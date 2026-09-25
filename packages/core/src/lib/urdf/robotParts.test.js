@@ -70,22 +70,22 @@ test("objects named by their own occurrence id are still named", () => {
   );
 });
 
-test("objects a loader named for want of a name are not components", () => {
+test("objects a loader named for want of a name are not components: their visual is", () => {
   // `glb:0` / `3mf:1` are the readers' fallbacks; `o1.2` is a CAD occurrence id.
   for (const name of ["glb:0", "3mf:1", "o1.2", "o3"]) {
     const visual = visualWithObjects("base:v1", "base", [{ name, id: name }, { name, id: name }]);
     const meshData = { parts: [visual] };
     const split = buildRobotComponentGeometry(meshData);
-    assert.deepEqual(split.parts, [visual], `${name} must not become a component`);
-    assert.deepEqual(robotComponents(split, "arm.urdf"), []);
+    assert.deepEqual(split.parts, [{ ...visual, componentName: "base:v1", visualId: "base:v1" }], `${name} must not become a component`);
+    assert.deepEqual(robotComponents(split, "arm.urdf").map((component) => component.id), ["base:v1"]);
   }
 });
 
-test("a visual with no named objects is left whole", () => {
+test("a visual with no named objects is one whole component", () => {
   const visual = visualWithObjects("base:v1", "base", [{ name: "" }, { name: "Unnamed component" }]);
   const split = buildRobotComponentGeometry({ parts: [visual] });
-  assert.deepEqual(split.parts, [visual]);
-  assert.deepEqual(robotComponents(split, "robot.urdf"), []);
+  assert.deepEqual(split.parts, [{ ...visual, componentName: "base:v1", visualId: "base:v1" }]);
+  assert.deepEqual(robotComponents(split, "robot.urdf").map((component) => component.name), ["base:v1"]);
 });
 
 test("an unsliceable object costs its visual's components, never the robot's geometry", () => {
@@ -112,11 +112,12 @@ test("an unsliceable object costs its visual's components, never the robot's geo
       const good = visualWithObjects("base:v1", "base", [{ name: "foot" }]);
       const split = buildRobotComponentGeometry({ parts: [broken, good] });
 
-      // The bad visual renders exactly as it did before the split existed...
-      assert.deepEqual(split.parts[0], broken, `visual kept whole for ${JSON.stringify(overrides)}`);
-      // ...and contributes no component rows, while its healthy sibling still does.
+      // The bad visual renders exactly as it did before the split existed, as one component...
+      assert.deepEqual(split.parts[0], { ...broken, componentName: "arm:v1", visualId: "arm:v1" },
+        `visual kept whole for ${JSON.stringify(overrides)}`);
+      // ...while its healthy sibling still splits.
       const components = robotComponents(split, "robot.urdf");
-      assert.deepEqual(components.map((component) => component.name), ["foot"]);
+      assert.deepEqual(components.map((component) => component.name), ["arm:v1", "foot"]);
     }
   } finally {
     console.warn = realWarn;
