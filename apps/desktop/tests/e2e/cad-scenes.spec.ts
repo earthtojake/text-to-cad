@@ -8,6 +8,7 @@ import { _electron as electron, expect, test, type ElectronApplication, type Pag
 import type { HardcoreApi } from "../../src/shared/ipc";
 import { cadRegistryEnvironment, cadRuntimeReady, cadTestProfile } from "./cad-runtime";
 import { selectFixtureSession } from "./session-fixture";
+import { widenExplorer } from "./viewer-layout";
 
 declare const window: {
   hardcore: HardcoreApi;
@@ -116,6 +117,8 @@ test.beforeAll(async () => {
   await selectFixtureSession(page, project);
   await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
   await page.getByRole("button", { name: "Toggle explorer", exact: true }).click();
+  // These tests are about the wide layout: the file's Settings in a column beside the model.
+  await widenExplorer(page);
 });
 
 test.afterAll(async () => {
@@ -140,6 +143,8 @@ async function openFile(file: string) {
     await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
     await page.getByRole("button", { name: "Toggle explorer", exact: true }).click();
   }
+  // The explorer's width is the session's own; each gets the wide layout's room.
+  await widenExplorer(page);
   await newTab.click();
   await page.getByRole("menuitem", { name: "File", exact: false }).click();
   await page.getByLabel("Filter files").fill(file);
@@ -161,31 +166,44 @@ async function selectOrOpenFile(file: string) {
   await openFile(file);
 }
 
-/** A panel's toggle in the nav row, pressed only if its panel is not already the open one. */
-async function showPanel(id: "cad-file" | "cad-display") {
+/** The file's Settings toggle in the nav row, pressed only if its panel is not already the open one. */
+async function showPanel(id: "cad-file") {
   const toggle = page.locator(`header [data-file-panel=${id}]`);
   if (await toggle.getAttribute("aria-pressed") !== "true") await toggle.click();
   await expect(toggle).toHaveAttribute("aria-pressed", "true");
 }
 
+/** Display is a popover tool, the toolbar's last button; it opens over the viewport and keeps the file's panel. */
+function displayTool() {
+  return page.locator("[data-cad-toolbar]").getByRole("button", { name: "Display", exact: true });
+}
+function displayPopover() {
+  return page.locator("[data-cad-display-popover]");
+}
+async function openDisplay() {
+  if (!(await displayPopover().isVisible())) await displayTool().click();
+  await expect(displayPopover()).toBeVisible();
+  return displayPopover();
+}
+/** Escape closes the popover and hands the toolbar back to the tool before it. */
+async function closeDisplay() {
+  await page.keyboard.press("Escape");
+  await expect(displayPopover()).toHaveCount(0);
+}
+
 async function setDisplayMode(mode: string) {
-  // Display is a panel of its own, beside the file's: its toggle turns the column over to it.
-  await showPanel("cad-display");
-  const value = page.locator("[data-file-sheet=Display]").getByRole("combobox", { name: "Mode" });
+  const value = (await openDisplay()).getByRole("combobox", { name: "Mode", exact: true });
   await value.click();
   await page.getByRole("option", { name: mode, exact: true }).click();
   await expect(value).toContainText(mode);
-  // Retain the helper's original return to geometry inspection: the file's own panel.
-  if (await page.locator("header [data-file-panel=cad-file]").count()) await showPanel("cad-file");
+  await closeDisplay();
   // The file-session writer batches ordinary UI changes for 180ms.
   await page.waitForTimeout(250);
 }
 
 async function expectDisplayMode(mode: string) {
-  await showPanel("cad-display");
-  await expect(page.locator("[data-file-sheet=Display]")
-    .getByRole("combobox", { name: "Mode" })).toContainText(mode);
-  if (await page.locator("header [data-file-panel=cad-file]").count()) await showPanel("cad-file");
+  await expect((await openDisplay()).getByRole("combobox", { name: "Mode", exact: true })).toContainText(mode);
+  await closeDisplay();
 }
 
 async function expectCadReady(file: string, componentCount = 1) {
@@ -261,41 +279,47 @@ test("View presets preserve authored materials and independent tools without a M
   await page.screenshot({ path: test.info().outputPath("inspect-material-unselected.png"), animations: "disabled" });
   await expect(page.getByRole("button", { name: "Theme settings", exact: true })).toHaveCount(0);
   await expect(page.locator("[data-file-panel=cad-theme], [data-file-sheet=Theme]")).toHaveCount(0);
-  // A lone part's own panel is named for it; Display is the panel beside it, and no panel
-  // of a Materials or Studio editor is in the row.
-  await expect(page.locator("header [data-file-panel]")).toHaveCount(3);
+  // The nav row holds the file's Settings and the files toggle, and nothing else: Display is a
+  // toolbar popover, and no panel of a Materials or Studio editor is in the row.
+  await expect(page.locator("header [data-file-panel]")).toHaveCount(2);
   expect(await page.locator("header [data-file-panel]").evaluateAll(toggles => toggles.map(toggle =>
     `${toggle.getAttribute("data-file-panel")}:${toggle.getAttribute("aria-label")}`)))
-    .toEqual(["cad-display:Display", "cad-file:Part", "tree:Show files"]);
-  const viewTab = page.locator("header [data-file-panel=cad-display]");
-  const view = page.locator("[data-file-sheet=Display]");
-  const mode = view.getByRole("combobox", { name: "Mode" });
-  await viewTab.click();
+    .toEqual(["cad-file:Settings", "tree:Show files"]);
+  const view = await openDisplay();
+  await expect(displayTool()).toHaveAttribute("aria-pressed", "true");
+  // The popover opens over the viewport and leaves the file's Settings where it was.
+  await expect(page.locator("[data-file-panel-container]")).toHaveCount(1);
+  await expect(page.locator("header [data-file-panel=cad-file]")).toHaveAttribute("aria-pressed", "true");
+  const mode = view.getByRole("combobox", { name: "Mode", exact: true });
+  const controlFont = await mode.evaluate(element => element.ownerDocument.defaultView!.getComputedStyle(element).fontSize);
   // The section rules of `packages/ui/docs/settings-ui.md`. Surfaces is always open: its
-  // header is static text, 28px and regular 12px, with no disclosure, plus or minus.
+  // header is 28px and the size of the controls, with no disclosure, plus or minus.
   const surfaces = view.getByRole("region", { name: "Surfaces", exact: true });
   const surfacesHeading = surfaces.getByRole("heading", { name: "Surfaces", exact: true });
   await expect(surfacesHeading).toBeVisible();
-  await expect(surfaces.getByRole("button", { name: /Surfaces$/ })).toHaveCount(0);
+  await expect(surfaces.getByRole("button", { name: /^(Enable|Disable|Expand|Collapse) Surfaces$/ })).toHaveCount(0);
+  await expect(surfacesHeading.locator("[aria-expanded]")).toHaveCount(0);
   expect((await surfacesHeading.boundingBox())?.height).toBe(28);
-  expect(await surfacesHeading.evaluate(element => element.ownerDocument.defaultView!.getComputedStyle(element).fontSize)).toBe("12px");
+  expect(await surfacesHeading.locator("button, span").first().evaluate(element => element.ownerDocument.defaultView!.getComputedStyle(element).fontSize)).toBe(controlFont);
   await expect(view.getByRole("button", { name: "View", exact: true })).toHaveCount(0);
   await expect(view.getByRole("combobox", { name: "Projection", exact: true })).toBeVisible();
-  // Clip is optional and off: its title is the control that turns it on, and hovering its
-  // header gives the row a gray background and nothing else.
-  const clip = view.getByRole("button", { name: "Clip", exact: true });
-  await expect(clip).toHaveAttribute("aria-expanded", "false");
-  await expect(clip.locator("svg")).toHaveCount(0);
-  expect((await clip.boundingBox())?.height).toBe(28);
-  expect(await clip.evaluate(element => element.ownerDocument.defaultView!.getComputedStyle(element).fontSize)).toBe("12px");
-  const restingBackground = await clip.evaluate(element => element.ownerDocument.defaultView!.getComputedStyle(element.parentElement!.parentElement!).backgroundColor);
-  await clip.hover();
-  await expect.poll(() => clip.evaluate(element => element.ownerDocument.defaultView!.getComputedStyle(element).textDecorationLine)).not.toContain("underline");
-  await expect.poll(() => clip.evaluate(element => element.ownerDocument.defaultView!.getComputedStyle(element.parentElement!.parentElement!).backgroundColor)).not.toBe(restingBackground);
-  await clip.click();
-  // Open, Clip is a position along each axis and a flip.
-  for (const axis of ["X", "Y", "Z"]) await expect(view.getByLabel(`Clip ${axis} position`, { exact: true })).toBeVisible();
-  await expect(view.getByRole("checkbox", { name: "Flip", exact: true })).toBeVisible();
+  // Lighting is optional and off under Solid: its title is the control that turns it on, and
+  // hovering its header gives the row a gray background and nothing else.
+  const lighting = view.getByRole("button", { name: "Lighting", exact: true });
+  await expect(lighting).toHaveAttribute("aria-expanded", "false");
+  await expect(lighting.locator("svg")).toHaveCount(0);
+  expect((await lighting.boundingBox())?.height).toBe(28);
+  expect(await lighting.evaluate(element => element.ownerDocument.defaultView!.getComputedStyle(element).fontSize)).toBe(controlFont);
+  const restingBackground = await lighting.evaluate(element => element.ownerDocument.defaultView!.getComputedStyle(element.parentElement!.parentElement!).backgroundColor);
+  await lighting.hover();
+  await expect.poll(() => lighting.evaluate(element => element.ownerDocument.defaultView!.getComputedStyle(element).textDecorationLine)).not.toContain("underline");
+  await expect.poll(() => lighting.evaluate(element => element.ownerDocument.defaultView!.getComputedStyle(element.parentElement!.parentElement!).backgroundColor)).not.toBe(restingBackground);
+  const exposure = view.getByLabel("Exposure value", { exact: true });
+  await lighting.click();
+  await expect(exposure).toHaveValue("0.0 EV");
+  await view.getByRole("button", { name: "Disable Lighting", exact: true }).click();
+  await expect(exposure).toHaveCount(0);
+
   await mode.click();
   await page.getByRole("option", { name: "Wireframe", exact: true }).click();
   await expect(mode).toContainText("Wireframe");
@@ -303,14 +327,17 @@ test("View presets preserve authored materials and independent tools without a M
 
   await mode.click();
   await page.getByRole("option", { name: "Render", exact: true }).click();
-  await expect(viewTab).toHaveAttribute("aria-pressed", "true");
+  // Choosing a preset keeps the popover, and Display, up.
+  await expect(displayTool()).toHaveAttribute("aria-pressed", "true");
   await expect(page.getByRole("button", { name: "Theme settings", exact: true })).toHaveCount(0);
-  // Render turns Lighting on. Open, its header is text and only its minus is a control.
+  // Render turns Lighting on. Open, a click on its heading reveals it and only its minus
+  // disables it (`packages/ui/docs/settings-ui.md`).
   const disableLighting = view.getByRole("button", { name: "Disable Lighting", exact: true });
   await expect(disableLighting).toHaveAttribute("aria-expanded", "true");
-  await expect(view.getByRole("button", { name: "Lighting", exact: true })).toHaveCount(0);
-  const exposure = view.getByLabel("Exposure value", { exact: true });
   await expect(view.getByRole("combobox", { name: "Quality", exact: true })).toContainText("Preview");
+  await view.getByRole("button", { name: "Lighting", exact: true }).click();
+  await expect(disableLighting).toHaveAttribute("aria-expanded", "true");
+  await expect(exposure).toHaveValue("0.0 EV");
   await exposure.fill("1.5");
   await exposure.press("Enter");
   await expect(mode).toContainText("Custom");
@@ -329,20 +356,45 @@ test("View presets preserve authored materials and independent tools without a M
 
   await mode.click();
   await page.getByRole("option", { name: "Wireframe", exact: true }).click();
-  await expect(viewTab).toHaveAttribute("aria-pressed", "true");
+  await expect(displayTool()).toHaveAttribute("aria-pressed", "true");
   // Wireframe has no lighting: the section is closed, its title the control that opens it.
   await expect(view.getByRole("button", { name: "Lighting", exact: true })).toHaveAttribute("aria-expanded", "false");
   await expect(exposure).toHaveCount(0);
-  await expect(view.getByLabel("Clip X position", { exact: true })).toBeVisible();
   await expect(page.getByRole("region", { name: "Studio", exact: true })).toHaveCount(0);
+  await closeDisplay();
+
+  // Clip is a tool of its own, independent of the display preset: a toggle whose panel sits
+  // under the toolbar, neutral until it is moved, and kept while Display changes the mode.
+  const tools = page.getByRole("group", { name: "Interaction tools", exact: true });
+  await tools.getByRole("button", { name: "Clip", exact: true }).click();
+  const clip = page.getByRole("region", { name: "Clip controls", exact: true });
+  await expect(clip).toBeVisible();
+  for (const axis of ["X", "Y", "Z"]) await expect(clip.getByRole("radio", { name: `Clip ${axis} axis` })).toBeVisible();
+  await expect(clip.getByLabel("Flip", { exact: true })).toBeVisible();
+  await clip.getByRole("radio", { name: "Clip X axis" }).click();
+  const clipAmount = clip.getByLabel("Clip amount value", { exact: true });
+  await clipAmount.fill("50%");
+  await clipAmount.press("Enter");
+  await expect(clip.getByRole("slider", { name: "Clip amount" })).toHaveAttribute("aria-valuenow", "50");
+  await openDisplay();
+  // Display opens beside the kept panel, not over it.
+  const [clipBox, displayBox] = [(await clip.boundingBox())!, (await displayPopover().boundingBox())!];
+  expect(displayBox.x).toBeGreaterThanOrEqual(clipBox.x + clipBox.width);
   await mode.click();
   await page.getByRole("option", { name: "Render", exact: true }).click();
   await expect(exposure).toHaveValue("0.0 EV");
+  await expect(clip).toBeVisible();
   await mode.click();
   await page.getByRole("option", { name: "Solid", exact: true }).click();
+  await expect(mode).toContainText("Solid");
+  await closeDisplay();
+  await expect(clip).toBeVisible();
+  await expect(tools.getByRole("button", { name: "Clip", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "Close clip controls" }).click();
+  await expect(clip).toHaveCount(0);
   // Leaving Render prepares the view again; a pick waits until the model is ready for one.
   await expect(page.locator("[data-viewer-transition]")).toHaveCount(0);
-  await page.locator("header [data-file-panel=cad-file]").click();
+  await showPanel("cad-file");
   await expectCadReady("part.step");
   await selectWholePart();
   await expect(materialInfo).toContainText("Brushed steel");
@@ -359,11 +411,15 @@ test("View presets preserve authored materials and independent tools without a M
 
 test("robot Position edits, preserves and resets a joint through the robot's own panel", async () => {
   await openFile("hinge.urdf");
-  // A robot's own panel is named for what it is, and its joints are the Position section at
-  // the top of it: one section, with no Joints section inside it.
-  await expect(page.locator("[data-file-sheet=Robot]")).toBeVisible();
-  await expect(page.locator("header [data-file-panel=cad-file]")).toHaveAttribute("aria-label", "Robot");
-  const position = page.getByRole("region", { name: "Position", exact: true });
+  // A robot's own panel is its Settings, with Links and Position as two tabs; the Position tool
+  // turns the panel to Position, whose joints are one section with no Joints heading inside it.
+  await expect(page.locator("[data-file-sheet=Settings]")).toBeVisible();
+  await expect(page.locator("header [data-file-panel=cad-file]")).toHaveAttribute("aria-label", "Settings");
+  await expect(page.locator("[data-file-sheet=Settings]").getByRole("tab")).toHaveText(["Links", "Position"]);
+  const tools = page.getByRole("group", { name: "Interaction tools", exact: true });
+  await tools.getByRole("button", { name: "Position", exact: true }).click();
+  await expect(page.getByRole("tab", { name: "Position", exact: true })).toHaveAttribute("aria-selected", "true");
+  const position = page.locator("[data-file-panel-section=position]");
   await expect(position).toBeVisible();
   await expect(position.getByRole("heading", { name: "Joints", exact: true })).toHaveCount(0);
   const joint = page.getByLabel("hinge value in deg", { exact: true });
@@ -375,9 +431,10 @@ test("robot Position edits, preserves and resets a joint through the robot's own
   await expect(joint).toBeHidden();
   await page.locator("header [data-file-panel=cad-file]").click();
   await expect(joint).toHaveValue("35°");
-  await page.getByRole("button", { name: "Reset", exact: true }).click();
+  await position.getByRole("button", { name: "Reset", exact: true }).click();
   await expect(joint).toHaveValue("0°");
   await page.screenshot({ path: test.info().outputPath("robot-kinematics.png"), animations: "disabled" });
+  await tools.getByRole("button", { name: "Select", exact: true }).click();
   expect(errors).toEqual([]);
 });
 
@@ -391,14 +448,6 @@ test("embedded STEP animation loads, plays and scrubs under the desktop CSP", as
   await expect(tools.getByRole("button", { name: "Animate", exact: true })).toBeVisible();
   await expect(tools.getByRole("button", { name: "Position", exact: true })).toHaveCount(0);
   await expect(page.getByRole("region", { name: "Position", exact: true })).toHaveCount(0);
-  await tools.getByRole("button", { name: "Animate", exact: true }).click();
-  const animation = page.getByRole("toolbar", { name: "Animation playback", exact: true });
-  const play = animation.getByRole("button", { name: "Play animation", exact: true });
-  // The data: module regression renders an error in place of these controls.
-  await expect(play).toBeEnabled();
-  const time = animation.getByRole("slider", { name: "Animation time", exact: true });
-  await expect(time).toHaveAttribute("aria-valuenow", "0");
-
   await expect.poll(async () => page.evaluate(() => window.__cadDisplayRecords?.().length || 0)).toBeGreaterThan(0);
   const rest = await page.evaluate(() => window.__cadDisplayRecords?.()[0]);
   expect(rest?.matrix).toHaveLength(16);
@@ -408,11 +457,18 @@ test("embedded STEP animation loads, plays and scrubs under the desktop CSP", as
     window.__cadDisplayRecords?.().find(record => record.partId === partId)?.matrix || null
   ), rest.partId);
 
-  await play.click();
+  // Pressing Animate plays the routine; pausing is the playbar's.
+  await tools.getByRole("button", { name: "Animate", exact: true }).click();
+  const animation = page.getByRole("toolbar", { name: "Animation playback", exact: true });
+  const play = animation.getByRole("button", { name: "Play animation", exact: true });
+  const pause = animation.getByRole("button", { name: "Pause animation", exact: true });
+  // The data: module regression renders an error in place of these controls.
+  await expect(pause).toBeEnabled();
+  const time = animation.getByRole("slider", { name: "Animation time", exact: true });
   await expect.poll(async () => Number(await time.getAttribute("aria-valuenow"))).toBeGreaterThan(0.05);
   await expect.poll(async () => (await displayMatrix())?.[12] ?? restX).toBeGreaterThan(restX + 0.05);
-  await animation.getByRole("button", { name: "Pause animation", exact: true }).click();
-  await expect(play).toBeVisible();
+  await pause.click();
+  await expect(play).toBeEnabled();
 
   // Scrubbing is the slider: a hundredth of a second a step, a tenth a page. At 1.25 s the clip
   // (which slides 1 a second) has moved the model 1.25, and the slider's start is the restart:
@@ -599,9 +655,9 @@ test("prompt actions preserve the draft, native clipboard and captured selection
     await feature.click({ button: "right" });
     await page.getByRole("menuitem", { name: "Copy Reference", exact: true }).click();
     const copiedReference = await app.evaluate(({ clipboard }) => clipboard.readText());
-    // The ordinary CAD copy grammar: a selector copies bare (the file is the one it is pasted
-    // about); only the whole file names its path, as `part.step#`.
-    expect(copiedReference).toMatch(/^#o1\.f\d+(,o1\.f\d+)*$/);
+    // The CAD copy grammar: every copied reference carries its file's prefix (the shortest
+    // path suffix naming it), so it still says which file it is from in a prompt about several.
+    expect(copiedReference).toMatch(/^part\.step#o1\.f\d+(,o1\.f\d+)*$/);
     const chips = page.locator("[data-composer] [data-reference-chip]");
     await expect(chips).toHaveCount(0);
     await expect(draft).toHaveText("Keep this draft intact.");
@@ -613,16 +669,24 @@ test("prompt actions preserve the draft, native clipboard and captured selection
     await expect(page.locator("[data-reference-tip]")).toHaveCount(0);
     await page.keyboard.press("Escape");
     await expect(details).toHaveCount(0);
-    await selectWholePart();
+    await setSelectFilter(/^All/);
 
-    await page.getByRole("button", { name: "Add to prompt", exact: true }).click();
+    // The viewer's bottom action copies; the prompt is reached through a pick's own menu — here
+    // the feature row's, the same menu the viewport opens over its faces.
+    await feature.click();
+    await expect(page.getByRole("button", { name: /^Copy Reference/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Add to prompt", exact: true })).toHaveCount(0);
+    await feature.click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Add to prompt", exact: true }).click();
+    await expect(page.getByRole("menu")).toHaveCount(0);
     await expect(chips).toHaveCount(1);
     await expect(chips).toHaveAttribute("data-file", "part.step");
     const selector = await chips.getAttribute("data-selector");
-    // The prompt serializer renders the whole-resource identity as the bare file.
-    expect(selector).toBe("");
+    expect(selector).toBeTruthy();
+    expect(copiedReference.endsWith(selector!)).toBe(true);
+    // (A menu hands focus back to its row as it closes, so the draft is not focused here; the
+    // snapshot below, a direct press, is what leaves the caret in it.)
     await expect(draft).toContainText("Keep this draft intact.");
-    await expect(draft).toBeFocused();
     expect(await app.evaluate(({ clipboard }) => clipboard.readText())).toBe(copiedReference);
 
     await page.getByRole("button", { name: "Take snapshot", exact: true }).click();

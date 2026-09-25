@@ -11,6 +11,7 @@ import {
 } from "@playwright/test";
 import { cadRegistryEnvironment, cadRuntimeReady, cadTestProfile } from "./cad-runtime";
 import { selectFixtureSession } from "./session-fixture";
+import { widenExplorer } from "./viewer-layout";
 
 /**
  * The colour scheme, end to end: who is allowed to write it, and whether it
@@ -196,6 +197,7 @@ test.beforeAll(async () => {
   app = await launch();
   fixtureSession = await selectFixtureSession(page, project);
   await page.getByRole("button", { name: "Toggle explorer" }).click();
+  await widenExplorer(page);
   await expect(page.getByTestId("explorer")).toBeVisible();
 });
 
@@ -265,14 +267,15 @@ test("stays dark through display mode and render settings edits", async () => {
   await expect(page.getByRole("button", { name: "Theme settings", exact: true })).toHaveCount(0);
   await expect(page.locator("[data-file-panel='cad-theme'], [data-file-sheet='Theme']")).toHaveCount(0);
 
-  // Display is a panel of its own: its toggle in the nav row turns the column over to it.
-  await page.locator("header [data-file-panel=cad-display]").click();
-  const displayMode = page.locator("[data-file-sheet=Display]").getByRole("combobox", { name: "Mode" });
+  // Display is a popover tool, the toolbar's last button.
+  await page.locator("[data-cad-toolbar]").getByRole("button", { name: "Display", exact: true }).click();
+  const display = page.locator("[data-cad-display-popover]");
+  const displayMode = display.getByRole("combobox", { name: "Mode", exact: true });
   await displayMode.click();
   await page.getByRole("option", { name: "Render", exact: true }).click();
-  // Render turns Lighting on. An open section's header is plain text and only its minus is a
-  // control (`packages/ui/docs/settings-ui.md`), so the section is found by its name.
-  const studio = page.locator("[data-file-sheet=Display]").getByRole("region", { name: "Lighting", exact: true });
+  // Render turns Lighting on; only its minus disables it (`packages/ui/docs/settings-ui.md`),
+  // so the section is found by its name.
+  const studio = display.getByRole("region", { name: "Lighting", exact: true });
   await expect(studio.getByRole("button", { name: "Disable Lighting", exact: true })).toHaveAttribute("aria-expanded", "true");
   await expectNeverMoved(page, "dark", "entering Render");
 
@@ -288,8 +291,10 @@ test("stays dark through display mode and render settings edits", async () => {
 
   await displayMode.click();
   await page.getByRole("option", { name: "Solid", exact: true }).click();
-  // Back to the file's own panel, where its Features tree is.
-  await page.locator("header [data-file-panel=cad-file]").click();
+  await expect(displayMode).toContainText("Solid");
+  // Escape closes the popover; the file's own panel, with its Features tree, never left.
+  await page.keyboard.press("Escape");
+  await expect(display).toHaveCount(0);
   await expect(page.getByRole("list", { name: "Model", exact: true })).toBeVisible();
   await expectNeverMoved(page, "dark", "returning to Inspect");
   expect(await surfaceWroteTheDocument(page)).toEqual({ theme: null, preference: null });

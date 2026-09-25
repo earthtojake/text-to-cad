@@ -137,7 +137,11 @@ test("an agent in a worktree opens the file it wrote there, and the explorer roo
   // the breadcrumb, the file's own bytes, and the worktree's tree one press away.
   await expect(page.getByRole("tab", { name: /hello\.txt/ })).toBeVisible({ timeout: 15_000 });
   await expect(page.locator("[data-crumb=worktree]")).toContainText("model-the-wrist");
-  await expect(page.locator("[data-crumb=worktree]")).toHaveAttribute("title", worktree);
+  // Its full path is a hint on hover, never a native title.
+  await expect(page.locator("[data-crumb=worktree]")).not.toHaveAttribute("title", /./);
+  await page.locator("[data-crumb=worktree]").hover();
+  await expect(page.getByRole("tooltip")).toHaveText(worktree);
+  await page.mouse.move(0, 0);
   await expect(page.locator(".monaco-editor").first()).toContainText("hello", { timeout: 15_000 });
   // Opened by a command, the file opens on its own default, which for a document is no
   // panel: the tree is the person's to take up, and it is the worktree's.

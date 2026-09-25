@@ -14,6 +14,7 @@ import {
 
 import { PANE_LIMITS } from "../../src/shared/types";
 import { selectFixtureSession } from "./session-fixture";
+import { VIEWER_DESKTOP_MIN } from "./viewer-layout";
 
 /**
  * The panes, and the top level's back and forward.
@@ -162,9 +163,10 @@ test("the explorer collapses on the same rule and comes back at its width", asyn
  */
 test("the explorer's toggle answers with a markdown file open and the tree hidden", async () => {
   await openExplorer();
-  // Room for the tree and the document beside it: the test before this one
-  // left the pane at its floor, where a file tab is all tree.
-  const short = PANE_LIMITS.explorer.default - (await explorerWidth());
+  // Room for the tree and the document beside it — the viewer's wide layout, where a
+  // pick keeps the tree up: the test before this one left the pane at its floor, where
+  // a file tab is all tree.
+  const short = VIEWER_DESKTOP_MIN - (await explorerWidth());
   if (short > 0) {
     await drag("explorer", -short);
   }

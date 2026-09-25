@@ -14,6 +14,8 @@ import {
 } from "@playwright/test";
 import { cadRegistryEnvironment, cadRuntimeReady, cadTestProfile } from "./cad-runtime";
 import { selectFixtureSession } from "./session-fixture";
+import { widenExplorer as giveViewerRoom } from "./viewer-layout";
+import { PANE_LIMITS } from "../../src/shared/types";
 
 /**
  * The explorer against this repository, with an isolated CAD project.
@@ -145,6 +147,8 @@ test.beforeAll(async () => {
   // here rather than incidentally by the first file.
   await page.getByRole("button", { name: "Toggle explorer" }).click();
   await expect(page.getByTestId("explorer")).toBeVisible();
+  // Room for the viewer's wide layout, whose panel column and kept tree this suite is about.
+  await giveViewerRoom(page);
 });
 
 test.afterAll(async () => {
@@ -323,10 +327,10 @@ test("navigates by the breadcrumb's menus", async () => {
   await expect(siblings.getByRole("menuitem", { name: "components", exact: true })).toBeVisible();
   await siblings.getByRole("menuitem", { name: "workbench" }).hover();
   const submenu = page.getByRole("menu", { name: "workbench" });
-  await expect(submenu.getByRole("menuitem", { name: "persistence.js", exact: true })).toBeVisible();
-  await submenu.getByRole("menuitem", { name: "persistence.js", exact: true }).click();
-  await expect(page.getByRole("tab", { name: /persistence\.js/ })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Browse persistence.js", exact: true })).toBeVisible();
+  await expect(submenu.getByRole("menuitem", { name: "sidebar.js", exact: true })).toBeVisible();
+  await submenu.getByRole("menuitem", { name: "sidebar.js", exact: true }).click();
+  await expect(page.getByRole("tab", { name: /sidebar\.js/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Browse sidebar.js", exact: true })).toBeVisible();
   await expect(page.getByRole("tab", { name: /^unboundIdentifiers\.test\.js/ })).toHaveCount(0);
   await expect(page.locator(".view-lines").first()).toBeVisible();
   await expect(page.getByRole("menu")).toHaveCount(0);
@@ -341,7 +345,7 @@ test("navigates by the breadcrumb's menus", async () => {
   await pick("Copy relative path");
   await expect
     .poll(() => app.evaluate(({ clipboard }) => clipboard.readText()))
-    .toBe("apps/web/src/client/workbench/persistence.js");
+    .toBe("apps/web/src/client/workbench/sidebar.js");
 
   // Escape closes a crumb's menu.
   await page.getByRole("button", { name: "Browse workbench", exact: true }).click();
@@ -357,7 +361,7 @@ test("navigates by the breadcrumb's menus", async () => {
 
   await restoreLayout();
   await resizeWindow(1440, 900);
-  await page.getByRole("tab", { name: /persistence\.js/ }).getByRole("button", { name: "Close persistence.js" }).click();
+  await page.getByRole("tab", { name: /sidebar\.js/ }).getByRole("button", { name: "Close sidebar.js" }).click();
 });
 
 test("keeps the files toggle where it is when the tree opens and shuts", async () => {
@@ -397,7 +401,8 @@ test("copies a relative path from a row's context menu", async () => {
   await pick("Copy relative path");
   await expect.poll(() => app.evaluate(({ clipboard }) => clipboard.readText())).toBe("apps/web/src/client/unboundIdentifiers.test.js");
 
-  // Copy path is the absolute one, and Copy reference is there for a CAD file.
+  // Copy path is the absolute one. A file menu has no Copy reference, a CAD file's included:
+  // the paths say it, and a reference inside the file is the viewer's to copy.
   await openContextMenu(row);
   await pick("Copy path");
   await expect.poll(() => app.evaluate(({ clipboard }) => clipboard.readText())).toBe(
@@ -407,7 +412,8 @@ test("copies a relative path from a row's context menu", async () => {
   const step = page.locator(`[role="treeitem"][data-path="${STEP}"]`);
   await page.getByLabel("Filter files").fill(STEP);
   await openContextMenu(page.getByRole("option", { name: STEP, exact: false }).first());
-  await expect(page.getByRole("menu").getByRole("menuitem", { name: "Copy reference" })).toBeVisible();
+  await expect(page.getByRole("menu").getByRole("menuitem", { name: "Copy relative path" })).toBeVisible();
+  await expect(page.getByRole("menu").getByRole("menuitem", { name: "Copy reference" })).toHaveCount(0);
   await page.keyboard.press("Escape");
   await page.getByLabel("Filter files").fill("");
   await expect(step).toHaveCount(0);
@@ -574,21 +580,21 @@ test("renders a STEP file through the bundled runtime's viewer", async () => {
 
   /*
     Picked in the tree, the STEP opens with the tree still up — a person walking
-    the tree keeps it — and its own panel, named for what the file is (a part,
-    here), one press away beside Display. That panel holds its geometry and
-    source features. It is drawn in this app's panel column (`panelSlot`), the
+    the tree keeps it — and its own Settings one press away. That panel holds
+    its geometry and source features. It is drawn in this app's panel column (`panelSlot`), the
     same column the tree is in, to the right of the model and never a drawer
     over it, at 1440×900 and at 1280×800.
   */
   const filePanel = page.locator("header [data-file-panel=cad-file]");
   await expect(page.getByRole("button", { name: "Hide files" })).toBeVisible();
   await expect(filePanel).toHaveAttribute("aria-pressed", "false");
-  await expect(filePanel).toHaveAttribute("aria-label", "Part");
-  await expect(page.locator("header [data-file-panel=cad-display]")).toHaveAttribute("aria-pressed", "false");
+  await expect(filePanel).toHaveAttribute("aria-label", "Settings");
+  // Display is a toolbar popover, not a panel of the row.
+  await expect(page.locator("header [data-file-panel=cad-display]")).toHaveCount(0);
   await filePanel.click();
   await expect(page.getByRole("button", { name: "Show files" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Hide files" })).toHaveCount(0);
-  await expect(page.locator("[data-file-sheet=Part]")).toBeVisible();
+  await expect(page.locator("[data-file-sheet=Settings]")).toBeVisible();
   // The STEP model list is in it.
   const tree = page.getByRole("list", { name: "Model", exact: true });
   await expect(tree).toBeVisible({ timeout: 120_000 });
@@ -633,28 +639,30 @@ test("renders a STEP file through the bundled runtime's viewer", async () => {
   await shoot("file-cad-1280x800.png", true);
   await resizeWindow(1440, 900);
 
-  // Display is a panel of its own, beside the file's; going back to the file's panel
-  // preserves Display's controls and the tree. The row holds those two and the files
-  // toggle, and no tab of any name: the retired View, Model and Inspector included.
+  // The row holds the file's Settings and the files toggle, and no tab of any name: the
+  // retired View, Model, Inspector and Display panels included. Display is the toolbar's
+  // popover over the scene; the file's panel and its tree stay where they are under it, and
+  // the popover keeps its settings across a close.
   expect(await page.locator("header [data-file-panel]").evaluateAll(toggles => toggles.map(toggle => toggle.getAttribute("aria-label"))))
-    .toEqual(["Display", "Part", "Show files"]);
+    .toEqual(["Settings", "Show files"]);
   await expect(page.locator("[data-file-sheet]").getByRole("tab")).toHaveCount(0);
-  const view = page.locator("header [data-file-panel=cad-display]");
-  const model = page.locator("header [data-file-panel=cad-file]");
-  await view.click();
-  const viewPanel = page.locator("[data-file-sheet=Display]");
-  const mode = viewPanel.getByRole("combobox", { name: "Mode" });
+  const display = page.locator("[data-cad-toolbar]").getByRole("button", { name: "Display", exact: true });
+  const viewPanel = page.locator("[data-cad-display-popover]");
+  const mode = viewPanel.getByRole("combobox", { name: "Mode", exact: true });
+  await display.click();
   await mode.click();
   await page.getByRole("option", { name: "Wireframe", exact: true }).click();
-  await model.click();
-  await expect(viewPanel).toBeHidden();
-  await view.click();
+  await expect(tree).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(viewPanel).toHaveCount(0);
+  await display.click();
   await expect(mode).toContainText("Wireframe");
   await mode.click();
   await page.getByRole("option", { name: "Solid", exact: true }).click();
   await expect(page.getByRole("listbox")).toHaveCount(0);
   await expect(mode).toBeFocused();
-  await model.click();
+  await page.keyboard.press("Escape");
+  await expect(viewPanel).toHaveCount(0);
   await expect(tree).toBeVisible();
 
   // Measurements live under the toolbar tool and close when it is toggled off.
@@ -674,17 +682,17 @@ test("renders a STEP file through the bundled runtime's viewer", async () => {
   await expect(measurements).toHaveCount(0);
   await expect(tree).toBeVisible();
 
-  // A STEP declares its own panel and Display; the file tree shares their single
-  // panel column. The retired Theme editor must not leave a toggle or an empty panel behind.
+  // A STEP declares its own Settings panel; the file tree shares its single panel column.
+  // The retired Theme editor must not leave a toggle or an empty panel behind.
   const filesToggle = page.getByTestId("tree-toggle");
   const sheetPanel = page.locator("header [data-file-panel='cad-file']");
   await expect(page.getByRole("button", { name: "Theme settings", exact: true })).toHaveCount(0);
   await expect(page.locator("[data-file-panel='cad-theme'], [data-file-sheet='Theme']")).toHaveCount(0);
-  // Named, and drawn, for what the file is: a part, with the box its tree draws for one.
-  await expect(sheetPanel).toHaveAttribute("aria-label", "Part");
-  await expect(sheetPanel).toHaveAttribute("title", "Part");
-  await expect(sheetPanel.locator("svg.lucide-box")).toHaveCount(1);
-  await expect(page.locator("header [data-file-panel='cad-display'] svg.lucide-sliders-horizontal")).toHaveCount(1);
+  // One optional Settings panel per file type, drawn with the sliders icon, named by its hint
+  // and never a native title.
+  await expect(sheetPanel).toHaveAttribute("aria-label", "Settings");
+  await expect(sheetPanel).not.toHaveAttribute("title", /./);
+  await expect(sheetPanel.locator("svg.lucide-sliders-horizontal")).toHaveCount(1);
   const parked = (await filesToggle.boundingBox())!;
   const sheetBox = (await sheetPanel.boundingBox())!;
   expect(sheetBox.x + sheetBox.width).toBeLessThanOrEqual(parked.x + 1);
@@ -716,7 +724,7 @@ test("renders a STEP file through the bundled runtime's viewer", async () => {
   const panelDark = await paint();
   await expect(page.locator("html")).toHaveClass(/\bdark\b/);
   await expect.poll(sceneBackdrop).toBe("51,51,51");
-  await expect(page.locator("header [data-file-panel=cad-display]")).toBeVisible();
+  await expect(page.locator("[data-cad-toolbar]").getByRole("button", { name: "Display", exact: true })).toBeVisible();
 
   await page.evaluate(() => window.hardcore.settings.set({ theme: "light" }));
   await expect(page.locator("html")).not.toHaveClass(/\bdark\b/);
@@ -743,6 +751,9 @@ test("keeps every tab in one strip, with + at its end", async () => {
   // This session owns two file tabs, a terminal and a browser; CAD tabs belong
   // to the fixture session and must not leak into this strip.
   await expect(page.getByRole("tab")).toHaveCount(4);
+  // At the explorer's own default width, which this suite widened for the viewer.
+  await dragSeparator((await page.getByTestId("explorer").boundingBox())!.width - PANE_LIMITS.explorer.default);
+  await expect.poll(async () => (await page.getByTestId("explorer").boundingBox())?.width ?? 0).toBeCloseTo(PANE_LIMITS.explorer.default, -1);
 
   // `+` trails the tabs inside their scrolling row rather than sitting in a
   // corner of its own, and it is at the strip's right edge with four tabs of
@@ -768,6 +779,7 @@ test("keeps every tab in one strip, with + at its end", async () => {
   await expect(page.getByRole("button", { name: "Expand explorer" })).toHaveCount(0);
 
   await shoot("strip.png", true);
+  await giveViewerRoom(page);
 });
 
 test("persists the strip across a reload", async () => {
@@ -819,9 +831,10 @@ test("renders the explorer in light as well as dark", async () => {
  */
 test("edits a markdown file in place and saves the lines it changed", async () => {
   await selectFixtureSession(page, docsDir);
-  // Each new session starts with its own empty, closed explorer.
+  // Each new session starts with its own empty, closed explorer, at the default width.
   await page.getByRole("button", { name: "Toggle explorer" }).click();
   await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
+  await giveViewerRoom(page);
 
   await newTab(page, "File");
   await page.getByLabel("Filter files").fill("AGENTS.md");
@@ -1007,6 +1020,8 @@ async function switchProject(directory: string) {
     await page.getByRole("button", { name: "Toggle explorer" }).click();
   }
   await expect(page.getByTestId("explorer")).toBeVisible();
+  // The explorer's width is the session's: each fixture session gets the wide layout's room.
+  await giveViewerRoom(page);
 }
 
 /** Open a path through the tree's filter — the way a person would. */

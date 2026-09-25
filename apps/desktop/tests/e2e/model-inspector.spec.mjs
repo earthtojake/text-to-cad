@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { cadRegistryEnvironment, cadRuntimeReady, cadTestProfile } from './cad-runtime.ts';
 import { selectFixtureSession } from './session-fixture.ts';
+import { widenExplorer } from './viewer-layout.ts';
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const root = path.resolve(appRoot, '../..');
 // Playwright REQUIRES the first argument to be a destructuring pattern, and this
@@ -56,6 +57,8 @@ test('the Features tree presents a lone part as its features, and precise viewpo
       name: 'Toggle explorer',
       exact: true
     }).click();
+    // The wide layout: the tree stays up across a pick and the Settings panel is a column.
+    await widenExplorer(page);
     await page.getByRole('button', {
       name: 'New tab',
       exact: true
@@ -69,18 +72,17 @@ test('the Features tree presents a lone part as its features, and precise viewpo
       name: 'tests/fixtures/cad/import-smoke.step',
       exact: false
     }).first().click();
-    // Picked in the tree, the STEP opens with the tree still up, and its own panel — named for
-    // what it is, a lone part — one press away.
+    // Picked in the tree, the STEP opens with the tree still up, and its own Settings one press away.
     const partPanel = page.locator('header [data-file-panel=cad-file]');
-    await expect(partPanel).toHaveAttribute('aria-label','Part', { timeout: 60000 });
+    await expect(partPanel).toHaveAttribute('aria-label','Settings', { timeout: 60000 });
     await expect(page.getByTestId('tree-toggle')).toHaveAttribute('aria-pressed','true');
     await partPanel.click();
-    await expect(page.locator('[data-file-sheet=Part]')).toBeVisible();
+    await expect(page.locator('[data-file-sheet=Settings]')).toBeVisible();
     // The tree is the panel's Features section — with no joints and no issues, its only one —
     // and there are no tabs at all: the Model, Surfaces and Geometry tabs are gone with the rest.
     await expect(page.getByRole('region',{name:'Features',exact:true})).toBeVisible();
     await expect(page.locator('[data-file-panel-section=features]')).toBeVisible();
-    await expect(page.locator('[data-file-sheet=Part] [data-file-panel-section]')).toHaveCount(1);
+    await expect(page.locator('[data-file-sheet=Settings] [data-file-panel-section]')).toHaveCount(1);
     await expect(page.locator('[data-file-sheet]').getByRole('tab')).toHaveCount(0);
     for (const retired of ['Model','Surfaces','Geometry']) await expect(page.getByRole('region',{name:retired,exact:true})).toHaveCount(0);
     const tree=page.getByRole('list',{name:'Model',exact:true});
@@ -109,12 +111,18 @@ test('the Features tree presents a lone part as its features, and precise viewpo
     await page.screenshot({path:`${output}/before-pick.png`,animations:'disabled'});
     await canvas.click({position:{x:box.width*0.5,y:box.height*0.5}});
     await page.screenshot({path:`${output}/after-pick.png`,animations:'disabled'});
-    await expect(page.getByRole('button',{name:'Add to prompt',exact:true})).toBeVisible();
-    // The pick's Reference, pinned at the Part panel's foot under its sections.
-    const reference=page.locator('[data-file-sheet=Part]').getByRole('region',{name:'Reference details',exact:true}).getByText(/^o[0-9.]+\.[fe][0-9]+$/);
+    // A usable selection earns the viewer's one bottom action, Copy Reference (with its shortcut);
+    // the prompt is reached through the pick's own menu.
+    const copyAction=page.getByRole('button',{name:/^Copy Reference\b/});
+    await expect(copyAction).toBeVisible();
+    await expect(page.getByRole('button',{name:'Add to prompt',exact:true})).toHaveCount(0);
+    // The pick's Reference, pinned at the Settings panel's foot under its sections.
+    const reference=page.locator('[data-file-sheet=Settings]').getByRole('region',{name:'Reference details',exact:true}).getByText(/^o[0-9.]+\.[fe][0-9]+$/);
     await expect(reference).toBeVisible();
     const selector=await reference.innerText();
-    await page.getByRole('button',{name:'Add to prompt',exact:true}).click();
+    await canvas.click({button:'right',position:{x:box.width*0.5,y:box.height*0.5}});
+    await page.getByRole('menuitem',{name:'Add to prompt',exact:true}).click();
+    await expect(page.getByRole('menu')).toHaveCount(0);
     const chip=page.locator('[data-composer] [data-reference-chip]');
     await expect(chip).toHaveCount(1);
     await expect(chip).toHaveAttribute('data-file','tests/fixtures/cad/import-smoke.step');
@@ -125,7 +133,7 @@ test('the Features tree presents a lone part as its features, and precise viewpo
     // Clearing inspection must also clear the viewport selection, while preserving the draft reference.
     await page.getByRole('button',{name:'Clear selection',exact:true}).click();
     await expect(page.getByRole('region',{name:'Reference details',exact:true})).toHaveCount(0);
-    await expect(page.getByRole('button',{name:'Add to prompt',exact:true})).toHaveCount(0);
+    await expect(copyAction).toHaveCount(0);
     await expect(chip).toHaveCount(1);
     assert.deepEqual(sourceRequests,[]);
     assert.deepEqual(errors,[]);

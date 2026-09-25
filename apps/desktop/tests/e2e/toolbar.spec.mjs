@@ -5,6 +5,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { cadRegistryEnvironment, cadRuntimeReady, cadTestProfile } from './cad-runtime.ts';
 import { selectFixtureSession } from './session-fixture.ts';
+import { widenExplorer } from './viewer-layout.ts';
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const root = path.resolve(appRoot, '../..');
 // Playwright REQUIRES the first argument to be a destructuring pattern, and this
@@ -83,6 +84,8 @@ test('CAD tools stay within the scene, with direct snapshot and Select filters',
       name: 'Toggle explorer',
       exact: true
     }).click();
+    // The wide layout first: the file's Settings is a column beside the scene.
+    await widenExplorer(page);
     await page.getByRole('button', {
       name: 'New tab',
       exact: true
@@ -96,9 +99,9 @@ test('CAD tools stay within the scene, with direct snapshot and Select filters',
       name: 'tests/fixtures/cad/import-smoke.step',
       exact: false
     }).first().click();
-    // Picked in the tree, the STEP opens with the tree; its own panel (a lone part's) is taken up.
+    // Picked in the tree, the STEP opens with the tree; its own Settings panel is taken up.
     await page.locator('header [data-file-panel=cad-file]').click({ timeout: 60000 });
-    await expect(page.locator('[data-file-sheet=Part]')).toBeVisible();
+    await expect(page.locator('[data-file-sheet=Settings]')).toBeVisible();
     const toolbar = page.locator('[data-cad-toolbar]');
     const resize = async width => app.evaluate(({
       BrowserWindow
@@ -139,10 +142,12 @@ test('CAD tools stay within the scene, with direct snapshot and Select filters',
       await expect(page.getByRole('button', { name: 'Take snapshot', exact: true })).toBeVisible();
       await expect(toolbar.getByRole('group', { name: 'View and actions' })).toHaveCount(0);
       for (const name of ['Select', 'Measure', 'Draw']) await expect(tools.getByRole('button', { name, exact: true })).toBeVisible();
-      // The desktop offers no fullscreen (the session pane is never taken away), so a STEP's
-      // strip ends without the Fullscreen button a host with one would get.
+      // Fullscreen is the viewer's own corner button, never a tool; Display is the toolbar's
+      // last button, a popover.
       await expect(tools.getByRole('button', { name: 'Fullscreen', exact: true })).toHaveCount(0);
-      await expect(toolbar.getByRole('button', { name: 'Display', exact: true })).toHaveCount(0);
+      await expect(page.getByRole('button', { name: 'Fullscreen', exact: true })).toHaveCount(1);
+      await expect(toolbar.getByRole('button', { name: 'Display', exact: true })).toBeVisible();
+      assert.equal((await toolbar.getByRole('button').evaluateAll(els => els.map(el => el.getAttribute('aria-label')))).at(-1), 'Display');
       await expect(toolbar.getByRole('button', { name: /^Viewing mode:/ })).toHaveCount(0);
       // There is no zoom control anywhere: not in the toolbar, and not in the file's panel,
       // which has no header of tabs to carry one. Framing a STEP is in its viewport context
@@ -153,18 +158,22 @@ test('CAD tools stay within the scene, with direct snapshot and Select filters',
       await fit();
     };
     await grouping();
-    // Display is a panel of its own, its toggle in the nav row.
-    const viewTab = page.locator('header [data-file-panel=cad-display]');
-    await expect(viewTab).toBeVisible();
-    await viewTab.click();
-    const displayMode = page.getByRole('combobox', { name: 'Mode', exact: true });
+    // Display is a popover tool: it opens under the toolbar, inside the scene.
+    await expect(page.locator('header [data-file-panel=cad-display]')).toHaveCount(0);
+    await toolbar.getByRole('button', { name: 'Display', exact: true }).click();
+    const display = page.locator('[data-cad-display-popover]');
+    const displayMode = display.getByRole('combobox', { name: 'Mode', exact: true });
     await expect(displayMode).toBeVisible();
     await displayMode.click();
     await page.getByRole('option', { name: 'Render', exact: true }).click();
     await expect(displayMode).toContainText('Render');
     for (const name of ['Select', 'Measure', 'Draw']) await expect(tools.getByRole('button', { name, exact: true })).toBeVisible();
+    const [popover, scene] = await Promise.all([display.boundingBox(), page.locator('[data-cad-surface]').boundingBox()]);
+    assert(popover.x >= scene.x - 1 && popover.x + popover.width <= scene.x + scene.width + 1, JSON.stringify({ popover, scene }));
     await displayMode.click();
     await page.getByRole('option', { name: 'Solid', exact: true }).click();
+    await page.keyboard.press('Escape');
+    await expect(display).toHaveCount(0);
     await page.screenshot({ path: `${output}/wide.png` });
     await narrowScene();
     await grouping();
@@ -184,8 +193,16 @@ test('CAD tools stay within the scene, with direct snapshot and Select filters',
     await page.keyboard.press('Escape');
     await expect(select).toBeFocused();
 
+    // Draw's own tools are its corner menu: the first press selects it, the second opens the menu.
     await tools.getByRole('button', { name: 'Draw', exact: true }).click();
-    await expect(toolbar.getByRole('group', { name: 'Drawing tools', exact: true }).getByRole('button', { name: 'Pen', exact: true })).toBeVisible();
+    await expect(tools.getByRole('button', { name: 'Draw', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await tools.getByRole('button', { name: 'Draw', exact: true }).click();
+    const drawMenu = page.getByRole('menu', { name: 'Draw', exact: true });
+    await expect(drawMenu.getByRole('button', { name: 'Pen', exact: true })).toBeVisible();
+    const drawBounds = await drawMenu.boundingBox();
+    assert(drawBounds.x >= 0 && drawBounds.x + drawBounds.width <= await page.evaluate(() => innerWidth));
+    await page.keyboard.press('Escape');
+    await expect(drawMenu).toHaveCount(0);
     await fit();
     await resize(1600);
     await expect(tools.getByRole('button', { name: 'Draw', exact: true })).toHaveAttribute('aria-pressed', 'true');
@@ -201,12 +218,13 @@ test('CAD tools stay within the scene, with direct snapshot and Select filters',
     await expect(page.getByText('12/50', { exact: true })).toBeVisible();
     await fit();
     for (const name of ['Select', 'Measure', 'Draw']) await expect(toolbar.getByRole('button', { name, exact: true })).toBeDisabled();
-    await expect(toolbar.getByRole('button', { name: 'Display', exact: true })).toHaveCount(0);
+    // Display is about the view, not the model, and stays the toolbar's last button while it compiles.
+    await expect(toolbar.getByRole('button', { name: 'Display', exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: 'Take snapshot', exact: true })).toBeDisabled();
     assert.deepEqual(errors, []);
     assert.deepEqual(sourceRequests, []);
     await expect(page.getByRole('tab', { name: 'Source features' })).toHaveCount(0);
-    console.info('PASS: tools at both widths; Display panel and Render; Select filter menu; Draw; focus; scene bounds; snapshot loading state; no renderer errors');
+    console.info('PASS: tools at both widths; Display popover and Render; Select filter menu; Draw; focus; scene bounds; snapshot loading state; no renderer errors');
   } finally {
     await page?.unrouteAll({ behavior: 'wait' });
     const runtimeLog = path.join(profile, 'cad-runtime.log');
