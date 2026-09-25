@@ -1506,14 +1506,27 @@ test('Annotate pins a note to the selection as a dot on the model and puts it in
   await chip.click();
   await page.waitForFunction(() => window.cadHarness.a.controller.readState().selectedPartIds.join() === 'o1.2');
 
-  // An edit replaces the chat box's copy: the same annotation, delivered again.
+  // An edit replaces the chat box's copy: the same annotation, delivered again. The box opens
+  // focused with the caret at the end, so typing goes straight into the note.
   await card.getByRole('button', {name: 'Edit annotation 1'}).click();
   const edit = card.getByRole('textbox', {name: 'Edit annotation 1'});
-  await edit.fill('make a 6 mm hole in it');
-  await edit.press('Enter');
+  assert.equal(await edit.evaluate(element => document.activeElement === element), true, 'the edit box has focus');
+  await page.keyboard.press('ControlOrMeta+a');
+  await page.keyboard.type('make a 6 mm hole in it');
+  await page.keyboard.press('Enter');
   await page.waitForFunction(() => window.__delivered.length === 2);
   const [edited] = (await delivered())[1];
   assert.deepEqual([edited.id, edited.text], [first.id, 'make a 6 mm hole in it']);
+  // Escape leaves the note as it was; clicking away from the box saves what was typed.
+  await card.getByRole('button', {name: 'Edit annotation 1'}).click();
+  await page.keyboard.type(' now');
+  await page.keyboard.press('Escape');
+  assert.match(await card.innerText(), /make a 6 mm hole in it$/m);
+  await card.getByRole('button', {name: 'Edit annotation 1'}).click();
+  await page.keyboard.type(', deburred');
+  await card.getByText(/^Annotation 1:/).click();
+  await page.waitForFunction(() => window.__delivered.length === 3);
+  assert.equal((await delivered())[2][0].text, 'make a 6 mm hole in it, deburred');
   await card.getByRole('button', {name: 'Close', exact: true}).click();
   await card.waitFor({state: 'detached'});
 
@@ -1535,9 +1548,9 @@ test('Annotate pins a note to the selection as a dot on the model and puts it in
   assert.match(await bar.innerText(), /^1 annotation\b/);
   await page.evaluate(() => { window.__deliveryFails = false; });
   await bar.getByRole('button', {name: 'Add to chat', exact: true}).click();
-  await page.waitForFunction(() => window.__delivered.length === 3);
+  await page.waitForFunction(() => window.__delivered.length === 4);
   await bar.waitFor({state: 'detached'});
-  assert.equal((await delivered())[2][0].text, 'add a fillet');
+  assert.equal((await delivered())[3][0].text, 'add a fillet');
   assert.deepEqual(view.errors.filter(error => !/No chat to add to/.test(error)), []);
 });
 

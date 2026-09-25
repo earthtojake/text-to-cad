@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Check, Hash, MessageSquarePlus, Trash2 } from "lucide-react";
 import { Button } from "@hardcore/ui/primitives/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@hardcore/ui/primitives/popover";
@@ -45,9 +45,17 @@ export function AnnotateButton({ disabled = false, onSubmit }) {
   );
 }
 
-function NoteInput({ value, onChange, onSubmit, onCancel, placeholder = "", className = "", label = "Annotation" }) {
+function NoteInput({ value, onChange, onSubmit, onCancel, onBlur, autoFocus = false, placeholder = "", className = "", label = "Annotation" }) {
+  const ref = useRef(null);
+  // Opened to edit a note: the caret goes to its end, so typing carries on from what is there.
+  useEffect(() => {
+    const element = ref.current;
+    if (!autoFocus || !element) return;
+    element.focus();
+    element.setSelectionRange(element.value.length, element.value.length);
+  }, [autoFocus]);
   return (
-    <textarea aria-label={label} value={value} placeholder={placeholder} rows={2}
+    <textarea ref={ref} aria-label={label} value={value} placeholder={placeholder} rows={2} onBlur={onBlur}
       className={cn("w-full resize-none rounded-md border border-input bg-transparent px-2 py-1.5 text-[13px] outline-none placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring", className)}
       onChange={event => onChange(event.target.value)}
       onKeyDown={event => {
@@ -79,7 +87,17 @@ export function AnnotationBody({ annotation, index, onSelect, onEdit, onRemove, 
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(annotation.text);
   useEffect(() => { if (!editing) setDraft(annotation.text); }, [annotation.text, editing]);
-  const save = () => { const value = draft.trim(); if (value) onEdit(value); setEditing(false); };
+  // Enter, Escape or leaving the box ends an edit, once: the box going away can blur it after.
+  const settled = useRef(false);
+  const startEditing = () => { settled.current = false; setEditing(true); };
+  const save = () => {
+    if (settled.current) return;
+    settled.current = true;
+    const value = draft.trim();
+    if (value) onEdit(value);
+    setEditing(false);
+  };
+  const cancel = () => { settled.current = true; setDraft(annotation.text); setEditing(false); };
   return (
     <div className="flex items-start gap-1.5">
       <div className="min-w-0 flex-1 text-[13px] leading-5">
@@ -88,12 +106,12 @@ export function AnnotationBody({ annotation, index, onSelect, onEdit, onRemove, 
           <span key={reference.selector} className="mr-1"><ReferenceChip reference={reference} onSelect={onSelect} /></span>
         ))}
         {editing ? (
-          <NoteInput className="mt-1" value={draft} onChange={setDraft} onSubmit={save}
-            onCancel={() => { setDraft(annotation.text); setEditing(false); }} label={`Edit annotation ${index + 1}`} />
+          <NoteInput className="mt-1" value={draft} onChange={setDraft} onSubmit={save} onBlur={save} autoFocus
+            onCancel={cancel} label={`Edit annotation ${index + 1}`} />
         ) : (
           <button type="button" aria-label={`Edit annotation ${index + 1}`} title="Edit"
             className="rounded-sm text-left whitespace-pre-wrap break-words hover:underline hover:decoration-muted-foreground/50 hover:underline-offset-2"
-            onClick={event => { event.stopPropagation(); setEditing(true); }}>
+            onClick={event => { event.stopPropagation(); startEditing(); }}>
             {annotation.text}
           </button>
         )}
