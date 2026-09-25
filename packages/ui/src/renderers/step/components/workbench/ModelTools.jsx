@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import ToolPanel from "../../../kit/tools/ToolPanel.jsx";
 import { CrossSectionControls, ExplodeControls } from "./ModelViewControls.js";
 import { explodablePartCount } from "../../workbench/explodableParts.js";
@@ -24,24 +24,20 @@ export function useModelTools({ modelKey, view, features, store, mesh, disabled,
     ...(view.exploded.enabled && view.exploded.amount > 0 ? ["exploded"] : []),
     ...(view.clip.enabled && Math.abs(view.clip.offsets[view.clip.axis] - (view.clip.invert ? 0 : 1)) > 1e-6 ? ["clip"] : []),
   ];
-  const previousTool = useRef(selectedTool);
-  const leave = (keepId = null) => setPanels(current => {
-    const ids = current.ids.filter(id => id === keepId || applied.includes(id));
-    return ids.length === current.ids.length ? current : { modelKey, ids };
-  });
   const [panels, setPanels] = useState(() => ({ modelKey, ids: applied }));
   const panelIds = panels.modelKey === modelKey ? panels.ids : applied;
-  useEffect(() => {
-    if (previousTool.current !== selectedTool) leave(selectedTool);
-    previousTool.current = selectedTool;
-  }, [selectedTool]);
+  const appliedKey = applied.join(",");
   useEffect(() => {
     setPanels(current => {
-      const ids = current.modelKey === modelKey ? current.ids : [];
-      const next = [...ids, ...applied.filter(id => !ids.includes(id))];
-      return current.modelKey === modelKey && next.length === ids.length ? current : { modelKey, ids: next };
+      const existing = current.modelKey === modelKey ? current.ids : [];
+      // Retain an untouched panel only while it owns input. The settings store is
+      // authoritative, so an external Reset also removes previously applied panels.
+      const ids = existing.filter(id => id === selectedTool || applied.includes(id));
+      ids.push(...applied.filter(id => !ids.includes(id)));
+      return current.modelKey === modelKey && ids.join(",") === current.ids.join(",")
+        ? current : { modelKey, ids };
     });
-  }, [modelKey, view.exploded.enabled, view.clip.enabled]);
+  }, [modelKey, selectedTool, appliedKey]);
   const definitions = [
     ...(measure ? [{ ...measure, id: "measure", label: "Measure" }] : []),
     { id: "exploded", label: "Explode", Icon: ExplodeIcon, unavailable: explodablePartCount(mesh) <= 1,
@@ -58,7 +54,6 @@ export function useModelTools({ modelKey, view, features, store, mesh, disabled,
     if (selectedTool === id) onSelect("references");
   };
   return {
-    leave,
     tools: definitions.filter(tool => tool.id !== "measure").map(({ id, label, Icon, unavailable }) => ({
       id, label, active: panelIds.includes(id), disabled: disabled || unavailable,
       icon: <Icon className="size-3" strokeWidth={2} aria-hidden="true" />,
@@ -77,7 +72,7 @@ export function useModelTools({ modelKey, view, features, store, mesh, disabled,
         return tool ? <section key={id} aria-label={`${tool.label} controls`}
           className="pointer-events-auto overflow-hidden rounded-md border border-border bg-popover text-popover-foreground shadow-sm text-tiny">
           <ToolPanel title={tool.label} label={`${tool.label} controls`} summary={tool.summary} collapsible
-            closeTitle="Reset and remove" onClose={() => remove(id)}>
+            onClose={() => remove(id)}>
             <div className="space-y-1 pb-1">{tool.controls}</div>
           </ToolPanel>
         </section> : null;

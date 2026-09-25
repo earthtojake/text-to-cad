@@ -89,7 +89,7 @@ test('a shell renderer resolves deferred files, reuses warm assets, restores iso
     .evaluateAll(buttons => buttons.map(button => `${button.getAttribute('aria-label')}:${button.getAttribute('aria-pressed')}`));
   // A mesh's one panel is Display, which a file never opens with: it is opened by its toggle.
   const openDisplay = async pane => {
-    if (await pane.locator('[data-cad-camera-controls]').getByRole('button', { name: 'Display', exact: true }).getAttribute('aria-expanded') !== 'true') await pane.locator('[data-cad-camera-controls]').getByRole('button', { name: 'Display', exact: true }).click();
+    if (await pane.locator('[data-cad-toolbar]').getByRole('button', { name: 'Display', exact: true }).getAttribute('aria-expanded') !== 'true') await pane.locator('[data-cad-toolbar]').getByRole('button', { name: 'Display', exact: true }).click();
     await pane.locator('[data-cad-display-popover]').waitFor();
   };
   const openSection = async title => {
@@ -110,7 +110,7 @@ test('a shell renderer resolves deferred files, reuses warm assets, restores iso
     await controller.setCamera({ ...controller.readState().camera, zoom: value });
   }, [testId, zoom]);
   const cameraZoom = () => page.evaluate(() => window.cadHarness.a.controller.readState().camera?.zoom ?? null);
-  await first.locator('[data-cad-camera-controls]').getByRole('button', { name: 'Display', exact: true }).waitFor().catch(async (error) => { throw new Error(`${error.message}; page errors: ${errors.join('; ')}; body: ${await page.locator("body").innerText()}; requests: ${requests.join(", ")}`); });
+  await first.locator('[data-cad-toolbar]').getByRole('button', { name: 'Display', exact: true }).waitFor().catch(async (error) => { throw new Error(`${error.message}; page errors: ${errors.join('; ')}; body: ${await page.locator("body").innerText()}; requests: ${requests.join(", ")}`); });
   // The file opened directly and opened with nothing: a mesh has no panel of its own, and
   // Display, its only one, is never where a file opens. Nor is the tree.
   assert.deepEqual(await panels(first), ['Show files:false']);
@@ -130,7 +130,7 @@ test('a shell renderer resolves deferred files, reuses warm assets, restores iso
   await openDisplay(first);
   assert.equal(await first.getByRole('button', { name: 'Theme settings', exact: true }).count(), 0);
   assert.equal(await first.locator('[data-file-sheet="Theme"]').count(), 0);
-  await first.locator('[data-cad-camera-controls]').getByRole('button', { name: 'Display', exact: true }).click();
+  await first.locator('[data-cad-toolbar]').getByRole('button', { name: 'Display', exact: true }).click();
   await first.getByRole('button', { name: 'Take snapshot', exact: true }).click();
   await page.waitForFunction(() => window.cadHarness.captures.length === 1);
   const captured = await page.evaluate(() => window.cadHarness.captures[0]);
@@ -144,8 +144,8 @@ test('a shell renderer resolves deferred files, reuses warm assets, restores iso
   await first.locator('[data-cad-display-popover]').waitFor({ state: 'detached' });
   // A mesh hands the shell no tools, so there is no strip over its viewport at
   // all: orbit, pan and zoom, and nothing to take up — nor Fullscreen, which is a STEP's.
-  assert.equal(await first.getByRole('group', { name: 'Interaction tools' }).count(), 0, 'camera controls do not create an empty interaction toolbar');
-  for (const name of ['Orbit', 'Draw', 'Select', 'Measure', 'Position', 'Animate', 'Fullscreen']) {
+  assert.equal(await first.getByRole('group', { name: 'Interaction tools' }).count(), 1, 'Display has a toolbar on every 3D file');
+  for (const name of ['Orbit', 'Draw', 'Select', 'Measure', 'Position', 'Animate']) {
     assert.equal(await first.getByRole('button', { name, exact: true }).count(), 0, name);
   }
   // Nor a menu of its own on a secondary press — and the browser's own is still
@@ -185,7 +185,7 @@ test('a shell renderer resolves deferred files, reuses warm assets, restores iso
   for (const saved of Object.values(before.renderers)) assert.ok(saved.camera, 'unmount flushes the outgoing camera');
   await page.evaluate(() => window.cadHarness.mounted(true));
   // Popover visibility is transient, not file state.
-  await first.locator('[data-cad-camera-controls]').getByRole('button', { name: 'Display', exact: true }).waitFor();
+  await first.locator('[data-cad-toolbar]').getByRole('button', { name: 'Display', exact: true }).waitFor();
   assert.equal(await first.locator('[data-cad-display-popover]').count(), 0);
   // The pane remounts before the viewport adopts the mesh and publishes its restored
   // camera. Wait for the actual presented frame, not an arbitrary settling delay.
@@ -583,16 +583,10 @@ test('a file opens framed at 100% of its own ruler: the open fit is the fit, wha
   const snapped = await page.evaluate(() => window.__cadCamera());
   snapped.target.forEach((value, index) => assert.ok(Math.abs(value - beforeSnap.target[index]) < 1e-8));
   assert.equal(snapped.zoom, beforeSnap.zoom);
-  const home = pane.getByRole('button', { name: 'Home', exact: true });
-  const display = pane.locator('[data-cad-camera-controls]').getByRole('button', { name: 'Display', exact: true });
-  const [homeBox, displayBox, cubeBox] = await Promise.all([home.boundingBox(), display.boundingBox(), pane.getByRole('img', { name: 'View cube' }).boundingBox()]);
-  assert.ok(homeBox.x < displayBox.x && homeBox.y === displayBox.y);
-  assert.ok(homeBox.y + homeBox.height <= cubeBox.y + 1);
-  await home.click();
-  const recovered = await settleInk(ink => ink > 0.05, 'framed the plate again after Home');
+  assert.equal(await pane.getByRole('button', { name: 'Home', exact: true }).count(), 0);
+  await page.evaluate(() => window.cadHarness.a.controller.resetCamera());
+  const recovered = await settleInk(ink => ink > 0.05, 'Zoom to Fit frames the plate after panning away');
   assert.ok(recovered > lost * 5);
-  await page.waitForFunction(() => Math.round(window.__cadCamera().zoomPercent) === 100);
-  assert.equal(Math.round((await page.evaluate(() => window.__cadCamera())).zoomPercent), 100);
   assert.deepEqual(errors, []);
 });
 
@@ -650,7 +644,8 @@ test('the shell keeps its Draw session across fullscreen, and fullscreen drags a
   // Fullscreen hides the host frame — the nav row and its panel toggles — without remounting
   // the scene or losing the tool.
   await page.evaluate(() => { window.beforeFullscreenCanvas = document.querySelector('[data-testid="one"] [aria-busy] > div > canvas'); window.cadHarness.fullscreen(true); });
-  await pane.locator('[data-file-panel]').first().waitFor({ state: 'detached' });
+  await pane.getByRole('button', { name: 'Exit fullscreen', exact: true }).waitFor();
+  assert.equal(await pane.locator('[data-file-panel]').first().isVisible(), true, 'fullscreen retains navbar actions');
   assert.equal(await pane.getByRole('group', { name: 'Interaction tools' }).count(), 0);
   assert.equal(await pane.getByRole('button', { name: 'Zoom controls' }).count(), 0);
   const defaultFullscreenCamera = await camera();
@@ -670,8 +665,8 @@ test('the shell keeps its Draw session across fullscreen, and fullscreen drags a
   // and the exit callback across FileViewer -> renderer -> toolbar.
   assert.equal(await pane.getByRole('toolbar', { name: 'Animation playback' }).count(), 0);
   await pane.getByRole('button', { name: 'Orbit settings', exact: true }).click();
-  await page.getByRole('slider', { name: 'Orbit speed', exact: true }).press('Home');
-  assert.equal(await page.getByRole('textbox', { name: 'Orbit speed value', exact: true }).inputValue(), '0×');
+  await page.getByRole('menuitemcheckbox', { name: 'Orbit', exact: true }).click();
+  assert.equal(await page.getByRole('menuitemcheckbox', { name: 'Orbit', exact: true }).getAttribute('aria-checked'), 'false');
   await page.keyboard.press('Escape');
   await pane.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
   await pane.getByRole('button', { name: 'Draw', exact: true }).waitFor();
@@ -976,17 +971,15 @@ test('a renderer supplies the viewport menu, a bottom action that falls back to 
   // shown whole. `render` is what actually drew the control both times.
   const action = pane.locator('[data-harness-bottom-action]');
   await action.waitFor();
-  const long = await page.evaluate(() => document.querySelector('[data-harness-bottom-action]').title);
-  assert.ok(long.length > 240 && long.startsWith('#harness_document/'), `the renderer's own long reference: ${long.length} chars`);
-  assert.equal(await action.innerText(), 'Copy 1 reference', 'a reference that does not fit becomes the count');
-  assert.equal(await action.getAttribute('title'), long, 'and the full reference is still the title');
+  assert.equal(await action.getAttribute('title'), null, 'no redundant native tooltip');
+  assert.equal(await action.locator('span').first().innerText(), 'Copy 1 reference', 'a reference that does not fit becomes the count');
   // What is on screen is one line of the count, not a cut-off reference.
-  assert.ok((await action.boundingBox()).width < 200, 'the button is the count\'s width');
+  assert.ok((await action.boundingBox()).width < 320, 'the button is the count\'s width');
   await action.click();
   await page.waitForFunction(() => document.querySelector('[data-harness-bottom-action]')?.textContent?.startsWith('#'));
-  const short = await action.innerText();
+  const short = await action.locator('span').first().innerText();
   assert.equal(short, '#harness_document/triangle_face_0001', 'a reference that fits is shown whole');
-  assert.equal(await action.getAttribute('title'), short);
+  assert.equal(await action.getAttribute('title'), null);
   assert.deepEqual(errors, []);
 });
 

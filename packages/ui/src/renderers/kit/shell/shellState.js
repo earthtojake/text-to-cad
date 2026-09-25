@@ -7,7 +7,7 @@ import { annotatePerspectiveSnapshot, clonePerspectiveSnapshot } from "@hardcore
 // slot that is the renderer's own business. Which panel is open is the host's, not
 // the file's.
 //
-//   { version: 1, camera, display, tool, renderer }
+//   { version: 1, camera: null, display, tool, renderer }
 //
 // Reading is forgiving (a record another version wrote is simply not restored);
 // writing is exact. Nothing here touches storage: the host owns that.
@@ -56,7 +56,7 @@ export function readShellState(raw) {
 }
 
 /** The record for the view as it is now. `tool` is what `toolModes.persisted` allows a tab to record. */
-export function writeShellState({ camera = null, display = {}, tool = "", renderer = {} } = {}) {
+export function writeShellState({ display = {}, tool = "", renderer = {} } = {}) {
   return {
     version: SHELL_STATE_VERSION,
     camera: null,

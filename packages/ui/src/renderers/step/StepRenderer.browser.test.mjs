@@ -169,7 +169,7 @@ const scrollingInside = (pane, sheet) => pane.locator(`[data-file-sheet="${sheet
 test('a STEP opens in Select with the tools its sidecar earns and Display last, on its own panel with the sections the sidecar earns, and paints both authored colours', async () => {
   const view = await open();
   const { pane, errors } = view;
-  assert.deepEqual(await view.tools(), ['Select:true', 'Draw:false', 'Measure:false', 'Explode:false', 'Clip:false', 'Position:false', 'Animate:false'],
+  assert.deepEqual(await view.tools(), ['Select:true', 'Draw:false', 'Measure:false', 'Explode:false', 'Clip:false', 'Position:false', 'Animate:false', 'Display:false'],
     'Position and Animate because the sidecar bound; Display, an independent settings popover, is the last button');
   // The nav row is the tab strip: the file's own panel (named for what it is, the icon its
   // tree draws for it), then Display, then the tree. The file opened directly, so it opened
@@ -243,7 +243,7 @@ test('Select picks parts and faces, a selection lives only under Select, and the
   await page.waitForFunction(() => window.cadHarness.a.controller.readState().selectedPartIds.length === 0);
   await pane.getByRole('button', { name: 'Select arm', exact: true }).click();
   await page.waitForFunction(() => window.cadHarness.a.controller.readState().selectedPartIds.length === 1);
-  assert.deepEqual(await view.tools(), ['Select:true', 'Draw:false', 'Measure:false', 'Explode:false', 'Clip:false', 'Position:false', 'Animate:false']);
+  assert.deepEqual(await view.tools(), ['Select:true', 'Draw:false', 'Measure:false', 'Explode:false', 'Clip:false', 'Position:false', 'Animate:false', 'Display:false']);
   assert.deepEqual((await view.state()).selectedPartIds, ['o1.2']);
   await page.keyboard.press('Escape');
 
@@ -468,12 +468,12 @@ test('hiding a part takes it off the screen, and the viewport menus offer what t
   }
   // A tree-row action chosen under another tool lands in Select first, then acts —
   // Isolate, which has no selection of its own to make and so cannot get there by itself.
-  assert.deepEqual(await view.tools(), ['Select:false', 'Draw:true', 'Measure:false', 'Explode:false', 'Clip:false', 'Position:false', 'Animate:false']);
+  assert.deepEqual(await view.tools(), ['Select:false', 'Draw:true', 'Measure:false', 'Explode:false', 'Clip:false', 'Position:false', 'Animate:false', 'Display:false']);
   await pane.getByRole('button', { name: 'Select arm', exact: true }).click({ button: 'right' });
   await page.getByRole('menuitem', { name: 'Isolate', exact: true }).click();
   await page.getByRole('menu').waitFor({ state: 'detached' });
   await page.waitForFunction(() => window.cadHarness.a.controller.readState().isolatedPartIds.join() === 'o1.2');
-  assert.deepEqual(await view.tools(), ['Select:true', 'Draw:false', 'Measure:false', 'Explode:false', 'Clip:false', 'Position:false', 'Animate:false']);
+  assert.deepEqual(await view.tools(), ['Select:true', 'Draw:false', 'Measure:false', 'Explode:false', 'Clip:false', 'Position:false', 'Animate:false', 'Display:false']);
   await page.keyboard.press('Escape');
   assert.deepEqual(errors, []);
 });
@@ -534,9 +534,9 @@ test('the context menu frames the model and the selection, from the viewport and
   // And from a tree row under another tool it lands in Select first, exactly as every
   // other tree-row action does, then frames the model again.
   await view.tool('Measure').click();
-  assert.deepEqual(await view.tools(), ['Select:false', 'Draw:false', 'Measure:true', 'Explode:false', 'Clip:false', 'Position:false', 'Animate:false']);
+  assert.deepEqual(await view.tools(), ['Select:false', 'Draw:false', 'Measure:true', 'Explode:false', 'Clip:false', 'Position:false', 'Animate:false', 'Display:false']);
   await choose(treeRow('Select base'), 'Zoom to fit');
-  assert.deepEqual(await view.tools(), ['Select:true', 'Draw:false', 'Measure:false', 'Explode:false', 'Clip:false', 'Position:false', 'Animate:false'],
+  assert.deepEqual(await view.tools(), ['Select:true', 'Draw:false', 'Measure:false', 'Explode:false', 'Clip:false', 'Position:false', 'Animate:false', 'Display:false'],
     'a tree-row framing action comes back to Select, like the rest of that menu');
   await frameWhen(view, shot => armWidth(shot) > 0 && armWidth(shot) < framedSelection * 0.9,
     `framed the whole model again from ${framedSelection}`);
@@ -873,7 +873,7 @@ test('Animate is the last mode on the strip, its playbar plays the routine, leav
   await view.tool('Animate').click();
   const playbar = pane.getByRole('toolbar', { name: 'Animation playback' });
   await playbar.waitFor();
-  assert.deepEqual(await view.tools(), ['Select:false', 'Draw:false', 'Measure:false', 'Explode:false', 'Clip:false', 'Position:false', 'Animate:true']);
+  assert.deepEqual(await view.tools(), ['Select:false', 'Draw:false', 'Measure:false', 'Explode:false', 'Clip:false', 'Position:false', 'Animate:true', 'Display:false']);
   // One routine: no routine-list button, just transport and the settings cog.
   assert.deepEqual(await playbar.getByRole('button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
     ['Pause animation', 'Playback settings']);
@@ -906,7 +906,7 @@ test('Animate is the last mode on the strip, its playbar plays the routine, leav
   await view.tool('Display').click();
   await page.getByRole('button', { name: 'Disable Orbit', exact: true }).click();
   await view.tool('Display').click();
-  assert.deepEqual(await view.tools(), ['Select:false', 'Draw:false', 'Measure:false', 'Explode:false', 'Clip:false', 'Position:false', 'Animate:true']);
+  assert.deepEqual(await view.tools(), ['Select:false', 'Draw:false', 'Measure:false', 'Explode:false', 'Clip:false', 'Position:false', 'Animate:true', 'Display:false']);
   assert.deepEqual(await view.panels(), ['Settings:true', 'Show files:false']);
   assert.deepEqual(errors, []);
 });
@@ -1468,54 +1468,55 @@ test('Preview starts animation, its corner chooses routines and Orbit, and only 
 });
 
 
-test('Preview is available without animations and pauses Orbit from its playbar', async t => {
+test('fullscreen works without animations, retains the navbar and restores the sidebar', async t => {
   const original = harness.entry.sourceSidecar.animation;
   t.after(() => { harness.entry.sourceSidecar.animation = original; });
   let view;
-  try { harness.entry.sourceSidecar.animation = { language: "javascript", source: "export const clips = {};" }; view = await open(); }
-  catch (error) { harness.entry.sourceSidecar.animation = original; throw error; }
+  try { harness.entry.sourceSidecar.animation = { language: 'javascript', source: 'export const clips = {};' }; view = await open(); }
+  finally { harness.entry.sourceSidecar.animation = original; }
   const { page, pane, errors } = view;
-  await view.tool('Preview').click();
+  assert.equal(await view.tool('Animate').count(), 0);
+  await pane.getByRole('button', { name: 'Fullscreen', exact: true }).click();
   const bar = pane.getByRole('toolbar', { name: 'Orbit playback' });
   await bar.getByRole('button', { name: 'Pause orbit' }).click();
   assert.equal(await bar.getByRole('button', { name: 'Play orbit' }).isVisible(), true);
-  await view.tool('Preview').click();
-  await page.getByRole('menuitemcheckbox', { name: 'Orbit' }).waitFor();
-  assert.equal(await page.getByRole('menuitemcheckbox', {name:'Orbit',exact:true}).getAttribute('aria-checked'), 'true');
-  assert.equal(await page.getByRole('menuitemradio').count(), 0);
+  assert.equal(await pane.locator('[data-file-panel="cad-file"]').isVisible(), true, 'navbar stays visible');
+  assert.equal(await pane.locator('[data-file-sheet="Settings"]').isVisible(), false);
+  assert.equal(await pane.getByRole('img', { name: 'View cube' }).count(), 0);
+  await pane.getByRole('button', { name: 'Orbit settings', exact: true }).click();
+  assert.equal(await page.getByRole('menuitemcheckbox', { name: 'Orbit', exact: true }).getAttribute('aria-checked'), 'false');
   await page.keyboard.press('Escape');
-  await view.tool('Select').click();
+  await pane.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
   await bar.waitFor({ state: 'detached' });
+  assert.equal(await pane.locator('[data-file-sheet="Settings"]').isVisible(), true);
   assert.deepEqual(errors, []);
 });
 
-
-test('Preview suspends persistent effects without losing values and restores them on exit', async () => {
+test('fullscreen restores camera and retained tools without changing saved effects', async () => {
   const view = await open();
   const { page, pane, errors } = view;
-  const whole = partBoxes(await view.frame());
   await view.tool('Clip').click();
   await page.getByLabel('Clip amount value', { exact: true }).fill('50%');
   await page.getByLabel('Clip amount value', { exact: true }).press('Enter');
-  await frameWhen(view, shot => partBoxes(shot).base.count < whole.base.count * 0.8, 'clip removes geometry before preview');
   await view.tool('Explode').click();
   await page.getByRole('slider', { name: 'Explode amount' }).press('End');
-  const saved = (await view.state()).display;
-  await view.tool('Preview').click();
-  await pane.getByRole('toolbar', { name: 'Animation playback' }).getByRole('button', { name: 'Pause animation' }).click();
-  await frameWhen(view, shot => partBoxes(shot).base.count > whole.base.count * 0.9, 'preview restores unclipped geometry');
-  assert.equal(await page.getByRole('region', {name:'Clip controls', exact:true}).count(), 0);
-  assert.equal(await view.tool('Clip').getAttribute('aria-pressed'), 'false');
-  assert.equal((await view.state()).display.clip.enabled, saved.clip.enabled);
-  // Restoring via a previously live tool must exit Preview, not remove the effect.
-  await view.tool('Clip').click();
+  await page.evaluate(() => window.cadHarness.a.controller.setCamera({ ...window.cadHarness.a.controller.readState().camera, zoom: 1.6, target: [4, 5, 2] }));
+  const saved = await view.state();
+  const sidebar = await pane.locator('[data-file-sheet="Settings"]').boundingBox();
+  await pane.getByRole('button', { name: 'Fullscreen', exact: true }).click();
+  assert.equal(await view.tool('Clip').count(), 0);
+  assert.equal(await page.getByRole('region', { name: 'Clip controls', exact: true }).count(), 0);
+  assert.deepEqual((await view.state()).display.clip, saved.display.clip);
+  await pane.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
   await page.getByLabel('Clip amount value', { exact: true }).waitFor();
-  assert.equal(await view.tool('Preview').getAttribute('aria-pressed'), 'false');
-  assert.deepEqual((await view.state()).display.clip, saved.clip);
-  assert.deepEqual((await view.state()).display.exploded, saved.exploded);
+  assert.deepEqual((await view.state()).display.clip, saved.display.clip);
+  assert.deepEqual((await view.state()).display.exploded, saved.display.exploded);
+  assert.deepEqual(await pane.locator('[data-file-sheet="Settings"]').boundingBox(), sidebar);
+  const restored = (await view.state()).camera;
+  for (const key of ['position', 'target', 'up']) saved.camera[key].forEach((value, i) => assert.ok(Math.abs(value - restored[key][i]) < 1e-6, `restored ${key}`));
+  assert.equal(restored.zoom, saved.camera.zoom);
   assert.deepEqual(errors, []);
 });
-
 
 test('sidebar follows explicit Position requests and picks without reopening a closed panel', async () => {
   const view = await open();

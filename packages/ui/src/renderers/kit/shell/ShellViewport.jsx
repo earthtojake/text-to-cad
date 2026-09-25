@@ -30,7 +30,7 @@ import {
   DEFAULT_VIEW_DIRECTION, DEFAULT_VIEW_PLANE_ORIENTATION, KEYBOARD_ORBIT_NUDGE_RAD, VIEWING_MODE, VIEW_PLANE_FACES,
   WHEEL_PINCH_DELTA_BOOST, WORLD_UP, applyOrbitDelta, clearKeyboardOrbitState,
   getActiveViewPlaneFaceId, getKeyboardOrbitAxes, getKeyboardOrbitCommand, isPinchWheelEvent, isTrackpadLikeWheelEvent,
-  reframeReason, runtimeFramingBounds, stepKeyboardOrbit
+  reframeReason, stepKeyboardOrbit
 } from "../camera/viewportCameraKit.js";
 import {
   ACCELERATED_WHEEL_ZOOM_SPEED, COARSE_POINTER_PINCH_ZOOM_SPEED, COARSE_POINTER_ZOOM_SPEED, DEFAULT_ZOOM_SPEED,
@@ -99,11 +99,6 @@ const ShellViewport = forwardRef(function ShellViewport({
   drawingEnabled = false,
   drawing = null,
   onPerspectiveChange = null,
-  onProjectionChange = null,
-  displayMode = "solid",
-  displayPreset = "solid",
-  displayModes = null,
-  onDisplayModeChange = null,
   onPresentationChange = null,
   onViewerAlertChange = null,
   // The camera came to rest on a new view: a presentation camera that moved (fullscreen's
@@ -160,8 +155,6 @@ const ShellViewport = forwardRef(function ShellViewport({
   // each fits the rest placement itself rather than inheriting the other's pose.
   const framedViewingModeRef = useRef("");
   const modelTransformRef = useRef({ offset: new THREE.Vector3(0, 0, 0) });
-  // The camera hook reports whether the default view was left; this viewport draws nothing from it.
-  const [, setDefaultPerspectiveDetached] = useState(false);
   const [error, setError] = useState("");
   const [viewerReadyTick, setViewerReadyTick] = useState(0);
   const [runtimeResetToken, setRuntimeResetToken] = useState(0);
@@ -190,7 +183,6 @@ const ShellViewport = forwardRef(function ShellViewport({
   const [activeViewPlaneFace, setActiveViewPlaneFace] = useState("");
   const [viewPlaneOrientation, setViewPlaneOrientation] = useState(DEFAULT_VIEW_PLANE_ORIENTATION);
   const activeViewPlaneFaceRef = useRef("");
-  const defaultPerspectiveResettingRef = useRef(false);
   const previewModeRef = useRef(previewMode);
   // The presentation camera never becomes the file's stored camera.
   const fullscreenCameraRef = useRef(null);
@@ -293,14 +285,14 @@ const ShellViewport = forwardRef(function ShellViewport({
   };
   const coordinateSystemFor = useCallback(() => STORED_CAMERA_COORDINATES, []);
   const {
-    activateDefaultViewPlane, activateViewPlaneFace, orbitFromViewCube, applyInitialPerspective, emitPerspectiveChange,
+    activateViewPlaneFace, orbitFromViewCube, applyInitialPerspective, emitPerspectiveChange,
     resetZoomAndPan, syncFullscreenCamera, syncViewPlaneOrientation
   } = useViewportCamera({
-    coordinateSystemFor, activeViewPlaneFaceRef, defaultPerspectiveResettingRef, fullscreenCameraRef,
+    coordinateSystemFor, activeViewPlaneFaceRef, fullscreenCameraRef,
     lastEmittedPerspectiveRef, cameraMovedRef, modelBounds: scene?.restBounds || scene?.bounds || null, modelKey, modelKeyRef,
     modelTransformRef, perspectiveChangeRef, perspectivePropRef, perspectiveRef, previewMode,
     previewModeRef, previewOrbitSpeed, runWithoutPerspectiveEvents, runtimeRef, sceneScaleModeRef, setActiveViewPlaneFace,
-    setDefaultPerspectiveDetached, setViewPlaneOrientation, suppressPerspectiveEventsRef, viewerReadyTick
+    setViewPlaneOrientation, suppressPerspectiveEventsRef, viewerReadyTick
   });
   // The open-time fit is taken under the lens the viewport opens with, and the file's own
   // projection arrives a moment later. CONVERTING that fit to the other projection is not the
@@ -379,7 +371,6 @@ const ShellViewport = forwardRef(function ShellViewport({
       });
     },
     activateViewPlaneFace,
-    activateDefaultViewPlane,
     requestRender() { runtimeRef.current?.requestRender?.(); },
     getPerspective() {
       return readScopedPerspectiveSnapshot(runtimeRef.current, {
@@ -413,7 +404,7 @@ const ShellViewport = forwardRef(function ShellViewport({
       if (!bounds || !runtime) return false;
       return zoomRuntimeToBounds(runtime, bounds, sceneScaleModeRef.current, { animate, modelOffset: modelTransformRef.current.offset });
     }
-  }), [activateViewPlaneFace, activateDefaultViewPlane, modelKey, normalizedSceneScaleMode, resetZoomAndPan, scene]);
+  }), [activateViewPlaneFace, modelKey, normalizedSceneScaleMode, resetZoomAndPan, scene]);
 
   // Read-only debug/test seam: the LIVE camera of the viewport that mounted last, so a
   // browser test can assert that moving a model leaves the framing exactly where it was.
@@ -455,9 +446,7 @@ const ShellViewport = forwardRef(function ShellViewport({
     framedBoundsRef.current = null;
     framedViewingModeRef.current = "";
     lastEmittedPerspectiveRef.current = null;
-    defaultPerspectiveResettingRef.current = false;
     viewerAlertChangeRef.current?.(null);
-    setDefaultPerspectiveDetached(false);
     setRuntimeResetToken((value) => value + 1);
   }, []);
   const handleRuntimeInitializationError = useCallback((runtimeError) => {

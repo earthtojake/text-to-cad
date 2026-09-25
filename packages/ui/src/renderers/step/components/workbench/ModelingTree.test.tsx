@@ -335,7 +335,7 @@ it('finds a nested part inside a collapsed subassembly, showing its owner path, 
  fireEvent.change(screen.getByRole('textbox',{name:'Filter model'}),{target:{value:'Wrist'}});
  await screen.findByRole('list',{name:'Model search results'});
  const hit=screen.getByRole('button',{name:'Select Wrist'});
- expect(hit.title).toBe('Arm/Wrist');
+ expect(hit.title).toBe(''); // no native tooltip competing with the shared hint
  expect(within(hit).getByText('Arm')).toBeTruthy();
  expect(onToggleTreeNode).not.toHaveBeenCalled();
  expect(request.mock.calls.length).toBe(callsBefore);

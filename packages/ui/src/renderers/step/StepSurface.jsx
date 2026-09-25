@@ -35,7 +35,7 @@ import { useStepPanel } from "./components/workbench/StepPanel.js";
 import { CAD_PANEL } from "../../file-viewer/navigation/panels.js";
 import { restoreMotionAnimation, restoreMotionParameters } from "./workbench/motionRestore.js";
 import { useStepMotionControls } from "./workbench/useStepMotionControls.js";
-import { animationControlsHaveContent } from "./components/workbench/AnimationControlsSection.js";
+import { animationControlsHaveContent } from "../kit/tools/playbar/ViewportAnimationBar.js";
 import { useCadAssets } from "./components/workbench/hooks/useCadAssets.js";
 import { useEditingPreview } from "./components/workbench/hooks/useEditingPreview.js";
 import { useViewportQualityStatus } from "./components/workbench/hooks/useViewportQualityStatus.js";
@@ -52,7 +52,7 @@ import {
   REFERENCE_STATUS,
   TAB_TOOL_MODE
 } from "./workbench/constants.js";
-import { promptDeliveryMessage } from "../kit/shell/promptContext.js";
+import { promptDeliveryError } from "../kit/shell/promptContext.js";
 import { readStepRecord, stepRecordSignatures, writeStepRecord } from "./workbench/stepSessionRecord.js";
 import {
   entrySourceFormat,
@@ -230,7 +230,6 @@ import {
   addReferenceLookupKeys,
   buildStepTreeCopyReferenceMap,
   buildStepTreeExpansionMenuState,
-  childAssemblyNodeIdForPickedLeaf,
   collectStepTreeRevealExpansionIds,
   collectStepTreeSubtreeIds,
   collectStepTreeTopologyLoadableNodeIds,
@@ -301,7 +300,6 @@ function StepSurfaceBody({
   const [selectionFilterNotice, setSelectionFilterNotice] = useState("");
   const [selectedPartIds, setSelectedPartIds] = useState([]);
   const [selectedRenderPartIdByAssemblyPartId, setSelectedRenderPartIdByAssemblyPartId] = useState({});
-  const [selectedWholeEntryCadRefToken, setSelectedWholeEntryCadRefToken] = useState("");
   const [expandedStepTreeNodeIds, setExpandedStepTreeNodeIds] = useState([]);
   const [activeTreeNodeScrollKey, setActiveTreeNodeScrollKey] = useState("");
   const [hiddenPartIds, setHiddenPartIds] = useState([]);
@@ -466,7 +464,6 @@ function StepSurfaceBody({
       setSelectedReferenceIds([]);
       setSelectedPartIds([]);
       setSelectedRenderPartIdByAssemblyPartId({});
-      setSelectedWholeEntryCadRefToken("");
     }
     previousPreviewTree.current = next;
   }, [selectedEntry?.file, selectedEntry?.hash, selectedEntry?.editingPreview]);
@@ -858,37 +855,33 @@ function StepSurfaceBody({
   ]);
 
   const handleCopyParameters = useCallback(async () => {
-    setScreenshotStatus("");
     const runtime = activeParameterRuntime;
     if (!runtime?.definition?.parameters?.length) {
-      setCopyStatus(`No ${runtime?.label || "model"} parameters to copy`);
+      reportActionError(`No ${runtime?.label || "model"} parameters to copy`);
       return;
     }
     try {
       await host.clipboard.writeText(buildParameterValuesCopyText(runtime.definition, runtime.values));
-      setCopyStatus(`Copied ${runtime.label} parameters`);
     } catch (error) {
-      setCopyStatus(error instanceof Error ? error.message : "Clipboard write failed");
+      reportActionError(error instanceof Error ? error.message : "Clipboard write failed");
     }
   }, [activeParameterRuntime]);
 
   const handlePasteParameters = useCallback(async () => {
-    setScreenshotStatus("");
     const runtime = activeParameterRuntime;
     if (!runtime?.definition?.parameters?.length) {
-      setCopyStatus(`No ${runtime?.label || "model"} parameters to paste`);
+      reportActionError(`No ${runtime?.label || "model"} parameters to paste`);
       return;
     }
     try {
       const clipboardText = await host.clipboard.readText();
-      const { values, count } = parseParameterValuesPasteText(runtime.definition, clipboardText, {
+      const { values } = parseParameterValuesPasteText(runtime.definition, clipboardText, {
         label: `${runtime.label} parameter`,
         unknownLabel: `${runtime.label} parameter`
       });
       runtime.applyValues(values);
-      setCopyStatus(`Pasted ${count} ${runtime.label} param${count === 1 ? "" : "s"}`);
     } catch (error) {
-      setCopyStatus(error instanceof Error ? error.message : "Clipboard paste failed");
+      reportActionError(error instanceof Error ? error.message : "Clipboard paste failed");
     }
   }, [activeParameterRuntime]);
 
@@ -1288,12 +1281,10 @@ function StepSurfaceBody({
     setSelectedPartIds([]);
     setSelectedReferenceIds([]);
     setSelectedRenderPartIdByAssemblyPartId({});
-    setSelectedWholeEntryCadRefToken("");
     setHoveredListReferenceId("");
     setHoveredModelReferenceId("");
     setHoveredListPartId("");
     setHoveredModelPartId("");
-    setCopyStatus("");
   }, []);
 
   // A routine that failed to load has no Animate tool to say so on: it is one of the file's
@@ -2015,9 +2006,6 @@ function StepSurfaceBody({
   const handleMeasureCancelDraft = useCallback(() => {
     setMeasureRulerState((current) => cancelMeasureRulerDraft(current));
   }, []);
-  const handleMeasureClear = useCallback(() => {
-    setMeasureRulerState((current) => clearMeasureRulerMeasurements(current));
-  }, []);
   const measureMeasurements = measureRulerState?.measurements || EMPTY_LIST;
   // Only rescue the highlight when the row it points at is gone (deleted or
   // cleared). Taking a new measurement promotes it separately, below; doing it
@@ -2270,8 +2258,7 @@ function StepSurfaceBody({
     onPresentationChange: handlePresentationChange
   });
   shellRef.current = shell;
-  const setCopyStatus = shell.setCopyStatus;
-  const setScreenshotStatus = shell.setScreenshotStatus;
+  const reportActionError = shell.reportActionError;
   const filePanelOpen = shell.openPanel === CAD_PANEL.file;
 
   useEffect(() => {
@@ -2449,8 +2436,8 @@ function StepSurfaceBody({
       referenceMap: effectiveActiveReferenceMap, parts: selectedMeshData?.parts || EMPTY_LIST, entry: selectedEntry,
     }) : canonicalCopySelectionLines.join("\n");
     if (!text || stepInteractionBlocked) return;
-    try { await host.clipboard.writeText(text); shellRef.current?.setCopyStatus((copySelectionPayload.copiedCount || canonicalCopySelectionLines.length) > 1 ? "References copied" : "Reference copied"); }
-    catch (error) { shellRef.current?.setCopyStatus(error instanceof Error ? error.message : "Could not copy reference"); }
+    try { await host.clipboard.writeText(text); }
+    catch (error) { shellRef.current?.reportActionError(error instanceof Error ? error.message : "Could not copy reference"); }
   }, [canonicalCopySelectionLines, copySelectionPayload.copiedCount, stepInteractionBlocked, host.clipboard, inspectionHighlight, effectiveActiveReferenceMap, selectedMeshData, selectedEntry]);
   // The tip teaches reference syntax, so it fires on the first pick that yields
   // a reference to copy — a component, a subassembly, or a face/edge. Gating it
@@ -2513,7 +2500,6 @@ function StepSurfaceBody({
     const next = !multiSelect && selectedPartIdsRef.current.length
       ? (normalizedReferenceId ? [normalizedReferenceId] : [])
       : computeNextSelectionIds(selectedReferenceIdsRef.current, normalizedReferenceId, { multiSelect });
-    setSelectedWholeEntryCadRefToken("");
     if (!multiSelect && selectedPartIdsRef.current.length) {
       selectedPartIdsRef.current = [];
       setSelectedPartIds([]);
@@ -2537,14 +2523,12 @@ function StepSurfaceBody({
 
   const clearReferenceSelection = useCallback(() => {
     selectedReferenceIdsRef.current = [];
-    setSelectedWholeEntryCadRefToken("");
     setSelectedReferenceIds([]);
-    setCopyStatus("");
   }, []);
 
   // Copy is clipboard-only. Adding context is an explicit host action.
   const deliverReferenceText = useCallback((text) => host.clipboard.writeText(text), [host.clipboard]);
-  const showPromptResult = useCallback((result) => shellRef.current?.setCopyStatus(promptDeliveryMessage(result)), []);
+  const showPromptResult = useCallback((result) => shellRef.current?.reportActionError(promptDeliveryError(result)), []);
   const deliverPrompt = useCallback((context) => {
     let pending;
     try { pending = host.promptContext.deliver(context); }
@@ -2585,11 +2569,9 @@ function StepSurfaceBody({
     selectedPartIdsRef.current = [];
     setSelectedPartIds([]);
     setSelectedRenderPartIdByAssemblyPartId({});
-    setSelectedWholeEntryCadRefToken("");
     selectedReferenceIdsRef.current = next;
     setSelectedReferenceIds(next);
     setActiveTreeNodeScrollKey("");
-    setCopyStatus("");
   }, [stepUpdateInProgress, effectiveActiveReferenceMap]);
   const hostReference = useMemo(
     () => ({ deliverReference: deliverReferenceText, addReference: addReferenceText, canAddToPrompt: composerDestination && promptAvailable }),
@@ -2665,7 +2647,6 @@ function StepSurfaceBody({
     const next = !multiSelect && selectedReferenceIdsRef.current.length
       ? (normalizedPartId ? [normalizedPartId] : [])
       : computeNextSelectionIds(selectedPartIdsRef.current, partId, { multiSelect });
-    setSelectedWholeEntryCadRefToken("");
     if (!multiSelect && selectedReferenceIdsRef.current.length) {
       selectedReferenceIdsRef.current = [];
       setSelectedReferenceIds([]);
@@ -2791,7 +2772,6 @@ function StepSurfaceBody({
     setInspectionHighlight(null);
     selectedPartIdsRef.current = [];
     selectedReferenceIdsRef.current = [];
-    setSelectedWholeEntryCadRefToken("");
     setSelectedPartIds([]);
     setSelectedRenderPartIdByAssemblyPartId({});
     setSelectedReferenceIds([]);
@@ -2800,7 +2780,6 @@ function StepSurfaceBody({
     setHoveredListReferenceId("");
     setHoveredModelReferenceId("");
     setViewerContextMenu(null);
-    setCopyStatus("");
   }, []);
 
   const collapseStepTreeSubtree = useCallback((partId) => {
@@ -2901,19 +2880,6 @@ function StepSurfaceBody({
     if (tabToolMode !== TAB_TOOL_MODE.REFERENCES) clearAssemblySelectionForFocus();
   }, [tabToolMode, clearAssemblySelectionForFocus]);
 
-  useEffect(() => {
-    {
-      return;
-    }
-    if (
-      selectedPartIdsRef.current.length ||
-      selectedReferenceIdsRef.current.length ||
-      selectedWholeEntryCadRefToken
-    ) {
-      clearAssemblySelection();
-    }
-  }, [clearAssemblySelection, selectedWholeEntryCadRefToken]);
-
   const clearSelectionForHiddenLeafIds = useCallback((leafIds, nodeId = "") => {
     const hiddenLeafIds = new Set(
       (Array.isArray(leafIds) ? leafIds : [])
@@ -2963,10 +2929,6 @@ function StepSurfaceBody({
       setSelectedReferenceIds(nextSelectedReferenceIds);
     }
 
-    if (partSelectionChanged || referenceSelectionChanged) {
-      setSelectedWholeEntryCadRefToken("");
-      setCopyStatus("");
-    }
   }, [
     assemblyRoot,
     effectiveActiveReferenceMap,
@@ -3530,7 +3492,7 @@ function StepSurfaceBody({
 
   const copyViewerContextMenuReference = useCallback(async (menu) => {
     if (stepInteractionBlocked) {
-      setCopyStatus(retainedPreviousStepMeshError
+      reportActionError(retainedPreviousStepMeshError
         ? "Selection unavailable because the STEP update failed."
         : "STEP update in progress. Please wait.");
       return;
@@ -3541,27 +3503,26 @@ function StepSurfaceBody({
       .filter(Boolean)
       .join("\n");
     if (!copyText) {
-      setCopyStatus("No selector ref is available for this node");
+      reportActionError("No selector ref is available for this node");
       return;
     }
     try {
       await deliverReferenceText(copyText);
-      setCopyStatus("Copied reference");
     } catch (error) {
-      setCopyStatus(error instanceof Error ? error.message : "Failed to copy reference");
+      reportActionError(error instanceof Error ? error.message : "Failed to copy reference");
     }
   }, [deliverReferenceText, retainedPreviousStepMeshError, stepInteractionBlocked]);
 
   const copyStepTreeContextMenuReference = useCallback(async (id, { topology = false, toPrompt = false } = {}) => {
     if (stepInteractionBlocked) {
-      setCopyStatus(retainedPreviousStepMeshError
+      reportActionError(retainedPreviousStepMeshError
         ? "Selection unavailable because the STEP update failed."
         : "STEP update in progress. Please wait.");
       return;
     }
     const normalizedId = String(id || "").trim();
     if (!normalizedId) {
-      setCopyStatus("No selector ref is available for this node");
+      reportActionError("No selector ref is available for this node");
       return;
     }
     const wholeStepEntryReference = !topology && !isAssemblyView && normalizedId === STEP_MODEL_ROOT_ID
@@ -3611,17 +3572,16 @@ function StepSurfaceBody({
     });
     const copyText = canonicalCadRefCopyText(lines[0]);
     if (!copyText) {
-      setCopyStatus("No selector ref is available for this node");
+      reportActionError("No selector ref is available for this node");
       return;
     }
     try {
       if (toPrompt) addReferenceText(copyText);
       else {
         await deliverReferenceText(copyText);
-        setCopyStatus("Copied reference");
       }
     } catch (error) {
-      setCopyStatus(error instanceof Error ? error.message : "Failed to copy reference");
+      reportActionError(error instanceof Error ? error.message : "Failed to copy reference");
     }
   }, [
     deliverReferenceText,
@@ -3768,7 +3728,7 @@ function StepSurfaceBody({
   // the viewport's one framing act — the live `resetCamera` command is the same call.
   const zoomToFitModel = useCallback(() => {
     if (!viewerRef.current?.resetZoom?.()) {
-      setCopyStatus("CAD Viewer camera not ready");
+      reportActionError("CAD Viewer camera not ready");
     }
   }, []);
 
@@ -3783,7 +3743,7 @@ function StepSurfaceBody({
     const referenceIds = ids(zoomSelectionRef.current.referenceIds);
     if (!(partIds.length || referenceIds.length)
       || !zoomToFitSelection({ partIds, referenceIds, animate: true })) {
-      setCopyStatus("No geometry to fit");
+      reportActionError("No geometry to fit");
     }
   }, []);
 
@@ -3818,7 +3778,7 @@ function StepSurfaceBody({
       .filter(Boolean)
       .join("\n");
     if (!copyText) {
-      setCopyStatus("No selector ref is available for this node");
+      reportActionError("No selector ref is available for this node");
       return;
     }
     addReferenceText(copyText);
@@ -3961,7 +3921,6 @@ function StepSurfaceBody({
       selectedReferenceIdsRef.current = references;
       setSelectedPartIds(parts);
       setSelectedReferenceIds(references);
-      setSelectedWholeEntryCadRefToken('');
       setInspectionHighlight(null);
       setSelectedRenderPartIdByAssemblyPartId(current => Object.fromEntries(parts.map(id => [id, renderPartIdForAssemblySelection(id, current[id])]).filter(([, id]) => id)));
       const last = selections[selections.length - 1];
@@ -4146,11 +4105,7 @@ function StepSurfaceBody({
       active: animateToolActive, disabled: toolIdle,
       onSelect: () => { if (!animateToolActive) { handleSelectTabToolMode(TAB_TOOL_MODE.ANIMATE); if (!animationState.playing) handleAnimationPlayToggle(); } },
     }) : null,
-  ].filter(Boolean).map(tool => modelEffects.tools.includes(tool) ? tool : ({
-    ...tool,
-    onSelect: () => { modelEffects.leave(); tool.onSelect(); },
-    ...(tool.onMenuSelect ? { onMenuSelect: () => { modelEffects.leave(); tool.onMenuSelect(); } } : {}),
-  }));
+  ].filter(Boolean);
 
   // ---- the bottom action ----------------------------------------------------------------------
   const selectionActionVisible = selectionCount > 0 && !stepUpdateInProgress && !referenceSelectionPending

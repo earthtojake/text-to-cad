@@ -118,7 +118,7 @@ test('fullscreen stays separate from conditional GLB animation tools', async (t)
   assert.equal(await pane.getByRole('toolbar', { name: 'Animation playback' }).isVisible(), true);
   await pane.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
   assert.equal(await animate.getAttribute('aria-pressed'), 'true');
-  await pane.getByRole('button', { name: 'Display', exact: true }).click();
+  await pane.locator('[data-cad-toolbar]').getByRole('button', { name: 'Display', exact: true }).click();
   await pane.getByRole('dialog', { name: 'Display settings' }).waitFor();
   assert.equal(await animate.getAttribute('aria-pressed'), 'false');
   assert.equal(await pane.getByRole('toolbar', { name: 'Animation playback' }).count(), 0);
@@ -190,19 +190,19 @@ test('a static GLB opens on its native scene with no tools: display settings, or
 
   // A GLB has no panel of its own: its only settings are Display's, and Display is never
   // where a file opens. So it opens with the column shut and the model given the room.
-  assert.deepEqual(await panels(pane), ['Display:false', 'Show files:false']);
+  assert.deepEqual(await panels(pane), ['Show files:false']);
   assert.equal(await pane.locator('[data-file-sheet]').count(), 0);
-  await pane.locator('[data-file-panel="cad-display"]').click();
-  await pane.locator('[data-file-sheet="Display"]').waitFor();
-  assert.deepEqual(await panels(pane), ['Display:true', 'Show files:false']);
+  await pane.locator('[data-cad-toolbar]').getByRole('button', { name: 'Display', exact: true }).click();
+  await pane.locator('[data-cad-display-popover]').waitFor();
+  assert.deepEqual(await panels(pane), ['Show files:false']);
   assert.equal(await pane.getByRole('tab').count(), 0, 'a panel has no tabs inside it');
   assert.deepEqual(await pane.getByRole('combobox', { name: 'Mode', exact: true }).innerText(), 'Solid');
   await pane.getByRole('combobox', { name: 'Mode', exact: true }).click();
   assert.deepEqual(await page.getByRole('option').allInnerTexts(), ['Solid', 'Render'], 'a GLB has no edges to draw: Solid and Render only');
   await page.keyboard.press('Escape');
   for (const section of ['Edges', 'Cross-section', 'Explode']) assert.equal(await pane.getByRole('heading', { name: section, exact: true }).count(), 0, section);
-  await pane.locator('[data-file-panel="cad-display"]').click();
-  await pane.locator('[data-file-sheet="Display"]').waitFor({ state: 'detached' });
+  await pane.locator('[data-cad-toolbar]').getByRole('button', { name: 'Display', exact: true }).click();
+  await pane.locator('[data-cad-display-popover]').waitFor({ state: 'detached' });
   // The column closing reaches the scene as a resize; let that frame land before comparing pictures.
   await page.waitForFunction(() => document.querySelector('[data-testid="one"] [aria-busy] > div > canvas').width >= 1190);
   await settle(page);
@@ -291,15 +291,14 @@ test('a static GLB opens on its native scene with no tools: display settings, or
   const stored = await page.evaluate(() => window.cadHarness.state.renderers);
   assert.deepEqual(Object.keys(stored), [JSON.stringify(['static.glb', 'glb'])], 'keyed by [path, renderer id]');
   const left = await page.evaluate(() => window.cadHarness.a.controller.readState());
-  await page.waitForFunction(position => JSON.stringify(window.cadHarness.state.renderers[JSON.stringify(['static.glb', 'glb'])].camera?.position.map(Math.round)) === position, JSON.stringify(left.camera.position.map(Math.round)));
   await page.evaluate(() => window.cadHarness.mounted(false));
   await pane.locator('canvas').first().waitFor({ state: 'detached' });
   await page.evaluate(() => window.cadHarness.mounted(true));
   await ready(pane);
   await page.waitForFunction(() => window.cadHarness.a.controller?.readState().loading === false);
   const reopened = await page.evaluate(() => window.cadHarness.a.controller.readState());
-  assert.deepEqual(reopened.camera.position.map(value => Math.round(value * 100)), left.camera.position.map(value => Math.round(value * 100)));
-  assert.equal(reopened.camera.zoom, left.camera.zoom);
+  assert.notDeepEqual(reopened.camera.position.map(value => Math.round(value * 100)), left.camera.position.map(value => Math.round(value * 100)), "reopening fits the model anew");
+  assert.equal(reopened.camera.zoom, 1);
   assert.deepEqual([reopened.display.surfaces.colorMode, reopened.display.surfaces.color, reopened.display.grid.enabled], ['single', '#00c040', false]);
 
   // Fullscreen is a STEP's alone. A host that asks a GLB for it is declined: the nav row
@@ -308,7 +307,7 @@ test('a static GLB opens on its native scene with no tools: display settings, or
   await page.waitForTimeout(300);
   assert.equal(await pane.getByRole('group', { name: 'Fullscreen controls' }).count(), 0);
   assert.equal(await pane.getByRole('button', { name: 'Exit fullscreen', exact: true }).count(), 0);
-  assert.deepEqual(await panels(pane), ['Display:false', 'Show files:false'], 'the nav row and its panels stay');
+  assert.deepEqual(await panels(pane), ['Show files:false'], 'the nav row and its panels stay');
   await noTools(pane);
   assert.deepEqual(errors, []);
 });

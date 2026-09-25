@@ -58,19 +58,16 @@ export function workspaceLoadAlert({ catalogError, error, modelKey, hasScene }) 
 
 /**
  * A host asking to select a reference in a file that has none is answered, never
- * dropped: the request is consumed and the person is told why nothing was selected.
+ * dropped: unsupported selection requests are consumed without changing the view.
  *
  * @param {ReturnType<typeof useWorkspaceDocument>} document
- * @param {(message: string) => void} say  The shell's status toast (`shell.setCopyStatus`).
- * @param {string} sentence
  */
-export function useDeclinedSelectReference(document, say, sentence) {
+export function useDeclinedSelectReference(document) {
   const key = document.commands.selectReference?.key ?? null;
   const declined = useRef(null);
   useEffect(() => {
     if (key === null || declined.current === key) return;
     declined.current = key;
     document.acknowledgeCommand?.("selectReference", key);
-    say(sentence);
-  }, [key, document.acknowledgeCommand, say, sentence]);
+  }, [key, document.acknowledgeCommand]);
 }

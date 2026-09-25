@@ -447,12 +447,12 @@ test('host commands a flat drawing cannot answer are declined in words', async (
 });
 
 // A host asking a drawing to select something is answered, not ignored.
-test('a select-reference request is consumed and explained', async (t) => {
+test('a select-reference request is consumed without a notification', async (t) => {
   const { open } = await serveHarness(t);
   const { page, pane, errors } = await open('sample.dxf');
   await drawn(pane);
   await page.evaluate(() => window.cadHarness.selectReference('o1.f1'));
-  await pane.getByText(/A DXF is a 2D drawing without CAD references/).waitFor();
+  await page.waitForFunction(() => !window.cadHarness.a.commands.getSnapshot().selectReference);
   assert.equal(await page.evaluate(() => window.cadHarness.a.commands.getSnapshot().selectReference ?? null), null,
     'the declined request is acknowledged');
   assert.deepEqual(errors, []);

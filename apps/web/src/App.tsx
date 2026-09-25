@@ -8,7 +8,7 @@ import { createDxfRenderer } from '@hardcore/ui/renderers/dxf';
 import { createGlbRenderer } from '@hardcore/ui/renderers/glb';
 import { createMeshRenderer } from '@hardcore/ui/renderers/mesh';
 import { createRobotRenderer } from '@hardcore/ui/renderers/robot';
-import { MissingFileAlert, StatusToast, ViewerLoadingOverlay } from '@hardcore/ui/file-viewer/presentation';
+import { MissingFileAlert, ViewerLoadingOverlay } from '@hardcore/ui/file-viewer/presentation';
 import { useViewerAutoReload } from './host/useViewerAutoReload.js';
 import { EmptyCadBackdrop } from '@hardcore/ui/file-viewer/empty';
 import type { CadServerInfo } from '@hardcore/core/client';
@@ -38,11 +38,10 @@ function RootView({ client, server }: { client: CadClient; server: CadServerInfo
     window.addEventListener("keydown", exit);
     return () => window.removeEventListener("keydown", exit);
   }, [fullscreen]);
-  const [copyStatus, setCopyStatus] = useState('');
   useViewerAutoReload(server, { fetchServerInfo: () => client.serverInfo({ fresh: true }).then(info => ({ ok: true, identityToken: String(info.identityToken || '') }), () => ({ ok: false })) });
   const source = useMemo(() => createWebFileSource(client, server), [client, server]);
   const promptContext = useMemo(() => createWebPromptContext(source.id, server.rootPath || '', browserClipboard, browserClipboardSupportsImages()), [source.id, server.rootPath]);
-  const fileActions = useMemo(() => createWebFileActions(client, server, { promptContext, clipboard: browserClipboard, onCopyStatus: setCopyStatus }), [client, server, promptContext]);
+  const fileActions = useMemo(() => createWebFileActions(client, server, { clipboard: browserClipboard }), [client, server]);
   const preferences = useMemo(createWebCadPreferences, []);
   useEffect(() => preferences.connect(), [preferences]);
   // One renderer per file family; each lazy-loads only its own code.
@@ -116,10 +115,10 @@ function RootView({ client, server }: { client: CadClient; server: CadServerInfo
       leading={<ViewerBrand />} navigationActions={<ViewerLinks />}
       displayActions={<ViewerAppearance colorSchemePreference={colorSchemePreference} resolvedColorSchemeMode={appearance.colorScheme} onColorSchemePreferenceChange={changeColorScheme} />}
       navigationPath={selectedEntry ? normalizeCadFileQueryParam(cadFileParamForEntry(selectedEntry)) : null}
-      onError={error => setCopyStatus(error.message)} presentation={{
+      onError={error => console.error(error)} presentation={{
         empty: <div className="relative h-full">{empty}</div>,
         loading: <div className="relative h-full"><ViewerLoadingOverlay viewerLoading /></div>,
         error: () => <div className="relative h-full">{catalog.error ? empty : <EmptyCadBackdrop colorScheme={appearance.colorScheme}><MissingFileAlert missingFileRef={file} rootPath={server.rootPath} /></EmptyCadBackdrop>}</div>,
       }} />
-  </div><StatusToast previewMode={fullscreen} copyStatus={copyStatus} onClear={() => setCopyStatus('')} /></div>;
+  </div></div>;
 }

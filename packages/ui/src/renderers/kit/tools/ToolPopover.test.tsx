@@ -25,6 +25,8 @@ it('Draw keeps settings actions open but closes on a tool choice or outside clic
   render(<Harness />);
   const draw = screen.getByRole('button', { name: 'Draw', exact: true });
   await user.click(draw.querySelector('[data-tool-menu-corner]')!);
+  expect(screen.queryByRole('menu')).toBeNull();
+  await user.click(draw);
   await user.click(screen.getByRole('button', { name: 'Undo' }));
   await user.click(screen.getByRole('button', { name: 'Redo' }));
   expect(drawing.undo).toHaveBeenCalledOnce();
@@ -65,7 +67,7 @@ it('ephemeral tool options dismiss on a choice, outside press, or repeated trigg
   expect(screen.queryByRole('menu')).toBeNull();
 });
 
-it('a direct corner press activates and opens a temporary dropdown', async () => {
+it('a corner press selects first and only opens options when already selected', async () => {
   const user = userEvent.setup();
   const activate = vi.fn();
   function Harness() {
@@ -79,6 +81,8 @@ it('a direct corner press activates and opens a temporary dropdown', async () =>
   await user.click(button.querySelector('[data-tool-menu-corner]')!);
   expect(activate).toHaveBeenCalledOnce();
   expect(button.getAttribute('aria-pressed')).toBe('true');
+  expect(screen.queryByRole('menu')).toBeNull();
+  await user.click(button.querySelector('[data-tool-menu-corner]')!);
   expect(screen.getByRole('menu')).toBeTruthy();
   await user.hover(button);
   expect(screen.queryByRole('tooltip')).toBeNull();

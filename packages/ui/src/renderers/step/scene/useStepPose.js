@@ -36,7 +36,7 @@ const MODEL_OFFSET = new THREE.Vector3(0, 0, 0);
 export function useStepPose(layers) {
   const {
     viewport, props, policy, refs, staticResetRenderToken,
-    setTransformedSelectorRuntime, setTransformedDisplayEdgeRuntime, displayRecordsToken
+    setTransformedSelectorRuntime, setTransformedDisplayEdgeRuntime
   } = layers;
   const { runtimeRef, viewerReadyTick } = viewport;
   const {
@@ -138,7 +138,6 @@ export function useStepPose(layers) {
     }
 
     const definition = stepParameterRuntime?.definition || null;
-    const module = definition?.module || null;
     const animationClip = stepAnimationRuntime?.clip || null;
     // Either system can be the only one present: a model may declare mates
     // without shipping clips, or ship clips without declaring a single mate.

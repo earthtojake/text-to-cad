@@ -1,4 +1,4 @@
-import { createContext, useLayoutEffect, useRef, useState } from "react";
+import { createContext, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { FileSheetSettingsSection } from "./FileSheet.js";
 
 /**
@@ -14,8 +14,8 @@ export const panelScroller = element => element?.closest("[data-file-panel-scrol
 
 /**
  * A file's own panel: its sections, stacked tight, each at its own full height under a
- * heading — the design the Display panel's sections use. There are no tabs: the nav row
- * is the tab strip, and a panel is one column of sections.
+ * heading — the design the Display popover uses. FilePanelTabs also uses this
+ * scroller for the active Features/Links or Position tab.
  *
  * Only the column scrolls, never a section inside it, and the Reference for a pick is
  * pinned at the panel's foot, scrolling on its own. With more than one section, each
@@ -33,7 +33,7 @@ export const panelScroller = element => element?.closest("[data-file-panel-scrol
  *   sticky?: boolean, footer?: import("react").ReactNode, active?: boolean, revealRequest?: { sectionId: string, key: number } | null }} props
  */
 export default function FilePanelSections({ sections, active = true, revealRequest = null, footer = null, sticky = true }) {
-  const shown = sections.filter(Boolean);
+  const shown = useMemo(() => sections.filter(Boolean), [sections]);
   const scroller = useRef(null);
   const [pendingReveal, setPendingReveal] = useState(null);
   useLayoutEffect(() => { if (revealRequest) setPendingReveal(revealRequest); }, [revealRequest]);
@@ -57,9 +57,9 @@ export default function FilePanelSections({ sections, active = true, revealReque
     if (!target) return;
     const body = target.querySelector('[data-file-panel-body]');
     const header = target.querySelector('[data-file-panel-heading]');
-    const offset = (sticky ? shown.findIndex(item => item.id === section.id) + 1 : 1) * header.getBoundingClientRect().height;
+    const offset = (sticky ? shown.findIndex(item => item.id === section.id) + 1 : 1) * (header?.getBoundingClientRect().height || 0);
     const element = scroller.current;
-    const top = element.scrollTop + body.getBoundingClientRect().top - element.getBoundingClientRect().top - offset;
+    const top = element.scrollTop + (body || target).getBoundingClientRect().top - element.getBoundingClientRect().top - offset;
     // Use only the natural scroll range. A short section near the end should
     // become visible without manufacturing empty space below it.
     element.scrollTop = Math.max(0, Math.min(top, element.scrollHeight - element.clientHeight));

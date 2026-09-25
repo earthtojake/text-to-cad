@@ -2,7 +2,7 @@ import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import * as THREE from 'three';
 import { useViewportCamera } from './useViewportCamera.js';
-import { readRuntimeZoomPercent, stepCameraTransition } from './runtimeCamera.js';
+import { stepCameraTransition } from './runtimeCamera.js';
 import { VIEW_PLANE_FACE_BY_ID, viewPlaneCameraBasis, WORLD_UP } from './viewportCameraKit.js';
 
 afterEach(cleanup);
@@ -14,12 +14,12 @@ for (const orthographic of [true, false]) {
     const original = { min: [-20, -10, -5], max: [20, 10, 5] };
     const { result } = renderHook(() => useViewportCamera({
       runtimeRef, modelBounds: original, modelKey: 'fixture', modelKeyRef: ref('fixture'),
-      coordinateSystemFor: () => 'cad-z-up-v1', activeViewPlaneFaceRef: ref(''), defaultPerspectiveResettingRef: ref(false),
+      coordinateSystemFor: () => 'cad-z-up-v1', activeViewPlaneFaceRef: ref(''),
       fullscreenCameraRef: ref(), lastEmittedPerspectiveRef: ref(), cameraMovedRef: ref(),
       modelTransformRef: ref({ offset: [0, 0, 0] }), perspectiveChangeRef: ref(), perspectivePropRef: ref(),
       perspectiveRef: ref(), previewMode: false, previewModeRef: ref(false), previewOrbitSpeed: 0,
       runWithoutPerspectiveEvents: (callback: () => unknown) => callback(), sceneScaleModeRef: ref('cad'),
-      setActiveViewPlaneFace: vi.fn(), setDefaultPerspectiveDetached: vi.fn(), setViewPlaneOrientation: vi.fn(),
+      setActiveViewPlaneFace: vi.fn(), setViewPlaneOrientation: vi.fn(),
       suppressPerspectiveEventsRef: ref(0), viewerReadyTick: 0
     }));
     const camera = orthographic ? new THREE.OrthographicCamera(-50, 50, 40, -40, 0.01, 10000)
@@ -43,11 +43,10 @@ for (const orthographic of [true, false]) {
       const expected = new THREE.Vector3(...viewPlaneCameraBasis(preset, WORLD_UP).direction);
       expect(direction.dot(expected)).toBeCloseTo(1, 8);
     }
-    act(() => { expect(result.current.activateDefaultViewPlane()).toBe(true); });
+    act(() => { expect(result.current.resetZoomAndPan()).toBe(true); });
     stepCameraTransition(runtime, runtime.cameraTransition.startTime + 1000);
     expect(runtime.controls.target.toArray()).toEqual([0, 0, 0]);
     expect(camera.zoom).toBe(1);
-    expect(readRuntimeZoomPercent(runtime)).toBeCloseTo(100, 5);
     expect(runtime.interactiveFraming.bounds).toEqual(original);
   });
 }

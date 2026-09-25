@@ -2,17 +2,16 @@ import { createPortal } from "react-dom";
 import { VIEWPORT_BOTTOM_CENTER } from "./viewportLayout.js";
 import { useEffect, useMemo, useState } from "react";
 import { Play, Pause, Maximize2 } from "lucide-react";
-import { TooltipProvider } from "@hardcore/ui/primitives/tooltip";
 import { ToolbarButton } from "../tools/ToolbarButton.js";
 import PreviewChrome from "../tools/PreviewChrome.jsx";
 import { cn } from "@hardcore/ui/utils";
 import { CAD_PANEL } from "../../../file-viewer/navigation/panels.js";
 import FilePanelTabs from "../inspector/FilePanelTabs.jsx";
-import FileSheet, { FileSheetPortalContext, HostPanelSlotContext } from "../inspector/FileSheet.js";
+import FileSheet, { HostPanelSlotContext } from "../inspector/FileSheet.js";
 import ViewerAlertCard from "../status/ViewerAlertCard.jsx";
-import StatusToast from "../status/StatusToast.js";
 import { ViewUpdateStatus } from "../status/ViewUpdateStatus.jsx";
 import ViewerLoadingOverlay from "../status/ViewerLoadingOverlay.js";
+import { presentationDisplaySettings } from "../view-settings/viewerDisplaySettings.js";
 import DisplaySettingsPopover from "../view-settings/DisplaySettingsPopover.jsx";
 import PlayMenu from "../tools/PlayMenu.jsx";
 import OrbitMenu from "../tools/OrbitMenu.jsx";
@@ -23,8 +22,6 @@ import ViewportBottomAction, { drawingCaptureAction } from "./ViewportBottomActi
 import ViewportContextMenu from "./ViewportContextMenu.jsx";
 
 const TOOLBAR_POSITION = Object.freeze({ top: "14px", left: "14px", maxWidth: "calc(100% - 60px)" });
-// The host's panel column sizes a panel; this is only the sheet's nominal width.
-const PANEL_WIDTH = 365;
 const MODEL_UPDATE_STATUS = Object.freeze({ pending: true, label: "Updating model…" });
 
 /**
@@ -100,7 +97,7 @@ export default function RendererShell({ shell, tools, playback = null, onPreview
     return () => view.onPanelVisibilityChange?.(true);
   }, [fullscreenActive, view.onPanelVisibilityChange]);
   useEffect(() => { onPreviewActiveChange?.(fullscreenActive); }, [fullscreenActive, onPreviewActiveChange]);
-  const previewDisplay = useMemo(() => fullscreenActive ? { ...resolvedScene.display, clip: { ...resolvedScene.display.clip, enabled: false }, exploded: { ...resolvedScene.display.exploded, enabled: false, amount: 0 } } : resolvedScene.display, [fullscreenActive, resolvedScene.display]);
+  const previewDisplay = useMemo(() => fullscreenActive ? presentationDisplaySettings(resolvedScene.display) : resolvedScene.display, [fullscreenActive, resolvedScene.display]);
   const leaveFullscreen = () => { setFullscreen(false); if (previewMode) view.onFullscreenChange?.(false); };
   if (shell.previewExitRef) shell.previewExitRef.current = fullscreenActive ? () => { leaveFullscreen(); return true; } : null;
   const animateTool = hasAnimation ? {
@@ -172,11 +169,6 @@ export default function RendererShell({ shell, tools, playback = null, onPreview
                     perspective={frame.viewerPerspective}
                     perspectiveRef={frame.activePerspectiveRef}
                     projection={resolvedScene.camera.projection}
-                    onProjectionChange={frame.setProjection}
-                    displayMode={frame.displayMode}
-                    displayPreset={frame.displayPreset}
-                    displayModes={frame.displayModes}
-                    onDisplayModeChange={frame.setDisplayMode}
                     focalLength={resolvedScene.camera.focalLength}
                     themeSettings={resolvedScene.theme}
                     displaySettings={previewDisplay}
@@ -187,8 +179,8 @@ export default function RendererShell({ shell, tools, playback = null, onPreview
                     quality={resolvedScene.quality}
                     orbitPreview={fullscreenActive && orbitPlaying}
                     controlsHidden={Boolean(fullscreenActive)}
-                    previewMode={previewMode}
-                    previewOrbitSpeed={frame.previewOrbitSpeed || 1}
+                    previewMode={fullscreenActive}
+                    previewOrbitSpeed={frame.previewOrbitSpeed ?? 1}
                     isLoading={viewerLoading}
                     viewUpdate={frame.viewUpdate}
                     loadingPresentation={frame.loading}
@@ -226,18 +218,16 @@ export default function RendererShell({ shell, tools, playback = null, onPreview
               {previewMode ? null : <>
                 <div className="pointer-events-none absolute z-20 flex max-h-[calc(100%-28px)] flex-col items-start gap-2" style={TOOLBAR_POSITION} data-cad-tool-groups="">
                   <FloatingToolBar inline tools={viewerTools} trailing={<DisplaySettingsPopover
-                    container={frame.hostElement} disabled={shell.idle} active={displayActive} onActivate={activateDisplay}
+                    container={frame.hostElement} disabled={shell.idle} active={displayActive} onActivate={activateDisplay} onDeactivate={() => shell.selectTool("")}
                     settings={frame.display} actions={view.displayActions} />} />
                   {!fullscreenActive && toolPanels}
                 </div>
-                <TooltipProvider delayDuration={250}>
                   <div className="pointer-events-auto absolute flex h-[34px] items-center" style={{ top: TOOLBAR_POSITION.top, right: TOOLBAR_POSITION.left }}>
                     <ToolbarButton tooltip={false} label="Fullscreen" className="size-6 bg-transparent hover:bg-transparent dark:hover:bg-transparent"
                       disabled={shell.idle} onClick={() => { setOrbitPlaying(true); setFullscreen(true); }}>
                       <Maximize2 className="size-3" strokeWidth={1.5} aria-hidden="true" />
                     </ToolbarButton>
                   </div>
-                </TooltipProvider>
               </>}
 
               </PreviewChrome>
@@ -256,26 +246,18 @@ export default function RendererShell({ shell, tools, playback = null, onPreview
 
             {/* Display floats over the viewport; the file sidebar keeps its own scroll and state. */}
             {panel ? <FileSheet open={filePanelOpen} title={panel.title}
-              isDesktop width={PANEL_WIDTH} scrollBody={false}>
+              scrollBody={false}>
               <div className="contents" inert={Boolean(fullscreenActive)} aria-disabled={Boolean(fullscreenActive)}><FilePanelTabs key={frame.modelKey} sections={panel.sections} active={filePanelOpen} revealRequest={shell.panelRevealRequest} /></div>
             </FileSheet> : null}
           </div>
         </div>
 
-        <StatusToast
-          copyStatus={frame.copyStatus}
-          screenshotStatus={frame.screenshotStatus}
-          previewMode={previewMode || fullscreenActive}
-          onClear={() => { frame.setCopyStatus(""); frame.setScreenshotStatus(""); }}
-        />
       </div>
     </div>
   );
   return (
     <HostPanelSlotContext.Provider value={view.panelSlot}>
-    <FileSheetPortalContext.Provider value={frame.hostElement}>
       {frameProvider ? frameProvider(body) : body}
-    </FileSheetPortalContext.Provider>
     </HostPanelSlotContext.Provider>
   );
 }

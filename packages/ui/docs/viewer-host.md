@@ -50,29 +50,28 @@ use the [explicit fake host](../src/host/testing/host.ts).
 
 ## Host fullscreen and renderer navigation actions
 
-`FileViewer.fullscreen` is transient host-owned presentation state, never a file
-preference. A host offers it by passing `FileViewer.onFullscreenChange(fullscreen:
-boolean)`; without that prop there is no fullscreen. FileViewer forwards it as
-`RendererViewProps.onFullscreenChange` only to a renderer whose registration
-declares `fullscreen: true` (STEP), and passes the flag only to such a renderer;
-when the file on screen has no fullscreen, FileViewer calls
-`onFullscreenChange(false)`. While presenting it hides the shared navbar and
-panel frame. The legacy host presentation API is separate from Display’s inline Preview.
-When a host invokes fullscreen directly, the renderer hides viewport controls and
-suspends tools/shortcuts. Keep the viewport mounted; preserve the selected panel, tool and
-document state. The app owns the state and its Escape listener. CAD renders its
-own fullscreen playback and exit controls, and its X calls
-`onFullscreenChange(false)`. The host Escape listener must honor
-`event.defaultPrevented`; Escape first closes an open renderer menu/overlay. The
-web app offers fullscreen; the desktop app passes no `onFullscreenChange`, so it
-has none.
-Control visibility and the fullscreen camera are transient. CAD captures the
-regular camera on entry, fits the authored model at the default angle, and restores
-the saved regular camera on exit. Presentation camera events never persist into
-the file session. Picking listeners, drawing and measurement are suspended;
-ordinary camera dragging remains available. Orbit speed is a global
-`CadPreferences.orbit` preference persisted by each host adapter. The fullscreen
-playbar reuses the same per-file animation runtime as the Animate tool.
+Every shared 3D shell offers local fullscreen presentation, including in desktop
+hosts without a fullscreen callback. It expands the scene below the parent-owned
+navbar by requesting `RendererViewProps.onPanelVisibilityChange(false)`. This
+suspends the panel frame without changing the selected panel or its width; cleanup
+restores visibility. It must not use `onChromeVisibilityChange` to hide the navbar.
+The generic chrome visibility extension remains available to other renderers.
+
+`FileViewer.fullscreen` / `onFullscreenChange` also permit host-controlled
+presentation for registrations declaring `fullscreen: true`. Unsupported files
+release host presentation. Local and host entry use the same shell presentation
+controls and camera lifecycle. The navbar stays visible in both paths. Exit calls
+the host callback when host presentation is active; Escape first lets an open
+menu consume the event. Neither path uses the browser Fullscreen API.
+
+Fullscreen state is transient. The shell saves the regular camera, fits a
+presentation camera and restores the regular camera on exit. Presentation
+movement never persists into the file session. Picking, drawing, measurements,
+joint handles and model effects are suspended without discarding their state;
+camera dragging remains available. Orbit starts by default, with speed from the
+host-owned `CadPreferences.orbit`. Fullscreen animation uses the same per-file
+runtime as Animate. Interaction and layout rules live in
+[settings-ui.md](settings-ui.md#camera-animation-and-fullscreen).
 
 A renderer can publish `FileNavigationAction[]` through
 `RendererViewProps.onNavigationActionsChange`. The shared navbar shows these
@@ -199,12 +198,11 @@ not a sixth mode. `setRenderMode(true/false)` selects Render/Solid through that
 same state. Grouped camera projection/lens changes preserve the viewport's pose
 and zoom. Display Reset restores the selected preset and disables both tools.
 `resetCamera` frames the model again without turning the camera — exactly what
-STEP's context-menu "Zoom to fit" does. The viewport Home button operates through
-the camera owner; it does not add a command to the live API.
+STEP's context-menu "Zoom to fit" does. Cube shortcuts change only orientation.
 
 Persisted pre-grouped file sessions migrate once at the state boundary: their
 old display and photographic payload become this display record; the render
-session slice retains only the camera snapshot. Live commands reject retired
+session does not retain camera transforms: fresh mounts fit the model. Live commands reject retired
 field names rather than maintaining a second display authority. Unavailable selectors fail explicitly; topology is not silently
 loaded. Mutations return a view snapshot after the React frame; a mode switch
 waits for the requested settings to commit, with a ten-second bound.
@@ -226,8 +224,8 @@ does not grant web arbitrary filesystem access or enable editing there.
 
 State remains controlled through FileViewer props. Apps merge changed chrome
 fields and document/renderer slices into the current root state; a stale view
-must not overwrite another view's independent fields. Existing versioned camera,
-pose and layout state restores through the same schemas. Material appearance
+must not overwrite another view's independent fields. Versioned pose and display state restores through the same schemas; legacy
+camera transforms are ignored so reopening/refreshing fits the file anew. Material appearance
 is source-owned and read-only; legacy material override slices are ignored. Global
 preferences belong to the app/window, document snapshots to workspace/path,
 and live selection/scene ownership to the mounted view.

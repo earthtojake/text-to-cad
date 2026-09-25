@@ -98,7 +98,7 @@ function RobotSurface({ view, data }) {
     live, escape, rendererState
   });
   shellRef.current = shell;
-  useDeclinedSelectReference(document, shell.setCopyStatus, ROBOT_DECLINED_LIVE_COMMANDS.select);
+  useDeclinedSelectReference(document);
 
   // ---- a pose step: k matrices, one frame, no component ----------------------------------
   const handlesRef = useRef(NO_HANDLES);

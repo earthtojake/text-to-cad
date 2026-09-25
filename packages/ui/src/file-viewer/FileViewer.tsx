@@ -58,7 +58,6 @@ export function FileViewer({ file, host, renderers, state, onStateChange, leadin
   const [navigationStatusSlot, setNavigationStatusSlot] = useState<HTMLDivElement | null>(null);
   const [panelVisibility, setPanelVisibility] = useState<{ key: string; visible: boolean } | null>(null);
   const onPanelVisibilityChange = useCallback((visible: boolean) => { if (currentKey.current === key) setPanelVisibility(previous => previous?.key === key && previous.visible === visible ? previous : { key, visible }); }, [key]);
-  const panelsVisible = panelVisibility?.key === key ? panelVisibility.visible : true;
   const [panelSlot, setPanelSlot] = useState<HTMLDivElement | null>(null);
   const [readiness, setReadiness] = useState<{ key: string; ready: boolean } | null>(null);
   const [chrome, setChrome] = useState<{ key: string; visible: boolean } | null>(null);
@@ -70,8 +69,9 @@ export function FileViewer({ file, host, renderers, state, onStateChange, leadin
   // handed the host's switch, and a file that has none leaves the host's fullscreen.
   const fullscreenAvailable = Boolean(onFullscreenChange) && loaded.status === "ready" && loaded.renderer.fullscreen === true;
   const presenting = fullscreen && fullscreenAvailable;
+  const panelsVisible = !presenting && (panelVisibility?.key === key ? panelVisibility.visible : true);
   useEffect(() => { if (fullscreen && loaded.status === "ready" && !fullscreenAvailable) onFullscreenChange?.(false); }, [fullscreen, loaded.status, fullscreenAvailable, onFullscreenChange]);
-  const chromeVisible = !presenting && (chrome?.key === key ? chrome.visible : true);
+  const chromeVisible = chrome?.key === key ? chrome.visible : true;
   const ready = loaded.status === "ready" && (readiness?.key === key ? readiness.ready : true);
   const declared = (open: string) => loaded.status === "ready" ? loaded.prepared.panels?.({ open, ready, file: loaded.file }) ?? [] : [];
   const panelsAt = (open: string) => [...declared(open), ...(source.list ? [treePanel(open, { empty: loaded.status === "empty" })] : [])];

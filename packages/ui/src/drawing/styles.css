@@ -79,12 +79,5 @@
   --sidebar-accent-foreground: oklch(0.205 0 0);
   color: var(--foreground);
 }
-/* The SDK's toast is the editor's only message surface (a fill with nothing to
-   fill, a rejected image). Under the toolbar, clear of a host's bottom action. */
-.hardcore-drawing-editor .excalidraw .Toast {
-  top: 3.25rem;
-  bottom: auto;
-  font-family: var(--ui-font);
-  font-size: var(--text-ui, 0.8125rem);
-}
-.hardcore-drawing-editor[data-drawing-mode="overlay"] .excalidraw .Toast { top: 5.5rem; }
+/* Viewer actions do not show notifications, including the SDK's own messages. */
+.hardcore-drawing-editor .excalidraw .Toast { display: none; }

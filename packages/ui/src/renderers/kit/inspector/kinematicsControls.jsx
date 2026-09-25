@@ -14,7 +14,7 @@ export function positionValuesAreDefault(values, defaults) {
   });
 }
 
-/** One compact header shared by STEP and robot position controls. */
+/** One compact header for authored position controls. */
 export function KinematicsPoseRow({ poses = [], activeValue, onSelect, onReset, disabled = false, label = "Pose", ariaLabel = "Pose" }) {
   const hasPoses = poses.length > 0;
   if (!hasPoses && !onReset) return null;
@@ -31,7 +31,7 @@ export function KinematicsPoseRow({ poses = [], activeValue, onSelect, onReset, 
   </div>;
 }
 
-/** Reset stays beside the pose selector, above the joint list. */
+/** Reset stays beside the pose choice, above the joint list. */
 export function MotionResetButton({ onReset, disabled = false }) {
   if (!onReset) return null;
   return <TooltipHint content="Reset motion"><Button variant="ghost" size="icon-xs" className="size-5 shrink-0 text-muted-foreground"

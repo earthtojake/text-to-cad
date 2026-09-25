@@ -31,7 +31,7 @@ await build({
       if (args.path.endsWith('/mesh')) return { contents: `export const createMeshRenderer=()=>({id:'mesh'});`, loader: 'js' };
       if (args.path.endsWith('/robot')) return { contents: `export const createRobotRenderer=()=>({id:'robot'});`, loader: 'js' };
       if (args.path.endsWith('useViewerAutoReload.js')) return { contents: 'let reloadOptions;export const autoReloadOptions=()=>reloadOptions;export const useViewerAutoReload=(_server,options)=>{reloadOptions=options;return false;};', loader: 'js' };
-      if (args.path.endsWith('/presentation')) return { contents: 'export const MissingFileAlert=()=>null;export const ViewerLoadingOverlay=()=>null;export const StatusToast=()=>null;', loader: 'js' };
+      if (args.path.endsWith('/presentation')) return { contents: 'export const MissingFileAlert=()=>null;export const ViewerLoadingOverlay=()=>null;', loader: 'js' };
       if (args.path.endsWith('/empty')) return { contents: 'export const EmptyCadBackdrop=({children})=>children;', loader: 'js' };
       return { contents: 'let current; export default function ViewerAppearance(props){current=props; return null} export const topBarSnapshot=()=>current;', loader: 'js' };
     });

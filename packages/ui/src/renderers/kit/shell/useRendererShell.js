@@ -2,7 +2,6 @@ import { useViewerMobile } from "../../../file-viewer/responsive.js";
 import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Camera, Pencil } from "lucide-react";
 import { clonePerspectiveSnapshot } from "@hardcore/core/lib/perspective.js";
-import { normalizeViewFeatures, viewSettingsAreCustom } from "@hardcore/core/common/viewSettings.js";
 import { VIEWER_SCENE_SCALE } from "@hardcore/core/lib/viewer/sceneScale.js";
 import { ViewerElementContext, useViewerHost, usePromptDestination } from "../../../host/context.js";
 import { CAD_PANEL } from "../../../file-viewer/navigation/panels.js";
@@ -21,7 +20,7 @@ import { useViewSettings } from "../view-settings/useViewSettings.js";
 import { cameraForViewSettings, viewerDisplaySettingsForCamera } from "../view-settings/viewerDisplaySettings.js";
 import { attachLiveBinding } from "./liveBinding.js";
 import { shellLoadReport } from "./loadReport.js";
-import { createViewPromptContext, promptDeliveryMessage } from "./promptContext.js";
+import { createViewPromptContext, promptDeliveryError } from "./promptContext.js";
 import { readShellState, scopeShellCamera, shellPresentationKey, shellStatesEqual, writeShellState } from "./shellState.js";
 import { useViewerShortcuts } from "./useViewerShortcuts.js";
 
@@ -134,7 +133,7 @@ export function useRendererShell({
   const destination = usePromptDestination();
   const promptAvailable = destination.available;
   const composer = destination.kind === "composer";
-  const { fullscreen = false, onFullscreenChange = null, openPanel = "", onPanelOpen, onChromeVisibilityChange,
+  const { fullscreen = false, openPanel = "", onPanelOpen,
     onNavigationActionsChange, onStateChange, appearance } = view;
   const colorScheme = appearance?.colorScheme === "dark" ? "dark" : "light";
   const previewMode = fullscreen;
@@ -214,7 +213,6 @@ export function useRendererShell({
   }, [previewMode]);
 
   // ---- host chrome ----------------------------------------------------------
-  useEffect(() => { onChromeVisibilityChange?.(!previewMode); }, [onChromeVisibilityChange, previewMode]);
   // The file's panels are the host's (its nav row is their tab strip); the shell draws the
   // one that is open. Explicit tool requests can open it; selection requests
   // only change its tab if it is already open.
@@ -253,14 +251,17 @@ export function useRendererShell({
   useEffect(() => { setHostElement(hostRef.current); }, []);
 
   // ---- loading and alerts ---------------------------------------------------
-  const [copyStatus, setCopyStatus] = useState("");
-  const [screenshotStatus, setScreenshotStatus] = useState("");
   const [ownRuntimeAlert, setOwnRuntimeAlert] = useState(null);
   // A renderer that composes the viewport's alert into its own keeps that state; the shell
   // then holds none, so the composed `load.alert` is not counted a second time here.
   const runtimeAlertRef = useRef(onRuntimeAlert);
   runtimeAlertRef.current = onRuntimeAlert;
   const setRuntimeAlert = useCallback(alert => (runtimeAlertRef.current || setOwnRuntimeAlert)(alert || null), []);
+  const reportActionError = useCallback(error => {
+    if (!error) return;
+    setRuntimeAlert({ severity: "error", kind: "status", blocking: false,
+      title: "Couldn’t complete the action", message: error instanceof Error ? error.message : String(error) });
+  }, [setRuntimeAlert]);
   const runtimeAlert = onRuntimeAlert ? null : ownRuntimeAlert;
   const viewerLoading = Boolean(load.busy);
   const hasContent = Boolean(scene) && !viewerLoading;
@@ -291,11 +292,11 @@ export function useRendererShell({
   // leave, so the file simply opens at rest with its transport under the model.
   const animationAvailable = animationControlsHaveContent(animation);
   const drawToolActive = !previewMode && toolMode === SHELL_TOOL.DRAW;
-  const selectTool = useCallback((mode) => setToolMode(current => (toolModes ? toolModes.next(current, mode) : mode)), [toolModes]);
+  const selectTool = useCallback((mode) => setToolMode(current => (toolModes ? toolModes.next(current, mode) : mode)), [toolModes, setToolMode]);
   const drawing = useDrawingSession(drawToolActive, CAD_DRAWING_DEFAULTS);
 
   // ---- prompt snapshots, clipboard ------------------------------------------
-  const showPromptResult = useCallback((result) => setCopyStatus(promptDeliveryMessage(result)), []);
+  const showPromptResult = useCallback((result) => reportActionError(promptDeliveryError(result)), [reportActionError]);
   const deliverPrompt = useCallback((context) => {
     let pending;
     try { pending = host.promptContext.deliver(context); }
@@ -317,23 +318,21 @@ export function useRendererShell({
       const pixels = viewerRef.current.captureScreenshotBlob();
       void pixels.catch(() => {});
       if (!composer) {
-        void host.clipboard.writeImage(pixels).then(() => setScreenshotStatus("Screenshot copied"), error => setScreenshotStatus(error instanceof Error ? error.message : "Capture failed"));
+        void host.clipboard.writeImage(pixels).catch(reportActionError);
         return;
       }
       void deliverPrompt(promptContextRef.current({
         resource: liveResourceRef.current?.() || resource, references: referencesRef.current?.() || [], capture: pixels
       }));
-    } catch (error) { setScreenshotStatus(error instanceof Error ? error.message : "Capture failed"); }
-  }, [modelKey, promptAvailable, viewerLoading, deliverPrompt, resource, composer, host.clipboard]);
+    } catch (error) { reportActionError(error); }
+  }, [modelKey, promptAvailable, viewerLoading, deliverPrompt, resource, composer, host.clipboard, reportActionError]);
   const copyActionRef = useRef(null);
   const copyDrawing = useCallback(async () => {
     if (!drawing.hasContent || !viewerRef.current?.captureScreenshotBlob) return;
-    setCopyStatus("");
     try {
       await host.clipboard.writeImage(viewerRef.current.captureScreenshotBlob());
-      setScreenshotStatus("Drawing copied");
-    } catch (error) { setScreenshotStatus(error instanceof Error ? error.message : "Could not copy drawing"); }
-  }, [drawing.hasContent, host.clipboard]);
+    } catch (error) { reportActionError(error); }
+  }, [drawing.hasContent, host.clipboard, reportActionError]);
   const captureKey = services.captureRequest?.key ?? null;
   const appliedCaptureKey = useRef(null);
   useEffect(() => {
@@ -358,7 +357,7 @@ export function useRendererShell({
   const escapeRef = useRef(escape.handle);
   escapeRef.current = escape.handle;
   useViewerShortcuts({
-    viewerElement, previewMode, copyStatus, screenshotStatus, setCopyStatus, setScreenshotStatus,
+    viewerElement, previewMode,
     onCopy: () => copyActionRef.current?.() || false,
     escapeActive: Boolean(panelOpen || escape.active),
     onEscape() {
@@ -433,10 +432,6 @@ export function useRendererShell({
     });
   }, [liveBinding, commandNames]);
 
-  // The view cube's projection toggle writes the same camera setting Display used to. Stable,
-  // so the memoized cube does not redraw with every render of the shell.
-  const setProjection = useCallback(
-    projection => viewSettingsStore.patch({ camera: { enabled: true, projection } }), [viewSettingsStore]);
   // ---- what the frame and the renderer read ---------------------------------
   // The Display panel's content: every renderer's, built here from its display settings.
   const display = <DisplaySettingsSection
@@ -468,7 +463,7 @@ export function useRendererShell({
   return {
     // Renderer-facing.
     toolMode, selectTool, tools, display, idle, previewMode, rendering, resolvedScene, viewerRef, openPanel,
-    setCopyStatus, setScreenshotStatus, capture, requestRender: () => viewerRef.current?.requestRender?.(),
+    reportActionError, capture, requestRender: () => viewerRef.current?.requestRender?.(),
     // The scene moved its own bounds: lighting, shadows and the floor follow, with no React render.
     syncSceneBounds: () => viewerRef.current?.syncSceneBounds?.(),
     // State the renderer keeps outside React changed: write the record soon (and on unmount).
@@ -484,13 +479,7 @@ export function useRendererShell({
       previewMode, previewOrbitSpeed, setPreviewOrbitSpeed, viewerLoading, loading, presentationState,
       handlePresentationChange, viewerAlert, setRuntimeAlert,
       copyActionRef, copyDrawing, copyShortcut: host.environment.platform === "darwin" ? "⌘C" : "Ctrl+C",
-      drawToolActive, drawing, animationAvailable, animation, composer, capture, openPanel, display,
-      setProjection,
-      displayMode: viewSettingsAreCustom(displaySettings, { features, appearance: colorScheme, lightingQuality: "preview" }) ? "custom" : displaySettings.mode,
-      displayPreset: displaySettings.mode,
-      displayModes: normalizeViewFeatures(features).modes,
-      setDisplayMode: viewSettingsStore.selectPreset,
-      copyStatus, screenshotStatus, setCopyStatus, setScreenshotStatus
+      drawToolActive, drawing, animationAvailable, animation, composer, capture, openPanel, display
     }
   };
 }

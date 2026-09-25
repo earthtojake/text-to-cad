@@ -29,20 +29,9 @@ import {
   SelectTrigger,
   SelectValue
 } from "@hardcore/ui/primitives/select";
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle
-} from "@hardcore/ui/primitives/sheet";
 import { Switch } from "@hardcore/ui/primitives/switch";
 import { ToggleGroup, ToggleGroupItem } from "@hardcore/ui/primitives/toggle-group";
 
-const DEFAULT_FILE_SHEET_WIDTH = 365;
-const DESKTOP_FILE_SHEET_MIN_WIDTH = 240;
-const DESKTOP_FILE_SHEET_MAX_WIDTH = "min(28rem, calc(100vw - 0.75rem))";
-const MOBILE_FILE_SHEET_WIDTH = "min(24rem, calc(100vw - 0.75rem))";
 const FILE_SHEET_CONTROL_TEXT_CLASSES = [
   "[&_[data-slot=input]]:!text-tiny",
   "[&_[data-slot=select-trigger]]:!text-tiny",
@@ -62,25 +51,7 @@ export const FILE_SHEET_INLINE_CONTROL_ROW_CLASSES = "px-2";
 export const FILE_SHEET_SECTION_TITLE_CLASSES = "text-xs text-sidebar-foreground";
 export const FILE_SHEET_FIELD_LABEL_CLASSES = "block min-w-0 truncate text-tiny leading-4 text-muted-foreground";
 export const FILE_SHEET_STATUS_TEXT_CLASSES = "px-2 text-tiny leading-4 text-muted-foreground";
-/**
- * The element a compact-mode file sheet portals into. Null means `body`,
- * which is right for the standalone viewer — its window IS the surface. A
- * host that embeds <CadFileView> in one pane of a larger window provides
- * its root here, so the drawer covers that pane rather than the host's
- * whole window (file-view/CadFileView.js).
- */
-export const FileSheetPortalContext = createContext(null);
-
-/**
- * The element the open panel's CONTENT is drawn in, when a host owns the
- * frame around it (file-view/hostPanelSlot.js, `panelSlot`).
- *
- * Null — the standalone viewer — means this component draws the frame
- * itself: the aside below, with its width, its border and its resize
- * handle. An element means the host has a panel column of its own, shared
- * with its own panels, and every sheet becomes just its body inside it. The
- * difference is a frame, not a content: one implementation either way.
- */
+/** Host-owned panel content slot. Without a slot, render a plain fallback aside. */
 export const HostPanelSlotContext = createContext(null);
 
 export const FILE_SHEET_UNIT_SUFFIX_CLASSES = "pointer-events-none absolute inset-y-0 right-2 flex items-center text-micro text-muted-foreground";
@@ -1035,38 +1006,15 @@ export function FileSheetColorRow({ label, value, onChange, disabled = false, cl
   );
 }
 
-function normalizeFileSheetWidth(width) {
-  const numericWidth = Number(width);
-  if (!Number.isFinite(numericWidth) || numericWidth <= 0) {
-    return DEFAULT_FILE_SHEET_WIDTH;
-  }
-  return Math.max(DESKTOP_FILE_SHEET_MIN_WIDTH, numericWidth);
-}
-
 export default function FileSheet({
   open,
   hidden = false,
   title,
-  isDesktop,
-  width,
   bodyClassName,
   scrollBody = true,
   children
 }) {
-  const portalContainer = useContext(FileSheetPortalContext);
   const hostPanelSlot = useContext(HostPanelSlotContext);
-  const desktopWidth = `min(${normalizeFileSheetWidth(width)}px, ${DESKTOP_FILE_SHEET_MAX_WIDTH})`;
-  const sheetStyle = isDesktop
-    ? {
-      width: desktopWidth,
-      flexBasis: desktopWidth,
-      minWidth: `min(${DESKTOP_FILE_SHEET_MIN_WIDTH}px, ${DESKTOP_FILE_SHEET_MAX_WIDTH})`,
-      maxWidth: DESKTOP_FILE_SHEET_MAX_WIDTH
-    }
-    : {
-      width: MOBILE_FILE_SHEET_WIDTH,
-      maxWidth: DESKTOP_FILE_SHEET_MAX_WIDTH
-    };
   const sheetBody = scrollBody ? (
     <ScrollArea
       className={cn("min-h-0 flex-1", FILE_SHEET_CONTROL_TEXT_CLASSES, bodyClassName)}

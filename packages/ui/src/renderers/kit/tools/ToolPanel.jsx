@@ -2,7 +2,7 @@ import { useState } from "react";
 import { ChevronDown, ChevronUp, X } from "lucide-react";
 
 /** Shared compact header/body for persistent tool controls, floating or anchored. */
-export default function ToolPanel({ title, label, summary, collapsible = false, onClose, closeTitle = "Close", children }) {
+export default function ToolPanel({ title, label, summary, collapsible = false, onClose, children }) {
   const [collapsed, setCollapsed] = useState(false);
   const buttonClass = "flex size-5 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45";
   return <>

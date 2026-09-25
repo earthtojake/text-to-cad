@@ -109,3 +109,9 @@ function recoverGroups(source) {
   }
   return next;
 }
+
+/** Presentation suspends model effects without changing the per-file settings. */
+export function presentationDisplaySettings(display) {
+  return { ...display, clip: { ...display.clip, enabled: false },
+    exploded: { ...display.exploded, enabled: false, amount: 0 } };
+}

@@ -28,7 +28,7 @@ Ordinary copied elements and raster image insertion remain available; pasted
 elements pass bounded scene validation.
 
 Every SDK control is hidden. The canvases, the in-place text editor, the context
-menu and the toast remain, and `DrawingToolbar` (`drawing/toolbar.tsx`) is the
+menu remain; SDK toast notifications are hidden, and `DrawingToolbar` (`drawing/toolbar.tsx`) is the
 one control surface: Select and move drawings, Pan view, Pen, Line, Arrow,
 Rectangle, Ellipse, Text, Fill area, and Eraser, followed by Color, Undo, Redo
 and Clear drawing, in the floating-toolbar button primitive. It imports nothing of the SDK.

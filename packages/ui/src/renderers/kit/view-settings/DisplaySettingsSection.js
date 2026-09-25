@@ -77,7 +77,7 @@ function NumberProperty({ label, Icon, value, min, max, unit = "", digits = 2, o
 
 export function DisplaySettingsSection({
   viewSettings = {}, resolvedView, hostAppearance = "light", lightingQuality = "final", onViewSettingsPatch, onGroupEnabledChange, onModeChange, onViewReset,
-  edgeStatus = "idle", edgeError = "", features = ALL_VIEW_FEATURES, leadingSections = [], appearanceControl = null, sticky = true
+  edgeStatus = "idle", edgeError = "", features = ALL_VIEW_FEATURES, appearanceControl = null, sticky = true
 }) {
   const settings = useMemo(() => normalizeViewSettings(viewSettings), [viewSettings]);
   const view = resolvedView || resolveViewSettings(settings, { appearance: hostAppearance, lightingQuality, features });
@@ -127,7 +127,6 @@ export function DisplaySettingsSection({
         </FileSheetFieldGrid>
       </> },
       offers("surfaces") && { id: "surfaces", title: "Surfaces", collapsible: false, content: surfaces },
-      ...leadingSections,
       section("edges", "Edges", <FileSheetFieldGrid>
         <FileSheetSelectRow hideLabel className="px-0" label="Edge visibility" value={view.edges.visibility} onValueChange={visibility => setGroup("edges", { visibility })}
           options={[{ value: "visible", label: "Visible" }, { value: "all", label: "All" }]} />

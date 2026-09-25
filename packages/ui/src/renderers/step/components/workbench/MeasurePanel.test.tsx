@@ -24,8 +24,7 @@ it('adds one dense row per measurement, which can be activated or deleted; clear
   expect(rows.map(row => row.className.includes('h-6'))).toEqual([true, true]);
   expect(rows[0].textContent).toContain('21.38');
   expect(rows[1].className).toContain('bg-sidebar-accent');
-  // Everything the old two-line row showed is still one hover away.
-  expect(rows[0].getAttribute('title')).toMatch(/21\.38.*→/);
+  expect(rows[0].getAttribute('title')).toBeNull(); // shared hints, never native titles
   fireEvent.click(rows[0]);
   expect(onActivate).toHaveBeenCalledWith('a');
   fireEvent.click(screen.getByRole('button', { name: 'Delete measurement 2' }));

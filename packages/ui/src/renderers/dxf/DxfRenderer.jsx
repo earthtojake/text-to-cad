@@ -3,10 +3,9 @@ import { Camera } from "lucide-react";
 import { cn } from "@hardcore/ui/utils";
 import { usePromptDestination, useViewerHost } from "../../host/context.js";
 import ViewerAlertCard from "../kit/status/ViewerAlertCard.jsx";
-import StatusToast from "../kit/status/StatusToast.js";
 import ViewerLoadingOverlay from "../kit/status/ViewerLoadingOverlay.js";
 import { attachLiveBinding } from "../kit/shell/liveBinding.js";
-import { createViewPromptContext, promptDeliveryMessage } from "../kit/shell/promptContext.js";
+import { createViewPromptContext, promptDeliveryError } from "../kit/shell/promptContext.js";
 import { useWorkspaceDocument } from "../workspace/useWorkspaceDocument.js";
 import { drawingLoadAlert, useDrawingPayload } from "./useDrawingPayload.js";
 import { useDrawingView } from "./useDrawingView.js";
@@ -42,7 +41,7 @@ function DxfSurface({ view, data }) {
   const workspace = useWorkspaceDocument({ view, data });
   const file = workspace.entry?.file || view.file.path;
   const payload = useDrawingPayload({ client: workspace.client, file, revision: workspace.resource.revision });
-  const [status, setStatus] = useState("");
+  const [actionError, setActionError] = useState(null);
   const { onReady, onNavigationActionsChange, onStateChange } = view;
 
   // ---- the view this file was left at ---------------------------------------
@@ -91,6 +90,7 @@ function DxfSurface({ view, data }) {
   resourceRef.current = workspace.resource;
   const promptAvailable = destination.available;
   const snapshot = useCallback(() => {
+    setActionError(null);
     // The host binds its destination during the gesture, BEFORE the PNG exists.
     const pixels = capture();
     void pixels.catch(() => {});
@@ -99,7 +99,7 @@ function DxfSurface({ view, data }) {
     catch (error) { pending = Promise.reject(error); }
     Promise.resolve(pending)
       .catch((error) => ({ status: "failed", message: error instanceof Error ? error.message : String(error) }))
-      .then((result) => setStatus(promptDeliveryMessage(result)));
+      .then((result) => setActionError(promptDeliveryError(result)));
   }, [capture, host.promptContext]);
 
   // A host's own capture request is the same act, acknowledged.
@@ -121,7 +121,6 @@ function DxfSurface({ view, data }) {
     if (selectKey === null || declinedSelect.current === selectKey) return;
     declinedSelect.current = selectKey;
     workspace.acknowledgeCommand?.("selectReference", selectKey);
-    setStatus(DECLINED_LIVE_COMMANDS.select);
   }, [selectKey, workspace.acknowledgeCommand]);
 
   // ---- the navbar ------------------------------------------------------------
@@ -172,9 +171,8 @@ function DxfSurface({ view, data }) {
         ) : null}
         <ViewerLoadingOverlay loading={{ opening: payload.loading && !alert, progress: { label: "Reading drawing" } }}
           operationKey={file} />
-        <ViewerAlertCard alert={alert} hasContent={false} onReload={view.reload} />
+        <ViewerAlertCard alert={alert || (actionError ? { severity: "error", kind: "status", blocking: false, title: "Couldn’t capture the drawing", message: actionError } : null)} hasContent={Boolean(payload.drawing)} onReload={view.reload} />
       </div>
-      <StatusToast copyStatus={status} onClear={() => setStatus("")} />
     </div>
   );
 }

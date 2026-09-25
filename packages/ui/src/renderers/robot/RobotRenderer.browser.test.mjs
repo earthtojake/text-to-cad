@@ -151,7 +151,7 @@ async function open(t, file, { panel = true } = {}) {
     // The nav row's panel toggles, in order, each with whether its panel is the open one.
     panels: () => pane.locator('[data-file-panel]')
       .evaluateAll(buttons => buttons.map(button => `${button.getAttribute('aria-label')}:${button.getAttribute('aria-pressed')}`)),
-    toggle: id => id === 'cad-display' ? pane.locator('[data-cad-camera-controls]').getByRole('button', { name: 'Display', exact: true }) : pane.locator(`[data-file-panel="${id}"]`),
+    toggle: id => id === 'cad-display' ? pane.locator('[data-cad-toolbar]').getByRole('button', { name: 'Display', exact: true }) : pane.locator(`[data-file-panel="${id}"]`),
     // The robot's own panel, and its sections top to bottom by their headings.
     sheet: () => pane.locator('[data-file-sheet="Settings"]'),
     sections: () => pane.locator('[data-file-sheet="Settings"] [data-file-panel-section] h2').allInnerTexts(),

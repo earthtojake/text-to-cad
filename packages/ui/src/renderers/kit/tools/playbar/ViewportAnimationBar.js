@@ -7,7 +7,7 @@ import { cn } from "@hardcore/ui/utils";
 import { ToolbarButton } from "../ToolbarButton.js";
 import { FILE_SHEET_PRECISION_SLIDER_CLASSES } from "../../inspector/FileSheet.js";
 
-// The playbar: play, scrub, set speed and loop. Routine selection lives in the Animate tool corner menu.
+// The playbar owns play/pause and scrubbing. Routine, speed and loop live in PlayMenu.
 //
 // Every animation source shares this transport UI. The bar only edits the clip
 // and clock state of the runtime it is handed; evaluating a clip is its owner's.
@@ -28,7 +28,7 @@ function formatSeconds(value) {
 // The time slider tracks the LIVE clock while playing: the elapsed time on the
 // runtime snapshot only moves when playback stops, because a playing clip
 // publishes through the clock store instead of React state.
-function AnimationTimeControl({ playing, elapsedSec, duration, onScrub, clock, disabled = false, compact = false }) {
+function AnimationTimeControl({ playing, elapsedSec, duration, onScrub, clock, disabled = false }) {
   const liveElapsedSec = useAnimationClockValue(clock);
   const rawElapsedSec = playing ? liveElapsedSec : elapsedSec;
   const value = Math.min(Math.max(Number(rawElapsedSec) || 0, 0), duration);
@@ -47,7 +47,7 @@ function AnimationTimeControl({ playing, elapsedSec, duration, onScrub, clock, d
 }
 
 /** Play/Pause and the scrubber over the renderer's live clock. Dragging the scrubber to the start is the restart. */
-export function AnimationTransport({ runtime, compact = false, disabled = false, responsive = false }) {
+export function AnimationTransport({ runtime, disabled = false, responsive = false }) {
   const activeClip = runtime?.clips?.find(clip => clip.id === runtime?.activeClipId);
   const duration = Math.max(Number(activeClip?.duration) || 1, 0.001);
   const iconClass = "size-3.5";
@@ -59,13 +59,13 @@ export function AnimationTransport({ runtime, compact = false, disabled = false,
     </ToolbarButton>
     <div className={cn("min-w-0 flex-1 px-1", responsive && "@max-[8rem]/cad-viewport:order-last @max-[8rem]/cad-viewport:basis-full")}>
       <AnimationTimeControl playing={runtime?.playing === true} elapsedSec={runtime?.elapsedSec}
-        duration={duration} onScrub={runtime?.onScrub} clock={runtime?.clock} disabled={disabled} compact={compact}/>
+        duration={duration} onScrub={runtime?.onScrub} clock={runtime?.clock} disabled={disabled}/>
     </div>
   </div></TooltipProvider>;
 }
 
 /**
- * The playbar: transport and settings in one transparent row. It is
+ * The playbar: transport in one transparent row. It is
  * the Animate tool's bottom action in the regular view and the whole of
  * fullscreen's animation control; both mount this component over the same
  * runtime. It stays centered until it needs to make room for the XYZ control.

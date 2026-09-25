@@ -1,4 +1,3 @@
-import type { PromptContextPort } from '@hardcore/core/prompt';
 import type { ClipboardPort } from '@hardcore/ui/host';
 import type { FileActions, FileChange, FileEntry, FileMetadata, FileSource } from '@hardcore/ui/file-viewer';
 import type { createCadClient, CadEntry, CadServerInfo } from '@hardcore/core/client';
@@ -65,8 +64,8 @@ function contentRevision(entry: CadEntry): string {
   return JSON.stringify([entry.hash, entry.documentHash, entry.animationHash, entry.appearanceHash, entry.url, entry.relations, entry.sourceSidecar, entry.mtime, entry.bytes]);
 }
 
-export function createWebFileActions(client: CadClient, server: CadServerInfo, { clipboard, onCopyStatus }: {
-  clipboard: ClipboardPort; promptContext: PromptContextPort; onCopyStatus?: (message: string) => void;
+export function createWebFileActions(client: CadClient, server: CadServerInfo, { clipboard }: {
+  clipboard: ClipboardPort;
 }): FileActions {
   const copy = async (entry: { path: string }, absolute = false) => {
     const catalogEntry = client.getSnapshot().entries.find(candidate => catalogPath(candidate) === entry.path);
@@ -76,11 +75,8 @@ export function createWebFileActions(client: CadClient, server: CadServerInfo, {
     const rootPrefix = rootPath.replace(/\\/g, '/');
     const relativePath = rawPath.startsWith(`${rootPrefix}/`) ? rawPath.slice(rootPrefix.length + 1) : catalogPath(catalogEntry);
     const text = absolute ? `${rootPath}${rootPath.includes('\\') ? '\\' : '/'}${rootPath.includes('\\') ? relativePath.replace(/\//g, '\\') : relativePath}` : relativePath;
-    onCopyStatus?.('');
     await clipboard.writeText(text);
-    const filename = relativePath.split('/').pop() || '';
-    const label = absolute ? 'Copied path' : 'Copied relative path';
-    onCopyStatus?.(filename && text !== filename ? `${label} for ${filename}` : label);
+
   };
   return {
     platform: server.platform === 'darwin' || server.platform === 'win32' || server.platform === 'linux' ? server.platform : navigator.userAgent.includes('Macintosh') ? 'darwin' : navigator.userAgent.includes('Windows') ? 'win32' : 'linux',

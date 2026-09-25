@@ -153,16 +153,15 @@ test('web preferences ignore retired tab arrangements without rewriting them', (
   }
 });
 
-test('web source keeps only catalog files, native path capabilities and original copy feedback', async () => {
+test('web source keeps only catalog files, native path capabilities and silent clipboard actions', async () => {
   const copied = [];
   Object.defineProperty(globalThis, 'navigator', { configurable: true, value: { userAgent: 'Macintosh', clipboard: { writeText: async value => copied.push(value) } } });
   let snapshot = { hydrated: true, entries: [{ file: '/models/parts/probe.step', rootRelativeFile: 'parts/probe.step', bytes: 128 }, { file: 'flat.stl', bytes: 64 }] };
   const listeners = new Set();
   const client = { getSnapshot: () => snapshot, resolveEntry: async path => snapshot.entries.find(entry => (entry.rootRelativeFile || entry.file) === path), subscribe: listener => { listeners.add(listener); return () => listeners.delete(listener); } };
-  const statuses = [];
   const server = { rootId: 'a', rootPath: '/models', backend: 'local-fs' };
   const delivered = [];
-  const ports = { clipboard: { writeText: async value => copied.push(value) }, promptContext: { deliver: async context => { delivered.push(context); return {status: 'copied', partIds: ['reference']}; } }, onCopyStatus: value => statuses.push(value) };
+  const ports = { clipboard: { writeText: async value => copied.push(value) }, promptContext: { deliver: async context => { delivered.push(context); return {status: 'copied', partIds: ['reference']}; } } };
   const source = createWebFileSource(client, server);
   const actions = createWebFileActions(client, server, ports);
   const options = { signal: new AbortController().signal };
@@ -172,7 +171,6 @@ test('web source keeps only catalog files, native path capabilities and original
   await actions.perform['copy-relative-path']({ path: 'parts/probe.step' });
   await actions.perform['copy-path']({ path: 'parts/probe.step' });
   assert.deepEqual(copied, ['parts/probe.step', '/models/parts/probe.step']);
-  assert.equal(statuses.at(-1), 'Copied path for probe.step');
   assert.equal(createWebFileActions(client, { rootId: 'a', rootPath: '/models', backend: 'remote' }, ports).perform['copy-path'], undefined);
   assert.equal(actions.perform['copy-reference'], undefined);
   assert.equal(actions.perform.reveal, undefined, 'older servers do not advertise reveal');

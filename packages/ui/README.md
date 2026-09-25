@@ -252,53 +252,25 @@ tree asks for the tree, so the tree stays up while a person walks it; any other
 open gets the file's own panel, or nothing when it has none. Display is never open
 by default, and no panel is saved per file. Opening Display leaves the file's
 panel visible, preserving the tree's disclosure and scroll.
-Display uses a compact properties popover capped at 520px: full-width Mode, then
-Appearance and Projection share a row. Surfaces is a separate section; Orbit belongs to the Play menu.
-A muted Reset icon sits at the top-right of Display.
-Optional effects use the shared plus/minus section gates: expand enables defaults,
-collapse disables. One scrollbar contains the whole sheet; choices and colors use
-ordinary Select and color-picker controls without closing the sheet.
-The sidebar uses `FilePanelSections` and `FileSheetSettingsSection` with 28px
-headers/controls, 4px row gaps and an 8px bottom gutter matching the horizontal inset; the first header has no top
-border. Perspective uses the standard lens without a separate Camera section.
-The toolbar orders Select, Draw, Measure, Explode, Clip, Position and Play without separators. Display sits beside Home above the cube and opens a 280px properties popover. Play options control Orbit, which moves the camera in place and fades toolbar chrome when idle; the sidebar stays visible. Interaction tools are exclusive; Explode and Clip remain selected while their panels exist. There are no dots. Persistent tools add compact 160px panels stacked directly beneath the toolbar. There are
-no enable checkboxes: both start with no effect until their sliders/inputs are edited. X or
-pressing the tool again resets and removes the effect; changing tools preserves applied effects and their panels, but removes neutral zero-value panels.
-Position controls live in the sidebar in STEP and robot viewers. Its tool enables
-joint handles and reveals the section; leaving the tool preserves the pose.
-Section headers stack at the top and bottom of the single scrolling column,
-remaining reachable even beside a long expanded tree. The tool strip is right-aligned
-at the top of the viewport. Measure has a temporary corner menu for snap options. Its first result adds a retained panel; completed measurements persist across tools. With results present, the main button or X clears them, while the corner resumes picking without clearing.
-Draw uses an ephemeral dropdown whose chosen tool determines its toolbar icon.
-The section order is Display, Surfaces, Edges, Grid / Axes, Lighting,
-Background and Floor; no preset reorders it. Grid and Axes have matching default colors.
-Transparent Home and Display buttons sit above the view cube. Clicking a face,
-edge or corner changes orientation without changing zoom or pan. Home restores
-the default isometric direction and original model bounds at 100% zoom. Colored XYZ guides follow the cube edges.
-Floor and Background use the same plus/minus gates as the other optional effects;
-opacity lives in color pickers with checkerboard previews.
-Hover only highlights controls; it never writes settings. One per-file settings store serves controls, agent
-commands and persistence, and retains unchanged renderer inputs across edits;
-see [View state and updates](docs/render-mode.md#state-and-updates).
-Expensive settings use [staged viewport updates](docs/view-updates.md): controls
-remain authoritative, preparation is replaceable, and captures await presentation.
+The binding [viewer design system](docs/settings-ui.md) defines tool lifecycle,
+sidebar navigation, mobile layout, section density, tooltips and fullscreen.
+RendererShell owns the top-left toolbar and bottom-right cube; Display is the
+last toolbar item and Animate is conditional on clips. Fullscreen is a separate
+top-right action and preserves the parent navbar. Keep app-specific effects in
+the [host contract](docs/viewer-host.md), not in renderer components.
 
-Solid, Render, X-ray, Hidden line and Wireframe are presets over one grouped
-settings schema. Every preset exposes the same groups. Render defaults to
-perspective; others to orthographic. Changed view values show Custom; Reset
-restores the base preset. Clip/Explode are tools outside presets and Custom,
-preserved along with camera viewpoint/zoom, motion and selection. The viewer
-inherits host light/dark appearance and defaults to Preview lighting quality;
-snapshots default to Light and Final. Explicit grouped values override these
-context defaults. Retired saved states migrate on restore; new commands use the
-closed grouped schema. See [View presets](docs/render-mode.md).
+One per-file settings store serves controls, live commands and persistence.
+Presets use the canonical grouped schema; see [View presets](docs/render-mode.md).
+Expensive changes use [staged viewport updates](docs/view-updates.md): controls
+remain authoritative, preparation is replaceable, and captures await presentation.
+Camera transforms remain local to a mounted viewer; refresh/reopen fits the file.
 
 Authored material color, finish and opacity are read-only in every style; the
 Model reference section shows their properties. There is no Materials editor or
 persisted material override. See [View styles](docs/render-mode.md) and
 [progressive detail](docs/lod.md).
 
-The breadcrumb names the file and carries no status. Opening and updating show
-in the viewport's own loading state, and an error as a card over the viewport;
+The navbar names the file and carries compact loading/update status. An error
+appears as a card over the viewport;
 a failed update the model survives can be dismissed, leaving the previous
 version to inspect. Try again reloads only the selected renderer.
