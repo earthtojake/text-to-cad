@@ -425,8 +425,14 @@ export const PANE_LIMITS = {
   sidebar: { default: 230, min: 180, max: 480 },
   /** A floor, not a width: the session is flexible and never collapses. */
   session: { min: 320 },
-  /** The maximum is the window less the session's floor and the sidebar. */
-  explorer: { default: 560, min: 280 },
+  /**
+   * The maximum is the window less the session's floor and the sidebar. The
+   * default clears the file viewer's 720px breakpoint (`VIEWER_MOBILE_BREAKPOINT`
+   * in `@hardcore/ui`, measured on the viewer's own width) with room to spare,
+   * so a fresh pane shows a file's panels in a column beside the model, not as
+   * phone sheets over it.
+   */
+  explorer: { default: 740, min: 280 },
   overshoot: 40,
 } as const;
 

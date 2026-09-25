@@ -8,7 +8,6 @@ import { _electron as electron, expect, test, type ElectronApplication, type Pag
 import type { HardcoreApi } from "../../src/shared/ipc";
 import { cadRegistryEnvironment, cadRuntimeReady, cadTestProfile } from "./cad-runtime";
 import { selectFixtureSession } from "./session-fixture";
-import { widenExplorer } from "./viewer-layout";
 
 declare const window: {
   hardcore: HardcoreApi;
@@ -117,8 +116,6 @@ test.beforeAll(async () => {
   await selectFixtureSession(page, project);
   await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
   await page.getByRole("button", { name: "Toggle explorer", exact: true }).click();
-  // These tests are about the wide layout: the file's Settings in a column beside the model.
-  await widenExplorer(page);
 });
 
 test.afterAll(async () => {
@@ -143,8 +140,6 @@ async function openFile(file: string) {
     await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
     await page.getByRole("button", { name: "Toggle explorer", exact: true }).click();
   }
-  // The explorer's width is the session's own; each gets the wide layout's room.
-  await widenExplorer(page);
   await newTab.click();
   await page.getByRole("menuitem", { name: "File", exact: false }).click();
   await page.getByLabel("Filter files").fill(file);

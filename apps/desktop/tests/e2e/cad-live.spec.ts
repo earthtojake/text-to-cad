@@ -14,7 +14,6 @@ type CadLiveState = { active: boolean; loading: boolean; revision: string;
   display: { mode: string; camera?: { enabled?: boolean; projection?: string; focalLength?: number } }; renderMode: string };
 import { cadRegistryEnvironment, cadRuntimeReady, cadTestProfile } from './cad-runtime';
 import { selectFixtureSession } from './session-fixture';
-import { widenExplorer } from './viewer-layout';
 
 declare const window: { hardcore: HardcoreApi; __cadCamera?: () => { position: number[]; target: number[]; projection: string } | null };
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -42,8 +41,6 @@ test('live CAD commands observe and control the mounted tiny STEP viewport witho
   const session = await selectFixtureSession(page, project);
   await expect(page.locator('[data-explorer-ready=true]')).toBeVisible();
   await page.getByRole('button', { name: 'Toggle explorer', exact: true }).click();
-  // The file's own panel opening by default is the wide layout's rule.
-  await widenExplorer(page);
   // Intercept only this test window's replies. Production renderer dispatch and
   // viewport bindings still run, while the global app/MCP reply handler is intact.
   await app.evaluate(({ BrowserWindow }) => {

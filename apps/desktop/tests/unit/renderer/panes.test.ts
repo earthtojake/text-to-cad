@@ -1,7 +1,8 @@
 import { describe, expect, it } from "vitest";
 
+import { PANEL_DEFAULT_WIDTH } from "@hardcore/ui/navigation";
 import { dragOutcome, maxWidthOf, resolvePanes } from "@renderer/lib/panes";
-import { PANE_LIMITS } from "@shared/types";
+import { PANE_LIMITS, WindowStateSchema } from "@shared/types";
 
 /**
  * The shell's geometry (`src/renderer/lib/panes.ts`): pixels in, pixels out.
@@ -88,6 +89,43 @@ describe("resolvePanes", () => {
 
   it("draws nothing off the first, unmeasured frame", () => {
     expect(resolvePanes({ width: 0, sidebar: open(230), explorer: open(560) }).collapse).toEqual([]);
+  });
+});
+
+describe("the explorer's default width", () => {
+  // The file viewer lays out for a phone below 720px of its own width
+  // (`VIEWER_MOBILE_BREAKPOINT` in @hardcore/ui), and the viewer fills the pane.
+  const VIEWER_WIDE_MIN = 720;
+  const defaults = {
+    sidebar: open(PANE_LIMITS.sidebar.default),
+    explorer: open(PANE_LIMITS.explorer.default),
+  };
+
+  it("opens the file viewer in its wide layout in a default window", () => {
+    const width = WindowStateSchema.parse({}).width;
+    const resolved = resolvePanes({ width, ...defaults });
+    expect(resolved).toEqual({
+      sidebar: PANE_LIMITS.sidebar.default,
+      explorer: PANE_LIMITS.explorer.default,
+      collapse: [],
+    });
+    expect(resolved.explorer!).toBeGreaterThanOrEqual(VIEWER_WIDE_MIN);
+    // With the viewer's panel column open at its default width, the model keeps most of the pane.
+    expect(resolved.explorer! - PANEL_DEFAULT_WIDTH).toBeGreaterThan(resolved.explorer! / 2);
+    // And the session keeps more than its floor.
+    expect(width - resolved.sidebar! - resolved.explorer! - 2 * SEP).toBeGreaterThan(PANE_LIMITS.session.min);
+  });
+
+  it("gives way like any stored width in a narrow window", () => {
+    // 900 is the window's minimum size: the explorer shrinks to what the session's floor
+    // leaves it, and nothing collapses.
+    const narrow = resolvePanes({ width: 900, ...defaults });
+    expect(narrow.collapse).toEqual([]);
+    expect(narrow.sidebar).toBe(PANE_LIMITS.sidebar.default);
+    expect(narrow.explorer).toBe(900 - 2 * SEP - PANE_LIMITS.session.min - PANE_LIMITS.sidebar.default);
+    // The collapse order does not depend on the default: explorer first, then the sidebar.
+    expect(resolvePanes({ width: 781, ...defaults }).collapse).toEqual(["explorer"]);
+    expect(resolvePanes({ width: 480, ...defaults }).collapse).toEqual(["explorer", "sidebar"]);
   });
 });
 
