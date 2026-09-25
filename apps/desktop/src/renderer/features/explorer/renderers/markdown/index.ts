@@ -1,5 +1,5 @@
-import { defineFileRenderer } from "../../file-viewer/registry.js";
-import { markdownPanels } from "../../file-viewer/navigation/index.js";
+import { defineFileRenderer } from "@hardcore/ui/file-viewer";
+import { markdownPanels } from "./panels";
 
 const MARKDOWN_EXTENSIONS = new Set(["md", "markdown", "mdx"]);
 
@@ -13,9 +13,9 @@ export const markdownRenderer = defineFileRenderer<null>({
     const text = await source.readText(file.path, { signal });
     return { data: null, text };
   },
-  load: () => import("./MarkdownRenderer.js"),
+  load: () => import("./MarkdownRenderer"),
 });
 
-export type { MarkdownRendererData } from "./MarkdownRenderer.js";
-export { capturePristine, documentToMarkdown, markdownToDocument } from "./document.js";
-export { markdownExtensions } from "./schema.js";
+export type { MarkdownRendererData } from "./MarkdownRenderer";
+export { capturePristine, documentToMarkdown, markdownToDocument } from "./document";
+export { markdownExtensions } from "./schema";

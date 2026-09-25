@@ -74,7 +74,7 @@ owner.
 | Measure | Arms picking; the corner menu chooses snapping | Unfinished picks are cancelled; completed measurements stay |
 | Explode / Clip | Opens a neutral panel; an edit applies the effect | A neutral panel goes; an applied effect and its panel stay |
 | Position | Shows joint handles and reveals the Position tab (desktop) | Handles hide; joint values stay |
-| Animate | Starts playback; the corner menu holds Routine, Speed and Loop | Playback stops and the model returns to rest |
+| Animate | Starts playback; the corner menu holds Routine, Speed and Loop | Playback stops and the model returns to rest; Routine, Speed and Loop stay |
 | Display | Selects Display and opens its popover | The popover closes and the default tool returns; settings stay |
 
 Choosing something in a tree under another tool returns to Select first.
@@ -239,8 +239,10 @@ width. Slider thumbs are named after their joint. Writes pose the model at once.
 Position persists across tools and sidebar changes. Reset restores the authored
 values (an SRDF's home included), stops motion and hands control back to
 Position. Animate sets the Position values aside and gives them back when it
-lets go. Kinematics, named poses and animation are separate capabilities; the
-absence of one never leaves empty controls for another.
+lets go. A Position edit, Reset included, stops and rewinds a routine but keeps
+Animate's Routine, Speed and Loop for the next play. Kinematics, named poses and
+animation are separate capabilities; the absence of one never leaves empty
+controls for another.
 
 The Reference pane is read-only, with a static heading and an X to clear. Copy
 lives in the bottom action — **Copy Reference** or **Copy References**, never
@@ -248,8 +250,11 @@ the ids — shown only for an actual, usable selection. Every copied reference
 carries its file prefix.
 
 Viewport picks reach individual faces and edges even where the tree groups them
-into a feature. In an assembly, faces and edges load one part at a time: with a
-face or edge filter and no part chosen, Select says so under the toolbar.
+into a feature. In an assembly, faces and edges load per part, when first
+needed: under a face or edge filter, a press on a part whose faces are not
+loaded loads that part alone and then picks what is under the pointer — one
+press, with "Loading selectable geometry…" under the toolbar meanwhile. Until
+then, hovering such a part lights the whole part.
 Shift-click adds to a selection in the viewport; Shift, Ctrl or Cmd does in a
 tree (robots select several links this way). Double-click isolates a component
 or subassembly; double-click on empty space leaves isolation, as does the

@@ -4,8 +4,6 @@ import test from "node:test";
 import {
   CAD_PANEL,
   FILE_PANEL_TREE,
-  SOURCE_PANEL,
-  markdownPanels,
   nextOpenPanel,
   resolveOpenPanel,
   treePanel,
@@ -20,6 +18,8 @@ import {
  */
 
 const part = true;
+/** A host renderer's own panel id: the desktop markdown's source view. */
+const SOURCE_PANEL = "source";
 const panelsOf = (declared, open = "", options) => [...declared, treePanel(open, options)];
 
 test("a viewer file declares only its own sidebar; Display belongs to the toolbar", () => {
@@ -41,14 +41,6 @@ test("a file opened directly opens with its own panel, or nothing: never Display
   assert.equal(resolveOpenPanel(panelsOf([], "", { empty: true }), null)?.id, FILE_PANEL_TREE);
   // A retired panel id a host stored (the old Display panel's) cannot occupy the sidebar.
   assert.equal(resolveOpenPanel(panelsOf(viewerPanels(true, { file: part })), "cad-display"), null);
-});
-
-test("markdown's one panel is named by what pressing it does", () => {
-  assert.deepEqual(
-    markdownPanels("").map((panel) => [panel.id, panel.label, panel.content]),
-    [["source", "View source", "body"]]
-  );
-  assert.deepEqual(markdownPanels(SOURCE_PANEL).map((panel) => panel.label), ["View preview"]);
 });
 
 test("the files toggle is last in every list, and named by what it does", () => {

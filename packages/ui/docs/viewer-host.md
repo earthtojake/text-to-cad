@@ -254,8 +254,8 @@ PNG capture on the renderer's actual PDF.js document. It exposes no disk write
 or script execution. Binary sources supply `ManagedFileAsset.bytes` for PDF
 preparation; shared UI discovers no transport. Each mounted PDF owns its worker,
 loading task, canvas and text layer, all released on unmount. Page references
-and captures use the source identity and path, never the asset URL. See
-[renderer contracts](renderers.md) for PDF and text selection behavior.
+and captures use the source identity and path, never the asset URL. The desktop's
+PDF renderer is this port's consumer ([renderer contracts](renderers.md)).
 
 PDF hosts may provide `host.pdf.assetBaseUrl`, an absolute trailing-slash URL
 containing the pinned PDF.js `cmaps/`, `standard_fonts/`, `wasm/`, and `iccs/`

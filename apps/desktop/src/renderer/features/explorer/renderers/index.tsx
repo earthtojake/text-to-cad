@@ -5,18 +5,23 @@ import { createDxfRenderer } from "@hardcore/ui/renderers/dxf";
 import { createGlbRenderer } from "@hardcore/ui/renderers/glb";
 import { createMeshRenderer } from "@hardcore/ui/renderers/mesh";
 import { createRobotRenderer } from "@hardcore/ui/renderers/robot";
-import { codeRenderer } from "@hardcore/ui/renderers/code";
-import { imageRenderer } from "@hardcore/ui/renderers/image";
-import { markdownRenderer } from "@hardcore/ui/renderers/markdown";
-import { pdfRenderer } from "@hardcore/ui/renderers/pdf";
-import { unsupportedRenderer } from "@hardcore/ui/renderers/unsupported";
 import type { ExplorerRoot } from "@shared/types";
-import { CadRuntimeError, createDesktopCadConnection, DesktopCadFailure } from "./adapters/cadRuntime";
-import type { DesktopCadConnection } from "./adapters/cadRuntime";
-import { desktopCadPreferences } from "./adapters/cadPersistence";
-import { createDesktopCadCommands } from "./host/cadCommands";
+import { CadRuntimeError, createDesktopCadConnection, DesktopCadFailure } from "../adapters/cadRuntime";
+import type { DesktopCadConnection } from "../adapters/cadRuntime";
+import { desktopCadPreferences } from "../adapters/cadPersistence";
+import { createDesktopCadCommands } from "../host/cadCommands";
+import { codeRenderer } from "./code";
+import { imageRenderer } from "./image";
+import { markdownRenderer } from "./markdown";
+import { pdfRenderer } from "./pdf";
+import { unsupportedRenderer } from "./unsupported";
 
-/** Application composition: only registered CAD code receives composer/native services. */
+/**
+ * Application composition: the shared viewer renderers (`@hardcore/ui/renderers/*`) and this
+ * app's own — Markdown, code, image, PDF and the unsupported fallback, which only the desktop
+ * registers and which live beside this file. Only registered CAD code receives composer/native
+ * services.
+ */
 export function createDesktopRenderers(projectId: string, root: ExplorerRoot, tabId: string, borrowedConnection?: DesktopCadConnection) {
   const ownedConnection = borrowedConnection ? null : createDesktopCadConnection(projectId, root);
   const connection = borrowedConnection ?? ownedConnection!;

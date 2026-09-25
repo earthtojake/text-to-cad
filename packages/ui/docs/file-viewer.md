@@ -3,7 +3,8 @@
 `@hardcore/ui/file-viewer` exports the complete file tab: breadcrumbs, entry
 menus, the file tree, one panel column, renderer loading, and the text editing
 session. It imports no concrete renderer. Applications compose registrations
-from the separate `@hardcore/ui/renderers/*` entry points.
+from the separate `@hardcore/ui/renderers/*` entry points and their own
+`defineFileRenderer` definitions ([renderers](renderers.md)).
 
 ```tsx
 <FileViewer

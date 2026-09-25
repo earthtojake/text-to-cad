@@ -42,19 +42,37 @@ function setup(initialClips: any = clips) {
   return { ...hook, clock };
 }
 
-it('a parameter edit stops live playback, resets its preferences and clock, and rejects an already queued frame', () => {
+// The transport preferences Animate's corner menu sets: not the defaults, so keeping them shows.
+const preferences = { activeClipId: 'close', speed: 2, loopEnabled: true };
+const pickPreferences = (result: any) => act(() => {
+  result.current.handleAnimationClipSelect('close'); result.current.handleAnimationSpeedChange(2); result.current.handleAnimationLoopToggle(true);
+});
+
+it('a parameter edit stops live playback, keeps its transport preferences, resets its clock, and rejects an already queued frame', () => {
   const { result, clock } = setup();
-  act(() => { result.current.handleAnimationClipSelect('close'); result.current.handleAnimationSpeedChange(2); });
+  pickPreferences(result);
   act(() => result.current.handleAnimationPlayToggle()); advance();
   expect(clock.getAnimationClock()).toBeGreaterThan(0);
   const stale = [...frames.values()];
   act(() => result.current.handleStepModuleParameterChange('hinge', 30));
-  expect(result.current.animation).toEqual({ ...buildDefaultAnimationState(clips), enabled: false });
+  expect(result.current.animation).toEqual({ ...preferences, enabled: false, playing: false, elapsedSec: 0 });
   expect(result.current.frame).toBeNull();
   expect(result.current.values).toEqual({ hinge: 30, slide: 2 });
   act(() => stale.forEach(frame => frame(performance.now() + 1000)));
   expect(clock.getAnimationClock()).toBe(0);
   expect(result.current.values.hinge).toBe(30);
+  // The next play is the routine the person chose, as they set it up, from its start.
+  act(() => result.current.handleAnimationPlayToggle());
+  expect(result.current.animation).toEqual({ ...preferences, enabled: true, playing: true, elapsedSec: 0 });
+});
+
+it('leaving Animate for another tool keeps the transport preferences too', () => {
+  const { result, clock } = setup();
+  pickPreferences(result);
+  act(() => result.current.handleAnimationPlayToggle()); advance();
+  act(() => result.current.releaseAnimation());
+  expect(result.current.animation).toEqual({ ...preferences, enabled: false, playing: false, elapsedSec: 0 });
+  expect(clock.getAnimationClock()).toBe(0);
 });
 
 it.each(['play', 'scrub', 'restart', 'clip', 'speed', 'loop'])('%s returns a posed model to its authored values', command => {
@@ -109,8 +127,8 @@ it('parameter paste participates in the same ownership/reset contract', () => {
 it.each(['playback', 'position'])('global motion reset clears %s and all pending producers without claiming animation time zero', state => {
   const { result, clock } = setup();
   if (state === 'playback') {
-    act(() => result.current.handleAnimationClipSelect('close'));
-    act(() => { result.current.handleAnimationSpeedChange(2); result.current.handleAnimationLoopToggle(true); result.current.handleAnimationPlayToggle(); });
+    pickPreferences(result);
+    act(() => result.current.handleAnimationPlayToggle());
     advance();
   } else { act(() => result.current.handleApplyPose('closed')); }
   const stale = [...frames.values()];
@@ -118,7 +136,10 @@ it.each(['playback', 'position'])('global motion reset clears %s and all pending
   act(() => stale.forEach(frame => frame(performance.now() + 500)));
   expect(result.current.values).toEqual(definition.defaultParameterValues);
   expect(result.current.pose).toBe(''); expect(result.current.frame).toBeNull();
-  expect(result.current.animation).toEqual({ ...buildDefaultAnimationState(clips), enabled: false });
+  // Reset is Position's: it puts the model at rest and stops the routine, and leaves Animate's
+  // transport preferences as the person set them.
+  expect(result.current.animation).toEqual({ ...(state === 'playback' ? preferences : buildDefaultAnimationState(clips)),
+    enabled: false, playing: false, elapsedSec: 0 });
   expect(clock.getAnimationClock()).toBe(0);
 });
 

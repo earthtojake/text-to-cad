@@ -1,20 +1,21 @@
 import { EditorContent, useEditor } from "@tiptap/react";
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
 
-import type { FileRendererProps } from "../../file-viewer/types.js";
-import { SOURCE_PANEL } from "../../file-viewer/navigation/index.js";
-import { cn } from "../../lib/utils.js";
+import type { FileRendererProps } from "@hardcore/ui/file-viewer";
+import { SOURCE_PANEL } from "./panels";
+import { cn } from "@hardcore/ui/utils";
 
-import { capturePristine, documentToMarkdown, markdownToDocument } from "./document.js";
-import { markdownExtensions } from "./schema.js";
+import { capturePristine, documentToMarkdown, markdownToDocument } from "./document";
+import { markdownExtensions } from "./schema";
 
-const SourceRenderer = lazy(() => import("../code/CodeRenderer.js"));
+const SourceRenderer = lazy(() => import("../code/CodeRenderer"));
 
 export type MarkdownRendererData = null;
 
 /** Monaco stays outside the preview chunk until the source panel is opened. */
 export default function MarkdownRenderer(props: FileRendererProps<MarkdownRendererData>) {
-  useEffect(() => props.onReady(true), [props.onReady]);
+  const { onReady } = props;
+  useEffect(() => onReady(true), [onReady]);
   if (props.openPanel === SOURCE_PANEL) {
     return (
       <Suspense fallback={<div className="p-4 text-xs text-muted-foreground">Opening source…</div>}>

@@ -93,6 +93,7 @@
     "monaco-editor": "0.56.0",
     "motion": "13.2.0",
     "nanoid": "6.0.1",
+    "pdfjs-dist": "6.3.289",
     "radix-ui": "1.6.7",
     "react": "19.3.0",
     "react-dom": "19.3.0",

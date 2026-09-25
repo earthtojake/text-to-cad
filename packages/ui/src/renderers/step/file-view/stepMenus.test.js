@@ -20,6 +20,15 @@ test("the model menu offers Show all only with something hidden, and frames the 
   assert.deepEqual([some.showShowAll, some.zoomSelectionAvailable, some.collapseAllDisabled], [true, true, false]);
 });
 
+test("a lone part's model menu carries the whole part's reference; an assembly's carries none", () => {
+  const lone = modelMenuDescriptor({ ...common, isAssemblyView: false, entry: { ...entry, kind: "part", fileRefPrefix: "hinge.step" },
+    hiddenCount: 0, zoomSelectionAvailable: false });
+  assert.equal(lone.copyText, "hinge.step#", "Add to prompt and Copy Reference name the whole file");
+  assert.equal(modelMenuDescriptor({ ...common, isAssemblyView: false, hiddenCount: 0, zoomSelectionAvailable: false }).copyText, "#");
+  assert.equal(modelMenuDescriptor({ ...common, hiddenCount: 0, zoomSelectionAvailable: false }).copyText, "",
+    "empty space in an assembly names no part");
+});
+
 test("a part menu acts on the whole selection with the node, and says what the node is", () => {
   const menu = partMenuDescriptor({ ...common, nodeId: " o1.2 ", renderPartId: "", node: root.children[1], leafIds: ["o1.2"],
     hiddenPartIds: [], focusedNodeIds: [], selectedPartIds: ["o1.1"], zoomSelectionAvailable: true });

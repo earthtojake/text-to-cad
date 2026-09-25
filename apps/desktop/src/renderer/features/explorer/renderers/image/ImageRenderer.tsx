@@ -1,9 +1,9 @@
 import { Maximize2, Minimize2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
-import type { FileRendererProps } from "../../file-viewer/types.js";
-import { cn } from "../../lib/utils.js";
-import { Button } from "../../primitives/button.jsx";
+import type { FileRendererProps } from "@hardcore/ui/file-viewer";
+import { cn } from "@hardcore/ui/utils";
+import { Button } from "@hardcore/ui/primitives/button";
 
 /**
  * A shared image view on a checkerboard, so transparency is visible rather than being

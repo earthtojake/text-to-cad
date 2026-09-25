@@ -80,11 +80,6 @@ src/
     dxf/            2D drawings
     workspace/      a viewer file's catalog entry and document load
     harness/, shell-harness/  surfaces the browser suites drive
-    markdown/       preview/editor and lossless Markdown bridge
-    code/           Monaco editor and worker setup
-    image/          image view and zoom
-    pdf/            PDF.js pages, text selection and host-bound capture
-    unsupported/    Not supported message and optional OS-open action
   primitives/       shared controls: buttons, menus, selects, sheets, tooltips, tree rows
   lib/              browser helpers
   loading/          shared loading animation
@@ -95,14 +90,18 @@ dist/               generated ESM, declarations, CSS, assets and worker modules
 
 `FileViewer` has no concrete renderer imports. A registration describes matching,
 priority, panels, asynchronous preparation, lazy component loading and disposal.
-Each app registers only the file types its source supports. CAD, Monaco and
-TipTap load when selected; adding a renderer does not add a branch to FileViewer.
+Each app registers only the file types its source supports. A renderer's code
+loads when a file selects it; adding a renderer does not add a branch to FileViewer.
 The registry rejects duplicate IDs and ambiguous matches.
 
+This package ships the viewer renderers both apps register. A renderer only one
+app registers is that app's own, built on the same public `defineFileRenderer`
+contract: the desktop's Markdown, code, image, PDF and unsupported-file
+renderers live in `apps/desktop` (see [renderers](docs/renderers.md)).
+
 File listing is independent of renderer matching: the tree shows every entry
-the host's source returns. Hosts that expose arbitrary files register the
-unsupported fallback, which shows “Not supported” without reading the file's
-contents, plus “Open externally” when the host provides that action.
+the host's source returns. A host that exposes arbitrary files registers a
+fallback renderer (`fallback: true`) for the types nothing else matches.
 
 ```tsx
 import { FileViewer } from '@hardcore/ui/file-viewer';
@@ -125,9 +124,7 @@ const renderers = [createStepRenderer({ client, preferences }), createDxfRendere
 
 Public entry points include `/host`, `/file-viewer`, `/navigation`, `/renderers/step`,
 `/renderers/dxf`, `/renderers/glb`, `/renderers/mesh`, `/renderers/robot`, `/renderers/workspace`, `/file-viewer/presentation`, `/file-viewer/empty`,
-`/renderers/markdown`, `/renderers/code`, `/renderers/code/editor`,
-`/renderers/image`, `/renderers/pdf`, `/renderers/unsupported`, `/loading-icon`,
-`/utils`, `/primitives/*`, `/tokens.css`, and `/styles.css`.
+`/drawing`, `/loading-icon`, `/utils`, `/primitives/*`, `/tokens.css`, and `/styles.css`.
 Declarations are owned here; apps need no ambient shims or aliases into this
 source tree.
 
@@ -211,11 +208,12 @@ installed; they may require different Chromium revisions. On Linux, add
 `--with-deps` to the browser install command if its system libraries are absent.
 The Node runner caps file concurrency at four so JSX transforms and Chromium
 setup do not compete with one process per host CPU. The UI suite includes Node
-helper tests, React/editor tests and real Chromium
+helper tests, React component tests and real Chromium
 integration tests for renderer preparation, saves/conflicts, root changes,
 multiple instances, cancellation and disposal. App integration and packaged
-runtime checks remain with their hosts. See [renderer contracts](docs/renderers.md)
-for the non-CAD renderers.
+runtime checks remain with their hosts, and so do the tests of a host's own
+renderers. See [renderer contracts](docs/renderers.md) for what a host renderer
+may rely on.
 
 ## CAD document updates
 

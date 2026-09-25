@@ -5,5 +5,5 @@ export {
   languageFor,
   monacoModelUri,
   monacoTheme,
-} from "./monaco.js";
-export { setupMonaco } from "./setup.js";
+} from "./monaco";
+export { setupMonaco } from "./setup";

@@ -1,4 +1,4 @@
-import { defineFileRenderer } from "../../file-viewer/registry.js";
+import { defineFileRenderer } from "@hardcore/ui/file-viewer";
 
 const TEXT_MIME = /^(?:text\/|application\/(?:json|(?:[a-z0-9.+-]+\+)?json|xml|(?:[a-z0-9.+-]+\+)?xml|javascript|x-javascript|yaml|x-yaml|toml))(?:;|$)/i;
 
@@ -11,8 +11,8 @@ export const codeRenderer = defineFileRenderer<null>({
     const text = await source.readText(file.path, { signal });
     return { data: null, text };
   },
-  load: () => import("./CodeRenderer.js"),
+  load: () => import("./CodeRenderer"),
 });
 
-export { languageFor, monacoModelUri, monacoTheme } from "./editor/monaco.js";
-export type { CodeRendererData } from "./CodeRenderer.js";
+export { languageFor, monacoModelUri, monacoTheme } from "./editor/monaco";
+export type { CodeRendererData } from "./CodeRenderer";

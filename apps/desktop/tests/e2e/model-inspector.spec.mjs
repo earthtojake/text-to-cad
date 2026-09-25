@@ -5,7 +5,6 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { cadRegistryEnvironment, cadRuntimeReady, cadTestProfile } from './cad-runtime.ts';
 import { selectFixtureSession } from './session-fixture.ts';
-import { widenExplorer } from './viewer-layout.ts';
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const root = path.resolve(appRoot, '../..');
 // Playwright REQUIRES the first argument to be a destructuring pattern, and this
@@ -57,8 +56,6 @@ test('the Features tree presents a lone part as its features, and precise viewpo
       name: 'Toggle explorer',
       exact: true
     }).click();
-    // The wide layout: the tree stays up across a pick and the Settings panel is a column.
-    await widenExplorer(page);
     await page.getByRole('button', {
       name: 'New tab',
       exact: true

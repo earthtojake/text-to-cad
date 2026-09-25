@@ -1,11 +1,11 @@
 import { ExternalLink, FileQuestion } from "lucide-react";
 
-import type { FileRendererProps } from "../../file-viewer/types.js";
-import { EmptyState } from "../../file-viewer/navigation/index.js";
-import { Button } from "../../primitives/button.jsx";
-import { useViewerHost } from '../../host/context.js';
+import type { FileRendererProps } from "@hardcore/ui/file-viewer";
+import { EmptyState } from "@hardcore/ui/navigation";
+import { Button } from "@hardcore/ui/primitives/button";
+import { useViewerHost } from "@hardcore/ui/host";
 
-import { formatBytes } from "../image/ImageRenderer.js";
+import { formatBytes } from "../image/ImageRenderer";
 
 /** A visible fallback for files without a renderer; no file contents are read. */
 export type UnsupportedRendererData = null;

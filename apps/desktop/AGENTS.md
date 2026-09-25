@@ -58,8 +58,10 @@ not.
 ## Rules that are easy to break here
 
 - **Pure refactor:** package moves preserve all app UI/UX and functionality.
-  FileTab hosts `@hardcore/ui/file-viewer`; renderers live in UI, IPC/native
-  services and app state stay here. Never import web app source.
+  FileTab hosts `@hardcore/ui/file-viewer`; the viewer renderers both apps
+  register live in UI, the file renderers only this app registers (Markdown,
+  code, image, PDF, unsupported) live in `features/explorer/renderers/`, and
+  IPC/native services and app state stay here. Never import web app source.
 
 - **The renderer imports from `src/main` never, and from `src/shared` types
   only.** Its one way off the page is `window.hardcore`, built from the

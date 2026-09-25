@@ -28,7 +28,8 @@ Load this only when a task needs Viewer file-support details or UI control guida
   Measure chooses snapping, and Animate chooses Routine, Speed and Loop.
 - One tool owns picking. Leaving Select clears selection; leaving Draw clears
   drawings. Position edits persist. Animate sets Position values aside while it
-  plays; leaving it stops playback and gives them back. Completed measurements
+  plays; leaving it stops playback and gives them back. Animate's Routine, Speed
+  and Loop survive leaving it and Position edits. Completed measurements
   remain until their panel's X or main tool button clears them; unfinished picks
   are canceled when leaving Measure.
 - Explode and Clip open neutral panels beneath the toolbar. Editing applies the
@@ -39,6 +40,8 @@ Load this only when a task needs Viewer file-support details or UI control guida
   percentage; Clip uses an axis, Flip and one cut-percentage slider over the
   original model bounding box. 0% means no effect.
 - Select individual faces/edges in the viewport even when Features groups them.
+  In an assembly, the first face/edge press on a part loads that part's faces
+  and picks under the pointer; the part lights on hover until then.
   Shift-click adds to the selection (Shift, Ctrl or Cmd in a tree). Double-click
   a component/subassembly to isolate; double-click away or the isolation bar's
   Exit leaves. Double-click a face/edge to copy its file-prefixed reference; it

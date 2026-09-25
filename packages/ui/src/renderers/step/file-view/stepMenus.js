@@ -1,4 +1,4 @@
-import { buildSelectionCopyPayload, uniqueStringList } from "../workbench/referenceSelection.js";
+import { buildSelectionCopyPayload, buildWholeStepEntryCopyReference, uniqueStringList } from "../workbench/referenceSelection.js";
 import {
   buildStepTreeExpansionMenuState,
   copyPayloadWithSelectedIdFallback,
@@ -18,9 +18,11 @@ const idList = (values) => uniqueStringList((Array.isArray(values) ? values : []
  * The menu over empty space: the model as a whole — reveal what is hidden, open or close the
  * tree, and frame it again. The framing is always worth offering (a press on the backdrop is
  * how somebody who zoomed off the model gets it back); the rest comes and goes with what it
- * could do.
+ * could do. A lone part has no part menu (the model IS the part), so its model menu carries
+ * the whole part's reference (`copyText`, the file's `#`) for Add to prompt and Copy Reference;
+ * an assembly's names no part and carries none.
  */
-export function modelMenuDescriptor({ root, isAssemblyView, expandedIds, loadableIds, hiddenCount, zoomSelectionAvailable }) {
+export function modelMenuDescriptor({ root, isAssemblyView, expandedIds, loadableIds, hiddenCount, zoomSelectionAvailable, entry = null }) {
   const expansion = buildStepTreeExpansionMenuState({
     root, isAssemblyView, expandedTreeNodeIds: expandedIds, loadableTreeNodeIds: loadableIds, actionNodeIds: []
   });
@@ -32,6 +34,7 @@ export function modelMenuDescriptor({ root, isAssemblyView, expandedIds, loadabl
     label: "Viewer",
     hidden: true,
     zoomSelectionAvailable,
+    copyText: isAssemblyView ? "" : buildWholeStepEntryCopyReference(entry)?.copyText || "",
     showShowAll: hiddenCount > 0,
     showExpandCollapse: showExpandCollapse && !(expandAllDisabled && collapseAllDisabled),
     collapsedExpandableTreeNodeIds: expansion.collapsedExpandableTreeNodeIds,

@@ -11,7 +11,6 @@ import {
 } from "@playwright/test";
 import { cadRegistryEnvironment, cadRuntimeReady, cadTestProfile } from "./cad-runtime";
 import { selectFixtureSession } from "./session-fixture";
-import { widenExplorer } from "./viewer-layout";
 
 /**
  * The colour scheme, end to end: who is allowed to write it, and whether it
@@ -197,7 +196,6 @@ test.beforeAll(async () => {
   app = await launch();
   fixtureSession = await selectFixtureSession(page, project);
   await page.getByRole("button", { name: "Toggle explorer" }).click();
-  await widenExplorer(page);
   await expect(page.getByTestId("explorer")).toBeVisible();
 });
 

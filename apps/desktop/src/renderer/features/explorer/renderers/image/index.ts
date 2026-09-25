@@ -1,4 +1,4 @@
-import { defineFileRenderer } from "../../file-viewer/registry.js";
+import { defineFileRenderer } from "@hardcore/ui/file-viewer";
 
 export const imageRenderer = defineFileRenderer<{ url: string; mime?: string }>({
   id: "image",
@@ -12,8 +12,8 @@ export const imageRenderer = defineFileRenderer<{ url: string; mime?: string }>(
       dispose: asset.release,
     };
   },
-  load: () => import("./ImageRenderer.js"),
+  load: () => import("./ImageRenderer"),
 });
 
-export { formatBytes } from "./ImageRenderer.js";
-export type { ImageRendererData } from "./ImageRenderer.js";
+export { formatBytes } from "./ImageRenderer";
+export type { ImageRendererData } from "./ImageRenderer";

@@ -2,16 +2,16 @@ import Editor, { type OnMount } from "@monaco-editor/react";
 import type { editor } from "monaco-editor";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
 
-import { useViewerHost } from '../../host/context.js';
-import type { FileRendererProps } from "../../file-viewer/types.js";
+import { useViewerHost } from "@hardcore/ui/host";
+import type { FileRendererProps } from "@hardcore/ui/file-viewer";
 
 import {
   SHARED_EDITOR_OPTIONS,
   languageFor,
   monacoModelUri,
   monacoTheme,
-} from "./editor/monaco.js";
-import { setupMonaco } from "./editor/setup.js";
+} from "./editor/monaco";
+import { setupMonaco } from "./editor/setup";
 
 /** Languages whose source is prose, and therefore wraps. */
 const WRAPPED = new Set(["markdown", "plaintext"]);
@@ -42,7 +42,9 @@ export default function CodeRenderer({
   const host = useViewerHost();
   const [delivery, setDelivery] = useState('');
   const contextRef = useRef({ host, document });
-  contextRef.current = { host, document };
+  useEffect(() => {
+    contextRef.current = { host, document };
+  }, [host, document]);
   const viewId = useId();
   const editorRef = useRef<editor.IStandaloneCodeEditor | null>(null);
   // The command is registered once, on the editor, and lives as long as it

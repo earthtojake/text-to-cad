@@ -35,7 +35,7 @@ import htmlWorker from "monaco-editor/language/html/html.worker?worker";
 import jsonWorker from "monaco-editor/language/json/json.worker?worker";
 import tsWorker from "monaco-editor/language/typescript/ts.worker?worker";
 
-import { MONACO_DARK, MONACO_LIGHT } from "./monaco.js";
+import { MONACO_DARK, MONACO_LIGHT } from "./monaco";
 
 /* -------------------------------------------------------------------------- */
 /* Themes                                                                      */

@@ -14,7 +14,6 @@ import {
 } from "@playwright/test";
 import { cadRegistryEnvironment, cadRuntimeReady, cadTestProfile } from "./cad-runtime";
 import { selectFixtureSession } from "./session-fixture";
-import { widenExplorer as giveViewerRoom } from "./viewer-layout";
 import { PANE_LIMITS } from "../../src/shared/types";
 
 /**
@@ -147,8 +146,6 @@ test.beforeAll(async () => {
   // here rather than incidentally by the first file.
   await page.getByRole("button", { name: "Toggle explorer" }).click();
   await expect(page.getByTestId("explorer")).toBeVisible();
-  // Room for the viewer's wide layout, whose panel column and kept tree this suite is about.
-  await giveViewerRoom(page);
 });
 
 test.afterAll(async () => {
@@ -626,7 +623,7 @@ test("renders a STEP file through the bundled runtime's viewer", async () => {
   await resizeWindow(1440, 900);
 
   // At the explorer's widest — the sidebar hidden and the session at its
-  // 560px floor — the surface holds everything at once, which is how a person
+  // 320px floor — the surface holds everything at once, which is how a person
   // reviews a part. There is no fullscreen to reach for: the session pane is
   // never taken away, so this is as wide as the explorer gets. The tree lists
   // the document's solids once the compile lands.
@@ -751,9 +748,8 @@ test("keeps every tab in one strip, with + at its end", async () => {
   // This session owns two file tabs, a terminal and a browser; CAD tabs belong
   // to the fixture session and must not leak into this strip.
   await expect(page.getByRole("tab")).toHaveCount(4);
-  // At the explorer's own default width, which this suite widened for the viewer.
-  await dragSeparator((await page.getByTestId("explorer").boundingBox())!.width - PANE_LIMITS.explorer.default);
-  await expect.poll(async () => (await page.getByTestId("explorer").boundingBox())?.width ?? 0).toBeCloseTo(PANE_LIMITS.explorer.default, -1);
+  // At a width four tabs of real names fill, narrower than the pane's default.
+  await explorerAt(STRIP_FULL);
 
   // `+` trails the tabs inside their scrolling row rather than sitting in a
   // corner of its own, and it is at the strip's right edge with four tabs of
@@ -779,7 +775,8 @@ test("keeps every tab in one strip, with + at its end", async () => {
   await expect(page.getByRole("button", { name: "Expand explorer" })).toHaveCount(0);
 
   await shoot("strip.png", true);
-  await giveViewerRoom(page);
+  // Back to the default width, the viewer's wide layout, for the tests after this one.
+  await explorerAt(PANE_LIMITS.explorer.default);
 });
 
 test("persists the strip across a reload", async () => {
@@ -834,7 +831,6 @@ test("edits a markdown file in place and saves the lines it changed", async () =
   // Each new session starts with its own empty, closed explorer, at the default width.
   await page.getByRole("button", { name: "Toggle explorer" }).click();
   await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
-  await giveViewerRoom(page);
 
   await newTab(page, "File");
   await page.getByLabel("Filter files").fill("AGENTS.md");
@@ -1020,8 +1016,6 @@ async function switchProject(directory: string) {
     await page.getByRole("button", { name: "Toggle explorer" }).click();
   }
   await expect(page.getByTestId("explorer")).toBeVisible();
-  // The explorer's width is the session's: each fixture session gets the wide layout's room.
-  await giveViewerRoom(page);
 }
 
 /** Open a path through the tree's filter — the way a person would. */
@@ -1133,6 +1127,15 @@ async function restoreLayout() {
     .getByRole("button", { name: "Toggle sidebar" })
     .click();
   await expect(page.getByTestId("sidebar")).toHaveCount(1);
+}
+
+/** The width at which the strip's four tabs fill its row, so `+` reaches its end. */
+const STRIP_FULL = 560;
+
+/** Drag the explorer to `width`, from wherever the tests before left it. */
+async function explorerAt(width: number) {
+  await dragSeparator((await page.getByTestId("explorer").boundingBox())!.width - width);
+  await expect.poll(async () => (await page.getByTestId("explorer").boundingBox())?.width ?? 0).toBeCloseTo(width, -1);
 }
 
 /** Drag the separator between the session and the explorer; it clamps. */

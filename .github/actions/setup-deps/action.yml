@@ -9,7 +9,7 @@ inputs:
     description: Install Python Playwright's snapshot browser (requires python).
     default: "true"
   ui-browser:
-    description: Install the npm Playwright Chromium used by shared UI and web browser tests.
+    description: Install the npm Playwright Chromium used by the shared UI, web and desktop browser tests.
     default: "false"
   npm:
     description: Space-separated root workspace paths, or "none". Include shared dependencies used by the job.

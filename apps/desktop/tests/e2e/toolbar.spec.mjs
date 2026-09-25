@@ -5,7 +5,6 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { cadRegistryEnvironment, cadRuntimeReady, cadTestProfile } from './cad-runtime.ts';
 import { selectFixtureSession } from './session-fixture.ts';
-import { widenExplorer } from './viewer-layout.ts';
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const root = path.resolve(appRoot, '../..');
 // Playwright REQUIRES the first argument to be a destructuring pattern, and this
@@ -84,8 +83,6 @@ test('CAD tools stay within the scene, with direct snapshot and Select filters',
       name: 'Toggle explorer',
       exact: true
     }).click();
-    // The wide layout first: the file's Settings is a column beside the scene.
-    await widenExplorer(page);
     await page.getByRole('button', {
       name: 'New tab',
       exact: true

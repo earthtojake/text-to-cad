@@ -135,9 +135,8 @@ import { modelMenuDescriptor, partMenuDescriptor, topologyMenuDescriptor } from 
 import { nodeCopyText, selectionCopyPayload } from "./file-view/stepCopy.js";
 import { HostReferenceContext, referenceLabel, referencesFromCopyText, resolveSelectorSelection } from "./file-view/hostReference.js";
 import { applySourceAppearanceToMeshData, sourceAppearanceGeometry } from "@hardcore/core/common/sourceSidecar.js";
-const TOPOLOGY_FILTER_NOUNS = Object.freeze({
-  faces: "faces", edges: "edges", "tangent-faces": "faces", "edge-chain": "edges"
-});
+// The selection filters that pick faces or edges, never the part.
+const TOPOLOGY_FILTERS = new Set(["faces", "edges", "tangent-faces", "edge-chain"]);
 const EMPTY_MATERIAL_OVERRIDES = Object.freeze({});
 // --- zoom to selection -------------------------------------------------------
 // What a selection occupies NOW: the boxes of its references, from the selector runtime as
@@ -255,6 +254,9 @@ function StepSurfaceBody({ view, data }) {
   const [hoveredModelReferenceId, setHoveredModelReferenceId] = useState("");
   const [selectionFilter, setSelectionFilter] = useState("all");
   const [inspectionHighlight, setInspectionHighlight] = useState(null);
+  // A press under a face or edge filter on an assembly part whose faces are not loaded yet:
+  // `{ partId, clientX, clientY, pointerType, multiSelect }`, replayed once they can be picked.
+  const [pendingTopologyPick, setPendingTopologyPick] = useState(null);
   const handleInspectionHighlight = useCallback((selection, label, context) => {
     setInspectionHighlight(selection ? { ...selection, label, context } : null);
   }, []);
@@ -1383,6 +1385,9 @@ function StepSurfaceBody({ view, data }) {
     isAssemblyView,
     stepInteractionBlocked,
   ]);
+  // The parts whose faces and edges can be picked right now.
+  const pickableTopologyPartIds = useMemo(() => new Set(viewerPickableReferences.map(referencePartId)),
+    [viewerPickableReferences, referencePartId]);
   // Collapsing a part (including isolation exit) removes its exact topology.
   // Drop those selections too, rather than leaving invisible IDs in Copy/shortcuts.
   useEffect(() => {
@@ -1478,8 +1483,8 @@ function StepSurfaceBody({ view, data }) {
   // A routine owns the model's pose only inside the mode. Outside it the clip is
   // released — stopped, rewound, the pose back with Position — so selection,
   // topology and Position never meet an animated model and need no special case
-  // for one. Nothing of the playback survives: coming back starts from the start,
-  // and a restored session that was mid-routine is released the same way.
+  // for one. Of the playback only the routine, speed and loop survive: coming back plays
+  // from the start, and a restored session that was mid-routine is released the same way.
   const releaseAnimation = motion.releaseAnimation;
   const animationOwnsPose = animationAvailable && viewportAnimation?.enabled !== false;
 
@@ -1819,7 +1824,7 @@ function StepSurfaceBody({ view, data }) {
   }, [loadInspectionTopology]);
   const appliedFilterTopologyRequest = useRef('');
   useEffect(() => {
-    const requestKey = ["faces", "edges", "tangent-faces", "edge-chain"].includes(selectionFilter) && topologyTarget
+    const requestKey = TOPOLOGY_FILTERS.has(selectionFilter) && topologyTarget
       ? `${selectedKey}:${artifactRevision}:${selectionFilter}:${topologyTarget.id}` : '';
     if (requestKey && appliedFilterTopologyRequest.current !== requestKey) loadFilterTopology(topologyTarget);
     appliedFilterTopologyRequest.current = requestKey;
@@ -2492,10 +2497,12 @@ function StepSurfaceBody({ view, data }) {
     selectionFilter === "edge-chain" ? [...effectiveActiveReferenceMap.values()] : EMPTY_LIST
   ), [selectionFilter, effectiveActiveReferenceMap]);
 
-  const handleModelReferenceActivate = useCallback((referenceId, { multiSelect = false } = {}) => {
+  const handleModelReferenceActivate = useCallback((referenceId, { multiSelect = false, clientX, clientY, pointerType = "" } = {}) => {
     if (stepInteractionBlocked) {
       return;
     }
+    // Every press settles a pick still waiting for its part's faces: the newest one wins.
+    setPendingTopologyPick(null);
     const nextReferenceId = String(referenceId || "").trim();
     if (!nextReferenceId) {
       if (multiSelect) return;
@@ -2522,7 +2529,17 @@ function StepSurfaceBody({ view, data }) {
       toggleReferenceSelection(nextReferenceId, { multiSelect });
       return;
     }
-    if (["faces", "edges", "tangent-faces", "edge-chain"].includes(selectionFilter)) return;
+    if (TOPOLOGY_FILTERS.has(selectionFilter)) {
+      // A face or edge filter never falls back to the part. A press on an assembly part whose
+      // faces and edges are not loaded asks for that part's topology — that part alone, as its
+      // Features row would — and picks again at the same point once they can be picked.
+      if (isAssemblyView && loadableStepTreeTopologyNodeIdSet.has(nextReferenceId) &&
+        !pickableTopologyPartIds.has(nextReferenceId) && Number.isFinite(clientX) && Number.isFinite(clientY)) {
+        setPendingTopologyPick({ partId: nextReferenceId, clientX, clientY, pointerType, multiSelect });
+        loadInspectionTopology([nextReferenceId]);
+      }
+      return;
+    }
     if (viewerInAssemblyMode) {
       const pickedPartId = nextReferenceId;
       const nextPartId = resolvePickedAssemblyPartId(pickedPartId);
@@ -2553,7 +2570,29 @@ function StepSurfaceBody({ view, data }) {
     toggleReferenceSelection,
     togglePartSelection,
     viewerInAssemblyMode,
+    loadableStepTreeTopologyNodeIdSet,
+    pickableTopologyPartIds,
+    loadInspectionTopology,
   ]);
+
+  // The press that was waiting for its part's faces, replayed at the same point once the part's
+  // topology is composed into the references (or has failed to be). What is under that point
+  // then is picked exactly as a fresh press would pick it, faces-only filter and all.
+  useEffect(() => {
+    const pending = pendingTopologyPick;
+    if (!pending) return;
+    if (referenceStatus === REFERENCE_STATUS.ERROR) { setPendingTopologyPick(null); return; }
+    if (stepInteractionBlocked || !selectedReferencesMatch || !requestedStepTreeTopologyNodeIds.includes(pending.partId)) return;
+    setPendingTopologyPick(null);
+    const referenceId = pickAtRef.current?.(pending.clientX, pending.clientY, pending.pointerType) || "";
+    const reference = effectiveActiveReferenceMap.get(referenceId);
+    if (reference && isViewerTopologyReference(reference)) {
+      handleModelReferenceActivate(referenceId, { multiSelect: pending.multiSelect });
+    }
+  }, [pendingTopologyPick, referenceStatus, stepInteractionBlocked, selectedReferencesMatch, requestedStepTreeTopologyNodeIds,
+    effectiveActiveReferenceMap, isViewerTopologyReference, handleModelReferenceActivate]);
+  // A waiting press belongs to the filter, tool and file it was made under.
+  useEffect(() => { setPendingTopologyPick(null); }, [selectionFilter, tabToolMode, selectedKey]);
 
   const doubleCopyReference = useRef(null);
   const handleModelReferenceDoubleActivate = useCallback((referenceId, { multiSelect = false } = {}) => {
@@ -2603,7 +2642,7 @@ function StepSurfaceBody({ view, data }) {
       ...modelMenuDescriptor({
         root: displayStepTreeRoot, isAssemblyView, expandedIds: expandedStepTreeNodeIds,
         loadableIds: loadableStepTreeTopologyNodeIds, hiddenCount: hiddenPartIds.length,
-        zoomSelectionAvailable: zoomSelectionRef.current.available
+        zoomSelectionAvailable: zoomSelectionRef.current.available, entry: selectedEntry
       })
     } : null);
   }, [
@@ -2612,6 +2651,7 @@ function StepSurfaceBody({ view, data }) {
     hiddenPartIds.length,
     isAssemblyView,
     loadableStepTreeTopologyNodeIds,
+    selectedEntry,
     selectedMeshData
   ]);
 
@@ -3186,10 +3226,9 @@ function StepSurfaceBody({ view, data }) {
   const selectDisabled = viewerLoading || !selectedMeshData || referenceSelectionPending ||
     referenceSelectionUnavailable || topologySelectionDeferred;
   const toolIdle = viewerLoading || !selectedMeshData;
-  // In an assembly, faces and edges load for one part at a time (topologyTarget). With a face
-  // or edge filter and no part chosen, a click has nothing to pick; say why instead of silence.
-  const topologyFilterHint = isAssemblyView && !topologyTarget && TOPOLOGY_FILTER_NOUNS[selectionFilter]
-    ? `Select a part to pick its ${TOPOLOGY_FILTER_NOUNS[selectionFilter]}` : "";
+  // In an assembly, a part's faces and edges load when a press under a face or edge filter
+  // first reaches it; the strip says so until the press can be picked.
+  const topologyFilterNotice = pendingTopologyPick ? "Loading selectable geometry…" : "";
   const removeMeasurements = () => {
     measure.clear();
     if (tabToolMode === TAB_TOOL_MODE.MEASURE) handleSelectTabToolMode(TAB_TOOL_MODE.REFERENCES);
@@ -3216,7 +3255,7 @@ function StepSurfaceBody({ view, data }) {
       menu: trigger => <SelectionFilterMenu value={selectionFilter} trigger={trigger}
         onChange={value => { setSelectionFilter(value); handleSelectTabToolMode(TAB_TOOL_MODE.REFERENCES); }} />,
       subToolbar: <ToolFilterNote options={SELECTION_FILTERS} value={selectionFilter}
-        active={selectionToolActive} notice={topologyFilterHint} />
+        active={selectionToolActive} notice={topologyFilterNotice} />
     }),
     { ...shell.tools.draw, disabled: toolIdle },
     shell.tools.own({ id: TAB_TOOL_MODE.MEASURE, label: "Measure",

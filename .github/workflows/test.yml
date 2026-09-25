@@ -333,11 +333,14 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@v7
 
+      # ui-browser: the unit tests include the PDF renderer's Chromium suite
+      # (apps/desktop/tests/browser); the Electron e2e needs no Playwright browser.
       - name: Set up desktop and CAD dependencies
         uses: ./.github/actions/setup-deps
         with:
           npm: packages/core packages/ui apps/desktop
           playwright: "false"
+          ui-browser: "true"
 
       # The app's renderer supplies the UI. CAD tests need only the source
       # Python service and Node/browser assets, not a packaged SPA or downloaded

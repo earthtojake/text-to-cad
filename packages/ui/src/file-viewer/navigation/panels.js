@@ -21,7 +21,7 @@
  *
  * Pure but for its lucide glyphs, so `node --test` loads it with no bundler.
  */
-import { Code2, Eye, Folders, SlidersHorizontal } from "lucide-react";
+import { Folders, SlidersHorizontal } from "lucide-react";
 
 /**
  * Where a panel's content comes from — which is who draws it.
@@ -72,9 +72,6 @@ export const CAD_PANEL = Object.freeze({
   file: "cad-file"
 });
 
-/** The desktop's markdown source view — its own id, since the field holds ids. */
-export const SOURCE_PANEL = "source";
-
 /**
  * A viewer file's sidebar, when it has file-specific controls. Display settings
  * live in the viewport toolbar's popover and never occupy this column.
@@ -94,25 +91,6 @@ export function viewerPanels(ready, { file = false } = {}) {
   if (!ready) return [];
   return [
     ...(file ? [{ id: CAD_PANEL.file, label: "Settings", icon: SlidersHorizontal, content: "slot", defaultOpen: true }] : [])
-  ];
-}
-
-/**
- * The desktop's markdown panel: the same bytes read as a document or as
- * source. Here because it is one of the list and obeys the same rule; the
- * label is what pressing it does.
- *
- * @param {string} open
- * @returns {FilePanel[]}
- */
-export function markdownPanels(open) {
-  return [
-    {
-      id: SOURCE_PANEL,
-      label: open === SOURCE_PANEL ? "View preview" : "View source",
-      icon: open === SOURCE_PANEL ? Eye : Code2,
-      content: "body"
-    }
   ];
 }
 
