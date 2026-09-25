@@ -25,7 +25,7 @@ await build({
       if (args.path.endsWith('/file-viewer')) return { contents: `let current; export function FileViewer(props){current=props; return null;} export const snapshot=()=>current;`, loader: 'js' };
       if (args.path.endsWith('/step')) return { contents: `export const createStepRenderer=()=>({id:'step'});`, loader: 'js' };
       // The preferences the host really uses; everything else the workspace module pulls in is a renderer's.
-      if (args.path.endsWith('/workspace')) return { contents: `export {createCadPreferences,CAD_LEGACY_PREFERENCE_KEYS} from ${JSON.stringify(fileURLToPath(new URL('../../../packages/ui/src/renderers/workspace/preferences.ts', import.meta.url)))};`, loader: 'js', resolveDir: fileURLToPath(new URL('.', import.meta.url)) };
+      if (args.path.endsWith('/workspace')) return { contents: `export {createCadPreferences} from ${JSON.stringify(fileURLToPath(new URL('../../../packages/ui/src/renderers/workspace/preferences.ts', import.meta.url)))};`, loader: 'js', resolveDir: fileURLToPath(new URL('.', import.meta.url)) };
       if (args.path.endsWith('/dxf')) return { contents: `export const createDxfRenderer=()=>({id:'dxf'});`, loader: 'js' };
       if (args.path.endsWith('/glb')) return { contents: `export const createGlbRenderer=()=>({id:'glb'});`, loader: 'js' };
       if (args.path.endsWith('/mesh')) return { contents: `export const createMeshRenderer=()=>({id:'mesh'});`, loader: 'js' };
@@ -89,15 +89,15 @@ test('web host preserves compact navigation, history, root state and focus refre
     assert.equal(snapshot().file, 'one.step');
     await act(() => snapshot().host.navigation.openFile('folder\\two.step'));
     assert.equal(snapshot().file, 'folder/two.step');
-    // The compact surface gives the model the room: a file opens there with no panel.
-    assert.equal(snapshot().state.panel, '');
+    // The host applies the panel at every width — FileViewer owns the mobile layout itself
+    // (floating sheets it closes on an open) — so a plain open lands on the file's default.
+    assert.equal(snapshot().state.panel, null);
     assert.equal(window.history.length, historyLength + 1);
     assert.equal(new URL(window.location.href).searchParams.get('file'), 'folder/two.step');
     await act(() => snapshot().host.navigation.openFile('one.step', { target: 'new', panel: 'tree' }));
-    assert.equal(snapshot().state.panel, '', 'even one picked in the tree');
+    assert.equal(snapshot().state.panel, 'tree', 'and one picked in the tree asks for the tree');
     assert.equal(window.history.length, historyLength + 2);
-    // Wider, a file opens with the panel it was opened with — the tree, for a pick there — or
-    // on its own default (`null`); the file already shown, opened with no panel, is left as it is.
+    // The file already shown keeps whatever it has open unless a panel is asked for.
     window.innerWidth = 1280;
     await act(() => snapshot().host.navigation.openFile('folder\\two.step', { target: 'new', panel: 'tree' }));
     assert.equal(snapshot().file, 'folder/two.step');

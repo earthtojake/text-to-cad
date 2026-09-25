@@ -102,8 +102,8 @@ function RootView({ client, server }: { client: CadClient; server: CadServerInfo
       setFile(next);
     } else if (options?.panel === undefined) return;
     // The file opens with the panel it was opened with (the tree, for one picked there) or with
-    // its own default. The compact surface gives the model the room: nothing opens there.
-    setState(previous => ({ ...previous, panel: window.innerWidth < 520 ? '' : options?.panel ?? null }));
+    // its own default. FileViewer owns mobile visibility and keeps its sheets closed.
+    setState(previous => ({ ...previous, panel: options?.panel ?? null }));
   }, [client]);
   const host = useMemo<ViewerHost>(() => ({
     files: source, fileActions, clipboard: browserClipboard, promptContext,
