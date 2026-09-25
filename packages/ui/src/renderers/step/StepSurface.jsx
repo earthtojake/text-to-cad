@@ -33,7 +33,7 @@ import { registerLodDisplaySource } from "./render/lodSceneAdoption.js";
 import { ALL_VIEW_FEATURES } from "@hardcore/core/common/viewSettings.js";
 import { useModelTools } from "./components/workbench/ModelTools.jsx";
 import { useStepPanel } from "./components/workbench/StepPanel.js";
-import { AnnotateButton, buildAnnotationsSection } from "./components/workbench/StepAnnotations.jsx";
+import { AnnotateButton } from "./components/workbench/StepAnnotations.jsx";
 import AnnotationPins from "./components/workbench/AnnotationPins.jsx";
 import { addAnnotation, annotationAnchor, annotationDelivered, createAnnotation, editAnnotation, markAnnotationSent, removeAnnotation } from "./workbench/stepAnnotations.js";
 import { CAD_PANEL } from "../../file-viewer/navigation/panels.js";
@@ -916,7 +916,8 @@ function StepSurfaceBody({ view, data }) {
       setExpandedStepTreeNodeIds(restored.tree.expandedStepTreeNodeIds);
       setHiddenPartIds(restored.tree.hiddenPartIds);
       setLargeFileState(normalizeLargeFileState(restored.largeFile));
-      setAnnotations(restored.annotations);
+      // Annotations are shown only as dots: one with nowhere to sit would be unreachable.
+      setAnnotations(restored.annotations.filter(annotation => annotation.anchor));
       motion.restore(restored);
     }
   });
@@ -1874,7 +1875,8 @@ function StepSurfaceBody({ view, data }) {
       ...selectedReferenceIdsRef.current.map(id => effectiveActiveReferenceMap.get(id)?.pickData).filter(Boolean),
       ...selectedPartIdsRef.current.map(id => id === STEP_MODEL_ROOT_ID
         ? { bbox: selectedMeshData?.bounds } : { bbox: parts.find(part => part.id === id)?.bounds })
-    ]);
+    // An annotation lives only as its dot, so one always gets a place: the model's middle at worst.
+    ]) || annotationAnchor([{ bbox: selectedMeshData?.bounds }]);
     setAnnotations(current => addAnnotation(current, createAnnotation(references, note, { anchor })));
   }, [annotationAvailable, referencesForHost, canonicalCopySelectionLines, effectiveActiveReferenceMap, selectedMeshData]);
   const annotationSelectCount = useRef(0);
@@ -3263,11 +3265,7 @@ function StepSurfaceBody({ view, data }) {
     menuForReferences: topologyReferenceMenu,
     partMenuActions,
     showAllHiddenParts: handleShowAllHiddenParts,
-    statusItems: selectedFileStatusItems,
-    annotationsSection: buildAnnotationsSection({
-      annotations, canAddToChat: promptAvailable && !stepInteractionBlocked,
-      onSelect: selectAnnotation, onEdit: changeAnnotation, onRemove: deleteAnnotation, onAddToChat: addAnnotationToChat
-    })
+    statusItems: selectedFileStatusItems
   });
 
   return <RendererShell shell={shell} tools={tools} playback={viewportAnimation} toolPanels={modelEffects.panels} panel={stepPanel}
