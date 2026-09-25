@@ -31,6 +31,8 @@ export function useStepPanel({
   menuForNode = null, menuForReferences = null, partMenuActions = null,
   treeSelectionDisabled = false,
   statusItems = EMPTY, positionRuntime = null,
+  // The Select tool's annotations (StepAnnotations.jsx), as a built section or null.
+  annotationsSection = null,
 }) {
   const recognitionKey = `${selectedEntry?.file}:${geometryInspection?.revision}`;
   const [recognitionRequest, setRecognitionRequest] = useState({ key: recognitionKey, ids: EMPTY });
@@ -54,7 +56,7 @@ export function useStepPanel({
   const selectionDetails = selectedReferences.length || measuredSelection.partIds.length ? <StepReferenceSection
     references={selectedReferences} meshData={selectedMeshData} sourceAppearance={selectedSourceAppearance} measurements={measurements}
   /> : null;
-  const sections = [{
+  const sections = [annotationsSection, {
     id: 'features', title: 'Features', role: 'model',
     content: active => <ModelingTree key={`${selectedEntry.file}:${geometryInspection?.revision}`}
       modeling={modeling} stepRoot={stepTreeRoot} active={active && open}

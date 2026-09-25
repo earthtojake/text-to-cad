@@ -33,6 +33,8 @@ import { registerLodDisplaySource } from "./render/lodSceneAdoption.js";
 import { ALL_VIEW_FEATURES } from "@hardcore/core/common/viewSettings.js";
 import { useModelTools } from "./components/workbench/ModelTools.jsx";
 import { useStepPanel } from "./components/workbench/StepPanel.js";
+import { AnnotateButton, buildAnnotationsSection } from "./components/workbench/StepAnnotations.jsx";
+import { addAnnotation, annotationDelivered, createAnnotation, editAnnotation, markAnnotationSent, removeAnnotation } from "./workbench/stepAnnotations.js";
 import { CAD_PANEL } from "../../file-viewer/navigation/panels.js";
 import { stepMotionSources, useStepMotion } from "./workbench/useStepMotion.js";
 import { animationControlsHaveContent } from "../kit/tools/playbar/ViewportAnimationBar.js";
@@ -260,6 +262,9 @@ function StepSurfaceBody({ view, data }) {
   const [expandedStepTreeNodeIds, setExpandedStepTreeNodeIds] = useState([]);
   const [activeTreeNodeScrollKey, setActiveTreeNodeScrollKey] = useState("");
   const [hiddenPartIds, setHiddenPartIds] = useState([]);
+  // The Select tool's annotations (workbench/stepAnnotations.js), kept in this tab's record.
+  const [annotations, setAnnotations] = useState([]);
+  const [annotationSelectRequest, setAnnotationSelectRequest] = useState(null);
   const [isolatedAssemblyNodeIds, setIsolatedAssemblyNodeIds] = useState([]);
   // What the viewport's menu is ABOUT while it is up (the part stays marked); the menu itself,
   // its gesture and its dismissal are the shell's (`kit/shell/ViewportContextMenu.jsx`). The ref
@@ -899,7 +904,7 @@ function StepSurfaceBody({ view, data }) {
   const session = useStepSessionRecord({
     state: view.state, entry: selectedEntry,
     tree: { selectedReferenceIds, selectedPartIds, expandedStepTreeNodeIds, hiddenPartIds },
-    parameterValues: stepModuleParameterValues, animationState, clockTime: getAnimationClock, largeFileState,
+    parameterValues: stepModuleParameterValues, animationState, clockTime: getAnimationClock, largeFileState, annotations,
     scheduleSave: scheduleRecordSave,
     // Everything this file was left with, once, before the first paint.
     restore(restored) {
@@ -908,6 +913,7 @@ function StepSurfaceBody({ view, data }) {
       setExpandedStepTreeNodeIds(restored.tree.expandedStepTreeNodeIds);
       setHiddenPartIds(restored.tree.hiddenPartIds);
       setLargeFileState(normalizeLargeFileState(restored.largeFile));
+      setAnnotations(restored.annotations);
       motion.restore(restored);
     }
   });
@@ -1851,6 +1857,29 @@ function StepSurfaceBody({ view, data }) {
     return createCadPromptContext({ resource: promptResource, references, text: [inspected, instruction].filter(Boolean).join('\n\n'), capture });
   }, [selectionKey, promptResource, viewerLoading, stepInteractionBlocked, inspectionHighlight, effectiveActiveReferenceMap, selectedMeshData, selectedEntry, canonicalCopySelectionLines, referencesForHost]);
 
+  // ---- annotations ------------------------------------------------------------------------------
+  // A note pinned to what is selected now. It goes nowhere until the person adds it to the chat
+  // box, and from there it is theirs to send.
+  const annotationAvailable = canonicalCopySelectionLines.length > 0 && !inspectionHighlight && !viewerLoading && !stepInteractionBlocked;
+  const annotateSelection = useCallback((note) => {
+    if (!annotationAvailable) return;
+    const references = referencesForHost(canonicalCopySelectionLines.join("\n")).map(({ selector, label }) => ({ selector, label }));
+    setAnnotations(current => addAnnotation(current, createAnnotation(references, note)));
+  }, [annotationAvailable, referencesForHost, canonicalCopySelectionLines]);
+  const annotationSelectCount = useRef(0);
+  const selectAnnotation = useCallback((annotation) => {
+    const selector = annotation.references.map(reference => reference.selector).join(",");
+    annotationSelectCount.current += 1;
+    setAnnotationSelectRequest({ selector, key: `annotation:${annotation.id}:${annotationSelectCount.current}` });
+  }, []);
+  const changeAnnotation = useCallback((id, text) => setAnnotations(current => editAnnotation(current, id, text)), []);
+  const deleteAnnotation = useCallback((id) => setAnnotations(current => removeAnnotation(current, id)), []);
+  const addAnnotationToChat = useCallback(async (annotation) => {
+    if (!promptAvailable) return;
+    const result = await deliverPrompt(createCadPromptContext({ resource: promptResource, references: annotation.references, text: annotation.text }));
+    if (annotationDelivered(result)) setAnnotations(current => markAnnotationSent(current, annotation.id));
+  }, [promptAvailable, deliverPrompt, promptResource]);
+
   const toggleStepTreeNode = useCallback((nodeId) => {
     const normalizedNodeId = String(nodeId || "").trim();
     if (!normalizedNodeId) return;
@@ -1947,7 +1976,15 @@ function StepSurfaceBody({ view, data }) {
    * change after. Already selected means revealed, not toggled off.
    */
   const appliedSelectReferenceKeyRef = useRef(null);
+  // Pressing an annotation asks for its geometry the same way a transcript link does. The
+  // host's newest request wins over an annotation's older one, and only the host's is
+  // acknowledged back to it.
+  useEffect(() => { setAnnotationSelectRequest(null); }, [selectReference?.key]);
+  const activeSelectReference = annotationSelectRequest || selectReference;
+  const acknowledgeHostCommand = acknowledgeCommand;
   useEffect(() => {
+    const selectReference = activeSelectReference;
+    const acknowledgeCommand = selectReference === annotationSelectRequest ? null : acknowledgeHostCommand;
     const selector = String(selectReference?.selector || "").trim();
     if (!selector || appliedSelectReferenceKeyRef.current === selectReference.key || viewerLoading || stepInteractionBlocked) {
       return;
@@ -1973,6 +2010,17 @@ function StepSurfaceBody({ view, data }) {
         if (selectReference.key !== undefined) acknowledgeCommand?.('selectReference', selectReference.key);
         return;
       }
+      // Anything else several selectors name (an annotation on parts and edges together) is
+      // selected as it stands, once every one of them resolves.
+      if (stepUpdateInProgress) return;
+      ensureSelectTool();
+      setSelectedPartIds(resolvedFaces.filter(value => value.kind !== "reference").map(value => value.id));
+      setSelectedRenderPartIdByAssemblyPartId({});
+      setSelectedReferenceIds(resolvedFaces.filter(value => value.kind === "reference").map(value => value.id));
+      setInspectionHighlight(null);
+      appliedSelectReferenceKeyRef.current = selectReference.key;
+      if (selectReference.key !== undefined) acknowledgeCommand?.('selectReference', selectReference.key);
+      return;
     }
     const resolved = resolveSelectorSelection(selector, {
       referenceMap: effectiveActiveReferenceMap,
@@ -1995,7 +2043,8 @@ function StepSurfaceBody({ view, data }) {
       togglePartSelection(resolved.id, { source: "reference" });
     }
   }, [
-    selectReference,
+    activeSelectReference,
+    annotationSelectRequest,
     isAssemblyView,
     isolatedStepTreeSelectableNodeIds,
     expandedStepTreeTopologyNodeIds,
@@ -3149,12 +3198,15 @@ function StepSurfaceBody({ view, data }) {
     : selectionActionVisible ? {
       label: copyButtonLabel,
       onInvoke: copySelectedReferences,
-      children: slots?.selectionExtras && selectionCount > 0 && !viewerLoading && !stepInteractionBlocked ? <slots.selectionExtras
-        selection={Object.freeze(createSelectionPromptContext().parts.filter(part => part.kind === 'reference').map(part => part.reference))}
-        selectionKey={selectionKey}
-        disabled={viewerLoading || stepInteractionBlocked || !promptAvailable}
-        createContext={createSelectionPromptContext}
-      /> : null
+      children: <div className="flex items-center gap-2">
+        <AnnotateButton disabled={!annotationAvailable} onSubmit={annotateSelection} />
+        {slots?.selectionExtras && selectionCount > 0 && !viewerLoading && !stepInteractionBlocked ? <slots.selectionExtras
+          selection={Object.freeze(createSelectionPromptContext().parts.filter(part => part.kind === 'reference').map(part => part.reference))}
+          selectionKey={selectionKey}
+          disabled={viewerLoading || stepInteractionBlocked || !promptAvailable}
+          createContext={createSelectionPromptContext}
+        /> : null}
+      </div>
     } : null;
 
   // ---- the file's panel ------------------------------------------------------------------------
@@ -3196,7 +3248,11 @@ function StepSurfaceBody({ view, data }) {
     menuForReferences: topologyReferenceMenu,
     partMenuActions,
     showAllHiddenParts: handleShowAllHiddenParts,
-    statusItems: selectedFileStatusItems
+    statusItems: selectedFileStatusItems,
+    annotationsSection: buildAnnotationsSection({
+      annotations, canAddToChat: promptAvailable && !stepInteractionBlocked,
+      onSelect: selectAnnotation, onEdit: changeAnnotation, onRemove: deleteAnnotation, onAddToChat: addAnnotationToChat
+    })
   });
 
   return <RendererShell shell={shell} tools={tools} playback={viewportAnimation} toolPanels={modelEffects.panels} panel={stepPanel}

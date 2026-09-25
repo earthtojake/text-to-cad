@@ -1452,6 +1452,60 @@ test('reference action uses its own viewport bottom inset', async () => {
   assert.deepEqual(view.errors, []);
 });
 
+test('Annotate pins a note to the selection; its chip selects that geometry again, and only the person adds it to the chat', async () => {
+  const view = await open();
+  const {page, pane} = view;
+  await page.evaluate(() => {
+    window.__delivered = [];
+    window.cadHarness.a.host.promptContext.deliver = async context => {
+      window.__delivered.push(context.parts.map(part => part.kind === 'reference'
+        ? {kind: 'reference', selectors: part.reference.target.selectors, label: part.reference.label || ''}
+        : {kind: part.kind, text: part.text}));
+      return {status: 'added', partIds: context.parts.map(part => part.id)};
+    };
+  });
+  await page.evaluate(() => window.cadHarness.a.controller.select({selectors:['o1.2']}));
+  const annotate = pane.getByRole('button', {name: 'Annotate', exact: true});
+  await annotate.click();
+  const box = page.getByRole('textbox', {name: 'Annotation', exact: true});
+  await box.fill('make a hole in it');
+  await box.press('Enter');
+  const list = pane.getByRole('list', {name: 'Annotations'});
+  await list.waitFor();
+  const row = list.getByRole('listitem');
+  assert.equal(await row.count(), 1);
+  assert.match((await row.innerText()).replace(/\s+/g, ' '), /^Annotation 1: .+ make a hole in it/);
+  assert.equal(await row.locator('[data-annotation-chip="o1.2"]').count(), 1, 'the chip is the selection it was made on');
+  assert.deepEqual(await page.evaluate(() => window.__delivered), [], 'making an annotation sends nothing');
+
+  // Pressing the chip selects that geometry again, whatever is selected now.
+  await page.evaluate(() => window.cadHarness.a.controller.select({selectors:['o1.1']}));
+  await page.waitForFunction(() => window.cadHarness.a.controller.readState().selectedPartIds.join() === 'o1.1');
+  await row.locator('[data-annotation-chip="o1.2"]').click();
+  await page.waitForFunction(() => window.cadHarness.a.controller.readState().selectedPartIds.join() === 'o1.2');
+
+  // The note is editable in place.
+  await pane.getByRole('button', {name: 'Edit annotation 1'}).click();
+  const edit = pane.getByRole('textbox', {name: 'Edit annotation 1'});
+  await edit.fill('make a 6 mm hole in it');
+  await edit.press('Enter');
+  assert.match(await row.innerText(), /make a 6 mm hole in it/);
+
+  // Add to chat puts the chip and the note in the chat box, and ticks the annotation sent.
+  await pane.getByRole('button', {name: 'Add annotation 1 to chat'}).click();
+  await page.waitForFunction(() => window.__delivered.length === 1);
+  const chipLabel = (await row.locator('[data-annotation-chip="o1.2"]').innerText()).trim();
+  assert.deepEqual(await page.evaluate(() => window.__delivered[0]), [
+    {kind: 'reference', selectors: ['o1.2'], label: chipLabel},
+    {kind: 'text', text: 'make a 6 mm hole in it'}
+  ]);
+  await row.getByLabel('Added to chat').waitFor();
+
+  await pane.getByRole('button', {name: 'Delete annotation 1'}).click();
+  await list.waitFor({state: 'detached'});
+  assert.deepEqual(view.errors, []);
+});
+
 test('reference CTA, double clicks and copy shortcut deliver references silently', async () => {
   const view = await open();
   const {page, pane, at, errors} = view;
