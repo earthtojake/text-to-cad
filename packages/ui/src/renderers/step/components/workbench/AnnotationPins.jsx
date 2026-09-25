@@ -17,7 +17,7 @@ const EDGE_MARGIN_PX = 12;
  * Where an anchor is on screen now, or null when it is behind the camera. `facing` is false
  * when the anchor's face points away from the camera: its dot is on the far side.
  */
-export function projectAnnotationAnchor(runtime, anchor, width, height) {
+function projectAnnotationAnchor(runtime, anchor, width, height) {
   const { THREE, camera } = runtime || {};
   if (!THREE || !camera || !anchor?.point) return null;
   const [dx, dy, dz] = measureModelOffsetFromRuntime(runtime);

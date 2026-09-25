@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, Hash, MessageSquarePlus, Trash2 } from "lucide-react";
+import { Check, Hash, MessageSquareDot, Trash2 } from "lucide-react";
 import { Button } from "@hardcore/ui/primitives/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@hardcore/ui/primitives/popover";
 import { TooltipHint } from "@hardcore/ui/primitives/tooltip";
@@ -28,7 +28,7 @@ export function AnnotateButton({ disabled = false, onSubmit }) {
     <Popover open={open && !disabled} onOpenChange={next => setOpen(next && !disabled)}>
       <PopoverTrigger asChild>
         <Button type="button" variant="outline" size="sm" disabled={disabled} className={BAR_BUTTON_CLASS}>
-          <MessageSquarePlus className="size-4" aria-hidden="true" />
+          <MessageSquareDot className="size-4" aria-hidden="true" />
           Annotate
         </Button>
       </PopoverTrigger>

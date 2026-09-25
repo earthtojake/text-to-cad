@@ -1,4 +1,4 @@
-import { Hash, MessageSquareText, X } from "lucide-react";
+import { Hash, MessageSquareDot, X } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -64,7 +64,7 @@ export function AnnotationsChip({
       <HoverCard closeDelay={100} openDelay={150}>
         <HoverCardTrigger asChild>
           <span className="inline-flex h-8 max-w-full cursor-default items-center gap-1.5 rounded-lg border bg-muted/30 pr-1 pl-2 text-[12px]">
-            <MessageSquareText
+            <MessageSquareDot
               aria-hidden
               className="size-3.5 text-muted-foreground"
             />
