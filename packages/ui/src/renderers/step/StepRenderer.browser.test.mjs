@@ -1452,23 +1452,26 @@ test('reference action uses its own viewport bottom inset', async () => {
   assert.deepEqual(view.errors, []);
 });
 
-test('Annotate pins a note to the selection as a dot on the model; its card edits it, and only the person adds it to the chat', async () => {
+test('Annotate pins a note to the selection as a dot on the model, and the bar adds every annotation to the chat at once', async () => {
   const view = await open();
   const {page, pane} = view;
   await page.evaluate(() => {
     window.__delivered = [];
     window.cadHarness.a.host.promptContext.deliver = async context => {
-      window.__delivered.push(context.parts.map(part => part.kind === 'reference'
-        ? {kind: 'reference', selectors: part.reference.target.selectors, label: part.reference.label || ''}
-        : {kind: part.kind, text: part.text}));
+      window.__delivered.push(context.parts.map(part => part.kind === 'annotation'
+        ? {kind: 'annotation', id: part.id, selectors: part.references.flatMap(reference => reference.target.selectors), text: part.text}
+        : {kind: part.kind}));
       return {status: 'added', partIds: context.parts.map(part => part.id)};
     };
   });
-  await page.evaluate(() => window.cadHarness.a.controller.select({selectors:['o1.2']}));
-  await pane.getByRole('button', {name: 'Annotate', exact: true}).click();
-  const box = page.getByRole('textbox', {name: 'Annotation', exact: true});
-  await box.fill('make a hole in it');
-  await box.press('Enter');
+  const annotate = async (selector, note) => {
+    await page.evaluate(value => window.cadHarness.a.controller.select({selectors: [value]}), selector);
+    await pane.getByRole('button', {name: 'Annotate', exact: true}).click();
+    const box = page.getByRole('textbox', {name: 'Annotation', exact: true});
+    await box.fill(note);
+    await box.press('Enter');
+  };
+  await annotate('o1.2', 'make a hole in it');
   assert.deepEqual(await page.evaluate(() => window.__delivered), [], 'making an annotation sends nothing');
   assert.equal(await pane.getByRole('list', {name: 'Annotations'}).count(), 0, 'annotations are not listed in the panel');
 
@@ -1484,7 +1487,6 @@ test('Annotate pins a note to the selection as a dot on the model; its card edit
   await card.waitFor();
   assert.match((await card.innerText()).replace(/\s+/g, ' '), /^Annotation 1: .+ make a hole in it/);
   const chip = card.locator('[data-annotation-chip="o1.2"]');
-  assert.equal(await chip.count(), 1, 'the chip is the selection it was made on');
 
   // Pressing the chip selects that geometry again, whatever is selected now.
   await page.evaluate(() => window.cadHarness.a.controller.select({selectors:['o1.1']}));
@@ -1498,22 +1500,27 @@ test('Annotate pins a note to the selection as a dot on the model; its card edit
   await edit.fill('make a 6 mm hole in it');
   await edit.press('Enter');
   assert.match(await card.innerText(), /make a 6 mm hole in it/);
-
-  // Add to chat puts the chip and the note in the chat box, and ticks the annotation sent.
-  await card.getByRole('button', {name: 'Add annotation 1 to chat'}).click();
-  await page.waitForFunction(() => window.__delivered.length === 1);
-  const chipLabel = (await chip.innerText()).trim();
-  assert.deepEqual(await page.evaluate(() => window.__delivered[0]), [
-    {kind: 'reference', selectors: ['o1.2'], label: chipLabel},
-    {kind: 'text', text: 'make a 6 mm hole in it'}
-  ]);
-  await card.getByLabel('Added to chat').waitFor();
-
   await card.getByRole('button', {name: 'Close', exact: true}).click();
   await card.waitFor({state: 'detached'});
-  await dot.click();
-  await card.getByRole('button', {name: 'Delete annotation 1'}).click();
+
+  // A second annotation; the bar over the model adds both to the chat box in one go.
+  await annotate('o1.1', 'add a fillet');
+  const bar = pane.getByRole('toolbar', {name: 'Annotations'});
+  assert.match(await bar.innerText(), /2 annotations/);
+  await bar.getByRole('button', {name: 'Add to chat', exact: true}).click();
+  await page.waitForFunction(() => window.__delivered.length === 1);
+  const delivered = await page.evaluate(() => window.__delivered[0]);
+  assert.deepEqual(delivered.map(part => [part.kind, part.selectors, part.text]), [
+    ['annotation', ['o1.2'], 'make a 6 mm hole in it'],
+    ['annotation', ['o1.1'], 'add a fillet']
+  ]);
+  await bar.getByText('2 annotations added').waitFor();
+  assert.equal(await bar.getByRole('button', {name: 'Add to chat', exact: true}).count(), 0, 'nothing is left to add');
+
+  // Clearing takes every dot away.
+  await bar.getByRole('button', {name: 'Clear annotations'}).click();
   await dot.waitFor({state: 'detached'});
+  assert.equal(await bar.count(), 0);
   assert.deepEqual(view.errors, []);
 });
 

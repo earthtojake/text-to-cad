@@ -41,6 +41,10 @@ import { dataUrlOf, rememberFiles } from "./composer/attachments";
 import { AttachmentImagePreview } from "./composer/AttachmentImagePreview";
 import { ComposerEditor, type ComposerEditorHandle } from "./composer/ComposerEditor";
 import { ReferenceScopeContext } from "./composer/ReferenceScope";
+import { AnnotationsChip, withAnnotations } from "@renderer/features/session/composer/AnnotationsChip";
+import type { DraftAnnotation } from "@renderer/state/composer";
+
+const NO_ANNOTATIONS: DraftAnnotation[] = [];
 
 /**
  * The composer (plan §2): "Do anything", the `+` menu, the chips the caller
@@ -144,10 +148,13 @@ export function Composer({
   }, [autoFocus, draftKey]);
 
   const slash = useSlashCommands(text, commands);
+  const annotations = useComposer((state) => state.annotations[draftKey] ?? NO_ANNOTATIONS);
+  const removeAnnotations = useComposer((state) => state.removeAnnotations);
 
   const handleSubmit = useCallback(
     async (message: PromptInputMessage) => {
-      const trimmed = message.text.trim();
+      // Annotations added from the viewer go out with the prompt, after what was typed.
+      const trimmed = withAnnotations(message.text.trim(), annotations);
       if (!trimmed && message.files.length === 0) {
         return;
       }
@@ -156,9 +163,10 @@ export function Composer({
         return;
       }
       setText("");
+      removeAnnotations(draftKey);
       await onSubmit(trimmed, content);
     },
-    [onSubmit, setText],
+    [onSubmit, setText, annotations, removeAnnotations, draftKey],
   );
 
   return (
@@ -227,6 +235,7 @@ export function Composer({
           onError={(error) => toast.error(error.message)}
           onSubmit={handleSubmit}
         >
+          <AnnotationsChip annotations={annotations} onRemove={() => removeAnnotations(draftKey)} />
           <AttachmentStrip />
           <AttachmentSink draftKey={draftKey} />
           <AttachmentBridge targetRef={attachmentsRef} />

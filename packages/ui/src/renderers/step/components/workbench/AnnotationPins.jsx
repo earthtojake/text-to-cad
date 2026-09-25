@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { X } from "lucide-react";
+import { Check, X } from "lucide-react";
 import { Button } from "@hardcore/ui/primitives/button";
 import { cn } from "@hardcore/ui/utils";
 import { measureModelOffsetFromRuntime } from "../../scene/useStepPicking.js";
@@ -33,7 +33,36 @@ export function projectAnnotationAnchor(runtime, anchor, width, height) {
   return { x: ((ndc.x + 1) * width) / 2, y: ((1 - ndc.y) * height) / 2, facing };
 }
 
-export default function AnnotationPins({ viewport, annotations, openId, onOpenChange, ...body }) {
+/**
+ * The bar over the model while there are annotations to add: "3 annotations · Add to chat · ×",
+ * as Codex's comment bar is. Adding puts every one not yet added into the chat box, in one go;
+ * the cross clears them all.
+ */
+function AnnotationsBar({ pending, total, canAddToChat, onAddToChat, onClear }) {
+  if (!total) return null;
+  const count = pending || total;
+  const label = `${count} ${count === 1 ? "annotation" : "annotations"}`;
+  return (
+    <div className="pointer-events-none absolute inset-x-0 top-3 z-30 flex justify-center">
+      <div role="toolbar" aria-label="Annotations" onPointerDown={event => event.stopPropagation()}
+        className="pointer-events-auto flex items-center gap-1 rounded-full border bg-background/95 py-1 pr-1 pl-3.5 text-[13px] shadow-lg shadow-black/15 backdrop-blur">
+        <span className="tabular-nums">{pending ? label : `${label} added`}</span>
+        {pending ? (
+          <Button type="button" size="sm" disabled={!canAddToChat} onClick={() => void onAddToChat()}
+            className="ml-1 h-7 rounded-full bg-blue-500 px-3 text-[13px] text-white hover:bg-blue-500/90">
+            Add to chat
+          </Button>
+        ) : <Check className="ml-0.5 size-3.5 text-muted-foreground" aria-hidden="true" />}
+        <Button type="button" variant="ghost" size="icon-xs" className="size-7 rounded-full text-muted-foreground"
+          aria-label="Clear annotations" onClick={onClear}>
+          <X className="size-3.5" />
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+export default function AnnotationPins({ viewport, annotations, openId, onOpenChange, canAddToChat, onAddToChat, onClear, ...body }) {
   const pinRefs = useRef(new Map());
   const annotationsRef = useRef(annotations);
   annotationsRef.current = annotations;
@@ -69,6 +98,8 @@ export default function AnnotationPins({ viewport, annotations, openId, onOpenCh
   if (!placed.length) return null;
   return (
     <div className="pointer-events-none absolute inset-0 z-20 overflow-hidden" data-annotation-pins="">
+      <AnnotationsBar pending={annotations.filter(annotation => !annotation.sent).length} total={annotations.length}
+        canAddToChat={canAddToChat} onAddToChat={onAddToChat} onClear={onClear} />
       {annotations.map((annotation, index) => {
         if (!annotation.anchor) return null;
         const open = openId === annotation.id;
@@ -87,7 +118,8 @@ export default function AnnotationPins({ viewport, annotations, openId, onOpenCh
               className={cn(
                 "pointer-events-auto absolute flex size-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-background text-[11px] font-semibold tabular-nums shadow-md shadow-black/30 transition-[transform,opacity]",
                 "hover:scale-110 group-data-[facing=false]/pin:opacity-45",
-                open ? "scale-110 bg-foreground text-background" : annotation.sent ? "bg-muted-foreground text-background" : "bg-primary text-primary-foreground"
+                annotation.sent ? "bg-muted-foreground text-background" : "bg-blue-500 text-white",
+                open && "scale-110 ring-2 ring-blue-500/40 ring-offset-1 ring-offset-background"
               )}>
               {index + 1}
             </button>
@@ -97,7 +129,7 @@ export default function AnnotationPins({ viewport, annotations, openId, onOpenCh
                 className="pointer-events-auto absolute top-0 -translate-y-1/2 rounded-lg border bg-popover p-2 text-popover-foreground shadow-lg group-data-[side=right]/pin:left-5 group-data-[side=left]/pin:right-5">
                 <AnnotationBody annotation={annotation} index={index} {...body}
                   onSelect={() => body.onSelect(annotation)} onEdit={text => body.onEdit(annotation.id, text)}
-                  onRemove={() => body.onRemove(annotation.id)} onAddToChat={() => body.onAddToChat(annotation)}
+                  onRemove={() => body.onRemove(annotation.id)}
                   actions={<Button type="button" variant="ghost" size="icon-xs" className="size-6 text-muted-foreground"
                     aria-label="Close" onClick={() => onOpenChange(null)}><X className="size-3.5" /></Button>} />
               </div>

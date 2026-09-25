@@ -40,7 +40,15 @@ export type DraftContext = { text?: string; references?: CadReference[]; files?:
 export type DraftPart =
   | { id: string; kind: "text"; text: string }
   | { id: string; kind: "reference"; text: string; label?: string; reference?: PromptReference }
-  | { id: string; kind: "attachment"; file: File; about?: readonly string[] };
+  | { id: string; kind: "attachment"; file: File; about?: readonly string[] }
+  | { id: string; kind: "annotation"; references: DraftAnnotationReference[]; text: string };
+/** A reference an annotation is about: its prompt token (`file#selector`) and the chip's label. */
+export type DraftAnnotationReference = { text: string; label?: string };
+/**
+ * A note the person pinned to geometry in the viewer and added to this draft. Annotations ride
+ * beside the text as one chip until the prompt is sent, then go out as a numbered list.
+ */
+export type DraftAnnotation = { id: string; references: DraftAnnotationReference[]; text: string };
 export type AcceptedContext = {
   key: string; partIds: string[];
   /** Snapshot identities and ordering remain available without retaining binary content. */
@@ -57,6 +65,9 @@ type ComposerState = {
   drafts: Record<string, string>;
   /** Display metadata belongs to the draft, not to another project's identical token. */
   referenceLabels: Record<string, Record<string, string>>;
+  /** Annotations added from the viewer, per draft key, until the prompt is sent. */
+  annotations: Record<string, DraftAnnotation[]>;
+  removeAnnotations: (key: string) => void;
   /** Files the explorer attached, per draft key, until the composer takes them. */
   pendingFiles: Record<string, File[]>;
   /** A new draft with a CAD reference runs in that model’s workspace. */
@@ -102,8 +113,16 @@ export const useComposer = create<ComposerState>((set, get) => ({
       let text = state.drafts[key] ?? "";
       const labels = { ...state.referenceLabels[key] };
       const files = [...(state.pendingFiles[key] ?? [])];
+      // An annotation added again (edited since) replaces its earlier copy rather than repeating it.
+      const annotations = [...(state.annotations[key] ?? [])];
       for (const part of parts) {
         if (part.kind === "attachment") { files.push(part.file); continue; }
+        if (part.kind === "annotation") {
+          const annotation = { id: part.id, references: part.references.map(reference => ({ ...reference })), text: part.text };
+          const index = annotations.findIndex(existing => existing.id === part.id);
+          if (index >= 0) annotations[index] = annotation; else annotations.push(annotation);
+          continue;
+        }
         if (part.kind === "reference") {
           const named = parseSegments(text).flatMap(segment => segment.type === "reference" ? [segment.reference] : []);
           const subjectNamed = subjects.has(part.id) && part.reference?.target.kind === "whole-resource"
@@ -120,6 +139,7 @@ export const useComposer = create<ComposerState>((set, get) => ({
         drafts: { ...state.drafts, [key]: text },
         referenceLabels: { ...state.referenceLabels, [key]: labels },
         pendingFiles: { ...state.pendingFiles, [key]: files },
+        annotations: { ...state.annotations, [key]: annotations },
         draftRoots: { ...state.draftRoots, [key]: options.root },
         // Receipts contain no attachment bytes and retain only recent operations.
         acceptedContexts: Object.fromEntries([...Object.entries(state.acceptedContexts), [operationId, accepted]].slice(-256)),
@@ -147,6 +167,11 @@ export const useComposer = create<ComposerState>((set, get) => ({
   queues: {},
   drafts: {},
   referenceLabels: {},
+  annotations: {},
+  removeAnnotations: (key) => set(state => {
+    const { [key]: _removed, ...rest } = state.annotations;
+    return { annotations: rest };
+  }),
   pendingFiles: {},
   draftRoots: {},
   setDraftRoot: (key, root) => set((state) => {

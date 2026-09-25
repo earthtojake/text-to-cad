@@ -59,6 +59,14 @@ export function createDesktopPromptContext(projectId: string, root: string | nul
         parts.push({ id: part.id, kind: "attachment", file, about: part.about });
         continue;
       }
+      if (part.kind === "annotation") {
+        for (const reference of part.references) {
+          if (reference.resource.kind === "workspace-file" && reference.resource.workspaceId !== workspaceId) throw new Error("This annotation belongs to another workspace.");
+        }
+        parts.push({ id: part.id, kind: "annotation", text: part.text,
+          references: part.references.map(reference => ({ text: formatPromptReference(reference), ...(reference.label ? { label: reference.label } : {}) })) });
+        continue;
+      }
       const resource = part.reference.resource;
       if (resource.kind === "workspace-file" && resource.workspaceId !== workspaceId) throw new Error("This reference belongs to another workspace.");
       parts.push({ id: part.id, kind: "reference", text: formatPromptReference(part.reference), label: part.reference.label, reference: part.reference });

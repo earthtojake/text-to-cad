@@ -130,7 +130,7 @@ import {
 import { meshLoadErrorForViewer, shouldStartMeshLoad } from "./components/workbench/hooks/meshLoadTarget.js";
 import { useViewerHost, usePromptDestination } from "../../host/context.js";
 import { useWorkspaceDocument } from "../workspace/useWorkspaceDocument.js";
-import { createCadPromptContext } from "./file-view/promptContext.js";
+import { createAnnotationsPromptContext, createCadPromptContext } from "./file-view/promptContext.js";
 import { modelMenuDescriptor, partMenuDescriptor, topologyMenuDescriptor } from "./file-view/stepMenus.js";
 import { nodeCopyText, selectionCopyPayload } from "./file-view/stepCopy.js";
 import { HostReferenceContext, referenceLabel, referencesFromCopyText, resolveSelectorSelection } from "./file-view/hostReference.js";
@@ -1891,11 +1891,15 @@ function StepSurfaceBody({ view, data }) {
     setAnnotations(current => removeAnnotation(current, id));
     setOpenAnnotationId(current => current === id ? null : current);
   }, []);
-  const addAnnotationToChat = useCallback(async (annotation) => {
-    if (!promptAvailable) return;
-    const result = await deliverPrompt(createCadPromptContext({ resource: promptResource, references: annotation.references, text: annotation.text }));
-    if (annotationDelivered(result)) setAnnotations(current => markAnnotationSent(current, annotation.id));
-  }, [promptAvailable, deliverPrompt, promptResource]);
+  // Every annotation not yet in the chat box goes there in one delivery, as Codex's comment bar
+  // sends; the person then sends the prompt.
+  const addAnnotationsToChat = useCallback(async () => {
+    const pending = annotations.filter(annotation => !annotation.sent);
+    if (!promptAvailable || !pending.length) return;
+    const result = await deliverPrompt(createAnnotationsPromptContext({ resource: promptResource, annotations: pending }));
+    if (annotationDelivered(result)) setAnnotations(current => pending.reduce((list, annotation) => markAnnotationSent(list, annotation.id), current));
+  }, [annotations, promptAvailable, deliverPrompt, promptResource]);
+  const clearAnnotations = useCallback(() => { setAnnotations([]); setOpenAnnotationId(null); }, []);
 
   const toggleStepTreeNode = useCallback((nodeId) => {
     const normalizedNodeId = String(nodeId || "").trim();
@@ -3285,8 +3289,8 @@ function StepSurfaceBody({ view, data }) {
         <StepSceneLayers viewport={viewport} stepScene={stepScene} policy={viewPolicyResolved} props={layerProps} api={layersApiRef} />
         {!presenting && !drawModeActive ? <AnnotationPins viewport={viewport} annotations={annotations}
           openId={openAnnotationId} onOpenChange={setOpenAnnotationId}
-          canAddToChat={promptAvailable && !stepInteractionBlocked}
-          onSelect={selectAnnotation} onEdit={changeAnnotation} onRemove={deleteAnnotation} onAddToChat={addAnnotationToChat} /> : null}
+          canAddToChat={promptAvailable && !stepInteractionBlocked} onAddToChat={addAnnotationsToChat} onClear={clearAnnotations}
+          onSelect={selectAnnotation} onEdit={changeAnnotation} onRemove={deleteAnnotation} /> : null}
       </>;
     }} />;
 }

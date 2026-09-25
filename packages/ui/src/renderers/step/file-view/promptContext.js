@@ -1,4 +1,4 @@
-import { createPromptContext, referencePart, textPart } from '@hardcore/core/prompt';
+import { annotationPart, createPromptContext, referencePart, textPart } from '@hardcore/core/prompt';
 
 /** Assemble a snapshot once, before asynchronous image encoding or host routing. */
 export function createCadPromptContext({ resource, references = [], text = '', capture, operationId }) {
@@ -13,4 +13,20 @@ export function createCadPromptContext({ resource, references = [], text = '', c
     parts.push({ id: 'capture', kind: 'attachment', name: `${resource.path.split('/').pop().replace(/\.[^.]+$/, '')}-view.png`, mimeType: 'image/png', content: capture, about: parts.filter(part => part.kind === 'reference').map(part => part.id) });
   }
   return createPromptContext(parts, operationId);
+}
+
+/**
+ * Annotations as one delivery: each is a part of its own (the references it is about and its
+ * note), keyed by the annotation's id so adding an edited one again replaces it in the draft.
+ */
+export function createAnnotationsPromptContext({ resource, annotations, operationId }) {
+  return createPromptContext(annotations.map(annotation => annotationPart(
+    annotation.references.map(reference => ({
+      resource: { ...resource },
+      target: { kind: 'cad-selector', selectors: reference.selector.split(',') },
+      ...(reference.label ? { label: reference.label } : {}),
+    })),
+    annotation.text,
+    annotation.id,
+  )), operationId);
 }
