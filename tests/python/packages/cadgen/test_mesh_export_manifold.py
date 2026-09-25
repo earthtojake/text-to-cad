@@ -5,7 +5,8 @@ watertight. The tessellator's own guarantee is pinned next to it, in
 `packages/cadgen-js/src/lib/surf/tessellateWatertight.test.js`; this test pins
 what a USER gets — the bytes of a written STL, read back with nothing but
 `struct` — for the ordinary part the issue reported: a rectangular plate with a
-single cylindrical through-hole.
+single cylindrical through-hole. Issue #433 is the same part bent: the hole
+goes through a curved wall.
 
 A cylindrical cut's rim is where the defect lived. Boundary snapping lands two
 of the bore face's vertices on one model point, and a weld that misses them
@@ -52,6 +53,30 @@ MODEL = textwrap.dedent("""\
     """)
 
 
+# Issue #433's part: a 130 mm strip of a curved wall (90 mm radius, 2.2 mm
+# thick) with one 3.3 mm hole through the top of the curve. The hole meeting a
+# CURVED face is the difference from the plate above; on 0.6.6 it wrote one
+# triangle twice and ~20 zero-area slivers around the rim.
+CURVED_WALL = textwrap.dedent("""\
+    from cadgen import build123d as bd
+    from cadgen import stl
+
+    R, T = {radius}, 2.2
+    L, W = 130.0, 40.0
+
+
+    @stl(out="{out}"{options})
+    def strip():
+        ring = bd.Cylinder(R, 2 * W, rotation=(90, 0, 0)) - bd.Cylinder(R - T, 2 * W, rotation=(90, 0, 0))
+        body = ring & bd.Pos(0, 0, R / 2) * bd.Box(L, W, R)
+        return body - bd.Pos(0, 0, R) * bd.Cylinder(1.65, 10)
+
+
+    if __name__ == "__main__":
+        strip()
+    """)
+
+
 def read_binary_stl(path: Path) -> list[tuple[tuple[float, float, float], ...]]:
     """Every triangle as its three corners, straight out of the file."""
     data = path.read_bytes()
@@ -86,10 +111,10 @@ class MeshExportManifoldTest(unittest.TestCase):
             "PYTHONPATH": str(REPO / "packages/cadgen/src"),
         })
 
-    def _export(self, name: str, *, x: float, options: str = "") -> Path:
+    def _export(self, name: str, *, x: float = 0.0, options: str = "", model: str = MODEL, **fields) -> Path:
         out = f"STL/{name}.stl"
         script = self.project / f"{name}.py"
-        script.write_text(MODEL.format(out=out, x=x, options=options), encoding="utf-8")
+        script.write_text(model.format(out=out, x=x, options=options, **fields), encoding="utf-8")
         proc = subprocess.run(
             [PYTHON, script.name], cwd=str(self.project), env=self.env,
             capture_output=True, text=True, timeout=600,
@@ -137,6 +162,15 @@ class MeshExportManifoldTest(unittest.TestCase):
         # spacing and failed once the rim's triangles grew past its epsilon.
         path = self._export("plate_coarse", x=10.0, options=", mesh_tolerance=1e-2")
         self.assertManifold(path, "hole at x=10, mesh_tolerance=1e-2")
+
+    def test_hole_through_a_curved_wall_exports_a_manifold_mesh(self) -> None:
+        # The issue's radius, plus the flatter wall it reported as worse (two
+        # duplicated triangles). The strip's square ends matter: the whole half
+        # ring never duplicated a triangle.
+        for radius in (90.0, 200.0):
+            with self.subTest(radius=radius):
+                path = self._export(f"strip_{int(radius)}", model=CURVED_WALL, radius=radius)
+                self.assertManifold(path, f"hole through a {radius} mm wall")
 
 
 if __name__ == "__main__":
