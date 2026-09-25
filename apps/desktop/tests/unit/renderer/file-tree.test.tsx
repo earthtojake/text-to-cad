@@ -120,10 +120,10 @@ describe("FileTree", () => {
     mount();
 
     await user.type(screen.getByLabelText("Filter files"), "tom.step");
-    await waitFor(() => expect(screen.getByRole("option")).toHaveAttribute("title", "STEP/tom.step"));
+    await waitFor(() => expect(screen.getByRole("option")).toHaveAttribute("data-path", "STEP/tom.step"));
     await user.clear(screen.getByLabelText("Filter files"));
     await user.type(screen.getByLabelText("Filter files"), "unsupported");
-    await waitFor(() => expect(screen.getByRole("option")).toHaveAttribute("title", "dist/output.unsupported"));
+    await waitFor(() => expect(screen.getByRole("option")).toHaveAttribute("data-path", "dist/output.unsupported"));
   });
 
   it("expands three levels of subfolders, one listing each", async () => {
@@ -261,6 +261,6 @@ describe("FileTree", () => {
 
     await user.type(screen.getByLabelText("Filter files"), "main");
     await waitFor(() => expect(screen.getByRole("option")).toBeInTheDocument());
-    expect(screen.getByRole("option")).toHaveAttribute("title", "apps/web/src/main.jsx");
+    expect(screen.getByRole("option")).toHaveAttribute("data-path", "apps/web/src/main.jsx");
   });
 });
