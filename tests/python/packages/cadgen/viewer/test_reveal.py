@@ -13,7 +13,7 @@ class RevealTests(unittest.TestCase):
         self.server = ServerFixture()
         self.addCleanup(self.server.close)
         self.target = Path(self.server.root, 'part with spaces.step')
-        self.target.write_text('fixture')
+        self.target.write_text('fixture', encoding='utf-8')
 
     def test_native_commands(self):
         with mock.patch('cadgen.viewer.reveal.subprocess.run') as run:
@@ -35,7 +35,7 @@ class RevealTests(unittest.TestCase):
 
     def test_rejects_escape_missing_and_invalid_paths(self):
         outside = Path(self.server.root).parent / 'outside.txt'
-        outside.write_text('outside')
+        outside.write_text('outside', encoding='utf-8')
         Path(self.server.root, 'escape').symlink_to(outside)
         with mock.patch('cadgen.viewer.reveal.subprocess.run') as run:
             for path in ('../outside.txt', 'escape'):
