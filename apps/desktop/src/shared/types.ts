@@ -558,6 +558,14 @@ export const SettingsSchema = z.object({
 
   /* Updates */
   checkUpdatesOnLaunch: z.boolean().default(true),
+
+  /* Onboarding */
+  /** The first-run welcome was finished or skipped; it does not open again. */
+  onboardingCompleted: z.boolean().default(false),
+  /** The sidebar's Getting started checklist was closed. */
+  onboardingChecklistDismissed: z.boolean().default(false),
+  /** A CAD file has been open in the viewer at least once (the checklist's last item). */
+  onboardingViewerOpened: z.boolean().default(false),
 });
 export type Settings = z.infer<typeof SettingsSchema>;
 

@@ -25,6 +25,7 @@ import { dialogsHandlers } from "./dialogs";
 import { explorerHandlers, initExplorerServices } from "./explorer";
 import { gitHandlers } from "./git";
 import { runtimeHandlers } from "./runtime";
+import { onboardingHandlers } from "./onboarding";
 import { skillsHandlers } from "./skills";
 import { IpcError, broadcast, registerIpc, type IpcContext } from "./register";
 
@@ -81,6 +82,9 @@ const handlers = {
 
   /** P5: the managed Python and cadgen runtime. */
   ...runtimeHandlers,
+
+  /** First run: whether onboarding shows, and the sample project. */
+  ...onboardingHandlers,
 
   /** P6: the native folder and file choosers Settings' path rows use. */
   ...dialogsHandlers,

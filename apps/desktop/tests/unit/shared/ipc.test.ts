@@ -72,6 +72,8 @@ describe("the contract", () => {
       "skills.info",
       "runtime.status",
       "runtime.repair",
+      "onboarding.status",
+      "onboarding.createSample",
       "dialogs.chooseDirectory",
       "dialogs.chooseFile",
       "settings.get",

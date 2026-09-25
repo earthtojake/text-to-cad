@@ -62,6 +62,8 @@ extraResources:
     to: cadgen
   - from: resources/skills
     to: skills
+  - from: resources/sample
+    to: sample
 
 # One icon source, build/icon.png (scripts/make-icons.mjs renders the sidebar star;
 # committed). electron-builder derives the macOS .icns and Windows .ico from it.

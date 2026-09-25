@@ -15,6 +15,7 @@ import { useComposer } from "./composer";
 import { performIntegrationCommand } from "./integration-commands";
 import { useExplorer } from "./explorer";
 import { attachHistory, useHistory } from "./history";
+import { useOnboarding } from "./onboarding";
 import { usePathLinks } from "./path-links";
 import { useProjects } from "./projects";
 import { useRuntime } from "./runtime";
@@ -210,6 +211,7 @@ export async function hydrate(): Promise<void> {
     useUpdates.getState().load(),
     useAgents.getState().load(),
     useAgentOptions.getState().load(),
+    useOnboarding.getState().load(),
   ]);
   const state = useSessions.getState();
   const session = state.sessions.find(session => session.id === state.activeId && !session.archived);

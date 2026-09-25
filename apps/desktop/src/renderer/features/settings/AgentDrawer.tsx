@@ -465,7 +465,7 @@ export function formatEnv(env: Record<string, string>): string {
  * `agents.output` afterwards, so the component has to remember the id to know
  * which stream is its own — two drawers open on two agents share one store.
  */
-function useJob() {
+export function useJob() {
   const [jobId, setJobId] = useState<string | null>(null);
   const job = useAgents((state) => (jobId ? state.jobs[jobId] : undefined));
   const starting = useRef(false);
@@ -492,7 +492,7 @@ function useJob() {
 }
 
 /** The tail of a running job, scrolled to the bottom. */
-function JobLog({ output }: { output: string }) {
+export function JobLog({ output }: { output: string }) {
   const ref = useRef<HTMLPreElement>(null);
   const text = useMemo(() => stripAnsi(output).trimEnd(), [output]);
 

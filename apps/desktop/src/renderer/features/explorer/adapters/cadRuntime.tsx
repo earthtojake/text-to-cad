@@ -10,6 +10,7 @@ import { useUi } from "@renderer/state/ui";
 import { subscribeSessionTabs } from "@renderer/state/explorer";
 import type { ViewerOrigin } from "@shared/ipc/cad";
 import type { ExplorerRoot, ExplorerTab, FileTab } from "@shared/types";
+import { markViewerOpened } from "@renderer/state/onboarding";
 
 export class CadRuntimeError extends Error {
   constructor(readonly answer: ViewerOrigin) { super(answer.message ?? "The CAD runtime did not start."); }
@@ -40,6 +41,8 @@ export function createDesktopCadConnection(projectId: string, root: ExplorerRoot
           const client = createCadClient({ origin: answer.origin, workspaceId: context.source.id });
           connection = client;
           connectionOrigin = answer.origin;
+          // A CAD file reached the viewer: the Getting started checklist's last item.
+          markViewerOpened();
           return client;
         })();
       }
