@@ -99,7 +99,7 @@ Desktop sidebar navigation is intentional:
   width and internal tab on exit.
 
 Use one breakpoint at 720px of the entire FileViewer. Desktop panels resize with
-one shared frame (256px minimum; reopening a collapsed panel starts at 320px).
+one shared frame (256px minimum; reopening a collapsed panel starts at 280px).
 Mobile panels are nonmodal floating sheets over the viewer; they never resize
 or translate the scene or lock/shift the surrounding page. They start closed,
 with a compact X, outside dismissal and Escape. Preserve the desktop selection

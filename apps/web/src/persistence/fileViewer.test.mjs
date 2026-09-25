@@ -21,27 +21,21 @@ function storage() {
 function viewport(width) { globalThis.window = { innerWidth: width, sessionStorage: storage() }; }
 
 // A page load is a file opened directly, so it opens with the file's own default panel
-// (`panel: null`) at any width, whatever the last page had open.
-test('a page load opens with the file’s default panel; its width is the renderer default for the viewport', () => {
-  viewport(480);
-  assert.equal(readViewState('narrow', storage()).panel, null);
-  assert.equal(readViewState('narrow', storage()).panelWidth, 365);
-  viewport(800);
-  assert.equal(readViewState('compact', storage()).panelWidth, 280);
-  viewport(1280);
-  assert.equal(readViewState('wide', storage()).panel, null);
-  assert.equal(readViewState('wide', storage()).panelWidth, 365);
+// (`panel: null`) at any width, whatever the last page had open, at the shared column's width.
+test('a page load opens with the file’s default panel at the shared column width, whatever the viewport', () => {
+  for (const width of [480, 800, 1280]) {
+    viewport(width);
+    assert.equal(readViewState('root', storage()).panel, null);
+    assert.equal(readViewState('root', storage()).panelWidth, 280);
+  }
 });
 
 test('restoration keeps the width and the expanded folders, never the open panel', () => {
   viewport(1280);
   const session = storage();
-  session.setItem('cad-viewer:directory-session:v1', JSON.stringify({ version: 1, fileSheetWidthPx: 401, fileViewerExpandedDirectoryIds: ['nested'] }));
-  assert.deepEqual(readViewState('old', session), { panel: null, panelWidth: 401, expandedDirectories: ['nested'] });
   writeViewState('a', { panel: 'tree', panelWidth: 900, expandedDirectories: ['a'] }, session);
-  assert.equal(readViewState('a', session).panel, null);
-  assert.equal(readViewState('a', session).panelWidth, 480);
-  assert.equal(readViewState('b', session).panelWidth, 401);
+  assert.deepEqual(readViewState('a', session), { panel: null, panelWidth: 480, expandedDirectories: ['a'], renderers: {} });
+  assert.equal(readViewState('b', session).panelWidth, 280);
 });
 
 test('a stale web view merges its renderer changes without reverting another view', () => {

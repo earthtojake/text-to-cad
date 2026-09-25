@@ -59,7 +59,7 @@ titles and the filter above them.
 Both tree lists inset row backgrounds 4px from their horizontal edges, including
 selected, hovered and filtered rows; nesting adds indentation inside that gutter.
 Every sidebar — the file tree and a file's own panel — shares a 256px minimum
-width. On desktop, resizing below it closes the panel; reopening restores 320px. Below 720px of total FileViewer width, panels are dismissible floating sheets and never shrink the scene. The sheets have no extra visible title row and never scroll or translate the host page.
+width. On desktop, resizing below it closes the panel; reopening restores 280px. Below 720px of total FileViewer width, panels are dismissible floating sheets and never shrink the scene. The sheets have no extra visible title row and never scroll or translate the host page.
 The view cube is hidden on mobile. Breadcrumbs and progress indicators use this same breakpoint. Panels never
 scroll sideways: a Position section's labels truncate to preserve its sliders and
 inputs.

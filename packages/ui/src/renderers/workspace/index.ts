@@ -3,6 +3,6 @@
 // Renderers import this and the kit; they never import each other.
 export { prepareWorkspaceEntry } from './prepare.js';
 export type { PreparedWorkspaceEntry, WorkspaceClientOption } from './prepare.js';
-export { createCadPreferences, CAD_LEGACY_PREFERENCE_KEYS } from './preferences.js';
+export { createCadPreferences } from './preferences.js';
 export type { CadPreferences, CadPreferenceSource } from './preferences.js';
 export type { ViewerCommands, ViewerCommandSource } from './commands.js';

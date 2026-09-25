@@ -41,32 +41,6 @@ Avoid adding file-specific state to `localStorage`. If the value depends on the
 selected file, the active root directory, a generated asset hash, or a tab
 interaction, it belongs in per-file state instead.
 
-## Legacy directory sessionStorage
-
-The host reads the existing directory record through
-[persistence.js](../src/client/workbench/persistence.js) as a fallback: its width
-and tree fields seed root-scoped FileViewer state that does not have them yet.
-Nothing else in the record is read, and the app never writes it.
-
-Retained key:
-
-```text
-cad-viewer:directory-session:v1
-```
-
-Recognized `cad-viewer:directory-session:v1` fields:
-
-- `fileViewerExpandedDirectoryIds`: the file tree's open folder ids. Absent is
-  a tree that has never been touched; an empty array means all folders are
-  closed. The tree reveals the open file's own ancestors either way.
-- `fileSheetWidthPx`: the panel column's custom width, stored only when it
-  differs from the default. There is one column and so one width — the file
-  tree, a file's own panel and Display all take it.
-
-Do not put selected-file state, model controls, drawing state, or
-generated-asset decisions in directory session state. Those belong in per-file
-state.
-
 ## Root-scoped FileViewer state
 
 The host's [fileViewer.ts](../src/persistence/fileViewer.ts) reads and writes

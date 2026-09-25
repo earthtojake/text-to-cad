@@ -32,7 +32,7 @@ import { useRef } from "react";
 // Fits a Position section's joint sliders and their typed values without scrolling sideways.
 export const PANEL_MIN_WIDTH = 256;
 export const PANEL_MAX_WIDTH = 480;
-export const PANEL_DEFAULT_WIDTH = 320;
+export const PANEL_DEFAULT_WIDTH = 280;
 
 /** Whatever a caller has, clamped into the column's range. */
 export function clampPanelWidth(width) {
@@ -89,7 +89,7 @@ export function FilePanelColumn({ id, label, width, onWidthChange, onCollapse, c
   // outside the right edge creates horizontal overflow on narrow pages.
   if (mobile) return <Sheet open={!hidden} onOpenChange={open => { if (!open) onDismiss?.(); }} modal={false}>
     <SheetContent ref={content} portalContainer={portalContainer} showCloseButton={false} aria-describedby={undefined}
-      className="absolute inset-y-2 right-2 h-auto w-[min(320px,calc(100%-32px))] max-w-none gap-0 overflow-hidden rounded-lg border shadow-lg data-[state=open]:animate-none data-[state=closed]:animate-none"
+      className="absolute inset-y-2 right-2 h-auto w-[min(280px,calc(100%-32px))] max-w-none gap-0 overflow-hidden rounded-lg border shadow-lg data-[state=open]:animate-none data-[state=closed]:animate-none"
       data-file-panel-container={id} data-mobile-panel="" onOpenAutoFocus={event => event.preventDefault()}
       onCloseAutoFocus={event => event.preventDefault()}
       onInteractOutside={event => {

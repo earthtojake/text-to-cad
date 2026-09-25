@@ -26,7 +26,3 @@ export function createCadPreferences({ initial = {}, onChange }: {
     }
   };
 }
-
-export const CAD_LEGACY_PREFERENCE_KEYS = Object.freeze({
-  directory: 'cad-viewer:directory-session:v1'
-});

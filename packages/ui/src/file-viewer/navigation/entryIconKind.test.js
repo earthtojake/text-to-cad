@@ -1,7 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { cadWorkspaceDefaultFileSheetWidthForViewport, fileSheetWidthPxForSessionState, CAD_WORKSPACE_COMPACT_TAB_TOOLS_WIDTH, CAD_WORKSPACE_DEFAULT_TAB_TOOLS_WIDTH } from './state.js';
-import { ENTRY_ICON_KIND, entryIconKind } from '../../../file-viewer/navigation/entryIconKind.js';
+import { ENTRY_ICON_KIND, entryIconKind } from './entryIconKind.js';
 
 test("how a model was produced changes nothing about its icon", () => {
   const generatedAssembly = {
@@ -73,21 +72,4 @@ test("entryIconKind gives STEP, STL, 3MF, and GLB distinct file explorer icons",
   assert.equal(glbIcon, ENTRY_ICON_KIND.GLB_MESH);
   assert.equal(staleStepIcon, ENTRY_ICON_KIND.STEP);
   assert.equal(new Set([stepIcon, stlIcon, threeMfIcon, glbIcon]).size, 4);
-});
-
-test("the Inspector sheet takes the narrower default between the compact breakpoints, and only there", () => {
-  assert.equal(cadWorkspaceDefaultFileSheetWidthForViewport(1440), CAD_WORKSPACE_DEFAULT_TAB_TOOLS_WIDTH);
-  assert.equal(cadWorkspaceDefaultFileSheetWidthForViewport(800), CAD_WORKSPACE_COMPACT_TAB_TOOLS_WIDTH);
-  assert.equal(cadWorkspaceDefaultFileSheetWidthForViewport(520), CAD_WORKSPACE_COMPACT_TAB_TOOLS_WIDTH, "the lower edge is compact");
-  assert.equal(cadWorkspaceDefaultFileSheetWidthForViewport(1024), CAD_WORKSPACE_DEFAULT_TAB_TOOLS_WIDTH, "the upper edge is not");
-  assert.equal(cadWorkspaceDefaultFileSheetWidthForViewport(400), CAD_WORKSPACE_DEFAULT_TAB_TOOLS_WIDTH, "below both, the default");
-  assert.equal(cadWorkspaceDefaultFileSheetWidthForViewport(NaN), CAD_WORKSPACE_DEFAULT_TAB_TOOLS_WIDTH);
-});
-
-test("a sheet width is only worth storing when it is not the default", () => {
-  assert.equal(fileSheetWidthPxForSessionState(CAD_WORKSPACE_DEFAULT_TAB_TOOLS_WIDTH), null);
-  assert.equal(fileSheetWidthPxForSessionState(420.4), 420);
-  assert.equal(fileSheetWidthPxForSessionState(0), null);
-  assert.equal(fileSheetWidthPxForSessionState("nope"), null);
-  assert.equal(fileSheetWidthPxForSessionState(280, 280), null, "the default is the one the caller names");
 });

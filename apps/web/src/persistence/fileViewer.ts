@@ -1,6 +1,5 @@
-import { clampPanelWidth } from '@hardcore/ui/navigation';
+import { clampPanelWidth, PANEL_DEFAULT_WIDTH } from '@hardcore/ui/navigation';
 import type { FileViewerState, JsonValue } from '@hardcore/ui/file-viewer';
-import { cadWorkspaceDefaultFileSheetWidthForViewport, readCadDirectorySessionState } from '../client/workbench/persistence.js';
 import { mergeChangedRecords } from './statePatch';
 
 const keyFor = (rootId: string) => `hardcore:file-viewer:v1:${encodeURIComponent(rootId)}`;
@@ -8,13 +7,7 @@ const keyFor = (rootId: string) => `hardcore:file-viewer:v1:${encodeURIComponent
 // default panel, never with whichever panel the last page had open. So the open panel is
 // not stored at all; its width and the tree's expanded folders are.
 export function readViewState(rootId: string, storage: Storage = sessionStorage): FileViewerState {
-  const defaultWidth = cadWorkspaceDefaultFileSheetWidthForViewport(window.innerWidth);
-  const legacy = readCadDirectorySessionState({ storage, defaultFileSheetWidthPx: defaultWidth });
-  const defaults: FileViewerState = {
-    panel: null,
-    panelWidth: clampPanelWidth(legacy.fileSheetWidthPx || defaultWidth),
-    expandedDirectories: legacy.fileViewerExpandedDirectoryIds || [],
-  };
+  const defaults: FileViewerState = { panel: null, panelWidth: PANEL_DEFAULT_WIDTH, expandedDirectories: [] };
   try {
     const value = JSON.parse(storage.getItem(keyFor(rootId)) || 'null');
     if (!value || typeof value !== 'object' || Array.isArray(value)) return defaults;

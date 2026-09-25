@@ -573,13 +573,11 @@ Hosts preserve these existing preference keys and precedence when migrating:
 
 | Data | Existing storage key / rule |
 | --- | --- |
-| Directory layout | `cad-viewer:directory-session:v1` (the web host reads its panel width and the tree's expanded folders; nothing else in it) |
 | Global fullscreen orbit speed | `cad-viewer:orbit:v1` |
 
-`@hardcore/ui/renderers/step/state` exports the panel column's width defaults
-(`cadWorkspaceDefaultFileSheetWidthForViewport`, `fileSheetWidthPxForSessionState`)
-and the orbit preference's reader and writer. `CAD_LEGACY_PREFERENCE_KEYS`
-exports the directory key name. Retired
+`@hardcore/ui/renderers/step/state` exports the orbit preference's reader and
+writer; the panel column's width and its default are the shared column's
+(`@hardcore/ui/navigation`). Retired
 `cad-viewer:file-sheet-tab-layout:v5`, `:v6` and `:v7` records, and a stored
 `cad-viewer:pose-transition:v1` preference, are left untouched and ignored:
 hosts no longer read, write or subscribe to them.
