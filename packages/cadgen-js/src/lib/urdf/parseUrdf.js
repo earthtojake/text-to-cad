@@ -1,5 +1,6 @@
 import { multiplyTransforms } from "./kinematics.js";
 import { resolveCadAssetMeshUrl } from "./meshAssetUrl.js";
+import { parseFourBarCoupling, validateFourBarJointConfiguration } from "./fourBarCoupling.js";
 
 const IDENTITY_TRANSFORM = Object.freeze([
   1, 0, 0, 0,
@@ -227,8 +228,12 @@ function resolveVisualColor(visualElement, namedMaterialColors, { linkName, visu
 
 function parseJointMimic(jointElement, jointName) {
   const mimicElement = childElementsByTag(jointElement, "mimic")[0];
+  const fourBarCoupling = parseFourBarCoupling(jointElement, jointName);
+  if (mimicElement && fourBarCoupling) {
+    throw new Error(`URDF joint ${jointName} cannot declare both mimic and tcad:four_bar`);
+  }
   if (!mimicElement) {
-    return null;
+    return fourBarCoupling;
   }
   const joint = String(mimicElement.getAttribute("joint") || "").trim();
   if (!joint) {
@@ -308,14 +313,15 @@ function parseJoint(jointElement, linkNames) {
 }
 
 function validateMimicJoints(joints) {
-  const jointNames = new Set(joints.map((joint) => joint.name));
+  const jointsByName = new Map(joints.map((joint) => [joint.name, joint]));
   for (const joint of joints) {
     if (!joint.mimic) {
       continue;
     }
-    if (!jointNames.has(joint.mimic.joint)) {
+    if (!jointsByName.has(joint.mimic.joint)) {
       throw new Error(`URDF mimic joint ${joint.name} references missing joint ${joint.mimic.joint}`);
     }
+    validateFourBarJointConfiguration(joint, jointsByName.get(joint.mimic.joint));
   }
 }
 

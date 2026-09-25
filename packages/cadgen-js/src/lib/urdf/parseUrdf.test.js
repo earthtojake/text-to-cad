@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { parseUrdf } from "./parseUrdf.js";
+import { buildDefaultUrdfJointValues, solveUrdfLinkWorldTransforms } from "./kinematics.js";
 
 class FakeElement {
   constructor(tagName, attributes = {}, children = []) {
@@ -190,4 +191,56 @@ test("parseUrdf accepts prismatic mimic joints", () => {
     multiplier: 0.0065,
     offset: 0
   });
+});
+
+function fourBarRobot(fourBarAttributes) {
+  const joint = (name, child, xyz, extra = []) => new FakeElement("joint", { name, type: "revolute" }, [
+    new FakeElement("parent", { link: "ground" }),
+    new FakeElement("child", { link: child }),
+    new FakeElement("origin", { xyz, rpy: "0 0 0" }),
+    new FakeElement("axis", { xyz: "0 0 1" }),
+    new FakeElement("limit", { lower: "-1.0471975512", upper: "1.0471975512", effort: "1", velocity: "1" }),
+    ...extra
+  ]);
+  const fourBar = new FakeElement("tcad:four_bar", fourBarAttributes);
+  fourBar.namespaceURI = "https://text-to-cad.dev/urdf";
+  return new FakeElement("robot", { name: "four_bar" }, [
+    new FakeElement("link", { name: "ground" }),
+    new FakeElement("link", { name: "output" }),
+    new FakeElement("link", { name: "input" }),
+    joint("output_joint", "output", "0.2 0 0"),
+    joint("input_joint", "input", "0 0 0", [fourBar])
+  ]);
+}
+
+// A parallelogram (crank = rocker, coupler = ground, both links up at zero): the input
+// must turn exactly with the driver, and it is derived, not a control.
+const PARALLELOGRAM = {
+  driver: "output_joint",
+  input_length: "0.05",
+  ground_length: "0.2",
+  output_length: "0.05",
+  coupler_length: "0.2",
+  input_zero: String(Math.PI / 2),
+  output_zero: String(Math.PI / 2)
+};
+
+test("tcad:four_bar derives its joint from the driver and is not a control", () => {
+  const urdfData = withFakeDomParser(new FakeDocument(fourBarRobot(PARALLELOGRAM)), () => parseUrdf("<robot />"));
+  const input = urdfData.joints.find((joint) => joint.name === "input_joint");
+  assert.equal(input.mimic.kind, "fourBar");
+  assert.equal(input.mimic.joint, "output_joint");
+  assert.deepEqual(Object.keys(buildDefaultUrdfJointValues(urdfData)), ["output_joint"]);
+  for (const driverDeg of [-40, 0, 25, 55]) {
+    const transform = solveUrdfLinkWorldTransforms(urdfData, { output_joint: driverDeg }).get("input");
+    const inputDeg = (Math.atan2(transform[4], transform[0]) * 180) / Math.PI;
+    assert.ok(Math.abs(inputDeg - driverDeg) < 1e-9, `driver ${driverDeg} gave input ${inputDeg}`);
+  }
+});
+
+test("tcad:four_bar rejects a linkage that cannot close", () => {
+  assert.throws(
+    () => withFakeDomParser(new FakeDocument(fourBarRobot({ ...PARALLELOGRAM, coupler_length: "0.5" })), () => parseUrdf("<robot />")),
+    /four-bar/
+  );
 });
