@@ -3,11 +3,11 @@ import { annotatePerspectiveSnapshot, clonePerspectiveSnapshot } from "@hardcore
 
 // The per-file record a shell renderer keeps in the host's state, keyed by the
 // host as `[file path, renderer id]`. One flat, versioned object: the camera the
-// file was left at, its Display settings, the tool a saved tab may record, and one
+// file uses only while mounted, its Display settings, the tool a saved tab may record, and one
 // slot that is the renderer's own business. Which panel is open is the host's, not
 // the file's.
 //
-//   { version: 1, camera, display, tool, renderer }
+//   { version: 1, camera: null, display, tool, renderer }
 //
 // Reading is forgiving (a record another version wrote is simply not restored);
 // writing is exact. Nothing here touches storage: the host owns that.
@@ -48,7 +48,7 @@ export function readShellState(raw) {
   const record = plainObject(raw) && raw.version === SHELL_STATE_VERSION ? raw : {};
   return {
     version: SHELL_STATE_VERSION,
-    camera: clonePerspectiveSnapshot(record.camera) || null,
+    camera: null, // Camera framing is session-only; ignore cameras from older saved records.
     display: readDisplay(record.display),
     tool: typeof record.tool === "string" ? record.tool : "",
     renderer: plainObject(record.renderer) ? structuredClone(record.renderer) : {}
@@ -56,10 +56,10 @@ export function readShellState(raw) {
 }
 
 /** The record for the view as it is now. `tool` is what `toolModes.persisted` allows a tab to record. */
-export function writeShellState({ camera = null, display = {}, tool = "", renderer = {} } = {}) {
+export function writeShellState({ display = {}, tool = "", renderer = {} } = {}) {
   return {
     version: SHELL_STATE_VERSION,
-    camera: clonePerspectiveSnapshot(camera) || null,
+    camera: null,
     display: structuredClone(display),
     tool: String(tool || ""),
     renderer: plainObject(renderer) ? structuredClone(renderer) : {}

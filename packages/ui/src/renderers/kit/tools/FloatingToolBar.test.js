@@ -34,6 +34,12 @@ test('every press reaches onSelect; a menu tool keeps its first press for itself
   trigger.props.onKeyDown({ key: 'a', preventDefault: () => { prevented += 1; } });
   assert.equal(prevented, 2, 'until it is active, a press never opens the menu and the keyboard selects the tool');
   assert.deepEqual(pressed, ['plain', 'menu']);
+  const corner = { target: { closest: () => ({}) }, preventDefault: () => { prevented += 1; } };
+  trigger.props.onPointerDown(corner);
+  trigger.props.onClick(corner);
+  assert.equal(prevented, 4, 'an inactive corner selects only, blocking menu pointer-down and click');
+  assert.deepEqual(pressed, ['plain', 'menu', 'menu'], 'a corner press activates once');
+
   view.unmount();
 });
 

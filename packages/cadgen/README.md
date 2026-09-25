@@ -343,3 +343,8 @@ teach it — doors compile a document's missing tree on demand.
 Developed in [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-cad);
 that repo's contributor guide carries the development workflow (tests,
 bundling, versioning).
+
+The viewer exposes `POST /__cad/clipboard` for explicit viewport PNG copies. It
+uses the same host and custom-header POST gates as other mutation routes, limits
+images to 20 MiB, and delegates native delivery to `viewer/clipboard.py`. It never
+reads the clipboard. Unsupported desktop clipboard environments return an error.

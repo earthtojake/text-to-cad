@@ -46,6 +46,7 @@ export function usePointerPick({ viewport, scene, enabled, onPick, onHover = nul
     const coarseDefault = window.matchMedia?.("(pointer: coarse)")?.matches ?? false;
     const coarse = pointerType => pointerType === "touch" || pointerType === "pen" || coarseDefault;
     let press = null;
+    const touches = new Set();
     let hovered = null;
     let hoverFrame = 0;
     let hoverAt = null;
@@ -71,10 +72,15 @@ export function usePointerPick({ viewport, scene, enabled, onPick, onHover = nul
     };
 
     const handlePointerDown = (event) => {
+      if (event.pointerType === "touch") {
+        touches.add(event.pointerId);
+        if (touches.size > 1) { press = null; return; }
+      }
       press = event.button === 0 && onCanvas(event)
         ? { x: event.clientX, y: event.clientY, pointerId: event.pointerId, pointerType: event.pointerType || "" } : null;
     };
     const handlePointerUp = (event) => {
+      touches.delete(event.pointerId);
       const started = press;
       press = null;
       if (!started || event.button !== 0 || event.pointerId !== started.pointerId) return;
@@ -83,6 +89,7 @@ export function usePointerPick({ viewport, scene, enabled, onPick, onHover = nul
       callbacks.current.onPick(pickAt(started.x, started.y), { multiSelect: Boolean(event.shiftKey) });
     };
     const handlePointerMove = (event) => {
+      if (press?.pointerId === event.pointerId && Math.hypot(event.clientX - press.x, event.clientY - press.y) > (coarse(press.pointerType) ? COARSE_TAP_SLOP_PX : FINE_TAP_SLOP_PX)) press = null;
       // A camera gesture is under way, or the pointer cannot rest: no hover.
       if (event.buttons !== 0 || coarse(event.pointerType || "")) return;
       if (!onCanvas(event)) { pendingHover = null; setHover(null); return; }
@@ -98,7 +105,7 @@ export function usePointerPick({ viewport, scene, enabled, onPick, onHover = nul
       });
     };
     const handlePointerLeave = () => { pendingHover = null; hoverAt = null; setHover(null); };
-    const handlePointerCancel = () => { press = null; };
+    const handlePointerCancel = event => { touches.delete(event.pointerId); press = null; };
 
     host.addEventListener("pointerdown", handlePointerDown);
     host.addEventListener("pointerup", handlePointerUp);

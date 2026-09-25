@@ -1,3 +1,4 @@
+import { TooltipHint } from "@hardcore/ui/primitives/tooltip";
 import { FILE_SHEET_FIELD_LABEL_CLASSES, FileSheetFieldGrid, FileSheetSubsection, FileSheetValueField } from "../kit/inspector/FileSheet.js";
 
 function formatSdfNumber(value, fallback = "0") {
@@ -20,7 +21,7 @@ function SdfMetadataList({ title, items, fields }) {
       <span className={FILE_SHEET_FIELD_LABEL_CLASSES}>{title}</span>
       <div className="space-y-1">
         {records.slice(0, 5).map((record, index) => (
-          <div key={`${title}:${index}`} className="truncate text-tiny leading-4 text-foreground" title={record}>{record}</div>
+          <TooltipHint key={`${title}:${index}`} content={record} overflowOnly><div  className="truncate text-tiny leading-4 text-foreground" >{record}</div></TooltipHint>
         ))}
         {records.length > 5 ? <div className="text-tiny leading-4 text-muted-foreground">{records.length - 5} more</div> : null}
       </div>

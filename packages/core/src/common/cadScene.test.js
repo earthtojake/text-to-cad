@@ -1216,6 +1216,7 @@ test("buildModel keeps restBounds at the zero pose while bounds follow the param
     theme: cloneThemePresetSettings("workbench-light"),
     renderPartsIndividually: true,
     parameterSetup: false,
+    clip: { enabled: true, axis: "x", offset: 0.5 },
     stepParameters: {
       definition: {
         module: {
@@ -1230,6 +1231,7 @@ test("buildModel keeps restBounds at the zero pose while bounds follow the param
   });
 
   assert.deepEqual(scene.bounds.max, [15, 1, 0], "bounds follow the posed record");
+  assert.equal(scene.runtime.activeClipPlane.constant, 1.5, "clip uses authored bounds before pose");
   assert.deepEqual(scene.restBounds.min, [0, 0, 0]);
   assert.deepEqual(scene.restBounds.max, [3, 1, 0]);
 
@@ -1248,6 +1250,7 @@ test("buildModel keeps restBounds at the zero pose while bounds follow the param
   });
   assert.deepEqual(scene.bounds.max, [43, 1, 0], "a new pose moves bounds");
   assert.deepEqual(scene.restBounds.max, [3, 1, 0], "and never moves restBounds");
+  assert.equal(scene.runtime.activeClipPlane.constant, 1.5, "posing cannot move the clip plane");
   scene.dispose();
 });
 
@@ -2016,4 +2019,22 @@ test("failed edge-instance disposal retains its set and another scene's shared s
   set.material.removeEventListener("dispose", fail);
   scene.dispose(); assert.equal(instanceDisposals, 1); assert.equal(textureDisposals, 0);
   other.dispose(); assert.equal(textureDisposals, 1);
+});
+
+
+test("external motion publishes live bounds and preserves rest framing bounds", () => {
+  const model = buildModel(THREE, sampleMeshData(), { renderPartsIndividually: true });
+  try {
+    const rest = structuredClone(model.restBounds);
+    const right = model.displayRecords.find(record => record.partId === "right");
+    right.effectMatrix = new THREE.Matrix4().makeTranslation(20, -10, 5);
+    applyDisplayRecordTransform(THREE, right);
+    model.refreshBounds();
+    assert.deepEqual(model.bounds, { min: [0, -10, 0], max: [23, 1, 5] });
+    assert.deepEqual(model.restBounds, rest);
+    right.effectMatrix = null;
+    applyDisplayRecordTransform(THREE, right);
+    model.refreshBounds();
+    assert.deepEqual(model.bounds, rest, "leaving animation also restores depth bounds");
+  } finally { model.dispose(); }
 });

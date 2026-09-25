@@ -11,26 +11,77 @@ Load this only when a task needs Viewer file-support details or UI control guida
 - `.srdf`: paired-URDF viewing with planning groups, group-state presets, and joint controls.
 - `.sdf`: SDF model/world viewing with metadata, counts, and joint controls when available.
 
-## Controls
+## Navigation and tools
 
-- Navigation: left-drag to orbit, right/middle-drag or Shift-drag to pan (two fingers on touch), wheel or pinch to zoom, and Arrow/WASD keys to orbit. Use the view sphere for top/bottom/front/back/left/right views; click its center to reset the view — it frames the whole model again AND returns to the default isometric direction, which is how you recover a view you have zoomed or panned away from.
-- File browser: the rightmost navbar toggle (`Show files`) opens the file tree in the panel column; search files/ids/paths, expand folders, select entries, or switch files from the breadcrumb menus. A file picked in the tree opens with the tree still showing (in the desktop app, in the file's own tab), so the tree can be walked file by file.
-- File names read exactly as they do on disk. The tab title, breadcrumb, catalog rows and the file picker all show the artifact's own basename and its own path — `moonwatch.step`, never the `moonwatch.py` that generated it. The Viewer never learns whether a document was generated: what it shows is decided from the file's bytes, the store and the build pool's job ledger, and no part of the UI names or opens a model script. The breadcrumb names the file and carries no status of its own — opening, updating and failing show in the viewport. (Copied topology references are the one exception, and a deliberate one: see the bare-stem rule below.)
-- Floating toolbar: a robot description opens in `Position`, leftmost in its toolbar — it drags the robot's joints by knobs in the viewport, and is the tool a robot always starts in. A STEP file with kinematics offers `Position` too, sitting immediately left of `Animate`, but opens in `Select` instead. A mesh file (GLB, STL, 3MF) or a DXF has NO tools at all and no toolbar: these have nothing to pick, measure, pose or draw on, so their viewport simply orbits, pans and zooms, and a right-click opens nothing. A GLB with animation clips shows the playbar under the model at all times — it is a transport, not a tool, and the file opens at rest. `Select` orbits the model and picks: faces, edges and parts on a STEP file; whole links on a robot description, where it has its own icon and `Escape` clears the selection; a selection exists only while Select is active (choosing another tool clears it, and selecting from the sidebar returns to Select). There is no Pan tool: right-drag, Shift-drag or two fingers pan the camera under every tool. `Measure` is STEP-only — it snaps to B-rep topology, so no mesh, drawing or robot offers it; pressing it again opens its snap menu, and recorded measurements list in a compact panel under the toolbar. `Draw` opens the sketch tools, and is a STEP tool alone. `Animate`, the last of the model's own tools (only `Fullscreen` follows it), appears only when the model has animation routines: it disables picking and puts a playbar at the bottom of the viewport (routine list when there is more than one, play/pause, scrubber, and a settings menu with Speed — shown as e.g. `1×` — and Loop); leaving the tool returns the model to its posed state. (A GLB has no such tool: its playbar is simply always there.) Every pose change — a named pose, a slider, a typed value, or a Position knob drag — is an instant jump; there is no eased transition. `Copy screenshot` puts a viewport capture on the clipboard — screenshots are clipboard-only; nothing downloads. A DXF is not a viewport at all: it is a 2D canvas — drag to pan, wheel or pinch to zoom about the pointer, double-click to fit — whose navbar carries `Take snapshot` and the file tree's toggle, nothing else. There is NO zoom control anywhere in the viewer: no percentage readout, no menu behind one, no zoom buttons. Framing a 3D model is a STEP's right-click menu, which ends in `Zoom to fit` and `Zoom to selection` (the latter greyed out without a selection) — the same two items over a part, over empty space and on a Features tree row — and, on every 3D file, the view cube in the corner: a face (TOP, FRONT, RIGHT…) snaps to that plane view, a corner to the isometric view from that corner, and dragging the cube orbits the camera; the house at its top-left, `Reset to default isometric view`, frames the model again from the default direction, and the button at its top-right switches orthographic and perspective projection. `Fullscreen`, the last button of a STEP's toolbar (and only a STEP's; the standalone Viewer offers it, the desktop app does not), hands the model the whole window: a model with routines is locked in the Animate tool with the same playbar, and the corner settings hold only orbit options (neither the settings button nor its Speed label has a tooltip); Escape or the corner's X leaves it.
-- File context menu (file browser rows and the breadcrumb): `Reveal in Explorer View` highlights the entry in the file browser, and the copy items hand out references to the file — `Copy Filename`, `Copy Path` (absolute), `Copy Relative Path` (relative to the served directory), and `Copy Link`, which copies the viewer deep link for the entry (the bare origin plus `?file=<root-relative path>`, byte-identical to the URL the app itself lands on). There is no download and no native file-manager reveal; paths and links are how bytes leave the Viewer.
-- Drawing tools: `Draw` locks the view direction and lays an Excalidraw sketch over the model; pan and zoom still work and the sketch moves with the model. A second toolbar row offers, in the order a sketch is made, pen, line, arrow, rectangle, ellipse, text, fill, eraser, colour, select/move, pan, undo, redo and clear. `Copy Drawing` copies the view with the sketch; leaving `Draw` discards the sketch.
-- File panels: the navbar's toggles, left to right, are the file's Display panel, its own panel, and the file tree; one is open at a time and none has tabs inside it. A STEP's own panel is `Part` or `Assembly` (a box or boxes), a robot description's is `Robot`, and a mesh (STL, 3MF, GLB) has none — only Display. A DXF drawing has only the file tree: a drawing is a finished 2D document, so there is nothing to configure. A file opened any other way than from the tree (a link, an address, an agent's open) opens with its own panel, or with nothing when it has none; Display is never open by default. The standalone Viewer narrower than 520px opens files with no panel at all, leaving the model the room. A file panel's sections stack tight at their full heights in one column that alone scrolls; beside another, each folds away and back with a plus/minus (a view only), and a pick's Reference is pinned at the panel's foot, under every section. A STEP's panel stacks Features (the model tree, with a `Filter model…` search whose hits select in the viewport and are revealed in the tree when the search ends); Position when the document's sidecar declares kinematics (a `Pose` row with the named-pose dropdown, then joint sliders — a DOF that exactly one coupling gears is marked "driven by <coupling>": its slider shows the effective value and drags the coupling, so sliding one member of a gear train turns the whole train — then Reset); and Issues when the file has any. A part with no kinematics is its Features alone, under that title. Animation is not a section: it is the Animate tool, and a routine that fails to load is one of the Issues. A robot's panel stacks Position (a `Pose` row with its named poses or group states, then joint sliders, then Reset), then Links (the link tree: rows carry no icon, and a `Filter links…` search also matches joint names; hover and click highlight the link in the viewport; a single root with children is pinned — no chevron, no indent, its children start at the tree's own left edge; a root that is only a frame with one fixed-jointed child, such as `base_footprint`, gets no row of its own and its child leads the tree instead, unless the description has no content anywhere; and a Reference pane with the link's mass, centre of mass and inertia, its visual and collision geometry, the parent joint's axis, limits and origin, and SRDF groups; a mesh path there opens that mesh file, and a parent or child link name selects that link); an SDF adds its SDF metadata after Links.
-- Viewing mode: the navbar dropdown selects a preset: `Solid`, `Render`, `X-ray`, `Hidden line`, or `Wireframe`. Solid is the default. Render starts with perspective projection; the other presets start orthographic. The same Display panel remains available in every preset, with four sections: Display (Mode, then surface style Shaded/Flat, part colours and opacity; the surface rows step aside in Hidden line and Wireframe, which draw no shaded surface), Edges, Grid & axes (one gate), and Environment (one gate over lighting, background and floor). Projection is the view cube's toggle, not a Display control. A change from a preset shows `Custom`; choosing another preset or resetting restores its defaults. Cross-section and Explode are toggle buttons in the toolbar after Measure, not Display sections and not exclusive tools: they stay on under Select or Measure, and survive preset changes. Edges, Cross-section, Explode, the X-ray, Hidden line and Wireframe presets and the Hidden/Off surface styles belong to STEP models: every other file type offers only `Solid` and `Render` with Shaded or Flat surfaces, and the snapshot CLIs refuse the same settings for those types.
-- Copied references carry their file: the Viewer prefixes every copied ref with the shortest
-  path suffix that names that file uniquely (`bracket#o1.2.f1`, or
-  `lyra/STEP/palm.step#o1.3` where a filename is not unique), so a ref pasted into a prompt
-  still says which model it belongs to. A generated model shows as a bare stem — the common
-  case, so it gets the shortest name — while everything else keeps its suffix (`bracket.step`,
-  `plate.stl`, `plate.3mf`). That means a bare stem is NOT a literal path suffix, so resolving
-  one back to a file means expanding it; the CAD skill's
-  `references/inspection-and-validation.md` documents the split-and-expand steps. Bare `#...`
-  refs remain valid everywhere.
-- Tutorial tips: the first time a selection produces a copyable reference — a component, a subassembly, or a face/edge — a one-shot tip above the "Copy #…" button explains that references can be pasted into prompts to edit specific parts. Only its X closes it; clicking away, Escape, and reloads leave it to reappear on the next selection, and once dismissed it never returns. Append `?resetTips=1` to a Viewer URL to clear the record and re-arm every tip; the param applies once and is stripped from the address bar.
-- Display panel: its first section, Display, holds the mode and projection selectors; the view's controls follow. Each group has an enable switch; its parameters are available while enabled. Lighting, floor, background and guides can be combined with any preset. Appearance can follow the host or use Light/Dark. Background and floor have color and opacity controls. Floor placement chooses the document origin (default) or the model's lowest point.
-- Exploded view: one percentage slider — 0% is assembled, and any higher value pulls the assembly apart. It is disabled for a document with fewer than two explodable parts.
-- Cross-section (the `clip` display setting): its toolbar panel holds a Flip toggle and X/Y/Z position sliders — a slider at 0 means no cut on that axis.
+- Orbit by dragging; right/middle-drag or Shift-drag pans. Wheel/pinch zooms,
+  two fingers pan, and Arrow/WASD keys orbit. The desktop bottom-right cube changes
+  direction without resetting zoom. Fresh loads fit the model.
+- The top-left toolbar contains the tools supported by the file. STEP starts in
+  Select and offers Draw, Measure, Explode, Clip, Position when it has kinematics,
+  Animate when it has routines, and Display. Robots start in Select and may offer
+  Position. Meshes offer Display; animated GLBs also offer Animate. DXF uses a 2D
+  canvas: drag to pan, wheel/pinch to zoom, double-click to fit.
+- A corner triangle means options. First press selects; another press opens the
+  temporary menu. Select chooses its pick filter, Draw chooses drawing tools,
+  Measure chooses snapping, and Animate chooses Routine, Speed and Loop.
+- One tool owns picking. Leaving Select clears selection; leaving Draw clears
+  drawings. Position edits persist. Leaving Animate stops playback and restores
+  base motion. Completed measurements remain until their panel's X or main tool
+  button clears them; unfinished picks are canceled when leaving Measure.
+- Explode and Clip open neutral panels beneath the toolbar. Editing applies the
+  effect; nonzero effects persist across tools. X or pressing the tool again
+  resets/removes it. Unused zero-value panels disappear when selecting another
+  tool. Explode uses a percentage; Clip uses an axis, Flip and one cut-percentage
+  slider over the original model bounding box. 0% means no effect.
+- Select individual faces/edges in the viewport even when Features groups them.
+  Double-click a component/subassembly to isolate; double-click away to leave.
+  Double-click a face/edge to copy its reference. STEP context menus offer Zoom
+  to Fit (the whole model, current angle) and Zoom to Selection.
+- Copy Reference/References appears only for a usable selection. Copy Drawing
+  appears only with ink. The platform copy shortcut performs the same action
+  unless a text field owns input. Copy notifications describe the completed action.
+
+## Panels and display
+
+The navbar offers one optional Settings panel and the file explorer. Features
+and Position are separate tabs for STEP when both exist; robots use Links and
+Position. Without Position, the tree appears directly. Selecting Position opens
+its tab on desktop. Ordinary selection follows the tree only if Settings is
+already open; it never reopens a closed sidebar. On mobile (below 720px), panels
+float over the scene and tools neither open nor switch them automatically.
+
+Position has a full-width Pose dropdown with Default and named poses, a Reset
+beside its label, then joint sliders/value inputs. Edits apply immediately and
+survive tool/tab changes. Reset restores authored defaults, including SRDF home.
+Issues live with Features; SDF metadata and robot link facts live with Links.
+Filters match model/link names; link filters also match joint names. References
+and link facts appear below the tree. File names retain their on-disk suffixes.
+
+Display is a toolbar tool opening a compact properties sheet: Mode, Appearance
+and Projection; Surfaces; then optional Edges, Grid / Axes, Lighting, Background
+and Floor. Plus enables a section with defaults; minus disables it. There is no
+extra Enabled checkbox. Color and choice popups do not close the whole sheet.
+Mode presets are Solid, Render, X-ray, Hidden line and Wireframe where supported.
+Render defaults to perspective; other presets to orthographic. Meshes and robots
+offer Solid/Render without STEP topology effects. Manual changes show Custom.
+Reset restores the selected preset and clears Clip/Explode, preserving camera,
+pose and app appearance. Preset changes preserve applied model effects.
+
+## Fullscreen and host actions
+
+Fullscreen is a transparent top-right scene button, separate from Animate. It
+fills the area below the navbar, hides the sidebar, cube and editor tools, and
+starts orbit. Hover reveals Exit, a separate Orbit menu, animation settings when
+clips exist, and a playbar. Controls share one idle timeout. Escape closes menus
+first, then exits. Exit restores the regular camera and prior sidebar state.
+
+The navbar's camera action captures the viewport. The web viewer's local backend
+can write a PNG to its machine's clipboard; desktop delivers to its composer.
+File actions offer path copying and, when supported by the host, Reveal in Finder,
+Explorer or a file manager. Native reveal/clipboard operate on the server machine
+when accessing a viewer remotely, not automatically on the remote device.
+
+Copied CAD references include a file identifier and canonical selector. Generated
+models may use a bare stem; other files retain their suffix. Resolve that identifier
+against the viewer's served root before using it as a filesystem path. Bare
+`#...` selectors remain valid when the model is already known.

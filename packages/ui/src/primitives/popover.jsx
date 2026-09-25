@@ -27,10 +27,11 @@ const PopoverContent = React.forwardRef(function PopoverContent({
   className,
   align = "center",
   sideOffset = 4,
+  container,
   ...props
 }, ref) {
   return (
-    <PopoverPrimitive.Portal>
+    <PopoverPrimitive.Portal container={container}>
       <PopoverPrimitive.Content
         ref={ref}
         data-slot="popover-content"

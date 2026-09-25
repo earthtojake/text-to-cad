@@ -12,7 +12,7 @@ const require = createRequire(import.meta.url);
 const temporary = await mkdtemp(join(tmpdir(), 'hardcore-web-app-'));
 const output = join(temporary, 'app.mjs');
 await build({
-  stdin: { contents: `export {default as App} from './App.tsx'; export {act,createElement} from 'react'; export {createRoot} from 'react-dom/client'; export {snapshot} from '@hardcore/ui/file-viewer'; export {topBarSnapshot} from './client/components/workbench/ViewerTopBar.jsx'; export {autoReloadOptions} from './host/useViewerAutoReload.js';`, resolveDir: fileURLToPath(new URL('.', import.meta.url)) },
+  stdin: { contents: `export {default as App} from './App.tsx'; export {act,createElement} from 'react'; export {createRoot} from 'react-dom/client'; export {snapshot} from '@hardcore/ui/file-viewer'; export {autoReloadOptions} from './host/useViewerAutoReload.js';`, resolveDir: fileURLToPath(new URL('.', import.meta.url)) },
   bundle: true, platform: 'node', format: 'esm', jsx: 'automatic', outfile: output,
   banner: { js: `import {createRequire} from 'node:module'; const require=createRequire(import.meta.url);` },
   plugins: [{ name: 'host-boundaries', setup(plugin) {
@@ -20,7 +20,7 @@ await build({
       path: args.kind.startsWith('require') ? require.resolve(args.path) : pathToFileURL(require.resolve(args.path)).href,
       external: true,
     }));
-    plugin.onResolve({ filter: /^@hardcore\/ui\/file-viewer$|^@hardcore\/ui\/renderers\/(step|dxf|glb|mesh|robot|workspace)$|^@hardcore\/ui\/file-viewer\/(presentation|empty)$|ViewerTopBar\.jsx$|useViewerAutoReload\.js$/ }, args => ({ path: args.path, namespace: 'host-test' }));
+    plugin.onResolve({ filter: /^@hardcore\/ui\/file-viewer$|^@hardcore\/ui\/renderers\/(step|dxf|glb|mesh|robot|workspace)$|^@hardcore\/ui\/file-viewer\/(presentation|empty)$|(?:ViewerAppearance|ViewerBrand|ViewerLinks)\.jsx$|useViewerAutoReload\.js$/ }, args => ({ path: args.path, namespace: 'host-test' }));
     plugin.onLoad({ filter: /.*/, namespace: 'host-test' }, args => {
       if (args.path.endsWith('/file-viewer')) return { contents: `let current; export function FileViewer(props){current=props; return null;} export const snapshot=()=>current;`, loader: 'js' };
       if (args.path.endsWith('/step')) return { contents: `export const createStepRenderer=()=>({id:'step'});`, loader: 'js' };
@@ -31,13 +31,13 @@ await build({
       if (args.path.endsWith('/mesh')) return { contents: `export const createMeshRenderer=()=>({id:'mesh'});`, loader: 'js' };
       if (args.path.endsWith('/robot')) return { contents: `export const createRobotRenderer=()=>({id:'robot'});`, loader: 'js' };
       if (args.path.endsWith('useViewerAutoReload.js')) return { contents: 'let reloadOptions;export const autoReloadOptions=()=>reloadOptions;export const useViewerAutoReload=(_server,options)=>{reloadOptions=options;return false;};', loader: 'js' };
-      if (args.path.endsWith('/presentation')) return { contents: 'export const MissingFileAlert=()=>null;export const ViewerLoadingOverlay=()=>null;export const StatusToast=()=>null;', loader: 'js' };
+      if (args.path.endsWith('/presentation')) return { contents: 'export const MissingFileAlert=()=>null;export const ViewerLoadingOverlay=()=>null;', loader: 'js' };
       if (args.path.endsWith('/empty')) return { contents: 'export const EmptyCadBackdrop=({children})=>children;', loader: 'js' };
-      return { contents: 'let current; export default function ViewerTopBar(props){current=props; return null} export const topBarSnapshot=()=>current;', loader: 'js' };
+      return { contents: 'let current; export default function ViewerAppearance(props){current=props; return null} export const topBarSnapshot=()=>current;', loader: 'js' };
     });
   } }],
 });
-const { App, act, createElement, createRoot, snapshot, topBarSnapshot, autoReloadOptions } = await import(pathToFileURL(output).href);
+const { App, act, createElement, createRoot, snapshot, autoReloadOptions } = await import(pathToFileURL(output).href);
 after(() => rm(temporary, { recursive: true, force: true }));
 
 test('web host preserves compact navigation, history, root state and focus refresh lifecycle', async () => {
@@ -59,16 +59,16 @@ test('web host preserves compact navigation, history, root state and focus refre
     await act(() => root.render(createElement(App, { client, server: { rootId: 'a' } })));
     // One viewer renderer per file family, registered together.
     assert.deepEqual(snapshot().renderers.map(renderer => renderer.id), ['step', 'dxf', 'glb', 'mesh', 'robot']);
-    assert.equal(topBarSnapshot().colorSchemePreference, 'system');
-    assert.equal(topBarSnapshot().resolvedColorSchemeMode, 'light');
+    assert.equal(snapshot().displayActions.props.colorSchemePreference, 'system');
+    assert.equal(snapshot().displayActions.props.resolvedColorSchemeMode, 'light');
     await act(() => { systemDark = true; for (const listener of appearanceListeners) listener(); });
-    assert.equal(topBarSnapshot().colorSchemePreference, 'system');
-    assert.equal(topBarSnapshot().resolvedColorSchemeMode, 'dark');
-    await act(() => topBarSnapshot().onColorSchemePreferenceChange('light'));
-    assert.equal(topBarSnapshot().colorSchemePreference, 'light');
-    assert.equal(topBarSnapshot().resolvedColorSchemeMode, 'light');
-    await act(() => topBarSnapshot().onColorSchemePreferenceChange('system'));
-    assert.equal(topBarSnapshot().resolvedColorSchemeMode, 'dark');
+    assert.equal(snapshot().displayActions.props.colorSchemePreference, 'system');
+    assert.equal(snapshot().displayActions.props.resolvedColorSchemeMode, 'dark');
+    await act(() => snapshot().displayActions.props.onColorSchemePreferenceChange('light'));
+    assert.equal(snapshot().displayActions.props.colorSchemePreference, 'light');
+    assert.equal(snapshot().displayActions.props.resolvedColorSchemeMode, 'light');
+    await act(() => snapshot().displayActions.props.onColorSchemePreferenceChange('system'));
+    assert.equal(snapshot().displayActions.props.resolvedColorSchemeMode, 'dark');
     assert.equal(snapshot().file, 'one.step');
     assert.deepEqual(await autoReloadOptions().fetchServerInfo(), { ok: true, identityToken: 'restarted' });
     assert.deepEqual(serverCalls[0], { fresh: true });

@@ -100,6 +100,8 @@ export interface FileNavigationAction {
   onInvoke: () => void | Promise<void>;
 }
 export interface RendererViewProps {
+  /** Optional host-owned controls inside the Display popover. */
+  displayActions?: ReactNode;
   /** Host-controlled presentation; disables editing/picking tools, not document state. */
   fullscreen?: boolean;
   /**
@@ -112,6 +114,9 @@ export interface RendererViewProps {
   source: FileSource;
   document: DocumentSession | null;
   openPanel: string;
+  /** Renderer status beside the filename; panel suspension preserves the open tab and width. */
+  navigationStatusSlot?: HTMLElement | null;
+  onPanelVisibilityChange?: (visible: boolean) => void;
   panelSlot: HTMLElement | null;
   onPanelOpen: (id: string) => void;
   onReady: (ready: boolean) => void;
@@ -164,6 +169,10 @@ export interface FileViewerProps {
   state: FileViewerState;
   onStateChange: (next: FileViewerState) => void;
   leading?: ReactNode;
+  /** Host content before renderer actions in the navbar. */
+  navigationActions?: ReactNode;
+  /** Host controls inside the CAD Display popover. */
+  displayActions?: ReactNode;
   /** Override the selected path shown by breadcrumbs and tree, e.g. before a catalog resolves. */
   navigationPath?: string | null;
   /** Omit for automatic folding based on the available content width. */

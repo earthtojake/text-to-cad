@@ -36,7 +36,7 @@ const MODEL_OFFSET = new THREE.Vector3(0, 0, 0);
 export function useStepPose(layers) {
   const {
     viewport, props, policy, refs, staticResetRenderToken,
-    setTransformedSelectorRuntime, setTransformedDisplayEdgeRuntime, displayRecordsToken
+    setTransformedSelectorRuntime, setTransformedDisplayEdgeRuntime
   } = layers;
   const { runtimeRef, viewerReadyTick } = viewport;
   const {
@@ -138,7 +138,6 @@ export function useStepPose(layers) {
     }
 
     const definition = stepParameterRuntime?.definition || null;
-    const module = definition?.module || null;
     const animationClip = stepAnimationRuntime?.clip || null;
     // Either system can be the only one present: a model may declare mates
     // without shipping clips, or ship clips without declaring a single mate.
@@ -171,6 +170,8 @@ export function useStepPose(layers) {
       }
       applyPartVisualState(runtime.THREE, runtime.displayRecords, partVisualStateRef.current);
       runtime.cadScene?.syncSurfaceInstances();
+      runtime.cadScene?.refreshBounds();
+      viewport.syncSceneBounds();
       const baseTopologyDisplayEdgesVisible = shouldRenderTopologyDisplayEdges({
         edgesVisible,
         wireframeMode,
@@ -312,6 +313,8 @@ export function useStepPose(layers) {
       );
       runtime.modelGroup?.updateMatrixWorld?.(true);
       runtime.edgesGroup?.updateMatrixWorld?.(true);
+      runtime.cadScene?.refreshBounds();
+      viewport.syncSceneBounds();
       const effectiveRuntime = nextEdgeRuntimes.selectorRuntime;
       // Picking is suspended during STEP animation playback, so skip rebuilding
       // pick-only state per frame; the playing->stopped rerun syncs the final pose.

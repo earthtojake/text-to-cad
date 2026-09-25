@@ -24,7 +24,7 @@ function MeshSurface({ view, data }) {
     load: { busy: loaded.busy && !scene, updating: loaded.busy && Boolean(scene), progress: loaded.progress, alert: loadAlert },
     live: LIVE
   });
-  useDeclinedSelectReference(document, shell.setCopyStatus, MESH_DECLINED_LIVE_COMMANDS.select);
+  useDeclinedSelectReference(document);
 
   return <RendererShell shell={shell} tools={[]} />;
 }

@@ -59,12 +59,12 @@ function isPartNode(item) {
 }
 
 const MEASUREMENT_HINTS = {
-  'Plane spacing': 'Perpendicular distance between the planes; not the minimum gap between their trimmed faces.',
-  'Line spacing': 'Perpendicular distance between the supporting lines; not the gap between their endpoints.',
-  'Axis spacing': 'Perpendicular distance between the cylinder axes.',
-  'Center distance': 'Straight-line distance between circle centers.',
-  'Angle': 'Smaller angle between the directions or planes (0–90°).',
-  'Axis angle': 'Smaller angle between the cylinder axes (0–90°).',
+  'Plane spacing': 'Plane distance, ignoring face boundaries',
+  'Line spacing': 'Line distance, ignoring endpoints',
+  'Axis spacing': 'Cylinder-axis distance',
+  'Center distance': 'Circle-centre distance',
+  'Angle': 'Smallest angle (0–90°)',
+  'Axis angle': 'Cylinder-axis angle (0–90°)',
 };
 
 function MeasurementRows({rows}) {
@@ -177,13 +177,13 @@ function PartDetail({ node, fallbackSize, meshData }) {
 
 // From the displayed mesh: exact for flat faces, a close approximation where faces curve.
 function VolumeRow({ volume }) {
-  return <InfoRow label="Volume" title="Computed from the displayed mesh; curved faces make it a close approximation">
+  return <InfoRow label="Volume" title="Approximate mesh volume">
     <MonoValue>{formatNumber(volume, volume >= 100 ? 0 : 2)} mm³</MonoValue>
   </InfoRow>;
 }
 
 function SizeRow({ size }) {
-  return <InfoRow label="Size" title="Bounding size along the model’s X, Y and Z axes"><MonoValue>{size.map(value=>formatNumber(value)).join(' × ')} mm</MonoValue></InfoRow>;
+  return <InfoRow label="Size" title="XYZ bounding size"><MonoValue>{size.map(value=>formatNumber(value)).join(' × ')} mm</MonoValue></InfoRow>;
 }
 
 function itemKey(item) {

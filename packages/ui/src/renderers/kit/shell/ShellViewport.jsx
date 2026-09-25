@@ -15,6 +15,7 @@ import {
 } from "@hardcore/core/lib/viewer/stageTheme.js";
 import { buildRuntimeInitializationAlert } from "@hardcore/core/lib/viewer/webglSupport.js";
 import { THEME_FLOOR_MODES } from "@hardcore/core/lib/themeSettings.js";
+import { useViewerMobile } from "../../../file-viewer/responsive.js";
 import ViewPlaneControl from "../camera/ViewPlaneControl.js";
 import { CAD_DEFAULT_VERTICAL_FOV_DEGREES, explicitViewerFocalLength, perspectiveDistanceScale } from "../camera/cameraLens.js";
 import { PREVIEW_AUTO_ROTATE_SPEED } from "../camera/orbitControls.js";
@@ -29,7 +30,7 @@ import {
   DEFAULT_VIEW_DIRECTION, DEFAULT_VIEW_PLANE_ORIENTATION, KEYBOARD_ORBIT_NUDGE_RAD, VIEWING_MODE, VIEW_PLANE_FACES,
   WHEEL_PINCH_DELTA_BOOST, WORLD_UP, applyOrbitDelta, clearKeyboardOrbitState,
   getActiveViewPlaneFaceId, getKeyboardOrbitAxes, getKeyboardOrbitCommand, isPinchWheelEvent, isTrackpadLikeWheelEvent,
-  reframeReason, runtimeFramingBounds, stepKeyboardOrbit
+  reframeReason, stepKeyboardOrbit
 } from "../camera/viewportCameraKit.js";
 import {
   ACCELERATED_WHEEL_ZOOM_SPEED, COARSE_POINTER_PINCH_ZOOM_SPEED, COARSE_POINTER_ZOOM_SPEED, DEFAULT_ZOOM_SPEED,
@@ -50,7 +51,7 @@ import { IDLE_PIXEL_RATIO_CAP, INTERACTION_IDLE_DELAY_MS, INTERACTION_PIXEL_RATI
 import { disposeSceneObject } from "../viewport/sceneObjects.js";
 import { useViewerRuntime } from "../viewport/useViewerRuntime.js";
 
-const VIEW_PLANE_CONTROL_SIZE = "6rem";
+const VIEW_PLANE_CONTROL_SIZE = "7rem";
 const STORED_CAMERA_COORDINATES = "cad-z-up-v1";
 /** How long after the open-time fit the viewport and projection may still be settling. */
 const OPEN_FIT_SETTLE_MS = 600;
@@ -89,6 +90,8 @@ const ShellViewport = forwardRef(function ShellViewport({
   renderConfiguration = null,
   quality = null,
   previewMode = false,
+  orbitPreview = false,
+  controlsHidden = false,
   previewOrbitSpeed = 1,
   isLoading = false,
   viewUpdate = null,
@@ -96,7 +99,6 @@ const ShellViewport = forwardRef(function ShellViewport({
   drawingEnabled = false,
   drawing = null,
   onPerspectiveChange = null,
-  onProjectionChange = null,
   onPresentationChange = null,
   onViewerAlertChange = null,
   // The camera came to rest on a new view: a presentation camera that moved (fullscreen's
@@ -124,6 +126,7 @@ const ShellViewport = forwardRef(function ShellViewport({
   if (scene && !isKitScene(scene)) {
     throw new Error("ShellViewport needs a kit scene: { object3D, bounds, dispose() } (kit/scene.js).");
   }
+  const mobile = useViewerMobile();
   const normalizedSceneScaleMode = normalizeSceneScaleMode(sceneScaleMode);
   const normalizedProjection = normalizeCameraProjection(projection);
   const defaultGridRadius = defaultSceneGridRadius(normalizedSceneScaleMode);
@@ -152,8 +155,6 @@ const ShellViewport = forwardRef(function ShellViewport({
   // each fits the rest placement itself rather than inheriting the other's pose.
   const framedViewingModeRef = useRef("");
   const modelTransformRef = useRef({ offset: new THREE.Vector3(0, 0, 0) });
-  // The camera hook reports whether the default view was left; this viewport draws nothing from it.
-  const [, setDefaultPerspectiveDetached] = useState(false);
   const [error, setError] = useState("");
   const [viewerReadyTick, setViewerReadyTick] = useState(0);
   const [runtimeResetToken, setRuntimeResetToken] = useState(0);
@@ -182,7 +183,6 @@ const ShellViewport = forwardRef(function ShellViewport({
   const [activeViewPlaneFace, setActiveViewPlaneFace] = useState("");
   const [viewPlaneOrientation, setViewPlaneOrientation] = useState(DEFAULT_VIEW_PLANE_ORIENTATION);
   const activeViewPlaneFaceRef = useRef("");
-  const defaultPerspectiveResettingRef = useRef(false);
   const previewModeRef = useRef(previewMode);
   // The presentation camera never becomes the file's stored camera.
   const fullscreenCameraRef = useRef(null);
@@ -285,14 +285,14 @@ const ShellViewport = forwardRef(function ShellViewport({
   };
   const coordinateSystemFor = useCallback(() => STORED_CAMERA_COORDINATES, []);
   const {
-    activateDefaultViewPlane, activateViewPlaneFace, orbitFromViewCube, applyInitialPerspective, emitPerspectiveChange,
+    activateViewPlaneFace, orbitFromViewCube, applyInitialPerspective, emitPerspectiveChange,
     resetZoomAndPan, syncFullscreenCamera, syncViewPlaneOrientation
   } = useViewportCamera({
-    coordinateSystemFor, activeViewPlaneFaceRef, defaultPerspectiveResettingRef, fullscreenCameraRef,
+    coordinateSystemFor, activeViewPlaneFaceRef, fullscreenCameraRef,
     lastEmittedPerspectiveRef, cameraMovedRef, modelBounds: scene?.restBounds || scene?.bounds || null, modelKey, modelKeyRef,
     modelTransformRef, perspectiveChangeRef, perspectivePropRef, perspectiveRef, previewMode,
     previewModeRef, previewOrbitSpeed, runWithoutPerspectiveEvents, runtimeRef, sceneScaleModeRef, setActiveViewPlaneFace,
-    setDefaultPerspectiveDetached, setViewPlaneOrientation, suppressPerspectiveEventsRef, viewerReadyTick
+    setViewPlaneOrientation, suppressPerspectiveEventsRef, viewerReadyTick
   });
   // The open-time fit is taken under the lens the viewport opens with, and the file's own
   // projection arrives a moment later. CONVERTING that fit to the other projection is not the
@@ -371,7 +371,6 @@ const ShellViewport = forwardRef(function ShellViewport({
       });
     },
     activateViewPlaneFace,
-    activateDefaultViewPlane,
     requestRender() { runtimeRef.current?.requestRender?.(); },
     getPerspective() {
       return readScopedPerspectiveSnapshot(runtimeRef.current, {
@@ -395,8 +394,7 @@ const ShellViewport = forwardRef(function ShellViewport({
     syncSceneBounds() {
       const runtime = runtimeRef.current;
       if (!runtime?.kitScene || runtime.kitScene !== scene) return false;
-      fitStageToSceneRef.current(runtime, scene);
-      runtime.invalidateShadows?.();
+      syncSceneBounds();
       runtime.requestRender?.();
       return true;
     },
@@ -406,7 +404,7 @@ const ShellViewport = forwardRef(function ShellViewport({
       if (!bounds || !runtime) return false;
       return zoomRuntimeToBounds(runtime, bounds, sceneScaleModeRef.current, { animate, modelOffset: modelTransformRef.current.offset });
     }
-  }), [activateViewPlaneFace, activateDefaultViewPlane, modelKey, normalizedSceneScaleMode, resetZoomAndPan, scene]);
+  }), [activateViewPlaneFace, modelKey, normalizedSceneScaleMode, resetZoomAndPan, scene]);
 
   // Read-only debug/test seam: the LIVE camera of the viewport that mounted last, so a
   // browser test can assert that moving a model leaves the framing exactly where it was.
@@ -448,9 +446,7 @@ const ShellViewport = forwardRef(function ShellViewport({
     framedBoundsRef.current = null;
     framedViewingModeRef.current = "";
     lastEmittedPerspectiveRef.current = null;
-    defaultPerspectiveResettingRef.current = false;
     viewerAlertChangeRef.current?.(null);
-    setDefaultPerspectiveDetached(false);
     setRuntimeResetToken((value) => value + 1);
   }, []);
   const handleRuntimeInitializationError = useCallback((runtimeError) => {
@@ -740,7 +736,7 @@ const ShellViewport = forwardRef(function ShellViewport({
     // Fullscreen installs a presentation camera and leaving restores the file's own: neither
     // is the open-time fit, so the viewport stops treating the pose as its to re-fit.
     runtime.openFitPending = false;
-    const orbitActive = previewMode && previewOrbitSpeed > 0;
+    const orbitActive = orbitPreview && !drawingOverlayActive && previewOrbitSpeed > 0;
     runtime.previewOrbitEnabled = orbitActive;
     runtime.orbitControlsLastTimestamp = 0;
     runtime.controls.autoRotate = orbitActive;
@@ -753,7 +749,7 @@ const ShellViewport = forwardRef(function ShellViewport({
       runtime.beginInteraction?.();
     } else runtime.scheduleIdleQuality();
     runtime.requestRender();
-  }, [previewMode, previewOrbitSpeed, viewerReadyTick]);
+  }, [previewMode, orbitPreview, previewOrbitSpeed, drawingOverlayActive, viewerReadyTick]);
 
   // Everything that follows where the scene IS, and nothing that frames it: lighting and
   // shadow reach and the floor's height. The ground's SIZE comes from the rest
@@ -946,8 +942,14 @@ const ShellViewport = forwardRef(function ShellViewport({
     if (!cameraCurrent) queueMicrotask(() => { if (runtimeRef.current === runtime) adoptSceneRef.current(runtime); });
     return true;
   }, []);
-  const viewportContext = useMemo(() => ({ runtimeRef, hostRef: interactionHostRef, mountRef, viewerReadyTick, commitScene }),
-    [viewerReadyTick, commitScene]);
+  const syncSceneBounds = useCallback(() => {
+    const runtime = runtimeRef.current;
+    if (!runtime?.kitScene) return;
+    fitStageToSceneRef.current(runtime, runtime.kitScene);
+    runtime.invalidateShadows?.();
+  }, []);
+  const viewportContext = useMemo(() => ({ runtimeRef, hostRef: interactionHostRef, mountRef, viewerReadyTick, commitScene, syncSceneBounds }),
+    [viewerReadyTick, commitScene, syncSceneBounds]);
   const preparingFrame = Boolean(resolvedPresentationKey) &&
     (presentedEpoch !== presentationEpoch || presentedKey !== resolvedPresentationKey) && !error;
   const coveringModeTransition = presentedEpoch !== presentationEpoch && !error && hasViewportContent;
@@ -979,26 +981,25 @@ const ShellViewport = forwardRef(function ShellViewport({
       ) : null}
       {drawingOverlayActive ? <DrawingOverlay drawing={drawing} onReady={handleDrawingReady} onContentChange={handleDrawingContent} onViewportChange={followDrawingViewport} /> : null}
       {typeof children === "function" ? children(viewportContext) : children}
+      {!mobile && <div className={`pointer-events-none absolute inset-0 transition-opacity duration-150 motion-reduce:transition-none ${controlsHidden ? "opacity-0" : "opacity-100"}`} hidden={controlsHidden} inert={controlsHidden} aria-hidden={controlsHidden} data-preview-cube="" data-visible={!controlsHidden}>
       <ViewPlaneControl
-        showViewPlane={!previewMode && !drawingOverlayActive}
+        showViewPlane={!previewMode}
+        disabled={drawingOverlayActive}
         previewMode={previewMode}
         isLoading={isLoading}
         meshData={scene}
         viewPlaneOffsetRight={16}
-        viewPlaneOffsetBottom="1rem"
+        viewPlaneOffsetBottom={32}
         viewPlaneSize={VIEW_PLANE_CONTROL_SIZE}
-        viewPlaneHeader={null}
         compact={false}
         activeViewPlaneFace={activeViewPlaneFace}
         viewPlaneFaces={VIEW_PLANE_FACES}
         viewPlaneOrientation={viewPlaneOrientation}
         viewerTheme={viewerTheme}
         activateViewPlaneFace={activateViewPlaneFace}
-        activateDefaultViewPlane={activateDefaultViewPlane}
         orbitViewCube={orbitFromViewCube}
-        projection={projection}
-        onProjectionChange={onProjectionChange}
       />
+      </div>}
       {error ? (
         <p className="bg-popover pointer-events-none absolute left-4 top-24 z-20 rounded-lg border border-error-border px-4 py-3 text-sm text-error shadow-sm sm:top-20">
           {error}

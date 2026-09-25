@@ -48,7 +48,7 @@ export default function ViewerAlertCard({ alert, hasContent, onReload }) {
             {shown.title || shown.summary || "Couldn’t display the model"}
           </h2>
           {dismissible ? (
-            <Button type="button" variant="ghost" size="icon-xs" aria-label="Dismiss" title="Dismiss" onClick={() => setDismissed(key)}>
+            <Button type="button" variant="ghost" size="icon-xs" aria-label="Dismiss"  onClick={() => setDismissed(key)}>
               <X aria-hidden="true" />
             </Button>
           ) : null}

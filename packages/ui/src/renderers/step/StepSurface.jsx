@@ -3,7 +3,7 @@ import { buildEdgeChainGraph } from "./workbench/edgeChainSelection.js";
 
 import SelectionFilterMenu, { ToolFilterNote } from "./components/workbench/SelectionFilterMenu.jsx";
 import { MEASURE_SELECTION_FILTERS, SELECTION_FILTERS } from "./workbench/selectionFilter.js";
-import { CirclePlay, MousePointer2, Ruler, SplinePointer, SquareSplitHorizontal, UnfoldVertical } from "lucide-react";
+import { Play, MousePointer2, Ruler, Spline } from "lucide-react";
 import { stepGeometryContextText, stepGeometryPromptText } from "./workbench/stepGeometryPrompt.js";
 import { filterSelectionReferences, toggleReferenceGroupSelection, connectedReferenceIds } from "./workbench/selectionFilter.js";
 import { buildTangentFaceGraph } from "./workbench/tangentFaceSelection.js";
@@ -15,7 +15,6 @@ import { displayRecordsBounds, mergeBoundsList } from "@hardcore/core/lib/viewer
 import { VIEWER_PICK_MODE } from "@hardcore/core/lib/viewer/constants.js";
 import { runtimeModelKeyMatches, toNumber } from "@hardcore/core/lib/viewer/modelRuntime.js";
 import { normalizePartIdList } from "@hardcore/core/lib/viewer/partVisualState.js";
-import { PromptContextAction } from "../../host/PromptContextAction.js";
 import RendererShell from "../kit/shell/RendererShell.jsx";
 import { useRendererShell } from "../kit/shell/useRendererShell.js";
 import { readShellState, shellPresentationKey } from "../kit/shell/shellState.js";
@@ -31,19 +30,17 @@ import { useViewportLod } from "./render/useViewportLod.js";
 import { lodSceneMayMove, sampleLodCamera } from "./render/lodCameraSample.js";
 import { registerLodDisplaySource } from "./render/lodSceneAdoption.js";
 import { ALL_VIEW_FEATURES, EDGELESS_VIEW_FEATURES } from "@hardcore/core/common/viewSettings.js";
-import { explodablePartCount } from "./workbench/explodableParts.js";
+import { useModelTools } from "./components/workbench/ModelTools.jsx";
 import { useStepPanel } from "./components/workbench/StepPanel.js";
 import { CAD_PANEL } from "../../file-viewer/navigation/panels.js";
 import { restoreMotionAnimation, restoreMotionParameters } from "./workbench/motionRestore.js";
 import { useStepMotionControls } from "./workbench/useStepMotionControls.js";
-import { animationControlsHaveContent } from "./components/workbench/AnimationControlsSection.js";
+import { animationControlsHaveContent } from "../kit/tools/playbar/ViewportAnimationBar.js";
 import { useCadAssets } from "./components/workbench/hooks/useCadAssets.js";
 import { useEditingPreview } from "./components/workbench/hooks/useEditingPreview.js";
 import { useViewportQualityStatus } from "./components/workbench/hooks/useViewportQualityStatus.js";
 import { previewGeometryChanged } from "./workbench/editingPreview.js";
 import MeasurePanel from "./components/workbench/MeasurePanel.jsx";
-import ViewToolPanel from "./components/workbench/ViewToolPanel.jsx";
-import { CrossSectionControls, ExplodeControls } from "../kit/view-settings/DisplaySettingsSection.js";
 import { useCadWorkspaceSelection } from "./components/workbench/hooks/useCadWorkspaceSelection.js";
 import { useCadWorkspaceSelectors } from "./components/workbench/hooks/useCadWorkspaceSelectors.js";
 import { useAppliedViewSettings } from "../kit/view-settings/useAppliedViewSettings.js";
@@ -55,7 +52,7 @@ import {
   REFERENCE_STATUS,
   TAB_TOOL_MODE
 } from "./workbench/constants.js";
-import { promptDeliveryMessage } from "../kit/shell/promptContext.js";
+import { promptDeliveryError } from "../kit/shell/promptContext.js";
 import { readStepRecord, stepRecordSignatures, writeStepRecord } from "./workbench/stepSessionRecord.js";
 import {
   entrySourceFormat,
@@ -81,8 +78,6 @@ import {
 import {
   buildNormalizedReferenceState,
   buildReferenceCacheKey,
-  buildSelectionCopyButtonLabel,
-  buildSelectionCopyCountLabel,
   buildSelectionCopyPayload,
   buildWholeStepEntryCopyReference,
   canonicalCadRefCopyText,
@@ -238,13 +233,11 @@ import {
   addReferenceLookupKeys,
   buildStepTreeCopyReferenceMap,
   buildStepTreeExpansionMenuState,
-  childAssemblyNodeIdForPickedLeaf,
   collectStepTreeRevealExpansionIds,
   collectStepTreeSubtreeIds,
   collectStepTreeTopologyLoadableNodeIds,
   expandedVisibleStepTreeTopologyNodeIds,
   referencesForExpandedStepTree,
-  referenceGroupForModelTreeHit,
   stepTreeTopologyOwnersForSelectors,
   copyPayloadWithSelectedIdFallback,
   copyReferenceForAssemblyPartSelection,
@@ -264,15 +257,15 @@ export default function StepSurface(props) {
 
 function StepSurfaceBody({
   client, entry, serverInfo, renderSession: cadRenderSession, preferences, onPreferenceChange, onOpenFile, className = "",
-  panelSlot, colorScheme = "light", selectReference, captureRequest, acknowledgeCommand, documentResource, slots, live,
-  fullscreen = false, onFullscreenChange, onNavigationActionsChange,
+  navigationStatusSlot, onPanelVisibilityChange, panelSlot, colorScheme = "light", selectReference, captureRequest, acknowledgeCommand, documentResource, slots, live,
+  fullscreen = false, onFullscreenChange, onNavigationActionsChange, displayActions,
   openPanel = "", onPanelOpen, onChromeVisibilityChange, onReload, state, onStateChange
 }) {
   // The host's props, as the shell reads them. This renderer took them apart before the
   // shell existed; it hands the same things back under the names every renderer uses.
   const view = {
-    fullscreen, openPanel, onPanelOpen, onChromeVisibilityChange,
-    onNavigationActionsChange, onStateChange, state, panelSlot, onOpenFile,
+    navigationStatusSlot, onPanelVisibilityChange, fullscreen, openPanel, onPanelOpen, onChromeVisibilityChange,
+    onNavigationActionsChange, displayActions, onStateChange, state, panelSlot, onOpenFile,
     reload: onReload, onFullscreenChange, appearance: { colorScheme }
   };
   const services = { preferences, onPreferenceChange, live, captureRequest, acknowledgeCommand };
@@ -310,7 +303,6 @@ function StepSurfaceBody({
   const [selectionFilterNotice, setSelectionFilterNotice] = useState("");
   const [selectedPartIds, setSelectedPartIds] = useState([]);
   const [selectedRenderPartIdByAssemblyPartId, setSelectedRenderPartIdByAssemblyPartId] = useState({});
-  const [selectedWholeEntryCadRefToken, setSelectedWholeEntryCadRefToken] = useState("");
   const [expandedStepTreeNodeIds, setExpandedStepTreeNodeIds] = useState([]);
   const [activeTreeNodeScrollKey, setActiveTreeNodeScrollKey] = useState("");
   const [hiddenPartIds, setHiddenPartIds] = useState([]);
@@ -333,7 +325,8 @@ function StepSurfaceBody({
   // handed a scene, and it runs in this function, above the viewport it mounts.
   const [stepScene] = useState(() => createStepScene(THREE));
   const viewUpdate = useAppliedViewSettings(desiredScene, selectedKey, viewerRef, viewSettingsStore);
-  const resolvedScene = viewUpdate.scene;
+  const [previewToolActive, setPreviewToolActive] = useState(false);
+  const resolvedScene = useMemo(() => previewToolActive ? { ...viewUpdate.scene, display: { ...viewUpdate.scene.display, clip: { ...viewUpdate.scene.display.clip, enabled: false }, exploded: { ...viewUpdate.scene.display.exploded, enabled: false, amount: 0 } } } : viewUpdate.scene, [viewUpdate.scene, previewToolActive]);
   const [hoveredListPartId, setHoveredListPartId] = useState("");
   const [hoveredModelPartId, setHoveredModelPartId] = useState("");
   const [stepUpdateInProgress, setStepUpdateInProgress] = useState(false);
@@ -475,7 +468,6 @@ function StepSurfaceBody({
       setSelectedReferenceIds([]);
       setSelectedPartIds([]);
       setSelectedRenderPartIdByAssemblyPartId({});
-      setSelectedWholeEntryCadRefToken("");
     }
     previousPreviewTree.current = next;
   }, [selectedEntry?.file, selectedEntry?.hash, selectedEntry?.editingPreview]);
@@ -867,37 +859,33 @@ function StepSurfaceBody({
   ]);
 
   const handleCopyParameters = useCallback(async () => {
-    setScreenshotStatus("");
     const runtime = activeParameterRuntime;
     if (!runtime?.definition?.parameters?.length) {
-      setCopyStatus(`No ${runtime?.label || "model"} parameters to copy`);
+      reportActionError(`No ${runtime?.label || "model"} parameters to copy`);
       return;
     }
     try {
       await host.clipboard.writeText(buildParameterValuesCopyText(runtime.definition, runtime.values));
-      setCopyStatus(`Copied ${runtime.label} parameters`);
     } catch (error) {
-      setCopyStatus(error instanceof Error ? error.message : "Clipboard write failed");
+      reportActionError(error instanceof Error ? error.message : "Clipboard write failed");
     }
   }, [activeParameterRuntime]);
 
   const handlePasteParameters = useCallback(async () => {
-    setScreenshotStatus("");
     const runtime = activeParameterRuntime;
     if (!runtime?.definition?.parameters?.length) {
-      setCopyStatus(`No ${runtime?.label || "model"} parameters to paste`);
+      reportActionError(`No ${runtime?.label || "model"} parameters to paste`);
       return;
     }
     try {
       const clipboardText = await host.clipboard.readText();
-      const { values, count } = parseParameterValuesPasteText(runtime.definition, clipboardText, {
+      const { values } = parseParameterValuesPasteText(runtime.definition, clipboardText, {
         label: `${runtime.label} parameter`,
         unknownLabel: `${runtime.label} parameter`
       });
       runtime.applyValues(values);
-      setCopyStatus(`Pasted ${count} ${runtime.label} param${count === 1 ? "" : "s"}`);
     } catch (error) {
-      setCopyStatus(error instanceof Error ? error.message : "Clipboard paste failed");
+      reportActionError(error instanceof Error ? error.message : "Clipboard paste failed");
     }
   }, [activeParameterRuntime]);
 
@@ -1226,7 +1214,6 @@ function StepSurfaceBody({
   const viewerMode = viewerInAssemblyMode ? "assembly" : "part";
   const drawModeActive = supportsTool(selectedEntrySourceFormat, "draw") &&
     tabToolMode === TAB_TOOL_MODE.DRAW;
-  const selectionCountBase = selectedPartIds.length + selectedReferenceIds.length;
 
   const selectedReferenceIdsRef = useRef(selectedReferenceIds);
   const selectedPartIdsRef = useRef(selectedPartIds);
@@ -1298,12 +1285,10 @@ function StepSurfaceBody({
     setSelectedPartIds([]);
     setSelectedReferenceIds([]);
     setSelectedRenderPartIdByAssemblyPartId({});
-    setSelectedWholeEntryCadRefToken("");
     setHoveredListReferenceId("");
     setHoveredModelReferenceId("");
     setHoveredListPartId("");
     setHoveredModelPartId("");
-    setCopyStatus("");
   }, []);
 
   // A routine that failed to load has no Animate tool to say so on: it is one of the file's
@@ -1544,13 +1529,7 @@ function StepSurfaceBody({
     topologyCompositionKeyMatches(referenceState.loadedTopologyKey, requestedTopologyKey);
   const selectedSelectorRuntime = selectedReferencesMatch ? referenceState?.selectorRuntime || null : null;
   const artifactRevision = buildReferenceCacheKey(selectedEntry);
-  const featureTargetScope = `${selectedKey}:${artifactRevision}`;
-  const [featureTargetState, setFeatureTargetState] = useState({ scope: featureTargetScope, targets: EMPTY_LIST });
-  const visibleFeatureTargets = featureTargetState.scope === featureTargetScope ? featureTargetState.targets : EMPTY_LIST;
-  const handleVisibleFeatureTargetsChange = useCallback((targets) => {
-    setFeatureTargetState(current => current.scope === featureTargetScope &&
-      JSON.stringify(current.targets) === JSON.stringify(targets) ? current : { scope: featureTargetScope, targets });
-  }, [featureTargetScope]);
+
   useEffect(() => {
     setSelectionFilter("all");
     setSelectionFilterNotice("");
@@ -1974,6 +1953,23 @@ function StepSurfaceBody({
     isAssemblyView,
     stepInteractionBlocked,
   ]);
+  // Collapsing a part (including isolation exit) removes its exact topology.
+  // Drop those selections too, rather than leaving invisible IDs in Copy/shortcuts.
+  useEffect(() => {
+    if (viewerLoading || stepInteractionBlocked || !stepTreeRoot || !selectedReferenceIds.length) return;
+    const expandedOwners = new Set(expandedStepTreeTopologyNodeIds);
+    const next = selectedReferenceIds.filter(id => {
+      const partId = parseAssemblyPartReferenceSelectionId(id)?.partId;
+      const owners = partId ? [isAssemblyView ? partId : STEP_MODEL_ROOT_ID]
+        : stepTreeTopologyOwnersForSelectors(stepTreeRoot, [id], { isAssemblyView });
+      return owners.every(owner => expandedOwners.has(owner));
+    });
+    if (next.length === selectedReferenceIds.length) return;
+    selectedReferenceIdsRef.current = next;
+    setSelectedReferenceIds(next);
+  }, [viewerLoading, stepInteractionBlocked, stepTreeRoot, selectedReferenceIds,
+    expandedStepTreeTopologyNodeIds, isAssemblyView]);
+
   const viewerPickableFaces = useMemo(
     () => viewerPickableReferences.filter((reference) => isFaceReference(reference)),
     [isFaceReference, viewerPickableReferences]
@@ -2016,9 +2012,6 @@ function StepSurfaceBody({
   const handleMeasureCancelDraft = useCallback(() => {
     setMeasureRulerState((current) => cancelMeasureRulerDraft(current));
   }, []);
-  const handleMeasureClear = useCallback(() => {
-    setMeasureRulerState((current) => clearMeasureRulerMeasurements(current));
-  }, []);
   const measureMeasurements = measureRulerState?.measurements || EMPTY_LIST;
   // Only rescue the highlight when the row it points at is gone (deleted or
   // cleared). Taking a new measurement promotes it separately, below; doing it
@@ -2036,10 +2029,10 @@ function StepSurfaceBody({
     setMeasureRulerState((current) => measureRulerStateForChange(current, { entryChanged: true }));
   }, [selectedKey, selectedEntry?.hash]);
   useEffect(() => {
-    setMeasureRulerState((current) => measureRulerStateForChange(current, { toolActive: measureModeActive }));
+    if (!measureModeActive) setMeasureRulerState(current => measureRulerStateForChange(current, { toolActive: false }));
     if (measureModeActive) setInspectionHighlight(null);
   }, [measureModeActive]);
-  // A new measurement activates the tab that holds it.
+  // A completed measurement selects its row; the persistent tool owns its panel.
   const measurementCountRef = useRef(0);
   useEffect(() => {
     const count = measureMeasurements.length;
@@ -2150,7 +2143,7 @@ function StepSurfaceBody({
   // tool with the rest of the viewer put away (or no tool, without animation).
   const animationAvailable = animationControlsHaveContent(viewportAnimation);
   const animateToolActive = !previewMode && animationAvailable && tabToolMode === TAB_TOOL_MODE.ANIMATE;
-  const animateModeActive = animationAvailable && (previewMode || animateToolActive);
+  const animateModeActive = animationAvailable && (previewMode || previewToolActive || animateToolActive);
   // A routine owns the model's pose only inside the mode. Outside it the clip is
   // released — stopped, rewound, the pose back with Position — so selection,
   // topology and Position never meet an animated model and need no special case
@@ -2272,8 +2265,7 @@ function StepSurfaceBody({
     onPresentationChange: handlePresentationChange
   });
   shellRef.current = shell;
-  const setCopyStatus = shell.setCopyStatus;
-  const setScreenshotStatus = shell.setScreenshotStatus;
+  const reportActionError = shell.reportActionError;
   const filePanelOpen = shell.openPanel === CAD_PANEL.file;
 
   useEffect(() => {
@@ -2445,18 +2437,15 @@ function StepSurfaceBody({
       .filter(Boolean),
     [copySelectionPayload.lines, selectedEntry]
   );
-  const copyButtonLabel = useMemo(
-    () => buildSelectionCopyButtonLabel(canonicalCopySelectionLines, { count: copySelectionPayload.copiedCount }),
-    [canonicalCopySelectionLines, copySelectionPayload.copiedCount]
-  );
-  // Shown instead of the ref when the ref will not fit. The kit's bottom action decides that by
-  // measuring, since whether it fits depends on the viewport, not the string.
-  const copyButtonCountLabel = useMemo(
-    () => buildSelectionCopyCountLabel(
-      copySelectionPayload.copiedCount || canonicalCopySelectionLines.length
-    ),
-    [copySelectionPayload.copiedCount, canonicalCopySelectionLines.length]
-  );
+  const copyButtonLabel = (copySelectionPayload.copiedCount || canonicalCopySelectionLines.length) > 1 ? "Copy References" : "Copy Reference";
+  const copySelectedReferences = useCallback(async () => {
+    const text = inspectionHighlight ? stepGeometryPromptText(inspectionHighlight, {
+      referenceMap: effectiveActiveReferenceMap, parts: selectedMeshData?.parts || EMPTY_LIST, entry: selectedEntry,
+    }) : canonicalCopySelectionLines.join("\n");
+    if (!text || stepInteractionBlocked) return;
+    try { await host.clipboard.writeText(text); }
+    catch (error) { shellRef.current?.reportActionError(error instanceof Error ? error.message : "Could not copy reference"); }
+  }, [canonicalCopySelectionLines, copySelectionPayload.copiedCount, stepInteractionBlocked, host.clipboard, inspectionHighlight, effectiveActiveReferenceMap, selectedMeshData, selectedEntry]);
   // The tip teaches reference syntax, so it fires on the first pick that yields
   // a reference to copy — a component, a subassembly, or a face/edge. Gating it
   // on topology alone would hide it from anyone who only ever clicks parts.
@@ -2490,8 +2479,8 @@ function StepSurfaceBody({
       return;
     }
     setActiveTreeNodeScrollKey(source === "viewer" || source === "reference" ? `${source}:${Date.now()}:${normalizedNodeId}` : "");
-    // Something in the viewport has details in the tree: show this file's panel.
-    shellRef.current?.revealFilePanel();
+    // Selection reveals its details only in an already-open sidebar.
+    shellRef.current?.revealFileSection("features", { open: false });
     if (expandAncestors || expandSelf || source === "reference") {
       expandStepTreeAroundNode(normalizedNodeId, { expandSelf });
     }
@@ -2518,7 +2507,6 @@ function StepSurfaceBody({
     const next = !multiSelect && selectedPartIdsRef.current.length
       ? (normalizedReferenceId ? [normalizedReferenceId] : [])
       : computeNextSelectionIds(selectedReferenceIdsRef.current, normalizedReferenceId, { multiSelect });
-    setSelectedWholeEntryCadRefToken("");
     if (!multiSelect && selectedPartIdsRef.current.length) {
       selectedPartIdsRef.current = [];
       setSelectedPartIds([]);
@@ -2542,14 +2530,12 @@ function StepSurfaceBody({
 
   const clearReferenceSelection = useCallback(() => {
     selectedReferenceIdsRef.current = [];
-    setSelectedWholeEntryCadRefToken("");
     setSelectedReferenceIds([]);
-    setCopyStatus("");
   }, []);
 
   // Copy is clipboard-only. Adding context is an explicit host action.
   const deliverReferenceText = useCallback((text) => host.clipboard.writeText(text), [host.clipboard]);
-  const showPromptResult = useCallback((result) => shellRef.current?.setCopyStatus(promptDeliveryMessage(result)), []);
+  const showPromptResult = useCallback((result) => shellRef.current?.reportActionError(promptDeliveryError(result)), []);
   const deliverPrompt = useCallback((context) => {
     let pending;
     try { pending = host.promptContext.deliver(context); }
@@ -2590,11 +2576,9 @@ function StepSurfaceBody({
     selectedPartIdsRef.current = [];
     setSelectedPartIds([]);
     setSelectedRenderPartIdByAssemblyPartId({});
-    setSelectedWholeEntryCadRefToken("");
     selectedReferenceIdsRef.current = next;
     setSelectedReferenceIds(next);
     setActiveTreeNodeScrollKey("");
-    setCopyStatus("");
   }, [stepUpdateInProgress, effectiveActiveReferenceMap]);
   const hostReference = useMemo(
     () => ({ deliverReference: deliverReferenceText, addReference: addReferenceText, canAddToPrompt: composerDestination && promptAvailable }),
@@ -2670,7 +2654,6 @@ function StepSurfaceBody({
     const next = !multiSelect && selectedReferenceIdsRef.current.length
       ? (normalizedPartId ? [normalizedPartId] : [])
       : computeNextSelectionIds(selectedPartIdsRef.current, partId, { multiSelect });
-    setSelectedWholeEntryCadRefToken("");
     if (!multiSelect && selectedReferenceIdsRef.current.length) {
       selectedReferenceIdsRef.current = [];
       setSelectedReferenceIds([]);
@@ -2793,9 +2776,9 @@ function StepSurfaceBody({
 
   const clearAssemblySelectionForFocus = useCallback(() => {
     setActiveTreeNodeScrollKey("");
+    setInspectionHighlight(null);
     selectedPartIdsRef.current = [];
     selectedReferenceIdsRef.current = [];
-    setSelectedWholeEntryCadRefToken("");
     setSelectedPartIds([]);
     setSelectedRenderPartIdByAssemblyPartId({});
     setSelectedReferenceIds([]);
@@ -2804,7 +2787,6 @@ function StepSurfaceBody({
     setHoveredListReferenceId("");
     setHoveredModelReferenceId("");
     setViewerContextMenu(null);
-    setCopyStatus("");
   }, []);
 
   const collapseStepTreeSubtree = useCallback((partId) => {
@@ -2905,19 +2887,6 @@ function StepSurfaceBody({
     if (tabToolMode !== TAB_TOOL_MODE.REFERENCES) clearAssemblySelectionForFocus();
   }, [tabToolMode, clearAssemblySelectionForFocus]);
 
-  useEffect(() => {
-    {
-      return;
-    }
-    if (
-      selectedPartIdsRef.current.length ||
-      selectedReferenceIdsRef.current.length ||
-      selectedWholeEntryCadRefToken
-    ) {
-      clearAssemblySelection();
-    }
-  }, [clearAssemblySelection, selectedWholeEntryCadRefToken]);
-
   const clearSelectionForHiddenLeafIds = useCallback((leafIds, nodeId = "") => {
     const hiddenLeafIds = new Set(
       (Array.isArray(leafIds) ? leafIds : [])
@@ -2967,10 +2936,6 @@ function StepSurfaceBody({
       setSelectedReferenceIds(nextSelectedReferenceIds);
     }
 
-    if (partSelectionChanged || referenceSelectionChanged) {
-      setSelectedWholeEntryCadRefToken("");
-      setCopyStatus("");
-    }
   }, [
     assemblyRoot,
     effectiveActiveReferenceMap,
@@ -3213,14 +3178,6 @@ function StepSurfaceBody({
       return;
     }
     if (topologyReference && isViewerTopologyReference(topologyReference)) {
-      const group = selectionFilter === "all" ? referenceGroupForModelTreeHit(
-        nextReferenceId, visibleFeatureTargets, viewerPickableReferences.map(reference => reference.id)
-      ) : EMPTY_LIST;
-      if (group.length) {
-        selectReferenceGroup(group, { multiSelect });
-        revealStepTreeNode(referencePartId(topologyReference), { source: "viewer" });
-        return;
-      }
       toggleReferenceSelection(nextReferenceId, { multiSelect });
       return;
     }
@@ -3240,7 +3197,6 @@ function StepSurfaceBody({
     }
   }, [
     clearAssemblySelection,
-    visibleFeatureTargets,
     viewerPickableReferences,
     revealStepTreeNode,
     referencePartId,
@@ -3261,43 +3217,25 @@ function StepSurfaceBody({
     viewerInAssemblyMode,
   ]);
 
+  const doubleCopyReference = useRef(null);
   const handleModelReferenceDoubleActivate = useCallback((referenceId) => {
-    if (stepInteractionBlocked || !isAssemblyView) {
-      return;
-    }
-    const pickedPartId = String(referenceId || "").trim();
-    if (!pickedPartId) {
+    if (stepInteractionBlocked) return;
+    if (!referenceId) {
       handleExitIsolate();
-      clearAssemblySelection();
       return;
     }
-    if (!viewerInAssemblyMode) {
+    const reference = effectiveActiveReferenceMap.get(referenceId);
+    const topology = reference && isViewerTopologyReference(reference);
+    if (topology && selectionFilter !== "parts") {
+      doubleCopyReference.current?.(referenceId);
       return;
     }
-    const topologyReference = effectiveActiveReferenceMap.get(pickedPartId) || null;
-    if (topologyReference && isViewerTopologyReference(topologyReference)) {
-      return;
+    if (isAssemblyView) {
+      const partId = topology ? referencePartId(reference) : referenceId;
+      focusStepTreeNode(resolvePickedAssemblyPartId(partId), { reveal: false });
     }
-    const nextPartId = resolvePickedAssemblyPartId(pickedPartId);
-    if (nextPartId) {
-      focusStepTreeNode(nextPartId);
-      const focusedNode = findAssemblyNode(assemblyRoot, nextPartId);
-      const hoveredChildNodeId = childAssemblyNodeIdForPickedLeaf(focusedNode, pickedPartId);
-      setHoveredModelReferenceId("");
-      setHoveredModelPartId(hoveredChildNodeId || nextPartId);
-    }
-  }, [
-    assemblyRoot,
-    clearAssemblySelection,
-    focusStepTreeNode,
-    handleExitIsolate,
-    effectiveActiveReferenceMap,
-    isViewerTopologyReference,
-    viewerInAssemblyMode,
-    isAssemblyView,
-    resolvePickedAssemblyPartId,
-    stepInteractionBlocked,
-  ]);
+  }, [stepInteractionBlocked, effectiveActiveReferenceMap, selectionFilter, isAssemblyView,
+    referencePartId, focusStepTreeNode, handleExitIsolate, resolvePickedAssemblyPartId]);
 
   const handleViewportContextMenuOpenChange = useCallback((open) => {
     if (!open) setViewerContextMenu(null);
@@ -3561,7 +3499,7 @@ function StepSurfaceBody({
 
   const copyViewerContextMenuReference = useCallback(async (menu) => {
     if (stepInteractionBlocked) {
-      setCopyStatus(retainedPreviousStepMeshError
+      reportActionError(retainedPreviousStepMeshError
         ? "Selection unavailable because the STEP update failed."
         : "STEP update in progress. Please wait.");
       return;
@@ -3572,27 +3510,26 @@ function StepSurfaceBody({
       .filter(Boolean)
       .join("\n");
     if (!copyText) {
-      setCopyStatus("No selector ref is available for this node");
+      reportActionError("No selector ref is available for this node");
       return;
     }
     try {
       await deliverReferenceText(copyText);
-      setCopyStatus("Copied reference");
     } catch (error) {
-      setCopyStatus(error instanceof Error ? error.message : "Failed to copy reference");
+      reportActionError(error instanceof Error ? error.message : "Failed to copy reference");
     }
   }, [deliverReferenceText, retainedPreviousStepMeshError, stepInteractionBlocked]);
 
   const copyStepTreeContextMenuReference = useCallback(async (id, { topology = false, toPrompt = false } = {}) => {
     if (stepInteractionBlocked) {
-      setCopyStatus(retainedPreviousStepMeshError
+      reportActionError(retainedPreviousStepMeshError
         ? "Selection unavailable because the STEP update failed."
         : "STEP update in progress. Please wait.");
       return;
     }
     const normalizedId = String(id || "").trim();
     if (!normalizedId) {
-      setCopyStatus("No selector ref is available for this node");
+      reportActionError("No selector ref is available for this node");
       return;
     }
     const wholeStepEntryReference = !topology && !isAssemblyView && normalizedId === STEP_MODEL_ROOT_ID
@@ -3642,17 +3579,16 @@ function StepSurfaceBody({
     });
     const copyText = canonicalCadRefCopyText(lines[0]);
     if (!copyText) {
-      setCopyStatus("No selector ref is available for this node");
+      reportActionError("No selector ref is available for this node");
       return;
     }
     try {
       if (toPrompt) addReferenceText(copyText);
       else {
         await deliverReferenceText(copyText);
-        setCopyStatus("Copied reference");
       }
     } catch (error) {
-      setCopyStatus(error instanceof Error ? error.message : "Failed to copy reference");
+      reportActionError(error instanceof Error ? error.message : "Failed to copy reference");
     }
   }, [
     deliverReferenceText,
@@ -3667,6 +3603,10 @@ function StepSurfaceBody({
     stepTreeCopyReferenceMap,
     stepTreeRoot
   ]);
+
+  doubleCopyReference.current = id => copyStepTreeContextMenuReference(id, {
+    topology: Boolean(effectiveActiveReferenceMap.get(id) && isViewerTopologyReference(effectiveActiveReferenceMap.get(id)))
+  });
 
   const selectViewerContextMenuNode = useCallback((menu) => {
     const referenceId = String(menu?.referenceId || "").trim();
@@ -3795,7 +3735,7 @@ function StepSurfaceBody({
   // the viewport's one framing act — the live `resetCamera` command is the same call.
   const zoomToFitModel = useCallback(() => {
     if (!viewerRef.current?.resetZoom?.()) {
-      setCopyStatus("CAD Viewer camera not ready");
+      reportActionError("CAD Viewer camera not ready");
     }
   }, []);
 
@@ -3810,7 +3750,7 @@ function StepSurfaceBody({
     const referenceIds = ids(zoomSelectionRef.current.referenceIds);
     if (!(partIds.length || referenceIds.length)
       || !zoomToFitSelection({ partIds, referenceIds, animate: true })) {
-      setCopyStatus("No geometry to fit");
+      reportActionError("No geometry to fit");
     }
   }, []);
 
@@ -3845,7 +3785,7 @@ function StepSurfaceBody({
       .filter(Boolean)
       .join("\n");
     if (!copyText) {
-      setCopyStatus("No selector ref is available for this node");
+      reportActionError("No selector ref is available for this node");
       return;
     }
     addReferenceText(copyText);
@@ -3907,8 +3847,7 @@ function StepSurfaceBody({
   }, [handleModelReferenceContext, hostReference, partMenuActions]);
 
   const handleSelectTabToolMode = useCallback((mode) => {
-    // Measure and Draw are sessions: asking for the active one again ends it, which is the
-    // shell's state machine. (The Measure button spends its second press on the snap menu.)
+    // Measure activation is idempotent; clearing retained results is an explicit toolbar action.
     shellRef.current?.selectTool(mode);
     const normalizedMode = CAD_TOOL_MODES.normalize(mode);
     if (
@@ -3991,7 +3930,6 @@ function StepSurfaceBody({
       selectedReferenceIdsRef.current = references;
       setSelectedPartIds(parts);
       setSelectedReferenceIds(references);
-      setSelectedWholeEntryCadRefToken('');
       setInspectionHighlight(null);
       setSelectedRenderPartIdByAssemblyPartId(current => Object.fromEntries(parts.map(id => [id, renderPartIdForAssemblySelection(id, current[id])]).filter(([, id]) => id)));
       const last = selections[selections.length - 1];
@@ -4010,7 +3948,8 @@ function StepSurfaceBody({
   const drawToolActive = drawModeActive;
   const canAddInspectionContext = promptAvailable &&
     inspectionHighlight?.context?.file === selectedEntry?.file;
-  let selectionCount = selectionCountBase;
+  let selectionCount = selectedReferences.length + selectedParts.length
+    + (!isAssemblyView && selectedPartIds.includes(STEP_MODEL_ROOT_ID) ? 1 : 0);
   if (inspectionHighlight) {
     selectionCount = 0;
     if (inspectionHighlight.label && !viewerLoading && !stepUpdateInProgress) {
@@ -4043,7 +3982,7 @@ function StepSurfaceBody({
   const holdingPreviousMesh = retainingPreviousStepMesh;
   const topologySelectionDeferred = Boolean(selectedTopologyDeferredByCost && selectedMeshData);
   // Animate, like fullscreen, is watching, and Pose offers its knobs alone.
-  const watching = previewMode || animateToolActive || Boolean(jointHandles);
+  const watching = previewMode || previewToolActive || animateToolActive || Boolean(jointHandles);
   const pickMode = watching || holdingPreviousMesh ? VIEWER_PICK_MODE.NONE : viewerPickModeForRenderPane({
     selectionFilter,
     topologySelectionPending: referenceSelectionPending,
@@ -4073,11 +4012,11 @@ function StepSurfaceBody({
     pickMode,
     pickableParts: !holdingPreviousMesh ? viewerAssemblyRenderParts : EMPTY_LIST,
     hiddenPartIds: viewerHiddenPartIdsForRenderPane({ inspectionEnabled: true, hasParts: true, hiddenPartIds: viewerHiddenPartIds }),
-    selectedPartIds: previewMode ? EMPTY_LIST : viewerSelectedPartIdsForRenderPane({ renderMode: resolvedScene.render.enabled, hasParts: true,
+    selectedPartIds: previewMode || previewToolActive ? EMPTY_LIST : viewerSelectedPartIdsForRenderPane({ renderMode: resolvedScene.render.enabled, hasParts: true,
       selectedPartIds: inspectionHighlight ? inspectionHighlight.partIds || EMPTY_LIST : viewerSelectedPartIds }),
-    hoveredPartId: !previewMode ? viewerHoveredPartIds : "",
-    hoveredReferenceId: !previewMode && !holdingPreviousMesh ? effectiveHoveredReferenceId : "",
-    selectedReferenceIds: !previewMode && !holdingPreviousMesh
+    hoveredPartId: !previewMode && !previewToolActive ? viewerHoveredPartIds : "",
+    hoveredReferenceId: !previewMode && !previewToolActive && !holdingPreviousMesh ? effectiveHoveredReferenceId : "",
+    selectedReferenceIds: !previewMode && !previewToolActive && !holdingPreviousMesh
       ? (inspectionHighlight ? inspectionHighlight.faceIds || EMPTY_LIST : selectedReferenceIds) : EMPTY_LIST,
     selectorRuntime: viewerSelectorRuntimeForRenderPane({ renderMode: resolvedScene.render.enabled, hasTopology: true,
       retainingPreviousStepMesh: holdingPreviousMesh, selectorRuntime: effectiveSelectorRuntime }),
@@ -4086,8 +4025,8 @@ function StepSurfaceBody({
     // {clip, elapsedSec, playing} or null. Null means no clip is selected, and the evaluator never runs.
     stepAnimationRuntime: selectedAnimationRuntime,
     animateMode: previewMode || animateToolActive,
-    jointHandles: previewMode ? null : jointHandles,
-    measureState: inspectionHighlight?.measurement ? { measurements: [inspectionHighlight.measurement] } : measureRulerState,
+    jointHandles: previewMode || previewToolActive ? null : jointHandles,
+    measureState: previewToolActive ? null : inspectionHighlight?.measurement ? { measurements: [inspectionHighlight.measurement] } : measureRulerState,
     activeMeasurementId: inspectionHighlight?.measurement?.id || activeMeasureId,
     measureModeActive: !previewMode && measureModeActive,
     allowMeshVertexSnap: false,
@@ -4124,20 +4063,20 @@ function StepSurfaceBody({
   // or edge filter and no part chosen, a click has nothing to pick; say why instead of silence.
   const topologyFilterHint = isAssemblyView && !topologyTarget && TOPOLOGY_FILTER_NOUNS[selectionFilter]
     ? `Select a part to pick its ${TOPOLOGY_FILTER_NOUNS[selectionFilter]}` : "";
-  const viewToggle = ({ id, group, label, Icon, disabled, panel }) => {
-    const on = desiredScene.view[group]?.enabled === true;
-    return { id, label, active: !previewMode && on, disabled: toolIdle || disabled,
-      icon: <Icon className="size-3" strokeWidth={2} aria-hidden="true" />,
-      onSelect: () => viewSettingsStore.setEnabled(group, !on),
-      subToolbar: on && !previewMode ? <ViewToolPanel title={label}>{panel}</ViewToolPanel> : null };
+  const removeMeasurements = () => {
+    setMeasureRulerState(null); setActiveMeasureId("");
+    if (tabToolMode === TAB_TOOL_MODE.MEASURE) handleSelectTabToolMode(TAB_TOOL_MODE.REFERENCES);
   };
-  const viewToggles = [
-    viewFeatures.sections.includes("exploded") ? viewToggle({ id: "explode", group: "exploded", label: "Explode", Icon: UnfoldVertical,
-      disabled: explodablePartCount(selectedMeshData) <= 1,
-      panel: <ExplodeControls viewSettings={displaySettings} onViewSettingsPatch={viewSettingsStore.patch} /> }) : null,
-    viewFeatures.sections.includes("clip") ? viewToggle({ id: "cross-section", group: "clip", label: "Cross-section", Icon: SquareSplitHorizontal,
-      panel: <CrossSectionControls viewSettings={displaySettings} onViewSettingsPatch={viewSettingsStore.patch} bounds={selectedMeshData?.bounds || null} /> }) : null
-  ].filter(Boolean);
+  const modelEffects = useModelTools({ modelKey: selectedEntry?.file, view: desiredScene.view,
+    features: viewFeatures, store: viewSettingsStore, mesh: selectedDisplayMeshData,
+    disabled: toolIdle, selectedTool: tabToolMode, onSelect: handleSelectTabToolMode, hidden: previewMode,
+    measure: supportsMeasure ? {
+      Icon: Ruler, unavailable: measureToolDisabled, isPicking: measureModeActive,
+      hasMeasurements: measureMeasurements.length > 0,
+      onRemove: removeMeasurements,
+      controls: <MeasurePanel measurements={measureMeasurements} activeId={activeMeasureId}
+        onActivate={setActiveMeasureId} onDelete={handleMeasureDelete} />
+    } : null });
   const tools = [
     supportsTool(selectedEntrySourceFormat, "select") ? shell.tools.own({
       id: TAB_TOOL_MODE.REFERENCES,
@@ -4152,43 +4091,33 @@ function StepSurfaceBody({
       subToolbar: <ToolFilterNote options={supportsTopology ? SELECTION_FILTERS : null} value={supportsTopology ? selectionFilter : null}
         active={selectionToolActive} notice={selectionFilterNotice || topologyFilterHint} />
     }) : null,
-    // Measure works like Select: the first press takes up the tool, a press while it is active
-    // opens what it snaps to. It does not toggle off; another tool or Escape ends the session.
-    supportsMeasure ? shell.tools.own({
-      id: TAB_TOOL_MODE.MEASURE, label: "Measure",
-      icon: <Ruler className="size-3" strokeWidth={2} aria-hidden="true" />,
-      active: measureModeActive, disabled: toolIdle || measureToolDisabled,
-      description: supportsTopology ? "Measure again to choose what measurements snap to" : undefined,
-      secondPressOpensMenu: true,
-      onSelect: () => { if (!measureModeActive || !supportsTopology) handleSelectTabToolMode(TAB_TOOL_MODE.MEASURE); },
-      menu: supportsTopology ? trigger => <SelectionFilterMenu options={MEASURE_SELECTION_FILTERS} menuLabel="Snap to" hint=""
-        value={measureSelectionFilter} trigger={trigger} onChange={value => {
-          setMeasureSelectionFilter(value); handleMeasureCancelDraft();
-          if (topologyTarget) loadFilterTopology(topologyTarget);
-        }} /> : undefined,
-      subToolbar: <ToolFilterNote options={supportsTopology ? MEASURE_SELECTION_FILTERS : null}
-        value={supportsTopology ? measureSelectionFilter : null} active={measureModeActive}
-        panel={<MeasurePanel measurements={measureMeasurements} activeId={activeMeasureId}
-          onActivate={setActiveMeasureId} onDelete={handleMeasureDelete} onClear={handleMeasureClear} />} />
-    }) : null,
-    // Explode and Cross-section examine the design, like Measure, but they are toggles and not
-    // tools: tools are one at a time, and a person selects or measures while exploded or cut.
-    // A press turns one on or off; while on, its controls sit in a panel under the strip.
-    ...viewToggles,
     supportsTool(selectedEntrySourceFormat, "draw") ? { ...shell.tools.draw, disabled: toolIdle } : null,
-    // Only in a file with joints to drag (never a disabled button). It sits with Animate,
-    // the other tool that moves the model.
+    supportsMeasure ? shell.tools.own({ id: TAB_TOOL_MODE.MEASURE, label: "Measure",
+      icon: <Ruler className="size-3" strokeWidth={2} aria-hidden="true" />,
+      active: tabToolMode === TAB_TOOL_MODE.MEASURE || measureMeasurements.length > 0, disabled: measureToolDisabled,
+      secondPressOpensMenu: true, menuOnCornerOnly: measureMeasurements.length > 0,
+      onMenuSelect: () => handleSelectTabToolMode(TAB_TOOL_MODE.MEASURE),
+      onSelect: () => measureMeasurements.length ? removeMeasurements() : handleSelectTabToolMode(TAB_TOOL_MODE.MEASURE),
+      menu: trigger => <SelectionFilterMenu trigger={trigger} value={measureSelectionFilter}
+        options={MEASURE_SELECTION_FILTERS} menuLabel="Measure snapping" hint="" onChange={value => {
+          setMeasureSelectionFilter(value); handleMeasureCancelDraft();
+          handleSelectTabToolMode(TAB_TOOL_MODE.MEASURE);
+        }} /> }) : null,
+    ...modelEffects.tools,
+    // Position follows the model effects; only files with movable joints offer it.
     poseAvailable ? shell.tools.own({ id: TAB_TOOL_MODE.POSE, label: "Position",
-      icon: <SplinePointer className="size-3" strokeWidth={2} aria-hidden="true" />,
-      active: poseToolActive, disabled: toolIdle, onSelect: () => handleSelectTabToolMode(TAB_TOOL_MODE.POSE) }) : null,
-    // Last of the model's own tools, and only in a file that has routines: no routines, no button. Its controls
-    // are the playbar, under the model while the tool is up.
-    animationAvailable ? shell.tools.own({ id: TAB_TOOL_MODE.ANIMATE, label: "Animate",
-      icon: <CirclePlay className="size-3" strokeWidth={2} aria-hidden="true" />,
-      active: animateToolActive, disabled: toolIdle, onSelect: () => handleSelectTabToolMode(TAB_TOOL_MODE.ANIMATE) }) : null,
-    // Last of all, and only where the host offers one: fullscreen is an act on the view, not a
-    // tool to be in, and a STEP is the one file that presents itself there.
-    shell.tools.fullscreen
+      icon: <Spline className="size-3" strokeWidth={2} aria-hidden="true" />,
+      active: poseToolActive, disabled: toolIdle,
+      onSelect: () => {
+        if (!poseToolActive) handleSelectTabToolMode(TAB_TOOL_MODE.POSE);
+        shell.revealFileSection("position");
+      } }) : null,
+    // The shared animation tool uses this action when routines exist.
+    animationAvailable ? shell.tools.own({ id: TAB_TOOL_MODE.ANIMATE, label: "Play",
+      icon: <Play className="size-3" aria-hidden="true" />,
+      active: animateToolActive, disabled: toolIdle,
+      onSelect: () => { if (!animateToolActive) { handleSelectTabToolMode(TAB_TOOL_MODE.ANIMATE); if (!animationState.playing) handleAnimationPlayToggle(); } },
+    }) : null,
   ].filter(Boolean);
 
   // ---- the bottom action ----------------------------------------------------------------------
@@ -4197,13 +4126,8 @@ function StepSurfaceBody({
   const bottomAction = drawToolActive
     ? (stepUpdateInProgress || referenceSelectionPending || referenceSelectionUnavailable || topologySelectionDeferred ? null : undefined)
     : selectionActionVisible ? {
-      // A reference cut off mid-token reads like a broken reference, so a long one becomes a count.
-      label: composerDestination ? "Add to prompt" : copyButtonLabel,
-      shortLabel: composerDestination ? "" : copyButtonCountLabel,
-      render: ({ className, disabled, title, children }) => (
-        <PromptContextAction type="button" variant="default" size="sm" className={className} disabled={disabled}
-          createContext={createSelectionPromptContext} onResult={showPromptResult} title={title}>{children}</PromptContextAction>
-      ),
+      label: copyButtonLabel,
+      onInvoke: copySelectedReferences,
       children: slots?.selectionExtras && selectionCount > 0 && !viewerLoading && !stepInteractionBlocked ? <slots.selectionExtras
         selection={Object.freeze(createSelectionPromptContext().parts.filter(part => part.kind === 'reference').map(part => part.reference))}
         selectionKey={selectionKey}
@@ -4214,6 +4138,7 @@ function StepSurfaceBody({
 
   // ---- the file's panel ------------------------------------------------------------------------
   const stepPanel = useStepPanel({
+    positionRuntime: stepPositionControls,
     selectedMeshData: selectedDisplayMeshData,
     selectedSourceAppearance,
     client,
@@ -4227,7 +4152,6 @@ function StepSurfaceBody({
     isAssemblyView,
     stepTreeRoot: displayStepTreeRoot,
     expandedTreeNodeIds: expandedStepTreeNodeIds,
-    onVisibleFeatureTargetsChange: handleVisibleFeatureTargetsChange,
     selectedPartIds,
     selectedReferenceIds,
     selectedReferences: selectedReferenceItems,
@@ -4238,6 +4162,7 @@ function StepSurfaceBody({
     onSelectTreeNode: selectStepTreeNode,
     onSelectReferenceGroup: selectReferenceGroup,
     onCopyTreeNodeReference: copyStepTreeContextMenuReference,
+    onCopySelection: copySelectedReferences,
     onFocusTreeNode: focusStepTreeNode,
     onUnfocusTreeNode: handleExitSingleIsolate,
     onExitAllIsolate: handleExitIsolate,
@@ -4250,12 +4175,10 @@ function StepSurfaceBody({
     menuForReferences: topologyReferenceMenu,
     partMenuActions,
     showAllHiddenParts: handleShowAllHiddenParts,
-    stepModule: stepPositionControls,
-    stepAnimation: stepAnimationControls,
     statusItems: selectedFileStatusItems
   });
 
-  return <RendererShell shell={shell} tools={tools} panel={stepPanel}
+  return <RendererShell shell={shell} tools={tools} playback={viewportAnimation} onPreviewActiveChange={setPreviewToolActive} toolPanels={modelEffects.panels} panel={stepPanel}
     className={className}
     bottomAction={bottomAction}
     contextMenuItems={selectionToolActive

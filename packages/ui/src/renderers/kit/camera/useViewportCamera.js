@@ -2,7 +2,7 @@ import { useCallback, useLayoutEffect, useRef } from "react";
 import { applyPerspectiveSnapshot, cancelCameraTransition, captureRuntimeViewportFitScale, readPerspectiveSnapshot, readScopedPerspectiveSnapshot, recenterRuntimeTarget, setRuntimeZoomPercent, syncRuntimeViewportFraming, transitionCameraToViewPreset, zoomRuntimeToBounds } from "./runtimeCamera.js";
 import { runtimeModelKeyMatches } from "@hardcore/core/lib/viewer/modelRuntime.js";
 import { perspectiveSnapshotEqual, perspectiveSnapshotMatchesScene, resolvePerspectiveSnapshot } from "@hardcore/core/lib/perspective.js";
-import { DEFAULT_VIEW_DIRECTION, VIEW_CUBE_DRAG_RAD_PER_PX, VIEW_PLANE_DEFAULT_PRESET, VIEW_PLANE_FACE_BY_ID, WORLD_UP, applyOrbitDelta, cameraMatchesViewPreset, clearKeyboardOrbitState, readViewPlaneOrientation, runtimeFramingBounds, viewPlaneOrientationEqual } from "./viewportCameraKit.js";
+import { DEFAULT_VIEW_DIRECTION, VIEW_CUBE_DRAG_RAD_PER_PX, VIEW_PLANE_FACE_BY_ID, WORLD_UP, applyOrbitDelta, clearKeyboardOrbitState, readViewPlaneOrientation, runtimeFramingBounds, viewPlaneOrientationEqual } from "./viewportCameraKit.js";
 
 /**
  * The camera of a mounted viewport, as React sees it: the perspective a session
@@ -19,7 +19,6 @@ import { DEFAULT_VIEW_DIRECTION, VIEW_CUBE_DRAG_RAD_PER_PX, VIEW_PLANE_DEFAULT_P
 export function useViewportCamera({
   coordinateSystemFor,
   activeViewPlaneFaceRef,
-  defaultPerspectiveResettingRef,
   fullscreenCameraRef,
   lastEmittedPerspectiveRef,
   cameraMovedRef,
@@ -37,7 +36,6 @@ export function useViewportCamera({
   runtimeRef,
   sceneScaleModeRef,
   setActiveViewPlaneFace,
-  setDefaultPerspectiveDetached,
   setViewPlaneOrientation,
   suppressPerspectiveEventsRef,
   viewerReadyTick
@@ -70,21 +68,6 @@ export function useViewportCamera({
     lastEmittedPerspectiveRef.current = nextPerspective;
     perspectiveChangeRef.current?.(nextPerspective);
   };
-  const syncDefaultPerspectiveState = (runtime = runtimeRef.current) => {
-    if (defaultPerspectiveResettingRef.current) {
-      if (runtime?.cameraTransition) {
-        setDefaultPerspectiveDetached(false);
-        return;
-      }
-      defaultPerspectiveResettingRef.current = false;
-    }
-    const nextDetached = runtime?.THREE
-      ? !cameraMatchesViewPreset(runtime, VIEW_PLANE_DEFAULT_PRESET)
-      : false;
-    setDefaultPerspectiveDetached((current) => (
-      current === nextDetached ? current : nextDetached
-    ));
-  };
   const syncViewPlaneOrientation = (runtime = runtimeRef.current) => {
     const nextOrientation = readViewPlaneOrientation(runtime);
     if (!nextOrientation) {
@@ -93,7 +76,6 @@ export function useViewportCamera({
     setViewPlaneOrientation((current) => (
       viewPlaneOrientationEqual(current, nextOrientation) ? current : nextOrientation
     ));
-    syncDefaultPerspectiveState(runtime);
   };
   const applyInitialPerspective = useCallback((runtime = runtimeRef.current) => {
     if (previewModeRef.current) return false;
@@ -167,8 +149,7 @@ export function useViewportCamera({
     // Entry/exit must precede ResizeObserver and the next presented frame.
   }, [previewMode, modelKey, viewerReadyTick]);
   // The authored bounds a reset frames, read at the moment of the reset: it is a
-  // fresh object every render, and both resets below must stay stable — one is
-  // handed to the memoized view cube, the other to the viewport's imperative handle.
+  // fresh object every render, but the imperative reset callback must stay stable.
   const modelBoundsRef = useRef(modelBounds);
   modelBoundsRef.current = modelBounds;
   const resetZoomAndPan = useCallback(({ animate = true } = {}) => {
@@ -213,38 +194,7 @@ export function useViewportCamera({
     }
     activeViewPlaneFaceRef.current = face.id;
     setActiveViewPlaneFace(face.id);
-    const transitioned = transitionCameraToViewPreset(runtime, face);
-    if (transitioned) {
-      defaultPerspectiveResettingRef.current = false;
-      setDefaultPerspectiveDetached(true);
-    }
-    return transitioned;
-  }, []);
-  // The view cube's centre: "Reset to default isometric view". It resets the VIEW —
-  // the model is FRAMED again, from the default direction — not just the direction.
-  // Turning the camera alone left somebody who had zoomed or panned away looking
-  // isometrically at empty space, and for a renderer that offers no viewport menu
-  // this button is the only way back to a framed model.
-  // With no authored bounds to frame there is nothing to fit, so it still turns.
-  const activateDefaultViewPlane = useCallback(() => {
-    const runtime = runtimeRef.current;
-    if (!runtime) {
-      return false;
-    }
-    activeViewPlaneFaceRef.current = "";
-    setActiveViewPlaneFace("");
-    const reset = zoomRuntimeToBounds(runtime, runtimeFramingBounds(runtime, modelBoundsRef.current), sceneScaleModeRef.current, {
-      animate: true,
-      modelOffset: modelTransformRef.current.offset,
-      resetZoomBaseline: true,
-      viewDirection: DEFAULT_VIEW_DIRECTION,
-      viewUp: WORLD_UP
-    }) || transitionCameraToViewPreset(runtime, VIEW_PLANE_DEFAULT_PRESET);
-    if (reset) {
-      defaultPerspectiveResettingRef.current = true;
-      setDefaultPerspectiveDetached(false);
-    }
-    return reset;
+    return transitionCameraToViewPreset(runtime, face);
   }, []);
   // Dragging the view cube orbits the camera, as dragging Fusion's does: the cube turns with
   // the pointer, so the camera turns the other way. Same orbit as the arrow keys.
@@ -269,7 +219,6 @@ export function useViewportCamera({
     return true;
   }, []);
   return {
-    activateDefaultViewPlane,
     activateViewPlaneFace,
     orbitFromViewCube,
     applyInitialPerspective,

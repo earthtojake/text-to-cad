@@ -185,3 +185,14 @@ test("a view is resolved from the lists it opts into, one feature at a time", ()
   assert.equal(resolveViewSettings(saved, { features: { modes: ["solid", "render"] } }).mode, "solid");
   assert.deepEqual(EDGELESS_VIEW_FEATURES.sections, ["mode", "camera", "surfaces", "lighting", "background", "floor", "grid", "axes"]);
 });
+
+
+test("light Render separates a white background from the gray floor", () => {
+  const view = resolveViewSettings({ mode: "render", appearance: "light" });
+  assert.equal(view.background.color, "#ffffff");
+  assert.equal(view.floor.color, "#e7e7e5");
+  const scene = resolveViewSceneSettings({ display: { mode: "render", appearance: "light" } });
+  assert.equal(scene.render.configuration.backdrop.color, "#ffffff");
+  assert.equal(scene.render.configuration.backdrop.groundColor, "#e7e7e5");
+  assert.equal(resolveViewSettings({ mode: "render", background: { color: "#abc123" } }).background.color, "#abc123");
+});

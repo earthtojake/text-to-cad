@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
-import { SplinePointer, SquareMousePointer } from "lucide-react";
+import { Spline, MousePointer2 } from "lucide-react";
 import { EDGELESS_VIEW_FEATURES } from "@hardcore/core/common/viewSettings.js";
 import { resolveLocalAssetFileRef } from "@hardcore/core/lib/urdf/meshAssetUrl.js";
 import { createRobotScene } from "@hardcore/core/lib/urdf/robotScene.js";
@@ -23,9 +23,8 @@ import { useLinkSelection } from "./useLinkSelection.js";
 import { useRobotDocument } from "./useRobotDocument.js";
 
 const NO_HANDLES = Object.freeze([]);
-const POSITION_ICON = <SplinePointer className="size-3" strokeWidth={2} aria-hidden="true" />;
-// Not the pointer a STEP selects references with: this Select picks whole LINKS.
-const SELECT_ICON = <SquareMousePointer className="size-3" strokeWidth={2} aria-hidden="true" />;
+const POSITION_ICON = <Spline className="size-3" strokeWidth={2} aria-hidden="true" />;
+const SELECT_ICON = <MousePointer2 className="size-3" strokeWidth={2} aria-hidden="true" />;
 
 function RobotSurface({ view, data }) {
   const document = useWorkspaceDocument({ view, data });
@@ -52,6 +51,7 @@ function RobotSurface({ view, data }) {
     ? { jointValues: poseRef.current.getSnapshot().values, signature: robotRef.current.revision } : restored), [restored]);
 
   // ---- scene ----------------------------------------------------------------------------
+  const [previewToolActive, setPreviewToolActive] = useState(false);
   const [scene, setScene] = useState(null);
   useLayoutEffect(() => {
     if (!robot || !pose) { setScene(null); return undefined; }
@@ -98,7 +98,7 @@ function RobotSurface({ view, data }) {
     live, escape, rendererState
   });
   shellRef.current = shell;
-  useDeclinedSelectReference(document, shell.setCopyStatus, ROBOT_DECLINED_LIVE_COMMANDS.select);
+  useDeclinedSelectReference(document);
 
   // ---- a pose step: k matrices, one frame, no component ----------------------------------
   const handlesRef = useRef(NO_HANDLES);
@@ -147,17 +147,17 @@ function RobotSurface({ view, data }) {
   useEffect(() => { if (robot && !posable && toolMode === ROBOT_TOOL.POSE) selectTool(ROBOT_TOOL.SELECT); }, [robot, posable, toolMode, selectTool]);
   // A selection exists only while Select is the tool: leaving it drops the selection.
   const clearSelection = selection.clear;
-  useEffect(() => { if (toolMode !== ROBOT_TOOL.SELECT) clearSelection(); }, [toolMode, clearSelection]);
-  const poseActive = posable && Boolean(scene) && toolMode === ROBOT_TOOL.POSE;
-  const selectActive = Boolean(scene) && toolMode === ROBOT_TOOL.SELECT;
+  useEffect(() => { if (previewToolActive || toolMode !== ROBOT_TOOL.SELECT) clearSelection(); }, [previewToolActive, toolMode, clearSelection]);
+  const poseActive = !previewToolActive && posable && Boolean(scene) && toolMode === ROBOT_TOOL.POSE;
+  const selectActive = !previewToolActive && Boolean(scene) && toolMode === ROBOT_TOOL.SELECT;
 
   // Choosing a link or an object under another tool returns to Select first, and shows
   // what was chosen where its details are: the robot's panel, with its Links.
-  const revealFilePanel = shell.revealFilePanel;
+  const revealFileSection = shell.revealFileSection;
   const reveal = useCallback(() => {
     selectTool(ROBOT_TOOL.SELECT);
-    revealFilePanel();
-  }, [selectTool, revealFilePanel]);
+    revealFileSection("links", { open: false });
+  }, [selectTool, revealFileSection]);
   const treeSelection = useMemo(() => ({
     ...selection,
     select: (id, options) => { selection.select(id, options); if (id) reveal(); },
@@ -178,21 +178,24 @@ function RobotSurface({ view, data }) {
   const groupNamesByLink = useMemo(() => (robot?.description?.srdf ? srdfGroupNamesByLink(robot.description) : null), [robot]);
 
   const tools = [
-    posable ? shell.tools.own({ id: ROBOT_TOOL.POSE, label: "Position", icon: POSITION_ICON }) : null,
-    shell.tools.own({ id: ROBOT_TOOL.SELECT, label: "Select", icon: SELECT_ICON })
+    shell.tools.own({ id: ROBOT_TOOL.SELECT, label: "Select", icon: SELECT_ICON }),
+    posable ? shell.tools.own({ id: ROBOT_TOOL.POSE, label: "Position", icon: POSITION_ICON,
+      onSelect: () => {
+        if (!poseActive) selectTool(ROBOT_TOOL.POSE);
+        shell.revealFileSection("position");
+      } }) : null
   ].filter(Boolean);
-  // The robot's own panel: its Position when it has joints a person can drive, then its
-  // Links (the tree, which fills the panel), then what an SDF declares of itself.
-  const panel = { title: "Robot", sections: [
-    posable && pose ? { id: "position", title: "Position", content: <PositionControls key={robot.revision} pose={pose} /> } : null,
+  // Links leads the panel; Position remains available independently of the tool.
+  const panel = { title: "Settings", sections: [
     { id: "links", title: "Links",
       content: active => <LinksSection key={modelKey} active={active} description={robot?.description || null} components={robot?.components}
         parts={robot?.parts} selection={treeSelection} groupNamesByLink={groupNamesByLink} meshPath={meshPath} onOpenFile={view.onOpenFile} /> },
+    posable && pose ? { id: "position", title: "Position", content: <PositionControls key={robot.revision} pose={pose} /> } : null,
     kind === "sdf" ? { id: "sdf", title: "SDF",
       content: <SdfSection info={robot?.description?.sdf || null} movableJointCount={pose?.joints.length || 0} /> } : null
   ] };
 
-  return <RendererShell shell={shell} tools={tools} panel={panel}
+  return <RendererShell shell={shell} tools={tools} panel={panel} onPreviewActiveChange={setPreviewToolActive}
     viewportOverlay={viewport => <>
       {poseActive ? <JointHandleOverlay handlesRef={handlesRef} layoutSeamRef={handleLayoutRef} {...viewport} /> : null}
       <PointerPick viewport={viewport} scene={scene} enabled={selectActive} onPick={handlePick} onHover={selection.hoverHit} />

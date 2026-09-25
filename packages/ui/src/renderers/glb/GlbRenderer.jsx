@@ -26,7 +26,7 @@ function GlbSurface({ view, data }) {
     animation, live: LIVE
   });
   requestRenderRef.current = shell.requestRender;
-  useDeclinedSelectReference(document, shell.setCopyStatus, GLB_DECLINED_LIVE_COMMANDS.select);
+  useDeclinedSelectReference(document);
 
   return <RendererShell shell={shell} tools={[]} />;
 }

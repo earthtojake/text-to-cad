@@ -138,11 +138,11 @@ test("measure ruler survives unrelated state changes", () => {
   assert.equal(measureRulerStateForChange(draft), draft);
 });
 
-test("leaving Measure clears both the draft and completed measurements", () => {
+test("leaving Measure cancels the draft and retains completed measurements", () => {
   const draft = applyMeasureRulerPick(null, FIRST_PICK);
   const committed = applyMeasureRulerPick(draft, SECOND_PICK);
-  assert.equal(measureRulerStateForChange(draft, { toolActive: false }), null);
-  assert.equal(measureRulerStateForChange(committed, { toolActive: false }), null);
+  assert.equal(measureRulerStateForChange(draft, { toolActive: false }).draft, null);
+  assert.deepEqual(measureRulerStateForChange(committed, { toolActive: false }).measurements, committed.measurements);
 });
 
 test("measure ruler drops everything on entry change", () => {

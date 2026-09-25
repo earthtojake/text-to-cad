@@ -4,7 +4,7 @@ import { Slider } from "@hardcore/ui/primitives/slider";
 import {
   FILE_SHEET_PRECISION_SLIDER_CLASSES, FileSheetSliderField, FileSheetStatusText, parseFileSheetNumberInput
 } from "../kit/inspector/FileSheet.js";
-import { KinematicsPoseRow, MotionResetButton, NO_PRESET_VALUE } from "../kit/inspector/kinematicsControls.jsx";
+import { KinematicsPoseRow, NO_PRESET_VALUE, DEFAULT_POSE_VALUE, positionValuesAreDefault } from "../kit/inspector/kinematicsControls.jsx";
 
 const JOINT_CONTROL_SYNC_EPSILON = 0.001;
 const JOINT_CONTROL_LOCAL_OVERRIDE_MS = 3500;
@@ -128,7 +128,7 @@ const JointRow = memo(function JointRow({
   };
 
   return (
-    <FileSheetSliderField
+    <FileSheetSliderField stacked
       label={jointName || "Joint"}
       value={formatJointValue(liveValueDeg, joint)}
       onValueCommit={(nextValue) => {
@@ -177,11 +177,12 @@ function PoseJointRow({ pose, joint }) {
 }
 
 function PoseGroupStateRow({ pose }) {
-  const read = () => pose.getSnapshot().groupStateId;
-  const groupStateId = useSyncExternalStore(pose.subscribe, read, read);
+  const read = () => pose.getSnapshot();
+  const { groupStateId, values } = useSyncExternalStore(pose.subscribe, read, read);
   return <KinematicsPoseRow
     poses={pose.groupStates.map(state => ({ value: state.id, label: String(state.label || state.name || "").trim() || "State" }))}
-    activeValue={pose.groupStates.some(state => state.id === groupStateId) ? groupStateId : NO_PRESET_VALUE}
+    onReset={pose.reset}
+    activeValue={positionValuesAreDefault(values, pose.defaults) ? DEFAULT_POSE_VALUE : pose.groupStates.some(state => state.id === groupStateId) ? groupStateId : NO_PRESET_VALUE}
     onSelect={(value) => {
       const state = pose.groupStates.find(candidate => candidate.id === value);
       if (state) pose.selectGroupState(state);
@@ -190,20 +191,19 @@ function PoseGroupStateRow({ pose }) {
 }
 
 /**
- * A robot's Position section: its named pose (an SRDF's group states), then a slider per
- * joint a person can drive, then Reset — one section's rows, with no sections of their own.
+ * A robot's Position sidebar section: its named pose (an SRDF's group states), then a slider per
+ * joint a person can drive, with Reset beside the pose selector — one section's rows, with no sections of their own.
  *
  * @param {{ pose: ReturnType<typeof import("./poseStore.js").createPoseStore> }} props
  */
 export default function PositionControls({ pose }) {
   if (!pose.joints.length) return <FileSheetStatusText className="py-2">No movable joints.</FileSheetStatusText>;
   return (
-    <div className="space-y-1">
+    <div className="space-y-2 px-1 py-2">
       {/* A named state is a way of SETTING the joints, so it leads them. A plain URDF
           declares none and opens straight onto its values. */}
-      {pose.groupStates.length ? <PoseGroupStateRow pose={pose} /> : null}
+      <PoseGroupStateRow pose={pose} />
       {pose.joints.map(joint => <PoseJointRow key={joint.name} pose={pose} joint={joint} />)}
-      <MotionResetButton onReset={pose.reset} />
     </div>
   );
 }

@@ -15,9 +15,8 @@ export function createViewPromptContext({ resource, references = [], capture, op
   return createPromptContext(parts, operationId);
 }
 
-export function promptDeliveryMessage(result) {
-  if (result.status === "added") return "Added to prompt";
-  if (result.status === "copied") return "Copied for prompt";
-  if (result.status === "cancelled") return "";
-  return result.message || (result.status === "deferred" ? "Choose a prompt destination" : "Could not deliver prompt context");
+/** Only failed or incomplete deliveries need an inline error; success is silent. */
+export function promptDeliveryError(result) {
+  if (result.status !== "failed" && result.status !== "partial") return null;
+  return result.message || "Could not deliver prompt context";
 }

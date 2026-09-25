@@ -7,7 +7,7 @@
  * standalone viewer. `EntryMenu.jsx` draws it; the host performs it; the unit
  * test reads it directly.
  *
- * The shape is the platform's: verbs first, the copies together, the edits
+ * Path copies come first, followed by opening/reveal actions, the edits
  * together, and the one destructive item alone at the bottom — the OS trash,
  * which is reversible, so there is no confirmation in front of it.
  *
@@ -23,7 +23,6 @@
  * Pure, and imports only `@hardcore/core`, so `node --test` loads it without the
  * bundler's aliases.
  */
-import { isCadFile } from "@hardcore/core/lib/fileFormats.js";
 
 /** Every action a menu can carry, in no particular order. */
 export const ENTRY_ACTIONS = Object.freeze([
@@ -49,19 +48,11 @@ export const ENTRY_ACTIONS = Object.freeze([
 export const ALL_ENTRY_CAPABILITIES = Object.freeze(new Set(ENTRY_ACTIONS));
 
 /**
- * What a browser tab can honestly do.
- *
- * No `open with`, no `reveal`, no terminal — a web page has no OS to ask. No
- * rename, duplicate, new file or trash — the CAD Viewer's backend serves a
- * directory, it does not edit one, and an item that reports "not supported"
- * is a promise the app never made. What is left is opening a file and putting
- * a name for it on the clipboard, which is all a reader of a served directory
- * wants. `copy-path` is included because the standalone's backend can answer
- * with an absolute path when it is serving a local directory; a host that
- * cannot should drop it from its own set.
+ * Read-only browser actions. The local viewer can reveal files through its
+ * guarded API; hosts without that capability omit it from their action map.
  */
 export const WEB_ENTRY_CAPABILITIES = Object.freeze(
-  new Set(["open", "copy-path", "copy-relative-path", "copy-reference"])
+  new Set(["open", "reveal", "copy-path", "copy-relative-path"])
 );
 
 /**
@@ -133,13 +124,13 @@ export function entryMenu(target, platform, capabilities = ALL_ENTRY_CAPABILITIE
 function directorySections({ target, platform, rename, trash, copies }) {
   const root = target.path === "";
   return [
+    copies,
     [
       { action: "new-file", label: "New file" },
       { action: "new-folder", label: "New folder" },
       { action: "open-terminal", label: "Open in terminal" }
     ],
     [{ action: "reveal", label: revealLabel(platform) }],
-    copies,
     ...(root ? [] : [[rename], [trash]])
   ];
 }
@@ -148,15 +139,13 @@ function fileSections({ target, platform, rename, trash, copies }) {
   // One tab per file (the store dedupes), so there is no "open in new tab";
   // and a crumb IS the open file, so it does not offer Open at all.
   return [
+    copies,
     ...(target.surface === "crumb" ? [] : [[{ action: "open", label: "Open" }]]),
     [
       { action: "open-default", label: "Open with default app" },
       { action: "open-with", label: "Open with…" },
       { action: "reveal", label: revealLabel(platform) }
     ],
-    // A CAD file is something an agent's prompt can point at: its reference is
-    // the token the agent reads. Which files those are is `@hardcore/core`.
-    [...copies, ...(isCadFile(target.path) ? [{ action: "copy-reference", label: "Copy reference" }] : [])],
     [rename, { action: "duplicate", label: "Duplicate" }],
     [trash]
   ];

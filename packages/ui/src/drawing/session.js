@@ -14,6 +14,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
  * @property {boolean} ready
  * @property {string} tool
  * @property {string} color
+ * @property {boolean} canUndo
+ * @property {boolean} canRedo
  * @property {boolean} hasContent
  * @property {(tool: import('./toolbar.jsx').DrawingTool) => void} selectTool
  * @property {(color: string) => void} selectColor
@@ -24,6 +26,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
  * @property {(tool: string) => void} onToolChange
  * @property {(color: string) => void} onColorChange
  * @property {(hasContent: boolean) => void} onContentChange
+ * @property {(history: { canUndo: boolean, canRedo: boolean }) => void} onHistoryChange
  */
 
 /**
@@ -36,7 +39,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
  * @returns {DrawingSession}
  */
 export function useDrawingSession(active = true, initial = {}) {
-  const idle = useMemo(() => ({ ready: false, tool: initial.tool ?? 'selection', color: initial.color ?? '#1e1e1e', hasContent: false }), [initial.tool, initial.color]);
+  const idle = useMemo(() => ({ ready: false, tool: initial.tool ?? 'selection', color: initial.color ?? '#1e1e1e', hasContent: false, canUndo: false, canRedo: false }), [initial.tool, initial.color]);
   const target = useRef(/** @type {DrawingToolbarTarget | null} */ (null));
   const [state, setState] = useState(idle);
   useEffect(() => { if (!active) { target.current = null; setState(idle); } }, [active, idle]);
@@ -49,6 +52,9 @@ export function useDrawingSession(active = true, initial = {}) {
   const onToolChange = useCallback((/** @type {string} */ tool) => report('tool', tool), [report]);
   const onColorChange = useCallback((/** @type {string} */ color) => report('color', color), [report]);
   const onContentChange = useCallback((/** @type {boolean} */ hasContent) => report('hasContent', hasContent), [report]);
+  const onHistoryChange = useCallback((/** @type {{ canUndo: boolean, canRedo: boolean }} */ history) =>
+    setState(current => current.canUndo === history.canUndo && current.canRedo === history.canRedo
+      ? current : { ...current, ...history }), []);
   const actions = useMemo(() => ({
     selectTool: (/** @type {import('./toolbar.jsx').DrawingTool} */ tool) => target.current?.setTool(tool),
     selectColor: (/** @type {string} */ color) => target.current?.setColor(color),
@@ -56,5 +62,5 @@ export function useDrawingSession(active = true, initial = {}) {
     redo: () => target.current?.redo(),
     clear: () => target.current?.clear(),
   }), []);
-  return { ...state, ...actions, onReady, onToolChange, onColorChange, onContentChange };
+  return { ...state, ...actions, onReady, onToolChange, onColorChange, onContentChange, onHistoryChange };
 }

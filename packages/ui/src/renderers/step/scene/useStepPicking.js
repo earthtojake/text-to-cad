@@ -362,6 +362,7 @@ export function useStepPicking({
       ? window.matchMedia("(pointer: coarse)")
       : null;
     const defaultToCoarsePointer = coarsePointerQuery?.matches ?? false;
+    const touches = new Set();
     const pointerDown = {
       active: false,
       x: 0,
@@ -1219,10 +1220,6 @@ export function useStepPicking({
         suppressContextMenuFromPanChord();
       }
       updateContextPointerMove(event);
-      if (runtime.interactionState.active) {
-        clearHoverState();
-        return;
-      }
       const tapSlop = tapSlopForPointer(pointerDown.pointerType || event.pointerType);
       if (pointerDown.active) {
         const moved = Math.hypot(event.clientX - pointerDown.x, event.clientY - pointerDown.y);
@@ -1230,7 +1227,7 @@ export function useStepPicking({
           pointerDown.active = false;
         }
       }
-      if (!canHoverWithPointer(event.pointerType)) {
+      if (runtime.interactionState.active || !canHoverWithPointer(event.pointerType)) {
         clearHoverState();
         return;
       }
@@ -1249,6 +1246,10 @@ export function useStepPicking({
     }
 
     function handlePointerDown(event) {
+      if (event.pointerType === "touch") {
+        touches.add(event.pointerId);
+        if (touches.size > 1) { pointerDown.active = false; clearPendingActivation(); return; }
+      }
       if (event.button !== 0) {
         if (event.button === 2 && isSceneInteractionTarget(event.target)) {
           recordContextPointerDown(event);
@@ -1278,6 +1279,7 @@ export function useStepPicking({
     }
 
     function handlePointerUp(event) {
+      touches.delete(event.pointerId);
       if (event.button === 0) {
         resetPrimaryPointer();
       } else if (event.button === 2) {
@@ -1312,6 +1314,14 @@ export function useStepPicking({
       }
       const referenceId = pointerDownReferenceId || pickActivationReference(event.clientX, event.clientY, event.pointerType || "");
       scheduleActivation(referenceId || "", { multiSelect: !!event.shiftKey });
+    }
+
+    function handlePointerCancel(event) {
+      touches.delete(event.pointerId);
+      pointerDown.active = false;
+      pointerDown.referenceId = "";
+      resetPrimaryPointer();
+      clearHoverState();
     }
 
     function handleDoubleClick(event) {
@@ -1350,6 +1360,7 @@ export function useStepPicking({
     container.addEventListener("pointerleave", handlePointerLeave);
     container.addEventListener("pointerdown", handlePointerDown);
     container.addEventListener("pointerup", handlePointerUp);
+    container.addEventListener("pointercancel", handlePointerCancel);
     if (doubleClickEnabled) {
       container.addEventListener("dblclick", handleDoubleClick);
     }
@@ -1367,6 +1378,7 @@ export function useStepPicking({
       container.removeEventListener("pointerleave", handlePointerLeave);
       container.removeEventListener("pointerdown", handlePointerDown);
       container.removeEventListener("pointerup", handlePointerUp);
+      container.removeEventListener("pointercancel", handlePointerCancel);
       if (doubleClickEnabled) {
         container.removeEventListener("dblclick", handleDoubleClick);
       }

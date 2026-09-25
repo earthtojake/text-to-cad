@@ -44,6 +44,11 @@ and submenus. Menu shortcuts use 10px metadata. These defaults belong to the
 primitives, including desktop's app-level equivalents; consumers do not add
 per-menu font-size overrides. Portals set their own compact text size rather
 than inheriting the trigger or host body's size.
+Viewer hover hints use `TooltipHint` from the shared tooltip primitive, with
+11px text and a 400ms delay. Use short action names, omit redundant hints on
+obvious or already labeled controls, and show full tree/field names only when
+clipped. Native HTML `title` attributes are not used for interface tooltips.
+
 The token uses rems so desktop UI scaling still works without changing the
 normal 16px root or shrinking layout spacing.
 
@@ -53,8 +58,9 @@ rows — files, model features, robot links — are 12px, the size of the sectio
 titles and the filter above them.
 Both tree lists inset row backgrounds 4px from their horizontal edges, including
 selected, hovered and filtered rows; nesting adds indentation inside that gutter.
-Every panel — the file tree, a file's own panel, Display — shares a 256px minimum
-width. Resizing below it closes the panel; reopening restores 320px. Panels never
+Every sidebar — the file tree and a file's own panel — shares a 256px minimum
+width. On desktop, resizing below it closes the panel; reopening restores 320px. Below 720px of total FileViewer width, panels are dismissible floating sheets and never shrink the scene. The sheets have no extra visible title row and never scroll or translate the host page.
+The view cube is hidden on mobile. Breadcrumbs and progress indicators use this same breakpoint. Panels never
 scroll sideways: a Position section's labels truncate to preserve its sliders and
 inputs.
 
@@ -231,56 +237,40 @@ and versioned, bounded memory cache; it adds no persistent store. Read
 [feature detection](docs/feature-detection.md) before changing inference rules,
 cache identity, cancellation or recognition limits.
 
-A file's controls are nav-row panels, never tabs inside a panel. From left to
-right a file has `Display`, then its own panel (a STEP's `Part` or `Assembly`, a
-robot's `Robot`), then the file tree; a mesh has no panel of its own, and a DXF has
-only the file tree. A file's own panel stacks its sections tight, each at its full
-height (`FilePanelSections`): a STEP's Features, Position when it declares
-kinematics, and Issues when it has any; a robot description's Position and Links
-(SDF adds its SDF metadata). Only the column scrolls, never a section; beside
-another, each section folds away and back with a plus and minus, a view only; and a
-pick's Reference is pinned at the panel's foot, scrolling on its own. Links is the description's link tree, with the Model
+A file can expose one optional `Settings` panel with the sliders icon in the
+nav row, beside the file tree. When Position exists, `FilePanelTabs`
+separates Features / Position or Links / Position. These primary views are always
+open within their tabs, with no collapse headers. Both stay mounted to preserve
+scroll and tree state; only the active tab does background work. Without Position,
+show the model panel directly. Each tab has one scrolling column and the selection
+Reference pinned at its foot. Issues and SDF metadata remain with the model tree.
+Links is the description's link tree, with the Model
 tree's rows, filter and Reference pane; see [robot links](docs/cad-renderer.md#robot-links).
 Which panel a file opens with is the host's to apply
 (`ViewerHost.navigation.openFile(path, { target, panel })`): a file picked in the
 tree asks for the tree, so the tree stays up while a person walks it; any other
 open gets the file's own panel, or nothing when it has none. Display is never open
-by default, and no panel is saved per file. Switching to Display keeps the file's
-panel mounted behind it, preserving the tree's disclosure and scroll.
-The Display panel uses a compact properties layout with 28px headers/controls, no extra
-header-to-content padding, 4px row gaps and 8px section bottoms. Its first section, Display, holds
-equal-width Mode and Projection dropdowns; Explode is a separate section. Surfaces stays expanded,
-and perspective uses the standard lens without a separate Camera section. Optional settings sections are
-feature gates: title/plus click enables, only the trailing minus disables, and
-gray/collapsed means neutral/off. Reopening resets values to defaults, including
-Clip offsets/Flip and Explode's amount (50%). Explode stays open when its slider
-returns to 0%; only the minus collapses it. The fixed section order is Display,
-Surfaces, Explode, Clip, Edges, Grid, Axes, Lighting, Background, Floor, and no
-preset reorders it. Grid and Axes are separate, with matching default colors.
-Floor and Background have no redundant enable/transparency checkboxes; opacity
-lives in color pickers with checkerboard previews.
-Hover only highlights controls; it never writes settings. One per-file settings store serves controls, agent
-commands and persistence, and retains unchanged renderer inputs across edits;
-see [View state and updates](docs/render-mode.md#state-and-updates).
-Expensive settings use [staged viewport updates](docs/view-updates.md): controls
-remain authoritative, preparation is replaceable, and captures await presentation.
+by default, and no panel is saved per file. Opening Display leaves the file's
+panel visible, preserving the tree's disclosure and scroll.
+The binding [viewer design system](docs/settings-ui.md) defines tool lifecycle,
+sidebar navigation, mobile layout, section density, tooltips and fullscreen.
+RendererShell owns the top-left toolbar and bottom-right cube; Display is the
+last toolbar item and Animate is conditional on clips. Fullscreen is a separate
+top-right action and preserves the parent navbar. Keep app-specific effects in
+the [host contract](docs/viewer-host.md), not in renderer components.
 
-Solid, Render, X-ray, Hidden line and Wireframe are presets over one grouped
-settings schema. Every preset exposes the same groups. Render defaults to
-perspective; others to orthographic. Changed view values show Custom; Reset
-restores the base preset. Clip/Explode are tools outside presets and Custom,
-preserved along with camera viewpoint/zoom, motion and selection. The viewer
-inherits host light/dark appearance and defaults to Preview lighting quality;
-snapshots default to Light and Final. Explicit grouped values override these
-context defaults. Retired saved states migrate on restore; new commands use the
-closed grouped schema. See [View presets](docs/render-mode.md).
+One per-file settings store serves controls, live commands and persistence.
+Presets use the canonical grouped schema; see [View presets](docs/render-mode.md).
+Expensive changes use [staged viewport updates](docs/view-updates.md): controls
+remain authoritative, preparation is replaceable, and captures await presentation.
+Camera transforms remain local to a mounted viewer; refresh/reopen fits the file.
 
 Authored material color, finish and opacity are read-only in every style; the
 Model reference section shows their properties. There is no Materials editor or
 persisted material override. See [View styles](docs/render-mode.md) and
 [progressive detail](docs/lod.md).
 
-The breadcrumb names the file and carries no status. Opening and updating show
-in the viewport's own loading state, and an error as a card over the viewport;
+The navbar names the file and carries compact loading/update status. An error
+appears as a card over the viewport;
 a failed update the model survives can be dismissed, leaving the previous
 version to inspect. Try again reloads only the selected renderer.

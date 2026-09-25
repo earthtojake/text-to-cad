@@ -176,6 +176,21 @@ const partNode=(id:string,name:string)=>({id,nodeType:'part',name,leafPartIds:[i
 const assemblyRoot={id:'document',nodeType:'assembly',name:'tom',children:[{id:'arm',nodeType:'assembly',name:'Arm',leafPartIds:['arm.wrist'],children:[partNode('arm.wrist','Wrist')]},partNode('base','Base')]};
 const directModeling={descriptor:assemblyDescriptor,results:{},error:null,retryFailed:vi.fn()};
 
+it('double-click isolates subassemblies and components but copies topology references',()=>{
+ const onFocusTreeNode=vi.fn(),onCopySelection=vi.fn();
+ render(<ModelingTreeView modeling={{...directModeling,results:{c:{tree}}}}
+  stepRoot={assemblyRoot} active references={refs('arm.wrist')}
+  partControls={{isAssemblyView:true,expandedTreeNodeIds:['arm','arm.wrist'],onFocusTreeNode,onCopySelection}}/>);
+ fireEvent.doubleClick(screen.getByRole('button',{name:'Select Arm',exact:true}));
+ expect(onFocusTreeNode).toHaveBeenLastCalledWith('arm');
+ fireEvent.doubleClick(screen.getByRole('button',{name:'Select Wrist',exact:true}));
+ expect(onFocusTreeNode).toHaveBeenLastCalledWith('arm.wrist');
+ expect(onCopySelection).not.toHaveBeenCalled();
+ fireEvent.doubleClick(screen.getByRole('button',{name:'Select Cut extrude 1',exact:true}));
+ expect(onCopySelection).toHaveBeenCalledTimes(1);
+ expect(onFocusTreeNode).toHaveBeenCalledTimes(2);
+});
+
 it('starts the compact tree immediately below the filter and keeps disclosure separate from selection',()=>{
  const onSelectTreeNode=vi.fn(),onToggleTreeNode=vi.fn(),onLoadTopology=vi.fn();
  const controls={expandedTreeNodeIds:[],onSelectTreeNode,onToggleTreeNode};
@@ -260,26 +275,6 @@ it('keeps feature summaries and measurements below the tree instead of truncatin
  expect(screen.getByRole('button',{name:'Select Cut extrude 1'}).textContent).toBe('Cut extrude 1');
 });
 
-it('publishes deepest visible feature targets, keeps them when inactive, and drops them when the parent collapses',()=>{
- const profile={id:'profile:1',kind:'profile',label:'Profile',faces:[],edges:[3],children:[]};
- const featureTree=[{...tree[0],children:[{...feature,children:[profile]}]}];
- const modeling={...directModeling,results:{c:{tree:featureTree}}};
- const references=[...refs('arm.wrist'),{id:'arm.wrist.e3',selectorType:'edge',occurrenceId:'arm.wrist',normalizedSelector:'arm.wrist.e3'}];
- const targets=vi.fn();
- const props={modeling,stepRoot:assemblyRoot,active:true,references,onVisibleFeatureTargetsChange:targets,partControls:{expandedTreeNodeIds:['arm','arm.wrist']}};
- const {rerender,unmount}=render(<ModelingTreeView {...props}/>);
- expect(targets).toHaveBeenLastCalledWith([{nodeId:'arm.wrist/cut:1-2',referenceIds:['arm.wrist.f1','arm.wrist.f2']}]);
- fireEvent.click(screen.getByRole('button',{name:'Expand Cut extrude 1'}));
- expect(targets).toHaveBeenLastCalledWith([{nodeId:'arm.wrist/profile:1',referenceIds:['arm.wrist.e3']},{nodeId:'arm.wrist/cut:1-2',referenceIds:['arm.wrist.f1','arm.wrist.f2']}]);
- const called=targets.mock.calls.length;
- rerender(<ModelingTreeView {...props} active={false}/>);
- expect(targets).toHaveBeenCalledTimes(called);
- rerender(<ModelingTreeView {...props} partControls={{expandedTreeNodeIds:['arm.wrist']}}/>);
- expect(targets).toHaveBeenLastCalledWith([]);
- unmount();
- expect(targets).toHaveBeenLastCalledWith([]);
-});
-
 it('does not request recognition for hidden or excluded isolated parts, while allowing an isolated descendant',()=>{
  const request=vi.fn();
  const props={modeling:directModeling,stepRoot:assemblyRoot,active:true,onRequestRecognition:request};
@@ -340,7 +335,7 @@ it('finds a nested part inside a collapsed subassembly, showing its owner path, 
  fireEvent.change(screen.getByRole('textbox',{name:'Filter model'}),{target:{value:'Wrist'}});
  await screen.findByRole('list',{name:'Model search results'});
  const hit=screen.getByRole('button',{name:'Select Wrist'});
- expect(hit.title).toBe('Arm/Wrist');
+ expect(hit.title).toBe(''); // no native tooltip competing with the shared hint
  expect(within(hit).getByText('Arm')).toBeTruthy();
  expect(onToggleTreeNode).not.toHaveBeenCalled();
  expect(request.mock.calls.length).toBe(callsBefore);
@@ -416,9 +411,9 @@ it('clears selection only from empty tree space, not a row or its controls',()=>
 });
 
 it('opens a lone part implicitly, requests its recognition and topology once, and presents its features directly',()=>{
- const onLoadTopology=vi.fn(),request=vi.fn(),onSelect=vi.fn(),targets=vi.fn();
+ const onLoadTopology=vi.fn(),request=vi.fn(),onSelect=vi.fn();
  const stepRoot={id:'__step_model__',nodeType:'part',name:'Case',leafPartIds:['__model__'],children:[]};
- const props={active:true,stepRoot,onLoadTopology,onSelect,onRequestRecognition:request,onVisibleFeatureTargetsChange:targets,references:refs()};
+ const props={active:true,stepRoot,onLoadTopology,onSelect,onRequestRecognition:request,references:refs()};
  const {rerender}=render(<ModelingTreeView {...props} modeling={{descriptor,results:{},error:null}}/>);
  expect(onLoadTopology).toHaveBeenCalledExactlyOnceWith(['o1']);
  expect(request).toHaveBeenLastCalledWith(['o1']);
@@ -429,10 +424,8 @@ it('opens a lone part implicitly, requests its recognition and topology once, an
  expect(screen.queryByRole('button',{name:'Expand Body 1'})).toBeNull();
  fireEvent.click(screen.getByRole('button',{name:'Select Cut extrude 1'}));
  expect(onSelect).toHaveBeenCalledWith(['o1.f1','o1.f2']);
- expect(targets).toHaveBeenLastCalledWith([{nodeId:'o1/cut:1-2',referenceIds:['o1.f1','o1.f2']}]);
  rerender(<ModelingTreeView {...props} modeling={{descriptor,results:{c:{tree}},error:null}} partControls={{hiddenPartIds:['__model__']}}/>);
  expect(screen.getByRole('button',{name:'Select Cut extrude 1'}).hasAttribute('disabled')).toBe(true);
- expect(targets).toHaveBeenLastCalledWith([]);
  expect(request).toHaveBeenLastCalledWith([]);
 });
 

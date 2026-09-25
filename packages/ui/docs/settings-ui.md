@@ -1,250 +1,246 @@
-# File-viewer settings design system
+# Viewer interaction and settings design system
 
-This is the binding contract for settings in shared file-viewer panels, including
-Display and a file's Position section. Use the primitives in
-[`FileSheet.js`](../src/renderers/kit/inspector/FileSheet.js), and stack a file's
-own panel with [`FilePanelSections.jsx`](../src/renderers/kit/inspector/FilePanelSections.jsx).
-A panel has no tabs: the nav row's toggles are the tab strip (the file's own
-panel, Display, the file tree), and a panel is one column of sections.
-Extend a shared primitive when a new control shape is needed. Do not recreate
-rows or section behavior inside each renderer. Environmental effects belong to
-the host, per [viewer-host.md](viewer-host.md); these controls work in either app.
+This is the binding contract for shared viewer tools, sidebars and settings.
+Use [FileSheet primitives](../src/renderers/kit/inspector/FileSheet.js),
+[FilePanelSections](../src/renderers/kit/inspector/FilePanelSections.jsx) and
+[toolbar primitives](../src/renderers/kit/tools/ToolbarButton.js). Extend these
+shared components rather than recreating their layout in individual renderers.
+Environmental effects belong to apps through the [host contract](viewer-host.md).
 
-## Sections express behavior
+## Ownership and layout
 
-Sections are a flat stack separated by thin borders. Do not nest disclosures or
-put the display groups inside another “Display settings” accordion.
+The host-owned FileViewer owns the navbar, breadcrumbs, panel
+frame and panel visibility. RendererShell owns the scene's toolbar, display
+popover, persistent tool panels, view cube, bottom actions and presentation.
+Renderers supply capabilities, tool definitions, document state and panel content;
+the shell must not inspect a format's parts, joints or topology.
 
-| Kind | Primitive | Behavior | Examples |
-| --- | --- | --- | --- |
-| Always available | `FileSheetStaticSection` | Always open; no chevron, hover treatment, or enable switch | Display |
-| Foldable | `FilePanelSections` in a file's own panel, beside another section (`FileSheetToggleHeading`, Expand/Collapse) | The gates' chevron as a view only: folding changes nothing the section does, and a folded section stays mounted | Features, Position, Issues, Links, SDF |
-| Optional feature | `FileSheetGatedSection` | Expanded means enabled; collapsed means disabled | Edges, Grid & axes, Environment |
+- The toolbar sits at top-left. Fullscreen is a separate small transparent
+  diagonal-arrows button at top-right, aligned with the toolbar.
+- STEP orders its available tools Select, Draw, Measure, Explode, Clip, Position,
+  Animate, Display. There is no separator or activity dot. Display is available
+  in every 3D renderer; Animate appears only with animation clips.
+- Persistent tool panels stack beneath the toolbar, 160px wide with 8px gaps and
+  a viewport-constrained scroller. They use `ToolPanel`, including its collapse
+  and X actions. Collapse changes visibility; X removes and resets the tool.
+- The draggable view cube is bottom-right on desktop, with enlarged face/edge/
+  corner hit areas, neutral hover feedback and XYZ guides. No surrounding arrow,
+  Home or Reset buttons. Mobile omits the cube.
+- Bottom actions and the playbar sit near bottom-center, independently of the
+  cube's dimensions. Copy CTAs use content-sized buttons and platform-appropriate
+  keyboard hints; mobile omits the shortcut hint.
+- Loading status sits after the filename/menu in the navbar. Notifications are
+  compact and right-aligned below the navbar, unaffected by sidebar width. Name
+  the completed action, such as “Reference copied,” rather than transport details.
 
-A section is gated only when its entire feature has a meaningful disabled state.
-The surface controls stay open, inside Display, because they configure the model's
-basic presentation. Their style picker offers only Shaded and Flat: Hidden and Off
-are what Hidden line and Wireframe are made of, so the Mode owns them, and while the
-Mode draws no shaded surface the surface rows step aside. Position holds controls over
-authored motion, not an optional display effect, so it is never gated; folding it
-away beside Features changes the view and nothing else.
+## Tools and lifecycle
 
-For an optional feature:
+One tool owns pointer input. Retained effects may remain highlighted alongside
+it; a highlighted retained effect is not another pointer owner.
 
-- The disabled header has muted text and a chevron pointing right. The title and
-  chevron enable it on click or keyboard activation. Hover provides a gray
-  background only.
-- The enabled header is static primary text with a chevron pointing down. Only the
-  chevron is an interactive icon button, with the standard button hover/focus
-  treatment.
-- Enabling initializes the group's defaults. Disabling removes its overrides
-  and applies its neutral behavior. Reopening never restores old edits.
-- Do not add an enable checkbox inside the section, and do not infer whether it
-  is open from the numerical value of a control.
-- Hover, focus, scrolling, layout movement, or renderer completion must never
-  write settings or open/close a section.
+| Tool | Activation and options | Leaving the tool |
+| --- | --- | --- |
+| Select | Default for STEP and robots; corner menu narrows selection where supported | Clear selected parts/topology/links |
+| Draw | Select drawing mode; corner menu offers drawing tools and history/color actions | Clear the sketch |
+| Measure | Arm picking; corner menu chooses snapping | Cancel unfinished picks; retain completed measurements |
+| Explode / Clip | Open a neutral panel; edits apply the effect | Remove a neutral panel; retain a nonzero effect |
+| Position | Enable joint handles; reveal Position on desktop | Hide handles; retain joint values |
+| Animate | Start playback; corner menu contains Routine, Speed and Loop | Stop playback and restore the renderer's base motion state |
+| Display | Select the tool and open its properties sheet | Close the sheet and return to Select; retain settings |
 
-Feature state comes from the canonical per-file settings store. There is no
-second accordion-open state to synchronize with it.
+Corner triangles indicate temporary menus only. First activation selects the
+tool, including a press on its corner; a subsequent press opens options. Use
+`ToolPopover`, with keyboard access, outside dismissal and Escape. Choosing a
+value closes ordinary option menus. A selected tool has no tooltip.
 
-## Explode and Cross-section
+Draw's menu has tools and settings rows separated by a rule, without headings.
+Selecting a drawing tool changes the main icon and closes the menu. Color, Undo
+and Redo keep it open; Clear closes it. Undo/Redo reflect their actual history
+stacks. Draw selection uses SquareMousePointer. Pencil and geometric marks use
+the same default stroke thickness.
 
-These are how a person examines a design, so they are not Display sections: they are
-toggle buttons in a STEP's tool strip, after Measure. They are not tools. Tools are
-one at a time; a person selects or measures while exploded or cut, so a toggle
-leaves the active tool alone. A press turns one on and puts its controls in a
-panel under the strip (`ViewToolPanel`, the Measure panel's surface); a press
-while on turns it off. The panel has no close button. The controls
-(`ExplodeControls`, `CrossSectionControls`) write the same `exploded` and `clip`
-settings Display's Reset clears.
+A measurement creates a retained results panel only when completed. No empty
+panel or “pick two points” prompt. With results, the main Measure button and X
+clear all results; its corner resumes picking and opens snapping options. Removing
+the last result returns Measure to ordinary picking behavior. No Clear All footer.
 
-Cross-section (the `clip` setting) opens with an X center cut and Flip off,
-exposing the section toward the default camera. Flip reverses the kept half
-without moving the plane; orbiting does not change the cut. Explode opens at 50%
-and stays on at 0%, and its button is disabled with fewer than two parts. Both stay
-outside presets.
+Explode and Clip have no enabled checkbox. Explode opens at 0%; Clip at 0% cut.
+Clicking a retained tool again is equivalent to X. Returning its value to neutral
+makes the panel temporary again; changing axis or Flip alone is not an effect.
+Canonical settings own these effects. External Reset must update panels too;
+restored nonzero effects get panels without requiring another toolbar click.
 
-## Read-only inspection
+Clip uses one axis/Flip row and one slider/value row. Left-to-right increases cut
+percentage through the original model bounding box. Flip reverses the retained
+half, preserving an active plane's coordinate. Pose, animation and Explode do
+not silently redefine the slider's range. At 0% there is no clipping. Explode
+is unavailable with fewer than two parts.
 
-Reference information uses a static heading with an X to clear selection, not a
-gated settings section. Its body may scroll independently and its divider may
-resize it; fields never hide behind nested disclosures. Use compact label/value
-rows with the same 8px gutters and 11px text as settings. A dropdown may browse
-multiple selected items without altering the selection. Keep copy, prompt and
-geometry-manipulation actions out of this read-only panel.
+## Sidebars and mobile
 
-## Density and spacing
+Each renderer may register at most one optional **Settings** navbar entry, with
+the sliders icon. Camera/snapshot actions are actions, not extra settings tabs.
+The file explorer and settings sheets have no redundant visible title bars;
+retain accessible dialog names.
 
-Use 8px horizontal gutters throughout. There is no tab strip inside a panel.
-The shared panel column has a 256px minimum width, so a Position section's joint
-sliders and their typed values fit without scrolling sideways. Dragging narrower
-collapses the panel; reopening starts at 320px. Every panel (the file tree, a
-file's own panel, Display) uses the same resize frame and rule.
-If the containing file view itself becomes narrower than the minimum, collapse
-the column as well. Collapsing never resets file, pose, or display state.
+A STEP's settings contain Features and, when available, Position. Robots use
+Links and Position; Links is the established robot-description term. Show an
+internal tab strip only when both exist. Keep inactive contents mounted, passing
+`active=false` to expensive content. Issues belong with Features; SDF metadata
+belongs with Links. Display is a toolbar popover, never a sidebar tab.
 
-Section headers are at least 28px high with regular 12px text. Controls follow
-the header directly, without extra top padding; expanded headers have no hover
-background to separate from the controls. Keep 4px between rows and 8px after
-the last row. Controls are generally 28px high. Use muted smaller labels for secondary
-information; do not enlarge every label to the default body size. Avoid bold.
+Desktop sidebar navigation is intentional:
 
-Related controls share rows through `FileSheetFieldGrid` (two or three equal
-columns), which owns the gutter. Children use `className="px-0"` when their
-primitive normally adds its own gutter. Never double-pad a grid cell.
+- Position explicitly opens its tab, including a repeated activation.
+- Selecting Select alone does not switch tabs. A selection can show Features or
+  Links when Settings is already open; it does not reopen a closed sidebar.
+- Draw, Measure, model effects, Animate and Display do not choose sidebar tabs.
+- Fullscreen temporarily hides/disables panels and restores the previous panel,
+  width and internal tab on exit.
 
-| Control | Pattern |
-| --- | --- |
-| Related choices | Two or three compact dropdowns on one row; equal widths |
-| Scalar with a useful range | `FileSheetSliderField compact`: short label, slider, committed value on one row |
-| Scalar where the range is less useful | `FileSheetNumberProperty` with recognizable icon/unit and a tooltip |
-| Boolean option within a feature | `FileSheetCheckboxRow`, label directly beside the checkbox |
-| Color and opacity | `FileSheetColorProperty`; swatch, hex value, and percentage together |
-| Actions | `FileSheetButtonRow`; compact buttons, verb labels, icons where useful |
+Use one breakpoint at 720px of the entire FileViewer. Desktop panels resize with
+one shared frame (256px minimum; reopening a collapsed panel starts at 320px).
+Mobile panels are nonmodal floating sheets over the viewer; they never resize
+or translate the scene or lock/shift the surrounding page. They start closed,
+with a compact X, outside dismissal and Escape. Preserve the desktop selection
+and width across the breakpoint. Tool-driven panel opening **and tab switching**
+are disabled on mobile. Breadcrumbs show the current filename and menu only;
+status becomes a tappable progress icon.
 
-Omit a visible label only when the selected value, icon, unit, or swatch makes
-its meaning clear. Always provide an accessible name and a tooltip for omitted
-labels. Keep labels on ambiguous controls such as authored joint values.
-Long labels truncate while reserving at least 48px for sliders and keeping
-numeric inputs visible, without pushing controls outside the panel;
-the full name remains available in a tooltip/accessibility label. Never use an
-unlabelled switch whose neighboring labels could refer to it.
+Model and link filters share `TreeFilterInput` sizing and insets, including the
+reduced top inset beneath a heading. Trees and Position scroll in their own
+active tab's single scroller. A pinned Reference inspector is a sibling pane,
+not a nested tree scroller. One-finger orbit, two-finger pan/zoom and tool taps
+must work on touch. A pinch, pointer cancellation or camera drag is not a pick.
 
-Menu items default to 11px text with a 16px line height in the shared dropdown,
-select and context-menu primitives, including submenus and checkbox/radio rows.
-Do not override this at each settings control: popup portals must retain the
-same compact size independently of the trigger's or host body's typography.
-Menu shortcut hints use the 10px metadata size.
+## Settings sheet and primitives
 
-Dropdowns show useful icons in both the selected value and menu options. Use
-specific projection icons and complementary Solid/Render icons. Color opacity
-uses the checkerboard preview; 0% is transparent and 100% is opaque. Do not add a
-separate transparency toggle or duplicate opacity slider.
+Display uses the render sphere icon and a 256px popover capped at 520px or the
+available viewport height. It is a tool: it remains usable during Draw and
+activating it leaves the previous tool. Closing its sheet returns to Select. Settings changes never dismiss the sheet.
 
-## Display
-
-Keep this order in every preset; enabling a feature never moves it:
+Use one scroller, shared section primitives, non-sticky headings and no nested
+cards. Nested dropdowns/color pickers own their dismissal: Escape or an outside
+click dismisses the innermost popup first, then the sheet on a later gesture.
 
 | Section | Contents |
 | --- | --- |
-| Display | The Mode dropdown; then, while the Mode draws surfaces, Style (Shaded/Flat) and part-color mode together and compact color/opacity controls. Projection is not here: it is the view cube's toggle |
-| Edges | Visibility and color together |
-| Grid & axes | One gate over both groups; Grid and Axis color/opacity side by side (the axes match the grid's default color) |
-| Environment | One gate over lighting, background and floor, the groups Render turns on together. A **Lighting** group (quality, then paired numeric properties for exposure/rotation and size/fill), then **Background & floor** (the two colors side by side, then floor placement, using model origin by default) |
+| Display | Full-width render Mode; Appearance and Projection beneath it; small gray Reset at top-right |
+| Surfaces | Style and part-color mode; color/palette and opacity below |
+| Edges | Visibility and color, where the format supports topology |
+| Grid / Axes | Two color/opacity controls, left/right in title order; no redundant visible labels |
+| Lighting | Quality, exposure, rotation, softbox size and fill |
+| Background | Color and opacity |
+| Floor | Color/opacity and placement |
 
-A section that gates several groups (`groupSection`) is open while any of them is on, and
-its gate turns all of them on or off together. Inside it, `FileSheetItemGroup` labels each
-group; that is a label, never a nested disclosure.
+Display and Surfaces stay open. Other sections use a plus/minus feature gate:
+expanded means enabled, collapsed means disabled. Grid / Axes gates both groups;
+their settings remain separate in the core/CLI contract. Never add a second
+“Enabled” checkbox inside a gated section. Enabling starts at defaults; disabling
+removes overrides. A heading click reveals enabled content without disabling it;
+only minus disables. Hover, focus and rendering completion never write settings.
 
-Explode, Cross-section and Edges are for CAD models (STEP). A mesh, a robot or a drawing has
-no parts to separate, no solid to section and no topology to draw edges from: those
-three sections are not rendered for it, they resolve disabled whatever was saved,
-and the presets made of edges (X-ray, Hidden line, Wireframe) are not offered
-(the `features` lists of `resolveViewSettings`: a STEP view passes `ALL_VIEW_FEATURES`,
-every other `EDGELESS_VIEW_FEATURES`). The snapshot CLI applies the same rule.
+Mode presets are shortcuts over the same controls. Manual overrides show Custom,
+which is not a selectable preset. Reset restores the chosen preset and clears
+Clip/Explode; it does not reset pose, camera, app appearance or orbit preferences.
+Appearance is host-owned Light/Dark/System. When System is stored, its trigger
+shows the resolved Light or Dark icon/value; the menu still marks System.
 
-Solid's basic display groups precede the effects disabled by default in Solid.
-Presets are batches of settings; controls do not branch on the mode name. An
-edit makes the selected value read muted **Custom**, which is not a menu option.
-**Reset** restores the currently selected preset's display defaults and disables
-Cross-section and Explode. It leaves the model's pose and the camera unchanged. See
-[render-mode.md](render-mode.md) for the grouped settings/CLI contract.
+Sections outside the short Display popover may use sticky headers: earlier
+headers stack at the top and later headers at the bottom of the single scroller.
+Use a top border except on the first section. Revealing a section expands it if
+folded and scrolls within the natural range; never add blank space to force it
+to the top. Ordinary edits do not scroll. Hidden tab headings need no artificial
+header offset.
 
-The desired settings update immediately. Expensive changes can take longer to
-appear in the viewport, but rendering cannot rewrite controls. The small status
-indicator, cancellation, and presentation policy live in
+Settings controls and Display headings use `text-tiny` (11px), regular weight
+and shared 28px control sizing. Sidebar section headings use 12px. Use 8px section gutters/bottom insets and 4px row/column gaps.
+`FileSheetFieldGrid` owns horizontal spacing; its children must not double-pad.
+Menu/select/context-menu typography comes from the primitives, including portals.
+Checkmarks sit on the right. Icons appear in selected values where meaningful.
+
+Use `FileSheetSliderField` for a useful bounded range and committed number input,
+`FileSheetNumberProperty` for other scalars, `FileSheetColorProperty` for combined
+color/opacity, and ordinary Select controls for choices. Keep drafts local until
+Enter/blur; Escape cancels. Clamp at the owner's write boundary. Sliders and
+number inputs share that boundary. Omit visible labels only where the value/icon
+is unambiguous, and always retain accessible names.
+
+## Position and references
+
+Pose sits above a full-width dropdown, with a small Reset icon opposite its
+label (`KinematicsPoseRow`). Include Default; manual edits show Custom. Without
+named poses, show Position and Reset only. There is no divider beneath Pose or
+Reset footer. Each joint label sits tightly above its slider in the flexible left
+column; a standard value input occupies the right column on the same row. Keep
+8px between joint rows and 8px top inset. Long labels truncate with a full-name
+hint; they must not consume the slider's width. Writes update pose immediately.
+
+Position persists across tools and sidebar changes. Reset restores authored
+values (including SRDF home), stops motion if necessary and hands control back
+to Position. Kinematics, named poses and animation availability are separate
+capabilities; absence of one must not create empty controls for another.
+
+Reference information is read-only, with a static heading and X to clear. Keep
+copy/prompt actions in the bottom CTA. Show that CTA only for an actual, usable
+selection. Use Copy Reference/Copy References, not IDs. The platform copy shortcut
+copies the active drawing or references unless a text field owns input.
+
+Viewport picks target individual faces and edges even when the tree groups them
+into a semantic feature. Double-click isolates a component/subassembly; double-
+click away leaves isolation. Only topology that cannot be isolated copies on
+double-click. Clearing/collapsing selected topology or leaving isolation must not
+leave a stale Copy Reference action.
+
+## Camera, animation and fullscreen
+
+Cube face/edge/corner clicks change direction and preserve pan/zoom; dragging
+orbits. Draw disables cube interaction without hiding it. Fresh file mounts and
+refreshes fit the model; camera transforms are not persisted in per-file storage.
+Display settings and authored pose are separate persisted state.
+
+Zoom to Fit recenters and frames the whole original model at the current angle.
+It has little effect when already fitted. Zoom to Selection frames the selected
+geometry and is unavailable without a selection. Both live in STEP context
+menus; live `resetCamera` uses the same fit path. Display Reset never reframes.
+
+Animate starts playback when selected. Its temporary menu contains Routine
+(when multiple exist), Speed and Loop. The bottom transport owns pause, scrub and
+restart; it has no second settings menu. No orbit settings appear in Animate.
+
+Fullscreen is available for every 3D file, independently of animation support.
+It fills the viewer **below the parent navbar**, hides/disables sidebars and editor
+controls, and starts orbit by default. Animation settings use the Play icon and
+the same runtime/menu as Animate; a separate Orbit menu controls orbit and speed.
+A static model gets an orbit play/pause transport. Exit, menus and transport use
+one one-second idle deadline and 150ms fade; movement wakes them, while hovering
+their generous interaction area or opening a menu holds them visible. The cube
+is always hidden. Escape closes menus before leaving fullscreen.
+
+Presentation suspends picking, drawing, measurements, handles and model effects
+without discarding their values. It saves the regular camera, fits a presentation
+camera and restores the exact regular camera on exit. Presentation movement never
+writes the saved file state. The sidebar selection/width is restored, not reopened
+unconditionally. Keep the viewport mounted throughout.
+
+## Tooltips and verification
+
+All hints use `TooltipHint`: compact text, one shared surface/arrow and a 400ms
+delay. No native `title` hints. Prefer one or two words; show full technical names
+only when truncated. Omit redundant hints on Fullscreen, X, transport and labeled
+text buttons. Disabled or selected tools have no tooltip; pressing, leaving or
+changing tool cancels pending hints. Menu focus restoration must not reopen one.
+
+Verify state transitions, touch cancellation, keyboard operation, nested popup
+dismissal, feature availability, narrow panels and empty/error states. Camera
+and persistent-tool tests must exercise actual transitions, not only class names.
+Do not preserve tests for discarded layouts: replace their old assertions with
+coverage of the current contract. The core settings semantics remain documented
+in [render-mode.md](render-mode.md); update scheduling is in
 [view-updates.md](view-updates.md).
 
-## Framing
+## Feedback
 
-There is NO zoom control. No panel carries one, there is no percentage readout,
-no menu behind one, and no zoom toolbar over the viewport. Do not add one, and do not advertise keyboard shortcuts the viewer does
-not implement. Zooming is the pointer's: wheel or pinch to zoom, drag to pan, and
-on a DXF double-click to fit.
-
-Two affordances frame the model, and between them every renderer has a way back
-from a view that has been driven off it.
-
-| Action | Where | Scope |
-| --- | --- | --- |
-| Zoom to fit | STEP's viewport context menu — over a part, over the backdrop, and on every Features tree row | Frame the whole model again, without turning the camera. What the live `resetCamera` command does |
-| Zoom to selection | The same menu, disabled without a selection | Frame what is selected now |
-| Reset to default isometric view | The house beside the view cube, in every 3D renderer | Frame the model AND return to the default direction — the only way back on a robot, a GLB or a mesh |
-| Display → Reset | The Display panel | Restore selected preset defaults and disable Cross-section/Explode; keep the model's pose and the camera |
-
-Framing the whole model is ONE act, so it is offered once and under one name.
-Restoring the model itself belongs to whoever owns it: the Position section's
-Reset for a pose, the Display panel's Reset for settings.
-
-## Position
-
-A STEP's own panel stacks **Features**, then **Position**, then **Issues**; a
-robot's stacks **Position**, then **Links**, then **SDF** for an `.sdf`. Include
-Position only when there is something to drive: a STEP whose sidecar declares
-kinematics, a robot with a joint a person can move. Detect the named poses and
-the joint values independently from their respective sidecar blocks (or the
-SRDF's group states), not from the file extension or the existence of the other
-block. Loading/error status for a requested block can be shown; absence of a
-block does not create empty controls. Animation has no section here: it is the
-Animate tool's own playbar, entirely outside this panel (see
-[Fullscreen presentation controls](#fullscreen-presentation-controls) for its
-transport, which the tool also shows at the bottom of the regular viewport).
-
-Position is ONE section of rows, with no sections of its own inside it. First a
-**Pose** row, the label on the left and the named-pose dropdown right-aligned
-beside it (`KinematicsPoseRow`), present only if named poses exist (a STEP
-sidecar's poses, an SRDF's group states); then a row per joint value, present
-only if joint values exist. Keep each DOF's label and unit: these are not
-self-explanatory icons. Numeric DOFs use compact slider/value rows with 4px
-gaps and a label column capped at 96px; longer labels truncate to preserve
-slider space. Do not include a Copy button. Every pose write lands in the same
-frame — a named pose, a slider drag, a typed number, a Position-tool knob and
-Reset — and none of them ease; motion over time is the Animate tool's, never
-this section's.
-
-Place one **Reset** at the bottom of Position. It restores authored joint
-values and, if a routine owns the pose, also stops playback and hands the pose
-back to Position, so animation and a modified pose never disagree about
-which one is in control after a reset. Display settings and camera remain
-unchanged.
-
-## Fullscreen presentation controls
-
-Fullscreen is entered from the `Fullscreen` tool (`Maximize2`), the last item of
-a STEP's tool strip, which exists only where the host offers fullscreen (the web
-app does; the desktop app does not). The kit's `FullscreenToolbar`
-(`kit/tools/fullscreen/`) places the Animate tool's playbar (`ViewportAnimationBar`,
-the same transparent bar the regular viewport shows at bottom center while a
-routine plays) at the bottom center, with an Orbit-settings button and X at
-the top-right. Use shared 24px buttons and 12px icons without a toolbar
-background, border or shadow. Play/Pause never opens a picker. Without
-animation, omit the bottom bar entirely.
-
-The corner button, unlike the neighboring Exit button, carries no tooltip; it
-opens a floating, content-height panel aligned to the top-right. Clamp its
-width and height to the viewport and scroll its contents when needed. It holds
-one permanent `FileSheetStaticSection`, **Orbit**: a compact speed slider,
-also untooltipped, plus numeric input (0–5×, slider steps of 0.05; 0 stops
-rotation). Persist this global preference through `CadPreferences`. Settings
-never opens or switches a file's panel, and closing it does not disable
-animation.
-
-Both control areas fade together after two seconds without pointer/wheel/keyboard
-activity. An open settings panel, a scrub gesture or keyboard focus keeps them
-visible. The animation clock's ticks do not reset the idle timer. Hidden controls are
-inert and do not intercept viewport input. Escape closes a nested picker, then
-the settings panel, then fullscreen. Fullscreen and the regular viewport's playbar use
-the same callbacks and the renderer's one clock; do not duplicate animation state.
-
-## State, input, and verification
-
-Use controlled values from the owning store/runtime. Input drafts stay local
-until Enter or blur commits them; Escape cancels. Normalize/clamp at the write
-boundary. Do not mirror props into effects that write them back to the owner.
-Native sliders and editable number fields must share one update path.
-
-New behavior must work with mouse and keyboard. Verify disabled/enabled
-semantics, preset stability, independently available kinematics blocks, empty and
-error states, and narrow panels. Test state transitions rather than exact class
-strings. The Display and Position components are the reference consumers;
-legacy subsection primitives elsewhere are not the pattern for new settings.
+Viewer actions complete without toast notifications. Do not add success messages,
+notification queues or dismissal timers for copy, snapshot or prompt actions.
+Loading progress stays in the navbar; failures use the existing error presentation.

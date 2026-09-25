@@ -13,7 +13,7 @@ URL/history behavior, read-only actions, app appearance and camera state, CAD
 selection/measurements/tools and responsive behavior.
 
 **Owns:** URL selection, browser history, document title/appearance, catalog
-file-source adapter, browser persistence, and this app's top bar/release links.
+file-source adapter, browser persistence, and this app's branding, appearance and release links.
 `src/App.tsx` composes an explicit `ViewerHost` and one renderer per file family. The catalog
 continues to expose CAD artifacts only; this migration adds no file types or
 write endpoints to the web app.
@@ -40,7 +40,7 @@ src/
   adapters/             read-only catalog file source and capabilities
   host/                 browser clipboard, prompt delivery and page lifecycle
   persistence/          root-scoped view state and legacy preference migration
-  client/               app top bar, browser navigation and styling
+  client/               navigation branding, release menu, appearance and styling
   shared/               app build/runtime configuration helpers
 ```
 
@@ -199,91 +199,26 @@ placement, and `active={false}` uses the still pose. The host owns status text.
 It also stays still for OS/app reduced motion and hidden documents. See
 the UI package's asset documentation for asset provenance and regeneration.
 
-### Narrow CAD panes
-
-A file has a top-right tool strip only where it has tools. A STEP's holds Select,
-Measure, Draw, plus Position and Animate where the file has joints or routines,
-and Fullscreen last; pressing Select again opens its selection-filter dropdown.
-Under Select a
-secondary tap over a STEP opens the part menu (the shell's viewport menu, filled
-by the STEP renderer); under any other tool it opens nothing. A robot description
-(its own renderer) opens in Position, which leads its tools, followed by a Select
-that picks whole links. Draw is a STEP tool and appears nowhere else. A DXF, a
-GLB, an STL and a 3MF (their own renderers) have NO tools and no strip at all:
-their viewport simply orbits, pans and zooms, and a secondary press opens
-nothing. A GLB with clips shows the playbar under the model always — it is a
-transport, not a tool, and the file opens at rest. A DXF is not a viewport at
-all: it is a straight 2D render on a canvas (drag to pan, wheel or pinch to zoom
-about the pointer, double-click to fit), and its file navbar carries Take
-snapshot and the file tree's toggle, nothing else. Buttons wrap inside the pill
-when an open panel or a narrow host reduces the scene width. Snapshot is a
-direct action before the panel toggles in the file navbar (Display, the file's own
-panel, then the file tree); the web prompt adapter copies the viewport image
-and references to the clipboard.
-There is no zoom control: no percentage readout, no menu behind
-one, no zoom toolbar. A STEP's viewport context menu ends in Zoom to fit and Zoom
-to selection (off without a selection), offered over a part, over the backdrop and
-on every Features tree row; on every other 3D file the view cube's centre, "Reset
-to default isometric view", frames the model again from the default direction.
-Nothing in either touches the model, its motion or its display settings.
-X/Y/Z labels remain visible outside the bottom-right axis endpoints.
-
-Fullscreen (`Maximize2`) is the last button of a STEP's own tool strip; the web
-header has none, and no other format offers it. The app owns this transient
-state and passes it to FileViewer with `onFullscreenChange`, which FileViewer
-hands to the STEP renderer alone. It hides all chrome, the nav row, the panel
-column and viewport tools. Shared CAD fullscreen controls show the Animate tool's
-transparent centered bottom playbar and an untooltipped orbit-settings button
-plus X at top-right. Settings opens a floating, content-height panel capped by
-the viewport, with one permanent Orbit section: a speed slider and numeric
-input (0 stops rotation). The bottom playbar has plain play/pause and a live
-scrub bar — there is no separate restart, since scrubbing to the start is the
-restart — and is absent without animation. Position stays in the file's panel.
-Both control areas fade after two seconds idle; an open settings panel and active
-slider/keyboard interaction keep them visible.
-The app honors prevented Escape events so nested pickers and settings close
-before fullscreen exits; X calls `onFullscreenChange(false)`. X or Escape
-restores the panel, active tool and original camera without reloading the scene.
-Each entry starts at the default camera. Orbit speed persists globally through
-the host preference adapter; animation shares the Animate tool's per-file state
-and clocks.
-
 ## Current viewer behavior
 
-The nav row is the tab strip: a file's toggles are `Display`, its own panel, then
-the file tree, and no panel has tabs inside it. Sections stack tight at their full
-heights in one scrolling column, each foldable beside another, with a pick's
-Reference pinned at the foot. A STEP's own panel is `Part` or `Assembly`; it stacks Features, then Position when the sidecar
-declares kinematics (a `Pose` row, the joint sliders, then Reset), then Issues
-when there are any. Every pose write — a named pose, a slider, a typed value, or
-a Position-tool knob — is an instant jump; there is no eased transition. Reset
-also stops any playing routine and hands the pose back to Position, so the two
-never disagree about which one is in control afterward. A robot description's
-own panel is `Robot`: its Position (a `Pose` row with any SRDF group states,
-then joint sliders, then Reset), then Links, which always shows the robot's link
-tree, and an SDF's metadata after Links. An
-STL, a 3MF and a GLB have Display and the tree. A DXF has neither a panel of its
-own nor Display — only the file tree's toggle beside Take snapshot: a drawing is
-a finished 2D document, and the pane shows it and nothing else.
+The shared [viewer design system](../../packages/ui/docs/settings-ui.md) is the
+authoritative contract for toolbar order, sidebar behavior, mobile layout,
+settings controls, selection and fullscreen. Keep those rules there rather than
+maintaining a separate web layout specification.
 
-The open panel is not saved: a page load opens the file with its own panel, or
-with nothing when it has none, and Display is never open by default. In a window
-at least 520px wide, a file picked in the tree opens with the tree still up, so it
-can be walked file by file, and any other open (a crumb, a link in a panel) shows
-the file's own panel; below that width every open leaves the model the room, with
-no panel at all. The web host stores the
-panel width and the tree's expanded folders ([storage](docs/storage.md)).
+The web host owns URL/history, root-scoped persistence, appearance, version links
+and native service adapters. Shared renderers own all model interaction. STEP and
+robots open in Select; their one Settings sidebar contains Features/Links and
+Position tabs when applicable. Every 3D file has Display in its top-left toolbar;
+Animate is conditional on clips. DXF remains a 2D canvas with pan, zoom and
+snapshot, without a 3D toolbar or settings panel.
 
-Display owns a single Mode dropdown: Solid, Render, X-ray, Hidden line and Wireframe.
-Modes are presets over one grouped display schema, and all settings groups are
-available in every preset. Render defaults to perspective; others to orthographic.
-Changing a view setting shows Custom. Display Reset restores its base preset and
-disables Clip/Explode; preset selection preserves those tools. Neither operation
-changes camera viewpoint/zoom, selection, the pose or app appearance.
-Expanded settings groups are enabled; the minus disables and restores neutral
-behavior. See [View presets](../../packages/ui/docs/render-mode.md). The file's
-own panel stays mounted while Display is open, so the Features tree keeps its
-disclosure and scroll.
+At the single 720px FileViewer breakpoint, desktop sidebars become floating mobile
+sheets and tool-triggered sidebar reveals stop. Fullscreen is a separate top-right
+scene action, retains the navbar, temporarily suspends panels and offers separate
+Orbit and animation controls. Camera transforms are session-only: refresh fits
+the file anew. Display and pose persistence remain host-owned through the shared
+state contract; see [storage](docs/storage.md).
 
 Authored material information lives in the Model reference details; editing it
 requires changing the source model or annotations. The viewer has no Materials
@@ -293,8 +228,8 @@ and root-scoped persistence. See the UI package's Render and LOD playbooks.
 
 Large assemblies load progressively and refine visible components within memory
 budgets. Warm tessellations can render before exact surface derivation. The
-breadcrumb carries no status: opening and updating show in the viewport's loading
-overlay, and an error is a card over the viewport whose Details keep the complete
+navbar carries opening/update status beside the filename (a progress icon on
+mobile); initial loading may also use the viewport overlay, and an error is a card over the viewport whose Details keep the complete
 compiler output and whose Try again reloads only that file. A failed update the
 model survives can be dismissed, leaving the previous version to inspect.
 
@@ -323,9 +258,13 @@ The web `FileSource` is a read-only CAD catalog. It exposes stat, directory
 listing and path search without text writes or native filesystem mutations.
 Catalog content/revision changes are distinct from transient metadata progress,
 so progress updates do not restart a prepared document. Native path copying and
-Copy reference live in the separate host actions adapter. Reference delivery
-uses the injected prompt port with the served workspace identity; ordinary path
-copying uses the clipboard port and retains the existing feedback labels.
+file reveal live in the separate host actions adapter. Path copying uses the
+clipboard port. Reveal uses guarded `POST /__cad/reveal` with a root-relative
+path; the backend rejects paths outside the served directory, including symlink
+escapes, and opens the native file manager without a shell. The menu uses the
+server platform to label Finder, Explorer, or the Linux file manager, and only
+offers reveal when the server advertises `reveal-path`. Path copies form the first menu section. Reference copying belongs
+to the renderer's selection action, rather than the file menu.
 
 ### Shared interface defaults
 
@@ -335,3 +274,25 @@ Menus, tabs and tree rows follow the same default from
 compact 11px labels and values. The shared renderer owns reference
 layout, projected-bounds camera fitting and labeled orientation axes, so desktop
 and web stay consistent without host-specific copies of those controls.
+
+### Compact navigation
+
+The web viewer has one navigation row. The native-GLB mark sits before breadcrumbs;
+the version/update dropdown sits before the renderer's snapshot action. It contains
+release instructions, release notes, GitHub and Discord. Appearance is injected as an icon-bearing dropdown beside Projection in
+the Display section, below the full-width Mode selector. The logo plays its existing native
+GLB animation on hover through the shared LoadingIcon, respecting reduced motion. `ViewerBrand`, `ViewerLinks` and `ViewerAppearance` stay web-owned;
+`FileViewer.leading`, `navigationActions` and `displayActions` provide the shared slots.
+The web favicon assets are static copies of the GLB-derived docs favicon, with no
+runtime dependency between apps. Refresh them together when that mark changes.
+
+The web camera action copies only the viewport PNG through guarded
+`POST /__cad/clipboard`, avoiding browser clipboard permission prompts. The local
+backend writes the server machine's native clipboard on macOS or Linux (wl-copy/xclip);
+this is not the remote phone's clipboard when accessing a shared server. Failures
+use the existing viewer error presentation; successful actions are silent. Desktop keeps its composer attachment workflow.
+Fullscreen is a transparent top-right action, independent of the toolbar. It
+hides editor chrome below the navbar and begins orbiting, with animation playback
+available for files with clips. Animate is conditional on STEP/GLB routines and
+has the shared temporary corner menu for routine, speed and loop. Every 3D file has a toolbar ending in Display, including static GLB files. Fullscreen
+has separate animation (Play icon) and Orbit menus. The cube remains at bottom-right in the normal viewer.

@@ -1,17 +1,4 @@
-/**
- * Discord, GitHub and the version chip: the ONE thing the standalone CAD
- * Viewer's nav row has that the desktop app's file tab does not.
- *
- * They are here rather than in `shell/` because they are not chrome, they are
- * this distribution's own links — and because the release check reaches
- * api.github.com, which a packaged desktop app's content-security policy has
- * no entry for. A shared module that fetched it would fail there silently,
- * once per file tab.
- *
- * Lifted out of `CadWorkspaceTopBar.js` unchanged when that file became the
- * shared row plus this: same cache, same tooltip, same copy actions. Only the
- * two size constants moved, because the row around them got shorter.
- */
+/** Web-owned release menu and community links; release polling never enters shared UI. */
 import { useEffect, useRef, useState } from "react";
 import { Check, CircleCheck, Copy } from "lucide-react";
 
@@ -29,12 +16,7 @@ import {
   viewerSkillsInstallCommandFromText
 } from "../../../shared/viewerConfig.mjs";
 import { Button } from "@hardcore/ui/primitives/button";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger
-} from "@hardcore/ui/primitives/tooltip";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, DropdownMenuItem, DropdownMenuSeparator } from "@hardcore/ui/primitives/dropdown-menu";
 import { cn } from "@hardcore/ui/utils";
 import { copyTextToClipboard } from "../../../host/browserClipboard.js";
 import viewerPackage from "../../../../package.json";
@@ -55,14 +37,8 @@ function DiscordMark(props) {
   );
 }
 
-// Sized for the shared nav row: the same 24px box and 14px glyph as the
-// panel toggles beside them, so one row does not have two button sizes in it.
-const topBarIconButtonClasses = "size-6 text-muted-foreground hover:text-foreground";
-const topBarIconClasses = "size-3.5";
 const latestReleaseCacheKeyPrefix = "cad-viewer:latest-release:v1:";
 const latestReleaseCacheTtlMs = 6 * 60 * 60 * 1000;
-const updateVersionTooltipDelayMs = 250;
-const passiveVersionTooltipDelayMs = 700;
 const emptyLatestReleaseCheck = Object.freeze({
   updateAvailable: false,
   latestVersion: "",
@@ -255,7 +231,7 @@ function VersionTooltipRow({ label, version, action = null }) {
   );
 }
 
-function VersionReleaseLink({ version, releaseUrl, releaseCheck = emptyLatestReleaseCheck }) {
+function VersionReleaseLink({ version, releaseUrl, githubUrl, discordUrl, releaseCheck = emptyLatestReleaseCheck }) {
   const normalizedVersion = String(version || "").trim();
   const [installCopyStatus, setInstallCopyStatus] = useState("");
   const [promptCopyStatus, setPromptCopyStatus] = useState("");
@@ -280,9 +256,7 @@ function VersionReleaseLink({ version, releaseUrl, releaseCheck = emptyLatestRel
   ).trim() || DEFAULT_VIEWER_SKILLS_INSTALL_COMMAND;
   const updatePrompt = DEFAULT_VIEWER_SKILLS_UPDATE_PROMPT;
   const upToDate = Boolean(latestVersion) && !latestReleaseNewer;
-  const label = updateAvailable
-    ? "Update CAD Viewer"
-    : (targetReleaseUrl ? `Open release ${normalizedVersion}` : `Version ${normalizedVersion}`);
+
 
   const handleCopyInstallCommand = async (event) => {
     event.preventDefault();
@@ -326,51 +300,21 @@ function VersionReleaseLink({ version, releaseUrl, releaseCheck = emptyLatestRel
     }
   };
 
-  const releaseButton = (
-    <Button
-      asChild={Boolean(targetReleaseUrl)}
-      variant={updateAvailable ? "default" : "ghost"}
-      size="xs"
-      className={cn(
-        "inline-flex rounded-sm px-2 text-xs leading-none",
-        updateAvailable
-          ? "h-6 px-2 text-tiny"
-          : "h-6 text-muted-foreground tabular-nums hover:text-foreground"
-      )}
-      aria-label={label}
-    >
-      {targetReleaseUrl ? (
-        <a href={targetReleaseUrl} target="_blank" rel="noreferrer">
-          <span className="inline-flex items-center gap-1">
-            {updateAvailable ? (
-              <span>Update</span>
-            ) : (
-              <span>{normalizedVersion}</span>
-            )}
-          </span>
-        </a>
-      ) : (
-        <span className="inline-flex items-center gap-1">
-          {updateAvailable ? (
-            <span>Update</span>
-          ) : (
-            <span>{normalizedVersion}</span>
-          )}
-        </span>
-      )}
-    </Button>
-  );
+  const releaseButton = <Button variant={updateAvailable ? "default" : "ghost"} size="xs"
+    className={cn("h-6 rounded-sm px-2 text-tiny", !updateAvailable && "text-muted-foreground tabular-nums hover:text-foreground")}
+    aria-label={updateAvailable ? "Update CAD Viewer" : `Version ${normalizedVersion}`}>
+    {updateAvailable ? "Update" : normalizedVersion}
+  </Button>;
 
   return (
-    <Tooltip delayDuration={updateAvailable ? updateVersionTooltipDelayMs : passiveVersionTooltipDelayMs}>
-      <TooltipTrigger asChild>
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
         {releaseButton}
-      </TooltipTrigger>
-      <TooltipContent
-        side="bottom"
+      </DropdownMenuTrigger>
+      <DropdownMenuContent
+        align="end"
         sideOffset={6}
         className="w-fit max-w-[calc(100vw-1rem)] border border-border bg-popover p-2 text-left text-popover-foreground shadow-lg shadow-black/10"
-        arrowClassName="bg-popover fill-popover"
       >
         <div className="inline-flex max-w-full flex-col gap-3">
           {latestVersionVisible ? (
@@ -445,7 +389,7 @@ function VersionReleaseLink({ version, releaseUrl, releaseCheck = emptyLatestRel
                 size="icon"
                 className="inline-flex size-6 shrink-0 items-center justify-center rounded-sm border border-border text-foreground transition-colors hover:bg-accent hover:text-accent-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
                 aria-label={promptCopyStatus === "copied" ? "Agent message copied" : "Copy agent message"}
-                title={updatePrompt}
+
                 onPointerDown={handleCopyUpdatePrompt}
                 onClick={handleCopyUpdatePrompt}
               >
@@ -467,17 +411,15 @@ function VersionReleaseLink({ version, releaseUrl, releaseCheck = emptyLatestRel
             </div>
           ) : null}
         </div>
-      </TooltipContent>
-    </Tooltip>
+        <DropdownMenuSeparator />
+        {targetReleaseUrl ? <DropdownMenuItem asChild><a href={targetReleaseUrl} target="_blank" rel="noreferrer">Release notes</a></DropdownMenuItem> : null}
+        {githubUrl ? <DropdownMenuItem asChild><a href={githubUrl} target="_blank" rel="noreferrer"><GitHubMark className="size-3.5" />GitHub</a></DropdownMenuItem> : null}
+        <DropdownMenuItem asChild><a href={discordUrl} target="_blank" rel="noreferrer"><DiscordMark className="size-3.5" />Discord</a></DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
-/**
- * The three of them, in the order the bar has always had: the version chip,
- * then Discord, then GitHub — all in front of the panel toggles the desktop
- * app draws too.
- *
- * `previewMode` is a snapshot render, which has no network and no links.
- */
+/** `previewMode` is a snapshot render, with no network or links. */
 export default function ViewerLinks({ previewMode = false }) {
   const viewerVersion = String(viewerPackage.version || "").trim();
   const discordUrl = normalizeViewerDiscordUrl(import.meta.env?.VIEWER_DISCORD_URL);
@@ -503,39 +445,6 @@ export default function ViewerLinks({ previewMode = false }) {
     return null;
   }
 
-  return (
-    <TooltipProvider delayDuration={250}>
-      <VersionReleaseLink
-        version={viewerVersion}
-        releaseUrl={releaseUrl}
-        releaseCheck={releaseCheck}
-      />
-      <Button
-        asChild
-        variant="ghost"
-        size="icon-xs"
-        aria-label="Join the text-to-cad Discord"
-        title="Join the text-to-cad Discord"
-        className={topBarIconButtonClasses}
-      >
-        <a href={discordUrl} target="_blank" rel="noreferrer">
-          <DiscordMark className={topBarIconClasses} />
-        </a>
-      </Button>
-      {githubUrl ? (
-        <Button
-          asChild
-          variant="ghost"
-          size="icon-xs"
-          aria-label="Open GitHub repository"
-          title="Open GitHub repository"
-          className={topBarIconButtonClasses}
-        >
-          <a href={githubUrl} target="_blank" rel="noreferrer">
-            <GitHubMark className={topBarIconClasses} />
-          </a>
-        </Button>
-      ) : null}
-    </TooltipProvider>
-  );
+  return <VersionReleaseLink version={viewerVersion} releaseUrl={releaseUrl} releaseCheck={releaseCheck}
+    githubUrl={githubUrl} discordUrl={discordUrl} />;
 }

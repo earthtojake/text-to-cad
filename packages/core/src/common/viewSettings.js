@@ -150,7 +150,7 @@ function defaults(appearance, lightingQuality) {
     surfaces: { enabled: true, style: "shaded", colorMode: "original", color: DEFAULT_PART_COLOR_SETTINGS.color, colors: [...DEFAULT_PART_COLOR_SETTINGS.colors], opacity: 1 },
     edges: { enabled: true, visibility: "visible", color: "#253443" },
     lighting: { enabled: false, quality: lightingQuality, exposure: 0, rotation: 0, size: 1, fill: 0.25 },
-    background: { enabled: false, color: dark ? "#121315" : "#e7e7e5", opacity: 1 },
+    background: { enabled: false, color: dark ? "#121315" : "#ffffff", opacity: 1 },
     floor: { enabled: false, placement: "origin", color: dark ? "#121315" : "#e7e7e5", opacity: 0.6 },
     grid: { enabled: true, color: dark ? "#495665" : "#cbd5e1", opacity: 0.16 },
     axes: { enabled: true, color: dark ? "#495665" : "#cbd5e1", opacity: 0.28 }

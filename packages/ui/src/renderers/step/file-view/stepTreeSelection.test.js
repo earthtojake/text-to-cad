@@ -2,11 +2,9 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { STEP_MODEL_ROOT_ID } from '@hardcore/core/lib/step/stepTree.js';
 import { selectableViewerNodeIdsForExpandedTree } from '../workbench/assemblyIsolation.js';
-import { toggleReferenceGroupSelection } from '../workbench/selectionFilter.js';
 import {
   collectStepTreeRevealExpansionIds,
   expandedVisibleStepTreeTopologyNodeIds,
-  referenceGroupForModelTreeHit,
   referencesForExpandedStepTree,
   stepTreeTopologyOwnersForSelectors,
 } from './stepTreeSelection.js';
@@ -53,21 +51,6 @@ test('sidecar-loaded and collapsed part topology cannot leak into viewport picki
   ];
   assert.deepEqual(referencesForExpandedStepTree(references, ['o1.1.1'], ref => ref.partId), [references[0]]);
   assert.deepEqual(referencesForExpandedStepTree(references, [], ref => ref.partId), []);
-});
-
-test('feature picking follows visible child targets before parent residual faces', () => {
-  const available = ['f1', 'f2', 'f3', 'f4'];
-  const parent = { nodeId: 'boss', referenceIds: ['f1', 'f2', 'f3'] };
-  const child = { nodeId: 'round', referenceIds: ['f1', 'f2'] };
-  assert.deepEqual(referenceGroupForModelTreeHit('f1', [parent], available), parent.referenceIds);
-  assert.deepEqual(referenceGroupForModelTreeHit('f1', [child, parent], available), child.referenceIds);
-  assert.deepEqual(referenceGroupForModelTreeHit('f3', [child, parent], available), parent.referenceIds);
-  assert.deepEqual(referenceGroupForModelTreeHit('f4', [child, parent], available), []);
-  assert.deepEqual(referenceGroupForModelTreeHit('f1', [child, parent], []), [], 'old published targets cannot revive collapsed topology');
-  assert.deepEqual(referenceGroupForModelTreeHit('f1', [child, parent], ['f1']), [], 'never deliver a partial feature group');
-  const group = referenceGroupForModelTreeHit('f1', [child, parent], available);
-  assert.deepEqual(toggleReferenceGroupSelection(['f4'], group, true), ['f4', 'f1', 'f2']);
-  assert.deepEqual(toggleReferenceGroupSelection(['f4', 'f1', 'f2'], group, true), ['f4']);
 });
 
 test('external reference requests reveal an unloaded owner and ancestors without opening siblings', () => {

@@ -26,12 +26,11 @@ test('one global Reset calls the coordinated host command', () => {
   const pose = { definition, onResetMotion: () => calls.push('both'), onResetParameters: () => calls.push('wrong') };
   const playback = { ...animation, resetModel: () => calls.push('wrong') };
   const section = buildPositionSection({ poseRuntime: pose, animationRuntime: playback });
-  const children = elements(section.content).filter(node => [PoseControlsSection, MotionResetButton].includes(node.type));
-  assert.deepEqual(children.map(node => node.type), [PoseControlsSection, MotionResetButton]);
-  const reset = MotionResetButton(children[1].props);
-  elements(reset).find(node => node.props.onClick).props.onClick();
+  const controls = elements(section.content).find(node => node.type === PoseControlsSection);
+  const header = elements(PoseControlsSection(controls.props)).find(node => node.type === KinematicsPoseRow);
+  header.props.onReset();
   assert.deepEqual(calls, ['both']);
-  assert.equal(elements(PoseControlsSection({ runtime: pose })).some(node => node.props.onReset || node.props.onCopy || node.props.transition), false);
+  assert.equal(elements(section.content).some(node => node.type === MotionResetButton), false, 'no separate bottom Reset');
 });
 
 test("the pose row and the joints are ONE section's rows, with no section of their own; either can exist alone", () => {

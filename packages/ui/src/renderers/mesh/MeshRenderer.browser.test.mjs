@@ -94,10 +94,10 @@ async function serveHarness(t) {
 }
 
 const ready = pane => pane.locator('[aria-busy="false"] > div > canvas').first().waitFor();
-// A mesh has no tools at all, so this must stay empty wherever it is asked.
+// A mesh exposes Display, but no interaction tools.
 const noTools = async (pane) => {
-  assert.equal(await pane.getByRole('group', { name: 'Interaction tools' }).count(), 0, 'a mesh viewport has no tool strip');
-  for (const name of ['Orbit', 'Draw', 'Select', 'Measure', 'Position', 'Animate', 'Fullscreen']) {
+  assert.equal(await pane.getByRole('group', { name: 'Interaction tools' }).count(), 1, 'a mesh exposes a Display toolbar');
+  for (const name of ['Orbit', 'Draw', 'Select', 'Measure', 'Position', 'Animate']) {
     assert.equal(await pane.getByRole('button', { name, exact: true }).count(), 0, name);
   }
 };
@@ -162,31 +162,30 @@ test('an STL opens as one mesh with no tools: display settings, orbit, host comm
 
   // A mesh has no panel of its own: its only settings are Display's, and Display is never
   // where a file opens. So it opens with the column shut and the model given the room.
-  assert.deepEqual(await panels(pane), ['Display:false', 'Show files:false']);
+  assert.deepEqual(await panels(pane), ['Show files:false']);
   assert.equal(await pane.locator('[data-file-sheet]').count(), 0);
-  await pane.locator('[data-file-panel="cad-display"]').click();
-  await pane.locator('[data-file-sheet="Display"]').waitFor();
-  assert.deepEqual(await panels(pane), ['Display:true', 'Show files:false']);
+  await pane.locator('[data-cad-toolbar]').getByRole('button', { name: 'Display', exact: true }).click();
+  await pane.locator('[data-cad-display-popover]').waitFor();
+  assert.deepEqual(await panels(pane), ['Show files:false']);
   assert.equal(await pane.getByRole('tab').count(), 0, 'a panel has no tabs inside it');
-  assert.deepEqual(await pane.getByRole('combobox', { name: 'Mode', exact: true }).innerText(), 'Solid');
-  // While a menu is open the rest of the page is hidden from the accessibility tree; wait for it to close.
-  const options = async (label) => {
-    await pane.getByRole('combobox', { name: label, exact: true }).click();
+  const displayMenu = pane.locator('[data-cad-display-popover]');
+  assert.match(await displayMenu.getByRole('combobox', { name: 'Mode', exact: true }).innerText(), /Solid/);
+  const options = async label => {
+    await displayMenu.getByRole('combobox', { name: label, exact: true }).click();
     const texts = await page.getByRole('option').allInnerTexts();
     await page.keyboard.press('Escape');
-    await page.getByRole('listbox').waitFor({ state: 'detached' });
+    await page.locator('[data-slot=select-content]').waitFor({ state: 'detached' });
     return texts;
   };
-  assert.deepEqual(await options('Mode'), ['Solid', 'Render'], 'a mesh has no edges to draw: Solid and Render only');
+  assert.deepEqual(await options('Mode'), ['Solid', 'Render']);
   assert.deepEqual(await options('Surface style'), ['Shaded', 'Flat']);
   assert.deepEqual(await options('Parts'), ['Original', 'Single color', 'Color by part']);
-  for (const section of ['Edges', 'Cross-section', 'Explode']) assert.equal(await pane.getByRole('heading', { name: section, exact: true }).count(), 0, section);
-  for (const section of ['Grid & axes', 'Environment']) assert.equal(await pane.getByRole('heading', { name: section, exact: true }).count(), 1, section);
-  // Projection is the view cube's toggle.
-  assert.equal(await pane.getByRole('combobox', { name: 'Projection', exact: true }).count(), 0);
-  assert.equal(await pane.getByRole('button', { name: 'Reset', exact: true }).count(), 1);
-  await pane.locator('[data-file-panel="cad-display"]').click();
-  await pane.locator('[data-file-sheet="Display"]').waitFor({ state: 'detached' });
+  for (const section of ['Edges', 'Cross-section', 'Explode']) assert.equal(await displayMenu.getByRole('heading', { name: section, exact: true }).count(), 0, section);
+  for (const section of ['Grid / Axes', 'Lighting', 'Background', 'Floor']) assert.equal(await displayMenu.getByRole('heading', { name: section, exact: true }).count(), 1, section);
+  assert.deepEqual(await options('Projection'), ['Orthographic', 'Perspective']);
+  assert.equal(await displayMenu.getByRole('button', { name: 'Reset', exact: true }).count(), 1);
+  await pane.locator('[data-cad-toolbar]').getByRole('button', { name: 'Display', exact: true }).click();
+  await pane.locator('[data-cad-display-popover]').waitFor({ state: 'detached' });
   // The column closing reaches the scene as a resize; let that frame land before comparing pictures.
   await page.waitForFunction(() => document.querySelector('[data-testid="one"] [aria-busy] > div > canvas').width >= 1190);
   await settle(page);
@@ -261,9 +260,9 @@ test('an STL opens as one mesh with no tools: display settings, orbit, host comm
   const declined = await page.evaluate(() => window.cadHarness.a.controller.select({ selectors: ['o1.f1'] }).then(() => '', error => error.message));
   assert.match(declined, /A mesh file has nothing to select/);
   assert.match(await page.evaluate(() => window.cadHarness.a.controller.clearSelection().then(() => '', error => error.message)), /no selection to clear/);
-  // A host's request to select a reference is consumed and answered in words.
+  // A host's request to select a reference is consumed without a notification.
   await page.evaluate(() => window.cadHarness.selectReference('o1.f1'));
-  await pane.getByText(/A mesh file has nothing to select/).waitFor();
+  await page.waitForFunction(() => !window.cadHarness.a.commands.getSnapshot().selectReference);
   assert.equal(await page.evaluate(() => window.cadHarness.a.commands.getSnapshot().selectReference ?? null), null, 'the declined request is acknowledged');
 
   // The navbar snapshot and a host's capture request go through the same prompt port.
@@ -281,15 +280,14 @@ test('an STL opens as one mesh with no tools: display settings, orbit, host comm
   const stored = await page.evaluate(() => window.cadHarness.state.renderers);
   assert.deepEqual(Object.keys(stored), [JSON.stringify(['part.stl', 'mesh'])], 'keyed by [path, renderer id]');
   const left = await page.evaluate(() => window.cadHarness.a.controller.readState());
-  await page.waitForFunction(position => JSON.stringify(window.cadHarness.state.renderers[JSON.stringify(['part.stl', 'mesh'])].camera?.position.map(Math.round)) === position, JSON.stringify(left.camera.position.map(Math.round)));
   await page.evaluate(() => window.cadHarness.mounted(false));
   await pane.locator('canvas').first().waitFor({ state: 'detached' });
   await page.evaluate(() => window.cadHarness.mounted(true));
   await ready(pane);
   await page.waitForFunction(() => window.cadHarness.a.controller?.readState().loading === false);
   const reopened = await page.evaluate(() => window.cadHarness.a.controller.readState());
-  assert.deepEqual(reopened.camera.position.map(value => Math.round(value * 100)), left.camera.position.map(value => Math.round(value * 100)));
-  assert.equal(reopened.camera.zoom, left.camera.zoom);
+  assert.notDeepEqual(reopened.camera.position.map(value => Math.round(value * 100)), left.camera.position.map(value => Math.round(value * 100)), "reopening fits the model anew");
+  assert.equal(reopened.camera.zoom, 1);
   assert.deepEqual([reopened.display.surfaces.colorMode, reopened.display.surfaces.color, reopened.display.grid.enabled, reopened.display.floor.enabled], ['single', '#00c040', true, true]);
   assert.equal(requests.filter(path => path === '/one/part.stl').length, 1, 'reopening a file reuses its decoded mesh without another asset request');
 
@@ -299,7 +297,7 @@ test('an STL opens as one mesh with no tools: display settings, orbit, host comm
   await page.waitForTimeout(300);
   assert.equal(await pane.getByRole('group', { name: 'Fullscreen controls' }).count(), 0);
   assert.equal(await pane.getByRole('button', { name: 'Orbit settings', exact: true }).count(), 0);
-  assert.deepEqual(await panels(pane), ['Display:false', 'Show files:false'], 'the nav row and its panels stay');
+  assert.deepEqual(await panels(pane), ['Show files:false'], 'the nav row and its panels stay');
   await noTools(pane);
   assert.deepEqual(errors, []);
 });
@@ -311,11 +309,11 @@ test('a 3MF is one mesh per object with its source colour; an uncoloured one tak
   await page.waitForFunction(() => window.cadHarness.a.controller?.readState().loading === false);
   await noTools(pane);
   // A 3MF's panels are a mesh's: Display alone, shut as it opens, and the same panel an STL has.
-  assert.deepEqual(await panels(pane), ['Display:false', 'Show files:false']);
-  await pane.locator('[data-file-panel="cad-display"]').click();
-  await pane.locator('[data-file-sheet="Display"]').waitFor();
-  await pane.locator('[data-file-panel="cad-display"]').click();
-  await pane.locator('[data-file-sheet="Display"]').waitFor({ state: 'detached' });
+  assert.deepEqual(await panels(pane), ['Show files:false']);
+  await pane.locator('[data-cad-toolbar]').getByRole('button', { name: 'Display', exact: true }).click();
+  await pane.locator('[data-cad-display-popover]').waitFor();
+  await pane.locator('[data-cad-toolbar]').getByRole('button', { name: 'Display', exact: true }).click();
+  await pane.locator('[data-cad-display-popover]').waitFor({ state: 'detached' });
   await page.waitForFunction(() => document.querySelector('[data-testid="one"] [aria-busy] > div > canvas').width >= 1190);
   await settle(page);
 

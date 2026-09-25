@@ -280,7 +280,7 @@ export function useStepMotionControls({
 
   return { handleStepModuleParameterChange, applyStepModuleParameterValues, handleResetStepModuleParameters,
     handleApplyPose, handleAnimationClipSelect, handleAnimationPlayToggle, handleAnimationRestart,
-    handleAnimationScrub, handleAnimationSpeedChange, handleAnimationLoopToggle, resetMotion,
+    handleAnimationScrub, handleAnimationSpeedChange, handleAnimationLoopToggle, resetMotion, resetPosition,
     // Leaving Animate: the clip hands the pose back to Position and keeps nothing of where it was.
     releaseAnimation: activatePositionControls };
 }

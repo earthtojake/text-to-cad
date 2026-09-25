@@ -1,6 +1,5 @@
-import { createElement, type ComponentType } from 'react';
+import { createElement } from 'react';
 import Overlay from '../renderers/kit/status/ViewerLoadingOverlay.js';
-import Toast from '../renderers/kit/status/StatusToast.js';
 
 export { default as MissingFileAlert } from '../renderers/kit/status/MissingFileAlert.js';
 export type { MissingFileAlertProps } from '../renderers/kit/status/MissingFileAlert.js';
@@ -25,11 +24,3 @@ export interface ViewerLoadingOverlayProps {
 export function ViewerLoadingOverlay({ viewerLoading, previewMode, progress }: ViewerLoadingOverlayProps) {
   return createElement(Overlay, { loading: { opening: viewerLoading, headline: "Opening model", progress }, previewMode, operationKey: "preparing-document" });
 }
-
-export interface StatusToastProps {
-  copyStatus?: string;
-  screenshotStatus?: string;
-  previewMode?: boolean;
-  onClear?: () => void;
-}
-export const StatusToast = Toast as ComponentType<StatusToastProps>;

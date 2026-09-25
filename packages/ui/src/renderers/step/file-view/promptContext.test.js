@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createCadPromptContext } from './promptContext.js';
-import { promptDeliveryMessage } from '../../kit/shell/promptContext.js';
+import { promptDeliveryError } from '../../kit/shell/promptContext.js';
 test('capture context freezes revision and selected topology before encoding', async () => {
   const resource = { kind: 'workspace-file', workspaceId: 'one', path: 'parts/widget.step', revision: 'v1' };
   let resolve;
@@ -20,7 +20,9 @@ test('whole-view captures retain provenance and delivery feedback reflects actua
   const context = createCadPromptContext({ resource: { kind: 'workspace-file', workspaceId: 'one', path: 'part.stl' }, capture: new Blob(['pixels'], { type: 'image/png' }) });
   assert.deepEqual(context.parts[0].reference.target, { kind: 'whole-resource' });
   assert.deepEqual(context.parts[1].about, ['source']);
-  assert.equal(promptDeliveryMessage({ status: 'added', partIds: ['source', 'capture'] }), 'Added to prompt');
-  assert.equal(promptDeliveryMessage({ status: 'failed', message: 'Closed draft' }), 'Closed draft');
-  assert.equal(promptDeliveryMessage({ status: 'partial', partIds: ['source'], message: 'Paste both representations' }), 'Paste both representations');
+  assert.equal(promptDeliveryError({ status: 'added', partIds: ['source', 'capture'] }), null);
+  assert.equal(promptDeliveryError({ status: 'copied' }), null);
+  assert.equal(promptDeliveryError({ status: 'cancelled' }), null);
+  assert.equal(promptDeliveryError({ status: 'failed', message: 'Closed draft' }), 'Closed draft');
+  assert.equal(promptDeliveryError({ status: 'partial', partIds: ['source'], message: 'Paste both representations' }), 'Paste both representations');
 });

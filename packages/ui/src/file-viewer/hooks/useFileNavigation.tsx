@@ -1,3 +1,4 @@
+import { TooltipHint } from "@hardcore/ui/primitives/tooltip";
 import { Ellipsis } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "../../primitives/dropdown-menu.jsx";
@@ -14,10 +15,10 @@ function CrumbActions({ entry, capabilities, platform, onAction }: {
 }) {
   const guard = useEntryMenuFocusGuard(onAction);
   return <DropdownMenu modal={false}>
-    <DropdownMenuTrigger asChild><button aria-label="File actions" title="File actions" data-testid="crumb-actions" type="button"
+    <DropdownMenuTrigger asChild><TooltipHint content="File actions"><button aria-label="File actions"  data-testid="crumb-actions" type="button"
       className="flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring data-[state=open]:bg-accent data-[state=open]:text-accent-foreground">
       <Ellipsis className="size-3.5" />
-    </button></DropdownMenuTrigger>
+    </button></TooltipHint></DropdownMenuTrigger>
     <DropdownMenuContent align="start" className="w-56" data-entry-menu={entry.path} onCloseAutoFocus={guard.onCloseAutoFocus} sideOffset={6}>
       <EntryMenuItems capabilities={capabilities} entry={entry} onAction={guard.onAction} platform={platform} surface="dropdown" />
     </DropdownMenuContent>

@@ -262,7 +262,7 @@ class ServerInfo(HttpLayerTestCase):
         self.assertEqual(info["serverMode"], "serve")
         self.assertIn("identityToken", info)
         self.assertIs(info["autoReload"], reload_module.running_from_source_checkout())
-        self.assertEqual(info["serverFeatures"], ["path-directory"])
+        self.assertEqual(info["serverFeatures"], ["path-directory", "reveal-path"])
         self.assertRegex(info["rootId"], r"^local-fs:[0-9a-f]{64}$")
         self.assertEqual(info["stepArtifactGenerationAvailable"], False)
         self.assertEqual(info["pid"], os.getpid())

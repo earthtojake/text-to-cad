@@ -28,16 +28,23 @@ Ordinary copied elements and raster image insertion remain available; pasted
 elements pass bounded scene validation.
 
 Every SDK control is hidden. The canvases, the in-place text editor, the context
-menu and the toast remain, and `DrawingToolbar` (`drawing/toolbar.tsx`) is the
-one control surface, in the order a sketch is made: Pen, Line, Arrow, Rectangle,
-Ellipse, Text, Fill area, Eraser, Color, Select and move drawings, Pan view,
-Undo, Redo and Clear drawing, in the floating-toolbar button primitive. It imports nothing of the SDK.
+menu remain; SDK toast notifications are hidden, and `DrawingToolbar` (`drawing/toolbar.tsx`) is the
+one control surface: Select and move drawings, Pan view, Pen, Line, Arrow,
+Rectangle, Ellipse, Text, Fill area, and Eraser, followed by Color, Undo, Redo
+and Clear drawing, in the floating-toolbar button primitive. It imports nothing of the SDK.
 The standalone editor renders it top-centre and always light (its tokens are
 re-declared inside the editor, and the color strip is in the toolbar's flow
 rather than a portalled popover, so a dark application cannot restyle it). A
 host that places the toolbar itself passes `toolbar={false}` and drives the same
 component from `useDrawingSession` (`drawing/session.ts`), as the CAD viewport
-does. These styles depend on Excalidraw's pinned DOM; verify both hosts when
+does. In CAD, Draw's corner menu is a narrow ephemeral dropdown with separate
+tool and settings groups divided by a separator, without internal headings
+(`layout="panel"`). Picking a tool changes the Draw button's icon and closes the
+menu. Undo, Redo and Color keep it open; Clear drawing closes it. Outside click,
+Escape or pressing Draw again dismisses the menu without ending Draw. Leaving
+Draw closes the menu and ends the session. The viewport’s Copy Drawing
+(or Add to Prompt) action appears only while the sketch contains visible elements;
+clearing or undoing the last element hides it again. These styles depend on Excalidraw's pinned DOM; verify both hosts when
 upgrading.
 
 Tools are locked in the SDK's sense: a shape is followed by another of the same
@@ -149,3 +156,12 @@ prompt, tools and asset unit tests (`tests/unit/main/drawing-assets.test.ts`
 covers this plugin), and `tests/e2e/drawing.spec.ts`. The latter
 draws real ink, checks PNG decoding and disabled persistence routes, and
 reloads the app profile while blocking external requests.
+
+While Draw is active, keep the view cube and its Reset, Mode, and Projection
+controls visible. Disable cube dragging/snapping and all three controls until
+Draw ends; drawing must not change the camera or display through these controls.
+
+New freehand strokes use `2 / 4.25` stroke width to compensate for Excalidraw’s
+freehand brush scaling; line, arrow, rectangle, and ellipse use width `2`.
+Toolbar and keyboard tool changes apply the same defaults without rewriting
+existing strokes.

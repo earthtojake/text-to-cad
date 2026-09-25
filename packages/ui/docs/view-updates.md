@@ -30,11 +30,13 @@ Both paths yield until the controls have painted, then apply the latest recipe.
 Only the preparation path loads resources and compiles shader variants. Live
 updates coalesce to the next frame and do not wait for an artificial debounce.
 
-Clip's plus starts an X center cut (50% of bounds), with Flip off. Disabling
-clears its overrides; reopening restores this default. Explicit coordinates,
-including zero, remain supported. Explode similarly starts at 50% when enabled
-and reopened; editing it to zero keeps the control open. Clip and Explode stay
-outside mode presets.
+The Clip and Explode tool buttons add neutral control panels. Editing a slider or
+number enables the effect; X or pressing the tool again resets and removes it.
+Clip uses original model bounds for its slider and the rendered plane, independent
+of pose and Explode. Its neutral endpoint is the maximum coordinate (minimum when
+flipped). It has one active axis and plane, exposed with X/Y/Z buttons, a single
+cut-amount slider and percentage input with Flip. The slider starts neutral on
+the left and advances from maximum to minimum coordinate; Flip reverses that direction. CLI coordinates, including zero, remain supported. Clip and Explode stay outside mode presets.
 
 ## Renderer and resources
 
@@ -66,9 +68,8 @@ outside FileViewer retain their own scene setup lifecycle.
 ## Status placement
 
 `kit/status/ViewUpdateStatus.jsx` only takes `status`, `onRetry`, and
-`className`. It has no scene/store knowledge. The FileViewer currently places it
-at the viewport's bottom left. Move that invocation or reuse the component
-without changing scheduling. It appears after 150ms with “Updating view…” (or
+`className`. It has no scene/store knowledge. RendererShell portals it into FileViewer’s navbar status slot, immediately after
+the filename and its menu, without changing scheduling. It appears after 150ms with “Updating view…” (or
 “Preparing section view…” for Clip), stays nonmodal, and never disables controls.
 Fast changes produce no spinner. Failures show a retry action.
 

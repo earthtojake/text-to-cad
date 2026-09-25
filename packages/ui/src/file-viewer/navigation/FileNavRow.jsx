@@ -1,3 +1,4 @@
+import { TooltipHint } from "@hardcore/ui/primitives/tooltip";
 import { Button } from "@hardcore/ui/primitives/button";
 import { cn } from "@hardcore/ui/utils";
 
@@ -33,27 +34,29 @@ export const PANEL_TOGGLE_CLASSES =
  * @param {object} props
  * @param {import("react").ElementType} props.icon
  * @param {string} props.label The accessible name and the tooltip — what pressing it does.
+ * @param {boolean} [props.disabled]
  * @param {boolean} props.active
  * @param {() => void} props.onClick
  * @param {string} [props.id] Written as `data-file-panel`, for the host's tests.
  * @param {string} [props.testId]
  */
-export function PanelToggle({ icon: Icon, label, active, onClick, id, testId }) {
+export function PanelToggle({ icon: Icon, label, active, onClick, id, testId, disabled = false }) {
   return (
-    <Button
+    <TooltipHint content={label.replace(/^(Show|Hide) /, "").replace(/^files$/, "Files")}><Button
       aria-label={label}
       aria-pressed={active}
+      disabled={disabled}
       className={PANEL_TOGGLE_CLASSES}
       {...(id ? { "data-file-panel": id } : {})}
       {...(testId ? { "data-testid": testId } : {})}
       onClick={onClick}
       size="icon-xs"
-      title={label}
+
       type="button"
       variant="ghost"
     >
       <Icon className="size-3.5" />
-    </Button>
+    </Button></TooltipHint>
   );
 }
 

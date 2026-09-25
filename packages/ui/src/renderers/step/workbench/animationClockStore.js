@@ -7,10 +7,6 @@ const AnimationClockContext = createContext(null);
 export function AnimationClockProvider({ value, children }) {
   return createElement(AnimationClockContext.Provider, { value }, children);
 }
-/** The clock when a provider is mounted, else null: for callers that only hand it on. */
-export function useOptionalAnimationClockStore() {
-  return useContext(AnimationClockContext);
-}
 export function useAnimationClockStore() {
   const clock = useContext(AnimationClockContext);
   if (!clock) throw new Error("CAD playback requires its renderer's animation clock.");
