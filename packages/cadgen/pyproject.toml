@@ -69,6 +69,8 @@ dependencies = [
 # is opt-in.
 [project.optional-dependencies]
 snapshot = ["playwright"]
+organic = ["numpy", "trimesh>=5.1.0", "manifold3d>=3.5,<4", "networkx"]
+organic-smooth = ["vtk>=9.3"]
 
 [project.urls]
 Homepage = "https://github.com/earthtojake/text-to-cad"

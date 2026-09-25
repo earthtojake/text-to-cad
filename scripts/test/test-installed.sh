@@ -162,4 +162,7 @@ rm -f "$EMPTY/models/probe.stl"
   || { cat "$WORK/stl.log" >&2; fail "stl build produced no mesh"; }
 echo "   wrote an STL from the document"
 
+step "Repair a mesh with only the wheel and its organic extra installed"
+"$PYTHON_BIN" "$SCRIPT_DIR/check-organic-wheel.py" "$WHEEL" || fail "organic wheel extra"
+
 printf '\nInstalled-mode checks passed.\n'

@@ -25,4 +25,10 @@ scipy
 networkx
 lxml
 pytest
-trimesh
+trimesh>=5.1.0
+
+# Mixed sculpt/CAD solids and bounded motion checks.
+manifold3d>=3.5,<4
+
+# Optional distance-field cutter smoothing.
+vtk>=9.3

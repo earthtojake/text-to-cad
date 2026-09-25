@@ -19,8 +19,8 @@
 // tessellations (bin/mesh-export.mjs adds the disk cache; a browser caller
 // could feed worker results). Determinism: same tessellations + descriptor in,
 // identical bytes out.
-import { meshToBinaryStl, xmlEscape, zipStore } from "./meshFormats.js";
-import { writeGlb } from "../glb/writeGlb.js";
+import { xmlEscape, zipStore } from "./meshFormats.js";
+import { meshSceneToGlb, meshSceneToStl } from "./meshSceneExport.js";
 // Every colour this module reads out of a package -- face, occurrence,
 // component, part -- is LINEAR, and every colour it hands downstream is an sRGB
 // hex string (writeGlb decodes it back to a linear baseColorFactor; 3MF's
@@ -373,16 +373,8 @@ export function buildPackageMeshPrimitives(descriptor, componentTessellations, o
   return { primitives, triangleCount };
 }
 
-export function packageMeshToStl({ primitives }, { name = "model" } = {}) {
-  let total = 0;
-  for (const p of primitives) total += p.positions.length;
-  const positions = new Float32Array(total);
-  let offset = 0;
-  for (const p of primitives) {
-    positions.set(p.positions, offset);
-    offset += p.positions.length;
-  }
-  return meshToBinaryStl({ positions }, { name });
+export function packageMeshToStl(mesh, options = {}) {
+  return meshSceneToStl(mesh, options);
 }
 
 // glTF is Y-up and meter-scaled; packages are Z-up CAD millimetres:
@@ -476,23 +468,15 @@ function yUpPrimitives(primitives) {
 }
 
 export function packageMeshToGlb({ primitives }, { name = "model", animation = null } = {}) {
-  return writeGlb(
+  // Package-specific morph verification and transforms run before the shared
+  // final serializer. The prepared geometry is already in glTF metres/Y-up.
+  return meshSceneToGlb(
     { primitives: yUpPrimitives(primitives) },
-    // upAxis: "y" states what yUpPrimitives just produced. It changes no geometry —
-    // these bytes stay the spec-conformant Y-up metres they always were — it only stops
-    // the CAD reader from having to guess, which it used to get wrong.
     {
-      preset: "export",
       name,
       sourceKind: "step",
-      units: "m",
-      upAxis: "y",
-      // A sampled clip (lib/export/packageAnimation.js): its channels target the node
-      // keys the per-occurrence primitives above declared, and its `rest` is what the
-      // file shows when nothing plays it.
-      ...(animation
-        ? { animations: [animation], nodeTransforms: animation.rest || null }
-        : {}),
+      coordinates: "gltf-m-y-up",
+      ...(animation ? { animations: [animation], nodeTransforms: animation.rest || null } : {}),
     },
   );
 }

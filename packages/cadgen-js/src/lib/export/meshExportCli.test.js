@@ -594,3 +594,48 @@ test('deform: "morph" bakes the deformation, and the file replays what the embed
     );
   }
 });
+
+test("triangle scene uses the shared STL/GLB serializers and keeps named parts", (t) => {
+  const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "mesh-scene-export-")));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const floats = (name, values) => {
+    const array = new Float32Array(values);
+    fs.writeFileSync(path.join(root, name), Buffer.from(array.buffer));
+    return name;
+  };
+  const first = floats("first.bin", [0, 0, 0, 10, 0, 0, 0, 0, 10]);
+  const second = floats("second.bin", [20, 0, 0, 30, 0, 0, 20, 0, 10]);
+  const colors = floats("colors.bin", [1, 0, 0, 0.25, 0, 1, 0, 1, 0, 0, 1, 1]);
+  const scene = path.join(root, "scene.json");
+  fs.writeFileSync(scene, JSON.stringify({
+    name: "assembly", units: "mm", up: "z",
+    parts: [
+      { name: "arm", positions: first, colors, alphaMode: "MASK", alphaCutoff: 0.4 },
+      { name: "body", positions: second },
+    ],
+  }));
+
+  for (const format of ["stl", "glb"]) {
+    const one = path.join(root, `one.${format}`);
+    const two = path.join(root, `two.${format}`);
+    for (const out of [one, two]) {
+      const result = runCli(["--mesh-scene", scene, "--format", format, "--out", out]);
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+      assert.equal(JSON.parse(result.stdout).files[0].triangleCount, 2);
+    }
+    assert.deepEqual(fs.readFileSync(one), fs.readFileSync(two));
+    if (format === "stl") {
+      assert.equal(fs.readFileSync(one).readUInt32LE(80), 2);
+    } else {
+      const bytes = fs.readFileSync(one);
+      const jsonLength = bytes.readUInt32LE(12);
+      const gltf = JSON.parse(bytes.subarray(20, 20 + jsonLength).toString("utf8"));
+      assert.deepEqual(gltf.nodes.map((node) => node.name), ["arm", "body"]);
+      assert.equal(gltf.meshes[0].primitives[0].attributes.COLOR_0 >= 0, true);
+      assert.equal(gltf.materials[0].pbrMetallicRoughness.metallicFactor, 0);
+      assert.equal(gltf.materials[0].pbrMetallicRoughness.roughnessFactor, 0.8);
+      assert.equal(gltf.materials[0].alphaMode, "MASK");
+      assert.equal(gltf.materials[0].alphaCutoff, 0.4);
+    }
+  }
+});

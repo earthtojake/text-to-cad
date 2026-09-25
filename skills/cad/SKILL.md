@@ -25,6 +25,10 @@ Read only the references needed for the request.
 
 For 2D DXF drawings use `$dxf`; this skill owns any 3D part the drawing projects.
 Use the corresponding robot-description skill for URDF, SRDF or SDF.
+For sculpted GLB/OBJ/STL parts that need CAD connectors or joints, use
+the organic-cad workflow for mesh preparation, Boolean integration and sampled
+clearance checks. Use this CAD skill to author the exact mechanical solids,
+functional void tools and dimensioned STEP geometry that workflow needs.
 
 ## Setup and paths
 
