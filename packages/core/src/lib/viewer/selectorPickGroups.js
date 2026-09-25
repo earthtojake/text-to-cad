@@ -211,28 +211,6 @@ export function buildEdgePickLines(THREE, selectorRuntime) {
   return lines;
 }
 
-export function buildVertexPickPoints(THREE, selectorRuntime) {
-  const proxy = selectorRuntime?.proxy || {};
-  if (!(proxy.vertexPositions instanceof Float32Array) || !proxy.vertexPositions.length) {
-    return null;
-  }
-  const geometry = new THREE.BufferGeometry();
-  geometry.setAttribute("position", new THREE.BufferAttribute(proxy.vertexPositions, 3));
-  const material = new THREE.PointsMaterial({
-    color: 0xffffff,
-    transparent: true,
-    opacity: 0,
-    size: 1.5,
-    sizeAttenuation: false,
-    depthWrite: false,
-    toneMapped: false,
-  });
-  const points = new THREE.Points(geometry, material);
-  points.userData.vertexIds = proxy.vertexIds || new Uint32Array(0);
-  points.frustumCulled = false;
-  return points;
-}
-
 function clearPickGroup(group, clearSceneGroup) {
   if (typeof clearSceneGroup === "function") {
     clearSceneGroup(group);
@@ -246,16 +224,14 @@ function clearPickGroup(group, clearSceneGroup) {
 export function syncSelectorPickGroups(runtime, selectorRuntime, modelOffset = null, {
   clearSceneGroup = null
 } = {}) {
-  if (!runtime?.THREE || !runtime?.facePickGroup || !runtime?.edgePickGroup || !runtime?.vertexPickGroup) {
+  if (!runtime?.THREE || !runtime?.facePickGroup || !runtime?.edgePickGroup) {
     return;
   }
 
   clearPickGroup(runtime.facePickGroup, clearSceneGroup);
   clearPickGroup(runtime.edgePickGroup, clearSceneGroup);
-  clearPickGroup(runtime.vertexPickGroup, clearSceneGroup);
   runtime.facePickMesh = null;
   runtime.edgePickLines = null;
-  runtime.vertexPickPoints = null;
   runtime.edgePickObjects = [];
 
   const facePickMesh = buildFacePickMesh(runtime.THREE, selectorRuntime);
@@ -271,23 +247,14 @@ export function syncSelectorPickGroups(runtime, selectorRuntime, modelOffset = n
     runtime.edgePickObjects = [edgePickLines];
   }
 
-  const vertexPickPoints = buildVertexPickPoints(runtime.THREE, selectorRuntime);
-  if (vertexPickPoints) {
-    runtime.vertexPickPoints = vertexPickPoints;
-    runtime.vertexPickGroup.add(vertexPickPoints);
-  }
-
   if (modelOffset) {
     runtime.facePickGroup.position.copy(modelOffset);
     runtime.edgePickGroup.position.copy(modelOffset);
-    runtime.vertexPickGroup.position.copy(modelOffset);
   } else {
     runtime.facePickGroup.position.set(0, 0, 0);
     runtime.edgePickGroup.position.set(0, 0, 0);
-    runtime.vertexPickGroup.position.set(0, 0, 0);
   }
   runtime.facePickGroup.updateMatrixWorld(true);
   runtime.edgePickGroup.updateMatrixWorld(true);
-  runtime.vertexPickGroup.updateMatrixWorld(true);
   ensureFacePickBvh(runtime, selectorRuntime);
 }

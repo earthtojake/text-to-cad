@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { resolveViewSettings, viewSettingsAreCustom } from '@hardcore/core/common/viewSettings.js';
+import { normalizeViewSettings, resetViewSettings, resolveViewSettings, viewSettingsAreCustom } from '@hardcore/core/common/viewSettings.js';
 import { DISPLAY_MODE_OPTIONS } from './DisplayModeOptions.js';
 import {
-  cameraForViewSettings, mergeViewerDisplaySettings, migrateViewerDisplaySettings, presentationDisplaySettings,
-  normalizeViewerDisplaySettings, resetViewerDisplaySettings, viewerDisplaySettingsForCamera, viewerDisplaySettingsForMode
+  cameraForViewSettings, mergeViewerDisplaySettings, presentationDisplaySettings,
+  viewerDisplaySettingsForCamera, viewerDisplaySettingsForMode
 } from './viewerDisplaySettings.js';
 
 test('the viewer offers the canonical presets in their intended order', () => {
@@ -20,13 +20,13 @@ test('live display patches merge groups without pinning defaults or losing tools
   const next = mergeViewerDisplaySettings(current, { lighting: { exposure: 2 } });
   assert.deepEqual(next, { ...current, lighting: { exposure: 2, size: 2 } });
   assert.throws(() => mergeViewerDisplaySettings(current, { render: { exposure: 1 } }), /Unsupported/);
-  assert.throws(() => normalizeViewerDisplaySettings({ mode: 'shaded_edges' }), /mode/);
+  assert.throws(() => normalizeViewSettings({ mode: 'shaded_edges' }), /mode/);
 });
 
 test('preset selection retains tools while Reset clears all View overrides', () => {
   const current = { mode: 'render', camera: { focalLength: 80 }, lighting: { exposure: 1 },
     clip: { enabled: true, axis: 'y', offset: 0.35 }, exploded: { enabled: true, amount: 0.4 } };
-  assert.deepEqual(resetViewerDisplaySettings(current), { mode: 'render' });
+  assert.deepEqual(resetViewSettings(current), { mode: 'render' });
   const next = viewerDisplaySettingsForMode(current, 'wireframe');
   assert.deepEqual(next, { mode: 'wireframe', clip: current.clip, exploded: current.exploded });
   assert.equal(viewSettingsAreCustom(next), false);
@@ -44,26 +44,6 @@ test('preset camera changes retain the actual camera position, target and zoom',
     assert.deepEqual(next, { ...camera, projection: expected.projection, focalLength: expected.focalLength });
   }
   assert.equal(cameraForViewSettings(null, { mode: 'render' }), null);
-});
-
-test('only persisted sessions migrate old display and photographic settings', () => {
-  const migrated = migrateViewerDisplaySettings({ mode: 'hidden_edges',
-    guides: { grid: { enabled: false } }, partColor: { mode: 'by_part', colors: ['#123456'] },
-    clip: { enabled: true, offset: 0.3 } }, {
-    enabled: true, payload: { exposure: 1, quality: 'preview', lighting: { fill: 0.5 },
-      backdrop: { ground: true, groundPlacement: 'lowest', transparent: true } },
-    cadCamera: { projection: 'orthographic', focalLength: 85 }
-  });
-  assert.equal(migrated.mode, 'render');
-  assert.deepEqual(migrated.camera, { projection: 'orthographic', focalLength: 85 });
-  assert.deepEqual(migrated.lighting, { fill: 0.5, quality: 'preview', exposure: 1 });
-  assert.deepEqual(migrated.background, { opacity: 0 });
-  assert.deepEqual(migrated.floor, { enabled: true, placement: 'lowest' });
-  assert.equal(migrated.surfaces.colorMode, 'by-part');
-  assert.equal(migrated.grid.enabled, false);
-  assert.equal(migrated.clip.offset, 0.3);
-  assert.equal(migrateViewerDisplaySettings({ mode: 'shaded' }).mode, 'solid');
-  assert.equal(migrateViewerDisplaySettings({ mode: 'hidden_edges' }).mode, 'xray');
 });
 
 test('the viewer Preview baseline is inherited without an override or Custom state', async () => {
@@ -87,15 +67,6 @@ test('camera commands activate explicit projection and lens while pose-only upda
   assert.equal(resolveViewSettings(next).camera.focalLength, 85);
   assert.deepEqual(current.camera, { enabled: false });
   assert.throws(() => viewerDisplaySettingsForCamera(current, { ...pose, focalLength: 500 }), /focalLength/);
-});
-
-test('persisted appearance survives corruption elsewhere and invalid appearance does not discard valid groups', () => {
-  const recover = migrateViewerDisplaySettings({ mode: 'render', appearance: 'dark',
-    surfaces: { color: 'broken', opacity: 0.4 }, camera: { focalLength: 85 }, unexpected: true });
-  assert.deepEqual(recover, { mode: 'render', appearance: 'dark', surfaces: { opacity: 0.4 }, camera: { focalLength: 85 } });
-  assert.deepEqual(migrateViewerDisplaySettings({ mode: 'solid', appearance: 'invalid', grid: { enabled: false } }),
-    { mode: 'solid', grid: { enabled: false } });
-  assert.equal(migrateViewerDisplaySettings({ mode: 'shaded_edges', appearance: 'dark' }).appearance, 'dark');
 });
 
 test('live clip scalar patches replace the active offset and retain the other axes', () => {

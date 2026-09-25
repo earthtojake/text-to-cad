@@ -1,7 +1,6 @@
 import { VIEWPORT_BOTTOM_CENTER } from "../../shell/viewportLayout.js";
 import { Pause, Play } from "lucide-react";
 import { useAnimationClockValue } from "./animationClock.js";
-import { TooltipProvider } from "@hardcore/ui/primitives/tooltip";
 import { Slider } from "@hardcore/ui/primitives/slider";
 import { cn } from "@hardcore/ui/utils";
 import { ToolbarButton } from "../ToolbarButton.js";
@@ -51,7 +50,7 @@ export function AnimationTransport({ runtime, disabled = false, responsive = fal
   const activeClip = runtime?.clips?.find(clip => clip.id === runtime?.activeClipId);
   const duration = Math.max(Number(activeClip?.duration) || 1, 0.001);
   const iconClass = "size-3.5";
-  return <TooltipProvider delayDuration={400}><div className={cn("flex min-w-0 flex-1 items-center gap-2", "h-6",
+  return <div className={cn("flex min-w-0 flex-1 items-center gap-2", "h-6",
     responsive && "@max-[8rem]/cad-viewport:h-auto @max-[8rem]/cad-viewport:flex-wrap")} data-animation-transport>
     <ToolbarButton tooltip={false} disabled={disabled} tooltipSide="top"
       onClick={() => runtime?.onPlayToggle?.()} label={`${runtime?.playing ? "Pause" : "Play"} animation`}>
@@ -61,7 +60,7 @@ export function AnimationTransport({ runtime, disabled = false, responsive = fal
       <AnimationTimeControl playing={runtime?.playing === true} elapsedSec={runtime?.elapsedSec}
         duration={duration} onScrub={runtime?.onScrub} clock={runtime?.clock} disabled={disabled}/>
     </div>
-  </div></TooltipProvider>;
+  </div>;
 }
 
 /**

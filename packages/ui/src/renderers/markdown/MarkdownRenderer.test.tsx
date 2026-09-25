@@ -12,3 +12,9 @@ test('a live-buffer replacement reaches the visual editor without echoing an edi
   expect(view.queryByText('Original')).toBeNull();
   expect(change).not.toHaveBeenCalled();
 });
+test('the document owns its selectability, whatever the host does to user-select', async () => {
+  const view = render(<MarkdownEditor content={'# Selectable\n'} onChange={() => {}} />);
+  await waitFor(() => expect(view.getByText('Selectable')).toBeTruthy());
+  const scroller = view.container.firstElementChild!;
+  expect(scroller.classList.contains('select-text')).toBe(true);
+});

@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { ToolbarButton } from "./ToolbarButton.js";
-import { TooltipProvider } from "@hardcore/ui/primitives/tooltip";
 import { ToolbarTooltipScope } from "@hardcore/ui/primitives/toolbar-button";
 
 export const PREVIEW_CHROME_IDLE_MS = 1000;
@@ -49,16 +48,16 @@ export default function PreviewChrome({ active, surface, onExit, settings, playb
       className="pointer-events-none absolute inset-0 z-20">
       <ToolbarTooltipScope enabled={!active}>{children}{!active && playbar}</ToolbarTooltipScope>
     </div>
-    {active ? <TooltipProvider delayDuration={400}><ToolbarTooltipScope enabled={visible || menuOpen}><div data-preview-controls="" data-visible={visible || menuOpen} inert={!visible && !menuOpen}
+    {active ? <ToolbarTooltipScope enabled={visible || menuOpen}><div data-preview-controls="" data-visible={visible || menuOpen} inert={!visible && !menuOpen}
       className="pointer-events-none absolute inset-0 z-30 transition-opacity duration-150"
       style={{ opacity: visible || menuOpen ? 1 : 0 }}>
-      <div data-preview-exit="" data-preview-hover-hold="" className="pointer-events-auto absolute right-0 top-0 flex items-center gap-1 p-3">
+      <div data-preview-hover-hold="" className="pointer-events-auto absolute right-0 top-0 flex items-center gap-1 p-3">
         {settings?.(setMenuOpen)}
         <ToolbarButton tooltip={false} label="Exit fullscreen" onClick={onExit}>
           <X className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
         </ToolbarButton>
       </div>
       {playbar}
-    </div></ToolbarTooltipScope></TooltipProvider> : null}
+    </div></ToolbarTooltipScope> : null}
   </>;
 }

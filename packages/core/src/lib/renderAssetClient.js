@@ -225,10 +225,6 @@ export async function loadRenderText(url, { signal, resources } = {}) {
   return finalizeCached(textCache, cacheKey, payload);
 }
 
-export function peekRenderText(url, { resources } = {}) {
-  return peekCached(textCache, cadResourceCacheKey(resources, url));
-}
-
 export async function loadRenderArrayBuffer(url, { signal, resources } = {}) {
   const cacheKey = cadResourceCacheKey(resources, url);
   if (!url) {
@@ -261,10 +257,6 @@ export async function loadRenderArrayBuffer(url, { signal, resources } = {}) {
     arrayBufferPendingCache.set(cacheKey, pending);
   }
   return withConsumerAbort(pending, signal);
-}
-
-export function peekRenderArrayBuffer(url, { resources } = {}) {
-  return peekCached(arrayBufferCache, cadResourceCacheKey(resources, url));
 }
 
 export async function loadRenderGlb(url, { signal, resources, preferWorker = false } = {}) {
@@ -944,42 +936,6 @@ export async function loadRenderSurfSelectorBundle(surfUrl, {
   }, { cachePending: !signal });
   finalizeCached(selectorCache, cacheKey, bundle);
   retainSurfEntry(selectorCache, cacheKey);
-  return bundle;
-}
-
-export async function loadRenderSurfDisplayEdgeBundle(surfUrl, {
-  signal,
-  resources,
-  tessellation,
-  identity,
-  memoryEstimateBytes,
-  tessellationCache,
-} = {}) {
-  // The render records draw the CAD edges from the meshData's line segments;
-  // the display-edge bundle for surf components is metadata only (profile
-  // "surface-edges").
-  const cacheKey = surfTessellationCacheKey(surfUrl, tessellation, identity);
-  const bundle = await loadCached(displayEdgeCache, cacheKey, async () => {
-    const selector = await loadRenderSurfSelectorBundle(surfUrl, {
-      signal,
-      resources,
-      tessellation,
-      identity,
-      memoryEstimateBytes,
-      tessellationCache,
-    });
-    return {
-      manifest: {
-        schemaVersion: selector.manifest.schemaVersion,
-        profile: "surface-edges",
-        edgeRendering: selector.manifest.edgeRendering,
-        bbox: selector.manifest.bbox,
-      },
-      buffers: {},
-    };
-  }, { cachePending: !signal });
-  finalizeCached(displayEdgeCache, cacheKey, bundle);
-  retainSurfEntry(displayEdgeCache, cacheKey);
   return bundle;
 }
 

@@ -1,7 +1,6 @@
 import type { ComponentType } from 'react';
 import { defineFileRenderer } from '../../file-viewer/registry.js';
 import type { FileRendererProps } from '../../file-viewer/types.js';
-import { viewerPanels } from '../../file-viewer/navigation/panels.js';
 import type { LiveViewBinding } from '../kit/shell/liveBinding.js';
 import { createCadPreferences, prepareWorkspaceEntry } from '../workspace/index.js';
 import type { CadPreferenceSource, PreparedWorkspaceEntry, ViewerCommandSource, WorkspaceClientOption } from '../workspace/index.js';
@@ -32,7 +31,6 @@ export function createMeshRenderer({ client, ...options }: MeshRendererOptions) 
     matches: (file) => MESH_FILE.test(file.path),
     // A mesh has no settings of its own: only Display, which never opens by itself, so the
     // model gets the room.
-    panels: ({ ready }) => viewerPanels(ready),
     async prepare(context) {
       const prepared = await prepareWorkspaceEntry(client, context);
       return { data: { ...prepared.data, services }, dispose: prepared.dispose };

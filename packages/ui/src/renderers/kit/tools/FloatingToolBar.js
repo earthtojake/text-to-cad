@@ -1,5 +1,4 @@
 import { Fragment } from "react";
-import { TooltipProvider } from "@hardcore/ui/primitives/tooltip";
 import { ToolbarButton } from "./ToolbarButton.js";
 
 export const FLOATING_TOOL_BAR_SURFACE_CLASS = "bg-background border border-border text-foreground shadow-sm";
@@ -67,17 +66,15 @@ function toolButton(tool) {
  * tools it is handed, left to right, then each tool's `subToolbar` beneath. It
  * holds no state and knows no tool by name.
  *
- * @param {{ tools: ViewportTool[], position?: import("react").CSSProperties, label?: string, bare?: boolean, inline?: boolean, trailing?: import("react").ReactNode }} props
+ * @param {{ tools: ViewportTool[], trailing?: import("react").ReactNode }} props  `trailing`: drawn after the
+ *   tools, in the same strip (the Display tool's popover trigger).
  */
-export default function FloatingToolBar({ tools = [], position, label = "Interaction tools", bare = false, inline = false, trailing = null }) {
-  return (<div className={`${inline ? "relative" : "absolute"} z-20 flex max-w-full shrink-0 flex-col items-end gap-1`}
-    data-cad-toolbar={bare ? "actions" : "tools"} style={position}>
-    <TooltipProvider delayDuration={400} skipDelayDuration={0}>
-      <div role="group" aria-label={label} className={`pointer-events-auto inline-flex max-w-full flex-wrap items-center gap-0.5 rounded-md ${tools.length === 1 && !trailing ? "p-0.5" : "min-h-8 p-1"} ${bare ? "" : FLOATING_TOOL_BAR_SURFACE_CLASS}`}>
+export default function FloatingToolBar({ tools = [], trailing = null }) {
+  return (<div className="relative z-20 flex max-w-full shrink-0 flex-col items-end gap-1" data-cad-toolbar="tools">
+      <div role="group" aria-label="Interaction tools" className={`pointer-events-auto inline-flex max-w-full flex-wrap items-center gap-0.5 rounded-md ${tools.length === 1 && !trailing ? "p-0.5" : "min-h-8 p-1"} ${FLOATING_TOOL_BAR_SURFACE_CLASS}`}>
         {tools.map(tool => <Fragment key={tool.id}>{toolButton(tool)}</Fragment>)}
         {trailing}
       </div>
-    </TooltipProvider>
     {tools.map(tool => (tool.subToolbar ? <Fragment key={tool.id}>{tool.subToolbar}</Fragment> : null))}
   </div>);
 }

@@ -190,3 +190,11 @@ it('enabling Background does not expose or enable Lighting or Floor', () => {
   expect(resolveViewSettings(current).lighting.enabled).toBe(false);
   expect(resolveViewSettings(current).floor.enabled).toBe(false);
 });
+
+it('the Projection value ends in an ellipsis when its column is narrow, with its icon beside it', () => {
+  render(<Harness initial={{ mode: 'solid', camera: { enabled: true, projection: 'orthographic' } }} />);
+  const trigger = screen.getByRole('combobox', { name: 'Projection' });
+  const value = within(trigger).getByText('Orthographic');
+  expect(value.classList.contains('truncate')).toBe(true);
+  expect(value.parentElement!.querySelector('svg')).not.toBeNull();
+});

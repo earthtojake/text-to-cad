@@ -13,7 +13,7 @@ const EmptyCadStage = lazy(() => import('./EmptyCadStage.js'));
 
 /** The empty CAD stage, loaded only when a host displays it. */
 export function EmptyCadBackdrop({ children, ...props }: EmptyCadBackdropProps) {
-  return <div className="relative h-full w-full" data-cad-empty-stage>
+  return <div className="relative h-full w-full">
     <Suspense fallback={null}><EmptyCadStage {...props} /></Suspense>
     {children}
   </div>;

@@ -19,41 +19,38 @@
  * what this returns, and the unit test reads it directly.
  */
 
-/** @typedef {"directory"|"file"|"ellipsis"} CrumbKind */
+/** @typedef {"directory"|"file"} CrumbKind */
 
 /**
  * @typedef {object} Crumb
  * @property {CrumbKind} kind
  * @property {string} label
- * @property {string} title The tooltip: the full segment, or the folded folders joined.
+ * @property {string} title The tooltip: the full segment.
  * @property {string} path Root-relative path of what the crumb names; never `""`.
- * @property {string|null} menu
+ * @property {string} menu
  *   The directory whose listing the crumb's menu shows — its parent, so the
- *   menu is the crumb's neighbours. `""` is the root. Null only for the
- *   ellipsis, which lists its folded folders instead.
- * @property {string|null} current
+ *   menu is the crumb's neighbours. `""` is the root.
+ * @property {string} current
  *   The entry the menu marks: the crumb itself. Equal to
  *   `stepToward(menu, path)`, which is what the component computes from the
  *   open file — this field is the rule written down.
- * @property {{ label: string, path: string }[]} hidden
- *   Ellipsis only: the folders it stands for, each a submenu.
  */
 
 /**
+ * Every segment is a crumb. A narrow (mobile) viewer shows the last one alone,
+ * which is FileViewer's to choose.
+ *
  * @param {object} input
  * @param {string|null} input.path The open file, root-relative; null for an empty tab.
- * @param {boolean} input.narrow
- *   Fold the folders into one `…` — a narrow pane. The file survives the
- *   fold: it is the crumb that names what is on screen.
  * @returns {Crumb[]}
  */
-export function buildCrumbs({ path, narrow }) {
+export function buildCrumbs({ path }) {
   const parts = path ? String(path).split("/").filter((part) => part !== "") : [];
   if (parts.length === 0) {
     return [];
   }
   const at = (index) => parts.slice(0, index + 1).join("/");
-  const crumbs = parts.map((label, index) => {
+  return parts.map((label, index) => {
     const own = at(index);
     return {
       kind: index === parts.length - 1 ? "file" : "directory",
@@ -61,45 +58,9 @@ export function buildCrumbs({ path, narrow }) {
       title: label,
       path: own,
       menu: parentOf(own),
-      current: own,
-      hidden: []
+      current: own
     };
   });
-
-  const folders = crumbs.slice(0, -1);
-  if (!narrow || folders.length < 2) {
-    return crumbs;
-  }
-  const ellipsis = {
-    kind: "ellipsis",
-    label: "…",
-    title: folders.map((folder) => folder.label).join("/"),
-    path: folders[folders.length - 1].path,
-    menu: null,
-    current: null,
-    hidden: folders.map((folder) => ({ label: folder.label, path: folder.path }))
-  };
-  return [ellipsis, crumbs[crumbs.length - 1]];
-}
-
-/**
- * The worktree marker, drawn before the crumbs, or null for a tab in the
- * project directory.
- *
- * NOT a crumb: it names the root, and a root has no menu here — its
- * neighbours are outside the project. It is a label, because which copy of
- * the tree a file is in is the one thing a person cannot tell from its name,
- * and losing that with the project crumb would have been an accident rather
- * than a decision.
- *
- * Only a host with several copies of one tree has anything to put here; the
- * standalone viewer serves one directory and passes nothing.
- *
- * @param {string|null} root
- * @returns {{ label: string, title: string }|null}
- */
-export function worktreeMark(root) {
-  return root ? { label: root.split(/[\\/]/).pop() ?? root, title: root } : null;
 }
 
 /**
@@ -143,9 +104,8 @@ export function menuEntries(entries, current) {
  * null when it is not under `directory` at all. What every menu marks.
  *
  * For a crumb's own menu this is the crumb — the menu is the crumb's parent,
- * and the crumb is the child of it on the way to the file. Inside a submenu
- * it keeps marking the way down, which is what the ellipsis's folded
- * ancestors need.
+ * and the crumb is the child of it on the way to the file. Inside a folder's
+ * submenu it keeps marking the way down.
  *
  * @param {string} directory
  * @param {string|null} target

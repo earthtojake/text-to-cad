@@ -10,13 +10,13 @@ export default function OrbitMenu({ enabled, onEnabledChange, speed, onSpeedChan
   const speeds = SPEEDS.includes(speed) ? SPEEDS : [...SPEEDS, speed].sort((a, b) => a - b);
   return <ToolPopover allowInactive onOpenChange={onOpenChange} label="Orbit options"
     trigger={<ToolbarButton label="Orbit settings"><Orbit className="size-3.5" strokeWidth={1.5} aria-hidden="true" /></ToolbarButton>}>
-    <DropdownMenuCheckboxItem indicatorSide="right" checked={enabled} onCheckedChange={onEnabledChange}
+    <DropdownMenuCheckboxItem checked={enabled} onCheckedChange={onEnabledChange}
       onSelect={event => event.preventDefault()}>Orbit</DropdownMenuCheckboxItem>
     <DropdownMenuSub>
       <DropdownMenuSubTrigger><span className="flex-1">Speed</span><span className="text-muted-foreground tabular-nums">{speed}×</span></DropdownMenuSubTrigger>
       <DropdownMenuSubContent className="w-32">
         <DropdownMenuRadioGroup value={String(speed)} onValueChange={value => onSpeedChange(Number(value))}>
-          {speeds.map(value => <DropdownMenuRadioItem indicatorSide="right" key={value} value={String(value)}>{value}×</DropdownMenuRadioItem>)}
+          {speeds.map(value => <DropdownMenuRadioItem key={value} value={String(value)}>{value}×</DropdownMenuRadioItem>)}
         </DropdownMenuRadioGroup>
       </DropdownMenuSubContent>
     </DropdownMenuSub>

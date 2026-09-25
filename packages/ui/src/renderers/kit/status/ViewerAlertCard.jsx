@@ -2,6 +2,7 @@ import { useState } from "react";
 import { CircleAlert, X } from "lucide-react";
 import { Button } from "@hardcore/ui/primitives/button";
 import { cn } from "@hardcore/ui/utils";
+import { useViewerMobile } from "../../../file-viewer/responsive.js";
 
 /**
  * Which alert the viewport shows. An error always does, and the viewport is the one
@@ -25,6 +26,7 @@ const alertKey = alert => JSON.stringify([alert.severity, alert.title, alert.mes
  */
 export default function ViewerAlertCard({ alert, hasContent, onReload }) {
   const shown = viewportAlert(alert, hasContent);
+  const mobile = useViewerMobile();
   const [dismissed, setDismissed] = useState("");
   if (!shown) {
     if (dismissed) setDismissed("");
@@ -37,7 +39,7 @@ export default function ViewerAlertCard({ alert, hasContent, onReload }) {
   const shortReason = reason.split("\n").find((line) => line.trim()) || "";
   const readableReason = shortReason.length > 360 ? `${shortReason.slice(0, 360)}…` : shortReason;
   return (
-    <div className="pointer-events-none absolute inset-0 z-30 flex min-w-0 items-center justify-center px-3 py-3 sm:px-4">
+    <div className={cn("pointer-events-none absolute inset-0 z-30 flex min-w-0 items-center justify-center py-3", mobile ? "px-3" : "px-4")}>
       <div
         role="alert"
         className="bg-popover pointer-events-auto w-full max-w-lg min-w-0 max-h-full overflow-y-auto rounded-lg border p-5 text-left shadow-md"

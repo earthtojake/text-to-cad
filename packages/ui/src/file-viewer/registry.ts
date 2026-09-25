@@ -8,7 +8,6 @@ export function defineFileRenderer<T>(definition: FileRendererDefinition<T>): Re
     priority: definition.priority,
     matches: definition.matches,
     fallback: definition.fallback,
-    fullscreen: definition.fullscreen,
     async prepare(context) {
       context.signal.throwIfAborted();
       let prepared: PreparedDocument<T> | undefined;

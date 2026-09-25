@@ -82,7 +82,6 @@ export function InlineName({
         busy && "opacity-60",
         className
       )}
-      data-inline-name
       disabled={busy}
       onBlur={() => {
         if (!cancelled.current) {

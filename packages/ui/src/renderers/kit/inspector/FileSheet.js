@@ -1,25 +1,10 @@
 import { TooltipHint } from "@hardcore/ui/primitives/tooltip";
 import { Children, createContext, useContext, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Check, ChevronDown, Minus, Plus } from "lucide-react";
+import { Minus, Plus } from "lucide-react";
 import { cn } from "@hardcore/ui/utils";
 import { Button } from "@hardcore/ui/primitives/button";
-import {
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger
-} from "@hardcore/ui/primitives/accordion";
 import { ColorPicker } from "@hardcore/ui/primitives/color-picker";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
-  DropdownMenuTrigger
-} from "@hardcore/ui/primitives/dropdown-menu";
-import { ScrollArea } from "@hardcore/ui/primitives/scroll-area";
 import {
   Select,
   SelectContent,
@@ -29,8 +14,6 @@ import {
   SelectTrigger,
   SelectValue
 } from "@hardcore/ui/primitives/select";
-import { Switch } from "@hardcore/ui/primitives/switch";
-import { ToggleGroup, ToggleGroupItem } from "@hardcore/ui/primitives/toggle-group";
 
 const FILE_SHEET_CONTROL_TEXT_CLASSES = [
   "[&_[data-slot=input]]:!text-tiny",
@@ -38,11 +21,8 @@ const FILE_SHEET_CONTROL_TEXT_CLASSES = [
   "[&_[data-slot=color-picker-trigger]]:!text-tiny"
 ].join(" ");
 
-export const FILE_SHEET_SECTION_TRIGGER_CLASSES = "px-2 py-2 text-xs font-normal text-sidebar-foreground/90";
-export const FILE_SHEET_SECTION_CONTENT_CLASSES = "py-2";
 export const FILE_SHEET_CONTROL_ROW_CLASSES = "space-y-1 px-2";
 export const FILE_SHEET_ROW_STACK_CLASSES = "space-y-3";
-export const FILE_SHEET_SECTION_BODY_CLASSES = `${FILE_SHEET_ROW_STACK_CLASSES} py-2`;
 export const FILE_SHEET_SLIDER_FIELD_CLASSES = "space-y-1 px-2";
 export const FILE_SHEET_INLINE_CONTROL_ROW_CLASSES = "px-2";
 // Section headers sit at the navbar's size (12px, normal weight) — a sheet's headings
@@ -54,7 +34,6 @@ export const FILE_SHEET_STATUS_TEXT_CLASSES = "px-2 text-tiny leading-4 text-mut
 /** Host-owned panel content slot. Without a slot, render a plain fallback aside. */
 export const HostPanelSlotContext = createContext(null);
 
-export const FILE_SHEET_UNIT_SUFFIX_CLASSES = "pointer-events-none absolute inset-y-0 right-2 flex items-center text-micro text-muted-foreground";
 // A trigger must clip and ellipsize its own value: the Radix trigger only sets
 // whitespace-nowrap, so without this a long option pushes its chevron out
 // through the border instead of truncating.
@@ -74,26 +53,7 @@ export const FILE_SHEET_VALUE_BADGE_INPUT_CLASSES = [
   "focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:opacity-50 dark:bg-input/30"
 ].join(" ");
 export const FILE_SHEET_COMPACT_BUTTON_CLASSES = "h-7 px-2 text-tiny text-muted-foreground hover:text-foreground";
-export const FILE_SHEET_COMPACT_ICON_BUTTON_CLASSES = "size-7 text-muted-foreground hover:text-foreground";
 export const FILE_SHEET_COMPACT_INPUT_CLASSES = "!h-7 px-2 text-tiny !text-foreground";
-export const FILE_SHEET_COMPACT_NUMERIC_INPUT_CLASSES = "h-7 px-2 !text-tiny leading-none tabular-nums text-foreground";
-export const FILE_SHEET_COMPACT_JOINT_INPUT_CLASSES = "h-7 px-2 !text-tiny leading-none tabular-nums text-foreground";
-export const FILE_SHEET_BOOLEAN_SWITCH_CLASSES = [
-  "h-4 w-7 border shadow-none",
-  "data-[state=checked]:border-primary/75 data-[state=checked]:bg-primary",
-  "data-[state=unchecked]:!border-border-1/50 data-[state=unchecked]:!bg-border-1/20"
-].join(" ");
-export const FILE_SHEET_BOOLEAN_SWITCH_THUMB_CLASSES = [
-  "!size-3 shadow-sm",
-  "data-[state=checked]:!translate-x-3 data-[state=checked]:!bg-background",
-  "data-[state=unchecked]:!translate-x-0 data-[state=unchecked]:!bg-border-1"
-].join(" ");
-export const FILE_SHEET_SEGMENTED_ITEM_CLASSES = [
-  "text-muted-foreground hover:text-foreground",
-  "data-[state=on]:!bg-accent data-[state=on]:!text-foreground",
-  "data-[state=on]:ring-1 data-[state=on]:ring-inset data-[state=on]:ring-border/80",
-  "data-[state=on]:hover:!bg-accent data-[state=on]:hover:!text-foreground"
-].join(" ");
 export const FILE_SHEET_PRECISION_SLIDER_CLASSES = [
   "h-4",
   "[&_[data-slot=slider-track]]:h-px",
@@ -113,31 +73,6 @@ export const FILE_SHEET_PRECISION_SLIDER_CLASSES = [
   "[&_[data-slot=slider-thumb]]:focus-visible:ring-2",
   "[&_[data-slot=slider-thumb]]:focus-visible:ring-ring/30"
 ].join(" ");
-
-export function FileSheetSection({
-  value,
-  title,
-  children,
-  className,
-  contentClassName,
-  triggerClassName,
-  triggerProps,
-  ...props
-}) {
-  return (
-    <AccordionItem value={value} className={cn("border-border", className)} {...props}>
-      <AccordionTrigger
-        className={cn(FILE_SHEET_SECTION_TRIGGER_CLASSES, triggerClassName)}
-        {...triggerProps}
-      >
-        {title}
-      </AccordionTrigger>
-      <AccordionContent className={cn(FILE_SHEET_SECTION_CONTENT_CLASSES, contentClassName)}>
-        {children}
-      </AccordionContent>
-    </AccordionItem>
-  );
-}
 
 // A properties-panel section that is always visible: no disclosure affordance
 // or hover treatment. Use for primary controls such as Mode and Projection.
@@ -298,53 +233,6 @@ export function FileSheetSubsection({
         </div>
       ) : null}
     </div>
-  );
-}
-
-export function FileSheetItemGroup({ label, children, className }) {
-  // A repeated instance inside one section (settings-ui.md "Repeated item groups"): the
-  // section names the kind, this names the instance. The label sits between a section
-  // header and a row label in weight — full-strength foreground at row size — and binds to
-  // its rows with the tight 4px stacked gap rather than a heading's 12px clearance. Groups
-  // are separated by the section's 16px rhythm with no rule: the next label is the boundary.
-  return (
-    <div className={cn("space-y-1 [&:not(:first-child)]:mt-4", className)} data-file-sheet-item-group="">
-      <div className="flex min-h-4 items-center px-2">
-        <span className="min-w-0 truncate text-tiny leading-4 text-sidebar-foreground">
-          {label}
-        </span>
-      </div>
-      <div className={FILE_SHEET_ROW_STACK_CLASSES} data-file-sheet-row-stack="">
-        {children}
-      </div>
-    </div>
-  );
-}
-
-export function FileSheetSectionBody({
-  children,
-  className
-}) {
-  return (
-    <div
-      className={cn(FILE_SHEET_SECTION_BODY_CLASSES, className)}
-      data-file-sheet-section-body=""
-      data-file-sheet-row-stack=""
-    >
-      {children}
-    </div>
-  );
-}
-
-// The one loading body a tab shows while its panel chunk arrives: the States
-// rule's muted 11px line in the row gutter, inside a normal section body so the
-// tab does not resize when the panel replaces it. Nothing animates — a panel
-// that usually arrives in a frame must not flash a spinner.
-export function FileSheetLoadingBody({ children }) {
-  return (
-    <FileSheetSectionBody>
-      <FileSheetStatusText>{children}</FileSheetStatusText>
-    </FileSheetSectionBody>
   );
 }
 
@@ -643,52 +531,6 @@ export function FileSheetInlineControlRow({
   );
 }
 
-export function FileSheetBooleanToggle({
-  checked,
-  onCheckedChange,
-  disabled = false,
-  ariaLabel,
-  className
-}) {
-  return (
-    <Switch
-      checked={checked}
-      disabled={disabled}
-      onCheckedChange={onCheckedChange}
-      className={cn(FILE_SHEET_BOOLEAN_SWITCH_CLASSES, className)}
-      thumbClassName={FILE_SHEET_BOOLEAN_SWITCH_THUMB_CLASSES}
-      aria-label={ariaLabel}
-    />
-  );
-}
-
-export function FileSheetToggleRow({
-  label,
-  checked,
-  onCheckedChange,
-  disabled = false,
-  description,
-  className,
-  labelClassName,
-  ariaLabel
-}) {
-  return (
-    <FileSheetInlineControlRow
-      label={label}
-      description={description}
-      className={className}
-      labelClassName={labelClassName}
-    >
-      <FileSheetBooleanToggle
-        checked={checked}
-        onCheckedChange={onCheckedChange}
-        disabled={disabled}
-        ariaLabel={ariaLabel || label}
-      />
-    </FileSheetInlineControlRow>
-  );
-}
-
 // Loading / empty / info line, or an error with tone="error". The one style
 // for every in-sheet message.
 export function FileSheetStatusText({ children, tone = "muted", className }) {
@@ -702,18 +544,6 @@ export function FileSheetStatusText({ children, tone = "muted", className }) {
     >
       {children}
     </p>
-  );
-}
-
-// Micro-labelled cell for a FileSheetFieldGrid: 11px label above a 28px control.
-// The one sanctioned label-above arrangement — reserved for tightly coupled
-// tuples and paired properties-panel controls; other settings use rows.
-export function FileSheetField({ label, children, className }) {
-  return (
-    <label className={cn("block min-w-0", className)}>
-      <span className={FILE_SHEET_FIELD_LABEL_CLASSES}>{label}</span>
-      <div className="mt-1 min-w-0">{children}</div>
-    </label>
   );
 }
 
@@ -761,58 +591,6 @@ export function FileSheetButtonRow({ children, columns, className }) {
     >
       {children}
     </div>
-  );
-}
-
-// Mutually exclusive modes, 2-3 short options. `fit` sizes the strip to its
-// content so it can sit on the control axis of an inline row; without it the
-// strip fills the row width, which is only for a block row's full-width slot.
-// More options than that, or labels long enough to crowd the label, is a
-// select — never a wide strip of tabs.
-export function FileSheetSegmentedControl({ value, onChange, options, ariaLabel, fit = false }) {
-  const columnCount = Math.max(1, Math.min(options.length, options.length > 4 ? 3 : 4));
-  return (
-    <ToggleGroup
-      type="single"
-      variant="outline"
-      size="sm"
-      value={value}
-      onValueChange={(nextValue) => {
-        if (!nextValue) {
-          return;
-        }
-        onChange(nextValue);
-      }}
-      className={cn(
-        "min-h-7",
-        fit ? "flex w-fit" : "grid w-full min-w-0 auto-rows-[1.75rem]"
-      )}
-      style={fit ? undefined : { gridTemplateColumns: `repeat(${columnCount}, minmax(0, 1fr))` }}
-      aria-label={ariaLabel}
-    >
-      {options.map((option) => {
-        const Icon = option.Icon;
-        return (
-          <TooltipHint key={option.value} content={option.title || (option.iconOnly ? option.label : null)}><ToggleGroupItem
-
-            value={option.value}
-            disabled={option.disabled === true}
-            className={cn(
-              "min-w-0 gap-1.5 !h-7 px-1.5 text-tiny",
-              fit && "!flex-none px-2",
-              option.iconOnly && "px-1",
-              FILE_SHEET_SEGMENTED_ITEM_CLASSES
-            )}
-
-            aria-label={option.label}
-          >
-            {Icon ? <Icon className="size-3" strokeWidth={2} aria-hidden="true" /> : null}
-            {/* iconOnly keeps the label for the tooltip and screen readers only. */}
-            {Icon && option.iconOnly ? null : <span className="truncate">{option.label}</span>}
-          </ToggleGroupItem></TooltipHint>
-        );
-      })}
-    </ToggleGroup>
   );
 }
 
@@ -899,71 +677,6 @@ export function FileSheetSelectRow({
 }
 
 // Compact color picker trigger for inline rows and parameter rows.
-/**
- * A select whose options nest one level: ungrouped entries render directly, each group is
- * a hover submenu (folder). For long grouped lists — a material catalog — where a
- * flat strip of headings would scroll forever. The trigger mirrors the inline select
- * trigger, so a column of selects reads uniformly.
- */
-export function FileSheetCascadeSelectRow({
-  label,
-  value,
-  onValueChange,
-  options,
-  ariaLabel,
-  className
-}) {
-  const selected = options.find((option) => option.value === value) || null;
-  const ungrouped = options.filter((option) => !option.group);
-  const groupNames = [...new Set(options.map((option) => option.group).filter(Boolean))];
-  // The tick sits on the RIGHT: a checkbox item's left indicator gutter indents checked
-  // and unchecked rows differently from the plain submenu triggers, which reads as ragged
-  // left padding. Right-side ticks keep every row's text on one left edge.
-  const renderItem = (option) => (
-    <DropdownMenuItem
-      key={option.value}
-      className="justify-between gap-2"
-      onSelect={() => onValueChange?.(option.value)}
-    >
-      <span className="min-w-0 truncate">{option.label}</span>
-      {option.value === value ? (
-        <Check className="size-3.5 shrink-0" strokeWidth={2} aria-hidden="true" />
-      ) : null}
-    </DropdownMenuItem>
-  );
-  return (
-    <FileSheetInlineControlRow label={label} className={className}>
-      <DropdownMenu>
-        <DropdownMenuTrigger asChild>
-          <button
-            type="button"
-            aria-label={ariaLabel || (typeof label === "string" ? label : undefined)}
-            className={cn(
-              "flex !h-7 w-fit min-w-20 max-w-44 items-center justify-between gap-1 overflow-hidden",
-              "rounded-md border border-input bg-transparent px-2 !text-tiny shadow-xs outline-none",
-              "focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30"
-            )}
-          >
-            <span className="min-w-0 truncate">{selected?.label ?? ""}</span>
-            <ChevronDown className="size-3.5 shrink-0 opacity-60" aria-hidden="true" />
-          </button>
-        </DropdownMenuTrigger>
-        <DropdownMenuContent align="end" sideOffset={4} className="w-52">
-          {ungrouped.map(renderItem)}
-          {groupNames.map((groupName) => (
-            <DropdownMenuSub key={groupName}>
-              <DropdownMenuSubTrigger>{groupName}</DropdownMenuSubTrigger>
-              <DropdownMenuSubContent className="max-h-80 w-56 overflow-y-auto">
-                {options.filter((option) => option.group === groupName).map(renderItem)}
-              </DropdownMenuSubContent>
-            </DropdownMenuSub>
-          ))}
-        </DropdownMenuContent>
-      </DropdownMenu>
-    </FileSheetInlineControlRow>
-  );
-}
-
 export function FileSheetColorPicker({
   value,
   onChange,
@@ -987,50 +700,13 @@ export function FileSheetColorPicker({
   );
 }
 
-// Label left, color picker on the control axis.
-export function FileSheetColorRow({ label, value, onChange, disabled = false, className, labelClassName }) {
-  return (
-    <FileSheetControlRow
-      label={label}
-      trailing={(
-        <FileSheetColorPicker
-          value={value}
-          onChange={onChange}
-          disabled={disabled}
-          aria-label={typeof label === "string" ? label : undefined}
-        />
-      )}
-      className={className}
-      labelClassName={labelClassName}
-    />
-  );
-}
-
-export default function FileSheet({
-  open,
-  hidden = false,
-  title,
-  bodyClassName,
-  scrollBody = true,
-  children
-}) {
+/** A file's own panel, portaled into the host's panel column; its sections own their scrolling. */
+export default function FileSheet({ open, title, children }) {
   const hostPanelSlot = useContext(HostPanelSlotContext);
-  const sheetBody = scrollBody ? (
-    <ScrollArea
-      className={cn("min-h-0 flex-1", FILE_SHEET_CONTROL_TEXT_CLASSES, bodyClassName)}
-      type="auto"
-      viewportClassName="h-full"
-    >
-      {children}
-    </ScrollArea>
-  ) : (
-    <div className={cn("flex min-h-0 flex-1 flex-col", FILE_SHEET_CONTROL_TEXT_CLASSES, bodyClassName)}>
-      {children}
-    </div>
-  );
-
   // FileViewer owns the single column and its dimensions. Wait for its slot.
   return open && hostPanelSlot
-    ? createPortal(<div className="flex h-full min-h-0 flex-col" hidden={hidden} data-file-sheet={title || ""}>{sheetBody}</div>, hostPanelSlot)
+    ? createPortal(<div className="flex h-full min-h-0 flex-col" data-file-sheet={title || ""}>
+      <div className={cn("flex min-h-0 flex-1 flex-col", FILE_SHEET_CONTROL_TEXT_CLASSES)}>{children}</div>
+    </div>, hostPanelSlot)
     : null;
 }

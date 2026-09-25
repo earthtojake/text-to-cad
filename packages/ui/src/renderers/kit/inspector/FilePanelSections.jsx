@@ -28,11 +28,12 @@ export const panelScroller = element => element?.closest("[data-file-panel-scrol
  * that keeps work alive only while it can be seen.
  *
  * @param {{ sections: Array<{ id: string, title: string,
+ *   role?: "model" | "position",
  *   content: import("react").ReactNode | ((active: boolean) => import("react").ReactNode),
  *   hideHeading?: boolean, headingAction?: import("react").ReactNode, enabled?: boolean, onEnabledChange?: (enabled: boolean) => void, disabled?: boolean, collapsible?: boolean } | null | false>,
- *   sticky?: boolean, footer?: import("react").ReactNode, active?: boolean, revealRequest?: { sectionId: string, key: number } | null }} props
+ *   sticky?: boolean, active?: boolean, revealRequest?: { sectionId: string, key: number } | null }} props
  */
-export default function FilePanelSections({ sections, active = true, revealRequest = null, footer = null, sticky = true }) {
+export default function FilePanelSections({ sections, active = true, revealRequest = null, sticky = true }) {
   const shown = useMemo(() => sections.filter(Boolean), [sections]);
   const scroller = useRef(null);
   const [pendingReveal, setPendingReveal] = useState(null);
@@ -70,7 +71,6 @@ export default function FilePanelSections({ sections, active = true, revealReque
       <div ref={scroller} className="min-h-0 flex-1 overflow-x-hidden overflow-y-auto" data-file-panel-scroll="">
         {shown.map((section, index) => <FilePanelSection key={section.id} section={section} active={active} index={index} count={shown.length} sticky={sticky}
           alone={shown.length === 1} open={!folded.has(section.id)} onOpenChange={open => fold(section.id, open)} onReveal={() => setPendingReveal({ sectionId: section.id })} />)}
-        {footer}
       </div>
       {/* `contents`: what is put here is laid out as this column's own last rows. */}
       <div ref={setReference} className="contents" data-file-panel-reference="" />

@@ -131,7 +131,7 @@ function DxfSurface({ view, data }) {
   actionsRef.current = { snapshot };
   useEffect(() => {
     const actions = [
-      { id: "snapshot", label: "Take snapshot", icon: Camera, disabled: !ready || !promptAvailable,
+      { id: "snapshot", label: "Take snapshot", hint: "Snapshot", icon: Camera, disabled: !ready || !promptAvailable,
         onInvoke: () => actionsRef.current.snapshot() }
     ];
     onNavigationActionsChange?.(actions);

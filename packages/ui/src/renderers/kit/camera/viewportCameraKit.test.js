@@ -231,3 +231,29 @@ test("a detail swap's float-level drift is the same zero pose, a millimetre is n
   assert.equal(sameZeroPoseBounds({ min: [0, 0, 0], max: [10.01, 4, 2] }, SMALL), false);
   assert.equal(sameZeroPoseBounds(null, SMALL), false, "no box is not the same box");
 });
+
+test('the lit cube face follows the camera direction, and the cube reads the camera through one scratch per runtime', async () => {
+  const THREE = await import('three');
+  const { getActiveViewPlaneFaceId, readViewPlaneOrientation } = await import('./viewportCameraKit.js');
+  const camera = new THREE.PerspectiveCamera();
+  const runtime = { THREE, camera, controls: { target: new THREE.Vector3(1, 2, 3) } };
+  const look = (x, y, z) => { camera.position.set(1 + x, 2 + y, 3 + z); camera.up.set(0, 0, 1); camera.lookAt(1, 2, 3); };
+  look(0, 0, 10);
+  assert.equal(getActiveViewPlaneFaceId(runtime), 'z');
+  look(10, 10, 10);
+  assert.match(getActiveViewPlaneFaceId(runtime), /\S/, 'a corner view lights its corner');
+  look(10, 3, 1);
+  assert.equal(getActiveViewPlaneFaceId(runtime), '', 'between presets nothing is lit');
+  camera.position.copy(runtime.controls.target);
+  assert.equal(getActiveViewPlaneFaceId(runtime), '');
+  // The orientation reads through one scratch rotation and vector per runtime, frame after frame.
+  look(0, -10, 0);
+  const front = readViewPlaneOrientation(runtime);
+  const scratch = { ...runtime.viewPlaneScratch };
+  look(10, 0, 0);
+  const side = readViewPlaneOrientation(runtime);
+  assert.equal(runtime.viewPlaneScratch.rotation, scratch.rotation);
+  assert.equal(runtime.viewPlaneScratch.axis, scratch.axis);
+  assert.ok(Math.abs(front.z[1] - 1) < 1e-9, 'from the front, +Z points up the screen');
+  assert.ok(Math.abs(side.x[2] - 1) < 1e-9, 'from the +X side, +X points at the viewer');
+});

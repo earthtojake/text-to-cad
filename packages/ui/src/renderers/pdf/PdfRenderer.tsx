@@ -122,7 +122,9 @@ export default function PdfRenderer({ data, file, source, state, onStateChange, 
           ...(current.selection ? [{ id: 'selection', kind: 'text' as const, text: `Page ${current.page} selection:\n${current.selection}` }] : []),
           { id: 'page', kind: 'attachment', name: `${file.name}-page-${current.page}.png`, mimeType: 'image/png', content: target.capture(current.page), about: ['pdf'] },
         ] };
-      }} onResult={result => setFeedback(result.status === 'added' ? 'Added to prompt' : result.status === 'copied' ? 'Copied' : ('message' in result ? result.message : undefined) ?? result.status)} />
+      }} onResult={result => setFeedback(
+        // A delivery that worked says nothing (no success messages); one that did not says why.
+        result.status === 'added' || result.status === 'copied' || result.status === 'cancelled' ? '' : ('message' in result ? result.message : undefined) ?? result.status)} />
       <span role="status" className="text-muted-foreground">{feedback}</span>
     </div>
     {error ? <div role="alert" className="p-3 text-destructive">{error}</div> : null}

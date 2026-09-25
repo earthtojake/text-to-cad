@@ -1,6 +1,6 @@
 import { createPortal } from "react-dom";
 import { VIEWPORT_BOTTOM_CENTER } from "./viewportLayout.js";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Play, Pause, Maximize2 } from "lucide-react";
 import { ToolbarButton } from "../tools/ToolbarButton.js";
 import PreviewChrome from "../tools/PreviewChrome.jsx";
@@ -16,6 +16,7 @@ import DisplaySettingsPopover from "../view-settings/DisplaySettingsPopover.jsx"
 import PlayMenu from "../tools/PlayMenu.jsx";
 import OrbitMenu from "../tools/OrbitMenu.jsx";
 import FloatingToolBar from "../tools/FloatingToolBar.js";
+import { ToolPanelStackContext } from "../tools/toolPanelStack.js";
 import { ViewportAnimationBar } from "../tools/playbar/ViewportAnimationBar.js";
 import ShellViewport from "./ShellViewport.jsx";
 import ViewportBottomAction, { drawingCaptureAction } from "./ViewportBottomAction.jsx";
@@ -34,7 +35,6 @@ const MODEL_UPDATE_STATUS = Object.freeze({ pending: true, label: "Updating mode
  *
  * @param {{ shell: ReturnType<typeof import("./useRendererShell.js").useRendererShell>,
  *   tools: import("../tools/FloatingToolBar.js").ViewportTool[],
- *   onPreviewActiveChange?: (active: boolean) => void,
  *   toolPanels?: import("react").ReactNode,
  *   playback?: any,
  *   panel?: { title: string, sections: object[] } | null,
@@ -42,7 +42,7 @@ const MODEL_UPDATE_STATUS = Object.freeze({ pending: true, label: "Updating mode
  *     onInvoke?(): void, render?: (props: object) => import("react").ReactNode, children?: import("react").ReactNode } | null,
  *   contextMenuItems?: ((press: { clientX: number, clientY: number, shiftKey: boolean }) => object[] | null) | null,
  *   onContextMenuOpenChange?: ((open: boolean) => void) | null,
- *   sceneRevision?: number, className?: string,
+ *   className?: string,
  *   frameProvider?: ((frame: import("react").ReactNode) => import("react").ReactNode) | null,
  *   onCanvasPointerDown?: ((event: import("react").PointerEvent) => void) | null,
  *   viewportOverlay?: import("react").ReactNode | ((viewport: { runtimeRef: object, hostRef: object,
@@ -71,19 +71,20 @@ const MODEL_UPDATE_STATUS = Object.freeze({ pending: true, label: "Updating mode
  *   it. The frame focuses itself on such a press whatever the renderer does; this is for a renderer
  *   that also has something to put down when the person reaches for the model.
  */
-export default function RendererShell({ shell, tools, playback = null, onPreviewActiveChange = null, toolPanels = null, panel = null, bottomAction = null, contextMenuItems = null,
-  onContextMenuOpenChange = null, sceneRevision = 0, viewportOverlay = null, className = "",
+export default function RendererShell({ shell, tools, playback = null, toolPanels = null, panel = null, bottomAction = null, contextMenuItems = null,
+  onContextMenuOpenChange = null, viewportOverlay = null, className = "",
   frameProvider = null, onCanvasPointerDown = null }) {
   const frame = shell.frame;
-  const { view, resolvedScene, previewMode, viewerLoading, scene } = frame;
+  const { view, resolvedScene, viewerLoading, scene } = frame;
+  // The one presentation state: every gate — the viewport's, the renderer's — reads it.
+  const { presenting, setPresenting } = shell;
   const animation = playback || frame.animation;
   const hasAnimation = Boolean(animation?.clips?.length);
   const animationTool = tools.find(tool => tool.id === "animate");
-  const [fullscreen, setFullscreen] = useState(false);
   const [orbitPlaying, setOrbitPlaying] = useState(true);
+  const panelStackRef = useRef(null);
   const [localAnimationActive, setLocalAnimationActive] = useState(false);
-  useEffect(() => { setFullscreen(false); setLocalAnimationActive(false); }, [frame.modelKey]);
-  const fullscreenActive = previewMode || fullscreen;
+  useEffect(() => { setPresenting(false); setLocalAnimationActive(false); }, [frame.modelKey, setPresenting]);
   const displayActive = shell.toolMode === "display";
   const animationActive = !displayActive && (animationTool ? animationTool.active : localAnimationActive || animation?.enabled);
   const activateDisplay = () => {
@@ -93,42 +94,42 @@ export default function RendererShell({ shell, tools, playback = null, onPreview
     if (!animationTool && animation?.enabled) animation.onRestart?.();
   };
   useEffect(() => {
-    view.onPanelVisibilityChange?.(!fullscreenActive);
+    view.onPanelVisibilityChange?.(!presenting);
     return () => view.onPanelVisibilityChange?.(true);
-  }, [fullscreenActive, view.onPanelVisibilityChange]);
-  useEffect(() => { onPreviewActiveChange?.(fullscreenActive); }, [fullscreenActive, onPreviewActiveChange]);
-  const previewDisplay = useMemo(() => fullscreenActive ? presentationDisplaySettings(resolvedScene.display) : resolvedScene.display, [fullscreenActive, resolvedScene.display]);
-  const leaveFullscreen = () => { setFullscreen(false); if (previewMode) view.onFullscreenChange?.(false); };
-  if (shell.previewExitRef) shell.previewExitRef.current = fullscreenActive ? () => { leaveFullscreen(); return true; } : null;
-  const animateTool = hasAnimation ? {
-    ...animationTool,
+  }, [presenting, view.onPanelVisibilityChange]);
+  const previewDisplay = useMemo(() => presenting ? presentationDisplaySettings(resolvedScene.display) : resolvedScene.display, [presenting, resolvedScene.display]);
+  const leaveFullscreen = () => setPresenting(false);
+  // A renderer's own Animate tool is drawn as it is handed over; the shell adds only the
+  // routine menu. A renderer without one gets the shell's.
+  const playMenu = trigger => <PlayMenu trigger={trigger} animation={animation} />;
+  const animateTool = !hasAnimation ? null : animationTool ? { ...animationTool, secondPressOpensMenu: true, menu: playMenu } : {
     id: "animate", label: "Animate", icon: <Play className="size-3" aria-hidden="true" />,
     active: Boolean(animationActive), disabled: shell.idle,
     secondPressOpensMenu: true,
     onSelect: () => {
       if (animationActive) return;
-      if (animationTool) animationTool.onSelect();
-      else { shell.selectTool("animate"); setLocalAnimationActive(true); if (!animation.playing) animation.onPlayToggle(); }
+      shell.selectTool("animate"); setLocalAnimationActive(true); if (!animation.playing) animation.onPlayToggle();
     },
-    menu: trigger => <PlayMenu trigger={trigger} animation={animation} />,
-  } : null;
-  const viewerTools = [...tools.filter(tool => tool !== animationTool), ...(animateTool ? [animateTool] : [])]
-    .map(tool => displayActive ? { ...tool, active: false } : tool);
+    menu: playMenu,
+  };
+  // Display takes the pointer from whichever tool had it (each tool's own `active` says so); a
+  // retained effect (a panel the person keeps) stays highlighted beside it.
+  const viewerTools = [...tools.filter(tool => tool !== animationTool), ...(animateTool ? [animateTool] : [])];
 
   const hasContent = Boolean(scene) && !viewerLoading;
   const filePanelOpen = frame.openPanel === CAD_PANEL.file;
   const action = bottomAction || (frame.drawToolActive && frame.drawing.hasContent
-    ? drawingCaptureAction({ composer: frame.composer, disabled: viewerLoading || !hasContent, onInvoke: frame.copyDrawing })
+    ? drawingCaptureAction({ disabled: viewerLoading || !hasContent, onInvoke: frame.copyDrawing })
     : null);
   frame.copyActionRef.current = () => {
-    if (fullscreenActive || previewMode) return false;
+    if (presenting) return false;
     if (frame.drawToolActive && frame.drawing.hasContent) { frame.copyDrawing(); return true; }
     if (bottomAction?.onInvoke && !bottomAction.disabled) { bottomAction.onInvoke(); return true; }
     return false;
   };
   // The renderer's overlay and the shell's own layers share one viewport context.
   const overlay = viewport => <>
-    {previewMode || fullscreenActive || !contextMenuItems ? null : <ViewportContextMenu viewport={viewport} items={contextMenuItems} onOpenChange={onContextMenuOpenChange} />}
+    {presenting || !contextMenuItems ? null : <ViewportContextMenu viewport={viewport} items={contextMenuItems} onOpenChange={onContextMenuOpenChange} />}
     {typeof viewportOverlay === "function" ? viewportOverlay(viewport) : viewportOverlay}
   </>;
   const body = (
@@ -162,7 +163,6 @@ export default function RendererShell({ shell, tools, playback = null, onPreview
                   <ShellViewport
                     ref={frame.viewerRef}
                     scene={scene}
-                    sceneRevision={sceneRevision}
                     modelKey={frame.modelKey}
                     presentationKey={frame.presentationKey}
                     sceneScaleMode={frame.sceneScaleMode}
@@ -177,14 +177,14 @@ export default function RendererShell({ shell, tools, playback = null, onPreview
                     renderMode={resolvedScene.render.enabled}
                     renderConfiguration={resolvedScene.render.configuration}
                     quality={resolvedScene.quality}
-                    orbitPreview={fullscreenActive && orbitPlaying}
-                    controlsHidden={Boolean(fullscreenActive)}
-                    previewMode={fullscreenActive}
+                    orbitPreview={presenting && orbitPlaying}
+                    controlsHidden={presenting}
+                    previewMode={presenting}
                     previewOrbitSpeed={frame.previewOrbitSpeed ?? 1}
                     isLoading={viewerLoading}
                     viewUpdate={frame.viewUpdate}
                     loadingPresentation={frame.loading}
-                    drawingEnabled={!fullscreenActive && frame.drawToolActive}
+                    drawingEnabled={frame.drawToolActive}
                     drawing={frame.drawing}
                     onPerspectiveChange={frame.handlePerspectiveChange}
                     onPresentationChange={frame.handlePresentationChange}
@@ -193,12 +193,12 @@ export default function RendererShell({ shell, tools, playback = null, onPreview
                     preserveInteractionPixelRatio={frame.preserveInteractionPixelRatio}
                     runtimeLifecycle={frame.runtimeLifecycle}
                   >{overlay}</ShellViewport>
-                  {!previewMode && !fullscreenActive ? <ViewerAlertCard key={frame.modelKey} alert={frame.viewerAlert} hasContent={hasContent} onReload={view.reload} /> : null}
-                  {!previewMode && !fullscreenActive && action ? <ViewportBottomAction composer={frame.composer} shortcut={frame.copyShortcut} {...action} /> : null}
+                  {!presenting ? <ViewerAlertCard key={frame.modelKey} alert={frame.viewerAlert} hasContent={hasContent} onReload={view.reload} /> : null}
+                  {!presenting && action ? <ViewportBottomAction shortcut={frame.copyShortcut} {...action} /> : null}
                 </div>
               </div>
 
-              <PreviewChrome active={fullscreenActive} surface={frame.hostElement} onExit={leaveFullscreen}
+              <PreviewChrome active={presenting} surface={frame.hostElement} onExit={leaveFullscreen}
                 settings={onOpenChange => <>
                   {hasAnimation && <PlayMenu onOpenChange={onOpenChange} allowInactive
                     trigger={<ToolbarButton label="Animation settings"><Play className="size-3.5" strokeWidth={1.5} aria-hidden="true" /></ToolbarButton>}
@@ -206,8 +206,8 @@ export default function RendererShell({ shell, tools, playback = null, onPreview
                   <OrbitMenu enabled={orbitPlaying} onEnabledChange={setOrbitPlaying}
                     speed={frame.previewOrbitSpeed || 1} onSpeedChange={frame.setPreviewOrbitSpeed} onOpenChange={onOpenChange} />
                 </>}
-                playbar={hasAnimation && (animationActive || fullscreenActive) ? <ViewportAnimationBar key={frame.modelKey} runtime={animation}
-                  avoidViewControl={!fullscreenActive} className="pointer-events-auto" disabled={viewerLoading || !scene} /> : fullscreenActive ?
+                playbar={hasAnimation && (animationActive || presenting) ? <ViewportAnimationBar key={frame.modelKey} runtime={animation}
+                  avoidViewControl={!presenting} className="pointer-events-auto" disabled={viewerLoading || !scene} /> : presenting ?
                   <div role="toolbar" aria-label="Orbit playback" data-preview-hover-hold="" style={{ bottom: VIEWPORT_BOTTOM_CENTER }}
                     className="pointer-events-auto absolute left-1/2 -translate-x-1/2 translate-y-1/2 px-6 py-4">
                     <ToolbarButton tooltip={false} label={orbitPlaying ? "Pause orbit" : "Play orbit"} onClick={() => setOrbitPlaying(value => !value)}>
@@ -215,20 +215,20 @@ export default function RendererShell({ shell, tools, playback = null, onPreview
                     </ToolbarButton>
                   </div> : null}>
 
-              {previewMode ? null : <>
+              <ToolPanelStackContext.Provider value={panelStackRef}>
                 <div className="pointer-events-none absolute z-20 flex max-h-[calc(100%-28px)] flex-col items-start gap-2" style={TOOLBAR_POSITION} data-cad-tool-groups="">
-                  <FloatingToolBar inline tools={viewerTools} trailing={<DisplaySettingsPopover
+                  <FloatingToolBar tools={viewerTools} trailing={<DisplaySettingsPopover
                     container={frame.hostElement} disabled={shell.idle} active={displayActive} onActivate={activateDisplay} onDeactivate={() => shell.selectTool("")}
                     settings={frame.display} actions={view.displayActions} />} />
-                  {!fullscreenActive && toolPanels}
+                  <div className="contents" ref={panelStackRef}>{!presenting && toolPanels}</div>
                 </div>
-                  <div className="pointer-events-auto absolute flex h-[34px] items-center" style={{ top: TOOLBAR_POSITION.top, right: TOOLBAR_POSITION.left }}>
-                    <ToolbarButton tooltip={false} label="Fullscreen" className="size-6 bg-transparent hover:bg-transparent dark:hover:bg-transparent"
-                      disabled={shell.idle} onClick={() => { setOrbitPlaying(true); setFullscreen(true); }}>
-                      <Maximize2 className="size-3" strokeWidth={1.5} aria-hidden="true" />
-                    </ToolbarButton>
-                  </div>
-              </>}
+              </ToolPanelStackContext.Provider>
+              <div className="pointer-events-auto absolute flex h-[34px] items-center" style={{ top: TOOLBAR_POSITION.top, right: TOOLBAR_POSITION.left }}>
+                <ToolbarButton tooltip={false} label="Fullscreen" className="size-6 bg-transparent hover:bg-transparent dark:hover:bg-transparent"
+                  disabled={shell.idle} onClick={() => { setOrbitPlaying(true); setPresenting(true); }}>
+                  <Maximize2 className="size-3" strokeWidth={1.5} aria-hidden="true" />
+                </ToolbarButton>
+              </div>
 
               </PreviewChrome>
 
@@ -239,15 +239,14 @@ export default function RendererShell({ shell, tools, playback = null, onPreview
                 ? MODEL_UPDATE_STATUS : frame.viewUpdate.status} onRetry={frame.viewUpdate.retry} />, view.navigationStatusSlot) : null}
               <ViewerLoadingOverlay
                 loading={frame.presentationState?.file === frame.modelKey && frame.presentationState?.covering ? null : frame.loading}
-                previewMode={previewMode}
                 operationKey={frame.modelKey}
               />
             </div>
 
             {/* Display floats over the viewport; the file sidebar keeps its own scroll and state. */}
-            {panel ? <FileSheet open={filePanelOpen} title={panel.title}
-              scrollBody={false}>
-              <div className="contents" inert={Boolean(fullscreenActive)} aria-disabled={Boolean(fullscreenActive)}><FilePanelTabs key={frame.modelKey} sections={panel.sections} active={filePanelOpen} revealRequest={shell.panelRevealRequest} /></div>
+            {panel ? <FileSheet open={filePanelOpen} title={panel.title}>
+              <div className="contents" inert={presenting} aria-disabled={presenting}><FilePanelTabs key={frame.modelKey} sections={panel.sections} active={filePanelOpen} revealRequest={shell.panelRevealRequest}
+                selected={shell.panelSection} onSelectedChange={shell.setPanelSection} /></div>
             </FileSheet> : null}
           </div>
         </div>

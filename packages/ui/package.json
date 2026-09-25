@@ -46,10 +46,6 @@
       "types": "./dist/renderers/code/editor/index.d.ts",
       "import": "./dist/renderers/code/editor/index.js"
     },
-    "./renderers/step/state": {
-      "types": "./dist/renderers/step/state.d.ts",
-      "import": "./dist/renderers/step/state.js"
-    },
     "./file-viewer/presentation": {
       "types": "./dist/file-viewer/presentation.d.ts",
       "import": "./dist/file-viewer/presentation.js"

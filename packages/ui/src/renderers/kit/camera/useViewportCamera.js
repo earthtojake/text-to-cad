@@ -2,7 +2,7 @@ import { useCallback, useLayoutEffect, useRef } from "react";
 import { applyPerspectiveSnapshot, cancelCameraTransition, captureRuntimeViewportFitScale, readPerspectiveSnapshot, readScopedPerspectiveSnapshot, recenterRuntimeTarget, setRuntimeZoomPercent, syncRuntimeViewportFraming, transitionCameraToViewPreset, zoomRuntimeToBounds } from "./runtimeCamera.js";
 import { runtimeModelKeyMatches } from "@hardcore/core/lib/viewer/modelRuntime.js";
 import { perspectiveSnapshotEqual, perspectiveSnapshotMatchesScene, resolvePerspectiveSnapshot } from "@hardcore/core/lib/perspective.js";
-import { DEFAULT_VIEW_DIRECTION, VIEW_CUBE_DRAG_RAD_PER_PX, VIEW_PLANE_FACE_BY_ID, WORLD_UP, applyOrbitDelta, clearKeyboardOrbitState, readViewPlaneOrientation, runtimeFramingBounds, viewPlaneOrientationEqual } from "./viewportCameraKit.js";
+import { DEFAULT_VIEW_DIRECTION, VIEW_CUBE_DRAG_RAD_PER_PX, VIEW_PLANE_FACE_BY_ID, WORLD_UP, applyOrbitDelta, clearKeyboardOrbitState, readViewPlaneOrientation, runtimeFramingBounds } from "./viewportCameraKit.js";
 
 /**
  * The camera of a mounted viewport, as React sees it: the perspective a session
@@ -68,14 +68,10 @@ export function useViewportCamera({
     lastEmittedPerspectiveRef.current = nextPerspective;
     perspectiveChangeRef.current?.(nextPerspective);
   };
+  // `setViewPlaneOrientation` is the cube's orientation store's `set`, which ignores an equal orientation.
   const syncViewPlaneOrientation = (runtime = runtimeRef.current) => {
     const nextOrientation = readViewPlaneOrientation(runtime);
-    if (!nextOrientation) {
-      return;
-    }
-    setViewPlaneOrientation((current) => (
-      viewPlaneOrientationEqual(current, nextOrientation) ? current : nextOrientation
-    ));
+    if (nextOrientation) setViewPlaneOrientation(nextOrientation);
   };
   const applyInitialPerspective = useCallback((runtime = runtimeRef.current) => {
     if (previewModeRef.current) return false;

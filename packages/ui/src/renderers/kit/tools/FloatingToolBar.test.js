@@ -7,11 +7,10 @@ const tool = (id, extra = {}) => ({ id, label: id.toUpperCase(), icon: null, onS
 const buttons = tree => elements(tree).filter(node => typeof node.props.label === 'string');
 
 test('the strip draws the tools it is handed, in order, and knows none by name', () => {
-  const view = render(FloatingToolBar, { tools: [tool('b', { active: true }), tool('a', { disabled: true })], position: { top: '14px' } });
+  const view = render(FloatingToolBar, { tools: [tool('b', { active: true }), tool('a', { disabled: true })] });
   assert.deepEqual(buttons(view.tree).map(node => [node.props.label, node.props.active, node.props['aria-pressed'], node.props.disabled]),
     [['B', true, true, undefined], ['A', false, false, true]]);
   assert.deepEqual(elements(view.tree).filter(node => node.props.role === 'group').map(node => node.props['aria-label']), ['Interaction tools']);
-  assert.deepEqual(elements(view.tree)[0].props.style, { top: '14px' });
   view.unmount();
 });
 

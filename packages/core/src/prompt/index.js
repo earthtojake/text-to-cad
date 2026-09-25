@@ -92,6 +92,43 @@ export function formatPromptContextText(context, options = {}) {
   return context.parts.flatMap(part => part.kind === 'text' ? [part.text] : part.kind === 'reference' ? [formatPromptReference(part.reference, options)] : []).join('\n');
 }
 
+const failureMessage = error => error instanceof Error ? error.message : String(error);
+/**
+ * The bookkeeping every `PromptContextPort.deliver` shares. `deliver(operationId, start)` starts
+ * one delivery per operation id — a repeated call for a bundle already on its way (or delivered)
+ * gets that first operation's result — refuses a delivery while `maxPending` are in flight, and
+ * remembers at most `maxRemembered` operations, evicting completed ones first. A failed or
+ * cancelled operation is forgotten, so the same bundle can be tried again. `start` runs at once,
+ * inside the caller's gesture; a throw or a rejection becomes a `failed` result.
+ */
+export function createPromptDeliveryLedger({ maxPending = 16, maxRemembered = 256, busyMessage = 'Wait for pending prompt deliveries before sending more.' } = {}) {
+  const operations = new Map();
+  const pending = new Set();
+  return {
+    deliver(operationId, start) {
+      const previous = operations.get(operationId);
+      if (previous) return previous;
+      if (pending.size >= maxPending) return Promise.resolve({ status: 'failed', message: busyMessage });
+      let operation;
+      try { operation = Promise.resolve(start()); }
+      catch (error) { operation = Promise.resolve({ status: 'failed', message: failureMessage(error) }); }
+      operation = operation.catch(error => ({ status: 'failed', message: failureMessage(error) }));
+      while (operations.size >= maxRemembered) {
+        const completed = [...operations.keys()].find(id => !pending.has(id));
+        if (!completed) break;
+        operations.delete(completed);
+      }
+      operations.set(operationId, operation);
+      pending.add(operationId);
+      void operation.then(result => {
+        pending.delete(operationId);
+        if (result.status === 'failed' || result.status === 'cancelled') operations.delete(operationId);
+      });
+      return operation;
+    },
+  };
+}
+
 const unavailable = Object.freeze({ kind: 'unavailable', available: false, reason: 'Prompt delivery is unavailable in this host.' });
 /** An explicit composition choice for a host with no prompt workflow; never discovers globals. */
 export const unavailablePromptContext = Object.freeze({

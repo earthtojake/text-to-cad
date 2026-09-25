@@ -33,13 +33,11 @@ export const EmptyState = runtime.EmptyState as typeof Contract.EmptyState;
 export const fuzzyMatch = runtime.fuzzyMatch as typeof Contract.fuzzyMatch;
 export const fuzzyFilter = runtime.fuzzyFilter as typeof Contract.fuzzyFilter;
 export const buildCrumbs = runtime.buildCrumbs as typeof Contract.buildCrumbs;
-export const worktreeMark = runtime.worktreeMark as typeof Contract.worktreeMark;
 export const parentOf = runtime.parentOf as typeof Contract.parentOf;
 export const Breadcrumbs = runtime.Breadcrumbs as typeof Contract.Breadcrumbs;
 export const FileNavRow = runtime.FileNavRow as typeof Contract.FileNavRow;
 export const PanelToggle = runtime.PanelToggle as typeof Contract.PanelToggle;
 export const FileIcon = runtime.FileIcon as typeof Contract.FileIcon;
 export const FolderIcon = runtime.FolderIcon as typeof Contract.FolderIcon;
-export const useElementWidth = runtime.useElementWidth as typeof Contract.useElementWidth;
 
 export { default as EntryIcon } from "./EntryIcon.jsx";

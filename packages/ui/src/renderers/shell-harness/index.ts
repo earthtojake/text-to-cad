@@ -19,10 +19,8 @@ export function createHarnessRenderer(services: HarnessRendererOptions) {
     id: 'shell-harness',
     priority: 100,
     matches: (file) => /\.harness$/i.test(file.path),
-    // Fullscreen is the shell's (its controls, its presentation camera), and a renderer only
-    // reaches it by declaring it: this frame declares it so the shell's fullscreen is driven here.
-    fullscreen: true,
-    panels: ({ ready }) => viewerPanels(ready),
+    // `panel*.harness` has a Settings panel with two tabs, as a file with Position does.
+    panels: ({ ready, file }) => viewerPanels(ready, { file: /^panel/.test(file.path) }),
     async prepare() { return { data: { services } }; },
     load: () => import('./HarnessRenderer.jsx') as Promise<{ default: ComponentType<FileRendererProps<{ services: HarnessRendererOptions }>> }>
   });

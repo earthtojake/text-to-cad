@@ -12,7 +12,7 @@ export function TreeFilterInput({ label, placeholder, value, onChange, onKeyDown
       <Search className="pointer-events-none absolute left-2 size-3 text-muted-foreground" />
       <input
         aria-label={label}
-        className="h-6 w-full min-w-0 rounded-md bg-transparent pr-5 pl-6.5 text-[12px] outline-none placeholder:text-muted-foreground focus:bg-background/70"
+        className="h-6 w-full min-w-0 rounded-md bg-transparent pr-5 pl-6.5 text-xs outline-none placeholder:text-muted-foreground focus:bg-background/70"
         onChange={event => onChange(event.target.value)}
         onKeyDown={onKeyDown}
         placeholder={placeholder}

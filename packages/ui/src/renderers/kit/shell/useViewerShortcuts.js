@@ -6,14 +6,13 @@ import { isEditableTarget } from "../viewport/dom.js";
  * `onEscape` only when this viewer owns it: focus is inside it, or the key
  * landed on the page background after the last pointer press was inside it.
  * A composer, another pane and any editable target keep their own Escape.
- * Fullscreen's Escape is the host's.
  *
  * @param {{ viewerElement: { current: HTMLElement | null } | null, escapeActive: boolean,
- *   onEscape: () => void, onCopy?: () => boolean, previewMode?: boolean }} options
+ *   onEscape: (event: KeyboardEvent) => void, onCopy?: () => boolean }} options
  *   `escapeActive`: there is something for Escape to do (so idle viewers hold no listener).
  */
 export function useViewerShortcuts({
-  viewerElement, escapeActive, onEscape, onCopy, previewMode = false
+  viewerElement, escapeActive, onEscape, onCopy
 }) {
   const pointerInside = useRef(false);
   const copy = useRef(onCopy);
@@ -26,9 +25,8 @@ export function useViewerShortcuts({
     return () => window.removeEventListener("pointerdown", onPointerDown, true);
   }, [viewerElement]);
   useEffect(() => {
-    if (!(escapeActive || previewMode || onCopy)) return undefined;
+    if (!(escapeActive || onCopy)) return undefined;
     const handleKeyDown = (event) => {
-      if (previewMode) return; // The host owns fullscreen Escape; tools are inactive.
       const element = viewerElement?.current;
       if (!element) return;
       const target = event.target;
@@ -40,9 +38,9 @@ export function useViewerShortcuts({
           ((event.key.toLowerCase() === "c" && (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey) || (event.key === "Insert" && event.ctrlKey))) {
         if (copy.current?.()) { event.preventDefault(); event.stopPropagation(); }
       }
-      if (event.key === "Escape" && !event.defaultPrevented && !isEditableTarget(event.target)) escape.current?.();
+      if (event.key === "Escape" && !event.defaultPrevented && !isEditableTarget(event.target)) escape.current?.(event);
     };
     window.addEventListener("keydown", handleKeyDown, true);
     return () => window.removeEventListener("keydown", handleKeyDown, true);
-  }, [viewerElement, escapeActive, previewMode, Boolean(onCopy)]);
+  }, [viewerElement, escapeActive, Boolean(onCopy)]);
 }

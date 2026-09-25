@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import { VIEW_CUBE_CORNERS, VIEW_CUBE_EDGES } from "./viewportCameraKit.js";
 
 // The view cube. A cube drawn from the camera's orientation: its faces are the six plane
@@ -116,7 +116,7 @@ function ViewPlaneControl({
   viewPlaneOffsetTop,
   activeViewPlaneFace,
   viewPlaneFaces,
-  viewPlaneOrientation,
+  orientation: orientationStore,
   compact = false,
   disabled = false,
   viewPlaneSize,
@@ -124,6 +124,9 @@ function ViewPlaneControl({
   activateViewPlaneFace,
   orbitViewCube
 }) {
+  // The cube's own subscription to the camera's orientation (`createViewPlaneOrientationStore`):
+  // a moving camera re-renders the cube and nothing around it.
+  const viewPlaneOrientation = useSyncExternalStore(orientationStore.subscribe, orientationStore.getSnapshot, orientationStore.getSnapshot);
   const [hoveredId, setHoveredId] = useState("");
   const [dragging, setDragging] = useState(false);
   // A press that moves more than a few pixels is a drag that orbits, not a click on a face.
@@ -270,7 +273,7 @@ function ViewPlaneControl({
               : `color-mix(in oklch, var(--background) ${shade}%, var(--foreground))`;
             return (
               <g key={face.id} {...pickProps(face.id, face.title, () => activateViewPlaneFace?.(face.id))}>
-                <polygon data-cube-artwork="" points={face.points.map((point) => point.join(",")).join(" ")}
+                <polygon points={face.points.map((point) => point.join(",")).join(" ")}
                   fill="color-mix(in oklch, var(--background) 90%, var(--foreground))" stroke="var(--background)" strokeWidth="0.6" strokeLinejoin="round" />
                 <path d={roundedInsetFace(face.points)} fill={fill} pointerEvents="none" />
                 {face.facing > 0.25 ? (
@@ -298,7 +301,7 @@ function ViewPlaneControl({
               </g>
             );
           })}
-          <g data-cube-artwork="" aria-hidden="true" pointerEvents="none">
+          <g aria-hidden="true" pointerEvents="none">
             {triad.map(({ axis, x, y, lx, ly, visible }) => (
               <g key={axis} opacity={visible ? 1 : 0.4}>
                 <line x1={axisX} y1={axisY} x2={x} y2={y} stroke={AXIS_COLORS[axis]} strokeWidth="1.7" strokeLinecap="round" />

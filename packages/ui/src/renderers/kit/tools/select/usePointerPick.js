@@ -1,4 +1,5 @@
 import { useEffect, useRef } from "react";
+import { prefersCoarsePointer } from "../../viewport/dom.js";
 
 const HOVER_MIN_MOVE_PX = 2;
 const FINE_TAP_SLOP_PX = 4;
@@ -43,7 +44,7 @@ export function usePointerPick({ viewport, scene, enabled, onPick, onHover = nul
     if (!enabled || !host || !runtime?.THREE || typeof scene?.pick !== "function") return undefined;
     const raycaster = new runtime.THREE.Raycaster();
     const ndc = new runtime.THREE.Vector2();
-    const coarseDefault = window.matchMedia?.("(pointer: coarse)")?.matches ?? false;
+    const coarseDefault = prefersCoarsePointer();
     const coarse = pointerType => pointerType === "touch" || pointerType === "pen" || coarseDefault;
     let press = null;
     const touches = new Set();

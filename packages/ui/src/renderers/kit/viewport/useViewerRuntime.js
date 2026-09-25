@@ -1,6 +1,6 @@
 import { createViewportBuffer } from "./viewportBuffer.js";
 import { useEffect, useLayoutEffect, useRef } from "react";
-import { isEditableTarget } from "./dom.js";
+import { isEditableTarget, prefersCoarsePointer } from "./dom.js";
 import {
   isWebGlContextCreationError,
   isSoftwareWebGlRenderer,
@@ -56,14 +56,12 @@ export function useViewerRuntime({
   applySceneBackground,
   applyInitialPerspective,
   updateGridHelper,
-  clearSceneGroup,
   disposeScene,
   disposeStudio,
   onSceneDisposed,
   disposeSceneObject,
   disposeTexture,
   syncViewPlaneOrientation,
-  BASE_VIEWER_THEME,
   DEFAULT_LIGHTING,
   DEFAULT_DAMPING_FACTOR,
   DEFAULT_ZOOM_SPEED,
@@ -143,12 +141,9 @@ export function useViewerRuntime({
       }
 
       const container = mountRef.current;
-      const coarsePointerQuery = typeof window.matchMedia === "function"
-        ? window.matchMedia("(pointer: coarse)")
-        : null;
-      const prefersCoarsePointer = coarsePointerQuery?.matches ?? false;
-      const getDefaultZoomSpeed = () => (prefersCoarsePointer ? COARSE_POINTER_ZOOM_SPEED : DEFAULT_ZOOM_SPEED);
-      const getPinchZoomSpeed = () => (prefersCoarsePointer ? COARSE_POINTER_PINCH_ZOOM_SPEED : TRACKPAD_PINCH_ZOOM_SPEED);
+      const coarsePointer = prefersCoarsePointer();
+      const getDefaultZoomSpeed = () => (coarsePointer ? COARSE_POINTER_ZOOM_SPEED : DEFAULT_ZOOM_SPEED);
+      const getPinchZoomSpeed = () => (coarsePointer ? COARSE_POINTER_PINCH_ZOOM_SPEED : TRACKPAD_PINCH_ZOOM_SPEED);
       const width = container.clientWidth || 800;
       const height = container.clientHeight || 640;
 
@@ -277,18 +272,15 @@ export function useViewerRuntime({
       const edgesGroup = new THREE.Group();
       const facePickGroup = new THREE.Group();
       const edgePickGroup = new THREE.Group();
-      const vertexPickGroup = new THREE.Group();
       // Pick proxies are opacity-0 raycast targets; keep them out of the render
       // pass entirely. Raycaster does not check `visible`, so picking still works.
       facePickGroup.visible = false;
       edgePickGroup.visible = false;
-      vertexPickGroup.visible = false;
       scene.add(stageGroup);
       scene.add(modelGroup);
       scene.add(edgesGroup);
       scene.add(facePickGroup);
       scene.add(edgePickGroup);
-      scene.add(vertexPickGroup);
 
       const raycaster = new THREE.Raycaster();
       const pointer = new THREE.Vector2();
@@ -665,10 +657,26 @@ export function useViewerRuntime({
       renderer.domElement.addEventListener("webglcontextlost", handleContextLost, false);
       renderer.domElement.addEventListener("webglcontextrestored", handleContextRestored, false);
 
+      // Arrow keys orbit the viewer that owns them: the key landed inside it, or on the page
+      // background while the pointer is over it. Another viewer, a panel or the page keeps its arrows.
+      const keyOwner = container.closest("[data-cad-surface]") || container;
+      let pointerOverViewer = false;
+      const handlePointerEnter = () => { pointerOverViewer = true; };
+      const handlePointerLeave = () => { pointerOverViewer = false; };
+      keyOwner.addEventListener("pointerenter", handlePointerEnter);
+      keyOwner.addEventListener("pointerleave", handlePointerLeave);
+      const ownsKey = (event) => {
+        const target = event.target;
+        if (target instanceof Node && keyOwner.contains(target)) return true;
+        const ownerDocument = keyOwner.ownerDocument;
+        return pointerOverViewer && (target === ownerDocument.body || target === ownerDocument.documentElement || target === ownerDocument);
+      };
+
       const handleKeyDown = (event) => {
         if (
           previewModeRef.current ||
           event.defaultPrevented ||
+          !ownsKey(event) ||
           event.ctrlKey ||
           event.metaKey ||
           event.altKey ||
@@ -759,10 +767,8 @@ export function useViewerRuntime({
         edgesGroup,
         facePickGroup,
         edgePickGroup,
-        vertexPickGroup,
         facePickMesh: null,
         edgePickLines: null,
-        vertexPickPoints: null,
         edgePickObjects: [],
         // What a scene tells the depth fit it has placed, each with its own bounds and
         // transforms (`fitCameraDepthToBounds`). A scene that says nothing leaves it empty
@@ -794,7 +800,6 @@ export function useViewerRuntime({
         hasVisibleModel: false,
         hasDrawingDocument: false,
         edgePickThreshold: 1.5,
-        vertexPickThreshold: 0.9,
         cameraTransition: null,
         previewOrbitEnabled: false,
         orbitControlsLastTimestamp: 0,
@@ -881,6 +886,8 @@ export function useViewerRuntime({
         runtime.renderer.domElement.removeEventListener("webglcontextrestored", handleContextRestored, false);
         window.removeEventListener("keydown", handleKeyDown);
         window.removeEventListener("keyup", handleKeyUp);
+        keyOwner.removeEventListener("pointerenter", handlePointerEnter);
+        keyOwner.removeEventListener("pointerleave", handlePointerLeave);
         window.removeEventListener("blur", clearKeyboardOrbit);
         document.removeEventListener("visibilitychange", handleVisibilityChange);
         runtime.controls.dispose();

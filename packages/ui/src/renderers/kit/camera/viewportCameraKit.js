@@ -482,14 +482,22 @@ export function viewPlaneOrientationEqual(a, b, epsilon = 1e-4) {
   return true;
 }
 
+// Called for every frame the camera moves: one scratch rotation and vector per runtime, not
+// a fresh allocation per axis.
+function viewPlaneScratch(runtime) {
+  runtime.viewPlaneScratch ||= { rotation: new runtime.THREE.Quaternion(), axis: new runtime.THREE.Vector3() };
+  return runtime.viewPlaneScratch;
+}
+
 export function readViewPlaneOrientation(runtime) {
   if (!runtime?.THREE || !runtime?.camera) {
     return null;
   }
-  const inverseCameraRotation = runtime.camera.quaternion.clone().invert();
+  const { rotation, axis } = viewPlaneScratch(runtime);
+  rotation.copy(runtime.camera.quaternion).invert();
   const projectAxis = (x, y, z) => {
-    const projected = new runtime.THREE.Vector3(x, y, z).applyQuaternion(inverseCameraRotation);
-    return [projected.x, projected.y, projected.z];
+    axis.set(x, y, z).applyQuaternion(rotation);
+    return [axis.x, axis.y, axis.z];
   };
   return {
     x: projectAxis(1, 0, 0),
@@ -498,26 +506,49 @@ export function readViewPlaneOrientation(runtime) {
   };
 }
 
+/**
+ * The cube's orientation, which changes on every frame the camera moves. A store, not React
+ * state of the viewport's: the cube subscribes to it, so a moving camera re-renders the cube
+ * and nothing around it. `set` ignores an orientation equal to the current one.
+ */
+export function createViewPlaneOrientationStore(initial) {
+  let current = initial;
+  const listeners = new Set();
+  return {
+    getSnapshot: () => current,
+    subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; },
+    set(next) {
+      if (!next || viewPlaneOrientationEqual(current, next)) return;
+      current = next;
+      for (const listener of listeners) listener();
+    }
+  };
+}
+
+// The cube's corners count too, so a corner view stays lit on the cube like a face view.
+const ACTIVE_VIEW_CANDIDATES = [...VIEW_PLANE_FACES, ...VIEW_CUBE_EDGES, ...VIEW_CUBE_CORNERS].map(({ id, direction }) => {
+  const length = Math.hypot(...direction);
+  return { id, direction: direction.map(value => value / length) };
+});
+
 export function getActiveViewPlaneFaceId(runtime) {
-  if (!runtime?.THREE || !runtime?.camera || !runtime?.controls) {
+  if (!runtime?.camera || !runtime?.controls) {
     return "";
   }
-
-  const offset = new runtime.THREE.Vector3().copy(runtime.camera.position).sub(runtime.controls.target);
-  if (offset.lengthSq() < 1e-6) {
+  const { position } = runtime.camera;
+  const { target } = runtime.controls;
+  const dx = position.x - target.x, dy = position.y - target.y, dz = position.z - target.z;
+  const length = Math.hypot(dx, dy, dz);
+  if (length * length < 1e-6) {
     return "";
   }
-  offset.normalize();
-
   let bestId = "";
   let bestScore = -Infinity;
-  // The cube's corners count too, so a corner view stays lit on the cube like a face view.
-  for (const face of [...VIEW_PLANE_FACES, ...VIEW_CUBE_EDGES, ...VIEW_CUBE_CORNERS]) {
-    const direction = new runtime.THREE.Vector3(...face.direction).normalize();
-    const score = offset.dot(direction);
+  for (const { id, direction } of ACTIVE_VIEW_CANDIDATES) {
+    const score = (dx * direction[0] + dy * direction[1] + dz * direction[2]) / length;
     if (score > bestScore) {
       bestScore = score;
-      bestId = face.id;
+      bestId = id;
     }
   }
   return bestScore >= VIEW_PLANE_ACTIVE_DOT_THRESHOLD ? bestId : "";

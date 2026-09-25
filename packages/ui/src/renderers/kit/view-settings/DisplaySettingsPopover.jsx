@@ -2,12 +2,18 @@ import { cloneElement, isValidElement, useState, useEffect, useRef } from "react
 import { Popover, PopoverContent, PopoverTrigger } from "@hardcore/ui/primitives/popover";
 import { ToolbarButton } from "../tools/ToolbarButton.js";
 import { RenderModeIcon } from "./DisplayModeOptions.js";
+import { hasOpenPopup } from "../../../lib/popups.js";
+import { placementBesidePanels, useToolPanelStack } from "../tools/toolPanelStack.js";
 
 /** A properties sheet for the Display tool. Closing the sheet releases the tool; settings remain applied. */
 export default function DisplaySettingsPopover({ settings, actions, active, onActivate, onDeactivate, container, disabled = false, triggerClassName = "" }) {
   const [open, setOpen] = useState(false);
   useEffect(() => { if (active === false) setOpen(false); }, [active]);
   const content = useRef(null);
+  const trigger = useRef(null);
+  const stack = useToolPanelStack();
+  // Beside the kept tool panels while there are any (`toolPanelStack.js`); otherwise under its button's end.
+  const [placement, setPlacement] = useState(null);
   const nestedDismissals = useRef(new WeakSet());
   const dismissingNestedPopup = useRef(false);
   useEffect(() => {
@@ -17,7 +23,7 @@ export default function DisplaySettingsPopover({ settings, actions, active, onAc
     // viewport focus. Keep that dismissal gesture in the child layer even after
     // it unmounts; Radix may defer the parent outside event until click.
     const capture = event => {
-      dismissingNestedPopup.current = !!content.current?.querySelector('[role="combobox"][aria-expanded="true"], [aria-haspopup][aria-expanded="true"]');
+      dismissingNestedPopup.current = hasOpenPopup(content.current);
       if (dismissingNestedPopup.current) {
         nestedDismissals.current.add(event);
       }
@@ -32,8 +38,11 @@ export default function DisplaySettingsPopover({ settings, actions, active, onAc
       document.removeEventListener('keydown', finish, true);
     };
   }, [open, container]);
-  return <Popover open={open} onOpenChange={next => { if (next) onActivate?.(); else if (active) onDeactivate?.(); setOpen(next); }}>
-    <PopoverTrigger asChild>
+  return <Popover open={open} onOpenChange={next => {
+    if (next) { setPlacement(placementBesidePanels(stack?.current, trigger.current)); onActivate?.(); } else if (active) onDeactivate?.();
+    setOpen(next);
+  }}>
+    <PopoverTrigger asChild ref={trigger}>
       <ToolbarButton label="Display" className={triggerClassName} tooltipSide="top" active={active ?? open} aria-pressed={active ?? open} disabled={disabled}>
         <RenderModeIcon className="size-3.5" aria-hidden="true" />
       </ToolbarButton>
@@ -46,9 +55,9 @@ export default function DisplaySettingsPopover({ settings, actions, active, onAc
         // Child dismissal can focus the viewport before restoring its trigger.
         if (dismissingNestedPopup.current || event.target === content.current?.ownerDocument.body
           || event.target?.closest?.('[data-slot=select-content]')
-          || content.current?.querySelector('[role="combobox"][aria-expanded="true"], [aria-haspopup][aria-expanded="true"]')) event.preventDefault();
+          || hasOpenPopup(content.current)) event.preventDefault();
       }}
-      container={container} align="end" side="bottom" sideOffset={8} collisionPadding={8} aria-label="Display settings"
+      container={container} align={placement?.align ?? "end"} alignOffset={placement?.alignOffset ?? 0} sticky={placement ? "always" : "partial"} side="bottom" sideOffset={8} collisionPadding={8} aria-label="Display settings"
       collisionBoundary={container} data-cad-display-popover=""
       className="flex w-64 max-w-(--radix-popover-content-available-width) max-h-[min(520px,var(--radix-popover-content-available-height))] flex-col overflow-hidden bg-background p-0 text-tiny data-[state=open]:animate-none data-[state=closed]:animate-none">
       {isValidElement(settings) ? cloneElement(settings, { appearanceControl: actions, sticky: false })

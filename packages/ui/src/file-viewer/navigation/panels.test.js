@@ -39,8 +39,8 @@ test("a file opened directly opens with its own panel, or nothing: never Display
   assert.equal(resolveOpenPanel(panelsOf([]), null), null);
   // Only with no file to show at all is the tree the thing to reach for.
   assert.equal(resolveOpenPanel(panelsOf([], "", { empty: true }), null)?.id, FILE_PANEL_TREE);
-  // A legacy Display panel id cannot occupy the sidebar.
-  assert.equal(resolveOpenPanel(panelsOf(viewerPanels(true, { file: part })), CAD_PANEL.display), null);
+  // A retired panel id a host stored (the old Display panel's) cannot occupy the sidebar.
+  assert.equal(resolveOpenPanel(panelsOf(viewerPanels(true, { file: part })), "cad-display"), null);
 });
 
 test("markdown's one panel is named by what pressing it does", () => {
@@ -65,8 +65,8 @@ test("one panel is open at a time, whichever was up before", () => {
   assert.equal(nextOpenPanel(CAD_PANEL.file, CAD_PANEL.file), "");
   // A press while ANOTHER panel is up opens this one — "show me this instead"
   // — whether the other is the surface's or the host's own tree.
-  assert.equal(nextOpenPanel(FILE_PANEL_TREE, CAD_PANEL.display), CAD_PANEL.display);
-  assert.equal(nextOpenPanel(CAD_PANEL.display, CAD_PANEL.file), CAD_PANEL.file);
+  assert.equal(nextOpenPanel(FILE_PANEL_TREE, CAD_PANEL.file), CAD_PANEL.file);
+  assert.equal(nextOpenPanel(SOURCE_PANEL, CAD_PANEL.file), CAD_PANEL.file);
   assert.equal(nextOpenPanel(CAD_PANEL.file, FILE_PANEL_TREE), FILE_PANEL_TREE);
   assert.equal(nextOpenPanel(SOURCE_PANEL, FILE_PANEL_TREE), FILE_PANEL_TREE);
 });

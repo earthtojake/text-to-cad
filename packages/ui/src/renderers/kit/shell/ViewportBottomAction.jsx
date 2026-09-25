@@ -9,8 +9,7 @@ const METRICS_CLASS = "h-11 w-fit min-w-0 max-w-full shrink overflow-hidden px-5
 
 /**
  * The viewport's bottom action: the one button the active tool offers, centred
- * over the shared bottom inset. `composer` selects prompt-oriented sizing;
- * the host owns any layout needed for its composer.
+ * over the shared bottom inset.
  *
  * `shortLabel` is what the button says when `label` does not FIT — a label cut off
  * mid-token reads like a broken name rather than a long one, so a long one is
@@ -26,7 +25,7 @@ const METRICS_CLASS = "h-11 w-fit min-w-0 max-w-full shrink overflow-hidden px-5
  * the disabled state and the label node.
  */
 export default function ViewportBottomAction({
-  label, shortLabel = "", disabled = false, onInvoke, composer = false, render = null, children = null, shortcut = ""
+  label, shortLabel = "", disabled = false, onInvoke, render = null, children = null, shortcut = ""
 }) {
   const mobile = useViewerMobile();
   const rulerRef = useRef(null);
@@ -44,7 +43,7 @@ export default function ViewportBottomAction({
     const observer = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measure);
     observer?.observe(ruler);
     return () => { window.removeEventListener("resize", measure); observer?.disconnect(); };
-  }, [label, shortLabel, composer]);
+  }, [label, shortLabel]);
 
   const metrics = cn(METRICS_CLASS, mobile && "h-10 px-4");
   const shown = shortLabel && !fits ? shortLabel : label;
@@ -66,8 +65,8 @@ export default function ViewportBottomAction({
   );
 }
 
-/** Draw's bottom action: the view with its ink, to the prompt or the clipboard. */
-export function drawingCaptureAction({ composer = false, disabled = false, onInvoke }) {
+/** Draw's bottom action: the view with its ink, to the clipboard. */
+export function drawingCaptureAction({ disabled = false, onInvoke }) {
   return {
     label: "Copy Drawing",
     disabled, onInvoke

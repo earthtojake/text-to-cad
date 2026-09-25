@@ -28,7 +28,7 @@ import {
 import { useViewportCamera } from "../camera/useViewportCamera.js";
 import {
   DEFAULT_VIEW_DIRECTION, DEFAULT_VIEW_PLANE_ORIENTATION, KEYBOARD_ORBIT_NUDGE_RAD, VIEWING_MODE, VIEW_PLANE_FACES,
-  WHEEL_PINCH_DELTA_BOOST, WORLD_UP, applyOrbitDelta, clearKeyboardOrbitState,
+  WHEEL_PINCH_DELTA_BOOST, WORLD_UP, applyOrbitDelta, clearKeyboardOrbitState, createViewPlaneOrientationStore,
   getActiveViewPlaneFaceId, getKeyboardOrbitAxes, getKeyboardOrbitCommand, isPinchWheelEvent, isTrackpadLikeWheelEvent,
   reframeReason, stepKeyboardOrbit
 } from "../camera/viewportCameraKit.js";
@@ -50,6 +50,7 @@ import { viewerTransitionBackdrop } from "../viewport/framePresentation.js";
 import { IDLE_PIXEL_RATIO_CAP, INTERACTION_IDLE_DELAY_MS, INTERACTION_PIXEL_RATIO_CAP, getPixelRatioCap } from "../viewport/pixelRatio.js";
 import { disposeSceneObject } from "../viewport/sceneObjects.js";
 import { useViewerRuntime } from "../viewport/useViewerRuntime.js";
+import ViewportError from "../status/ViewportError.jsx";
 
 const VIEW_PLANE_CONTROL_SIZE = "7rem";
 const STORED_CAMERA_COORDINATES = "cad-z-up-v1";
@@ -73,8 +74,6 @@ function clearGroup(group) {
  */
 const ShellViewport = forwardRef(function ShellViewport({
   scene = null,
-  // Bumped by the renderer when the scene moved its own bounds (an animation frame).
-  sceneRevision = 0,
   modelKey = "",
   presentationKey = "",
   sceneScaleMode = VIEWER_SCENE_SCALE.CAD,
@@ -181,7 +180,9 @@ const ShellViewport = forwardRef(function ShellViewport({
     runtime.requestRender?.();
   }, [resolvedPresentationKey]);
   const [activeViewPlaneFace, setActiveViewPlaneFace] = useState("");
-  const [viewPlaneOrientation, setViewPlaneOrientation] = useState(DEFAULT_VIEW_PLANE_ORIENTATION);
+  // The cube's alone: it changes every frame the camera moves, and only the cube reads it.
+  const [viewPlaneOrientation] = useState(() => createViewPlaneOrientationStore(DEFAULT_VIEW_PLANE_ORIENTATION));
+  const setViewPlaneOrientation = viewPlaneOrientation.set;
   const activeViewPlaneFaceRef = useRef("");
   const previewModeRef = useRef(previewMode);
   // The presentation camera never becomes the file's stored camera.
@@ -479,10 +480,10 @@ const ShellViewport = forwardRef(function ShellViewport({
     cancelCameraTransition, clearKeyboardOrbitState, isTrackpadLikeWheelEvent, isPinchWheelEvent, WHEEL_PINCH_DELTA_BOOST,
     getKeyboardOrbitCommand, getKeyboardOrbitAxes, applyOrbitDelta, getViewerThemeValue, getPixelRatioCap,
     applySceneBackground, onViewportResize: handleViewportResize, applyInitialPerspective,
-    updateGridHelper: updateActiveGridHelper, clearSceneGroup: clearGroup, disposeScene: releaseScene,
+    updateGridHelper: updateActiveGridHelper, disposeScene: releaseScene,
     onSceneDisposed: handleSceneReleased,
     disposeStudio: (runtime) => studioScene()?.disposePhotographicStudio(runtime),
-    disposeSceneObject, disposeTexture, syncViewPlaneOrientation, BASE_VIEWER_THEME, DEFAULT_LIGHTING,
+    disposeSceneObject, disposeTexture, syncViewPlaneOrientation, DEFAULT_LIGHTING,
     DEFAULT_DAMPING_FACTOR, DEFAULT_ZOOM_SPEED, COARSE_POINTER_ZOOM_SPEED, INTERACTION_PIXEL_RATIO_CAP,
     IDLE_PIXEL_RATIO_CAP: Number(quality?.idlePixelRatioCap) > 0 ? Number(quality.idlePixelRatioCap) : IDLE_PIXEL_RATIO_CAP,
     INTERACTION_IDLE_DELAY_MS, TRACKPAD_PINCH_ZOOM_SPEED, COARSE_POINTER_PINCH_ZOOM_SPEED, ACCELERATED_WHEEL_ZOOM_SPEED,
@@ -900,7 +901,7 @@ const ShellViewport = forwardRef(function ShellViewport({
   useEffect(() => {
     if (runtimeRef.current) adoptSceneRef.current(runtimeRef.current);
   }, [
-    scene, sceneRevision, markPresentationReady, modelKey, perspective, perspectiveRef, isLoading, viewerReadyTick,
+    scene, markPresentationReady, modelKey, perspective, perspectiveRef, isLoading, viewerReadyTick,
     normalizedSceneScaleMode, resolvedFloorMode, renderMode, floorFollowsModel, viewerTheme,
     applyActivePhotographicStudio, detachScene
   ]);
@@ -950,6 +951,9 @@ const ShellViewport = forwardRef(function ShellViewport({
   }, []);
   const viewportContext = useMemo(() => ({ runtimeRef, hostRef: interactionHostRef, mountRef, viewerReadyTick, commitScene, syncSceneBounds }),
     [viewerReadyTick, commitScene, syncSceneBounds]);
+  // The renderer's overlay is re-rendered when the renderer hands a new one or the viewport is
+  // replaced — not when this viewport redraws for its own state (a lit cube face, a frame presented).
+  const overlay = useMemo(() => (typeof children === "function" ? children(viewportContext) : children), [children, viewportContext]);
   const preparingFrame = Boolean(resolvedPresentationKey) &&
     (presentedEpoch !== presentationEpoch || presentedKey !== resolvedPresentationKey) && !error;
   const coveringModeTransition = presentedEpoch !== presentationEpoch && !error && hasViewportContent;
@@ -980,7 +984,7 @@ const ShellViewport = forwardRef(function ShellViewport({
         </div>
       ) : null}
       {drawingOverlayActive ? <DrawingOverlay drawing={drawing} onReady={handleDrawingReady} onContentChange={handleDrawingContent} onViewportChange={followDrawingViewport} /> : null}
-      {typeof children === "function" ? children(viewportContext) : children}
+      {overlay}
       {!mobile && <div className={`pointer-events-none absolute inset-0 transition-opacity duration-150 motion-reduce:transition-none ${controlsHidden ? "opacity-0" : "opacity-100"}`} hidden={controlsHidden} inert={controlsHidden} aria-hidden={controlsHidden} data-preview-cube="" data-visible={!controlsHidden}>
       <ViewPlaneControl
         showViewPlane={!previewMode}
@@ -994,17 +998,13 @@ const ShellViewport = forwardRef(function ShellViewport({
         compact={false}
         activeViewPlaneFace={activeViewPlaneFace}
         viewPlaneFaces={VIEW_PLANE_FACES}
-        viewPlaneOrientation={viewPlaneOrientation}
+        orientation={viewPlaneOrientation}
         viewerTheme={viewerTheme}
         activateViewPlaneFace={activateViewPlaneFace}
         orbitViewCube={orbitFromViewCube}
       />
       </div>}
-      {error ? (
-        <p className="bg-popover pointer-events-none absolute left-4 top-24 z-20 rounded-lg border border-error-border px-4 py-3 text-sm text-error shadow-sm sm:top-20">
-          {error}
-        </p>
-      ) : null}
+      <ViewportError message={error} />
     </div>
   );
 });

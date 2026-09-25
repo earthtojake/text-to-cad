@@ -622,9 +622,10 @@ test('the shell keeps its Draw session across fullscreen, and fullscreen drags a
   await page.waitForTimeout(250);
   const regularCamera = await camera();
 
-  // Fullscreen hides the host frame — the nav row and its panel toggles — without remounting
-  // the scene or losing the tool.
-  await page.evaluate(() => { window.beforeFullscreenCanvas = document.querySelector('[data-testid="one"] [aria-busy] > div > canvas'); window.cadHarness.fullscreen(true); });
+  // Fullscreen is the viewer's own: it keeps the host's nav row, hides the tools, and neither
+  // remounts the scene nor loses the tool.
+  await page.evaluate(() => { window.beforeFullscreenCanvas = document.querySelector('[data-testid="one"] [aria-busy] > div > canvas'); });
+  await pane.getByRole('button', { name: 'Fullscreen', exact: true }).click();
   await pane.getByRole('button', { name: 'Exit fullscreen', exact: true }).waitFor();
   assert.equal(await pane.locator('[data-file-panel]').first().isVisible(), true, 'fullscreen retains navbar actions');
   assert.equal(await pane.getByRole('group', { name: 'Interaction tools' }).count(), 0);
@@ -658,7 +659,7 @@ test('the shell keeps its Draw session across fullscreen, and fullscreen drags a
   assert.equal(restoredCamera.projection, regularCamera.projection);
   assert.equal(restoredCamera.zoom, regularCamera.zoom);
   // Presentation state is discarded each time, never resumed from the last orbit.
-  await page.evaluate(() => window.cadHarness.fullscreen(true));
+  await pane.getByRole('button', { name: 'Fullscreen', exact: true }).click();
   await pane.getByRole('button', { name: 'Exit fullscreen', exact: true }).waitFor();
   const secondFullscreenCamera = await camera();
   for (const key of ['position', 'target', 'up']) {
@@ -746,7 +747,11 @@ test('a scene that arrives in place is framed when whole, a renderer hears what 
   await pane.locator('[data-harness-arrive="partial"]').click();
   const partial = await waitForFrame(frame => frame.painted > opened.painted * 3 && frame.atEdge > 0,
     'drew the grown scene, unframed, while it was still arriving');
-  assert.deepEqual(await pose(), openedPose, 'the camera did not move for a partial arrival');
+  // Not reframed: the pose is the opened one, to within the float noise of a settled camera
+  // (a reframe moves it by the scene's own size, four orders of magnitude more).
+  const partialPose = (await pose()).flat();
+  openedPose.flat().forEach((value, index) => assert.ok(Math.abs(value - partialPose[index]) < 1e-4,
+    `the camera did not move for a partial arrival (${index}: ${value} → ${partialPose[index]})`));
   await pane.locator('[data-harness-arrive="whole"]').click();
   const whole = await waitForFrame(frame => frame.atEdge === 0 && frame.painted > 500 && frame.painted < partial.painted,
     'framed the scene once it was whole');
@@ -935,7 +940,8 @@ test('a renderer supplies the viewport menu, a bottom action that falls back to 
   await page.setViewportSize({ width: 900, height: 800 });
   await page.waitForFunction(count => Number(document.querySelector('[data-harness-camera-settles]').textContent) > count, beforeWidthChange);
   const afterResize = Number(await settles());
-  await page.evaluate(() => { window.cadHarness.preferences.update({ orbit: { speed: 0 } }); window.cadHarness.fullscreen(true); });
+  await page.evaluate(() => window.cadHarness.preferences.update({ orbit: { speed: 0 } }));
+  await pane.getByRole('button', { name: 'Fullscreen', exact: true }).click();
   await pane.getByRole('button', { name: 'Exit fullscreen', exact: true }).waitFor();
   const fullscreenCanvas = await pane.locator('[aria-busy] > div > canvas').first().boundingBox();
   await page.mouse.move(fullscreenCanvas.x + fullscreenCanvas.width / 2, fullscreenCanvas.y + fullscreenCanvas.height / 2);
@@ -1106,5 +1112,145 @@ test('a renderer says more about its load than a download: finding the file, edi
   await page.waitForFunction(() => document.querySelector('[data-harness-put-down]')?.textContent === 'put down @idle');
   // And the frame still takes focus on that same press, as it always did.
   assert.equal(await page.evaluate(() => document.activeElement?.dataset?.slot), 'cad-file-view');
+  assert.deepEqual(errors, []);
+});
+
+// Keyboard ownership between two viewers on one page, and the panel state the shell keeps
+// for a file across the viewer breakpoint.
+test('keys belong to the viewer that has them: arrows orbit one viewer, Escape is spent on that viewer\'s own popup, Draw keeps its Escape, and the Settings tab survives the breakpoint', async (t) => {
+  const temporary = await mkdtemp(join(tmpdir(), 'hardcore-shell-keys-'));
+  let server, browser;
+  t.after(async () => { await browser?.close(); if (server) await new Promise(resolve => server.close(resolve)); await rm(temporary, { recursive: true, force: true }); });
+  await build({ entryPoints: [fileURLToPath(new URL('../../harness/index.tsx', import.meta.url))], outfile: join(temporary, 'harness.js'), bundle: true, format: 'esm', platform: 'browser', conditions: ['production'], jsx: 'automatic', loader: { '.webp': 'dataurl', '.woff2': 'dataurl' } });
+  const bundle = await readFile(join(temporary, 'harness.js'));
+  const compiledCss = await readFile(new URL('../../../../dist/styles.css', import.meta.url));
+  server = createServer((request, response) => {
+    const url = new URL(request.url, 'http://test');
+    const root = url.pathname.split('/')[1];
+    if (url.pathname === '/harness.js') { response.setHeader('Content-Type', 'text/javascript'); response.end(bundle); }
+    else if (url.pathname === '/styles.css') { response.setHeader('Content-Type', 'text/css'); response.end(compiledCss); }
+    else if (url.pathname.endsWith('/__cad/catalog')) { response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify({ rootId: root, entries: [] })); }
+    else if (url.pathname.endsWith('/__cad/server')) { response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify({ rootId: root, rootPath: '/models', backend: 'cadgen' })); }
+    else if (/\.(woff2|ttf)$/.test(url.pathname)) { response.statusCode = 404; response.end(); }
+    else { response.setHeader('Content-Type', 'text/html'); response.end('<!doctype html><html><head><link rel="stylesheet" href="/styles.css"></head><body><div id="root"></div><script type="module" src="/harness.js"></script></body></html>'); }
+  });
+  await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
+  browser = await chromium.launch({ headless: true, args: process.platform === 'darwin'
+    ? ['--use-angle=metal'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+  const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
+  page.setDefaultTimeout(15000);
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.addInitScript(() => { window.Worker = undefined; });
+  await page.goto(`http://127.0.0.1:${server.address().port}/?file=panel.harness`);
+  const one = page.getByTestId('one');
+  await one.locator('[aria-busy="false"] > div > canvas').first().waitFor();
+  const settings = one.locator('[data-file-panel="cad-file"]');
+  const sheet = one.locator('[data-file-sheet]');
+  await sheet.waitFor();
+  const tab = name => one.getByRole('tab', { name, exact: true });
+
+  // THE SETTINGS TAB is the shell's: crossing the breakpoint (a second pane halves the width,
+  // and the column becomes a sheet) and back keeps the tab that was chosen.
+  await tab('Position').click();
+  assert.equal(await tab('Position').getAttribute('aria-selected'), 'true');
+  await page.evaluate(() => window.cadHarness.second(true));
+  await page.waitForFunction(() => document.querySelector('[data-testid="one"] .hardcore-file-viewer')?.getAttribute('data-viewer-layout') === 'mobile');
+  await page.evaluate(() => window.cadHarness.second(false));
+  await page.waitForFunction(() => document.querySelector('[data-testid="one"] .hardcore-file-viewer')?.getAttribute('data-viewer-layout') === 'desktop');
+  await sheet.waitFor();
+  assert.equal(await tab('Position').getAttribute('aria-selected'), 'true', 'the tab survived the remount');
+
+  // ESCAPE. A quick second Escape after closing a Select closes the Display sheet: a listbox
+  // on its way out does not hold the key.
+  await one.locator('[data-cad-toolbar]').getByRole('button', { name: 'Display', exact: true }).click();
+  const popover = one.locator('[data-cad-display-popover]');
+  await popover.waitFor();
+  await one.getByRole('combobox', { name: 'Mode', exact: true }).click();
+  await page.getByRole('listbox').waitFor();
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(120);
+  await page.keyboard.press('Escape');
+  await popover.waitFor({ state: 'detached' });
+  assert.equal(await sheet.isVisible(), true, 'the sidebar waits for a later Escape');
+
+  // Draw's surface keeps its Escape: the sidebar stays. Out of Draw, Escape shuts it.
+  await one.getByRole('button', { name: 'Draw', exact: true }).click();
+  await one.locator('[data-drawing-ready]').waitFor();
+  const canvas = await one.locator('[data-cad-drawing-overlay] canvas').last().boundingBox();
+  await page.mouse.move(canvas.x + canvas.width / 2, canvas.y + canvas.height / 2);
+  await page.mouse.down(); await page.mouse.move(canvas.x + canvas.width / 2 + 40, canvas.y + canvas.height / 2 + 20, { steps: 4 }); await page.mouse.up();
+  await one.locator('[data-cad-drawing-overlay] .excalidraw').focus();
+  await page.keyboard.press('Escape');
+  await page.waitForTimeout(150);
+  assert.equal(await sheet.isVisible(), true, 'Escape on the drawing surface is Draw\'s');
+  // Leaving Draw: Display is a tool, and closing its sheet hands back to no tool at all.
+  const display = one.locator('[data-cad-toolbar]').getByRole('button', { name: 'Display', exact: true });
+  await display.click(); await popover.waitFor();
+  await display.click(); await popover.waitFor({ state: 'detached' });
+  await one.locator('[data-cad-drawing-overlay]').waitFor({ state: 'detached' });
+  await one.locator('[data-slot="cad-file-view"]').focus();
+  await page.keyboard.press('Escape');
+  await sheet.waitFor({ state: 'detached' });
+  assert.equal(await settings.getAttribute('aria-pressed'), 'false');
+
+  // KEPT PANELS. The Display sheet and a tool's menu open beside the panels a person keeps
+  // under the strip, never over them; and a kept effect stays highlighted while Display is up.
+  const keep = one.getByRole('button', { name: 'Keep', exact: true });
+  await keep.click();
+  const kept = await one.locator('[aria-label="Kept controls"]').boundingBox();
+  await display.click(); await popover.waitFor();
+  await page.waitForTimeout(200);
+  const sheetBox = await popover.boundingBox();
+  assert.ok(sheetBox.x >= kept.x + kept.width, `the Display sheet (x ${sheetBox.x}) opens beside the kept panel (right ${kept.x + kept.width})`);
+  assert.equal(await keep.getAttribute('aria-pressed'), 'true', 'the kept effect stays highlighted while Display is the tool');
+  assert.equal(await display.getAttribute('aria-pressed'), 'true');
+  await display.click(); await popover.waitFor({ state: 'detached' });
+  const draw = one.getByRole('button', { name: 'Draw', exact: true });
+  await draw.click(); await one.locator('[data-drawing-ready]').waitFor();
+  await draw.click();
+  const drawMenu = page.locator('[role="menu"][aria-label="Drawing controls"]');
+  await drawMenu.waitFor();
+  await page.waitForTimeout(200);
+  const menuBox = await drawMenu.boundingBox();
+  assert.ok(menuBox.x >= kept.x + kept.width, `the Draw menu (x ${menuBox.x}) opens beside the kept panel (right ${kept.x + kept.width})`);
+  await page.keyboard.press('Escape');
+  await drawMenu.waitFor({ state: 'detached' });
+  await display.click(); await popover.waitFor();
+  await display.click(); await popover.waitFor({ state: 'detached' });
+  await keep.click();
+  await one.locator('[aria-label="Kept controls"]').waitFor({ state: 'detached' });
+
+  // ARROWS orbit the viewer the key landed in, or the one under the pointer when it landed
+  // on the page — never every viewer on the page.
+  await page.evaluate(() => window.cadHarness.second(true));
+  const two = page.getByTestId('two');
+  await two.locator('[aria-busy="false"] > div > canvas').first().waitFor();
+  await page.waitForFunction(() => window.cadHarness.a.controller?.readState().loading === false && window.cadHarness.b.controller?.readState().loading === false);
+  const cameras = () => page.evaluate(() => [window.cadHarness.a.controller.readState().camera.position, window.cadHarness.b.controller.readState().camera.position]);
+  const turned = (before, after) => before.some((value, index) => Math.abs(value - after[index]) > 1e-6);
+  await page.evaluate(() => document.activeElement?.blur());
+  const twoBox = await two.locator('[aria-busy="false"] > div > canvas').first().boundingBox();
+  await page.mouse.move(twoBox.x + twoBox.width / 2, twoBox.y + twoBox.height - 30);
+  let [a0, b0] = await cameras();
+  await page.keyboard.press('ArrowRight');
+  await page.waitForTimeout(250);
+  let [a1, b1] = await cameras();
+  assert.equal(turned(a0, a1), false, 'the viewer the pointer is not over keeps its camera');
+  assert.equal(turned(b0, b1), true, 'the viewer under the pointer turns');
+  await page.mouse.move(1260, 790);
+  [a0, b0] = await cameras();
+  await page.keyboard.press('ArrowLeft');
+  await page.waitForTimeout(250);
+  [a1, b1] = await cameras();
+  assert.equal(turned(a0, a1) || turned(b0, b1), false, 'a key on the page with the pointer outside every viewer turns none');
+  await one.locator('[data-slot="cad-file-view"]').focus();
+  await page.mouse.move(twoBox.x + twoBox.width / 2, twoBox.y + twoBox.height - 30);
+  [a0, b0] = await cameras();
+  await page.keyboard.press('ArrowUp');
+  await page.waitForTimeout(250);
+  [a1, b1] = await cameras();
+  assert.equal(turned(a0, a1), true, 'the focused viewer turns');
+  assert.equal(turned(b0, b1), false, 'and the one under the pointer does not');
   assert.deepEqual(errors, []);
 });

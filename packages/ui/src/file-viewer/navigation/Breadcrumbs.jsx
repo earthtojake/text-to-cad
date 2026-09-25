@@ -41,8 +41,7 @@ import { FileIcon, FolderIcon } from "./icons.jsx";
  *   may hold state, and the object handed in must be STABLE across renders.
  *   Sorting is not its job: `menuEntries` orders and marks what comes back.
  * @property {(args: { crumb: Crumb, children: import("react").ReactNode }) => import("react").ReactNode} [wrapCrumb]
- *   Wraps one crumb's trigger — the host's right-click entry menu. Never
- *   called for the ellipsis, which names several folders and so names none.
+ *   Wraps one crumb's trigger — the host's right-click entry menu.
  * @property {(args: { crumb: Crumb }) => import("react").ReactNode} [renderCrumbActions]
  *   Drawn immediately after the FILE crumb: the host's own `⋯`, because a
  *   right-click is not a control anybody can see.
@@ -110,7 +109,7 @@ function CrumbButton({ crumb, last, activePath, onOpen, source }) {
   const trigger = (
     <DropdownMenuTrigger asChild>
       <button
-        aria-label={`Browse ${crumb.kind === "ellipsis" ? crumb.title : crumb.label}`}
+        aria-label={`Browse ${crumb.label}`}
         className={className}
         data-crumb={crumb.kind}
 
@@ -121,37 +120,18 @@ function CrumbButton({ crumb, last, activePath, onOpen, source }) {
     </DropdownMenuTrigger>
   );
 
-  // The ellipsis stands for several folders at once, so it names no entry
-  // and has no entry menu; every other crumb names exactly one.
-  const wrapped =
-    crumb.kind === "ellipsis"
-      ? trigger
-      : source.wrapCrumb?.({ crumb, children: trigger }) ?? trigger;
+  const wrapped = source.wrapCrumb?.({ crumb, children: trigger }) ?? trigger;
 
   return (
     <DropdownMenu modal={false}>
       {wrapped}
       <DropdownMenuContent align="start" className="w-max min-w-44 max-w-80" sideOffset={6}>
-        {crumb.kind === "ellipsis" ? (
-          crumb.hidden.map((folder) => (
-            <DirectorySubMenu
-              activePath={activePath}
-              directory={folder.path}
-              key={folder.path}
-              label={folder.label}
-              marked={false}
-              onOpen={onOpen}
-              source={source}
-            />
-          ))
-        ) : (
-          <DirectoryMenuItems
-            activePath={activePath}
-            directory={crumb.menu ?? ""}
-            onOpen={onOpen}
-            source={source}
-          />
-        )}
+        <DirectoryMenuItems
+          activePath={activePath}
+          directory={crumb.menu}
+          onOpen={onOpen}
+          source={source}
+        />
       </DropdownMenuContent>
     </DropdownMenu>
   );

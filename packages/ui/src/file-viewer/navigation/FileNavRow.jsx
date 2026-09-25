@@ -70,8 +70,8 @@ export function PanelToggle({ icon: Icon, label, active, onClick, id, testId, di
  *   Drawn before the first crumb, inside the breadcrumb's own overflow box —
  *   the desktop's worktree label. It shrinks and truncates with the folders.
  * @param {import("react").ReactNode} [props.status]
- *   Drawn after the last crumb: the desktop's unsaved-changes dot, the
- *   standalone's loading spinner. Small, and about the open file.
+ *   Drawn after the last crumb: the unsaved-changes dot and the renderer's
+ *   status slot (its loading and update status). Small, and about the open file.
  * @param {import("react").ReactNode} [props.trailing]
  *   The right end: panel toggles, and whatever the host puts in front of
  *   them. Never shrinks.

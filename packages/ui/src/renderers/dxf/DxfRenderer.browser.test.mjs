@@ -338,12 +338,6 @@ test('a DXF has no panels of its own, no tools and no fullscreen', async (t) => 
     assert.equal(await pane.getByRole('button', { name, exact: true }).count(), 0, name);
   }
   assert.equal(await pane.getByRole('tab').count(), 0, 'no Material, Bends, Layers or Display tabs');
-  // Fullscreen is a STEP's alone: a host that asks a drawing for it is declined, and the nav
-  // row stays over the drawing.
-  await page.evaluate(() => window.cadHarness.fullscreen(true));
-  await page.waitForTimeout(300);
-  assert.deepEqual(await panels(), ['Show files:false'], 'fullscreen did not take the nav row away');
-  assert.equal(await pane.getByRole('group', { name: 'Fullscreen controls' }).count(), 0);
   // What a drawing offers: a snapshot, and nothing else. Zooming is the pointer's —
   // wheel or pinch about it, drag to pan, double-click to fit — so the navbar carries
   // no zoom buttons, and there is no zoom control anywhere else in the viewer either.

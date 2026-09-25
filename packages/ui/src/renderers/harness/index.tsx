@@ -11,7 +11,8 @@ import { createMeshRenderer } from '@hardcore/ui/renderers/mesh';
 import { createRobotRenderer } from '@hardcore/ui/renderers/robot';
 import { createHarnessRenderer } from '@hardcore/ui/renderers/shell-harness';
 import type { ViewerHost } from '@hardcore/ui/host';
-import type { CadLiveController, CadCommands } from '@hardcore/ui/renderers/step';
+import type { CadLiveController } from '@hardcore/ui/renderers/step';
+import type { ViewerCommands as CadCommands } from '@hardcore/ui/renderers/workspace';
 
 // The one file both panes open: `?file=arm.urdf` for a test whose fixture is not the default mesh.
 const file = new URLSearchParams(location.search).get('file') || 'part.stl';
@@ -19,6 +20,9 @@ const captures: { file: string; size: number; type: string; references: unknown 
 // What a renderer asked the host to open (a mesh a robot description names, say).
 const opened: string[] = [];
 const preferences = createCadPreferences();
+// The keyboard the browser under test types on, as a web host reports it: the drawing
+// editor's history keys must be the ones its SDK listens for on this machine.
+const keyboardPlatform = /Mac|iPhone|iPad/.test(navigator.platform) ? 'darwin' : /Win/.test(navigator.platform) ? 'win32' : 'linux';
 function workspace(id: string) {
   let snapshot: CadCommands = {};
   const listeners = new Set<() => void>();
@@ -41,7 +45,7 @@ function workspace(id: string) {
     list: async () => [{ path: file, name: file, kind: 'file' }]
   };
   const destination = { kind: 'composer' as const, available: true };
-  const host: ViewerHost = { files: source, navigation: { openFile(path) { opened.push(path); } }, environment: { colorScheme: 'dark' },
+  const host: ViewerHost = { files: source, navigation: { openFile(path) { opened.push(path); } }, environment: { colorScheme: 'dark', platform: keyboardPlatform },
     clipboard: { writeText: async () => {}, readText: async () => '', writeImage: async () => {} },
     promptContext: { getSnapshot: () => destination, subscribe: () => () => {}, deliver: async context => {
       const attachment = context.parts.find(part => part.kind === 'attachment');
@@ -71,11 +75,10 @@ function App() {
   const [otherState, setOtherState] = useState<FileViewerState>({ panel: null, panelWidth: 300 });
   const [second, setSecond] = useState(false);
   const [mounted, setMounted] = useState(true);
-  const [fullscreen, setFullscreen] = useState(false);
-  Object.assign(window, { cadHarness: { a, b, state, otherState, preferences, captures, opened, capture: a.capture, selectReference: a.selectReference, second: setSecond, mounted: setMounted, fullscreen: setFullscreen } });
+  Object.assign(window, { cadHarness: { a, b, state, otherState, preferences, captures, opened, capture: a.capture, selectReference: a.selectReference, second: setSecond, mounted: setMounted } });
   return <div style={{ display: 'flex', width: '1200px', height: '720px' }}>
     <section data-testid="one" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
-      {mounted && <FileViewer fullscreen={fullscreen} onFullscreenChange={setFullscreen} file={file} host={a.host} renderers={a.renderers} state={state} onStateChange={setState} />}
+      {mounted && <FileViewer file={file} host={a.host} renderers={a.renderers} state={state} onStateChange={setState} />}
     </section>
     {second && <section data-testid="two" style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
       <FileViewer file={file} host={b.host} renderers={b.renderers} state={otherState} onStateChange={setOtherState} />

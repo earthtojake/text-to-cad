@@ -41,6 +41,8 @@ export interface DrawingEditorProps {
   toolbar?: boolean;
   /** The tool a new editor opens on; the SDK's own default is selection. */
   initialTool?: DrawingTool;
+  /** The host's keyboard platform (`ViewerHost.environment.platform`): ⌘ on `darwin`, Ctrl elsewhere. */
+  platform?: string;
   onReady(controller: DrawingController | null): void;
   onContentChange?(hasContent: boolean): void;
   onHistoryChange?(history: { canUndo: boolean; canRedo: boolean }): void;
@@ -60,11 +62,11 @@ export async function exportDrawingScenePng(serialized: string): Promise<Blob> {
     mimeType: 'image/png', exportPadding: 24, maxWidthOrHeight: 2048 });
 }
 
-function pressHistoryKey(editor: HTMLElement | null, redo: boolean) {
+function pressHistoryKey(editor: HTMLElement | null, redo: boolean, platform: string | undefined) {
   const target = editor?.querySelector<HTMLElement>('.excalidraw');
   if (!target) return;
   target.focus({ preventScroll: true });
-  const mac = /Mac|iP(hone|ad|od)/.test(navigator.platform);
+  const mac = platform === 'darwin';
   target.dispatchEvent(new KeyboardEvent('keydown', { key: 'z', code: 'KeyZ', bubbles: true, cancelable: true,
     shiftKey: redo, metaKey: mac, ctrlKey: !mac }));
 }
@@ -76,7 +78,7 @@ function drawingStrokeWidth(tool: string) {
 }
 
 /** An editor only: no app detection, persistence, network, file dialogs or prompt routing. */
-export function DrawingEditor({ initialScene, name = 'Drawing', mode = 'canvas', toolbar = true, initialTool = 'selection', onReady, onContentChange, onHistoryChange, onToolChange, onColorChange, onViewportChange }: DrawingEditorProps) {
+export function DrawingEditor({ initialScene, name = 'Drawing', mode = 'canvas', toolbar = true, initialTool = 'selection', platform, onReady, onContentChange, onHistoryChange, onToolChange, onColorChange, onViewportChange }: DrawingEditorProps) {
   const [initialData] = useState(() => {
     const document = initialScene ? parseDrawingScene(initialScene) : emptyDrawingDocument();
     // Ink over someone else's picture cannot assume a light background.
@@ -104,6 +106,8 @@ export function DrawingEditor({ initialScene, name = 'Drawing', mode = 'canvas',
   }, []);
   const ready = useRef(onReady);
   ready.current = onReady;
+  const platformRef = useRef(platform);
+  platformRef.current = platform;
   // Excalidraw clears its imperative scene before parent passive cleanup.
   // Retain immutable scene references, not its API, for that final snapshot.
   const latest = useRef<{ elements: readonly ExcalidrawElement[]; appState: AppState; files: BinaryFiles } | null>(null);
@@ -127,17 +131,17 @@ export function DrawingEditor({ initialScene, name = 'Drawing', mode = 'canvas',
   // place; over a viewport that is a white flash, so the surface waits for it.
   const [initialized, setInitialized] = useState(false);
   // Fill is this editor's tool, not the SDK's: a press with it active fills the area under the pointer.
+  // A press outside any closed area fills nothing; the editor shows no notifications (settings-ui.md).
   useEffect(() => api?.onPointerDown((activeTool, pointer) => {
     if (activeTool.type !== 'custom' || activeTool.customType !== 'fill') return;
     const state = api.getAppState();
     void fillElementAt(pointer.origin, { elements: api.getSceneElements(), appState: state, files: api.getFiles() }, state.currentItemStrokeColor)
       .then(fill => {
-        if (liveApi.current !== api) return;
-        if (!fill) { api.setToast({ message: 'Draw around an area first, then fill inside it.', duration: 2500 }); return; }
+        if (liveApi.current !== api || !fill) return;
         // Appended: an insertion below existing elements re-indexes them, which the SDK
         // records as a second, invisible undo step. The outline is the fill's edge anyway.
         api.updateScene({ elements: [...api.getSceneElements(), fill], captureUpdate: CaptureUpdateAction.IMMEDIATELY });
-      }).catch(() => { if (liveApi.current === api) api.setToast({ message: 'That area could not be filled.' }); });
+      }).catch(() => {});
   }), [api]);
   useEffect(() => api?.onScrollChange((scrollX, scrollY, zoom) => viewportChange.current?.({ scrollX, scrollY, zoom: zoom.value })), [api]);
   useEffect(() => {
@@ -174,8 +178,8 @@ export function DrawingEditor({ initialScene, name = 'Drawing', mode = 'canvas',
       },
       setColor(color) { api.updateScene({ appState: { currentItemStrokeColor: color }, captureUpdate: CaptureUpdateAction.NEVER }); },
       // History is not part of the SDK's imperative API; its own shortcuts are.
-      undo() { pressHistoryKey(root.current, false); },
-      redo() { pressHistoryKey(root.current, true); },
+      undo() { pressHistoryKey(root.current, false, platformRef.current); },
+      redo() { pressHistoryKey(root.current, true, platformRef.current); },
       clear() {
         // A versioned deletion: the SDK's history ignores elements whose version did not move.
         api.updateScene({ elements: api.getSceneElements().map(element => newElementWith(element, { isDeleted: true })),
@@ -248,8 +252,8 @@ export function DrawingEditor({ initialScene, name = 'Drawing', mode = 'canvas',
       api.updateScene({ elements: [...api.getSceneElements(), ...elements],
         appState: { selectedElementIds: Object.fromEntries(elements.map(element => [element.id, true])) },
         captureUpdate: CaptureUpdateAction.IMMEDIATELY });
-    } catch (error) {
-      if (liveApi.current === api) api.setToast({ message: error instanceof Error ? error.message : 'The image could not be inserted.' });
+    } catch {
+      // An image that cannot be decoded is simply not inserted.
     }
   };
   return <div ref={root} className="hardcore-drawing-editor" data-drawing-mode={mode} data-drawing-ready={initialized ? '' : undefined}
@@ -295,7 +299,7 @@ export function DrawingEditor({ initialScene, name = 'Drawing', mode = 'canvas',
       onPaste={data => {
         if (!data.elements) return true;
         try { parseDrawingScene(JSON.stringify({ ...emptyDrawingDocument(), elements: data.elements, files: data.files ?? {} })); }
-        catch (error) { api?.setToast({ message: error instanceof Error ? error.message : 'Unsupported drawing content.' }); return false; }
+        catch { return false; }
         return true;
       }}
       onChange={change} onLinkOpen={(_element, event) => event.preventDefault()}

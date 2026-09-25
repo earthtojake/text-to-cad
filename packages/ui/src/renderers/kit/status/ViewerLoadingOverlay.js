@@ -1,7 +1,7 @@
 import LoadingIndicator from "./LoadingIndicator.js";
 
-export default function ViewerLoadingOverlay({ loading, previewMode, operationKey }) {
-  if (!loading?.opening || previewMode) return null;
+export default function ViewerLoadingOverlay({ loading, operationKey }) {
+  if (!loading?.opening) return null;
   return (
     <div className="pointer-events-none absolute inset-0 z-20 overflow-hidden">
       <div className="cad-loading-overlay absolute inset-0" />

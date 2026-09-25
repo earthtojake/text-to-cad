@@ -1,4 +1,4 @@
-import type { PromptContext, PromptPart, PromptReference, PromptTextOptions, PromptContextPort } from './types.js';
+import type { PromptContext, PromptPart, PromptReference, PromptTextOptions, PromptContextPort, PromptDeliveryResult } from './types.js';
 export type * from './types.js';
 export declare function validatePromptReference(reference: unknown): PromptReference;
 export declare function validatePromptContext(context: unknown): PromptContext;
@@ -8,3 +8,8 @@ export declare function textPart(text: string, id?: string): Extract<PromptPart,
 export declare function formatPromptReference(reference: PromptReference, options?: PromptTextOptions): string;
 export declare function formatPromptContextText(context: PromptContext, options?: PromptTextOptions): string;
 export declare const unavailablePromptContext: PromptContextPort;
+/** One delivery per operation id, a bound on deliveries in flight, and a bounded memory of completed ones. */
+export interface PromptDeliveryLedger {
+  deliver(operationId: string, start: () => Promise<PromptDeliveryResult> | PromptDeliveryResult): Promise<PromptDeliveryResult>;
+}
+export declare function createPromptDeliveryLedger(options?: { maxPending?: number; maxRemembered?: number; busyMessage?: string }): PromptDeliveryLedger;

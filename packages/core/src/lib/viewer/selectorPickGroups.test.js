@@ -6,7 +6,6 @@ import {
   buildFacePickMesh,
   buildGlbFaceIdsForMesh,
   buildGlbFaceIdsForPart,
-  buildVertexPickPoints,
   syncDisplayMeshFaceIds,
   syncSelectorPickGroups,
   TOPOLOGY_FACE_ID_NONE
@@ -36,11 +35,10 @@ function sampleSelectorRuntime() {
   };
 }
 
-test("selector pick builders create invisible face, edge, and vertex pick objects", () => {
+test("selector pick builders create invisible face and edge pick objects", () => {
   const selectorRuntime = sampleSelectorRuntime();
   const faceMesh = buildFacePickMesh(THREE, selectorRuntime);
   const edgeLines = buildEdgePickLines(THREE, selectorRuntime);
-  const vertexPoints = buildVertexPickPoints(THREE, selectorRuntime);
 
   assert.equal(faceMesh.type, "Mesh");
   assert.equal(faceMesh.material.opacity, 0);
@@ -55,15 +53,8 @@ test("selector pick builders create invisible face, edge, and vertex pick object
   assert.equal(edgeLines.frustumCulled, false);
   assert.deepEqual([...edgeLines.userData.edgeIds], [11]);
 
-  assert.equal(vertexPoints.type, "Points");
-  assert.equal(vertexPoints.material.opacity, 0);
-  assert.equal(vertexPoints.material.size, 1.5);
-  assert.equal(vertexPoints.frustumCulled, false);
-  assert.deepEqual([...vertexPoints.userData.vertexIds], [13]);
-
   assert.equal(buildFacePickMesh(THREE, { proxy: {} }), null);
   assert.equal(buildEdgePickLines(THREE, { proxy: {} }), null);
-  assert.equal(buildVertexPickPoints(THREE, { proxy: {} }), null);
 });
 
 test("selector face id helpers map GLB face runs to parts and whole meshes", () => {
@@ -211,12 +202,10 @@ test("selector pick helpers sync pick groups and preserve caller-owned clearing"
   const runtime = {
     THREE,
     facePickGroup: new THREE.Group(),
-    edgePickGroup: new THREE.Group(),
-    vertexPickGroup: new THREE.Group()
+    edgePickGroup: new THREE.Group()
   };
   runtime.facePickGroup.add(new THREE.Object3D());
   runtime.edgePickGroup.add(new THREE.Object3D());
-  runtime.vertexPickGroup.add(new THREE.Object3D());
   const cleared = [];
   const modelOffset = new THREE.Vector3(1, 2, 3);
 
@@ -229,17 +218,14 @@ test("selector pick helpers sync pick groups and preserve caller-owned clearing"
     }
   });
 
-  assert.deepEqual(cleared, [runtime.facePickGroup, runtime.edgePickGroup, runtime.vertexPickGroup]);
+  assert.deepEqual(cleared, [runtime.facePickGroup, runtime.edgePickGroup]);
   assert.equal(runtime.facePickGroup.children.length, 1);
   assert.equal(runtime.edgePickGroup.children.length, 1);
-  assert.equal(runtime.vertexPickGroup.children.length, 1);
   assert.equal(runtime.facePickMesh, runtime.facePickGroup.children[0]);
   assert.equal(runtime.edgePickLines, runtime.edgePickGroup.children[0]);
   assert.deepEqual(runtime.edgePickObjects, [runtime.edgePickLines]);
-  assert.equal(runtime.vertexPickPoints, runtime.vertexPickGroup.children[0]);
   assert.deepEqual(runtime.facePickGroup.position.toArray(), [1, 2, 3]);
   assert.deepEqual(runtime.edgePickGroup.position.toArray(), [1, 2, 3]);
-  assert.deepEqual(runtime.vertexPickGroup.position.toArray(), [1, 2, 3]);
 
   syncSelectorPickGroups(runtime, { proxy: {} }, null, {
     clearSceneGroup(group) {
@@ -250,7 +236,6 @@ test("selector pick helpers sync pick groups and preserve caller-owned clearing"
   });
   assert.equal(runtime.facePickMesh, null);
   assert.equal(runtime.edgePickLines, null);
-  assert.equal(runtime.vertexPickPoints, null);
   assert.deepEqual(runtime.edgePickObjects, []);
   assert.deepEqual(runtime.facePickGroup.position.toArray(), [0, 0, 0]);
 });

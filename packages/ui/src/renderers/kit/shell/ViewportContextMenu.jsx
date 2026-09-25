@@ -6,6 +6,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger
 } from "@hardcore/ui/primitives/dropdown-menu";
+import { prefersCoarsePointer } from "../viewport/dom.js";
 
 // A secondary press that MOVED is a pan, not a menu. Coarse pointers wander more.
 const FINE_TAP_SLOP_PX = 4;
@@ -76,7 +77,7 @@ export default function ViewportContextMenu({ viewport, items, onOpenChange = nu
   useEffect(() => {
     const host = hostRef.current;
     if (!host || !offering) return undefined;
-    const coarseDefault = window.matchMedia?.("(pointer: coarse)")?.matches ?? false;
+    const coarseDefault = prefersCoarsePointer();
     const slop = pointerType => (pointerType === "touch" || pointerType === "pen" || coarseDefault
       ? COARSE_TAP_SLOP_PX : FINE_TAP_SLOP_PX);
     // The scene's own canvas only: a control drawn over it keeps its presses.
@@ -108,11 +109,13 @@ export default function ViewportContextMenu({ viewport, items, onOpenChange = nu
     host.addEventListener("pointerdown", down, true);
     host.addEventListener("pointermove", move, true);
     host.addEventListener("pointerup", up, true);
-    host.addEventListener("pointercancel", () => { press = null; }, true);
+    const cancel = () => { press = null; };
+    host.addEventListener("pointercancel", cancel, true);
     return () => {
       host.removeEventListener("pointerdown", down, true);
       host.removeEventListener("pointermove", move, true);
       host.removeEventListener("pointerup", up, true);
+      host.removeEventListener("pointercancel", cancel, true);
       press = null;
     };
   }, [hostRef, runtimeRef, viewerReadyTick, offering]);

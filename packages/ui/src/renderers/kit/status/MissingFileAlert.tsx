@@ -3,10 +3,9 @@ import { Alert, AlertDescription, AlertTitle } from "@hardcore/ui/primitives/ale
 export interface MissingFileAlertProps {
   missingFileRef: string;
   rootPath?: string;
-  previewMode?: boolean;
 }
 
-export default function MissingFileAlert({ missingFileRef, rootPath = "", previewMode = false }: MissingFileAlertProps) {
+export default function MissingFileAlert({ missingFileRef, rootPath = "" }: MissingFileAlertProps) {
   const missingFileLabel = String(missingFileRef || "").trim();
   // A Viewer resolves paths against ITS OWN served root. Point one at an
   // absolute path belonging to a different checkout — easy to do when an
@@ -25,16 +24,13 @@ export default function MissingFileAlert({ missingFileRef, rootPath = "", previe
   );
   return (
     <>
-      {!previewMode && missingFileLabel ? (
+      {missingFileLabel ? (
         <div className="pointer-events-none absolute inset-0 z-30 flex min-w-0 items-center justify-center px-4 py-4">
           <Alert
             variant="destructive"
             className="bg-popover pointer-events-auto w-full max-w-xl min-w-0 p-4 text-center shadow-lg"
           >
-            <p className="col-start-1 text-tiny uppercase tracking-[0.16em] text-destructive">
-              {missingFileOutsideRoot ? "Outside this viewer's root" : "File does not exist"}
-            </p>
-            <AlertTitle className="col-start-1 mt-1 line-clamp-none text-lg text-foreground">
+            <AlertTitle className="col-start-1 line-clamp-none text-lg text-foreground">
               {missingFileOutsideRoot ? "Outside this viewer's root" : "File does not exist"}
             </AlertTitle>
             <AlertDescription className="col-start-1 mt-1 text-sm leading-6 text-muted-foreground">

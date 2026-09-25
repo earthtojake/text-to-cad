@@ -35,3 +35,11 @@ it('reports rejected delivery and respects live unavailability', async () => {
   await act(async () => { fireEvent.click(screen.getByRole('button')); });
   expect(onResult).toHaveBeenCalledWith({ status: 'failed', message: 'Destination closed' });
 });
+it('says why it is unavailable in its description, with no native title', () => {
+  const host = testHost();
+  render(<ViewerHostContext.Provider value={host}><PromptContextAction createContext={() => createPromptContext([textPart('hello')])} /></ViewerHostContext.Provider>);
+  const button = screen.getByRole('button');
+  expect((button as HTMLButtonElement).disabled).toBe(true);
+  expect(button.getAttribute('aria-description')).toBe('Prompt delivery is unavailable in this host.');
+  expect(button.hasAttribute('title')).toBe(false);
+});

@@ -104,7 +104,7 @@ export type FilePanel = {
 
 export const FILE_PANEL_TREE: string;
 export const SOURCE_PANEL: string;
-export const CAD_PANEL: { readonly file: string; readonly display: string };
+export const CAD_PANEL: { readonly file: string };
 
 /** A viewer file's panels: its own controls (when it has any), then its Display settings. */
 export function viewerPanels(ready: boolean, options?: { file?: boolean }): FilePanel[];
@@ -226,7 +226,7 @@ export function fuzzyFilter(
   limit?: number,
 ): { path: string; indices: number[] }[];
 
-export type CrumbKind = "directory" | "file" | "ellipsis";
+export type CrumbKind = "directory" | "file";
 
 /** One crumb: a path segment BELOW the root, and the directory its menu lists. */
 export type Crumb = {
@@ -234,10 +234,9 @@ export type Crumb = {
   label: string;
   title: string;
   path: string;
-  /** The crumb's PARENT — the menu is its neighbours. Null only for the ellipsis. */
-  menu: string | null;
-  current: string | null;
-  hidden: { label: string; path: string }[];
+  /** The crumb's PARENT — the menu is its neighbours. */
+  menu: string;
+  current: string;
 };
 
 /** One row of a crumb's menu, in the crumb path space. */
@@ -260,7 +259,7 @@ export type CrumbSource = {
    * a React hook, unconditionally, once per open menu.
    */
   useListing: (directory: string) => readonly ListingEntry[] | null;
-  /** Wraps a crumb's trigger — the right-click entry menu. Never the ellipsis. */
+  /** Wraps a crumb's trigger — the right-click entry menu. */
   wrapCrumb?: (args: { crumb: Crumb; children: ReactNode }) => ReactNode;
   /** Drawn after the FILE crumb: the `⋯` that opens the same menu by click. */
   renderCrumbActions?: (args: { crumb: Crumb }) => ReactNode;
@@ -268,10 +267,7 @@ export type CrumbSource = {
   renderRename?: (args: { crumb: Crumb }) => ReactNode;
 };
 
-export function buildCrumbs(input: { path: string | null; narrow: boolean }): Crumb[];
-
-/** The worktree a file is in, as a label rather than a crumb; null in the project. */
-export function worktreeMark(root: string | null): { label: string; title: string } | null;
+export function buildCrumbs(input: { path: string | null }): Crumb[];
 
 /** The directory an entry lives in: `""` at the root. */
 export function parentOf(path: string): string;
@@ -317,6 +313,3 @@ export const PanelToggle: ComponentType<{
  */
 export const FileIcon: ComponentType<{ path: string; className?: string }>;
 export const FolderIcon: ComponentType<{ open: boolean; className?: string }>;
-
-/** An element's width through a `ResizeObserver`; `0` until first measured. */
-export function useElementWidth(): [(element: HTMLElement | null) => void, number];

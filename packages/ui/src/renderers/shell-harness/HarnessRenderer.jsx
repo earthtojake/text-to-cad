@@ -159,7 +159,20 @@ function HarnessSurface({ view, data }) {
     { id: "clear", label: "Clear the note", separatorBefore: true, disabled: !picked, onSelect: () => setPicked("") }
   ]), [picked]);
 
-  return <RendererShell shell={shell} tools={[shell.tools.draw]}
+  // `panel*.harness` stands in for a file with Settings (a model tab and a Position tab) and a
+  // retained effect: "Keep" keeps a panel under the strip, highlighted, whatever tool is up.
+  const [kept, setKept] = useState(false);
+  const withPanel = view.file.path.startsWith("panel");
+  const keepTool = { id: "keep", label: "Keep", icon: <span aria-hidden="true">K</span>, active: kept, disabled: shell.idle,
+    onSelect: () => setKept(value => !value) };
+  const panel = withPanel ? { title: "Settings", sections: [
+    { id: "features", role: "model", title: "Features", content: <p data-harness-tab="features">Model tree</p> },
+    { id: "position", role: "position", title: "Position", content: <p data-harness-tab="position">Joints</p> }
+  ] } : null;
+
+  return <RendererShell shell={shell} tools={withPanel ? [shell.tools.draw, keepTool] : [shell.tools.draw]} panel={panel}
+    toolPanels={kept ? <div className="w-40" data-harness-kept=""><section aria-label="Kept controls"
+      className="pointer-events-auto h-24 rounded-md border border-border bg-popover text-tiny">Kept</section></div> : null}
     contextMenuItems={contextMenuItems} onContextMenuOpenChange={setMenuUp}
     frameProvider={frame => <HarnessFrameContext.Provider value={`frame:${stage}`}>{frame}</HarnessFrameContext.Provider>}
     onCanvasPointerDown={() => setPutDown(`put down @${stage}`)}

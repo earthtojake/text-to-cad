@@ -59,10 +59,6 @@ export function stepTreeNodeIsTopology(node) {
   return Boolean(stepTreeNodeTopologyType(node));
 }
 
-export function stepTreeNodeHasChildren(node) {
-  return stepTreeNodeChildren(node).length > 0;
-}
-
 export function stepTreeNodeLeafPartIds(node) {
   const declaredLeafPartIds = Array.isArray(node?.leafPartIds)
     ? node.leafPartIds.map((id) => normalizeString(id)).filter(Boolean)

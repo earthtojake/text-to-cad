@@ -31,7 +31,7 @@ function harness(displaySettings) {
   viewSettingsStore.subscribe(() => { result.display = viewSettingsStore.getSnapshot().display; });
   const scope = {
     viewSettingsStore, clonePerspectiveSnapshot, cameraForViewSettings, viewerDisplaySettingsForCamera,
-    previewMode: false, modelKey: 'part.step', sceneScaleMode: 'cad',
+    presenting: false, modelKey: 'part.step', sceneScaleMode: 'cad',
     scopeShellCamera: camera => camera,
     viewerRef: { current: { setPerspective(camera) { result.applied = camera; return true; } } },
     setViewerPerspective: camera => { result.perspective = camera; },

@@ -1,6 +1,7 @@
 import { TooltipHint } from "@hardcore/ui/primitives/tooltip";
 import LoadingIcon from "@hardcore/ui/loading-icon";
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
+import { ViewerHostContext } from "../../../host/context.js";
 import { Progress } from "@hardcore/ui/primitives/progress";
 import { prolongedLoadingMessage } from "./loadingMessage.js";
 
@@ -18,9 +19,10 @@ export default function LoadingIndicator({ progress, operationKey = "" }) {
   const elapsed = timing.key === operationKey ? timing.elapsed : 0;
   const waiting = Boolean(progress?.connectionLost);
   const explanation = prolongedLoadingMessage(elapsed, progress?.connectionLost);
+  const reducedMotion = useContext(ViewerHostContext)?.environment.reducedMotion === true;
   return (
     <div className="flex w-[22rem] max-w-[90vw] flex-col gap-3" role="status" aria-live="polite" data-viewer-loading="true">
-      <LoadingIcon size={80} active={!waiting} className="self-center" />
+      <LoadingIcon size={80} active={!waiting} reducedMotion={reducedMotion} className="self-center" />
       <div className="flex items-baseline justify-between gap-4 text-xs opacity-75">
         <span className="truncate">{waiting ? `Last step: ${progress?.label || "Reading model"}` : progress?.label || "Preparing view"}</span>
         <span className="shrink-0 tabular-nums">{progress?.counts || ""}</span>

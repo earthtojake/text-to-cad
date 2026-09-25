@@ -43,6 +43,11 @@ test('PDF.js renders the same two-page document that live read, page, selection 
     assert.equal(await page.evaluate(() => window.pdfHarness.live.state().selection), 'Second PDF page');
     const png = await page.evaluate(async () => { const blob = await window.pdfHarness.live.capture(1); return { size: blob.size, type: blob.type, page: window.pdfHarness.live.state().page }; });
     assert.ok(png.size > 1000); assert.equal(png.type, 'image/png'); assert.equal(png.page, 2);
+    // A delivery that worked says nothing: no "Copied" or "Added to prompt" beside the action.
+    await page.getByRole('button', { name: 'Copy for prompt' }).click();
+    await page.waitForFunction(() => window.pdfHarness.deliveries.length === 1);
+    await page.getByRole('button', { name: 'Copy for prompt' }).and(page.locator(':enabled')).waitFor();
+    assert.equal(await page.getByRole('status').innerText(), '');
     const invalid = await page.evaluate(async () => { try { await window.pdfHarness.live.read(0, 1); } catch (error) { return error.message; } });
     assert.match(invalid, /Page must be/);
     await page.evaluate(() => window.pdfHarness.unmount());

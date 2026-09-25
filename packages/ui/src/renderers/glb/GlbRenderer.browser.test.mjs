@@ -301,14 +301,6 @@ test('a static GLB opens on its native scene with no tools: display settings, or
   assert.equal(reopened.camera.zoom, 1);
   assert.deepEqual([reopened.display.surfaces.colorMode, reopened.display.surfaces.color, reopened.display.grid.enabled], ['single', '#00c040', false]);
 
-  // Fullscreen is a STEP's alone. A host that asks a GLB for it is declined: the nav row
-  // stays, and nothing of fullscreen's own is drawn.
-  await page.evaluate(() => window.cadHarness.fullscreen(true));
-  await page.waitForTimeout(300);
-  assert.equal(await pane.getByRole('group', { name: 'Fullscreen controls' }).count(), 0);
-  assert.equal(await pane.getByRole('button', { name: 'Exit fullscreen', exact: true }).count(), 0);
-  assert.deepEqual(await panels(pane), ['Show files:false'], 'the nav row and its panels stay');
-  await noTools(pane);
   assert.deepEqual(errors, []);
 });
 

@@ -3,8 +3,8 @@
 // The standalone app is served BY that backend, so every call it makes is a
 // root-relative `/__cad/...` or `/__tess_cache/...` URL and the origin is the
 // empty string — same origin, exactly what shipped before this module existed.
-// A host that embeds <CadFileView> (the desktop app, which spawns
-// `cadgen viewer --api-only` per project root) is served from somewhere else
+// A host that embeds the viewer (one that spawns `cadgen viewer --api-only`
+// per project root, say) is served from somewhere else
 // entirely, so it hands the surface an absolute origin
 // ("http://127.0.0.1:3250") and every backend URL is built against it.
 //

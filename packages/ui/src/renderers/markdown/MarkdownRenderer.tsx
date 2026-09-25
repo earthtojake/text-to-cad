@@ -121,7 +121,7 @@ export function MarkdownEditor({
   );
 
   return (
-    <div className="h-full overflow-auto" data-selectable onKeyDown={onKeyDown}>
+    <div className="h-full overflow-auto select-text" onKeyDown={onKeyDown}>
       <div className="mx-auto w-full max-w-[72ch] px-8 py-8">
         <EditorContent editor={editor} />
       </div>

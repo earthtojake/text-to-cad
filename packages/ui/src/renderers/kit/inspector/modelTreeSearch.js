@@ -1,4 +1,6 @@
+import { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { fuzzyMatch } from '../../../file-viewer/navigation/fuzzy.js';
+import { panelScroller } from './FilePanelSections.jsx';
 
 /**
  * A tree's filter box: a flat, ranked view over the presented tree, never a
@@ -110,4 +112,46 @@ export function searchModelTree(index, query, limit = 200) {
   }
   scored.sort((left, right) => right.score - left.score || left.at - right.at);
   return { matches: scored.slice(0, limit).map(({ at, entry, indices, alias }) => (alias ? { at, entry, indices, alias } : { at, entry, indices })), total: scored.length };
+}
+
+const NO_MATCHES = Object.freeze({ matches: Object.freeze([]), total: 0 });
+
+/**
+ * A tree's filter box, as one hook for every file tree that has one: the query, the ranked
+ * hits over `roots` (indexed only while there is a query, and searched at deferred
+ * priority), the keyboard cursor over them, and the scroll position the tree had when the
+ * search began, put back when it ends.
+ *
+ * The tree renders the hits into `listRef`'s element; each hit row carries
+ * `data-search-row={node.id}`, and Enter presses that row's `button[aria-pressed]`.
+ *
+ * @param {object[]} roots The presented tree's top-level nodes.
+ */
+export function useTreeSearch(roots) {
+  const [query, setQuery] = useState(''), [cursor, setCursor] = useState(null);
+  const searching = query.trim() !== '', deferredQuery = useDeferredValue(query);
+  const index = useMemo(() => (searching ? buildModelTreeSearchIndex(roots) : null), [searching, roots]);
+  const found = useMemo(() => (index ? searchModelTree(index, deferredQuery) : NO_MATCHES), [index, deferredQuery]);
+  const listRef = useRef(null), resumeScroll = useRef(0);
+  const changeQuery = value => {
+    if (!searching && value.trim() && listRef.current) resumeScroll.current = panelScroller(listRef.current).scrollTop;
+    setQuery(value); setCursor(null);
+  };
+  // Back where the tree was; a hit selected meanwhile is then scrolled to by the tree's own reveal.
+  useLayoutEffect(() => { if (!searching && listRef.current) panelScroller(listRef.current).scrollTop = resumeScroll.current; }, [searching]);
+  const cursorId = found.matches.some(match => match.entry.node.id === cursor) ? cursor : found.matches[0]?.entry.node.id ?? null;
+  useEffect(() => { if (cursorId) listRef.current?.querySelector(`[data-search-row="${CSS.escape(cursorId)}"]`)?.scrollIntoView?.({ block: 'nearest' }); }, [cursorId]);
+  const onKeyDown = event => {
+    if (event.key === 'Escape' && query) { event.preventDefault(); event.stopPropagation(); changeQuery(''); return; }
+    if (!found.matches.length) return;
+    const at = found.matches.findIndex(match => match.entry.node.id === cursorId);
+    if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+      event.preventDefault();
+      setCursor(found.matches[Math.min(Math.max(at + (event.key === 'ArrowDown' ? 1 : -1), 0), found.matches.length - 1)].entry.node.id);
+    } else if (event.key === 'Enter' && at >= 0) {
+      event.preventDefault();
+      listRef.current?.querySelector(`[data-search-row="${CSS.escape(cursorId)}"] button[aria-pressed]:not(:disabled)`)?.click();
+    }
+  };
+  return { query, searching, deferredQuery, index, found, cursorId, listRef, changeQuery, onKeyDown };
 }

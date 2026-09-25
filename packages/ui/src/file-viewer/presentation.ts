@@ -17,10 +17,9 @@ export interface CadArtifactProgress {
 }
 export interface ViewerLoadingOverlayProps {
   viewerLoading: boolean;
-  previewMode?: boolean;
   progress?: CadArtifactProgress | null;
 }
 /** The original CAD loading artwork, available before loading the renderer. */
-export function ViewerLoadingOverlay({ viewerLoading, previewMode, progress }: ViewerLoadingOverlayProps) {
-  return createElement(Overlay, { loading: { opening: viewerLoading, headline: "Opening model", progress }, previewMode, operationKey: "preparing-document" });
+export function ViewerLoadingOverlay({ viewerLoading, progress }: ViewerLoadingOverlayProps) {
+  return createElement(Overlay, { loading: { opening: viewerLoading, headline: "Opening model", progress }, operationKey: "preparing-document" });
 }

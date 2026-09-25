@@ -9,7 +9,7 @@
 // runtimes, alerts UI, bounds. This module owns only the shared state
 // evaluation.
 
-import { normalizeStepModuleParameterValues, resolveStepModuleFeatures } from "./stepModule.js";
+import { resolveStepModuleFeatures } from "./stepModule.js";
 import {
   applyStepModuleEffectsToRecords,
   buildStepModuleContext,
@@ -91,9 +91,4 @@ export function applySceneState(THREE, {
 
   const { appearanceChanged } = applyStepModuleEffectsToRecords(THREE, runtime.displayRecords, effectsByPartId);
   return { applied: true, transformDetected, appearanceChanged, effectsByPartId };
-}
-
-/** Normalized DOF values for a definition (clamped, defaulted). */
-export function sceneParameterValues(definition, values = {}) {
-  return normalizeStepModuleParameterValues(definition, values);
 }

@@ -1,15 +1,16 @@
 import React from 'react';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import ViewPlaneControl from '../../../../dist/renderers/kit/camera/ViewPlaneControl.js';
-import { VIEW_PLANE_FACES } from './viewportCameraKit.js';
+import { VIEW_PLANE_FACES, createViewPlaneOrientationStore } from './viewportCameraKit.js';
 
 beforeEach(() => vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} }));
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); });
 const ISO = { x: [0.8, -0.3, 0.52], y: [0.6, 0.4, -0.69], z: [0, 0.87, 0.5] };
+const TOP = { x: [1, 0, 0], y: [0, 1, 0], z: [0, 0, 1] };
 function cube(extra = {}) {
   const activate = vi.fn(), reset = vi.fn(), parentPointer = vi.fn();
-  const props = { showViewPlane: true, meshData: {}, viewPlaneFaces: VIEW_PLANE_FACES, viewPlaneOrientation: ISO,
+  const props = { showViewPlane: true, meshData: {}, viewPlaneFaces: VIEW_PLANE_FACES, orientation: createViewPlaneOrientationStore(ISO),
     viewPlaneOffsetRight: 16, activateViewPlaneFace: activate, activateDefaultViewPlane: reset, ...extra };
   const view = render(<div onPointerDown={parentPointer}><ViewPlaneControl {...props} /></div>);
   return { ...view, activate, reset, parentPointer, props };
@@ -80,4 +81,21 @@ it('uses the enlarged cube itself for navigation without surrounding arrow butto
   expect(screen.queryByRole('button', { name: /^Orbit / })).toBeNull();
   expect(screen.getByLabelText('View cube').parentElement?.style.width).toBe('7rem');
   for (const dot of container.querySelectorAll('circle')) expect(dot.getAttribute('fill')).toBe('transparent');
+});
+it('follows its orientation store alone: an equal orientation is no change, a new one redraws only the cube', () => {
+  const orientation = createViewPlaneOrientationStore(ISO);
+  let renders = 0;
+  function Parent() { renders += 1; return <ViewPlaneControl showViewPlane meshData={{}} viewPlaneFaces={VIEW_PLANE_FACES} orientation={orientation} viewPlaneOffsetRight={16} activateViewPlaneFace={() => {}} />; }
+  render(<Parent />);
+  const drawn = () => [...screen.getByLabelText('View cube').querySelectorAll('polygon')].map(face => face.getAttribute('points')).join('|');
+  const iso = drawn();
+  const notified = vi.fn();
+  orientation.subscribe(notified);
+  act(() => orientation.set({ x: [...ISO.x], y: [...ISO.y], z: [...ISO.z] }));
+  expect(notified).not.toHaveBeenCalled();
+  act(() => orientation.set(TOP));
+  expect(notified).toHaveBeenCalledTimes(1);
+  expect(drawn()).not.toBe(iso);
+  expect(screen.getByLabelText('View cube').querySelectorAll('polygon').length).toBe(1);
+  expect(renders).toBe(1);
 });

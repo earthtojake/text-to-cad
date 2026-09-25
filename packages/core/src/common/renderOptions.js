@@ -706,18 +706,6 @@ export function fitCameraDepthToBounds(camera, bounds, {
   return true;
 }
 
-export function lockedFrameHalfHeight(outputs, bounds, width, height, job, sceneScale, settingsByScale) {
-  const padding = framePadding(job);
-  return Math.max(
-    ...outputs.map((output) => {
-      const outputWidth = toFiniteNumber(output.width, width);
-      const outputHeight = toFiniteNumber(output.height, height);
-      return frameHalfHeightForView(resolveRenderView(output.camera || job.camera || "iso"), bounds, outputWidth, outputHeight, padding, sceneScale, settingsByScale);
-    }),
-    renderSceneScaleSettings(sceneScale, settingsByScale).minBoundsSpan / 2
-  );
-}
-
 export function outputSize(output, job) {
   return {
     width: Math.max(1, Math.floor(toFiniteNumber(output.width, job.output?.width || 1400))),

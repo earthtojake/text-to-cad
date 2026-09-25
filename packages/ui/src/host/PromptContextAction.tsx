@@ -9,13 +9,16 @@ export interface PromptContextActionProps extends Omit<ComponentProps<typeof But
   children?: ReactNode;
   clipboardLabel?: string;
 }
-/** One action, whose environmental delivery is selected by the host. */
+/**
+ * One action, whose environmental delivery is selected by the host. Why it is unavailable is the
+ * button's accessible description, not a hover hint: a disabled control has none (settings-ui.md).
+ */
 export function PromptContextAction({ createContext, onResult, children, clipboardLabel = 'Copy for prompt', disabled, ...props }: PromptContextActionProps) {
   const { promptContext } = useViewerHost();
   const destination = usePromptDestination();
   const [pending, setPending] = useState(false);
   return <Button {...props} disabled={disabled || pending || !destination.available}
-    title={props.title ?? destination.reason}
+    aria-description={destination.available ? undefined : destination.reason}
     onClick={() => {
       setPending(true);
       // Call before awaiting: browser activation and desktop draft binding belong to this gesture.

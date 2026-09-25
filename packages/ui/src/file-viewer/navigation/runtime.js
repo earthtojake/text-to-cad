@@ -2,7 +2,7 @@
  * `@hardcore/ui/navigation` — the chrome AROUND a file surface, shared by the two
  * apps that draw one.
  *
- * `./file-view` is one file's contents; this is everything else a person sees:
+ * A renderer draws one file's contents; this is everything else a person sees:
  * the nav row above it, the breadcrumb in that row, the menus a crumb and a
  * row drop down, the panel column at the right end, the file tree that lives
  * in it, and the empty state when nothing is open. The standalone CAD Viewer
@@ -16,10 +16,6 @@
  * the hosts genuinely differ on, where a directory listing comes from and what
  * an entry menu's items do, are injected as source adapters rather than
  * imported.
- *
- * Exported as SOURCE, like `./file-view`: JSX in `.jsx` files, plain modules
- * in `.js`, with JSDoc where types earned their keep. The consumer's bundler
- * compiles it and needs the same settings `docs/file-view.md` lists.
  */
 export { Breadcrumbs } from "./Breadcrumbs.jsx";
 export { EmptyState } from "./EmptyState.jsx";
@@ -39,8 +35,7 @@ export {
   menuEntries,
   nameOf,
   parentOf,
-  stepToward,
-  worktreeMark
+  stepToward
 } from "./crumbs.js";
 export {
   ALL_ENTRY_CAPABILITIES,
@@ -63,4 +58,3 @@ export {
   treePanel,
   viewerPanels
 } from "./panels.js";
-export { useElementWidth } from "./useElementWidth.js";

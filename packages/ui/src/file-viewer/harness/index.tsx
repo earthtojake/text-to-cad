@@ -1,6 +1,6 @@
 import { createRoot } from "react-dom/client";
 import { createPortal } from "react-dom";
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { unavailablePromptContext } from "@hardcore/core/prompt";
 import { FileText } from "lucide-react";
 import { FileViewer, defineFileRenderer } from "../index.js";
@@ -11,6 +11,8 @@ const events: string[] = [];
 const opened: { path: string; options?: { target: "current" | "new"; panel?: string } }[] = [];
 const rendererCallbacks = new Map<string, FileRendererProps<string>>();
 const cleanupWrites = new Map<string, JsonValue>();
+// How often each root's renderer rendered: FileViewer must not re-render it for its own chrome.
+const renders: Record<string, number> = {};
 function memorySource(id: string) {
   const files = new Map<string, TextDocument>([["notes.txt", { content: `${id} original`, revision: "1" }], ["next.txt", { content: `${id} next`, revision: "1" }], ["slow.txt", { content: `${id} slow`, revision: "1" }], ["readonly.txt", { content: "truncated", revision: "1", truncated: true }]]);
   const listeners = new Set<Parameters<NonNullable<FileSource["subscribe"]>>[0]>();
@@ -65,8 +67,9 @@ function memorySource(id: string) {
 }
 const a = memorySource("root-a"), b = memorySource("root-b");
 function InMemoryRenderer(props: FileRendererProps<string>) {
-  const { document, data, openPanel, panelSlot, onChromeVisibilityChange } = props;
+  const { document, data, openPanel, panelSlot } = props;
   rendererCallbacks.set(props.source.id, props);
+  renders[props.source.id] = (renders[props.source.id] ?? 0) + 1;
   useEffect(() => () => {
     const state = cleanupWrites.get(`${props.source.id}:${props.file.path}`);
     if (state) props.onStateChange(state);
@@ -75,7 +78,6 @@ function InMemoryRenderer(props: FileRendererProps<string>) {
     <div data-testid="payload">{data}</div>
     <textarea aria-label="Document" value={document?.value ?? ""} readOnly={document?.readOnly} onChange={(event) => document?.setValue(event.target.value)} />
     <button onClick={() => void document?.save()} disabled={document?.readOnly}>Save</button>
-    <button onClick={() => onChromeVisibilityChange(false)}>Preview</button>
     <span data-testid="document-key">{document?.key}</span>
     {openPanel === "details" && panelSlot ? createPortal(<p>Injected panel</p>, panelSlot) : null}
   </div>;
@@ -93,15 +95,16 @@ function App() {
   const [file, setFile] = useState("notes.txt");
   const [root, setRoot] = useState(a);
   const [second, setSecond] = useState(false);
-  const [narrowCrumbs, setNarrowCrumbs] = useState<boolean | undefined>(undefined);
   const [navigationPath, setNavigationPath] = useState<string | null | undefined>(undefined);
   const [state, setState] = useState<FileViewerState>({ panel: null, panelWidth: 300, expandedDirectories: [""] });
   const [otherState, setOtherState] = useState<FileViewerState>({ panel: "", panelWidth: 300 });
-  Object.assign(window, { harness: { a, b, events, opened, rendererCallbacks, cleanupWrites, state, open: setFile, narrowCrumbs: setNarrowCrumbs, navigationPath: setNavigationPath, setRoot: (id: string) => { setRoot(id === "root-b" ? b : a); }, second: setSecond, width: (panelWidth: number) => setState((previous) => ({ ...previous, panelWidth })) } });
+  Object.assign(window, { harness: { a, b, events, opened, rendererCallbacks, renders, cleanupWrites, state, open: setFile, navigationPath: setNavigationPath, setRoot: (id: string) => { setRoot(id === "root-b" ? b : a); }, second: setSecond, width: (panelWidth: number) => setState((previous) => ({ ...previous, panelWidth })) } });
+  // A host is made once for its root, as an app makes it (FileViewer's props are compared by identity).
+  const primaryHost = useMemo(() => host(root, (path, options) => { opened.push({ path, options }); setFile(path); setState((previous) => ({ ...previous, panel: options?.panel ?? null })); }), [root]);
   return <div style={{ width: "1000px", height: "650px" }}>
     <section data-testid="primary" style={{ height: "400px", display: "flex", flexDirection: "column" }}>
       {/* A host that shows one file at a time: an open moves this view to the file, with the panel it was opened with, or the file's own default. */}
-      <FileViewer file={file} host={host(root, (path, options) => { opened.push({ path, options }); setFile(path); setState((previous) => ({ ...previous, panel: options?.panel ?? null })); })} renderers={renderers} state={state} onStateChange={setState} narrowCrumbs={narrowCrumbs} navigationPath={navigationPath} />
+      <FileViewer file={file} host={primaryHost} renderers={renderers} state={state} onStateChange={setState} navigationPath={navigationPath} />
     </section>
     {second ? <section data-testid="secondary" style={{ height: "240px" }}><FileViewer file="notes.txt" host={host(b, () => {})} renderers={renderers} state={otherState} onStateChange={setOtherState} /></section> : null}
   </div>;

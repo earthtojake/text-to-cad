@@ -24,7 +24,11 @@ const xref = pdf.length;
 pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.slice(1).map(offset => `${String(offset).padStart(10, '0')} 00000 n \n`).join('')}trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
 const bytes = new TextEncoder().encode(pdf);
 let live: LivePdfDocument | null = null;
+const deliveries: string[] = [];
+const destination = { kind: 'clipboard' as const, available: true };
 const host = testHost({
+  promptContext: { getSnapshot: () => destination, subscribe: () => () => {},
+    deliver: async context => { deliveries.push(context.parts.map(part => part.id).join()); return { status: 'copied', partIds: context.parts.map(part => part.id) }; } },
   files: { id: 'pdf-root', rootName: 'PDF', stat: async path => ({ path, name: path, kind: 'file', size: bytes.length, extension: 'pdf', mediaType: 'pdf', revision: 'fixture-r1' }),
     readAsset: async () => ({ url: '', bytes, release() {} }) },
   pdf: { assetBaseUrl: new URL('/pdfjs/', window.location.href).href, bind(target) { live = target; return () => { live = null; }; } },
@@ -35,5 +39,5 @@ function App() {
   return <div style={{ height: 600 }}><FileViewer file="two.pdf" host={host} renderers={renderers} state={state} onStateChange={setState} /></div>;
 }
 const root = createRoot(document.getElementById('root')!);
-Object.assign(window, { pdfHarness: { get live() { return live; }, unmount() { root.unmount(); } } });
+Object.assign(window, { pdfHarness: { deliveries, get live() { return live; }, unmount() { root.unmount(); } } });
 root.render(<App />);

@@ -58,17 +58,6 @@ export const DEFAULT_DISPLAY_GUIDE_SETTINGS = Object.freeze({
   })
 });
 
-export const DISABLED_DISPLAY_GUIDE_SETTINGS = Object.freeze({
-  grid: Object.freeze({
-    ...DEFAULT_DISPLAY_GUIDE_SETTINGS.grid,
-    enabled: false
-  }),
-  axis: Object.freeze({
-    ...DEFAULT_DISPLAY_GUIDE_SETTINGS.axis,
-    enabled: false
-  })
-});
-
 export const DEFAULT_PART_COLOR_SETTINGS = Object.freeze({
   mode: CAD_PART_COLOR_MODE.ORIGINAL,
   color: "#b6c4ce",
@@ -423,10 +412,6 @@ export function normalizeDisplaySettings(value = null, { fallback = DEFAULT_DISP
     guides: normalizeDisplayGuideSettings(source.guides, fallback.guides),
     partColor: normalizePartColorSettings(source.partColor, fallback.partColor)
   };
-}
-
-export function cloneDisplaySettings(value = DEFAULT_DISPLAY_SETTINGS) {
-  return normalizeDisplaySettings(value);
 }
 
 export function displaySettingsEqual(left, right) {

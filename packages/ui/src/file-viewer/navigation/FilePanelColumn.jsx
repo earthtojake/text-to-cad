@@ -2,6 +2,7 @@ import { X } from "lucide-react";
 import { Button } from "../../primitives/button.jsx";
 import { Sheet, SheetContent, SheetTitle, SheetClose } from "../../primitives/sheet.jsx";
 import { useRef } from "react";
+import { hasOpenPopup } from "../../lib/popups.js";
 
 /**
  * The file surface's panel column: the one frame every panel is drawn in.
@@ -89,7 +90,8 @@ export function FilePanelColumn({ id, label, width, onWidthChange, onCollapse, c
   // outside the right edge creates horizontal overflow on narrow pages.
   if (mobile) return <Sheet open={!hidden} onOpenChange={open => { if (!open) onDismiss?.(); }} modal={false}>
     <SheetContent ref={content} portalContainer={portalContainer} showCloseButton={false} aria-describedby={undefined}
-      className="absolute inset-y-2 right-2 h-auto w-[min(280px,calc(100%-32px))] max-w-none gap-0 overflow-hidden rounded-lg border shadow-lg data-[state=open]:animate-none data-[state=closed]:animate-none"
+      className="absolute inset-y-2 right-2 h-auto w-[min(var(--file-panel-sheet-width),calc(100%-32px))] max-w-none gap-0 overflow-hidden rounded-lg border shadow-lg data-[state=open]:animate-none data-[state=closed]:animate-none"
+      style={{ "--file-panel-sheet-width": `${PANEL_DEFAULT_WIDTH}px` }}
       data-file-panel-container={id} data-mobile-panel="" onOpenAutoFocus={event => event.preventDefault()}
       onCloseAutoFocus={event => event.preventDefault()}
       onInteractOutside={event => {
@@ -98,7 +100,7 @@ export function FilePanelColumn({ id, label, width, onWidthChange, onCollapse, c
         // Selects and color/menu popups portal outside the sheet. Their touches
         // still belong to it, and dismissing a child must not dismiss the panel.
         if (target?.closest?.('[data-file-panel], [data-slot=select-content], [data-slot=dropdown-menu-content], [data-slot=dropdown-menu-sub-content], [data-slot=popover-content]')
-          || content.current?.querySelector('[aria-haspopup][aria-expanded="true"]')) event.preventDefault();
+          || hasOpenPopup(content.current)) event.preventDefault();
       }}>
       <SheetTitle className="sr-only">{label.replace(/^(Show|Hide) /, "")}</SheetTitle>
       <SheetClose asChild><Button className="absolute right-2 top-2 z-10 size-5" variant="ghost" size="icon-xs" aria-label="Close panel"><X className="size-3" /></Button></SheetClose>

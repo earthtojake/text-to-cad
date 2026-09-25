@@ -291,14 +291,6 @@ test('an STL opens as one mesh with no tools: display settings, orbit, host comm
   assert.deepEqual([reopened.display.surfaces.colorMode, reopened.display.surfaces.color, reopened.display.grid.enabled, reopened.display.floor.enabled], ['single', '#00c040', true, true]);
   assert.equal(requests.filter(path => path === '/one/part.stl').length, 1, 'reopening a file reuses its decoded mesh without another asset request');
 
-  // Fullscreen is a STEP's alone. A host that asks a mesh for it is declined: the nav row
-  // stays, and nothing of fullscreen's own is drawn.
-  await page.evaluate(() => window.cadHarness.fullscreen(true));
-  await page.waitForTimeout(300);
-  assert.equal(await pane.getByRole('group', { name: 'Fullscreen controls' }).count(), 0);
-  assert.equal(await pane.getByRole('button', { name: 'Orbit settings', exact: true }).count(), 0);
-  assert.deepEqual(await panels(pane), ['Show files:false'], 'the nav row and its panels stay');
-  await noTools(pane);
   assert.deepEqual(errors, []);
 });
 

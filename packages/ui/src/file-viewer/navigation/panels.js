@@ -65,12 +65,11 @@ import { Code2, Eye, Folders, SlidersHorizontal } from "lucide-react";
 export const FILE_PANEL_TREE = "tree";
 
 /**
- * The file sidebar's id. The legacy Display id is retained only so existing
- * persisted panel values resolve as unavailable; Display is a toolbar popover.
+ * The file sidebar's id. Any other stored id — a retired panel's — resolves as
+ * nothing open (`resolveOpenPanel`).
  */
 export const CAD_PANEL = Object.freeze({
-  file: "cad-file",
-  display: "cad-display"
+  file: "cad-file"
 });
 
 /** The desktop's markdown source view — its own id, since the field holds ids. */

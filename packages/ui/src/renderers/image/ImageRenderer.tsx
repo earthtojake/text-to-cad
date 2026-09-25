@@ -56,12 +56,12 @@ export default function ImageRenderer({
         </div>
       </div>
 
-      <div className="flex h-8 shrink-0 items-center justify-between border-t px-3 text-[11px] text-muted-foreground">
+      <div className="flex h-8 shrink-0 items-center justify-between border-t px-3 text-tiny text-muted-foreground">
         <span>
           {dimensions ? `${dimensions.width} × ${dimensions.height}` : "—"} · {formatBytes(file.size)}
         </span>
         <Button
-          className="h-6 gap-1.5 px-2 text-[11px] font-medium"
+          className="h-6 gap-1.5 px-2 text-tiny font-normal"
           onClick={() => setActual((current) => !current)}
           size="sm"
           variant="ghost"

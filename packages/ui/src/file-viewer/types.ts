@@ -1,4 +1,3 @@
-import type { ResourceRef } from "@hardcore/core/prompt";
 import type { ComponentType, ElementType, ReactNode } from "react";
 import type { EntryAction, FilePanel, Platform } from "./navigation/index.js";
 import type { ViewerHost } from "../host/types.js";
@@ -9,7 +8,6 @@ export interface FileMetadata extends FileEntry {
   size: number;
   extension: string;
   mime?: string;
-  modifiedAt?: number;
   /** A source hint; each registration remains responsible for matching. */
   mediaType?: string;
   revision?: string;
@@ -21,7 +19,7 @@ export interface TextDocument {
   readOnly?: boolean;
 }
 /** A source owns the URL; each successful read supplies a distinct release lease. */
-export interface ManagedFileAsset { url: string; bytes?: Uint8Array<ArrayBuffer>; mime?: string; resource?: ResourceRef; byteLength?: number; release: () => void }
+export interface ManagedFileAsset { url: string; bytes?: Uint8Array<ArrayBuffer>; mime?: string; release: () => void }
 export type FileFailureCode = "denied" | "not-found" | "already-exists" | "unsupported" | "conflict" | "error";
 export type FileChange =
   | { kind: "content" | "metadata"; path: string; revision?: string }
@@ -93,7 +91,10 @@ export interface PreparedDocument<T> { data: T; text?: TextDocument; dispose?: (
 /** Renderer-owned actions shown before the common panel buttons. Never persisted. */
 export interface FileNavigationAction {
   id: string;
+  /** The accessible name. */
   label: string;
+  /** The hover hint, when shorter than the label ("Snapshot" for "Take snapshot"); default the label. */
+  hint?: string;
   icon: ElementType;
   disabled?: boolean;
   active?: boolean;
@@ -102,26 +103,18 @@ export interface FileNavigationAction {
 export interface RendererViewProps {
   /** Optional host-owned controls inside the Display popover. */
   displayActions?: ReactNode;
-  /** Host-controlled presentation; disables editing/picking tools, not document state. */
-  fullscreen?: boolean;
-  /**
-   * Enter or leave fullscreen. Given only to a renderer that declares `fullscreen` and only
-   * by a host that has a fullscreen to offer, so its absence is the whole "no fullscreen here".
-   */
-  onFullscreenChange?: (fullscreen: boolean) => void;
   onNavigationActionsChange?: (actions: readonly FileNavigationAction[]) => void;
   file: FileMetadata;
   source: FileSource;
   document: DocumentSession | null;
   openPanel: string;
-  /** Renderer status beside the filename; panel suspension preserves the open tab and width. */
+  /** Renderer status beside the filename. */
   navigationStatusSlot?: HTMLElement | null;
+  /** Suspend the panel column (a renderer's own fullscreen); the open panel and its width are kept. */
   onPanelVisibilityChange?: (visible: boolean) => void;
   panelSlot: HTMLElement | null;
   onPanelOpen: (id: string) => void;
   onReady: (ready: boolean) => void;
-  /** Preview modes can hide the common navigation and panel column. */
-  onChromeVisibilityChange: (visible: boolean) => void;
   onOpenFile: (path: string, options?: { target: "current" | "new" }) => void;
   appearance: { colorScheme: "light" | "dark" };
   state: JsonValue | undefined;
@@ -134,8 +127,6 @@ export interface FileRendererDefinition<T> {
   priority: number;
   matches: (file: FileMetadata) => boolean;
   fallback?: boolean;
-  /** Offers fullscreen: the host's `onFullscreenChange` reaches this renderer and no other. */
-  fullscreen?: boolean;
   /** The nav row's panels for this file, which can depend on what `prepare` found (`data`). */
   panels?: (context: PanelContext & { data: T }) => FilePanel[];
   prepare: (context: PrepareContext) => Promise<PreparedDocument<T>>;
@@ -155,14 +146,9 @@ export interface RendererRegistration {
   priority: number;
   matches: (file: FileMetadata) => boolean;
   fallback?: boolean;
-  fullscreen?: boolean;
   prepare: (context: PrepareContext) => Promise<PreparedRenderer>;
 }
 export interface FileViewerProps {
-  /** The app owns fullscreen state and its surrounding chrome. */
-  fullscreen?: boolean;
-  /** The host's fullscreen, offered to a renderer that declares one; omitted, there is none. */
-  onFullscreenChange?: (fullscreen: boolean) => void;
   file: string | FileMetadata | null;
   host: ViewerHost;
   renderers: readonly RendererRegistration[];
@@ -175,8 +161,6 @@ export interface FileViewerProps {
   displayActions?: ReactNode;
   /** Override the selected path shown by breadcrumbs and tree, e.g. before a catalog resolves. */
   navigationPath?: string | null;
-  /** Omit for automatic folding based on the available content width. */
-  narrowCrumbs?: boolean;
   reveal?: { path: string; directory: boolean; nonce?: number } | null;
   onError?: (error: Error) => void;
   presentation?: { empty?: ReactNode; loading?: ReactNode; error?: (message: string) => ReactNode };

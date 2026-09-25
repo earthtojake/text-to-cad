@@ -14,6 +14,10 @@ import {
 import FilePanelSections from "../inspector/FilePanelSections.jsx";
 import { OrthographicProjectionIcon, PerspectiveProjectionIcon } from "../camera/ProjectionModeIcons.js";
 
+const PROJECTIONS = Object.freeze({
+  orthographic: { label: "Orthographic", icon: <OrthographicProjectionIcon className="size-3 shrink-0" /> },
+  perspective: { label: "Perspective", icon: <PerspectiveProjectionIcon className="size-3 shrink-0" /> }
+});
 const PART_COLOR_OPTIONS = [
   { value: "original", label: "Original" }, { value: "single", label: "Single color" }, { value: "by-part", label: "Color by part" }
 ];
@@ -77,7 +81,7 @@ function NumberProperty({ label, Icon, value, min, max, unit = "", digits = 2, o
 
 export function DisplaySettingsSection({
   viewSettings = {}, resolvedView, hostAppearance = "light", lightingQuality = "final", onViewSettingsPatch, onGroupEnabledChange, onModeChange, onViewReset,
-  edgeStatus = "idle", edgeError = "", features = ALL_VIEW_FEATURES, appearanceControl = null, sticky = true
+  features = ALL_VIEW_FEATURES, appearanceControl = null, sticky = true
 }) {
   const settings = useMemo(() => normalizeViewSettings(viewSettings), [viewSettings]);
   const view = resolvedView || resolveViewSettings(settings, { appearance: hostAppearance, lightingQuality, features });
@@ -122,8 +126,9 @@ export function DisplaySettingsSection({
           {appearanceControl}
           <FileSheetSelectRow hideLabel className="px-0" label="Projection" value={view.camera.projection}
             onValueChange={projection => setGroup("camera", { projection })}
-            options={[{ value: "orthographic", label: "Orthographic", icon: <OrthographicProjectionIcon className="size-3" /> },
-              { value: "perspective", label: "Perspective", icon: <PerspectiveProjectionIcon className="size-3" /> }]} />
+            // Its own trigger content, like Mode's: a narrow column ends the label in an ellipsis.
+            triggerContent={<span className="flex min-w-0 items-center gap-1">{PROJECTIONS[view.camera.projection]?.icon}<span className="truncate">{PROJECTIONS[view.camera.projection]?.label}</span></span>}
+            options={Object.entries(PROJECTIONS).map(([value, { label, icon }]) => ({ value, label, icon }))} />
         </FileSheetFieldGrid>
       </> },
       offers("surfaces") && { id: "surfaces", title: "Surfaces", collapsible: false, content: surfaces },
@@ -153,10 +158,7 @@ export function DisplaySettingsSection({
           options={[{ value: "origin", label: "Model origin" }, { value: "lowest", label: "Lowest point" }]} />
       </>),
   ];
-  return <div className="flex min-h-0 flex-1 flex-col [&_[data-file-panel-heading]_.text-xs]:text-tiny" data-cad-display-settings-section="true">
-    <FilePanelSections sections={sections} sticky={sticky} footer={edgeStatus === "loading" || edgeError ? <div className="space-y-1 border-t border-border py-1">
-      {offers("edges") && edgeStatus === "loading" ? <p role="status" className="px-2 text-tiny text-muted-foreground">Preparing edges…</p> : null}
-      {offers("edges") && edgeError ? <p role="alert" className="px-2 text-tiny text-destructive">Couldn’t load edges. {edgeError}</p> : null}
-    </div> : null} />
+  return <div className="flex min-h-0 flex-1 flex-col [&_[data-file-panel-heading]_.text-xs]:text-tiny">
+    <FilePanelSections sections={sections} sticky={sticky} />
   </div>;
 }

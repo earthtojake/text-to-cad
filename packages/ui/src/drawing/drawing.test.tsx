@@ -133,7 +133,7 @@ describe('drawing editor', () => {
   it('lets a host toolbar drive an overlay: sticky tools, color, history, an undoable clear and the viewport', async () => {
     let controller: DrawingController | null = null;
     const onToolChange = vi.fn(), onColorChange = vi.fn(), onViewportChange = vi.fn();
-    const view = render(<DrawingEditor mode="overlay" toolbar={false} initialTool="freedraw"
+    const view = render(<DrawingEditor mode="overlay" toolbar={false} initialTool="freedraw" platform="darwin"
       onReady={value => { controller = value; }} onToolChange={onToolChange} onColorChange={onColorChange} onViewportChange={onViewportChange} />);
     await waitFor(() => expect(controller).not.toBeNull());
     const editor = view.container.firstChild as HTMLElement;
@@ -178,7 +178,13 @@ describe('drawing editor', () => {
     const keys: KeyboardEvent[] = [];
     surface.addEventListener('keydown', event => keys.push(event));
     controller!.undo(); controller!.redo();
-    expect(keys.map(event => [event.key, event.shiftKey, event.metaKey || event.ctrlKey])).toEqual([['z', false, true], ['z', true, true]]);
+    // With the host's keyboard: ⌘ on its darwin, Ctrl on any other platform.
+    expect(keys.map(event => [event.key, event.shiftKey, event.metaKey, event.ctrlKey])).toEqual([['z', false, true, false], ['z', true, true, false]]);
+    view.rerender(<DrawingEditor mode="overlay" toolbar={false} initialTool="freedraw" platform="win32"
+      onReady={value => { controller = value; }} onToolChange={onToolChange} onColorChange={onColorChange} onViewportChange={onViewportChange} />);
+    keys.length = 0;
+    controller!.undo();
+    expect(keys.map(event => [event.key, event.metaKey, event.ctrlKey])).toEqual([['z', false, true]]);
 
     controller!.clear();
     expect(sdk.api.updateScene).toHaveBeenLastCalledWith({ elements: [expect.objectContaining({ id: 'rectangle', isDeleted: true, version: 2 })],
@@ -245,13 +251,14 @@ describe('drawing editor', () => {
     const xs = fill.points.map((point: number[]) => fill.x + point[0]), ys = fill.points.map((point: number[]) => fill.y + point[1]);
     for (const [value, expected] of [[Math.min(...xs), 100], [Math.max(...xs), 300], [Math.min(...ys), 50], [Math.max(...ys), 150]]) expect(Math.abs(value - expected)).toBeLessThan(4);
 
-    // Outside any ink there is no area to mean: a hint, and no element.
+    // Outside any ink there is no area to mean: no element, and no notification either.
     sdk.pointerDown({ type: 'custom', customType: 'fill' }, { origin: { x: 600, y: 600 } });
-    await waitFor(() => expect(sdk.api.setToast).toHaveBeenCalledTimes(1));
+    await new Promise(resolve => setTimeout(resolve, 20));
     // Any other tool's press is the SDK's own business.
     sdk.pointerDown({ type: 'freedraw' }, { origin: { x: 180, y: 90 } });
     await new Promise(resolve => setTimeout(resolve, 20));
     expect(sdk.api.updateScene).toHaveBeenCalledTimes(1);
+    expect(sdk.api.setToast).not.toHaveBeenCalled();
     view.unmount();
   });
 });

@@ -160,7 +160,7 @@ test("an empty tab opens on the tree, a pick in the tree opens the file with the
   assert.equal(await page.getByRole("tree").count(), 0);
   assert.equal(await page.evaluate(() => window.harness.state.panel), null, "the field is back to the file's own default");
 });
-test("preview hides shared chrome, another document restores it, and widths stay bounded", async () => {
+test("a renderer's panel suspension hides the column and disables its toggles, another document restores it, and widths stay bounded", async () => {
   await reset();
   await page.getByTestId("tree-toggle").click();
   await page.getByRole("tree").waitFor();
@@ -170,12 +170,13 @@ test("preview hides shared chrome, another document restores it, and widths stay
   const handle = page.getByRole("separator", { name: "Resize Hide files panel" });
   await page.waitForFunction(() => document.querySelector('[role="separator"][aria-label="Resize Hide files panel"]')?.getAttribute("aria-valuenow") !== "300");
   assert.equal(await handle.getAttribute("aria-valuenow"), await handle.getAttribute("aria-valuemax"));
-  await page.getByRole("button", { name: "Preview", exact: true }).click();
-  assert.equal(await page.getByTestId("tree-toggle").count(), 0);
-  assert.equal(await page.getByRole("tree").count(), 0);
+  await page.evaluate(() => window.harness.rendererCallbacks.get("root-a").onPanelVisibilityChange(false));
+  await page.getByRole("tree").waitFor({ state: "hidden" });
+  assert.equal(await page.getByTestId("tree-toggle").isDisabled(), true, "the navbar stays; its panel toggles wait");
   await page.evaluate(() => window.harness.open("next.txt"));
   await waitValue("root-a next");
-  await page.getByTestId("tree-toggle").waitFor();
+  await page.getByRole("tree").waitFor();
+  assert.equal(await page.getByTestId("tree-toggle").isDisabled(), false);
 });
 test("root changes, multiple instances, cancelled loads and readonly documents remain isolated", async () => {
   await reset();
@@ -199,7 +200,7 @@ test("root changes, multiple instances, cancelled loads and readonly documents r
   assert.equal(await document().getAttribute("readonly"), "");
   assert.equal(await page.getByRole("button", { name: "Save", exact: true }).isDisabled(), true);
 });
-test("a former renderer cannot change the new root's panels, state or preview", async () => {
+test("a former renderer cannot change the new root's panels, state or panel visibility", async () => {
   await reset();
   await page.getByTestId("tree-toggle").click();
   await page.getByRole("tree").waitFor();
@@ -207,9 +208,10 @@ test("a former renderer cannot change the new root's panels, state or preview", 
   await waitValue("root-b original");
   await page.evaluate(() => {
     const stale = window.harness.rendererCallbacks.get("root-a");
-    stale.onPanelOpen("details"); stale.onStateChange({ from: "old root" }); stale.onChromeVisibilityChange(false);
+    stale.onPanelOpen("details"); stale.onStateChange({ from: "old root" }); stale.onPanelVisibilityChange(false);
   });
   await page.getByTestId("tree-toggle").waitFor();
+  assert.equal(await page.getByTestId("tree-toggle").isDisabled(), false);
   assert.equal(await page.getByRole("tree").count(), 1);
   assert.equal(await page.getByText("Injected panel").count(), 0);
   assert.equal(await page.evaluate(() => window.harness.state.renderers), undefined);
@@ -225,6 +227,13 @@ test("navbar actions belong to the active file generation and ignore retired reg
   });
   await page.getByRole('button', { name: 'Inspect notes', exact: true }).click();
   assert.ok(await page.evaluate(() => window.harness.events.includes('notes-action')));
+  // A hint shorter than the accessible name is the action's own field, not a special case in the navbar.
+  await page.evaluate(() => window.harness.rendererCallbacks.get('root-a').onNavigationActionsChange([
+    { id: 'snapshot', label: 'Take snapshot', hint: 'Snapshot', icon: 'span', onInvoke() {} }]));
+  await page.mouse.move(0, 0);
+  await page.getByRole('button', { name: 'Take snapshot', exact: true }).hover();
+  assert.equal(await page.getByRole('tooltip').innerText(), 'Snapshot');
+  assert.equal(await page.getByRole('button', { name: 'Take snapshot', exact: true }).getAttribute('title'), null);
   await page.evaluate(() => window.harness.open('next.txt'));
   await waitValue('root-a next');
   assert.equal(await page.getByRole('button', { name: 'Inspect notes', exact: true }).count(), 0);
@@ -257,10 +266,10 @@ test("a departing renderer flushes its own state on file changes and reloads, bu
 
 test("host breadcrumb policy stays scoped to the active document", async () => {
   await reset();
-  await page.evaluate(() => { window.harness.a.add('nested/deep/file.txt'); window.harness.narrowCrumbs(true); window.harness.open('nested/deep/file.txt'); });
+  await page.evaluate(() => { window.harness.a.add('nested/deep/file.txt'); window.harness.open('nested/deep/file.txt'); });
   await waitValue('added');
-  await page.getByRole('button', { name: 'Browse nested/deep', exact: true }).waitFor();
-  await page.evaluate(() => window.harness.narrowCrumbs(false));
+  // Every folder is its own crumb on a desktop-width viewer: there is no folding into one ellipsis.
+  assert.equal(await page.getByRole('button', { name: /…/ }).count(), 0);
   await page.getByRole('button', { name: 'Browse nested', exact: true }).waitFor();
   await page.getByRole('button', { name: 'Browse deep', exact: true }).waitFor();
   await page.evaluate(() => window.harness.open('next.txt'));
@@ -309,4 +318,18 @@ test("mobile breadcrumbs show only the file and its actions across a single brea
   await pane.evaluate(element => { element.parentElement.style.width = '720px'; });
   await page.waitForFunction(() => document.querySelector('[data-viewer-layout]')?.dataset.viewerLayout === 'desktop');
   assert.equal(await pane.locator('[data-crumb="directory"]').count(), 2);
+});
+
+test("the renderer is not re-rendered by the frame's own chrome: a panel drag or a resize within a layout", async () => {
+  await reset();
+  await page.getByTestId("tree-toggle").click();
+  await page.getByRole("tree").waitFor();
+  await page.waitForTimeout(100);
+  const before = await page.evaluate(() => window.harness.renders["root-a"]);
+  for (const width of [320, 340, 360, 400]) await page.evaluate(next => window.harness.width(next), width);
+  await page.setViewportSize({ width: 1180, height: 800 });
+  await page.setViewportSize({ width: 1240, height: 800 });
+  await page.waitForTimeout(100);
+  assert.equal(await page.getByRole("tree").count(), 1);
+  assert.equal(await page.evaluate(() => window.harness.renders["root-a"]), before, "no renderer render for a width that does not cross the breakpoint");
 });
