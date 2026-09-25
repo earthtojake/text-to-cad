@@ -31,15 +31,15 @@ export const VIEWER_DOUBLE_CLICK_ACTIVATION_DELAY_MS = 220;
 /**
  * What a pick at one point resolves to under the pick mode, from ONE raycast of the model:
  * the part under Parts and Assembly; topology, else the part, under Auto; topology under
- * Measure and Topology, where a HOVER that finds no topology still lights the part, so the
- * pointer shows what a press there reaches. Nothing at all while picking is off: every press
- * and release asks, and a raycast can materialize deformation buffers and enqueue a BVH build
- * for an answer that is always "nothing".
+ * Measure; topology, else the part, under Topology (a face or edge filter), whose surface
+ * never selects that part: a hover lights it, so the pointer shows what a press there
+ * reaches, and a press asks for its faces — by mouse or by touch alike. Nothing at all while
+ * picking is off: every press and release asks, and a raycast can materialize deformation
+ * buffers and enqueue a BVH build for an answer that is always "nothing".
  */
 export function resolveViewerReferencePick({
   pickMode,
   suppressTopologyPicking = false,
-  hover = false,
   intersectModel,
   pickTopology,
   pickPart
@@ -54,9 +54,11 @@ export function resolveViewerReferencePick({
   if (pickMode === VIEWER_PICK_MODE.AUTO) {
     return pickTopology(intersections) || pickPart(intersections);
   }
-  if (pickMode === VIEWER_PICK_MODE.MEASURE || pickMode === VIEWER_PICK_MODE.TOPOLOGY) {
-    return pickTopology(intersections) ||
-      (hover && pickMode === VIEWER_PICK_MODE.TOPOLOGY ? pickPart(intersections) : null);
+  if (pickMode === VIEWER_PICK_MODE.MEASURE) {
+    return pickTopology(intersections);
+  }
+  if (pickMode === VIEWER_PICK_MODE.TOPOLOGY) {
+    return pickTopology(intersections) || pickPart(intersections);
   }
   return null;
 }
@@ -693,7 +695,6 @@ export function useStepPicking({
       return resolveViewerReferencePick({
         pickMode: pickModeRef.current,
         suppressTopologyPicking,
-        hover,
         intersectModel: () => {
           setPointerFromPosition(clientX, clientY);
           return intersectVisibleModelMeshes();
@@ -1054,6 +1055,7 @@ export function useStepPicking({
         return;
       }
       const pointerDownReferenceId = String(pointerDown.referenceId || "").trim();
+      const press = { clientX: pointerDown.x, clientY: pointerDown.y, pointerType: pointerDown.pointerType || event.pointerType || "" };
       pointerDown.active = false;
       pointerDown.pointerType = "";
       pointerDown.referenceId = "";
@@ -1067,7 +1069,9 @@ export function useStepPicking({
         return;
       }
       const referenceId = pointerDownReferenceId || pickActivationReference(event.clientX, event.clientY, event.pointerType || "");
-      scheduleActivation(referenceId || "", { multiSelect: !!event.shiftKey });
+      // The press point goes with the activation, so a pick that has to wait (a part whose faces
+      // are still loading) can be asked again at the same place.
+      scheduleActivation(referenceId || "", { multiSelect: !!event.shiftKey, ...press });
     }
 
     function handlePointerCancel(event) {

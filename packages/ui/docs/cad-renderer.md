@@ -834,8 +834,14 @@ selected entities, without attaching a source filename or source line.
 STEP's Select tool filters by All, Parts, Faces or Edges and, under **Connected
 selection**, Edge chain or Tangent faces (`workbench/selectionFilter.js`); Measure's
 snapping filters are Any geometry, Points, Edges and Faces. Explicit
-filters never fall back to a different entity type. Face and edge filters load topology
-for the selected leaf part; selecting another part in the Features tree changes that target.
+filters never fall back to a different entity type. In an assembly, face and edge filters
+(the connected ones too) load topology per leaf part, on demand: a press on a part whose
+faces are not pickable yet requests that part's topology through the same per-node path a
+Features row uses (`loadInspectionTopology`, which expands it in the tree), holds the press
+(`pendingTopologyPick`, with "Loading selectable geometry…" under the toolbar) and, once
+the part's references are composed, picks again at the same point through `pickAtRef` —
+one press, never the part. A hover over such a part lights the whole part, the one hint
+that a press there reaches it. A chosen part is also loaded when the filter is picked.
 Opening a STEP starts with render geometry; activating Select or Measure requests
 exact inspection topology when it is needed.
 Shift-click adds/removes entities. A double-click on a face or edge (outside the
@@ -865,8 +871,8 @@ chain across edges classified as tangent by the loaded STEP topology; sharp,
 unknown, boundary and nonmanifold edges stop the chain. Selection never crosses
 occurrences or solid shapes. Shift-click adds a chain, or removes it if the whole
 chain is already selected. The resulting faces use the existing highlight and
-Copy Reference controls. An assembly part loads its topology through the Features
-tree first, as with the Faces filter. This changes selection only, not CAD geometry.
+Copy Reference controls. An assembly part loads its topology on the first press, as
+with the Faces filter. This changes selection only, not CAD geometry.
 
 Edge chain uses tessellated edge endpoints within the same solid/occurrence and
 a shared face, with a 0.00001 model-unit endpoint tolerance. It follows corners
@@ -931,8 +937,11 @@ active tool — under Measure, Draw, Position or Animate a secondary tap opens n
 though the native menu stays suppressed and a secondary drag still pans. The
 TREE's is available under any tool, and every action returns to Select first,
 exactly as clicking a row already does (`ensureSelectTool`). A secondary tap on
-empty space asks about the model as a whole (Show all, Expand all, Collapse all)
-and opens nothing at all when none of those can do anything. The tree starts directly below `Filter model…`, the file
+empty space asks about the model as a whole (Show all, Expand all, Collapse all,
+then the framing group). A single-part STEP has no part menu — a press on the part
+opens this one too — so there it opens with the part menu's reference group for the
+whole part (`<file>#`): Add to prompt, under the same host condition, and Copy Reference
+(`modelMenuDescriptor`'s `copyText`). The tree starts directly below `Filter model…`, the file
 tree's filter box (`TreeFilterInput`, `primitives/tree-filter`), with a conditional
 Show all on the filter row's right side. While something is isolated, an isolation
 bar heads the tree (`Isolated: …` and **Exit**). There is no feature-count header.
@@ -1108,9 +1117,12 @@ Restart; the scrubber's start is the restart.
 
 A routine owns the model's pose only inside the mode. Outside it the clip is
 released — stopped, rewound, the pose handed back to the Position controls — so
-selection, topology and the Position controls never meet an animated model. Nothing
-of the playback survives leaving: returning starts from the start, and a restored
-session that was mid-routine is released the same way. A routine that failed to
+selection, topology and the Position controls never meet an animated model. Of the
+playback only the transport preferences survive leaving — the routine, Speed and
+Loop the corner menu set, kept by a Position edit too (`activatePositionControls` in
+`useStepMotionControls.js`) and saved with the file's record: returning plays that
+routine from the start, and a restored session that was mid-routine is released the
+same way. A routine that failed to
 load has no Animate tool to say so on; it is listed in the file panel's Issues as
 `Animation unavailable`.
 

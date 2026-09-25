@@ -278,11 +278,57 @@ test('expanding a part loads its topology, the second press on Select narrows th
   await page.waitForFunction(() => window.cadHarness.a.controller.readState().selectedReferenceIds.length === 1);
   assert.match((await pane.getByLabel('Reference details').innerText()).replace(/\s+/g, ' '),
     /Type Face · Cylindrical.*Diameter Ø 6 mm.*Radius R 3 mm/, 'the pane measures the face, not the part');
-  // An explicit filter never falls back: a press on the arm, whose topology was
-  // never asked for, adds no reference.
+  // An explicit filter never falls back: a press on the arm, whose topology was never asked
+  // for, loads the arm's faces and picks the one under the pointer — never the part.
   await page.mouse.click(...at([15, 0, 4]));
-  await page.waitForTimeout(600);
+  await page.waitForFunction(() => /\|o1\.2\.f\d+$/.test(window.cadHarness.a.controller.readState().selectedReferenceIds.join()));
   assert.equal((await view.state()).selectedPartIds.length, 0, 'the Faces filter does not fall back to the part');
+  assert.deepEqual(errors, []);
+});
+
+test('under the Faces or Edges filter, one press on a part whose faces are not loaded loads that part alone and picks what is under the pointer', async () => {
+  const view = await open();
+  const { page, pane, at, errors } = view;
+  const reference = pane.getByLabel('Reference details');
+  const filter = async name => {
+    await view.tool('Select').click();
+    await page.getByRole('menuitemradio', { name: new RegExp(`^${name}`) }).click();
+    await page.getByRole('menu').waitFor({ state: 'detached' });
+  };
+  const selected = () => page.evaluate(() => window.cadHarness.a.controller.readState().selectedReferenceIds);
+  // Nothing is chosen and nothing is expanded: no part has its faces loaded.
+  await filter('Faces');
+  assert.deepEqual([(await view.state()).selectedPartIds, await view.rows()], [[], ['Expand base', 'Select base', 'Expand arm', 'Select arm']]);
+  assert.equal(await pane.locator('[data-cad-toolbar]').getByText(/Select a part/).count(), 0, 'the strip never asks for a part first');
+  // One press on the base's top face: the base's topology loads — the strip says so while it
+  // does — and that face is picked, with no second press.
+  // The load is quick here, so what the strip showed is recorded as it is drawn.
+  await page.evaluate(() => {
+    window.__sawLoading = [];
+    new MutationObserver(() => {
+      for (const status of document.querySelectorAll('[data-cad-toolbar] [role=status]')) {
+        if (status.textContent === 'Loading selectable geometry…') {
+          window.__sawLoading.push(window.cadHarness.a.controller.readState().selectedReferenceIds.length);
+        }
+      }
+    }).observe(document.body, { subtree: true, childList: true, characterData: true });
+  });
+  await page.mouse.click(...at([6, 6, 5]));
+  await page.waitForFunction(() => /^topology\|o1\.1\|face\|o1\.1\.f\d+$/.test(window.cadHarness.a.controller.readState().selectedReferenceIds.join()));
+  const face = (await selected())[0].split('|').at(-1);
+  assert.deepEqual(await page.evaluate(() => window.__sawLoading.slice(0, 1)), [0], 'the strip said it was loading, before anything was picked');
+  assert.equal(await pane.locator('[data-cad-toolbar]').getByText('Loading selectable geometry…').count(), 0, 'and stops once the face is picked');
+  assert.match((await reference.innerText()).replace(/\s+/g, ' '), new RegExp(`Type Face · Planar.*ID ${face.replace(/\./g, '\\.')}`),
+    'the Reference names the face under the pointer');
+  assert.deepEqual((await view.state()).selectedPartIds, [], 'the filter never falls back to the part');
+  const rows = await view.rows();
+  assert.ok(!rows.includes('Expand base') && rows.includes('Expand arm'), `only the pressed part loads: ${rows}`);
+  // Edges likewise, on the arm, whose topology is still not loaded: its top edge over the +x face.
+  await filter('Edges');
+  await page.mouse.click(...at([20, 0, 4]));
+  await page.waitForFunction(() => /^topology\|o1\.2\|edge\|o1\.2\.e\d+$/.test(window.cadHarness.a.controller.readState().selectedReferenceIds.join()));
+  const edge = (await selected())[0].split('|').at(-1);
+  assert.match((await reference.innerText()).replace(/\s+/g, ' '), new RegExp(`Type Edge.*ID ${edge.replace(/\./g, '\\.')}`));
   assert.deepEqual(errors, []);
 });
 
@@ -1305,7 +1351,7 @@ test('neutral model tools leave with another tool; applied effects persist until
 });
 
 
-test('Animate starts playback, its corner chooses routine, speed and loop, and the playbar pauses', async () => {
+test('Animate starts playback, its corner chooses routine, speed and loop, the playbar pauses, and the choices outlast leaving the tool', async () => {
   const animation = harness.entry.sourceSidecar.animation;
   const original = animation.source;
   let view;
@@ -1341,8 +1387,25 @@ test('Animate starts playback, its corner chooses routine, speed and loop, and t
   await page.getByRole('menu', { name: 'Animate', exact: true }).waitFor({ state: 'detached' });
   await bar.getByRole('button', { name: 'Pause animation' }).click();
   assert.equal(await tool.getAttribute('aria-pressed'), 'true');
+  // The new routine brought its own loop; turn it off again before leaving.
+  const corner2 = await tool.locator('[data-tool-menu-corner]').boundingBox();
+  await page.mouse.click(corner2.x + corner2.width - 2, corner2.y + corner2.height - 2);
+  await page.getByRole('menuitemcheckbox', {name:'Loop',exact:true}).click();
+  await page.keyboard.press('Escape');
+  await page.getByRole('menu', { name: 'Animate', exact: true }).waitFor({ state: 'detached' });
   await view.tool('Select').click();
   await bar.waitFor({ state:'detached' });
+  // Leaving Animate keeps what its corner chose: the next press plays that routine, at that
+  // speed, without the loop, from the start.
+  await tool.click();
+  await bar.getByRole('button', { name: 'Pause animation' }).waitFor();
+  assert.equal(await bar.getByRole('slider', { name: 'Animation time' }).getAttribute('aria-valuemax'), '2', 'the routine is the one chosen');
+  const again = await tool.locator('[data-tool-menu-corner]').boundingBox();
+  await page.mouse.click(again.x + again.width - 2, again.y + again.height - 2);
+  assert.equal(await page.getByRole('menuitemcheckbox', {name:'Loop',exact:true}).getAttribute('aria-checked'), 'false');
+  await page.getByRole('menuitem', {name:/^Speed/}).hover();
+  assert.equal(await page.getByRole('menuitemradio', {name:'2×',exact:true}).getAttribute('aria-checked'), 'true');
+  await page.keyboard.press('Escape');
   assert.deepEqual(errors, []);
 });
 
@@ -1951,6 +2014,20 @@ test('mobile touch operates every STEP tool without hover or accidental pinch se
   await copyAction.waitFor();
   assert.ok((await copyAction.boundingBox()).width < 260, 'the mobile action hugs its content');
   assert.equal(await copyAction.locator('kbd').count(), 0, 'no desktop shortcut on mobile');
+  // Under Faces, one tap on a part whose faces are not loaded loads them and picks the face.
+  // Reopening the filter menu by touch: the menu that closed a moment ago can still be in the
+  // page, closed, and a tap then sometimes only unmounts it (seen under a full run, not alone),
+  // so the tap is repeated once when no menu opened. Items come from the open menu.
+  const openMenu = () => page.locator('[role=menu][data-state=open]');
+  const filterMenu = async () => {
+    await view.tool('Select').tap();
+    if (!await openMenu().waitFor({ timeout: 1500 }).then(() => true, () => false)) await view.tool('Select').tap();
+    return openMenu();
+  };
+  await (await filterMenu()).getByRole('menuitemradio', { name: /^Faces/ }).tap();
+  await page.touchscreen.tap(...project([15, 0, 4]));
+  await page.waitForFunction(() => /\|o1\.2\.f\d+$/.test(window.cadHarness.a.controller.readState().selectedReferenceIds.join()));
+  await (await filterMenu()).getByRole('menuitemradio', { name: /^All/ }).tap();
   await view.tool('Measure').tap();
   await view.tool('Measure').tap();
   await page.getByRole('menuitemradio', { name: /^Any geometry/ }).tap();

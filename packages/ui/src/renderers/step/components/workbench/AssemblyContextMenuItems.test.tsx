@@ -60,3 +60,17 @@ it('a disabled menu disables its framing group too', () => {
   expect(find(entries, 'Zoom to fit').disabled).toBe(true);
   expect(find(entries, 'Zoom to selection').disabled).toBe(true);
 });
+
+it("opens a lone part's model menu with the part menu's reference group, Add to prompt only where the host offers it", () => {
+  const onAddToPrompt = vi.fn();
+  const menu = { global: true, copyText: 'hinge.step#', showShowAll: true, zoomSelectionAvailable: false };
+  const entries = modelMenuEntries(menu, { actions: { onAddToPrompt } });
+  expect(labels(entries)).toEqual(['Add to prompt', 'Copy Reference', 'Show all', 'Zoom to fit', 'Zoom to selection']);
+  expect(find(entries, 'Show all').separatorBefore).toBe(true);
+  find(entries, 'Add to prompt').onSelect();
+  expect(onAddToPrompt).toHaveBeenCalledWith(menu);
+  // The same host condition as the part menu: no composer, no Add to prompt.
+  expect(labels(modelMenuEntries(menu, { actions: {} })).slice(0, 2)).toEqual(['Copy Reference', 'Show all']);
+  // An assembly's empty space names no part, so it has no reference group.
+  expect(labels(modelMenuEntries({ ...menu, copyText: '' }, { actions: { onAddToPrompt } }))[0]).toBe('Show all');
+});

@@ -42,13 +42,23 @@ function zoomEntries(menu, { disabled = false, actions = {} } = {}) {
  * offered only where the host has somewhere to put it, so a caller leaves it out
  * otherwise. `disabled` disables every item at once, for a tree whose selection is blocked.
  */
-export function assemblyPartMenuEntries(menu, { disabled = false, actions = {} } = {}) {
+/**
+ * The reference group that opens a menu about something with a reference: Add to prompt (only
+ * where the host offers it) and Copy Reference, both off when there is nothing to copy.
+ */
+function referenceEntries(menu, { disabled = false, actions = {} } = {}) {
   const run = (action) => () => action?.(menu);
-  const off = (flag) => disabled || flag === true;
   const copyDisabled = disabled || !String(menu.copyText || "").trim();
   const entries = [];
   if (actions.onAddToPrompt) entries.push(entry("add-to-prompt", "Add to prompt", copyDisabled, run(actions.onAddToPrompt)));
   entries.push(entry("copy-reference", "Copy Reference", copyDisabled, run(actions.onCopyReference)));
+  return entries;
+}
+
+export function assemblyPartMenuEntries(menu, { disabled = false, actions = {} } = {}) {
+  const run = (action) => () => action?.(menu);
+  const off = (flag) => disabled || flag === true;
+  const entries = referenceEntries(menu, { disabled, actions });
   entries.push(entry("select", menu.selected === true ? "Deselect" : "Select", off(menu.selectDisabled), run(actions.onSelect), true));
   if (menu.showIsolate !== false) {
     entries.push(entry("isolate", menu.focused === true ? "Exit isolate" : "Isolate", off(menu.isolateDisabled), run(actions.onIsolate)));
@@ -84,14 +94,19 @@ export function assemblyPartMenuEntries(menu, { disabled = false, actions = {} }
  * What a secondary tap on EMPTY space offers: the model as a whole (Show all, Expand all,
  * Collapse all) and the framing group — which is why this menu always has something to
  * show, and why somebody who has zoomed off the model can press anywhere to get it back.
+ * A lone part's model menu is also the menu over the part itself, so when the descriptor
+ * carries the whole part's reference (`menu.copyText`) it opens with the part menu's
+ * reference group.
  */
 export function modelMenuEntries(menu, { actions = {} } = {}) {
   const run = (action) => () => action?.(menu);
-  const entries = [];
-  if (menu.showShowAll === true) entries.push({ id: "show-all", label: "Show all", onSelect: run(actions.onHideAll) });
+  const entries = String(menu.copyText || "").trim() ? referenceEntries(menu, { actions }) : [];
+  if (menu.showShowAll === true) {
+    entries.push({ id: "show-all", label: "Show all", separatorBefore: entries.length > 0, onSelect: run(actions.onHideAll) });
+  }
   if (menu.showExpandCollapse === true) {
     entries.push({ id: "expand-all", label: "Expand all", disabled: menu.expandAllDisabled === true,
-      separatorBefore: menu.showShowAll === true, onSelect: run(actions.onExpandAll) });
+      separatorBefore: entries.length > 0, onSelect: run(actions.onExpandAll) });
     entries.push({ id: "collapse-all", label: "Collapse all", disabled: menu.collapseAllDisabled === true, onSelect: run(actions.onCollapseAll) });
   }
   const zoom = zoomEntries(menu, { actions });
