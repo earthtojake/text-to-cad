@@ -1,3 +1,7 @@
+import { solveFourBarCoupling } from "./fourBarCoupling.js";
+
+const FOUR_BAR_JOINT_LIMIT_TOLERANCE_DEG = 1e-6;
+
 const IDENTITY_TRANSFORM = Object.freeze([
   1, 0, 0, 0,
   0, 1, 0, 0,
@@ -220,6 +224,28 @@ function nativeToJointValue(joint, value) {
   return isAngularJoint(joint) ? (numericValue * 180) / Math.PI : numericValue;
 }
 
+function validatedFourBarJointValueDeg(joint, valueDeg) {
+  if (!Number.isFinite(valueDeg)) {
+    throw new Error(`URDF four-bar joint ${joint?.name || "(unnamed)"} derived a non-finite angle`);
+  }
+  if (String(joint?.type || "") === "continuous") {
+    return valueDeg;
+  }
+  const minimumDeg = Number(joint?.minValueDeg);
+  const maximumDeg = Number(joint?.maxValueDeg);
+  if (
+    !Number.isFinite(minimumDeg)
+    || !Number.isFinite(maximumDeg)
+    || valueDeg < minimumDeg - FOUR_BAR_JOINT_LIMIT_TOLERANCE_DEG
+    || valueDeg > maximumDeg + FOUR_BAR_JOINT_LIMIT_TOLERANCE_DEG
+  ) {
+    throw new Error(
+      `URDF four-bar joint ${joint?.name || "(unnamed)"} derived ${valueDeg} degrees outside its limits`
+    );
+  }
+  return clampJointValueDeg(joint, valueDeg);
+}
+
 function translationAlongAxisTransform(axis, distance) {
   const [x, y, z] = normalizeVector(axis);
   const safeDistance = Number.isFinite(Number(distance)) ? Number(distance) : 0;
@@ -270,6 +296,10 @@ function resolveJointValue(joint, jointByName, jointValuesByName, resolving = ne
   resolving.delete(jointName);
 
   const masterNativeValue = masterJoint ? jointValueToNative(masterJoint, masterValue) : masterValue;
+  if (mimic.kind === "fourBar") {
+    const dependentNativeValue = solveFourBarCoupling(mimic, masterNativeValue);
+    return validatedFourBarJointValueDeg(joint, nativeToJointValue(joint, dependentNativeValue));
+  }
   const multiplier = Number.isFinite(Number(mimic.multiplier)) ? Number(mimic.multiplier) : 1;
   const offset = Number.isFinite(Number(mimic.offset)) ? Number(mimic.offset) : 0;
   return clampJointValueDeg(joint, nativeToJointValue(joint, (multiplier * masterNativeValue) + offset));

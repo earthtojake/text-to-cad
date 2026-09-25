@@ -62,21 +62,29 @@ function sourceObjectMesh(mesh, part) {
   };
 }
 
+// Every visual is a component (as the text-to-cad-fourbar viewer had it): clicking any
+// part of the robot selects its row in the tree. A visual whose mesh carries no named
+// objects is one component, named for its mesh (the visual's label).
+function wholeVisual(visual) {
+  const name = String(visual?.label || visual?.name || visual?.id || "").trim();
+  return { ...visual, componentName: name, visualId: visual.id };
+}
+
 function splitVisual(visual) {
   const objects = visual.sourceMesh?.parts;
-  if (!Array.isArray(objects) || !objects.some(componentName)) return [visual];
+  if (!Array.isArray(objects) || !objects.some(componentName)) return [wholeVisual(visual)];
   const split = [];
   for (const [index, object] of objects.entries()) {
     const sourceMesh = sourceObjectMesh(visual.sourceMesh, object);
     // One unsliceable object forfeits the components for its VISUAL, not the visual's
     // geometry: dropping the object alone would silently delete triangles from the
     // render, so the visual stays whole and simply contributes no component rows.
-    if (!sourceMesh) return [visual];
+    if (!sourceMesh) return [wholeVisual(visual)];
     split.push({
       ...visual,
       id: `${visual.id}/object/${index}`,
       name: componentName(object) || visual.name,
-      componentName: componentName(object),
+      componentName: componentName(object) || `${wholeVisual(visual).componentName}:${index + 1}`,
       visualId: visual.id,
       meshObjectId: String(object.id || index),
       meshObjectIndex: index,
