@@ -21,7 +21,7 @@ from cadgen.store.index import entry_path, write_entry
 from cadgen.store.objects import object_path, put_object
 
 TESS_VERSION = 4
-TESSELLATOR_VERSION = 4
+TESSELLATOR_VERSION = 5
 MESH_INDEX_SCHEMA = 1
 MAX_INDEX_BYTES = 16 * 1024
 MAX_HEADER_BYTES = 4 * 1024 * 1024

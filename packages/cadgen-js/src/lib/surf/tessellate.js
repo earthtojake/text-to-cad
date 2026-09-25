@@ -41,7 +41,7 @@ import { cos, sin } from "./trig.js";
 // cadgen/store/meshes.py, which is the one that builds and validates the key —
 // bumping only the first leaves the store rejecting every entry the new
 // algorithm writes.
-export const TESSELLATION_VERSION = 4;
+export const TESSELLATION_VERSION = 5;
 
 export const DEFAULT_OPTIONS = {
   // Max 3D distance between the surface and a triangle edge midpoint,
@@ -513,7 +513,7 @@ function clipPolygonToCell(points, cu0, cu1, cv0, cv1) {
   return output;
 }
 
-function gridTriangulate(face, floats, loops, chordLimit, angleLimit = Infinity) {
+function gridTriangulate(face, floats, loops, chordLimit, angleLimit = Infinity, { flip = true } = {}) {
   let minU = Infinity;
   let maxU = -Infinity;
   let minV = Infinity;
@@ -573,24 +573,55 @@ function gridTriangulate(face, floats, loops, chordLimit, angleLimit = Infinity)
   // Treating them as separate vertices creates sliver strips whose refined
   // vertices later collapse in the Float32 mesh transport. Weld in parameter
   // space before refinement, keeping opposite periodic seams distinct.
+  // The same holds between two trim-derived points — a corner where two
+  // pcurves end one ULP apart, a cell-clip point beside a loop sample — so any
+  // two vertices within one source ULP on both axes are one vertex too. Left
+  // apart, every edge refinement draws from each runs parallel to its twin one
+  // ULP away, and the rows of midpoints collapse pairwise in Float32.
   const epsilonU = Math.max(Math.abs(minU), Math.abs(maxU), maxU - minU, 1e-12) * 2 ** -23;
   const epsilonV = Math.max(Math.abs(minV), Math.abs(maxV), maxV - minV, 1e-12) * 2 ** -23;
+  const nearby = new Map(); // ULP-cell key -> vertex ids
+  const cellKey = (cu, cv) => `${cu}:${cv}`;
   const vertexId = (u, v) => {
     const iu = Math.round((u - minU) / du);
     const iv = Math.round((v - minV) / dv);
     const gridU = iu === stepsU ? maxU : minU + iu * du;
     const gridV = iv === stepsV ? maxV : minV + iv * dv;
-    if (face.surface.kind !== "plane") {
+    const curved = face.surface.kind !== "plane";
+    if (curved) {
       if (Math.abs(u - gridU) <= epsilonU) u = gridU;
       if (Math.abs(v - gridV) <= epsilonV) v = gridV;
     }
     const key = `${u}:${v}`;
     let id = vertexIds.get(key);
+    if (id !== undefined) return id;
+    const cu = Math.floor(u / epsilonU);
+    const cv = Math.floor(v / epsilonV);
+    // Planes keep exact keys: the conformity pass looks their boundary
+    // vertices up by the uv it projected them to.
+    if (curved) {
+      for (let a = -1; a <= 1 && id === undefined; a += 1) {
+        for (let b = -1; b <= 1 && id === undefined; b += 1) {
+          for (const candidate of nearby.get(cellKey(cu + a, cv + b)) ?? []) {
+            const [x, y] = uvVerts[candidate];
+            if (Math.abs(x - u) <= epsilonU && Math.abs(y - v) <= epsilonV) {
+              id = candidate;
+              break;
+            }
+          }
+        }
+      }
+    }
     if (id === undefined) {
       id = uvVerts.length;
       uvVerts.push([u, v]);
-      vertexIds.set(key, id);
+      if (curved) {
+        let list = nearby.get(cellKey(cu, cv));
+        if (!list) nearby.set(cellKey(cu, cv), (list = []));
+        list.push(id);
+      }
     }
+    vertexIds.set(key, id);
     return id;
   };
 
@@ -658,12 +689,146 @@ function gridTriangulate(face, floats, loops, chordLimit, angleLimit = Infinity)
       }
     }
   }
+  if (flip) flipSlivers(face, floats, uvVerts, triangles, degenerateLimit);
   return {
     uvVerts,
     triangles,
     vertexIds,
     segmentIndex: { segments, segmentsByCell, cellOf, stepsV },
   };
+}
+
+// Earcut takes any convex corner as an ear, and a trim that curves AWAY from
+// the face's interior makes every trim vertex convex: a boundary cell then
+// comes back as a stack of slivers, each three consecutive trim points joined
+// across a chord a few microns off the trim (the rim of a hole through a
+// curved wall, where the rim's uv curve is nearly — never exactly — straight).
+// Everything downstream inherits them. Refinement splits their chords into
+// interior vertices a hair inside the trim, the slivers' bad shape drives that
+// refinement on for thousands of triangles, and any later move of a trim
+// vertex along the trim folds the triangles hung from those near-trim vertices
+// (issue #433: one triangle written twice), besides the near-zero-area
+// slivers themselves reaching the exported mesh.
+//
+// Lawson flips over the base triangulation take them out: an interior edge
+// whose two opposite corners' angles sum past pi flips to the other diagonal.
+// The angles are planar ones, measured in the face's uv mapped through the
+// surface metric at the uv box's centre — exact for planes and cylinders (the
+// hole's bore, the curved wall), a consistent approximation elsewhere. They are
+// deliberately NOT 3D angles: a base triangle can span a quarter turn of a
+// cylinder, and 3D angles across a chord through the solid would pick
+// diagonals that have nothing to do with the surface. A fixed affine image of
+// uv is a plane, so this is ordinary Delaunay flipping, which terminates.
+// A flip happens only when the quad is strictly convex in uv, so both new
+// triangles keep the old orientation and stay inside the two they replace —
+// inside the face. Boundary edges (used once) are never touched.
+function flipSlivers(face, floats, uvVerts, triangles, degenerateLimit) {
+  let minU = Infinity, maxU = -Infinity, minV = Infinity, maxV = -Infinity;
+  for (const [u, v] of uvVerts) {
+    if (u < minU) minU = u;
+    if (u > maxU) maxU = u;
+    if (v < minV) minV = v;
+    if (v > maxV) maxV = v;
+  }
+  if (!(maxU > minU) || !(maxV > minV)) return;
+  // First fundamental form at the centre, by central differences.
+  const cu = (minU + maxU) / 2, cv = (minV + maxV) / 2;
+  const hu = (maxU - minU) * 1e-4, hv = (maxV - minV) * 1e-4;
+  const su = sub(evaluateSurface(face.surface, floats, cu + hu, cv), evaluateSurface(face.surface, floats, cu - hu, cv))
+    .map((x) => x / (2 * hu));
+  const sv = sub(evaluateSurface(face.surface, floats, cu, cv + hv), evaluateSurface(face.surface, floats, cu, cv - hv))
+    .map((x) => x / (2 * hv));
+  const E = su[0] * su[0] + su[1] * su[1] + su[2] * su[2];
+  const F = su[0] * sv[0] + su[1] * sv[1] + su[2] * sv[2];
+  const G = sv[0] * sv[0] + sv[1] * sv[1] + sv[2] * sv[2];
+  const det = E * G - F * F;
+  // A singular or non-finite metric (a pole, a collapsed patch) has no plane
+  // to measure angles in; leave that face as earcut built it.
+  if (!(E > 0) || !(det > E * G * 1e-12) || !Number.isFinite(det)) return;
+  const rootE = Math.sqrt(E);
+  const shear = F / rootE;
+  const height = Math.sqrt(det) / rootE;
+  const plane = uvVerts.map(([u, v]) => [rootE * u + shear * v, height * v]);
+  // sin(alpha + beta) < 0 for the angles at c and d over edge (a, b), scaled
+  // by the four (positive) edge lengths: the classic Delaunay test.
+  const angleSumPastPi = (a, b, c, d) => {
+    const [ax, ay] = plane[a], [bx, by] = plane[b], [cx, cy] = plane[c], [dx, dy] = plane[d];
+    const cax = ax - cx, cay = ay - cy, cbx = bx - cx, cby = by - cy;
+    const dax = ax - dx, day = ay - dy, dbx = bx - dx, dby = by - dy;
+    const value = Math.abs(cax * cby - cay * cbx) * (dax * dbx + day * dby) +
+      (cax * cbx + cay * cby) * Math.abs(dax * dby - day * dbx);
+    return value < -1e-9 * Math.sqrt((cax * cax + cay * cay) * (cbx * cbx + cby * cby) *
+      (dax * dax + day * day) * (dbx * dbx + dby * dby));
+  };
+  const orient = (a, b, c) =>
+    (uvVerts[b][0] - uvVerts[a][0]) * (uvVerts[c][1] - uvVerts[a][1]) -
+    (uvVerts[c][0] - uvVerts[a][0]) * (uvVerts[b][1] - uvVerts[a][1]);
+  const pairKey = (p, q) => (p < q ? p * 0x100000000 + q : q * 0x100000000 + p);
+  // edge -> the (up to two) triangle offsets that use it.
+  const owners = new Map();
+  const own = (t) => {
+    for (let k = 0; k < 3; k += 1) {
+      const key = pairKey(triangles[t + k], triangles[t + ((k + 1) % 3)]);
+      let list = owners.get(key);
+      if (!list) owners.set(key, (list = []));
+      list.push(t);
+    }
+  };
+  const disown = (t) => {
+    for (let k = 0; k < 3; k += 1) {
+      const key = pairKey(triangles[t + k], triangles[t + ((k + 1) % 3)]);
+      const list = owners.get(key);
+      list.splice(list.indexOf(t), 1);
+      if (!list.length) owners.delete(key);
+    }
+  };
+  for (let t = 0; t < triangles.length; t += 3) own(t);
+  const pending = [...owners.keys()];
+  const queued = new Set(pending);
+  // Planar Delaunay flipping terminates; the budget only guards against float
+  // noise at the margin.
+  let budget = triangles.length * 4;
+  while (pending.length && budget > 0) {
+    const key = pending.pop();
+    queued.delete(key);
+    const list = owners.get(key);
+    if (!list || list.length !== 2) continue;
+    const [t1, t2] = list;
+    // Rotate t1 so its edge (a, b) is the shared one and c is opposite.
+    let a = -1, b = -1, c = -1;
+    for (let k = 0; k < 3; k += 1) {
+      const p = triangles[t1 + k], q = triangles[t1 + ((k + 1) % 3)];
+      if (pairKey(p, q) === key) {
+        a = p; b = q; c = triangles[t1 + ((k + 2) % 3)];
+      }
+    }
+    let d = -1;
+    for (let k = 0; k < 3; k += 1) {
+      const p = triangles[t2 + k];
+      if (p !== a && p !== b) d = p;
+    }
+    if (c < 0 || d < 0 || c === d) continue;
+    if (!angleSumPastPi(a, b, c, d) || angleSumPastPi(c, d, b, a)) continue;
+    // (a, b, c) and (b, a, d) keep their winding as (a, d, c) and (d, b, c):
+    // the quad a-d-b-c is strictly convex iff both are non-degenerate with the
+    // original sign.
+    const sign = Math.sign(orient(a, b, c));
+    if (!sign || sign * orient(a, d, c) <= degenerateLimit || sign * orient(d, b, c) <= degenerateLimit) continue;
+    disown(t1);
+    disown(t2);
+    triangles[t1] = a; triangles[t1 + 1] = d; triangles[t1 + 2] = c;
+    triangles[t2] = d; triangles[t2 + 1] = b; triangles[t2 + 2] = c;
+    own(t1);
+    own(t2);
+    budget -= 1;
+    for (const [p, q] of [[a, d], [d, b], [b, c], [c, a]]) {
+      const next = pairKey(p, q);
+      if (!queued.has(next)) {
+        queued.add(next);
+        pending.push(next);
+      }
+    }
+  }
 }
 
 function projectToSegment(px, py, x0, y0, x1, y1) {
@@ -813,8 +978,10 @@ function tessellateFaceRaw(face, floats, scale, options = {}, sharedEdges = null
   const singularGrid = loops.length === 1 &&
     (singularU(face.surface, face.uv[2]) || singularU(face.surface, face.uv[3])) &&
     loops[0].every(([u, v]) => u === face.uv[0] || u === face.uv[1] || v === face.uv[2] || v === face.uv[3]);
+  // A singular grid is regular by construction, and its pole row collapses
+  // below; there is nothing for a flip to improve.
   const built = gridTriangulate(face, floats, loops, singularGrid ? chordLimit / 3 : chordLimit,
-    singularGrid ? angleTolerance / Math.SQRT2 : Infinity);
+    singularGrid ? angleTolerance / Math.SQRT2 : Infinity, { flip: !singularGrid });
   if (!built) return null;
   const { uvVerts, triangles: baseTriangles, vertexIds, segmentIndex } = built;
   let triangles = baseTriangles;
@@ -1241,6 +1408,29 @@ function compactCollapsedTriangles(triangles, xyz, remap) {
   return kept;
 }
 
+// A welded vertex is the same model point as the one it folds into, so the
+// survivor inherits every model edge it lay on — in both welds. Dropping them
+// loses edges: a corner welded into a vertex pinned through only ONE of the
+// corner's two edges stops being an end of the other, conformity no longer
+// sees the mesh edge running from it along that edge, and the union point the
+// neighbouring face inserted there becomes a T-junction. (The first weld used
+// to drop them; with the old chord-scale merge that left open edges on the
+// mixed fixture at chord 0.02.)
+function foldWeldedLabels(boundary, remap) {
+  for (const [vertIndex, target] of remap) {
+    const labels = boundary.get(vertIndex);
+    const targetLabels = boundary.get(target);
+    if (labels && targetLabels) {
+      for (const label of labels) {
+        if (!targetLabels.some((existing) => existing.ord === label.ord && existing.f === label.f)) {
+          targetLabels.push(label);
+        }
+      }
+    }
+    boundary.delete(vertIndex);
+  }
+}
+
 // Fan-split every face's boundary mesh edges to the UNION of boundary vertex
 // fractions across the component, so no T-junction survives: a vertex present
 // on one side of a model edge exists on the other side too, with bit-identical
@@ -1249,6 +1439,17 @@ function conformBoundaries(rawFaces, sharedEdges, floats, mergeTolerance = 0) {
   // Fractions closer than the SPATIAL merge tolerance are the same point of
   // the model; a pure 1e-9 fraction eps let two labels 0.1um apart survive as
   // distinct vertices on long edges.
+  //
+  // That tolerance is SOURCE precision, never the display chord tolerance.
+  // Merging two fractions snaps every vertex carrying either onto one point,
+  // which collapses whatever mesh edge a face drew between them — and each
+  // face samples its own boundary to its OWN tolerance, so at a chord-scale
+  // merge a small face's genuinely distinct trim vertices collapsed in bulk:
+  // 770 of them on the bore of issue #433's hole, folding the triangles hung
+  // from them, and on the mixed fixture at chord 0.02 a trim vertex snapped
+  // into the corner at the end of its edge, flattening a triangle onto the
+  // neighbouring straight edge. Points a face resolved stay resolved; the
+  // other side of the edge receives them through the fan split below.
   const fractionEps = (ord) => {
     const shared = sharedEdges.get(ord);
     const spatial = shared?.length ? (mergeTolerance * 0.5) / shared.length : 0;
@@ -1405,7 +1606,7 @@ function conformBoundaries(rawFaces, sharedEdges, floats, mergeTolerance = 0) {
     // Unconditional: a seam-spanning triangle collapses on position alone, so
     // it must be dropped even when nothing welded.
     raw.triangles = compactCollapsedTriangles(raw.triangles, raw.xyz, remap);
-    for (const vertIndex of remap.keys()) raw.boundary.delete(vertIndex);
+    foldWeldedLabels(raw.boundary, remap);
   }
 
   for (const { face, raw } of rawFaces) {
@@ -1553,18 +1754,7 @@ function conformBoundaries(rawFaces, sharedEdges, floats, mergeTolerance = 0) {
       else bucket.push(vertIndex);
     }
     raw.triangles = compactCollapsedTriangles(raw.triangles, xyz, remapAfter);
-    for (const [vertIndex, target] of remapAfter) {
-      const labels = boundary.get(vertIndex);
-      const targetLabels = boundary.get(target);
-      if (labels && targetLabels) {
-        for (const label of labels) {
-          if (!targetLabels.some((existing) => existing.ord === label.ord && existing.f === label.f)) {
-            targetLabels.push(label);
-          }
-        }
-      }
-      boundary.delete(vertIndex);
-    }
+    foldWeldedLabels(boundary, remapAfter);
   }
 }
 
@@ -1660,14 +1850,16 @@ export function tessellateComponent(index, floats, options = {}) {
     if (!edge.curve) continue;
     sharedEdges.set(edge.ord, sampleSharedEdge(edge.curve, floats, chordTolerance * scale));
   }
+  // Source-precision coincidence, independent of display detail: two points
+  // closer than this are one point of the model evaluated twice. It is the only
+  // distance anything welds at — a coarse chord tolerance must not weld two
+  // distinct corners of a small feature, nor two vertices a face placed apart.
+  const weldTolerance = scale * 2 ** -21;
   // Weld model CORNERS: edge endpoints that coincide (within tolerance) are
   // the same vertex of the model, but each curve evaluates it with its own
   // float rounding. Snap every cluster to ONE canonical point object so a
   // corner is bit-identical no matter which edge a face pinned it through.
   {
-    // Source-precision coincidence, independent of display detail. A coarse
-    // chord tolerance must not weld two distinct corners of a small feature.
-    const weldTolerance = scale * 2 ** -21;
     const corners = [];
     const canonicalCorner = (point) => {
       for (const corner of corners) {
@@ -1698,7 +1890,7 @@ export function tessellateComponent(index, floats, options = {}) {
     if (raw) rawFaces.push({ face, raw });
   }
   if (!options.noSharedBoundaries && !options.noConformPass) {
-    conformBoundaries(rawFaces, sharedEdges, floats, chordTolerance * scale);
+    conformBoundaries(rawFaces, sharedEdges, floats, weldTolerance);
     for (const { face, raw } of rawFaces) {
       refineInteriorPostConform(face, raw, floats, options);
     }
