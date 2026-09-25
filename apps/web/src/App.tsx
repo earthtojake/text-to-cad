@@ -112,7 +112,7 @@ function RootView({ client, server }: { client: CadClient; server: CadServerInfo
   const empty = <div className="pointer-events-auto absolute inset-0 z-10 bg-background"><EmptyState icon={FileText} title="No file open" description="Pick one from the tree on the right, or filter by name." /></div>;
   return <div className="flex h-svh flex-col overflow-hidden"><div className="min-h-0 flex-1">
     <FileViewer fullscreen={fullscreen} onFullscreenChange={setFullscreen} file={file || null} host={host} renderers={renderers} state={state} onStateChange={setState} narrowCrumbs={false}
-      leading={<ViewerBrand />} navigationActions={<ViewerLinks />}
+      leading={<ViewerBrand title={file ? "" : "text-to-cad"} />} navigationActions={<ViewerLinks />}
       displayActions={<ViewerAppearance colorSchemePreference={colorSchemePreference} resolvedColorSchemeMode={appearance.colorScheme} onColorSchemePreferenceChange={changeColorScheme} />}
       navigationPath={selectedEntry ? normalizeCadFileQueryParam(cadFileParamForEntry(selectedEntry)) : null}
       onError={error => console.error(error)} presentation={{

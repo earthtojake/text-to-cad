@@ -118,6 +118,11 @@ test('web host preserves compact navigation, history, root state and focus refre
     await act(() => { window.history.replaceState({}, '', '?file=missing.step'); window.dispatchEvent(new window.PopStateEvent('popstate')); });
     assert.equal(snapshot().file, 'missing.step');
     assert.equal(snapshot().navigationPath, null);
+    assert.equal(snapshot().leading.props.title, '', 'a file, even a missing one, is named by its crumbs');
+    // No file at all: the app names itself beside its icon, where the crumbs would be.
+    await act(() => { window.history.replaceState({}, '', '/'); window.dispatchEvent(new window.PopStateEvent('popstate')); });
+    assert.ok(!snapshot().file);
+    assert.equal(snapshot().leading.props.title, 'text-to-cad');
     await act(() => { window.history.replaceState({}, '', '?file=one.step'); window.dispatchEvent(new window.PopStateEvent('popstate')); });
     await act(() => window.dispatchEvent(new window.Event('focus')));
     assert.equal(calls.length, 1);
