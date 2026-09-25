@@ -149,7 +149,7 @@ describe("ExplorerTab", () => {
   });
   it("restores retired CAD Theme panels to the renderer default without changing other choices", () => {
     const row = { id: "t1", sessionId: "s1", projectId: "p1", order: 0, kind: "file", path: "part.step" };
-    for (const [saved, expected] of [["cad-theme", null], [null, null], ["", ""], ["tree", "tree"], ["cad-file", "cad-file"], ["source", "source"]]) {
+    for (const [saved, expected] of [["cad-theme", null], ["cad-display", null], [null, null], ["", ""], ["tree", "tree"], ["cad-file", "cad-file"], ["source", "source"]]) {
       const restored = ExplorerTabSchema.parse({ ...row, panel: saved });
       expect(restored.kind).toBe("file");
       expect(restored.kind === "file" && restored.panel).toBe(expected);

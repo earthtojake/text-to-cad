@@ -1,6 +1,7 @@
 import type { FileViewerState, JsonValue } from "@hardcore/ui/file-viewer";
 
-// The per-tab renderer records (camera, display settings, a renderer's own slice), one
+// The per-tab renderer records (display settings, the tool, a renderer's own slice; never the
+// camera, which is refit on every open), one
 // localStorage entry keyed by `[sourceId, tabId]`. A record lives as long as its tab: a
 // closed tab's record is forgotten, or the store would grow with every file ever opened.
 const KEY = "hardcore.fileViewer.v1";

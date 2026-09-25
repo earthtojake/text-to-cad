@@ -195,9 +195,9 @@ export const FileTabSchema = z.object({
    * It is not the same as `""`: a tab whose panels were all closed on
    * purpose must come back closed.
    */
-  // Older tabs can name the retired theme editor. Restore the renderer's
-  // default panel while preserving explicit choices.
-  panel: z.string().nullable().default(null).transform((panel) => panel === "cad-theme" ? null : panel),
+  // Older tabs can name a retired panel (the theme editor, the Display panel). Those read
+  // as the renderer's default, not as "nothing open"; explicit choices are preserved.
+  panel: z.string().nullable().default(null).transform((panel) => panel === "cad-theme" || panel === "cad-display" ? null : panel),
 });
 
 /**
