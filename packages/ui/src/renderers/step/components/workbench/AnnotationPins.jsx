@@ -33,32 +33,7 @@ function projectAnnotationAnchor(runtime, anchor, width, height) {
   return { x: ((ndc.x + 1) * width) / 2, y: ((1 - ndc.y) * height) / 2, facing };
 }
 
-/**
- * Annotations go into the chat box as they are made. This bar is for the ones that did not (no chat
- * was open to take them, or adding failed): "2 annotations · Add to chat · ×". The cross clears
- * them all, from the model and the chat box both.
- */
-function AnnotationsBar({ pending, canAddToChat, onAddToChat, onClear }) {
-  if (!pending) return null;
-  return (
-    <div className="pointer-events-none absolute inset-x-0 top-3 z-30 flex justify-center">
-      <div role="toolbar" aria-label="Annotations" onPointerDown={event => event.stopPropagation()}
-        className="pointer-events-auto flex h-9 items-center gap-2 rounded-full border border-border/70 bg-background pr-1 pl-4 text-[13px] shadow-md shadow-black/10">
-        <span className="font-medium tabular-nums">{pending} {pending === 1 ? "annotation" : "annotations"}</span>
-        <Button type="button" size="sm" disabled={!canAddToChat} onClick={() => void onAddToChat()}
-          className="h-7 rounded-full bg-blue-500 px-3 text-[13px] font-medium text-white shadow-none hover:bg-blue-600">
-          Add to chat
-        </Button>
-        <Button type="button" variant="ghost" size="icon-xs" className="-ml-1 size-7 rounded-full text-muted-foreground"
-          aria-label="Clear annotations" onClick={onClear}>
-          <X className="size-3.5" />
-        </Button>
-      </div>
-    </div>
-  );
-}
-
-export default function AnnotationPins({ viewport, annotations, openId, onOpenChange, canAddToChat, onAddToChat, onClear, ...body }) {
+export default function AnnotationPins({ viewport, annotations, openId, onOpenChange, ...body }) {
   const pinRefs = useRef(new Map());
   // Elements the frame loop has placed. A ref callback runs again on every render; only an element
   // it has never placed starts hidden, so a re-render never blinks a dot out for a frame.
@@ -98,8 +73,6 @@ export default function AnnotationPins({ viewport, annotations, openId, onOpenCh
   if (!placed.length) return null;
   return (
     <div className="pointer-events-none absolute inset-0 z-20 overflow-hidden" data-annotation-pins="">
-      <AnnotationsBar pending={annotations.filter(annotation => !annotation.sent).length}
-        canAddToChat={canAddToChat} onAddToChat={onAddToChat} onClear={onClear} />
       {annotations.map((annotation, index) => {
         if (!annotation.anchor) return null;
         const open = openId === annotation.id;

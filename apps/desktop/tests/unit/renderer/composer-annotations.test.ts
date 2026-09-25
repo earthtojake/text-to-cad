@@ -1,7 +1,9 @@
 import { beforeEach, expect, it, vi } from "vitest";
 
+import { createDesktopPromptContext } from "@renderer/features/explorer/host/promptContext";
 import { openAnnotation, withAnnotations } from "@renderer/features/session/composer/AnnotationsChip";
 import { useExplorer } from "@renderer/state/explorer";
+import { useSessions } from "@renderer/state/sessions";
 import type { FileTab } from "@shared/types";
 import { useComposer } from "@renderer/state/composer";
 import type { DraftPart } from "@renderer/state/composer";
@@ -60,4 +62,16 @@ it("an annotation deleted on the model leaves the draft, and the rest stay", () 
   useComposer.getState().acceptContext(key, "op-1", [annotation("a1", "hole"), annotation("a2", "fillet")], { root: "/p", focus: false });
   useComposer.getState().removeAnnotations(key, ["a1"]);
   expect(useComposer.getState().annotations[key]?.map(item => item.id)).toEqual(["a2"]);
+});
+
+it("the chat box tells the viewer which annotations it holds, and a new answer only when that changes", () => {
+  useSessions.setState({ sessions: [{ id: key, projectId: "p", archived: false }] as never });
+  const port = createDesktopPromptContext("p", null, "w", key);
+  expect(port.getSnapshot().held).toEqual([]);
+  useComposer.getState().acceptContext(key, "op-1", [annotation("a1", "hole"), annotation("a2", "fillet")], { root: "/p", focus: false });
+  const holding = port.getSnapshot();
+  expect(holding.held).toEqual(["a1", "a2"]);
+  expect(port.getSnapshot()).toBe(holding);
+  useComposer.getState().removeAnnotations(key);
+  expect(port.getSnapshot().held).toEqual([]);
 });

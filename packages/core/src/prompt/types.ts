@@ -20,6 +20,12 @@ export interface PromptDestinationState {
   kind: 'composer' | 'clipboard' | 'unavailable';
   available: boolean;
   reason?: string;
+  /**
+   * Ids of delivered parts the draft still holds, for a destination that keeps them apart from its
+   * text (a composer's annotations). A part delivered and no longer held was sent with the prompt
+   * or removed from the draft. Absent: the destination does not say.
+   */
+  held?: readonly string[];
   capabilities?: {
     attachments: 'none' | 'png' | 'images-and-text';
     maxParts: number;

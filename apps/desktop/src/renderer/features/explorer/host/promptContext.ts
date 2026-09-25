@@ -4,7 +4,9 @@ import type { PromptContext, PromptContextPort, PromptDeliveryResult, PromptDest
 import { bindDraftDestination, DraftDestinationGone, draftDestinationIsCurrent, validateDraftDestination } from "@renderer/state/cad-draft";
 import type { DraftDestination } from "@renderer/state/cad-draft";
 import { useComposer } from "@renderer/state/composer";
-import type { DraftPart } from "@renderer/state/composer";
+import type { DraftAnnotation, DraftPart } from "@renderer/state/composer";
+
+const NO_ANNOTATIONS: readonly DraftAnnotation[] = [];
 import { useSessions } from "@renderer/state/sessions";
 
 const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
@@ -40,11 +42,18 @@ async function attachmentFile(part: Extract<PromptContext["parts"][number], { ki
 /** Every renderer action addresses the immutable session that owns its tab. */
 export function createDesktopPromptContext(projectId: string, root: string | null, workspaceId: string, sessionId: string): PromptContextPort {
   const ledger = createPromptDeliveryLedger({ busyMessage: "Wait for pending prompt context before adding more." });
-  let snapshot: PromptDestinationState = { kind: "composer", available: true, capabilities };
+  let snapshot: PromptDestinationState = { kind: "composer", available: true, capabilities, held: [] };
+  let heldFrom: readonly DraftAnnotation[] | null = null;
   const getSnapshot = () => {
     const owner = useSessions.getState().sessions.find(session => session.id === sessionId);
     const available = Boolean(owner && !owner.archived && owner.projectId === projectId);
-    if (snapshot.available !== available) snapshot = available ? { kind: "composer", available: true, capabilities } : { kind: "composer", available: false, reason: "This tab's session is no longer active.", capabilities };
+    // The annotations this chat's draft still holds: the viewer keeps a dot only for those.
+    const annotations = useComposer.getState().annotations[sessionId] ?? NO_ANNOTATIONS;
+    if (snapshot.available !== available || heldFrom !== annotations) {
+      heldFrom = annotations;
+      const held = annotations.map(annotation => annotation.id);
+      snapshot = available ? { kind: "composer", available: true, capabilities, held } : { kind: "composer", available: false, reason: "This tab's session is no longer active.", capabilities, held };
+    }
     return snapshot;
   };
   const materialize = async (context: PromptContext): Promise<DraftPart[]> => {
