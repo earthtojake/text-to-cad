@@ -4,6 +4,7 @@ import { Button } from "@hardcore/ui/primitives/button";
 import { cn } from "@hardcore/ui/utils";
 import { measureModelOffsetFromRuntime } from "../../scene/useStepPicking.js";
 import { AnnotationBody } from "./StepAnnotations.jsx";
+import { placeAnnotationCard } from "../../workbench/stepAnnotations.js";
 
 // Annotations on the model itself: a numbered dot where each one was made, and its card when
 // the dot is pressed. The dots are HTML over the canvas, moved every frame to where their
@@ -12,7 +13,6 @@ import { AnnotationBody } from "./StepAnnotations.jsx";
 
 const CARD_WIDTH_PX = 288;
 const EDGE_MARGIN_PX = 12;
-
 /**
  * Where an anchor is on screen now, or null when it is behind the camera. `facing` is false
  * when the anchor's face points away from the camera: its dot is on the far side.
@@ -61,8 +61,13 @@ export default function AnnotationPins({ viewport, annotations, openId, onOpenCh
         if (!onScreen) continue;
         element.style.transform = `translate(${Math.round(at.x)}px, ${Math.round(at.y)}px)`;
         element.dataset.facing = String(at.facing);
-        // The card opens toward the side there is room on.
-        element.dataset.side = at.x + CARD_WIDTH_PX + EDGE_MARGIN_PX > width ? "left" : "right";
+        const card = element.querySelector("[data-annotation-card]");
+        if (card) {
+          card.style.width = `${Math.min(CARD_WIDTH_PX, width - 2 * EDGE_MARGIN_PX)}px`;
+          const { dx, dy } = placeAnnotationCard({ x: at.x, y: at.y, width, height, cardWidth: card.offsetWidth, cardHeight: card.offsetHeight });
+          card.style.transform = `translate(${dx}px, ${dy}px)`;
+          card.style.visibility = "visible";
+        }
       }
     };
     place();
@@ -98,9 +103,11 @@ export default function AnnotationPins({ viewport, annotations, openId, onOpenCh
               {index + 1}
             </button>
             {open ? (
-              <div role="dialog" aria-label={`Annotation ${index + 1} details`} style={{ width: CARD_WIDTH_PX }}
+              <div role="dialog" aria-label={`Annotation ${index + 1} details`} data-annotation-card=""
+                // Placed by the frame loop (placeAnnotationCard); hidden until it has been.
+                style={{ width: CARD_WIDTH_PX, visibility: "hidden" }}
                 onKeyDown={event => { if (event.key === "Escape") { event.stopPropagation(); onOpenChange(null); } }}
-                className="pointer-events-auto absolute top-0 -translate-y-1/2 rounded-lg border bg-popover p-2 text-popover-foreground shadow-lg group-data-[side=right]/pin:left-5 group-data-[side=left]/pin:right-5">
+                className="pointer-events-auto absolute top-0 left-0 rounded-lg border bg-popover p-2 text-popover-foreground shadow-lg">
                 <AnnotationBody annotation={annotation} index={index} {...body}
                   onSelect={() => body.onSelect(annotation)} onEdit={text => body.onEdit(annotation.id, text)}
                   onRemove={() => body.onRemove(annotation.id)}

@@ -37,3 +37,9 @@ test('annotations go out as one delivery, one part each, keyed by the annotation
   assert.deepEqual(context.parts[1].references[0].target, { kind: 'cad-selector', selectors: ['o1.f2', 'o1.f5'] });
   assert.equal(context.parts[0].references[0].label, 'Edge 3');
 });
+
+test('an annotation on the whole model is about the whole file', () => {
+  const resource = { kind: 'workspace-file', workspaceId: 'one', path: 'parts/widget.step' };
+  const context = createAnnotationsPromptContext({ resource, annotations: [{ id: 'a1', references: [{ selector: '', label: 'Whole model' }], text: 'lighter' }] });
+  assert.deepEqual(context.parts[0].references[0].target, { kind: 'whole-resource' });
+});

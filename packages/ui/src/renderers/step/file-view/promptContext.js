@@ -23,7 +23,7 @@ export function createAnnotationsPromptContext({ resource, annotations, operatio
   return createPromptContext(annotations.map(annotation => annotationPart(
     annotation.references.map(reference => ({
       resource: { ...resource },
-      target: { kind: 'cad-selector', selectors: reference.selector.split(',') },
+      target: reference.selector ? { kind: 'cad-selector', selectors: reference.selector.split(',') } : { kind: 'whole-resource' },
       ...(reference.label ? { label: reference.label } : {}),
     })),
     annotation.text,

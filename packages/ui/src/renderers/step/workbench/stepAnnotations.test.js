@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  MAX_ANNOTATIONS, addAnnotation, annotationAnchor, annotationDelivered, annotationReferenceLabel, createAnnotation, editAnnotation,
+  MAX_ANNOTATIONS, addAnnotation, annotationAnchor, placeAnnotationCard, annotationDelivered, annotationReferenceLabel, createAnnotation, editAnnotation,
   markAnnotationSent, readAnnotations, removeAnnotation
 } from "./stepAnnotations.js";
 
@@ -13,6 +13,7 @@ test("a chip names a face, edge or vertex by its number, a part by its name, and
   assert.equal(annotationReferenceLabel("o1.1.f2,o1.1.f5"), "2 faces");
   assert.equal(annotationReferenceLabel("o1.1.f2,o1.1.e5"), "2 references");
   assert.equal(annotationReferenceLabel("o1.2"), "o1.2");
+  assert.equal(annotationReferenceLabel(""), "Whole model");
 });
 
 test("an annotation needs something to be pinned to", () => {
@@ -59,4 +60,19 @@ test("a dot sits in the middle of what the annotation is about", () => {
     { point: [1, 1, 1], normal: null }, "several: the average, and no single normal");
   const stored = readAnnotations([{ id: "a1", references: [{ selector: "o1.1.f1" }], anchor: { point: [1, 2, 3], normal: "up" } }]);
   assert.deepEqual(stored[0].anchor, { point: [1, 2, 3], normal: null });
+});
+
+test("an annotation on the whole model keeps its empty selector", () => {
+  assert.deepEqual(createAnnotation([{ selector: "" }], "make it lighter", { id: "a1" }).references, [{ selector: "", label: "Whole model" }]);
+});
+
+const card = { cardWidth: 288, cardHeight: 80 };
+test("a dot's card sits beside it where there is room, and is slid into view where there is none", () => {
+  assert.deepEqual(placeAnnotationCard({ x: 100, y: 300, width: 900, height: 600, ...card }), { dx: 20, dy: -40 }, "right of the dot");
+  assert.deepEqual(placeAnnotationCard({ x: 800, y: 300, width: 900, height: 600, ...card }), { dx: -308, dy: -40 }, "left, near the right edge");
+  const narrow = placeAnnotationCard({ x: 207, y: 300, width: 457, height: 600, ...card });
+  assert.ok(207 + narrow.dx >= 12 && 207 + narrow.dx + 288 <= 457 - 12, `inside a narrow viewport: ${JSON.stringify(narrow)}`);
+  assert.equal(narrow.dy, 20, "below the dot, which stays in view");
+  assert.equal(placeAnnotationCard({ x: 207, y: 560, width: 457, height: 600, ...card }).dy, -100, "above it, near the bottom");
+  assert.equal(placeAnnotationCard({ x: 100, y: 20, width: 900, height: 600, ...card }).dy, -8, "kept below the top edge");
 });

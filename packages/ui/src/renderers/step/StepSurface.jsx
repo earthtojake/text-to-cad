@@ -1916,11 +1916,19 @@ function StepSurfaceBody({ view, data }) {
   }, [annotationAvailable, referencesForHost, canonicalCopySelectionLines, effectiveActiveReferenceMap, selectedMeshData, addToChatBox]);
   const annotationSelectCount = useRef(0);
   const selectAnnotation = useCallback((annotation) => {
-    const selector = annotation.references.map(reference => reference.selector).join(",");
+    const selector = annotation.references.map(reference => reference.selector).filter(Boolean).join(",");
+    setOpenAnnotationId(annotation.anchor ? annotation.id : null);
+    // An annotation on the whole model selects the whole model again.
+    if (!selector) {
+      if (isAssemblyView) return;
+      ensureSelectTool();
+      setSelectedReferenceIds([]);
+      setSelectedPartIds([STEP_MODEL_ROOT_ID]);
+      return;
+    }
     annotationSelectCount.current += 1;
     setAnnotationSelectRequest({ selector, key: `annotation:${annotation.id}:${annotationSelectCount.current}` });
-    setOpenAnnotationId(annotation.anchor ? annotation.id : null);
-  }, []);
+  }, [isAssemblyView]);
   const changeAnnotation = useCallback((id, text) => {
     const edited = editAnnotation(annotations, id, text);
     const annotation = edited.find(item => item.id === id);

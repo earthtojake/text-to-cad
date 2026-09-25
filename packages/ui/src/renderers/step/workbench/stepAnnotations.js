@@ -25,7 +25,7 @@ const TOPOLOGY_NAMES = Object.freeze({ f: "Face", e: "Edge", v: "Vertex" });
 /**
  * A chip's label for one selector. A part keeps the name the tree gives it; a face, edge or
  * vertex is named by its type and number ("o1.1.e3" -> "Edge 3"); a merged group of faces
- * ("o1.1.f2,o1.1.f5") is counted.
+ * ("o1.1.f2,o1.1.f5") is counted; no selector at all is the whole model.
  */
 export function annotationReferenceLabel(selector, label = "") {
   const value = text(selector);
@@ -39,13 +39,13 @@ export function annotationReferenceLabel(selector, label = "") {
   }
   const topology = value.match(/\.([fev])(\d+)$/);
   if (topology) return `${TOPOLOGY_NAMES[topology[1]]} ${topology[2]}`;
-  return value || "Model";
+  return value || "Whole model";
 }
 
+// An empty selector is the whole file: what a selection of a single part's whole model copies as.
 function readReference(value) {
   if (!plainObject(value)) return null;
   const selector = text(value.selector);
-  if (!selector) return null;
   return { selector, label: annotationReferenceLabel(selector, value.label) };
 }
 
@@ -125,4 +125,24 @@ export function markAnnotationSent(list, id) {
 /** Whether a delivery put the annotation where the person can send it. */
 export function annotationDelivered(result) {
   return ["added", "copied", "partial"].includes(result?.status);
+}
+
+// ---- a dot's card ----------------------------------------------------------------------------
+
+const CARD_MARGIN_PX = 12;
+const CARD_GAP_PX = 20;
+
+/**
+ * Where a dot's card goes, relative to the dot, so all of it is on screen and the dot stays in
+ * view: beside the dot on a side with room, else below it (or above, without room below), slid
+ * along to fit (a narrow viewport has room on neither side).
+ */
+export function placeAnnotationCard({ x, y, width, height, cardWidth, cardHeight }) {
+  const clamp = (value, low, high) => Math.min(Math.max(value, low), Math.max(low, high));
+  const fitY = dy => clamp(dy, CARD_MARGIN_PX - y, height - CARD_MARGIN_PX - cardHeight - y);
+  if (x + CARD_GAP_PX + cardWidth <= width - CARD_MARGIN_PX) return { dx: CARD_GAP_PX, dy: Math.round(fitY(-cardHeight / 2)) };
+  if (x - CARD_GAP_PX - cardWidth >= CARD_MARGIN_PX) return { dx: -CARD_GAP_PX - cardWidth, dy: Math.round(fitY(-cardHeight / 2)) };
+  const dx = clamp(-cardWidth / 2, CARD_MARGIN_PX - x, width - CARD_MARGIN_PX - cardWidth - x);
+  const below = y + CARD_GAP_PX + cardHeight <= height - CARD_MARGIN_PX;
+  return { dx: Math.round(dx), dy: Math.round(below ? CARD_GAP_PX : fitY(-CARD_GAP_PX - cardHeight)) };
 }

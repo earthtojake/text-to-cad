@@ -20,7 +20,8 @@ export function openComposerReference(scope: ReferenceScope, reference: CadRefer
     throw new Error("Open the model in this chat’s workspace to view this reference.");
   }
   const tab = explorer.openFile(file, scope.root);
-  if (!tab || !reference.selector) return;
+  // An annotation on the whole model names no geometry, and still opens its card.
+  if (!tab || (!reference.selector && !options?.annotation)) return;
   if (options) explorer.selectCadReference(tab.id, reference.selector, options);
   else explorer.selectCadReference(tab.id, reference.selector);
 }
