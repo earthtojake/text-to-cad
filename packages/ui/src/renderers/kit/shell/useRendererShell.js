@@ -214,8 +214,10 @@ export function useRendererShell({
 
   // ---- host chrome ----------------------------------------------------------
   // The file's panels are the host's (its nav row is their tab strip); the shell draws the
-  // one that is open. Explicit tool requests can open it; selection requests
-  // only change its tab if it is already open.
+  // one that is open. A sidebar that is open turns to the file's own panel when there is
+  // something to show in it — a pick, the Position tool — the file tree giving way to what
+  // was picked; an explicit tool request opens the panel even when nothing is open, a
+  // selection does not. On mobile the sheets stay the person's to open.
   const mobile = useViewerMobile();
   const panelRef = useRef({ openPanel, onPanelOpen });
   panelRef.current = { openPanel, onPanelOpen };
@@ -231,8 +233,8 @@ export function useRendererShell({
     if (panelRef.current.openPanel !== CAD_PANEL.file) panelRef.current.onPanelOpen?.(CAD_PANEL.file);
   }, [mobile]);
   const revealFileSection = useCallback((sectionId, { open = true } = {}) => {
-    if (mobile || (!open && panelRef.current.openPanel !== CAD_PANEL.file)) return;
-    if (open) revealFilePanel();
+    if (mobile || (!open && !panelRef.current.openPanel)) return;
+    revealFilePanel();
     setPanelRevealRequest(previous => ({ sectionId, key: (previous?.key || 0) + 1 }));
   }, [mobile, revealFilePanel]);
   const chromeBackdropColor = useChromeBackdropColor(colorScheme === "dark");
