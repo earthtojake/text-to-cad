@@ -1862,9 +1862,16 @@ function StepSurfaceBody({ view, data }) {
   }, [selectionKey, promptResource, viewerLoading, stepInteractionBlocked, inspectionHighlight, effectiveActiveReferenceMap, selectedMeshData, selectedEntry, canonicalCopySelectionLines, referencesForHost]);
 
   // ---- annotations ------------------------------------------------------------------------------
-  // A note pinned to what is selected now. It goes nowhere until the person adds it to the chat
-  // box, and from there it is theirs to send.
+  // A note pinned to what is selected now. It goes straight into the chat box beside the prompt and
+  // keeps up with the model there: an edit replaces it, a delete takes it back out. Nothing reaches
+  // the agent until the person sends the prompt.
   const annotationAvailable = canonicalCopySelectionLines.length > 0 && !inspectionHighlight && !viewerLoading && !stepInteractionBlocked;
+  const addToChatBox = useCallback(async (list) => {
+    if (!promptAvailable || !list.length) return;
+    const result = await deliverPrompt(createAnnotationsPromptContext({ resource: promptResource, annotations: list }));
+    if (annotationDelivered(result)) setAnnotations(current => list.reduce((next, annotation) => markAnnotationSent(next, annotation.id), current));
+  }, [promptAvailable, deliverPrompt, promptResource]);
+  const takeOutOfChatBox = useCallback((ids) => { if (ids.length) host.promptContext.retract?.(ids); }, [host.promptContext]);
   const annotateSelection = useCallback((note) => {
     if (!annotationAvailable) return;
     const references = referencesForHost(canonicalCopySelectionLines.join("\n")).map(({ selector, label }) => ({ selector, label }));
@@ -1877,8 +1884,11 @@ function StepSurfaceBody({ view, data }) {
         ? { bbox: selectedMeshData?.bounds } : { bbox: parts.find(part => part.id === id)?.bounds })
     // An annotation lives only as its dot, so one always gets a place: the model's middle at worst.
     ]) || annotationAnchor([{ bbox: selectedMeshData?.bounds }]);
-    setAnnotations(current => addAnnotation(current, createAnnotation(references, note, { anchor })));
-  }, [annotationAvailable, referencesForHost, canonicalCopySelectionLines, effectiveActiveReferenceMap, selectedMeshData]);
+    const annotation = createAnnotation(references, note, { anchor });
+    if (!annotation) return;
+    setAnnotations(current => addAnnotation(current, annotation));
+    void addToChatBox([annotation]);
+  }, [annotationAvailable, referencesForHost, canonicalCopySelectionLines, effectiveActiveReferenceMap, selectedMeshData, addToChatBox]);
   const annotationSelectCount = useRef(0);
   const selectAnnotation = useCallback((annotation) => {
     const selector = annotation.references.map(reference => reference.selector).join(",");
@@ -1886,20 +1896,27 @@ function StepSurfaceBody({ view, data }) {
     setAnnotationSelectRequest({ selector, key: `annotation:${annotation.id}:${annotationSelectCount.current}` });
     setOpenAnnotationId(annotation.anchor ? annotation.id : null);
   }, []);
-  const changeAnnotation = useCallback((id, text) => setAnnotations(current => editAnnotation(current, id, text)), []);
+  const changeAnnotation = useCallback((id, text) => {
+    const edited = editAnnotation(annotations, id, text);
+    const annotation = edited.find(item => item.id === id);
+    if (!annotation || annotation.text === annotations.find(item => item.id === id)?.text) return;
+    setAnnotations(edited);
+    // The chat box's copy is replaced by the edited one (the same id).
+    void addToChatBox([annotation]);
+  }, [annotations, addToChatBox]);
   const deleteAnnotation = useCallback((id) => {
     setAnnotations(current => removeAnnotation(current, id));
     setOpenAnnotationId(current => current === id ? null : current);
-  }, []);
-  // Every annotation not yet in the chat box goes there in one delivery, as Codex's comment bar
-  // sends; the person then sends the prompt.
-  const addAnnotationsToChat = useCallback(async () => {
-    const pending = annotations.filter(annotation => !annotation.sent);
-    if (!promptAvailable || !pending.length) return;
-    const result = await deliverPrompt(createAnnotationsPromptContext({ resource: promptResource, annotations: pending }));
-    if (annotationDelivered(result)) setAnnotations(current => pending.reduce((list, annotation) => markAnnotationSent(list, annotation.id), current));
-  }, [annotations, promptAvailable, deliverPrompt, promptResource]);
-  const clearAnnotations = useCallback(() => { setAnnotations([]); setOpenAnnotationId(null); }, []);
+    takeOutOfChatBox([id]);
+  }, [takeOutOfChatBox]);
+  // The bar's: whatever did not reach the chat box when it was made (no chat was open, or adding
+  // failed), all at once.
+  const addAnnotationsToChat = useCallback(() => addToChatBox(annotations.filter(annotation => !annotation.sent)), [annotations, addToChatBox]);
+  const clearAnnotations = useCallback(() => {
+    takeOutOfChatBox(annotations.map(annotation => annotation.id));
+    setAnnotations([]);
+    setOpenAnnotationId(null);
+  }, [annotations, takeOutOfChatBox]);
 
   const toggleStepTreeNode = useCallback((nodeId) => {
     const normalizedNodeId = String(nodeId || "").trim();

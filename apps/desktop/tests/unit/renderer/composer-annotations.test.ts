@@ -55,3 +55,9 @@ it("pressing an annotation in the chat box opens its model, selects its geometry
   expect(selectCadReference).toHaveBeenCalledWith("bracket-tab", "o1.1.f2,o1.1.f5", { annotation: "a1" });
   expect(() => openAnnotation(null, { id: "a2", text: "", references: [{ text: "parts/bracket.step#o1.1.f2" }] })).toThrow(/project/);
 });
+
+it("an annotation deleted on the model leaves the draft, and the rest stay", () => {
+  useComposer.getState().acceptContext(key, "op-1", [annotation("a1", "hole"), annotation("a2", "fillet")], { root: "/p", focus: false });
+  useComposer.getState().removeAnnotations(key, ["a1"]);
+  expect(useComposer.getState().annotations[key]?.map(item => item.id)).toEqual(["a2"]);
+});

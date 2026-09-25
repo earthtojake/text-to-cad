@@ -82,6 +82,8 @@ export function createDesktopPromptContext(projectId: string, root: string | nul
   };
   return {
     getSnapshot,
+    // An annotation deleted on the model leaves this chat's draft with it.
+    retract: partIds => useComposer.getState().removeAnnotations(sessionId, partIds),
     subscribe: listener => {
       const unsubscribes = [useSessions.subscribe(listener), useComposer.subscribe(listener)];
       return () => unsubscribes.forEach(unsubscribe => unsubscribe());

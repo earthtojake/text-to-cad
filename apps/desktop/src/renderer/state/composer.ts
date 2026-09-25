@@ -67,7 +67,8 @@ type ComposerState = {
   referenceLabels: Record<string, Record<string, string>>;
   /** Annotations added from the viewer, per draft key, until the prompt is sent. */
   annotations: Record<string, DraftAnnotation[]>;
-  removeAnnotations: (key: string) => void;
+  /** All of a draft's annotations, or only those with the given ids. */
+  removeAnnotations: (key: string, ids?: readonly string[]) => void;
   /** Files the explorer attached, per draft key, until the composer takes them. */
   pendingFiles: Record<string, File[]>;
   /** A new draft with a CAD reference runs in that model’s workspace. */
@@ -168,7 +169,11 @@ export const useComposer = create<ComposerState>((set, get) => ({
   drafts: {},
   referenceLabels: {},
   annotations: {},
-  removeAnnotations: (key) => set(state => {
+  removeAnnotations: (key, ids) => set(state => {
+    if (ids) {
+      const kept = (state.annotations[key] ?? []).filter(annotation => !ids.includes(annotation.id));
+      return { annotations: { ...state.annotations, [key]: kept } };
+    }
     const { [key]: _removed, ...rest } = state.annotations;
     return { annotations: rest };
   }),

@@ -1452,18 +1452,23 @@ test('reference action uses its own viewport bottom inset', async () => {
   assert.deepEqual(view.errors, []);
 });
 
-test('Annotate pins a note to the selection as a dot on the model, and the bar adds every annotation to the chat at once', async () => {
+test('Annotate pins a note to the selection as a dot on the model and puts it in the chat box, where the person sends it', async () => {
   const view = await open();
   const {page, pane} = view;
   await page.evaluate(() => {
     window.__delivered = [];
-    window.cadHarness.a.host.promptContext.deliver = async context => {
-      window.__delivered.push(context.parts.map(part => part.kind === 'annotation'
-        ? {kind: 'annotation', id: part.id, selectors: part.references.flatMap(reference => reference.target.selectors), text: part.text}
-        : {kind: part.kind}));
+    window.__retracted = [];
+    window.__deliveryFails = false;
+    const port = window.cadHarness.a.host.promptContext;
+    port.deliver = async context => {
+      if (window.__deliveryFails) return {status: 'failed', message: 'No chat to add to'};
+      window.__delivered.push(context.parts.map(part => ({kind: part.kind, id: part.id,
+        selectors: part.references?.flatMap(reference => reference.target.selectors), text: part.text})));
       return {status: 'added', partIds: context.parts.map(part => part.id)};
     };
+    port.retract = ids => { window.__retracted.push([...ids]); };
   });
+  const delivered = () => page.evaluate(() => window.__delivered);
   const annotate = async (selector, note) => {
     await page.evaluate(value => window.cadHarness.a.controller.select({selectors: [value]}), selector);
     await pane.getByRole('button', {name: 'Annotate', exact: true}).click();
@@ -1471,8 +1476,14 @@ test('Annotate pins a note to the selection as a dot on the model, and the bar a
     await box.fill(note);
     await box.press('Enter');
   };
+
+  // Making an annotation puts it in the chat box at once; nothing is sent to the agent by it.
   await annotate('o1.2', 'make a hole in it');
-  assert.deepEqual(await page.evaluate(() => window.__delivered), [], 'making an annotation sends nothing');
+  await page.waitForFunction(() => window.__delivered.length === 1);
+  const [first] = (await delivered())[0];
+  assert.deepEqual([first.kind, first.selectors, first.text], ['annotation', ['o1.2'], 'make a hole in it']);
+  const bar = pane.getByRole('toolbar', {name: 'Annotations'});
+  assert.equal(await bar.count(), 0, 'nothing is left to add, so there is no bar');
   assert.equal(await pane.getByRole('list', {name: 'Annotations'}).count(), 0, 'annotations are not listed in the panel');
 
   // It is a numbered dot on the model, over the part it was made on; pressing the dot opens its card there.
@@ -1486,6 +1497,7 @@ test('Annotate pins a note to the selection as a dot on the model, and the bar a
   await dot.click();
   await card.waitFor();
   assert.match((await card.innerText()).replace(/\s+/g, ' '), /^Annotation 1: .+ make a hole in it/);
+  await card.getByLabel('In the chat box').waitFor();
   const chip = card.locator('[data-annotation-chip="o1.2"]');
 
   // Pressing the chip selects that geometry again, whatever is selected now.
@@ -1494,45 +1506,39 @@ test('Annotate pins a note to the selection as a dot on the model, and the bar a
   await chip.click();
   await page.waitForFunction(() => window.cadHarness.a.controller.readState().selectedPartIds.join() === 'o1.2');
 
-  // The note is editable in place.
+  // An edit replaces the chat box's copy: the same annotation, delivered again.
   await card.getByRole('button', {name: 'Edit annotation 1'}).click();
   const edit = card.getByRole('textbox', {name: 'Edit annotation 1'});
   await edit.fill('make a 6 mm hole in it');
   await edit.press('Enter');
-  assert.match(await card.innerText(), /make a 6 mm hole in it/);
+  await page.waitForFunction(() => window.__delivered.length === 2);
+  const [edited] = (await delivered())[1];
+  assert.deepEqual([edited.id, edited.text], [first.id, 'make a 6 mm hole in it']);
   await card.getByRole('button', {name: 'Close', exact: true}).click();
   await card.waitFor({state: 'detached'});
 
   // The chat box names an annotation (its chip was pressed there): its geometry is selected and its card opens.
   await page.evaluate(() => window.cadHarness.a.controller.select({selectors:['o1.1']}));
-  const annotationId = await dot.evaluate(element => element.closest('[data-annotation-pin]').dataset.annotationPin);
-  await page.evaluate(id => window.cadHarness.selectReference('o1.2', id), annotationId);
+  await page.evaluate(id => window.cadHarness.selectReference('o1.2', id), first.id);
   await card.waitFor();
   await page.waitForFunction(() => window.cadHarness.a.controller.readState().selectedPartIds.join() === 'o1.2');
-  await card.getByRole('button', {name: 'Close', exact: true}).click();
 
-  // A second annotation; the bar over the model adds both to the chat box in one go.
-  await annotate('o1.1', 'add a fillet');
-  const bar = pane.getByRole('toolbar', {name: 'Annotations'});
-  assert.match(await bar.innerText(), /2 annotations/);
-  await bar.getByRole('button', {name: 'Add to chat', exact: true}).click();
-  await page.waitForFunction(() => window.__delivered.length === 1);
-  const delivered = await page.evaluate(() => window.__delivered[0]);
-  assert.deepEqual(delivered.map(part => [part.kind, part.selectors, part.text]), [
-    ['annotation', ['o1.2'], 'make a 6 mm hole in it'],
-    ['annotation', ['o1.1'], 'add a fillet']
-  ]);
-  // Once every annotation is in the chat box the bar goes; the dots stay, grey.
-  await bar.waitFor({state: 'detached'});
-  assert.equal(await dot.count(), 1);
-
-  // A new one brings the bar back; clearing takes every dot away.
-  await annotate('o1.2', 'and chamfer it');
-  assert.match(await bar.innerText(), /^1 annotation\b/);
-  await bar.getByRole('button', {name: 'Clear annotations'}).click();
+  // Deleting it on the model takes it back out of the chat box.
+  await card.getByRole('button', {name: 'Delete annotation 1'}).click();
   await dot.waitFor({state: 'detached'});
-  assert.equal(await bar.count(), 0);
-  assert.deepEqual(view.errors, []);
+  assert.deepEqual(await page.evaluate(() => window.__retracted), [[first.id]]);
+
+  // One that could not be added waits on the bar, which adds it once there is somewhere to add it.
+  await page.evaluate(() => { window.__deliveryFails = true; });
+  await annotate('o1.1', 'add a fillet');
+  await bar.waitFor();
+  assert.match(await bar.innerText(), /^1 annotation\b/);
+  await page.evaluate(() => { window.__deliveryFails = false; });
+  await bar.getByRole('button', {name: 'Add to chat', exact: true}).click();
+  await page.waitForFunction(() => window.__delivered.length === 3);
+  await bar.waitFor({state: 'detached'});
+  assert.equal((await delivered())[2][0].text, 'add a fillet');
+  assert.deepEqual(view.errors.filter(error => !/No chat to add to/.test(error)), []);
 });
 
 test('reference CTA, double clicks and copy shortcut deliver references silently', async () => {

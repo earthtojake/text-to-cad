@@ -34,9 +34,9 @@ export function projectAnnotationAnchor(runtime, anchor, width, height) {
 }
 
 /**
- * The bar over the model while some annotations are not in the chat box yet, as Codex's comment
- * bar is: "3 annotations · Add to chat · ×". Adding puts every one not yet added into the chat box
- * in one go; the cross clears them all. Once all are added it goes: the grey dots say so.
+ * Annotations go into the chat box as they are made. This bar is for the ones that did not (no chat
+ * was open to take them, or adding failed): "2 annotations · Add to chat · ×". The cross clears
+ * them all, from the model and the chat box both.
  */
 function AnnotationsBar({ pending, canAddToChat, onAddToChat, onClear }) {
   if (!pending) return null;
@@ -119,7 +119,7 @@ export default function AnnotationPins({ viewport, annotations, openId, onOpenCh
               className={cn(
                 "pointer-events-auto absolute flex size-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-background text-[11px] font-semibold tabular-nums shadow-md shadow-black/30 transition-[transform,opacity]",
                 "hover:scale-110 group-data-[facing=false]/pin:opacity-45",
-                annotation.sent ? "bg-muted-foreground text-background" : "bg-blue-500 text-white",
+                "bg-blue-500 text-white",
                 open && "scale-110 ring-2 ring-blue-500/40 ring-offset-1 ring-offset-background"
               )}>
               {index + 1}

@@ -37,5 +37,10 @@ export interface PromptContextPort {
   getSnapshot(): PromptDestinationState;
   subscribe(listener: () => void): () => void;
   deliver(context: PromptContext): Promise<PromptDeliveryResult>;
+  /**
+   * Take parts this surface delivered back out of the draft, by part id, while the draft still
+   * holds them (an annotation deleted on the model). A destination without drafts has none.
+   */
+  retract?(partIds: readonly string[]): void;
 }
 export interface PromptTextOptions { resolvePath?: (resource: ResourceRef) => string }
