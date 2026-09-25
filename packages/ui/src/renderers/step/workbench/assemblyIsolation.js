@@ -71,40 +71,6 @@ export function minimalAssemblyIsolationNodeIds(root, nodeIds, { rootId = "" } =
   return roots;
 }
 
-function assemblyChildNodeIds(node, rootId) {
-  const normalizedRootId = String(rootId || "").trim();
-  return (Array.isArray(node?.children) ? node.children : [])
-    .map((child) => String(child?.id || "").trim())
-    .filter((nodeId) => nodeId && nodeId !== normalizedRootId);
-}
-
-export function assemblyIsolationLayerNodeIds(root, isolatedNodeIds, rootId) {
-  if (!root) {
-    return [];
-  }
-  const normalizedIsolatedNodeIds = minimalAssemblyIsolationNodeIds(root, isolatedNodeIds, {
-    rootId
-  });
-  if (!normalizedIsolatedNodeIds.length) {
-    return assemblyChildNodeIds(root, rootId);
-  }
-  const selectable = new Set();
-  for (const nodeId of normalizedIsolatedNodeIds) {
-    const node = findAssemblyNode(root, nodeId);
-    for (const selectableNodeId of assemblyChildNodeIds(node, rootId)) {
-      selectable.add(selectableNodeId);
-    }
-  }
-  return [...selectable];
-}
-
-export function selectableViewerNodeIdsForIsolation(root, isolatedNodeIds, rootId) {
-  if (!root) {
-    return [];
-  }
-  return assemblyIsolationLayerNodeIds(root, isolatedNodeIds, rootId);
-}
-
 export function selectableViewerNodeIdsForExpandedTree(root, expandedNodeIds, {
   rootId = "",
   isolatedNodeIds = []

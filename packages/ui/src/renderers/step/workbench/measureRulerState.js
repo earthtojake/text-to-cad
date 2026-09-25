@@ -62,24 +62,26 @@ export function applyMeasureRulerPick(state, pick, {
   };
 }
 
+const sameSnapTarget = (left, right) => (left?.referenceId || "") === (right?.referenceId || "") &&
+  (left?.snapKind || "") === (right?.snapKind || "");
+
 /**
  * Hover is tracked whether or not a measurement is in flight: with a draft it
- * drives the rubber-band line, and without one it is what lets the panel read
- * out the size of the entity under the cursor before any click.
+ * decides whether there is a rubber band at all, and without one it is what lets
+ * the panel read out the size of the entity under the cursor before any click.
  *
- * With no draft the point itself is not needed, so the state object is only
- * replaced when the hovered entity changes — otherwise every mouse move would
- * re-render the workspace for a readout that did not move.
+ * Either way the state object is only replaced when what the pointer SNAPS TO
+ * changes (or a hover comes or goes) — otherwise every mouse move would re-render
+ * the workspace. The point itself moves every frame, and the overlay draws it from
+ * the live hover it is handed (`useStepMeasureOverlay`), not from here.
  */
 export function applyMeasureRulerHover(state, hover) {
   const nextHover = hover && isFinitePoint(hover?.point) ? hover : null;
   if (!state?.draft) {
-    const currentId = state?.hover?.referenceId || "";
-    const nextId = nextHover?.referenceId || "";
     if (!state && !nextHover) {
       return state || null;
     }
-    if (state && currentId === nextId && (state.hover?.snapKind || "") === (nextHover?.snapKind || "")) {
+    if (state && sameSnapTarget(state.hover, nextHover)) {
       return state;
     }
     return {
@@ -87,6 +89,9 @@ export function applyMeasureRulerHover(state, hover) {
       hover: nextHover,
       measurements: state?.measurements || []
     };
+  }
+  if (Boolean(state.draft.hover) === Boolean(nextHover) && sameSnapTarget(state.draft.hover, nextHover)) {
+    return state;
   }
   return {
     ...state,
@@ -154,11 +159,12 @@ export function cancelMeasureRulerDraft(state) {
   };
 }
 
-export function clearMeasureRulerMeasurements(state) {
-  if (!state) {
-    return null;
-  }
-  return state.draft || state.hover
-    ? { draft: state.draft || null, hover: state.hover || null, measurements: [] }
-    : null;
+/** Whether Measure's snapping filter lets a pick (or a hover) of this snap kind through. */
+export function measureFilterAccepts(filter, snapKind) {
+  return (filter !== "edges" || snapKind === "edge") && (filter !== "faces" || snapKind === "face");
+}
+
+/** What Measure's snapping filter offers to snap to: the faces, the edges, both, or neither (free points). */
+export function measureFilterSnaps(filter) {
+  return { faces: filter === "all" || filter === "faces", edges: filter === "all" || filter === "edges" };
 }

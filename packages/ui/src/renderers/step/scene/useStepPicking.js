@@ -1,16 +1,16 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { VIEWER_PICK_MODE } from "@hardcore/core/lib/viewer/constants.js";
 import {
   classifyMeasurePick,
   edgeGeometryFromSegments,
-  isFinitePoint,
-  pickMeshVertexByScreenDistance
+  isFinitePoint
 } from "@hardcore/core/lib/viewer/measurement.js";
 import { buildEdgeLinePositionsFromProxy } from "@hardcore/core/lib/viewer/referenceGeometry.js";
 import { pointVisibleByClipPlane } from "@hardcore/core/lib/viewer/clipPlane.js";
 import { screenLimitedPickThreshold } from "@hardcore/core/lib/viewer/pickingThresholds.js";
 import { PERF_MEASURE_NAMES, perfMeasure, perfStart } from "@hardcore/core/lib/viewer/perfMarks.js";
 import { partIdFromIntersection, shouldRaycastRecordForPick } from "./partPicking.js";
+import { prefersCoarsePointer } from "../../kit/viewport/dom.js";
 
 const AUTO_EDGE_PICK_THRESHOLD_FACTOR = 1;
 const FRONT_LAYER_DISTANCE_FACTOR = 0.0015;
@@ -23,97 +23,43 @@ const EDGE_HOVER_MAX_SCREEN_DISTANCE_PX = 6;
 const EDGE_HOVER_MAX_SCREEN_DISTANCE_WITH_FACE_PX = EDGE_HOVER_MAX_SCREEN_DISTANCE_PX;
 const EDGE_PICK_PRIORITY_WITH_FACE_PX = EDGE_PICK_MAX_SCREEN_DISTANCE_WITH_FACE_PX;
 const EDGE_HOVER_PRIORITY_WITH_FACE_PX = EDGE_HOVER_MAX_SCREEN_DISTANCE_WITH_FACE_PX;
-const CORNER_PICK_MAX_SCREEN_DISTANCE_PX = 5;
-const CORNER_HOVER_MAX_SCREEN_DISTANCE_PX = 4;
-// Mesh Measure has no face/edge fallback, so the corner window is wider
-// than STEP's 4/5 px. Still a screen-space cap, not "nearest of the triangle".
-const MESH_VERTEX_HOVER_MAX_SCREEN_DISTANCE_PX = 14;
-const MESH_VERTEX_PICK_MAX_SCREEN_DISTANCE_PX = 16;
-const CORNER_PICK_PRIORITY_WITH_OTHER_PX = 4;
-const CORNER_HOVER_PRIORITY_WITH_OTHER_PX = 3;
 const HOVER_PICK_MIN_MOVE_PX = 2;
 const FINE_POINTER_TAP_SLOP_PX = 4;
 const COARSE_POINTER_TAP_SLOP_PX = 12;
 export const VIEWER_DOUBLE_CLICK_ACTIVATION_DELAY_MS = 220;
 
+/**
+ * What a pick at one point resolves to under the pick mode, from ONE raycast of the model:
+ * the part under Parts and Assembly; topology, else the part, under Auto; topology under
+ * Measure and Topology, where a HOVER that finds no topology still lights the part, so the
+ * pointer shows what a press there reaches. Nothing at all while picking is off: every press
+ * and release asks, and a raycast can materialize deformation buffers and enqueue a BVH build
+ * for an answer that is always "nothing".
+ */
 export function resolveViewerReferencePick({
   pickMode,
   suppressTopologyPicking = false,
-  preferTopology = false,
+  hover = false,
   intersectModel,
   pickTopology,
   pickPart
 }) {
-  // Raycasts can materialize deformation buffers and enqueue a BVH build.
-  // A disabled picker must stop before even preparing those intersections.
   if (suppressTopologyPicking || pickMode === VIEWER_PICK_MODE.NONE) {
     return null;
   }
   const intersections = intersectModel();
-  if (preferTopology) {
-    const reference = pickTopology(intersections);
-    if (reference) return reference;
-  }
   if (pickMode === VIEWER_PICK_MODE.PARTS || pickMode === VIEWER_PICK_MODE.ASSEMBLY) {
     return pickPart(intersections);
   }
   if (pickMode === VIEWER_PICK_MODE.AUTO) {
     return pickTopology(intersections) || pickPart(intersections);
   }
-  if (pickMode === VIEWER_PICK_MODE.MEASURE) {
-    return pickTopology(intersections);
+  if (pickMode === VIEWER_PICK_MODE.MEASURE || pickMode === VIEWER_PICK_MODE.TOPOLOGY) {
+    return pickTopology(intersections) ||
+      (hover && pickMode === VIEWER_PICK_MODE.TOPOLOGY ? pickPart(intersections) : null);
   }
   return null;
 }
-
-function applyColumnMajorMatrix4(point, elements) {
-  if (!isFinitePoint(point) || !elements || elements.length < 16) {
-    return null;
-  }
-  const x = point[0];
-  const y = point[1];
-  const z = point[2];
-  const w = (elements[3] * x) + (elements[7] * y) + (elements[11] * z) + elements[15];
-  if (!Number.isFinite(w) || Math.abs(w) < 1e-12) {
-    return null;
-  }
-  return [
-    ((elements[0] * x) + (elements[4] * y) + (elements[8] * z) + elements[12]) / w,
-    ((elements[1] * x) + (elements[5] * y) + (elements[9] * z) + elements[13]) / w,
-    ((elements[2] * x) + (elements[6] * y) + (elements[10] * z) + elements[14]) / w
-  ];
-}
-
-/**
- * World-space corners of the triangle a mesh ray hit. Used to snap Measure
- * picks to a vertex without walking the rest of the mesh.
- */
-export function worldTriangleVerticesFromMeshIntersection(intersection) {
-  const face = intersection?.face;
-  const position = intersection?.object?.geometry?.attributes?.position;
-  const matrix = intersection?.object?.matrixWorld?.elements;
-  if (!face || !position || typeof position.getX !== "function" || !matrix) {
-    return null;
-  }
-  const vertices = [];
-  for (const index of [face.a, face.b, face.c]) {
-    if (!Number.isInteger(index) || index < 0 || index >= position.count) {
-      return null;
-    }
-    const local = [Number(position.getX(index)), Number(position.getY(index)), Number(position.getZ(index))];
-    const world = applyColumnMajorMatrix4(local, matrix);
-    if (!world) {
-      return null;
-    }
-    vertices.push(world);
-  }
-  return vertices;
-}
-
-const MESH_VERTEX_MEASURE_REFERENCE = Object.freeze({
-  selectorType: "vertex",
-  pickData: Object.freeze({ selectorType: "vertex" })
-});
 
 export function measureHitPointFromWorldIntersection(intersection) {
   if (!intersection?.point) {
@@ -171,7 +117,6 @@ export function measurePickForPosition({
   bypassTopology = false,
   edgeSegments = null,
   edgeGeometry,
-  vertexPoint = null,
   modelOffset = null
 } = {}) {
   const hitPoint = isFinitePoint(worldHitPoint) ? worldHitPoint : null;
@@ -184,8 +129,7 @@ export function measurePickForPosition({
     hitPoint: modelHitPoint,
     referenceId: referenceId || "",
     edgeSegments,
-    edgeGeometry,
-    vertexPoint
+    edgeGeometry
   });
   if (!pick) {
     return null;
@@ -244,7 +188,13 @@ function frontMostModelIntersections(intersections) {
   return intersections.filter((intersection) => Number(intersection?.distance) <= nearestDistance + depthWindow);
 }
 
-function focusedPartIdSet(value) {
+function referenceIdSet(references) {
+  return new Set(
+    (Array.isArray(references) ? references : []).map((reference) => String(reference?.id || "").trim()).filter(Boolean)
+  );
+}
+
+function partIdSet(value) {
   return new Set(
     (Array.isArray(value) ? value : [value])
       .map((id) => String(id || "").trim())
@@ -272,7 +222,6 @@ export function useStepPicking({
   selectorRuntime,
   pickableFaces,
   pickableEdges,
-  pickableVertices,
   hiddenPartIds,
   focusedPartId,
   onHoverReferenceChange,
@@ -286,55 +235,39 @@ export function useStepPicking({
   viewerReadyTick,
   // While a STEP animation is playing, reference hover/selection is suspended
   // so playback frames skip raycasts and pick-state rebuilds entirely.
-  suppressTopologyPicking = false,
-  allowMeshVertexSnap = false
+  suppressTopologyPicking = false
 }) {
   // Keep pointer listeners stable across parent rerenders; hover itself updates parent state.
+  // The listeners read everything that changes through these refs, so nothing here re-binds
+  // them: not a pose tick (a posed selector runtime), not a hover, not a new pickable list.
   const pickModeRef = useRef(pickMode);
   const selectorRuntimeRef = useRef(selectorRuntime);
   const pickableFacesRef = useRef(pickableFaces);
   const pickableEdgesRef = useRef(pickableEdges);
-  const pickableVerticesRef = useRef(pickableVertices);
-  const hiddenPartIdsRef = useRef(hiddenPartIds);
-  const focusedPartIdRef = useRef(focusedPartId);
   const onHoverReferenceChangeRef = useRef(onHoverReferenceChange);
   const onActivateReferenceRef = useRef(onActivateReference);
   const onDoubleActivateReferenceRef = useRef(onDoubleActivateReference);
   const onMeasurePickRef = useRef(onMeasurePick);
   const onMeasureHoverPointRef = useRef(onMeasureHoverPoint);
-  const allowMeshVertexSnapRef = useRef(allowMeshVertexSnap);
-  const allowedFaceReferenceIdsRef = useRef(new Set());
-  const allowedEdgeReferenceIdsRef = useRef(new Set());
-  const allowedVertexReferenceIdsRef = useRef(new Set());
 
   pickModeRef.current = pickMode;
   selectorRuntimeRef.current = selectorRuntime;
   pickableFacesRef.current = pickableFaces;
   pickableEdgesRef.current = pickableEdges;
-  pickableVerticesRef.current = pickableVertices;
-  hiddenPartIdsRef.current = hiddenPartIds;
-  focusedPartIdRef.current = focusedPartId;
   onHoverReferenceChangeRef.current = onHoverReferenceChange;
   onActivateReferenceRef.current = onActivateReference;
   onDoubleActivateReferenceRef.current = onDoubleActivateReference;
   onMeasurePickRef.current = onMeasurePick;
   onMeasureHoverPointRef.current = onMeasureHoverPoint;
-  allowMeshVertexSnapRef.current = allowMeshVertexSnap === true;
-  allowedFaceReferenceIdsRef.current = new Set(
-    (Array.isArray(pickableFaces) ? pickableFaces : [])
-      .map((reference) => String(reference?.id || "").trim())
-      .filter(Boolean)
-  );
-  allowedEdgeReferenceIdsRef.current = new Set(
-    (Array.isArray(pickableEdges) ? pickableEdges : [])
-      .map((reference) => String(reference?.id || "").trim())
-      .filter(Boolean)
-  );
-  allowedVertexReferenceIdsRef.current = new Set(
-    (Array.isArray(pickableVertices) ? pickableVertices : [])
-      .map((reference) => String(reference?.id || "").trim())
-      .filter(Boolean)
-  );
+  // The id sets a pick is checked against, built when their lists change rather than on every
+  // render (the layers render per orbit frame) or every pick.
+  const pickSetsRef = useRef(null);
+  pickSetsRef.current = {
+    faces: useMemo(() => referenceIdSet(pickableFaces), [pickableFaces]),
+    edges: useMemo(() => referenceIdSet(pickableEdges), [pickableEdges]),
+    hidden: useMemo(() => partIdSet(hiddenPartIds), [hiddenPartIds]),
+    focused: useMemo(() => partIdSet(focusedPartId), [focusedPartId])
+  };
 
   // Arming the tool has to change the cursor immediately. Leaving it to the next
   // hover tick means the select pointer lingers until the mouse happens to move.
@@ -358,10 +291,7 @@ export function useStepPicking({
 
     const container = mountRef.current;
     const sceneMount = sceneMountRef?.current || null;
-    const coarsePointerQuery = typeof window.matchMedia === "function"
-      ? window.matchMedia("(pointer: coarse)")
-      : null;
-    const defaultToCoarsePointer = coarsePointerQuery?.matches ?? false;
+    const defaultToCoarsePointer = prefersCoarsePointer();
     const touches = new Set();
     const pointerDown = {
       active: false,
@@ -435,28 +365,28 @@ export function useStepPicking({
       pointerDown.referenceId = "";
     }
 
+    // The viewport's box, read ONCE per pick (every pick starts by aiming the ray) and reused
+    // by every candidate it scores, rather than a layout read per candidate.
+    let pickRect = null;
     function setPointerFromPosition(clientX, clientY) {
-      const rect = container.getBoundingClientRect();
-      runtime.pointer.x = ((clientX - rect.left) / rect.width) * 2 - 1;
-      runtime.pointer.y = -((clientY - rect.top) / rect.height) * 2 + 1;
+      pickRect = container.getBoundingClientRect();
+      runtime.pointer.x = ((clientX - pickRect.left) / pickRect.width) * 2 - 1;
+      runtime.pointer.y = -((clientY - pickRect.top) / pickRect.height) * 2 + 1;
       runtime.raycaster.setFromCamera(runtime.pointer, runtime.camera);
       if (runtime.raycaster?.params?.Line) {
         runtime.raycaster.params.Line.threshold = runtime.edgePickThreshold || 1;
       }
-      if (runtime.raycaster?.params?.Points) {
-        runtime.raycaster.params.Points.threshold = runtime.vertexPickThreshold || 1;
-      }
     }
 
     function projectPointToClient(point) {
-      if (!point?.clone || !runtime?.camera) {
+      if (!point?.clone || !runtime?.camera || !pickRect) {
         return null;
       }
       const projected = point.clone().project(runtime.camera);
       if (!Number.isFinite(projected.x) || !Number.isFinite(projected.y)) {
         return null;
       }
-      const rect = container.getBoundingClientRect();
+      const rect = pickRect;
       return {
         x: rect.left + ((projected.x + 1) * 0.5 * rect.width),
         y: rect.top + ((1 - projected.y) * 0.5 * rect.height)
@@ -472,7 +402,7 @@ export function useStepPicking({
     }
 
     function pickViewportHeightPx() {
-      return container.clientHeight || container.getBoundingClientRect().height || 1;
+      return pickRect?.height || 1;
     }
 
     function pickSurfaceDistance(modelIntersections) {
@@ -499,8 +429,7 @@ export function useStepPicking({
     }
 
     function visibleModelMeshes() {
-      const focusIds = focusedPartIdSet(focusedPartIdRef.current);
-      const hiddenIds = focusedPartIdSet(hiddenPartIdsRef.current);
+      const { focused: focusIds, hidden: hiddenIds } = pickSetsRef.current;
       return runtime.displayRecords
         .filter((record) => shouldRaycastRecordForPick(record, { focusIds, hiddenIds }))
         .map((record) => record.mesh);
@@ -515,8 +444,7 @@ export function useStepPicking({
     }
 
     function pickPartReferenceFromIntersections(intersections) {
-      const focusIds = focusedPartIdSet(focusedPartIdRef.current);
-      const hiddenIds = focusedPartIdSet(hiddenPartIdsRef.current);
+      const { focused: focusIds, hidden: hiddenIds } = pickSetsRef.current;
       for (const intersection of intersections) {
         const partId = partIdFromIntersection(intersection);
         if (!partId) {
@@ -542,7 +470,7 @@ export function useStepPicking({
       }
       const reference = selectorRuntimeRef.current?.faceReferenceByRowIndex?.get?.(rowIndex) || null;
       const referenceId = String(reference?.id || "").trim();
-      const allowedFaceReferenceIds = allowedFaceReferenceIdsRef.current;
+      const allowedFaceReferenceIds = pickSetsRef.current.faces;
       if (!referenceId || (allowedFaceReferenceIds.size && !allowedFaceReferenceIds.has(referenceId))) {
         return null;
       }
@@ -561,24 +489,8 @@ export function useStepPicking({
       }
       const reference = selectorRuntimeRef.current?.edgeReferenceByRowIndex?.get?.(rowIndex) || null;
       const referenceId = String(reference?.id || "").trim();
-      const allowedEdgeReferenceIds = allowedEdgeReferenceIdsRef.current;
+      const allowedEdgeReferenceIds = pickSetsRef.current.edges;
       if (!referenceId || (allowedEdgeReferenceIds.size && !allowedEdgeReferenceIds.has(referenceId))) {
-        return null;
-      }
-      return reference;
-    }
-
-    function vertexReferenceFromIntersection(intersection) {
-      const pointIndex = Number(intersection?.index);
-      const vertexIds = intersection?.object?.userData?.vertexIds;
-      const rowIndex = Number.isInteger(pointIndex) ? Number(vertexIds?.[pointIndex]) : NaN;
-      if (!Number.isInteger(rowIndex)) {
-        return null;
-      }
-      const reference = selectorRuntimeRef.current?.vertexReferenceByRowIndex?.get?.(rowIndex) || null;
-      const referenceId = String(reference?.id || "").trim();
-      const allowedVertexReferenceIds = allowedVertexReferenceIdsRef.current;
-      if (!referenceId || (allowedVertexReferenceIds.size && !allowedVertexReferenceIds.has(referenceId))) {
         return null;
       }
       return reference;
@@ -669,55 +581,6 @@ export function useStepPicking({
       };
     }
 
-    function pickVertexCandidate(modelIntersections, clientX, clientY, {
-      thresholdScale = 1,
-      maxScreenDistancePx = CORNER_PICK_MAX_SCREEN_DISTANCE_PX
-    } = {}) {
-      const pickableVertices = Array.isArray(pickableVerticesRef.current) ? pickableVerticesRef.current : [];
-      if (!pickableVertices.length || !runtime.vertexPickPoints) {
-        return null;
-      }
-      const vertexThreshold = currentPickThreshold(
-        runtime.vertexPickThreshold || 1,
-        thresholdScale,
-        maxScreenDistancePx,
-        modelIntersections
-      );
-      if (runtime.raycaster?.params?.Points) {
-        runtime.raycaster.params.Points.threshold = vertexThreshold;
-      }
-      let filteredIntersections = filterClippedIntersections(runtime, runtime.raycaster.intersectObject(runtime.vertexPickPoints, false));
-      const nearestSurfaceDistance = Number(modelIntersections?.[0]?.distance);
-      if (Number.isFinite(nearestSurfaceDistance)) {
-        const depthAllowance = Math.max(
-          EDGE_OCCLUSION_EPSILON_MIN,
-          vertexThreshold * EDGE_OCCLUSION_EPSILON_FACTOR
-        );
-        filteredIntersections = filteredIntersections.filter(
-          (intersection) => Number(intersection?.distance) <= nearestSurfaceDistance + depthAllowance
-        );
-      }
-      const best = chooseBestEdgeIntersection(
-        filteredIntersections,
-        (intersection) => edgeScreenDistance(intersection, clientX, clientY)
-      );
-      if (!best) {
-        return null;
-      }
-      const bestScreenDistance = edgeScreenDistance(best, clientX, clientY);
-      if (Number.isFinite(bestScreenDistance) && bestScreenDistance > maxScreenDistancePx) {
-        return null;
-      }
-      const reference = vertexReferenceFromIntersection(best);
-      if (!reference) {
-        return null;
-      }
-      return {
-        reference,
-        screenDistance: bestScreenDistance
-      };
-    }
-
     function areFaceAndEdgeAdjacent(faceReference, edgeReference) {
       const adjacentSelectors = Array.isArray(faceReference?.pickData?.adjacentSelectors)
         ? faceReference.pickData.adjacentSelectors
@@ -730,40 +593,10 @@ export function useStepPicking({
       return adjacentSelectors.includes(edgeDisplaySelector) || adjacentSelectors.includes(edgeNormalizedSelector);
     }
 
-    function areEdgeAndVertexAdjacent(edgeReference, vertexReference) {
-      const adjacentSelectors = Array.isArray(vertexReference?.pickData?.adjacentSelectors)
-        ? vertexReference.pickData.adjacentSelectors
-        : [];
-      if (!adjacentSelectors.length) {
-        return false;
-      }
-      const edgeDisplaySelector = String(edgeReference?.displaySelector || "").trim();
-      const edgeNormalizedSelector = String(edgeReference?.normalizedSelector || "").trim();
-      return adjacentSelectors.includes(edgeDisplaySelector) || adjacentSelectors.includes(edgeNormalizedSelector);
-    }
-
-    function areFaceAndVertexAdjacent(faceReference, vertexReference) {
-      const faceAdjacentSelectors = Array.isArray(faceReference?.pickData?.adjacentSelectors)
-        ? faceReference.pickData.adjacentSelectors
-        : [];
-      const vertexAdjacentSelectors = Array.isArray(vertexReference?.pickData?.adjacentSelectors)
-        ? vertexReference.pickData.adjacentSelectors
-        : [];
-      if (!faceAdjacentSelectors.length || !vertexAdjacentSelectors.length) {
-        return false;
-      }
-      const edgeSelectorSet = new Set(faceAdjacentSelectors);
-      return vertexAdjacentSelectors.some((selector) => edgeSelectorSet.has(selector));
-    }
-
     function pickTopologyReference(modelIntersections, clientX, clientY, { hover = false } = {}) {
       const pickableFaces = Array.isArray(pickableFacesRef.current) ? pickableFacesRef.current : [];
       const pickableEdges = Array.isArray(pickableEdgesRef.current) ? pickableEdgesRef.current : [];
-      const pickableVertices = Array.isArray(pickableVerticesRef.current) ? pickableVerticesRef.current : [];
-      const hasFaces = pickableFaces.length > 0;
-      const hasEdges = pickableEdges.length > 0;
-      const hasVertices = pickableVertices.length > 0;
-      if (!hasFaces && !hasEdges && !hasVertices) {
+      if (!pickableFaces.length && !pickableEdges.length) {
         return null;
       }
       const faceReference = pickFaceReference(modelIntersections);
@@ -787,25 +620,6 @@ export function useStepPicking({
           maxScreenDistancePx
         }
       );
-      const vertexCandidate = pickVertexCandidate(
-        modelIntersections,
-        clientX,
-        clientY,
-        {
-          maxScreenDistancePx: hover ? CORNER_HOVER_MAX_SCREEN_DISTANCE_PX : CORNER_PICK_MAX_SCREEN_DISTANCE_PX
-        }
-      );
-      if (vertexCandidate) {
-        const vertexPriorityDistancePx = hover ? CORNER_HOVER_PRIORITY_WITH_OTHER_PX : CORNER_PICK_PRIORITY_WITH_OTHER_PX;
-        const adjacentToEdge = edgeCandidate && areEdgeAndVertexAdjacent(edgeCandidate.reference, vertexCandidate.reference);
-        const adjacentToFace = faceReference && areFaceAndVertexAdjacent(faceReference, vertexCandidate.reference);
-        if (!faceReference && !edgeCandidate) {
-          return vertexCandidate.reference.id;
-        }
-        if ((adjacentToEdge || adjacentToFace) && Number(vertexCandidate.screenDistance) <= vertexPriorityDistancePx) {
-          return vertexCandidate.reference.id;
-        }
-      }
       if (faceReference && edgeCandidate) {
         const priorityDistancePx = hover ? EDGE_HOVER_PRIORITY_WITH_FACE_PX : EDGE_PICK_PRIORITY_WITH_FACE_PX;
         if (areFaceAndEdgeAdjacent(faceReference, edgeCandidate.reference)) {
@@ -816,7 +630,7 @@ export function useStepPicking({
         }
         return faceReference.id;
       }
-      return edgeCandidate?.reference?.id || faceReference?.id || vertexCandidate?.reference?.id || null;
+      return edgeCandidate?.reference?.id || faceReference?.id || null;
     }
 
     function measureReferenceById(referenceId) {
@@ -829,39 +643,24 @@ export function useStepPicking({
         .find((candidate) => String(candidate?.id || "").trim() === String(referenceId || "").trim()) || null;
     }
 
-    // Hover re-resolves the same edge on every mouse move, so the last slice is
-    // kept rather than rebuilt each tick.
-    // Hover re-resolves the same edge every tick, and both the proxy slice and
-    // the geometry fit are functions of the reference alone.
-    let measureEdgeCache = { referenceId: "", segments: null, geometry: null };
+    // Hover re-resolves the same edge every tick, and both the proxy slice and the geometry fit
+    // are functions of the reference in the selector runtime it came from — which a pose
+    // replaces, so the runtime is part of the key.
+    let measureEdgeCache = { runtime: null, referenceId: "", segments: null, geometry: null };
 
     function measureSnapGeometry(reference, referenceId) {
       const selectorType = String(reference?.pickData?.selectorType || reference?.selectorType || "")
         .trim()
         .toLowerCase();
-      if (selectorType === "vertex") {
-        const center = reference?.pickData?.center;
-        return { edgeSegments: null, edgeGeometry: null, vertexPoint: isFinitePoint(center) ? center.slice(0, 3) : null };
-      }
       if (selectorType !== "edge") {
-        return { edgeSegments: null, edgeGeometry: null, vertexPoint: null };
+        return { edgeSegments: null, edgeGeometry: null };
       }
-      if (measureEdgeCache.referenceId !== referenceId) {
-        const segments = buildEdgeLinePositionsFromProxy(selectorRuntimeRef.current, reference);
-        measureEdgeCache = { referenceId, segments, geometry: edgeGeometryFromSegments(segments) };
+      const selectorRuntime = selectorRuntimeRef.current;
+      if (measureEdgeCache.referenceId !== referenceId || measureEdgeCache.runtime !== selectorRuntime) {
+        const segments = buildEdgeLinePositionsFromProxy(selectorRuntime, reference);
+        measureEdgeCache = { runtime: selectorRuntime, referenceId, segments, geometry: edgeGeometryFromSegments(segments) };
       }
-      return {
-        edgeSegments: measureEdgeCache.segments,
-        edgeGeometry: measureEdgeCache.geometry,
-        vertexPoint: null
-      };
-    }
-
-    function projectWorldArrayToClient(point) {
-      if (!isFinitePoint(point) || !runtime?.THREE?.Vector3) {
-        return null;
-      }
-      return projectPointToClient(new runtime.THREE.Vector3(point[0], point[1], point[2]));
+      return { edgeSegments: measureEdgeCache.segments, edgeGeometry: measureEdgeCache.geometry };
     }
 
     function measureReferenceFromPosition(clientX, clientY, { hover = false, bypassTopology = false } = {}) {
@@ -871,35 +670,10 @@ export function useStepPicking({
         .find((intersection) => measureHitPointFromWorldIntersection(intersection)) || null;
       const worldHitPoint = measureHitPointFromWorldIntersection(hitIntersection);
       const modelOffset = measureModelOffsetFromRuntime(runtimeRef.current);
-      if (allowMeshVertexSnapRef.current && !bypassTopology) {
-        const triangleWorld = worldTriangleVerticesFromMeshIntersection(hitIntersection);
-        const maxScreenDistancePx = hover
-          ? MESH_VERTEX_HOVER_MAX_SCREEN_DISTANCE_PX
-          : MESH_VERTEX_PICK_MAX_SCREEN_DISTANCE_PX;
-        const meshSnap = pickMeshVertexByScreenDistance(
-          triangleWorld,
-          { x: clientX, y: clientY },
-          maxScreenDistancePx,
-          projectWorldArrayToClient
-        );
-        if (!meshSnap) {
-          return { pick: null, referenceId: "" };
-        }
-        return {
-          pick: measurePickForPosition({
-            reference: MESH_VERTEX_MEASURE_REFERENCE,
-            worldHitPoint,
-            referenceId: "",
-            vertexPoint: measureWorldPointToModel(meshSnap.point, modelOffset),
-            modelOffset
-          }),
-          referenceId: ""
-        };
-      }
       const referenceId = bypassTopology ? "" : (pickTopologyReference(modelIntersections, clientX, clientY, { hover }) || "");
       const reference = referenceId ? measureReferenceById(referenceId) : null;
-      const { edgeSegments, edgeGeometry, vertexPoint } = bypassTopology
-        ? { edgeSegments: null, edgeGeometry: null, vertexPoint: null }
+      const { edgeSegments, edgeGeometry } = bypassTopology
+        ? { edgeSegments: null, edgeGeometry: null }
         : measureSnapGeometry(reference, referenceId);
       return {
         pick: measurePickForPosition({
@@ -909,44 +683,24 @@ export function useStepPicking({
           bypassTopology,
           edgeSegments,
           edgeGeometry,
-          vertexPoint,
           modelOffset
         }),
         referenceId
       };
     }
 
-    function pickReferenceAtPosition(clientX, clientY, { hover = false, preferTopology = false } = {}) {
-      // Every press and release asks for a pick. With picking off that was still a full
-      // model raycast per orbit gesture, which can materialize deformation buffers and
-      // enqueue a BVH build for an answer that is always "nothing".
-      if (suppressTopologyPicking || pickModeRef.current === VIEWER_PICK_MODE.NONE) {
-        return null;
-      }
-      setPointerFromPosition(clientX, clientY);
-      const modelIntersections = intersectVisibleModelMeshes();
-      const pickMode = pickModeRef.current;
-      if (preferTopology && pickMode !== VIEWER_PICK_MODE.PARTS) {
-        const topologyReference = pickTopologyReference(modelIntersections, clientX, clientY, { hover });
-        if (topologyReference) {
-          return topologyReference;
-        }
-      }
-      if (pickMode === VIEWER_PICK_MODE.PARTS) {
-        return pickPartReferenceFromIntersections(modelIntersections);
-      }
-      if (pickMode === VIEWER_PICK_MODE.ASSEMBLY) {
-        return pickPartReferenceFromIntersections(modelIntersections);
-      }
-      if (pickMode === VIEWER_PICK_MODE.AUTO) {
-        return pickTopologyReference(modelIntersections, clientX, clientY, { hover }) ||
-          pickPartReferenceFromIntersections(modelIntersections);
-      }
-      if (pickMode === VIEWER_PICK_MODE.MEASURE || pickMode === VIEWER_PICK_MODE.TOPOLOGY) {
-        return pickTopologyReference(modelIntersections, clientX, clientY, { hover }) ||
-          (hover && pickMode === VIEWER_PICK_MODE.TOPOLOGY ? pickPartReferenceFromIntersections(modelIntersections) : null);
-      }
-      return null;
+    function pickReferenceAtPosition(clientX, clientY, { hover = false } = {}) {
+      return resolveViewerReferencePick({
+        pickMode: pickModeRef.current,
+        suppressTopologyPicking,
+        hover,
+        intersectModel: () => {
+          setPointerFromPosition(clientX, clientY);
+          return intersectVisibleModelMeshes();
+        },
+        pickTopology: (intersections) => pickTopologyReference(intersections, clientX, clientY, { hover }),
+        pickPart: pickPartReferenceFromIntersections
+      });
     }
 
     function pickActivationReference(clientX, clientY, pointerType = "") {
@@ -1391,7 +1145,6 @@ export function useStepPicking({
     previewMode,
     runtimeRef,
     sceneMountRef,
-    selectorRuntime,
     suppressTopologyPicking,
     viewerReadyTick
   ]);

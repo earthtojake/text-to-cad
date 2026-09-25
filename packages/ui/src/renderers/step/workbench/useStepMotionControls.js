@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { advanceAnimationElapsed, animationClipDuration, animationNowMs, buildDefaultAnimationState,
   clampAnimationElapsed, clampAnimationSpeed, findAnimationClip, firstAnimationClipId,
   shouldPublishAnimationFrame } from "@hardcore/core/common/animationClock.js";
@@ -28,15 +28,24 @@ export function useStepMotionControls({
     writeParameters(normalizeParameterValues(selectedStepModuleDefinition,
       selectedStepModuleDefinition?.defaultParameterValues || {}));
   }, [selectedStepModuleDefinition, setAppliedStepPoseName, writeParameters]);
+  // What Position had set when a routine took the pose. A routine plays from the model at rest,
+  // so taking the pose puts Position's values aside rather than throwing them away; handing
+  // the pose back (leaving Animate, or touching Position) puts them back first.
+  const heldPositionRef = useRef(null);
+  useEffect(() => { heldPositionRef.current = null; }, [selectedStepModuleDefinition]);
   const activatePositionControls = useCallback(() => {
     motionRevisionRef.current += 1;
     const next = { ...buildDefaultAnimationState(selectedAnimationClips), enabled: false };
     animationStateRef.current = next;
     setAnimationState(next);
     resetAnimationClock();
-  }, [selectedAnimationClips, resetAnimationClock]);
+    const held = heldPositionRef.current;
+    heldPositionRef.current = null;
+    if (held) writeParameters(normalizeParameterValues(selectedStepModuleDefinition, held));
+  }, [selectedAnimationClips, resetAnimationClock, selectedStepModuleDefinition, writeParameters]);
   const activateAnimationControls = useCallback(() => {
     motionRevisionRef.current += 1;
+    heldPositionRef.current ||= { ...stepModuleParameterValuesRef.current };
     resetPosition();
   }, [resetPosition]);
   const resetMotion = useCallback(() => {
@@ -281,6 +290,7 @@ export function useStepMotionControls({
   return { handleStepModuleParameterChange, applyStepModuleParameterValues, handleResetStepModuleParameters,
     handleApplyPose, handleAnimationClipSelect, handleAnimationPlayToggle, handleAnimationRestart,
     handleAnimationScrub, handleAnimationSpeedChange, handleAnimationLoopToggle, resetMotion, resetPosition,
-    // Leaving Animate: the clip hands the pose back to Position and keeps nothing of where it was.
+    // Leaving Animate: the clip hands the pose back to Position, as Position left it, and keeps
+    // nothing of where it was.
     releaseAnimation: activatePositionControls };
 }

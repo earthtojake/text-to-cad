@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { attachCadLiveBinding } from './live';
+import { attachLiveBinding } from '../kit/shell/liveBinding';
 import type { CadLiveController, CadLiveState } from './live';
 
 const state = (): Omit<CadLiveState, 'active'> => ({
@@ -14,7 +14,10 @@ function harness(settle = () => Promise.resolve()) {
     setDisplaySettings: vi.fn(), setRenderMode: vi.fn(), capture: vi.fn(() => Promise.resolve(new Blob(['png']))) };
   const release = vi.fn();
   const readRuntime = vi.fn(() => ({ ...commands, readState: () => current }));
-  const detach = attachCadLiveBinding({ bind(value) { controller = value; return release; } }, readRuntime, settle);
+  // The binding production attaches (`useRendererShell`): the shared surface plus this
+  // renderer's two selection commands.
+  const detach = attachLiveBinding<CadLiveController>({ bind(value) { controller = value; return release; } }, readRuntime,
+    { settle, commands: ['select', 'clearSelection'] });
   return { controller, commands, detach, release, readRuntime, update: (next: typeof current) => { current = next; } };
 }
 

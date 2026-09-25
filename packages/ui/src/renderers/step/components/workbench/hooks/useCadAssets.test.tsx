@@ -2,7 +2,7 @@ import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
 import { createHttpCadResourceProvider } from '@hardcore/core/client';
-import { entryHasDisplayEdges, entryHasMesh, entryHasReferences } from '@hardcore/core/lib/entryAssets.js';
+import { entryHasMesh, entryHasReferences } from '@hardcore/core/lib/entryAssets.js';
 import { renderAssetCacheStats } from '@hardcore/core/lib/renderAssetClient.js';
 import { createTessellationCache, encodeComponentTessellation, tessellationPayloadFacts,
   tessellationCacheKey, validateTessellationProbeRow } from '@hardcore/core/lib/surf/tessellationCache.js';
@@ -29,7 +29,7 @@ let defaultClient = {};
 function assets(initialEntry: ReturnType<typeof entry>, client = defaultClient, tessellationCache = {}) {
   client.resources ||= createHttpCadResourceProvider();
   return useCadAssets({ initialEntry, client, tessellationCache,
-    entryHasMesh, entryHasReferences, entryHasDisplayEdges,
+    entryHasMesh, entryHasReferences,
     buildNormalizedReferenceState: () => null });
 }
 

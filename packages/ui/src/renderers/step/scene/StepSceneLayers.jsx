@@ -11,6 +11,7 @@ import { useStepMeasureOverlay } from "./useStepMeasureOverlay.js";
 import { useStepPicking } from "./useStepPicking.js";
 import { useStepPose } from "./useStepPose.js";
 import { releaseStepRuntime, useStepSceneSync } from "./useStepSceneSync.js";
+import ViewportError from "../../kit/status/ViewportError.jsx";
 
 /**
  * Everything of a STEP that lives IN the viewport, mounted through the kit viewport's overlay
@@ -39,10 +40,10 @@ import { releaseStepRuntime, useStepSceneSync } from "./useStepSceneSync.js";
 export default function StepSceneLayers({ viewport, stepScene, policy, props, api }) {
   const { runtimeRef, hostRef, mountRef, viewerReadyTick } = viewport;
   const {
-    meshData, modelKey, isLoading, renderMode, previewMode, pickMode, pickableParts, hiddenPartIds, selectedPartIds,
-    hoveredPartId, selectorRuntime, displayEdgeRuntime, stepParameterRuntime, stepAnimationRuntime, animateMode,
-    jointHandles, measureState, activeMeasurementId, measureModeActive, allowMeshVertexSnap,
-    onLodCameraChange, onMeshSourceAdoption, onViewerAlertChange, onStepModuleTransformDetectedChange,
+    meshData, modelKey, isLoading, renderMode, previewMode, pickMode, hiddenPartIds, selectedPartIds,
+    hoveredPartId, selectorRuntime, stepParameterRuntime, stepAnimationRuntime, animateMode,
+    jointHandles, measureState, activeMeasurementId, measureModeActive,
+    onLodCameraChange, onMeshSourceAdoption, onViewerAlertChange,
     onHoverReferenceChange, onActivateReference, onDoubleActivateReference, onMeasurePick, onMeasureHoverPoint
   } = props;
   const stepAnimationPlaying = Boolean(stepAnimationRuntime?.playing);
@@ -64,7 +65,6 @@ export default function StepSceneLayers({ viewport, stepScene, policy, props, ap
   const meshSourceAdoptionRef = useRef(onMeshSourceAdoption);
   meshSourceAdoptionRef.current = onMeshSourceAdoption;
   const viewerAlertChangeRef = useRef(onViewerAlertChange);
-  const stepModuleTransformDetectedChangeRef = useRef(onStepModuleTransformDetectedChange);
   const sceneUpdateAlertRef = useRef(null);
   // The last { title, message } the pose pass raised, so it is deduplicated across frames and
   // cleared when a pass runs clean.
@@ -72,10 +72,8 @@ export default function StepSceneLayers({ viewport, stepScene, policy, props, ap
   const explosionRef = useRef({ rafId: 0, progress: 0, modelKey: "", enabled: false, layout: null });
   const clipSettingsRef = useRef(normalizeStepClipSettings(null));
   const selectorRuntimeRef = useRef(selectorRuntime);
-  const displayEdgeRuntimeRef = useRef(displayEdgeRuntime);
   const stepModuleCleanupRef = useRef([]);
   const [transformedSelectorRuntime, setTransformedSelectorRuntime] = useState(null);
-  const [transformedDisplayEdgeRuntime, setTransformedDisplayEdgeRuntime] = useState(null);
   const [error, setError] = useState("");
   // Bumped whenever the exploded view reaches a POSE it will hold: overlays that bake a
   // record's matrix at build time (the reference highlight) re-read it here.
@@ -87,14 +85,11 @@ export default function StepSceneLayers({ viewport, stepScene, policy, props, ap
   const activeSelectorRuntime = transformedSelectorRuntime?.base === selectorRuntime
     ? transformedSelectorRuntime.runtime
     : selectorRuntime;
-  const activeDisplayEdgeRuntime = transformedDisplayEdgeRuntime?.base === displayEdgeRuntime
-    ? transformedDisplayEdgeRuntime.runtime
-    : displayEdgeRuntime;
-  const edges = policy.edgeVisibility({ selectorRuntime: activeSelectorRuntime, displayEdgeRuntime: activeDisplayEdgeRuntime });
+  const edges = policy.edgeVisibility({ selectorRuntime: activeSelectorRuntime });
   const {
     viewerTheme, visualEdgeSettings, hiddenAwareVisualEdgeSettings, focusedPartIds, normalizedDisplayMode,
     normalizedClipSettings, partVisualStateEnabled, explodedViewActive, filteredPickableFaces, filteredPickableEdges,
-    filteredPickableVertices, visibleReferenceFilter, normalizedThemeSettings
+    visibleReferenceFilter, normalizedThemeSettings
   } = policy;
 
   useLayoutEffect(() => {
@@ -148,7 +143,7 @@ export default function StepSceneLayers({ viewport, stepScene, policy, props, ap
       return map;
     }
     const map = new Map();
-    for (const reference of [...filteredPickableFaces, ...filteredPickableEdges, ...filteredPickableVertices]) {
+    for (const reference of [...filteredPickableFaces, ...filteredPickableEdges]) {
       const referenceId = String(reference?.id || "").trim();
       if (!referenceId) {
         continue;
@@ -156,26 +151,17 @@ export default function StepSceneLayers({ viewport, stepScene, policy, props, ap
       map.set(referenceId, reference);
     }
     return map;
-  }, [activeSelectorRuntime, filteredPickableEdges, filteredPickableFaces, filteredPickableVertices, visibleReferenceFilter]);
+  }, [activeSelectorRuntime, filteredPickableEdges, filteredPickableFaces, visibleReferenceFilter]);
 
   useEffect(() => {
     viewerAlertChangeRef.current = onViewerAlertChange;
   }, [onViewerAlertChange]);
   useEffect(() => {
-    stepModuleTransformDetectedChangeRef.current = onStepModuleTransformDetectedChange;
-  }, [onStepModuleTransformDetectedChange]);
-  useEffect(() => {
     setTransformedSelectorRuntime(null);
   }, [modelKey, selectorRuntime]);
   useEffect(() => {
-    setTransformedDisplayEdgeRuntime(null);
-  }, [modelKey, displayEdgeRuntime]);
-  useEffect(() => {
     selectorRuntimeRef.current = activeSelectorRuntime;
   }, [activeSelectorRuntime]);
-  useEffect(() => {
-    displayEdgeRuntimeRef.current = activeDisplayEdgeRuntime;
-  }, [activeDisplayEdgeRuntime]);
 
   // The section clip: one plane, from the resolved view, over everything the scene drew.
   useEffect(() => {
@@ -196,14 +182,13 @@ export default function StepSceneLayers({ viewport, stepScene, policy, props, ap
   ]);
 
   const refs = {
-    partVisualStateRef, clipSettingsRef, selectorRuntimeRef, displayEdgeRuntimeRef, staticSceneResetRef,
+    partVisualStateRef, clipSettingsRef, selectorRuntimeRef, staticSceneResetRef,
     meshSourceAdoptionRef, viewerAlertChangeRef, sceneUpdateAlertRef, sceneEffectsAlertRef, lodCameraChangeRef,
-    stepModuleTransformDetectedChangeRef, stepModuleCleanupRef
+    stepModuleCleanupRef
   };
   const layers = {
     viewport, stepScene, props, policy, refs, edges, staticResetRenderToken, explosionRef,
-    activeSelectorRuntime, activeDisplayEdgeRuntime, pickableReferenceMap,
-    setTransformedSelectorRuntime, setTransformedDisplayEdgeRuntime,
+    activeSelectorRuntime, pickableReferenceMap, setTransformedSelectorRuntime,
     displayRecordsToken, setDisplayRecordsToken, explodedViewPoseTick, setExplodedViewPoseTick, setError
   };
   useStepSceneSync(layers);
@@ -260,7 +245,6 @@ export default function StepSceneLayers({ viewport, stepScene, policy, props, ap
     selectorRuntime: activeSelectorRuntime,
     pickableFaces: filteredPickableFaces,
     pickableEdges: filteredPickableEdges,
-    pickableVertices: filteredPickableVertices,
     hiddenPartIds,
     focusedPartId: focusedPartIds,
     onHoverReferenceChange,
@@ -270,8 +254,7 @@ export default function StepSceneLayers({ viewport, stepScene, policy, props, ap
     onMeasurePick: handleMeasurePick,
     onMeasureHoverPoint: handleMeasureHoverPoint,
     viewerReadyTick,
-    suppressTopologyPicking: animateMode || Array.isArray(jointHandles) || stepAnimationPlaying,
-    allowMeshVertexSnap
+    suppressTopologyPicking: animateMode || Array.isArray(jointHandles) || stepAnimationPlaying
   });
 
   // Read-only debug/test seams. `__cadCamera` and `__cadStage` are the viewport's.
@@ -329,11 +312,7 @@ export default function StepSceneLayers({ viewport, stepScene, policy, props, ap
         aria-hidden="true"
       />
       {jointHandles ? <JointHandleOverlay handles={jointHandles} runtimeRef={runtimeRef} hostRef={hostRef} layoutSeamRef={jointHandleLayoutRef} viewerReadyTick={viewerReadyTick} /> : null}
-      {error ? (
-        <p className="bg-popover pointer-events-none absolute left-4 top-24 z-20 rounded-lg border border-error-border px-4 py-3 text-sm text-error shadow-sm sm:top-20">
-          {error}
-        </p>
-      ) : null}
+      <ViewportError message={error} />
     </>
   );
 }

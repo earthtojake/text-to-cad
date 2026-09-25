@@ -1,7 +1,3 @@
-// Browser tab title. The selected file is appended as "<title> | <filename>";
-// index.html carries the same string so the tab reads correctly before hydration.
-export const DOCUMENT_TITLE = "text-to-cad";
-
 export const ASSET_STATUS = {
   PENDING: "pending",
   LOADING: "loading",
@@ -18,8 +14,6 @@ export const REFERENCE_STATUS = {
 };
 
 import { createToolModes } from "../../kit/tools/toolModes.js";
-
-export { RENDER_FORMAT } from "@hardcore/core/lib/fileFormats.js";
 
 export const TAB_TOOL_MODE = {
   REFERENCES: "references",

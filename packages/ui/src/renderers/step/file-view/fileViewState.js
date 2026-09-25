@@ -1,10 +1,4 @@
 // Per-file surface defaults and normalization. Hosts own storage and panel layout.
-// Single user-facing label for "the viewer is (re)generating the render artifacts a STEP model
-// needs before it can render" — used for both the filename status chip and its tooltip across every
-// artifact-generation trigger (first build, stale rebuild, source-changed regen). Browser-side
-// asset-load/parse stages ("loading mesh", reference "loading topology", etc.) are a different
-// concept and keep their own wording.
-export const ARTIFACT_GENERATING_LABEL = "Generating artifacts";
 export const EMPTY_LIST = Object.freeze([]);
 export const DEFAULT_LARGE_FILE_STATE = Object.freeze({
   selectableTopologyEnabled: false

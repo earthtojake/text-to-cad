@@ -6,7 +6,7 @@ import {
 } from "@hardcore/core/lib/cadRefs.js";
 import { entryReferenceAssetSignature } from "@hardcore/core/lib/entryAssets.js";
 import { buildSelectorRuntime } from "@hardcore/core/lib/selectors/runtime.js";
-import { cadPathForEntry, fileKey } from "./entryPaths.js";
+import { fileKey } from "./entryPaths.js";
 
 export function buildReferenceCacheKey(entry) {
   const fileRef = fileKey(entry);
@@ -113,64 +113,6 @@ export function selectRequestedAssemblyComponents(
 // occurrences. Only an absent key belongs to the single-part fallback contract.
 export function topologyCompositionKeyMatches(loadedTopologyKey, requestedTopologyKey) {
   return (loadedTopologyKey ?? "*") === requestedTopologyKey;
-}
-
-export function resolveAssemblyPartActivation(referenceId, {
-  topologyReference = null,
-  resolvePartId = null
-} = {}) {
-  const normalizedReferenceId = String(referenceId || "").trim();
-  const selectorType = String(topologyReference?.selectorType || "").trim();
-  if (
-    !normalizedReferenceId ||
-    selectorType === "face" ||
-    selectorType === "edge" ||
-    selectorType === "vertex" ||
-    typeof resolvePartId !== "function"
-  ) {
-    return null;
-  }
-  const partId = String(resolvePartId(normalizedReferenceId) || "").trim();
-  return partId ? { partId, renderPartId: normalizedReferenceId } : null;
-}
-
-export function modelReferenceActivationDecision(referenceId, {
-  topologyReference = null,
-  assemblyMode = false,
-  resolvePartId = null,
-  deferForTopology = false,
-  referenceKnown = false
-} = {}) {
-  const normalizedReferenceId = String(referenceId || "").trim();
-  if (!normalizedReferenceId) {
-    return { kind: "clear" };
-  }
-  const selectorType = String(topologyReference?.selectorType || "").trim();
-  if (selectorType === "face" || selectorType === "edge" || selectorType === "vertex") {
-    return { kind: "reference", referenceId: normalizedReferenceId };
-  }
-  if (assemblyMode) {
-    const part = resolveAssemblyPartActivation(normalizedReferenceId, {
-      topologyReference,
-      resolvePartId
-    });
-    if (part) {
-      return { kind: "part", ...part };
-    }
-  }
-  if (deferForTopology) {
-    return { kind: "defer", referenceId: normalizedReferenceId };
-  }
-  if (assemblyMode) {
-    return { kind: "clear" };
-  }
-  return referenceKnown
-    ? { kind: "reference", referenceId: normalizedReferenceId }
-    : { kind: "ignore" };
-}
-
-export function pendingReferenceActivationMatches(pending, { fileRef = "", tree = "" } = {}) {
-  return !!pending && pending.fileRef === fileRef && pending.tree === tree;
 }
 
 export function parseAssemblyPartReferenceSelectionId(referenceId) {
@@ -340,6 +282,18 @@ export function withFileRefPrefix(line, prefix) {
     : text;
 }
 
+/**
+ * The ONE shape copied reference text takes, whoever asked for it — the Copy Reference
+ * button and its shortcut, a viewport or tree menu's Copy Reference, a double-click on a
+ * face or edge, Add to prompt: each line canonical, each carrying this file's prefix, so a
+ * ref pasted into a prompt spanning several files still says which file it is from.
+ */
+export function copyTextLines(lines, fileRefPrefix = "") {
+  return (Array.isArray(lines) ? lines : String(lines || "").split("\n"))
+    .map((line) => withFileRefPrefix(canonicalCadRefCopyText(line), fileRefPrefix))
+    .filter(Boolean);
+}
+
 /** The file prefix a copied ref should carry, or "" when the entry has none. */
 export function fileRefPrefixForEntry(entry) {
   return String(entry?.fileRefPrefix || "").trim();
@@ -403,36 +357,6 @@ export function buildSelectionCopyPayload({ references = [], parts = [], entry =
   };
 }
 
-export function buildSelectionCopyButtonLabel(lines, { limit = 1 } = {}) {
-  const copyLines = Array.isArray(lines) ? lines : [];
-  const normalizedLimit = Math.max(1, Number(limit) || 1);
-  const tokens = copyLines
-    .map((line) => canonicalCadRefCopyText(line, { allowPlain: true }))
-    .filter(Boolean);
-
-  if (!tokens.length) {
-    return "Copy refs";
-  }
-
-  const visibleTokens = tokens.slice(0, normalizedLimit);
-  return `Copy ${visibleTokens.join(", ")}`;
-}
-
-/**
- * The label to fall back to when the ref itself will not fit: "Copy 3 refs".
- *
- * A ref cut off mid-token ("Copy motorcycle_shock_absor…") tells the user less than a count
- * does — it looks like the ref is wrong rather than merely long. The clipboard carries the
- * whole thing either way.
- */
-export function buildSelectionCopyCountLabel(count) {
-  const n = Math.max(0, Math.floor(Number(count) || 0));
-  if (!n) {
-    return "Copy refs";
-  }
-  return `Copy ${n} ref${n === 1 ? "" : "s"}`;
-}
-
 export function orderedStringListEqual(a, b) {
   if (a === b) {
     return true;
@@ -460,34 +384,6 @@ export function uniqueStringList(values) {
     result.push(normalizedValue);
   }
   return result;
-}
-
-function normalizePosixPath(path) {
-  const parts = [];
-  for (const part of String(path || "").replace(/\\/g, "/").split("/")) {
-    if (!part || part === ".") {
-      continue;
-    }
-    if (part === "..") {
-      parts.pop();
-      continue;
-    }
-    parts.push(part);
-  }
-  return parts.join("/");
-}
-
-export function resolveTopologyRelativeFile(entry, sourcePath) {
-  const relativeSourcePath = String(sourcePath || "").trim();
-  const stepPath = fileKey(entry);
-  if (!relativeSourcePath || !stepPath) {
-    return "";
-  }
-  const stepParts = stepPath.split("/");
-  const stepFilename = stepParts.pop();
-  const stepDirectory = stepParts.join("/");
-  const topologyDirectory = stepDirectory ? `${stepDirectory}/.${stepFilename}` : `.${stepFilename}`;
-  return normalizePosixPath(`${topologyDirectory}/${relativeSourcePath}`);
 }
 
 export function computeNextSelectionIds(currentIds, selectionId, { multiSelect = false } = {}) {

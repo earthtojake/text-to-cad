@@ -45,7 +45,7 @@ export function renderableMeshParts(meshData) {
  */
 export function useStepViewPolicy({
   meshData, themeSettings, displaySettings, renderMode, renderConfiguration, renderPartsIndividually,
-  pickMode, pickableParts, pickableFaces, pickableEdges, pickableVertices, hiddenPartIds, selectedPartIds, focusedPartId
+  pickMode, pickableParts, pickableFaces, pickableEdges, hiddenPartIds, selectedPartIds, focusedPartId
 }) {
   const resolveViewerRenderState = useMemo(() => createViewerRenderStateResolver(), []);
   const normalizedViewerRenderState = useMemo(() => resolveViewerRenderState({
@@ -157,16 +157,12 @@ export function useStepViewPolicy({
     () => (Array.isArray(pickableEdges) ? pickableEdges : []).filter(visibleReferenceFilter),
     [pickableEdges, visibleReferenceFilter]
   );
-  const filteredPickableVertices = useMemo(
-    () => (Array.isArray(pickableVertices) ? pickableVertices : []).filter(visibleReferenceFilter),
-    [pickableVertices, visibleReferenceFilter]
-  );
   // Edges are drawn when the view asks for them. STEP linework comes from the B-rep
   // topology: the topology line when a runtime carries it, else the build's own record edges.
   const edgesVisible = explicitViewPolicy ? displayEdgeSettings.enabled : displayModeShowsEdges(normalizedDisplayMode);
-  const edgeVisibility = useCallback(({ selectorRuntime, displayEdgeRuntime }) => {
+  const edgeVisibility = useCallback(({ selectorRuntime }) => {
     const topologyDisplayEdgesVisible = shouldRenderTopologyDisplayEdges({
-      edgesVisible, wireframeMode, cadEdgeSource: true, displayEdgeRuntime, selectorRuntime, edgeSettings: visualEdgeSettings
+      edgesVisible, wireframeMode, cadEdgeSource: true, selectorRuntime, edgeSettings: visualEdgeSettings
     });
     const surfaceStepEdgesVisible = edgesVisible && !topologyDisplayEdgesVisible;
     return {
@@ -182,7 +178,7 @@ export function useStepViewPolicy({
     photographicLighting, normalizedMaterialSettings, materialPartPolicyKey, normalizedExplodedSettings, explodeAmount,
     explodedViewActive, effectiveRenderPartsIndividually, displayEdgeSettings, wireframeMode, wireframeEdgeColor,
     visualEdgeSettings, hiddenAwareVisualEdgeSettings, focusedPartIds, focusedPartIdSet, hiddenPartIdSet, normalizedClipSettings,
-    partVisualStateEnabled, edgesVisible, edgeVisibility, filteredPickableFaces, filteredPickableEdges, filteredPickableVertices,
+    partVisualStateEnabled, edgesVisible, edgeVisibility, filteredPickableFaces, filteredPickableEdges,
     visibleReferenceFilter
   };
 }

@@ -1,12 +1,9 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import {
   isAbortError,
-  loadRenderDisplayEdgeBundle,
-  loadRenderGlb,
   loadRenderSurf,
   loadRenderSelectorBundle,
   loadRenderSurfSelectorBundle,
-  peekRenderDisplayEdgeBundle,
   peekRenderGlb,
   peekRenderSelectorBundle,
   peekRenderTopologyIndex,
@@ -49,26 +46,20 @@ import {
 } from "./packageComponentReuse.js";
 import { ASSET_STATUS, REFERENCE_STATUS } from "../../../workbench/constants.js";
 import {
-  entryAssetHash,
   entryAssetUrl,
-  entryDisplayEdgeTopologyAssetUrl,
-  entryMeshAssetHash,
   entryMeshAssetSignature,
-  entryMeshAssetUrl,
   entrySelectorTopologyAssetUrl,
   entrySourceSidecarUrl,
   entryTopologyAssetUrl
 } from "@hardcore/core/lib/entryAssets.js";
 import { reclaimIdleSurfWorkers } from "@hardcore/core/lib/renderAssetClient.js";
 import { estimateMeshRenderCost } from "@hardcore/core/lib/render/meshCost.js";
-import { buildDisplayEdgeRuntime, buildSelectorRuntime } from "@hardcore/core/lib/selectors/runtime.js";
 import {
   composePackageSelectorRuntime,
   compositionUsesComponent,
   baseLodReferenceComposition,
   reconcileLodReferencePublication,
-  reconcileLivePackageSelectorBundles,
-  swapCompositionBundle
+  reconcileLivePackageSelectorBundles
 } from "./packageReferenceComposition.js";
 import { selectRequestedAssemblyComponents } from "../../../workbench/referenceSelection.js";
 import { viewerMemoryPolicy } from "../../../render/viewerMemoryPolicy.js";
@@ -207,7 +198,6 @@ export function useCadAssets({
   tessellationCache,
   entryHasMesh,
   entryHasReferences,
-  entryHasDisplayEdges = () => false,
   buildNormalizedReferenceState,
 }) {
   const resources = client?.resources;
@@ -240,22 +230,14 @@ export function useCadAssets({
     }
     // Complete STEP packages may exceed the per-component SURF LRU. Reuse their
     // bounded CPU working set, with fresh occurrence metadata for this mount.
-    if (Boolean(entry)) {
-      const completed = restoreCompletedPackage(entry);
-      if (completed) return completedPackageMeshState(entry, completed.meshData);
-      const glbUrl = entryAssetUrl(entry, "glb");
-      const topologyUrl = entryTopologyAssetUrl(entry);
-      const previewMeshData = peekRenderGlb(glbUrl, { resources });
-      if (!previewMeshData) {
-        return null;
-      }
-      const topologyManifest = peekRenderTopologyIndex(topologyUrl, { resources });
-      if (!topologyManifest) {
-        return buildAssemblyPreviewMeshState(entry, previewMeshData);
-      }
+    const completed = restoreCompletedPackage(entry);
+    if (completed) return completedPackageMeshState(entry, completed.meshData);
+    const previewMeshData = peekRenderGlb(entryAssetUrl(entry, "glb"), { resources });
+    if (!previewMeshData) {
       return null;
     }
-    return null;
+    const topologyManifest = peekRenderTopologyIndex(entryTopologyAssetUrl(entry), { resources });
+    return topologyManifest ? null : buildAssemblyPreviewMeshState(entry, previewMeshData);
   }, [buildAssemblyPreviewMeshState, entryHasMesh, restoreCompletedPackage, resources]);
 
   // FileViewer remounts file-owned controls. Restore immutable warm assets on
@@ -291,17 +273,11 @@ export function useCadAssets({
   const [referenceStatus, setReferenceStatus] = useState(REFERENCE_STATUS.IDLE);
   const [referenceError, setReferenceError] = useState("");
   const [referenceLoadStage, setReferenceLoadStage] = useState("");
-  const [displayEdgeState, setDisplayEdgeState] = useState(null);
-  const [displayEdgeStatus, setDisplayEdgeStatus] = useState(REFERENCE_STATUS.IDLE);
-  const [displayEdgeError, setDisplayEdgeError] = useState("");
-  const [displayEdgeLoadStage, setDisplayEdgeLoadStage] = useState("");
 
   const requestIdRef = useRef(0);
   const referenceRequestIdRef = useRef(0);
-  const displayEdgeRequestIdRef = useRef(0);
   const meshAbortControllerRef = useRef(null);
   const referenceAbortControllerRef = useRef(null);
-  const displayEdgeAbortControllerRef = useRef(null);
 
   // --- viewport LOD (design/unified-tessellation.md Phase 5) -----------------
   // The composed package's ingredients, kept so a level swap can re-compose ONE
@@ -512,7 +488,7 @@ export function useCadAssets({
       baseReferenceState, baseReferenceComposition,
       referenceComposition: references?.composition || baseReferenceComposition };
     if (ctx.lodPending || lodSceneAdoptionRef.current.snapshot().pending) return false;
-    const nextState = buildComposedPackageMeshStateRef.current(ctx.entry, ctx.descriptor, composed);
+    const nextState = completedPackageMeshState(ctx.entry, composed);
     publishMeshCostAccounting({ meshData: composed, componentMeshDataByCid: maps.componentMeshDataByCid,
       loaded: Object.keys(maps.componentMeshDataByCid).length, total: Object.keys(ctx.descriptor.components || {}).length,
       publishCount: ctx.publishCount, meshRevision: ctx.meshHash, final: ctx.complete });
@@ -551,7 +527,7 @@ export function useCadAssets({
         abortLoad(referenceAbortControllerRef);
         referenceCompositionRef.current = pending.baseReferenceComposition;
         displayedReferenceCompositionRef.current = pending.baseReferenceComposition;
-        const restoredState = buildComposedPackageMeshStateRef.current(ctx.entry, ctx.descriptor, pending.baseSource);
+        const restoredState = completedPackageMeshState(ctx.entry, pending.baseSource);
         recoveryCommand.source = pending.baseSource;
         recoveryCommand.reference = pending.baseReferenceState;
         setMeshEnvelope(previous => updateLodMeshState(previous, current => (
@@ -615,12 +591,6 @@ export function useCadAssets({
   const prepareReferenceStateForLodRef = useRef(prepareReferenceStateForLod);
   prepareReferenceStateForLodRef.current = prepareReferenceStateForLod;
 
-  const buildComposedPackageMeshState = useCallback((entry, descriptor, meshData) => {
-    return completedPackageMeshState(entry, meshData);
-  }, [resources]);
-  // Defined after applyComponentLodPayload, consumed by it through a ref.
-  const buildComposedPackageMeshStateRef = useRef(buildComposedPackageMeshState);
-  buildComposedPackageMeshStateRef.current = buildComposedPackageMeshState;
 
   const getCachedReferenceState = useCallback((entry) => {
     if (!entryHasReferences(entry)) {
@@ -629,24 +599,6 @@ export function useCadAssets({
     const bundle = peekRenderSelectorBundle(entrySelectorTopologyAssetUrl(entry), { resources });
     return bundle ? buildNormalizedReferenceState(entry, bundle) : null;
   }, [buildNormalizedReferenceState, entryHasReferences, resources]);
-
-  const buildDisplayEdgeState = useCallback((entry, bundle) => {
-    return {
-      file: entry.file,
-      fileRef: String(entry?.file || "").trim(),
-      kind: entry.kind,
-      displayEdgeHash: entryAssetHash(entry, "displayEdgeTopology"),
-      displayEdgeRuntime: buildDisplayEdgeRuntime(bundle)
-    };
-  }, [resources]);
-
-  const getCachedDisplayEdgeState = useCallback((entry) => {
-    if (!entryHasDisplayEdges(entry)) {
-      return null;
-    }
-    const bundle = peekRenderDisplayEdgeBundle(entryDisplayEdgeTopologyAssetUrl(entry), { resources });
-    return bundle ? buildDisplayEdgeState(entry, bundle) : null;
-  }, [buildDisplayEdgeState, entryHasDisplayEdges, resources]);
 
   const cancelMeshLoad = useCallback(() => {
     lodSceneAdoptionRef.current.cancel();
@@ -695,12 +647,6 @@ export function useCadAssets({
     referenceRequestIdRef.current += 1;
     abortLoad(referenceAbortControllerRef);
     setReferenceLoadStage("");
-  }, [resources]);
-
-  const cancelDisplayEdgeLoad = useCallback(() => {
-    displayEdgeRequestIdRef.current += 1;
-    abortLoad(displayEdgeAbortControllerRef);
-    setDisplayEdgeLoadStage("");
   }, [resources]);
 
   const loadMeshForEntry = useCallback(async (entry) => {
@@ -792,378 +738,370 @@ export function useCadAssets({
     try {
       // Every STEP entry is a component-GLB package (a single-component part is just a
       // package with one occurrence); compose it the same way.
-      if (Boolean(entry)) {
-        setMeshLoadProgress({
-          phase: "read",
-          label: "Reading model",
-          done: 0,
-          total: 0,
-          determinate: false,
+      setMeshLoadProgress({
+        phase: "read",
+        label: "Reading model",
+        done: 0,
+        total: 0,
+        determinate: false,
+      });
+      const meshUrl = entryAssetUrl(entry, "glb");
+      if (!meshUrl) {
+        throw new Error(`STEP file is missing GLB asset: ${entry.file || "(unknown)"}`);
+      }
+      // Component-GLB package: the canonical STEP artifact is a directory. Probe for
+      // its assembly.json, fetch each unique component GLB once, and compose them in
+      // world space. A non-package descriptor is a stale/unbuilt artifact (throws below).
+      const sourceSidecarUrl = entrySourceSidecarUrl(entry);
+      const inlineSourceSidecar = !entry?.editingPreview && entry?.sourceSidecar && typeof entry.sourceSidecar === "object"
+        ? validateSourceSidecar(entry.sourceSidecar, {
+            url: sourceSidecarUrl || entry?.file,
+            documentHash: entry?.documentHash,
+          })
+        : null;
+      const storedPackageDescriptor = await loadPackageDescriptor(meshUrl, { resources, signal: controller.signal });
+      if (controller.signal.aborted) {
+        throw abortError();
+      }
+      const packageDescriptor = storedPackageDescriptor
+        ? applySourceAppearance(storedPackageDescriptor, inlineSourceSidecar?.appearance)
+        : null;
+      if (packageDescriptor && packageDescriptor.kind === "assembly-package") {
+        // Progressive publish (design/viewer-memory.md §6): components are
+        // fetched with bounded concurrency and the ones loaded so far are
+        // re-composed and published per batch (packageProgressiveLoad.js owns
+        // the batch policy), so the model paints while it loads and a cancel
+        // frees what was never published. Composition is the reference-based
+        // path applyComponentLodPayload uses for a level swap. The final
+        // publish carries every component and is the state the single
+        // post-load publish used to produce.
+        let publishedOnce = false;
+        const componentEntries = Object.entries(packageDescriptor.components || {});
+        setMeshLoadProgress(progressiveLoadProgress(0, componentEntries.length));
+        const defaultInitialPlan = initialDisplayLodPlan({
+          componentCount: componentEntries.length,
+          maxInFlightBytes: PROGRESSIVE_LOAD_MAX_INFLIGHT_BYTES,
         });
-        const meshUrl = entryAssetUrl(entry, "glb");
-        if (!meshUrl) {
-          throw new Error(`STEP file is missing GLB asset: ${entry.file || "(unknown)"}`);
-        }
-        // Component-GLB package: the canonical STEP artifact is a directory. Probe for
-        // its assembly.json, fetch each unique component GLB once, and compose them in
-        // world space. A non-package descriptor is a stale/unbuilt artifact (throws below).
-        const sourceSidecarUrl = entrySourceSidecarUrl(entry);
-        const inlineSourceSidecar = !entry?.editingPreview && entry?.sourceSidecar && typeof entry.sourceSidecar === "object"
-          ? validateSourceSidecar(entry.sourceSidecar, {
-              url: sourceSidecarUrl || entry?.file,
-              documentHash: entry?.documentHash,
-            })
-          : null;
-        const storedPackageDescriptor = await loadPackageDescriptor(meshUrl, { resources, signal: controller.signal });
-        if (controller.signal.aborted) {
-          throw abortError();
-        }
-        const packageDescriptor = storedPackageDescriptor
-          ? applySourceAppearance(storedPackageDescriptor, inlineSourceSidecar?.appearance)
-          : null;
-        if (packageDescriptor && packageDescriptor.kind === "assembly-package") {
-          // Progressive publish (design/viewer-memory.md §6): components are
-          // fetched with bounded concurrency and the ones loaded so far are
-          // re-composed and published per batch (packageProgressiveLoad.js owns
-          // the batch policy), so the model paints while it loads and a cancel
-          // frees what was never published. Composition is the reference-based
-          // path applyComponentLodPayload uses for a level swap. The final
-          // publish carries every component and is the state the single
-          // post-load publish used to produce.
-          let publishedOnce = false;
-          const componentEntries = Object.entries(packageDescriptor.components || {});
-          setMeshLoadProgress(progressiveLoadProgress(0, componentEntries.length));
-          const defaultInitialPlan = initialDisplayLodPlan({
-            componentCount: componentEntries.length,
-            maxInFlightBytes: PROGRESSIVE_LOAD_MAX_INFLIGHT_BYTES,
-          });
-          const initialPlanByCid = new Map();
-          // Runtime tickets bind the geometry descriptor's opaque D to the
-          // concrete O selected by either a TESS v4 hit or surface resolution.
-          // They never rewrite the canonical descriptor.
-          const componentIdentityByCid = new Map();
-          const retainedComponentMeshByCid = retainedComponentMeshesForRevision({
-            previous: previousCompleteLodPackage,
-            descriptor: packageDescriptor,
-            meshUrl,
-          });
-          for (const cid of Object.keys(retainedComponentMeshByCid)) {
-            const previousIdentity = previousCompleteLodPackage?.componentIdentityByCid?.[cid]
-              || previousCompleteLodPackage?.descriptor?.components?.[cid];
-            if (previousIdentity?.surfaceObject) {
-              componentIdentityByCid.set(cid, Object.freeze({
-                ...packageDescriptor.components[cid],
-                surfaceObject: previousIdentity.surfaceObject,
-                surfUrl: previousIdentity.surfUrl || "",
-              }));
-            }
+        const initialPlanByCid = new Map();
+        // Runtime tickets bind the geometry descriptor's opaque D to the
+        // concrete O selected by either a TESS v4 hit or surface resolution.
+        // They never rewrite the canonical descriptor.
+        const componentIdentityByCid = new Map();
+        const retainedComponentMeshByCid = retainedComponentMeshesForRevision({
+          previous: previousCompleteLodPackage,
+          descriptor: packageDescriptor,
+          meshUrl,
+        });
+        for (const cid of Object.keys(retainedComponentMeshByCid)) {
+          const previousIdentity = previousCompleteLodPackage?.componentIdentityByCid?.[cid]
+            || previousCompleteLodPackage?.descriptor?.components?.[cid];
+          if (previousIdentity?.surfaceObject) {
+            componentIdentityByCid.set(cid, Object.freeze({
+              ...packageDescriptor.components[cid],
+              surfaceObject: previousIdentity.surfaceObject,
+              surfUrl: previousIdentity.surfUrl || "",
+            }));
           }
-          const loader = createProgressivePackageLoader({
-            descriptor: packageDescriptor,
-            // Atomic same-file revisions keep the old complete composition on
-            // screen while staging. Seed the new composer from that exact
-            // predecessor so unchanged occurrence rows and tree branches can
-            // cross the revision boundary. The request-local loader is the only
-            // added owner; failure clears it and success drops it with the load.
-            initialComposition: previousCompleteLodPackage?.meshData || null,
-            concurrency: packageComponentLoadConcurrency(),
-            // The local cap controls package concurrency. A single larger L0
-            // leaf may run alone only if reserveLoad below can charge its full
-            // worker estimate to the shared Viewer memory envelope.
-            allowOversizedSingle: true,
-            sourceExpansionRatio: (cid) => (
-              initialPlanByCid.get(cid) || defaultInitialPlan
-            ).sourceExpansionRatio,
-            retainedComponent: (cid) => retainedComponentMeshByCid[cid] || null,
-            retryCacheProbeMiss: isTessellationCacheProbeMissError,
-            // Exact-surface artifact: tessellated client-side from the .surf
-            // (design/surface-rendering.md). Same meshData contract as the
-            // component GLB this replaced.
-            loadComponent: async (cid, component, { estimatedBytes, cacheProbe }) => {
-              const componentPlan = initialPlanByCid.get(cid) || defaultInitialPlan;
-              const identity = componentIdentityByCid.get(cid);
-              if (!identity?.surfaceObject) {
-                throw new Error(`Component ${cid} has no resolved surface identity`);
-              }
-              const meshData = await loadRenderSurf(
-                identity.surfUrl || "",
-                { resources, tessellationCache,
-                        signal: controller.signal,
-                  tessellation: lodTessellationForLevel(componentPlan.level),
-                  identity: { ...identity, tessellationProbe: cacheProbe || null },
-                  memoryEstimateBytes: cacheProbe
-                    ? estimatedBytes
-                    : estimatedBytes * SURF_WORKER_TEMP_ESTIMATE_MULTIPLIER,
-                },
-              );
-              meshData.lodLevel = componentPlan.level;
-              return meshData;
-            },
-            // Byte-aware admission: the .surf's content-length (a HEAD, no body)
-            // sizes the component before its decode is admitted; null when the
-            // server does not answer, and the loader falls back to its running
-            // mean.
-            sizeHint: async (cid, component, {
-              rejectedCacheObjects = new Set(),
-              skipCacheProbes = false,
-            } = {}) => {
-              const surfaceInput = String(component?.surfaceInput || "");
-              const cached = !skipCacheProbes && await probeInitialDisplayLod({ resources, tessellationCache,
+        }
+        const loader = createProgressivePackageLoader({
+          descriptor: packageDescriptor,
+          // Atomic same-file revisions keep the old complete composition on
+          // screen while staging. Seed the new composer from that exact
+          // predecessor so unchanged occurrence rows and tree branches can
+          // cross the revision boundary. The request-local loader is the only
+          // added owner; failure clears it and success drops it with the load.
+          initialComposition: previousCompleteLodPackage?.meshData || null,
+          concurrency: packageComponentLoadConcurrency(),
+          // The local cap controls package concurrency. A single larger L0
+          // leaf may run alone only if reserveLoad below can charge its full
+          // worker estimate to the shared Viewer memory envelope.
+          allowOversizedSingle: true,
+          sourceExpansionRatio: (cid) => (
+            initialPlanByCid.get(cid) || defaultInitialPlan
+          ).sourceExpansionRatio,
+          retainedComponent: (cid) => retainedComponentMeshByCid[cid] || null,
+          retryCacheProbeMiss: isTessellationCacheProbeMissError,
+          // Exact-surface artifact: tessellated client-side from the .surf
+          // (design/surface-rendering.md). Same meshData contract as the
+          // component GLB this replaced.
+          loadComponent: async (cid, _component, { estimatedBytes, cacheProbe }) => {
+            const componentPlan = initialPlanByCid.get(cid) || defaultInitialPlan;
+            const identity = componentIdentityByCid.get(cid);
+            if (!identity?.surfaceObject) {
+              throw new Error(`Component ${cid} has no resolved surface identity`);
+            }
+            const meshData = await loadRenderSurf(
+              identity.surfUrl || "",
+              { resources, tessellationCache,
+                      signal: controller.signal,
+                tessellation: lodTessellationForLevel(componentPlan.level),
+                identity: { ...identity, tessellationProbe: cacheProbe || null },
+                memoryEstimateBytes: cacheProbe
+                  ? estimatedBytes
+                  : estimatedBytes * SURF_WORKER_TEMP_ESTIMATE_MULTIPLIER,
+              },
+            );
+            meshData.lodLevel = componentPlan.level;
+            return meshData;
+          },
+          // Byte-aware admission: the .surf's content-length (a HEAD, no body)
+          // sizes the component before its decode is admitted; null when the
+          // server does not answer, and the loader falls back to its running
+          // mean.
+          sizeHint: async (cid, component, {
+            rejectedCacheObjects = new Set(),
+            skipCacheProbes = false,
+          } = {}) => {
+            const surfaceInput = String(component?.surfaceInput || "");
+            const cached = !skipCacheProbes && await probeInitialDisplayLod({ resources, tessellationCache,
+              surfaceInput,
+              surfaceObject: component.surfaceObject,
+              maxInFlightBytes: PROGRESSIVE_LOAD_MAX_INFLIGHT_BYTES,
+              signal: controller.signal,
+              rejectedCacheObjects,
+            });
+            if (cached) {
+              initialPlanByCid.set(cid, cached.plan);
+              componentIdentityByCid.set(cid, Object.freeze({
+                ...component,
+                surfaceObject: cached.cacheProbe.surfaceObject,
+                surfUrl: component.surf ? resolvePackageAssetUrl(meshUrl, component.surf, resources) : "",
+              }));
+              return { sourceBytes: null, cacheProbe: cached.cacheProbe };
+            }
+
+            let ticket;
+            const staticUrl = component.surf ? resolvePackageAssetUrl(meshUrl, component.surf, resources) : "";
+            if (component.surfaceObject && staticUrl) {
+              ticket = {
                 surfaceInput,
                 surfaceObject: component.surfaceObject,
-                maxInFlightBytes: PROGRESSIVE_LOAD_MAX_INFLIGHT_BYTES,
-                signal: controller.signal,
-                rejectedCacheObjects,
-              });
-              if (cached) {
-                initialPlanByCid.set(cid, cached.plan);
-                componentIdentityByCid.set(cid, Object.freeze({
-                  ...component,
-                  surfaceObject: cached.cacheProbe.surfaceObject,
-                  surfUrl: component.surf ? resolvePackageAssetUrl(meshUrl, component.surf, resources) : "",
-                }));
-                return { sourceBytes: null, cacheProbe: cached.cacheProbe };
-              }
-
-              let ticket;
-              const staticUrl = component.surf ? resolvePackageAssetUrl(meshUrl, component.surf, resources) : "";
-              if (component.surfaceObject && staticUrl) {
-                ticket = {
-                  surfaceInput,
-                  surfaceObject: component.surfaceObject,
-                  surfUrl: staticUrl,
-                  byteLength: null,
-                };
-              } else {
-                const resolved = await resolveSurfaceComponents(packageDescriptor, [{
-                  cid, surfaceInput, surfaceObject: component.surfaceObject,
-                }], { client, signal: controller.signal });
-                ticket = resolved.get(cid);
-              }
-              const hint = ticket.byteLength || await surfContentLength(ticket.surfUrl, controller.signal, resources);
-              const plan = initialDisplayLodPlan({
-                componentCount: componentEntries.length,
-                surfBytes: hint,
-                maxInFlightBytes: PROGRESSIVE_LOAD_MAX_INFLIGHT_BYTES,
-              });
-              initialPlanByCid.set(cid, plan);
-              componentIdentityByCid.set(cid, Object.freeze({ ...component, ...ticket }));
-              // A tier revised by the exact SURF size may already be warm.
-              const revised = skipCacheProbes ? null : (await tessellationCache.probeCachedTessellationEntries(
-                  [surfaceInput], lodTessellationForLevel(plan.level), { resources, signal: controller.signal },
-                )).get(surfaceInput) || null;
-              if (revised && revised.surfaceObject === ticket.surfaceObject
-                  && !rejectedCacheObjects.has(revised.object)) {
-                return { sourceBytes: hint, cacheProbe: revised };
-              }
-              return { sourceBytes: hint, cacheProbe: null };
-            },
-            reserveLoad: ({ cid, estimatedBytes, cacheProbe }) => viewerMemoryPolicy.reserve({
-              category: "workerInFlight",
-              bytes: cacheProbe ? estimatedBytes : estimatedBytes * SURF_WORKER_TEMP_ESTIMATE_MULTIPLIER,
-              label: cid,
-              kind: "replace",
-              // A miss can be transient while another admitted worker owns
-              // the remaining bytes. The loader reports only a miss that is
-              // still impossible after all in-flight work drains.
-              recordLimitation: false
-            }),
-            releaseLoad: (token) => {
-              viewerMemoryPolicy.release(token);
-              syncSurfWorkerMemory();
-            },
-            recoverMemoryPressure: async () => {
-              if (completedPackages.clear()) {
-                syncAssetCacheMemory(componentMemoryAccounting(displayedLodPackageRef.current?.componentMeshDataByCid).buffers);
-                return true;
-              }
-              const reclaimed = reclaimIdleSurfWorkers();
-              syncSurfWorkerMemory();
-              if (reclaimed.reclaimedSlots > 0 || reclaimed.fullyReleased) return true;
-              // Every package decode has drained at this point. If another
-              // selector/LOD consumer still owns all slots, wait for that
-              // generation to finish, then retry this unchanged reservation
-              // once. Generation fencing prevents this waiter from clearing a
-              // replacement pool's accounting.
-              const released = await releaseSurfWorkers();
-              syncSurfWorkerMemory();
-              return released;
-            },
-            onMemoryLimitation: publishMemoryLimitation,
-            // Revision replacement is a transaction: loaded component arrays
-            // are accounted beside the current complete scene, but only the
-            // final composition is published.
-            publishIntermediate: !stageWholeReplacement,
-            onRetainedChange: ({ loaded, total, retainedBytes }) => {
-              if (requestId !== requestIdRef.current || controller.signal.aborted) return;
-              if (stageWholeReplacement) {
-                viewerMemoryPolicy.setRetained("replacementPending", retainedBytes);
-                syncAssetCacheMemory();
-              }
-              setMeshLoadProgress(loaded === total
-                ? {
-                    phase: "view",
-                    label: "Preparing view",
-                    done: loaded,
-                    total,
-                    determinate: true,
-                  }
-                : progressiveLoadProgress(loaded, total));
-            },
-            // The same staleness guard every publish below re-checks: the
-            // request is current and not aborted.
-            isCurrent: () => requestId === requestIdRef.current && !controller.signal.aborted,
-            // The LOD working set is live from the first publish, so a level
-            // swap that lands mid-load is composed from and kept by later
-            // batches instead of being reverted to level 0.
-            swappedComponents: () => (
-              lodPackageRef.current?.requestId === requestId ? publishedLodContext(lodPackageRef.current).componentMeshDataByCid : null
-            ),
-            onPublish: ({ meshData, componentMeshDataByCid, loaded, total, final, publishCount }) => {
-              if (final) viewerMemoryPolicy.clearLimitation();
-
-              // window.__cadMeshCost for the headless memory harness; not React state.
-              publishMeshCostAccounting({ meshData, componentMeshDataByCid, loaded, total, publishCount, final, meshRevision: getAssemblyMeshHash(entry) });
-              const nextState = buildComposedPackageMeshState(entry, packageDescriptor, meshData);
-              // A partial model is structure-ready (the tree can show) but not
-              // interaction-ready: the workspace keeps the "loading" overlay
-              // with the per-batch count until the final publish flips it.
-              nextState.assemblyInteractionReady = final;
-              const ctx = lodPackageRef.current;
-              const componentLodLevelByCid = Object.fromEntries(
-                Object.entries(componentMeshDataByCid).map(([cid, componentMeshData]) => [
-                  cid,
-                  normalizeLodLevel(componentMeshData?.lodLevel),
-                ]),
-              );
-              if (ctx && ctx.requestId === requestId) {
-                const pending = ctx.lodPending;
-                if (pending?.phase === "restoring") {
-                  ctx.componentMeshDataByCid = componentMeshDataByCid;
-                  ctx.componentLodLevelByCid = componentLodLevelByCid;
-                  ctx.meshData = meshData;
-                  pending.baseSource = meshData;
-                  pending.baseSources.add(meshData);
-                } else if (pending) {
-                  // Preserve unrelated progressive arrivals in both views.
-                  pending.maps.componentMeshDataByCid = componentMeshDataByCid;
-                  pending.maps.componentLodLevelByCid = componentLodLevelByCid;
-                  pending.source = meshData;
-                  pending.candidateSources.add(meshData);
-                  ctx.componentMeshDataByCid = { ...componentMeshDataByCid };
-                  ctx.componentLodLevelByCid = { ...componentLodLevelByCid };
-                  for (const item of pending.items) {
-                    ctx.componentMeshDataByCid[item.cid] = item.baseMesh;
-                    ctx.componentLodLevelByCid[item.cid] = item.previousLevel;
-                  }
-                  pending.baseSource = buildComposedPackageMeshData(packageDescriptor,
-                    ctx.componentMeshDataByCid, { previous: ctx.meshData });
-                  ctx.meshData = pending.baseSource;
-                  pending.baseSources.add(pending.baseSource);
-                } else {
-                  ctx.componentMeshDataByCid = componentMeshDataByCid;
-                  ctx.meshData = meshData;
-                  ctx.componentLodLevelByCid = componentLodLevelByCid;
-                }
-                ctx.complete = final;
-              } else {
-                lodPackageRef.current = {
-                  entry: surfaceViewReplacement ? { ...entry, runtimeSurfaceViewReplacement: false } : entry,
-                  file: entry.file,
-                  meshUrl,
-                  descriptor: packageDescriptor,
-                  runtimeDescriptor: storedPackageDescriptor,
-                  componentIdentityByCid: Object.fromEntries(componentIdentityByCid),
-                  componentMeshDataByCid,
-                  meshData,
-                  componentLodLevelByCid,
-                  requestId,
-                  complete: final
-                };
-              }
-              lodPackageRef.current.componentIdentityByCid = Object.fromEntries(componentIdentityByCid);
-              const publishedCtx = lodPackageRef.current;
-              publishedCtx.publishCount = publishCount;
-              publishedCtx.meshHash = nextState.meshHash;
-              syncDisplayedMemory(publishedCtx.componentMeshDataByCid);
-              if (final) {
-                displayedLodPackageRef.current = publishedCtx;
-                displayedReferenceCompositionRef.current = null;
-              } else {
-                displayedLodPackageRef.current = null;
-                displayedReferenceCompositionRef.current = null;
-              }
-              if (!publishedOnce) {
-                // First publish replaces whatever was showing (requestId is the
-                // guard, as the single publish had). The camera frames once per
-                // model key on this state; the loader put the extreme-placed
-                // components in the first batch so that frame spans the model.
-                publishedOnce = true;
-                setMeshState(nextState);
-                setStatus(ASSET_STATUS.READY);
-                setError("");
-                setFatalLoadFailure(null);
-                // A partial model is on screen: a later failure attaches to it
-                // as a background error rather than blanking the viewport.
-                assemblyPreviewVisible = entry?.kind === "assembly";
-              } else {
-                // Later publishes swap the state in place under the same guard
-                // the LOD swap uses: a state for another file is never replaced.
-                setMeshState((current) => (
-                  !current || current.file !== entry.file ? current : nextState
-                ));
-              }
-              // The LOD scheduler and memory accounting see the model as it
-              // loads; the summary only lists components with bounds (loaded).
-              setLodPackage(buildLodPackageSummary(entry, meshUrl, packageDescriptor,
-                publishedCtx.componentMeshDataByCid, publishedCtx.componentIdentityByCid));
-              if (final) {
-                setMeshLoadProgress({
+                surfUrl: staticUrl,
+                byteLength: null,
+              };
+            } else {
+              const resolved = await resolveSurfaceComponents(packageDescriptor, [{
+                cid, surfaceInput, surfaceObject: component.surfaceObject,
+              }], { client, signal: controller.signal });
+              ticket = resolved.get(cid);
+            }
+            const hint = ticket.byteLength || await surfContentLength(ticket.surfUrl, controller.signal, resources);
+            const plan = initialDisplayLodPlan({
+              componentCount: componentEntries.length,
+              surfBytes: hint,
+              maxInFlightBytes: PROGRESSIVE_LOAD_MAX_INFLIGHT_BYTES,
+            });
+            initialPlanByCid.set(cid, plan);
+            componentIdentityByCid.set(cid, Object.freeze({ ...component, ...ticket }));
+            // A tier revised by the exact SURF size may already be warm.
+            const revised = skipCacheProbes ? null : (await tessellationCache.probeCachedTessellationEntries(
+                [surfaceInput], lodTessellationForLevel(plan.level), { resources, signal: controller.signal },
+              )).get(surfaceInput) || null;
+            if (revised && revised.surfaceObject === ticket.surfaceObject
+                && !rejectedCacheObjects.has(revised.object)) {
+              return { sourceBytes: hint, cacheProbe: revised };
+            }
+            return { sourceBytes: hint, cacheProbe: null };
+          },
+          reserveLoad: ({ cid, estimatedBytes, cacheProbe }) => viewerMemoryPolicy.reserve({
+            category: "workerInFlight",
+            bytes: cacheProbe ? estimatedBytes : estimatedBytes * SURF_WORKER_TEMP_ESTIMATE_MULTIPLIER,
+            label: cid,
+            kind: "replace",
+            // A miss can be transient while another admitted worker owns
+            // the remaining bytes. The loader reports only a miss that is
+            // still impossible after all in-flight work drains.
+            recordLimitation: false
+          }),
+          releaseLoad: (token) => {
+            viewerMemoryPolicy.release(token);
+            syncSurfWorkerMemory();
+          },
+          recoverMemoryPressure: async () => {
+            if (completedPackages.clear()) {
+              syncAssetCacheMemory(componentMemoryAccounting(displayedLodPackageRef.current?.componentMeshDataByCid).buffers);
+              return true;
+            }
+            const reclaimed = reclaimIdleSurfWorkers();
+            syncSurfWorkerMemory();
+            if (reclaimed.reclaimedSlots > 0 || reclaimed.fullyReleased) return true;
+            // Every package decode has drained at this point. If another
+            // selector/LOD consumer still owns all slots, wait for that
+            // generation to finish, then retry this unchanged reservation
+            // once. Generation fencing prevents this waiter from clearing a
+            // replacement pool's accounting.
+            const released = await releaseSurfWorkers();
+            syncSurfWorkerMemory();
+            return released;
+          },
+          onMemoryLimitation: publishMemoryLimitation,
+          // Revision replacement is a transaction: loaded component arrays
+          // are accounted beside the current complete scene, but only the
+          // final composition is published.
+          publishIntermediate: !stageWholeReplacement,
+          onRetainedChange: ({ loaded, total, retainedBytes }) => {
+            if (requestId !== requestIdRef.current || controller.signal.aborted) return;
+            if (stageWholeReplacement) {
+              viewerMemoryPolicy.setRetained("replacementPending", retainedBytes);
+              syncAssetCacheMemory();
+            }
+            setMeshLoadProgress(loaded === total
+              ? {
                   phase: "view",
                   label: "Preparing view",
                   done: loaded,
                   total,
                   determinate: true,
-                });
+                }
+              : progressiveLoadProgress(loaded, total));
+          },
+          // The same staleness guard every publish below re-checks: the
+          // request is current and not aborted.
+          isCurrent: () => requestId === requestIdRef.current && !controller.signal.aborted,
+          // The LOD working set is live from the first publish, so a level
+          // swap that lands mid-load is composed from and kept by later
+          // batches instead of being reverted to level 0.
+          swappedComponents: () => (
+            lodPackageRef.current?.requestId === requestId ? publishedLodContext(lodPackageRef.current).componentMeshDataByCid : null
+          ),
+          onPublish: ({ meshData, componentMeshDataByCid, loaded, total, final, publishCount }) => {
+            if (final) viewerMemoryPolicy.clearLimitation();
+
+            // window.__cadMeshCost for the headless memory harness; not React state.
+            publishMeshCostAccounting({ meshData, componentMeshDataByCid, loaded, total, publishCount, final, meshRevision: getAssemblyMeshHash(entry) });
+            const nextState = completedPackageMeshState(entry, meshData);
+            // A partial model is structure-ready (the tree can show) but not
+            // interaction-ready: the workspace keeps the "loading" overlay
+            // with the per-batch count until the final publish flips it.
+            nextState.assemblyInteractionReady = final;
+            const ctx = lodPackageRef.current;
+            const componentLodLevelByCid = Object.fromEntries(
+              Object.entries(componentMeshDataByCid).map(([cid, componentMeshData]) => [
+                cid,
+                normalizeLodLevel(componentMeshData?.lodLevel),
+              ]),
+            );
+            if (ctx && ctx.requestId === requestId) {
+              const pending = ctx.lodPending;
+              if (pending?.phase === "restoring") {
+                ctx.componentMeshDataByCid = componentMeshDataByCid;
+                ctx.componentLodLevelByCid = componentLodLevelByCid;
+                ctx.meshData = meshData;
+                pending.baseSource = meshData;
+                pending.baseSources.add(meshData);
+              } else if (pending) {
+                // Preserve unrelated progressive arrivals in both views.
+                pending.maps.componentMeshDataByCid = componentMeshDataByCid;
+                pending.maps.componentLodLevelByCid = componentLodLevelByCid;
+                pending.source = meshData;
+                pending.candidateSources.add(meshData);
+                ctx.componentMeshDataByCid = { ...componentMeshDataByCid };
+                ctx.componentLodLevelByCid = { ...componentLodLevelByCid };
+                for (const item of pending.items) {
+                  ctx.componentMeshDataByCid[item.cid] = item.baseMesh;
+                  ctx.componentLodLevelByCid[item.cid] = item.previousLevel;
+                }
+                pending.baseSource = buildComposedPackageMeshData(packageDescriptor,
+                  ctx.componentMeshDataByCid, { previous: ctx.meshData });
+                ctx.meshData = pending.baseSource;
+                pending.baseSources.add(pending.baseSource);
+              } else {
+                ctx.componentMeshDataByCid = componentMeshDataByCid;
+                ctx.meshData = meshData;
+                ctx.componentLodLevelByCid = componentLodLevelByCid;
               }
-              if (stageWholeReplacement && final) {
-                viewerMemoryPolicy.setRetained("replacementPending", 0);
-              }
+              ctx.complete = final;
+            } else {
+              lodPackageRef.current = {
+                entry: surfaceViewReplacement ? { ...entry, runtimeSurfaceViewReplacement: false } : entry,
+                file: entry.file,
+                meshUrl,
+                descriptor: packageDescriptor,
+                runtimeDescriptor: storedPackageDescriptor,
+                componentIdentityByCid: Object.fromEntries(componentIdentityByCid),
+                componentMeshDataByCid,
+                meshData,
+                componentLodLevelByCid,
+                requestId,
+                complete: final
+              };
             }
-          });
-          try {
-            await loader.run();
-          } finally {
-            // Nothing tessellates once the load ends — a later LOD refinement
-            // builds a fresh pool — so the workers' isolates go back to the
-            // process instead of holding the heap each grew for the largest
-            // component it decoded. Also on the failure path: an aborted load
-            // is exactly when the memory is most worth returning.
-            releaseSurfWorkers().then(() => {
-              syncSurfWorkerMemory();
-            }).catch(() => {
-              syncSurfWorkerMemory();
-            });
+            lodPackageRef.current.componentIdentityByCid = Object.fromEntries(componentIdentityByCid);
+            const publishedCtx = lodPackageRef.current;
+            publishedCtx.publishCount = publishCount;
+            publishedCtx.meshHash = nextState.meshHash;
+            syncDisplayedMemory(publishedCtx.componentMeshDataByCid);
+            if (final) {
+              displayedLodPackageRef.current = publishedCtx;
+              displayedReferenceCompositionRef.current = null;
+            } else {
+              displayedLodPackageRef.current = null;
+              displayedReferenceCompositionRef.current = null;
+            }
+            if (!publishedOnce) {
+              // First publish replaces whatever was showing (requestId is the
+              // guard, as the single publish had). The camera frames once per
+              // model key on this state; the loader put the extreme-placed
+              // components in the first batch so that frame spans the model.
+              publishedOnce = true;
+              setMeshState(nextState);
+              setStatus(ASSET_STATUS.READY);
+              setError("");
+              setFatalLoadFailure(null);
+              // A partial model is on screen: a later failure attaches to it
+              // as a background error rather than blanking the viewport.
+              assemblyPreviewVisible = entry?.kind === "assembly";
+            } else {
+              // Later publishes swap the state in place under the same guard
+              // the LOD swap uses: a state for another file is never replaced.
+              setMeshState((current) => (
+                !current || current.file !== entry.file ? current : nextState
+              ));
+            }
+            // The LOD scheduler and memory accounting see the model as it
+            // loads; the summary only lists components with bounds (loaded).
+            setLodPackage(buildLodPackageSummary(entry, meshUrl, packageDescriptor,
+              publishedCtx.componentMeshDataByCid, publishedCtx.componentIdentityByCid));
+            if (final) {
+              setMeshLoadProgress({
+                phase: "view",
+                label: "Preparing view",
+                done: loaded,
+                total,
+                determinate: true,
+              });
+            }
+            if (stageWholeReplacement && final) {
+              viewerMemoryPolicy.setRetained("replacementPending", 0);
+            }
           }
-          return;
+        });
+        try {
+          await loader.run();
+        } finally {
+          // Nothing tessellates once the load ends — a later LOD refinement
+          // builds a fresh pool — so the workers' isolates go back to the
+          // process instead of holding the heap each grew for the largest
+          // component it decoded. Also on the failure path: an aborted load
+          // is exactly when the memory is most worth returning.
+          releaseSurfWorkers().then(() => {
+            syncSurfWorkerMemory();
+          }).catch(() => {
+            syncSurfWorkerMemory();
+          });
         }
-        // Every STEP model is a component-GLB package (handled above). A missing/non-package
-        // descriptor means the artifact is stale or was never built as a package.
-        throw new Error(
-          `STEP file ${entry.file || "(unknown)"} is not a component-GLB package; regenerate it to produce an assembly.json package.`
-        );
+        return;
       }
-      // Nothing else reaches here: every format but STEP has its own renderer, and this
-      // one only matches `.step`/`.stp`. A file that arrives anyway is a registration bug.
+      // Every STEP model is a component-GLB package (handled above). A missing/non-package
+      // descriptor means the artifact is stale or was never built as a package.
       throw new Error(
-        `${entry.file || "(unknown)"} is not a STEP model; it has no renderer in this view.`
+        `STEP file ${entry.file || "(unknown)"} is not a component-GLB package; regenerate it to produce an assembly.json package.`
       );
     } catch (err) {
       if (requestId !== requestIdRef.current || isAbortError(err) || controller.signal.aborted) {
         return;
       }
-      if (err instanceof SurfaceResolutionError && err.replacementView
-          && !surfaceViewReplacement && Boolean(entry)) {
+      if (err instanceof SurfaceResolutionError && err.replacementView && !surfaceViewReplacement) {
         return surfaceViewReplacementRef.current?.(
           entry, entryAssetUrl(entry, "glb"), err.replacementView,
         );
@@ -1525,74 +1463,9 @@ export function useCadAssets({
     }
   }, [buildNormalizedReferenceState, cancelReferenceLoad, entryHasReferences, getAssemblyMeshHash, getCachedReferenceState, resources]);
 
-  const loadDisplayEdgesForEntry = useCallback(async (entry) => {
-    cancelDisplayEdgeLoad();
-    const requestId = displayEdgeRequestIdRef.current;
-
-    if (!entryHasDisplayEdges(entry)) {
-      setDisplayEdgeState(null);
-      setDisplayEdgeStatus(REFERENCE_STATUS.DISABLED);
-      setDisplayEdgeError("");
-      return;
-    }
-
-    // A STEP model is a component-GLB package: there is no separate display-edge bundle to
-    // fetch (the package "glb" asset is a directory, so a fetch would 404). The per-component
-    // edges live in the composed selector runtime, which the STEP scene already uses as the display-
-    // edge source via `displayEdgeRuntime || selectorRuntime`. Disable the dedicated load.
-    if (Boolean(entry)) {
-      setDisplayEdgeState(null);
-      setDisplayEdgeStatus(REFERENCE_STATUS.DISABLED);
-      setDisplayEdgeError("");
-      return;
-    }
-
-    const cachedDisplayEdgeState = getCachedDisplayEdgeState(entry);
-    if (cachedDisplayEdgeState) {
-      setDisplayEdgeState(cachedDisplayEdgeState);
-      setDisplayEdgeStatus(REFERENCE_STATUS.READY);
-      setDisplayEdgeError("");
-      return;
-    }
-
-    const controller = new AbortController();
-    displayEdgeAbortControllerRef.current = controller;
-    setDisplayEdgeStatus(REFERENCE_STATUS.LOADING);
-    setDisplayEdgeError("");
-    setDisplayEdgeLoadStage("loading edges");
-
-    try {
-      const bundle = await loadRenderDisplayEdgeBundle(
-        entryDisplayEdgeTopologyAssetUrl(entry),
-        { resources, signal: controller.signal }
-      );
-      if (requestId !== displayEdgeRequestIdRef.current) {
-        return;
-      }
-      setDisplayEdgeState(buildDisplayEdgeState(entry, bundle));
-      setDisplayEdgeStatus(REFERENCE_STATUS.READY);
-      setDisplayEdgeError("");
-    } catch (err) {
-      if (requestId !== displayEdgeRequestIdRef.current || isAbortError(err) || controller.signal.aborted) {
-        return;
-      }
-      setDisplayEdgeState(null);
-      setDisplayEdgeStatus(REFERENCE_STATUS.ERROR);
-      setDisplayEdgeError(err instanceof Error ? err.message : String(err));
-    } finally {
-      if (displayEdgeAbortControllerRef.current === controller) {
-        displayEdgeAbortControllerRef.current = null;
-      }
-      if (requestId === displayEdgeRequestIdRef.current) {
-        setDisplayEdgeLoadStage("");
-      }
-    }
-  }, [buildDisplayEdgeState, cancelDisplayEdgeLoad, entryHasDisplayEdges, getCachedDisplayEdgeState, resources]);
-
   useEffect(() => () => {
     abortLoad(meshAbortControllerRef);
     abortLoad(referenceAbortControllerRef);
-    abortLoad(displayEdgeAbortControllerRef);
     const displayed = displayedLodPackageRef.current;
     if (displayed) completedPackages.set(client, displayed.entry, displayed);
     syncAssetCacheMemory();
@@ -1621,22 +1494,12 @@ export function useCadAssets({
     referenceError,
     setReferenceError,
     referenceLoadStage,
-    displayEdgeState,
-    setDisplayEdgeState,
-    displayEdgeStatus,
-    setDisplayEdgeStatus,
-    displayEdgeError,
-    setDisplayEdgeError,
-    displayEdgeLoadStage,
     getCachedMeshState,
     getCachedReferenceState,
-    getCachedDisplayEdgeState,
     cancelMeshLoad,
     cancelReferenceLoad,
-    cancelDisplayEdgeLoad,
     loadMeshForEntry,
     fatalLoadFailure,
-    loadReferencesForEntry,
-    loadDisplayEdgesForEntry
+    loadReferencesForEntry
   };
 }

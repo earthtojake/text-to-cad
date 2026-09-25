@@ -6,7 +6,7 @@ import { applyPartVisualState, FOCUSED_DIMMED_SURFACE_OPACITY, normalizePartIdLi
 import { REFERENCE_HIGHLIGHT_WIDTH_MULTIPLIER, REFERENCE_SELECTED_COLOR } from "@hardcore/core/lib/viewer/referenceGeometry.js";
 import { syncDisplayMeshFaceIds, syncSelectorPickGroups } from "@hardcore/core/lib/viewer/selectorPickGroups.js";
 import { BASE_VIEWER_THEME } from "@hardcore/core/lib/viewer/stageTheme.js";
-import { createRecordTopologyDisplayEdgeGroup, syncTopologyDisplayEdgeLine } from "@hardcore/core/lib/viewer/topologyDisplayEdgeLine.js";
+import { syncTopologyDisplayEdgeLine } from "@hardcore/core/lib/viewer/topologyDisplayEdgeLine.js";
 import { clamp } from "../../kit/camera/viewportCameraKit.js";
 import { clearSceneGroup } from "./useStepSceneSync.js";
 import { explodedPickSelectorRuntime } from "@hardcore/core/common/topologyDisplayEdgeRuntime.js";
@@ -115,16 +115,16 @@ export function useStepPartVisualState(layers) {
  * pointer, the B-rep edges the display asks for, and the brighter edges of a highlighted part.
  */
 export function useStepLinework(layers) {
-  const { viewport, props, policy, refs, activeSelectorRuntime, activeDisplayEdgeRuntime, explodedViewPoseTick } = layers;
+  const { viewport, props, policy, refs, activeSelectorRuntime, explodedViewPoseTick } = layers;
   const { runtimeRef, viewerReadyTick } = viewport;
-  const { meshData, modelKey, selectedPartIds, hoveredPartId, selectorRuntime, displayEdgeRuntime } = props;
+  const { meshData, modelKey, selectedPartIds, hoveredPartId, selectorRuntime } = props;
   const { viewerTheme, displayEdgeSettings, visualEdgeSettings, hiddenAwareVisualEdgeSettings, focusedPartIds, hiddenPartIdSet } = policy;
   const { topologyDisplayEdgesVisible } = layers.edges;
   const { clipSettingsRef } = refs;
 
   useEffect(() => {
     const runtime = runtimeRef.current;
-    if (!runtime?.THREE || !runtime?.edgePickGroup || !runtime?.facePickGroup || !runtime?.vertexPickGroup) {
+    if (!runtime?.THREE || !runtime?.edgePickGroup || !runtime?.facePickGroup) {
       return;
     }
 
@@ -159,9 +159,7 @@ export function useStepLinework(layers) {
     const transformByRecord = runtime.topologyDisplayEdgeTransformByRecord === true;
     syncTopologyDisplayEdgeLine(
       runtime,
-      transformByRecord
-        ? (displayEdgeRuntime || selectorRuntime)
-        : (activeDisplayEdgeRuntime || activeSelectorRuntime),
+      transformByRecord ? selectorRuntime : activeSelectorRuntime,
       {
         visible: topologyDisplayEdgesVisible,
         edgeSettings: hiddenAwareVisualEdgeSettings,
@@ -173,7 +171,7 @@ export function useStepLinework(layers) {
         syncClip: (activeRuntime) => syncRuntimeStepClipPlane(activeRuntime, clipSettingsRef.current)
       }
     );
-  }, [activeDisplayEdgeRuntime, activeSelectorRuntime, displayEdgeRuntime, viewerReadyTick, viewerTheme, focusedPartIds, hiddenAwareVisualEdgeSettings, selectorRuntime, topologyDisplayEdgesVisible, visualEdgeSettings]);
+  }, [activeSelectorRuntime, viewerReadyTick, viewerTheme, focusedPartIds, hiddenAwareVisualEdgeSettings, selectorRuntime, topologyDisplayEdgesVisible, visualEdgeSettings]);
 
   useEffect(() => {
     const runtime = runtimeRef.current;
@@ -216,18 +214,7 @@ export function useStepLinework(layers) {
         highlightOpacity: getHighlightEdgeOpacity(displayEdgeSettings),
         highlightRenderOrder: 26
       };
-      const highlightLine = runtime.topologyDisplayEdgeTransformByRecord === true && displayEdgeRuntime
-        ? createRecordTopologyDisplayEdgeGroup(runtime, displayEdgeRuntime, {
-            edgeSettings: highlightEdgeSettings,
-            viewerTheme,
-            displayRecords: runtime.displayRecords
-          })
-        : createSharedTopologyDisplayEdgeObject(
-            runtime,
-            activeDisplayEdgeRuntime || activeSelectorRuntime,
-            highlightEdgeSettings,
-            viewerTheme
-          );
+      const highlightLine = createSharedTopologyDisplayEdgeObject(runtime, activeSelectorRuntime, highlightEdgeSettings, viewerTheme);
       if (highlightLine) {
         highlightGroup.add(highlightLine);
       }
@@ -245,9 +232,7 @@ export function useStepLinework(layers) {
       clearOverlayGroup(runtime, highlightGroup);
     };
   }, [
-    activeDisplayEdgeRuntime,
     activeSelectorRuntime,
-    displayEdgeRuntime,
     displayEdgeSettings,
     hiddenAwareVisualEdgeSettings,
     hiddenPartIdSet,

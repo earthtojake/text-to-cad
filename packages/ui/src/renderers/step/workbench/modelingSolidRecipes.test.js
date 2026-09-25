@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import fs from 'node:fs';
 import { buildModelingTree } from './modelingTree.js';
-import { reconstructionRecipe } from './reconstructionRecipe.js';
+import { reconstructionRecipe } from './__tests__/reconstructionRecipe.js';
 const fixture = name => JSON.parse(fs.readFileSync(new URL(`./__tests__/fixtures/${name}.json`,import.meta.url)));
 const recognize = ({index,floats}) => {const tree=buildModelingTree(index,Float32Array.from(floats));return {tree,recipe:reconstructionRecipe(index,tree)};};
 

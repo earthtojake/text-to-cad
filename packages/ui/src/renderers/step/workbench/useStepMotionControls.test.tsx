@@ -167,3 +167,25 @@ it('every pose write lands at once and asks for no frame: a value, a named pose,
   expect(result.current.values).toEqual({ hinge: 5, slide: 2 });
   expect(frames.size).toBe(0);
 });
+
+it('a routine puts Position aside while it plays and gives it back when the pose is handed back', () => {
+  const { result } = setup();
+  act(() => result.current.handleStepModuleParameterChange('hinge', 45));
+  expect(result.current.values).toEqual({ hinge: 45, slide: 2 });
+  act(() => result.current.handleAnimationPlayToggle());
+  expect(result.current.values, 'a routine plays from the model at rest').toEqual(definition.defaultParameterValues);
+  act(() => { result.current.handleAnimationScrub(1); result.current.handleAnimationPlayToggle(); });
+  act(() => result.current.releaseAnimation());
+  expect(result.current.values, 'leaving Animate restores what Position had set').toEqual({ hinge: 45, slide: 2 });
+  expect(result.current.animation.enabled).toBe(false);
+  // Handing the pose back by touching Position starts from Position's values too.
+  act(() => result.current.handleAnimationPlayToggle());
+  act(() => result.current.handleStepModuleParameterChange('slide', 9));
+  expect(result.current.values).toEqual({ hinge: 45, slide: 9 });
+  // Reset still means the model at rest, and leaves nothing held for later.
+  act(() => result.current.handleAnimationPlayToggle());
+  act(() => result.current.handleResetStepModuleParameters());
+  expect(result.current.values).toEqual(definition.defaultParameterValues);
+  act(() => result.current.releaseAnimation());
+  expect(result.current.values).toEqual(definition.defaultParameterValues);
+});

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import {
   applyExplodedViewProgress, clearExplodedViewRecords, computeExplodedViewLayout, easeExplodedViewProgress
 } from "@hardcore/core/lib/viewer/explodedView.js";
@@ -18,7 +18,7 @@ function cancelExplodedViewAnimation(animationRef) {
   animation.rafId = 0;
 }
 
-function displayRecordExplodedViewTranslation(THREE, record) {
+export function displayRecordExplodedViewTranslation(THREE, record) {
   const elements = record?.explodedViewMatrix?.elements;
   if (!THREE?.Vector3 || !elements || elements.length < 16) {
     return THREE?.Vector3 ? new THREE.Vector3() : null;

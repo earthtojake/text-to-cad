@@ -6,8 +6,7 @@ import {
 } from "@hardcore/core/common/stepModuleEffects.js";
 import { applySceneState } from "@hardcore/core/common/applySceneState.js";
 import {
-  explodedPickSelectorRuntime, resolveTopologyDisplayEdgeRuntimes, shouldRenderTopologyDisplayEdges,
-  shouldUseRecordTopologyEdgeTransforms
+  explodedPickSelectorRuntime, resolveTopologyDisplayEdgeRuntimes, shouldRenderTopologyDisplayEdges
 } from "@hardcore/core/common/topologyDisplayEdgeRuntime.js";
 import { applyDisplayRecordTransform, syncRuntimeStepClipPlane } from "@hardcore/core/lib/viewer/modelRuntime.js";
 import { applyPartVisualState, FOCUSED_DIMMED_SURFACE_OPACITY } from "@hardcore/core/lib/viewer/partVisualState.js";
@@ -35,23 +34,22 @@ const MODEL_OFFSET = new THREE.Vector3(0, 0, 0);
  */
 export function useStepPose(layers) {
   const {
-    viewport, props, policy, refs, staticResetRenderToken,
-    setTransformedSelectorRuntime, setTransformedDisplayEdgeRuntime
+    viewport, props, policy, refs, staticResetRenderToken, setTransformedSelectorRuntime
   } = layers;
   const { runtimeRef, viewerReadyTick } = viewport;
   const {
     meshData, modelKey, isLoading, pickMode, pickableParts, hiddenPartIds, selectedPartIds, hoveredPartId,
-    selectorRuntime, displayEdgeRuntime, stepParameterRuntime, stepAnimationRuntime, animateMode
+    selectorRuntime, stepParameterRuntime, stepAnimationRuntime, animateMode
   } = props;
   const stepAnimationPlaying = Boolean(stepAnimationRuntime?.playing);
   const {
     viewerTheme, visualEdgeSettings, hiddenAwareVisualEdgeSettings, focusedPartIds, explodedViewActive,
     wireframeMode, edgesVisible, partVisualStateEnabled
   } = policy;
-  const { topologyDisplayEdgesVisible, recordEdgesVisible } = layers.edges;
+  const { recordEdgesVisible } = layers.edges;
   const {
     partVisualStateRef, clipSettingsRef, selectorRuntimeRef, staticSceneResetRef, viewerAlertChangeRef,
-    sceneEffectsAlertRef, lodCameraChangeRef, stepModuleTransformDetectedChangeRef, stepModuleCleanupRef
+    sceneEffectsAlertRef, lodCameraChangeRef, stepModuleCleanupRef
   } = refs;
   // A STEP's linework comes from its B-rep topology.
   const shouldUseCadEdgeSource = true;
@@ -154,9 +152,7 @@ export function useStepPose(layers) {
     };
     if ((!definition && !animationClip) || isLoading || !meshData) {
       clearSceneEffectsAlert();
-      stepModuleTransformDetectedChangeRef.current?.(false);
       updateTransformedRuntimeState(setTransformedSelectorRuntime, null);
-      updateTransformedRuntimeState(setTransformedDisplayEdgeRuntime, null);
       runtime.topologyDisplayEdgeTransformByRecord = explodedViewActive;
       if (staticSceneResetRef.current.consume(staticResetRenderToken, {
         source: meshData, runtime, visualState: partVisualStateRef.current, clipState: clipSettingsRef.current,
@@ -176,11 +172,10 @@ export function useStepPose(layers) {
         edgesVisible,
         wireframeMode,
         cadEdgeSource: shouldUseCadEdgeSource,
-        displayEdgeRuntime,
         selectorRuntime,
         edgeSettings: visualEdgeSettings
       });
-      syncTopologyDisplayEdgeLine(runtime, displayEdgeRuntime || selectorRuntime, {
+      syncTopologyDisplayEdgeLine(runtime, selectorRuntime, {
         visible: baseTopologyDisplayEdgesVisible,
         edgeSettings: hiddenAwareVisualEdgeSettings,
         focusedPartIds,
@@ -244,45 +239,25 @@ export function useStepPose(layers) {
       if (!passError) {
         clearSceneEffectsAlert();
       }
-      const useRecordTopologyEdgeTransforms = explodedViewActive || shouldUseRecordTopologyEdgeTransforms({
-        transformDetected,
-        topologyDisplayEdgesVisible,
-        displayEdgeRuntime,
-        displayRecords: runtime.displayRecords
-      });
-      // The transformed selector runtime is pick-only output, and the costliest thing a
-      // posed frame makes: every face and edge proxy de-indexed and re-transformed into
-      // fresh arrays, behind a cache no moving frame can hit, and as React state it then
-      // rebuilt pick groups, their BVH, the picking listeners and the highlight overlays —
-      // every frame. In Animate mode none of it has a reader. The display edges keep their
-      // own runtime; only a model whose edges come from the selector runtime still needs it.
-      const posedSelectorRuntime = animateMode && displayEdgeRuntime ? null : selectorRuntime;
+      // An exploded view moves the linework with each record; otherwise the line follows the
+      // selector runtime as posed. The transformed selector runtime is pick-only output, and
+      // the costliest thing a posed frame makes; STEP linework comes from it, so it is made.
+      const useRecordTopologyEdgeTransforms = explodedViewActive;
       const nextEdgeRuntimes = resolveTopologyDisplayEdgeRuntimes({
-        selectorRuntime: posedSelectorRuntime,
-        displayEdgeRuntime,
-        displayRecords: transformDetected ? runtime.displayRecords : [],
-        transformDisplayEdges: !useRecordTopologyEdgeTransforms
+        selectorRuntime,
+        displayRecords: transformDetected ? runtime.displayRecords : []
       });
       const nextTopologyDisplayEdgesVisible = shouldRenderTopologyDisplayEdges({
         edgesVisible,
         wireframeMode,
         cadEdgeSource: shouldUseCadEdgeSource,
-        displayEdgeRuntime: useRecordTopologyEdgeTransforms ? displayEdgeRuntime : nextEdgeRuntimes.displayEdgeRuntime,
         selectorRuntime: nextEdgeRuntimes.selectorRuntime,
         edgeSettings: visualEdgeSettings
       });
-      stepModuleTransformDetectedChangeRef.current?.(nextEdgeRuntimes.transformCount > 0);
       const nextSelectorRuntime = nextEdgeRuntimes.transformedSelectorRuntime;
-      const nextDisplayEdgeRuntime = useRecordTopologyEdgeTransforms
-        ? null
-        : nextEdgeRuntimes.transformedDisplayEdgeRuntime;
-      updateTransformedRuntimeState(setTransformedSelectorRuntime, nextSelectorRuntime && posedSelectorRuntime ? {
+      updateTransformedRuntimeState(setTransformedSelectorRuntime, nextSelectorRuntime ? {
         base: selectorRuntime,
         runtime: nextSelectorRuntime
-      } : null);
-      updateTransformedRuntimeState(setTransformedDisplayEdgeRuntime, nextDisplayEdgeRuntime ? {
-        base: displayEdgeRuntime,
-        runtime: nextDisplayEdgeRuntime
       } : null);
       for (const record of runtime.displayRecords) {
         applyDisplayRecordTransform(runtime.THREE, record, runtime.modelRadius || 1);
@@ -298,7 +273,7 @@ export function useStepPose(layers) {
       runtime.topologyDisplayEdgeTransformByRecord = useRecordTopologyEdgeTransforms;
       syncTopologyDisplayEdgeLine(
         runtime,
-        useRecordTopologyEdgeTransforms ? displayEdgeRuntime : nextEdgeRuntimes.topologyRuntime,
+        useRecordTopologyEdgeTransforms ? null : nextEdgeRuntimes.topologyRuntime,
         {
           visible: nextTopologyDisplayEdgesVisible,
           edgeSettings: hiddenAwareVisualEdgeSettings,
@@ -357,7 +332,6 @@ export function useStepPose(layers) {
     pickableParts,
     selectedPartIds,
     selectorRuntime,
-    displayEdgeRuntime,
     stepParameterRuntime,
     stepAnimationRuntime,
     // Leaving the mode must re-run this pass once: it is what rebuilds the pick state.

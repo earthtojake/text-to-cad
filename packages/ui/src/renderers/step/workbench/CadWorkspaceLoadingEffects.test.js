@@ -42,8 +42,7 @@ function workspaceLoadingEffects() {
       const names = referencedNames(callbackPath);
       for (const loaderName of [
         "loadMeshForEntry",
-        "loadReferencesForEntry",
-        "loadDisplayEdgesForEntry"
+        "loadReferencesForEntry"
       ]) {
         if (names.has(loaderName)) {
           effects.push({
@@ -68,7 +67,7 @@ function workspaceLoadingEffects() {
 test("persisted Render loads model documents and shared interaction assets", () => {
   const effects = workspaceLoadingEffects();
   const byLoader = new Map(effects.map((effect) => [effect.loaderName, effect]));
-  assert.equal(effects.length, 3, "expected one effect for each document or inspection loader");
+  assert.equal(effects.length, 2, "expected one effect for each document or inspection loader");
 
   const selectedEntry = { path: "fixture.step" };
   const meshState = { cached: "mesh" };
@@ -76,9 +75,6 @@ test("persisted Render loads model documents and shared interaction assets", () 
   byLoader.get("loadMeshForEntry").run({
     renderSession: { enabled: true },
     selectedEntry,
-    selectedEntryRenderAssetFormat: "step",
-    assetKindForRenderFormat: () => "mesh",
-    ASSET_KIND: { MESH: "mesh", DRAWING: "drawing" },
     shouldStartMeshLoad: () => true,
     meshLoadInProgress: false,
     meshLoadTargetFile: "",
@@ -122,23 +118,4 @@ test("persisted Render loads model documents and shared interaction assets", () 
   });
   assert.deepEqual(referenceEvents, ["load"]);
   assert.deepEqual(referenceState, { cached: "topology" });
-
-  const displayEdgeState = { cached: "edges" };
-  const displayEdgeEvents = [];
-  byLoader.get("loadDisplayEdgesForEntry").run({
-    selectedEntry,
-    selectedStepDisplayEdgesRequested: true,
-    selectedDisplayEdgesMatch: false,
-    displayEdgeState,
-    cancelDisplayEdgeLoad: () => displayEdgeEvents.push("cancel"),
-    loadDisplayEdgesForEntry: () => {
-      displayEdgeEvents.push("load");
-      return Promise.resolve();
-    },
-    setDisplayEdgeState: () => displayEdgeEvents.push("state"),
-    setDisplayEdgeStatus: () => displayEdgeEvents.push("status"),
-    setDisplayEdgeError: () => displayEdgeEvents.push("error")
-  });
-  assert.deepEqual(displayEdgeEvents, ["load"]);
-  assert.deepEqual(displayEdgeState, { cached: "edges" });
 });

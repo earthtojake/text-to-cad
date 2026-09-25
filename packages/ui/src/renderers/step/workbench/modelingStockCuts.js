@@ -1,4 +1,4 @@
-import { add, sub, scale, dot, length, parallel, near, inward, faceEdges, contourArea } from './modelingGeometry.js';
+import { sub, scale, dot, parallel, near, inward, faceEdges, contourArea } from './modelingGeometry.js';
 import { localPrismaticFeatures } from './modelingLocalFeatures.js';
 
 // A planar back face can define stock; recessed parallel faces define outward

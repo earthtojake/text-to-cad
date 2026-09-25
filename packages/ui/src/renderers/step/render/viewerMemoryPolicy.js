@@ -195,9 +195,7 @@ export function createViewerMemoryPolicy({
 // accelerators. It accounts only disposable browser-side data; persistent
 // store/tessellation-provider records are outside its ownership.
 export const viewerMemoryPolicy = createViewerMemoryPolicy();
-
-if (typeof window !== "undefined") {
-  // Read-only browser diagnostic; unlike performance.memory this reports the
-  // same categories and admission math in every supported browser.
-  window.__cadViewerMemoryPolicySnapshot = () => viewerMemoryPolicy.snapshot();
-}
+// Read-only browser diagnostic (`window.__cadViewerMemoryPolicySnapshot`), published by a
+// mounted viewport (`useViewportLod`), never at import: unlike performance.memory it reports
+// the same categories and admission math in every supported browser.
+export const viewerMemoryPolicySnapshot = () => viewerMemoryPolicy.snapshot();

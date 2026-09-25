@@ -7,7 +7,8 @@ import {
   applyMeasureRulerHover,
   applyMeasureRulerPick,
   cancelMeasureRulerDraft,
-  clearMeasureRulerMeasurements,
+  measureFilterAccepts,
+  measureFilterSnaps,
   measureRulerDraftMeasurement,
   measureRulerStateForChange,
 } from "./measureRulerState.js";
@@ -154,18 +155,6 @@ test("measure ruler drops everything on entry change", () => {
   assert.equal(measureRulerStateForChange(committed, { entryChanged: true, toolActive: true }), null);
 });
 
-test("clearMeasureRulerMeasurements empties the list but keeps live draft and hover", () => {
-  const committed = applyMeasureRulerPick(applyMeasureRulerPick(null, FIRST_PICK), SECOND_PICK);
-  const cleared = clearMeasureRulerMeasurements(committed);
-  assert.deepEqual(cleared.measurements, []);
-
-  const withDraft = applyMeasureRulerPick(committed, FIRST_PICK);
-  const clearedDraft = clearMeasureRulerMeasurements(withDraft);
-  assert.deepEqual(clearedDraft.measurements, []);
-  assert.equal(clearedDraft.draft, withDraft.draft);
-  assert.equal(clearMeasureRulerMeasurements(null), null);
-});
-
 test("measure ruler tracks hover without a draft, and only when the entity changes", () => {
   // Needed for the single-entity readout; a new object every mouse move would
   // re-render the workspace for a value that did not change.
@@ -222,4 +211,32 @@ test("each measurement keeps its own colour index, even after deletions", () => 
   state = applyMeasureRulerDelete(state, state.measurements[0].id);
   state = applyMeasureRulerPick(applyMeasureRulerPick(state, FIRST_PICK, opts), SECOND_PICK, opts);
   assert.deepEqual(state.measurements.map((item) => item.colorIndex), [1, 2]);
+});
+
+test("a draft re-renders only when what its end snaps to changes, not on every move along it", () => {
+  const draft = applyMeasureRulerPick(null, FIRST_PICK);
+  const onEdge = applyMeasureRulerHover(draft, { point: [1, 0, 0], referenceId: "e1", snapKind: "edge" });
+  assert.notEqual(onEdge, draft, "arriving on an edge is a change");
+  assert.equal(applyMeasureRulerHover(onEdge, { point: [2, 0, 0], referenceId: "e1", snapKind: "edge" }), onEdge,
+    "sliding along the same edge keeps the state: the overlay moves the end from the live hover");
+  const onFace = applyMeasureRulerHover(onEdge, { point: [2, 1, 0], referenceId: "f2", snapKind: "face" });
+  assert.equal(onFace.draft.hover.referenceId, "f2");
+  const off = applyMeasureRulerHover(onFace, null);
+  assert.equal(off.draft.hover, null, "leaving the model drops the rubber band");
+  assert.equal(applyMeasureRulerHover(off, null), off);
+  const free = applyMeasureRulerHover(off, { point: [5, 5, 5] });
+  assert.deepEqual(free.draft.hover, { point: [5, 5, 5] }, "a free point with no target is still a hover");
+});
+
+test("Measure's snapping filter lets through what it names, and snaps to only that", () => {
+  for (const kind of ["edge", "face", "free", undefined]) {
+    assert.equal(measureFilterAccepts("all", kind), true, `all takes ${kind}`);
+    assert.equal(measureFilterAccepts("points", kind), true, `points takes ${kind} as a point`);
+  }
+  assert.deepEqual(["edge", "face", "free"].map(kind => measureFilterAccepts("edges", kind)), [true, false, false]);
+  assert.deepEqual(["edge", "face", "free"].map(kind => measureFilterAccepts("faces", kind)), [false, true, false]);
+  assert.deepEqual(measureFilterSnaps("all"), { faces: true, edges: true });
+  assert.deepEqual(measureFilterSnaps("faces"), { faces: true, edges: false });
+  assert.deepEqual(measureFilterSnaps("edges"), { faces: false, edges: true });
+  assert.deepEqual(measureFilterSnaps("points"), { faces: false, edges: false }, "points snaps to nothing: free surface points");
 });

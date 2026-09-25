@@ -858,6 +858,15 @@ test('Position persists across tools and tabs, its tool reveals controls, and An
   await view.tool('Animate').click();
   assert.equal(await view.tool('Animate').getAttribute('aria-pressed'), 'true');
   await page.waitForFunction(y => Math.abs(window.__cadDisplayRecords().find(record => record.partId === 'o1.2').matrix[13] - y) > 1, rest['o1.2'][1]);
+  // Leaving Animate hands the pose back to Position as Position left it: the routine played
+  // from the model at rest, and never threw the joint value away.
+  await view.tool('Select').click();
+  await page.waitForFunction(([x, y, z]) => {
+    const [px, py, pz] = window.__cadDisplayRecords().find(record => record.partId === 'o1.2').matrix.slice(12, 15);
+    return Math.hypot(px - x, py - y, pz - z) < 1e-3;
+  }, posed['o1.2']);
+  await position.getByLabel('hinge slider value', { exact: true }).waitFor({ state: 'attached' });
+  assert.equal(await position.getByLabel('hinge slider value', { exact: true }).inputValue(), '60.0 deg');
   assert.deepEqual(errors, []);
 });
 
@@ -1267,9 +1276,30 @@ test('neutral model tools leave with another tool; applied effects persist until
   assert.equal(await explode.isVisible(), true);
   await page.getByLabel('Clip amount value', { exact: true }).fill('0');
   await page.getByLabel('Clip amount value', { exact: true }).press('Enter');
-  await page.getByRole('slider', { name: 'Explode amount' }).press('Home');
+  await clip.waitFor({ state: 'hidden' });
+  // A kept panel whose value is dragged THROUGH neutral stays under the pointer: dropping it
+  // mid-drag lost the drag. It goes only once the pointer lets go at neutral.
+  const thumb = page.getByRole('slider', { name: 'Explode amount' });
+  const track = await explode.locator('[data-slot=slider-track]').boundingBox();
+  const thumbBox = await thumb.boundingBox();
+  const y = thumbBox.y + thumbBox.height / 2;
+  await page.mouse.move(thumbBox.x + thumbBox.width / 2, y);
+  await page.mouse.down();
+  await page.mouse.move(track.x - 30, y, { steps: 8 });
+  await page.waitForFunction(() => window.cadHarness.a.controller.readState().display.exploded.amount === 0);
+  await page.waitForTimeout(100);
+  assert.equal(await explode.isVisible(), true, 'the panel stays while the pointer holds its slider at 0');
+  await page.mouse.move(track.x + track.width / 2, y, { steps: 8 });
+  await page.mouse.up();
+  assert.equal(await explode.isVisible(), true);
+  assert.ok(Math.abs((await view.state()).display.exploded.amount - 0.5) < 0.1, 'and the drag carried on to where it was let go');
+  const middle = await thumb.boundingBox();
+  await page.mouse.move(middle.x + middle.width / 2, y);
+  await page.mouse.down();
+  await page.mouse.move(track.x - 30, y, { steps: 8 });
+  await page.mouse.up();
+  await explode.waitFor({ state: 'hidden' });
   await view.tool('Select').click();
-  await clip.waitFor({ state: 'hidden' }); await explode.waitFor({ state: 'hidden' });
   await view.tool('Clip').click(); await view.tool('Clip').click(); await clip.waitFor({ state: 'hidden' });
   assert.deepEqual(errors, []);
 });
@@ -1435,7 +1465,8 @@ test('reference CTA, double clicks and copy shortcut deliver references silently
   const action = pane.getByRole('button', {name:/^Copy Reference\b/});
   await action.click();
   await page.waitForFunction(() => window.__clipboardWrites.length === 1);
-  assert.match(await page.evaluate(() => window.__clipboardWrites[0]), /#o1\.2/);
+  // Every copy carries the file's prefix, the one way copied text is shaped (`copyTextLines`).
+  assert.equal(await page.evaluate(() => window.__clipboardWrites[0]), 'hinge_block.step#o1.2');
   assert.ok((await action.boundingBox()).height >= 44);
   assert.equal(await page.locator('[data-slot=toast]').count(), 0, 'copy completes silently');
   await action.press('Control+c');
@@ -1450,7 +1481,21 @@ test('reference CTA, double clicks and copy shortcut deliver references silently
   await page.getByRole('menuitemradio', { name: /^Faces/ }).click();
   await page.mouse.dblclick(...at([6,6,5]));
   await page.waitForFunction(() => window.__clipboardWrites.length === 3);
-  assert.match(await page.evaluate(() => window.__clipboardWrites[2]), /#o1\.1\.f\d+/);
+  const face = await page.evaluate(() => window.__clipboardWrites[2]);
+  assert.match(face, /^hinge_block\.step#o1\.1\.f\d+$/, 'a double-click copies what the Copy Reference button would');
+  // ...and leaves the face it copied selected: the two clicks it is made of do not toggle it off.
+  await page.waitForTimeout(350);
+  const faceId = (await view.state()).selectedReferenceIds;
+  assert.equal(faceId.length, 1, `the double-clicked face is the selection: ${JSON.stringify(faceId)}`);
+  await pane.getByRole('button', { name: /^Copy Reference\b/ }).click();
+  await page.waitForFunction(() => window.__clipboardWrites.length === 4);
+  assert.equal(await page.evaluate(() => window.__clipboardWrites[3]), face, 'the button copies the same face, the same way');
+  // A second double-click on the now-selected face copies again and still leaves it selected.
+  await page.mouse.dblclick(...at([6,6,5]));
+  await page.waitForFunction(() => window.__clipboardWrites.length === 5);
+  await page.waitForTimeout(350);
+  assert.deepEqual((await view.state()).selectedReferenceIds, faceId);
+  await page.evaluate(() => { window.__clipboardWrites.splice(3); });
   await page.waitForTimeout(350);
   await view.tool('Select').click();
   await page.getByRole('menuitemradio', { name: /^Edges/ }).click();
@@ -1462,6 +1507,11 @@ test('reference CTA, double clicks and copy shortcut deliver references silently
   await page.waitForFunction(() => window.cadHarness.a.controller.readState().isolatedPartIds.length === 0);
   assert.ok(partBoxes(await view.frame()).arm, 'double-clicking empty space restores the other component');
   assert.equal(await page.evaluate(() => window.__clipboardWrites.length), 4, 'empty-space double-click does not copy');
+  // A tree row's own Copy Reference is the same copy, prefix included.
+  await pane.getByRole('button', { name: 'Select arm', exact: true }).click({ button: 'right' });
+  await page.getByRole('menuitem', { name: 'Copy Reference', exact: true }).click();
+  await page.waitForFunction(() => window.__clipboardWrites.length === 5);
+  assert.equal(await page.evaluate(() => window.__clipboardWrites[4]), 'hinge_block.step#o1.2');
   await view.tool('Draw').click();
   await page.waitForFunction(() => document.querySelector('[data-testid="one"] [data-drawing-ready]'));
   await page.mouse.move(view.box.x + 150, view.box.y + 150);
@@ -1643,7 +1693,10 @@ test('Position header offers Default and Reset together above the joint values',
   const joint = panel.locator('[data-position-control]').first();
   const labelBox = await joint.getByText('hinge', { exact: true }).boundingBox();
   const valueBox = await value.boundingBox();
-  const sliderBox = await joint.getByRole('slider').boundingBox();
+  const sliderBox = await joint.getByRole('slider', { name: 'hinge', exact: true }).boundingBox();
+  // Every joint's slider thumb is named for its joint, not only its number field.
+  assert.deepEqual(await panel.locator('[role=slider]').evaluateAll(thumbs => thumbs.filter(thumb => !thumb.getAttribute('aria-label')).length), 0,
+    'no unnamed slider thumb');
   assert.ok(sliderBox.x + sliderBox.width < valueBox.x, 'numeric value sits beside the label/slider pair');
   assert.ok(sliderBox.y >= labelBox.y + labelBox.height - 4, 'slider is directly beneath its label');
   assert.ok((await preset.boundingBox()).width > headerBox.width * 0.9, 'pose dropdown fills the control width');

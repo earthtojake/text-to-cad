@@ -9,6 +9,7 @@ export function buildPositionSection({ poseRuntime = null, animationRuntime = nu
   const onReset = poseRuntime?.onResetMotion || animationRuntime?.resetModel || poseRuntime?.onResetParameters;
   return {
     id: "position",
+    role: "position",
     title: "Position",
     content: (
       <div className="space-y-2 px-1 py-2">

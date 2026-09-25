@@ -32,13 +32,12 @@ export function stepRecordSignatures(entry) {
 }
 
 const NO_TREE = Object.freeze({
-  referenceQuery: "", selectedReferenceIds: [], selectedPartIds: [], expandedStepTreeNodeIds: [], hiddenPartIds: []
+  selectedReferenceIds: [], selectedPartIds: [], expandedStepTreeNodeIds: [], hiddenPartIds: []
 });
 
 function readTree(value) {
   if (!plainObject(value)) return null;
   return {
-    referenceQuery: text(value.referenceQuery),
     selectedReferenceIds: idList(value.selectedReferenceIds),
     selectedPartIds: idList(value.selectedPartIds),
     expandedStepTreeNodeIds: idList(value.expandedStepTreeNodeIds),
@@ -86,4 +85,32 @@ export function writeStepRecord({ tree, pose, animation, largeFile, signatures }
     largeFile: { selectableTopologyEnabled: bool(largeFile?.selectableTopologyEnabled, false) },
     largeFileSignature: signatures.geometry
   };
+}
+
+/**
+ * What the record is written from, the surface as it stands: its tree, its Position values,
+ * its routine (while a clip plays, the time is the clock's: React state holds where it last
+ * paused) and its large-file choice.
+ */
+export function stepRecordInputs({ tree, parameterValues, animationState, clockTime, largeFileState, signatures }) {
+  return {
+    tree,
+    pose: { parameterValues },
+    animation: {
+      activeClipId: animationState.activeClipId, enabled: animationState.enabled,
+      elapsedSec: animationState.playing ? clockTime() : animationState.elapsedSec,
+      speed: animationState.speed, loopEnabled: animationState.loopEnabled
+    },
+    largeFile: { selectableTopologyEnabled: largeFileState.selectableTopologyEnabled },
+    signatures
+  };
+}
+
+/**
+ * The Position values a restored record starts from, or null when it has no pose slice. A
+ * routine that owned the pose wins outright: the losing owner's raw values are not restored.
+ */
+export function restoredPoseValues(restored) {
+  if (!restored.pose) return null;
+  return restored.animation?.enabled !== false && restored.animation?.activeClipId ? {} : restored.pose.parameterValues;
 }

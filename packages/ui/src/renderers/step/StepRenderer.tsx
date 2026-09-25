@@ -1,82 +1,12 @@
-import { useSyncExternalStore, type ComponentType } from 'react';
-import type { FileNavigationAction, FileRendererProps, JsonValue } from '../../file-viewer/types.js';
-import type { CadWorkspaceService, CadEntry, CadRenderSession, CadServerInfo } from '@hardcore/core/client';
-import type { CadCommands, CadCommandSource, CadLiveBinding, StepRendererSlots, PreparedStepDocument } from './index.js';
-import type { ResourceRef } from '@hardcore/core/prompt';
-import type { CadPreferences } from '../workspace/index.js';
+import type { ComponentType } from 'react';
+import type { FileRendererProps, RendererViewProps } from '../../file-viewer/types.js';
+import type { PreparedStepDocument } from './index.js';
 import StepSurface from './StepSurface.jsx';
 
-const emptyCommands: CadCommands = Object.freeze({});
-const emptySubscribe = () => () => {};
-const getEmptyCommands = () => emptyCommands;
-interface StepSurfaceProps {
-  displayActions?: import("react").ReactNode;
-  fullscreen?: boolean;
-  onFullscreenChange?: (fullscreen: boolean) => void;
-  onNavigationActionsChange?: (actions: readonly FileNavigationAction[]) => void;
-  preferences: CadPreferences;
-  onPreferenceChange(patch: Partial<CadPreferences>): void;
-  client: CadWorkspaceService;
-  entry: CadEntry;
-  serverInfo: CadServerInfo;
-  renderSession: CadRenderSession;
-  onOpenFile(path: string): void;
-  /** Renderer status beside the filename; panel suspension preserves the open tab and width. */
-  navigationStatusSlot?: HTMLElement | null;
-  onPanelVisibilityChange?: (visible: boolean) => void;
-  panelSlot: HTMLElement | null;
-  colorScheme: 'light' | 'dark';
-  openPanel: string;
-  onPanelOpen(id: string): void;
-  onChromeVisibilityChange(visible: boolean): void;
-  onReload(): void;
-  state: JsonValue | undefined;
-  onStateChange(state: JsonValue): void;
-  selectReference?: CadCommands['selectReference'];
-  captureRequest?: CadCommands['captureRequest'];
-  acknowledgeCommand?: CadCommandSource['acknowledge'];
-  documentResource: ResourceRef;
-  slots?: StepRendererSlots;
-  live?: CadLiveBinding;
-}
-const Surface = StepSurface as ComponentType<StepSurfaceProps>;
+const Surface = StepSurface as ComponentType<{ view: RendererViewProps; data: PreparedStepDocument }>;
 
+/** Like every renderer on the shell: the host's view props as they came, and the prepared document. */
 export default function StepRenderer(props: FileRendererProps<PreparedStepDocument>) {
-  const { data } = props;
-  const commands = useSyncExternalStore(
-    data.services.commands?.subscribe || emptySubscribe,
-    data.services.commands?.getSnapshot || getEmptyCommands,
-    getEmptyCommands
-  );
-  const preferences = useSyncExternalStore(data.services.preferences!.subscribe, data.services.preferences!.getSnapshot, data.services.preferences!.getSnapshot);
-  return <Surface
-    key={JSON.stringify([props.source.id, props.file.path])}
-    preferences={preferences}
-    onPreferenceChange={data.services.preferences!.update}
-    client={data.client}
-    entry={data.entry}
-    serverInfo={data.serverInfo}
-    renderSession={data.renderSession}
-    onOpenFile={props.onOpenFile}
-    navigationStatusSlot={props.navigationStatusSlot}
-    onPanelVisibilityChange={props.onPanelVisibilityChange}
-    panelSlot={props.panelSlot}
-    colorScheme={props.appearance.colorScheme}
-    openPanel={props.openPanel}
-    onPanelOpen={props.onPanelOpen}
-    onChromeVisibilityChange={props.onChromeVisibilityChange}
-    fullscreen={props.fullscreen}
-    onFullscreenChange={props.onFullscreenChange}
-    onNavigationActionsChange={props.onNavigationActionsChange}
-    displayActions={props.displayActions}
-    onReload={props.reload}
-    state={props.state}
-    onStateChange={props.onStateChange}
-    documentResource={{ kind: 'workspace-file', workspaceId: props.source.id, path: props.file.path, revision: String(data.entry.hash || props.file.revision || '') }}
-    slots={data.services.slots}
-    live={data.services.live}
-    selectReference={commands.selectReference}
-    captureRequest={commands.captureRequest}
-    acknowledgeCommand={data.services.commands?.acknowledge}
-  />;
+  const { data, ...view } = props;
+  return <Surface key={JSON.stringify([view.source.id, view.file.path])} view={view} data={data} />;
 }

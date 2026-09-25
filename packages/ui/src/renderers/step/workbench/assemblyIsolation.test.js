@@ -4,7 +4,6 @@ import test from "node:test";
 import {
   minimalAssemblyIsolationNodeIds,
   selectableViewerNodeIdsForExpandedTree,
-  selectableViewerNodeIdsForIsolation
 } from "./assemblyIsolation.js";
 
 const root = {
@@ -48,25 +47,6 @@ test("minimal assembly isolation keeps only the highest selected ancestor", () =
   );
   assert.deepEqual(
     minimalAssemblyIsolationNodeIds(root, ["assembly_a", "part_a1", "part_b"], { rootId: "root" }),
-    ["assembly_a", "part_b"]
-  );
-});
-
-test("viewer selection during isolate only keeps direct children selectable", () => {
-  assert.deepEqual(
-    selectableViewerNodeIdsForIsolation(root, ["assembly_a", "part_a1"], "root"),
-    ["part_a1", "part_a2"]
-  );
-  assert.deepEqual(
-    selectableViewerNodeIdsForIsolation(root, ["part_a2"], "root"),
-    ["part_a2_leaf"]
-  );
-  assert.deepEqual(
-    selectableViewerNodeIdsForIsolation(root, ["part_a1", "part_b"], "root"),
-    []
-  );
-  assert.deepEqual(
-    selectableViewerNodeIdsForIsolation(root, [], "root"),
     ["assembly_a", "part_b"]
   );
 });

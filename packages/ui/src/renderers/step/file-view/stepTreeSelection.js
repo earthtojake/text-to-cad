@@ -3,7 +3,7 @@
 // <CadFileView>; nothing here changed but its address.
 import { canonicalCadRefCopyText, uniqueStringList } from "../workbench/referenceSelection.js";
 import { buildCadRefToken, isNativeCadSelector, parseCadRefSelector } from "@hardcore/core/lib/cadRefs.js";
-import { descendantLeafPartIds, findAssemblyNode } from "@hardcore/core/lib/assembly/meshData.js";
+import { findAssemblyNode } from "@hardcore/core/lib/assembly/meshData.js";
 import {
   collectStepTreeAncestorIds,
   flattenVisibleStepTreeRows,
@@ -453,22 +453,6 @@ export function buildStepTreeExpansionMenuState({
   };
 }
 
-export function visibleStepTreeTopologyReferenceIdsForWorkspace(root, expandedTreeNodeIds, {
-  isAssemblyView = false
-} = {}) {
-  if (!root) {
-    return [];
-  }
-  return uniqueStringList(
-    flattenVisibleStepTreeRows(root, expandedTreeNodeIds, {
-      omitRoot: stepTreeRootRowIsElidedForWorkspace(root, isAssemblyView),
-      showAllRootChildren: true
-    })
-      .map((row) => String(row?.topologyReferenceId || "").trim())
-      .filter(Boolean)
-  );
-}
-
 export function findStepTreeTopologyNodeIdForReference(root, referenceId) {
   const normalizedReferenceId = String(referenceId || "").trim();
   if (!root || !normalizedReferenceId) {
@@ -483,27 +467,6 @@ export function findStepTreeTopologyNodeIdForReference(root, referenceId) {
     const children = stepTreeNodeChildren(node);
     for (let index = children.length - 1; index >= 0; index -= 1) {
       stack.push(children[index]);
-    }
-  }
-  return "";
-}
-
-export function childAssemblyNodeIdForPickedLeaf(node, leafPartId) {
-  const normalizedLeafPartId = String(leafPartId || "").trim();
-  const children = Array.isArray(node?.children) ? node.children : [];
-  if (!normalizedLeafPartId || !children.length) {
-    return "";
-  }
-  for (const child of children) {
-    const childId = String(child?.id || "").trim();
-    if (!childId) {
-      continue;
-    }
-    if (childId === normalizedLeafPartId) {
-      return childId;
-    }
-    if (descendantLeafPartIds(child).includes(normalizedLeafPartId)) {
-      return childId;
     }
   }
   return "";

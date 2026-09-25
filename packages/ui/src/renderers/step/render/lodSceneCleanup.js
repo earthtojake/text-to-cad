@@ -5,7 +5,7 @@ import { renderMemoryAccounting } from "./renderMemoryAccounting.js";
 // model group and the stage are the viewport's: it adopted the scene's root into the first
 // and builds the floor in the second, so clearing either here would take the viewport's own
 // objects with it.
-export const STEP_RUNTIME_GROUPS = Object.freeze(["edgesGroup", "facePickGroup", "edgePickGroup", "vertexPickGroup"]);
+export const STEP_RUNTIME_GROUPS = Object.freeze(["edgesGroup", "facePickGroup", "edgePickGroup"]);
 
 // Full scene teardown is the recovery boundary after an interrupted in-place
 // reconciliation. Never certify disposal from a React unmount/abort alone.
@@ -23,7 +23,6 @@ export function disposeViewerCadScene(runtime, {
     }
     runtime.facePickMesh = null;
     runtime.edgePickLines = null;
-    runtime.vertexPickPoints = null;
     runtime.edgePickObjects = [];
     runtime.topologyDisplayEdgeLine = null;
     runtime.topologyDisplayEdgeTransformByRecord = false;

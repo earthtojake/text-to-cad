@@ -55,7 +55,7 @@ export function useStepPanel({
     references={selectedReferences} meshData={selectedMeshData} sourceAppearance={selectedSourceAppearance} measurements={measurements}
   /> : null;
   const sections = [{
-    id: 'features', title: 'Features',
+    id: 'features', title: 'Features', role: 'model',
     content: active => <ModelingTree key={`${selectedEntry.file}:${geometryInspection?.revision}`}
       modeling={modeling} stepRoot={stepTreeRoot} active={active && open}
       onRequestRecognition={onRequestRecognition}

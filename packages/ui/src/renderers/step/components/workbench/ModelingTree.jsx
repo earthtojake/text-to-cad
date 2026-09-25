@@ -1,5 +1,5 @@
 import { TooltipHint } from "@hardcore/ui/primitives/tooltip";
-import { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Box, Boxes, Circle, CornerUpRight, Focus, Layers, RotateCw, Shapes, Spline, SquareDashed, X } from 'lucide-react';
 import { Button } from '@hardcore/ui/primitives/button';
 import { TreeRowSurface, TreeRowChevron, TreeRowLabel } from '@hardcore/ui/primitives/tree-row';
@@ -9,13 +9,11 @@ import ModelPartMenu from './ModelPartMenu.jsx';
 import ModelPartActions from './ModelPartActions.jsx';
 import { modelingSelectionPaths } from '../../workbench/modelingSelection.js';
 import InspectorSplit from '../../../kit/inspector/InspectorSplit.jsx';
-import { panelScroller } from '../../../kit/inspector/FilePanelSections.jsx';
 import { modelingReferenceIds } from '../../workbench/modelingTree.js';
 import { implicitModelingRoots, presentModelingAssembly } from '../../workbench/modelingPresentation.js';
-import { buildModelTreeSearchIndex, modelTreeSearchChain, searchModelTree } from '../../../kit/inspector/modelTreeSearch.js';
+import { modelTreeSearchChain, useTreeSearch } from '../../../kit/inspector/modelTreeSearch.js';
 
 const EMPTY = [];
-const NO_MATCHES = {matches:EMPTY,total:0};
 const icons = {part:Box,assembly:Boxes,group:Boxes,boss:Layers,pocket:Shapes,hole:Circle,body:Box,extrude:Layers,loft:Layers,cut:Shapes,revolve:RotateCw,round:CornerUpRight,profile:SquareDashed,curve:Spline,remainder:Box};
 const number = n => n.toLocaleString(undefined,{maximumFractionDigits:3});
 
@@ -162,17 +160,7 @@ export default function ModelingTree({ modeling, active, disabled, references=EM
   // Search is a second view of the same tree. Typing never touches expansion,
   // which is also the picking frontier and the topology request; the rows
   // unmount so a large open tree is not re-rendered per keystroke.
-  const [query,setQuery]=useState(''),[cursor,setCursor]=useState(null);
-  const searching=query.trim() !== '',deferredQuery=useDeferredValue(query);
-  const searchIndex=useMemo(()=>searching ? buildModelTreeSearchIndex(tree) : null,[searching,tree]);
-  const found=useMemo(()=>searchIndex ? searchModelTree(searchIndex,deferredQuery) : NO_MATCHES,[searchIndex,deferredQuery]);
-  const listRef=useRef(null),resumeScroll=useRef(0);
-  const changeQuery=value=>{
-    if(!searching && value.trim() && listRef.current)resumeScroll.current=panelScroller(listRef.current).scrollTop;
-    setQuery(value);setCursor(null);
-  };
-  // Back where the tree was; a hit selected meanwhile is then scrolled to by the reveal below.
-  useLayoutEffect(()=>{if(!searching && listRef.current)panelScroller(listRef.current).scrollTop=resumeScroll.current;},[searching]);
+  const {query,searching,deferredQuery,index:searchIndex,found,cursorId,listRef,changeQuery,onKeyDown:onSearchKeyDown}=useTreeSearch(tree);
   const picked=useMemo(()=>selectedReferences || references.filter(ref=>selectedReferenceIds.includes(ref.id)),[selectedReferences,references,selectedReferenceIds]);
   const ids=selected ? modelingReferenceIds(selected,selected.occurrenceId,references) : EMPTY;
   const selection=new Set(selectedReferenceIds),showDetails=selected && (pending || (ids.length > 0 && ids.length === selection.size && ids.every(id=>selection.has(id))));
@@ -288,20 +276,6 @@ export default function ModelingTree({ modeling, active, disabled, references=EM
   // What a feature row's menu needs of the tree: the row's faces as reference ids, how to load
   // them, and the row's own click, so its Select is the click rather than a second opinion.
   const feature={referenceIds:node=>modelingReferenceIds(node,node.occurrenceId,references),loadTopology:onLoadTopology,choose};
-  const cursorId=found.matches.some(match=>match.entry.node.id === cursor) ? cursor : found.matches[0]?.entry.node.id ?? null;
-  useEffect(()=>{if(cursorId)listRef.current?.querySelector(`[data-search-row="${CSS.escape(cursorId)}"]`)?.scrollIntoView?.({block:'nearest'});},[cursorId]);
-  const onSearchKeyDown=event=>{
-    if(event.key === 'Escape' && query){event.preventDefault();event.stopPropagation();changeQuery('');return;}
-    if(!found.matches.length)return;
-    const at=found.matches.findIndex(match=>match.entry.node.id === cursorId);
-    if(event.key === 'ArrowDown' || event.key === 'ArrowUp'){
-      event.preventDefault();
-      setCursor(found.matches[Math.min(Math.max(at+(event.key === 'ArrowDown' ? 1 : -1),0),found.matches.length-1)].entry.node.id);
-    } else if(event.key === 'Enter' && at >= 0){
-      event.preventDefault();
-      listRef.current?.querySelector(`[data-search-row="${CSS.escape(cursorId)}"] button[aria-pressed]:not(:disabled)`)?.click();
-    }
-  };
   const highlighted=new Set(showDetails ? [selected.id] : paths.map(path=>path.at(-1).id));
   // Its members are not rendered while it is collapsed, so the row itself carries
   // their selection; anything less and selecting a folded row looks like a no-op.
@@ -335,7 +309,7 @@ export default function ModelingTree({ modeling, active, disabled, references=EM
         onClick={event=>{if(!disabled && !event.target.closest('li,button,input,[role="menu"]'))clearSelection();}}>
         {isolatedLabels.length > 0 && <div role="status" aria-label="Isolation" className="mb-1 flex min-h-7 items-center gap-2 rounded-md bg-accent/60 px-2 text-tiny">
           <Focus className="size-3 shrink-0 text-foreground" aria-hidden="true"/>
-          <span className="min-w-0 flex-1 truncate" title={isolatedLabels.join(', ')}>Isolated: {isolatedLabels.join(', ')}</span>
+          <TooltipHint content={isolatedLabels.join(', ')} overflowOnly><span className="min-w-0 flex-1 truncate">Isolated: {isolatedLabels.join(', ')}</span></TooltipHint>
           <Button disabled={disabled} type="button" variant="ghost" size="sm" className="h-6 shrink-0 px-1.5 text-tiny" onClick={partControls.onExitAllIsolate}>Exit</Button>
         </div>}
         {searching && <p role="status" className="px-2 py-1 text-micro text-muted-foreground">{found.total > found.matches.length ? `First ${found.matches.length} of ${found.total.toLocaleString()} matches` : `${found.total} ${found.total === 1 ? 'match' : 'matches'}`}</p>}

@@ -7,7 +7,6 @@ import {
   buildFileStatusItems,
   fileStatusAdvisoryInfoItems,
   fileStatusWarningOrErrorItems,
-  fileStatusHasWarningsOrErrors,
   formatFileStatusItemForAgent,
   mostIntenseFileStatusLevel,
   stepFileStatusItems,
@@ -216,7 +215,7 @@ test("buildFileStatusItems combines producers and exposes the most intense level
     }
   });
 
-  assert.equal(fileStatusHasWarningsOrErrors(items), true);
+  assert.equal(fileStatusWarningOrErrorItems(items).length > 0, true);
   assert.equal(mostIntenseFileStatusLevel(items), FILE_STATUS_LEVELS.ERROR);
   assert.deepEqual(items.map((item) => item.level), [
     FILE_STATUS_LEVELS.ERROR,

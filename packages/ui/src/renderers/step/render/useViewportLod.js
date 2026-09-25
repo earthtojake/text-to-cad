@@ -16,7 +16,7 @@ import { normalizeSceneQuality, resolveSceneQuality, SCENE_QUALITY } from "@hard
 
 import { createLodScheduler } from "./lodScheduler.js";
 import { syncSurfWorkerMemory } from "./surfWorkerMemoryPolicy.js";
-import { viewerMemoryPolicy } from "./viewerMemoryPolicy.js";
+import { viewerMemoryPolicy, viewerMemoryPolicySnapshot } from "./viewerMemoryPolicy.js";
 import { estimateViewportLodMemory } from "./viewportLodMemory.js";
 import { lodPayloadMemory, setLodStaging, lodStagingBuffers, lodStagingSnapshot, syncSelectorCacheAccounting } from "./lodStagingMemory.js";
 import { lodPayloadRequest } from "./lodPayloadRequest.js";
@@ -252,7 +252,7 @@ export function useViewportLod({ sampleCamera, lodPackage, modelKey = "", applyC
       }
     });
     schedulerRef.current = scheduler;
-    if (typeof window !== "undefined") window.__cadViewportLod = snapshot;
+    if (typeof window !== "undefined") Object.assign(window, { __cadViewportLod: snapshot, __cadViewerMemoryPolicySnapshot: viewerMemoryPolicySnapshot });
     return () => {
       scheduler.dispose();
       schedulerRef.current = null;

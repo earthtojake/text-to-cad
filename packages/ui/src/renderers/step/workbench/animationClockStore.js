@@ -1,4 +1,4 @@
-import { createContext, createElement, useContext, useSyncExternalStore } from "react";
+import { createContext, createElement, useContext } from "react";
 import { createAnimationClock } from "../../kit/tools/playbar/animationClock.js";
 
 export { createAnimationClock };
@@ -11,8 +11,4 @@ export function useAnimationClockStore() {
   const clock = useContext(AnimationClockContext);
   if (!clock) throw new Error("CAD playback requires its renderer's animation clock.");
   return clock;
-}
-export function useAnimationClock() {
-  const clock = useAnimationClockStore();
-  return useSyncExternalStore(clock.subscribe, clock.getAnimationClock, clock.getAnimationClock);
 }

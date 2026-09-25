@@ -27,17 +27,31 @@ export function useModelTools({ modelKey, view, features, store, mesh, disabled,
   const [panels, setPanels] = useState(() => ({ modelKey, ids: applied }));
   const panelIds = panels.modelKey === modelKey ? panels.ids : applied;
   const appliedKey = applied.join(",");
+  // A pointer held down in a panel (a slider mid-drag): a kept panel whose value passes
+  // through neutral on the way somewhere else must not vanish under the pointer, so panels
+  // are only dropped once it lets go.
+  const [holding, setHolding] = useState(false);
+  useEffect(() => {
+    if (!holding) return undefined;
+    const release = () => setHolding(false);
+    window.addEventListener("pointerup", release, true);
+    window.addEventListener("pointercancel", release, true);
+    return () => {
+      window.removeEventListener("pointerup", release, true);
+      window.removeEventListener("pointercancel", release, true);
+    };
+  }, [holding]);
   useEffect(() => {
     setPanels(current => {
       const existing = current.modelKey === modelKey ? current.ids : [];
       // Retain an untouched panel only while it owns input. The settings store is
       // authoritative, so an external Reset also removes previously applied panels.
-      const ids = existing.filter(id => id === selectedTool || applied.includes(id));
+      const ids = existing.filter(id => holding || id === selectedTool || applied.includes(id));
       ids.push(...applied.filter(id => !ids.includes(id)));
       return current.modelKey === modelKey && ids.join(",") === current.ids.join(",")
         ? current : { modelKey, ids };
     });
-  }, [modelKey, selectedTool, appliedKey]);
+  }, [modelKey, selectedTool, appliedKey, holding]);
   const definitions = [
     ...(measure ? [{ ...measure, id: "measure", label: "Measure" }] : []),
     { id: "exploded", label: "Explode", Icon: ExplodeIcon, unavailable: explodablePartCount(mesh) <= 1,
@@ -66,7 +80,8 @@ export function useModelTools({ modelKey, view, features, store, mesh, disabled,
         setPanels(current => ({ modelKey, ids: [...new Set([...(current.modelKey === modelKey ? current.ids.filter(value => applied.includes(value)) : []), id])] }));
       }
     })),
-    panels: <div hidden={hidden} className="min-h-0 w-40 max-w-full space-y-2 overflow-y-auto" data-model-tool-panels="">
+    panels: <div hidden={hidden} className="min-h-0 w-40 max-w-full space-y-2 overflow-y-auto" data-model-tool-panels=""
+      onPointerDownCapture={() => setHolding(true)}>
       {[...(measure?.hasMeasurements ? ["measure"] : []), ...panelIds].map(id => {
         const tool = definitions.find(value => value.id === id);
         return tool ? <section key={id} aria-label={`${tool.label} controls`}

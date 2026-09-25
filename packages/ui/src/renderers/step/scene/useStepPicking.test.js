@@ -13,50 +13,55 @@ import {
   measureModelPointToWorld,
   measurePickForPosition,
   resolveViewerReferencePick,
-  measureWorldPointToModel,
-  worldTriangleVerticesFromMeshIntersection
+  measureWorldPointToModel
 } from "./useStepPicking.js";
 import { partIdFromIntersection, shouldRaycastRecordForPick } from "./partPicking.js";
 
 test("disabled picking never prepares surface intersections or resolves references", () => {
   const unexpected = () => assert.fail("disabled picking must not raycast or resolve a reference");
   for (const pickMode of Object.values(VIEWER_PICK_MODE)) {
-    for (const preferTopology of [false, true]) {
+    for (const hover of [false, true]) {
       assert.equal(resolveViewerReferencePick({
-        pickMode, preferTopology, suppressTopologyPicking: true,
+        pickMode, hover, suppressTopologyPicking: true,
         intersectModel: unexpected, pickTopology: unexpected, pickPart: unexpected
       }), null);
     }
   }
-  // NONE also disables the picker without a separate Render/playback flag,
-  // including pointer-down, hover, and touch requests that prefer topology.
-  for (const preferTopology of [false, true]) {
+  // NONE also disables the picker without a separate Render/playback flag, for a press and a
+  // hover alike.
+  for (const hover of [false, true]) {
     assert.equal(resolveViewerReferencePick({
-      pickMode: VIEWER_PICK_MODE.NONE, preferTopology,
+      pickMode: VIEWER_PICK_MODE.NONE, hover,
       intersectModel: unexpected, pickTopology: unexpected, pickPart: unexpected
     }), null);
   }
 });
 
 test("Inspect resolves parts, topology, and Measure from one surface intersection pass", () => {
+  // The resolver the pointer hook runs for every press, release and hover (`pickReferenceAtPosition`).
   const intersections = [{ distance: 4, faceIndex: 3 }];
-  for (const [pickMode, topologyReference, expected, expectedCalls] of [
-    [VIEWER_PICK_MODE.PARTS, "face:3", "part:1", ["surface", "part"]],
-    [VIEWER_PICK_MODE.ASSEMBLY, "face:3", "part:1", ["surface", "part"]],
-    [VIEWER_PICK_MODE.AUTO, "face:3", "face:3", ["surface", "topology"]],
-    [VIEWER_PICK_MODE.AUTO, null, "part:1", ["surface", "topology", "part"]],
-    [VIEWER_PICK_MODE.MEASURE, "face:3", "face:3", ["surface", "topology"]],
-    [VIEWER_PICK_MODE.MEASURE, null, null, ["surface", "topology"]]
+  for (const [pickMode, hover, topologyReference, expected, expectedCalls] of [
+    [VIEWER_PICK_MODE.PARTS, false, "face:3", "part:1", ["surface", "part"]],
+    [VIEWER_PICK_MODE.ASSEMBLY, false, "face:3", "part:1", ["surface", "part"]],
+    [VIEWER_PICK_MODE.AUTO, false, "face:3", "face:3", ["surface", "topology"]],
+    [VIEWER_PICK_MODE.AUTO, false, null, "part:1", ["surface", "topology", "part"]],
+    [VIEWER_PICK_MODE.MEASURE, false, "face:3", "face:3", ["surface", "topology"]],
+    [VIEWER_PICK_MODE.MEASURE, true, null, null, ["surface", "topology"]],
+    [VIEWER_PICK_MODE.TOPOLOGY, false, "face:3", "face:3", ["surface", "topology"]],
+    // A face or edge filter: a press on no topology picks nothing, a hover there lights the part.
+    [VIEWER_PICK_MODE.TOPOLOGY, false, null, null, ["surface", "topology"]],
+    [VIEWER_PICK_MODE.TOPOLOGY, true, null, "part:1", ["surface", "topology", "part"]]
   ]) {
     const calls = [];
     const result = resolveViewerReferencePick({
       pickMode,
+      hover,
       intersectModel: () => { calls.push("surface"); return intersections; },
       pickTopology: (hits) => { assert.equal(hits, intersections); calls.push("topology"); return topologyReference; },
       pickPart: (hits) => { assert.equal(hits, intersections); calls.push("part"); return "part:1"; }
     });
-    assert.equal(result, expected);
-    assert.deepEqual(calls, expectedCalls);
+    assert.equal(result, expected, `${pickMode} hover=${hover}`);
+    assert.deepEqual(calls, expectedCalls, `${pickMode} hover=${hover}`);
   }
 });
 
@@ -158,56 +163,6 @@ test("measure picks snap in the model frame and report the point back in world s
   });
   assert.equal(pick.snapKind, "edge");
   assert.deepEqual(pick.point, [12, 0, 10]);
-});
-
-test("measure vertex picks are lifted out of the model frame too", () => {
-  const pick = measurePickForPosition({
-    reference: { id: "v1", selectorType: "vertex", pickData: { selectorType: "vertex" } },
-    worldHitPoint: [0, 0, 0],
-    referenceId: "v1",
-    vertexPoint: [50, 30, 20],
-    modelOffset: [0, 0, -10]
-  });
-  assert.equal(pick.snapKind, "vertex");
-  assert.deepEqual(pick.point, [50, 30, 10]);
-});
-
-test("worldTriangleVerticesFromMeshIntersection reads the hit face in world space", () => {
-  const identity = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];
-  const translated = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 10, 0, 0, 1];
-  const positions = {
-    count: 3,
-    getX(index) {
-      return [0, 2, 0][index];
-    },
-    getY(index) {
-      return [0, 0, 2][index];
-    },
-    getZ() {
-      return 0;
-    }
-  };
-  const intersection = {
-    face: { a: 0, b: 1, c: 2 },
-    object: {
-      geometry: { attributes: { position: positions } },
-      matrixWorld: { elements: translated }
-    }
-  };
-  assert.deepEqual(worldTriangleVerticesFromMeshIntersection(intersection), [
-    [10, 0, 0],
-    [12, 0, 0],
-    [10, 2, 0]
-  ]);
-  assert.deepEqual(
-    worldTriangleVerticesFromMeshIntersection({
-      ...intersection,
-      object: { ...intersection.object, matrixWorld: { elements: identity } }
-    }),
-    [[0, 0, 0], [2, 0, 0], [0, 2, 0]]
-  );
-  assert.equal(worldTriangleVerticesFromMeshIntersection(null), null);
-  assert.equal(worldTriangleVerticesFromMeshIntersection({ face: { a: 0, b: 1, c: 9 }, object: intersection.object }), null);
 });
 
 test("measureModelOffsetFromRuntime reads the offset applied to the pick groups", () => {

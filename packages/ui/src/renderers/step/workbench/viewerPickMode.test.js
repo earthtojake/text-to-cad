@@ -29,10 +29,10 @@ test("Render retains picking proxies while STEP transforms and tube deformation 
   geometry.setAttribute("normal", new THREE.Float32BufferAttribute([0, 0, 1, 0, 0, 1, 0, 0, 1], 3));
   const mesh = new THREE.Mesh(geometry);
   const record = { partId: "o1", mesh, geometry, partBounds: { min: [0, 0, 0], max: [10, 1, 1] } };
-  const runtime = { THREE, displayRecords: [record], facePickGroup: new THREE.Group(), edgePickGroup: new THREE.Group(), vertexPickGroup: new THREE.Group() };
+  const runtime = { THREE, displayRecords: [record], facePickGroup: new THREE.Group(), edgePickGroup: new THREE.Group() };
   try {
     syncSelectorPickGroups(runtime, selectorRuntime);
-    assert.ok(runtime.edgePickGroup.children.length + runtime.vertexPickGroup.children.length > 0);
+    assert.ok(runtime.edgePickGroup.children.length > 0);
     const path = y => ({ normal: [0, 0, 1], segments: [{ kind: "line", start: [0, y, 0], end: [10, y, 0] }] });
     const clip = { duration: 1, update(t, model) { model.get("rope").deformTube({ rest: path(0), path: path(t * 10) }).translate([0, 0, 5]); } };
     const result = applySceneState(THREE, {

@@ -160,6 +160,9 @@ export function stepArtifactStatusMessage(artifact) {
   if (code === "unsupported_step_topology") {
     return "Generated GLB topology metadata is unsupported.";
   }
+  if (code === "missing_source_path") {
+    return "Generated GLB metadata is missing its source path.";
+  }
   if (code === "missing_step_hash") {
     return "Generated GLB is missing the hash of the STEP file.";
   }
@@ -176,6 +179,3 @@ export function stepArtifactCanGenerate(entry, { generationAvailable = true } = 
   return BUILDABLE_STEP_ARTIFACT_ERROR_CODE_SET.has(String(entry?.artifact?.error || ""));
 }
 
-export function stepArtifactNeedsWarning(entry, options = {}) {
-  return entry?.artifact?.ok === false && !stepArtifactCanGenerate(entry, options);
-}

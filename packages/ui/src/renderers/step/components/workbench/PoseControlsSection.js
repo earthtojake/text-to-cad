@@ -253,7 +253,7 @@ export default function PoseControlsSection({
                   max={parameter.max}
                   step={controlStep}
                   onValueChange={(nextValue) => changeParameter(parameter.id, nextValue?.[0] ?? currentValue)}
-                  aria-label={parameter.label}
+                  thumbProps={{ "aria-label": parameter.label }}
                 />
               </FileSheetSliderField>
             );

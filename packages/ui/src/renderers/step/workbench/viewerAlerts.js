@@ -1,8 +1,4 @@
-import {
-  stepArtifactHasRenderableGlb,
-  stepArtifactStatusMessage
-} from "./fileStatusItems.js";
-import { failedStepArtifact } from "./stepArtifactStatus.js";
+import { failedStepArtifact, stepArtifactHasRenderableGlb, stepArtifactStatusMessage } from "./stepArtifactStatus.js";
 import { fileKey } from "./entryPaths.js";
 import { failureAlert, isViewerServiceFailure, noGeometryAlert } from "../../kit/status/loadAlerts.js";
 

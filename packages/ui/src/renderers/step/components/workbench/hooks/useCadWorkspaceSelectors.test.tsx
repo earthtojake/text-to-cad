@@ -20,22 +20,17 @@ const reference = (id: string, selectorType = 'face') => ({ id, selectorType, di
 const inputs = (overrides: Record<string, unknown> = {}) => ({
   selectedReferencesMatch: false,
   referenceState: null,
-  isAssemblyView: true,
   supportsPartSelection: false,
   assemblyParts: undefined,
   assemblyPartMap: undefined,
-  inspectedAssemblyNodeId: '',
-  inspectedAssemblyPartTopologyReferences: EMPTY,
   selectedReferenceIds: EMPTY,
   selectedPartIds: EMPTY,
-  hoveredListReferenceId: '',
   hoveredModelReferenceId: '',
   hoveredListPartId: '',
   hoveredModelPartId: '',
   ...overrides
 });
-const NAMES = ['currentReferences', 'activeReferenceMap', 'referenceMap', 'visibleReferences', 'filteredReferences',
-  'assemblyParts', 'assemblyPartMap', 'selectedReferences', 'selectedParts', 'inspectedAssemblyPartReferences'];
+const NAMES = ['currentReferences', 'activeReferenceMap', 'selectedReferences', 'selectedParts'];
 const identities = (result: any) => NAMES.map(name => result[name]);
 /**
  * IDENTITY, not contents. Two empty lists are equal and are not the same list, and it is
@@ -78,7 +73,7 @@ it('a selection resolves against the loaded references and keeps its identity wh
   const selected = inputs({ selectedReferencesMatch: true, referenceState: { references }, selectedReferenceIds: ['o1.1:f2'] });
   const { result, rerender } = renderHook(props => useCadWorkspaceSelectors(props), { initialProps: selected });
   expect(result.current.selectedReferences.map((item: any) => item.id)).toEqual(['o1.1:f2']);
-  expect(result.current.hoveredReference).toBe(null);
+  expect(result.current.hoveredReferenceId).toBe('');
   const resolved = result.current.selectedReferences;
   rerender({ ...selected, hoveredModelPartId: 'o1.1' });
   expect(result.current.selectedReferences).toBe(resolved);

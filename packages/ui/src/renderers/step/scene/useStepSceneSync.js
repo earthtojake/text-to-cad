@@ -9,9 +9,7 @@ import { syncRuntimeStepClipPlane } from "@hardcore/core/lib/viewer/modelRuntime
 import { buildGlbFaceIdsForMesh, buildGlbFaceIdsForPart, syncSelectorPickGroups } from "@hardcore/core/lib/viewer/selectorPickGroups.js";
 import { scheduleRuntimeRaycastBvh } from "@hardcore/core/lib/viewer/raycastBvh.js";
 import { disposeSectionCaps } from "@hardcore/core/lib/viewer/sectionCaps.js";
-import {
-  resolveTopologyDisplayEdgeRuntimes, shouldUseRecordTopologyEdgeTransforms
-} from "@hardcore/core/common/topologyDisplayEdgeRuntime.js";
+import { resolveTopologyDisplayEdgeRuntimes } from "@hardcore/core/common/topologyDisplayEdgeRuntime.js";
 import { cancelCameraTransition } from "../../kit/camera/runtimeCamera.js";
 import { disposeSceneObject } from "../../kit/viewport/sceneObjects.js";
 import { disposeViewerCadScene } from "../render/lodSceneCleanup.js";
@@ -95,12 +93,12 @@ function recordSceneSyncTiming(startedAt, { mode, records, reason = "" }) {
 export function useStepSceneSync(layers) {
   const {
     viewport, stepScene, props, policy, refs, staticResetRenderToken,
-    setTransformedSelectorRuntime, setTransformedDisplayEdgeRuntime, setDisplayRecordsToken, setError, edges
+    setTransformedSelectorRuntime, setDisplayRecordsToken, setError, edges
   } = layers;
   const { runtimeRef, viewerReadyTick } = viewport;
   const {
     meshData, modelKey, isLoading, appearance, materialOverrides, receiveShadows, pickMode, pickableParts,
-    selectorRuntime, displayEdgeRuntime, stepParameterRuntime
+    selectorRuntime, stepParameterRuntime
   } = props;
   const {
     viewerTheme, normalizedThemeSettings, normalizedDisplayMode, surfaceSettings, explicitViewPolicy,
@@ -110,7 +108,7 @@ export function useStepSceneSync(layers) {
   const { topologyDisplayEdgesVisible, surfaceStepEdgesVisible } = edges;
   const {
     partVisualStateRef, clipSettingsRef, staticSceneResetRef, meshSourceAdoptionRef, viewerAlertChangeRef,
-    sceneUpdateAlertRef, lodCameraChangeRef, stepModuleTransformDetectedChangeRef
+    sceneUpdateAlertRef, lodCameraChangeRef
   } = refs;
   const meshGeometrySource = meshData?.geometrySource && typeof meshData.geometrySource === "object"
     ? meshData.geometrySource
@@ -135,7 +133,7 @@ export function useStepSceneSync(layers) {
     if (!runtime) {
       return;
     }
-    const { edgesGroup, facePickGroup, edgePickGroup, vertexPickGroup } = runtime;
+    const { edgesGroup, facePickGroup, edgePickGroup } = runtime;
 
     const clearDisplayedModel = ({ preserveModelIdentity = false, releaseGpu = true } = {}) => {
       staticSceneResetRef.current.invalidate();
@@ -303,37 +301,18 @@ export function useStepSceneSync(layers) {
     viewport.commitScene();
     const initialEdgeRuntimes = resolveTopologyDisplayEdgeRuntimes({
       selectorRuntime,
-      displayEdgeRuntime,
-      displayRecords: modelStepParameters ? runtime.displayRecords : [],
-      transformDisplayEdges: false
+      displayRecords: modelStepParameters ? runtime.displayRecords : []
     });
-    const initialRecordTopologyEdgeTransforms = explodedViewActive || shouldUseRecordTopologyEdgeTransforms({
-      transformDetected: initialEdgeRuntimes.transformCount > 0,
-      topologyDisplayEdgesVisible,
-      displayEdgeRuntime,
-      displayRecords: runtime.displayRecords
-    });
-    const initialDisplayEdgeRuntime = initialRecordTopologyEdgeTransforms
-      ? null
-      : resolveTopologyDisplayEdgeRuntimes({
-          selectorRuntime: null,
-          displayEdgeRuntime,
-          displayRecords: modelStepParameters ? runtime.displayRecords : []
-        }).transformedDisplayEdgeRuntime;
+    // An exploded view moves the linework with each record; otherwise the line follows the
+    // selector runtime as posed.
+    const initialRecordTopologyEdgeTransforms = explodedViewActive;
     const initialSelectorRuntime = initialEdgeRuntimes.transformedSelectorRuntime;
     updateTransformedRuntimeState(setTransformedSelectorRuntime, initialSelectorRuntime ? {
       base: selectorRuntime,
       runtime: initialSelectorRuntime
     } : null);
-    updateTransformedRuntimeState(setTransformedDisplayEdgeRuntime, initialDisplayEdgeRuntime ? {
-      base: displayEdgeRuntime,
-      runtime: initialDisplayEdgeRuntime
-    } : null);
-    stepModuleTransformDetectedChangeRef.current?.(initialEdgeRuntimes.transformCount > 0);
     const displaySelectorRuntime = initialEdgeRuntimes.selectorRuntime;
-    const displayEdgesRuntime = initialRecordTopologyEdgeTransforms
-      ? displayEdgeRuntime
-      : (initialDisplayEdgeRuntime || initialEdgeRuntimes.topologyRuntime);
+    const displayEdgesRuntime = initialRecordTopologyEdgeTransforms ? null : initialEdgeRuntimes.topologyRuntime;
     runtime.topologyDisplayEdgeTransformByRecord = initialRecordTopologyEdgeTransforms;
 
     syncTopologyDisplayEdgeLine(runtime, displayEdgesRuntime, {
@@ -352,7 +331,6 @@ export function useStepSceneSync(layers) {
     const radius = Number(runtime.modelRadius) || 1;
     facePickGroup.updateMatrixWorld(true);
     edgePickGroup.updateMatrixWorld(true);
-    vertexPickGroup.updateMatrixWorld(true);
     // Refresh retained scene/GPU estimates before admitting idle BVH work.
     // A denied accelerator keeps stock raycasting and therefore cannot make
     // selection incorrect or blank the current model.
@@ -474,7 +452,6 @@ export function useStepSceneSync(layers) {
     explodedViewActive,
     pickableParts,
     selectorRuntime,
-    displayEdgeRuntime,
     normalizedDisplayMode,
     materialPartPolicyKey,
     surfaceSettings,

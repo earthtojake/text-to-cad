@@ -208,8 +208,7 @@ export function renderMemoryAccounting(runtime) {
   const pickRoots = [
     runtime?.facePickMesh,
     runtime?.facePickGroup,
-    runtime?.edgePickGroup,
-    runtime?.vertexPickGroup
+    runtime?.edgePickGroup
   ];
   for (const root of pickRoots) {
     if (!root) {

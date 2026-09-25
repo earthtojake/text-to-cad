@@ -39,6 +39,7 @@ function SettingsSlider({ label, value, min, max, step = 0.01, suffix = "", digi
         step={step}
         disabled={disabled}
         onValueChange={(next) => onChange(clamp(next[0], min, max))}
+        thumbProps={{ "aria-label": label }}
         className={FILE_SHEET_PRECISION_SLIDER_CLASSES}
       />
     </FileSheetSliderField>

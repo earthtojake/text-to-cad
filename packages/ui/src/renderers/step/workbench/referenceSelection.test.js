@@ -6,20 +6,15 @@ import {
   fileRefPrefixForEntry,
   buildNormalizedReferenceState,
   buildReferenceCacheKey,
-  buildSelectionCopyButtonLabel,
-  buildSelectionCopyCountLabel,
   buildSelectionCopyPayload,
   buildWholeStepEntryCopyReference,
   canonicalCadRefCopyText,
   computeNextSelectionIds,
   copySelectedReferenceText,
-  modelReferenceActivationDecision,
+  copyTextLines,
   normalizeReferenceList,
   orderedStringListEqual,
   parseAssemblyPartReferenceSelectionId,
-  pendingReferenceActivationMatches,
-  resolveAssemblyPartActivation,
-  resolveTopologyRelativeFile,
   selectRequestedAssemblyComponents,
   topologyCompositionKeyMatches,
   uniqueStringList,
@@ -151,10 +146,7 @@ test("copy helpers merge selector refs and keep plain fallback lines", () => {
     id: "step-entry:whole",
     copyText: "#"
   });
-  assert.equal(buildSelectionCopyButtonLabel(payload.lines, { count: payload.copiedCount }), "Copy #e1,o1.2,o1.6");
-  assert.equal(buildSelectionCopyButtonLabel(["#o1.7.1.s1 cube_top_pad solid volume=490"]), "Copy #o1.7.1.s1");
   assert.equal(canonicalCadRefCopyText("#o1.7.1.f4 plane area=35"), "#o1.7.1.f4");
-  assert.equal(buildSelectionCopyButtonLabel([]), "Copy refs");
 });
 
 test("selection utility helpers preserve list and topology path behavior", () => {
@@ -169,11 +161,6 @@ test("selection utility helpers preserve list and topology path behavior", () =>
   assert.deepEqual(computeNextSelectionIds(["a"], "b"), ["b"]);
   assert.deepEqual(computeNextSelectionIds(["a"], "b", { multiSelect: true }), ["a", "b"]);
   assert.deepEqual(computeNextSelectionIds(["a", "b"], "a", { multiSelect: true }), ["b"]);
-
-  assert.equal(
-    resolveTopologyRelativeFile({ file: "models/assy.step" }, "../parts/part.step"),
-    "models/parts/part.step"
-  );
 });
 
 test("selectRequestedAssemblyComponents loads only the expanded occurrences' components", () => {
@@ -219,62 +206,6 @@ test("empty lazy topology composition remains a valid exact assembly key", () =>
   assert.equal(topologyCompositionKeyMatches("", "*"), false);
 });
 
-test("collapsed assembly canvas picks activate parts without requiring topology", () => {
-  const resolvePartId = (id) => id === "mesh-sun" ? "o1.3" : "";
-  assert.deepEqual(
-    resolveAssemblyPartActivation("mesh-sun", { resolvePartId }),
-    { partId: "o1.3", renderPartId: "mesh-sun" }
-  );
-  assert.equal(
-    resolveAssemblyPartActivation("topology|o1.3|face|5", {
-      topologyReference: { selectorType: "face" },
-      resolvePartId: () => "o1.3"
-    }),
-    null
-  );
-  assert.equal(resolveAssemblyPartActivation("unknown", { resolvePartId }), null);
-  assert.deepEqual(
-    modelReferenceActivationDecision("mesh-sun", {
-      assemblyMode: true,
-      resolvePartId,
-      deferForTopology: true
-    }),
-    { kind: "part", partId: "o1.3", renderPartId: "mesh-sun" }
-  );
-});
-
-test("expanded topology activates exact references and stale topology demand stays fenced", () => {
-  for (const selectorType of ["face", "edge"]) {
-    assert.deepEqual(
-      modelReferenceActivationDecision(`topology|o1.3|${selectorType}|5`, {
-        topologyReference: { selectorType },
-        assemblyMode: true,
-        resolvePartId: () => "o1.3",
-        deferForTopology: false,
-        referenceKnown: true
-      }),
-      { kind: "reference", referenceId: `topology|o1.3|${selectorType}|5` }
-    );
-  }
-  assert.deepEqual(
-    modelReferenceActivationDecision("topology|o1.3|face|5", {
-      assemblyMode: false,
-      deferForTopology: true,
-      referenceKnown: false
-    }),
-    { kind: "defer", referenceId: "topology|o1.3|face|5" }
-  );
-  const pending = { fileRef: "planetary.step", tree: "tree-a", referenceId: "f5" };
-  assert.equal(pendingReferenceActivationMatches(pending, {
-    fileRef: "planetary.step",
-    tree: "tree-a"
-  }), true);
-  assert.equal(pendingReferenceActivationMatches(pending, {
-    fileRef: "planetary.step",
-    tree: "tree-b"
-  }), false);
-});
-
 test("copy text carries the entry's shortest unique path suffix", () => {
   const entry = { ...STEP_ENTRY, fileRefPrefix: "assy.step" };
   assert.equal(
@@ -315,14 +246,15 @@ test("withFileRefPrefix is idempotent, which is what lets it run at one funnel",
   assert.equal(withFileRefPrefix("", "plate.stl"), "");
 });
 
-test("the count label stands in for a ref that will not fit", () => {
-  // Singular vs plural matters: this is the primary label whenever the viewport is narrow.
-  assert.equal(buildSelectionCopyCountLabel(1), "Copy 1 ref");
-  assert.equal(buildSelectionCopyCountLabel(3), "Copy 3 refs");
-  assert.equal(buildSelectionCopyCountLabel(12), "Copy 12 refs");
-  // Nothing selected falls back to the same wording the ref label uses.
-  assert.equal(buildSelectionCopyCountLabel(0), "Copy refs");
-  assert.equal(buildSelectionCopyCountLabel(null), "Copy refs");
-  assert.equal(buildSelectionCopyCountLabel(-2), "Copy refs");
-  assert.equal(buildSelectionCopyCountLabel(2.7), "Copy 2 refs");
+test("every copy path shapes its text the one way: canonical refs, each carrying the file prefix", () => {
+  // The Copy Reference button, a menu's Copy Reference and a double-click all copy through here,
+  // so a tree row's ref is prefixed exactly as the button's is.
+  assert.deepEqual(copyTextLines(["#o1.3.f24 plane area=35", "", "#o1.7"], "planetary.step"),
+    ["planetary.step#o1.3.f24", "planetary.step#o1.7"]);
+  assert.deepEqual(copyTextLines("#o1.3.f24\n#o1.7", "planetary.step"), ["planetary.step#o1.3.f24", "planetary.step#o1.7"],
+    "a menu's newline-joined copy text reads the same as a list of lines");
+  assert.deepEqual(copyTextLines(["planetary.step#o1.3"], "planetary.step"), ["planetary.step#o1.3"], "an already-prefixed line passes through");
+  assert.deepEqual(copyTextLines(["#o1.3"], ""), ["#o1.3"], "no prefix, the bare ref");
+  assert.deepEqual(copyTextLines(["plain text"], "planetary.step"), [], "text that is not a ref is not copied");
+  assert.deepEqual(copyTextLines(undefined, "planetary.step"), []);
 });

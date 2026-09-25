@@ -122,9 +122,14 @@ export function useStepMeasureOverlay({
             });
           }
         }
-        if (draft?.anchor && draft?.hover) {
-          const draftMeasurement = measureRulerDraftMeasurement(state);
-          const layout = screenSpaceDimensionLayout(draft.anchor, draft.hover, draftMeasurement, camera, localRect);
+        // The rubber band ends at the LIVE hover (the ref the snap marker reads): the draft's own
+        // hover says only whether there is an end and what it snaps to, and changes only then.
+        const liveHover = measureHoverRef?.current;
+        const draftEnd = draft?.anchor && draft?.hover
+          ? (liveHover?.point && liveHover !== draft.anchor ? liveHover : draft.hover) : null;
+        if (draftEnd) {
+          const draftMeasurement = measureRulerDraftMeasurement({ draft: { anchor: draft.anchor, hover: draftEnd } });
+          const layout = screenSpaceDimensionLayout(draft.anchor, draftEnd, draftMeasurement, camera, localRect);
           if (layout) {
             drawMeasureDimension(context, layout, {
               color: MEASURE_DIMENSION_DRAFT_COLOR,
@@ -134,7 +139,7 @@ export function useStepMeasureOverlay({
               label: measureLabelText(draftMeasurement),
               bounds
             });
-            const end = projectWorldPointToClient(draft.hover.point, camera, localRect);
+            const end = projectWorldPointToClient(draftEnd.point, camera, localRect);
             if (end) {
               drawPulsingEndRing(context, end, { now, color: MEASURE_DIMENSION_DRAFT_COLOR });
             }

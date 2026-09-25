@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import fs from 'node:fs';
-import { buildModelingTree } from './modelingTree.js';
+import { buildModelingTree } from '../modelingTree.js';
 import { reconstructionRecipe } from './reconstructionRecipe.js';
-const fixture = name => JSON.parse(fs.readFileSync(new URL(`./__tests__/fixtures/${name}.json`, import.meta.url)));
+const fixture = name => JSON.parse(fs.readFileSync(new URL(`./fixtures/${name}.json`, import.meta.url)));
 
 test('recovered boundaries become numerical sketches with actual solid dependencies', () => {
   const index = fixture('annular'), recipe = reconstructionRecipe(index, buildModelingTree(index));

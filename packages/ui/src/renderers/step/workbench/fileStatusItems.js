@@ -1,7 +1,8 @@
-import { entryHasMesh } from "@hardcore/core/lib/entryAssets.js";
 import { viewerRootRelativePath } from "./pathPresentation.js";
 import {
-  stepArtifactIssueShouldSuppress
+  stepArtifactHasRenderableGlb,
+  stepArtifactIssueShouldSuppress,
+  stepArtifactStatusMessage
 } from "./stepArtifactStatus.js";
 
 export const FILE_STATUS_LEVELS = Object.freeze({
@@ -138,9 +139,6 @@ export function fileStatusWarningOrErrorItems(items) {
     .sort((left, right) => fileStatusLevelRank(right.level) - fileStatusLevelRank(left.level));
 }
 
-export function fileStatusHasWarningsOrErrors(items) {
-  return fileStatusWarningOrErrorItems(items).length > 0;
-}
 
 // INFO-level advisories render below the warnings/errors in the status section —
 // quiet chips, never counted as issues and never lighting the sheet's level dot.
@@ -157,17 +155,7 @@ export function mostIntenseFileStatusLevel(items) {
   ), "");
 }
 
-export function mostIntenseFileStatusItem(items) {
-  return normalizeFileStatusItems(items).reduce((currentItem, item) => (
-    !currentItem || fileStatusLevelRank(item.level) > fileStatusLevelRank(currentItem.level)
-      ? item
-      : currentItem
-  ), null);
-}
 
-export function stepArtifactHasRenderableGlb(entry) {
-  return entryHasMesh(entry);
-}
 
 function artifactStatusTitle(artifact, entry) {
   const code = cleanText(artifact?.error);
@@ -186,34 +174,6 @@ function artifactStatusLevel(artifact, entry) {
     : FILE_STATUS_LEVELS.ERROR;
 }
 
-export function stepArtifactStatusMessage(artifact) {
-  const code = cleanText(artifact?.error);
-  if (code === "missing_glb") {
-    return "Generated GLB is missing.";
-  }
-  if (code === "missing_step_topology") {
-    return "Generated GLB is missing STEP topology metadata.";
-  }
-  if (code === "missing_selector_topology") {
-    return "Generated GLB is missing selector topology metadata.";
-  }
-  if (code === "missing_edge_topology") {
-    return "Generated GLB is missing surface edge topology metadata.";
-  }
-  if (code === "missing_surface_edge_attributes") {
-    return "Generated GLB is missing surface edge render attributes.";
-  }
-  if (code === "unsupported_step_topology") {
-    return "Generated GLB topology metadata is unsupported.";
-  }
-  if (code === "missing_source_path") {
-    return "Generated GLB metadata is missing its source path.";
-  }
-  if (code === "missing_step_hash") {
-    return "Generated GLB is missing the hash of the STEP file.";
-  }
-  return "Generated STEP artifact is unavailable.";
-}
 
 function stepSourceStatusTitle(stepStatus) {
   return "STEP file missing";

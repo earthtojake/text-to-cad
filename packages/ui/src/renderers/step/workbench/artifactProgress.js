@@ -103,27 +103,3 @@ export function artifactStatusFailure(error, attempts) {
     detail: `Could not check build status after ${nonNegativeInt(attempts)} attempts: ${detail}`
   };
 }
-
-/**
- * The display model for one frame.
- *
- * `percent` is null for a phase with no denominator — the caller renders an indeterminate
- * bar rather than a number. It is deliberately NOT capped below 100: a phase that has
- * finished its own work has honestly finished it, and the next phase's frame replaces this
- * one immediately. The old cap existed because the number claimed to describe the whole
- * build, where 100% beside a still-spinning viewer read as a hang.
- */
-export function formatArtifactProgress(progress) {
-  if (!progress) {
-    return null;
-  }
-  const determinate = progress.determinate && progress.total > 0;
-  return {
-    label: progress.label,
-    ordinal: progress.index > 0 && progress.count > 0 ? `${progress.index}/${progress.count}` : "",
-    detail: progress.detail,
-    determinate,
-    percent: determinate ? Math.round((progress.done / progress.total) * 100) : null,
-    counts: determinate ? `${progress.done}/${progress.total}` : ""
-  };
-}
