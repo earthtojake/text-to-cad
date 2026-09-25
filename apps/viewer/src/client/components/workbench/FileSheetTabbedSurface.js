@@ -1,16 +1,14 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Rows2 } from "lucide-react";
 import { cn } from "@/ui/utils";
 import {
   activateFileSheetTab,
   clampSplitRatio,
-  defaultRenderFileSheetTabArrangement,
   FILE_SHEET_TAB_PANES,
   kindSupportsSplit,
   moveFileSheetTab,
   normalizeFileSheetTabArrangement,
   readFileSheetTabLayoutStore,
-  renderFileSheetTabArrangementForScope,
   resolveFileSheetTabPanes,
   setFileSheetTabRatio,
   writeFileSheetTabLayoutStore
@@ -27,15 +25,12 @@ function localStorageOrNull() {
 
 // Per-kind tab arrangement (pane assignment, order, split, ratio), persisted
 // globally to localStorage. Active tab selection stays per-file via openSectionIds.
-function useFileSheetTabArrangement(kind, sectionIds, layoutMode, layoutScope) {
+function useFileSheetTabArrangement(kind, sectionIds) {
   const sectionKey = sectionIds.join("|");
   const sectionIdsRef = useRef(sectionIds);
   sectionIdsRef.current = sectionIds;
 
   const [store, setStore] = useState(() => ({}));
-  const [renderArrangementState, setRenderArrangementState] = useState(null);
-  const previousLayoutModeRef = useRef(layoutMode);
-  const previousLayoutScopeRef = useRef(layoutScope);
 
   // Hydrate from storage on the client after mount to avoid SSR mismatches.
   useEffect(() => {
@@ -45,57 +40,13 @@ function useFileSheetTabArrangement(kind, sectionIds, layoutMode, layoutScope) {
     }
   }, []);
 
-  const cadArrangement = useMemo(
+  const arrangement = useMemo(
     () => normalizeFileSheetTabArrangement(store[kind], kind, sectionIds),
     // sectionKey captures sectionIds identity.
     [store, kind, sectionKey] // eslint-disable-line react-hooks/exhaustive-deps
   );
 
-  // A new Render visit starts from the canonical single row. useLayoutEffect
-  // resets before paint, so a split made on the previous visit never flashes.
-  useLayoutEffect(() => {
-    const enteredRender = layoutMode === "render" && previousLayoutModeRef.current !== "render";
-    const changedRenderModel = layoutMode === "render" && previousLayoutScopeRef.current !== layoutScope;
-    previousLayoutModeRef.current = layoutMode;
-    previousLayoutScopeRef.current = layoutScope;
-    if (enteredRender || changedRenderModel) {
-      setRenderArrangementState({
-        scope: layoutScope,
-        arrangement: defaultRenderFileSheetTabArrangement(sectionIdsRef.current)
-      });
-    }
-  }, [layoutMode, layoutScope]);
-
-  const arrangement = useMemo(() => {
-    if (layoutMode !== "render") {
-      return cadArrangement;
-    }
-    return renderFileSheetTabArrangementForScope(
-      renderArrangementState,
-      layoutScope,
-      kind,
-      sectionIds
-    );
-  }, [cadArrangement, kind, layoutMode, layoutScope, renderArrangementState, sectionKey]); // eslint-disable-line react-hooks/exhaustive-deps
-
   const updateArrangement = useCallback((updater) => {
-    if (layoutMode === "render") {
-      setRenderArrangementState((currentState) => {
-        const ids = sectionIdsRef.current;
-        const current = currentState?.scope === layoutScope ? currentState.arrangement : null;
-        const base = normalizeFileSheetTabArrangement(
-          current || defaultRenderFileSheetTabArrangement(ids),
-          kind,
-          ids
-        );
-        const next = typeof updater === "function" ? updater(base) : updater;
-        return {
-          scope: layoutScope,
-          arrangement: normalizeFileSheetTabArrangement(next, kind, ids)
-        };
-      });
-      return;
-    }
     setStore((current) => {
       const ids = sectionIdsRef.current;
       const base = normalizeFileSheetTabArrangement(current[kind], kind, ids);
@@ -105,7 +56,7 @@ function useFileSheetTabArrangement(kind, sectionIds, layoutMode, layoutScope) {
       writeFileSheetTabLayoutStore(localStorageOrNull(), nextStore);
       return nextStore;
     });
-  }, [kind, layoutMode, layoutScope]);
+  }, [kind]);
 
   return [arrangement, updateArrangement];
 }
@@ -139,7 +90,7 @@ function FileSheetTab({
       }}
       onDragEnd={onDragEnd}
       className={cn(
-        "group/file-sheet-tab relative -mb-px flex h-8 max-w-[12rem] shrink-0 cursor-pointer select-none items-center gap-1.5 whitespace-nowrap border-r border-sidebar-border/50 border-b-2 px-2 text-[11px] font-medium leading-none transition-colors",
+        "group/file-sheet-tab relative -mb-px flex h-8 max-w-[12rem] shrink-0 cursor-pointer select-none items-center gap-1.5 whitespace-nowrap border-r border-sidebar-border/50 border-b-2 px-2 text-tiny leading-none transition-colors",
         active
           ? "border-b-primary bg-accent/40 text-foreground"
           : "border-b-transparent text-muted-foreground hover:bg-accent/25 hover:text-foreground",
@@ -243,8 +194,6 @@ function computeDropIndex(stripEl, clientX) {
 
 export default function FileSheetTabbedSurface({
   kind,
-  layoutMode = "cad",
-  layoutScope = "",
   sections,
   openSectionIds = [],
   onOpenSectionIdsChange
@@ -262,12 +211,7 @@ export default function FileSheetTabbedSurface({
     return map;
   }, [visibleSections]);
 
-  const [arrangement, updateArrangement] = useFileSheetTabArrangement(
-    kind,
-    sectionIds,
-    layoutMode,
-    String(layoutScope || "")
-  );
+  const [arrangement, updateArrangement] = useFileSheetTabArrangement(kind, sectionIds);
   const resolved = useMemo(
     () => resolveFileSheetTabPanes(arrangement, kind, openSectionIds),
     [arrangement, kind, openSectionIds]
@@ -437,7 +381,7 @@ export default function FileSheetTabbedSurface({
                 : "border-sidebar-border/70 bg-background/30"
             )}
           >
-            <span className="pointer-events-none flex items-center gap-1.5 text-[11px] font-medium text-muted-foreground">
+            <span className="pointer-events-none flex items-center gap-1.5 text-tiny text-muted-foreground">
               <Rows2 className="size-3.5" strokeWidth={2} aria-hidden="true" />
               Drop here to split
             </span>

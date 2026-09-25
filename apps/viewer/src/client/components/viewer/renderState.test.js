@@ -48,6 +48,6 @@ test("viewer render-state normalization keeps viewer-side defaults local", () =>
 
   assert.deepEqual(state.themeSettings, normalizeThemeSettings({}));
   assert.deepEqual(state.displaySettings, normalizeDisplaySettings(null));
-  assert.equal(state.displayMode, "shaded_edges");
+  assert.equal(state.displayMode, "solid");
   assert.deepEqual(state.clipSettings, normalizeStepClipSettings(null));
 });

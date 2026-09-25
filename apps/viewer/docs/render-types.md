@@ -28,16 +28,16 @@ format. Pure data: no behaviour, no imports beyond the format enum.
 | `label` | User-facing format name (status chips, sheet titles, loading labels). |
 | `rebuildCommand` | The manual rebuild command shown on a build-failure card, or `""` when the viewer builds it or the file IS the asset. |
 | `sceneScale` | `cad` or `urdf`; picks the scene-scale profile. |
-| `tools` | `select`, `pan`, `draw`, `orbit`, `screenshot` — read through `supportsTool()`. They act on the VIEWPORT, not the geometry, so every row grants all five today; the map stays because this is where a format would decline one. `orbit` is the camera capability behind fullscreen/preview mode, not a toolbar button of its own. |
+| `tools` | `select`, `pan`, `draw`, `orbit`, `screenshot`. Orbit and screenshot are true for everything — they act on the viewport, not the geometry. |
 | `parts` | Per-part selection, hiding, isolate, assembly tree. |
 | `topology` | Face/edge/vertex references. Implies `parts`. |
-| `measure` | Measurement picks. STEP measures B-rep topology; a mesh format measures triangle corners only. |
 | `exploded`, `displayModes`, `clip` | STEP-tier display transforms. |
 | `planView` | Offers the 2D/3D top-down lock. |
 | `themeProjection` | Honours `themeSettings.projection`. |
 | `params` | `sidecar` (the model's `@step(pose=...)` block), or `null`. |
-| `animations` | Can expose animation clips. STEP gates on the clips its sidecar's embedded animation module exports; direct GLB gates on playable embedded glTF clips. |
+| `animations` | Has animation clips, so transport controls apply. |
 | `artifactManaged` | Builds a package before it can render. A format listed here that the backend cannot produce a package for blocks forever, so a format the viewer renders from its own file belongs out. |
+| `exportFormats` | What `/__cad/export` can produce for it. |
 
 ### Rules
 
@@ -99,12 +99,28 @@ every artifact-managed kind.
 
 ## Standing gate
 
-The repository's self-contained browser gate loads generated test inputs for every
-format and asserts non-empty model bounds, real-framebuffer foreground coverage, toolbar
-and context-menu capabilities, and no page errors. It uses Metal on macOS and SwiftShader
-on Linux. See the
-[repository contribution guide](https://github.com/earthtojake/text-to-cad/blob/main/CONTRIBUTING.md#viewer-development-in-this-repo)
-for the command.
+`scripts/e2e-format-sweep.mjs` loads one fixture per format against a running
+viewer and asserts each draws something with no page errors:
+
+```bash
+npm run start -- --port 3245 --host 127.0.0.1   # from the models root
+node scripts/e2e-format-sweep.mjs --dir <abs-models-root> [--out <dir>]
+```
+
+Run it for any change to shared viewer code. It uses `page.screenshot()` against a
+Metal-backed context on purpose: a blank-but-error-free viewport is the signature failure
+mode here (a shader that fails to compile, a gate that hides the geometry), sampling the
+canvas with `drawImage` reports every format blank because the drawing buffer is not
+preserved, and the software rasteriser hides real GPU failures. It has already earned its
+keep — it caught a temporal-dead-zone crash that blanked all six formats and that the
+build and unit tests both passed.
+
+**Method warning: do not run large sweeps back to back.** Chaining full runs (or launching
+several browsers in quick succession) exhausts GPU
+contexts and reports large numbers of *false* blanks — a run that reported 33 blank models
+reported zero on a clean run of the same build, twice. Let the previous run's browser fully
+exit before starting another, and treat any mass-blank result as suspect until reproduced
+from a cold start. Isolate a single suspect model rather than trusting one bulk run.
 
 ## Known non-uniformities
 
@@ -113,15 +129,25 @@ Recorded so they are not mistaken for bugs, and so the next person knows the cos
 - **Select is inert for DXF.** It keeps the button for a uniform toolbar shape; it has no
   pickable topology.
 
-## Scene conformance
+## Theme conformance
 
-CAD appearance and the isolated photographic Render configuration reach every
-mesh renderer (STEP/STL/3MF/GLB/DXF) and change the picture. Render always uses
-its fixed shaded, authored-color view policy; CAD selection, clipping,
-visibility, edges, guides, and exploded transforms never enter that path.
-Shared cadgen-js scene settings are the single public schema.
+Every theme field reaches the mesh renderer (STEP/STL/3MF/GLB/DXF) and changes the
+picture. `common/themeSettings.js` is the single schema: it used to be duplicated across
+two packages, and a field added to one and not the other was silently dropped for that
+renderer at normalization time — that is how `lighting.fill` and `lighting.rim` came to be
+ignored. One copy, one normalization, and that failure mode is gone.
 
-The repository browser gate loads one mesh scene through the real Appearance and Render
-controls. It checks that CAD light/dark and the Light/Dark Render backdrops produce
-distinct framebuffers after the model's non-empty bounds and foreground draw have been
-established independently.
+### Conformance harness
+
+```bash
+node scripts/e2e-theme-conformance.mjs --dir <abs-models-root> [--out <dir>] [--baseline <file>]
+```
+
+Loads one mesh scene under all eight presets and asserts **surface response** — the
+model's own pixels must actually differ across themes. A renderer that ignores the theme
+still starts up and still draws while rendering all eight identically, which is exactly
+what happened while `lighting.fill` and `lighting.rim` were being dropped at
+normalization.
+
+`scripts/theme-conformance-baseline.json` records the measured means so a change of
+look is visible in a diff rather than only in a pass/fail.

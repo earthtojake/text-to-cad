@@ -22,12 +22,12 @@ const SHADOW_SETTINGS = Object.freeze({
   [VIEWER_SCENE_SCALE.CAD]: Object.freeze({
     minExtent: 60,
     normalBias: 0.024,
-    radius: 2
+    radius: 14
   }),
   [VIEWER_SCENE_SCALE.URDF]: Object.freeze({
     minExtent: 0.55,
     normalBias: 0.000012,
-    radius: 2
+    radius: 14
   })
 });
 
@@ -68,11 +68,7 @@ export function getProportionalLightingScopeRadius(radius, value) {
   return (safeModelRadius / referenceModelRadius) * sceneScaleSettings.lightingScopeRadius;
 }
 
-export function getShadowCameraSettings(value, {
-  radius = 0,
-  keyLightDistance = 0,
-  shadowMapSize = 2048
-} = {}) {
+export function getShadowCameraSettings(value, { radius = 0, keyLightDistance = 0 } = {}) {
   const sceneScaleMode = normalizeSceneScaleMode(value);
   const shadowSettings = SHADOW_SETTINGS[sceneScaleMode];
   const shadowScopeRadius = clampSceneModelRadius(radius, sceneScaleMode);
@@ -83,24 +79,12 @@ export function getShadowCameraSettings(value, {
       Math.max(Number(keyLightDistance) || 0, 0) + (shadowScopeRadius * 6) + 1
     )
     : Math.max(shadowScopeRadius * 8, 320);
-  const mapSize = Math.max(Number(shadowMapSize) || 2048, 1);
-  const texelWorldSize = (shadowExtent * 2) / mapSize;
-  // Normal bias should hide acne without lifting engraved or closely nested
-  // surfaces out of each other's shadows. Higher-resolution Render maps can
-  // safely use a smaller bias on compact CAD models; normal CAD keeps its
-  // historical cap and large-model behavior.
-  const normalBias = Math.min(shadowSettings.normalBias, texelWorldSize * 0.35);
-  // Three r185 implements PCF softening with a five-sample Vogel disk. The old
-  // radius of 14 was ignored by PCFSoftShadowMap, but the replacement PCF path
-  // honors it and turns broad penumbrae into visible stipple. Keep the disk
-  // compact, with slightly tighter filtering at Render's 4K shadow quality.
-  const filterRadius = mapSize >= 4096 ? 1.5 : shadowSettings.radius;
 
   return {
     scopeRadius: shadowScopeRadius,
     extent: shadowExtent,
     far: shadowFar,
-    normalBias,
-    radius: filterRadius
+    normalBias: shadowSettings.normalBias,
+    radius: shadowSettings.radius
   };
 }

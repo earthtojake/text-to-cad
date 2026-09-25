@@ -1,10 +1,19 @@
-const SYSTEM_COLOR_SCHEME_ID = "system";
+export const SYSTEM_COLOR_SCHEME_ID = "system";
 export const LIGHT_COLOR_SCHEME_ID = "light";
 export const DARK_COLOR_SCHEME_ID = "dark";
 export const DEFAULT_COLOR_SCHEME_ID = SYSTEM_COLOR_SCHEME_ID;
+export const THEME_STORAGE_KEY = "cad-viewer:theme";
 export const COLOR_SCHEME_STORAGE_KEY = "cad-viewer:color-scheme";
-export const COLOR_SCHEME_COOKIE_NAME = "cad-viewer-appearance";
-export const COLOR_SCHEME_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
+
+const COLOR_SCHEME_ALIASES = Object.freeze({
+  "studio-light": LIGHT_COLOR_SCHEME_ID,
+  ivory: LIGHT_COLOR_SCHEME_ID,
+  graphite: DARK_COLOR_SCHEME_ID,
+  blueprint: DARK_COLOR_SCHEME_ID,
+  solarized: DARK_COLOR_SCHEME_ID,
+  terminal: DARK_COLOR_SCHEME_ID,
+  "candy-core": DARK_COLOR_SCHEME_ID
+});
 
 const COLOR_SCHEME_OPTIONS = Object.freeze([
   {
@@ -27,12 +36,13 @@ const COLOR_SCHEME_REGISTRY = Object.freeze(
 
 export const COLOR_SCHEMES = COLOR_SCHEME_OPTIONS;
 
-function normalizeColorSchemeId(colorSchemeId) {
+export function normalizeColorSchemeId(colorSchemeId) {
   const normalizedId = String(colorSchemeId || "").trim().toLowerCase();
-  return Object.hasOwn(COLOR_SCHEME_REGISTRY, normalizedId) ? normalizedId : DEFAULT_COLOR_SCHEME_ID;
+  const canonicalId = COLOR_SCHEME_ALIASES[normalizedId] || normalizedId;
+  return COLOR_SCHEME_REGISTRY[canonicalId] ? canonicalId : DEFAULT_COLOR_SCHEME_ID;
 }
 
-function getColorSchemeOption(colorSchemeId) {
+export function getColorSchemeOption(colorSchemeId) {
   return COLOR_SCHEME_REGISTRY[normalizeColorSchemeId(colorSchemeId)];
 }
 
@@ -54,29 +64,7 @@ function browserLocalStorage() {
   }
 }
 
-function browserDocument() {
-  return typeof document !== "undefined" ? document : null;
-}
-
-// Cookies are shared by viewer ports on the same host. The localStorage copy
-// is a fallback when cookies are disabled and a signal for other same-origin tabs.
-export function readColorSchemeCookie(target = browserDocument()) {
-  try {
-    for (const part of String(target?.cookie || "").split(";")) {
-      const [name, ...value] = part.trim().split("=");
-      if (name !== COLOR_SCHEME_COOKIE_NAME) continue;
-      const preference = value.join("=");
-      return Object.hasOwn(COLOR_SCHEME_REGISTRY, preference) ? preference : null;
-    }
-  } catch {
-    // Sandboxed documents can deny cookie access while still allowing storage.
-  }
-  return null;
-}
-
-export function readColorSchemePreference(storage = browserLocalStorage(), target = browserDocument()) {
-  const cookiePreference = readColorSchemeCookie(target);
-  if (cookiePreference) return cookiePreference;
+export function readColorSchemePreference(storage = browserLocalStorage()) {
   if (!storage) {
     return DEFAULT_COLOR_SCHEME_ID;
   }
@@ -88,39 +76,33 @@ export function readColorSchemePreference(storage = browserLocalStorage(), targe
 }
 
 export function writeColorSchemePreference(colorSchemeId, options = {}) {
-  const storage = Object.hasOwn(options, "storage") ? options.storage : browserLocalStorage();
-  const target = Object.hasOwn(options, "document") ? options.document : browserDocument();
+  const storage = options.storage || browserLocalStorage();
+  if (!storage) {
+    return true;
+  }
   const normalizedId = normalizeColorSchemeId(colorSchemeId);
-  let persisted = false;
-  let failure = null;
-  if (target) {
-    try {
-      const secure = target.location?.protocol === "https:" ? "; Secure" : "";
-      target.cookie = `${COLOR_SCHEME_COOKIE_NAME}=${normalizedId}; Path=/; Max-Age=${COLOR_SCHEME_COOKIE_MAX_AGE}; SameSite=Lax${secure}`;
-      persisted = readColorSchemeCookie(target) === normalizedId;
-      if (!persisted) failure = new Error("The browser did not save the appearance cookie");
-    } catch (error) {
-      failure = error;
+  try {
+    if (normalizedId === DEFAULT_COLOR_SCHEME_ID) {
+      storage.removeItem(COLOR_SCHEME_STORAGE_KEY);
+    } else {
+      storage.setItem(COLOR_SCHEME_STORAGE_KEY, normalizedId);
     }
-  }
-  if (storage) {
-    try {
-      if (normalizedId === DEFAULT_COLOR_SCHEME_ID) {
-        storage.removeItem(COLOR_SCHEME_STORAGE_KEY);
-      } else {
-        storage.setItem(COLOR_SCHEME_STORAGE_KEY, normalizedId);
-      }
-      // A readable stale cookie remains authoritative. Do not claim a save
-      // succeeded merely because the fallback accepted a conflicting value.
-      persisted ||= readColorSchemeCookie(target) === null;
-    } catch (error) {
-      failure ||= error;
+    return true;
+  } catch (error) {
+    if (typeof options.onWriteError === "function") {
+      options.onWriteError({ key: COLOR_SCHEME_STORAGE_KEY, error });
     }
+    return false;
   }
-  if (!persisted && failure && typeof options.onWriteError === "function") {
-    options.onWriteError({ key: COLOR_SCHEME_COOKIE_NAME, error: failure });
+}
+
+export function getColorSchemeControlLabel(colorSchemeId, { prefersDark = false } = {}) {
+  const option = getColorSchemeOption(colorSchemeId);
+  if (option.id !== SYSTEM_COLOR_SCHEME_ID) {
+    return option.label;
   }
-  return persisted || (!storage && !target);
+  const resolvedMode = resolveColorSchemeMode(colorSchemeId, { prefersDark });
+  return `${option.label} (${getColorSchemeOption(resolvedMode).label})`;
 }
 
 export function applyColorSchemeToDocument(colorSchemeId, root = document.documentElement, { prefersDark = false } = {}) {
@@ -136,3 +118,14 @@ export function applyColorSchemeToDocument(colorSchemeId, root = document.docume
   root.classList.toggle("dark", resolvedMode === DARK_COLOR_SCHEME_ID);
   root.style.colorScheme = resolvedMode;
 }
+
+export const SYSTEM_THEME_ID = SYSTEM_COLOR_SCHEME_ID;
+export const LIGHT_THEME_ID = LIGHT_COLOR_SCHEME_ID;
+export const DARK_THEME_ID = DARK_COLOR_SCHEME_ID;
+export const DEFAULT_THEME_ID = DEFAULT_COLOR_SCHEME_ID;
+export const THEMES = COLOR_SCHEMES;
+export const normalizeThemeId = normalizeColorSchemeId;
+export const getThemeOption = getColorSchemeOption;
+export const resolveThemeMode = resolveColorSchemeMode;
+export const getThemeControlLabel = getColorSchemeControlLabel;
+export const applyThemeToDocument = applyColorSchemeToDocument;

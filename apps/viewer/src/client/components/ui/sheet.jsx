@@ -52,10 +52,13 @@ const SheetContent = React.forwardRef(function SheetContent({
   children,
   side = "right",
   showCloseButton = true,
+  // Where the sheet portals to; `body` by default. An embedded surface hands
+  // its own root in, so a drawer stays inside the pane it belongs to.
+  portalContainer,
   ...props
 }, ref) {
   return (
-    <SheetPortal>
+    <SheetPortal container={portalContainer ?? undefined}>
       <SheetOverlay className={overlayClassName} />
       <SheetPrimitive.Content
         ref={ref}
@@ -117,7 +120,7 @@ function SheetTitle({
   return (
     <SheetPrimitive.Title
       data-slot="sheet-title"
-      className={cn("font-semibold text-foreground", className)}
+      className={cn("text-foreground", className)}
       {...props} />
   );
 }

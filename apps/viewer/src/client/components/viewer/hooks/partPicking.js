@@ -20,12 +20,5 @@ export function shouldRaycastRecordForPick(record, { focusIds, hiddenIds } = {})
 }
 
 export function partIdFromIntersection(intersection) {
-  const direct = intersection?.object?.userData?.partId;
-  if (direct) {
-    return direct;
-  }
-  const instanceId = Number(intersection?.instanceId);
-  return Number.isInteger(instanceId)
-    ? intersection?.object?.userData?.partIds?.[instanceId] || null
-    : null;
+  return intersection?.object?.userData?.partId || null;
 }

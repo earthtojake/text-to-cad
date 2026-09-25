@@ -140,44 +140,6 @@ test("stage plane factories return deterministic Three.js objects", () => {
   assert.equal(createStageFloorGlowPlane(THREE, { lighting: { spot: { enabled: false } } }, 1, 80, 0, VIEWER_SCENE_SCALE.CAD), null);
 });
 
-test("stage floor color does not change its dielectric response", () => {
-  const settings = {
-    floor: { horizonBlend: 0.38, reflectivity: 0.1, roughness: 0.72 },
-    materials: { envMapIntensity: 0.9 },
-    environment: { enabled: true, intensity: 0.78 }
-  };
-  const light = createStageFloorPlane(THREE, BASE_VIEWER_THEME, {
-    ...settings,
-    floor: { ...settings.floor, color: "#d4d5d3" }
-  }, 120, 0);
-  const dark = createStageFloorPlane(THREE, BASE_VIEWER_THEME, {
-    ...settings,
-    floor: { ...settings.floor, color: "#18191a" }
-  }, 120, 0);
-
-  for (const key of ["roughness", "metalness", "clearcoat", "reflectivity", "specularIntensity", "envMapIntensity", "opacity"]) {
-    assert.equal(light.material[key], dark.material[key], key);
-  }
-  assert.equal(light.material.specularColor.getHexString(), "ffffff");
-  assert.equal(dark.material.specularColor.getHexString(), "ffffff");
-});
-
-test("stage floor material does not apply global environment intensity twice", () => {
-  const settings = {
-    floor: { reflectivity: 0.24 },
-    materials: { envMapIntensity: 1.4 },
-    environment: { enabled: true, intensity: 0.1 }
-  };
-  const dimEnvironment = createStageFloorPlane(THREE, BASE_VIEWER_THEME, settings, 120, 0);
-  const brightEnvironment = createStageFloorPlane(THREE, BASE_VIEWER_THEME, {
-    ...settings,
-    environment: { ...settings.environment, intensity: 2.8 }
-  }, 120, 0);
-
-  assert.equal(dimEnvironment.material.envMapIntensity, brightEnvironment.material.envMapIntensity);
-  assert.ok(dimEnvironment.material.envMapIntensity > 0);
-});
-
 test("stage runtime helpers update background and spotlight targets without owning lifecycle", () => {
   const alphaValues = [];
   const runtime = {

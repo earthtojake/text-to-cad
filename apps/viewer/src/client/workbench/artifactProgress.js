@@ -17,8 +17,6 @@
 // clocks: this module is a pure formatter, so a frame renders the same whenever it is read.
 
 export const ARTIFACT_PROGRESS_POLL_MS = 400;
-export const ARTIFACT_STATUS_TIMEOUT_MS = 10_000;
-export const ARTIFACT_STATUS_FAILURE_LIMIT = 3;
 // The first poll runs sooner than the rest. The overlay grows the moment progress first
 // arrives, and that is the one layout shift the stacked design cannot avoid — so it should
 // happen while the loading state is still appearing, not a noticeable beat later. The build
@@ -57,50 +55,7 @@ export function normalizeArtifactProgress(raw) {
     // Never trust the flag over the count: a payload claiming `determinate` without a total
     // would render "31/null".
     determinate: Boolean(raw.determinate) && Number(total) > 0,
-    updatedAt: finiteNumber(raw.updatedAt, 0),
-    refreshedAt: finiteNumber(raw.refreshedAt, 0),
-    connectionLost: raw.connectionLost && typeof raw.connectionLost === "object"
-      ? {
-        failures: nonNegativeInt(raw.connectionLost.failures),
-        since: finiteNumber(raw.connectionLost.since, 0),
-        detail: String(raw.connectionLost.detail || "").trim()
-      }
-      : null
-  };
-}
-
-export function refreshArtifactProgress(progress, refreshedAt = Date.now()) {
-  return progress ? { ...progress, refreshedAt: finiteNumber(refreshedAt, 0), connectionLost: null } : null;
-}
-
-export function artifactProgressConnectionLost(progress, failure, failures, now = Date.now()) {
-  const prior = normalizeArtifactProgress(progress);
-  const stamp = finiteNumber(now, 0);
-  const detail = String(failure?.detail || failure?.message || failure || "The viewer did not respond.").trim();
-  const base = prior || normalizeArtifactProgress({
-    phase: "waiting",
-    label: "Waiting for build status",
-    determinate: false,
-    refreshedAt: 0
-  });
-  return {
-    ...base,
-    connectionLost: {
-      failures: nonNegativeInt(failures),
-      since: prior?.connectionLost?.since || stamp,
-      detail
-    }
-  };
-}
-
-export function artifactStatusFailure(error, attempts) {
-  const source = error?.failure && typeof error.failure === "object" ? error.failure : {};
-  const detail = String(source.detail || error?.message || error || "The viewer did not respond.").trim();
-  return {
-    ...source,
-    kind: "status",
-    attempts: nonNegativeInt(attempts),
-    detail: `Could not check build status after ${nonNegativeInt(attempts)} attempts: ${detail}`
+    updatedAt: finiteNumber(raw.updatedAt, 0)
   };
 }
 

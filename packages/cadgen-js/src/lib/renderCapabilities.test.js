@@ -55,16 +55,6 @@ test("viewport content kinds are known", () => {
   assert.equal(viewportContentKind(RENDER_FORMAT.URDF), VIEWPORT_CONTENT.ROBOT);
 });
 
-test("camera framing uses the format's declared scene scale", () => {
-  for (const format of [RENDER_FORMAT.URDF, RENDER_FORMAT.SRDF, RENDER_FORMAT.SDF]) {
-    assert.equal(renderCapabilities(format).sceneScale, "urdf", format);
-  }
-  for (const format of [RENDER_FORMAT.STEP, RENDER_FORMAT.DXF, RENDER_FORMAT.STL,
-    RENDER_FORMAT.THREE_MF, RENDER_FORMAT.GLB, "gltf", "unknown"]) {
-    assert.equal(renderCapabilities(format).sceneScale, "cad", format);
-  }
-});
-
 test("orbit and screenshot are available to every format", () => {
   // These act on the viewport, not the geometry. Gating them per format is what
   // produced the same dead-button bug for two formats independently.

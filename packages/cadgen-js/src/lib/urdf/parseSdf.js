@@ -1,5 +1,4 @@
 import { invertRigidTransform, multiplyTransforms, poseTransformFromXyzRpy } from "./kinematics.js";
-import { resolveCadAssetMeshUrl } from "./meshAssetUrl.js";
 
 const IDENTITY_TRANSFORM = Object.freeze([
   1, 0, 0, 0,
@@ -171,14 +170,6 @@ function resolveMeshUrl(uri, sourceUrl) {
   if (!rawUri) {
     throw new Error("SDF mesh URI is required");
   }
-  // The Viewer serves a description from `/__cad/asset?file=...`, where the mesh is relative
-  // to the QUERY, not the path. Without this the URI resolved to `/__cad/<uri>`, the backend
-  // 404'd it, and every SDF naming a mesh failed to load with "Couldn't load the model" —
-  // while the URDF beside it, same relative path, loaded fine.
-  const assetUrl = resolveCadAssetMeshUrl(rawUri, sourceUrl);
-  if (assetUrl) {
-    return assetUrl;
-  }
   const normalizedSourceUrl = normalizeAbsoluteUrl(sourceUrl);
   let resolvedUrl;
   if (rawUri.startsWith("package://")) {
@@ -256,81 +247,6 @@ function occurrenceIdFromSdfName(value) {
   return match ? `o${match[1].replace(/_/g, ".")}` : "";
 }
 
-function positiveChildNumber(parent, tagName) {
-  const value = Number(childText(parent, tagName));
-  return Number.isFinite(value) && value > 0 ? value : 0;
-}
-
-// SDF spells the same three shapes URDF does, but as child ELEMENTS rather than attributes
-// (`<box><size>x y z</size></box>` against `<box size="x y z"/>`). The descriptor this
-// returns is URDF's, so `buildUrdfPrimitiveMesh` meshes it with no branch of its own.
-//
-// Until this existed, a link whose visual was a box, cylinder or sphere produced no
-// geometry at all: `resolveUrdfVisuals` drops a visual with neither a primitive nor a mesh,
-// so a model built the ordinary SDF way rendered as empty space — exit 0, no warning, and a
-// reviewer looking at a picture of the one link that happened to use a mesh file.
-// Strictly ADDITIVE: a shape whose numbers are missing or degenerate returns null and stays
-// the placeholder it already was. A description that renders today must not start failing
-// because this learned to read one more element.
-function parseSdfPrimitiveGeometry(geometryElement) {
-  const boxElement = childElementsByTag(geometryElement, "box")[0];
-  if (boxElement) {
-    const size = String(childText(boxElement, "size") || "").trim().split(/\s+/).map(Number);
-    return size.length === 3 && size.every((value) => Number.isFinite(value) && value > 0)
-      ? { type: "box", size }
-      : null;
-  }
-
-  const cylinderElement = childElementsByTag(geometryElement, "cylinder")[0];
-  if (cylinderElement) {
-    const radius = positiveChildNumber(cylinderElement, "radius");
-    const length = positiveChildNumber(cylinderElement, "length");
-    return radius && length ? { type: "cylinder", radius, length } : null;
-  }
-
-  const sphereElement = childElementsByTag(geometryElement, "sphere")[0];
-  if (sphereElement) {
-    const radius = positiveChildNumber(sphereElement, "radius");
-    return radius ? { type: "sphere", radius } : null;
-  }
-
-  return null;
-}
-
-// The shapes this renderer can draw. Anything else — capsule, plane, ellipsoid, heightmap,
-// polyline — has no mesh here, so a VISUAL built from one produced NOTHING and said nothing:
-// the composer drops a visual with neither a primitive nor a mesh, and the model rendered
-// as empty space at exit 0. URDF has always thrown on unsupported visual geometry; SDF now
-// matches it, naming the link, the kind and what it could have been instead.
-//
-// COLLISION geometry is not drawn at all, so an undrawable one costs the picture nothing and
-// must never block a load: a `<plane>` ground collision is the single most common shape in a
-// real Gazebo world. Those keep the `unsupportedGeometry` placeholder, which is what the
-// Viewer's SDF sheet already counts under "Unsupported geom." — non-blocking, and visible.
-export const SDF_RENDERABLE_GEOMETRY = Object.freeze(["box", "cylinder", "mesh", "sphere"]);
-
-function sdfGeometryContext(linkName, labelKind, index) {
-  return `SDF link ${linkName} ${labelKind} ${index}`;
-}
-
-function unrenderableSdfGeometryMessage(linkName, labelKind, index, geometryKind) {
-  const where = sdfGeometryContext(linkName, labelKind, index);
-  if (geometryKind === "missing") {
-    return `${where} has no <geometry>. `
-      + `Give it one of: ${SDF_RENDERABLE_GEOMETRY.join(", ")}.`;
-  }
-  // A shape this renderer DOES draw, whose dimensions are missing or non-positive, is a
-  // different mistake from naming a shape it has never drawn. Saying "box is unsupported"
-  // about a <box> would send the reader looking in the wrong place entirely.
-  if (SDF_RENDERABLE_GEOMETRY.includes(geometryKind)) {
-    return `${where} is a <${geometryKind}> with missing or non-positive dimensions, `
-      + "so it has no shape to draw. Give it positive dimensions.";
-  }
-  return `${where} uses <${geometryKind}> geometry, which this renderer cannot draw. `
-    + `Supported: ${SDF_RENDERABLE_GEOMETRY.join(", ")}. `
-    + "Replace it with one of those, or reference a mesh file.";
-}
-
 function parseMeshInstance(containerElement, { linkName, kind, index, sourceUrl }) {
   const labelKind = kind === "collision" ? "collision" : "visual";
   const instanceId = String(containerElement?.getAttribute("name") || "").trim();
@@ -338,36 +254,14 @@ function parseMeshInstance(containerElement, { linkName, kind, index, sourceUrl 
   const geometryElement = childElementsByTag(containerElement, "geometry")[0] || null;
   const meshElement = geometryElement ? childElementsByTag(geometryElement, "mesh")[0] : null;
   if (!meshElement) {
-    const context = `SDF link ${linkName} ${labelKind} ${index}`;
-    const primitive = geometryElement ? parseSdfPrimitiveGeometry(geometryElement) : null;
-    const color = materialColorFromElement(
-      childElementsByTag(containerElement, "material")[0] || null,
-      context
-    );
-    if (primitive) {
-      return {
-        id: `${linkName}:${kind[0]}${index}`,
-        label: primitive.type,
-        instanceId,
-        occurrenceId: occurrenceIdFromSdfName(instanceId) || occurrenceIdFromSdfName(linkName),
-        meshUrl: "",
-        color,
-        primitive,
-        localTransform: pose.transform,
-        pose
-      };
-    }
     const geometryKind = geometryElement ? (elementName(childElements(geometryElement)[0]) || "unknown") : "missing";
-    if (labelKind === "visual") {
-      throw new Error(unrenderableSdfGeometryMessage(linkName, labelKind, index, geometryKind));
-    }
     return {
       id: `${linkName}:${kind[0]}${index}`,
       label: `${geometryKind} ${labelKind}`,
       instanceId,
       occurrenceId: occurrenceIdFromSdfName(instanceId) || occurrenceIdFromSdfName(linkName),
       meshUrl: "",
-      color,
+      color: "",
       localTransform: pose.transform,
       pose,
       unsupportedGeometry: geometryKind
@@ -375,12 +269,6 @@ function parseMeshInstance(containerElement, { linkName, kind, index, sourceUrl 
   }
   const uri = childText(meshElement, "uri");
   if (!uri) {
-    if (labelKind === "visual") {
-      throw new Error(
-        `${sdfGeometryContext(linkName, labelKind, index)} is a <mesh> with no <uri>, so there is `
-        + "nothing to load. Give the mesh a <uri>."
-      );
-    }
     return {
       id: `${linkName}:${kind[0]}${index}`,
       label: `mesh ${labelKind}`,

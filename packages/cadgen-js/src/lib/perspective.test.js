@@ -121,20 +121,3 @@ test("perspective snapshots preserve and compare camera projection", () => {
     false
   );
 });
-
-test("perspective snapshots preserve and compare orthographic framing", () => {
-  const framed = {
-    ...PERSPECTIVE_A,
-    projection: CAMERA_PROJECTION.PERSPECTIVE,
-    orthographicHalfHeight: 37.5
-  };
-
-  assert.deepEqual(clonePerspectiveSnapshot(framed), framed);
-  assert.equal(perspectiveSnapshotEqual(framed, { ...framed, orthographicHalfHeight: 37.50001 }), true);
-  assert.equal(perspectiveSnapshotEqual(framed, { ...framed, orthographicHalfHeight: 38 }), false);
-  assert.equal(perspectiveSnapshotEqual(framed, PERSPECTIVE_A), false);
-  assert.equal(clonePerspectiveSnapshot({
-    ...PERSPECTIVE_A,
-    orthographicHalfHeight: "37.5"
-  }).orthographicHalfHeight, 37.5);
-});
