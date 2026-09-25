@@ -514,7 +514,7 @@ it('a folded row reads as selected only when the selection is what it stands for
  expect(screen.getByRole('button',{name:'Select plant_1 (2)'}).getAttribute('aria-pressed')).toBe('true');
 });
 
-it('joins touching selected rows into one block, and isolates from the row', () => {
+it('joins touching selected rows into one block, and the isolation bar ends an isolation', () => {
   const onFocusTreeNode=vi.fn(),onUnfocusTreeNode=vi.fn(),onExitAllIsolate=vi.fn();
   const controls={expandedTreeNodeIds:['arm'],isAssemblyView:true,hiddenPartIds:[],focusedNodeIds:[] as string[],
     onSelectTreeNode:vi.fn(),onToggleTreeNode:vi.fn(),onTogglePartVisibility:vi.fn(),onFocusTreeNode,onUnfocusTreeNode,onExitAllIsolate};
@@ -526,15 +526,15 @@ it('joins touching selected rows into one block, and isolates from the row', () 
   expect(surface('Wrist').style.borderTopLeftRadius).toBe('');
   expect(surface('Base').style.borderTopLeftRadius).toBe('0px');
   expect(surface('Arm').style.borderBottomLeftRadius).toBe('');
-  // Isolate sits beside Hide on the row; isolated, it stays lit and the tree says so.
-  fireEvent.click(screen.getByRole('button',{name:'Isolate Base'}));
-  expect(onFocusTreeNode).toHaveBeenCalledWith('base');
+  // Isolation is not a row action (a double-click isolates); isolated, the tree says so at
+  // the top and its Exit ends it.
+  expect(screen.queryByRole('button',{name:/Isolate/})).toBeNull();
   rerender(<ModelingTreeView {...props} partControls={{...controls,focusedNodeIds:['base']}}/>);
-  expect(screen.getByRole('button',{name:'Exit isolate Base'}).getAttribute('aria-pressed')).toBe('true');
+  expect(screen.queryByRole('button',{name:/isolate/i})).toBeNull();
   const bar=screen.getByRole('status',{name:'Isolation'});
   expect(bar.textContent).toContain('Isolated: Base');
   fireEvent.click(within(bar).getByRole('button',{name:'Exit'}));
   expect(onExitAllIsolate).toHaveBeenCalled();
-  fireEvent.click(screen.getByRole('button',{name:'Exit isolate Base'}));
-  expect(onUnfocusTreeNode).toHaveBeenCalledWith('base');
+  expect(onFocusTreeNode).not.toHaveBeenCalled();
+  expect(onUnfocusTreeNode).not.toHaveBeenCalled();
 });
