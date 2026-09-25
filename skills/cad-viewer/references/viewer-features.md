@@ -7,7 +7,7 @@ Load this only when a task needs Viewer file-support details or UI control guida
 - `.step`, `.stp`: STEP/STP review through the document's tree in the store (compiled from the file's bytes on open when missing); supports assembly trees, part hide/show, inspect/focus, face/edge/vertex/part selection, copied `#...` CAD references, display modes, clip planes, and live pose sliders and animation clips when the model's sidecar declares kinematics or animation.
 - `.stl`, `.3mf`, `.glb`: mesh viewing with orbit/pan/zoom, screenshots, and the Display tab's shading modes. Measure snaps to triangle vertices only (two clicks, distance in mm) — not STEP faces/edges. A plain GLB's `COLOR_0` vertex colors render as source colors, exactly like authored material colors; a GLB carrying embedded animation gets an Animation tab of its own.
 - `.dxf`: read-only 3D flat-pattern viewing. The drawing file is parsed directly and rendered client-side — no render artifact exists for a `.dxf`, so generated and imported drawings alike render straight from their own bytes.
-- `.urdf`: robot link/mesh viewing with movable joint sliders, reset pose, and copied joint values.
+- `.urdf`: robot link/mesh viewing with movable joint sliders, reset pose, and copied joint values. Joints with `<mimic>` or the `tcad:four_bar` extension are derived from their driver and get no slider. The Components tab lists every link's visuals (a mesh's named objects as their own rows); clicking a part in the viewport selects its row and expands its link.
 - `.srdf`: paired-URDF viewing with planning groups, group-state presets, and joint controls.
 - `.sdf`: SDF model/world viewing with metadata, counts, warnings, and joint controls when available.
 
