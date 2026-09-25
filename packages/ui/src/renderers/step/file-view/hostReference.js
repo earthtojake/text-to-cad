@@ -1,5 +1,5 @@
 // What a host gets from the surface, and what it can ask of it, about
-// references (docs/cad-renderer.md, "References and captures").
+// references (docs/cad-renderer.md, "Prompt references, captures and extensions").
 //
 // Copy actions write only to the clipboard. Explicit Add to prompt actions
 // send references to the host. In the other direction, selectReference asks
