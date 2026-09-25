@@ -5,7 +5,7 @@
 # VERSION, so the editable install reports exactly the pinned version. Installing a
 # skill's requirements.txt WITHOUT this file fetches the last published release from
 # PyPI instead of the checkout -- this file is the development door.
---editable ./packages/cadgen
+--editable ./packages/cadgen[fea]
 
 # pip installs the Python; it cannot build the JavaScript that ships beside it.
 # packages/cadgen/src/cadgen/_runtime is gitignored and produced by

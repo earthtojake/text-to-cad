@@ -69,6 +69,16 @@ dependencies = [
 # is opt-in.
 [project.optional-dependencies]
 snapshot = ["playwright"]
+# Linear static FEA (`cadgen fea`): netgen meshes the B-rep (LGPL-2.1, brings its
+# own OpenCascade), scikit-fem assembles, pyamg solves. Wheels on every packaged
+# target; the desktop runtime installs this extra.
+fea = [
+  "netgen-mesher>=6.2.2607",
+  "scikit-fem>=12,<13",
+  "pyamg>=5.2",
+  "numpy>=1.26",
+  "scipy>=1.11",
+]
 
 [project.urls]
 Homepage = "https://github.com/earthtojake/text-to-cad"
