@@ -579,8 +579,7 @@ export function FileSheetFieldGrid({ columns = 2, children, className }) {
   );
 }
 
-// Sibling actions as equal-width columns; a single child renders full width
-// (the Reset convention: outline + RotateCcw, last row of what it resets).
+// Sibling actions as equal-width columns; a single child renders full width.
 export function FileSheetButtonRow({ children, columns, className }) {
   const columnCount = Math.max(1, columns || Children.count(children));
   return (
@@ -596,8 +595,8 @@ export function FileSheetButtonRow({ children, columns, className }) {
 
 // The standard select: an inline row, trigger on the control axis. `stacked`
 // gives the block-row treatment — label above, full width — and is reserved for
-// a surface's primary control, the first row that reframes everything under it
-// (Render > Studio, Display > Mode, Kinematics > Preset). Nothing else.
+// a surface's primary control, the first row that reframes everything under it.
+// Nothing else.
 // Pass triggerContent to replace the plain SelectValue (e.g. a swatch + label).
 export function FileSheetSelectRow({
   label,

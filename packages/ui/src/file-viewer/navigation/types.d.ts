@@ -106,7 +106,7 @@ export const FILE_PANEL_TREE: string;
 export const SOURCE_PANEL: string;
 export const CAD_PANEL: { readonly file: string };
 
-/** A viewer file's panels: its own controls (when it has any), then its Display settings. */
+/** A viewer file's panels: its Settings when it has file-specific controls, or none. */
 export function viewerPanels(ready: boolean, options?: { file?: boolean }): FilePanel[];
 /** The desktop's markdown source view, declared in the same vocabulary. */
 export function markdownPanels(open: string): FilePanel[];

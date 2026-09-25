@@ -2,17 +2,16 @@
 
 The CAD viewer is the viewport, floating toolbar, file panels, reference
 interactions, measurement and drawing tools, animation, loading artwork and
-alerts, extracted into `@hardcore/ui`. This migration is a behavior-preserving
-refactor apart from the approved prompt-action mapping and reference-tooltip
-removal described in [ViewerHost](viewer-host.md). Changing a default, control,
-layout, saved preference or interaction requires separate work and its own
-review.
+alerts, in `@hardcore/ui`. The rules of its chrome — which tools a file has, how
+they take and give back the pointer, the sidebar, fullscreen, the keyboard — are the
+[design system](settings-ui.md); this document is the mechanism behind them.
 
-It is no longer one component stack: there is one renderer per file family over
-a shared, format-blind [kit](#kit) and [shell](#shell). The STEP renderer is
-under `src/renderers/step`, on the kit like every other family: its scene and viewport
+There is one renderer per file family over a shared, format-blind [kit](#kit) and
+[shell](#shell). The STEP renderer is under `src/renderers/step`, on the kit like
+every other family: its scene and viewport
 ([STEP scene and viewport](#step-scene-and-viewport)) and its surface, `StepSurface.jsx`, which
-runs `useRendererShell` exactly as the other renderers do. Applications use the registrations and the shared
+runs `useRendererShell` exactly as the other renderers do and composes STEP's own
+modules around it (see the end of [Shell](#shell)). Applications use the registrations and the shared
 `FileViewer`; they do not import another application's source.
 
 ## Kit
@@ -32,31 +31,34 @@ the reverse.
 | folder | what it is |
 | --- | --- |
 | `viewport/` | `useViewerRuntime` (three.js renderer lifecycle, on-demand render loop and `requestRender`, resize and device-pixel-ratio caps, context loss, keyboard orbit, teardown), `framePresentation`, `viewportBuffer`, `renderDepthPolicy`, `sceneObjects` (`disposeSceneObject`), DOM helpers. The scene in the viewport is its owner's: teardown calls the injected `disposeScene(runtime)` and `disposeStudio(runtime)`. |
-| `camera/` | `runtimeCamera` (zoom percent against the authored framing, projection and lens sync, perspective snapshots, eased transitions, fit-to-bounds, recentre), `useViewportCamera` (that behaviour bound to a mounted viewport: the perspective kept by a mounted view, the fullscreen camera swap and its restore, the reset, view-cube presets — whose default preset FRAMES as well as turns), `viewportCameraKit` and `viewportCameraFit`, `orbitControls`, `zoomPivotReanchor`, `zoomSpeeds`, `cameraLens`, `ViewPlaneControl` (view cube). |
+| `camera/` | `runtimeCamera` (zoom percent against the authored framing, projection and lens sync, perspective snapshots, eased transitions, fit-to-bounds, recentre), `useViewportCamera` (that behaviour bound to a mounted viewport: the perspective kept by a mounted view, the fullscreen camera swap and its restore, the reset that Zoom to fit and the live `resetCamera` share, view-cube presets, which turn the camera and keep its zoom and target), `viewportCameraKit` and `viewportCameraFit`, `orbitControls`, `zoomPivotReanchor`, `zoomSpeeds`, `cameraLens`, `ViewPlaneControl` (view cube). |
 | `look/` | `stageEffects` (lighting rig scaled to the model, floor, glow and shadow catcher, grid and origin axes), the Render studio boundary (`renderStudioChunk`, `studioEnvironmentCache` and its worker). `chromeBackdrop` and `useChromeBackdropColor` (the frame colour around a scene). The surface LOOK is data the viewport resolves and a scene applies to its own materials: `@hardcore/core/lib/viewer/surfaceLook.js` (`createSurfaceLook(THREE, root).apply(look)`) does it for any authored material tree. The viewport resolves it with core's `resolveSceneSurfaceLook` (`common/sceneSettings.js`), the resolver the snapshot CLI dresses the same scenes with. |
-| `view-settings/` | The settings model and store (`viewSettingsStore`, `useViewSettings`, `viewerDisplaySettings`, `renderState`), applying a change to a viewport (`useAppliedViewSettings`, `viewUpdateCoordinator`, `viewUpdateGate`, `viewUpdatePlan`), and the Display panel's content (`DisplaySettingsSection`, `DisplayModeOptions`). |
-| `tools/` | `FloatingToolBar` (the dumb strip), `toolModes` (the tool-mode state machine), `ToolbarButton`, and the format-blind tools: `draw/` (overlay, view lock, `useDrawingViewLock`), `PreviewChrome` (presentation visibility), `PlayMenu` / `OrbitMenu` (independent options), `fullscreen/` (orbit preferences), `playbar/` (`ViewportAnimationBar`, `animationClock`, `usePlaybackFrames`), `pose/` (the handle overlay, canvas, drag mathematics), `select/` (`usePointerPick`: taps and hover through a scene's own `pick`). Screenshot capture is `@hardcore/core/lib/viewer/screenshotCapture.js`. |
-| `inspector/` | `FileSheet` and its row primitives, `FilePanelSections` (a file's own panel: its sections stacked tight in one scrolling column, each foldable beside another, with a pick's Reference pinned at the foot), `InspectorSplit`, `modelTreeSearch`, `referenceRows` (`InfoRow`, `MonoValue`, `CoordValue`), `kinematicsControls` (the `Pose` row and the Reset button every Position section ends with). The tree row and filter box are `primitives/tree-row` and `primitives/tree-filter`. |
+| `view-settings/` | The settings model and store (`viewSettingsStore`, `useViewSettings`, `viewerDisplaySettings`, `renderState`), applying a change to a viewport (`useAppliedViewSettings`, `viewUpdateCoordinator`, `viewUpdateGate`, `viewUpdatePlan`), the Display tool (`DisplaySettingsPopover`, the toolbar's last button) and its content (`DisplaySettingsSection`, `DisplayModeOptions`). |
+| `tools/` | `FloatingToolBar` (the dumb strip), `toolModes` (the tool-mode state machine), `ToolbarButton`, `ToolPopover` (a tool's corner menu), `ToolPanel` and `toolPanelStack` (the kept panels under the strip, and the placement that opens menus beside them), and the format-blind tools: `draw/` (overlay, view lock, `useDrawingViewLock`), `PreviewChrome` (fullscreen's controls and their visibility), `PlayMenu` (Routine, Speed and Loop: Animate's corner menu and fullscreen's Play menu) and `OrbitMenu` (fullscreen's orbit and its speed), `fullscreen/` (orbit preferences), `playbar/` (`ViewportAnimationBar`, `animationClock`, `usePlaybackFrames`), `pose/` (the handle overlay, canvas, drag mathematics), `select/` (`usePointerPick`: taps and hover through a scene's own `pick`). Screenshot capture is `@hardcore/core/lib/viewer/screenshotCapture.js`. |
+| `inspector/` | `FileSheet` and its row primitives, `FilePanelSections` (a file's Settings panel: its sections stacked tight in one scrolling column, each foldable beside another, with a pick's Reference pinned at the foot), `FilePanelTabs` (the same panel as two tabs when it has a `model` and a `position` section), `InspectorSplit`, `modelTreeSearch` (`useTreeSearch`, the ranked flat search every tree shares), `referenceRows` (`InfoRow`, `MonoValue`, `CoordValue`), `kinematicsControls` (the `Pose` row that heads every Position section, with its Reset). The tree row and filter box are `primitives/tree-row` and `primitives/tree-filter`. |
 | `status/` | `LoadingIndicator` and `ViewerLoadingOverlay`, `ViewerAlertCard` (the card over the viewport, and `viewportAlert`, which alert it shows), `MissingFileAlert`, `ViewUpdateStatus`, `loadingState` (`viewerLoadingState`), `loadAlerts` (`failureAlert`, `noGeometryAlert`). |
 | `shell/` | The host glue every renderer needs that is not about its scene: see [Shell](#shell). |
 
-**What a view opts into.** The Display panel and `resolveViewSettings` take explicit
+**What a view opts into.** The Display popover and `resolveViewSettings` take explicit
 lists, `features: { sections, modes, surfaceStyles }` (`ViewFeatures` in
 `@hardcore/core/common/viewSettings.js`): the sections the panel mounts
 (`VIEW_SECTION_IDS`), the presets and the surface styles it lists. A section left
 out resolves off whatever was saved, and the saved settings are never rewritten.
 Core names two lists, `ALL_VIEW_FEATURES` and `EDGELESS_VIEW_FEATURES` (no Edges,
-Clip or Explode; Solid and Render; Shaded and Flat). The STEP renderer passes the
-first, in three places that must agree: the view-settings store (`configure({ features })`), the Display panel,
-and the headless renderer (`renderMeshScene.js`). The GLB, mesh and robot renderers
-pass the second to the shell, which configures the store and the panel from the one list,
-and the headless renderer resolves a GLB, mesh or robot job under it too.
+Clip or Explode; Solid and Render; Shaded and Flat). Every renderer hands its list to
+the shell, which configures the view-settings store (`configure({ features })`) and the
+Display popover from it: STEP passes the first (and the same list to its Explode and Clip
+tools), the GLB, mesh and robot renderers the second. The headless renderer
+(`renderMeshScene.js`) resolves a job of each family under the same list.
 
 **Tools.** The strip draws the list it is handed: `{ id, label, icon, active,
-disabled, onSelect, description?, menu?, secondPressOpensMenu?, subToolbar? }`.
-A renderer builds its own list from `shell.tools.own(...)`, adding `shell.tools.draw`
-where it offers Draw. RendererShell appends conditional Animate and Display,
-with a separate Fullscreen action; STEP's is in `step/StepSurface.jsx`. `createToolModes({ defaultMode, modes })`
+disabled, onSelect, description?, menu?, secondPressOpensMenu?, menuOnCornerOnly?,
+onMenuSelect?, subToolbar? }`, then Display as its last button (`trailing`). A renderer
+builds its own list from `shell.tools.own(...)`, adding `shell.tools.draw` where it offers
+Draw; STEP's is in `step/StepSurface.jsx`. RendererShell gives a renderer's own Animate
+tool its routine menu (`PlayMenu`), or supplies an Animate tool for a file with routines
+whose renderer has none (a GLB), and puts Animate last before Display. Fullscreen is not
+a tool: it is a separate button at the viewport's top-right. `createToolModes({ defaultMode, modes })`
 answers what a press does (`next`), what a saved tab may record (`persisted`) and
 which tool a file opens in (`restore`); the STEP declaration is
 `CAD_TOOL_MODES` in `workbench/constants.js`. The playbar follows the clock on
@@ -145,15 +147,15 @@ calls one hook; the shell owns the rest.
 
 | module | what it is |
 | --- | --- |
-| `useRendererShell.js` | The hook. Per-file state through the host, the Display settings store and the Display panel's content (`shell.display`), tool modes (Draw is the only tool the shell itself owns, with Display and fullscreen provided by the frame; `toolModes` is omitted altogether by a renderer with no tools), the file's panels (which one is open is the host's: `shell.openPanel`, and `shell.revealFilePanel()` for the renderer), navbar actions, prompt snapshots, the clipboard screenshot, fullscreen, alerts, shortcuts, and the live command surface. It owns no zoom control: the shell has none. |
-| `RendererShell.jsx` | The frame: viewport box, tool strip, bottom action, playbar, fullscreen controls, loading/update overlays, the alert card, and the file's panels portaled into the host's panel column: its own (`panel={{ title, sections }}`, drawn as tabs by `FilePanelTabs`). Display is a toolbar popover independent of the sidebar. One DOM structure (`data-slot="cad-file-view"`, `data-cad-surface`, `data-cad-scene-backdrop`, `data-cad-toolbar`, `data-file-sheet`) for every renderer. `frameProvider` wraps the WHOLE frame in the renderer's own context — above the panels' portal as well as the viewport, because both halves read it — and `onCanvasPointerDown` is a press that landed on the model, for a renderer with something to put down when the person reaches for it. The frame focuses itself on such a press either way. |
-| `ShellViewport.jsx` | The three.js viewport around ONE kit scene: `useViewerRuntime`, `useViewportCamera`, the look (rig or studio, environment, background, floor, grid, axes), the Draw overlay and view lock, the view cube, frame presentation and the queued view-settings handshake. Its children may be a function of the viewport (`{ runtimeRef, hostRef, mountRef, viewerReadyTick, commitScene, syncSceneBounds }`), which is how a renderer mounts its own overlay or pointer pick. A scene that changes IN PLACE (it arrives in pieces, swaps its detail, is rebuilt under one identity) calls `commitScene()` from its own effect: the viewport re-reads what it placed, fits the stage and the depth range and applies the framing rules THEN, because a child's effects run before the viewport's own adoption effect. The one thing a commit never does ahead of the viewport is FRAME under a camera that is about to change: when the same render also changed the lens, the projection or the viewing mode, the stage is adopted at once and the framing follows once the camera has been given those props (a stored camera applied under the old projection and then converted comes out about a sixth smaller). A scene that says `complete: false` is framed on what has arrived and once more when it is whole — unless the camera on screen is the person's rather than that first fit, which is true of one they moved during the current mount; reopening always starts with fresh framing. `preserveInteractionPixelRatio` keeps the idle pixel ratio while the camera moves (a scene drawn with hairlines), and `runtimeLifecycle` (`onRelease(runtime, { handoff })` while the WebGL renderer is still alive, `onContextLost()`, `onInitializationError(error)`) is for a renderer that hangs its own objects or in-flight work on the runtime. `syncSceneBounds()` re-fits lighting, shadows and the floor's height to a scene that moved its own bounds, with no React render and no reframe. What is SIZED stays sized from the rest placement, in Inspect and in Render alike: the grid and stage (`sceneRadiusForBounds` on `restBounds`) and the Render studio's floor plane (`applyPhotographicStudio`'s `groundBounds`), so a pose or a playing routine never rescales or slides the ground under the model; `zoomToBounds(bounds)` frames part of the scene. Read-only test seams: `window.__cadCamera()` (the live camera, its depth range included) and `window.__cadStage()` (the ground's radius, the bounds the stage is fitted to, the floor's height, the studio floor's size and centre). |
-| `shellState.js` | The per-file record `{ version, camera, display, tool, renderer }`, read forgivingly and written exactly. The host keys it `[file path, renderer id]`. Which panel is open is the host's, not the file's, so the record has no field for it. |
+| `useRendererShell.js` | The hook. Per-file state through the host, the Display settings store and the Display popover's content (`shell.display`), tool modes (Draw is the only strip tool the shell itself owns; Display, the Fullscreen button and Animate's menu are the frame's; `toolModes` is omitted altogether by a renderer with no tools of its own), the file's panel (which one is open is the host's: `shell.openPanel`; `shell.revealFileSection(id, { open })` for the renderer, and the selected tab, `shell.panelSection`), navbar actions, prompt snapshots, the clipboard screenshot, the one fullscreen state (`shell.presenting`, from `usePresentationState`), alerts, shortcuts, and the live command surface. It owns no zoom control: the shell has none. |
+| `RendererShell.jsx` | The frame: viewport box, tool strip (the renderer's tools, Animate with its routine menu, Display last) at the top-left, the Fullscreen button at the top-right, the kept tool panels under the strip, bottom action, playbar, fullscreen's controls (`PreviewChrome`), the loading overlay, the update status portaled into the nav row (`view.navigationStatusSlot`), the alert card, and the file's Settings panel portaled into the host's panel column (`panel={{ title, sections }}`, drawn by `FilePanelTabs`: two tabs when it has both a `model` and a `position` section, one column of sections otherwise). Display is a toolbar popover independent of the sidebar. One DOM structure (`data-slot="cad-file-view"`, `data-cad-surface`, `data-cad-scene-backdrop`, `data-cad-toolbar`, `data-file-sheet`) for every renderer. `frameProvider` wraps the WHOLE frame in the renderer's own context — above the panels' portal as well as the viewport, because both halves read it — and `onCanvasPointerDown` is a press that landed on the model, for a renderer with something to put down when the person reaches for it. The frame focuses itself on such a press either way. |
+| `ShellViewport.jsx` | The three.js viewport around ONE kit scene: `useViewerRuntime`, `useViewportCamera`, the look (rig or studio, environment, background, floor, grid, axes), the Draw overlay and view lock, the view cube (bottom-right; absent on mobile, hidden while presenting), frame presentation and the queued view-settings handshake. Its children may be a function of the viewport (`{ runtimeRef, hostRef, mountRef, viewerReadyTick, commitScene, syncSceneBounds }`), which is how a renderer mounts its own overlay or pointer pick. A scene that changes IN PLACE (it arrives in pieces, swaps its detail, is rebuilt under one identity) calls `commitScene()` from its own effect: the viewport re-reads what it placed, fits the stage and the depth range and applies the framing rules THEN, because a child's effects run before the viewport's own adoption effect. The one thing a commit never does ahead of the viewport is FRAME under a camera that is about to change: when the same render also changed the lens, the projection or the viewing mode, the stage is adopted at once and the framing follows once the camera has been given those props (a stored camera applied under the old projection and then converted comes out about a sixth smaller). A scene that says `complete: false` is framed on what has arrived and once more when it is whole — unless the camera on screen is the person's rather than that first fit, which is true of one they moved during the current mount; reopening always starts with fresh framing. `preserveInteractionPixelRatio` keeps the idle pixel ratio while the camera moves (a scene drawn with hairlines), and `runtimeLifecycle` (`onRelease(runtime, { handoff })` while the WebGL renderer is still alive, `onContextLost()`, `onInitializationError(error)`) is for a renderer that hangs its own objects or in-flight work on the runtime. `syncSceneBounds()` re-fits lighting, shadows and the floor's height to a scene that moved its own bounds, with no React render and no reframe. What is SIZED stays sized from the rest placement, in Inspect and in Render alike: the grid and stage (`sceneRadiusForBounds` on `restBounds`) and the Render studio's floor plane (`applyPhotographicStudio`'s `groundBounds`), so a pose or a playing routine never rescales or slides the ground under the model; `zoomToBounds(bounds)` frames part of the scene. Read-only test seams: `window.__cadCamera()` (the live camera, its depth range included) and `window.__cadStage()` (the ground's radius, the bounds the stage is fitted to, the floor's height, the studio floor's size and centre). |
+| `shellState.js` | The per-file record `{ version, camera, display, tool, renderer }`, read forgivingly and written exactly. `camera` is always null: framing is session-only, and a camera an older record holds is ignored. The host keys it `[file path, renderer id]`. Which panel is open is the host's, not the file's, so the record has no field for it. |
 | `liveBinding.ts` | `attachLiveBinding`: the live command surface. Base commands (`readState`, `setCamera`, `resetCamera`, `setDisplaySettings`, `setRenderMode`, `capture`) mean the same for every renderer; a renderer ADDS commands by name and DECLINES the known host commands (`HOST_LIVE_COMMANDS`) that make no sense for it with the sentence the caller reads. Binding fails when a renderer does neither. |
 | `promptContext.js` | `createViewPromptContext` (a snapshot and what it depicts) and `promptDeliveryError`. A renderer with a reference vocabulary of its own passes `promptContext` instead, and may then return that vocabulary from `promptReferences`. |
 | `loadReport.js` | `shellLoadReport`: what the shell asks the status kit about one document load, as one pure function, and all it returns is the loading presentation over the viewport. A renderer whose document is a plain download passes `load` and nothing more. One whose document can be EDITED or PREVIEWED while it is open knows more than the shell can: `load.editPending` (queued work of the person's own, with nothing of it on screen), `load.currentPreview` (that work IS what is drawn, so the wait is over even though the write is not) and `load.finding` (the file is not even located yet). An alert is `load.alert`, which the frame draws as the alert card (`ViewerAlertCard`: an error always, a warning only while nothing is on screen); a warning beside a model is the renderer's own to list (STEP's Issues section). |
-| `useViewerShortcuts.js` | Which mounted viewer an Escape belongs to; the renderer says what Escape means. |
-| `ViewportBottomAction.jsx` | The active tool's one bottom button (Draw: the view with its ink, to the prompt or clipboard); `{ label, shortLabel, render }` for a renderer's own, where a label too wide for the button becomes `shortLabel` and `render` draws a control that is not a plain press. |
+| `useViewerShortcuts.js` | Which mounted viewer an Escape or a ⌘C / Ctrl+C belongs to (focus inside it, or the page after a press inside it); the renderer says what Escape means, and a copy is the active tool's (Draw's drawing, else the bottom action). The order is [the design system's](settings-ui.md#keyboard). |
+| `ViewportBottomAction.jsx` | The active tool's one bottom button (Draw: the view with its ink, to the clipboard), with the copy shortcut beside its label on desktop; `{ label, shortLabel, render }` for a renderer's own, where a label too wide for the button becomes `shortLabel` and `render` draws a control that is not a plain press. |
 | `ViewportContextMenu.jsx` | The viewport's menu on a secondary TAP (a secondary drag pans; primary and secondary together is the pan chord). The gesture, the anchor, the clamping and the dismissal are the shell's; the ITEMS are the renderer's (`contextMenuItems(press)`), asked at the moment of the press, and `onContextMenuOpenChange(open)` says while the menu is up. A renderer that passes no items has no viewport menu at all — every renderer but STEP. |
 
 ```jsx
@@ -162,32 +164,34 @@ const shell = useRendererShell({
   services,             // { preferences, onPreferenceChange, live?, captureRequest?, acknowledgeCommand? }
   resource, modelKey, revisionKey,
   features,             // ViewFeatures: the Display sections this family opts into
-  toolModes,            // createToolModes({ defaultMode, modes }), or omitted: no tools at all
+  toolModes,            // createToolModes({ defaultMode, modes }), or omitted: no tools of its own
   scene,                // KitScene | null
   load,                 // { busy, updating?, progress?, alert? }: the renderer's document load
   animation,            // playbar runtime with its own `clock`, or null
   live,                 // { commands?, declined?, state? }
-  // optional: promptReferences, escape, displayProps, sceneScaleMode,
+  // optional: promptReferences, promptContext, escape, sceneScaleMode, presentation, tool,
+  //   viewSettings, viewerRef, onCameraSettled, onRuntimeAlert, presentationReport,
+  //   preserveInteractionPixelRatio, runtimeLifecycle,
   //   rendererState   the renderer's slot of the record: an object, or a FUNCTION read when the record is written
   //   toolRestore     { opensIn, never }: the tool THIS file opens in, while the tool modes' default stays the fallback
 });
-// Renderer-facing, beside `tools`, `display`, `toolMode`, `selectTool`, `requestRender`:
-shell.openPanel;                 // the open panel's id, the host's: CAD_PANEL.file, CAD_PANEL.display, or another
-shell.revealFilePanel();         // a pick with details to show: open the file's own panel where there is room beside the model
+// Renderer-facing, beside `tools`, `display`, `toolMode`, `selectTool`, `presenting`, `requestRender`:
+shell.openPanel;                 // the open panel's id, the host's: CAD_PANEL.file, "tree", or ""
+shell.revealFileSection(id, { open });  // turn the file's panel to a section's tab; `open: false` only turns a sidebar already open; never on mobile
 shell.syncSceneBounds();         // the scene moved its bounds (a pose): the stage follows, no render
 shell.scheduleStateSave();       // state kept outside React changed: write the record soon, and on unmount
-// The shell adds Display and a separate fullscreen presentation action.
+// The shell adds Animate's routine menu, Display, and the Fullscreen button.
 const tools = [shell.tools.own({ id, label, icon }), shell.tools.draw].filter(Boolean); // [] for camera-only formats
-// panel: the file's own, as sections { id, title, content }; omitted, the file has Display alone
+// panel: the file's Settings, as sections { id, title, role?, content }; omitted, the file has none
 return <RendererShell shell={shell} tools={tools} panel={{ title, sections }}
   viewportOverlay={viewport => <PointerPick viewport={viewport} scene={scene} enabled={selecting} onPick={pick} onHover={hover} />} />;
 ```
 
-The panels' nav-row buttons are the registration's, not the frame's: `panels()` declares
-the file's own panel and Display (`viewerPanels`, see the file navbar under
-[Draw](#draw)), and the frame draws whichever of the two the host says is open. A
-renderer passes `panel` only when its registration declares a panel of its own
-(`viewerPanels(ready, { file })`).
+The panel's nav-row button is the registration's, not the frame's: `panels()` declares
+the file's Settings panel (`viewerPanels(ready, { file: true })`, see
+[File navbar](#file-navbar)), and the frame draws it when the host says it is open. A
+renderer passes `panel` only when its registration declares one; a GLB, a mesh and a
+DXF declare none.
 
 A renderer whose model moves outside React (a robot's pose) keeps that state in
 its own store: `rendererState` as a function is read at the moment the record is
@@ -215,14 +219,19 @@ run under the shell (`kit/tools/draw/Draw.browser.test.mjs`).
 The STEP renderer is on the shell end to end: its scene and viewport
 ([STEP scene and viewport](#step-scene-and-viewport)) and its surface, `StepSurface.jsx`,
 whose frame, per-file record and host glue are the shell's. What STEP keeps of its own is
-what only a STEP has — its slice of the per-file record (`workbench/stepSessionRecord.js`:
-the tree, the pose, the animation, the large-file setting, each behind the signature that
-says whether it still fits the file), its prompt context, and the resource its live state
-reports while a rebuild is held behind the previous mesh (`live.resource`). The shell was
-widened for it rather than forked: it accepts display settings a renderer made earlier than
-it could hand them back (`viewSettings`), a viewer handle the renderer owns (`viewerRef`),
-externally held tool state (`tool`), and a load report that knows about finding, editing and
-previewing.
+what only a STEP has — its slice of the per-file record (`workbench/stepSessionRecord.js`,
+read and written by `workbench/useStepSessionRecord.js`: the tree, the pose, the animation,
+the large-file setting, each behind the signature that says whether it still fits the
+file), its prompt context, and the resource its live state reports while a rebuild is held
+behind the previous mesh (`live.resource`). The surface composes modules of its own around
+the shell: Measure's session (`workbench/useStepMeasure.js`), the pose and routines
+(`workbench/useStepMotion.js`), the context menus as pure descriptors
+(`file-view/stepMenus.js`) and what a selection or a node copies (`file-view/stepCopy.js`).
+The shell was widened for it rather than forked: it accepts display settings a renderer
+made earlier than it could hand them back (`viewSettings`), a viewer handle the renderer
+owns (`viewerRef`), externally held tool state (`tool`) and fullscreen state
+(`presentation`: STEP's picking and recognition gates run before the shell's hook),
+and a load report that knows about finding, editing and previewing.
 
 Its safety net is `step/StepRenderer.browser.test.mjs`, which opens a real `.step`
 in a real browser: a two-part component-SURF package with one revolute mate, one
@@ -292,8 +301,8 @@ the viewer was inventing from the file; a drawing is not that.
   never re-renders the component tree. The backing store is DPR-aware
   (`kit/viewport/pixelRatio.js`), and the cursor is `grab` / `grabbing`.
 - **Navbar**: `Take snapshot`, then the file tree's toggle, and nothing else — no
-  panel toggle of its own and no `Display`, because the registration declares no
-  panels, and no zoom buttons, because zooming a drawing is the pointer's: wheel or
+  panel toggle of its own, because the registration declares no panels, and no zoom
+  buttons, because zooming a drawing is the pointer's: wheel or
   pinch about it, drag to pan, double-click to fit. The snapshot is the canvas as a
   PNG, background included, delivered through `host.promptContext` like every other
   renderer's.
@@ -344,17 +353,19 @@ STEP renderer does not match `.glb`.
   flag, or the grey a STEP export stamps on uncoloured parts) takes the viewer's
   surface colour in Inspect.
 - **Display**: `EDGELESS_VIEW_FEATURES` (Solid and Render; no Edges, Clip or Explode).
-- **Tools**: none. A GLB picks nothing, so there is no Select, no filter menu, no
-  copy-references action — and no tool strip and no viewport context menu either.
-- **Animation** (`glb/useGlbAnimation.js`): a file with playable clips shows the
-  kit playbar under the model, always: it is a transport, not a tool to take up
-  and leave. The file OPENS AT REST — one
-  `AnimationMixer` on the native scene, built by the first play, scrub or clip
-  choice and alive only while a routine owns the pose — so the bar appearing
-  changes nothing on screen.
-- **Panels**: `Display` and the file tree (`viewerPanels(ready)`: a GLB has no
-  panel of its own), so a GLB opens with no panel open. No fullscreen: the
-  registration does not declare it.
+- **Tools**: Display, with Animate before it for a file with playable clips. The
+  renderer hands the shell no tools of its own (`tools={[]}`): a GLB picks nothing, so
+  there is no Select, no filter menu, no copy-references action and no viewport
+  context menu.
+- **Animation** (`glb/useGlbAnimation.js`): the Animate tool is the shell's own
+  (`RendererShell.jsx`), with the routine menu every Animate has. Pressing it takes up
+  the tool and plays; the playbar is under the model while a clip owns the pose, and
+  in fullscreen. Taking up Display stops the clip at its start. The file OPENS AT
+  REST — one `AnimationMixer` on the native scene, built by the first play, scrub or
+  clip choice and alive only while a routine owns the pose.
+- **Panels**: the file tree alone: the registration declares none, so a GLB opens
+  with no panel open. Fullscreen is the shell's, as for every 3D file, with the Play
+  menu when the file has clips.
 - **Host commands**: the base live commands; `select` and `clearSelection` are
   declined with a sentence, and a `selectReference` host request is consumed and
   acknowledged without changing the view.
@@ -387,11 +398,11 @@ renderer does not match either.
   Single colour and Color by part override source colours (the palette is dealt
   in the order it always was, `paletteIndex`), opacity applies to every object.
 - **Display**: `EDGELESS_VIEW_FEATURES` (Solid and Render; no Edges, Clip or Explode).
-- **Tools**: none. A triangle mesh has nothing to pick, measure, pose or play, so
-  there is no tool strip over the viewport and no viewport context menu.
-- **Panels**: `Display` and the file tree (`viewerPanels(ready)`: a mesh has no
-  panel of its own), so a mesh opens with no panel open. No fullscreen: the
-  registration does not declare it.
+- **Tools**: Display alone. A triangle mesh has nothing to pick, measure, pose or
+  play, so the renderer hands the shell no tools (`tools={[]}`) and there is no
+  viewport context menu.
+- **Panels**: the file tree alone: the registration declares none, so a mesh opens
+  with no panel open. Fullscreen is the shell's, as for every 3D file.
 - **Alerts**: a file that fails to parse raises the load alert ("Couldn’t load
   the model", with the loader's error in Details); one that parses to no
   triangles raises "No geometry to display".
@@ -448,7 +459,8 @@ loader asks which it is. The STEP renderer matches none of them.
   inside out. "Color by part" deals the palette in the order parts always took it.
 - **Display**: `EDGELESS_VIEW_FEATURES` (Solid and Render; no Edges, Clip or Explode).
 - **Tools**, left to right: **Select** (the default), **Position** (only with
-  movable joints), and **Display**. Fullscreen is a separate viewport action.
+  movable joints; pressing it also turns the panel to its Position tab), and
+  **Display**. Fullscreen is the separate button at the viewport's top-right.
 - **Pose** (`robot/poseStore.js`): joint values live in a store outside React
   (degrees; metres for a prismatic joint), with one write path. A write is clamped,
   ignored under `URDF_JOINT_VALUE_EPSILON`, releases the tracked named pose and is
@@ -462,22 +474,26 @@ loader asks which it is. The STEP renderer matches none of them.
   screen (a development React build), which is what a frame costs. The opening pose is
   every joint's default, then the SRDF group state(s) named `home` (core's
   `robotOpeningPose`, which a snapshot opens the robot at too).
-- **Select**: a selection is ONE link or any number of named objects (Shift in
-  the viewport; Shift, Ctrl or Cmd on a row). It exists only while Select is the
-  tool: choosing a row under another tool returns to Select first, and leaving
-  Select clears it. A viewport pick opens the robot's own panel, where its Links
-  are (`shell.revealFilePanel()`), except in a window under 520px wide, where the
-  panel would cover the model. Escape clears the selection before it shuts the
-  open panel. Hover and
-  selection are drawn by the scene (`setHighlight`), with
+- **Select**: a selection is any number of links or any number of named objects,
+  never both (`robot/useLinkSelection.js`; Shift in the viewport, Shift, Ctrl or Cmd
+  on a row add), and the Reference summarises several (`Selection · 3 links`). It
+  exists only while Select is the tool: choosing a row under another tool returns to
+  Select first, and leaving Select clears it. A viewport pick turns a sidebar that is
+  already open — the file tree included — to the robot's Settings on its Links tab
+  (`shell.revealFileSection("links", { open: false })`); it opens nothing that is
+  closed, and on mobile it turns nothing. Escape clears the selection before it shuts
+  the open panel. Hover and selection are drawn by the scene (`setHighlight`), with
   the highlight ink a STEP part wears; hover is not React state. A robot has no
-  viewport menu and so no framing items: its way back to a framed view is the view cube.
-- **Panels**: `Display`, then its own, `Robot` (`Bot`), open by default, then the
-  file tree (`viewerPanels(ready, { file: { label: "Robot", icon: Bot } })`). The
-  Robot panel starts with **Links** ([Robot links](#robot-links)), **Position**, and **SDF**
-  for an `.sdf` (`SdfSection.jsx`). `PositionControls.jsx` lives in the sidebar:
-  SRDF group states when provided,
-  a slider per driven joint, then Reset.
+  viewport menu and so no framing items; opening the file again fits it afresh.
+- **Panels**: `Settings` (`SlidersHorizontal`), open by default, then the file tree
+  (`viewerPanels(ready, { file: true })`). Its sections are **Links**
+  ([Robot links](#robot-links), `role: "model"`), **SDF** for an `.sdf`
+  (`SdfSection.jsx`), and **Position** (`role: "position"`) with movable joints, which
+  makes the panel two tabs, Links (with SDF under it) and Position.
+  `PositionControls.jsx` is the Position tab: the `Pose` row (with SRDF group states, a
+  dropdown of `Default`, the states and `Custom` for a hand-moved pose; Reset opposite
+  its label either way), then a slider per driven joint, its thumb named after the
+  joint.
 - **Host commands**: the base live commands; `clearSelection` clears the link
   selection; `select` is declined with a sentence (a robot description has no
   reference grammar), and a `selectReference` host request is consumed and
@@ -496,7 +512,8 @@ loader asks which it is. The STEP renderer matches none of them.
 ```tsx
 import { createCadClient } from '@hardcore/core/client';
 import { FileViewer } from '@hardcore/ui/file-viewer';
-import { createCadPreferences, createStepRenderer } from '@hardcore/ui/renderers/step';
+import { createStepRenderer } from '@hardcore/ui/renderers/step';
+import { createCadPreferences } from '@hardcore/ui/renderers/workspace';
 import '@hardcore/ui/styles.css';
 
 const client = createCadClient({
@@ -535,9 +552,10 @@ and viewport are imported lazily after renderer selection.
 
 Each renderer declares at most one optional Settings panel (`cad-file`) with a
 sliders icon. The shared FileViewer owns its frame; renderer content portals
-into `panelSlot`. Display is a toolbar popover. Fullscreen presentation is shared
-across 3D renderers and keeps the parent navbar visible; see the
-[host presentation contract](viewer-host.md#host-fullscreen-and-renderer-navigation-actions).
+into `panelSlot`. Display is a toolbar tool. Fullscreen is the shell's own state in
+every 3D renderer, with no host prop: the parent navbar stays visible and its panel
+toggles are off while it lasts; see [fullscreen](settings-ui.md#camera-animation-and-fullscreen)
+and [the host's side](viewer-host.md#fullscreen-and-renderer-navigation-actions).
 
 All package exports are compiled ESM with declarations. Consumers need no
 source aliases, JSX transforms for dependency `.js`, or cross-app stylesheet
@@ -548,7 +566,9 @@ assets, which remain inside `@hardcore/core`.
 
 `CadPreferenceSource` exposes `getSnapshot`, `subscribe` and `update`.
 `createCadPreferences` provides an in-memory implementation and an optional
-host persistence callback. A host can share one source across its CAD panes.
+host persistence callback; `createStoredCadPreferences(storage)` keeps them in a
+host's `Storage`, owns their format and reads them again on the host's `storage`
+events (both `@hardcore/ui/renderers/workspace`). A host can share one source across its CAD panes.
 It contains the global fullscreen orbit preference. Which panel is open is the
 host's (`FileViewerState.panel`): neither a preference nor part of a file's
 record. Shared code never reads browser storage on import or construction.
@@ -569,25 +589,21 @@ the original invalidation rules. Playback time is saved when stopped or
 unmounted, and opening a file does not resume playback automatically. Camera transforms are
 not persisted: refresh/reopen fits the model; a mounted viewer keeps its camera.
 
-Hosts preserve these existing preference keys and precedence when migrating:
-
-| Data | Existing storage key / rule |
+| Data | Storage key |
 | --- | --- |
 | Global fullscreen orbit speed | `cad-viewer:orbit:v1` |
 
-`@hardcore/ui/renderers/step/state` exports the orbit preference's reader and
-writer; the panel column's width and its default are the shared column's
-(`@hardcore/ui/navigation`). Retired
+`createStoredCadPreferences` is that key's one reader and writer; the panel column's
+width and its default are the shared column's (`@hardcore/ui/navigation`).
 `cad-viewer:file-sheet-tab-layout:v5`, `:v6` and `:v7` records, and a stored
-`cad-viewer:pose-transition:v1` preference, are left untouched and ignored:
-hosts no longer read, write or subscribe to them.
+`cad-viewer:pose-transition:v1` preference, are left untouched and ignored: no host
+reads, writes or subscribes to them.
 Origins are transport locations, not persistence namespaces for new state.
 
 ## Prompt references, captures and extensions
 
 References, inspection text and PNG captures produce one `PromptContext` through
-`host.promptContext`. The old `onReference`, `onPromptContext` and `onCapture`
-callbacks are removed. Workspace/path/revision identity and typed targets are
+`host.promptContext`. Workspace/path/revision identity and typed targets are
 preserved; a capture names the references it depicts. Ordinary explicit copy
 controls use `host.clipboard`. The viewport only produces screenshot pixels.
 The port and app adapters own delivery and return an acknowledged outcome.
@@ -597,12 +613,13 @@ Its typed context builder shares the same capture/reference pipeline; it does
 not expose the CAD scene. See [ViewerHost](viewer-host.md) for lifetime, focus,
 selection invalidation, supported content and clipboard representation limits.
 
-An optional `CadCommandSource` has the same subscription shape and publishes
+An optional `ViewerCommandSource` (`@hardcore/ui/renderers/workspace`) has the same
+subscription shape and publishes
 `selectReference: { selector, key? }` or `captureRequest: { key }`. A fresh key
 requests another operation even when its selector or target file is unchanged.
-Selecting a reference also opens the file's own panel (`shell.revealFilePanel()`,
-in a window at least 520px wide), expands the matching Features row's ancestors,
-and scrolls it into view. Repeating the request
+Selecting a reference also turns a sidebar that is already open to the file's
+Settings, on its Features tab (never on mobile), expands the matching Features row's
+ancestors, and scrolls it into view. Repeating the request
 reveals the existing selection again without toggling it off; a face-group
 reference keeps the group highlighted and reveals its active face.
 Both toolbar capture and host capture commands use the same implementation.
@@ -624,7 +641,9 @@ captures a PNG without prompt delivery or clipboard effects. It never substitute
 catalog or persisted state for a live viewport. On unmount it retains only a
 serializable inactive snapshot; controls require the tab to be shown. See the
 [viewer host contract](viewer-host.md#app-specific-interfaces) for lifecycle and
-stale-operation rules and [`live.ts`](../src/renderers/step/live.ts) for signatures.
+stale-operation rules, [`liveBinding.ts`](../src/renderers/kit/shell/liveBinding.ts)
+for the signatures every renderer shares and [`live.ts`](../src/renderers/step/live.ts)
+for STEP's (its selection, hidden and isolated parts, `select` and `clearSelection`).
 
 ## Lifetimes
 
@@ -690,14 +709,12 @@ session cancellation and client-owned writes. The browser integration harness ex
 rendering with two roots, panel switching, PNG captures, host title ownership
 and state round trips through unmount/remount.
 
-The camera session schema stores vectors and zoom while omitting runtime scope
-metadata. The viewport restores the serialized camera in its current file
-session, so a 110% view reopens at 110% while a second renderer starts from its
-own 100% default. Presets update projection/lens while retaining viewpoint and
+The camera is never stored: opening or reopening a file, or reloading the page, fits
+the model, and a mounted viewer keeps its own camera. Presets update projection/lens while retaining viewpoint and
 zoom on the same renderer, canvas and controls. Ordinary settings edits never
 restart the viewport. Initial/reset/fit views use the
 projected bounds with 1.1 padding (roughly 91% occupancy in the limiting viewport
-dimension), rather than a bounding sphere. Saved/manual views retain their own
+dimension), rather than a bounding sphere. Manual views retain their own
 zoom and pose. This policy belongs to the interactive UI; snapshot/export
 framing remains independent. The orientation control labels its positive X/Y/Z
 axes and retains its snap and drag interactions.
@@ -751,8 +768,7 @@ The optional `@hardcore/ui/file-viewer/empty` entry exports `EmptyCadBackdrop` f
 - **The ground is sized from REST.** The viewport sizes the grid, the stage and the
   Render studio's floor from `restBounds`, as it does for every renderer, so posing
   a mate or playing a routine never rescales or slides the ground — including a
-  Render entered while the model is posed, which used to size the studio floor from
-  the posed box.
+  Render entered while the model is posed.
 - **Shadows** are per record (core's `syncRecordShadowPolicy`: only an opaque, lit surface
   takes or casts one), so the scene implements `setShadowReception` and the viewport
   never sets its meshes itself.
@@ -761,8 +777,8 @@ The optional `@hardcore/ui/file-viewer/empty` entry exports `EmptyCadBackdrop` f
   reception are STEP's (`setLookContext`). Both resolve the same settings, so the
   scene wears a look once: whichever arrives second finds it already on.
   `keepsAuthoredFinish` is `hasAuthoredMaterials(meshData)`.
-- **Viewport**: the shell's own `ShellViewport`, mounted by `RendererShell` — STEP no
-  longer wraps it. The surface decides what it may show and pick just now (nothing
+- **Viewport**: the shell's own `ShellViewport`, mounted by `RendererShell`; STEP
+  does not wrap it. The surface decides what it may show and pick just now (nothing
   under Position, Animate or fullscreen; no topology while a previous mesh is held over
   an update) and hands the viewport menu and the bottom action to the shell, and it
   keeps the two things only a STEP can answer, beside the kit viewport's handle: `sampleLodCamera` and `zoomToFitSelection` (the boxes of the selected
@@ -783,7 +799,7 @@ The optional `@hardcore/ui/file-viewer/empty` entry exports `EmptyCadBackdrop` f
   | `useStepExplode.js` | The exploded view: a radial layout eased over a second, snapped by the slider, re-applied to fresh records. |
   | `useStepHighlights.js` | The reference highlight: boundary lines and fills of selected and hovered faces, edges and vertices. |
   | `useStepMeasureOverlay.js` | The measure canvas: rulers and the snap indicator. |
-  | `useStepPicking.js` | The pointer: hover, tap, double-click (isolate) and measure picks, with all of the topology raycasting. The viewport menu is NOT here: it asks this hook what is under a press (`pickAtRef`). |
+  | `useStepPicking.js` | The pointer: hover, tap, double-click (the surface copies a face or edge, isolates a part, or leaves isolation on empty space) and measure picks, with all of the topology raycasting. The viewport menu is NOT here: it asks this hook what is under a press (`pickAtRef`). |
 
 - **One owner of the frame after a pose.** A pose or animation write is drawn because
   the pose pass asks for a frame, once, as its last act, and nothing else on that
@@ -793,10 +809,8 @@ The optional `@hardcore/ui/file-viewer/empty` entry exports `EmptyCadBackdrop` f
   re-run for a pose at all — every part-id list the workspace hands the viewport
   keeps its identity while its contents hold, because each is derived through a
   memo and the empty case is one shared frozen list
-  (`hooks/useCadWorkspaceSelectors.js`). It passes through the viewport by identity
-  from there. The viewport used to hold that back with a comparison of its own,
-  which hid the churn upstream and left a memo load-bearing for how much work
-  happens rather than for its speed. `StepRenderer.browser.test.mjs` fails its
+  (`components/workbench/hooks/useCadWorkspaceSelectors.js`). It passes through the viewport by identity
+  from there, with no comparison of its own to hide churn upstream. `StepRenderer.browser.test.mjs` fails its
   Position and Animate tests when that one request is removed.
 - **The viewport menu** is the part menu, one list
   (`assemblyPartMenuEntries` in `components/workbench/AssemblyContextMenuItems.js`)
@@ -817,12 +831,18 @@ selected entities, without attaching a source filename or source line.
 
 ## Selection and inspection tools
 
-STEP's Select tool offers All, Parts, Faces, Tangent faces, and Edges. Explicit
+STEP's Select tool filters by All, Parts, Faces or Edges and, under **Connected
+selection**, Edge chain or Tangent faces (`workbench/selectionFilter.js`); Measure's
+snapping filters are Any geometry, Points, Edges and Faces. Explicit
 filters never fall back to a different entity type. Face and edge filters load topology
-for the selected leaf part; selecting another part in Tree changes that target.
+for the selected leaf part; selecting another part in the Features tree changes that target.
 Opening a STEP starts with render geometry; activating Select or Measure requests
 exact inspection topology when it is needed.
-Shift-click adds/removes entities. Escape clears the
+Shift-click adds/removes entities. A double-click on a face or edge (outside the
+Parts filter) copies it and leaves it selected; on a component or subassembly it
+isolates it, and on empty space it leaves isolation. Every copied reference — the
+bottom action, ⌘C, both menus, the double-click — carries the file's prefix through
+one `copyTextLines`. Escape clears the
 selection after any open menu has been dismissed. Input fields
 keep their own Escape behaviour.
 
@@ -840,61 +860,69 @@ whose bounds intersect the active plane receive the two extra stencil passes;
 disabling clipping releases the fill and materials without disposing the model's
 geometry. Open/non-manifold meshes cannot guarantee a solid section fill.
 
-Tangent faces**. Clicking a face selects its connected
+**Tangent faces.** Clicking a face selects its connected
 chain across edges classified as tangent by the loaded STEP topology; sharp,
 unknown, boundary and nonmanifold edges stop the chain. Selection never crosses
 occurrences or solid shapes. Shift-click adds a chain, or removes it if the whole
 chain is already selected. The resulting faces use the existing highlight and
-Add to prompt controls. An assembly part loads its topology through Tree first,
-as with the Faces filter. This changes selection only, not CAD geometry.
-
-Selection filters keep All, Parts, Faces and Edges together. **Connected
-selection** groups Edge chain and Tangent faces separately; the measurement filter menu keeps
-its existing options.
+Copy Reference controls. An assembly part loads its topology through the Features
+tree first, as with the Faces filter. This changes selection only, not CAD geometry.
 
 Edge chain uses tessellated edge endpoints within the same solid/occurrence and
 a shared face, with a 0.00001 model-unit endpoint tolerance. It follows corners
 where only one continuation exists and a unique smooth continuation at branches;
 ambiguous branches, missing endpoints, and closed single edges stop traversal.
-Shift toggles the resulting group and Add to prompt uses its canonical edge refs.
+Shift toggles the resulting group, and Copy Reference copies its canonical edge refs.
 
 ### STEP panel
 
-A STEP's own panel (`components/workbench/StepPanel.js`) is named for what the file
-is, `Part` or `Assembly`, and stacks its sections tight in one column
-(`kit/inspector/FilePanelSections.jsx`), in this order:
+A STEP's Settings panel (`components/workbench/StepPanel.js`) has these sections, in
+this order:
 
-- **Features**: the model tree, at its full height.
-- **Position**: named poses, joint values, and Reset, when the file has kinematics.
+- **Features** (`role: "model"`): the model tree, at its full height.
+- **Position** (`role: "position"`): named poses, joint values and Reset, when the
+  file has kinematics.
 - **Issues**: only when there are any. Warnings and errors are counted in its heading;
   a routine that failed to load (`Animation unavailable`) is one of them.
 
-Explode and Clip follow the interaction tools without a separator. Their
-160px controls stack beneath the right-aligned toolbar in the order added, with no enable
-checkbox: both start neutral until their values are edited. Their buttons stay selected while their panels exist; changing interaction tools
-preserves panels and effects. X or pressing the tool again resets and removes
-the effect. Clip uses an axis selector, one slider/input and Flip; its plane and
-slider range share the original bounds, unaffected by pose or Explode. Select remains an ordinary interaction tool; no button has an active dot.
+With Position, `kit/inspector/FilePanelTabs.jsx` draws the panel as two tabs,
+**Features** (the tree, then Issues) and **Position**; without it, one column of
+sections (`kit/inspector/FilePanelSections.jsx`).
 
-Position controls live in the sidebar. The Position tool enables joint handles
-and reveals that section, unfolding it and scrolling the panel to it. Each
-section header stays visible, stacking at the top or bottom of the scroller; the tree and controls
-share one scroll container, with no nested section scrollbars. Robot viewers use the same shell and shared
-`Pose` row and Reset (`kit/inspector/kinematicsControls.jsx`). Animation belongs
-to the Animate tool. Display remains a separate nav-row panel; switching display
-mode preserves the open panel and selection.
+Explode and Clip follow Measure on the strip. Their 160px panels
+(`components/workbench/ModelTools.jsx`), with Measure's results panel, stack beneath
+the toolbar at the viewport's top-left in the order added, with no enable checkbox: a
+panel opens neutral and an edit applies its effect. A neutral panel goes when another
+tool is chosen, or when the pointer is released after a drag that ended at neutral —
+a press inside the panel column holds every panel until it lets go, so a slider
+dragged through its neutral value keeps its panel. An applied effect keeps its panel
+and its button's highlight across tools. X, or pressing the tool again, resets and
+removes the effect. Clip uses an axis selector, one slider/input and Flip; its plane and
+slider range share the original bounds, unaffected by pose or Explode. The lifecycle is
+[the design system's](settings-ui.md#tools-and-lifecycle).
+
+Position controls live in the Settings panel's Position tab. The Position tool
+enables joint handles and turns the panel to that tab
+(`shell.revealFileSection("position")`), opening the panel when no sidebar is open
+(never on mobile). Each tab is one scroller, with no nested section scrollbars;
+outside tabs, section headers stay visible, stacking at the top or bottom of it.
+Robot viewers use the same shell and the shared `Pose` row with its Reset
+(`kit/inspector/kinematicsControls.jsx`). Animation belongs to the Animate tool.
+Display is a toolbar popover; switching display mode preserves the open panel and
+selection.
 
 The Features rows share the file tree's row primitive and 28px height, with the
 model tree's horizontal inset. The disclosure
 button expands children; the rest of the row selects its canonical references.
 Labels keep the row's width; summaries and measurements belong in the selected
-reference details. The small eye action changes visibility, while Isolate stays
-in the row's context menu.
+reference details. A row's one action is Hide (the eye), shown on hover and kept
+shown while the row is hidden (`ModelPartActions.jsx`). A double-click on a component
+or subassembly row isolates it; Isolate is also in the row's context menu.
 
 That menu is THE part menu, the one the viewport offers over the same part: one
 descriptor (`assemblyNodeMenu`) and one set of actions (`partMenuActions`),
-rendered by `AssemblyPartMenuItems`, so the two cannot drift apart. Add to prompt,
-Copy Reference, Select/Deselect, Isolate/Exit isolate, Exit all isolates, Hide
+rendered by `AssemblyPartMenuItems`, so the two cannot drift apart. Add to prompt
+(only where the host has a composer destination), Copy Reference, Select/Deselect, Isolate/Exit isolate, Exit all isolates, Hide
 others, Hide/Reveal, then the tree's Expand/Collapse and Expand all/Collapse all,
 and last one framing group: **Zoom to fit** and **Zoom to selection** (off without
 a selection). Framing cannot contradict the tool in hand, and every item of this
@@ -905,8 +933,9 @@ TREE's is available under any tool, and every action returns to Select first,
 exactly as clicking a row already does (`ensureSelectTool`). A secondary tap on
 empty space asks about the model as a whole (Show all, Expand all, Collapse all)
 and opens nothing at all when none of those can do anything. The tree starts directly below `Filter model…`, the file
-tree's filter box (`primitives/tree-filter`). Conditional Show all and Exit isolate
-actions sit on the filter row's right side; there is no feature-count header.
+tree's filter box (`TreeFilterInput`, `primitives/tree-filter`), with a conditional
+Show all on the filter row's right side. While something is isolated, an isolation
+bar heads the tree (`Isolated: …` and **Exit**). There is no feature-count header.
 Clicking empty tree space clears selection, including a pending topology pick.
 
 The filter is a second view of the tree, never a filter over its expansion.
@@ -959,10 +988,10 @@ without modifying the selection. New selections show their newest reference.
 Selection totals remain above the current reference's name, type, wrapping
 canonical ID, dimensions, coordinates and source material. Rows share an 8px
 gutter, an 80px label column and 11px text, with thin separators between totals,
-reference facts and material. There are no copy or dimension-preview buttons;
-reference delivery stays in the tree/viewport context actions and measurement
-previews in the Measure tool. There is no separate Surfaces tab or source
-feature view. Display contains per-file display controls and photographic settings.
+reference facts and material. The pane has no copy or dimension-preview buttons:
+copying is the viewport's bottom action (**Copy Reference** or **Copy References**,
+shown only for a resolved selection) and the tree and viewport menus, and
+measurement previews are the Measure tool's. There is no source feature view.
 
 Tool order, corner menus, persistent panels and cleanup policies are defined in
 [the shared design system](settings-ui.md#tools-and-lifecycle). Keep renderer
@@ -975,13 +1004,14 @@ to Select first. No other tool ever sees a selection, so none needs a rule for o
 
 ### Position
 
-Position edits persist when switching tools, folding the section, or closing the
-panel. Reset explicitly restores STEP defaults or the robot opening pose
-(including SRDF `home`). The Position tool controls joint handles and reveals
-its sidebar section, with no corner menu. Animate retains its existing ownership
-and reset-on-exit behavior.
+Position edits persist when switching tools or tabs, or closing the panel. Reset
+explicitly restores STEP defaults or the robot opening pose (including SRDF `home`).
+The Position tool controls joint handles and reveals its tab, with no corner menu.
+Animate sets the Position values aside when a routine takes the pose and gives them
+back when it lets go (`workbench/useStepMotionControls.js`). The Position tab's layout
+is [the design system's](settings-ui.md#position-and-references).
 
-The Position tool (`SplinePointer`; its tool id is `pose`) drags a model's joints
+The Position tool (lucide `Spline`; its tool id is `pose`) drags a model's joints
 by handles in the viewport. It exists where
 something can be driven: a robot (URDF, SRDF, SDF) with a revolute, continuous
 or prismatic joint that is not a mimic follower, and a STEP whose sidecar
@@ -1066,15 +1096,15 @@ tool's. Each format has one write path (`write` in `robot/poseStore.js`;
 
 ### Animate
 
-Animate is a session, like Draw: never persisted, never restored. While it is
-active nothing under the pointer is pickable and the camera orbits as usual.
-Its controls are the playbar at the bottom centre (`ViewportAnimationBar`),
-transparent, in one row: a routine list button (only with two or more
-routines), Play/Pause, the live scrubber, and a settings cog. Settings is a
-player's menu: a Speed row showing the current speed and opening the list of
-speeds (an authored speed outside the presets is listed too), and a Loop row
-whose check sits on the right and which toggles without closing the menu.
-There is no Restart; the scrubber's start is the restart.
+Animate is a session, like Draw: the tool is never persisted, never restored. It
+exists only for a file with routines, and pressing it takes up the tool and starts
+playing. Its corner menu (`kit/tools/PlayMenu.jsx`, which the shell adds) holds
+Routine (only with two or more routines), Speed (the presets, and an authored speed
+outside them) and Loop, whose check sits on the right and which toggles without
+closing the menu. While it is active nothing under the pointer is pickable and the
+camera orbits as usual. The playbar at the bottom centre (`ViewportAnimationBar`) is
+transparent, in one row: Play/Pause and the live scrubber, nothing else. There is no
+Restart; the scrubber's start is the restart.
 
 A routine owns the model's pose only inside the mode. Outside it the clip is
 released — stopped, rewound, the pose handed back to the Position controls — so
@@ -1086,7 +1116,7 @@ load has no Animate tool to say so on; it is listed in the file panel's Issues a
 
 Because the mode picks nothing and ends at rest pose, pick-only state stands
 still while it lasts (`animateMode` in `step/scene/useStepPose.js`): the transformed selector
-runtime is not rebuilt per posed frame (which as React state used to rebuild pick
+runtime is not rebuilt per posed frame (as React state it would rebuild pick
 groups, their BVH, the picking listeners and the highlight overlays every
 frame), pickable lists are one shared empty list, presses and releases cast no
 model ray, and part visual state is not reconciled while a routine plays. The
@@ -1100,7 +1130,7 @@ with two callers: React runs it when something it reads changes (a scrub, a
 pose, a display setting, a new mesh) and publishes it through a ref; while a
 routine plays, the animation clock calls that same function once per tick
 (`usePlaybackFrames`; the GLB renderer drives its mixer the same way). The
-scrubber is the clock's only React subscriber. Because the pass now runs inside
+scrubber is the clock's only React subscriber. Because the pass runs inside
 the tick, the clock's adaptive pacing measures a frame's real cost. A frame that
 only moved parts skips material and instance-membership reconciliation: the
 effects pass reports whether a style, visibility or highlight changed
@@ -1121,7 +1151,9 @@ Ellipse, Text, Fill area and Eraser, followed by a separated settings row with
 Color, Undo, Redo and Clear drawing. Choosing a tool updates Draw's toolbar icon
 and closes the dropdown. Color, Undo and Redo keep it open; Clear drawing closes
 it. Outside click, Escape and pressing Draw again dismiss the menu; leaving Draw
-ends the drawing session. A line is followed by another line. Color changes what
+ends the drawing session. Select and move drawings wears lucide's
+`SquareMousePointer`; Undo and Redo are off while there is nothing to undo or redo.
+A line is followed by another line. Color changes what
 is drawn next without recoloring existing ink. Fill area is not an
 SDK tool (`drawing/fill.ts`): a click inside drawn ink adds a translucent
 polygon of the current color, from an outline that need not be closed. Draw opens on the pen in neon red.
@@ -1142,50 +1174,64 @@ panned pose when Draw ends.
 
 A sketch is session-only. It lives in the mounted editor, is never written to
 tab or file state, and is discarded when Draw is deselected, the file changes or
-the renderer unmounts; a restored tab never reopens in Draw. The bottom action
-is **Copy Drawing**, or **Add to Prompt** where the host has a composer
-destination. It delivers one prompt bundle through the host prompt-context port:
-the viewport capture with the editor's committed ink composited over it
-viewport-aligned (the ink canvas keeps its own pixel ratio and is scaled into
-the frame; selection handles are not included), plus the selected references.
+the renderer unmounts; a restored tab never reopens in Draw. While the sketch has
+ink, the bottom action is **Copy Drawing**, with the copy shortcut beside it (⌘C or
+Ctrl+C does the same): the viewport capture with the editor's committed ink
+composited over it viewport-aligned (the ink canvas keeps its own pixel ratio and is
+scaled into the frame; selection handles are not included), written to the clipboard
+as a PNG (`host.clipboard.writeImage`).
 
-The file navbar holds the renderer's actions, then the file's panel toggles, and
-the nav row IS the tab strip: no panel has tabs inside it, and pressing a toggle
-opens that panel and closes whatever was open. Left to right: the direct snapshot
-action (`Take snapshot`, `Camera`); `Display`, id `cad-display` (`SlidersHorizontal`);
-the file's own panel, id `cad-file` (a STEP part's `Part` with `Box`, an assembly's
-`Assembly` with `Boxes`, a URDF, SRDF or SDF's `Robot` with `Bot`); and the file
-tree, id `tree` (`Folders`, labelled `Show files` / `Hide files`). An STL,
-a 3MF and a GLB have Display and the tree; a DXF has the tree alone. Each
-registration declares its panels in `panels({ open, ready, file, data })`, which
-can read what `prepare` found (a STEP names its panel from the entry), through
-`viewerPanels(ready, { file })` (`file-viewer/navigation/panels.js`); until the
-surface is up (`ready`) there are none. The tree is FileViewer's own
-(`treePanel`), always last.
+### File navbar
+
+The file navbar holds the renderer's actions, then the file's panel toggles; pressing
+a toggle opens that panel and closes whatever was open. Left to right: the direct
+snapshot action (`Take snapshot`, `Camera`); the file's Settings panel, id `cad-file`
+(`SlidersHorizontal`), for a STEP and a URDF, SRDF or SDF; and the file tree, id
+`tree` (`Folders`, labelled `Show files` / `Hide files`). An STL, a 3MF, a GLB and a
+DXF have the tree alone. Each registration declares its panels in
+`panels({ open, ready, file, data })` through `viewerPanels(ready, { file: true })`
+(`file-viewer/navigation/panels.js`); until the surface is up (`ready`) there are
+none. The tree is FileViewer's own (`treePanel`), always last. Display is a toolbar
+tool and never a panel. Beside the file name, the nav row's status slot carries the
+renderer's update status (`view.navigationStatusSlot`).
 
 With nothing chosen (`panel: null`) the open panel is the first that claims
-`defaultOpen`: the file's own panel, or nothing when the file has none. Display is
-never the default, and the tree is the default only when no file is open at all.
-A file picked in the tree is opened with `panel: "tree"`
+`defaultOpen`: the file's Settings, or nothing when the file has none; the tree is
+the default only when no file is open at all. On mobile a file opens with no sheet
+over it ([sidebars and mobile](settings-ui.md#sidebars-and-mobile)). A file picked in the tree is opened with `panel: "tree"`
 (`navigation.openFile(path, { target, panel })`), so the tree stays up while it is
 walked; any other open starts the file at its default, and the host applies either
 (`viewer-host.md`). `""` is nothing open, and so is an id the file's list does not
 have.
 
-Snapshot uses the host prompt-context port: desktop attaches
-the viewport image and references to the owning session's draft; web copies
-through its clipboard adapter. The DXF renderer, which is not on the shell,
-contributes its own one: Take snapshot.
+Take snapshot captures the view (with Draw's ink, when there is some). Where the
+host has a composer destination it goes through the prompt-context port with the
+references it depicts (desktop attaches it to the owning session's draft); otherwise
+it is written to the clipboard as a PNG (`host.clipboard.writeImage`), which is the
+web app's case. The DXF renderer, which is not on the shell, contributes its own
+Take snapshot, always through the prompt-context port.
 The shared FileViewer renders these registered actions without importing CAD.
 
-Camera framing, Animate and fullscreen use the shared
+### Fullscreen and camera
+
+Camera framing, Animate and fullscreen follow the shared
 [interaction contract](settings-ui.md#camera-animation-and-fullscreen).
 `useViewportCamera` owns initial fit, orientation transitions and the presentation
 camera swap. `zoomRuntimeToBounds` is the single framing act used by context-menu
 Zoom to Fit and live `resetCamera`. Cube shortcuts preserve zoom and pan.
-`PreviewChrome` shares one visibility deadline across Exit, settings and transport;
-`PlayMenu` and `OrbitMenu` remain independent. No legacy fullscreen toolbar or
-STEP-specific playbar wrapper is mounted alongside them.
+
+Fullscreen is one `presenting` state the shell owns (`usePresentationState` in
+`useRendererShell.js`); a renderer whose own gates run before the shell's hook holds
+it and passes it in as `presentation`, as STEP does. The Fullscreen button at the
+viewport's top-right sets it, and Escape or Exit clears it; no host prop reaches it.
+While presenting, the frame drops the toolbar, kept tool panels, view cube, bottom action,
+alert card and viewport menu, `view.onPanelVisibilityChange(false)` hides the host's
+sidebar, and every renderer gate reads the same state: picks, hover, highlights,
+recognition, Measure, Draw, joint handles, and Select, Position and Animate as tools
+are off, without discarding their values. `PreviewChrome` then shows only Exit, a Play
+menu (`PlayMenu`, for a file with routines), an Orbit menu (`OrbitMenu`) and, at the
+bottom, the playbar or an orbit play/pause, all on one idle deadline
+(`PREVIEW_CHROME_IDLE_MS`).
 
 ### Read-only STEP features
 
@@ -1207,12 +1253,14 @@ structural tree display or ordinary part selection.
 
 Shared Features inspection runs entirely client-side from STEP geometry. The
 worker returns inferred operations, not executable playback. The existing
-canonical face/edge reference flow supplies highlighting and Add to prompt.
+canonical face/edge reference flow supplies highlighting and copying.
 
 Kernel verification, its cache and endpoint, intermediate-solid playback, and
 GIF/video export are isolated on `amy/step-reconstruction-playback`. They are
-not shipped in the shared app. Pure numerical recipe helpers remain as
-recognition regression checks, without a runtime interpreter or export path.
+not shipped in the shared app. Recognition records the numbers a solid was
+reconstructed from (`workbench/modelingSolidRecipes.js`); assembling a recognized tree
+into a numerical recipe is test-only (`workbench/__tests__/reconstructionRecipe.js`), a
+recognition regression check with no runtime interpreter or export path.
 
 ### Robot links
 
@@ -1234,8 +1282,8 @@ child leads the tree instead, unless the description has no content anywhere,
 in which case every link is kept. An SRDF shows its paired URDF's tree.
 
 The section reuses the Features tree's pieces rather than cloning them: the 28px
-row primitive, `Filter links…` (`primitives/tree-filter`), the ranked flat
-search of `kit/inspector/modelTreeSearch.js`, and `InspectorSplit` for the Reference pane
+row primitive, `Filter links…` (`TreeFilterInput`, `primitives/tree-filter`), the
+ranked flat search of `kit/inspector/modelTreeSearch.js` (`useTreeSearch`), and `InspectorSplit` for the Reference pane
 (pinned at the panel's foot, it opens at a third of the panel, never below a readable
 minimum on a short screen, and never so tall that the sections lose theirs — the same
 pane the Features tree uses). The search index also reads a row's `searchAliases`, so a
@@ -1248,8 +1296,10 @@ scrolls to it when the search ends.
 
 Selection is the scene graph's. A link is hovered and selected in the viewport
 as the meshes of its group, and a viewport pick of a surface that is not a named
-object walks up to its link; a named object still selects itself (Shift in the
-viewport, Shift/Ctrl/Cmd on a row add). A link with no geometry selects its row
+object walks up to its link; a named object still selects itself. Any number of
+links, or of named objects, can be selected, never both (Shift in the viewport,
+Shift/Ctrl/Cmd on a row add); the Reference then summarises them
+(`Selection · N links`, `Selection · N components`). A link with no geometry selects its row
 and details only. As for STEP, a robot selection exists only while Select is the
 tool: choosing a row under another tool returns to Select, leaving Select clears
 it, and Escape clears it before it shuts the open panel. A click acts at once: a
@@ -1281,15 +1331,19 @@ There is no copy action: robot formats have no reference grammar to deliver.
 
 ### Panels and dark surfaces
 
-A file's panels have no tabs: the nav row's toggles are the tab strip, and a panel
-is one column of sections under 28px headings (`FilePanelSections`), stacked tight,
-each at its full height: only the column scrolls, never a section inside it. Beside
-another section, each heading folds its section away and back with the Display
-gates' plus and minus (`FileSheetToggleHeading`); folding is a view and nothing
-else, and a folded section stays mounted. With one section, its title heads the
-panel. A pick's Reference (`InspectorSplit`) is pinned at the panel's foot, under
-every section, and scrolls on its own; its separator resizes it. Display floats over the viewport, leaving the file sidebar visible with its
-disclosure and scroll intact.
+A file's Settings panel is one column of sections under 28px headings
+(`FilePanelSections`), stacked tight, each at its full height: only the column
+scrolls, never a section inside it. When its sections include both a
+`role: "model"` and a `role: "position"` section, `FilePanelTabs` splits it into two
+tabs — the model section with every other section under it, and Position — each one
+scroller whose sections do not fold; both stay mounted, and the selected tab is the
+shell's (`shell.panelSection`), so it survives the panel remounting across the mobile
+breakpoint. Otherwise, beside another section, each heading folds its section away
+and back (`FileSheetToggleHeading`); folding is a view and nothing else, and a folded
+section stays mounted. With one section, its title heads the panel. A pick's
+Reference (`InspectorSplit`) is pinned at the panel's foot, under every section, and
+scrolls on its own; its separator resizes it. The Display popover floats over the
+viewport, leaving the file sidebar visible with its disclosure and scroll intact.
 
 The shared dark UI uses neutral charcoal tokens. Inspect's fixed dark workbench
 uses a slightly lighter `#333333` canvas; light app appearance selects its light basis.
@@ -1304,24 +1358,27 @@ hash must match the saved artifact before those annotations apply. Active build
 previews carry immutable geometry revisions and never initiate a source build.
 A complete previous revision stays visible until its replacement is ready.
 
-Display's Mode dropdown selects Solid, Render, X-ray, Hidden line or Wireframe
-presets over the same grouped settings. Render defaults to perspective; the
+The Display popover's mode control selects Solid, Render, X-ray, Hidden line or
+Wireframe presets over the same grouped settings. Render defaults to perspective; the
 others to orthographic. Changing values shows Custom. Reset restores the base
 preset and disables Clip/Explode, preserving camera viewpoint/zoom, selection
 and the pose.
 The groups and gate behavior are specified in [View presets](render-mode.md).
 Photographic lighting and stage code stay lazy; the lightweight grouped settings
-panel is always available. Authored materials remain read-only in the Model
+popover is always available. Authored materials remain read-only in the Model
 reference section, with no material override or undo state.
 
 The host-supplied render session owns its tessellation cache and worker leases.
-The file session's display slice is the sole view-settings authority; its render
-slice holds only the camera snapshot. Surface derivation and preview requests
+The per-file record's display slice is the sole view-settings authority; the camera
+is the mounted viewport's and is never stored. Surface derivation and preview requests
 use the file's injected service and abort when the consumer leaves. The Features
 tree resolves exact surfaces on demand through the same client.
 
-The breadcrumb carries no status. Opening and updating show in the viewport's
-loading overlay. An error is a card over the viewport (`ViewerAlertCard`), always;
+Opening shows in the viewport's loading overlay. An update — a newer revision
+loading behind the model on screen, or a Display change being prepared, and that
+change's failure with a Retry — shows in the nav row's status slot beside the file
+name (`ViewUpdateStatus`, portaled into `view.navigationStatusSlot`; on mobile, a
+spinner whose label opens on press). An error is a card over the viewport (`ViewerAlertCard`), always;
 one the model survives (`blocking: false`, the previous version still on screen)
 has a Dismiss button, and stays dismissed until the alert changes, or clears and is
 raised again. A warning is a card only while nothing is on screen; beside a model,
@@ -1331,12 +1388,15 @@ which rechecks the artifact and does not restart the desktop window.
 
 ### Camera framing and zoom
 
-The zoom ruler and Reset use the original authored model bounds and default
-orientation. Explode, clipping, animation, kinematics, visibility, floor and
+Zoom to fit and the live `resetCamera` frame the original authored model bounds at
+the current angle, and that framing is 100%. Explode, clipping, animation, kinematics, visibility, floor and
 other scene effects never redefine 100%. Perspective and orthographic derive
 their own baseline from that same box and the current viewport dimensions.
 Selection fit may move the camera but cannot make that new framing become 100%.
 `kit/camera/viewportCameraFit.js` owns the fit calculation; live posed bounds remain useful
-for clipping, lighting and picking. Nothing displays that percentage any more — it
-survives only as the `window.__cadCamera()` test seam — and the acts that frame the
-model are STEP's context menu and the view cube's centre.
+for clipping, lighting and picking. Nothing displays that percentage; it is read
+through the `window.__cadCamera()` test seam (`zoomPercent`). The acts that frame the
+model are STEP's context menu (Zoom to fit, Zoom to selection) and the live
+`resetCamera`; the view cube (bottom-right, hidden on mobile and in fullscreen) turns
+the camera and keeps its zoom and pan, and opening or reloading a file fits the model
+afresh.

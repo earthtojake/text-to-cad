@@ -6,14 +6,10 @@ error states, and common edit/save/reload lifecycle. Both `apps/web` and
 `apps/desktop` consume this component through the package's compiled exports.
 The desktop's project/session/window layout remains application code.
 
-The package extraction and host-boundary migration preserve behavior. Preserve the existing UI, UX and
-functionality of docs, web and desktop: styling, labels, defaults, shortcuts,
-file actions, editing and conflict behavior, CAD interactions, persistence,
-and narrow layouts. The approved exceptions are the shared primary prompt action
-(Add to prompt in desktop, clipboard delivery in web) and removal of the
-reference coaching tooltip. Other features or visual changes require separate review.
-The viewer's shared controls keep their original appearance. Desktop's
-surrounding app controls remain local where their existing appearance differs.
+The viewer's tools, sidebars, settings, tooltips and keyboard follow one
+binding [design system](docs/settings-ui.md), the same in both apps. A change to
+that chrome changes the design system first. Desktop's surrounding app controls
+remain local where their appearance differs.
 
 ## Ownership and dependencies
 
@@ -89,7 +85,7 @@ src/
     image/          image view and zoom
     pdf/            PDF.js pages, text selection and host-bound capture
     unsupported/    Not supported message and optional OS-open action
-  primitives/       shared controls retaining the viewer's existing styling
+  primitives/       shared controls: buttons, menus, selects, sheets, tooltips, tree rows
   lib/              browser helpers
   loading/          shared loading animation
   styles/           canonical tokens and component CSS
@@ -128,7 +124,7 @@ const renderers = [createStepRenderer({ client, preferences }), createDxfRendere
 ```
 
 Public entry points include `/host`, `/file-viewer`, `/navigation`, `/renderers/step`,
-`/renderers/dxf`, `/renderers/glb`, `/renderers/mesh`, `/renderers/robot`, `/renderers/workspace`, `/renderers/step/state`, `/file-viewer/presentation`, `/file-viewer/empty`,
+`/renderers/dxf`, `/renderers/glb`, `/renderers/mesh`, `/renderers/robot`, `/renderers/workspace`, `/file-viewer/presentation`, `/file-viewer/empty`,
 `/renderers/markdown`, `/renderers/code`, `/renderers/code/editor`,
 `/renderers/image`, `/renderers/pdf`, `/renderers/unsupported`, `/loading-icon`,
 `/utils`, `/primitives/*`, `/tokens.css`, and `/styles.css`.
@@ -137,13 +133,14 @@ source tree.
 
 `/drawing` is a separate lazy entry point for the Excalidraw editor, for temporary
 sketches, with no platform discovery or persistent storage. Desktop owns its temporary Drawing tabs,
-in-memory scene retention and prompt delivery; web's viewer remains unchanged.
+in-memory scene retention and prompt delivery; the viewer's Draw tool mounts the
+same editor as an overlay in both apps.
 Read [drawing](docs/drawing.md) before extending this editor or reusing it for
 viewer annotations.
 
 The required host contract, typed prompt bundles, delivery receipts and named
 renderer slots are documented in [viewer host](docs/viewer-host.md). Clipboard
-and page reload implementations now live in the apps. Shared UI performs no
+and page reload implementations live in the apps. Shared UI performs no
 raw transport, clipboard discovery, host storage or page-navigation effects.
 
 ## Lifetimes and state
@@ -186,8 +183,10 @@ requests on a warm reopen without retaining another copy of the geometry.
 
 The host owns stored state. The web adapter retains browser URL/history and
 session preferences; desktop retains its explorer/project preferences and IPC
-watchers. CAD's state entry point supplies existing schema validation for safe
-legacy restoration. Capabilities determine menus: a read-only web source cannot
+watchers. Both build the viewer's orbit preference with
+`createStoredCadPreferences` and merge renderer records with
+`mergeChangedRecords`. A viewer's per-file record holds its Display settings,
+its tool and its renderer's slice, never a camera. Capabilities determine menus: a read-only web source cannot
 acquire editing or native operations merely by rendering this component.
 
 ## Development and verification
@@ -216,7 +215,7 @@ helper tests, React/editor tests and real Chromium
 integration tests for renderer preparation, saves/conflicts, root changes,
 multiple instances, cancellation and disposal. App integration and packaged
 runtime checks remain with their hosts. See [renderer contracts](docs/renderers.md)
-for the non-CAD behavior that must remain unchanged.
+for the non-CAD renderers.
 
 ## CAD document updates
 
@@ -238,26 +237,27 @@ and versioned, bounded memory cache; it adds no persistent store. Read
 cache identity, cancellation or recognition limits.
 
 A file can expose one optional `Settings` panel with the sliders icon in the
-nav row, beside the file tree. When Position exists, `FilePanelTabs`
-separates Features / Position or Links / Position. These primary views are always
-open within their tabs, with no collapse headers. Both stay mounted to preserve
-scroll and tree state; only the active tab does background work. Without Position,
-show the model panel directly. Each tab has one scrolling column and the selection
+nav row, beside the file tree. `FilePanelTabs` reads each section's `role`, not
+its name: when a `model` and a `position` section both exist it separates them
+into Features / Position or Links / Position tabs, whose primary views are always
+open, with no collapse headers. Both stay mounted to preserve scroll and tree
+state; only the active tab does background work. Without Position, the model
+panel shows directly. Each tab has one scrolling column and the selection
 Reference pinned at its foot. Issues and SDF metadata remain with the model tree.
 Links is the description's link tree, with the Model
 tree's rows, filter and Reference pane; see [robot links](docs/cad-renderer.md#robot-links).
 Which panel a file opens with is the host's to apply
 (`ViewerHost.navigation.openFile(path, { target, panel })`): a file picked in the
 tree asks for the tree, so the tree stays up while a person walks it; any other
-open gets the file's own panel, or nothing when it has none. Display is never open
-by default, and no panel is saved per file. Opening Display leaves the file's
-panel visible, preserving the tree's disclosure and scroll.
+open gets the file's own panel, or nothing when it has none. No panel is saved
+in a file's record. Display is a toolbar popover, never a panel.
 The binding [viewer design system](docs/settings-ui.md) defines tool lifecycle,
-sidebar navigation, mobile layout, section density, tooltips and fullscreen.
-RendererShell owns the top-left toolbar and bottom-right cube; Display is the
-last toolbar item and Animate is conditional on clips. Fullscreen is a separate
-top-right action and preserves the parent navbar. Keep app-specific effects in
-the [host contract](docs/viewer-host.md), not in renderer components.
+sidebar navigation, mobile layout, section density, keyboard scope, tooltips
+and fullscreen. RendererShell owns the top-left toolbar and bottom-right cube;
+Display is the last toolbar item and Animate is conditional on clips.
+Fullscreen is a separate top-right action, the shell's own, and preserves the
+parent navbar. Keep app-specific effects in the
+[host contract](docs/viewer-host.md), not in renderer components.
 
 One per-file settings store serves controls, live commands and persistence.
 Presets use the canonical grouped schema; see [View presets](docs/render-mode.md).

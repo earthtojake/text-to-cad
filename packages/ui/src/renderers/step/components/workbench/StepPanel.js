@@ -9,10 +9,10 @@ import { stepGeometryMeasurements } from '../../workbench/stepGeometryMeasuremen
 const EMPTY = [];
 
 /**
- * A STEP's own panel: its Features tree, Position, and its
- * Issues when there are any — sections stacked in one column, named for what the file is (a
- * part, an assembly). The sheet
- * around it, and the Display panel beside it, are the shell's (`kit/shell/RendererShell.jsx`).
+ * A STEP's Settings panel: its Features tree, Position, and its Issues when there are
+ * any. Features (`role: "model"`) and Position (`role: "position"`) become two tabs when
+ * both exist, Issues riding under Features (`kit/inspector/FilePanelTabs.jsx`). The sheet
+ * around it, and the Display popover, are the shell's (`kit/shell/RendererShell.jsx`).
  *
  * `open`: the panel is on screen, which is when recognition is worth running.
  */

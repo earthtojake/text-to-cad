@@ -77,15 +77,17 @@ pickers include opacity, with an opaque checkerboard behind the color swatch:
 0% is transparent, 100% opaque. The background's fractional alpha reaches the
 actual canvas and PNG, not just the preview.
 
-**Mode** and **Surfaces** share one always-open **Display** section. Explode is gated: collapsing clears its
-amount and reopening starts at 50%; editing back to 0% does not auto-collapse.
-Clip follows the
-same gate rule: disabling discards its offsets and Flip; re-enabling restores
-the default X center cut. Preset selection preserves Clip/Explode; Display Reset
-disables both tools. Grid and Axes are independent sections.
-Explode and Clip live in the STEP panel between Features and Position, outside
-the exclusive tool strip. The Display panel order is Display, Edges, Grid,
-Axes, Lighting, Background, Floor. Preset changes never reorder controls.
+The Display popover's first section, **Display**, holds Mode, the host's
+Appearance and Projection; **Surfaces** follows; both are always open. Grid and
+Axes are one gated section, **Grid / Axes**, over two independent groups. The
+popover order is Display, Surfaces, Edges, Grid / Axes, Lighting, Background,
+Floor. Preset changes never reorder controls. Clip and Explode are not Display
+sections: they are STEP toolbar tools with their own panels, and their settings
+live in this same store (`clip`, `exploded`). A tool opens neutral — Explode at
+0%, Clip at no cut — and an edit enables its group; removing the tool discards
+its amount, offsets and Flip. Preset selection preserves Clip/Explode; Display
+Reset disables both. See
+[settings-ui.md](./settings-ui.md#tools-and-lifecycle) for their lifecycle.
 The remaining optional effects use the same feature gate primitive. A surface
 gate that just restores ordinary shading is not a meaningful disable action.
 The Lens slider and Camera section are omitted: perspective uses the standard
@@ -156,8 +158,8 @@ it never clears or covers the canvas with a loading screen. Only actual context
 recovery replaces the renderer. Quality refines tessellation within the same
 cache and memory budget. Picking/topology stays demand-driven in every preset.
 
-Opening Clip starts a center cut and prepares its shader/cap variants before
-presentation. Moving an enabled cut stays live. Explicit neutral boundaries
+Enabling Clip prepares its shader/cap variants before presentation. Moving an
+enabled cut stays live. Explicit neutral boundaries
 still avoid unnecessary caps. See [responsive View updates](view-updates.md)
 for scheduling, resource caching, loading presentation and capture readiness.
 
@@ -176,17 +178,9 @@ padding multiplier. Preset changes do not refit. Motion changes geometry, not
 what 100% means. A changed camera clears current screen-space drawings; camera
 state republished unchanged after a runtime replacement does not.
 
-## Panel structure
+## Where the controls live
 
-Display is its own panel in the nav row, beside the file's own. A STEP's own
-panel stacks **Features**, **Position** (only when the sidecar declares
-kinematics) and **Issues** (only when there are any) under headings that never
-collapse. Within Position the `Pose` row precedes the joint rows; each is
-independently present only when its content exists, without an enable switch.
-There are no tabs and no drag or split behavior. The file's own panel stays
-mounted while Display is open, so the Features tree keeps disclosure and scroll.
-The floating interaction toolbar owns Select/Measure (STEP only)/Draw, plus
-Position and Animate where a file has joints or routines, and on a STEP,
-Fullscreen last where the host offers it; view actions and capture remain
-separate. A robot description's own panel stacks Position, Links and (for an
-SDF) SDF.
+Display settings are a toolbar popover present for every 3D file, never a
+sidebar panel. A file's own Settings panel holds its model tree and Position
+(see [settings-ui.md](./settings-ui.md#sidebars-and-mobile)); nothing in it is a
+display setting.

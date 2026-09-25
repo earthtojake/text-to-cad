@@ -41,7 +41,7 @@ export function createStepRenderer({ client, ...services }: StepRendererOptions)
     id: 'step',
     priority: 100,
     matches: (file) => !OTHER_RENDERERS_FILE.test(file.path) && (file.mediaType === 'cad' || Boolean(isCadFile(file.path))),
-    // Its own panel is named for what the file is, with the icon its Features tree draws for it.
+    // One Settings panel (Features, and Position when the file has joints), open by default.
     panels: ({ ready }) => viewerPanels(ready, { file: true }),
     async prepare(context) {
       const prepared = await prepareWorkspaceEntry(client, context);

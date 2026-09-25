@@ -65,11 +65,11 @@ const EMPTY = Object.freeze({});
  * scene. The renderer loads its document and builds its scene; this hook owns
  * the rest and hands back one `shell` object for `<RendererShell>`:
  *
- *  - per-file state through the host (`state` / `onStateChange`): camera,
- *    Display settings, the recorded tool, and one `renderer` slot that is the
- *    renderer's own;
+ *  - per-file state through the host (`state` / `onStateChange`): Display
+ *    settings, the recorded tool, and one `renderer` slot that is the
+ *    renderer's own (the camera is never stored);
  *  - Display settings: store, resolution against the renderer's FEATURES, the
- *    queued application to the viewport, and the Display panel's content;
+ *    queued application to the viewport, and the Display popover's content;
  *  - tools: the mode state machine and Draw's session, or none at all for a
  *    renderer whose viewport is the camera's alone;
  *  - the host contract: the file's panels, navbar actions, prompt snapshots,
@@ -82,7 +82,7 @@ const EMPTY = Object.freeze({});
  *   live?: object, captureRequest?: { key: string | number } | null,
  *   acknowledgeCommand?: (kind: string, key: string | number) => void }} options.services
  * @param {import("@hardcore/core/prompt").ResourceRef} options.resource  The document on screen, for prompt context and live state.
- * @param {string} options.modelKey  Stable per file: scopes the stored camera and the presentation.
+ * @param {string} options.modelKey  Stable per file: scopes the camera and the presentation.
  * @param {string} [options.revisionKey]  Changes when the file's bytes do.
  * @param {import("@hardcore/core/common/viewSettings.js").ViewFeatures} options.features
  * @param {object} [options.viewSettings]  The result of `useViewSettings`, when the renderer needs the
@@ -108,7 +108,8 @@ const EMPTY = Object.freeze({});
  *   renderer's document load. `busy`: nothing to show yet. `updating`: a newer revision is loading behind the scene on
  *   screen. The rest are for a renderer whose document is more than a download — see `loadReport.js`.
  * @param {object | null} [options.animation]  A playbar runtime (with its own `clock`), when the file has
- *   routines. The playbar is then always under the model; it is not a tool to take up and leave.
+ *   routines. The shell then offers Animate (unless the renderer hands over its own) and shows the
+ *   playbar while Animate is up and in fullscreen.
  * @param {{ commands?: Record<string, (...args: any[]) => void>, declined?: Record<string, string>,
  *   state?: () => object, resource?: () => object }} [options.live]  Live commands this renderer adds (by name) or
  *   declines (name to the error its caller reads), and extra fields for the live state. Every name in
@@ -316,8 +317,7 @@ export function useRendererShell({
 
   // ---- tools ----------------------------------------------------------------
   const idle = viewerLoading || !scene;
-  // A file with routines shows the playbar, always: it is not a tool to take up and
-  // leave, so the file simply opens at rest with its transport under the model.
+  // A file with routines gets Animate, and its playbar while Animate is up (`RendererShell.jsx`).
   const animationAvailable = animationControlsHaveContent(animation);
   const drawToolActive = !presenting && toolMode === SHELL_TOOL.DRAW;
   const selectTool = useCallback((mode) => setToolMode(current => (toolModes ? toolModes.next(current, mode) : mode)), [toolModes, setToolMode]);
@@ -463,7 +463,7 @@ export function useRendererShell({
   }, [liveBinding, commandNames]);
 
   // ---- what the frame and the renderer read ---------------------------------
-  // The Display panel's content: every renderer's, built here from its display settings.
+  // The Display popover's content: every renderer's, built here from its display settings.
   const display = <DisplaySettingsSection
     features={features} viewSettings={displaySettings} hostAppearance={colorScheme} lightingQuality="preview"
     resolvedView={desiredScene.view} onViewSettingsPatch={viewSettingsStore.patch}

@@ -7,9 +7,10 @@
  * row drop down, the panel column at the right end, the file tree that lives
  * in it, and the empty state when nothing is open. The standalone CAD Viewer
  * and the desktop app's file tab both import from here, so those are the same
- * code and not merely the same design — the two differ in exactly two things:
- * the links only a web build has (Discord, GitHub, the version), and what a
- * host can DO with a file, which is a capability set rather than a fork.
+ * code and not merely the same design. What differs is injected: a host's own
+ * nav-row content (`leading`, `navigationActions`, `displayActions` on
+ * FileViewer), and what a host can DO with a file, which is a capability set
+ * rather than a fork.
  *
  * The dependency runs one way — the desktop depends on this package and this
  * package depends on nothing of the desktop's — which is why the two things

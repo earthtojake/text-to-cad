@@ -6,17 +6,13 @@ distribution — and the built client ships inside that same wheel. One instance
 serves ONE directory, fixed at start; the page is always the bare origin and
 `?file=` selects an artifact inside that root. There is no hosted deployment.
 
-This package was renamed from the former viewer app directory. It is the browser host of
-`@hardcore/ui/file-viewer`, not the owner of the shared CAD interface.
-This is a **pure refactor**: UI, UX and functionality stay the same, including
-URL/history behavior, read-only actions, app appearance and camera state, CAD
-selection/measurements/tools and responsive behavior.
+This app is the browser host of `@hardcore/ui/file-viewer`, not the owner of
+the shared CAD interface.
 
 **Owns:** URL selection, browser history, document title/appearance, catalog
 file-source adapter, browser persistence, and this app's branding, appearance and release links.
 `src/App.tsx` composes an explicit `ViewerHost` and one renderer per file family. The catalog
-continues to expose CAD artifacts only; this migration adds no file types or
-write endpoints to the web app.
+exposes CAD artifacts only, and the web app has no file-writing endpoints.
 Follow the [shared host contract](../../packages/ui/docs/viewer-host.md) when
 adding viewer features; browser effects belong in this app's adapters.
 The [shared Model tree](../../packages/ui/docs/cad-renderer.md#step-panel)
@@ -38,8 +34,8 @@ src/
   App.tsx               FileViewer browser host and renderer registration
   main.tsx              host/client bootstrap and cleanup
   adapters/             read-only catalog file source and capabilities
-  host/                 browser clipboard, prompt delivery and page lifecycle
-  persistence/          root-scoped view state and legacy preference migration
+  host/                 browser clipboard, prompt delivery and development auto-reload
+  persistence/          root-scoped view state and the orbit preference store
   client/               navigation branding, release menu, appearance and styling
   shared/               app build/runtime configuration helpers
 ```
@@ -144,7 +140,8 @@ the build — detection only; it keeps serving.
   retains completed STEP working sets in a bounded CPU cache, so reopening a
   warm assembly does not reload each component. Root, origin and revision
   identities isolate reuse; changed files and evicted entries load normally.
-  Inactive WebGL scenes are released and camera state remains file-scoped.
+  Inactive WebGL scenes are released, and a file's camera lives only while its
+  viewer is mounted.
 - **Vite's transform cache can outlive HMR and hard reloads.** If a source
   edit does not show up, restart the dev server and delete
   `node_modules/.vite`.
@@ -202,29 +199,34 @@ the UI package's asset documentation for asset provenance and regeneration.
 ## Current viewer behavior
 
 The shared [viewer design system](../../packages/ui/docs/settings-ui.md) is the
-authoritative contract for toolbar order, sidebar behavior, mobile layout,
-settings controls, selection and fullscreen. Keep those rules there rather than
-maintaining a separate web layout specification.
+authoritative contract for the [toolbar](../../packages/ui/docs/settings-ui.md#tools-and-lifecycle),
+[sidebars and mobile layout](../../packages/ui/docs/settings-ui.md#sidebars-and-mobile),
+settings controls, selection and
+[fullscreen](../../packages/ui/docs/settings-ui.md#camera-animation-and-fullscreen).
+Keep those rules there rather than maintaining a separate web layout
+specification.
 
 The web host owns URL/history, root-scoped persistence, appearance, version links
 and native service adapters. Shared renderers own all model interaction. STEP and
-robots open in Select; their one Settings sidebar contains Features/Links and
-Position tabs when applicable. Every 3D file has Display in its top-left toolbar;
-Animate is conditional on clips. DXF remains a 2D canvas with pan, zoom and
+robots open in Select; their one Settings sidebar holds Features (Links for a
+robot) and Position as two tabs when a file has both. Every 3D file has a
+top-left toolbar ending in Display, static GLB files included; Animate appears
+only for files with routines or clips. DXF is a 2D canvas with pan, zoom and
 snapshot, without a 3D toolbar or settings panel.
 
-At the single 720px FileViewer breakpoint, desktop sidebars become floating mobile
-sheets and tool-triggered sidebar reveals stop. Fullscreen is a separate top-right
-scene action, retains the navbar, temporarily suspends panels and offers separate
-Orbit and animation controls. Camera transforms are session-only: refresh fits
-the file anew. Display and pose persistence remain host-owned through the shared
-state contract; see [storage](docs/storage.md).
+Below 720px of FileViewer width, sidebars become floating sheets over the viewer,
+the crumbs collapse to the current file, the view cube is hidden and no tool or
+pick opens a sidebar by itself. Fullscreen is the shared shell's top-right
+button: it keeps the navbar and suspends the sidebar, orbits by default and
+offers separate Orbit and animation menus; the host passes no fullscreen props.
+The camera is never stored, so a refresh frames the file anew; Display settings,
+pose and explode are kept per file through the shared state contract (see
+[storage](docs/storage.md)).
 
-Authored material information lives in the Model reference details; editing it
-requires changing the source model or annotations. The viewer has no Materials
-or Theme editor and does not restore legacy material overrides or custom themes.
-These controls live in `@hardcore/ui`; the web host keeps URL/history, appearance
-and root-scoped persistence. See the UI package's Render and LOD playbooks.
+Authored material information lives in the selection's reference details; editing
+it requires changing the source model or annotations. The viewer has no Materials
+or Theme editor. These controls live in `@hardcore/ui`; see the UI package's
+Render and LOD playbooks.
 
 Large assemblies load progressively and refine visible components within memory
 budgets. Warm tessellations can render before exact surface derivation. The
@@ -242,15 +244,15 @@ strict port binding. React 19 is deduplicated with the shared packages.
 Prompt actions prepare clipboard content for an external composer. References
 use the complete served-root path and canonical selector grammar, rather than a
 display filename suffix. Image writes begin during the user gesture with a
-pending PNG Blob. A mixed text/image copy reports separate representations and
-warns that some receivers paste only one; unsupported combinations fail without
+pending PNG Blob. A mixed text/image copy is written as separate clipboard
+representations, and its result says some receivers paste only one; unsupported combinations fail without
 silently copying a subset. No receipt claims that another app pasted or sent the
 content. Bundles accept at most 128 parts and one PNG up to 20 MiB; image support
 is advertised only when the browser exposes image clipboard writes. Failed
 operations can be retried, while recent successful operation IDs prevent repeated
-writes. Clipboard operations, page exit publication and development reload live
+writes. Clipboard operations, prompt delivery and development reload live
 under `src/host`; shared UI receives their explicit ports. The browser file source
-continues to expose no general write operations.
+exposes no general write operations.
 
 ### File storage and host actions
 
@@ -277,9 +279,11 @@ and web stay consistent without host-specific copies of those controls.
 
 ### Compact navigation
 
-The web viewer has one navigation row. The native-GLB mark sits before breadcrumbs;
-the version/update dropdown sits before the renderer's snapshot action. It contains
-release instructions, release notes, GitHub and Discord. Appearance is injected as an icon-bearing dropdown beside Projection in
+The web viewer has one navigation row. The native-GLB mark sits before breadcrumbs,
+and with no file open the app names itself "text-to-cad" beside it. At the right
+end, the version/update dropdown comes first, then the renderer's snapshot action,
+the file's Settings toggle and Show files. The dropdown contains release
+instructions, release notes, GitHub and Discord. Appearance is injected as an icon-bearing dropdown beside Projection in
 the Display section, below the full-width Mode selector. The logo plays its existing native
 GLB animation on hover through the shared LoadingIcon, respecting reduced motion. `ViewerBrand`, `ViewerLinks` and `ViewerAppearance` stay web-owned;
 `FileViewer.leading`, `navigationActions` and `displayActions` provide the shared slots.
@@ -290,9 +294,5 @@ The web camera action copies only the viewport PNG through guarded
 `POST /__cad/clipboard`, avoiding browser clipboard permission prompts. The local
 backend writes the server machine's native clipboard on macOS or Linux (wl-copy/xclip);
 this is not the remote phone's clipboard when accessing a shared server. Failures
-use the existing viewer error presentation; successful actions are silent. Desktop keeps its composer attachment workflow.
-Fullscreen is a transparent top-right action, independent of the toolbar. It
-hides editor chrome below the navbar and begins orbiting, with animation playback
-available for files with clips. Animate is conditional on STEP/GLB routines and
-has the shared temporary corner menu for routine, speed and loop. Every 3D file has a toolbar ending in Display, including static GLB files. Fullscreen
-has separate animation (Play icon) and Orbit menus. The cube remains at bottom-right in the normal viewer.
+use the viewer's error presentation; successful actions are silent. Desktop
+attaches the snapshot to its composer instead.

@@ -13,7 +13,7 @@ import { annotatePerspectiveSnapshot, clonePerspectiveSnapshot } from "@hardcore
 // writing is exact. Nothing here touches storage: the host owns that.
 
 export const SHELL_STATE_VERSION = 1;
-/** The coordinate system every stored camera is expressed in. */
+/** The coordinate system a scoped camera (a live `setCamera`) is expressed in. */
 export const SHELL_CAMERA_COORDINATES = "cad-z-up-v1";
 
 const plainObject = value => Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -34,7 +34,7 @@ export function shellPresentationKey(modelKey, revisionKey = "") {
   return modelKey ? `${modelKey}:${revisionKey}:complete` : "";
 }
 
-/** The stored camera, scoped to the model it frames so it is never applied to another. */
+/** A camera scoped to the model it frames, so it is never applied to another. Never stored. */
 export function scopeShellCamera(camera, modelKey, sceneScaleMode) {
   const snapshot = clonePerspectiveSnapshot(camera);
   return snapshot ? annotatePerspectiveSnapshot(snapshot, { modelKey, sceneScaleMode, coordinateSystem: SHELL_CAMERA_COORDINATES }) : null;

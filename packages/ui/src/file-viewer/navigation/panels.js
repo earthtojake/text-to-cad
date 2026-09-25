@@ -5,8 +5,8 @@
  * (`FilePanelColumn.jsx`) — and a list of things that can be in it: what the
  * file's renderer declares (a viewer file's own controls) and the file tree LAST. The nav row draws one icon button per
  * panel, in declaration order, and highlights the open one; pressing a toggle
- * opens that panel and closes whatever was open. A panel has no tabs inside it:
- * the nav row IS the tab strip.
+ * opens that panel and closes whatever was open. Tabs inside a panel are the
+ * panel's own business (a viewer file's Settings, `FilePanelTabs.jsx`).
  *
  * The panel frame is shared across both apps: the tree is an
  * entry in this list, not a second column beside it with a design of its own.
@@ -79,10 +79,9 @@ export const SOURCE_PANEL = "source";
  * A viewer file's sidebar, when it has file-specific controls. Display settings
  * live in the viewport toolbar's popover and never occupy this column.
  *
- * `file` names the sidebar by what the file is — `{ label, icon }`, the icon the
- * file tree draws for that kind of document (a part's box, an assembly's boxes, a
- * robot) — and is null for a file whose only settings are Display's (a mesh). It is
- * the default: a file opened directly opens with its controls. Display never is.
+ * `file` asks for it: one panel, always labelled "Settings" under the sliders icon,
+ * whatever the file is; false for a file whose only settings are Display's (a
+ * mesh). It is the default: a file opened directly opens with its controls.
  *
  * Nothing until the surface is up: a pane whose runtime did not start shows a
  * failure card, and a toggle over a card would open nothing.

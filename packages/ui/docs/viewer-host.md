@@ -7,8 +7,10 @@ persistent storage or page navigation. DOM, canvas, workers and layout remain
 shared. Missing optional methods mean an operation is unsupported.
 
 The host contains `files`, optional native `fileActions`, `clipboard`,
-`promptContext`, `navigation`, resolved `environment.colorScheme`, and optional
-lifecycle flush subscription. CAD is a separate registration supplied with a
+`promptContext`, `navigation`, `environment` and the optional live-document
+bindings `documents` and `pdf`. `environment` carries the resolved `colorScheme`,
+the keyboard `platform` (`darwin` shows ⌘, anything else Ctrl) and the app's own
+`reducedMotion`, honoured beside the system's `prefers-reduced-motion`. CAD is a separate registration supplied with a
 `CadWorkspaceService`; the generic FileViewer does not import CAD. The HTTP CAD
 adapter can serve both apps, while desktop owns native runtime startup/recovery.
 See [workspace resources](../../core/docs/workspace-resources.md) for resource
@@ -27,18 +29,17 @@ are for reading and maintaining the contracts.
 
 | Contract | Definition | Public entry point |
 | --- | --- | --- |
-| `ViewerHost`, `ClipboardPort`, `ViewerCommandTarget` | [Host types](../src/host/types.ts) | `@hardcore/ui/host` |
+| `ViewerHost`, `ClipboardPort` | [Host types](../src/host/types.ts) | `@hardcore/ui/host` |
 | `FileSource`, `FileActions`, mutation receipts, `FileViewerState` | [File viewer types](../src/file-viewer/types.ts) | `@hardcore/ui/file-viewer` |
 | `PromptContextPort`, bundles, references and delivery receipts | [Prompt types](../../core/src/prompt/types.ts) | `@hardcore/core/prompt` |
 | `CadWorkspaceService`, `CadResourceProvider`, worker tickets | [CAD service types](../../core/src/client/types.ts) | `@hardcore/core/client` |
-| `StepRendererSlots`, selection props, `CadCommandSource`, `CadLiveBinding` | [STEP registration](../src/renderers/step/index.ts) | `@hardcore/ui/renderers/step` |
-| `CadPreferenceSource` | [Viewer preferences](../src/renderers/workspace/preferences.ts) | `@hardcore/ui/renderers/workspace` |
+| `StepRendererSlots`, selection props, `CadLiveBinding` | [STEP registration](../src/renderers/step/index.ts) | `@hardcore/ui/renderers/step` |
+| `CadPreferenceSource`, `createCadPreferences`, `createStoredCadPreferences` | [Viewer preferences](../src/renderers/workspace/preferences.ts) | `@hardcore/ui/renderers/workspace` |
 | `DxfRendererOptions` (2D drawings; declares no panel, and declines every camera, display and selection command) | [DXF registration](../src/renderers/dxf/index.ts) | `@hardcore/ui/renderers/dxf` |
 | `GlbRendererOptions`, `LiveViewBinding`, `LiveViewController` | [GLB registration](../src/renderers/glb/index.ts), [live binding](../src/renderers/kit/shell/liveBinding.ts) | `@hardcore/ui/renderers/glb` |
 | `MeshRendererOptions` (STL, 3MF), `LiveViewBinding`, `LiveViewController` | [Mesh registration](../src/renderers/mesh/index.ts) | `@hardcore/ui/renderers/mesh` |
 | `RobotRendererOptions` (URDF, SRDF, SDF), `RobotLiveController`, `RobotLiveState` (`selectedLinks`, `selectedPartIds`) | [Robot registration](../src/renderers/robot/index.ts) | `@hardcore/ui/renderers/robot` |
-| `ViewerCommands`, `ViewerCommandSource` (the host requests the GLB, mesh and robot renderers take) | [Viewer commands](../src/renderers/workspace/commands.ts) | `@hardcore/ui/renderers/workspace` |
-| STEP snapshot validation and versioning | [STEP state](../src/renderers/step/state.ts) | `@hardcore/ui/renderers/step/state` |
+| `ViewerCommands`, `ViewerCommandSource` (the host requests every viewer renderer takes) | [Viewer commands](../src/renderers/workspace/commands.ts) | `@hardcore/ui/renderers/workspace` |
 
 Start with the actual composition in [web App](../../../apps/web/src/App.tsx)
 or [desktop FileTab](../../../apps/desktop/src/renderer/features/explorer/FileTab.tsx).
@@ -48,35 +49,24 @@ browser lifetimes; [desktop README](../../../apps/desktop/README.md) documents
 native IPC, draft delivery and project persistence. Shared component tests can
 use the [explicit fake host](../src/host/testing/host.ts).
 
-## Host fullscreen and renderer navigation actions
+## Fullscreen and renderer navigation actions
 
-Every shared 3D shell offers local fullscreen presentation, including in desktop
-hosts without a fullscreen callback. It expands the scene below the parent-owned
-navbar by requesting `RendererViewProps.onPanelVisibilityChange(false)`. This
-suspends the panel frame without changing the selected panel or its width; cleanup
-restores visibility. It must not use `onChromeVisibilityChange` to hide the navbar.
-The generic chrome visibility extension remains available to other renderers.
-
-`FileViewer.fullscreen` / `onFullscreenChange` also permit host-controlled
-presentation for registrations declaring `fullscreen: true`. Unsupported files
-release host presentation. Local and host entry use the same shell presentation
-controls and camera lifecycle. The navbar stays visible in both paths. Exit calls
-the host callback when host presentation is active; Escape first lets an open
-menu consume the event. Neither path uses the browser Fullscreen API.
-
-Fullscreen state is transient. The shell saves the regular camera, fits a
-presentation camera and restores the regular camera on exit. Presentation
-movement never persists into the file session. Picking, drawing, measurements,
-joint handles and model effects are suspended without discarding their state;
-camera dragging remains available. Orbit starts by default, with speed from the
-host-owned `CadPreferences.orbit`. Fullscreen animation uses the same per-file
-runtime as Animate. Interaction and layout rules live in
+Fullscreen is the shared shell's own presentation state; there is no host prop
+for it and a host cannot start or observe it. It expands the scene below the
+host's navbar, which stays, by calling
+`RendererViewProps.onPanelVisibilityChange(false)`: the panel column is
+suspended and its toggles disabled without changing the selected panel or its
+width, and exit or unmount restores it. It never uses the browser Fullscreen
+API. The shell saves the regular camera, fits a presentation camera and restores
+the regular camera on exit; nothing of the presentation is persisted. Orbit
+starts by default, with its speed from `CadPreferences.orbit` (the app's
+preference store). The rules are in
 [settings-ui.md](settings-ui.md#camera-animation-and-fullscreen).
 
 A renderer can publish `FileNavigationAction[]` through
 `RendererViewProps.onNavigationActionsChange`. The shared navbar shows these
-before its panel toggles. Each action declares its icon, accessible label,
-disabled state and invocation callback. Registration belongs to the mounted
+before its panel toggles. Each action declares its icon, accessible label, an
+optional shorter hover `hint`, disabled state and invocation callback. Registration belongs to the mounted
 file generation: publish an empty list on cleanup; departing renderers cannot
 replace a new file's actions. Publish only when action metadata changes; stable
 commands should read the current viewport through a ref, avoiding parent/child
@@ -124,8 +114,7 @@ storage, page navigation and native process lifecycle remain host responsibiliti
 All primary context actions use `PromptContextPort.deliver(context)`. Desktop
 inserts into a compatible draft; web prepares clipboard representations. Ordinary
 explicit copy/paste controls use the separate `ClipboardPort`. Delivery never
-submits a prompt. The reference coaching tooltip and its retired preference/reset
-plumbing are removed; accessible labels remain.
+submits a prompt.
 
 The portable types and validators live at `@hardcore/core/prompt`. One versioned
 bundle contains ordered text, reference and attachment parts with unique IDs.
@@ -141,8 +130,8 @@ cadgen grammar, not STEP entity numbers. Preserve a revision when available;
 references do not promise to survive edits. Shared serialization handles quoting.
 The web adapter maps workspace files to full served-root paths for external chats.
 
-`PromptContextAction` reads the subscribed destination and labels the shared
-action Add to prompt or Copy for prompt/reference. It calls delivery during the
+`PromptContextAction` (the PDF renderer's prompt action) reads the subscribed
+destination and labels the action Add to prompt or Copy for prompt. It calls delivery during the
 user gesture, before awaiting capture: browser activation and desktop destination
 binding depend on this. Availability and advertised attachment/combination limits
 belong to the host. Every result is acknowledged: added, copied, partial,
@@ -167,9 +156,8 @@ they do not transfer Promise or Blob values across native IPC.
 CAD's `slots.selectionExtras` mounts an optional React component beside shared
 selection actions. It receives immutable typed selection, `selectionKey`,
 disabled state and `createContext({text, capture})`. It receives no scene, stores,
-IPC or arbitrary internal setters. Shared actions remain visible. Apps may supply
-a future Quick Edit interface through this seam; this refactor introduces no new
-Quick Edit workflow.
+IPC or arbitrary internal setters. Shared actions remain visible. Neither app
+mounts one today.
 
 The renderer owns placement and visibility. A contributed popover owns its focus,
 Escape handling and cleanup, stops events it consumes, and closes or invalidates
@@ -200,10 +188,9 @@ and zoom. Display Reset restores the selected preset and disables both tools.
 `resetCamera` frames the model again without turning the camera — exactly what
 STEP's context-menu "Zoom to fit" does. Cube shortcuts change only orientation.
 
-Persisted pre-grouped file sessions migrate once at the state boundary: their
-old display and photographic payload become this display record; the render
-session does not retain camera transforms: fresh mounts fit the model. Live commands reject retired
-field names rather than maintaining a second display authority. Unavailable selectors fail explicitly; topology is not silently
+A stored file record never holds a camera: fresh mounts fit the model. Live
+commands reject retired field names rather than maintaining a second display
+authority. Unavailable selectors fail explicitly; topology is not silently
 loaded. Mutations return a view snapshot after the React frame; a mode switch
 waits for the requested settings to commit, with a ten-second bound.
 Loading views
@@ -219,42 +206,37 @@ Hosts may cache that inactive snapshot without retaining a scene or moving focus
 operations. Typed mutation receipts report committed changes independently of
 caller cancellation. An abort after commit is not rollback. Content, metadata,
 add, delete and move notifications have distinct meanings. Desktop reconciles
-all affected tabs; web remains its existing read-only CAD catalog. This migration
-does not grant web arbitrary filesystem access or enable editing there.
+all affected tabs; web is a read-only CAD catalog, with no arbitrary filesystem
+access or editing.
 
 State remains controlled through FileViewer props. Apps merge changed chrome
 fields and document/renderer slices into the current root state; a stale view
-must not overwrite another view's independent fields. Versioned pose and display state restores through the same schemas; legacy
-camera transforms are ignored so reopening/refreshing fits the file anew. Material appearance
-is source-owned and read-only; legacy material override slices are ignored. Global
-preferences belong to the app/window, document snapshots to workspace/path,
+must not overwrite another view's independent fields (both apps merge renderer
+records with `mergeChangedRecords`). Versioned pose and display state restores
+through the same schemas; camera transforms are never stored, so reopening or
+refreshing fits the file anew. Material appearance is source-owned and
+read-only. Global preferences belong to the app/window, document snapshots to workspace/path,
 and live selection/scene ownership to the mounted view.
 
-Lifecycle flush publishes the current view state; it does not save document
-content or promise an asynchronous operation will finish during page exit.
-Web owns pagehide, focus, visibility, history and development reload. Desktop
-owns window/runtime lifecycle and IPC. Existing dirty-editor behavior remains.
+A mounted view writes its record shortly after each change and once more when it
+unmounts; nothing saves document content or promises an asynchronous operation
+will finish during page exit. Web owns pagehide (which unmounts the app), focus,
+visibility, history and development reload. Desktop owns window/runtime
+lifecycle and IPC.
 
 The dependency checker enforces host boundaries, including worker source. The
 browser harness mounts real renderers with explicit fake hosts; app tests cover
 native/clipboard delivery and multiple-view state merges. Warm-cache regression
 tests remain required for resource changes.
 
-## Scoped commands
+## Keyboard scope
 
-An optional `host.commands.bind(target)` registers this mounted viewer's
-save/reload/focus methods and returns an unbind function. A target includes
-source identity, path and document generation. Captured commands fail with
-`stale` after navigation, reload, source replacement or unmount. Saves acknowledge
-conflicts and failures; a stale completion can report that the old document's
-write committed without updating its replacement. Each app owns dispatch to its
-intended view; there is no global command bus or new menu action.
-
-Monaco retains its editor-local save binding. CAD keyboard shortcuts consume
-only events from their viewer or its last pointer-owned background, so another
-viewer or the composer does not receive Escape/undo on its behalf. Existing
-reverse CAD selection/capture commands remain tab-scoped domain commands;
-ordinary native window Reload retains its existing app behavior.
+Monaco keeps its editor-local save binding. Viewer shortcuts consume only events
+from their own viewer, or from the page background after a pointer press in it,
+so another viewer or the composer never receives Escape, copy or orbit keys on
+its behalf ([settings-ui.md](settings-ui.md#keyboard)). The standalone
+`DrawingEditor` takes the host's keyboard `platform` as a prop for its undo and
+redo keys.
 
 ## Live text and PDF capabilities
 
@@ -287,8 +269,8 @@ permit its compilation in CSP without enabling JavaScript eval.
 `FileViewer.leading` adds host content before breadcrumbs. `navigationActions` adds
 host controls before renderer navigation actions (such as Snapshot), and
 `displayActions` passes host-owned appearance controls into the Display section beside Projection via
-`RendererViewProps`. The shell handles placement and hides the toolbar in fullscreen;
-the host owns callbacks and preferences. These slots do not imply platform detection
+`RendererViewProps`. The shell handles placement and hides the toolbar in
+fullscreen; the host owns callbacks and preferences. These slots do not imply platform detection
 or move application-specific release/network behavior into shared UI.
 
 For snapshot actions, clipboard destinations receive the viewport PNG directly
@@ -303,4 +285,9 @@ it instead; only non-isolatable topology references use double-click copying. Ca
 routing. The host supplies `environment.platform` for the ⌘C / Ctrl+C hint;
 the web host derives that field from its browser environment.
 
-Renderer status uses `RendererViewProps.navigationStatusSlot`, a named portal slot immediately after the filename. `onPanelVisibilityChange(false)` temporarily hides the panel and disables panel toggles without changing the user’s selected panel or width. Renderers restore visibility on exit/unmount; FileViewer scopes this callback to the current document generation. Preview uses this suspension while keeping the navbar visible.
+Renderer status uses `RendererViewProps.navigationStatusSlot`, a named portal
+slot immediately after the filename. `onPanelVisibilityChange(false)` temporarily
+hides the panel and disables panel toggles without changing the user's selected
+panel or width. Renderers restore visibility on exit/unmount; FileViewer scopes
+this callback to the current document generation. Fullscreen uses this
+suspension while keeping the navbar visible.

@@ -1,7 +1,6 @@
 import { useState } from "react";
 import LoadingIcon from "@hardcore/ui/loading-icon";
 
-/** The native GLB mark uses its existing loop only while hovered. */
 /** The icon at the head of the nav row, and the app's name beside it while no file is open. */
 export default function ViewerBrand({ title = "" }) {
   const [hovered, setHovered] = useState(false);

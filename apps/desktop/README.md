@@ -19,12 +19,6 @@ This app is a root npm workspace. Install dependencies in this checkout with
 modules explicitly. Do not borrow another checkout's `node_modules`: packaged
 Electron dependency resolution must be verified from this workspace's tree.
 
-The migration to `@hardcore/core` and `@hardcore/ui` is a **pure refactor**.
-All existing UI, UX and functionality are preserved: window/session layout,
-file renderers, controls, shortcuts, editing/saves/conflicts, CAD tools,
-reference chips, preferences, app appearance and native services. Desktop's local
-controls keep their appearance; the shared file viewer keeps the viewer's.
-
 `features/explorer/FileTab.tsx` is a thin host of `@hardcore/ui/file-viewer`.
 Its adapters translate IPC file access, source capabilities, root identity,
 persistence and CAD commands into package contracts. `renderers.tsx` registers
@@ -35,10 +29,13 @@ image, PDF and fallback renderers. The whole
 file-tab interface is shared with web. Projects, sessions, browser/terminal/
 review tabs, agent integrations and native services remain in this app.
 Neither shared package imports app source, and desktop imports no web source.
-The host keeps the fullscreen orbit preference in one window-wide store backed
-by its global storage key (`cad-viewer:orbit:v1`). Active and newly opened roots share that
-preference; document state and the open panel remain scoped to their root or
-tab. Retired tutorial and tab-layout records are ignored.
+The host keeps the fullscreen orbit preference in one window-wide store, built
+with the shared `createStoredCadPreferences` over `localStorage` (key
+`cad-viewer:orbit:v1`; `adapters/cadPersistence.ts`). Active and newly opened
+roots share that preference; renderer records and the open panel belong to the
+tab. The renderer records live in `hardcore.fileViewer.v1`, keyed
+`[sourceId, tabId]`, merged with the shared `mergeChangedRecords`, and forgotten
+when their tab closes for good (`adapters/viewStateStore.ts`).
 
 ## Dev
 
@@ -191,12 +188,13 @@ document), `file-markdown-raw-blocks` (raw HTML kept as its own bytes),
 neighbours, open),
 `file-context-menu` (a tree row's), `file-image`, `file-cad-failed` (the runtime broken on
 purpose), `file-cad` (the explorer at its widest: the sidebar hidden and the
-session at its floor), `file-cad-default` (the explorer at its default
-width, the file's own panel open beside the model) and both again at 1280×800,
+session at its floor), `file-cad-default` (the file's Settings open beside
+the model) and both again at 1280×800,
 `file-cad-measure`, `file-cad-tree` and `file-cad-files` (the file tree in
 that same column), `file-cad-light-chrome` (Inspect and the app in light
-appearance), `render-materials` (Render's material editor and photographic
-scene), and `robot-kinematics` (a joint edited in the robot panel's Position),
+appearance), `render-view` (Render's photographic scene, with no Materials
+editor), and `robot-kinematics` (a joint edited in the robot's Settings, on its
+Position tab),
 `terminal`,
 `browser-empty`, `browser`, `review`, `strip`, `strip-overflow` (seven tabs in
 a pane at its floor, `+` pinned to the right edge), `panes-sidebar-collapsed`
@@ -589,11 +587,12 @@ from the tree, the tab strip, the command palette or an agent's
 the pane's width, and only a person's own toggle or drag writes it: an agent
 opening a file shows the pane without deciding anything for next time.
 
-A CAD file in the explorer is laid out by the desktop, not measured by the
-shared FileViewer frame: the surface is pinned to its desktop
-layout so nothing is ever a drawer over the model, its panels are drawn in
-the file tab's own panel column (so their width is that column's — see "The
-panels a file has"). The app owns light/dark appearance. Inspect uses its
+A CAD file in the explorer is laid out by the shared FileViewer, which measures
+its own width: from 720px up, a file's panels are drawn in the file tab's own
+panel column beside the model (see "The panels a file has"); below it — and the
+explorer pane opens at 560px (`PANE_LIMITS.explorer.default`) — they are
+floating sheets over the model, the crumbs collapse to the file and the view
+cube is hidden. The app owns light/dark appearance. Inspect uses its
 fixed light (`#f0f4f9`) or dark (`#333333`) canvas; Render starts from the
 matching photographic studio and keeps its model-local backdrop edits.
 
@@ -680,20 +679,21 @@ not change a reference's filename. Long names truncate within the chip; the
 full label is available on hover. The
 full file/selector remains in the tooltip and is still the text sent to the
 agent. Names are optional display metadata scoped to the draft; typed or
-unresolved references keep their file/selector fallback. The viewer's reference
-coaching tooltip is removed; composer reference-chip tooltips remain.
+unresolved references keep their file/selector fallback.
 
 Image attachments show a contained thumbnail beside the filename, with an always-visible remove control. Click the thumbnail (or focus it and press Enter) to inspect the full image. Escape, Close or the backdrop dismisses the preview and returns focus to the thumbnail; the draft is unchanged. Explorer tabs use a bordered active state and visible keyboard focus on selection and close controls.
 
-Explicit Copy and Copy Link remain clipboard-only. The primary Add to prompt
-action adds selected references and inspection facts. **Ask about this view**
-adds the image and selected references together, without duplicating existing
-chips. Each tab delivers only to the session that owns it. A workspace
-mismatch is rejected, and switching to another chat never redirects context.
-Nothing is sent until the user submits.
+The viewer's Copy Reference(s) button, ⌘C and the copy items in its menus are
+clipboard-only. A STEP's viewport and model-tree menus also offer **Add to
+prompt**, which adds that reference to the draft, and the navbar's snapshot
+adds the current view and the selected references together. Each tab delivers
+only to the session that owns it. A workspace mismatch is rejected, and
+switching to another chat never redirects context. Nothing is sent until the
+user submits.
 
-FileViewer receives an explicit `ViewerHost`: workspace files/actions, native
-clipboard, prompt delivery, navigation, appearance and shutdown publication.
+FileViewer receives an explicit `ViewerHost`: workspace files/actions, live
+documents, native clipboard, prompt delivery, navigation and environment
+(appearance, keyboard platform and the app's reduced-motion setting).
 Follow the [shared host contract](../../packages/ui/docs/viewer-host.md) when
 adding integrations; native effects and session workflows belong in this app.
 Prompt delivery binds the tab's immutable owner session when the host is
@@ -969,18 +969,18 @@ last owner leaves.
 
 ### The file tab's nav
 
-One row: the breadcrumb, then one toggle per panel this file has — the
-renderer's, then the files toggle at the right end, which stays there
-whatever is open and whatever kind of file it is (it used to move into the
-tree's own header when the tree opened; the tree's header is the filter and
-nothing else). There is no `Copy path` button and no `Open ▾`: those are
-items in the entry menus.
+One row: the breadcrumb, with the unsaved dot and the file's loading or update
+status after the file's name; then, at the right end, the renderer's actions
+(a viewer file's snapshot), one toggle per panel the file declares, and the
+files toggle last, which stays there whatever is open and whatever kind of
+file it is. The tree's header is its filter and nothing else. There is no
+`Copy path` button and no `Open ▾`: those are items in the entry menus.
 
 The row itself is the CAD Viewer's — `@hardcore/ui/navigation`, inside the complete shared FileViewer that web
 viewer draws too, so the two apps have one nav row and not two that resemble
-each other. This app supplies the ends (the branch label, the unsaved dot, its
-panel toggles) and, through a source adapter, the two things only it has:
-where a directory listing comes from and the entry menus on a crumb
+each other. This app supplies the branch label before the crumbs (`leading`,
+drawn by `FileTab.tsx`) and, through a source adapter, the two things only it
+has: where a directory listing comes from and the entry menus on a crumb
 (`features/explorer/adapters/fileSource.ts`).
 
 The desktop `FileSource` exposes validated IPC storage operations separately
@@ -1009,8 +1009,8 @@ the tree a file is in is the one thing its name does not say. Directories
 come first, each a submenu
 of its own listing read when it is opened; picking a file opens it *in this
 tab* — the crumb is the tab's address bar, unlike the tree's rows, which open
-tabs. In a narrow pane the folders fold into a `…` crumb whose menu is those
-folders. The listings are the tree's own (`useTree`), so a folder the tree
+tabs. Below the viewer's 720px breakpoint the crumbs collapse to the file's
+own. The listings are the tree's own (`useTree`), so a folder the tree
 has read costs the menu nothing and the two never disagree.
 
 **The file crumb carries a `⋯`** immediately after its name ("File actions"),
@@ -1055,17 +1055,15 @@ which is the last entry and not a special case; the nav row draws one icon
 button per entry with `aria-pressed`, highlighted while its panel is open,
 in that order — so the files toggle is last and never moves, and the one
 control that is always there is always in the same place. Opening any panel
-closes whatever was open, and no panel has tabs inside it: the nav row is the
-tab strip. This is the standalone viewer's top bar, ported,
-with the app's own tree folded into it.
+closes whatever was open.
 
 Markdown declares one, the two readings of the same bytes (`View source` /
-`View preview`). A viewer file declares **Display** (`cad-display`, the sliders
-glyph), then its own panel, next to the tree. The own panel's id is `cad-file`,
-named for what the file is: a STEP part's `Part` (a box), an assembly's `Assembly`
-(boxes), a URDF, SRDF or SDF's `Robot` (a bot). An STL, a 3MF and a GLB declare
-Display alone, and a DXF declares none. Code, images and PDFs declare none,
-leaving the tree as the whole list.
+`View preview`). A viewer file declares at most one: its **Settings**
+(`cad-file`, the sliders glyph), and only a STEP and a URDF, SRDF or SDF have
+one (`viewerPanels(ready, { file: true })`). Its sections are Features (Links
+for a robot) and Position, shown as two tabs when a file has both. An STL, a
+3MF, a GLB and a DXF declare none; Display is a toolbar popover, never a panel.
+Code, images and PDFs declare none, leaving the tree as the whole list.
 
 A declaration identifies where its content belongs: `tree` is the app's file
 tree, `slot` is a box the renderer draws into, and `body` replaces the file
@@ -1082,65 +1080,85 @@ in the tree asks for the tree (`openFile(path, { target: "new", panel: "tree" })
 its tab — new, or the one already showing it — opens with the tree up, so the tree
 can be walked file by file; `openSessionTab` applies a requested panel in the same
 strip update that selects the tab, and leaves a tab's panel alone when none is
-asked for. When a pick in the viewport has details to show, the renderer opens
-its own panel (`onPanelOpen`), so the toggle follows the visible content. A CAD
-tab whose runtime failed declares no panels, leaving only the files toggle.
-Saved `cad-theme` panel choices read as `null`.
+asked for. While any panel is open — the tree included — a viewport pick turns
+it to the file's Settings (`onPanelOpen`), and the Position tool opens Settings
+on its Position tab; a pick with nothing open leaves it closed. Below the
+viewer's 720px breakpoint the tab's panel is not consulted: a file opens with
+no sheet, a sheet opens from its toggle, and neither a pick nor a tool opens one. A CAD tab whose runtime
+failed declares no panels, leaving only the files toggle. Saved `cad-theme`
+panel choices read as `null`.
 
 ### Inspect and Render
 
-CAD controls are shared with web. A file has a top-right tool strip only where it
-has tools: a STEP's contains Select, Measure and Draw, plus Position (drag joints by
-viewport handles) and Animate where the file has joints or routines. Pressing Select again opens its selection-filter dropdown.
-A robot description opens in Position, which leads its tools, followed by a Select that picks whole links. An agent's select command on one fails with a sentence saying so; its clearSelection clears the link selection.
-Draw is a STEP tool and appears nowhere else.
-A GLB, an STL and a 3MF have nothing to select and no tools at all: their viewport
-simply orbits, pans and zooms, with no strip over it and no menu on a secondary
-press. A GLB with clips shows the playbar under the model always — a transport,
-not a tool — and the file opens at rest. An agent's select command on one of them fails with a sentence saying so.
-Buttons wrap inside the pill in a narrow explorer pane. The file navbar has a
-direct snapshot action before the panel toggles: the file's own panel, Display
-(`SlidersHorizontal`) and the file tree (`Folders`).
-Snapshot attaches the viewport PNG and references to this tab's owning session
-draft through the prompt-context adapter; it does not send a message. Playback
-lives in the Animate tool, not in a panel. There is no zoom control anywhere:
-no percentage readout, no menu behind one, no zoom toolbar. A
-STEP's viewport context menu ends in Zoom to fit and Zoom to selection (off without
-a selection), offered over a part, over the backdrop and on every Features tree row;
-on every other 3D file the view cube's centre, "Reset to default isometric view",
-frames the model again from the default direction. Nothing in either touches the
-model, its motion or its display settings; Display Reset restores the selected
-preset and disables Clip/Explode, and the Position section's Reset restores a pose. X/Y/Z labels stay outside the
-bottom-right axis endpoints, with the yellow center above their stems.
-This app has no fullscreen: it passes no `onFullscreenChange`, so a STEP's strip
-has no Fullscreen button here.
+CAD controls are shared with web, and the shared
+[viewer design system](../../packages/ui/docs/settings-ui.md) is their contract;
+what follows is what a desktop tab shows. Every 3D file has a toolbar at the
+top left, ending in **Display**
+([tools and lifecycle](../../packages/ui/docs/settings-ui.md#tools-and-lifecycle)).
+A STEP's is Select, Draw, Measure, Explode, Clip, then Position where the
+sidecar declares kinematics and Animate where it declares routines, then Display.
+A tool with a corner mark has a menu (Select's selection filter, Measure's
+snapping, Animate's routine, speed and loop); Explode and Clip are toggles whose
+panels sit beneath the toolbar. A robot description's is Select (which picks
+whole links; Shift, Ctrl or Cmd adds one), Position where it has movable joints,
+then Display; it opens in Select. An agent's select command on a robot fails
+with a sentence saying so; its clearSelection clears the link selection. Draw is
+a STEP tool and appears nowhere else. A GLB, an STL and a 3MF have nothing to
+select: their toolbar is Display, plus Animate for a GLB with clips, and an
+agent's select command on one fails with a sentence saying so. The playbar
+shows while Animate is active and in fullscreen. Buttons wrap inside the
+toolbar in a narrow pane. Display is a popover tool: it takes the pointer from the
+active tool, and closing it hands the pointer to the file's default tool
+(Select, where there is one).
 
-A STEP's own panel is `Part` or `Assembly`, and it stacks Features, then Position
-when the sidecar declares kinematics (a `Pose` row, the joint sliders, then
-Reset), then Issues when there are any. Animate's
-playback and Position's pose retain independent runtimes, enable state and
-actions; every pose write (a value, a named pose, a Position-tool knob, Reset) is
-an instant jump, and Reset also stops any playing routine and hands the pose
-back to Position. A robot's own panel is `Robot`: its Position for the joints,
-then Links (the link tree), and an SDF's metadata after Links. A DXF drawing has
-no panel of its own and no Display: it is a straight 2D render on a canvas — drag to pan,
-wheel or pinch to zoom about the pointer, double-click to fit — and the navbar carries
-only Take snapshot and the files toggle.
+The file navbar's snapshot action (the camera) attaches the viewport PNG and
+the selected references to this tab's owning session draft through the
+prompt-context adapter; it does not send a message. There is no zoom control
+anywhere: no percentage readout, no menu behind one, no zoom toolbar. A STEP's
+viewport context menu ends in Zoom to fit and Zoom to selection (off without a
+selection), offered over a part, over the backdrop and on every Features tree
+row. The view cube sits at the bottom right, hidden below the 720px breakpoint
+and in fullscreen: its faces turn the camera to the six plane views and its
+corners to the isometric views, keeping the zoom. Neither touches the model, its
+motion or its display settings. The camera is never stored, so reopening a file
+frames it afresh.
 
-Display contains the single Mode dropdown for shaded, edge, wire and photographic
-Render presentation. All modes share the camera, projection, part colors,
-guides, clipping and explode controls. Render adds its lighting, backdrop and
-Preview/Final quality sections inside Display. Switching modes never reframes the
-camera or changes the open panel. Photographic settings persist per file. The
-file's own panel stays mounted while Display is open, so the Features tree keeps
-its disclosure and scroll.
+**Fullscreen** is the shared shell's own button, a small two-arrow icon at the
+top right of the viewport
+([camera, animation and fullscreen](../../packages/ui/docs/settings-ui.md#camera-animation-and-fullscreen)).
+It keeps this app's navbar, hides the toolbar and suspends the sidebar, orbits
+by default, and offers an Orbit menu and, for a file with animations, a Play
+menu; Escape or its X exits and puts the camera back. The host passes nothing
+for it.
 
-Settings › Appearance owns the app's System, Light and Dark preference. CAD
-Theme settings are retired, and old theme records cannot override the current
-scene. Authored materials are read-only in every display mode, with names and
-properties in the Model reference section. There is no Materials tab, local
-assignment or material undo state; old overrides are ignored. Use prompts to
-change source material assignments or properties.
+A STEP's Settings holds Features, then Issues when there are any, and Position
+when the sidecar declares kinematics (a `Pose` choice with its Reset, then the
+joint sliders); with Position present, Features and Position are separate tabs.
+Animate's playback and Position's pose retain independent runtimes, enable state
+and actions; every pose write (a value, a named pose, a Position-tool knob,
+Reset) is an instant jump, and Reset also stops any playing routine and hands
+the pose back to Position. A robot's Settings holds Links (the link tree, an
+SDF's metadata after it) and Position for the joints, as two tabs when both are
+there. A DXF drawing has no toolbar and no Settings: it is a straight 2D render
+on a canvas — drag to pan, wheel or pinch to zoom about the pointer,
+double-click to fit — and the navbar carries only Take snapshot and the files
+toggle.
+
+Display's first section holds the Mode dropdown (Solid, Render, X-ray, Hidden
+line, Wireframe) and Projection; Surfaces, Edges, Grid / Axes, Lighting (with
+its Preview/Final quality), Background and Floor follow. A robot, a GLB, an STL
+and a 3MF have no CAD edges, so they offer only Solid and Render and no Edges
+section. Switching modes never reframes the camera
+or changes the open panel. Display settings, Clip and Explode persist in the
+tab's record for the file.
+The file's Settings stays mounted while Display is open, so the Features tree
+keeps its disclosure and scroll.
+
+Settings › Appearance owns the app's System, Light and Dark preference; the
+desktop adds no appearance control to Display. Authored materials are read-only
+in every display mode, with names and properties in the selection's reference
+details. There is no Materials tab, local assignment or material undo state.
+Use prompts to change source material assignments or properties.
 
 Embedded STEP animation modules load through temporary Blob URLs in the
 renderer. Its content security policy permits `blob:` scripts for this path,

@@ -10,7 +10,7 @@ GLB have no levels: their renderers load the file whole, parse it once per revis
 STL in a worker) and keep the decode cached, so reopening one fetches and parses nothing
 (see [Mesh renderer](cad-renderer.md#mesh-renderer)).
 
-The observable promises are in [the app README](../README.md#the-laws-that-bind-the-app);
+The observable promises are in [the web app README](../../../apps/web/README.md#the-laws-that-bind-the-app);
 this file is the mechanism behind them. None of it may change **exact**
 geometry, measurements or explicit mesh-export tolerances — detail is a
 display concern only.

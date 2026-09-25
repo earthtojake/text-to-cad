@@ -11,8 +11,10 @@ orbit, using the brand blue (`#62b7ec`) and studio lighting. `hardcore-still.web
 is the fully expanded reference pose. The viewer displays both at 96 × 96.
 
 The animation is decorative. Existing loading state, status labels and measured
-progress still control the overlay. OS reduced motion, the desktop's Reduce
-motion setting, and document visibility select the still image. No additional
+progress still control the overlay. The still image shows when the system
+prefers reduced motion, when the document is hidden, or when the icon's
+`reducedMotion` prop is set — the viewer passes the host's
+`environment.reducedMotion` (the desktop's Reduce motion setting). No additional
 WebGL context or animation loop runs in the application.
 
 To regenerate, install the desktop dependencies, Chromium for Playwright, and

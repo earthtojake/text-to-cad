@@ -358,10 +358,11 @@ renderers. Apps consume compiled public exports. Apps never import another app,
 and packages never import apps. `npm run check:boundaries` checks the graph,
 including aliases, re-exports and dynamic imports.
 
-Package movement is a pure refactor: preserve UI, UX, file actions, defaults and
-persistence. Incorporate explicitly requested upstream features in the shared
-components so web and desktop receive the same behavior. Package/app READMEs
-state the ownership rules.
+Viewer features go in the shared components, so web and desktop receive the same
+behavior; apps supply only what the host contract asks of them. The viewer's
+tools, sidebars and settings follow the binding design system in
+`packages/ui/docs/settings-ui.md`: change it with the chrome, and change the
+chrome only through it. Package/app READMEs state the ownership rules.
 
 Install from the repository root, selecting only the workflow being exercised:
 
