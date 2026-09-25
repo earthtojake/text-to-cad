@@ -21,9 +21,23 @@ reads the result out of the loaded GLB (its `fields` extras and the
 the deformation in place; `FeaLegend.jsx` is the overlay (colour bar, range,
 units, field select, deformation slider) on the shell's `viewportOverlay`
 slot; `GlbRenderer.jsx` wires it and keeps the choice per tab. The GLB is
-now standard glTF (metres, Y-up). Screenshots of the built app on the
-L-bracket example are in the shared doc. What remains of the plan is below,
+now standard glTF (metres, Y-up). What remains of the plan is below,
 unchanged.
+
+The built app on the L-bracket example (`models/examples/src/l_bracket.py`,
+6061-T6, bottom face fixed, 500 N in −Y on the top of the back plate):
+
+| The STEP | von Mises, deformation ×190 | Displacement field |
+| --- | --- | --- |
+| ![The L-bracket STEP](images/fea/part-step.png) | ![von Mises stress](images/fea/result-von-mises.png) | ![Displacement](images/fea/result-displacement.png) |
+
+| Deformation ×0 | Deformation ×760 |
+| --- | --- |
+| ![Undeformed](images/fea/result-undeformed.png) | ![Max deformation](images/fea/result-max-deformation.png) |
+
+![Orbit and field switch](images/fea/fea-result-orbit-and-field.gif)
+
+![Deformation scale sweep](images/fea/fea-deformation-scale.gif)
 
 ## Recommendation in one paragraph
 
