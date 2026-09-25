@@ -67,14 +67,17 @@ function NoteInput({ value, onChange, onSubmit, onCancel, onBlur, autoFocus = fa
   );
 }
 
-/** A reference as a chip: pressing it selects that geometry again. */
+/**
+ * A reference as a chip, drawn as the chat box draws a reference in the prompt (its frame, and a
+ * hash with the label for a selector in the file on screen): pressing it selects that geometry again.
+ */
 function ReferenceChip({ reference, onSelect }) {
   return (
     <button type="button" data-annotation-chip={reference.selector} title={reference.selector}
       onClick={event => { event.stopPropagation(); onSelect(); }}
-      className="inline-flex max-w-full items-center gap-1 rounded-md border bg-secondary/70 px-1.5 py-0.5 align-middle text-[12px] leading-4 transition-colors hover:bg-secondary">
-      <Hash className="size-3 shrink-0 text-muted-foreground" aria-hidden="true" />
-      <span className="truncate">{reference.label}</span>
+      className="inline-flex max-w-full items-center gap-1 rounded-md border bg-secondary/70 px-1.5 py-px align-middle text-[12px] leading-4 text-secondary-foreground transition-colors duration-120 hover:bg-primary/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
+      <Hash className="size-3 shrink-0 opacity-70" aria-hidden="true" />
+      <span className="min-w-0 max-w-[160px] truncate text-muted-foreground">{reference.label}</span>
     </button>
   );
 }

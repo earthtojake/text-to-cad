@@ -57,24 +57,41 @@ export function ReferenceChip({ node, selected }: NodeViewProps) {
           }
         }}
       >
-        {name ? (
-          <Box aria-hidden className="size-3 shrink-0 opacity-70" />
-        ) : (
-          <Hash aria-hidden className="size-3 shrink-0 opacity-70" />
-        )}
-        {name ? (
-          <span className="min-w-0 max-w-[160px] truncate" data-reference-model>{name}</span>
-        ) : null}
-        {name && label ? <span aria-hidden className="shrink-0 text-muted-foreground"> · </span> : null}
-        {label ? (
-          <span className="min-w-0 max-w-[160px] truncate text-muted-foreground" data-reference-label title={label}>{label}</span>
-        ) : null}
-        {!label && reference.selector ? (
-          <span className="min-w-0 max-w-[160px] truncate rounded-sm bg-primary/10 px-1 font-mono text-[11px] text-primary" data-selector-badge>
-            {reference.selector}
-          </span>
-        ) : null}
+        <ReferenceChipContent label={label} name={name} selector={reference.selector} />
       </button>
     </NodeViewWrapper>
+  );
+}
+
+/** A reference chip's frame, for a chip drawn outside the editor (an annotation's, in its list). */
+export const REFERENCE_CHIP_CLASS =
+  "inline-flex max-w-full items-center gap-1 rounded-md border bg-secondary/70 px-1.5 py-px align-baseline text-[12px] leading-4 text-secondary-foreground";
+
+/**
+ * What a reference chip shows, wherever it is drawn: a file icon and the file's name, then its
+ * part/feature label, or its selector as a badge when it has none; a hash instead of the file
+ * for a bare selector.
+ */
+export function ReferenceChipContent({ name, label, selector }: { name: string; label?: string; selector?: string }) {
+  return (
+    <>
+      {name ? (
+        <Box aria-hidden className="size-3 shrink-0 opacity-70" />
+      ) : (
+        <Hash aria-hidden className="size-3 shrink-0 opacity-70" />
+      )}
+      {name ? (
+        <span className="min-w-0 max-w-[160px] truncate" data-reference-model>{name}</span>
+      ) : null}
+      {name && label ? <span aria-hidden className="shrink-0 text-muted-foreground"> · </span> : null}
+      {label ? (
+        <span className="min-w-0 max-w-[160px] truncate text-muted-foreground" data-reference-label title={label}>{label}</span>
+      ) : null}
+      {!label && selector ? (
+        <span className="min-w-0 max-w-[160px] truncate rounded-sm bg-primary/10 px-1 font-mono text-[11px] text-primary" data-selector-badge>
+          {selector}
+        </span>
+      ) : null}
+    </>
   );
 }

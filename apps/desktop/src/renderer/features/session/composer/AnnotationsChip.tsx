@@ -1,4 +1,4 @@
-import { Hash, MessageSquareDot, X } from "lucide-react";
+import { MessageSquareDot, X } from "lucide-react";
 import { toast } from "sonner";
 
 import {
@@ -6,6 +6,8 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from "@renderer/components/ui/hover-card";
+import { cn } from "@renderer/lib/utils";
+import { REFERENCE_CHIP_CLASS, ReferenceChipContent } from "@renderer/features/session/composer/ReferenceChip";
 import { parseReference } from "@renderer/features/session/composer/references";
 import {
   openComposerReference,
@@ -104,21 +106,15 @@ export function AnnotationsChip({
                     {index + 1}.
                   </span>
                   <span className="min-w-0">
-                    {annotation.references.map((reference) => (
-                      <span
-                        className="mr-1 inline-flex max-w-full items-center gap-0.5 rounded-md border bg-secondary/70 px-1 align-middle text-[11px]"
-                        key={reference.text}
-                        title={reference.text}
-                      >
-                        <Hash
-                          aria-hidden
-                          className="size-2.5 shrink-0 text-muted-foreground"
-                        />
-                        <span className="truncate">
-                          {reference.label ?? reference.text}
+                    {annotation.references.map((reference) => {
+                      const parsed = parseReference(reference.text);
+                      const name = parsed?.file ? (parsed.file.split(/[\\/]/).pop() ?? parsed.file) : "";
+                      return (
+                        <span className={cn(REFERENCE_CHIP_CLASS, "mr-1 align-middle")} key={reference.text} title={reference.text}>
+                          <ReferenceChipContent label={reference.label} name={name} selector={parsed?.selector} />
                         </span>
-                      </span>
-                    ))}
+                      );
+                    })}
                     <span className="break-words">{annotation.text}</span>
                   </span>
                 </button>
