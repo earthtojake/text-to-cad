@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  MAX_ANNOTATIONS, addAnnotation, annotationDelivered, annotationReferenceLabel, createAnnotation, editAnnotation,
+  MAX_ANNOTATIONS, addAnnotation, annotationAnchor, annotationDelivered, annotationReferenceLabel, createAnnotation, editAnnotation,
   markAnnotationSent, readAnnotations, removeAnnotation
 } from "./stepAnnotations.js";
 
@@ -18,7 +18,7 @@ test("a chip names a face, edge or vertex by its number, a part by its name, and
 test("an annotation needs something to be pinned to", () => {
   assert.equal(createAnnotation([], "make a hole"), null);
   assert.deepEqual(createAnnotation([{ selector: "o1.1.e3" }], "make a hole in it", { id: "a1" }),
-    { id: "a1", references: [{ selector: "o1.1.e3", label: "Edge 3" }], text: "make a hole in it", sent: false });
+    { id: "a1", references: [{ selector: "o1.1.e3", label: "Edge 3" }], text: "make a hole in it", sent: false, anchor: null });
 });
 
 test("editing a sent note makes it unsent; an unchanged edit leaves it alone", () => {
@@ -46,4 +46,17 @@ test("only a delivery that reached the chat box counts as sent", () => {
   assert.equal(annotationDelivered({ status: "failed" }), false);
   assert.equal(annotationDelivered({ status: "cancelled" }), false);
   assert.equal(annotationDelivered(undefined), false);
+});
+
+test("a dot sits in the middle of what the annotation is about", () => {
+  assert.equal(annotationAnchor([]), null);
+  assert.equal(annotationAnchor([{ selectorType: "edge" }]), null, "nothing to place it on");
+  assert.deepEqual(annotationAnchor([{ selectorType: "face", center: [1, 2, 3], normal: [0, 0, 1] }]),
+    { point: [1, 2, 3], normal: [0, 0, 1] });
+  assert.deepEqual(annotationAnchor([{ selectorType: "occurrence", bbox: { min: [0, 0, 0], max: [2, 4, 6] } }]),
+    { point: [1, 2, 3], normal: null });
+  assert.deepEqual(annotationAnchor([{ selectorType: "face", center: [0, 0, 0], normal: [1, 0, 0] }, { selectorType: "edge", center: [2, 2, 2] }]),
+    { point: [1, 1, 1], normal: null }, "several: the average, and no single normal");
+  const stored = readAnnotations([{ id: "a1", references: [{ selector: "o1.1.f1" }], anchor: { point: [1, 2, 3], normal: "up" } }]);
+  assert.deepEqual(stored[0].anchor, { point: [1, 2, 3], normal: null });
 });

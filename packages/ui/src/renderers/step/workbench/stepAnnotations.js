@@ -8,7 +8,11 @@
 // person's note after the agent changes the part. Its chips simply stop resolving if the edge
 // is gone.
 //
-//   { id, references: [{ selector, label }], text, sent }
+//   { id, references: [{ selector, label }], text, sent, anchor }
+//
+// `anchor` is where the annotation's dot sits on the model: a point in model space (the
+// frame selector geometry is authored in, before the viewer re-centres the model), and the
+// face's outward normal when it was made on one face, so a dot on the far side can dim.
 
 const text = value => String(value ?? "").trim();
 const plainObject = value => Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -45,12 +49,37 @@ function readReference(value) {
   return { selector, label: annotationReferenceLabel(selector, value.label) };
 }
 
+const point = value => Array.isArray(value) && value.length === 3 && value.every(Number.isFinite) ? [...value] : null;
+
+function readAnchor(value) {
+  if (!plainObject(value)) return null;
+  const at = point(value.point);
+  return at ? { point: at, normal: point(value.normal) } : null;
+}
+
 function readAnnotation(value) {
   if (!plainObject(value)) return null;
   const id = text(value.id);
   const references = Array.isArray(value.references) ? value.references.map(readReference).filter(Boolean) : [];
   if (!id || !references.length) return null;
-  return { id, references, text: String(value.text ?? ""), sent: value.sent === true };
+  return { id, references, text: String(value.text ?? ""), sent: value.sent === true, anchor: readAnchor(value.anchor) };
+}
+
+const boxCenter = box => point(box?.min) && point(box?.max) ? box.min.map((min, axis) => (min + box.max[axis]) / 2) : null;
+
+/**
+ * Where a new annotation's dot goes: the middle of what it is about. A face or edge gives its
+ * own centre (or its box's), a part its box's; several give the average of theirs. The normal
+ * is kept only for a single face, the one case where "facing away" means something.
+ *
+ * @param {Array<{ center?: number[], bbox?: object, normal?: number[], selectorType?: string }>} geometry
+ */
+export function annotationAnchor(geometry) {
+  const points = geometry.map(item => point(item?.center) || boxCenter(item?.bbox)).filter(Boolean);
+  if (!points.length) return null;
+  const at = [0, 1, 2].map(axis => points.reduce((sum, value) => sum + value[axis], 0) / points.length);
+  const single = geometry.length === 1 && geometry[0]?.selectorType === "face" ? point(geometry[0].normal) : null;
+  return { point: at, normal: single };
 }
 
 /** A stored list as it can be used: malformed entries dropped, ids unique, the newest kept. */
@@ -71,8 +100,8 @@ let counter = 0;
 const nextId = () => `a${Date.now().toString(36)}${(counter++).toString(36)}`;
 
 /** A new annotation on the given references, or null when there is nothing to pin it to. */
-export function createAnnotation(references, note, { id = nextId() } = {}) {
-  return readAnnotation({ id, references, text: note, sent: false });
+export function createAnnotation(references, note, { id = nextId(), anchor = null } = {}) {
+  return readAnnotation({ id, references, text: note, sent: false, anchor });
 }
 
 export function addAnnotation(list, annotation) {

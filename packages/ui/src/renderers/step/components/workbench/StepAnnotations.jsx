@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Check, Hash, MessageSquarePlus, SendHorizontal, X } from "lucide-react";
+import { Check, Hash, MessageSquarePlus, SendHorizontal, Trash2 } from "lucide-react";
 import { Badge } from "@hardcore/ui/primitives/badge";
 import { Button } from "@hardcore/ui/primitives/button";
 import { Popover, PopoverContent, PopoverTrigger } from "@hardcore/ui/primitives/popover";
@@ -70,51 +70,62 @@ function ReferenceChip({ reference, onSelect }) {
   );
 }
 
-function AnnotationRow({ annotation, index, canAddToChat, onSelect, onEdit, onRemove, onAddToChat }) {
+/**
+ * One annotation's content: its chips, its note (pressed to edit in place) and its actions.
+ * The panel's list and the card a dot opens on the model both show it.
+ */
+export function AnnotationBody({ annotation, index, canAddToChat, onSelect, onEdit, onRemove, onAddToChat, actions = null }) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(annotation.text);
   useEffect(() => { if (!editing) setDraft(annotation.text); }, [annotation.text, editing]);
   const save = () => { const value = draft.trim(); if (value) onEdit(value); setEditing(false); };
   return (
-    <li data-annotation={annotation.id} data-sent={annotation.sent}
-      className="group rounded-md px-2 py-1.5 hover:bg-muted/50" onClick={() => onSelect()}>
-      <div className="flex items-start gap-1.5">
-        <div className="min-w-0 flex-1 text-[13px] leading-5">
-          <span className="mr-1 font-medium">Annotation {index + 1}:</span>
-          {annotation.references.map(reference => (
-            <span key={reference.selector} className="mr-1"><ReferenceChip reference={reference} onSelect={onSelect} /></span>
-          ))}
-          {editing ? (
-            <NoteInput className="mt-1" value={draft} onChange={setDraft} onSubmit={save}
-              onCancel={() => { setDraft(annotation.text); setEditing(false); }} label={`Edit annotation ${index + 1}`} />
-          ) : (
-            <button type="button" aria-label={`Edit annotation ${index + 1}`} title="Edit"
-              className="rounded-sm text-left whitespace-pre-wrap break-words hover:underline hover:decoration-muted-foreground/50 hover:underline-offset-2"
-              onClick={event => { event.stopPropagation(); setEditing(true); }}>
-              {annotation.text}
-            </button>
-          )}
-        </div>
-        <div className="flex shrink-0 items-center gap-0.5" onClick={event => event.stopPropagation()}>
-          {annotation.sent ? (
-            <span className="flex items-center gap-0.5 pr-1 text-[11px] text-muted-foreground" aria-label="Added to chat">
-              <Check className="size-3" aria-hidden="true" />Sent
-            </span>
-          ) : null}
-          <TooltipHint content={canAddToChat ? "Add to chat" : "No chat to add to"}>
-            <Button type="button" variant="ghost" size="icon-xs" className="size-6" aria-label={`Add annotation ${index + 1} to chat`}
-              disabled={!canAddToChat} onClick={() => void onAddToChat()}>
-              <SendHorizontal className="size-3.5" />
-            </Button>
-          </TooltipHint>
-          <TooltipHint content="Delete">
-            <Button type="button" variant="ghost" size="icon-xs" className="size-6 text-muted-foreground" aria-label={`Delete annotation ${index + 1}`}
-              onClick={() => onRemove()}>
-              <X className="size-3.5" />
-            </Button>
-          </TooltipHint>
-        </div>
+    <div className="flex items-start gap-1.5">
+      <div className="min-w-0 flex-1 text-[13px] leading-5">
+        <span className="mr-1 font-medium">Annotation {index + 1}:</span>
+        {annotation.references.map(reference => (
+          <span key={reference.selector} className="mr-1"><ReferenceChip reference={reference} onSelect={onSelect} /></span>
+        ))}
+        {editing ? (
+          <NoteInput className="mt-1" value={draft} onChange={setDraft} onSubmit={save}
+            onCancel={() => { setDraft(annotation.text); setEditing(false); }} label={`Edit annotation ${index + 1}`} />
+        ) : (
+          <button type="button" aria-label={`Edit annotation ${index + 1}`} title="Edit"
+            className="rounded-sm text-left whitespace-pre-wrap break-words hover:underline hover:decoration-muted-foreground/50 hover:underline-offset-2"
+            onClick={event => { event.stopPropagation(); setEditing(true); }}>
+            {annotation.text}
+          </button>
+        )}
       </div>
+      <div className="flex shrink-0 items-center gap-0.5" onClick={event => event.stopPropagation()}>
+        {annotation.sent ? (
+          <span className="flex items-center gap-0.5 pr-1 text-[11px] text-muted-foreground" aria-label="Added to chat">
+            <Check className="size-3" aria-hidden="true" />Sent
+          </span>
+        ) : null}
+        <TooltipHint content={canAddToChat ? "Add to chat" : "No chat to add to"}>
+          <Button type="button" variant="ghost" size="icon-xs" className="size-6" aria-label={`Add annotation ${index + 1} to chat`}
+            disabled={!canAddToChat} onClick={() => void onAddToChat()}>
+            <SendHorizontal className="size-3.5" />
+          </Button>
+        </TooltipHint>
+        <TooltipHint content="Delete">
+          <Button type="button" variant="ghost" size="icon-xs" className="size-6 text-muted-foreground" aria-label={`Delete annotation ${index + 1}`}
+            onClick={() => onRemove()}>
+            <Trash2 className="size-3.5" />
+          </Button>
+        </TooltipHint>
+        {actions}
+      </div>
+    </div>
+  );
+}
+
+function AnnotationRow({ annotation, index, ...body }) {
+  return (
+    <li data-annotation={annotation.id} data-sent={annotation.sent}
+      className="group rounded-md px-2 py-1.5 hover:bg-muted/50" onClick={() => body.onSelect()}>
+      <AnnotationBody annotation={annotation} index={index} {...body} />
     </li>
   );
 }

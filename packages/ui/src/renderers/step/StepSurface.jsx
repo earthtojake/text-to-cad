@@ -34,7 +34,8 @@ import { ALL_VIEW_FEATURES } from "@hardcore/core/common/viewSettings.js";
 import { useModelTools } from "./components/workbench/ModelTools.jsx";
 import { useStepPanel } from "./components/workbench/StepPanel.js";
 import { AnnotateButton, buildAnnotationsSection } from "./components/workbench/StepAnnotations.jsx";
-import { addAnnotation, annotationDelivered, createAnnotation, editAnnotation, markAnnotationSent, removeAnnotation } from "./workbench/stepAnnotations.js";
+import AnnotationPins from "./components/workbench/AnnotationPins.jsx";
+import { addAnnotation, annotationAnchor, annotationDelivered, createAnnotation, editAnnotation, markAnnotationSent, removeAnnotation } from "./workbench/stepAnnotations.js";
 import { CAD_PANEL } from "../../file-viewer/navigation/panels.js";
 import { stepMotionSources, useStepMotion } from "./workbench/useStepMotion.js";
 import { animationControlsHaveContent } from "../kit/tools/playbar/ViewportAnimationBar.js";
@@ -265,6 +266,8 @@ function StepSurfaceBody({ view, data }) {
   // The Select tool's annotations (workbench/stepAnnotations.js), kept in this tab's record.
   const [annotations, setAnnotations] = useState([]);
   const [annotationSelectRequest, setAnnotationSelectRequest] = useState(null);
+  // The annotation whose card is open on the model, if any.
+  const [openAnnotationId, setOpenAnnotationId] = useState(null);
   const [isolatedAssemblyNodeIds, setIsolatedAssemblyNodeIds] = useState([]);
   // What the viewport's menu is ABOUT while it is up (the part stays marked); the menu itself,
   // its gesture and its dismissal are the shell's (`kit/shell/ViewportContextMenu.jsx`). The ref
@@ -1864,16 +1867,28 @@ function StepSurfaceBody({ view, data }) {
   const annotateSelection = useCallback((note) => {
     if (!annotationAvailable) return;
     const references = referencesForHost(canonicalCopySelectionLines.join("\n")).map(({ selector, label }) => ({ selector, label }));
-    setAnnotations(current => addAnnotation(current, createAnnotation(references, note)));
-  }, [annotationAvailable, referencesForHost, canonicalCopySelectionLines]);
+    // Its dot goes in the middle of what is selected: faces and edges by their own geometry,
+    // parts (and a single-part model's root) by their boxes.
+    const parts = selectedMeshData?.parts || EMPTY_LIST;
+    const anchor = annotationAnchor([
+      ...selectedReferenceIdsRef.current.map(id => effectiveActiveReferenceMap.get(id)?.pickData).filter(Boolean),
+      ...selectedPartIdsRef.current.map(id => id === STEP_MODEL_ROOT_ID
+        ? { bbox: selectedMeshData?.bounds } : { bbox: parts.find(part => part.id === id)?.bounds })
+    ]);
+    setAnnotations(current => addAnnotation(current, createAnnotation(references, note, { anchor })));
+  }, [annotationAvailable, referencesForHost, canonicalCopySelectionLines, effectiveActiveReferenceMap, selectedMeshData]);
   const annotationSelectCount = useRef(0);
   const selectAnnotation = useCallback((annotation) => {
     const selector = annotation.references.map(reference => reference.selector).join(",");
     annotationSelectCount.current += 1;
     setAnnotationSelectRequest({ selector, key: `annotation:${annotation.id}:${annotationSelectCount.current}` });
+    setOpenAnnotationId(annotation.anchor ? annotation.id : null);
   }, []);
   const changeAnnotation = useCallback((id, text) => setAnnotations(current => editAnnotation(current, id, text)), []);
-  const deleteAnnotation = useCallback((id) => setAnnotations(current => removeAnnotation(current, id)), []);
+  const deleteAnnotation = useCallback((id) => {
+    setAnnotations(current => removeAnnotation(current, id));
+    setOpenAnnotationId(current => current === id ? null : current);
+  }, []);
   const addAnnotationToChat = useCallback(async (annotation) => {
     if (!promptAvailable) return;
     const result = await deliverPrompt(createCadPromptContext({ resource: promptResource, references: annotation.references, text: annotation.text }));
@@ -3262,12 +3277,18 @@ function StepSurfaceBody({ view, data }) {
     onContextMenuOpenChange={handleViewportContextMenuOpenChange}
     // A press on the model puts the inspection highlight down: what the person is looking at
     // is what they just pointed at.
-    onCanvasPointerDown={() => setInspectionHighlight(null)}
+    onCanvasPointerDown={() => { setInspectionHighlight(null); setOpenAnnotationId(null); }}
     // Both halves read it: the viewport's menu resolves references through it, and so do the
     // panel's rows, which are portaled out of this tree into the host's panel column.
     frameProvider={frame => <HostReferenceContext.Provider value={hostReference}>{frame}</HostReferenceContext.Provider>}
     viewportOverlay={viewport => {
       runtimeRefRef.current = viewport.runtimeRef;
-      return <StepSceneLayers viewport={viewport} stepScene={stepScene} policy={viewPolicyResolved} props={layerProps} api={layersApiRef} />;
+      return <>
+        <StepSceneLayers viewport={viewport} stepScene={stepScene} policy={viewPolicyResolved} props={layerProps} api={layersApiRef} />
+        {!presenting && !drawModeActive ? <AnnotationPins viewport={viewport} annotations={annotations}
+          openId={openAnnotationId} onOpenChange={setOpenAnnotationId}
+          canAddToChat={promptAvailable && !stepInteractionBlocked}
+          onSelect={selectAnnotation} onEdit={changeAnnotation} onRemove={deleteAnnotation} onAddToChat={addAnnotationToChat} /> : null}
+      </>;
     }} />;
 }

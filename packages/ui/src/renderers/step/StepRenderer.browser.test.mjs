@@ -1478,6 +1478,20 @@ test('Annotate pins a note to the selection; its chip selects that geometry agai
   assert.equal(await row.locator('[data-annotation-chip="o1.2"]').count(), 1, 'the chip is the selection it was made on');
   assert.deepEqual(await page.evaluate(() => window.__delivered), [], 'making an annotation sends nothing');
 
+  // It is also a numbered dot on the model, over the part it was made on; pressing the dot opens its card there.
+  const dot = pane.getByRole('button', {name: 'Annotation 1', exact: true});
+  await dot.waitFor();
+  const dotBox = await dot.boundingBox();
+  const canvasBox = await pane.locator('[data-cad-surface] canvas').first().boundingBox();
+  assert.ok(dotBox.x > canvasBox.x && dotBox.x < canvasBox.x + canvasBox.width && dotBox.y > canvasBox.y && dotBox.y < canvasBox.y + canvasBox.height,
+    'the dot is on the model, inside the viewport');
+  const card = pane.getByRole('dialog', {name: 'Annotation 1 details'});
+  await dot.click();
+  await card.waitFor();
+  assert.match(await card.innerText(), /make a hole in it/);
+  await card.getByRole('button', {name: 'Close', exact: true}).click();
+  await card.waitFor({state: 'detached'});
+
   // Pressing the chip selects that geometry again, whatever is selected now.
   await page.evaluate(() => window.cadHarness.a.controller.select({selectors:['o1.1']}));
   await page.waitForFunction(() => window.cadHarness.a.controller.readState().selectedPartIds.join() === 'o1.1');
@@ -1485,14 +1499,14 @@ test('Annotate pins a note to the selection; its chip selects that geometry agai
   await page.waitForFunction(() => window.cadHarness.a.controller.readState().selectedPartIds.join() === 'o1.2');
 
   // The note is editable in place.
-  await pane.getByRole('button', {name: 'Edit annotation 1'}).click();
-  const edit = pane.getByRole('textbox', {name: 'Edit annotation 1'});
+  await list.getByRole('button', {name: 'Edit annotation 1'}).click();
+  const edit = list.getByRole('textbox', {name: 'Edit annotation 1'});
   await edit.fill('make a 6 mm hole in it');
   await edit.press('Enter');
   assert.match(await row.innerText(), /make a 6 mm hole in it/);
 
   // Add to chat puts the chip and the note in the chat box, and ticks the annotation sent.
-  await pane.getByRole('button', {name: 'Add annotation 1 to chat'}).click();
+  await list.getByRole('button', {name: 'Add annotation 1 to chat'}).click();
   await page.waitForFunction(() => window.__delivered.length === 1);
   const chipLabel = (await row.locator('[data-annotation-chip="o1.2"]').innerText()).trim();
   assert.deepEqual(await page.evaluate(() => window.__delivered[0]), [
@@ -1501,8 +1515,9 @@ test('Annotate pins a note to the selection; its chip selects that geometry agai
   ]);
   await row.getByLabel('Added to chat').waitFor();
 
-  await pane.getByRole('button', {name: 'Delete annotation 1'}).click();
+  await list.getByRole('button', {name: 'Delete annotation 1'}).click();
   await list.waitFor({state: 'detached'});
+  await dot.waitFor({state: 'detached'});
   assert.deepEqual(view.errors, []);
 });
 
