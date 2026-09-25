@@ -12,11 +12,6 @@ export function cadFileParamForEntry(entry) {
   return rootRelativeFile || file;
 }
 
-export function cadPathForEntry(entry) {
-  const file = cadFileParamForEntry(entry);
-  return file.replace(/\.(step|stp|stl|3mf|glb|dxf|urdf|srdf|sdf)$/i, "");
-}
-
 function writeUrl(url, { history = "replace" } = {}) {
   const nextSearch = url.searchParams.toString();
   const nextUrl = `${url.pathname}${nextSearch ? `?${nextSearch}` : ""}${url.hash}`;
@@ -41,41 +36,6 @@ export function normalizeCadFileQueryParam(value) {
   return normalizeUrlPath(value);
 }
 
-function sourceExtensionForPath(value) {
-  const match = /\.([^.\/]+)$/.exec(String(value || "").trim());
-  return match ? `.${match[1]}` : "";
-}
-
-function appendExtension(value, extension) {
-  const normalizedValue = normalizeUrlPath(value);
-  const normalizedExtension = String(extension || "").trim();
-  if (!normalizedValue || !normalizedExtension) {
-    return normalizedValue;
-  }
-  return normalizedValue.toLowerCase().endsWith(normalizedExtension.toLowerCase())
-    ? normalizedValue
-    : `${normalizedValue}${normalizedExtension}`;
-}
-
-function fileAliasesForEntry(entry) {
-  const aliases = new Set();
-  const addAlias = (value) => {
-    const normalizedValue = normalizeUrlPath(value);
-    if (normalizedValue) {
-      aliases.add(normalizedValue);
-    }
-  };
-
-  const file = cadFileParamForEntry(entry);
-  addAlias(file);
-
-  const cadPath = cadPathForEntry(entry);
-  const extension = sourceExtensionForPath(file);
-  addAlias(appendExtension(cadPath, extension));
-
-  return aliases;
-}
-
 export function readDefaultCadParam() {
   return normalizeViewerDefaultFile(import.meta.env?.VIEWER_DEFAULT_FILE) || null;
 }
@@ -98,7 +58,7 @@ export function findEntryByUrlPath(entries, urlPath) {
   if (!normalizedUrlPath) {
     return null;
   }
-  return entries.find((entry) => fileAliasesForEntry(entry).has(normalizedUrlPath)) || null;
+  return entries.find((entry) => normalizeUrlPath(cadFileParamForEntry(entry)) === normalizedUrlPath) || null;
 }
 
 export function writeCadParam(urlPath, { history = "replace" } = {}) {

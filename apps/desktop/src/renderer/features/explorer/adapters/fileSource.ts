@@ -3,7 +3,8 @@ import type { ExternalEntryAction } from "@hardcore/ui/file-viewer";
 import { closeSessionTab, readSessionStrip, revealSessionPath, useExplorer } from "@renderer/state/explorer";
 import type { FileMutationResult as NativeMutationResult } from "@shared/ipc/explorer";
 import type { ExplorerRoot } from "@shared/types";
-import { currentPlatform, messageOf, performEntryAction, requestAt } from "../entry-actions";
+import { platform } from "@renderer/lib/platform";
+import { messageOf, performEntryAction, requestAt } from "../entry-actions";
 import type { EntryActionContext } from "../entry-actions";
 import { viewerFileChange } from "../file-changes";
 
@@ -61,7 +62,7 @@ export function createDesktopFileSource({ sessionId, projectId, projectName, roo
       const blob = new Blob([bytes], { type: binary.mime });
       signal.throwIfAborted();
       const url = URL.createObjectURL(blob);
-      return { url, bytes, mime: binary.mime, byteLength: binary.size, resource: { kind: "workspace-file", workspaceId: id, path: binary.path }, release: () => URL.revokeObjectURL(url) };
+      return { url, bytes, mime: binary.mime, release: () => URL.revokeObjectURL(url) };
     },
     async writeText(path, { content, expectedRevision, signal }) {
       if (signal.aborted) return { status: "cancelled" };
@@ -101,6 +102,6 @@ export function createDesktopFileSource({ sessionId, projectId, projectName, roo
 
 export function createDesktopFileActions(context: EntryActionContext): FileActions {
   const actions: ExternalEntryAction[] = ["open-default", "open-with", "reveal", "copy-path", "copy-relative-path", "copy-reference", "open-terminal"];
-  return { platform: currentPlatform(), perform: Object.fromEntries(actions.map(action => [action,
+  return { platform, perform: Object.fromEntries(actions.map(action => [action,
     (entry: Parameters<typeof performEntryAction>[1]) => performEntryAction(action, entry, context)])) };
 }

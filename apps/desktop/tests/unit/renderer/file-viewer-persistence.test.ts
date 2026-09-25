@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { desktopCadPreferences, migrateCadPreferences } from "@renderer/features/explorer/adapters/cadPersistence";
+import { createStoredCadPreferences } from "@hardcore/ui/renderers/workspace";
+import { desktopCadPreferences } from "@renderer/features/explorer/adapters/cadPersistence";
 
 beforeEach(() => { localStorage.clear(); sessionStorage.clear(); });
 describe("Desktop viewer preferences", () => {
@@ -7,10 +8,10 @@ describe("Desktop viewer preferences", () => {
     const retiredTheme = JSON.stringify({ version: 13, themeId: "cinematic", custom: { exposure: 1.2 } });
     localStorage.setItem("cad-viewer:theme", retiredTheme);
     localStorage.setItem("cad-viewer:tutorial-tips:v1", JSON.stringify({ version: 1, seen: ["copyReference", 5] }));
-    expect(migrateCadPreferences(localStorage)).toEqual({ orbit: { speed: 1 } });
+    expect(createStoredCadPreferences(localStorage).getSnapshot()).toEqual({ orbit: { speed: 1 } });
     expect(localStorage.getItem("cad-viewer:theme")).toBe(retiredTheme);
     localStorage.setItem("cad-viewer:tutorial-tips:v1", JSON.stringify({ version: 0, seen: ["copyReference"] }));
-    expect(migrateCadPreferences(localStorage)).not.toHaveProperty("seenTips");
+    expect(createStoredCadPreferences(localStorage).getSnapshot()).not.toHaveProperty("seenTips");
   });
   it("shares motion preferences across roots without reviving CAD themes or tutorial state", () => {
     const retiredTheme = JSON.stringify({ version: 13, themeId: "cinematic", custom: null });
@@ -37,7 +38,7 @@ describe("Desktop viewer preferences", () => {
   it("preserves the orbit preference across roots and synchronizes another window without rewriting it", () => {
     const key = "cad-viewer:orbit:v1";
     localStorage.setItem(key, JSON.stringify({ speed: 2 }));
-    expect(migrateCadPreferences(localStorage).orbit).toEqual({ speed: 2 });
+    expect(createStoredCadPreferences(localStorage).getSnapshot().orbit).toEqual({ speed: 2 });
     const firstRoot = desktopCadPreferences();
     window.dispatchEvent(new StorageEvent("storage", { key }));
     expect(firstRoot.getSnapshot().orbit).toEqual({ speed: 2 });
@@ -54,7 +55,7 @@ describe("Desktop viewer preferences", () => {
     const key = "cad-viewer:pose-transition:v1";
     const retired = JSON.stringify({ animate: false, speed: 2 });
     localStorage.setItem(key, retired);
-    expect(migrateCadPreferences(localStorage)).not.toHaveProperty("poseTransition");
+    expect(createStoredCadPreferences(localStorage).getSnapshot()).not.toHaveProperty("poseTransition");
     const preferences = desktopCadPreferences();
     const before = preferences.getSnapshot();
     window.dispatchEvent(new StorageEvent("storage", { key }));
@@ -68,7 +69,7 @@ describe("Desktop viewer preferences", () => {
       const key = `cad-viewer:file-sheet-tab-layout:v${version}`;
       const legacy = JSON.stringify({ step: { split: true, top: ["render"], bottom: ["tree", "pose"], ratio: 0.2 } });
       localStorage.setItem(key, legacy);
-      expect(migrateCadPreferences(localStorage)).not.toHaveProperty("fileSheetTabs");
+      expect(createStoredCadPreferences(localStorage).getSnapshot()).not.toHaveProperty("fileSheetTabs");
       window.dispatchEvent(new StorageEvent("storage", { key }));
       expect(preferences.getSnapshot()).toBe(before);
       expect(localStorage.getItem(key)).toBe(legacy);

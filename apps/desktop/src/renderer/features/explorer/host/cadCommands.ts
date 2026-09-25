@@ -1,12 +1,12 @@
-import type { CadCommands, CadCommandSource } from "@hardcore/ui/renderers/step";
+import type { ViewerCommands, ViewerCommandSource } from "@hardcore/ui/renderers/workspace";
 import { useExplorer } from "@renderer/state/explorer";
 import type { ExplorerRoot } from "@shared/types";
 
 /** Borrow only requests for this active document; acknowledgement owns consumption. */
-export function createDesktopCadCommands(projectId: string, root: ExplorerRoot, tabId: string): CadCommandSource & {
+export function createDesktopCadCommands(projectId: string, root: ExplorerRoot, tabId: string): ViewerCommandSource & {
   acknowledge(kind: "selectReference" | "captureRequest", key: string | number): void;
 } {
-  let snapshot: CadCommands = { selectReference: null, captureRequest: null };
+  let snapshot: ViewerCommands = { selectReference: null, captureRequest: null };
   return {
     subscribe: listener => useExplorer.subscribe(listener),
     getSnapshot() {

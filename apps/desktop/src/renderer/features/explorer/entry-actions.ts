@@ -3,7 +3,6 @@ import { createPromptContext, referencePart } from "@hardcore/core/prompt";
 import type { PromptContextPort } from "@hardcore/core/prompt";
 import type { ExternalEntryAction, FileEntry } from "@hardcore/ui/file-viewer";
 import type { ClipboardPort } from "@hardcore/ui/host";
-import type { Platform } from "@hardcore/ui/navigation";
 import { openSessionTab } from "@renderer/state/explorer";
 import type { ExplorerRoot } from "@shared/types";
 
@@ -18,11 +17,6 @@ export type EntryActionContext = {
 
 export function requestAt(ctx: Pick<EntryActionContext, "projectId" | "root">) {
   return { projectId: ctx.projectId, ...(ctx.root ? { root: ctx.root } : {}) };
-}
-
-export function currentPlatform(): Platform {
-  const agent = navigator.userAgent;
-  return agent.includes("Macintosh") ? "darwin" : agent.includes("Windows") ? "win32" : "linux";
 }
 
 export async function performEntryAction(action: ExternalEntryAction, entry: Pick<FileEntry, "path" | "kind">, ctx: EntryActionContext): Promise<void> {

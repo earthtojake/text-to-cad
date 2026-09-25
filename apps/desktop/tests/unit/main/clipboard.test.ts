@@ -9,7 +9,7 @@ vi.mock("electron", () => ({ clipboard: native.clipboard, nativeImage: { createF
 vi.mock("@main/ipc/register", () => ({ IpcError: class IpcError extends Error {} }));
 
 import { clipboardHandlers } from "@main/ipc/clipboard";
-import { ClipboardContentSchema, clipboardContract } from "@shared/ipc/clipboard";
+import { clipboardContract } from "@shared/ipc/clipboard";
 
 const png = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10, 1]).toString("base64");
 beforeEach(() => {
@@ -20,15 +20,15 @@ beforeEach(() => {
 });
 
 describe("native clipboard boundary", () => {
-  it("writes a text and PNG bundle together after decoding the image", () => {
-    clipboardHandlers.clipboard.writeContent({ text: "part.step#o1", pngBase64: png });
-    expect(native.clipboard.write).toHaveBeenCalledExactlyOnceWith({ text: "part.step#o1", image: native.image });
+  it("writes a PNG after decoding it", () => {
+    clipboardHandlers.clipboard.writeImage({ pngBase64: png });
+    expect(native.clipboard.writeImage).toHaveBeenCalledExactlyOnceWith(native.image);
     expect(native.clipboard.writeText).not.toHaveBeenCalled();
   });
 
-  it("rejects invalid PNG bytes before changing either representation", () => {
-    expect(() => clipboardHandlers.clipboard.writeContent({ text: "keep together", pngBase64: Buffer.from("not png").toString("base64") })).toThrow("must be a PNG");
-    expect(native.clipboard.write).not.toHaveBeenCalled();
+  it("rejects invalid PNG bytes before changing the clipboard", () => {
+    expect(() => clipboardHandlers.clipboard.writeImage({ pngBase64: Buffer.from("not png").toString("base64") })).toThrow("must be a PNG");
+    expect(native.clipboard.writeImage).not.toHaveBeenCalled();
     expect(native.createFromBuffer).not.toHaveBeenCalled();
     native.image.isEmpty.mockReturnValue(true);
     expect(() => clipboardHandlers.clipboard.writeImage({ pngBase64: png })).toThrow("invalid or too large");
@@ -42,8 +42,8 @@ describe("native clipboard boundary", () => {
   });
 
   it("only accepts bounded plain text and PNG base64, without arbitrary formats", () => {
-    expect(ClipboardContentSchema.safeParse({}).success).toBe(false);
-    expect(ClipboardContentSchema.safeParse({ text: "hello", html: "<script>" }).success).toBe(false);
+    expect(clipboardContract.clipboard.writeText.request.safeParse({ text: "hello", html: "<script>" }).success).toBe(false);
+    expect("writeContent" in clipboardContract.clipboard).toBe(false);
     expect(clipboardContract.clipboard.writeImage.request.safeParse({ pngBase64: "!" }).success).toBe(false);
     expect(clipboardContract.clipboard.writeText.request.safeParse({ text: "x".repeat(1024 * 1024 + 1) }).success).toBe(false);
   });

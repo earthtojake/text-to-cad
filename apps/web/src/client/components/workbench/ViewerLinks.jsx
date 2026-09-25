@@ -419,14 +419,13 @@ function VersionReleaseLink({ version, releaseUrl, githubUrl, discordUrl, releas
     </DropdownMenu>
   );
 }
-/** `previewMode` is a snapshot render, with no network or links. */
-export default function ViewerLinks({ previewMode = false }) {
+export default function ViewerLinks() {
   const viewerVersion = String(viewerPackage.version || "").trim();
   const discordUrl = normalizeViewerDiscordUrl(import.meta.env?.VIEWER_DISCORD_URL);
   const githubUrl = normalizeViewerGithubUrl(import.meta.env?.VIEWER_GITHUB_URL);
   const releaseUrl = viewerGithubReleaseUrl(viewerVersion, githubUrl);
   const latestReleaseUrl = viewerGithubLatestReleaseUrl(githubUrl);
-  const latestReleaseApiUrl = previewMode ? "" : viewerGithubLatestReleaseApiUrl(githubUrl);
+  const latestReleaseApiUrl = viewerGithubLatestReleaseApiUrl(githubUrl);
   const mockLatestVersion = import.meta.env.DEV
     ? String(import.meta.env?.VIEWER_MOCK_LATEST_VERSION || "").trim()
     : "";
@@ -440,10 +439,6 @@ export default function ViewerLinks({ previewMode = false }) {
     mockLatestVersion,
     mockLatestReleaseUrl
   });
-
-  if (previewMode) {
-    return null;
-  }
 
   return <VersionReleaseLink version={viewerVersion} releaseUrl={releaseUrl} releaseCheck={releaseCheck}
     githubUrl={githubUrl} discordUrl={discordUrl} />;

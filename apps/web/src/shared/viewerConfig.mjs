@@ -148,19 +148,6 @@ export function normalizeViewerSkillsInstallCommand(
   return String(fallback || "").trim();
 }
 
-export function normalizeViewerSkillsUpdatePrompt(
-  value = "",
-  fallback = DEFAULT_VIEWER_SKILLS_UPDATE_PROMPT
-) {
-  const prompt = String(value ?? "").replace(/\r\n/gu, "\n").trim();
-  // The prompt is pasted into an agent chat, so it has to actually name the command to run --
-  // prose alone ("please update the skills") would leave the agent guessing at a channel.
-  if (prompt && /\bnpx\s+skills\s+(?:install|add)\b/iu.test(prompt)) {
-    return prompt;
-  }
-  return String(fallback || "").trim();
-}
-
 export function viewerSkillsInstallCommandFromText(
   value = "",
   fallback = DEFAULT_VIEWER_SKILLS_INSTALL_COMMAND

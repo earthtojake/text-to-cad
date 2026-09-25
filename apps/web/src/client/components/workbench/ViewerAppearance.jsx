@@ -4,9 +4,8 @@ import { COLOR_SCHEMES } from "../../ui/colorScheme.js";
 
 const ICONS = { system: Monitor, light: Sun, dark: Moon };
 // Host-owned appearance preference, placed beside Projection by the shared sheet.
-/** @param {{ colorSchemePreference?: string, resolvedColorSchemeMode?: 'light' | 'dark', onColorSchemePreferenceChange?: (value: string) => void, fullscreen?: boolean }} props */
-export default function ViewerAppearance({ colorSchemePreference = "system", resolvedColorSchemeMode = "light", onColorSchemePreferenceChange = undefined, fullscreen = false }) {
-  if (fullscreen) return null;
+/** @param {{ colorSchemePreference?: string, resolvedColorSchemeMode?: 'light' | 'dark', onColorSchemePreferenceChange?: (value: string) => void }} props */
+export default function ViewerAppearance({ colorSchemePreference = "system", resolvedColorSchemeMode = "light", onColorSchemePreferenceChange = undefined }) {
   const displayedMode = colorSchemePreference === "system" ? resolvedColorSchemeMode : colorSchemePreference;
   const Icon = ICONS[displayedMode] || Sun;
   return <Select value={colorSchemePreference} onValueChange={onColorSchemePreferenceChange}>

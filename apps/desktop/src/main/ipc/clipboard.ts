@@ -25,9 +25,5 @@ export const clipboardHandlers = {
     writeText: ({ text }) => clipboard.writeText(text),
     readText: () => clipboard.readText(),
     writeImage: ({ pngBase64 }) => clipboard.writeImage(decodePng(pngBase64)),
-    writeContent: ({ text, pngBase64 }) => {
-      const image = pngBase64 === undefined ? undefined : decodePng(pngBase64);
-      clipboard.write({ ...(text === undefined ? {} : { text }), ...(image ? { image } : {}) });
-    },
   },
 } satisfies IpcHandlers<typeof clipboardContract>;

@@ -97,7 +97,8 @@ test("managed binary leases keep workspace identity and bytes without extra meta
     vi.mocked(window.hardcore.explorer.readBinary).mockResolvedValueOnce({ path: "images/sample.png", size: 3, mime: "image/png", dataUrl: "data:image/png;base64,AQID" });
     const files = source();
     const lease = await files.readAsset!("images/sample.png", { signal: signal() });
-    expect(lease).toMatchObject({ url: "blob:fixture", byteLength: 3, resource: { kind: "workspace-file", workspaceId: files.id, path: "images/sample.png" } });
+    expect(lease).toMatchObject({ url: "blob:fixture", mime: "image/png" });
+    expect(lease.bytes).toEqual(new Uint8Array([1, 2, 3]));
     expect(stat).not.toHaveBeenCalled();
     expect(createObjectURL).toHaveBeenCalledTimes(1);
     lease.release();

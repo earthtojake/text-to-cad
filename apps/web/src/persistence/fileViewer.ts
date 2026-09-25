@@ -1,6 +1,6 @@
 import { clampPanelWidth, PANEL_DEFAULT_WIDTH } from '@hardcore/ui/navigation';
 import type { FileViewerState, JsonValue } from '@hardcore/ui/file-viewer';
-import { mergeChangedRecords } from './statePatch';
+import { mergeChangedRecords } from '@hardcore/ui/file-viewer';
 
 const keyFor = (rootId: string) => `hardcore:file-viewer:v1:${encodeURIComponent(rootId)}`;
 // A page load is a file opened directly (an address, a link): it opens with the file's own

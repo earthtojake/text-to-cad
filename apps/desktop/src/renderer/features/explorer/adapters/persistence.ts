@@ -1,10 +1,8 @@
-import type { FileViewerState } from "@hardcore/ui/file-viewer";
+import { mergeChangedRecords, type FileViewerState } from "@hardcore/ui/file-viewer";
 import { useCallback, useMemo, useState } from "react";
 import { useExplorer, useTree } from "@renderer/state/explorer";
 import type { ExplorerRoot } from "@shared/types";
-import { mergeChangedRecords } from "./statePatch";
 import { readViewState as read, writeViewState as write, viewStateKey } from "./viewStateStore";
-export { mergeChangedRecords as mergeRendererState } from "./statePatch";
 
 /** Keep existing panel/width/tree preferences; add one versioned root-scoped renderer record. */
 export function useDesktopViewState(sourceId: string, tabId: string, root: ExplorerRoot, panel: string | null) {

@@ -5,7 +5,10 @@
  * Read from the user agent rather than from `app.info()` over IPC, because
  * that answer arrives a frame or two late and the sidebar would visibly shift.
  */
-export const isMac = navigator.userAgent.includes("Macintosh");
+const agent = navigator.userAgent;
+export const isMac = agent.includes("Macintosh");
+/** The renderer's one platform answer: keyboard modifiers, the viewer's host environment and its entry menus. */
+export const platform: "darwin" | "win32" | "linux" = isMac ? "darwin" : agent.includes("Windows") ? "win32" : "linux";
 
 /** Call once, before render. Drives `--titlebar-inset` in globals.css. */
 export function applyPlatformClass() {

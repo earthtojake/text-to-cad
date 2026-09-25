@@ -1,31 +1,12 @@
-import { createCadPreferences, type CadPreferences } from '@hardcore/ui/renderers/workspace';
-import { readOrbit, writeOrbit, ORBIT_STORAGE_KEY } from '@hardcore/ui/renderers/step/state';
+import { createStoredCadPreferences } from '@hardcore/ui/renderers/workspace';
 
-/** The browser host persists motion preferences; CAD modes own appearance. */
+/** The browser host keeps viewer preferences in localStorage, and hears other tabs change them. */
 export function createWebCadPreferences() {
-  let syncing = false;
-  const snapshot = (): CadPreferences => ({ orbit: readOrbit(localStorage) });
-  let baseline = snapshot();
-  const source = createCadPreferences({
-    initial: baseline,
-    onChange(preferences) {
-      if (!syncing) {
-        if (preferences.orbit && JSON.stringify(preferences.orbit) !== JSON.stringify(baseline.orbit)) writeOrbit(localStorage, preferences.orbit);
-      }
-      baseline = preferences;
-    },
-  });
+  const source = createStoredCadPreferences(localStorage);
   return {
     ...source,
     connect() {
-      const sync = (event: StorageEvent) => {
-        if (event.key === null || event.key === ORBIT_STORAGE_KEY) {
-          syncing = true;
-          try { source.update(snapshot()); }
-          finally { syncing = false; }
-          return;
-        }
-      };
+      const sync = (event: StorageEvent) => source.storageChanged(event.key);
       window.addEventListener('storage', sync);
       return () => window.removeEventListener('storage', sync);
     },

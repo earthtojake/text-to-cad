@@ -15,7 +15,6 @@ import {
   normalizeViewerDiscordUrl,
   normalizeViewerGithubUrl,
   normalizeViewerSkillsInstallCommand,
-  normalizeViewerSkillsUpdatePrompt,
   viewerGithubLatestReleaseApiUrl,
   viewerGithubLatestReleaseUrl,
   viewerGithubReleaseUrl,
@@ -242,17 +241,3 @@ test("the agent update prompt names the skills command alone, in one short line"
   assert.ok(DEFAULT_VIEWER_SKILLS_UPDATE_PROMPT.length < 140);
 });
 
-test("normalizeViewerSkillsUpdatePrompt rejects a prompt with no command in it", () => {
-  const custom = "Run `npx skills add earthtojake/text-to-cad` for me.";
-  assert.equal(normalizeViewerSkillsUpdatePrompt(custom), custom);
-  // The `install` spelling is an accepted alias, so an older prompt still passes through.
-  const legacy = "Run `npx skills install earthtojake/text-to-cad`.";
-  assert.equal(normalizeViewerSkillsUpdatePrompt(legacy), legacy);
-  // Prose with no command leaves the agent guessing at a channel: fall back instead.
-  assert.equal(
-    normalizeViewerSkillsUpdatePrompt("Please update the skills."),
-    DEFAULT_VIEWER_SKILLS_UPDATE_PROMPT
-  );
-  assert.equal(normalizeViewerSkillsUpdatePrompt(""), DEFAULT_VIEWER_SKILLS_UPDATE_PROMPT);
-  assert.equal(normalizeViewerSkillsUpdatePrompt(null), DEFAULT_VIEWER_SKILLS_UPDATE_PROMPT);
-});

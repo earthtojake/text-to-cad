@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
-import { FileTab } from "@renderer/features/explorer/FileTab";
+import { FileTab, worktreeMark } from "@renderer/features/explorer/FileTab";
 import { readSessionStrip, useExplorer } from "@renderer/state/explorer";
 import { useProjects } from "@renderer/state/projects";
 import { createDesktopFileSource } from "@renderer/features/explorer/adapters/fileSource";
@@ -98,4 +98,17 @@ it("a retained file callback opens only its owner session after the user switche
   await waitFor(async () => expect((await readSessionStrip("file-tab-owner")).tabs).toEqual(expect.arrayContaining([expect.objectContaining({ path: "later.txt", sessionId: "file-tab-owner" })])));
   expect(useExplorer.getState().sessionId).toBe("other-file-owner");
   expect(useExplorer.getState().tabs).toEqual([]);
+});
+
+it("a worktree tab names its worktree before the crumbs, with its path as a hint rather than a native title", async () => {
+  expect(worktreeMark("/home/me/.hardcore/worktrees/p/wrist")).toEqual({ label: "wrist", path: "/home/me/.hardcore/worktrees/p/wrist" });
+  expect(worktreeMark("C:\\Users\\me\\.hardcore\\worktrees\\p\\wrist")?.label).toBe("wrist");
+  expect(worktreeMark(null)).toBeNull();
+  const tab = useExplorer.getState().open("file", { path: "notes.txt" })!;
+  render(<FileTab sessionId="file-tab-owner" tabId={tab.id} project={project} root="/home/me/.hardcore/worktrees/p/wrist" path="notes.txt" panel={null} />);
+  await screen.findByRole("textbox", { name: "Draft" });
+  const mark = document.querySelector("[data-crumb=worktree]")!;
+  expect(mark.textContent).toBe("wrist");
+  expect(mark.getAttribute("title")).toBeNull();
+  expect(mark.getAttribute("data-slot")).toBe("tooltip-trigger");
 });

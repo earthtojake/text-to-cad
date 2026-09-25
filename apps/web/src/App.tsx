@@ -15,7 +15,6 @@ import type { CadServerInfo } from '@hardcore/core/client';
 import type { CadClient } from './adapters/fileSource';
 import { createWebFileSource, createWebFileActions } from './adapters/fileSource';
 import { browserClipboard, browserClipboardSupportsImages } from './host/clipboard';
-import { browserLifecycle } from './host/lifecycle';
 import { createWebPromptContext } from './host/promptContext';
 import { readViewState, writeViewState } from './persistence/fileViewer';
 import { createWebCadPreferences } from './persistence/cadPreferences';
@@ -25,19 +24,15 @@ import ViewerLinks from './client/components/workbench/ViewerLinks.jsx';
 import { cadFileParamForEntry, findEntryByUrlPath, normalizeCadFileQueryParam, readCadParam, readDefaultCadParam, writeCadParam } from './client/workbench/sidebar.js';
 import { applyColorSchemeToDocument, readColorSchemePreference, resolveColorSchemeMode, writeColorSchemePreference } from './client/ui/colorScheme.js';
 
+/** The keyboard the page is typed on — ⌘ on Apple devices, Ctrl elsewhere: the host's one platform answer. */
+const keyboardPlatform = () => /Mac|iPhone|iPad/.test(navigator.platform) ? "darwin" : /Win/.test(navigator.platform) ? "win32" : "linux";
+
 export default function App(props: { client: CadClient; server: CadServerInfo }) {
   return <RootView key={props.server.rootId} {...props} />;
 }
 
 /** A root change creates a new session before any view state can be persisted. */
 function RootView({ client, server }: { client: CadClient; server: CadServerInfo }) {
-  const [fullscreen, setFullscreen] = useState(false);
-  useEffect(() => {
-    if (!fullscreen) return;
-    const exit = (event: KeyboardEvent) => { if (event.key === "Escape" && !event.defaultPrevented) { event.preventDefault(); setFullscreen(false); } };
-    window.addEventListener("keydown", exit);
-    return () => window.removeEventListener("keydown", exit);
-  }, [fullscreen]);
   useViewerAutoReload(server, { fetchServerInfo: () => client.serverInfo({ fresh: true }).then(info => ({ ok: true, identityToken: String(info.identityToken || '') }), () => ({ ok: false })) });
   const source = useMemo(() => createWebFileSource(client, server), [client, server]);
   const promptContext = useMemo(() => createWebPromptContext(source.id, server.rootPath || '', browserClipboard, browserClipboardSupportsImages()), [source.id, server.rootPath]);
@@ -107,14 +102,15 @@ function RootView({ client, server }: { client: CadClient; server: CadServerInfo
   }, [client]);
   const host = useMemo<ViewerHost>(() => ({
     files: source, fileActions, clipboard: browserClipboard, promptContext,
-    navigation: { openFile: open }, environment: { ...appearance, platform: /Mac|iPhone|iPad/.test(navigator.platform) ? "darwin" : /Win/.test(navigator.platform) ? "win32" : "linux" }, lifecycle: browserLifecycle,
+    navigation: { openFile: open }, environment: { ...appearance, platform: keyboardPlatform() },
   }), [source, fileActions, promptContext, open, appearance]);
   const empty = <div className="pointer-events-auto absolute inset-0 z-10 bg-background"><EmptyState icon={FileText} title="No file open" description="Pick one from the tree on the right, or filter by name." /></div>;
   return <div className="flex h-svh flex-col overflow-hidden"><div className="min-h-0 flex-1">
-    <FileViewer fullscreen={fullscreen} onFullscreenChange={setFullscreen} file={file || null} host={host} renderers={renderers} state={state} onStateChange={setState} narrowCrumbs={false}
+    <FileViewer file={file || null} host={host} renderers={renderers} state={state} onStateChange={setState}
       leading={<ViewerBrand title={file ? "" : "text-to-cad"} />} navigationActions={<ViewerLinks />}
       displayActions={<ViewerAppearance colorSchemePreference={colorSchemePreference} resolvedColorSchemeMode={appearance.colorScheme} onColorSchemePreferenceChange={changeColorScheme} />}
-      navigationPath={selectedEntry ? normalizeCadFileQueryParam(cadFileParamForEntry(selectedEntry)) : null}
+      // Unselected while the catalog resolves the file; once it has, a missing file is named by its own crumbs.
+      navigationPath={selectedEntry ? normalizeCadFileQueryParam(cadFileParamForEntry(selectedEntry)) : catalog.hydrated ? normalizeCadFileQueryParam(file) || null : null}
       onError={error => console.error(error)} presentation={{
         empty: <div className="relative h-full">{empty}</div>,
         loading: <div className="relative h-full"><ViewerLoadingOverlay viewerLoading /></div>,

@@ -9,14 +9,16 @@ import { AUTO_RELOAD_PHASE, nextAutoReloadState } from "./viewerAutoReload.js";
  * `viewerAutoReload.js`; this is the timer, the fetch and the reload.
  *
  * @param {{autoReload?: boolean, identityToken?: string}|null} serverInfo
+ * @param {{ fetchServerInfo: () => Promise<{ ok: boolean, identityToken?: string }> }} options  `fetchServerInfo`
+ *   asks the backend who it is now; a closed port mid-restart answers `{ ok: false }`, not a throw.
  */
 export function useViewerAutoReload(serverInfo, {
-  fetchServerInfo = defaultFetchServerInfo,
+  fetchServerInfo,
   reload = defaultReload,
   now = () => Date.now(),
   schedule = (run, delayMs) => setTimeout(run, delayMs),
   cancel = (handle) => clearTimeout(handle)
-} = {}) {
+}) {
   const optionsRef = useRef(null);
   optionsRef.current = { fetchServerInfo, reload, now, schedule, cancel };
   const enabled = Boolean(serverInfo?.autoReload);
@@ -54,21 +56,6 @@ export function useViewerAutoReload(serverInfo, {
       }
     };
   }, [enabled, baseline]);
-}
-
-async function defaultFetchServerInfo() {
-  try {
-    const response = await fetch("/__cad/server", { cache: "no-store" });
-    if (!response.ok) {
-      return { ok: false };
-    }
-    const payload = await response.json();
-    return { ok: true, identityToken: String(payload?.identityToken || "") };
-  } catch {
-    // A closed port mid-exec. The caller reads this as "restarting", not as a
-    // failure, and asks again shortly.
-    return { ok: false };
-  }
 }
 
 function defaultReload() {

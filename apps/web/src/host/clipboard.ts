@@ -22,7 +22,10 @@ function writeContent({ text, image }: { text?: string; image?: Blob | Promise<B
   } catch (error) { void png.catch(() => {}); return Promise.reject(error); }
 }
 
-export const browserClipboard: ClipboardPort = {
+/** The browser's clipboard: the host port, and the one write only the web's prompt delivery uses. */
+export type WebClipboard = ClipboardPort & { writeContent?(content: { text?: string; image?: Blob | Promise<Blob> }): Promise<void> };
+
+export const browserClipboard: WebClipboard = {
   writeText: copyTextToClipboard,
   readText: readTextFromClipboard,
   async writeImage(image) {

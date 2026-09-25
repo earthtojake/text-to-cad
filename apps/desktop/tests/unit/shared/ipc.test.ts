@@ -82,7 +82,6 @@ describe("the contract", () => {
       "clipboard.writeText",
       "clipboard.readText",
       "clipboard.writeImage",
-      "clipboard.writeContent",
       "browser.ensure",
       "browser.metadata",
       "browser.navigate",

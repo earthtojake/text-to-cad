@@ -19,8 +19,4 @@ export const desktopClipboard: ClipboardPort = {
   writeText: text => window.hardcore.clipboard.writeText({ text }),
   readText: () => window.hardcore.clipboard.readText(),
   writeImage: async image => window.hardcore.clipboard.writeImage({ pngBase64: await pngBase64(image) }),
-  writeContent: async ({ text, image }) => window.hardcore.clipboard.writeContent({
-    ...(text === undefined ? {} : { text }),
-    ...(image === undefined ? {} : { pngBase64: await pngBase64(image) }),
-  }),
 };

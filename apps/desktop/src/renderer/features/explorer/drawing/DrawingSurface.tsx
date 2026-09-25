@@ -5,6 +5,7 @@ import { ImagePlus } from 'lucide-react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from 'sonner';
 import { Button } from '@renderer/components/ui/button';
+import { platform } from '@renderer/lib/platform';
 import { getDrawingScene, retainDrawingScene } from '@renderer/state/drawings';
 import { renameDrawingTab } from '@renderer/state/explorer';
 import type { DrawingTabProps } from '../DrawingTab';
@@ -65,7 +66,7 @@ export default function DrawingSurface({ sessionId, tabId, project, root, title 
         </Button>
       </div>
     </header>
-    <div className="min-h-0 flex-1"><DrawingEditor initialScene={initialScene} name={title}
+    <div className="min-h-0 flex-1"><DrawingEditor initialScene={initialScene} name={title} platform={platform}
       onReady={ready} onContentChange={setHasContent} /></div>
   </section>;
 }

@@ -9,10 +9,10 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const temporary = await mkdtemp(join(tmpdir(), 'web-host-adapters-'));
 const output = join(temporary, 'adapters.mjs');
 await build({
-  stdin: { contents: `export {createWebPromptContext} from './promptContext.ts';export {browserClipboard} from './clipboard.ts';export {browserLifecycle} from './lifecycle.ts';`, resolveDir: fileURLToPath(new URL('.', import.meta.url)) },
+  stdin: { contents: `export {createWebPromptContext} from './promptContext.ts';export {browserClipboard} from './clipboard.ts';`, resolveDir: fileURLToPath(new URL('.', import.meta.url)) },
   bundle: true, platform: 'node', format: 'esm', outfile: output,
 });
-const { createWebPromptContext, browserClipboard, browserLifecycle } = await import(pathToFileURL(output).href);
+const { createWebPromptContext, browserClipboard } = await import(pathToFileURL(output).href);
 after(() => rm(temporary, { recursive: true, force: true }));
 const reference = { id: 'ref', kind: 'reference', reference: { resource: { kind: 'workspace-file', workspaceId: 'root', path: 'folder/part.step', revision: 'r4' }, target: { kind: 'cad-selector', selectors: ['o1.f2'] } } };
 const context = (operationId, parts) => ({ schemaVersion: 1, operationId, parts });
@@ -79,20 +79,6 @@ test('permission or encoder failure returns failed rather than copied', async ()
   assert.deepEqual(await port.deliver(context('denied', [reference])), { status: 'failed', message: 'Permission denied' });
   assert.deepEqual(await port.deliver(context('denied', [reference])), { status: 'copied', partIds: ['ref'] });
   assert.equal(attempts, 2);
-});
-
-test('browser lifecycle listeners flush only while subscribed', () => {
-  const events = new EventTarget();
-  const restoreWindow = replaceGlobal('window', events);
-  let flushes = 0;
-  try {
-    const dispose = browserLifecycle.subscribeFlush(() => flushes++);
-    events.dispatchEvent(new Event('pagehide'));
-    events.dispatchEvent(new Event('beforeunload'));
-    dispose();
-    events.dispatchEvent(new Event('pagehide'));
-    assert.equal(flushes, 2);
-  } finally { restoreWindow(); }
 });
 
 

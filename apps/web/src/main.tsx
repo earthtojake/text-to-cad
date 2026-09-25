@@ -8,7 +8,6 @@ import { createCadClient } from '@hardcore/core/client';
 import { unavailablePromptContext } from '@hardcore/core/prompt';
 import type { ViewerHost } from '@hardcore/ui/host';
 import { browserClipboard } from './host/clipboard';
-import { browserLifecycle } from './host/lifecycle';
 import App from './App';
 import ViewerBrand from './client/components/workbench/ViewerBrand.jsx';
 import ViewerLinks from './client/components/workbench/ViewerLinks.jsx';
@@ -33,10 +32,10 @@ function StartingView({ error }: { error?: Error }) {
   const dark = resolveColorSchemeMode(readColorSchemePreference(), { prefersDark: matchMedia('(prefers-color-scheme: dark)').matches }) === 'dark';
   const host = useMemo<ViewerHost>(() => ({
     files: source, clipboard: browserClipboard, promptContext: unavailablePromptContext,
-    navigation: { openFile: () => {} }, environment: { colorScheme: dark ? 'dark' : 'light' }, lifecycle: browserLifecycle,
+    navigation: { openFile: () => {} }, environment: { colorScheme: dark ? 'dark' : 'light' },
   }), [source, dark]);
   return <div className="flex h-svh flex-col overflow-hidden"><div className="min-h-0 flex-1">
-    <FileViewer leading={<ViewerBrand />} navigationActions={<ViewerLinks />} file={file} host={host} renderers={[]} state={state} onStateChange={setState} navigationPath={null} narrowCrumbs={false}
+    <FileViewer leading={<ViewerBrand />} navigationActions={<ViewerLinks />} file={file} host={host} renderers={[]} state={state} onStateChange={setState} navigationPath={null}
       presentation={{loading:<div className="relative h-full"><ViewerLoadingOverlay viewerLoading /></div>, error:() => <div className="relative h-full"><EmptyState icon={FileText} title="No file open" description="Pick one from the tree on the right, or filter by name." /></div>}} />
   </div></div>;
 }

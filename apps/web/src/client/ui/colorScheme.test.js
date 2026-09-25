@@ -53,7 +53,6 @@ test("color scheme preference persists independently from theme settings", () =>
 function createRoot() {
   const classes = new Set();
   return {
-    dataset: {},
     style: {},
     classList: {
       toggle: (name, on) => {
@@ -76,34 +75,57 @@ function createRoot() {
   looked at through a light window and picking a cinematic preset repainted
   every panel, toolbar and menu. That function is gone; a theme reaches the
   scene and stops there. What is left is this: a scheme id, the OS preference
-  for `system`, and four writes on one element.
+  for `system`, and two writes on one element.
 */
 test("the document's light/dark is written from a scheme id, never from a theme", () => {
   const root = createRoot();
 
   applyColorSchemeToDocument(DARK_COLOR_SCHEME_ID, root);
-  assert.equal(root.dataset.themePreference, DARK_COLOR_SCHEME_ID);
-  assert.equal(root.dataset.theme, DARK_COLOR_SCHEME_ID);
   assert.equal(root.style.colorScheme, DARK_COLOR_SCHEME_ID);
   assert.equal(root.classList.contains("dark"), true);
 
   applyColorSchemeToDocument(LIGHT_COLOR_SCHEME_ID, root);
-  assert.equal(root.dataset.theme, LIGHT_COLOR_SCHEME_ID);
+  assert.equal(root.style.colorScheme, LIGHT_COLOR_SCHEME_ID);
   assert.equal(root.classList.contains("dark"), false);
 
-  // `system` keeps the PREFERENCE and resolves the mode from the OS, so the
-  // attribute says what was chosen and the class says what it came to.
+  // `system` resolves the mode from the OS.
   applyColorSchemeToDocument(DEFAULT_COLOR_SCHEME_ID, root, { prefersDark: true });
-  assert.equal(root.dataset.themePreference, DEFAULT_COLOR_SCHEME_ID);
-  assert.equal(root.dataset.theme, DARK_COLOR_SCHEME_ID);
   assert.equal(root.classList.contains("dark"), true);
   applyColorSchemeToDocument(DEFAULT_COLOR_SCHEME_ID, root, { prefersDark: false });
-  assert.equal(root.dataset.theme, LIGHT_COLOR_SCHEME_ID);
+  assert.equal(root.style.colorScheme, LIGHT_COLOR_SCHEME_ID);
   assert.equal(root.classList.contains("dark"), false);
 
   // A theme id is not a scheme id: anything unrecognized falls back to
   // `system` rather than being honoured as a colour.
   applyColorSchemeToDocument("cinematic", root, { prefersDark: false });
-  assert.equal(root.dataset.themePreference, DEFAULT_COLOR_SCHEME_ID);
+  assert.equal(root.style.colorScheme, LIGHT_COLOR_SCHEME_ID);
   assert.equal(root.classList.contains("dark"), false);
+});
+
+/*
+  The page's first paint, before any module loads, reads the preference the same way the
+  app does: the cookie is authoritative, so a page whose cookie says dark never paints the
+  light localStorage value first and then flips.
+*/
+function firstPaint({ cookie = "", stored = null, prefersDark = false }) {
+  const html = readFileSync(new URL("../../../index.html", import.meta.url), "utf8");
+  const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
+  const root = createRoot();
+  vm.runInNewContext(script, {
+    document: { documentElement: root, cookie },
+    window: { matchMedia: () => ({ matches: prefersDark }), localStorage: { getItem: () => stored } }
+  });
+  return root;
+}
+
+test("the first paint honours the appearance cookie before localStorage, as the app does", () => {
+  const dark = firstPaint({ cookie: `other=1; ${COLOR_SCHEME_COOKIE_NAME}=${DARK_COLOR_SCHEME_ID}`, stored: LIGHT_COLOR_SCHEME_ID });
+  assert.equal(dark.classList.contains("dark"), true);
+  assert.equal(dark.style.colorScheme, DARK_COLOR_SCHEME_ID);
+  const light = firstPaint({ stored: LIGHT_COLOR_SCHEME_ID, prefersDark: true });
+  assert.equal(light.classList.contains("dark"), false);
+  const system = firstPaint({ cookie: `${COLOR_SCHEME_COOKIE_NAME}=nonsense`, prefersDark: true });
+  assert.equal(system.classList.contains("dark"), true);
+  // The same answer the module gives for the same cookie.
+  assert.equal(readColorSchemePreference(createMemoryStorage(), { cookie: `${COLOR_SCHEME_COOKIE_NAME}=${DARK_COLOR_SCHEME_ID}` }), DARK_COLOR_SCHEME_ID);
 });

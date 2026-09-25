@@ -4,6 +4,7 @@ import { createCadClient } from "@hardcore/core/client";
 import type { CadClient } from "@hardcore/core/client";
 import type { PrepareContext, RendererViewProps } from "@hardcore/ui/file-viewer";
 import { EmptyState } from "@hardcore/ui/navigation";
+import { TooltipHint } from "@hardcore/ui/primitives/tooltip";
 import { Button } from "@renderer/components/ui/button";
 import { useUi } from "@renderer/state/ui";
 import { subscribeSessionTabs } from "@renderer/state/explorer";
@@ -185,7 +186,7 @@ export function DesktopCadFailure({ answer, onReady, reload }: { answer: ViewerO
   return <EmptyState icon={Box} title={TITLES[reason]} description={REASONS[reason]} tone="warn" action={reason === "no-project" ? undefined :
     <div className="flex flex-col items-center gap-2" data-cad-failure={reason}>
       {answer.message ? <pre className="max-h-40 max-w-[420px] overflow-auto rounded-lg border bg-muted/40 px-3 py-2 text-left font-mono text-[11px] leading-relaxed whitespace-pre-wrap text-muted-foreground"><code data-selectable>{answer.message}</code></pre> : null}
-      {answer.log ? <p className="max-w-[420px] truncate text-[11px] text-muted-foreground" title={answer.log}>Log: <span data-selectable>{answer.log}</span></p> : null}
+      {answer.log ? <TooltipHint content={answer.log} overflowOnly><p className="max-w-[420px] truncate text-[11px] text-muted-foreground">Log: <span data-selectable>{answer.log}</span></p></TooltipHint> : null}
       <div className="flex items-center gap-2">
         <Button className="h-7 gap-1.5 text-xs" onClick={reload} size="sm" variant="secondary"><RefreshCw className="size-3.5" />Try again</Button>
         <Button className="h-7 gap-1.5 text-xs" onClick={() => openSettings("about")} size="sm" variant="ghost"><Settings2 className="size-3.5" />Runtime status</Button>

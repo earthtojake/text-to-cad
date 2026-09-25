@@ -6,6 +6,7 @@ import { Button } from "@renderer/components/ui/button";
 import { useAcp } from "@renderer/state/acp";
 import { useAgents } from "@renderer/state/agents";
 import { useComposer } from "@renderer/state/composer";
+import { useSettings } from "@renderer/state/settings";
 import { effortOption, fastOption, modeChoice, modelOption } from "@shared/acp/options";
 import type { PromptBlock, SessionState } from "@shared/acp/types";
 import type { Session } from "@shared/types";
@@ -251,9 +252,10 @@ function Reconnecting() {
 }
 
 function Connecting({ agentName }: { agentName: string }) {
+  const reducedMotion = useSettings((state) => state.settings?.reduceMotion ?? false);
   return (
     <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-6 text-center" data-connecting>
-      <LoadingIcon size={64} />
+      <LoadingIcon size={64} reducedMotion={reducedMotion} />
       <p className="text-[13px] text-muted-foreground">Connecting to {agentName}…</p>
     </div>
   );

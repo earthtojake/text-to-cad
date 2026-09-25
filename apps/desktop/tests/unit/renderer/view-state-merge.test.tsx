@@ -1,16 +1,11 @@
 import { act, renderHook } from "@testing-library/react";
 import { beforeEach, expect, it } from "vitest";
-import { mergeRendererState, useDesktopViewState } from "@renderer/features/explorer/adapters/persistence";
+import { useDesktopViewState } from "@renderer/features/explorer/adapters/persistence";
 import { useExplorer } from "@renderer/state/explorer";
 
 beforeEach(() => {
   localStorage.clear(); sessionStorage.clear();
   useExplorer.setState({ sessionId: "session", projectId: "merge-project", root: null, tabs: [], activeId: null, ready: true, trees: {}, panelWidth: 248 });
-});
-
-it("merges only renderer keys changed by a view, including deletion", () => {
-  expect(mergeRendererState({ a: "latest-a", b: "new-b", c: "new-c" }, { a: "old-a", b: "old-b" }, { a: "changed-a", b: "old-b" })).toEqual({ a: "changed-a", b: "new-b", c: "new-c" });
-  expect(mergeRendererState({ a: "latest-a", b: "new-b" }, { a: "old-a" }, {})).toEqual({ b: "new-b" });
 });
 
 it("a stale view cannot overwrite another tab's renderer state or newer root chrome", () => {

@@ -1,4 +1,4 @@
-import { formatPromptReference, validatePromptContext } from "@hardcore/core/prompt";
+import { createPromptDeliveryLedger, formatPromptReference, validatePromptContext } from "@hardcore/core/prompt";
 import type { PromptContext, PromptContextPort, PromptDeliveryResult, PromptDestinationState } from "@hardcore/core/prompt";
 
 import { bindDraftDestination, DraftDestinationGone, draftDestinationIsCurrent, validateDraftDestination } from "@renderer/state/cad-draft";
@@ -39,22 +39,7 @@ async function attachmentFile(part: Extract<PromptContext["parts"][number], { ki
 
 /** Every renderer action addresses the immutable session that owns its tab. */
 export function createDesktopPromptContext(projectId: string, root: string | null, workspaceId: string, sessionId: string): PromptContextPort {
-  const operations = new Map<string, Promise<PromptDeliveryResult>>();
-  const pending = new Set<string>();
-  const remember = (operationId: string, operation: Promise<PromptDeliveryResult>) => {
-    while (operations.size >= 256) {
-      const completed = [...operations.keys()].find(id => !pending.has(id));
-      if (!completed) break;
-      operations.delete(completed);
-    }
-    operations.set(operationId, operation);
-    pending.add(operationId);
-    void operation.then(result => {
-      pending.delete(operationId);
-      if (result.status === "failed" || result.status === "cancelled") operations.delete(operationId);
-    });
-    return operation;
-  };
+  const ledger = createPromptDeliveryLedger({ busyMessage: "Wait for pending prompt context before adding more." });
   let snapshot: PromptDestinationState = { kind: "composer", available: true, capabilities };
   const getSnapshot = () => {
     const owner = useSessions.getState().sessions.find(session => session.id === sessionId);
@@ -102,12 +87,7 @@ export function createDesktopPromptContext(projectId: string, root: string | nul
       if (accepted) return Promise.resolve(accepted.key === sessionId
         ? { status: "added", partIds: accepted.partIds }
         : { status: "failed", message: "This operation already belongs to another session." });
-      const previous = operations.get(context.operationId);
-      if (previous) return previous;
-      if (pending.size >= 16) return Promise.resolve({ status: "failed", message: "Wait for pending prompt context before adding more." });
-      let operation: Promise<PromptDeliveryResult>;
-      try {
-        validatePromptContext(context);
+      return ledger.deliver(context.operationId, (): Promise<PromptDeliveryResult> => {
         if (context.parts.length > 128) throw new Error("Prompt context has too many parts.");
         if (context.parts.reduce((total, part) => total + (part.kind === "text" ? part.text.length : 0), 0) > 1024 * 1024) throw new Error("Prompt text must be at most 1 MiB.");
         let knownBytes = 0;
@@ -116,13 +96,14 @@ export function createDesktopPromptContext(projectId: string, root: string | nul
           if (part.content.size > MAX_ATTACHMENT_BYTES || knownBytes > 40 * 1024 * 1024) throw new Error("Prompt attachments exceed the draft's size limits.");
         }
         const frozen: PromptContext = { ...context, parts: context.parts.map(part => part.kind === "reference" ? { ...part, reference: structuredClone(part.reference) } : part.kind === "attachment" ? { ...part, about: part.about ? [...part.about] : undefined } : { ...part }) };
-        const destination = bindDraftDestination(projectId, root, sessionId);
-        operation = accept(frozen, destination).catch(error => ({
+        let destination: DraftDestination;
+        try { destination = bindDraftDestination(projectId, root, sessionId); }
+        catch (error) { return Promise.resolve({ status: error instanceof DraftDestinationGone ? "cancelled" : "failed", message: message(error) }); }
+        return accept(frozen, destination).catch(error => ({
           status: error instanceof DraftDestinationGone || (error instanceof Error && error.name === "AbortError") ? "cancelled" : "failed",
           message: message(error),
         }));
-      } catch (error) { operation = Promise.resolve({ status: error instanceof DraftDestinationGone ? "cancelled" : "failed", message: message(error) }); }
-      return remember(context.operationId, operation);
+      });
     },
   };
 }

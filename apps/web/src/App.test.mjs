@@ -22,10 +22,10 @@ await build({
     }));
     plugin.onResolve({ filter: /^@hardcore\/ui\/file-viewer$|^@hardcore\/ui\/renderers\/(step|dxf|glb|mesh|robot|workspace)$|^@hardcore\/ui\/file-viewer\/(presentation|empty)$|(?:ViewerAppearance|ViewerBrand|ViewerLinks)\.jsx$|useViewerAutoReload\.js$/ }, args => ({ path: args.path, namespace: 'host-test' }));
     plugin.onLoad({ filter: /.*/, namespace: 'host-test' }, args => {
-      if (args.path.endsWith('/file-viewer')) return { contents: `let current; export function FileViewer(props){current=props; return null;} export const snapshot=()=>current;`, loader: 'js' };
+      if (args.path.endsWith('/file-viewer')) return { contents: `let current; export function FileViewer(props){current=props; return null;} export const snapshot=()=>current; export {mergeChangedRecords} from ${JSON.stringify(fileURLToPath(new URL('../../../packages/ui/src/file-viewer/statePatch.ts', import.meta.url)))};`, loader: 'js', resolveDir: fileURLToPath(new URL('.', import.meta.url)) };
       if (args.path.endsWith('/step')) return { contents: `export const createStepRenderer=()=>({id:'step'});`, loader: 'js' };
       // The preferences the host really uses; everything else the workspace module pulls in is a renderer's.
-      if (args.path.endsWith('/workspace')) return { contents: `export {createCadPreferences} from ${JSON.stringify(fileURLToPath(new URL('../../../packages/ui/src/renderers/workspace/preferences.ts', import.meta.url)))};`, loader: 'js', resolveDir: fileURLToPath(new URL('.', import.meta.url)) };
+      if (args.path.endsWith('/workspace')) return { contents: `export {createCadPreferences, createStoredCadPreferences} from ${JSON.stringify(fileURLToPath(new URL('../../../packages/ui/src/renderers/workspace/preferences.ts', import.meta.url)))};`, loader: 'js', resolveDir: fileURLToPath(new URL('.', import.meta.url)) };
       if (args.path.endsWith('/dxf')) return { contents: `export const createDxfRenderer=()=>({id:'dxf'});`, loader: 'js' };
       if (args.path.endsWith('/glb')) return { contents: `export const createGlbRenderer=()=>({id:'glb'});`, loader: 'js' };
       if (args.path.endsWith('/mesh')) return { contents: `export const createMeshRenderer=()=>({id:'mesh'});`, loader: 'js' };
@@ -81,7 +81,9 @@ test('web host preserves compact navigation, history, root state and focus refre
     // A page load is a file opened directly, so it opens on that file's own default panel
     // (`null`) — a narrow window included — and never on one a previous page left open.
     assert.equal(snapshot().state.panel, null);
-    assert.equal(snapshot().narrowCrumbs, false);
+    assert.equal('narrowCrumbs' in snapshot(), false);
+    assert.equal('fullscreen' in snapshot(), false, 'fullscreen is each viewer\'s own, never the host\'s');
+    assert.equal('lifecycle' in snapshot().host, false);
     assert.equal(window.document.title, 'text-to-cad | one.step');
     const historyLength = window.history.length;
     await act(() => snapshot().host.navigation.openFile('missing.step'));
@@ -115,9 +117,9 @@ test('web host preserves compact navigation, history, root state and focus refre
     window.innerWidth = 480;
     await act(() => { window.history.replaceState({}, '', '?file=one.step'); window.dispatchEvent(new window.PopStateEvent('popstate')); });
     assert.equal(snapshot().file, 'one.step');
-    await act(() => { window.history.replaceState({}, '', '?file=missing.step'); window.dispatchEvent(new window.PopStateEvent('popstate')); });
-    assert.equal(snapshot().file, 'missing.step');
-    assert.equal(snapshot().navigationPath, null);
+    await act(() => { window.history.replaceState({}, '', '?file=folder/missing.step'); window.dispatchEvent(new window.PopStateEvent('popstate')); });
+    assert.equal(snapshot().file, 'folder/missing.step');
+    assert.equal(snapshot().navigationPath, 'folder/missing.step', 'a missing file, nested or not, keeps its crumbs once the catalog has answered');
     assert.equal(snapshot().leading.props.title, '', 'a file, even a missing one, is named by its crumbs');
     // No file at all: the app names itself beside its icon, where the crumbs would be.
     await act(() => { window.history.replaceState({}, '', '/'); window.dispatchEvent(new window.PopStateEvent('popstate')); });

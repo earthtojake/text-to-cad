@@ -6,22 +6,22 @@
     <meta name="description" content="Browse cached CAD parts, assemblies, and prompt-ready references" />
     <title>text-to-cad</title>
     <script>
+      // First paint in the stored appearance, read as colorScheme.js reads it: the cookie
+      // (shared by every viewer port on this host) wins, then this origin's localStorage.
       (function () {
         const root = document.documentElement;
-        const storageKey = "cad-viewer:color-scheme";
+        const known = (value) => value === "light" || value === "dark" || value === "system";
         const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
         let preference = "system";
         try {
-          const storedPreference = window.localStorage && window.localStorage.getItem(storageKey);
-          if (storedPreference === "light" || storedPreference === "dark" || storedPreference === "system") {
-            preference = storedPreference;
-          }
+          const cookie = document.cookie.split(";").map((part) => part.trim().split("=")).find(([name]) => name === "cad-viewer-appearance");
+          const cookiePreference = cookie ? cookie.slice(1).join("=") : "";
+          const storedPreference = window.localStorage && window.localStorage.getItem("cad-viewer:color-scheme");
+          preference = known(cookiePreference) ? cookiePreference : known(storedPreference) ? storedPreference : "system";
         } catch {
           preference = "system";
         }
         const mode = preference === "system" ? (prefersDark ? "dark" : "light") : preference;
-        root.dataset.themePreference = preference;
-        root.dataset.theme = mode;
         root.classList.toggle("dark", mode === "dark");
         root.style.colorScheme = mode;
       })();

@@ -1,16 +1,15 @@
-import { formatPromptContextText, validatePromptContext } from '@hardcore/core/prompt';
+import { createPromptDeliveryLedger, formatPromptContextText, validatePromptContext } from '@hardcore/core/prompt';
 import type { PromptContextPort, PromptDeliveryResult, PromptDestinationState, ResourceRef } from '@hardcore/core/prompt';
-import type { ClipboardPort } from '@hardcore/ui/host';
+import type { WebClipboard } from './clipboard';
 
 /** Prepare portable clipboard content without claiming an external composer pasted it. */
-export function createWebPromptContext(workspaceId: string, rootPath: string, clipboard: ClipboardPort, supportsImages = typeof clipboard.writeImage === 'function'): PromptContextPort {
+export function createWebPromptContext(workspaceId: string, rootPath: string, clipboard: WebClipboard, supportsImages = typeof clipboard.writeImage === 'function'): PromptContextPort {
   const capabilities: NonNullable<PromptDestinationState['capabilities']> = {
     attachments: supportsImages ? 'png' : 'none', maxParts: 128, maxAttachmentBytes: 20 * 1024 * 1024,
     mixedTextAndImage: supportsImages && clipboard.writeContent ? 'representations' : 'unsupported',
   };
   const state: PromptDestinationState = Object.freeze({ kind: 'clipboard', available: true, capabilities });
-  const operations = new Map<string, Promise<PromptDeliveryResult>>();
-  const pending = new Set<string>();
+  const ledger = createPromptDeliveryLedger({ busyMessage: 'Wait for pending clipboard operations before copying more.' });
   const resolvePath = (resource: ResourceRef) => {
     if (resource.kind === 'url') return resource.url;
     if (resource.workspaceId !== workspaceId) throw new Error('This reference belongs to another served workspace.');
@@ -24,12 +23,7 @@ export function createWebPromptContext(workspaceId: string, rootPath: string, cl
       if (context && Array.isArray(context.parts)) for (const part of context.parts) if (part?.kind === 'attachment' && part.content) void Promise.resolve(part.content).catch(() => {});
       try { validatePromptContext(context); }
       catch (error) { return Promise.resolve({ status: 'failed', message: error instanceof Error ? error.message : String(error) }); }
-      const previous = operations.get(context.operationId);
-      if (previous) return previous;
-      if (pending.size >= 16) return Promise.resolve({ status: 'failed', message: 'Wait for pending clipboard operations before copying more.' });
-      let operation: Promise<PromptDeliveryResult>;
-      try {
-        validatePromptContext(context);
+      return ledger.deliver(context.operationId, (): Promise<PromptDeliveryResult> => {
         if (context.parts.length > 128) throw new Error('Prompt context has too many parts.');
         const attachments = context.parts.filter(part => part.kind === 'attachment');
         if (attachments.length && !supportsImages) throw new Error('Clipboard image copy is not supported in this browser.');
@@ -46,25 +40,11 @@ export function createWebPromptContext(workspaceId: string, rootPath: string, cl
         // No await precedes this call: ClipboardItem can carry the pending Blob.
         if (image !== undefined && text !== undefined) {
           if (!clipboard.writeContent) throw new Error('This browser cannot copy text and an image together. Copy them separately.');
-          operation = clipboard.writeContent({ text, image }).then(() => ({ status: 'partial', partIds, message: 'Text and PNG copied as separate clipboard representations. Some apps paste only one; paste and check both before sending.' }));
-        } else {
-          const write = image !== undefined ? clipboard.writeImage(image) : clipboard.writeText(text ?? '');
-          operation = write.then(() => ({ status: 'copied', partIds }));
+          return clipboard.writeContent({ text, image }).then(() => ({ status: 'partial', partIds, message: 'Text and PNG copied as separate clipboard representations. Some apps paste only one; paste and check both before sending.' }));
         }
-        operation = operation.catch(error => ({ status: 'failed', message: error instanceof Error ? error.message : String(error) }));
-      } catch (error) { operation = Promise.resolve({ status: 'failed', message: error instanceof Error ? error.message : String(error) }); }
-      while (operations.size >= 256) {
-        const completed = [...operations.keys()].find(id => !pending.has(id));
-        if (!completed) break;
-        operations.delete(completed);
-      }
-      operations.set(context.operationId, operation);
-      pending.add(context.operationId);
-      void operation.then(result => {
-        pending.delete(context.operationId);
-        if (result.status === 'failed' || result.status === 'cancelled') operations.delete(context.operationId);
+        const write = image !== undefined ? clipboard.writeImage(image) : clipboard.writeText(text ?? '');
+        return write.then(() => ({ status: 'copied', partIds }));
       });
-      return operation;
     },
   };
 }

@@ -131,8 +131,6 @@ export function applyColorSchemeToDocument(colorSchemeId, root = document.docume
   const normalizedId = normalizeColorSchemeId(colorSchemeId);
   const resolvedMode = resolveColorSchemeMode(normalizedId, { prefersDark });
 
-  root.dataset.themePreference = normalizedId;
-  root.dataset.theme = resolvedMode;
   root.classList.toggle("dark", resolvedMode === DARK_COLOR_SCHEME_ID);
   root.style.colorScheme = resolvedMode;
 }
