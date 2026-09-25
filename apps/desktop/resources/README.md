@@ -41,6 +41,23 @@ runs it with `PYTHONDONTWRITEBYTECODE` — probes it (`import cadgen`,
 `import cadgen.viewer`, the version equals the app's), and writes
 `runtime.json` last.
 
+**The `fea` extra ships too** (`RUNTIME_EXTRAS` in `scripts/bundle-runtime.mjs`):
+the install line is `<cadgen wheel>[fea]`, so netgen, scikit-fem and pyamg land
+beside cadgen and `cadgen fea solve` works offline like every other door. The
+constraints file pins them because `scripts/cad-resources.mjs` follows the
+extra when it computes the closure (`pip show` would not).
+
+**Wheel data files are put back after pip.** `pip install --target` installs
+into a temporary prefix and moves only the package directories, so a wheel's
+`<dist>.data/data/lib/*` -- netgen-occt's forty-odd OpenCascade libraries --
+is silently lost, while the dist-info RECORD still lists each file one level
+above site-packages, which is exactly where netgen's importer looks for them.
+The bundler reads every RECORD, downloads the incomplete distributions' wheels
+again (pip's cache makes that free), and copies the files to where the RECORD
+says. The probe then imports OCP, then netgen, and meshes a unit cube in one
+process: an import alone would not catch a dropped library, and the two
+OpenCascades (OCP's and netgen's, loaded RTLD_GLOBAL) have to coexist.
+
 **Cross-target works from one host** because pip never runs the target's
 interpreter: with `--platform` and `--only-binary=:all:` it only picks wheels
 for it, and cadgen's closure is wheels on every packaged target (checked from

@@ -14,7 +14,8 @@
  *    app bundles the very file that went to PyPI.
  * 2. `constraints.txt`. `pip freeze` from the development interpreter (the
  *    checkout's `.venv` by default), filtered to cadgen's dependency closure —
- *    the packages `pip show` reaches from `cadgen`, transitively — so the
+ *    the packages its metadata reaches, transitively, the runtime's extras
+ *    (`RUNTIME_EXTRAS` in bundle-runtime.mjs) included — so the
  *    managed runtime resolves the same OCP, build123d and ezdxf the checkout
  *    was tested against, and nothing the venv happens to hold beyond them
  *    (pytest, playwright, the editable cadgen itself) pins anything.
@@ -28,6 +29,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { appVersion } from "./app-version.mjs";
+import { RUNTIME_EXTRAS } from "./bundle-runtime.mjs";
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const repoRoot = path.resolve(appRoot, "..", "..");
@@ -70,34 +72,42 @@ function requireBundledCadgenRuntime() {
   }
 }
 
-/** Distribution names `pip show` reaches from `root`, transitively — the closure. */
-export function dependencyClosure(python, root, env) {
-  const seen = new Set();
-  const queue = [root];
-  while (queue.length > 0) {
-    const name = queue.shift();
-    const key = name.toLowerCase();
-    if (seen.has(key)) {
-      continue;
-    }
-    let info;
-    try {
-      info = run(python, ["-m", "pip", "show", name], { env });
-    } catch {
-      continue; // an extra that is not installed, or a name pip does not know
-    }
-    seen.add(key);
-    const requires = info
-      .split("\n")
-      .find((line) => line.startsWith("Requires:"))
-      ?.slice("Requires:".length)
-      .split(",")
-      .map((entry) => entry.trim())
-      .filter(Boolean) ?? [];
-    queue.push(...requires);
-  }
-  seen.delete(root.toLowerCase());
-  return seen;
+/**
+ * Distribution names reachable from `root`, transitively — the closure — with
+ * the named extras of the root followed (and any extras a requirement names,
+ * `a[b]`). `pip show` cannot do this: its `Requires:` line leaves every
+ * extra's requirement out, so netgen and the rest of `cadgen[fea]` would go
+ * unpinned and the runtime would resolve them from PyPI at build time.
+ * Environment markers other than `extra` are not evaluated: a requirement for
+ * another platform is a name `pip freeze` does not list here, so it pins
+ * nothing, which is the same outcome as before.
+ */
+export function dependencyClosure(python, root, env, extras = []) {
+  const script = `
+import importlib.metadata as md, json, re, sys
+root, extras = sys.argv[1], [e for e in sys.argv[2].split(",") if e]
+REQ = re.compile(r"^\\s*([A-Za-z0-9][A-Za-z0-9._-]*)\\s*(?:\\[([^\\]]*)\\])?[^;]*(?:;(.*))?$")
+EXTRA = re.compile(r"""extra\\s*==\\s*['"]([^'"]+)['"]""")
+def norm(name): return name.lower().replace("_", "-").replace(".", "-")
+seen, queue = {}, [(root, set(extras))]
+while queue:
+    name, wanted = queue.pop(0)
+    key = norm(name)
+    if key in seen and wanted <= seen[key]: continue
+    try: dist = md.distribution(name)
+    except md.PackageNotFoundError: continue
+    seen[key] = seen.get(key, set()) | wanted
+    for line in dist.requires or []:
+        match = REQ.match(line)
+        if not match: continue
+        dep, dep_extras, marker = match.group(1), match.group(2) or "", match.group(3) or ""
+        extra = EXTRA.search(marker)
+        if extra and extra.group(1) not in wanted: continue
+        queue.append((dep, {e.strip() for e in dep_extras.split(",") if e.strip()}))
+print(json.dumps(sorted(k for k in seen if k != norm(root))))
+`;
+  const out = run(python, ["-c", script, root, extras.join(",")], { env });
+  return new Set(JSON.parse(out));
 }
 
 /** `pip freeze` lines for the closure — `name==version` only, editable installs dropped. */
@@ -138,7 +148,7 @@ export function writeCadResources({ python, out, version, noWheel = false }) {
 
   // The closure is computed with `pip show`, which normalises names the way
   // freeze prints them (dashes), so the two agree on membership.
-  const closure = new Set([...dependencyClosure(python, "cadgen", env)].map((name) => name.replace(/_/g, "-")));
+  const closure = new Set([...dependencyClosure(python, "cadgen", env, RUNTIME_EXTRAS)].map((name) => name.replace(/_/g, "-")));
   const constraints = constraintsFrom(run(python, ["-m", "pip", "freeze"], { env }), closure);
   if (constraints.length === 0) {
     throw new Error("pip freeze found none of cadgen's dependencies; is cadgen installed in that interpreter?");
