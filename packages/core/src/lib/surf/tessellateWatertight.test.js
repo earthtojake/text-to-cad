@@ -128,6 +128,13 @@ for (const fixture of ["sun_gear", "mixed"]) {
 // rim outgrew it. That is why these cases run at COARSE chord tolerances — they
 // are the ones that reproduce, and a density-dependent weld would fail them
 // again. Fine tolerances are covered by the fixtures' default-tolerance runs.
+//
+// curved_wall_hole is issue #433's part: a 2.2 mm strip of a 90 mm-radius
+// wall with one 3.3 mm hole drilled through it. The rim's uv curve on the bore
+// is nearly straight and bends AWAY from the face, so earcut built every rim
+// cell as a stack of slivers; their refined chords left vertices microns inside
+// the rim, and the conformity pass folded triangles over them — one triangle
+// emitted twice, edges on four faces. Every tolerance failed somewhere.
 function meshDefects(name, options) {
   const { index, floats } = loadFixture(name);
   const component = tessellateComponent(index, floats, { ...options, collectBoundaryDebug: true });
@@ -137,9 +144,10 @@ function meshDefects(name, options) {
     const nx = uy * vz - uz * vy, ny = uz * vx - ux * vz, nz = ux * vy - uy * vx;
     return Math.sqrt(nx * nx + ny * ny + nz * nz);
   };
-  // Keyed by exact position, which is how a mesh consumer welds an exported
-  // STL: it is the model's own triangle set that must be sound, not any one
-  // face's index space.
+  // Keyed by exact Float32 position, which is what an exported STL carries
+  // and how a mesh consumer welds it: it is the model's own triangle set that
+  // must be sound, not any one face's index space. Two vertices a double ULP
+  // apart are one vertex in the file.
   const at = (p) => `${p[0]},${p[1]},${p[2]}`;
   let degenerate = 0;
   let triangles = 0;
@@ -151,7 +159,7 @@ function meshDefects(name, options) {
         dbg.xyz[dbg.triangles[t]],
         dbg.xyz[dbg.triangles[t + 1]],
         dbg.xyz[dbg.triangles[t + 2]],
-      ];
+      ].map((p) => Array.from(Float32Array.from(p)));
       triangles += 1;
       if (twiceArea(corners[0], corners[1], corners[2]) === 0) degenerate += 1;
       const keys = corners.map(at);
@@ -174,8 +182,13 @@ function meshDefects(name, options) {
 for (const [fixture, chordTolerance] of [
   ["sun_gear", undefined],
   ["sun_gear", 2e-2],
+  ["mixed", undefined],
   ["mixed", 5e-3],
+  ["mixed", 2e-2],
   ["cam_follower_roller", 2e-2],
+  ["curved_wall_hole", undefined],
+  ["curved_wall_hole", 1e-2],
+  ["curved_wall_hole", 2e-2],
 ]) {
   const label = chordTolerance === undefined ? "default tolerance" : `chord ${chordTolerance}`;
   test(`${fixture} @ ${label}: no degenerate or duplicated triangles, every edge shared by two`, () => {
