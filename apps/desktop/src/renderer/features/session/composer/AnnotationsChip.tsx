@@ -1,4 +1,6 @@
 import { formatPromptAnnotation, type PromptReference } from "@hardcore/core/prompt";
+import type { PromptBlock } from "@shared/acp/types";
+import { useEffect, useMemo } from "react";
 import { MessageSquareDot, X } from "lucide-react";
 import { toast } from "sonner";
 
@@ -9,6 +11,13 @@ import type { DraftAnnotation } from "@renderer/state/composer";
 
 import { REFERENCE_CHIP_CLASS, ReferenceChipContent } from "./ReferenceChip";
 import type { ReferenceScope } from "./ReferenceScope";
+
+/** A markup's picture, small, for the chip's list. */
+function MarkupThumbnail({ image }: { image: File }) {
+  const url = useMemo(() => URL.createObjectURL(image), [image]);
+  useEffect(() => () => URL.revokeObjectURL(url), [url]);
+  return <img alt="Markup" className="mt-1 max-h-24 rounded border object-contain" src={url} />;
+}
 
 const referencePath = (reference: PromptReference) =>
   reference.resource.kind === "workspace-file" ? reference.resource.path : reference.resource.url;
@@ -92,6 +101,7 @@ export function AnnotationsChip({
                       </span>
                     ))}
                     <span className="break-words">{annotation.text}</span>
+                    {annotation.image ? <MarkupThumbnail image={annotation.image} /> : null}
                   </span>
                 </button>
               </li>
@@ -116,6 +126,24 @@ export function withAnnotations(text: string, annotations: readonly DraftAnnotat
   if (annotations.length === 0) {
     return text;
   }
-  const lines = annotations.map((annotation, index) => `${index + 1}. ${formatPromptAnnotation(annotation, { labels: true })}`);
+  // A markup's image goes after the text, in this order: the line says which one it is.
+  let markup = 0;
+  const lines = annotations.map((annotation, index) => {
+    const line = `${index + 1}. ${formatPromptAnnotation(annotation, { labels: true })}`;
+    return annotation.image ? `${line} (on markup image ${++markup})` : line;
+  });
   return [text, ["Annotations:", ...lines].join("\n")].filter(Boolean).join("\n\n");
+}
+
+/** The annotations' markups as image blocks, in the order `withAnnotations` numbers them. */
+export async function annotationImageBlocks(annotations: readonly DraftAnnotation[]): Promise<PromptBlock[]> {
+  const blocks: PromptBlock[] = [];
+  for (const annotation of annotations) {
+    if (!annotation.image) continue;
+    const bytes = new Uint8Array(await annotation.image.arrayBuffer());
+    let binary = "";
+    for (let index = 0; index < bytes.length; index += 0x8000) binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
+    blocks.push({ type: "image", data: btoa(binary), mimeType: annotation.image.type || "image/png", uri: null });
+  }
+  return blocks;
 }

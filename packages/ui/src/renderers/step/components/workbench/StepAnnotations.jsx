@@ -1,68 +1,14 @@
 import { useEffect, useRef, useState } from "react";
-import { Hash, MessageSquareDot, Trash2 } from "lucide-react";
+import { NoteInput } from "../../../../host/AnnotateButton.js";
+import { Hash, Trash2 } from "lucide-react";
 import { Button } from "@hardcore/ui/primitives/button";
-import { Popover, PopoverContent, PopoverTrigger } from "@hardcore/ui/primitives/popover";
 import { TooltipHint } from "@hardcore/ui/primitives/tooltip";
-import { cn } from "@hardcore/ui/utils";
 
 // The Select tool's annotations (`workbench/stepAnnotations.js`): the Annotate button beside
-// Copy Reference, and the body of the card a dot opens on the model (AnnotationPins.jsx). An
+// Copy Reference (the shared host one), and the body of the card a dot opens on the model
+// (AnnotationPins.jsx). An
 // annotation goes into the chat box as it is made, and reaches the agent only when the person
 // sends the prompt.
-
-/** Annotate: a note on the current selection, typed in a small box above the button. */
-export function AnnotateButton({ disabled = false, onSubmit }) {
-  const [open, setOpen] = useState(false);
-  const [note, setNote] = useState("");
-  const submit = () => {
-    const value = note.trim();
-    if (!value) return;
-    onSubmit(value);
-    setNote("");
-    setOpen(false);
-  };
-  return (
-    <Popover open={open && !disabled} onOpenChange={next => setOpen(next && !disabled)}>
-      <PopoverTrigger asChild>
-        <Button type="button" variant="outline" size="sm" disabled={disabled} className="h-11 gap-1.5 border border-border/60 bg-background/90 px-4 text-sm shadow-lg shadow-black/20 backdrop-blur hover:bg-background">
-          <MessageSquareDot className="size-4" aria-hidden="true" />
-          Annotate
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent side="top" align="center" sideOffset={10} className="w-80 p-2" aria-label="New annotation"
-        onOpenAutoFocus={event => { event.preventDefault(); event.currentTarget.querySelector("textarea")?.focus(); }}>
-        <NoteInput value={note} onChange={setNote} onSubmit={submit} onCancel={() => setOpen(false)}
-          placeholder="What should change here?" />
-        <div className="mt-1.5 flex items-center justify-between gap-2 px-0.5">
-          <span className="text-[11px] text-muted-foreground">Enter to add · Shift+Enter for a new line</span>
-          <Button type="button" size="sm" className="h-7 px-3 text-xs" disabled={!note.trim()} onClick={submit}>Add</Button>
-        </div>
-      </PopoverContent>
-    </Popover>
-  );
-}
-
-function NoteInput({ value, onChange, onSubmit, onCancel, onBlur, autoFocus = false, placeholder = "", className = "", label = "Annotation" }) {
-  const ref = useRef(null);
-  // Opened to edit a note: the caret goes to its end, so typing carries on from what is there.
-  useEffect(() => {
-    const element = ref.current;
-    if (!autoFocus || !element) return;
-    element.focus();
-    element.setSelectionRange(element.value.length, element.value.length);
-  }, [autoFocus]);
-  return (
-    <textarea ref={ref} aria-label={label} value={value} placeholder={placeholder} rows={2} onBlur={onBlur}
-      className={cn("w-full resize-none rounded-md border border-input bg-transparent px-2 py-1.5 text-[13px] outline-none placeholder:text-muted-foreground focus-visible:ring-1 focus-visible:ring-ring", className)}
-      onChange={event => onChange(event.target.value)}
-      onKeyDown={event => {
-        // The viewer's own shortcuts (Escape clears the selection, letters pick tools) stay out of the note.
-        event.stopPropagation();
-        if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); onSubmit(); }
-        else if (event.key === "Escape") { event.preventDefault(); onCancel(); }
-      }} />
-  );
-}
 
 /**
  * A reference as a chip, drawn as the chat box draws a reference in the prompt (its frame, and a
@@ -128,3 +74,4 @@ export function AnnotationBody({ annotation, index, onSelect, onEdit, onRemove, 
     </div>
   );
 }
+

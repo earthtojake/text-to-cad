@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import { Pencil } from 'lucide-react';
 import { getDocument, PDFWorker, TextLayer } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import type { PDFDocumentProxy, PDFPageProxy } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { zoomLimits } from '@hardcore/core/lib/drawing2d/index.js';
 import PdfWorker from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?worker';
 import 'pdfjs-dist/web/pdf_viewer.css';
-import { PromptContextAction, useViewerHost, type LivePdfDocument } from '@hardcore/ui/host';
+import { AnnotateButton, PromptContextAction, useMarkupAnnotate, useViewerHost, type LivePdfDocument } from '@hardcore/ui/host';
 import type { FileRendererProps } from '@hardcore/ui/file-viewer';
+import type { DrawingController, DrawingViewport } from '@hardcore/ui/drawing';
 
 export interface PdfRendererData { bytes: Uint8Array<ArrayBuffer> }
 function validPage(page: number, count: number) {
@@ -27,6 +29,8 @@ async function capture(document: PDFDocumentProxy, page: number) {
 // of the pane, so a deep zoom into a drawing sheet stays sharp. A gesture moves the last drawing by
 // a CSS transform at once, and the page is drawn again sharp when the view settles.
 type View = { scale: number; x: number; y: number };
+// Excalidraw is large and only markup needs it: the chunk loads the first time Mark up is pressed.
+const MarkupLayer = lazy(() => import('@hardcore/ui/drawing').then(module => ({ default: module.MarkupLayer })));
 /** Wheel notches to zoom factor (~100 px of delta a notch); a pinch is a ctrl-wheel with smaller deltas. */
 const WHEEL_ZOOM_SPEED = 0.0015;
 const PINCH_WHEEL_ZOOM_SPEED = 0.01;
@@ -56,6 +60,13 @@ export default function PdfRenderer({ data, file, source, state, onStateChange, 
   const selectionRef = useRef(selection);
   const canvas = useRef<HTMLCanvasElement>(null);
   const pane = useRef<HTMLDivElement>(null);
+  // Markup: ink over the page, as the 3D viewer's Draw is, for "Add to prompt" to send with the page.
+  // Leaving markup discards the ink; the PDF itself is never written.
+  const [marking, setMarking] = useState(false);
+  const markingRef = useRef(false);
+  useEffect(() => { markingRef.current = marking; }, [marking]);
+  const [inked, setInked] = useState(false);
+  const inkController = useRef<DrawingController | null>(null);
   const layer = useRef<HTMLDivElement>(null);
   const liveRef = useRef<LivePdfDocument | null>(null);
   const changeRef = useRef(onStateChange);
@@ -205,7 +216,7 @@ export default function PdfRenderer({ data, file, source, state, onStateChange, 
     const onWheel = (event: WheelEvent) => {
       // The pane must not scroll under a page being zoomed.
       event.preventDefault();
-      if (!size.current.width) return;
+      if (!size.current.width || markingRef.current) return;
       const fitScale = fitView(size.current, { width: host.clientWidth, height: host.clientHeight }).scale;
       const { minScale, maxScale } = zoomLimits(fitScale);
       const at = view.current; const point = local(event);
@@ -217,7 +228,7 @@ export default function PdfRenderer({ data, file, source, state, onStateChange, 
     // A drag pans, except one that starts on the page's text: that one selects it.
     let drag: { id: number; x: number; y: number } | null = null;
     const onPointerDown = (event: PointerEvent) => {
-      if (event.button !== 0 || (event.target as Element | null)?.closest?.('.textLayer span')) return;
+      if (event.button !== 0 || markingRef.current || (event.target as Element | null)?.closest?.('.textLayer span')) return;
       drag = { id: event.pointerId, x: event.clientX, y: event.clientY };
       host.setPointerCapture(event.pointerId);
     };
@@ -230,7 +241,7 @@ export default function PdfRenderer({ data, file, source, state, onStateChange, 
     };
     const onPointerUp = (event: PointerEvent) => { if (drag?.id === event.pointerId) drag = null; };
     const onDoubleClick = (event: MouseEvent) => {
-      if ((event.target as Element | null)?.closest?.('.textLayer span')) return;
+      if (markingRef.current || (event.target as Element | null)?.closest?.('.textLayer span')) return;
       event.preventDefault(); fit();
     };
     host.addEventListener('wheel', onWheel, { passive: false });
@@ -248,6 +259,41 @@ export default function PdfRenderer({ data, file, source, state, onStateChange, 
       host.removeEventListener('dblclick', onDoubleClick);
     };
   }, [moveTo, fit]);
+  // The ink is screen-space; a pan or zoom made inside the editor moves the page with it, from the view
+  // markup started on: a scene point s is drawn at (s + scroll) * zoom.
+  const markupStart = useRef<View>({ scale: 1, x: 0, y: 0 });
+  const startMarkup = () => { markupStart.current = { ...view.current }; fitted.current = false; setMarking(true); };
+  const stopMarkup = () => { inkController.current = null; setInked(false); setMarking(false); };
+  const followInk = useCallback((ink: DrawingViewport) => {
+    const at = markupStart.current;
+    moveTo({ scale: at.scale * ink.zoom, x: (at.x + ink.scrollX) * ink.zoom, y: (at.y + ink.scrollY) * ink.zoom });
+  }, [moveTo]);
+  const onInkController = useCallback((controller: DrawingController | null) => { inkController.current = controller; }, []);
+  /** What is on screen now, the page and its ink, as one image. */
+  const captureMarkup = useCallback(() => {
+    const page = canvas.current; const ink = inkController.current?.inkCanvas();
+    if (!page) return Promise.reject(new Error('PDF is still loading.'));
+    const out = globalThis.document.createElement('canvas');
+    out.width = page.width; out.height = page.height;
+    const context = out.getContext('2d');
+    if (!context) return Promise.reject(new Error('Could not capture the markup.'));
+    context.fillStyle = '#f4f4f5'; context.fillRect(0, 0, out.width, out.height);
+    context.drawImage(page, 0, 0);
+    if (ink) context.drawImage(ink, 0, 0, out.width, out.height);
+    return new Promise<Blob>((resolve, reject) => out.toBlob(blob => blob ? resolve(blob) : reject(new Error('Markup capture failed.')), 'image/png'));
+  }, []);
+  // Annotate: the page as it is on screen with its ink, and a note on it, as one annotation in the chat
+  // box; the ink clears for the next one. The same annotate every viewer that marks up uses.
+  const annotateMarkup = useMarkupAnnotate({
+    reference: useCallback(() => {
+      const current = liveRef.current?.state();
+      return current ? { resource: { kind: 'workspace-file' as const, workspaceId: source.id, path: file.path, revision: current.revision },
+        target: { kind: 'whole-resource' as const }, label: `page ${current.page}` } : null;
+    }, [source.id, file.path]),
+    capture: captureMarkup,
+    name: useCallback(() => `${file.name}-page-${pageRef.current}-markup.png`, [file.name]),
+    onAdded: useCallback(() => inkController.current?.clear(), []),
+  });
   return <div className="flex h-full flex-col bg-muted/30" aria-label={`PDF ${file.name}`}>
     <div className="flex shrink-0 items-center gap-2 border-b px-3 py-2">
       <button disabled={!pdf || page <= 1} onClick={() => setPage(page - 1)} aria-label="Previous page">‹</button>
@@ -261,11 +307,18 @@ export default function PdfRenderer({ data, file, source, state, onStateChange, 
         return { schemaVersion: 1, operationId: crypto.randomUUID(), parts: [
           { id: 'pdf', kind: 'reference', reference: { resource: { kind: 'workspace-file', workspaceId: source.id, path: file.path, revision: current.revision }, target: { kind: 'whole-resource' }, label: `${file.name}, page ${current.page}` } },
           ...(current.selection ? [{ id: 'selection', kind: 'text' as const, text: `Page ${current.page} selection:\n${current.selection}` }] : []),
-          { id: 'page', kind: 'attachment', name: `${file.name}-page-${current.page}.png`, mimeType: 'image/png', content: target.capture(current.page), about: ['pdf'] },
+          // With markup, the page as it is on screen with its ink; without, the whole page.
+          marking && inked
+            ? { id: 'page', kind: 'attachment', name: `${file.name}-page-${current.page}-markup.png`, mimeType: 'image/png', content: captureMarkup(), about: ['pdf'] }
+            : { id: 'page', kind: 'attachment', name: `${file.name}-page-${current.page}.png`, mimeType: 'image/png', content: target.capture(current.page), about: ['pdf'] },
         ] };
       }} onResult={result => setFeedback(
         // A delivery that worked says nothing (no success messages); one that did not says why.
         result.status === 'added' || result.status === 'copied' || result.status === 'cancelled' ? '' : ('message' in result ? result.message : undefined) ?? result.status)} />
+      <button type="button" disabled={!pdf} aria-pressed={marking} onClick={() => (marking ? stopMarkup() : startMarkup())}
+        className={`ml-auto inline-flex items-center gap-1 rounded-md px-2 py-1 text-sm ${marking ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}>
+        <Pencil className="size-3.5" aria-hidden="true" />{marking ? 'Done marking up' : 'Mark up'}
+      </button>
       <span role="status" className="text-muted-foreground">{feedback}</span>
     </div>
     {error ? <div role="alert" className="p-3 text-destructive">{error}</div> : null}
@@ -276,6 +329,14 @@ export default function PdfRenderer({ data, file, source, state, onStateChange, 
     }}>
       <canvas ref={canvas} className="absolute left-0 top-0 origin-top-left" />
       <div ref={layer} className="textLayer absolute left-0 top-0 origin-top-left cursor-text" />
+      {marking ? <Suspense fallback={null}>
+        <MarkupLayer platform={host.environment.platform} onController={onInkController} onContentChange={setInked} onViewportChange={followInk}
+          actions={<div className="rounded-lg border bg-background p-1 shadow-sm">
+            <AnnotateButton variant="toolbar" side="bottom" disabled={!inked || !annotateMarkup.available}
+              onSubmit={note => void annotateMarkup.annotate(note).then(result => setFeedback(
+                result.status === 'added' || result.status === 'copied' || result.status === 'partial' ? '' : ('message' in result ? result.message : undefined) ?? result.status))} />
+          </div>} />
+      </Suspense> : null}
     </div>
   </div>;
 }

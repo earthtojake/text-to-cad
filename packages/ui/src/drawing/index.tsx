@@ -2,7 +2,7 @@ import { Excalidraw, CaptureUpdateAction, convertToExcalidrawElements, exportToB
 import type { AppState, BinaryFiles, ExcalidrawImperativeAPI, ExcalidrawInitialDataState } from '@excalidraw/excalidraw/types';
 import type { ExcalidrawElement, FileId } from '@excalidraw/excalidraw/element/types';
 import { emptyDrawingDocument, MAX_DRAWING_BYTES, parseDrawingScene } from '@hardcore/core/drawing';
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import { useDrawingSession } from './session.js';
 import { DEFAULT_OVERLAY_DRAWING_COLOR, DRAWING_TOOLS, DrawingToolbar } from './toolbar.jsx';
 import type { DrawingTool } from './toolbar.jsx';
@@ -307,4 +307,40 @@ export function DrawingEditor({ initialScene, name = 'Drawing', mode = 'canvas',
         saveAsImage: false, toggleTheme: false, changeViewBackgroundColor: false } }} />
     {toolbar ? <DrawingToolbar drawing={session} className="hardcore-drawing-editor__toolbar" /> : null}
   </div>;
+}
+
+export interface MarkupLayerProps {
+  /** The host's keyboard platform (`ViewerHost.environment.platform`). */
+  platform?: string;
+  /** The mounted editor, for capturing its ink (`inkCanvas`) and clearing it after an annotation. */
+  onController(controller: DrawingController | null): void;
+  onContentChange?(hasContent: boolean): void;
+  /** A pan or zoom made inside the editor, for a viewer that moves its own view with the ink. */
+  onViewportChange?(viewport: DrawingViewport): void;
+  /** Extra controls beside the drawing tools (a viewer's Annotate). */
+  actions?: ReactNode;
+}
+
+/**
+ * Markup over any viewer's view: the drawing editor, transparent and screen-space, with the drawing
+ * toolbar in the corner. A viewer mounts it while the person marks up, moves its view with the ink
+ * (`onViewportChange`), and captures what is on screen with the ink over it. Mounting it loads the
+ * editor, so a viewer lazy-imports this module and pays for Excalidraw only when markup starts.
+ */
+export function MarkupLayer({ platform, onController, onContentChange, onViewportChange, actions = null }: MarkupLayerProps) {
+  const markup = useDrawingSession(true, { tool: 'freedraw', color: DEFAULT_OVERLAY_DRAWING_COLOR });
+  const { onReady, onContentChange: reportContent } = markup;
+  const ready = useCallback((controller: DrawingController | null) => { onController(controller); onReady(controller); }, [onController, onReady]);
+  const content = useCallback((hasContent: boolean) => { onContentChange?.(hasContent); reportContent(hasContent); }, [onContentChange, reportContent]);
+  return <>
+    <div className="absolute inset-0 z-10" data-markup-layer="">
+      <DrawingEditor mode="overlay" toolbar={false} initialTool="freedraw" name="Markup" platform={platform}
+        onReady={ready} onHistoryChange={markup.onHistoryChange} onToolChange={markup.onToolChange}
+        onColorChange={markup.onColorChange} onContentChange={content} onViewportChange={onViewportChange} />
+    </div>
+    <div className="absolute left-3 top-3 z-20 flex items-start gap-2" data-markup-toolbar="">
+      <DrawingToolbar drawing={markup} />
+      {actions}
+    </div>
+  </>;
 }

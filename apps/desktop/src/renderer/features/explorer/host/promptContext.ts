@@ -59,20 +59,25 @@ export function createDesktopPromptContext(projectId: string, root: string | nul
   const materialize = async (context: PromptContext): Promise<DraftPart[]> => {
     const parts: DraftPart[] = [];
     let bytes = 0;
+    // A markup an annotation is on travels with the annotation, not as a loose attachment.
+    const markups = new Set(context.parts.flatMap(part => part.kind === "annotation" && part.attachment ? [part.attachment] : []));
+    const markupFiles = new Map<string, File>();
     for (const part of context.parts) {
       if (part.kind === "text") { parts.push({ ...part }); continue; }
       if (part.kind === "attachment") {
         const file = await attachmentFile(part);
         bytes += file.size;
         if (bytes > 40 * 1024 * 1024) throw new Error("Prompt attachments must total at most 40 MiB.");
-        parts.push({ id: part.id, kind: "attachment", file, about: part.about });
+        if (markups.has(part.id)) markupFiles.set(part.id, file);
+        else parts.push({ id: part.id, kind: "attachment", file, about: part.about });
         continue;
       }
       if (part.kind === "annotation") {
         for (const reference of part.references) {
           if (reference.resource.kind === "workspace-file" && reference.resource.workspaceId !== workspaceId) throw new Error("This annotation belongs to another workspace.");
         }
-        parts.push({ id: part.id, kind: "annotation", text: part.text, references: [...part.references] });
+        const image = part.attachment ? markupFiles.get(part.attachment) : undefined;
+        parts.push({ id: part.id, kind: "annotation", text: part.text, references: [...part.references], ...(image ? { image } : {}) });
         continue;
       }
       const resource = part.reference.resource;
