@@ -298,7 +298,9 @@ test('the Select tool has four modes with their own icons: each sets the tree, l
   // All is the plain pointer, and the tree is the person's own: open the base.
   assert.equal(await view.selectMode(), 'all');
   await pane.getByRole('button', { name: 'Expand base', exact: true }).click();
-  assert.deepEqual(await view.rows(), ['Collapse base', 'Select base', 'Expand arm', 'Select arm']);
+  // Opening a part loads its topology, so its feature follows once recognised.
+  await pane.getByRole('button', { name: 'Select Box', exact: true }).waitFor();
+  assert.deepEqual(await view.rows(), ['Collapse base', 'Select base', 'Select Box', 'Expand arm', 'Select arm']);
   await openMenu();
   assert.deepEqual(await menu.getByRole('menuitemradio').allInnerTexts(), ['All', 'Parts', 'Faces', 'Edges'], 'an assembly offers Parts');
   assert.deepEqual(await menu.getByRole('menuitemcheckbox').allInnerTexts(), ['Edge chain', 'Tangent faces'], 'the connected options are checkboxes, after the modes');
