@@ -35,6 +35,18 @@ export default function PdfRenderer({ data, file, source, state, onStateChange, 
   const pageRef = useRef(page);
   const selectionRef = useRef(selection);
   const canvas = useRef<HTMLCanvasElement>(null);
+  // The page is drawn to the pane's width: a drawing sheet (A2 is 1,684 pt wide) opens whole.
+  const pane = useRef<HTMLDivElement>(null);
+  const [paneWidth, setPaneWidth] = useState(0);
+  useEffect(() => {
+    const element = pane.current;
+    if (!element) return undefined;
+    const measure = () => setPaneWidth(element.clientWidth);
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, []);
   const layer = useRef<HTMLDivElement>(null);
   const liveRef = useRef<LivePdfDocument | null>(null);
   const changeRef = useRef(onStateChange);
@@ -88,7 +100,7 @@ export default function PdfRenderer({ data, file, source, state, onStateChange, 
     return () => { unbind?.(); active = false; liveRef.current = null; };
   }, [pdf, host.pdf, file.path, file.revision, source.id]);
   useEffect(() => {
-    if (!pdf || !canvas.current || !layer.current) return;
+    if (!pdf || !canvas.current || !layer.current || !paneWidth) return;
     let cancelled = false;
     let render: ReturnType<Awaited<ReturnType<PDFDocumentProxy['getPage']>>['render']> | undefined;
     let textLayer: TextLayer | undefined;
@@ -97,17 +109,22 @@ export default function PdfRenderer({ data, file, source, state, onStateChange, 
       const selected = await pdf.getPage(validPage(page, pdf.numPages));
       if (cancelled || !canvas.current || !layer.current) return;
       const base = selected.getViewport({ scale: 1 });
-      const viewport = selected.getViewport({ scale: Math.min(1.5, 4096 / Math.max(base.width, base.height)) });
-      canvas.current.width = Math.ceil(viewport.width); canvas.current.height = Math.ceil(viewport.height);
+      // Fit the width (less the pane's padding), never past 1.5x; the canvas has the screen's pixels
+      // for that size, capped so a large sheet stays within what a canvas can hold.
+      const fit = Math.min(1.5, Math.max(0.1, (paneWidth - 24) / base.width));
+      const viewport = selected.getViewport({ scale: fit });
+      const pixels = selected.getViewport({ scale: Math.min(fit * (globalThis.devicePixelRatio || 1), 8192 / Math.max(base.width, base.height)) });
+      canvas.current.width = Math.ceil(pixels.width); canvas.current.height = Math.ceil(pixels.height);
+      canvas.current.style.width = `${Math.floor(viewport.width)}px`; canvas.current.style.height = `${Math.floor(viewport.height)}px`;
       layer.current.replaceChildren();
       layer.current.style.setProperty('--scale-factor', String(viewport.scale));
-      render = selected.render({ canvas: canvas.current, viewport });
+      render = selected.render({ canvas: canvas.current, viewport: pixels });
       textLayer = new TextLayer({ textContentSource: selected.streamTextContent(), container: layer.current, viewport });
       await Promise.all([render.promise, textLayer.render()]);
       if (!cancelled) onReady(true);
     })().catch(reason => { if (!cancelled) setError(String(reason)); });
     return () => { cancelled = true; render?.cancel(); textLayer?.cancel(); };
-  }, [pdf, page, onReady]);
+  }, [pdf, page, onReady, paneWidth]);
   return <div className="flex h-full flex-col bg-muted/30" aria-label={`PDF ${file.name}`}>
     <div className="flex shrink-0 items-center gap-2 border-b px-3 py-2">
       <button disabled={!pdf || page <= 1} onClick={() => setPage(page - 1)} aria-label="Previous page">‹</button>
@@ -129,7 +146,7 @@ export default function PdfRenderer({ data, file, source, state, onStateChange, 
       <span role="status" className="text-muted-foreground">{feedback}</span>
     </div>
     {error ? <div role="alert" className="p-3 text-destructive">{error}</div> : null}
-    <div className="min-h-0 flex-1 overflow-auto p-3" onMouseUp={() => {
+    <div ref={pane} className="min-h-0 flex-1 overflow-auto p-3" onMouseUp={() => {
       const selected = globalThis.getSelection();
       const value = selected && layer.current?.contains(selected.anchorNode) && layer.current.contains(selected.focusNode) ? selected.toString() : '';
       selectionRef.current = value; setSelection(value);
