@@ -577,49 +577,50 @@ test("renders a STEP file through the bundled runtime's viewer", async () => {
 
   /*
     Picked in the tree, the STEP opens with the tree still up — a person walking
-    the tree keeps it — and its own Settings one press away. That panel holds
-    its geometry and source features. It is drawn in this app's panel column (`panelSlot`), the
-    same column the tree is in, to the right of the model and never a drawer
-    over it, at 1440×900 and at 1280×800.
+    the tree keeps it — and in Select, so its Features are already the first
+    panel of the tool stack under the viewer's toolbar. The nav row's only panel
+    toggle is the file tree's: a STEP declares no panel of its own, and nothing
+    of the file's is drawn in this app's panel column. The stack is inside the
+    surface, over the model; the column is beside it, at 1440×900 and at
+    1280×800.
   */
-  const filePanel = page.locator("header [data-file-panel=cad-file]");
+  const filesToggle = page.getByTestId("tree-toggle");
   await expect(page.getByRole("button", { name: "Hide files" })).toBeVisible();
-  await expect(filePanel).toHaveAttribute("aria-pressed", "false");
-  await expect(filePanel).toHaveAttribute("aria-label", "Settings");
-  // Display is a toolbar popover, not a panel of the row.
-  await expect(page.locator("header [data-file-panel=cad-display]")).toHaveCount(0);
-  await filePanel.click();
-  await expect(page.getByRole("button", { name: "Show files" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Hide files" })).toHaveCount(0);
-  await expect(page.locator("[data-file-sheet=Settings]")).toBeVisible();
-  // The STEP model list is in it.
+  await expect(filesToggle).toHaveAttribute("aria-pressed", "true");
+  expect(await page.locator("header [data-file-panel]").evaluateAll(toggles => toggles.map(toggle => toggle.getAttribute("aria-label"))))
+    .toEqual(["Hide files"]);
+  await expect(page.locator("[data-file-panel=cad-file], [data-file-panel=cad-display], [data-file-sheet]")).toHaveCount(0);
+  // The STEP model list is the Features panel's.
   const tree = page.getByRole("list", { name: "Model", exact: true });
   await expect(tree).toBeVisible({ timeout: 120_000 });
   await expect(page.getByRole("region", { name: "Source features" })).toHaveCount(0);
   await expect(page.getByRole("region", { name: "Surfaces" })).toHaveCount(0);
   await page.waitForTimeout(1000);
   await shoot("file-cad-default.png", true);
-  await expectFilePanelBesideModel();
+  await expectToolStackOnModel();
+  await expectFilesBesideModel();
   await resizeWindow(1280, 800);
-  await expectFilePanelBesideModel();
+  await expectToolStackOnModel();
+  await expectFilesBesideModel();
   await shoot("file-cad-default-1280x800.png", true);
   /*
-    The files toggle puts the tree in that column, which closes the file's
-    panel: one panel, one column, whatever is in it. The tree used to open
-    BESIDE it — two columns, two designs — and this pane was too narrow to
-    hold both, which is why the tree used to hide itself here.
+    The files toggle closes the app's column and nothing else: the tool stack
+    is the viewer's, so the Features stay up over the model, and opening the
+    column again leaves them where they were.
   */
-  await page.getByRole("button", { name: "Show files" }).click();
+  await filesToggle.click();
+  await expect(page.getByRole("button", { name: "Show files" })).toBeVisible();
+  await expect(page.getByLabel("Filter files")).toHaveCount(0);
+  await expect(panels(page)).toHaveCount(0);
+  await expect(tree).toBeVisible();
+  await expectToolStackOnModel();
+  await shoot("file-cad-no-files.png", true);
+  await filesToggle.click();
   await expect(page.getByRole("button", { name: "Hide files" })).toBeVisible();
   await expect(page.getByLabel("Filter files")).toBeVisible();
   await expect(panels(page)).toHaveCount(1);
-  await expect(page.getByRole("region", { name: "Source features" })).toHaveCount(0);
-  await shoot("file-cad-tree.png", true);
-  // ...and the file panel's own toggle brings it back, closing the tree.
-  await page.locator("header [data-file-panel='cad-file']").click();
-  await expect(page.getByRole("region", { name: "Source features" })).toHaveCount(0);
-  await expect(page.getByLabel("Filter files")).toHaveCount(0);
-  await expect(panels(page)).toHaveCount(1);
+  await expect(panels(page)).toHaveAttribute("data-file-panel-container", "tree");
+  await expect(tree).toBeVisible();
   await resizeWindow(1440, 900);
 
   // At the explorer's widest — the sidebar hidden and the session at its
@@ -629,29 +630,29 @@ test("renders a STEP file through the bundled runtime's viewer", async () => {
   // the document's solids once the compile lands.
   await widenExplorer();
   await expect(tree.getByRole("button", { name: /^Select / }).first()).toBeVisible();
-  await expectFilePanelBesideModel();
+  await expectToolStackOnModel();
   await page.waitForTimeout(1500);
   await shoot("file-cad.png", true);
   await resizeWindow(1280, 800);
   await shoot("file-cad-1280x800.png", true);
   await resizeWindow(1440, 900);
 
-  // The row holds the file's Settings and the files toggle, and no tab of any name: the
-  // retired View, Model, Inspector and Display panels included. Display is the toolbar's
-  // popover over the scene; the file's panel and its tree stay where they are under it, and
-  // the popover keeps its settings across a close.
-  expect(await page.locator("header [data-file-panel]").evaluateAll(toggles => toggles.map(toggle => toggle.getAttribute("aria-label"))))
-    .toEqual(["Settings", "Show files"]);
-  await expect(page.locator("[data-file-sheet]").getByRole("tab")).toHaveCount(0);
+  // No tab of any name in the viewer: the retired View, Model, Inspector, Settings and Display
+  // panels included. Display is the toolbar's last tool; while it is the tool its panel leads
+  // the stack in place of the Features, and it keeps its settings across a close.
+  await expect(page.locator("[data-cad-surface]").getByRole("tab")).toHaveCount(0);
   const display = page.locator("[data-cad-toolbar]").getByRole("button", { name: "Display", exact: true });
-  const viewPanel = page.locator("[data-cad-display-popover]");
+  const viewPanel = page.locator('[data-cad-tool-stack] [data-tool-panel][aria-label="Display settings"]');
   const mode = viewPanel.getByRole("combobox", { name: "Mode", exact: true });
   await display.click();
+  await expect(viewPanel).toBeVisible();
+  await expect(tree).toBeHidden();
   await mode.click();
   await page.getByRole("option", { name: "Wireframe", exact: true }).click();
-  await expect(tree).toBeVisible();
+  await expect(viewPanel).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(viewPanel).toHaveCount(0);
+  await expect(tree).toBeVisible();
   await display.click();
   await expect(mode).toContainText("Wireframe");
   await mode.click();
@@ -679,40 +680,29 @@ test("renders a STEP file through the bundled runtime's viewer", async () => {
   await expect(measurements).toHaveCount(0);
   await expect(tree).toBeVisible();
 
-  // A STEP declares its own Settings panel; the file tree shares its single panel column.
-  // The retired Theme editor must not leave a toggle or an empty panel behind.
-  const filesToggle = page.getByTestId("tree-toggle");
-  const sheetPanel = page.locator("header [data-file-panel='cad-file']");
+  // The retired Theme editor and Settings panel leave no toggle and no empty panel behind: the
+  // files toggle is the row's one panel toggle, never a native title, and it opens the app's
+  // column beside the model while the Features stay on it.
   await expect(page.getByRole("button", { name: "Theme settings", exact: true })).toHaveCount(0);
-  await expect(page.locator("[data-file-panel='cad-theme'], [data-file-sheet='Theme']")).toHaveCount(0);
-  // One optional Settings panel per file type, drawn with the sliders icon, named by its hint
-  // and never a native title.
-  await expect(sheetPanel).toHaveAttribute("aria-label", "Settings");
-  await expect(sheetPanel).not.toHaveAttribute("title", /./);
-  await expect(sheetPanel.locator("svg.lucide-sliders-horizontal")).toHaveCount(1);
-  const parked = (await filesToggle.boundingBox())!;
-  const sheetBox = (await sheetPanel.boundingBox())!;
-  expect(sheetBox.x + sheetBox.width).toBeLessThanOrEqual(parked.x + 1);
-  await expect(sheetPanel).toHaveAttribute("aria-pressed", "true");
-
-  await filesToggle.click();
-  await expect(sheetPanel).toHaveAttribute("aria-pressed", "false");
+  await expect(page.locator("[data-file-panel='cad-theme'], [data-file-panel='cad-file'], [data-file-sheet]")).toHaveCount(0);
+  await expect(filesToggle).not.toHaveAttribute("title", /./);
   await expect(filesToggle).toHaveAttribute("aria-pressed", "true");
-  await expect(tree).toBeHidden();
+  const parked = (await filesToggle.boundingBox())!;
+  await filesToggle.click();
+  await expect(filesToggle).toHaveAttribute("aria-pressed", "false");
+  await expect(panels(page)).toHaveCount(0);
+  await expect(tree).toBeVisible();
+  await shoot("file-cad-files-closed.png", true);
+  await filesToggle.click();
+  await expect(filesToggle).toHaveAttribute("aria-pressed", "true");
   await expect(panels(page)).toHaveCount(1);
   await expect(panels(page)).toHaveAttribute("data-file-panel-container", "tree");
   await expect(page.getByLabel("Filter files")).toBeVisible();
-  await shoot("file-cad-files.png", true);
-
-  await sheetPanel.click();
-  await expect(sheetPanel).toHaveAttribute("aria-pressed", "true");
-  await expect(filesToggle).toHaveAttribute("aria-pressed", "false");
-  await expect(page.getByLabel("Filter files")).toHaveCount(0);
   await expect(tree).toBeVisible();
-  await expect(panels(page)).toHaveCount(1);
-  await expect(panels(page)).toHaveAttribute("data-file-panel-container", "cad-file");
   await expect(page.locator("[data-cad-surface] aside")).toHaveCount(0);
-  await expectFilePanelBesideModel();
+  await expectFilesBesideModel();
+  await expectToolStackOnModel();
+  await shoot("file-cad-files.png", true);
   expect(Math.abs((await filesToggle.boundingBox())!.x - parked.x)).toBeLessThan(1);
 
   // Inspect uses one fixed scene recipe. Its canvas and guides follow the
@@ -1161,38 +1151,49 @@ async function resizeWindow(width: number, height: number) {
   await page.waitForTimeout(400);
 }
 
-/**
- * The STEP sheet is a column to the right of the model, inside the surface:
- * its left edge is past the canvas's left edge by more than the sheet's own
- * width, and its right edge is the surface's. A drawer over the model would
- * fail the first; a sheet pinned to the window would fail the second.
- */
-/** The file tab's panel column — one of them, whatever panel is in it. */
+/** The file tab's panel column — the app's, beside the viewer: the file tree. */
 function panels(target: Page) {
   return target.locator("[data-file-panel-container]");
 }
 
 /**
- * The file's own panel is a column beside the model, never a drawer over it.
- *
- * It is the app's own panel column (`@hardcore/ui/navigation`'s `FilePanelColumn.jsx`) with the viewer's
- * panel portaled into it, so it sits BESIDE the surface rather than inside
- * it: the model gets the whole surface and the pane is what the column takes
- * its width from.
+ * The file's controls are the viewer's tool stack: the Features panel hangs
+ * under the toolbar at its left edge, inside the surface and over the model,
+ * at the stack's stored width (190px by default, 160px at least), and it
+ * never runs past the surface's foot.
  */
-async function expectFilePanelBesideModel() {
+async function expectToolStackOnModel() {
   const surface = page.locator("[data-cad-surface]");
-  const sheet = panels(page);
-  await expect(sheet).toHaveAttribute("data-file-panel-container", "cad-file");
+  const features = page.locator("[data-cad-tool-stack]").getByRole("region", { name: "Features", exact: true });
+  await expect(features).toBeVisible();
   await expect(page.getByRole("list", { name: "Model", exact: true })).toBeVisible();
+  const [surfaceBox, toolbarBox, featuresBox] = [(await surface.boundingBox())!,
+    (await page.locator("[data-cad-toolbar]").boundingBox())!, (await features.boundingBox())!];
+  const where = `surface ${JSON.stringify(surfaceBox)} toolbar ${JSON.stringify(toolbarBox)} features ${JSON.stringify(featuresBox)}`;
+  expect(Math.abs(featuresBox.x - toolbarBox.x), where).toBeLessThanOrEqual(1);
+  expect(featuresBox.y, where).toBeGreaterThanOrEqual(toolbarBox.y + toolbarBox.height);
+  expect(featuresBox.width, where).toBeGreaterThanOrEqual(159);
+  expect(featuresBox.width, where).toBeLessThanOrEqual(Math.max(191, surfaceBox.width / 2 + 1));
+  expect(featuresBox.x, where).toBeGreaterThanOrEqual(surfaceBox.x);
+  expect(featuresBox.y + featuresBox.height, where).toBeLessThanOrEqual(surfaceBox.y + surfaceBox.height + 1);
+}
+
+/**
+ * The app's column (the file tree) is beside the model, never a drawer over
+ * it: it does not overlap the surface, the model keeps a usable width, and
+ * the column runs the surface's height.
+ */
+async function expectFilesBesideModel() {
+  const surface = page.locator("[data-cad-surface]");
+  const column = panels(page);
+  await expect(column).toHaveAttribute("data-file-panel-container", "tree");
   const surfaceBox = (await surface.boundingBox())!;
-  const sheetBox = (await sheet.boundingBox())!;
-  const where = `surface ${JSON.stringify(surfaceBox)} sheet ${JSON.stringify(sheetBox)}`;
-  expect(sheetBox.width, where).toBeGreaterThanOrEqual(180);
-  // The model keeps the whole surface, and the sheet is to the right of it.
-  expect(sheetBox.x, where).toBeGreaterThanOrEqual(surfaceBox.x + surfaceBox.width - 2);
+  const columnBox = (await column.boundingBox())!;
+  const where = `surface ${JSON.stringify(surfaceBox)} column ${JSON.stringify(columnBox)}`;
+  expect(columnBox.width, where).toBeGreaterThanOrEqual(199);
+  expect(columnBox.x >= surfaceBox.x + surfaceBox.width - 2 || columnBox.x + columnBox.width <= surfaceBox.x + 2, where).toBe(true);
   expect(surfaceBox.width, where).toBeGreaterThan(200);
-  expect(sheetBox.height, where).toBeGreaterThan(surfaceBox.height * 0.9);
+  expect(columnBox.height, where).toBeGreaterThan(surfaceBox.height * 0.9);
 }
 
 /**

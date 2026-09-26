@@ -130,9 +130,11 @@ test("a Codex session opens a STEP in the explorer through open_file", async () 
   await expect(page.getByRole("tab", { name: /part\.step/ })).toBeVisible({ timeout: 30_000 });
   if (CAD_PYTHON) {
     await expect(page.locator("canvas").first()).toBeVisible({ timeout: 90_000 });
-    // Opened by a command, a STEP opens on its own panel, with its Features tree in it.
-    await expect(page.locator("header [data-file-panel=cad-file]")).toHaveAttribute("aria-pressed", "true", { timeout: 90_000 });
-    await expect(page.getByRole("list", { name: "Model", exact: true })).toBeVisible({ timeout: 90_000 });
+    // Opened by a command, a STEP opens in Select, its Features tree the first panel of the
+    // viewer's tool stack; the nav row declares no panel of the file's.
+    const features = page.locator("[data-cad-tool-stack]").getByRole("region", { name: "Features", exact: true });
+    await expect(features.getByRole("list", { name: "Model", exact: true })).toBeVisible({ timeout: 90_000 });
+    await expect(page.locator("header [data-file-panel=cad-file]")).toHaveCount(0);
   }
 
   // And the session recorded the tool call, with the server's answer in it.

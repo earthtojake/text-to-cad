@@ -96,9 +96,11 @@ test('CAD tools stay within the scene, with direct snapshot and Select filters',
       name: 'tests/fixtures/cad/import-smoke.step',
       exact: false
     }).first().click();
-    // Picked in the tree, the STEP opens with the tree; its own Settings panel is taken up.
-    await page.locator('header [data-file-panel=cad-file]').click({ timeout: 60000 });
-    await expect(page.locator('[data-file-sheet=Settings]')).toBeVisible();
+    // Picked in the tree, the STEP opens with the tree and in Select: its Features are already
+    // the first panel of the tool stack under the toolbar, with no panel of its own to open.
+    const stack = page.locator('[data-cad-tool-stack]');
+    await expect(stack.getByRole('region', { name: 'Features', exact: true })).toBeVisible({ timeout: 60000 });
+    await expect(page.locator('header [data-file-panel=cad-file], [data-file-sheet]')).toHaveCount(0);
     const toolbar = page.locator('[data-cad-toolbar]');
     const resize = async width => app.evaluate(({
       BrowserWindow
@@ -146,27 +148,28 @@ test('CAD tools stay within the scene, with direct snapshot and Select filters',
       await expect(toolbar.getByRole('button', { name: 'Display', exact: true })).toBeVisible();
       assert.equal((await toolbar.getByRole('button').evaluateAll(els => els.map(el => el.getAttribute('aria-label')))).at(-1), 'Display');
       await expect(toolbar.getByRole('button', { name: /^Viewing mode:/ })).toHaveCount(0);
-      // There is no zoom control anywhere: not in the toolbar, and not in the file's panel,
-      // which has no header of tabs to carry one. Framing a STEP is in its viewport context
-      // menu, and that is the whole of it.
+      // There is no zoom control anywhere: not in the toolbar, and not in the tool stack, which
+      // has no header of tabs to carry one. Framing a STEP is in its viewport context menu, and
+      // that is the whole of it.
       await expect(page.getByRole('button', { name: 'Zoom controls', exact: true })).toHaveCount(0);
       await expect(page.getByLabel('Zoom level percent', { exact: true })).toHaveCount(0);
-      await expect(page.locator('[data-file-sheet]').getByRole('tab')).toHaveCount(0);
+      await expect(page.locator('[data-cad-surface]').getByRole('tab')).toHaveCount(0);
       await fit();
     };
     await grouping();
-    // Display is a popover tool: it opens under the toolbar, inside the scene.
+    // Display is a tool whose panel leads the stack under the toolbar, inside the scene.
     await expect(page.locator('header [data-file-panel=cad-display]')).toHaveCount(0);
     await toolbar.getByRole('button', { name: 'Display', exact: true }).click();
-    const display = page.locator('[data-cad-display-popover]');
+    const display = stack.locator('[data-tool-panel][aria-label="Display settings"]');
     const displayMode = display.getByRole('combobox', { name: 'Mode', exact: true });
     await expect(displayMode).toBeVisible();
     await displayMode.click();
     await page.getByRole('option', { name: 'Render', exact: true }).click();
     await expect(displayMode).toContainText('Render');
     for (const name of ['Select', 'Measure', 'Draw']) await expect(tools.getByRole('button', { name, exact: true })).toBeVisible();
-    const [popover, scene] = await Promise.all([display.boundingBox(), page.locator('[data-cad-surface]').boundingBox()]);
+    const [popover, scene, strip] = await Promise.all([display.boundingBox(), page.locator('[data-cad-surface]').boundingBox(), toolbar.boundingBox()]);
     assert(popover.x >= scene.x - 1 && popover.x + popover.width <= scene.x + scene.width + 1, JSON.stringify({ popover, scene }));
+    assert(Math.abs(popover.x - strip.x) <= 1 && popover.y >= strip.y + strip.height, JSON.stringify({ popover, strip }));
     await displayMode.click();
     await page.getByRole('option', { name: 'Solid', exact: true }).click();
     await page.keyboard.press('Escape');
@@ -190,16 +193,16 @@ test('CAD tools stay within the scene, with direct snapshot and Select filters',
     await page.keyboard.press('Escape');
     await expect(select).toBeFocused();
 
-    // Draw's own tools are its corner menu: the first press selects it, the second opens the menu.
+    // Draw has no corner menu: its tools, color and history are the Drawing panel, which leads
+    // the stack while Draw is up and stays inside the window.
     await tools.getByRole('button', { name: 'Draw', exact: true }).click();
     await expect(tools.getByRole('button', { name: 'Draw', exact: true })).toHaveAttribute('aria-pressed', 'true');
-    await tools.getByRole('button', { name: 'Draw', exact: true }).click();
-    const drawMenu = page.getByRole('menu', { name: 'Draw', exact: true });
-    await expect(drawMenu.getByRole('button', { name: 'Pen', exact: true })).toBeVisible();
-    const drawBounds = await drawMenu.boundingBox();
+    await expect(page.getByRole('menu')).toHaveCount(0);
+    const drawPanel = stack.locator('[data-tool-panel][aria-label="Drawing controls"]');
+    await expect(drawPanel.getByRole('button', { name: 'Pen', exact: true })).toBeVisible();
+    const drawBounds = await drawPanel.boundingBox();
     assert(drawBounds.x >= 0 && drawBounds.x + drawBounds.width <= await page.evaluate(() => innerWidth));
-    await page.keyboard.press('Escape');
-    await expect(drawMenu).toHaveCount(0);
+    assert.equal(await stack.locator('[data-tool-panel]:visible').first().getAttribute('aria-label'), 'Drawing controls');
     await fit();
     await resize(1600);
     await expect(tools.getByRole('button', { name: 'Draw', exact: true })).toHaveAttribute('aria-pressed', 'true');
@@ -221,7 +224,7 @@ test('CAD tools stay within the scene, with direct snapshot and Select filters',
     assert.deepEqual(errors, []);
     assert.deepEqual(sourceRequests, []);
     await expect(page.getByRole('tab', { name: 'Source features' })).toHaveCount(0);
-    console.info('PASS: tools at both widths; Display popover and Render; Select filter menu; Draw; focus; scene bounds; snapshot loading state; no renderer errors');
+    console.info('PASS: tools at both widths; Display panel and Render; Select mode menu; Draw panel; focus; scene bounds; snapshot loading state; no renderer errors');
   } finally {
     await page?.unrouteAll({ behavior: 'wait' });
     const runtimeLog = path.join(profile, 'cad-runtime.log');

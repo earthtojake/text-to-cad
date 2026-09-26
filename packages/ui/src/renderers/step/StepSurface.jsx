@@ -1163,10 +1163,8 @@ function StepSurfaceBody({ view, data }) {
   );
 
   useCadWorkspaceSelection({
-    isAssemblyView,
     supportsPartSelection,
     assemblyPartsLoaded,
-    selectedEntryHasReferences,
     setSelectedReferenceIds,
     setHoveredModelReferenceId,
     assemblyParts,

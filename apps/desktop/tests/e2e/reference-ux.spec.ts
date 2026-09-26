@@ -41,16 +41,18 @@ test("viewer context and revision requests stay with the right draft and workspa
     await page.getByRole("menuitem", { name: "File", exact: false }).click();
     await page.getByLabel("Filter files").fill("models/car.step");
     await page.getByRole("option", { name: "models/car.step", exact: false }).first().click();
-    // Picked in the tree, the file opens with the tree; its components are in its own panel.
-    await page.locator("header [data-file-panel=cad-file]").click({ timeout: 90_000 });
-    const wheel = page.getByRole("treeitem", { name: /Component wheel_front_left/ });
+    // Picked in the tree, the file opens with the tree and in Select: its components are rows of
+    // the Features panel in the viewer's tool stack, with nothing to open first.
+    const features = page.locator("[data-cad-tool-stack]").getByRole("region", { name: "Features", exact: true });
+    await expect(features).toBeVisible({ timeout: 90_000 });
+    const wheel = features.getByRole("button", { name: "Select wheel_front_left", exact: true });
     await expect(wheel).toBeVisible({ timeout: 90_000 });
     await wheel.click();
     const tip = page.locator("[data-reference-tip]");
     await expect(tip).toHaveCount(0);
     await page.keyboard.press("Escape");
     await expect(tip).toHaveCount(0);
-    await expect(wheel).toHaveAttribute("aria-selected", "false");
+    await expect(wheel).toHaveAttribute("aria-pressed", "false");
     await wheel.click();
 
     const draft = page.getByPlaceholder("Do anything");
@@ -60,7 +62,12 @@ test("viewer context and revision requests stay with the right draft and workspa
     const chip = page.locator("[data-composer] [data-reference-chip]");
     await expect(chip).toHaveCount(0);
     await expect(draft).toHaveText("Make this wheel wider:");
-    await page.getByRole("button", { name: "Add to prompt", exact: true }).click();
+    // The viewer's bottom action copies; the prompt is reached through the row's own menu, and
+    // adding the same reference twice leaves one chip.
+    await expect(page.getByRole("button", { name: /^Copy Reference/ })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Add to prompt", exact: true })).toHaveCount(0);
+    await wheel.click({ button: "right" });
+    await page.getByRole("menuitem", { name: "Add to prompt", exact: true }).click();
     await expect(draft).toBeFocused();
     await expect(chip).toHaveText("car.step · wheel_front_left");
     await wheel.click({ button: "right" });
@@ -72,7 +79,7 @@ test("viewer context and revision requests stay with the right draft and workspa
     await expect(chip).toHaveAttribute("title", `Show ${token} in viewer`);
     await page.getByRole("button", { name: "Close car.step", exact: true }).click();
     await chip.getByRole("button").click();
-    await expect(wheel).toHaveAttribute("aria-selected", "true");
+    await expect(wheel).toHaveAttribute("aria-pressed", "true");
     await expect(tip).toHaveCount(0);
     await expect(chip).toHaveText("car.step · wheel_front_left");
     await page.mouse.move(350, 80);
@@ -91,7 +98,7 @@ test("viewer context and revision requests stay with the right draft and workspa
     await page.keyboard.press("Escape");
     await expect(preview).toHaveCount(0);
     await expect(enlarge).toBeFocused();
-    await expect(wheel).toHaveAttribute("aria-selected", "true");
+    await expect(wheel).toHaveAttribute("aria-pressed", "true");
     await enlarge.press("Enter");
     await expect(preview).toBeVisible();
     await preview.getByRole("button", { name: "Close", exact: true }).click();
@@ -140,8 +147,8 @@ test("viewer context and revision requests stay with the right draft and workspa
     await page.locator(`[data-session-row="${session.id}"]`).getByRole("button").first().click();
     await page.getByRole("tab", { name: /car.step/ }).click();
     await expect(wheel).toBeVisible();
-    if (await wheel.getAttribute("aria-selected") !== "true") await wheel.click();
-    await expect(wheel).toHaveAttribute("aria-selected", "true");
+    if (await wheel.getAttribute("aria-pressed") !== "true") await wheel.click();
+    await expect(wheel).toHaveAttribute("aria-pressed", "true");
     await page.getByRole("button", { name: "Take snapshot", exact: true }).click();
     await expect(page.getByRole("button", { name: "Start chat here", exact: true })).toHaveCount(0);
     await expect(chip).toHaveText("car.step · wheel_front_left");
