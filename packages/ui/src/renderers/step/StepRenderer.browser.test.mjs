@@ -1311,7 +1311,13 @@ test('Display sheet keeps controls together, resets optional sections and stays 
       const target = dismiss === 'trigger' ? triggerBox
         : dismiss === 'section' ? headingBox
         : { x: 8, y: 80, width: 2, height: 2 };
-      await page.mouse.click(target.x + target.width / 2, target.y + target.height / 2);
+      const point = [target.x + target.width / 2, target.y + target.height / 2];
+      // Radix arms the listbox's outside-press listener a tick after it mounts, so a press that
+      // lands in that tick is ignored; press again until the listbox goes.
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        await page.mouse.click(...point);
+        if (await page.locator('[data-slot=select-content]').waitFor({ state: 'detached', timeout: 1000 }).then(() => true, () => false)) break;
+      }
     }
     await page.locator('[data-slot=select-content]').waitFor({ state: 'detached' });
     assert.equal(await sheet.isVisible(), true, `dismissing a dropdown with ${dismiss} preserves its parent`);
