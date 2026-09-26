@@ -201,6 +201,8 @@ type ExplorerState = {
    * captures, and consumed by `CadRenderer` as the viewer's `captureRequest`.
    */
   cadCapture: { projectId: string; tabId: string; path: string; root: ExplorerRoot; nonce: number } | null;
+  /** An annotation the chat box asked a CAD tab to open (its entry there was pressed). Nonce-keyed like `cadSelection`. */
+  cadAnnotation: { projectId: string; tabId: string; path: string; root: ExplorerRoot; id: string; nonce: number } | null;
 
   bindSession: (sessionId: string | null, projectId: string | null, root?: ExplorerRoot) => Promise<void>;
   /**
@@ -248,7 +250,9 @@ type ExplorerState = {
   selectCadReference: (tabId: string, selector: string) => void;
   /** Ask a CAD tab for a capture of what it is showing. */
   captureCad: (tabId: string) => void;
-  acknowledgeCadCommand: (kind: "selectReference" | "captureRequest", nonce: string | number) => void;
+  /** Ask a CAD tab to open one of its annotations and select its geometry. */
+  openCadAnnotation: (tabId: string, id: string) => void;
+  acknowledgeCadCommand: (kind: "selectReference" | "captureRequest" | "openAnnotation", nonce: string | number) => void;
 };
 
 // A committed mutation is broadcast and also returned to its caller. Bound
@@ -376,7 +380,8 @@ function commit(
       && tab.id === command.tabId && tab.path === command.path && tab.root === command.root);
   set({ tabs: ordered, activeId: unique.activeId,
     cadSelection: stillTargets(current.cadSelection) ? current.cadSelection : null,
-    cadCapture: stillTargets(current.cadCapture) ? current.cadCapture : null });
+    cadCapture: stillTargets(current.cadCapture) ? current.cadCapture : null,
+    cadAnnotation: stillTargets(current.cadAnnotation) ? current.cadAnnotation : null });
   if (sessionId) saveStrip(sessionId, { tabs: ordered, activeId: unique.activeId,
     trees: current.trees, reveal: current.reveal, collapsed: current.collapsed, width: current.width });
 }
@@ -409,6 +414,7 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
   reveal: null,
   cadSelection: null,
   cadCapture: null,
+  cadAnnotation: null,
 
   bindSession: async (sessionId, projectId, root = null) => {
     if (get().sessionId === sessionId && get().ready) {
@@ -424,7 +430,7 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
     const binding = ++bindingSequence;
     if (previous.projectId) unwatch(previous.projectId, previous.root);
     set({ sessionId, projectId: sessionId ? projectId : null, root, tabs: [], activeId: null, ready: false, loadError: null,
-      changedPaths: [], changedEntries: [], changedRoot: null, reveal: null, cadSelection: null, cadCapture: null,
+      changedPaths: [], changedEntries: [], changedRoot: null, reveal: null, cadSelection: null, cadCapture: null, cadAnnotation: null,
       collapsed: sessionId ? collapsedFor(sessionId) : true,
       width: sessionId ? widthFor(sessionId) : PANE_LIMITS.explorer.default, trees: {} });
     if (!sessionId || !projectId) { set({ ready: true }); return; }
@@ -568,7 +574,8 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
 
   setActive: (activeId) => set(state => ({ activeId,
     cadSelection: state.cadSelection?.tabId === activeId ? state.cadSelection : null,
-    cadCapture: state.cadCapture?.tabId === activeId ? state.cadCapture : null })),
+    cadCapture: state.cadCapture?.tabId === activeId ? state.cadCapture : null,
+    cadAnnotation: state.cadAnnotation?.tabId === activeId ? state.cadAnnotation : null })),
 
   selectIndex: (index) => {
     const tab = get().tabs[index - 1];
@@ -688,8 +695,15 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
     return { cadCapture: { projectId: state.projectId, tabId, path: tab.path, root: tab.root, nonce: ++cadCommandSequence } };
   }),
 
+  openCadAnnotation: (tabId, id) => set(state => {
+    const tab = state.tabs.find(tab => tab.id === tabId);
+    if (!state.projectId || state.activeId !== tabId || tab?.kind !== "file" || !tab.path) return state;
+    return { cadAnnotation: { projectId: state.projectId, tabId, path: tab.path, root: tab.root, id, nonce: ++cadCommandSequence } };
+  }),
+
   acknowledgeCadCommand: (kind, nonce) => set(state => {
     if (kind === "selectReference") return state.cadSelection?.nonce === nonce ? { cadSelection: null } : state;
+    if (kind === "openAnnotation") return state.cadAnnotation?.nonce === nonce ? { cadAnnotation: null } : state;
     return state.cadCapture?.nonce === nonce ? { cadCapture: null } : state;
   }),
 
@@ -825,7 +839,7 @@ function updateSessionStrip(sessionId: string, strip: Strip): void {
   const unique = dedupeFileTabs(strip.tabs, strip.activeId);
   const next = { ...strip, tabs: unique.tabs.map((tab, order) => ({ ...tab, order })), activeId: unique.activeId };
   const active = useExplorer.getState().sessionId === sessionId && useExplorer.getState().ready;
-  if (active) useExplorer.setState({ ...next, cadSelection: null, cadCapture: null });
+  if (active) useExplorer.setState({ ...next, cadSelection: null, cadCapture: null, cadAnnotation: null });
   saveStrip(sessionId, next);
 }
 

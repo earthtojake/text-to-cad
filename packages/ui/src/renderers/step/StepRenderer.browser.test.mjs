@@ -1586,6 +1586,113 @@ test('reference action uses its own viewport bottom inset', async () => {
   assert.deepEqual(view.errors, []);
 });
 
+test('annotations live in the chat box: making one puts it there, and its dot is on the model only while the chat box holds it', async () => {
+  const view = await open();
+  const {page, pane} = view;
+  // A chat box that keeps annotations apart from its text, as the desktop's does: it says which it holds.
+  await page.evaluate(() => {
+    window.__delivered = [];
+    window.__held = [];
+    const harness = window.cadHarness.a;
+    const hold = ids => { window.__held = ids; harness.setPromptDestination({held: [...ids]}); };
+    window.__hold = hold;
+    hold([]);
+    harness.host.promptContext.deliver = async context => {
+      window.__delivered.push(context.parts.map(part => ({kind: part.kind, id: part.id,
+        selectors: part.references?.flatMap(reference => reference.target.selectors), text: part.text})));
+      hold([...new Set([...window.__held, ...context.parts.map(part => part.id)])]);
+      return {status: 'added', partIds: context.parts.map(part => part.id)};
+    };
+    harness.host.promptContext.retract = ids => hold(window.__held.filter(id => !ids.includes(id)));
+  });
+  const delivered = () => page.evaluate(() => window.__delivered);
+  const annotate = async (selector, note) => {
+    await page.evaluate(value => window.cadHarness.a.controller.select({selectors: [value]}), selector);
+    await pane.getByRole('button', {name: 'Annotate', exact: true}).click();
+    const box = page.getByRole('textbox', {name: 'Annotation', exact: true});
+    await box.fill(note);
+    await box.press('Enter');
+  };
+
+  // Making an annotation puts it in the chat box at once; nothing is sent to the agent by it.
+  await annotate('o1.2', 'make a hole in it');
+  await page.waitForFunction(() => window.__delivered.length === 1);
+  const [first] = (await delivered())[0];
+  assert.deepEqual([first.kind, first.selectors, first.text], ['annotation', ['o1.2'], 'make a hole in it']);
+  assert.equal(await pane.getByRole('toolbar', {name: 'Annotations'}).count(), 0, 'there is no bar over the model');
+  assert.equal(await pane.getByRole('list', {name: 'Annotations'}).count(), 0, 'annotations are not listed in the panel');
+
+  // It is a numbered dot on the model, over the part it was made on; pressing the dot opens its card there.
+  const dot = pane.getByRole('button', {name: 'Annotation 1', exact: true});
+  await dot.waitFor();
+  const dotBox = await dot.boundingBox();
+  const canvasBox = await pane.locator('[data-cad-surface] canvas').first().boundingBox();
+  assert.ok(dotBox.x > canvasBox.x && dotBox.x < canvasBox.x + canvasBox.width && dotBox.y > canvasBox.y && dotBox.y < canvasBox.y + canvasBox.height,
+    'the dot is on the model, inside the viewport');
+  const card = pane.getByRole('dialog', {name: 'Annotation 1 details'});
+  await dot.click();
+  await card.waitFor();
+  assert.match((await card.innerText()).replace(/\s+/g, ' '), /^Annotation 1: .+ make a hole in it/);
+  const chip = card.locator('[data-annotation-chip="o1.2"]');
+
+  // Pressing the chip selects that geometry again, whatever is selected now.
+  await page.evaluate(() => window.cadHarness.a.controller.select({selectors:['o1.1']}));
+  await page.waitForFunction(() => window.cadHarness.a.controller.readState().selectedPartIds.join() === 'o1.1');
+  await chip.click();
+  await page.waitForFunction(() => window.cadHarness.a.controller.readState().selectedPartIds.join() === 'o1.2');
+
+  // An edit replaces the chat box's copy: the same annotation, delivered again. The box opens
+  // focused with the caret at the end, so typing goes straight into the note.
+  await card.getByRole('button', {name: 'Edit annotation 1'}).click();
+  const edit = card.getByRole('textbox', {name: 'Edit annotation 1'});
+  assert.equal(await edit.evaluate(element => document.activeElement === element), true, 'the edit box has focus');
+  await page.keyboard.press('ControlOrMeta+a');
+  await page.keyboard.type('make a 6 mm hole in it');
+  await page.keyboard.press('Enter');
+  await page.waitForFunction(() => window.__delivered.length === 2);
+  const [edited] = (await delivered())[1];
+  assert.deepEqual([edited.id, edited.text], [first.id, 'make a 6 mm hole in it']);
+
+  // Escape leaves the note as it was; clicking away from the box saves what was typed.
+  await card.getByRole('button', {name: 'Edit annotation 1'}).click();
+  await page.keyboard.type(' now');
+  await page.keyboard.press('Escape');
+  assert.match(await card.innerText(), /make a 6 mm hole in it$/m);
+  await card.getByRole('button', {name: 'Edit annotation 1'}).click();
+  await page.keyboard.type(', deburred');
+  await card.getByText(/^Annotation 1:/).click();
+  await page.waitForFunction(() => window.__delivered.length === 3);
+  assert.equal((await delivered())[2][0].text, 'make a 6 mm hole in it, deburred');
+  await card.getByRole('button', {name: 'Close', exact: true}).click();
+  await card.waitFor({state: 'detached'});
+
+  // The chat box names an annotation (its chip was pressed there): its geometry is selected and its card opens.
+  await page.evaluate(() => window.cadHarness.a.controller.select({selectors:['o1.1']}));
+  await page.evaluate(id => window.cadHarness.a.openAnnotation(id), first.id);
+  await card.waitFor();
+  await page.waitForFunction(() => window.cadHarness.a.controller.readState().selectedPartIds.join() === 'o1.2');
+
+  // Deleting it on the model takes it out of the chat box.
+  await card.getByRole('button', {name: 'Delete annotation 1'}).click();
+  await dot.waitFor({state: 'detached'});
+  assert.deepEqual(await page.evaluate(() => window.__held), []);
+
+  // Sending the prompt (or removing the annotations from the chat box) takes their dots off the model.
+  await annotate('o1.1', 'add a fillet');
+  await annotate('o1.2', 'and chamfer it');
+  const second = pane.getByRole('button', {name: 'Annotation 2', exact: true});
+  await second.waitFor();
+  await page.evaluate(() => window.__hold([]));
+  await dot.waitFor({state: 'detached'});
+  await second.waitFor({state: 'detached'});
+
+  // With no chat to put them in, there is nothing to annotate into.
+  await page.evaluate(() => window.cadHarness.a.setPromptDestination({available: false, reason: 'No chat'}));
+  await page.evaluate(() => window.cadHarness.a.controller.select({selectors: ['o1.2']}));
+  assert.equal(await pane.getByRole('button', {name: 'Annotate', exact: true}).isDisabled(), true);
+  assert.deepEqual(view.errors, []);
+});
+
 test('reference CTA, double clicks and copy shortcut deliver references silently', async () => {
   const view = await open();
   const {page, pane, at, errors} = view;

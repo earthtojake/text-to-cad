@@ -11,6 +11,7 @@ import { createMeshRenderer } from '@hardcore/ui/renderers/mesh';
 import { createRobotRenderer } from '@hardcore/ui/renderers/robot';
 import { createHarnessRenderer } from '@hardcore/ui/renderers/shell-harness';
 import type { ViewerHost } from '@hardcore/ui/host';
+import type { PromptDestinationState } from '@hardcore/core/prompt';
 import type { CadLiveController } from '@hardcore/ui/renderers/step';
 import type { ViewerCommands as CadCommands } from '@hardcore/ui/renderers/workspace';
 
@@ -38,16 +39,26 @@ function workspace(id: string) {
   const request = (next: CadCommands) => { snapshot = next; for (const listener of listeners) listener(); };
   const capture = () => request({ captureRequest: { key: Date.now() } });
   const selectReference = (selector: string) => request({ selectReference: { selector, key: Date.now() } });
+  const openAnnotation = (id: string) => request({ openAnnotation: { id, key: Date.now() } });
   const client = createCadClient({ origin: `${location.origin}/${id}`, workspaceId: id, pollIntervalMs: 0 });
   const source: FileSource = {
     id, rootName: id,
     stat: async (path) => ({ path, name: path, kind: 'file', size: 400, extension: path.split('.').pop() || '' }),
     list: async () => [{ path: file, name: file, kind: 'file' }]
   };
-  const destination = { kind: 'composer' as const, available: true };
+  // The chat box a test stands in for: `setPromptDestination` changes what it says (held
+  // annotations, whether there is one at all), and the viewer hears it as it would a real one.
+  let destination: PromptDestinationState = { kind: 'composer', available: true };
+  const destinationListeners = new Set<() => void>();
+  const setPromptDestination = (patch: Partial<PromptDestinationState>) => {
+    destination = { ...destination, ...patch };
+    for (const listener of destinationListeners) listener();
+  };
   const host: ViewerHost = { files: source, navigation: { openFile(path) { opened.push(path); } }, environment: { colorScheme: 'dark', platform: keyboardPlatform },
     clipboard: { writeText: async () => {}, readText: async () => '', writeImage: async () => {} },
-    promptContext: { getSnapshot: () => destination, subscribe: () => () => {}, deliver: async context => {
+    promptContext: { getSnapshot: () => destination,
+      subscribe: listener => { destinationListeners.add(listener); return () => { destinationListeners.delete(listener); }; },
+      deliver: async context => {
       const attachment = context.parts.find(part => part.kind === 'attachment');
       if (attachment?.kind === 'attachment') { const blob = await attachment.content; captures.push({ file, size: blob.size, type: blob.type, references: context.parts.filter(part => part.kind === 'reference').map(part => part.reference) }); }
       return { status: 'added', partIds: context.parts.map(part => part.id) };
@@ -59,7 +70,7 @@ function workspace(id: string) {
   const services = { client, preferences, commands, live };
   // `harness` is test scaffolding for the shell's own tools; it ships nowhere.
   const renderers = [createStepRenderer(services), createDxfRenderer(services), createGlbRenderer(services), createMeshRenderer(services), createRobotRenderer(services), createHarnessRenderer(services)];
-  return { client, source, host, renderers, commands, capture, selectReference, get controller() { return controller; } };
+  return { client, source, host, renderers, commands, capture, selectReference, openAnnotation, setPromptDestination, get controller() { return controller; } };
 }
 const a = workspace('one'), b = workspace('two');
 // Directory navigation hydrates before a renderer mounts. Large workspaces

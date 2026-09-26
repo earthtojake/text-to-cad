@@ -33,3 +33,13 @@ test("a routine that owned the pose wins: its record restores no Position values
   assert.deepEqual(restoredPoseValues({ pose: { parameterValues: { hinge: 30 } }, animation: { enabled: false, activeClipId: "swing" } }), { hinge: 30 });
   assert.deepEqual(restoredPoseValues({ pose: { parameterValues: { hinge: 30 } }, animation: { enabled: true, activeClipId: "swing" } }), {});
 });
+
+test("annotations are kept through a rebuild: a note is the person's, whatever the model became", () => {
+  const signatures = stepRecordSignatures(entry);
+  const annotations = [{ id: "a1", references: [{ selector: "o1.1.e3", label: "Edge 3" }], text: "make a hole in it", anchor: { point: [1, 2, 3], normal: null } }];
+  const record = writeStepRecord(stepRecordInputs({ tree, parameterValues: {}, animationState, clockTime: () => 0,
+    largeFileState: { selectableTopologyEnabled: false }, annotations, signatures }));
+  assert.deepEqual(readStepRecord(record, signatures).annotations, annotations);
+  assert.deepEqual(readStepRecord(record, stepRecordSignatures({ ...entry, hash: "h2" })).annotations, annotations);
+  assert.deepEqual(readStepRecord({}, signatures).annotations, [], "a record from before annotations has none");
+});

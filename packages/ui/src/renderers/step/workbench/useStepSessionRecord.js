@@ -15,19 +15,20 @@ import { readStepRecord, stepRecordInputs, stepRecordSignatures, writeStepRecord
  *   a time to save (a PLAYING clip never is: its time moves every frame).
  *
  * @param {{ state: unknown, entry: object, tree: object, parameterValues: object, animationState: object,
- *   clockTime: () => number, largeFileState: object, scheduleSave: () => void, restore: (record: object) => void }} options
+ *   clockTime: () => number, largeFileState: object, annotations: object[], scheduleSave: () => void,
+ *   restore: (record: object) => void }} options
  */
-export function useStepSessionRecord({ state, entry, tree, parameterValues, animationState, clockTime, largeFileState, scheduleSave, restore }) {
+export function useStepSessionRecord({ state, entry, tree, parameterValues, animationState, clockTime, largeFileState, annotations, scheduleSave, restore }) {
   const [stored] = useState(() => readShellState(state).renderer);
   const signatures = useMemo(() => stepRecordSignatures(entry), [entry]);
   const signaturesRef = useRef(signatures);
   signaturesRef.current = signatures;
   const inputsRef = useRef(null);
-  inputsRef.current = stepRecordInputs({ tree, parameterValues, animationState, clockTime, largeFileState, signatures });
+  inputsRef.current = stepRecordInputs({ tree, parameterValues, animationState, clockTime, largeFileState, annotations, signatures });
   const write = useCallback(() => writeStepRecord(inputsRef.current), []);
   const readStored = useCallback(() => readStepRecord(stored, signaturesRef.current), [stored]);
   useEffect(() => { scheduleSave(); }, [scheduleSave, tree.selectedReferenceIds, tree.selectedPartIds,
-    tree.expandedStepTreeNodeIds, tree.hiddenPartIds, parameterValues, animationState, largeFileState, signatures]);
+    tree.expandedStepTreeNodeIds, tree.hiddenPartIds, parameterValues, animationState, largeFileState, annotations, signatures]);
   const restored = useRef(false);
   useLayoutEffect(() => {
     if (restored.current) return;

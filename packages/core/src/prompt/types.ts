@@ -12,12 +12,20 @@ export interface PromptReference { resource: ResourceRef; target: ReferenceTarge
 export type PromptPart =
   | { id: string; kind: 'text'; text: string }
   | { id: string; kind: 'reference'; reference: PromptReference }
-  | { id: string; kind: 'attachment'; name: string; mimeType: string; content: Blob | Promise<Blob>; about?: readonly string[] };
+  | { id: string; kind: 'attachment'; name: string; mimeType: string; content: Blob | Promise<Blob>; about?: readonly string[] }
+  /** A note the person pinned to geometry: what it is about, and what they want done there. */
+  | { id: string; kind: 'annotation'; references: readonly PromptReference[]; text: string };
 export interface PromptContext { schemaVersion: 1; operationId: string; parts: readonly PromptPart[] }
 export interface PromptDestinationState {
   kind: 'composer' | 'clipboard' | 'unavailable';
   available: boolean;
   reason?: string;
+  /**
+   * Ids of delivered parts the draft still holds, for a destination that keeps them apart from its
+   * text (a composer's annotations). A part delivered and no longer held was sent with the prompt
+   * or removed from the draft. Absent: the destination does not say.
+   */
+  held?: readonly string[];
   capabilities?: {
     attachments: 'none' | 'png' | 'images-and-text';
     maxParts: number;
@@ -35,5 +43,10 @@ export interface PromptContextPort {
   getSnapshot(): PromptDestinationState;
   subscribe(listener: () => void): () => void;
   deliver(context: PromptContext): Promise<PromptDeliveryResult>;
+  /**
+   * Take parts this surface delivered back out of the draft, by part id, while the draft still
+   * holds them (an annotation deleted on the model). A destination without drafts has none.
+   */
+  retract?(partIds: readonly string[]): void;
 }
 export interface PromptTextOptions { resolvePath?: (resource: ResourceRef) => string }

@@ -1,16 +1,18 @@
 import { entryAssetHash } from "@hardcore/core/lib/entryAssets.js";
+import { readAnnotations } from "./stepAnnotations.js";
 
 // The STEP renderer's own slot in the shell's per-file record (`kit/shell/shellState.js`):
 // what it was left looking at, posed to, and playing. The shell keeps the camera, the
 // Display settings and the tool; everything here is a STEP's alone.
 //
-//   { tree, treeSignature, pose, animation, motionSignature, largeFile, largeFileSignature }
+//   { tree, treeSignature, pose, animation, motionSignature, largeFile, largeFileSignature, annotations }
 //
 // A slice comes back only when the file it was written against is still the file on
 // screen. That is what the signatures are: a rebuilt model has different topology, so a
 // selection of face ids from the old one is not a selection at all, and a sidecar that was
 // regenerated may not have the parameters the stored pose names. Reading is forgiving
-// (a slice that does not match is simply absent); writing is exact.
+// (a slice that does not match is simply absent); writing is exact. Annotations are the one
+// slice with no signature: a note is the person's, whatever the model has become since.
 
 const text = value => String(value ?? "").trim();
 const plainObject = value => Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -71,19 +73,21 @@ export function readStepRecord(renderer, signatures) {
       ? { parameterValues: { ...record.pose.parameterValues } } : null),
     animation: (matches(record.motionSignature, signatures.motion) && readAnimation(record.animation)) || null,
     largeFile: { selectableTopologyEnabled: matches(record.largeFileSignature, signatures.geometry)
-      && bool(record.largeFile?.selectableTopologyEnabled, false) }
+      && bool(record.largeFile?.selectableTopologyEnabled, false) },
+    annotations: readAnnotations(record.annotations)
   };
 }
 
 /** The record for the STEP on screen as it is now, signatures included. */
-export function writeStepRecord({ tree, pose, animation, largeFile, signatures }) {
+export function writeStepRecord({ tree, pose, animation, largeFile, annotations, signatures }) {
   return {
     tree: readTree(tree) || NO_TREE, treeSignature: signatures.geometry,
     pose: { parameterValues: plainObject(pose?.parameterValues) ? { ...pose.parameterValues } : {} },
     animation: readAnimation(animation) || readAnimation({}),
     motionSignature: signatures.motion,
     largeFile: { selectableTopologyEnabled: bool(largeFile?.selectableTopologyEnabled, false) },
-    largeFileSignature: signatures.geometry
+    largeFileSignature: signatures.geometry,
+    annotations: readAnnotations(annotations)
   };
 }
 
@@ -92,7 +96,7 @@ export function writeStepRecord({ tree, pose, animation, largeFile, signatures }
  * its routine (while a clip plays, the time is the clock's: React state holds where it last
  * paused) and its large-file choice.
  */
-export function stepRecordInputs({ tree, parameterValues, animationState, clockTime, largeFileState, signatures }) {
+export function stepRecordInputs({ tree, parameterValues, animationState, clockTime, largeFileState, annotations = [], signatures }) {
   return {
     tree,
     pose: { parameterValues },
@@ -102,6 +106,7 @@ export function stepRecordInputs({ tree, parameterValues, animationState, clockT
       speed: animationState.speed, loopEnabled: animationState.loopEnabled
     },
     largeFile: { selectableTopologyEnabled: largeFileState.selectableTopologyEnabled },
+    annotations,
     signatures
   };
 }
