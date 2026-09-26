@@ -5,6 +5,7 @@
     "src/main/**/*.mjs",
     "src/preload/**/*.ts",
     "src/shared/**/*.ts",
+    "src/plugins/**/*.mjs",
     "tests/unit/main/**/*.ts",
     "tests/unit/shared/**/*.ts",
     "tests/e2e/**/*.ts",

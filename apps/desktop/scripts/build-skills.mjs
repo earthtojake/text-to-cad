@@ -26,13 +26,16 @@ import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { integrations } from "../src/main/integrations/registry.mjs";
+import { plugins } from "../src/plugins/index.mjs";
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 
 /** The skill this app's viewer makes redundant. */
 export const EXCLUDED_SKILLS = ["cad-viewer"];
-/** Focused skills declared by app integrations. */
+/** Focused skills declared by app integrations (plugins' app-owned skills among them). */
 export const APP_SKILLS = integrations.flatMap(integration => integration.skills);
+/** Repository skills a plugin pairs its viewer with; they ship with the rest, and must. */
+export const PLUGIN_REPO_SKILLS = plugins.flatMap(plugin => plugin.repoSkills);
 
 /** Never copied out of a skill directory: caches, envs, scratch. */
 const SKIP_ENTRIES = new Set(["node_modules", "__pycache__", ".venv", "tmp", ".DS_Store", ".pytest_cache"]);
@@ -76,6 +79,9 @@ export function planSkills(repoRoot, desktopRoot = appRoot) {
     if (!fs.existsSync(path.join(from, "SKILL.md"))) throw new Error(`missing ${from}/SKILL.md`);
     return { name: path.basename(from), from };
   });
+  for (const name of PLUGIN_REPO_SKILLS) {
+    if (!names.some(skill => skill.name === name)) throw new Error(`a plugin names repo skill ${name}, which does not ship`);
+  }
   const combined = [...names, ...appSkills];
   if (new Set(combined.map(skill => skill.name)).size !== combined.length) throw new Error("Duplicate registered skill identity");
   return combined;

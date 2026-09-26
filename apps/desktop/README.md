@@ -943,7 +943,9 @@ for limits, asset licensing and the reuse boundary for future CAD overlays.
 
 The shared viewer renderers come from `@hardcore/ui/renderers/*`. Markdown, code,
 image, PDF and the unsupported fallback are this app's own, because web
-registers none of them: `features/explorer/renderers/{markdown,code,image,pdf,unsupported}`,
+registers none of them: `features/explorer/renderers/{markdown,code,image,unsupported}`,
+and PDF as a plugin, beside G-code's toolpath viewer, in `src/plugins/` (its
+[README](src/plugins/README.md): a plugin is a file type's viewer, tools and skills in one folder),
 each a `defineFileRenderer` registration from `@hardcore/ui/file-viewer` over the
 package's public exports only (the contract a host renderer may rely on is
 `@hardcore/ui`'s [renderer contracts](../../packages/ui/docs/renderers.md)).

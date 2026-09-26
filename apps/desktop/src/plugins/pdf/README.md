@@ -24,7 +24,7 @@ Hardcore's existing FileTab. Embedding that separately would produce two live
 PDFs. We therefore reuse its underlying established Mozilla PDF.js engine and
 bind it directly to the host's document capability, with a small domain MCP
 adapter. No claim is made that the upstream PDF skill and server are a matched
-pair. The [OpenAI PDF skill](../../../../skills/pdf/UPSTREAM.md) is reused
+pair. The [OpenAI PDF skill](../../../skills/pdf/UPSTREAM.md) is reused
 independently under its preserved Apache-2.0 license. Anthropic's PDF skill was
 also considered but its per-skill license is not permissive for redistribution.
 

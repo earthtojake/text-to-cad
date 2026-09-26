@@ -25,6 +25,7 @@ phase is not an oversight — it is the seam.
 | P5 (done) | `src/main/{cad,integrations}/`, `src/main/ipc/{cad,integrations,runtime,skills}.ts`, `resources/`, `skills/`, `scripts/{build,build-skills,build-mcp,cad-resources,bundle-runtime}.mjs`, `src/renderer/state/integration-commands.ts`, the `reveal` field of the explorer store and tree |
 | P6 | `src/renderer/features/settings` — the pages' contents |
 | P7 (done) | `src/main/projects/{git,workspace}.ts`, `src/shared/ipc/git.ts`, `src/main/ipc/git.ts`, `src/renderer/lib/git-mode.ts`, the review tab's scopes and commit popover, Git & Worktrees' per-project cards, `tests/e2e/git.spec.ts` |
+| Plugins | `src/plugins/<id>/` — one capability's file types, viewer, agent tools and skills; the three lists in `src/plugins/{index.mjs,main.mjs,renderer.ts}`. Read `src/plugins/README.md` before adding a viewer for a file type |
 | P8 (done) | `electron-builder.yml`, `build/`, `resources/`, `scripts/{package,make-icons}.mjs`, `updater.ts`, `telemetry.ts`, `src/{shared,main}/ipc/app.ts`, the CI jobs |
 
 Work outside your phase's directories only where the seam requires it — a new

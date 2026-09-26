@@ -1,13 +1,19 @@
 /** Generic app command relay; domain capabilities remain in their own integrations. */
 import { z } from "zod";
+import { plugins } from "../../plugins/index.mjs";
 import { invoke } from "./define";
-/** What an agent can ask the explorer to do, through the Hardcore MCP server. */
-export const IntegrationCommandKindSchema = z.enum([
+/** The app's own commands; a plugin's come from its manifest (`src/plugins`). */
+const APP_COMMAND_KINDS = [
   "open-file", "reveal", "open-url", "open-drawing", "drawing-state", "drawing-capture", "drawing-rename",
   "list-tabs", "show-tab", "close-tab", "viewer-state", "select-reference", "capture-view",
-  "document-read", "document-edit", "document-save", "pdf-state", "pdf-read", "pdf-page", "pdf-capture",
+  "document-read", "document-edit", "document-save",
   "terminal-open", "tab-resource", "cad-clear-selection", "cad-camera", "cad-reset-camera", "cad-render-mode",
-]);
+] as const;
+type Plugin = (typeof plugins)[number];
+export type PluginCommandKind = Plugin extends infer Each ? Each extends Plugin ? Each["commands"][keyof Each["commands"]] : never : never;
+export const PLUGIN_COMMAND_KINDS = plugins.flatMap(plugin => Object.values(plugin.commands)) as PluginCommandKind[];
+/** What an agent can ask the explorer to do, through the Hardcore MCP server. */
+export const IntegrationCommandKindSchema = z.enum([...APP_COMMAND_KINDS, ...PLUGIN_COMMAND_KINDS]);
 export type IntegrationCommandKind = z.infer<typeof IntegrationCommandKindSchema>;
 
 export const IntegrationCommandSchema = z.object({

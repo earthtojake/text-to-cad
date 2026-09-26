@@ -5,7 +5,7 @@ import { languageFor, monacoModelUri } from "@renderer/features/explorer/rendere
 import { codeRenderer } from "@renderer/features/explorer/renderers/code";
 import { imageRenderer } from "@renderer/features/explorer/renderers/image";
 import { markdownRenderer } from "@renderer/features/explorer/renderers/markdown";
-import { pdfRenderer } from "@renderer/features/explorer/renderers/pdf";
+import { pdfRenderer } from "@plugins/pdf/viewer";
 import { unsupportedRenderer } from "@renderer/features/explorer/renderers/unsupported";
 
 /** The desktop's own file renderers, registered through the shared FileViewer's public API. */

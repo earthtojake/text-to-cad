@@ -1,11 +1,11 @@
-/** One composition point for app-owned integrations. Imported by main, MCP and skill packaging. */
+/** One composition point for app-owned integrations and the plugins' (src/plugins). Imported by main, MCP and skill packaging. */
 import workspace from "./workspace/module.mjs";
 import browser from "./browser/module.mjs";
-import pdf from "./pdf/module.mjs";
 import cad from "./cad/module.mjs";
 import documents from "./documents/module.mjs";
 import terminals from "./terminals/module.mjs";
 import drawings from "./drawings/module.mjs";
+import { pluginIntegrations } from "../../plugins/main.mjs";
 
 /**
  * @typedef {{ id: string, description: string, skills: string[], tools: Array<{name: string, description: string, inputSchema: import('zod').ZodType<Record<string, unknown>>, output: string}>, hostTools?: Array<{name: string, description: string, inputSchema: import('zod').ZodType<Record<string, unknown>>, output: string}>, runtime?: string, rendererCommands?: Record<string, string> }} Integration
@@ -24,7 +24,7 @@ export function defineIntegrations(entries) {
   }
   return Object.freeze(entries);
 }
-export const integrations = defineIntegrations([workspace, browser, pdf, cad, documents, terminals, drawings]);
+export const integrations = defineIntegrations([workspace, browser, ...pluginIntegrations, cad, documents, terminals, drawings]);
 export function integrationById(id) {
   const found = integrations.find(entry => entry.id === id);
   if (!found) throw new Error(`Unknown integration: ${id}`);

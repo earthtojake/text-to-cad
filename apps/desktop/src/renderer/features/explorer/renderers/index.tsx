@@ -1,3 +1,4 @@
+import { rendererPlugins } from "@plugins/renderer";
 import { desktopCadLive } from "@renderer/state/live-cad";
 import type { PrepareContext, RendererRegistration } from "@hardcore/ui/file-viewer";
 import { createStepRenderer } from "@hardcore/ui/renderers/step";
@@ -13,14 +14,13 @@ import { createDesktopCadCommands } from "../host/cadCommands";
 import { codeRenderer } from "./code";
 import { imageRenderer } from "./image";
 import { markdownRenderer } from "./markdown";
-import { pdfRenderer } from "./pdf";
 import { unsupportedRenderer } from "./unsupported";
 
 /**
- * Application composition: the shared viewer renderers (`@hardcore/ui/renderers/*`) and this
- * app's own — Markdown, code, image, PDF and the unsupported fallback, which only the desktop
- * registers and which live beside this file. Only registered CAD code receives composer/native
- * services.
+ * Application composition: the shared viewer renderers (`@hardcore/ui/renderers/*`), this
+ * app's own — Markdown, code, image and the unsupported fallback, which only the desktop
+ * registers and which live beside this file — and each plugin's viewers (`src/plugins`, PDF's
+ * among them). Only registered CAD code receives composer/native services.
  */
 export function createDesktopRenderers(projectId: string, root: ExplorerRoot, tabId: string, borrowedConnection?: DesktopCadConnection) {
   const ownedConnection = borrowedConnection ? null : createDesktopCadConnection(projectId, root);
@@ -46,5 +46,6 @@ export function createDesktopRenderers(projectId: string, root: ExplorerRoot, ta
     },
   });
   const viewers = [createStepRenderer(services), createDxfRenderer(services), createGlbRenderer(services), createMeshRenderer(services), createRobotRenderer(services)].map(withRuntimeFailure);
-  return { renderers: [markdownRenderer, codeRenderer, ...viewers, imageRenderer, pdfRenderer, unsupportedRenderer], dispose: () => ownedConnection?.dispose() };
+  const pluginViewers = rendererPlugins.flatMap(plugin => plugin.renderers({ projectId, root, tabId }));
+  return { renderers: [markdownRenderer, codeRenderer, ...viewers, imageRenderer, ...pluginViewers, unsupportedRenderer], dispose: () => ownedConnection?.dispose() };
 }

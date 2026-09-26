@@ -4,7 +4,7 @@ import { FileViewer, type FileViewerState } from '@hardcore/ui/file-viewer';
 import type { LivePdfDocument } from '@hardcore/ui/host';
 import '@hardcore/ui/styles.css';
 
-import { pdfRenderer } from '../../../src/renderer/features/explorer/renderers/pdf';
+import { pdfRenderer } from '../../../src/plugins/pdf/viewer';
 import { testViewerHost } from '../../viewer-host';
 
 const objects = [

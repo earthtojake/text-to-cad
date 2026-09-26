@@ -5,6 +5,10 @@
     "src/renderer/**/*.tsx",
     "src/preload/*.d.ts",
     "src/shared/**/*.ts",
+    "src/plugins/index.mjs",
+    "src/plugins/*/manifest.mjs",
+    "src/plugins/**/*.ts",
+    "src/plugins/**/*.tsx",
     "tests/unit/renderer/**/*.ts",
     "tests/unit/renderer/**/*.tsx",
     "tests/unit/shared/frames.ts",
@@ -25,6 +29,8 @@
       "vitest/globals"
     ],
     "jsx": "react-jsx",
+    "allowJs": true,
+    "checkJs": false,
     "allowSyntheticDefaultImports": true
   }
 }

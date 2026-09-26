@@ -63,6 +63,7 @@ test.beforeAll(async () => {
   project = path.join(base, 'integration-fixture'); record = path.join(base, 'agent.jsonl');
   fs.mkdirSync(project); fs.writeFileSync(path.join(project, 'notes.txt'), 'disk original\n');
   fs.writeFileSync(path.join(project, 'fixture.pdf'), pdfFixture());
+  fs.copyFileSync(path.join(appRoot, 'tests/fixtures/gcode/cup.gcode'), path.join(project, 'cup.gcode'));
   app = await electron.launch({ args: [path.join(appRoot, 'out/main/index.js'), `--user-data-dir=${path.join(base, 'profile')}`],
     env: { ...process.env, NODE_ENV: 'test', HARDCORE_E2E_HIDDEN: '1', HARDCORE_FAKE_AGENT: path.join(appRoot, 'tests/fake-agent/index.mjs'),
       FAKE_AGENT_INTEGRATION_PROOF: '1', FAKE_AGENT_RECORD: record, CADGEN_DAEMON: '0' } });
@@ -80,7 +81,7 @@ test.afterAll(async () => { await app?.close(); if (base) fs.rmSync(base, { recu
 test('real ACP session starts isolated domain MCPs and operates the live app resources', async () => {
   test.setTimeout(180_000);
   const catalog = await proof({ operation: 'catalog' }) as { catalog: Array<{ name: string; tools: string[] }> };
-  expect(catalog.catalog.map(entry => entry.name).sort()).toEqual(['browser', 'cad', 'documents', 'drawings', 'pdf', 'terminals', 'workspace'].map(name => `hardcore-${name}`).sort());
+  expect(catalog.catalog.map(entry => entry.name).sort()).toEqual(['browser', 'cad', 'documents', 'drawings', 'gcode', 'pdf', 'terminals', 'workspace'].map(name => `hardcore-${name}`).sort());
   expect(catalog.catalog.find(entry => entry.name === 'hardcore-documents')?.tools).toContain('edit_document');
   expect(catalog.catalog.find(entry => entry.name === 'hardcore-pdf')?.tools).not.toContain('edit_document');
 
@@ -134,6 +135,16 @@ test('real ACP session starts isolated domain MCPs and operates the live app res
   expect(json<{ pages: Array<{ text: string }> }>(await tool('pdf', 'read_pdf', { tabId: pdf.tabId })).pages[0]?.text).toContain('日本');
   const capture = await tool('pdf', 'capture_pdf', { tabId: pdf.tabId });
   expect(capture.isError).not.toBe(true); expect(capture.content.find(block => block.type === 'image')?.mimeType).toBe('image/png');
+
+  // A plugin's viewer and tools (src/plugins/gcode): the agent reads and steers the toolpath the person sees.
+  const gcode = json<{ tabId: string; renderer: string }>(await tool('workspace', 'open_file', { path: 'cup.gcode' }));
+  expect(gcode.renderer).toBe('gcode');
+  await expect(page.getByText('Layer 16 of 16')).toBeVisible();
+  expect(json(await tool('gcode', 'gcode_state', { tabId: gcode.tabId }))).toMatchObject({ layers: 16, layer: 16, arcMoves: 1, path: 'cup.gcode' });
+  expect(json(await tool('gcode', 'set_gcode_layer', { tabId: gcode.tabId, layer: 8 }))).toMatchObject({ layer: 8 });
+  await expect(page.getByText('Layer 8 of 16')).toBeVisible();
+  const toolpath = await tool('gcode', 'capture_gcode', { tabId: gcode.tabId });
+  expect(toolpath.isError).not.toBe(true); expect(toolpath.content.find(block => block.type === 'image')?.mimeType).toBe('image/png');
 
   const terminal = json<{ tabId: string }>(await tool('terminals', 'create_terminal'));
   let output = json<Record<string, unknown>>(await tool('terminals', 'read_terminal', { tabId: terminal.tabId }));

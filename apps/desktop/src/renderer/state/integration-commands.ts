@@ -2,6 +2,8 @@
 import { isCadFile } from "@hardcore/core/lib/fileFormats.js";
 import { emptyDrawingDocument, parseDrawingScene } from "@hardcore/core/drawing";
 import { selectRenderer } from "@hardcore/ui/file-viewer";
+import { rendererPlugins } from "@plugins/renderer";
+import { imageResult } from "@plugins/results";
 import { createDesktopRenderers } from "@renderer/features/explorer/renderers";
 import type { IntegrationCommand } from "@shared/ipc/integrations";
 import type { ExplorerTab } from "@shared/types";
@@ -9,7 +11,7 @@ import { readSessionStrip, renameDrawingTab, tabTitle, openSessionTab, closeSess
 import { getDrawingScene } from "./drawings";
 import { useProjects } from "./projects";
 import { useSessions } from "./sessions";
-import { hasDirtyDocument, performDocumentCommand, performPdfCommand } from "./live-documents";
+import { hasDirtyDocument, performDocumentCommand } from "./live-documents";
 import { performCadViewerCommand } from "./live-cad";
 
 async function rendererIdForPath(projectId: string, root: string | null, path: string, tabId: string) {
@@ -53,12 +55,6 @@ async function scopedTab(command: IntegrationCommand, signal?: AbortSignal) {
   return tab;
 }
 
-async function imageResult(blob: Blob, metadata: Record<string, unknown>) {
-  const bytes = new Uint8Array(await blob.arrayBuffer());
-  let binary = ""; for (const byte of bytes) binary += String.fromCharCode(byte);
-  return { ...metadata, mimeType: blob.type, base64: btoa(binary) };
-}
-
 export async function performIntegrationCommand(command: IntegrationCommand, signal?: AbortSignal): Promise<unknown> {
   signal?.throwIfAborted();
   const owner = useSessions.getState().sessions.find(session => session.id === command.sessionId && session.projectId === command.projectId && !session.archived);
@@ -71,11 +67,12 @@ export async function performIntegrationCommand(command: IntegrationCommand, sig
     if (tab.kind !== "file" || !tab.path) throw new Error("This is not a document tab.");
     return performDocumentCommand(command.kind, { ...params, tabId: tab.id }, { ...scope, path: tab.path });
   }
-  if (command.kind.startsWith("pdf-")) {
+  const plugin = rendererPlugins.find(candidate => Object.values(candidate.manifest.commands).includes(command.kind));
+  if (plugin) {
     const tab = await scopedTab(command, signal);
     signal?.throwIfAborted();
-    if (tab.kind !== "file" || !tab.path) throw new Error("This is not a PDF tab.");
-    return performPdfCommand(command.kind, { ...params, tabId: tab.id }, { ...scope, path: tab.path });
+    if (tab.kind !== "file" || !tab.path) throw new Error(`This is not a ${plugin.manifest.name} tab.`);
+    return plugin.perform(command.kind, { ...params, tabId: tab.id }, { ...scope, path: tab.path });
   }
   switch (command.kind) {
     case "open-file": {

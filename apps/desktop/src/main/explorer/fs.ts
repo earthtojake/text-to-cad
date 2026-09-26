@@ -23,6 +23,8 @@ import fs from "node:fs/promises";
 import path from "node:path";
 import ignore from "ignore";
 
+import { plugins } from "../../plugins/index.mjs";
+
 /* -------------------------------------------------------------------------- */
 /* What a tree row is                                                          */
 /* -------------------------------------------------------------------------- */
@@ -145,9 +147,10 @@ export async function resolveInRoot(root: string, target: string): Promise<strin
 /**
  * The file types the explorer renders. This is the one table: the extension
  * decides the renderer and the media type together, so a `.step` cannot end up
- * routed to Monaco while claiming to be `model/step`.
+ * routed to Monaco while claiming to be `model/step`. A plugin's types
+ * (`src/plugins`, its manifest's `fileTypes`) are rows of it too.
  */
-const TYPES: ReadonlyArray<readonly [FileKind, string, readonly string[]]> = [
+const BASE_TYPES: ReadonlyArray<readonly [FileKind, string, readonly string[]]> = [
   ["image", "image/png", ["png"]],
   ["image", "image/jpeg", ["jpg", "jpeg"]],
   ["image", "image/gif", ["gif"]],
@@ -156,7 +159,6 @@ const TYPES: ReadonlyArray<readonly [FileKind, string, readonly string[]]> = [
   ["image", "image/bmp", ["bmp"]],
   ["image", "image/x-icon", ["ico"]],
   ["image", "image/avif", ["avif"]],
-  ["pdf", "application/pdf", ["pdf"]],
   // The nine extensions the CAD Viewer's file surface understands (plan §3).
   ["cad", "model/step", ["step", "stp"]],
   ["cad", "model/gltf-binary", ["glb"]],
@@ -186,11 +188,19 @@ const TYPES: ReadonlyArray<readonly [FileKind, string, readonly string[]]> = [
   ["text", "text/plain", ["txt", "log", "csv", "tsv", "env", "ini", "cfg", "conf", "lock"]],
 ];
 
-const BY_EXTENSION = new Map<string, { kind: FileKind; mime: string }>(
-  TYPES.flatMap(([kind, mime, extensions]) =>
-    extensions.map((extension) => [extension, { kind, mime }] as const),
-  ),
-);
+const TYPES: ReadonlyArray<readonly [FileKind, string, readonly string[]]> = [
+  ...BASE_TYPES,
+  ...plugins.flatMap((plugin) => plugin.fileTypes.map((type) => [type.kind, type.mime, type.extensions] as const)),
+];
+
+const BY_EXTENSION = new Map<string, { kind: FileKind; mime: string }>();
+for (const [kind, mime, extensions] of TYPES) {
+  for (const extension of extensions) {
+    // Two rows for one extension would leave which renderer opens it to table order.
+    if (BY_EXTENSION.has(extension)) throw new Error(`.${extension} is claimed twice in the file type table`);
+    BY_EXTENSION.set(extension, { kind, mime });
+  }
+}
 
 /**
  * Extensionless files that are text — the dotfiles and the build files every

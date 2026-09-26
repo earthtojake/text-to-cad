@@ -95,7 +95,7 @@ input requires another read.
 The PDF renderer and its agent tools share one real Mozilla PDF.js document,
 worker and text layer. Page reads are bounded to 50 pages/one million
 characters and canvases to 4096 pixels on the longest side. Extraction does not
-perform OCR. See the [PDF domain notes](../src/main/integrations/pdf/README.md)
+perform OCR. See the [PDF domain notes](../src/plugins/pdf/README.md)
 for the upstream MCP assessment and the independently reused, Apache-licensed
 OpenAI PDF skill.
 
@@ -140,6 +140,12 @@ The bundled CAD runtime remains on session PATH; integrations do not install
 another runtime or replace the person's agent configuration.
 
 ## Adding a domain
+
+A domain that comes with a file type — a viewer, the tools that act on it and the skills that
+go with it — is a **plugin**: one folder under `src/plugins/`, from which the explorer's file
+types, the registry, the IPC command kinds, the renderer's routing and the skill build all derive
+their rows. PDF and G-code are built that way; [`src/plugins/README.md`](../src/plugins/README.md)
+is the walkthrough. The steps below are for an app domain with no file type of its own.
 
 1. Add `src/main/integrations/<domain>/module.mjs` using `definition.mjs`'s
    `tool` helper. Declare strict bounded schemas, JSON/image result kind and

@@ -52,7 +52,7 @@ export default tseslint.config(
     },
   },
   {
-    files: ["src/renderer/**/*.{ts,tsx}"],
+    files: ["src/renderer/**/*.{ts,tsx}", "src/plugins/**/*.{ts,tsx}"],
     plugins: { "react-hooks": reactHooks },
     rules: reactHooks.configs.recommended.rules,
   },
