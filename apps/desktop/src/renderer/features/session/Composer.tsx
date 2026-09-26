@@ -236,8 +236,10 @@ export function Composer({
           onError={(error) => toast.error(error.message)}
           onSubmit={handleSubmit}
         >
-          <AnnotationsChip annotations={annotations} onRemove={() => removeAnnotations(draftKey)} scope={referenceScope} />
-          <AttachmentStrip />
+          <AttachmentStrip
+            annotations={<AnnotationsChip annotations={annotations} onRemove={() => removeAnnotations(draftKey)} scope={referenceScope} />}
+            hasAnnotations={annotations.length > 0}
+          />
           <AttachmentSink draftKey={draftKey} />
           <AttachmentBridge targetRef={attachmentsRef} />
           {/*
@@ -444,15 +446,19 @@ function AttachButton({
   );
 }
 
-/** The files waiting to go with the next prompt, above the textarea. */
-function AttachmentStrip() {
+/**
+ * What waits to go with the next prompt, above the textarea: the viewer's annotations, as one
+ * chip, then the files.
+ */
+function AttachmentStrip({ annotations, hasAnnotations }: { annotations: React.ReactNode; hasAnnotations: boolean }) {
   const attachments = usePromptInputAttachments();
-  if (attachments.files.length === 0) {
+  if (attachments.files.length === 0 && !hasAnnotations) {
     return null;
   }
   return (
     <PromptInputHeader className="px-2 pt-2">
       <Attachments variant="inline">
+        {annotations}
         {attachments.files.map((file) => {
           const isImage = file.mediaType?.startsWith("image/");
           return (

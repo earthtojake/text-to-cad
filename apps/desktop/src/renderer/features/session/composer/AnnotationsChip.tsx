@@ -30,7 +30,7 @@ export function openAnnotation(scope: ReferenceScope | null, annotation: DraftAn
 }
 
 /**
- * The annotations added from the viewer, as one chip above the box: "3 annotations". Hovering lists
+ * The annotations added from the viewer, as one chip in the box's attachment strip: "3 annotations". Hovering lists
  * them, and pressing one goes back to it on the model; the cross takes them all back out of the
  * draft. They go out with the prompt when the person sends it (`withAnnotations`).
  */
@@ -48,7 +48,7 @@ export function AnnotationsChip({
   }
   const label = `${annotations.length} ${annotations.length === 1 ? "annotation" : "annotations"}`;
   return (
-    <div className="px-2 pt-2" data-composer-annotations>
+    <div data-composer-annotations>
       <HoverCard closeDelay={100} openDelay={150}>
         <HoverCardTrigger asChild>
           <span className="inline-flex h-8 max-w-full cursor-default items-center gap-1.5 rounded-lg border bg-muted/30 pr-1 pl-2 text-[12px]">
