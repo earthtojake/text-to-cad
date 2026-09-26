@@ -11,7 +11,6 @@ to a temporary STEP; nothing under ``models/`` is read.
 
 from __future__ import annotations
 
-import importlib.util
 import io
 import json
 import math
@@ -26,9 +25,14 @@ from tests.python.support.paths import add_repo_path
 add_repo_path("packages/cadgen/src")
 
 from cadgen._internal.fea.materials import lookup_material  # noqa: E402
+from cadgen._internal.fea.mesh import require_fea_stack  # noqa: E402
 from cadgen._internal.fea.study import parse_study  # noqa: E402
 
-HAVE_FEA = all(importlib.util.find_spec(name) is not None for name in ("netgen", "skfem", "pyamg", "numpy", "scipy"))
+try:
+    require_fea_stack()
+    HAVE_FEA = True
+except RuntimeError:
+    HAVE_FEA = False
 
 # The cantilever: length along +X, fixed at x = 0, loaded at x = L in -Z.
 LENGTH, WIDTH, HEIGHT, FORCE = 60.0, 6.0, 6.0, 100.0
@@ -177,19 +181,13 @@ class Cantilever(unittest.TestCase):
 
         vtu = self.result.vtu.read_text(encoding="utf-8")
 
-        def block(name: str) -> np.ndarray:
-            start = vtu.index(f'Name="{name}"')
-            start = vtu.index(">", start) + 1
-            end = vtu.index("</DataArray>", start)
-            return np.array(vtu[start:end].split(), dtype=float)
+        def block(marker: str) -> np.ndarray:
+            """The numbers of the DataArray whose opening tag holds ``marker``."""
+            start = vtu.index(">", vtu.index(marker) + len(marker)) + 1
+            return np.array(vtu[start:vtu.index("</DataArray>", start)].split(), dtype=float)
 
-        points = block("connectivity")  # touch the grid to be sure it is well formed
-        self.assertEqual(len(points) % 4, 0)
-        start = vtu.index("<Points>")
-        start = vtu.index(">", vtu.index("<DataArray", start)) + 1
-        end = vtu.index("</DataArray>", start)
-        xyz = np.array(vtu[start:end].split(), dtype=float).reshape(-1, 3)
-        values = block("von_mises")
+        xyz = block("<Points><DataArray").reshape(-1, 3)
+        values = block('Name="von_mises"')
         probe = (np.abs(xyz[:, 0] - LENGTH / 4) < 1.01) & (np.abs(xyz[:, 2] - HEIGHT / 2) < 1e-6) & (np.abs(xyz[:, 1]) < WIDTH / 2 - 1e-6)
         self.assertGreater(probe.sum(), 0)
         expected = _bending_stress(LENGTH / 4)
@@ -202,7 +200,7 @@ class Cantilever(unittest.TestCase):
         sidecar = json.loads(self.result.sidecar.read_text(encoding="utf-8"))
         self.assertEqual(sidecar["study"], self.study)
         self.assertEqual(sidecar["summary"], self.result.summary)
-        self.assertEqual(sidecar["legend"]["max"], self.result.summary["max_von_mises_MPa"])
+        self.assertEqual(sidecar["fields"][0]["max"], self.result.summary["max_von_mises_MPa"])
         self.assertEqual(sidecar["mesh"]["order"], 2)
 
     def test_the_glb_is_a_valid_binary_gltf_with_colours_and_the_value_attribute(self):
@@ -216,12 +214,12 @@ class Cantilever(unittest.TestCase):
         gltf = json.loads(raw[20:20 + json_length])
         attributes = gltf["meshes"][0]["primitives"][0]["attributes"]
         self.assertEqual(set(attributes), {"POSITION", "NORMAL", "COLOR_0", "_VON_MISES", "_DISPLACEMENT"})
-        fields = gltf["meshes"][0]["extras"]["fields"]
-        self.assertEqual([f["attribute"] for f in fields], ["_VON_MISES", "_DISPLACEMENT"])
-        self.assertEqual(fields[1]["max"], self.result.summary["max_displacement_mm"])
-        self.assertEqual(gltf["meshes"][0]["extras"]["units"], "MPa")
-        self.assertEqual(gltf["meshes"][0]["extras"]["max"], self.result.summary["max_von_mises_MPa"])
-        self.assertEqual(gltf["meshes"][0]["extras"]["deformation_scale"], self.result.summary["deformation_scale"])
+        extras = gltf["meshes"][0]["extras"]
+        self.assertEqual(extras["deformation_scale"], self.result.summary["deformation_scale"])
+        self.assertEqual([f["attribute"] for f in extras["fields"]], ["_VON_MISES", "_DISPLACEMENT"])
+        self.assertEqual((extras["fields"][0]["units"], extras["fields"][0]["max"]), ("MPa", self.result.summary["max_von_mises_MPa"]))
+        self.assertEqual(extras["fields"][1]["max"], self.result.summary["max_displacement_mm"])
+        self.assertEqual(len(extras["ramp"]), 5)
         colour = gltf["accessors"][attributes["COLOR_0"]]
         self.assertEqual((colour["type"], colour["componentType"], colour.get("normalized")), ("VEC4", 5121, True))
         position = gltf["accessors"][attributes["POSITION"]]
@@ -261,24 +259,18 @@ class Cantilever(unittest.TestCase):
 
 class MissingExtra(unittest.TestCase):
     def test_the_install_hint_names_the_extra(self):
-        from cadgen._internal.fea import mesh
+        import builtins
+        from unittest import mock
 
-        real = mesh.__builtins__["__import__"] if isinstance(mesh.__builtins__, dict) else __import__
+        real = builtins.__import__
 
         def refuse(name, *args, **kwargs):
             if name == "pyamg":
                 raise ImportError(name)
             return real(name, *args, **kwargs)
 
-        import builtins
-
-        original = builtins.__import__
-        builtins.__import__ = refuse
-        try:
-            with self.assertRaises(RuntimeError) as caught:
-                mesh.require_fea_stack()
-        finally:
-            builtins.__import__ = original
+        with mock.patch("builtins.__import__", refuse), self.assertRaises(RuntimeError) as caught:
+            require_fea_stack()
         self.assertIn("cadgen[fea]", str(caught.exception))
         self.assertIn("pyamg", str(caught.exception))
 

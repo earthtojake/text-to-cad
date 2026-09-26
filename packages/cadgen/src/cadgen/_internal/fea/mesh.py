@@ -15,9 +15,6 @@ so the CAD kernel (OCP) is imported first, here, before netgen ever is.
 
 from __future__ import annotations
 
-import contextlib
-import os
-import sys
 import tempfile
 import time
 from dataclasses import dataclass
@@ -27,9 +24,9 @@ from typing import TYPE_CHECKING
 if TYPE_CHECKING:
     import numpy as np
 
-    from cadgen.step_scene import Occurrence, StepScene
+    from cadgen.step_scene import Occurrence
 
-__all__ = ["FaceFingerprint", "VolumeMesh", "default_mesh_size", "mesh_occurrence", "require_fea_stack"]
+__all__ = ["FaceFingerprint", "VolumeMesh", "default_mesh_size", "face_area_center", "mesh_occurrence", "occurrence_fingerprints", "require_fea_stack"]
 
 
 def require_fea_stack() -> None:
@@ -77,9 +74,6 @@ class VolumeMesh:
     bbox_diagonal: float
     seconds: float
 
-    def face_triangles(self, ordinal: int) -> "np.ndarray":
-        return self.boundary[self.boundary_ordinal == ordinal]
-
 
 def default_mesh_size(bbox_diagonal: float) -> float:
     """The element size a study gets when it names none: a fortieth of the
@@ -87,38 +81,24 @@ def default_mesh_size(bbox_diagonal: float) -> float:
     return max(bbox_diagonal / 40.0, 1e-3)
 
 
-def occurrence_fingerprints(occurrence: "Occurrence") -> list[FaceFingerprint]:
-    """Area and centre of mass of every face, by the scene's own ordinals."""
+def face_area_center(face) -> tuple[float, tuple[float, float, float]]:
+    """Area (mm^2) and centre of mass (mm) of one build123d face."""
     from OCP.BRepGProp import BRepGProp
     from OCP.GProp import GProp_GProps
 
+    props = GProp_GProps()
+    BRepGProp.SurfaceProperties_s(face.wrapped, props)
+    centre = props.CentreOfMass()
+    return float(props.Mass()), (centre.X(), centre.Y(), centre.Z())
+
+
+def occurrence_fingerprints(occurrence: "Occurrence") -> list[FaceFingerprint]:
+    """Area and centre of mass of every face, by the scene's own ordinals."""
     out = []
     for selection in occurrence.entities("face"):
-        props = GProp_GProps()
-        BRepGProp.SurfaceProperties_s(selection.shape().wrapped, props)
-        centre = props.CentreOfMass()
-        out.append(
-            FaceFingerprint(
-                selection.ref, int(selection._ordinal), float(props.Mass()), (centre.X(), centre.Y(), centre.Z())
-            )
-        )
+        area, centre = face_area_center(selection.shape())
+        out.append(FaceFingerprint(selection.ref, int(selection._ordinal), area, centre))
     return out
-
-
-@contextlib.contextmanager
-def _quiet_stdout():
-    """netgen's C++ side prints progress straight to fd 1, which is the JSON
-    result channel of every cadgen command; park it on devnull meanwhile."""
-    sys.stdout.flush()
-    saved = os.dup(1)
-    try:
-        with open(os.devnull, "wb") as sink:
-            os.dup2(sink.fileno(), 1)
-        yield
-    finally:
-        sys.stdout.flush()
-        os.dup2(saved, 1)
-        os.close(saved)
 
 
 def _write_brep(shape, path: Path) -> None:
@@ -169,17 +149,16 @@ def _match_faces(fingerprints: list[FaceFingerprint], ng_faces, scale: float) ->
     return mapping
 
 
-def mesh_occurrence(
-    scene: "StepScene", occurrence: "Occurrence", *, max_h: float | None = None, verbose: bool = False
-) -> VolumeMesh:
+def mesh_occurrence(occurrence: "Occurrence", *, max_h: float | None = None) -> VolumeMesh:
     """Mesh one placed occurrence with second-order tetrahedra."""
     require_fea_stack()
     import numpy as np
 
+    from cadgen._internal.step_scene_loader import kernel_messages_on_stderr
+
     shape = occurrence.shape()
     fingerprints = occurrence_fingerprints(occurrence)
-    bbox = shape.bounding_box()
-    diagonal = float(bbox.diagonal)
+    diagonal = float(shape.bounding_box().diagonal)
     if not diagonal > 0:
         raise RuntimeError(f"{occurrence.ref} has no volume to mesh")
     h = float(max_h) if max_h else default_mesh_size(diagonal)
@@ -191,7 +170,8 @@ def mesh_occurrence(
     with tempfile.TemporaryDirectory(prefix="cadgen-fea-") as tmp:
         brep = Path(tmp) / "occurrence.brep"
         _write_brep(shape.wrapped, brep)
-        with _quiet_stdout():
+        # netgen's C++ side prints to fd 1, the JSON result channel of every door.
+        with kernel_messages_on_stderr():
             ngmesh.SetMessageImportance(0)
             geometry = ngocc.OCCGeometry(str(brep))
             mapping = _match_faces(fingerprints, list(geometry.faces), diagonal)
@@ -208,18 +188,15 @@ def mesh_occurrence(
         raise RuntimeError(f"the mesher produced no volume elements for {occurrence.ref}; is it a closed solid?")
     if not np.all(e3["np"] == 10):
         raise RuntimeError("the mesher produced elements that are not 10-node tetrahedra")
-    tets = np.ascontiguousarray(e3["nodes"][:, :10].astype(np.int64) - 1)
-    boundary = np.ascontiguousarray(e2["nodes"][:, :6].astype(np.int64) - 1)
     ordinal_of = np.zeros(int(e2["index"].max()) + 1, dtype=np.int64)
     for index, ordinal in mapping.items():
         ordinal_of[index + 1] = ordinal
-    boundary_ordinal = ordinal_of[e2["index"].astype(np.int64)]
 
     return VolumeMesh(
         nodes=coordinates,
-        tets=tets,
-        boundary=boundary,
-        boundary_ordinal=boundary_ordinal,
+        tets=np.ascontiguousarray(e3["nodes"][:, :10].astype(np.int64) - 1),
+        boundary=np.ascontiguousarray(e2["nodes"][:, :6].astype(np.int64) - 1),
+        boundary_ordinal=ordinal_of[e2["index"].astype(np.int64)],
         faces={fp.ordinal: fp for fp in fingerprints},
         max_h=h,
         bbox_diagonal=diagonal,

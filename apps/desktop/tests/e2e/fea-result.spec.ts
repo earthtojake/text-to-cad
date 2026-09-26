@@ -12,8 +12,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { _electron as electron, expect, test, type ElectronApplication, type Page } from "@playwright/test";
 import type { HardcoreApi } from "../../src/shared/ipc";
-import { cadRegistryEnvironment, cadRuntimeReady, cadTestProfile } from "./cad-runtime";
-import { selectFixtureSession } from "./session-fixture";
+import { cadRuntimeReady, cadTestProfile, cadgenEnvironment } from "./cad-runtime";
+import { openExplorerFile, selectFixtureSession } from "./session-fixture";
 
 declare const window: { hardcore: HardcoreApi };
 
@@ -22,6 +22,7 @@ let app: ElectronApplication;
 let page: Page;
 let userData: string;
 let project: string;
+let env: NodeJS.ProcessEnv;
 const errors: string[] = [];
 
 const CANTILEVER_STEP_SCRIPT = `
@@ -30,23 +31,16 @@ from build123d import Align, Box, export_step
 export_step(Box(60, 6, 6, align=(Align.MIN, Align.CENTER, Align.CENTER)), sys.argv[1])
 `;
 
-function cadgenEnvironment() {
-  return {
-    ...process.env, ...cadRegistryEnvironment(userData), CADGEN_DAEMON: "0",
-    CADGEN_CACHE_DIR: path.join(userData, "cad-cache"), CADGEN_DAEMON_STATE_DIR: path.join(userData, "cad-daemon"),
-  };
-}
-
 /** The result GLB, written by the runtime's cadgen; null when its fea extra is not installed. */
 function writeFeaResult(python: string): string | null {
   const probe = execFileSync(python, ["-c", "import importlib.util as u; print(all(u.find_spec(m) for m in ('netgen', 'skfem', 'pyamg')))"], {
-    env: cadgenEnvironment(), encoding: "utf8", stdio: "pipe", timeout: 60_000,
+    env, encoding: "utf8", stdio: "pipe", timeout: 60_000,
   }).trim();
   if (probe !== "True") return null;
   const step = path.join(project, "beam.step");
-  execFileSync(python, ["-c", CANTILEVER_STEP_SCRIPT, step], { cwd: project, env: cadgenEnvironment(), stdio: "pipe", timeout: 120_000 });
+  execFileSync(python, ["-c", CANTILEVER_STEP_SCRIPT, step], { cwd: project, env, stdio: "pipe", timeout: 120_000 });
   const faces = JSON.parse(execFileSync(python, ["-m", "cadgen.cli", "fea", "faces", step, "--json"], {
-    cwd: project, env: cadgenEnvironment(), encoding: "utf8", stdio: "pipe", timeout: 180_000,
+    cwd: project, env, encoding: "utf8", stdio: "pipe", timeout: 180_000,
   }).trim().split("\n").at(-1)!) as { faces: { ref: string; normal: number[] | null }[] };
   const fixed = faces.faces.find((face) => (face.normal?.[0] ?? 0) < -0.99)!.ref;
   const loaded = faces.faces.find((face) => (face.normal?.[0] ?? 0) > 0.99)!.ref;
@@ -58,7 +52,7 @@ function writeFeaResult(python: string): string | null {
   });
   const out = path.join(project, "FEA", "beam.study1.glb");
   execFileSync(python, ["-m", "cadgen.cli", "fea", "solve", step, out, "--study", study, "--json"], {
-    cwd: project, env: cadgenEnvironment(), stdio: "pipe", timeout: 300_000,
+    cwd: project, env, stdio: "pipe", timeout: 300_000,
   });
   return out;
 }
@@ -67,9 +61,10 @@ test.describe.configure({ mode: "serial" });
 test.beforeAll(async () => {
   project = fs.mkdtempSync(path.join(os.tmpdir(), "fea-result-"));
   userData = cadTestProfile("fea-result");
+  env = cadgenEnvironment(userData);
   app = await electron.launch({
     args: [path.join(appRoot, "out/main/index.js"), `--user-data-dir=${userData}`],
-    env: { ...cadgenEnvironment(), NODE_ENV: "test", HARDCORE_FAKE_AGENT: path.join(appRoot, "tests/fake-agent/index.mjs") },
+    env: { ...env, NODE_ENV: "test", HARDCORE_FAKE_AGENT: path.join(appRoot, "tests/fake-agent/index.mjs") },
   });
   page = await app.firstWindow();
   await page.waitForLoadState("domcontentloaded");
@@ -90,26 +85,14 @@ test.afterAll(async () => {
   try {
     await app?.close();
   } finally {
-    try { if (userData) fs.rmSync(userData, { recursive: true, force: true }); }
-    finally { if (project) fs.rmSync(project, { recursive: true, force: true }); }
+    for (const directory of [userData, project]) {
+      if (directory) fs.rmSync(directory, { recursive: true, force: true });
+    }
   }
 });
 
-async function openFile(file: string) {
-  const newTab = page.getByRole("button", { name: "New tab", exact: true });
-  if (!(await newTab.isVisible())) {
-    await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
-    await page.getByRole("button", { name: "Toggle explorer", exact: true }).click();
-  }
-  await newTab.click();
-  await page.getByRole("menuitem", { name: "File", exact: false }).click();
-  await page.getByLabel("Filter files").fill(file);
-  await page.getByRole("option", { name: file, exact: false }).first().click();
-  await expect(page.locator("[data-cad-surface] canvas").first()).toBeVisible({ timeout: 90_000 });
-}
-
 test("a result GLB opens with its legend, and a plain STEP has none", async () => {
-  await openFile("beam.study1.glb");
+  await openExplorerFile(page, "beam.study1.glb");
   const legend = page.getByRole("group", { name: "FEA result" });
   await expect(legend).toBeVisible({ timeout: 30_000 });
   await expect(legend).toContainText("beam.step");
@@ -119,7 +102,7 @@ test("a result GLB opens with its legend, and a plain STEP has none", async () =
   await expect(legend.getByRole("textbox", { name: "Deformation scale value" })).toHaveValue(/^×\d/);
   expect(errors, errors.join("\n")).toEqual([]);
 
-  await openFile("beam.step");
+  await openExplorerFile(page, "beam.step");
   await expect(page.getByRole("group", { name: "FEA result" })).toHaveCount(0);
 });
 

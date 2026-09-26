@@ -15,6 +15,14 @@ export function cadRegistryEnvironment(profile: string) {
   return { TMPDIR: profile, TEMP: profile, TMP: profile };
 }
 
+/** The environment a cadgen process gets in a test: the registry above, and a cache and daemon state of its own. */
+export function cadgenEnvironment(profile: string) {
+  return {
+    ...process.env, ...cadRegistryEnvironment(profile), CADGEN_DAEMON: "0",
+    CADGEN_CACHE_DIR: path.join(profile, "cad-cache"), CADGEN_DAEMON_STATE_DIR: path.join(profile, "cad-daemon"),
+  };
+}
+
 /** Local UI-only runs may omit Python; CAD qualification must never silently skip it. */
 export function cadRuntimeReady(status: { state: string; cadgenVersion: string | null }) {
   if (process.env.HARDCORE_E2E_REQUIRE_CAD === "1") {

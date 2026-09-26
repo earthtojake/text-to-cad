@@ -312,7 +312,7 @@ function targetSelectorArgs(asset, pyMinor) {
 }
 
 /** Pip arguments that install the selected release wheel (with the runtime's extras) and its pinned closure. */
-export function runtimePipInstallArgs({ layout, asset, pyMinor, wheel, constraints, extras = RUNTIME_EXTRAS }) {
+export function runtimePipInstallArgs({ layout, asset, pyMinor, wheel, constraints }) {
   return [
     "-m", "pip", "install",
     "--no-compile",
@@ -321,24 +321,23 @@ export function runtimePipInstallArgs({ layout, asset, pyMinor, wheel, constrain
     ...targetSelectorArgs(asset, pyMinor),
     "--target", layout.sitePackages,
     "-c", constraints,
-    extras.length > 0 ? `${wheel}[${extras.join(",")}]` : wheel,
+    `${wheel}[${RUNTIME_EXTRAS.join(",")}]`,
   ];
 }
 
 /**
  * Wheel data files a `pip install --target` dropped, by distribution.
  *
- * A wheel may carry files outside its package under `<dist>.data/data/<dir>/`
- * (netgen-occt keeps every OpenCascade library there; gmsh its whole
- * `libgmsh`). pip's `--target` mode installs into a temporary prefix and moves
- * only the package directories to the target, so those files are lost — and
- * the dist-info RECORD still lists them, relative to site-packages
- * (`../libTKernel.7.8.1.dylib`), which is exactly where netgen's importer
- * then looks for them (`importlib.metadata`). Returns
- * `Map<"name==version", [record paths]>` for every listed data file (one
- * level above site-packages) that is not on disk; empty when the install is
- * complete. Console scripts (`../../bin/…`) are not data files: pip writes
- * those into the target's `bin/`, which the prune step deletes anyway.
+ * A wheel may carry files outside its package under `<dist>.data/data/lib/`
+ * (netgen-occt keeps every OpenCascade library there). pip's `--target` mode
+ * installs into a temporary prefix and moves only the package directories to
+ * the target, so those files are lost — and the dist-info RECORD still lists
+ * them, one level above site-packages (`../libTKernel.7.8.1.dylib`), which is
+ * exactly where netgen's importer then looks for them (`importlib.metadata`).
+ * Returns `Map<"name==version", [record paths]>` for every such file that is
+ * not on disk; empty when the install is complete. Console scripts
+ * (`../../bin/…`) are not data files: pip writes those into the target's
+ * `bin/`, which the prune step deletes anyway.
  */
 export function missingWheelDataFiles(sitePackages) {
   const missing = new Map();
@@ -346,99 +345,65 @@ export function missingWheelDataFiles(sitePackages) {
     return missing;
   }
   for (const entry of fs.readdirSync(sitePackages)) {
-    if (!entry.endsWith(".dist-info")) {
-      continue;
-    }
     const record = path.join(sitePackages, entry, "RECORD");
-    const metadata = path.join(sitePackages, entry, "METADATA");
-    if (!fs.existsSync(record) || !fs.existsSync(metadata)) {
+    if (!entry.endsWith(".dist-info") || !fs.existsSync(record)) {
       continue;
     }
-    const text = fs.readFileSync(metadata, "utf8");
-    const name = /^Name:\s*(.+)$/m.exec(text)?.[1].trim();
-    const version = /^Version:\s*(.+)$/m.exec(text)?.[1].trim();
-    if (!name || !version) {
-      continue;
-    }
+    // `<name>-<version>.dist-info`, the name already normalised the way pip accepts it.
+    const stem = entry.slice(0, -".dist-info".length);
+    const requirement = `${stem.slice(0, stem.lastIndexOf("-"))}==${stem.slice(stem.lastIndexOf("-") + 1)}`;
     for (const line of fs.readFileSync(record, "utf8").split(/\r?\n/)) {
       const file = line.split(",")[0];
-      // Exactly one level up: the temporary prefix's `lib/` (data files).
-      // `../../bin/<script>` is a console script pip DID write, into the
-      // target's own `bin/`, which the prune step removes on purpose.
-      if (!/^\.\.\/(?!\.\.\/)/.test(file) || fs.existsSync(path.resolve(sitePackages, file))) {
-        continue;
+      if (/^\.\.\/(?!\.\.\/)/.test(file) && !fs.existsSync(path.resolve(sitePackages, file))) {
+        if (!missing.has(requirement)) {
+          missing.set(requirement, []);
+        }
+        missing.get(requirement).push(file);
       }
-      const key = `${name}==${version}`;
-      if (!missing.has(key)) {
-        missing.set(key, []);
-      }
-      missing.get(key).push(file);
     }
   }
   return missing;
 }
 
-/**
- * Copy the dropped data files of ONE distribution from its unpacked wheel to
- * where the RECORD names them. `extracted` is the wheel's contents; a RECORD
- * path `../X` (pip's temporary `lib/X`) is `<dist>.data/data/lib/X`, and a
- * deeper `../../bin/X` is `<dist>.data/data/bin/X`. Returns the paths written.
- */
-export function placeWheelDataFiles(extracted, sitePackages, files) {
-  const dataDir = fs.readdirSync(extracted).find((name) => name.endsWith(".data"));
-  if (!dataDir) {
-    throw new Error(`${extracted} holds no .data directory, yet its RECORD lists files outside the package`);
-  }
-  const data = path.join(extracted, dataDir, "data");
-  const written = [];
-  for (const file of files) {
-    const leaf = file.replace(/^(\.\.\/)+/, "");
-    const candidates = [path.join(data, "lib", leaf), path.join(data, leaf)];
-    const source = candidates.find((candidate) => fs.existsSync(candidate));
-    if (!source) {
-      throw new Error(`cannot find ${file} inside the wheel (looked for ${candidates.map((c) => path.relative(extracted, c)).join(", ")})`);
-    }
-    const destination = path.resolve(sitePackages, file);
-    fs.mkdirSync(path.dirname(destination), { recursive: true });
-    fs.copyFileSync(source, destination);
-    fs.chmodSync(destination, fs.statSync(source).mode);
-    written.push(destination);
-  }
-  return written;
-}
+// Copies the named members of one wheel's `<dist>.data/data/lib/` straight to
+// where the RECORD says they go: argv = wheel, site-packages, record paths…
+const PLACE_WHEEL_DATA = `
+import os, sys, zipfile
+wheel, site, files = sys.argv[1], sys.argv[2], sys.argv[3:]
+with zipfile.ZipFile(wheel) as archive:
+    names = archive.namelist()
+    for file in files:
+        leaf = file[len("../"):]
+        member = next((n for n in names if n.endswith("/data/lib/" + leaf)), None)
+        if member is None:
+            raise SystemExit(f"{os.path.basename(wheel)} holds no data/lib/{leaf}")
+        destination = os.path.normpath(os.path.join(site, file))
+        os.makedirs(os.path.dirname(destination), exist_ok=True)
+        with archive.open(member) as source, open(destination, "wb") as target:
+            target.write(source.read())
+        os.chmod(destination, 0o755)
+`;
 
 /** Fetch each incomplete distribution's wheel again (pip's cache makes this cheap) and put its data files back. */
-export function restoreWheelDataFiles({ layout, asset, pyMinor, pipPython, cache, env }) {
-  const missing = missingWheelDataFiles(layout.sitePackages);
+export function restoreWheelDataFiles({ layout, asset, pyMinor, pipPython, env }) {
   const restored = [];
-  if (missing.size === 0) {
-    return restored;
-  }
-  const downloads = path.join(cache, "wheel-data");
-  fs.mkdirSync(downloads, { recursive: true });
-  for (const [requirement, files] of missing) {
-    run(pipPython, [
-      "-m", "pip", "download", "--no-deps", "--only-binary=:all:",
-      ...targetSelectorArgs(asset, pyMinor),
-      "-d", downloads, requirement,
-    ], { env, quiet: true });
-    const [name, version] = requirement.split("==");
-    const prefix = `${name.toLowerCase().replace(/[-.]/g, "_")}-${version}-`;
-    const wheel = fs.readdirSync(downloads).find((entry) => entry.toLowerCase().startsWith(prefix) && entry.endsWith(".whl"));
-    if (!wheel) {
-      throw new Error(`pip download produced no ${requirement} wheel under ${downloads}`);
-    }
-    const extracted = fs.mkdtempSync(path.join(os.tmpdir(), "hardcore-wheel-data-"));
+  for (const [requirement, files] of missingWheelDataFiles(layout.sitePackages)) {
+    const downloads = fs.mkdtempSync(path.join(os.tmpdir(), "hardcore-wheel-data-"));
     try {
-      run(pipPython, ["-m", "zipfile", "-e", path.join(downloads, wheel), extracted], { quiet: true });
-      restored.push(...placeWheelDataFiles(extracted, layout.sitePackages, files).map((file) => path.relative(layout.root, file)));
+      run(pipPython, [
+        "-m", "pip", "download", "--no-deps", "--only-binary=:all:",
+        ...targetSelectorArgs(asset, pyMinor),
+        "-d", downloads, requirement,
+      ], { env, quiet: true });
+      const wheel = fs.readdirSync(downloads).find((name) => name.endsWith(".whl"));
+      if (!wheel) {
+        throw new Error(`pip download produced no ${requirement} wheel`);
+      }
+      run(pipPython, ["-c", PLACE_WHEEL_DATA, path.join(downloads, wheel), layout.sitePackages, ...files], { quiet: true });
+      restored.push(...files.map((file) => path.relative(layout.root, path.resolve(layout.sitePackages, file))));
     } finally {
-      fs.rmSync(extracted, { recursive: true, force: true });
+      fs.rmSync(downloads, { recursive: true, force: true });
     }
-  }
-  const left = missingWheelDataFiles(layout.sitePackages);
-  if (left.size > 0) {
-    throw new Error(`wheel data files still missing after restore: ${[...left.values()].flat().join(", ")}`);
   }
   return restored;
 }
@@ -485,7 +450,7 @@ export async function bundleRuntime({ target, out, cache, wheels, version, pytho
     PYTHONDONTWRITEBYTECODE: "1",
   };
   run(pipPython, runtimePipInstallArgs({ layout, asset, pyMinor, wheel: wheelPath, constraints }), { env: pipEnv });
-  const restored = restoreWheelDataFiles({ layout, asset, pyMinor, pipPython, cache, env: pipEnv });
+  const restored = restoreWheelDataFiles({ layout, asset, pyMinor, pipPython, env: pipEnv });
   if (restored.length > 0) {
     console.info(`restored ${restored.length} wheel data files pip --target dropped (${restored.slice(0, 3).join(", ")}${restored.length > 3 ? ", …" : ""})`);
   }

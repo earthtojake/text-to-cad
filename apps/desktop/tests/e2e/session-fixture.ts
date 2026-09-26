@@ -38,3 +38,21 @@ export async function selectFixtureSession(page: Page, directory: string): Promi
   await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
   return session;
 }
+
+/**
+ * Open a workspace file in a new explorer tab through the New tab menu and
+ * the file filter, and wait for its CAD surface. A session just made has its
+ * explorer closed (`docs/session-workspaces.md`), so it is opened first.
+ */
+export async function openExplorerFile(page: Page, file: string) {
+  const newTab = page.getByRole("button", { name: "New tab", exact: true });
+  if (!(await newTab.isVisible())) {
+    await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
+    await page.getByRole("button", { name: "Toggle explorer", exact: true }).click();
+  }
+  await newTab.click();
+  await page.getByRole("menuitem", { name: "File", exact: false }).click();
+  await page.getByLabel("Filter files").fill(file);
+  await page.getByRole("option", { name: file, exact: false }).first().click();
+  await expect(page.locator("[data-cad-surface] canvas").first()).toBeVisible({ timeout: 90_000 });
+}

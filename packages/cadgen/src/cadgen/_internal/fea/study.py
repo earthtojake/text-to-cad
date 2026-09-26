@@ -68,12 +68,7 @@ class Study:
 
     @property
     def face_refs(self) -> tuple[str, ...]:
-        seen: list[str] = []
-        for group in (*self.fixtures, *self.loads):
-            for ref in group.faces:
-                if ref not in seen:
-                    seen.append(ref)
-        return tuple(seen)
+        return tuple(dict.fromkeys(ref for group in (*self.fixtures, *self.loads) for ref in group.faces))
 
 
 def _load_document(study: str | dict | Path) -> dict:
@@ -125,7 +120,13 @@ def _material(spec: Any) -> Material:
         return lookup_material(spec)
     if not isinstance(spec, dict):
         raise ValueError("material: give a name from the table or an object with E_MPa, nu and yield_MPa")
-    base = lookup_material(spec["name"]) if "name" in spec and spec["name"].strip().lower() in _known_names() else None
+    # An object may extend a table entry ({"name": "steel", "yield_MPa": 355}).
+    base = None
+    if isinstance(spec.get("name"), str):
+        try:
+            base = lookup_material(spec["name"])
+        except ValueError:
+            pass
     if base is None and not {"E_MPa", "nu", "yield_MPa"} <= set(spec):
         raise ValueError("material: an object needs E_MPa, nu and yield_MPa (density_t_per_mm3 optional)")
     E = _number(spec.get("E_MPa", base.E if base else None), where="material.E_MPa", positive=True)
@@ -137,12 +138,6 @@ def _material(spec: Any) -> Material:
     )
     density = _number(spec.get("density_t_per_mm3", base.density if base else 0.0), where="material.density_t_per_mm3")
     return Material(str(spec.get("name", base.name if base else "custom")), E, nu, yield_strength, density)
-
-
-def _known_names() -> set[str]:
-    from cadgen._internal.fea.materials import MATERIALS, _ALIASES
-
-    return set(MATERIALS) | set(_ALIASES)
 
 
 def parse_study(study: str | dict | Path | None) -> Study:

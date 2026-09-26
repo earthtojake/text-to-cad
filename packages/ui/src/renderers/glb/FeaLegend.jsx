@@ -1,3 +1,4 @@
+import { clamp } from "@hardcore/core/common/numbers.js";
 import { cn } from "@hardcore/ui/utils";
 import { Slider } from "@hardcore/ui/primitives/slider";
 import { FileSheetSelectRow, FileSheetSliderField, parseFileSheetNumberInput } from "../kit/inspector/FileSheet.js";
@@ -13,17 +14,15 @@ import { deformationRange, feaRampGradient, formatValue } from "./feaResult.js";
  * Top-left, where nothing else of the shell sits (the view cube is
  * bottom-right, the update status bottom-left, the tool strip top-right).
  * The card itself takes pointer events; the surrounding layer does not, so
- * orbiting past it still works.
+ * orbiting past it still works. `field` and `scale` arrive resolved.
  */
-export default function FeaLegend({ result, field, onFieldChange, deformation, onDeformationChange, className }) {
-  const active = result.fields.find((entry) => entry.attribute === field) || result.fields[0];
+export default function FeaLegend({ result, field, scale, onFieldChange, onScaleChange }) {
   const range = deformationRange(result.deformationScale);
-  const scale = Number.isFinite(deformation) ? deformation : result.deformationScale;
-  const ticks = [1, 0.75, 0.5, 0.25, 0].map((f) => active.min + (active.max - active.min) * f);
+  const ticks = [1, 0.75, 0.5, 0.25, 0].map((f) => field.min + (field.max - field.min) * f);
   return (
-    <div className="pointer-events-none absolute inset-0 z-20" data-fea-legend>
+    <div className="pointer-events-none absolute inset-0 z-20">
       <div
-        className={cn("pointer-events-auto absolute left-3 top-3 w-56 rounded-md py-1.5", FLOATING_TOOL_BAR_SURFACE_CLASS, className)}
+        className={cn("pointer-events-auto absolute left-3 top-3 w-56 rounded-md py-1.5", FLOATING_TOOL_BAR_SURFACE_CLASS)}
         role="group"
         aria-label="FEA result"
       >
@@ -33,20 +32,20 @@ export default function FeaLegend({ result, field, onFieldChange, deformation, o
         <FileSheetSelectRow
           label="Field"
           ariaLabel="Result field"
-          value={active.attribute}
-          onValueChange={(next) => onFieldChange?.(next)}
+          value={field.attribute}
+          onValueChange={onFieldChange}
           options={result.fields.map((entry) => ({ value: entry.attribute, label: entry.name }))}
         />
-        <div className="flex items-stretch gap-2 px-2 py-1.5" data-fea-colorbar>
+        <div className="flex items-stretch gap-2 px-2 py-1.5">
           <div
             className="w-3 shrink-0 rounded-sm border border-border"
-            style={{ background: feaRampGradient(), minHeight: "5.5rem" }}
+            style={{ background: feaRampGradient(result.ramp), minHeight: "5.5rem" }}
             aria-hidden="true"
           />
-          <ol className="flex min-w-0 flex-1 flex-col justify-between font-mono text-micro tabular-nums text-muted-foreground" aria-label={`${active.name} scale`}>
+          <ol className="flex min-w-0 flex-1 flex-col justify-between font-mono text-micro tabular-nums text-muted-foreground" aria-label={`${field.name} scale`}>
             {ticks.map((value, index) => (
               <li key={index} className="leading-none">
-                {formatValue(value)}{index === 0 && active.units ? ` ${active.units}` : ""}
+                {formatValue(value)}{index === 0 && field.units ? ` ${field.units}` : ""}
               </li>
             ))}
           </ol>
@@ -56,7 +55,7 @@ export default function FeaLegend({ result, field, onFieldChange, deformation, o
           label="Deform."
           labelTitle="Deformation scale: how much larger than life the displacement is drawn"
           value={`×${formatValue(scale)}`}
-          onValueCommit={(draft) => onDeformationChange?.(parseFileSheetNumberInput(String(draft).replace(/^×/, ""), {
+          onValueCommit={(draft) => onScaleChange(parseFileSheetNumberInput(String(draft).replace(/^×/, ""), {
             fallback: scale, min: range.min, max: range.max
           }))}
           valueInputProps={{ ariaLabel: "Deformation scale value" }}
@@ -68,7 +67,7 @@ export default function FeaLegend({ result, field, onFieldChange, deformation, o
             step={range.step}
             aria-label="Deformation scale"
             thumbProps={{ "aria-label": "Deformation scale" }}
-            onValueChange={(next) => onDeformationChange?.(Math.min(Math.max(next[0], range.min), range.max))}
+            onValueChange={(next) => onScaleChange(clamp(next[0], range.min, range.max))}
           />
         </FileSheetSliderField>
       </div>

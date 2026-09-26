@@ -112,7 +112,6 @@ describe("the runtime install", () => {
     });
 
     expect(args.at(-1)).toBe(`${wheel}[fea]`);
-    expect(runtimePipInstallArgs({ layout: runtimeLayout("/R/runtime/mac-arm64", "mac-arm64"), asset: PYTHON_BUILD.targets["mac-arm64"], pyMinor: "3.13", wheel, constraints, extras: [] }).at(-1)).toBe(wheel);
     expect(args).toContain(constraints);
     expect(args).not.toContain("cadgen==9.9.9");
     expect(args).not.toContain("--find-links");

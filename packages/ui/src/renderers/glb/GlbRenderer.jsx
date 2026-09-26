@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { finiteOr } from "@hardcore/core/common/numbers.js";
 import { EDGELESS_VIEW_FEATURES } from "@hardcore/core/common/viewSettings.js";
 import RendererShell from "../kit/shell/RendererShell.jsx";
 import { readShellState } from "../kit/shell/shellState.js";
@@ -22,10 +23,12 @@ function GlbSurface({ view, data }) {
 
   // An FEA result (cadgen fea solve) carries its fields and true displacement in the
   // file; the legend lets the field and the exaggeration be chosen per tab.
-  const fea = useMemo(() => (scene ? readFeaResult(scene) : null), [scene]);
+  const fea = useMemo(() => readFeaResult(scene?.document?.scene), [scene]);
   const [restored] = useState(() => readShellState(view.state).renderer || {});
   const [feaField, setFeaField] = useState(() => (typeof restored.feaField === "string" ? restored.feaField : null));
-  const [feaScale, setFeaScale] = useState(() => (Number.isFinite(restored.feaScale) ? restored.feaScale : null));
+  const [feaScale, setFeaScale] = useState(() => finiteOr(restored.feaScale, null));
+  const activeField = fea ? fea.fields.find((entry) => entry.attribute === feaField) || fea.fields[0] : null;
+  const activeScale = fea ? finiteOr(feaScale, fea.deformationScale) : null;
   const rendererState = useMemo(() => (fea ? { feaField, feaScale } : restored), [fea, feaField, feaScale, restored]);
 
   const requestRenderRef = useMemo(() => ({ current: null }), []);
@@ -39,27 +42,19 @@ function GlbSurface({ view, data }) {
   requestRenderRef.current = shell.requestRender;
   useDeclinedSelectReference(document);
 
-  const requestRender = shell.requestRender;
   useEffect(() => {
-    if (!fea) {
-      return;
+    if (fea && recolorByField(fea.mesh, activeField, fea.ramp)) {
+      requestRenderRef.current?.();
     }
-    const field = fea.fields.find((entry) => entry.attribute === feaField) || fea.fields[0];
-    const changed = recolorByField(fea.mesh, field)
-      | applyDeformation(fea.mesh, Number.isFinite(feaScale) ? feaScale : fea.deformationScale, fea.deformationScale);
-    if (changed) {
-      requestRender?.();
+  }, [fea, activeField, requestRenderRef]);
+  useEffect(() => {
+    if (fea && applyDeformation(fea.mesh, activeScale, fea.deformationScale)) {
+      requestRenderRef.current?.();
     }
-  }, [fea, feaField, feaScale, requestRender]);
+  }, [fea, activeScale, requestRenderRef]);
 
   const overlay = fea ? (
-    <FeaLegend
-      result={fea}
-      field={feaField}
-      onFieldChange={setFeaField}
-      deformation={feaScale}
-      onDeformationChange={setFeaScale}
-    />
+    <FeaLegend result={fea} field={activeField} scale={activeScale} onFieldChange={setFeaField} onScaleChange={setFeaScale} />
   ) : null;
 
   return <RendererShell shell={shell} tools={[]} viewportOverlay={overlay} />;

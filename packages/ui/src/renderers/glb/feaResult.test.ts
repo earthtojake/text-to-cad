@@ -26,7 +26,7 @@ function resultMesh({ generator = 'cadgen fea', scale = 10 } = {}) {
   });
   const root = new Group();
   root.add(mesh);
-  return { mesh, scene: { document: { scene: root } } };
+  return { mesh, root };
 }
 
 describe('feaRamp', () => {
@@ -45,32 +45,34 @@ describe('feaRamp', () => {
 
 describe('readFeaResult', () => {
   it('finds the result mesh and keeps only the fields the geometry carries', () => {
-    const { mesh, scene } = resultMesh();
-    const result = readFeaResult(scene);
+    const { mesh, root } = resultMesh();
+    const result = readFeaResult(root);
     expect(result?.mesh).toBe(mesh);
     expect(result?.deformationScale).toBe(10);
     expect(result?.fields.map((f) => f.attribute)).toEqual(['_von_mises', '_displacement']);
     expect(result?.fields[1]).toMatchObject({ units: 'mm', max: 2, attributeScale: 1000 });
+    expect(result?.ramp.length).toBe(5);  // no ramp in the file: the default
   });
 
   it('is null for a GLB that is not a result', () => {
-    expect(readFeaResult(resultMesh({ generator: 'something else' }).scene)).toBeNull();
+    expect(readFeaResult(resultMesh({ generator: 'something else' }).root)).toBeNull();
     expect(readFeaResult(null)).toBeNull();
   });
 });
 
 describe('fields on the geometry', () => {
   it('reads a scalar as is and a vector as its scaled magnitude', () => {
-    const { mesh, scene } = resultMesh();
-    const [vm, disp] = readFeaResult(scene)!.fields;
+    const { mesh, root } = resultMesh();
+    const [vm, disp] = readFeaResult(root)!.fields;
     expect(Array.from(fieldValues(mesh, vm)!)).toEqual([0, 50, 100, 25]);
     expect(Array.from(fieldValues(mesh, disp)!)).toEqual([0, 1, 2, 0.5]);
   });
 
   it('recolours the byte colour attribute over the field range', () => {
-    const { mesh, scene } = resultMesh();
-    const [vm] = readFeaResult(scene)!.fields;
+    const { mesh, root } = resultMesh();
+    const [vm] = readFeaResult(root)!.fields;
     expect(recolorByField(mesh, vm)).toBe(true);
+    expect(recolorByField(mesh, vm)).toBe(false);  // already shown
     const bytes = Array.from(mesh.geometry.getAttribute('color').array as Uint8Array);
     expect(bytes.slice(0, 4)).toEqual([13, 26, 230, 255]);   // 0 MPa: blue
     expect(bytes.slice(8, 12)).toEqual([230, 20, 13, 255]);  // 100 MPa: red
@@ -78,8 +80,10 @@ describe('fields on the geometry', () => {
   });
 
   it('re-scales the deformation from the file positions and the true displacement', () => {
-    const { mesh, scene } = resultMesh({ scale: 10 });
+    const { mesh } = resultMesh({ scale: 10 });
     const position = mesh.geometry.getAttribute('position');
+    // asking for the file's own scale first is a no-op
+    expect(applyDeformation(mesh, 10, 10)).toBe(false);
     // vertex 2 sits at (0, 1, 0) with 10x of 0.002 m already baked in; at 0x it moves back by 0.02
     expect(applyDeformation(mesh, 0, 10)).toBe(true);
     expect(position.getZ(2)).toBeCloseTo(-0.02, 6);

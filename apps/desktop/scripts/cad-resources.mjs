@@ -146,9 +146,9 @@ export function writeCadResources({ python, out, version, noWheel = false }) {
     console.info(`wheel: ${wheel}`);
   }
 
-  // The closure is computed with `pip show`, which normalises names the way
-  // freeze prints them (dashes), so the two agree on membership.
-  const closure = new Set([...dependencyClosure(python, "cadgen", env, RUNTIME_EXTRAS)].map((name) => name.replace(/_/g, "-")));
+  // The closure's names are normalised the way freeze prints them (lower case,
+  // dashes), so the two agree on membership.
+  const closure = dependencyClosure(python, "cadgen", env, RUNTIME_EXTRAS);
   const constraints = constraintsFrom(run(python, ["-m", "pip", "freeze"], { env }), closure);
   if (constraints.length === 0) {
     throw new Error("pip freeze found none of cadgen's dependencies; is cadgen installed in that interpreter?");

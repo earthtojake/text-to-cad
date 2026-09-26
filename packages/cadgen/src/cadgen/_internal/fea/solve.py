@@ -36,9 +36,11 @@ DOF_WARN = 400_000
 #: Below this many free DOF the direct solver wins on setup cost.
 DIRECT_SOLVE_BELOW = 20_000
 
-# The six local edges of a tetrahedron as corner pairs; the order is irrelevant
-# here because every mid-edge node is matched to its corner pair by position.
-_LOCAL_EDGES = ((0, 1), (1, 2), (0, 2), (0, 3), (1, 3), (2, 3))
+# netgen's 10-node tetrahedron lists the four corners, then the mid-edge nodes of
+# edges (0,1) (0,2) (0,3) (1,2) (1,3) (2,3); skfem's quadratic tet wants them on
+# edges (0,1) (1,2) (0,2) (0,3) (1,3) (2,3). One fixed permutation maps the
+# former to the latter -- the mesher does not vary its order.
+NETGEN_TET10_TO_SKFEM = (0, 1, 2, 3, 4, 7, 5, 6, 8, 9)
 
 
 @dataclass
@@ -55,12 +57,8 @@ class SolveOutcome:
     vertices: int
     #: (T, 4) corner connectivity in vertex ids.
     tets: "np.ndarray"
-    #: (B, 3) boundary triangles in vertex ids, wound outward.
-    boundary_triangles: "np.ndarray"
-    #: (B, 6) the same triangles with their mid-edge nodes, in scalar DOF ids.
+    #: (B, 6) the boundary triangles with their mid-edge nodes, in scalar DOF ids.
     boundary_quadratic: "np.ndarray"
-    #: (B,) the face ordinal each boundary triangle lies on.
-    boundary_ordinal: "np.ndarray"
     #: Per fixture (by index): reaction force vector in N.
     reactions: list[tuple[float, float, float]]
     #: Total applied force in N, summed over the loads.
@@ -71,68 +69,46 @@ class SolveOutcome:
     solver: str = ""
 
 
-def _vertex_mesh(volume: "VolumeMesh"):
-    """scikit-fem's quadratic tet mesh from netgen's arrays, plus the maps between them."""
+def _element_mesh(volume: "VolumeMesh"):
+    """scikit-fem's quadratic tet mesh from netgen's arrays, and node -> scalar DOF.
+
+    skfem renumbers on construction (corner vertices first, then edge nodes);
+    the map back to the mesher's node ids falls out of its element DOF table.
+    """
     import numpy as np
-    from skfem import MeshTet1, MeshTet2
+    from skfem import MeshTet2
 
-    corners = volume.tets[:, :4]
-    used, inverse = np.unique(corners, return_inverse=True)
-    vertices = len(used)
-    node_to_vertex = np.full(len(volume.nodes), -1, dtype=np.int64)
-    node_to_vertex[used] = np.arange(vertices)
-    t = np.ascontiguousarray(inverse.reshape(corners.shape).T)
-    p = np.ascontiguousarray(volume.nodes[used].T)
-    linear = MeshTet1(p, t)
-
-    # Which mid-edge node sits between which corner pair, by position: the one
-    # nearest the pair's midpoint. A curved edge moves it off the midpoint by
-    # far less than an edge length, so the choice is unambiguous.
-    pairs = np.array(_LOCAL_EDGES)
-    pc = volume.nodes[corners]                              # (E, 4, 3)
-    mids = volume.nodes[volume.tets[:, 4:]]                 # (E, 6, 3)
-    midpoints = 0.5 * (pc[:, pairs[:, 0]] + pc[:, pairs[:, 1]])
-    distance = np.linalg.norm(midpoints[:, :, None, :] - mids[:, None, :, :], axis=-1)
-    pick = distance.argmin(axis=2)                          # (E, 6): mid slot per local edge
-    if not np.array_equal(np.sort(pick, axis=1), np.tile(np.arange(6), (len(pick), 1))):
-        raise RuntimeError("could not pair the mesher's mid-edge nodes with element edges")
-    mid_node = np.take_along_axis(volume.tets[:, 4:], pick, axis=1)  # (E, 6) node ids
-    a = node_to_vertex[corners[:, pairs[:, 0]]]
-    b = node_to_vertex[corners[:, pairs[:, 1]]]
-    keys = np.minimum(a, b) * vertices + np.maximum(a, b)
-    key_flat, first = np.unique(keys.ravel(), return_index=True)
-    mid_flat = mid_node.ravel()[first]
-
-    edges = linear.edges.astype(np.int64)                    # (2, ne) vertex ids
-    edge_keys = np.minimum(edges[0], edges[1]) * vertices + np.maximum(edges[0], edges[1])
-    where = np.searchsorted(key_flat, edge_keys)
-    if not np.array_equal(key_flat[where], edge_keys):
-        raise RuntimeError("the mesher's edges and the element edges disagree")
-    edge_mid = mid_flat[where]
-    doflocs = np.hstack([p, volume.nodes[edge_mid].T])
-    quadratic = MeshTet2(doflocs, t)
-    # Every mesher node -> its scalar DOF: corners are vertices, mid-edge nodes
-    # follow in skfem's edge order.
-    node_to_dof = node_to_vertex.copy()
-    node_to_dof[edge_mid] = vertices + np.arange(len(edge_mid))
-    return quadratic, node_to_dof, vertices
+    connectivity = np.ascontiguousarray(volume.tets[:, NETGEN_TET10_TO_SKFEM].T)
+    mesh = MeshTet2(np.ascontiguousarray(volume.nodes.T), connectivity)
+    node_to_dof = np.full(len(volume.nodes), -1, dtype=np.int64)
+    node_to_dof[connectivity] = mesh.dofs.element_dofs
+    if (node_to_dof < 0).any():
+        raise RuntimeError("the mesher produced nodes that no element uses")
+    return mesh, node_to_dof
 
 
-def _facet_index(mesh, triangles: "np.ndarray", vertices: int) -> "np.ndarray":
-    """skfem facet ids for boundary triangles given as sorted-able vertex triples."""
-    import numpy as np
+class _FacetLookup:
+    """skfem facet ids for boundary triangles given as vertex triples; the
+    facet table is keyed once and reused for every fixture and load."""
 
-    facets = np.sort(mesh.facets.astype(np.int64), axis=0)
-    keys = (facets[0] * vertices + facets[1]) * vertices + facets[2]
-    order = np.argsort(keys)
-    sorted_keys = keys[order]
-    tri = np.sort(triangles.astype(np.int64), axis=1)
-    wanted = (tri[:, 0] * vertices + tri[:, 1]) * vertices + tri[:, 2]
-    where = np.searchsorted(sorted_keys, wanted)
-    where = np.clip(where, 0, len(sorted_keys) - 1)
-    if not np.array_equal(sorted_keys[where], wanted):
-        raise RuntimeError("a boundary triangle of the mesher is not a facet of the element mesh")
-    return order[where]
+    def __init__(self, mesh, vertices: int):
+        import numpy as np
+
+        self._vertices = vertices
+        facets = np.sort(mesh.facets.astype(np.int64), axis=0)
+        keys = (facets[0] * vertices + facets[1]) * vertices + facets[2]
+        self._order = np.argsort(keys)
+        self._keys = keys[self._order]
+
+    def __call__(self, triangles: "np.ndarray") -> "np.ndarray":
+        import numpy as np
+
+        tri = np.sort(triangles.astype(np.int64), axis=1)
+        wanted = (tri[:, 0] * self._vertices + tri[:, 1]) * self._vertices + tri[:, 2]
+        where = np.clip(np.searchsorted(self._keys, wanted), 0, len(self._keys) - 1)
+        if not np.array_equal(self._keys[where], wanted):
+            raise RuntimeError("a boundary triangle of the mesher is not a facet of the element mesh")
+        return self._order[where]
 
 
 def _rigid_body_modes(locations: "np.ndarray", component: "np.ndarray") -> "np.ndarray":
@@ -156,7 +132,6 @@ def _rigid_body_modes(locations: "np.ndarray", component: "np.ndarray") -> "np.n
 
 def _solve_system(K, f, free: "np.ndarray", locations: "np.ndarray", component: "np.ndarray", warnings: list[str]):
     """Displacement on the free DOF: direct for small systems, AMG+CG otherwise."""
-    import numpy as np
     import scipy.sparse.linalg as spla
 
     Kff = K[free][:, free].tocsr()
@@ -196,10 +171,9 @@ def solve_linear_static(
     timings: dict[str, float] = {}
     warnings: list[str] = []
     started = time.perf_counter()
-    mesh, node_to_dof, vertices = _vertex_mesh(volume)
-    node_to_vertex = np.where(node_to_dof < vertices, node_to_dof, -1)
-    element = ElementVector(ElementTetP2())
-    basis = Basis(mesh, element)
+    mesh, node_to_dof = _element_mesh(volume)
+    vertices = int(mesh.t.max()) + 1
+    basis = Basis(mesh, ElementVector(ElementTetP2()))
     scalar = basis.with_element(ElementTetP2())
     timings["mesh_to_fem_s"] = time.perf_counter() - started
     if log:
@@ -219,26 +193,23 @@ def solve_linear_static(
     scalar_count = vertices + mesh.edges.shape[1]
     locations = np.zeros((basis.N, 3))
     component = np.zeros(basis.N, dtype=np.int64)
-    scalar_index = np.zeros(basis.N, dtype=np.int64)
     for c in range(3):
         for dofs, where in ((basis.nodal_dofs[c], scalar.nodal_dofs[0]), (basis.edge_dofs[c], scalar.edge_dofs[0])):
             locations[dofs] = mesh.doflocs[:, where].T
             component[dofs] = c
-            scalar_index[dofs] = where
 
-    boundary_vertices = node_to_vertex[volume.boundary[:, :3]]
-    if (boundary_vertices < 0).any():
-        raise RuntimeError("a boundary triangle references a node that is not a corner vertex")
     boundary_quadratic = node_to_dof[volume.boundary]
-    if (boundary_quadratic < 0).any():
-        raise RuntimeError("a boundary triangle references a node the element mesh does not know")
+    boundary_vertices = boundary_quadratic[:, :3]
+    if (boundary_vertices >= vertices).any():
+        raise RuntimeError("a boundary triangle's corner is not a corner vertex of the element mesh")
+    facet_lookup = _FacetLookup(mesh, vertices)
 
     def facets_of(refs) -> "np.ndarray":
         ordinals = [ordinal_of[ref] for ref in refs]
         mask = np.isin(volume.boundary_ordinal, ordinals)
         if not mask.any():
             raise RuntimeError(f"no boundary triangles lie on {', '.join(refs)}")
-        return _facet_index(mesh, boundary_vertices[mask], vertices)
+        return facet_lookup(boundary_vertices[mask])
 
     # Stiffness
     started = time.perf_counter()
@@ -248,30 +219,24 @@ def solve_linear_static(
 
     # Loads
     f = np.zeros(basis.N)
-    applied = np.zeros(3)
     for load in loads:
         facet_basis = basis.boundary(facets_of(load.faces))
-        area = float(facet_basis.dx.sum())
         if load.type == "force":
-            traction = np.asarray(load.vector, dtype=float) / area
-            applied += np.asarray(load.vector, dtype=float)
+            traction = np.asarray(load.vector, dtype=float) / float(facet_basis.dx.sum())
 
             @LinearForm
             def form(v, w, traction=traction):
-                return traction[0] * v.value[0] + traction[1] * v.value[1] + traction[2] * v.value[2]
+                return traction[0] * v[0] + traction[1] * v[1] + traction[2] * v[2]
 
         else:
             pressure = float(load.pressure)
 
             @LinearForm
             def form(v, w, pressure=pressure):
-                n = getattr(w.n, "value", w.n)
-                return -pressure * (n[0] * v.value[0] + n[1] * v.value[1] + n[2] * v.value[2])
+                return -pressure * (w.n[0] * v[0] + w.n[1] * v[1] + w.n[2] * v[2])
 
-        contribution = asm(form, facet_basis)
-        f += contribution
-        if load.type == "pressure":
-            applied += np.array([contribution[basis.nodal_dofs[c]].sum() + contribution[basis.edge_dofs[c]].sum() for c in range(3)])
+        f += asm(form, facet_basis)
+    applied = tuple(float(f[component == c].sum()) for c in range(3))
 
     # Fixtures
     fixture_dofs = [basis.get_dofs(facets_of(fixture.faces)).all() for fixture in fixtures]
@@ -287,19 +252,19 @@ def solve_linear_static(
 
     # Reactions: K u - f on the fixed DOF, summed per fixture and component.
     residual = K @ u - f
-    reactions = []
-    for dofs in fixture_dofs:
-        reactions.append(tuple(float(residual[dofs][component[dofs] == c].sum()) for c in range(3)))
+    reactions = [
+        tuple(float(residual[dofs][component[dofs] == c].sum()) for c in range(3))
+        for dofs in fixture_dofs
+    ]
 
     # Stress recovery
     started = time.perf_counter()
     grad = basis.interpolate(u).grad                          # (3, 3, elements, quadrature)
     strain = 0.5 * (grad + np.transpose(grad, (1, 0, 2, 3)))
     trace = strain[0, 0] + strain[1, 1] + strain[2, 2]
-    stress = 2.0 * mu * strain
+    s = 2.0 * mu * strain
     for i in range(3):
-        stress[i, i] += lam * trace
-    s = stress
+        s[i, i] += lam * trace
     von_mises_q = np.sqrt(
         0.5 * ((s[0, 0] - s[1, 1]) ** 2 + (s[1, 1] - s[2, 2]) ** 2 + (s[2, 2] - s[0, 0]) ** 2)
         + 3.0 * (s[0, 1] ** 2 + s[1, 2] ** 2 + s[0, 2] ** 2)
@@ -318,11 +283,9 @@ def solve_linear_static(
         von_mises_gauss_max=float(von_mises_q.max()),
         vertices=vertices,
         tets=np.ascontiguousarray(mesh.t.T),
-        boundary_triangles=boundary_vertices,
         boundary_quadratic=boundary_quadratic,
-        boundary_ordinal=volume.boundary_ordinal,
         reactions=reactions,
-        applied=tuple(float(x) for x in applied),
+        applied=applied,
         dofs=int(basis.N),
         timings=timings,
         warnings=warnings,
