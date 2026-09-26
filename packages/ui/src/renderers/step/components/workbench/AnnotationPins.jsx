@@ -1,123 +1,111 @@
-import { useEffect, useRef } from "react";
+import { memo, useCallback, useEffect, useRef } from "react";
 import { X } from "lucide-react";
+import { projectWorldPointToClient } from "@hardcore/core/lib/viewer/measureRuler.js";
 import { Button } from "@hardcore/ui/primitives/button";
+import { Popover, PopoverContent, PopoverTrigger } from "@hardcore/ui/primitives/popover";
 import { cn } from "@hardcore/ui/utils";
 import { measureModelOffsetFromRuntime } from "../../scene/useStepPicking.js";
 import { AnnotationBody } from "./StepAnnotations.jsx";
-import { placeAnnotationCard } from "../../workbench/stepAnnotations.js";
 
-// Annotations on the model itself: a numbered dot where each one was made, and its card when
-// the dot is pressed. The dots are HTML over the canvas, moved every frame to where their
-// anchors project (as the Position tool's knobs are), so they follow the camera without a
-// React render per frame.
+// Annotations on the model itself: a numbered dot where each one was made, and its card when the
+// dot is pressed. The dots are HTML over the canvas, moved by a frame loop to where their anchors
+// project (as the Position tool's knobs are), so they follow the camera without a React render per
+// frame. A card is a popover anchored to its dot: it stays inside the viewport and follows the dot.
 
-const CARD_WIDTH_PX = 288;
-const EDGE_MARGIN_PX = 12;
-/**
- * Where an anchor is on screen now, or null when it is behind the camera. `facing` is false
- * when the anchor's face points away from the camera: its dot is on the far side.
- */
-function projectAnnotationAnchor(runtime, anchor, width, height) {
-  const { THREE, camera } = runtime || {};
-  if (!THREE || !camera || !anchor?.point) return null;
-  const [dx, dy, dz] = measureModelOffsetFromRuntime(runtime);
-  const world = new THREE.Vector3(anchor.point[0] + dx, anchor.point[1] + dy, anchor.point[2] + dz);
-  camera.updateMatrixWorld();
-  if (world.clone().applyMatrix4(camera.matrixWorldInverse).z >= -camera.near) return null;
-  let facing = true;
-  if (anchor.normal) {
-    const toCamera = camera.position.clone().sub(world);
-    facing = toCamera.dot(new THREE.Vector3(...anchor.normal)) >= 0;
-  }
-  const ndc = world.project(camera);
-  return { x: ((ndc.x + 1) * width) / 2, y: ((1 - ndc.y) * height) / 2, facing };
+/** Where an anchor is on screen now, or null when it is behind the camera or off the view. */
+function projectAnchor(anchor, { camera, offset, width, height }) {
+  const world = anchor.point.map((value, axis) => value + offset[axis]);
+  const at = projectWorldPointToClient(world, camera, { left: 0, top: 0, width, height });
+  if (!at || at.x < 0 || at.y < 0 || at.x > width || at.y > height) return null;
+  // A dot on a face turned away from the camera is on the far side of the model.
+  const normal = anchor.normal;
+  const facing = !normal || normal.reduce((sum, value, axis) => sum + value * (camera.position.getComponent(axis) - world[axis]), 0) >= 0;
+  return { x: Math.round(at.x), y: Math.round(at.y), facing };
 }
 
-export default function AnnotationPins({ viewport, annotations, openId, onOpenChange, ...body }) {
-  const pinRefs = useRef(new Map());
-  // Elements the frame loop has placed. A ref callback runs again on every render; only an element
-  // it has never placed starts hidden, so a re-render never blinks a dot out for a frame.
-  const placedRef = useRef(new WeakSet());
+const Pin = memo(function Pin({ annotation, index, open, register, host, onOpenChange, onSelect, onEdit, onRemove }) {
+  const ref = useCallback(element => register(annotation.id, element), [register, annotation.id]);
+  return (
+    <div ref={ref} className="group/pin absolute left-0 top-0" data-annotation-pin={annotation.id} data-open={open}
+      // A press on a dot or its card is not a press on the model: no pick, no orbit.
+      onPointerDown={event => event.stopPropagation()} onDoubleClick={event => event.stopPropagation()}
+      onContextMenu={event => event.stopPropagation()}>
+      <Popover open={open} onOpenChange={next => onOpenChange(next ? annotation.id : null)}>
+        <PopoverTrigger asChild>
+          <button type="button" aria-label={`Annotation ${index + 1}`}
+            className={cn(
+              "pointer-events-auto absolute flex size-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-background bg-blue-500 text-[11px] font-semibold text-white tabular-nums shadow-md shadow-black/30 transition-[transform,opacity]",
+              "hover:scale-110 group-data-[facing=false]/pin:opacity-45",
+              open && "scale-110 ring-2 ring-blue-500/40 ring-offset-1 ring-offset-background"
+            )}>
+            {index + 1}
+          </button>
+        </PopoverTrigger>
+        <PopoverContent container={host} collisionBoundary={host} collisionPadding={12} updatePositionStrategy="always"
+          side="right" sideOffset={12} aria-label={`Annotation ${index + 1} details`}
+          className="w-72 p-2" onOpenAutoFocus={event => event.preventDefault()}
+          // Escape in the note's edit box cancels the edit; only outside it does it close the card.
+          onEscapeKeyDown={event => { if (event.target?.tagName === "TEXTAREA") event.preventDefault(); }}>
+          <AnnotationBody annotation={annotation} index={index}
+            onSelect={() => onSelect(annotation)} onEdit={text => onEdit(annotation.id, text)} onRemove={() => onRemove(annotation.id)}
+            actions={<Button type="button" variant="ghost" size="icon-xs" className="size-6 text-muted-foreground"
+              aria-label="Close" onClick={() => onOpenChange(null)}><X className="size-3.5" /></Button>} />
+        </PopoverContent>
+      </Popover>
+    </div>
+  );
+});
+
+function AnnotationPins({ viewport, annotations, openId, onOpenChange, onSelect, onEdit, onRemove }) {
+  const { runtimeRef, hostRef } = viewport;
   const annotationsRef = useRef(annotations);
   annotationsRef.current = annotations;
-  const { runtimeRef, hostRef } = viewport;
+  const pins = useRef(new Map());
+  // A new dot starts hidden; the frame loop shows it where its anchor projects.
+  const register = useCallback((id, element) => {
+    if (!element) { pins.current.delete(id); return; }
+    element.hidden = true;
+    pins.current.set(id, { element, placed: "" });
+  }, []);
 
+  const shown = annotations.length > 0;
   useEffect(() => {
+    if (!shown) return undefined;
     let frame = 0;
     const place = () => {
       frame = window.requestAnimationFrame(place);
       const runtime = runtimeRef.current;
       const host = hostRef.current;
-      if (!runtime || !host) return;
-      const width = host.clientWidth;
-      const height = host.clientHeight;
+      if (!runtime?.camera || !host) return;
+      runtime.camera.updateMatrixWorld();
+      const view = { camera: runtime.camera, offset: measureModelOffsetFromRuntime(runtime), width: host.clientWidth, height: host.clientHeight };
       for (const annotation of annotationsRef.current) {
-        const element = pinRefs.current.get(annotation.id);
-        if (!element) continue;
-        const at = projectAnnotationAnchor(runtime, annotation.anchor, width, height);
-        const onScreen = at && at.x >= 0 && at.y >= 0 && at.x <= width && at.y <= height;
-        element.hidden = !onScreen;
-        placedRef.current.add(element);
-        if (!onScreen) continue;
-        element.style.transform = `translate(${Math.round(at.x)}px, ${Math.round(at.y)}px)`;
-        element.dataset.facing = String(at.facing);
-        const card = element.querySelector("[data-annotation-card]");
-        if (card) {
-          card.style.width = `${Math.min(CARD_WIDTH_PX, width - 2 * EDGE_MARGIN_PX)}px`;
-          const { dx, dy } = placeAnnotationCard({ x: at.x, y: at.y, width, height, cardWidth: card.offsetWidth, cardHeight: card.offsetHeight });
-          card.style.transform = `translate(${dx}px, ${dy}px)`;
-          card.style.visibility = "visible";
-        }
+        const pin = pins.current.get(annotation.id);
+        if (!pin) continue;
+        const at = projectAnchor(annotation.anchor, view);
+        // The page is written only when a dot moves, turns away or leaves the view.
+        const placed = at ? `${at.x},${at.y},${at.facing}` : "off";
+        if (pin.placed === placed) continue;
+        pin.placed = placed;
+        pin.element.hidden = !at;
+        if (!at) continue;
+        pin.element.style.transform = `translate(${at.x}px, ${at.y}px)`;
+        pin.element.dataset.facing = String(at.facing);
       }
     };
     place();
     return () => window.cancelAnimationFrame(frame);
-  }, [runtimeRef, hostRef]);
+  }, [shown, runtimeRef, hostRef]);
 
-  const placed = annotations.filter(annotation => annotation.anchor);
-  if (!placed.length) return null;
+  if (!shown) return null;
   return (
     <div className="pointer-events-none absolute inset-0 z-20 overflow-hidden" data-annotation-pins="">
-      {annotations.map((annotation, index) => {
-        if (!annotation.anchor) return null;
-        const open = openId === annotation.id;
-        return (
-          <div key={annotation.id} ref={element => {
-            // Hidden until the frame loop has placed it; after that the loop alone owns it.
-            if (!element) { pinRefs.current.delete(annotation.id); return; }
-            if (!placedRef.current.has(element)) element.hidden = true;
-            pinRefs.current.set(annotation.id, element);
-          }}
-            className="group/pin absolute left-0 top-0" data-annotation-pin={annotation.id} data-open={open}
-            // A press on a dot or its card is not a press on the model: no pick, no orbit.
-            onPointerDown={event => event.stopPropagation()} onDoubleClick={event => event.stopPropagation()}
-            onContextMenu={event => event.stopPropagation()}>
-            <button type="button" aria-label={`Annotation ${index + 1}`} aria-expanded={open}
-              onClick={() => onOpenChange(open ? null : annotation.id)}
-              className={cn(
-                "pointer-events-auto absolute flex size-6 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-background text-[11px] font-semibold tabular-nums shadow-md shadow-black/30 transition-[transform,opacity]",
-                "hover:scale-110 group-data-[facing=false]/pin:opacity-45",
-                "bg-blue-500 text-white",
-                open && "scale-110 ring-2 ring-blue-500/40 ring-offset-1 ring-offset-background"
-              )}>
-              {index + 1}
-            </button>
-            {open ? (
-              <div role="dialog" aria-label={`Annotation ${index + 1} details`} data-annotation-card=""
-                // Placed by the frame loop (placeAnnotationCard); hidden until it has been.
-                style={{ width: CARD_WIDTH_PX, visibility: "hidden" }}
-                onKeyDown={event => { if (event.key === "Escape") { event.stopPropagation(); onOpenChange(null); } }}
-                className="pointer-events-auto absolute top-0 left-0 rounded-lg border bg-popover p-2 text-popover-foreground shadow-lg">
-                <AnnotationBody annotation={annotation} index={index} {...body}
-                  onSelect={() => body.onSelect(annotation)} onEdit={text => body.onEdit(annotation.id, text)}
-                  onRemove={() => body.onRemove(annotation.id)}
-                  actions={<Button type="button" variant="ghost" size="icon-xs" className="size-6 text-muted-foreground"
-                    aria-label="Close" onClick={() => onOpenChange(null)}><X className="size-3.5" /></Button>} />
-              </div>
-            ) : null}
-          </div>
-        );
-      })}
+      {annotations.map((annotation, index) => (
+        <Pin key={annotation.id} annotation={annotation} index={index} open={openId === annotation.id} register={register}
+          host={hostRef.current} onOpenChange={onOpenChange} onSelect={onSelect} onEdit={onEdit} onRemove={onRemove} />
+      ))}
     </div>
   );
 }
+
+export default memo(AnnotationPins);

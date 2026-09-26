@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { annotationPart, createPromptContext, createPromptDeliveryLedger, referencePart, textPart, validatePromptContext, formatPromptContextText, formatPromptReference } from './index.js';
+import { annotationPart, formatPromptAnnotation, createPromptContext, createPromptDeliveryLedger, referencePart, textPart, validatePromptContext, formatPromptContextText, formatPromptReference } from './index.js';
 
 const reference = { resource: { kind: 'workspace-file', workspaceId: 'root', path: 'STEP/my part.step', revision: 'v1' }, target: { kind: 'cad-selector', selectors: ['o1.2.f45'] } };
 test('one context retains image/reference relationships and formats canonical references', () => {
@@ -53,6 +53,7 @@ test('an annotation carries the geometry it is about and the note, and reads as 
   const context = createPromptContext([annotationPart([edge], 'make a hole in it', 'a1')]);
   assert.ok(Object.isFrozen(context.parts[0].references[0].target.selectors));
   assert.equal(formatPromptContextText(context), 'parts/bracket.step#o1.1.e3: make a hole in it');
+  assert.equal(formatPromptAnnotation(context.parts[0], { labels: true }), 'parts/bracket.step#o1.1.e3 (Edge 3): make a hole in it');
   assert.throws(() => createPromptContext([{ id: 'a', kind: 'annotation', references: [], text: 'x' }]), /at least one reference/);
   assert.throws(() => createPromptContext([{ id: 'a', kind: 'annotation', references: [edge] }]), /its note/);
 });

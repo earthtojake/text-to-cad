@@ -1,12 +1,17 @@
 import { annotationPart, createPromptContext, referencePart, textPart } from '@hardcore/core/prompt';
 
+/** A selector in a CAD file as a prompt reference; no selector is the whole file. */
+function cadPromptReference(resource, { selector, label }) {
+  return {
+    resource: { ...resource },
+    target: selector ? { kind: 'cad-selector', selectors: selector.split(',') } : { kind: 'whole-resource' },
+    ...(label ? { label } : {}),
+  };
+}
+
 /** Assemble a snapshot once, before asynchronous image encoding or host routing. */
 export function createCadPromptContext({ resource, references = [], text = '', capture, operationId }) {
-  const parts = references.map((reference, index) => referencePart({
-    resource: { ...resource },
-    target: reference.selector ? { kind: 'cad-selector', selectors: reference.selector.split(',') } : { kind: 'whole-resource' },
-    ...(reference.label ? { label: reference.label } : {}),
-  }, `reference-${index}`));
+  const parts = references.map((reference, index) => referencePart(cadPromptReference(resource, reference), `reference-${index}`));
   if (text) parts.push(textPart(text));
   if (capture) {
     if (!parts.some(part => part.kind === 'reference')) parts.unshift(referencePart({ resource: { ...resource }, target: { kind: 'whole-resource' } }, 'source'));
@@ -21,12 +26,6 @@ export function createCadPromptContext({ resource, references = [], text = '', c
  */
 export function createAnnotationsPromptContext({ resource, annotations, operationId }) {
   return createPromptContext(annotations.map(annotation => annotationPart(
-    annotation.references.map(reference => ({
-      resource: { ...resource },
-      target: reference.selector ? { kind: 'cad-selector', selectors: reference.selector.split(',') } : { kind: 'whole-resource' },
-      ...(reference.label ? { label: reference.label } : {}),
-    })),
-    annotation.text,
-    annotation.id,
+    annotation.references.map(reference => cadPromptReference(resource, reference)), annotation.text, annotation.id,
   )), operationId);
 }

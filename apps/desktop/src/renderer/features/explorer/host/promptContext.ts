@@ -5,11 +5,10 @@ import { bindDraftDestination, DraftDestinationGone, draftDestinationIsCurrent, 
 import type { DraftDestination } from "@renderer/state/cad-draft";
 import { useComposer } from "@renderer/state/composer";
 import type { DraftAnnotation, DraftPart } from "@renderer/state/composer";
-
-const NO_ANNOTATIONS: readonly DraftAnnotation[] = [];
 import { useSessions } from "@renderer/state/sessions";
 
 const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
+const NO_ANNOTATIONS: readonly DraftAnnotation[] = [];
 const message = (error: unknown) => error instanceof Error ? error.message : String(error);
 const capabilities = Object.freeze({ attachments: "images-and-text" as const, maxParts: 128, maxAttachmentBytes: MAX_ATTACHMENT_BYTES, maxTotalAttachmentBytes: 40 * 1024 * 1024, mixedTextAndImage: "atomic" as const });
 function consumeAttachmentRejections(context: PromptContext) {
@@ -52,7 +51,8 @@ export function createDesktopPromptContext(projectId: string, root: string | nul
     if (snapshot.available !== available || heldFrom !== annotations) {
       heldFrom = annotations;
       const held = annotations.map(annotation => annotation.id);
-      snapshot = available ? { kind: "composer", available: true, capabilities, held } : { kind: "composer", available: false, reason: "This tab's session is no longer active.", capabilities, held };
+      snapshot = { kind: "composer", capabilities, held,
+        ...(available ? { available: true } : { available: false, reason: "This tab's session is no longer active." }) };
     }
     return snapshot;
   };
@@ -72,8 +72,7 @@ export function createDesktopPromptContext(projectId: string, root: string | nul
         for (const reference of part.references) {
           if (reference.resource.kind === "workspace-file" && reference.resource.workspaceId !== workspaceId) throw new Error("This annotation belongs to another workspace.");
         }
-        parts.push({ id: part.id, kind: "annotation", text: part.text,
-          references: part.references.map(reference => ({ text: formatPromptReference(reference), ...(reference.label ? { label: reference.label } : {}) })) });
+        parts.push({ id: part.id, kind: "annotation", text: part.text, references: [...part.references] });
         continue;
       }
       const resource = part.reference.resource;

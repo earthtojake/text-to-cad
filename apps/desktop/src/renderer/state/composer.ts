@@ -41,14 +41,12 @@ export type DraftPart =
   | { id: string; kind: "text"; text: string }
   | { id: string; kind: "reference"; text: string; label?: string; reference?: PromptReference }
   | { id: string; kind: "attachment"; file: File; about?: readonly string[] }
-  | { id: string; kind: "annotation"; references: DraftAnnotationReference[]; text: string };
-/** A reference an annotation is about: its prompt token (`file#selector`) and the chip's label. */
-export type DraftAnnotationReference = { text: string; label?: string };
+  | { id: string; kind: "annotation"; references: PromptReference[]; text: string };
 /**
- * A note the person pinned to geometry in the viewer and added to this draft. Annotations ride
- * beside the text as one chip until the prompt is sent, then go out as a numbered list.
+ * A note the person pinned to geometry in the viewer, in this draft. Annotations ride beside the
+ * text as one chip until the prompt is sent, then go out as a numbered list after it.
  */
-export type DraftAnnotation = { id: string; references: DraftAnnotationReference[]; text: string };
+export type DraftAnnotation = { id: string; references: PromptReference[]; text: string };
 export type AcceptedContext = {
   key: string; partIds: string[];
   /** Snapshot identities and ordering remain available without retaining binary content. */
@@ -115,13 +113,12 @@ export const useComposer = create<ComposerState>((set, get) => ({
       const labels = { ...state.referenceLabels[key] };
       const files = [...(state.pendingFiles[key] ?? [])];
       // An annotation added again (edited since) replaces its earlier copy rather than repeating it.
-      const annotations = [...(state.annotations[key] ?? [])];
+      let annotations = state.annotations[key];
       for (const part of parts) {
         if (part.kind === "attachment") { files.push(part.file); continue; }
         if (part.kind === "annotation") {
-          const annotation = { id: part.id, references: part.references.map(reference => ({ ...reference })), text: part.text };
-          const index = annotations.findIndex(existing => existing.id === part.id);
-          if (index >= 0) annotations[index] = annotation; else annotations.push(annotation);
+          const annotation = { id: part.id, references: structuredClone(part.references), text: part.text };
+          annotations = [...(annotations ?? []).filter(existing => existing.id !== part.id), annotation];
           continue;
         }
         if (part.kind === "reference") {
@@ -140,7 +137,7 @@ export const useComposer = create<ComposerState>((set, get) => ({
         drafts: { ...state.drafts, [key]: text },
         referenceLabels: { ...state.referenceLabels, [key]: labels },
         pendingFiles: { ...state.pendingFiles, [key]: files },
-        annotations: { ...state.annotations, [key]: annotations },
+        ...(annotations !== state.annotations[key] ? { annotations: { ...state.annotations, [key]: annotations ?? [] } } : {}),
         draftRoots: { ...state.draftRoots, [key]: options.root },
         // Receipts contain no attachment bytes and retain only recent operations.
         acceptedContexts: Object.fromEntries([...Object.entries(state.acceptedContexts), [operationId, accepted]].slice(-256)),
@@ -170,10 +167,10 @@ export const useComposer = create<ComposerState>((set, get) => ({
   referenceLabels: {},
   annotations: {},
   removeAnnotations: (key, ids) => set(state => {
-    if (ids) {
-      const kept = (state.annotations[key] ?? []).filter(annotation => !ids.includes(annotation.id));
-      return { annotations: { ...state.annotations, [key]: kept } };
-    }
+    const current = state.annotations[key];
+    const kept = ids ? current?.filter(annotation => !ids.includes(annotation.id)) : undefined;
+    if (!current || kept?.length === current.length) return state;
+    if (kept) return { annotations: { ...state.annotations, [key]: kept } };
     const { [key]: _removed, ...rest } = state.annotations;
     return { annotations: rest };
   }),

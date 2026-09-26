@@ -38,7 +38,8 @@ function workspace(id: string) {
   };
   const request = (next: CadCommands) => { snapshot = next; for (const listener of listeners) listener(); };
   const capture = () => request({ captureRequest: { key: Date.now() } });
-  const selectReference = (selector: string, annotation?: string) => request({ selectReference: { selector, key: Date.now(), ...(annotation ? { annotation } : {}) } });
+  const selectReference = (selector: string) => request({ selectReference: { selector, key: Date.now() } });
+  const openAnnotation = (id: string) => request({ openAnnotation: { id, key: Date.now() } });
   const client = createCadClient({ origin: `${location.origin}/${id}`, workspaceId: id, pollIntervalMs: 0 });
   const source: FileSource = {
     id, rootName: id,
@@ -69,7 +70,7 @@ function workspace(id: string) {
   const services = { client, preferences, commands, live };
   // `harness` is test scaffolding for the shell's own tools; it ships nowhere.
   const renderers = [createStepRenderer(services), createDxfRenderer(services), createGlbRenderer(services), createMeshRenderer(services), createRobotRenderer(services), createHarnessRenderer(services)];
-  return { client, source, host, renderers, commands, capture, selectReference, setPromptDestination, get controller() { return controller; } };
+  return { client, source, host, renderers, commands, capture, selectReference, openAnnotation, setPromptDestination, get controller() { return controller; } };
 }
 const a = workspace('one'), b = workspace('two');
 // Directory navigation hydrates before a renderer mounts. Large workspaces

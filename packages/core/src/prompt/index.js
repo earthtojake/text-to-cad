@@ -96,9 +96,15 @@ export function formatPromptReference(reference, { resolvePath } = {}) {
   }
   return quoted;
 }
-/** An annotation as one line: the references it is about, then the note ("a.step#o1.1.e3: make a hole"). */
-export function formatPromptAnnotation(part, options = {}) {
-  const references = part.references.map(reference => formatPromptReference(reference, options)).join(' ');
+/**
+ * An annotation as one line: the references it is about, then the note
+ * ("a.step#o1.1.e3: make a hole"); `labels` adds each reference's label ("a.step#o1.1.e3 (Edge 3)").
+ */
+export function formatPromptAnnotation(part, { labels = false, ...options } = {}) {
+  const references = part.references.map(reference => {
+    const token = formatPromptReference(reference, options);
+    return labels && reference.label ? `${token} (${reference.label})` : token;
+  }).join(' ');
   return part.text ? `${references}: ${part.text}` : references;
 }
 export function formatPromptContextText(context, options = {}) {

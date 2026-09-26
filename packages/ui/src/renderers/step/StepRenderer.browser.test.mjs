@@ -1597,7 +1597,7 @@ test('annotations live in the chat box: making one puts it there, and its dot is
 
   // The chat box names an annotation (its chip was pressed there): its geometry is selected and its card opens.
   await page.evaluate(() => window.cadHarness.a.controller.select({selectors:['o1.1']}));
-  await page.evaluate(id => window.cadHarness.selectReference('o1.2', id), first.id);
+  await page.evaluate(id => window.cadHarness.a.openAnnotation(id), first.id);
   await card.waitFor();
   await page.waitForFunction(() => window.cadHarness.a.controller.readState().selectedPartIds.join() === 'o1.2');
 

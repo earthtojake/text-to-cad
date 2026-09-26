@@ -5,7 +5,7 @@ import { useExplorer } from "@renderer/state/explorer";
 beforeEach(() => {
   vi.useFakeTimers();
   useExplorer.setState({ sessionId: "session", projectId: "project", root: null, tabs: [], activeId: null,
-    cadSelection: null, cadCapture: null, ready: true });
+    cadSelection: null, cadCapture: null, cadAnnotation: null, ready: true });
 });
 afterEach(() => { vi.runOnlyPendingTimers(); vi.useRealTimers(); });
 
@@ -17,7 +17,7 @@ it("captures the request document and drops it when that tab changes path or roo
   expect(useExplorer.getState().cadSelection).toMatchObject({ projectId: "project", path: "first.step", root: null });
   expect(source.getSnapshot().captureRequest).not.toBeNull();
   useExplorer.getState().update(tab.id, { path: "replacement.step" });
-  expect(source.getSnapshot()).toEqual({ selectReference: null, captureRequest: null });
+  expect(source.getSnapshot()).toEqual({ selectReference: null, captureRequest: null, openAnnotation: null });
   expect(useExplorer.getState().cadSelection).toBeNull();
   useExplorer.getState().captureCad(tab.id);
   useExplorer.getState().update(tab.id, { root: "/other" });
@@ -62,4 +62,17 @@ it("rejects background, replacement project and closed-tab requests", () => {
   useExplorer.setState({ projectId: "project" });
   useExplorer.getState().close(first.id);
   expect(useExplorer.getState().cadCapture).toBeNull();
+});
+
+it("asks the active CAD tab to open an annotation, once, and forgets it when the tab changes", () => {
+  const tab = useExplorer.getState().openFile("bracket.step", null)!;
+  const source = createDesktopCadCommands("project", null, tab.id);
+  useExplorer.getState().openCadAnnotation(tab.id, "a1");
+  const asked = source.getSnapshot().openAnnotation;
+  expect(asked).toMatchObject({ id: "a1" });
+  source.acknowledge("openAnnotation", asked!.key);
+  expect(source.getSnapshot().openAnnotation).toBeNull();
+  useExplorer.getState().openCadAnnotation(tab.id, "a2");
+  useExplorer.getState().update(tab.id, { path: "other.step" });
+  expect(source.getSnapshot().openAnnotation).toBeNull();
 });

@@ -35,7 +35,7 @@ import { useModelTools } from "./components/workbench/ModelTools.jsx";
 import { useStepPanel } from "./components/workbench/StepPanel.js";
 import { AnnotateButton } from "./components/workbench/StepAnnotations.jsx";
 import AnnotationPins from "./components/workbench/AnnotationPins.jsx";
-import { addAnnotation, annotationAnchor, annotationDelivered, createAnnotation, editAnnotation, markAnnotationSent, removeAnnotation } from "./workbench/stepAnnotations.js";
+import { annotationAnchor, annotationDelivered, createAnnotation } from "./workbench/stepAnnotations.js";
 import { CAD_PANEL } from "../../file-viewer/navigation/panels.js";
 import { stepMotionSources, useStepMotion } from "./workbench/useStepMotion.js";
 import { animationControlsHaveContent } from "../kit/tools/playbar/ViewportAnimationBar.js";
@@ -267,7 +267,8 @@ function StepSurfaceBody({ view, data }) {
   const [hiddenPartIds, setHiddenPartIds] = useState([]);
   // The Select tool's annotations (workbench/stepAnnotations.js), kept in this tab's record.
   const [annotations, setAnnotations] = useState([]);
-  const [annotationSelectRequest, setAnnotationSelectRequest] = useState(null);
+  // An annotation whose geometry is to be selected again, once its topology is loaded.
+  const [pendingAnnotationSelection, setPendingAnnotationSelection] = useState(null);
   // The annotation whose card is open on the model, if any.
   const [openAnnotationId, setOpenAnnotationId] = useState(null);
   const [isolatedAssemblyNodeIds, setIsolatedAssemblyNodeIds] = useState([]);
@@ -918,8 +919,7 @@ function StepSurfaceBody({ view, data }) {
       setExpandedStepTreeNodeIds(restored.tree.expandedStepTreeNodeIds);
       setHiddenPartIds(restored.tree.hiddenPartIds);
       setLargeFileState(normalizeLargeFileState(restored.largeFile));
-      // Annotations are shown only as dots: one with nowhere to sit would be unreachable.
-      setAnnotations(restored.annotations.filter(annotation => annotation.anchor));
+      setAnnotations(restored.annotations);
       motion.restore(restored);
     }
   });
@@ -1872,30 +1872,28 @@ function StepSurfaceBody({ view, data }) {
   // An edit on the model replaces the chat box's copy, a delete takes it out; sending the prompt,
   // or removing the annotations from the chat box, takes their dots off the model. Nothing reaches
   // the agent until the person sends the prompt.
+  const annotationsRef = useRef(annotations);
+  annotationsRef.current = annotations;
   const annotationAvailable = canonicalCopySelectionLines.length > 0 && !inspectionHighlight && !viewerLoading
     && !stepInteractionBlocked && promptAvailable;
-  const addToChatBox = useCallback(async (list) => {
-    if (!promptAvailable || !list.length) return false;
-    const result = await deliverPrompt(createAnnotationsPromptContext({ resource: promptResource, annotations: list }));
-    if (!annotationDelivered(result)) return false;
-    setAnnotations(current => list.reduce((next, annotation) => markAnnotationSent(next, annotation.id), current));
-    return true;
-  }, [promptAvailable, deliverPrompt, promptResource]);
-  // What the chat box still holds, when it says: a delivered annotation it no longer holds went out
-  // with the prompt or was removed there, and leaves the model too.
+  const addToChatBox = useCallback(async (annotation) => annotationDelivered(
+    await deliverPrompt(createAnnotationsPromptContext({ resource: promptResource, annotations: [annotation] }))
+  ), [deliverPrompt, promptResource]);
+  // What the chat box holds, when it says. One it held and no longer holds went out with the prompt
+  // or was removed there, and leaves the model too. The first answer keeps only what is held: a tab
+  // restored after the chat box was emptied has nothing to show.
   const heldAnnotationIds = destination.held;
+  const previousHeldRef = useRef(null);
   useEffect(() => {
     if (!heldAnnotationIds) return;
     const held = new Set(heldAnnotationIds);
+    const previous = previousHeldRef.current;
+    previousHeldRef.current = held;
     setAnnotations(current => {
-      const kept = current.filter(annotation => !annotation.sent || held.has(annotation.id));
+      const kept = current.filter(annotation => held.has(annotation.id) || (previous && !previous.has(annotation.id)));
       return kept.length === current.length ? current : kept;
     });
   }, [heldAnnotationIds]);
-  useEffect(() => {
-    setOpenAnnotationId(current => current && !annotations.some(annotation => annotation.id === current) ? null : current);
-  }, [annotations]);
-  const takeOutOfChatBox = useCallback((ids) => { if (ids.length) host.promptContext.retract?.(ids); }, [host.promptContext]);
   const annotateSelection = useCallback((note) => {
     if (!annotationAvailable) return;
     const references = referencesForHost(canonicalCopySelectionLines.join("\n")).map(({ selector, label }) => ({ selector, label }));
@@ -1910,38 +1908,30 @@ function StepSurfaceBody({ view, data }) {
     ]) || annotationAnchor([{ bbox: selectedMeshData?.bounds }]);
     const annotation = createAnnotation(references, note, { anchor });
     if (!annotation) return;
-    setAnnotations(current => addAnnotation(current, annotation));
+    setAnnotations(current => [...current, annotation]);
     // One the chat box would not take is not kept: the delivery says why.
-    void addToChatBox([annotation]).then(added => { if (!added) setAnnotations(current => removeAnnotation(current, annotation.id)); });
+    void addToChatBox(annotation).then(added => {
+      if (!added) setAnnotations(current => current.filter(item => item.id !== annotation.id));
+    });
   }, [annotationAvailable, referencesForHost, canonicalCopySelectionLines, effectiveActiveReferenceMap, selectedMeshData, addToChatBox]);
-  const annotationSelectCount = useRef(0);
+  // Pressing an annotation (a chip on its card, or its entry in the chat box) opens its card and
+  // selects what it was made on again.
   const selectAnnotation = useCallback((annotation) => {
-    const selector = annotation.references.map(reference => reference.selector).filter(Boolean).join(",");
-    setOpenAnnotationId(annotation.anchor ? annotation.id : null);
-    // An annotation on the whole model selects the whole model again.
-    if (!selector) {
-      if (isAssemblyView) return;
-      ensureSelectTool();
-      setSelectedReferenceIds([]);
-      setSelectedPartIds([STEP_MODEL_ROOT_ID]);
-      return;
-    }
-    annotationSelectCount.current += 1;
-    setAnnotationSelectRequest({ selector, key: `annotation:${annotation.id}:${annotationSelectCount.current}` });
-  }, [isAssemblyView]);
+    setOpenAnnotationId(annotation.id);
+    setPendingAnnotationSelection(annotation);
+  }, []);
   const changeAnnotation = useCallback((id, text) => {
-    const edited = editAnnotation(annotations, id, text);
-    const annotation = edited.find(item => item.id === id);
-    if (!annotation || annotation.text === annotations.find(item => item.id === id)?.text) return;
-    setAnnotations(edited);
+    const previous = annotationsRef.current.find(annotation => annotation.id === id);
+    if (!previous || previous.text === text) return;
+    const edited = { ...previous, text };
+    setAnnotations(current => current.map(annotation => annotation.id === id ? edited : annotation));
     // The chat box's copy is replaced by the edited one (the same id).
-    void addToChatBox([annotation]);
-  }, [annotations, addToChatBox]);
+    void addToChatBox(edited);
+  }, [addToChatBox]);
   const deleteAnnotation = useCallback((id) => {
-    setAnnotations(current => removeAnnotation(current, id));
-    setOpenAnnotationId(current => current === id ? null : current);
-    takeOutOfChatBox([id]);
-  }, [takeOutOfChatBox]);
+    setAnnotations(current => current.filter(annotation => annotation.id !== id));
+    host.promptContext.retract?.([id]);
+  }, [host.promptContext]);
 
   const toggleStepTreeNode = useCallback((nodeId) => {
     const normalizedNodeId = String(nodeId || "").trim();
@@ -2039,22 +2029,7 @@ function StepSurfaceBody({ view, data }) {
    * change after. Already selected means revealed, not toggled off.
    */
   const appliedSelectReferenceKeyRef = useRef(null);
-  // Pressing an annotation asks for its geometry the same way a transcript link does. The
-  // host's newest request wins over an annotation's older one, and only the host's is
-  // acknowledged back to it.
-  const annotationsRef = useRef(annotations);
-  annotationsRef.current = annotations;
   useEffect(() => {
-    setAnnotationSelectRequest(null);
-    // A request from the chat box that names an annotation opens its card on the model too.
-    const named = selectReference?.annotation;
-    if (named && annotationsRef.current.some(annotation => annotation.id === named && annotation.anchor)) setOpenAnnotationId(named);
-  }, [selectReference?.key]);
-  const activeSelectReference = annotationSelectRequest || selectReference;
-  const acknowledgeHostCommand = acknowledgeCommand;
-  useEffect(() => {
-    const selectReference = activeSelectReference;
-    const acknowledgeCommand = selectReference === annotationSelectRequest ? null : acknowledgeHostCommand;
     const selector = String(selectReference?.selector || "").trim();
     if (!selector || appliedSelectReferenceKeyRef.current === selectReference.key || viewerLoading || stepInteractionBlocked) {
       return;
@@ -2080,17 +2055,6 @@ function StepSurfaceBody({ view, data }) {
         if (selectReference.key !== undefined) acknowledgeCommand?.('selectReference', selectReference.key);
         return;
       }
-      // Anything else several selectors name (an annotation on parts and edges together) is
-      // selected as it stands, once every one of them resolves.
-      if (stepUpdateInProgress) return;
-      ensureSelectTool();
-      setSelectedPartIds(resolvedFaces.filter(value => value.kind !== "reference").map(value => value.id));
-      setSelectedRenderPartIdByAssemblyPartId({});
-      setSelectedReferenceIds(resolvedFaces.filter(value => value.kind === "reference").map(value => value.id));
-      setInspectionHighlight(null);
-      appliedSelectReferenceKeyRef.current = selectReference.key;
-      if (selectReference.key !== undefined) acknowledgeCommand?.('selectReference', selectReference.key);
-      return;
     }
     const resolved = resolveSelectorSelection(selector, {
       referenceMap: effectiveActiveReferenceMap,
@@ -2113,8 +2077,7 @@ function StepSurfaceBody({ view, data }) {
       togglePartSelection(resolved.id, { source: "reference" });
     }
   }, [
-    activeSelectReference,
-    annotationSelectRequest,
+    selectReference,
     isAssemblyView,
     isolatedStepTreeSelectableNodeIds,
     expandedStepTreeTopologyNodeIds,
@@ -2132,6 +2095,39 @@ function StepSurfaceBody({ view, data }) {
     toggleReferenceSelection,
     togglePartSelection
   ]);
+
+  // An annotation's geometry, selected again through the live selection. Topology that is not
+  // loaded yet is loaded first; the selection is made when the maps it needs have filled.
+  useEffect(() => {
+    const annotation = pendingAnnotationSelection;
+    if (!annotation || viewerLoading || stepInteractionBlocked || stepUpdateInProgress) return;
+    const selectors = annotation.references.map(reference => reference.selector).filter(Boolean);
+    ensureSelectTool();
+    if (!selectors.length) {
+      // An annotation on the whole model.
+      if (!isAssemblyView) { setSelectedReferenceIds([]); setSelectedPartIds([STEP_MODEL_ROOT_ID]); }
+      setPendingAnnotationSelection(null);
+      return;
+    }
+    try {
+      stepLiveCommandsRef.current.select({ selectors });
+      setPendingAnnotationSelection(null);
+    } catch {
+      const owners = stepTreeTopologyOwnersForSelectors(stepTreeRoot, selectors.flatMap(selector => selector.split(",")), { isAssemblyView });
+      if (owners.some(id => !expandedStepTreeTopologyNodeIds.includes(id))) loadInspectionTopology(owners);
+    }
+  }, [pendingAnnotationSelection, effectiveActiveReferenceMap, displayStepTreeRoot, stepTreeRoot, expandedStepTreeTopologyNodeIds,
+    isAssemblyView, viewerLoading, stepInteractionBlocked, stepUpdateInProgress, loadInspectionTopology]);
+
+  // The chat box asks for an annotation (its entry there was pressed): its card opens, its geometry
+  // is selected. One this tab no longer has is simply answered.
+  const openAnnotationCommand = workspace.commands.openAnnotation;
+  useEffect(() => {
+    if (!openAnnotationCommand) return;
+    const annotation = annotationsRef.current.find(item => item.id === openAnnotationCommand.id);
+    if (annotation) selectAnnotation(annotation);
+    acknowledgeCommand?.("openAnnotation", openAnnotationCommand.key);
+  }, [openAnnotationCommand, selectAnnotation, acknowledgeCommand]);
 
   const clearAssemblySelectionForFocus = useCallback(() => {
     setActiveTreeNodeScrollKey("");

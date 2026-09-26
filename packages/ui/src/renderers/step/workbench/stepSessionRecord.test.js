@@ -36,7 +36,7 @@ test("a routine that owned the pose wins: its record restores no Position values
 
 test("annotations are kept through a rebuild: a note is the person's, whatever the model became", () => {
   const signatures = stepRecordSignatures(entry);
-  const annotations = [{ id: "a1", references: [{ selector: "o1.1.e3", label: "Edge 3" }], text: "make a hole in it", sent: true, anchor: { point: [1, 2, 3], normal: null } }];
+  const annotations = [{ id: "a1", references: [{ selector: "o1.1.e3", label: "Edge 3" }], text: "make a hole in it", anchor: { point: [1, 2, 3], normal: null } }];
   const record = writeStepRecord(stepRecordInputs({ tree, parameterValues: {}, animationState, clockTime: () => 0,
     largeFileState: { selectableTopologyEnabled: false }, annotations, signatures }));
   assert.deepEqual(readStepRecord(record, signatures).annotations, annotations);

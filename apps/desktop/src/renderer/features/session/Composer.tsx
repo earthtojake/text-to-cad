@@ -41,7 +41,7 @@ import { dataUrlOf, rememberFiles } from "./composer/attachments";
 import { AttachmentImagePreview } from "./composer/AttachmentImagePreview";
 import { ComposerEditor, type ComposerEditorHandle } from "./composer/ComposerEditor";
 import { ReferenceScopeContext } from "./composer/ReferenceScope";
-import { AnnotationsChip, withAnnotations } from "@renderer/features/session/composer/AnnotationsChip";
+import { AnnotationsChip, withAnnotations } from "./composer/AnnotationsChip";
 import type { DraftAnnotation } from "@renderer/state/composer";
 
 const NO_ANNOTATIONS: DraftAnnotation[] = [];
@@ -154,7 +154,8 @@ export function Composer({
   const handleSubmit = useCallback(
     async (message: PromptInputMessage) => {
       // Annotations added from the viewer go out with the prompt, after what was typed.
-      const trimmed = withAnnotations(message.text.trim(), annotations);
+      const pending = useComposer.getState().annotations[draftKey] ?? NO_ANNOTATIONS;
+      const trimmed = withAnnotations(message.text.trim(), pending);
       if (!trimmed && message.files.length === 0) {
         return;
       }
@@ -163,10 +164,10 @@ export function Composer({
         return;
       }
       setText("");
-      removeAnnotations(draftKey);
+      if (pending.length) removeAnnotations(draftKey);
       await onSubmit(trimmed, content);
     },
-    [onSubmit, setText, annotations, removeAnnotations, draftKey],
+    [onSubmit, setText, removeAnnotations, draftKey],
   );
 
   return (

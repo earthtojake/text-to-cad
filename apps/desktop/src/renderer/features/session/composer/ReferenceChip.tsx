@@ -23,7 +23,6 @@ import { openComposerReference, ReferenceScopeContext } from "./ReferenceScope";
 export function ReferenceChip({ node, selected }: NodeViewProps) {
   const scope = useContext(ReferenceScopeContext);
   const reference = node.attrs as CadReference;
-  const name = reference.file ? (reference.file.split(/[\\/]/).pop() ?? reference.file) : "";
   const token = referenceToken(reference);
   const label = useComposer((state) => scope?.draftKey ? state.referenceLabels[scope.draftKey]?.[token] : undefined);
   return (
@@ -57,7 +56,7 @@ export function ReferenceChip({ node, selected }: NodeViewProps) {
           }
         }}
       >
-        <ReferenceChipContent label={label} name={name} selector={reference.selector} />
+        <ReferenceChipContent file={reference.file} label={label} selector={reference.selector} />
       </button>
     </NodeViewWrapper>
   );
@@ -72,7 +71,8 @@ export const REFERENCE_CHIP_CLASS =
  * part/feature label, or its selector as a badge when it has none; a hash instead of the file
  * for a bare selector.
  */
-export function ReferenceChipContent({ name, label, selector }: { name: string; label?: string; selector?: string }) {
+export function ReferenceChipContent({ file, label, selector }: { file: string; label?: string; selector?: string }) {
+  const name = file ? (file.split(/[\\/]/).pop() ?? file) : "";
   return (
     <>
       {name ? (
