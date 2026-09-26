@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useRef } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { X } from "lucide-react";
 import { projectWorldPointToClient } from "@hardcore/core/lib/viewer/measureRuler.js";
 import { Button } from "@hardcore/ui/primitives/button";
@@ -23,8 +23,21 @@ function projectAnchor(anchor, { camera, offset, width, height }) {
   return { x: Math.round(at.x), y: Math.round(at.y), facing };
 }
 
+// A card is this wide (w-72) plus its gap from the dot.
+const CARD_ROOM_PX = 300;
+
 const Pin = memo(function Pin({ annotation, index, open, register, host, onOpenChange, onSelect, onEdit, onRemove }) {
-  const ref = useCallback(element => register(annotation.id, element), [register, annotation.id]);
+  const element = useRef(null);
+  const ref = useCallback(node => { element.current = node; register(annotation.id, node); }, [register, annotation.id]);
+  // The card opens beside the dot on a side with room for it, else below it, where the popover
+  // slides it along to fit: a narrow viewer has room on neither side.
+  const [side, setSide] = useState("right");
+  useLayoutEffect(() => {
+    if (!open || !element.current || !host) return;
+    const dot = element.current.getBoundingClientRect();
+    const view = host.getBoundingClientRect();
+    setSide(view.right - dot.left >= CARD_ROOM_PX ? "right" : dot.left - view.left >= CARD_ROOM_PX ? "left" : "bottom");
+  }, [open, host]);
   return (
     <div ref={ref} className="group/pin absolute left-0 top-0" data-annotation-pin={annotation.id} data-open={open}
       // A press on a dot or its card is not a press on the model: no pick, no orbit.
@@ -42,7 +55,7 @@ const Pin = memo(function Pin({ annotation, index, open, register, host, onOpenC
           </button>
         </PopoverTrigger>
         <PopoverContent container={host} collisionBoundary={host} collisionPadding={12} updatePositionStrategy="always"
-          side="right" sideOffset={12} aria-label={`Annotation ${index + 1} details`}
+          side={side} sideOffset={12} aria-label={`Annotation ${index + 1} details`}
           className="w-72 p-2" onOpenAutoFocus={event => event.preventDefault()}
           // Escape in the note's edit box cancels the edit; only outside it does it close the card.
           onEscapeKeyDown={event => { if (event.target?.tagName === "TEXTAREA") event.preventDefault(); }}>
