@@ -6,7 +6,7 @@ error states, and common edit/save/reload lifecycle. Both `apps/web` and
 `apps/desktop` consume this component through the package's compiled exports.
 The desktop's project/session/window layout remains application code.
 
-The viewer's tools, sidebars, settings, tooltips and keyboard follow one
+The viewer's tools, tool stack, settings, tooltips and keyboard follow one
 binding [design system](docs/settings-ui.md), the same in both apps. A change to
 that chrome changes the design system first. Desktop's surrounding app controls
 remain local where their appearance differs.
@@ -54,10 +54,15 @@ rows — files, model features, robot links — are 12px, the size of the sectio
 titles and the filter above them.
 Both tree lists inset row backgrounds 4px from their horizontal edges, including
 selected, hovered and filtered rows; nesting adds indentation inside that gutter.
-Every sidebar — the file tree and a file's own panel — shares a 256px minimum
-width. On desktop, resizing below it closes the panel; reopening restores 280px. Below 720px of total FileViewer width, panels are dismissible floating sheets and never shrink the scene. The sheets have no extra visible title row and never scroll or translate the host page.
+The host's panel column (the file tree) is 280px by default and 200px at least; a
+drag past the minimum stops at it, and only a drag below half of it closes the
+column. Below 720px of total FileViewer width, it is a dismissible floating sheet and
+never shrinks the scene. The sheets have no extra visible title row and never scroll
+or translate the host page. A CAD file's controls are not a panel of that column but
+of the viewer's own tool stack under the toolbar: one width for every panel (190px
+by default, 160px at least, resized together), bounded by the viewer's height.
 The view cube is hidden on mobile. Breadcrumbs and progress indicators use this same breakpoint. Panels never
-scroll sideways: a Position section's labels truncate to preserve its sliders and
+scroll sideways: a Position panel's labels truncate to preserve its sliders and
 inputs.
 
 React, ReactDOM, Three.js and Lucide are host-supplied peers. React 18 and 19
@@ -225,7 +230,7 @@ The Model tree shares the file tree's row and filter primitives. Its visible exp
 controls viewport selection, exact topology and optional feature recognition;
 collapsed parts do not trigger whole-assembly analysis, and neither does its
 filter, which searches names without expanding anything. Contextual measurements
-remain available in Render too. See [model tree and recognition](docs/cad-renderer.md#step-panel)
+remain available in Render too. See [model tree and recognition](docs/cad-renderer.md#step-panels)
 for selection, isolation, demand and cache ownership.
 
 Feature detection stays client-side in this renderer, separate from cadgen
@@ -234,23 +239,20 @@ and versioned, bounded memory cache; it adds no persistent store. Read
 [feature detection](docs/feature-detection.md) before changing inference rules,
 cache identity, cancellation or recognition limits.
 
-A file can expose one optional `Settings` panel with the sliders icon in the
-nav row, beside the file tree. `FilePanelTabs` reads each section's `role`, not
-its name: when a `model` and a `position` section both exist it separates them
-into Features / Position or Links / Position tabs, whose primary views are always
-open, with no collapse headers. Both stay mounted to preserve scroll and tree
-state; only the active tab does background work. Without Position, the model
-panel shows directly. Each tab has one scrolling column and the selection
-Reference pinned at its foot. Issues and SDF metadata remain with the model tree.
-Links is the description's link tree, with the Model
-tree's rows, filter and Reference pane; see [robot links](docs/cad-renderer.md#robot-links).
-Which panel a file opens with is the host's to apply
+A CAD file declares no panel of the nav row: its controls are `ToolPanel`s in the
+tool stack, shown by the tool they belong to. Select shows Features (a robot's Links)
+and, with a selection, the Reference; Position shows Position; Display and Draw show
+their own panels; kept effects (Explode, Clip, Measure's results) follow. A panel
+whose tool is not up stays mounted, hidden, so a tree keeps its scroll and expansion;
+only what is on screen does background work. Issues and SDF metadata are Select's
+panels too. Links is the description's link tree, with the Model tree's rows, filter
+and Reference panel; see [robot links](docs/cad-renderer.md#robot-links). Which of
+the host's panels a file opens with is the host's to apply
 (`ViewerHost.navigation.openFile(path, { target, panel })`): a file picked in the
-tree asks for the tree, so the tree stays up while a person walks it; any other
-open gets the file's own panel, or nothing when it has none. No panel is saved
-in a file's record. Display is a toolbar popover, never a panel.
+tree asks for the tree, so the tree stays up while a person walks it; any other open
+gets nothing. No panel is saved in a file's record.
 The binding [viewer design system](docs/settings-ui.md) defines tool lifecycle,
-sidebar navigation, mobile layout, section density, keyboard scope, tooltips
+the tool stack, mobile layout, section density, keyboard scope, tooltips
 and fullscreen. RendererShell owns the top-left toolbar and bottom-right cube;
 Display is the last toolbar item and Animate is conditional on clips.
 Fullscreen is a separate top-right action, the shell's own, and preserves the

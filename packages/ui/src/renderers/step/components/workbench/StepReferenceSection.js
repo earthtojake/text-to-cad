@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
-import { referenceMeasurements, selectionMeasurements } from "../../workbench/referenceMeasurements.js";
+import { referenceMeasurements } from "../../workbench/referenceMeasurements.js";
 import { stepSelectionMaterialInfo } from "../../workbench/stepSelectionMaterial.js";
 import { nodeVolume } from "../../workbench/partVolume.js";
 
+import { TooltipHint } from "@hardcore/ui/primitives/tooltip";
 import { CoordValue, InfoRow, MonoValue, formatNumber } from "../../../kit/inspector/referenceRows.jsx";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@hardcore/ui/primitives/select";
+import { Select, SelectContent, SelectItem, SelectTrigger } from "@hardcore/ui/primitives/select";
 
 // A selected "element" is either a topology reference (face / edge / solid,
 // carrying reference.pickData) or an assembly node (component / subassembly).
@@ -58,17 +59,9 @@ function isPartNode(item) {
   return Boolean(item) && !item.pickData && (item.nodeType || Array.isArray(item.children));
 }
 
-const MEASUREMENT_HINTS = {
-  'Plane spacing': 'Plane distance, ignoring face boundaries',
-  'Line spacing': 'Line distance, ignoring endpoints',
-  'Axis spacing': 'Cylinder-axis distance',
-  'Center distance': 'Circle-centre distance',
-  'Angle': 'Smallest angle (0–90°)',
-  'Axis angle': 'Cylinder-axis angle (0–90°)',
-};
 
 function MeasurementRows({rows}) {
-  return rows.map(([label,value,unit])=><InfoRow key={label} label={label} title={MEASUREMENT_HINTS[label]}><MonoValue>{`${formatNumber(value)} ${unit}`}</MonoValue></InfoRow>);
+  return rows.map(([label,value,unit])=><InfoRow key={label} label={label}><MonoValue>{`${formatNumber(value)} ${unit}`}</MonoValue></InfoRow>);
 }
 
 function MaterialChannelValues({ channels }) {
@@ -129,6 +122,7 @@ function TopologyDetail({ reference, fallbackSize }) {
   const center = quantities.circular && Array.isArray(pick.params?.center) ? pick.params.center : Array.isArray(pick.center) ? pick.center : box?.center;
   const component = String(pick.sourceName || pick.name || reference.occurrenceId || "").trim();
 
+  // Its name is the panel's heading (`referenceName`); the id, what a copy carries, is a row.
   return (
     <div className="flex min-w-0 flex-col">
       <InfoRow label="Type">{SELECTOR_TYPE_LABELS[type] || "Reference"}{subtype && ` · ${subtype}`}</InfoRow>
@@ -148,7 +142,6 @@ function PartDetail({ node, fallbackSize, meshData }) {
   const isAssembly =
     String(node.nodeType || "").trim() === "assembly" ||
     (Array.isArray(node.children) && node.children.length > 0);
-  const name = String(node.name || node.displayName || "").trim();
   const selector = String(node.displaySelector || node.occurrenceId || node.id || "").trim();
   const partCount = Array.isArray(node.leafPartIds)
     ? node.leafPartIds.length
@@ -158,9 +151,9 @@ function PartDetail({ node, fallbackSize, meshData }) {
   const box = readBbox(node);
   const volume = useMemo(() => nodeVolume(node, meshData), [node, meshData]);
 
+  // Its name is the panel's heading (`referenceName`); the id, what a copy carries, is a row.
   return (
     <div className="flex min-w-0 flex-col">
-      {name && <InfoRow label="Name">{name}</InfoRow>}
       <InfoRow label="Type">{isAssembly ? "Subassembly" : "Component"}</InfoRow>
       <InfoRow label="ID"><MonoValue>{selector}</MonoValue></InfoRow>
       <div className="flex flex-col">
@@ -190,14 +183,37 @@ function itemKey(item) {
   return String(item?.id || item?.occurrenceId || item?.displaySelector || "").trim();
 }
 
-function itemLabel(item) {
-  const name = isPartNode(item) ? item.name || item.displayName : SELECTOR_TYPE_LABELS[item.selectorType];
-  const selector = item.displaySelector || item.normalizedSelector || itemKey(item);
-  return [name, selector].filter(Boolean).join(' · ');
+/**
+ * A reference as a person reads it: its own label when it has one (a part's or subassembly's
+ * name, a named face), otherwise where it is and what — "base · face 3" — from its part as the
+ * tree names it (`partName`) and its selector's last token. A generated label that only
+ * restates the selector ("Face o1.1.f3") is not a name. Never the raw id first: that is the ID row.
+ */
+function referenceName(item, meshData, partName) {
+  if (isPartNode(item)) return String(item.name || item.displayName || "").trim() || itemKey(item);
+  const selector = String(item.displaySelector || item.normalizedSelector || item.id || "").split("|").pop();
+  const token = selector.split(".").filter(Boolean).pop() || "";
+  const own = [item.name, item.pickData?.name, item.label].map(value => String(value || "").trim())
+    .find(value => value && !(token && value.includes(token)) && !value.includes(selector));
+  if (own) return own;
+  const kind = (SELECTOR_TYPE_LABELS[item.selectorType] || "Reference").toLowerCase();
+  const number = token.match(/^[a-z]+(\d+)$/i)?.[1] || "";
+  const occurrence = item.occurrenceId || selector.slice(0, -token.length - 1);
+  const parts = Array.isArray(meshData?.parts) ? meshData.parts : [];
+  const part = parts.find(entry => [entry.occurrenceId, entry.id].includes(occurrence));
+  const parent = String(item.pickData?.sourceName || item.sourceName || partName?.(occurrence) || part?.name || part?.displayName || occurrence || "").trim();
+  return [parent, number ? `${kind} ${number}` : kind].filter(Boolean).join(" · ");
 }
 
-/** Read-only facts. The picker browses an existing selection; it never changes it. */
-export function StepReferenceSection({ references = [], meshData = null, sourceAppearance = null, measurements = null }) {
+/**
+ * The Reference panel's heading and rows for what is selected: read-only facts. The heading is
+ * the reference being read — its name (or kind) and id — and, with several selected, a picker
+ * that browses them; it never changes the selection, and it is the only thing a multi-selection
+ * adds: the rows are always the browsed reference's alone. `null` with nothing to say.
+ *
+ * @returns {{ title: import("react").ReactNode, content: import("react").ReactNode } | null}
+ */
+export function useStepReference({ references = [], meshData = null, sourceAppearance = null, measurements = null, partName = null }) {
   const items = useMemo(() => Array.isArray(references) ? references.filter(Boolean) : [], [references]);
   const idsKey = JSON.stringify(items.map(itemKey));
   const [browsed, setBrowsed] = useState(null);
@@ -207,33 +223,30 @@ export function StepReferenceSection({ references = [], meshData = null, sourceA
   const materialInfo = useMemo(() => stepSelectionMaterialInfo({
     references: activeItem ? [activeItem] : [], meshData, appearance: sourceAppearance,
   }), [activeItem, meshData, sourceAppearance]);
-  const totals = items.length > 1 ? selectionMeasurements(items) : [];
-  const selectionSize = items.length !== 1 && measurements?.size;
-  const radii = items.length > 1 ? measurements?.radii || [] : [];
-  // Several whole parts: their combined volume, known only if every one's is.
-  const selectionVolume = useMemo(() => {
-    if (items.length < 2 || !items.every(isPartNode)) return null;
-    const volumes = items.map(item => nodeVolume(item, meshData));
-    return volumes.every(volume => volume !== null) ? volumes.reduce((sum, volume) => sum + volume, 0) : null;
-  }, [items, meshData]);
+  // Parts measured without a reference of their own: their overall size is all there is to say.
+  const partsOnlySize = !items.length && measurements?.size;
+  if (!activeItem && !partsOnlySize) return null;
 
-  return <div className="min-w-0 text-tiny font-normal">
-    {items.length > 1 && <p className="py-1 text-micro text-muted-foreground">Selection · {items.length} references</p>}
-    {(totals.length > 0 || selectionSize || radii.length > 0 || selectionVolume !== null) && <div className="mb-2 border-b border-sidebar-border/60 pb-2" aria-label="Selection measurements">
-      <MeasurementRows rows={totals}/>
-      {selectionSize && <SizeRow size={selectionSize}/>}
-      {selectionVolume !== null && <VolumeRow volume={selectionVolume}/>}
-      {radii.length > 0 && <InfoRow label={radii.length === 1 ? 'Radius' : 'Radii'}><MonoValue>{radii.map(value=>formatNumber(value)).join(', ')} mm</MonoValue></InfoRow>}
-    </div>}
-    {items.length > 1 && <Select value={itemKey(activeItem)} onValueChange={id=>setBrowsed({selection:idsKey,id})}>
-      <SelectTrigger size="sm" aria-label="Inspect selected reference" className="mb-1 min-w-0 px-2 text-tiny">
-        <SelectValue className="min-w-0 flex-1 text-left"><span className="block truncate">{itemLabel(activeItem)}</span></SelectValue>
-      </SelectTrigger>
-      <SelectContent className="max-w-[var(--radix-select-trigger-width)]">{items.map(item=><SelectItem className="break-all" key={itemKey(item)} value={itemKey(item)}>{itemLabel(item)}</SelectItem>)}</SelectContent>
-    </Select>}
+  const name = item => referenceName(item, meshData, partName);
+  // Flush with the rows' labels: the trigger brings no inset of its own. Several references
+  // add their count ("1/2") so the name reads as a chooser.
+  const at = items.indexOf(activeItem) + 1;
+  const title = items.length > 1 ? <Select value={itemKey(activeItem)} onValueChange={id=>setBrowsed({selection:idsKey,id})}>
+    <SelectTrigger size="sm" aria-label="Inspect selected reference"
+      className="!h-6 min-w-0 max-w-full gap-1 border-none bg-transparent !px-0 text-xs shadow-none hover:bg-transparent dark:bg-transparent [&_svg]:size-3">
+      <span className="flex min-w-0 flex-1 items-baseline gap-1.5 text-left" data-reference-label="">
+        <span className="min-w-0 truncate">{name(activeItem)}</span>
+        <span className="shrink-0 text-micro text-muted-foreground tabular-nums" data-reference-count="">{at}/{items.length}</span>
+      </span>
+    </SelectTrigger>
+    <SelectContent className="max-w-[max(var(--radix-select-trigger-width),12rem)]">{items.map(item=><SelectItem className="break-all" key={itemKey(item)} value={itemKey(item)}>{name(item)}</SelectItem>)}</SelectContent>
+  </Select> : activeItem ? <TooltipHint content={name(activeItem)} overflowOnly><span className="block truncate" data-reference-label="">{name(activeItem)}</span></TooltipHint> : null;
+  const content = <div className="min-w-0 text-tiny font-normal">
+    {partsOnlySize && <SizeRow size={partsOnlySize}/>}
     {activeItem && (isPartNode(activeItem)
       ? <PartDetail node={activeItem} meshData={meshData} fallbackSize={items.length === 1 ? measurements?.size : null}/>
       : <TopologyDetail reference={activeItem} fallbackSize={items.length === 1 ? measurements?.size : null}/>)}
     <MaterialDetail info={materialInfo}/>
   </div>;
+  return { title, content };
 }

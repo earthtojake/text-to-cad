@@ -329,7 +329,7 @@ test('a DXF has no panels of its own, no tools and no fullscreen', async (t) => 
   const panels = () => pane.locator('[data-file-panel]')
     .evaluateAll(buttons => buttons.map(button => `${button.getAttribute('aria-label')}:${button.getAttribute('aria-pressed')}`));
   assert.deepEqual(await panels(), ['Show files:false'], 'the file tree, one press away, and nothing else');
-  assert.equal(await pane.locator('[data-file-sheet]').count(), 0, 'and no file sheet in the DOM');
+  assert.equal(await pane.locator('[data-tool-panel]').count(), 0, 'and no tool panel: a drawing has no tools');
   assert.equal(await pane.getByRole('group', { name: 'Interaction tools' }).count(), 0, 'no tool strip');
   for (const name of ['Orbit', 'Draw', 'Select', 'Measure', 'Position', 'Animate', 'Fullscreen']) {
     assert.equal(await pane.getByRole('button', { name, exact: true }).count(), 0, name);

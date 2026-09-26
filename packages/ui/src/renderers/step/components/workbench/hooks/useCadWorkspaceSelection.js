@@ -1,11 +1,15 @@
 import { useEffect } from "react";
 import { filterPreservingIdentity } from "../../../workbench/valueUtils.js";
 
+/**
+ * Keeps a part or reference selection to what the loaded assembly can still name. A selection
+ * is never dropped because the file's topology is momentarily unavailable — a watched sidecar
+ * change rebuilds the render assets and the pick is still the same face once they are back;
+ * a change to the geometry itself resets the selection where the STEP update is detected.
+ */
 export function useCadWorkspaceSelection({
-  isAssemblyView,
   supportsPartSelection,
   assemblyPartsLoaded,
-  selectedEntryHasReferences,
   setSelectedReferenceIds,
   setHoveredModelReferenceId,
   assemblyParts,
@@ -17,19 +21,6 @@ export function useCadWorkspaceSelection({
   setHoveredListPartId,
   setHoveredModelPartId
 }) {
-  useEffect(() => {
-    if (isAssemblyView || selectedEntryHasReferences) {
-      return;
-    }
-    setSelectedReferenceIds((current) => current.length ? [] : current);
-    setHoveredModelReferenceId("");
-  }, [
-    isAssemblyView,
-    selectedEntryHasReferences,
-    setHoveredModelReferenceId,
-    setSelectedReferenceIds
-  ]);
-
   useEffect(() => {
     if (!assemblyPartsLoaded) {
       return;

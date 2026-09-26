@@ -1,6 +1,7 @@
 const validBox = box => box && ['min', 'max'].every(key => Array.isArray(box[key]) && box[key].length === 3 && box[key].every(Number.isFinite)) && box.min.every((value, axis) => value <= box.max[axis]);
 
-// Read the linked final geometry, never infer construction dimensions or volume.
+// The overall size of what is selected, read from the linked final geometry: never inferred
+// construction dimensions.
 export function stepGeometryMeasurements(selection, references, parts) {
   const faceIds = [...new Set(selection?.faceIds || [])];
   const partIds = [...new Set(selection?.partIds || [])];
@@ -13,11 +14,5 @@ export function stepGeometryMeasurements(selection, references, parts) {
     for (const box of boxes) { min = Math.min(min, box.min[axis]); max = Math.max(max, box.max[axis]); }
     return max - min;
   }) : null;
-  // Parts can overlap selected faces; do not present a partial or double-counted total.
-  const area = !partIds.length && faces.length && faces.every(face => Number.isFinite(face?.area) && face.area >= 0) ? faces.reduce((sum, face) => sum + face.area, 0) : null;
-  const radii = [...new Set(faces.flatMap(face => {
-    const params = face?.params;
-    return ['cylinder', 'sphere'].includes(face?.surfaceType || params?.kind) && Number.isFinite(params?.radius) && params.radius > 0 ? [Number(params.radius.toPrecision(10))] : [];
-  }))].sort((a, b) => a - b);
-  return { size, area, radii };
+  return { size };
 }

@@ -198,8 +198,8 @@ export function setRuntimeZoomPercent(runtime, percent) {
   return true;
 }
 
-// The canvas IS the viewport: it fills the box between the sidebar and the
-// sheet and nothing else, so the camera frames and centres in the whole of it.
+// The canvas IS the viewport: it fills the box beside the host's panel column and
+// nothing else, so the camera frames and centres in the whole of it.
 export function getViewportMetrics(runtime) {
   const canvas = runtime?.renderer?.domElement;
   const width = Math.max(1, canvas?.clientWidth || canvas?.parentElement?.clientWidth || 1);

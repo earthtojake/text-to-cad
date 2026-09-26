@@ -193,8 +193,9 @@ function PoseGroupStateRow({ pose }) {
 }
 
 /**
- * A robot's Position sidebar section: its named pose (an SRDF's group states), then a slider per
- * joint a person can drive, with Reset beside the pose selector — one section's rows, with no sections of their own.
+ * A robot's Position panel (the tool stack's, while the Position tool is up): its named pose (an
+ * SRDF's group states), then a slider per joint a person can drive, with Reset beside the pose
+ * selector — one panel's rows, with no sections of their own.
  *
  * @param {{ pose: ReturnType<typeof import("./poseStore.js").createPoseStore> }} props
  */

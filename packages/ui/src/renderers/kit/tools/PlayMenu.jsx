@@ -1,4 +1,6 @@
 import { DropdownMenuCheckboxItem, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger } from "@hardcore/ui/primitives/dropdown-menu";
+import { cn } from "@hardcore/ui/utils";
+import { FLOATING_SURFACE_CLASS } from "./floatingSurface.js";
 import ToolPopover from "./ToolPopover.jsx";
 
 import { PLAYBACK_SPEEDS as ANIMATION_SPEEDS } from "./playbar/ViewportAnimationBar.js";
@@ -9,7 +11,7 @@ export default function PlayMenu({ trigger, animation, onOpenChange, allowInacti
   return <ToolPopover onOpenChange={onOpenChange} allowInactive={allowInactive} trigger={trigger} label="Animation options" className="w-40">
     {animation?.clips?.length > 1 && <DropdownMenuSub>
       <DropdownMenuSubTrigger>Routine</DropdownMenuSubTrigger>
-      <DropdownMenuSubContent className="w-44">
+      <DropdownMenuSubContent className={cn(FLOATING_SURFACE_CLASS, "w-44")}>
         <DropdownMenuRadioGroup value={animation.activeClipId} onValueChange={animation.onClipSelect}>
           {animation.clips.map(clip => <DropdownMenuRadioItem key={clip.id} value={clip.id}>{clip.label}</DropdownMenuRadioItem>)}
         </DropdownMenuRadioGroup>
@@ -18,7 +20,7 @@ export default function PlayMenu({ trigger, animation, onOpenChange, allowInacti
     {animation?.clips?.length > 0 && <>
       <DropdownMenuSub>
         <DropdownMenuSubTrigger><span className="flex-1">Speed</span><span className="text-muted-foreground tabular-nums">{animationSpeed}×</span></DropdownMenuSubTrigger>
-        <DropdownMenuSubContent className="w-32">
+        <DropdownMenuSubContent className={cn(FLOATING_SURFACE_CLASS, "w-32")}>
           <DropdownMenuRadioGroup value={String(animationSpeed)} onValueChange={value => animation.onSpeedChange(Number(value))}>
             {animationSpeeds.map(value => <DropdownMenuRadioItem key={value} value={String(value)}>{value}×</DropdownMenuRadioItem>)}
           </DropdownMenuRadioGroup>

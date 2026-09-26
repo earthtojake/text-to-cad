@@ -1,4 +1,6 @@
 import { Orbit } from "lucide-react";
+import { cn } from "@hardcore/ui/utils";
+import { FLOATING_SURFACE_CLASS } from "./floatingSurface.js";
 import { DropdownMenuCheckboxItem, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger } from "@hardcore/ui/primitives/dropdown-menu";
 import { ToolbarButton } from "./ToolbarButton.js";
 import ToolPopover from "./ToolPopover.jsx";
@@ -14,7 +16,7 @@ export default function OrbitMenu({ enabled, onEnabledChange, speed, onSpeedChan
       onSelect={event => event.preventDefault()}>Orbit</DropdownMenuCheckboxItem>
     <DropdownMenuSub>
       <DropdownMenuSubTrigger><span className="flex-1">Speed</span><span className="text-muted-foreground tabular-nums">{speed}×</span></DropdownMenuSubTrigger>
-      <DropdownMenuSubContent className="w-32">
+      <DropdownMenuSubContent className={cn(FLOATING_SURFACE_CLASS, "w-32")}>
         <DropdownMenuRadioGroup value={String(speed)} onValueChange={value => onSpeedChange(Number(value))}>
           {speeds.map(value => <DropdownMenuRadioItem key={value} value={String(value)}>{value}×</DropdownMenuRadioItem>)}
         </DropdownMenuRadioGroup>

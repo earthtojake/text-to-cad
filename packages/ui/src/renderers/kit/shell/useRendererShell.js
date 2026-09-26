@@ -1,19 +1,17 @@
-import { useViewerMobile } from "../../../file-viewer/responsive.js";
 import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Camera, Pencil } from "lucide-react";
 import { clonePerspectiveSnapshot } from "@hardcore/core/lib/perspective.js";
 import { VIEWER_SCENE_SCALE } from "@hardcore/core/lib/viewer/sceneScale.js";
 import { ViewerElementContext, useViewerHost, usePromptDestination } from "../../../host/context.js";
 import { hasOpenPopup } from "../../../lib/popups.js";
-import { CAD_PANEL } from "../../../file-viewer/navigation/panels.js";
 import { useDrawingSession } from "../../../drawing/session.js";
-import { DrawingToolbar, DRAWING_TOOLBAR_TOOLS } from "../../../drawing/toolbar.jsx";
+import { DRAWING_TOOLBAR_TOOLS } from "../../../drawing/toolbar.jsx";
 import { sceneBackdropEdgeColor } from "../look/chromeBackdrop.js";
 import { useChromeBackdropColor } from "../look/useChromeBackdropColor.js";
 import { prefetchRenderStudio } from "../look/renderStudioChunk.js";
-import ToolPopover from "../tools/ToolPopover.jsx";
 import { CAD_DRAWING_DEFAULTS } from "../tools/draw/DrawingOverlay.jsx";
 import { normalizeOrbit } from "../tools/fullscreen/orbitPreferences.js";
+import { normalizeToolStackWidth } from "../tools/toolStackWidth.js";
 import { animationControlsHaveContent } from "../tools/playbar/ViewportAnimationBar.js";
 import { DisplaySettingsSection } from "../view-settings/DisplaySettingsSection.js";
 import { useAppliedViewSettings } from "../view-settings/useAppliedViewSettings.js";
@@ -72,13 +70,14 @@ const EMPTY = Object.freeze({});
  *    queued application to the viewport, and the Display popover's content;
  *  - tools: the mode state machine and Draw's session, or none at all for a
  *    renderer whose viewport is the camera's alone;
- *  - the host contract: the file's panels, navbar actions, prompt snapshots,
- *    clipboard screenshots, fullscreen, alerts, shortcuts;
+ *  - the host contract: navbar actions, prompt snapshots, clipboard screenshots,
+ *    fullscreen, alerts, shortcuts (a file's controls are tool-stack panels the renderer
+ *    shows with its tools, never a host panel);
  *  - the live command surface, with the renderer's added and declined commands.
  *
  * @param {object} options
  * @param {import("../../../file-viewer/types.js").RendererViewProps} options.view  The host's props, unchanged.
- * @param {{ preferences: { orbit?: { speed: number } }, onPreferenceChange(patch: object): void,
+ * @param {{ preferences: { orbit?: { speed: number }, toolStackWidth?: number }, onPreferenceChange(patch: object): void,
  *   live?: object, captureRequest?: { key: string | number } | null,
  *   acknowledgeCommand?: (kind: string, key: string | number) => void }} options.services
  * @param {import("@hardcore/core/prompt").ResourceRef} options.resource  The document on screen, for prompt context and live state.
@@ -124,7 +123,8 @@ const EMPTY = Object.freeze({});
  *   builder that speaks it, and then `promptReferences` may return that vocabulary instead — and such a
  *   renderer reports its live `selection` itself, in the prompt grammar, through `live.state`.
  * @param {{ active?: boolean, handle?: () => boolean }} [options.escape]  Escape, innermost first: `handle` returns
- *   true when it spent the key; otherwise the shell closes the file's open panel.
+ *   true when it spent the key. After it there is nothing of the viewer's own left to close: the
+ *   host's panel column (the file tree) closes only from its own toggle.
  * @param {object | (() => object)} [options.rendererState]  The renderer's own slice of the per-file record. A
  *   FUNCTION is read when the record is written, never at render: state a renderer keeps outside React (a pose
  *   written per frame) is saved as it is at that moment, its last change before unmount included. Such a
@@ -166,8 +166,7 @@ export function useRendererShell({
   const destination = usePromptDestination();
   const promptAvailable = destination.available;
   const composer = destination.kind === "composer";
-  const { openPanel = "", onPanelOpen,
-    onNavigationActionsChange, onStateChange, appearance } = view;
+  const { onNavigationActionsChange, onStateChange, appearance } = view;
   const colorScheme = appearance?.colorScheme === "dark" ? "dark" : "light";
   const ownPresentation = usePresentationState();
   const { presenting, set: setPresenting } = presentation || ownPresentation;
@@ -245,34 +244,6 @@ export function useRendererShell({
   }, [presenting]);
 
   // ---- host chrome ----------------------------------------------------------
-  // The file's panels are the host's (its nav row is their tab strip); the shell draws the
-  // one that is open. A sidebar that is open turns to the file's own panel when there is
-  // something to show in it — a pick, the Position tool — the file tree giving way to what
-  // was picked; an explicit tool request opens the panel even when nothing is open, a
-  // selection does not. On mobile the sheets stay the person's to open.
-  const mobile = useViewerMobile();
-  const panelRef = useRef({ openPanel, onPanelOpen });
-  panelRef.current = { openPanel, onPanelOpen };
-  const panelOpen = openPanel === CAD_PANEL.file;
-  const closePanel = useCallback(() => {
-    const current = panelRef.current.openPanel;
-    if (current === CAD_PANEL.file) panelRef.current.onPanelOpen?.("");
-  }, []);
-  const [panelRevealRequest, setPanelRevealRequest] = useState(null);
-  // The panel's selected tab is the shell's, not the panel's: the panel remounts when the
-  // viewer crosses the mobile breakpoint (its column becomes a sheet), and the tab survives.
-  const [panelSection, setPanelSection] = useState("");
-  const revealFilePanel = useCallback(() => {
-    // Below this width the panel covers the model it was asked about, so it stays the person's to open.
-    if (mobile) return;
-    if (panelRef.current.openPanel !== CAD_PANEL.file) panelRef.current.onPanelOpen?.(CAD_PANEL.file);
-  }, [mobile]);
-  const revealFileSection = useCallback((sectionId, { open = true } = {}) => {
-    if (mobile || (!open && !panelRef.current.openPanel)) return;
-    revealFilePanel();
-    setPanelSection(sectionId);
-    setPanelRevealRequest(previous => ({ sectionId, key: (previous?.key || 0) + 1 }));
-  }, [mobile, revealFilePanel]);
   const chromeBackdropColor = useChromeBackdropColor(colorScheme === "dark");
   const sceneBackdrop = useMemo(
     () => resolvedScene.view.background.enabled && resolvedScene.view.background.opacity === 1
@@ -283,6 +254,10 @@ export function useRendererShell({
   );
   const previewOrbitSpeed = normalizeOrbit(services.preferences?.orbit).speed;
   const setPreviewOrbitSpeed = useCallback(speed => services.onPreferenceChange({ orbit: normalizeOrbit({ speed }) }),
+    [services.onPreferenceChange]);
+  // The tool stack's one width is the person's, across files: the host keeps it with the orbit.
+  const toolStackWidth = normalizeToolStackWidth(services.preferences?.toolStackWidth);
+  const setToolStackWidth = useCallback(width => services.onPreferenceChange({ toolStackWidth: normalizeToolStackWidth(width) }),
     [services.onPreferenceChange]);
   const hostRef = useRef(null);
   const [hostElement, setHostElement] = useState(null);
@@ -386,16 +361,17 @@ export function useRendererShell({
   useViewerShortcuts({
     viewerElement,
     onCopy: () => copyActionRef.current?.() || false,
-    escapeActive: Boolean(panelOpen || escape.active || presenting),
+    escapeActive: Boolean(escape.active || presenting || toolMode === SHELL_TOOL.DISPLAY),
     onEscape(event) {
       // A popup opened in THIS viewer (a menu, a Select, the Display sheet) owns Escape before
-      // fullscreen or the sidebar; another viewer's popup is not this one's business.
+      // fullscreen; another viewer's popup is not this one's business.
       if (hasOpenPopup(viewerElement.current)) return;
       if (presenting) { setPresenting(false); return; }
+      // Display is a tool whose panel is its settings: Escape puts it down, as its button does.
+      if (toolMode === SHELL_TOOL.DISPLAY) { selectTool(""); return; }
       // Draw's surface spends its own Escape (its editor deselects, or drops the stroke in hand).
       if (drawToolActive && event.target instanceof Element && event.target.closest("[data-cad-drawing-overlay]")) return;
-      if (escapeRef.current?.() === true) return;
-      closePanel();
+      escapeRef.current?.();
     }
   });
 
@@ -464,7 +440,7 @@ export function useRendererShell({
 
   // ---- what the frame and the renderer read ---------------------------------
   // The Display popover's content: every renderer's, built here from its display settings.
-  const display = <DisplaySettingsSection
+  const display = <DisplaySettingsSection appearanceControl={view.displayActions}
     features={features} viewSettings={displaySettings} hostAppearance={colorScheme} lightingQuality="preview"
     resolvedView={desiredScene.view} onViewSettingsPatch={viewSettingsStore.patch}
     onGroupEnabledChange={viewSettingsStore.setEnabled} onModeChange={viewSettingsStore.selectPreset}
@@ -472,32 +448,26 @@ export function useRendererShell({
   const stripTool = ({ id, label, icon, ...rest }) => ({
     id, label, icon, active: !presenting && toolMode === id, disabled: idle, onSelect: () => selectTool(id), ...rest
   });
-  const [drawMenuOpen, setDrawMenuOpen] = useState(false);
   const DrawIcon = DRAWING_TOOLBAR_TOOLS.find(item => item.id === drawing.tool)?.Icon || Pencil;
   const tools = {
     /** A tool of the renderer's own: `{ id, label, icon }` plus anything the strip reads. */
     own: stripTool,
+    // Its tools, color and history are a panel in the tool stack while it is up (`RendererShell.jsx`);
+    // the button shows the drawing tool in hand.
     draw: stripTool({ id: SHELL_TOOL.DRAW, label: "Draw", icon: <DrawIcon data-drawing-tool={drawing.tool} className="size-3" strokeWidth={2} aria-hidden="true" />,
-      secondPressOpensMenu: true,
-      description: "Open the corner menu for drawing tools and settings",
-      onSelect: () => { if (!drawToolActive) selectTool(SHELL_TOOL.DRAW); },
-      menu: trigger => <ToolPopover trigger={trigger} label="Drawing controls" className="w-auto p-1"
-        onFocusOutside={event => event.preventDefault()}
-        open={drawMenuOpen} onOpenChange={setDrawMenuOpen}>
-        <DrawingToolbar drawing={drawing} layout="panel" onToolSelect={() => setDrawMenuOpen(false)} onClear={() => setDrawMenuOpen(false)} />
-      </ToolPopover> }),
+      // A second press puts it down, as a kept tool's does (its mode toggles).
+      onSelect: () => selectTool(SHELL_TOOL.DRAW) }),
   };
 
   return {
     // Renderer-facing.
-    toolMode, selectTool, tools, display, idle, presenting, setPresenting, rendering, resolvedScene, viewerRef, openPanel,
+    toolMode, selectTool, tools, display, idle, presenting, setPresenting, rendering, resolvedScene, viewerRef,
     // Deliver a prompt context through the host, reporting a failure as the viewport's alert.
     reportActionError, capture, deliverPrompt, requestRender: () => viewerRef.current?.requestRender?.(),
     // The scene moved its own bounds: lighting, shadows and the floor follow, with no React render.
     syncSceneBounds: () => viewerRef.current?.syncSceneBounds?.(),
     // State the renderer keeps outside React changed: write the record soon (and on unmount).
     scheduleStateSave: scheduleSessionSave,
-    revealFilePanel, revealFileSection, panelRevealRequest, panelSection, setPanelSection,
     // Frame-facing (RendererShell).
     frame: {
       view, hostRef, hostElement, viewerElement, sceneBackdrop, colorScheme, modelKey, presentationKey, sceneScaleMode, scene,
@@ -505,10 +475,10 @@ export function useRendererShell({
       onCameraSettled: reportCameraSettled,
       preserveInteractionPixelRatio: preserveInteractionPixelRatio === true,
       runtimeLifecycle: stableRuntimeLifecycle,
-      previewOrbitSpeed, setPreviewOrbitSpeed, viewerLoading, loading, presentationState,
+      previewOrbitSpeed, setPreviewOrbitSpeed, toolStackWidth, setToolStackWidth, viewerLoading, loading, presentationState,
       handlePresentationChange, viewerAlert, setRuntimeAlert,
       copyActionRef, copyDrawing, copyShortcut: host.environment.platform === "darwin" ? "⌘C" : "Ctrl+C",
-      drawToolActive, drawing, animationAvailable, animation, capture, openPanel, display
+      drawToolActive, drawing, animationAvailable, animation, capture, display
     }
   };
 }

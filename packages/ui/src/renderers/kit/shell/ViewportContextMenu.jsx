@@ -6,7 +6,9 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger
 } from "@hardcore/ui/primitives/dropdown-menu";
+import { cn } from "@hardcore/ui/utils";
 import { prefersCoarsePointer } from "../viewport/dom.js";
+import { FLOATING_SURFACE_CLASS } from "../tools/floatingSurface.js";
 
 // A secondary press that MOVED is a pan, not a menu. Coarse pointers wander more.
 const FINE_TAP_SLOP_PX = 4;
@@ -129,7 +131,7 @@ export default function ViewportContextMenu({ viewport, items, onOpenChange = nu
       <DropdownMenuTrigger asChild>
         <button type="button" tabIndex={-1} aria-hidden="true" className="pointer-events-none fixed size-px opacity-0" style={style} />
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" side="bottom" sideOffset={4} className="w-44"
+      <DropdownMenuContent align="start" side="bottom" sideOffset={4} className={cn(FLOATING_SURFACE_CLASS, "w-44")}
         onContextMenu={event => { event.preventDefault(); event.stopPropagation(); }}>
         {open.items.map(item => (
           <div key={item.id} className="contents">

@@ -256,18 +256,19 @@ test("stays dark through display mode and render settings edits", async () => {
   await page.getByLabel("Filter files").fill(STEP);
   await page.getByRole("option", { name: STEP, exact: false }).first().click();
   await expect(page.locator("[data-cad-surface] canvas").first()).toBeVisible({ timeout: 120_000 });
-  // Picked in the tree, the file opens with the tree; its model list is in its own panel.
-  await page.locator("header [data-file-panel=cad-file]").click();
-  await expect(page.getByRole("list", { name: "Model", exact: true })).toBeVisible({ timeout: 120_000 });
+  // Picked in the tree, the file opens with the tree and in Select, its model list already in
+  // the Features panel of the viewer's tool stack.
+  const stack = page.locator("[data-cad-tool-stack]");
+  await expect(stack.getByRole("list", { name: "Model", exact: true })).toBeVisible({ timeout: 120_000 });
   await expectNeverMoved(page, "dark", "the CAD surface mounting");
   // Embedded CAD consumes the host appearance and never writes the document.
   expect(await surfaceWroteTheDocument(page)).toEqual({ theme: null, preference: null });
   await expect(page.getByRole("button", { name: "Theme settings", exact: true })).toHaveCount(0);
-  await expect(page.locator("[data-file-panel='cad-theme'], [data-file-sheet='Theme']")).toHaveCount(0);
+  await expect(page.locator("[data-file-panel='cad-theme'], [data-file-sheet]")).toHaveCount(0);
 
-  // Display is a popover tool, the toolbar's last button.
+  // Display is a tool, the toolbar's last button; its panel leads the stack while it is up.
   await page.locator("[data-cad-toolbar]").getByRole("button", { name: "Display", exact: true }).click();
-  const display = page.locator("[data-cad-display-popover]");
+  const display = stack.locator('[data-tool-panel][aria-label="Display settings"]');
   const displayMode = display.getByRole("combobox", { name: "Mode", exact: true });
   await displayMode.click();
   await page.getByRole("option", { name: "Render", exact: true }).click();
@@ -290,10 +291,10 @@ test("stays dark through display mode and render settings edits", async () => {
   await displayMode.click();
   await page.getByRole("option", { name: "Solid", exact: true }).click();
   await expect(displayMode).toContainText("Solid");
-  // Escape closes the popover; the file's own panel, with its Features tree, never left.
+  // Escape puts Display down and Select, with its Features tree as it was, is back.
   await page.keyboard.press("Escape");
   await expect(display).toHaveCount(0);
-  await expect(page.getByRole("list", { name: "Model", exact: true })).toBeVisible();
+  await expect(stack.getByRole("list", { name: "Model", exact: true })).toBeVisible();
   await expectNeverMoved(page, "dark", "returning to Inspect");
   expect(await surfaceWroteTheDocument(page)).toEqual({ theme: null, preference: null });
 });

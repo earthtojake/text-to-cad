@@ -166,9 +166,9 @@ test("the viewer's Add to prompt lands a chip, and the camera an image", async (
   await filter.fill(STEP);
   await page.getByRole("option", { name: STEP, exact: false }).first().click();
   await expect(page.locator("canvas").first()).toBeVisible({ timeout: 60_000 });
-  // Picked in the tree, the file opens with the tree; its model list is in its own panel.
-  await page.locator("header [data-file-panel=cad-file]").click();
-  const tree = page.getByRole("list", { name: "Model", exact: true });
+  // Picked in the tree, the file opens with the tree and in Select, so its model list is
+  // already in the Features panel of the viewer's tool stack; nothing needs opening.
+  const tree = page.locator("[data-cad-tool-stack]").getByRole("region", { name: "Features", exact: true }).getByRole("list", { name: "Model", exact: true });
   await expect(tree).toBeVisible({ timeout: 90_000 });
 
   // Add to prompt from the tree's context menu names the file by its full path.

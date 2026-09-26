@@ -17,7 +17,7 @@ function panel(input = {}) {
   });
   return { ...result, settings: () => store.getSnapshot().display };
 }
-const sections = tree => elements(tree).find(node => node.type?.name === "FilePanelSections")?.props.sections.filter(Boolean) ?? [];
+const sections = tree => elements(tree).find(node => node.type?.name === "DisplaySections")?.props.sections.filter(Boolean) ?? [];
 const controls = tree => sections(tree).length ? sections(tree).flatMap(section => elements(section.content)) : elements(tree);
 const labelled = (tree, label) => controls(tree).find(node => node.props.label === label);
 
@@ -53,7 +53,7 @@ test("group edits are sparse and disabling discards only that group's overrides"
 
 test("projection and tools update independent groups; only the view change is Custom", () => {
   const view = panel({ mode: "solid" });
-  // Explode lives in the STEP sidebar and writes the same store.
+  // Explode is a STEP tool with its own panel, and writes the same store.
   const explode = render(ExplodeControls, { viewSettings: view.settings(), onViewSettingsPatch: panel.store.patch });
   labelled(explode.tree, "Explode").props.onChange(45);
   explode.unmount();

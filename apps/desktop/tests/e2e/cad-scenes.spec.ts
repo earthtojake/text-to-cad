@@ -145,10 +145,10 @@ async function openFile(file: string) {
   await page.getByLabel("Filter files").fill(file);
   await page.getByRole("option", { name: file, exact: false }).first().click();
   await expect(page.locator("[data-cad-surface] canvas").first()).toBeVisible({ timeout: 90_000 });
-  // Picked in the tree, the file opens with the tree still up; these tests are about the
-  // file, so its own panel is taken up.
+  // Picked in the tree, the file opens with the tree still up, in Select: its tree (a STEP's
+  // Features, a robot's Links) is already the first panel of the tool stack.
   await expect(page.getByTestId("tree-toggle")).toHaveAttribute("aria-pressed", "true");
-  await showPanel("cad-file");
+  await expect(stack().getByRole("region", { name: /^(Features|Links)$/ })).toBeVisible({ timeout: 90_000 });
 }
 
 async function selectOrOpenFile(file: string) {
@@ -161,29 +161,31 @@ async function selectOrOpenFile(file: string) {
   await openFile(file);
 }
 
-/** The file's Settings toggle in the nav row, pressed only if its panel is not already the open one. */
-async function showPanel(id: "cad-file") {
-  const toggle = page.locator(`header [data-file-panel=${id}]`);
-  if (await toggle.getAttribute("aria-pressed") !== "true") await toggle.click();
-  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+/** The tool stack under the toolbar: every panel of the file's tools. */
+function stack() {
+  return page.locator("[data-cad-tool-stack]");
+}
+/** The panels the stack shows, top to bottom, by name. */
+function stackPanels() {
+  return stack().locator("[data-tool-panel]:visible").evaluateAll(panels => panels.map(panel => panel.getAttribute("aria-label")));
 }
 
-/** Display is a popover tool, the toolbar's last button; it opens over the viewport and keeps the file's panel. */
+/** Display is a tool, the toolbar's last button; while it is the tool its panel leads the stack. */
 function displayTool() {
   return page.locator("[data-cad-toolbar]").getByRole("button", { name: "Display", exact: true });
 }
-function displayPopover() {
-  return page.locator("[data-cad-display-popover]");
+function displayPanel() {
+  return stack().locator('[data-tool-panel][aria-label="Display settings"]');
 }
 async function openDisplay() {
-  if (!(await displayPopover().isVisible())) await displayTool().click();
-  await expect(displayPopover()).toBeVisible();
-  return displayPopover();
+  if (!(await displayPanel().isVisible())) await displayTool().click();
+  await expect(displayPanel()).toBeVisible();
+  return displayPanel();
 }
-/** Escape closes the popover and hands the toolbar back to the tool before it. */
+/** Escape puts Display down and hands the toolbar back to the default tool. */
 async function closeDisplay() {
   await page.keyboard.press("Escape");
-  await expect(displayPopover()).toHaveCount(0);
+  await expect(displayPanel()).toHaveCount(0);
 }
 
 async function setDisplayMode(mode: string) {
@@ -227,32 +229,24 @@ async function expectCadReady(file: string, componentCount = 1) {
 }
 
 /**
- * Select a lone part WHOLE. It has no row of its own in the Features tree, so it is selected
- * where a person selects a part whole: in the viewport, under the Select tool's Parts filter.
+ * Pick the lone part in the viewport under Select's default mode, All: the face under the
+ * pointer, whose Reference joins the stack under Features and reads its part's material.
  */
-async function selectWholePart() {
-  await setSelectFilter(/^Parts/);
+async function pickPart(timeout = 15_000) {
+  const select = page.getByRole("group", { name: "Interaction tools", exact: true }).getByRole("button", { name: "Select", exact: true });
+  if (await select.getAttribute("aria-pressed") !== "true") await select.click();
+  await expect(select.locator("[data-select-mode]")).toHaveAttribute("data-select-mode", "all");
   const canvas = page.locator("[data-cad-surface] canvas").first();
   const box = (await canvas.boundingBox())!;
   await canvas.click({ position: { x: box.width / 2, y: box.height / 2 } });
-  await expect(page.getByRole("region", { name: "Reference details", exact: true })).toBeVisible();
-}
-
-/** The Select tool's second press opens its filter; the filter is kept with the file. */
-async function setSelectFilter(name: RegExp) {
-  const select = page.getByRole("group", { name: "Interaction tools", exact: true }).getByRole("button", { name: "Select", exact: true });
-  if (await select.getAttribute("aria-pressed") !== "true") await select.click();
-  await expect(select).toHaveAttribute("aria-pressed", "true");
-  await select.click();
-  await page.getByRole("menuitemradio", { name }).click();
-  await expect(page.getByRole("menu")).toHaveCount(0);
+  await expect(stack().getByRole("region", { name: "Reference details", exact: true })).toBeVisible({ timeout });
 }
 
 test("View presets preserve authored materials and independent tools without a Materials editor", async () => {
   test.setTimeout(150_000);
   await openFile("part.step");
   await expect(page.getByRole("list", { name: "Model", exact: true })).toBeVisible({ timeout: 90_000 });
-  await selectWholePart();
+  await pickPart();
   const materialInfo = page.locator('[aria-label="Source material"]');
   await expect(materialInfo).toContainText("Unassigned");
   await expect(materialInfo.locator("input, select, button")).toHaveCount(0);
@@ -267,24 +261,34 @@ test("View presets preserve authored materials and independent tools without a M
       assignments: { [occurrenceId!]: "steel" },
     },
   }));
-  await expect(materialInfo).toContainText("Brushed steel", { timeout: 30_000 });
+  // The model reloads with its new appearance, and a face pick does not survive the reload (a
+  // lone part has no whole-part pick to keep), so the part is picked again once it has landed.
+  await expect(async () => {
+    await pickPart(3_000);
+    await expect(materialInfo).toContainText("Brushed steel", { timeout: 2_000 });
+  }).toPass({ timeout: 45_000 });
   await expect(materialInfo).toContainText("25%");
   await page.screenshot({ path: test.info().outputPath("inspect-material.png"), animations: "disabled" });
   await page.keyboard.press("Escape");
   await page.screenshot({ path: test.info().outputPath("inspect-material-unselected.png"), animations: "disabled" });
   await expect(page.getByRole("button", { name: "Theme settings", exact: true })).toHaveCount(0);
-  await expect(page.locator("[data-file-panel=cad-theme], [data-file-sheet=Theme]")).toHaveCount(0);
-  // The nav row holds the file's Settings and the files toggle, and nothing else: Display is a
-  // toolbar popover, and no panel of a Materials or Studio editor is in the row.
-  await expect(page.locator("header [data-file-panel]")).toHaveCount(2);
+  await expect(page.locator("[data-file-panel=cad-theme], [data-file-sheet]")).toHaveCount(0);
+  // The nav row's only panel toggle is the files one: a STEP declares no panel of its own,
+  // Display is a toolbar tool, and no Materials or Studio editor is anywhere.
   expect(await page.locator("header [data-file-panel]").evaluateAll(toggles => toggles.map(toggle =>
     `${toggle.getAttribute("data-file-panel")}:${toggle.getAttribute("aria-label")}`)))
-    .toEqual(["cad-file:Settings", "tree:Show files"]);
+    .toEqual(["tree:Hide files"]);
+  expect(await stackPanels()).toEqual(["Features"]);
   const view = await openDisplay();
   await expect(displayTool()).toHaveAttribute("aria-pressed", "true");
-  // The popover opens over the viewport and leaves the file's Settings where it was.
+  // Display's panel is the stack while it is the tool, at the toolbar's left edge, and the
+  // host's file tree stays where it was.
+  expect(await stackPanels()).toEqual(["Display settings"]);
+  const [toolbarBox, viewBox] = [(await page.locator("[data-cad-toolbar]").boundingBox())!, (await view.boundingBox())!];
+  expect(Math.abs(viewBox.x - toolbarBox.x)).toBeLessThanOrEqual(1);
+  expect(viewBox.y).toBeGreaterThanOrEqual(toolbarBox.y + toolbarBox.height);
   await expect(page.locator("[data-file-panel-container]")).toHaveCount(1);
-  await expect(page.locator("header [data-file-panel=cad-file]")).toHaveAttribute("aria-pressed", "true");
+  await expect(page.getByTestId("tree-toggle")).toHaveAttribute("aria-pressed", "true");
   const mode = view.getByRole("combobox", { name: "Mode", exact: true });
   const controlFont = await mode.evaluate(element => element.ownerDocument.defaultView!.getComputedStyle(element).fontSize);
   // The section rules of `packages/ui/docs/settings-ui.md`. Surfaces is always open: its
@@ -372,9 +376,11 @@ test("View presets preserve authored materials and independent tools without a M
   await clipAmount.press("Enter");
   await expect(clip.getByRole("slider", { name: "Clip amount" })).toHaveAttribute("aria-valuenow", "50");
   await openDisplay();
-  // Display opens beside the kept panel, not over it.
-  const [clipBox, displayBox] = [(await clip.boundingBox())!, (await displayPopover().boundingBox())!];
-  expect(displayBox.x).toBeGreaterThanOrEqual(clipBox.x + clipBox.width);
+  // Display leads the stack, and the kept Clip panel stays under it, the stack's one width.
+  expect(await stackPanels()).toEqual(["Display settings", "Clip controls"]);
+  const [clipBox, displayBox] = [(await clip.boundingBox())!, (await displayPanel().boundingBox())!];
+  expect(clipBox.y).toBeGreaterThanOrEqual(displayBox.y + displayBox.height);
+  expect(Math.abs(clipBox.width - displayBox.width)).toBeLessThanOrEqual(1);
   await mode.click();
   await page.getByRole("option", { name: "Render", exact: true }).click();
   await expect(exposure).toHaveValue("0.0 EV");
@@ -389,43 +395,53 @@ test("View presets preserve authored materials and independent tools without a M
   await expect(clip).toHaveCount(0);
   // Leaving Render prepares the view again; a pick waits until the model is ready for one.
   await expect(page.locator("[data-viewer-transition]")).toHaveCount(0);
-  await showPanel("cad-file");
   await expectCadReady("part.step");
-  await selectWholePart();
+  await pickPart();
   await expect(materialInfo).toContainText("Brushed steel");
   const sidecarPath = path.join(project, "part.step.json");
   const sidecar = JSON.parse(fs.readFileSync(sidecarPath, "utf8"));
   delete sidecar.appearance;
   fs.writeFileSync(sidecarPath, JSON.stringify(sidecar));
-  await expect(materialInfo).toContainText("Unassigned", { timeout: 30_000 });
+  // An appearance-only reload keeps the pick: the Reference is still up, now unassigned.
+  await expect(materialInfo).toContainText("Unassigned", { timeout: 45_000 });
   await page.keyboard.press("Escape");
-  await setSelectFilter(/^All/);
+  await expect(stack().getByRole("region", { name: "Reference details", exact: true })).toHaveCount(0);
   expect(await page.evaluate(() => localStorage.getItem("cad-viewer:theme"))).toBeNull();
   expect(errors).toEqual([]);
 });
 
 test("robot Position edits, preserves and resets a joint through the robot's own panel", async () => {
   await openFile("hinge.urdf");
-  // A robot's own panel is its Settings, with Links and Position as two tabs; the Position tool
-  // turns the panel to Position, whose joints are one section with no Joints heading inside it.
-  await expect(page.locator("[data-file-sheet=Settings]")).toBeVisible();
-  await expect(page.locator("header [data-file-panel=cad-file]")).toHaveAttribute("aria-label", "Settings");
-  await expect(page.locator("[data-file-sheet=Settings]").getByRole("tab")).toHaveText(["Links", "Position"]);
+  // A robot declares no panel of its own and has no tabs: Select shows its Links in the tool
+  // stack, and the Position tool shows the Position panel in their place, with no heading of
+  // its own and no Joints heading inside it.
+  expect(await page.locator("header [data-file-panel]").evaluateAll(toggles => toggles.map(toggle => toggle.getAttribute("aria-label")))).toEqual(["Hide files"]);
+  await expect(page.locator("[data-cad-surface]").getByRole("tab")).toHaveCount(0);
+  expect(await stackPanels()).toEqual(["Links"]);
   const tools = page.getByRole("group", { name: "Interaction tools", exact: true });
   await tools.getByRole("button", { name: "Position", exact: true }).click();
-  await expect(page.getByRole("tab", { name: "Position", exact: true })).toHaveAttribute("aria-selected", "true");
-  const position = page.locator("[data-file-panel-section=position]");
+  const position = stack().locator('[data-tool-panel][aria-label="Position controls"]');
   await expect(position).toBeVisible();
-  await expect(position.getByRole("heading", { name: "Joints", exact: true })).toHaveCount(0);
-  const joint = page.getByLabel("hinge value in deg", { exact: true });
+  expect(await stackPanels()).toEqual(["Position controls"]);
+  await expect(position.getByRole("heading")).toHaveCount(0);
+  const joint = position.getByLabel("hinge value in deg", { exact: true });
   await expect(joint).toHaveValue("0°");
   await joint.fill("35");
   await joint.press("Enter");
   await expect(joint).toHaveValue("35°");
-  await page.getByRole("button", { name: "Show files", exact: true }).click();
+  // The value survives a trip to Select, whose Links take the stack meanwhile.
+  await tools.getByRole("button", { name: "Select", exact: true }).click();
   await expect(joint).toBeHidden();
-  await page.locator("header [data-file-panel=cad-file]").click();
+  expect(await stackPanels()).toEqual(["Links"]);
+  await tools.getByRole("button", { name: "Position", exact: true }).click();
   await expect(joint).toHaveValue("35°");
+  // The host's file tree is no switch of the stack's: closing it leaves Position up.
+  await page.getByTestId("tree-toggle").click();
+  await expect(page.getByTestId("tree-toggle")).toHaveAttribute("aria-pressed", "false");
+  await expect(joint).toBeVisible();
+  await expect(joint).toHaveValue("35°");
+  await page.getByTestId("tree-toggle").click();
+  await expect(page.getByTestId("tree-toggle")).toHaveAttribute("aria-pressed", "true");
   await position.getByRole("button", { name: "Reset", exact: true }).click();
   await expect(joint).toHaveValue("0°");
   await page.screenshot({ path: test.info().outputPath("robot-kinematics.png"), animations: "disabled" });
@@ -657,14 +673,17 @@ test("prompt actions preserve the draft, native clipboard and captured selection
     await expect(chips).toHaveCount(0);
     await expect(draft).toHaveText("Keep this draft intact.");
 
-    // This single-component import exposes its model root as a whole-resource selection,
-    // made in the viewport under Parts. Exercise that identity explicitly rather than assuming o1.
-    const details = page.getByRole("region", { name: "Reference details", exact: true });
-    await selectWholePart();
-    await expect(page.locator("[data-reference-tip]")).toHaveCount(0);
+    // A lone part has no row and no Parts mode: the whole part's reference is on the viewport's
+    // menu over empty space, which leads with Add to prompt and then Copy Reference.
+    const canvas = page.locator("[data-cad-surface] canvas").first();
+    const canvasBox = (await canvas.boundingBox())!;
+    await canvas.click({ button: "right", position: { x: canvasBox.width - 40, y: canvasBox.height * 0.45 } });
+    await expect(page.getByRole("menu")).toBeVisible();
+    expect((await page.getByRole("menu").getByRole("menuitem").allTextContents()).slice(0, 2)).toEqual(["Add to prompt", "Copy Reference"]);
     await page.keyboard.press("Escape");
-    await expect(details).toHaveCount(0);
-    await setSelectFilter(/^All/);
+    await expect(page.getByRole("menu")).toHaveCount(0);
+    await expect(stack().getByRole("region", { name: "Reference details", exact: true })).toHaveCount(0);
+    await expect(page.locator("[data-reference-tip]")).toHaveCount(0);
 
     // The viewer's bottom action copies; the prompt is reached through a pick's own menu — here
     // the feature row's, the same menu the viewport opens over its faces.

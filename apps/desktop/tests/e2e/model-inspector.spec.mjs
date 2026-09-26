@@ -69,19 +69,25 @@ test('the Features tree presents a lone part as its features, and precise viewpo
       name: 'tests/fixtures/cad/import-smoke.step',
       exact: false
     }).first().click();
-    // Picked in the tree, the STEP opens with the tree still up, and its own Settings one press away.
-    const partPanel = page.locator('header [data-file-panel=cad-file]');
-    await expect(partPanel).toHaveAttribute('aria-label','Settings', { timeout: 60000 });
+    // Picked in the tree, the STEP opens with the tree still up and in Select, so its Features are
+    // already the first panel of the tool stack under the toolbar: the nav row holds only the file
+    // tree's toggle, and there is no Settings panel, no sheet and no tab to open first.
+    const features=page.getByRole('region',{name:'Features',exact:true});
+    await expect(features).toBeVisible({timeout:60000});
     await expect(page.getByTestId('tree-toggle')).toHaveAttribute('aria-pressed','true');
-    await partPanel.click();
-    await expect(page.locator('[data-file-sheet=Settings]')).toBeVisible();
-    // The tree is the panel's Features section — with no joints and no issues, its only one —
-    // and there are no tabs at all: the Model, Surfaces and Geometry tabs are gone with the rest.
-    await expect(page.getByRole('region',{name:'Features',exact:true})).toBeVisible();
-    await expect(page.locator('[data-file-panel-section=features]')).toBeVisible();
-    await expect(page.locator('[data-file-sheet=Settings] [data-file-panel-section]')).toHaveCount(1);
-    await expect(page.locator('[data-file-sheet]').getByRole('tab')).toHaveCount(0);
+    await expect(page.locator('header [data-file-panel]')).toHaveCount(1);
+    await expect(page.locator('[data-file-panel=cad-file], [data-file-sheet]')).toHaveCount(0);
+    await expect(features).toHaveAttribute('data-tool-panel','tree');
+    expect(await page.locator('[data-cad-tool-stack] [data-tool-panel]:visible').evaluateAll(panels=>panels.map(panel=>panel.getAttribute('aria-label')))).toEqual(['Features']);
+    // Its top row is the filter, with no heading over it; no tab anywhere in the viewer.
+    await expect(features.locator('[data-tool-panel-heading]')).toHaveCount(0);
+    await expect(features.getByRole('textbox',{name:'Filter model'})).toBeVisible();
+    await expect(page.locator('[data-cad-surface]').getByRole('tab')).toHaveCount(0);
     for (const retired of ['Model','Surfaces','Geometry']) await expect(page.getByRole('region',{name:retired,exact:true})).toHaveCount(0);
+    // A lone part has no Explode on its strip: an unavailable tool is absent, not disabled.
+    const tools=page.getByRole('group',{name:'Interaction tools',exact:true});
+    await expect(tools.getByRole('button',{name:'Select',exact:true})).toBeEnabled({timeout:30000});
+    await expect(tools.getByRole('button',{name:'Explode',exact:true})).toHaveCount(0);
     const tree=page.getByRole('list',{name:'Model',exact:true});
     // A lone part is presented as its features directly: the part itself adds no choice.
     const feature=tree.getByRole('button',{name:/^Select Base (extrude|revolve)$/}).first();
@@ -95,13 +101,22 @@ test('the Features tree presents a lone part as its features, and precise viewpo
     await expect(feature).toHaveAttribute('aria-pressed','true');
     await page.keyboard.press('Escape');
     await expect(feature).toHaveAttribute('aria-pressed','false');
-    // Precise refs: the Select tool's second press narrows its filter to faces.
-    const selectTool = page.getByRole('group',{name:'Interaction tools',exact:true}).getByRole('button', {name:'Select', exact:true});
-    await expect(selectTool).toBeEnabled({timeout:30000});
+    // Precise refs: the Select tool's second press opens its mode menu under the button — All,
+    // Faces and Edges for a lone part (Parts is an assembly's), then the two checkboxes — and
+    // Faces puts its own icon on the strip.
+    const selectTool = tools.getByRole('button', {name:'Select', exact:true});
     await expect(selectTool).toHaveAttribute('aria-pressed','true');
+    await expect(selectTool.locator('[data-select-mode]')).toHaveAttribute('data-select-mode','all');
     await selectTool.click();
-    await page.getByRole('menuitemradio',{name:/^Faces/}).click();
+    // Found by its label: Radix names a menu after its trigger.
+    const modeMenu=page.locator('[role=menu][aria-label="Select mode"]');
+    await expect(modeMenu.getByRole('menuitemradio')).toHaveText(['All','Faces','Edges']);
+    await expect(modeMenu.getByRole('menuitemcheckbox')).toHaveText(['Edge chain','Tangent faces']);
+    const [menuBox,selectBox]=await Promise.all([modeMenu.boundingBox(),selectTool.boundingBox()]);
+    expect(menuBox.y).toBeGreaterThanOrEqual(selectBox.y+selectBox.height-1);
+    await modeMenu.getByRole('menuitemradio',{name:'Faces',exact:true}).click();
     await expect(page.getByRole('menu')).toHaveCount(0);
+    await expect(selectTool.locator('[data-select-mode]')).toHaveAttribute('data-select-mode','faces');
     // Pick the model itself; no exhaustive topology list is needed to inspect faces or edges.
     const canvas=page.locator('[data-cad-surface] canvas').first();
     const box=await canvas.boundingBox();
@@ -113,11 +128,26 @@ test('the Features tree presents a lone part as its features, and precise viewpo
     const copyAction=page.getByRole('button',{name:/^Copy Reference\b/});
     await expect(copyAction).toBeVisible();
     await expect(page.getByRole('button',{name:'Add to prompt',exact:true})).toHaveCount(0);
-    // The pick's Reference, pinned at the Settings panel's foot under its sections.
-    const reference=page.locator('[data-file-sheet=Settings]').getByRole('region',{name:'Reference details',exact:true}).getByText(/^o[0-9.]+\.[fe][0-9]+$/);
+    // The pick's Reference is the next panel of the stack, directly under Features, its heading the
+    // reference itself (never the raw id, which is its ID row) with an X that clears the selection.
+    const details=page.locator('[data-cad-tool-stack]').getByRole('region',{name:'Reference details',exact:true});
+    await expect(details).toBeVisible();
+    expect(await page.locator('[data-cad-tool-stack] [data-tool-panel]:visible').evaluateAll(panels=>panels.map(panel=>panel.getAttribute('aria-label')))).toEqual(['Features','Reference details']);
+    const [featuresBox,detailsBox]=await Promise.all([features.boundingBox(),details.boundingBox()]);
+    expect(Math.abs(featuresBox.x-detailsBox.x)).toBeLessThanOrEqual(1);
+    expect(Math.abs(featuresBox.width-detailsBox.width)).toBeLessThanOrEqual(1);
+    expect(detailsBox.y).toBeGreaterThanOrEqual(featuresBox.y+featuresBox.height);
+    const reference=details.getByText(/^o[0-9.]+\.[fe][0-9]+$/);
     await expect(reference).toBeVisible();
     const selector=await reference.innerText();
+    await expect(details.locator('[data-tool-panel-heading] h3')).not.toHaveText(selector);
+    await expect(details.locator('[data-tool-panel-heading] h3')).toHaveText(/\S/);
+    await expect(details.getByRole('button',{name:'Clear selection',exact:true})).toBeVisible();
+    // Over a pick of a lone part the viewport's menu leads with the reference group: Add to prompt,
+    // then Copy Reference.
     await canvas.click({button:'right',position:{x:box.width*0.5,y:box.height*0.5}});
+    await expect(page.getByRole('menu')).toBeVisible();
+    expect((await page.getByRole('menu').getByRole('menuitem').allTextContents()).slice(0,2)).toEqual(['Add to prompt','Copy Reference']);
     await page.getByRole('menuitem',{name:'Add to prompt',exact:true}).click();
     await expect(page.getByRole('menu')).toHaveCount(0);
     const chip=page.locator('[data-composer] [data-reference-chip]');

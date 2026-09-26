@@ -119,11 +119,11 @@ test('fullscreen stays separate from conditional GLB animation tools', async (t)
   await pane.getByRole('button', { name: 'Exit fullscreen', exact: true }).click();
   assert.equal(await animate.getAttribute('aria-pressed'), 'true');
   await pane.locator('[data-cad-toolbar]').getByRole('button', { name: 'Display', exact: true }).click();
-  await pane.getByRole('dialog', { name: 'Display settings' }).waitFor();
+  await pane.locator('[data-tool-panel][aria-label="Display settings"]').waitFor();
   assert.equal(await animate.getAttribute('aria-pressed'), 'false');
   assert.equal(await pane.getByRole('toolbar', { name: 'Animation playback' }).count(), 0);
   await animate.click();
-  await pane.getByRole('dialog', { name: 'Display settings' }).waitFor({ state: 'hidden' });
+  await pane.locator('[data-tool-panel][aria-label="Display settings"]').waitFor({ state: 'hidden' });
   await pane.getByRole('button', { name: 'Pause animation', exact: true }).waitFor();
   assert.deepEqual([...staticView.errors, ...errors], []);
 });
@@ -191,9 +191,9 @@ test('a static GLB opens on its native scene with no tools: display settings, or
   // A GLB has no panel of its own: its only settings are Display's, and Display is never
   // where a file opens. So it opens with the column shut and the model given the room.
   assert.deepEqual(await panels(pane), ['Show files:false']);
-  assert.equal(await pane.locator('[data-file-sheet]').count(), 0);
+  assert.equal(await pane.locator('[data-tool-panel]').count(), 0, 'nothing in the tool stack until Display is taken up');
   await pane.locator('[data-cad-toolbar]').getByRole('button', { name: 'Display', exact: true }).click();
-  await pane.locator('[data-cad-display-popover]').waitFor();
+  await pane.locator('[data-tool-panel][aria-label="Display settings"]').waitFor();
   assert.deepEqual(await panels(pane), ['Show files:false']);
   assert.equal(await pane.getByRole('tab').count(), 0, 'a panel has no tabs inside it');
   assert.deepEqual(await pane.getByRole('combobox', { name: 'Mode', exact: true }).innerText(), 'Solid');
@@ -202,7 +202,7 @@ test('a static GLB opens on its native scene with no tools: display settings, or
   await page.keyboard.press('Escape');
   for (const section of ['Edges', 'Cross-section', 'Explode']) assert.equal(await pane.getByRole('heading', { name: section, exact: true }).count(), 0, section);
   await pane.locator('[data-cad-toolbar]').getByRole('button', { name: 'Display', exact: true }).click();
-  await pane.locator('[data-cad-display-popover]').waitFor({ state: 'detached' });
+  await pane.locator('[data-tool-panel][aria-label="Display settings"]').waitFor({ state: 'detached' });
   // The column closing reaches the scene as a resize; let that frame land before comparing pictures.
   await page.waitForFunction(() => document.querySelector('[data-testid="one"] [aria-busy] > div > canvas').width >= 1190);
   await settle(page);

@@ -12,7 +12,7 @@ test('stored preferences read their storage, write the orbit back, and re-read o
   values.set('cad-viewer:orbit:v1', JSON.stringify({ speed: 2 }));
   values.set('cad-viewer:theme', 'retired');
   const preferences = createStoredCadPreferences(storage);
-  expect(preferences.getSnapshot()).toEqual({ orbit: { speed: 2 } });
+  expect(preferences.getSnapshot()).toEqual({ orbit: { speed: 2 }, toolStackWidth: 190 });
   preferences.update({ orbit: { speed: 1.37 } });
   expect(JSON.parse(values.get('cad-viewer:orbit:v1')!)).toEqual({ speed: 1.37 });
   expect(createStoredCadPreferences(storage).getSnapshot().orbit).toEqual({ speed: 1.37 });
@@ -31,4 +31,18 @@ test('stored preferences read their storage, write the orbit back, and re-read o
   preferences.storageChanged(null);
   expect(preferences.getSnapshot().orbit).toEqual({ speed: 1 });
   expect(values.size).toBe(0);
+});
+
+test('the tool stack width is a stored preference of its own: bounded, written back, and heard from other windows', () => {
+  const { values, storage } = memory();
+  const preferences = createStoredCadPreferences(storage);
+  expect(preferences.getSnapshot().toolStackWidth).toBe(190);
+  preferences.update({ toolStackWidth: 240 });
+  expect(values.get('cad-viewer:tool-stack-width:v1')).toBe('240');
+  expect(values.has('cad-viewer:orbit:v1')).toBe(false);
+  expect(createStoredCadPreferences(storage).getSnapshot().toolStackWidth).toBe(240);
+  values.set('cad-viewer:tool-stack-width:v1', '12');
+  preferences.storageChanged('cad-viewer:tool-stack-width:v1');
+  expect(preferences.getSnapshot().toolStackWidth).toBe(160);
+  expect(values.get('cad-viewer:tool-stack-width:v1')).toBe('12');
 });

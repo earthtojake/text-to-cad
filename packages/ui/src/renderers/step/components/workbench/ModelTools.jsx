@@ -18,8 +18,14 @@ function ClipIcon(props) {
   </svg>;
 }
 
-/** Selection belongs to the toolbar; applied effects and their panels outlive it. */
-export function useModelTools({ modelKey, view, features, store, mesh, disabled, selectedTool, onSelect, hidden, measure = null }) {
+/**
+ * Explode, Clip and Measure's results: tools whose effects a person keeps, each with a panel in
+ * the tool stack that outlives the tool being in hand. Selection belongs to the toolbar.
+ *
+ * A tool the file cannot offer is not on the strip: Explode needs two parts to separate. While
+ * the mesh is still loading that is not known yet, so Explode is shown, idle, until it is.
+ */
+export function useModelTools({ modelKey, view, features, store, mesh, disabled, selectedTool, onSelect, measure = null }) {
   const applied = [
     ...(view.exploded.enabled && view.exploded.amount > 0 ? ["exploded"] : []),
     ...(view.clip.enabled && Math.abs(view.clip.offsets[view.clip.axis] - (view.clip.invert ? 0 : 1)) > 1e-6 ? ["clip"] : []),
@@ -54,7 +60,7 @@ export function useModelTools({ modelKey, view, features, store, mesh, disabled,
   }, [modelKey, selectedTool, appliedKey, holding]);
   const definitions = [
     ...(measure ? [{ ...measure, id: "measure", label: "Measure" }] : []),
-    { id: "exploded", label: "Explode", Icon: ExplodeIcon, unavailable: explodablePartCount(mesh) <= 1,
+    { id: "exploded", label: "Explode", Icon: ExplodeIcon, unavailable: Boolean(mesh) && explodablePartCount(mesh) <= 1,
       summary: `${Math.round((view.exploded.enabled ? view.exploded.amount : 0) * 100)}%`,
       controls: <ExplodeControls compact viewSettings={view} onViewSettingsPatch={store.patch} /> },
     { id: "clip", label: "Clip", Icon: ClipIcon,
@@ -68,8 +74,8 @@ export function useModelTools({ modelKey, view, features, store, mesh, disabled,
     if (selectedTool === id) onSelect("references");
   };
   return {
-    tools: definitions.filter(tool => tool.id !== "measure").map(({ id, label, Icon, unavailable }) => ({
-      id, label, active: panelIds.includes(id), disabled: disabled || unavailable,
+    tools: definitions.filter(tool => tool.id !== "measure" && !tool.unavailable).map(({ id, label, Icon }) => ({
+      id, label, active: panelIds.includes(id), disabled,
       icon: <Icon className="size-3" strokeWidth={2} aria-hidden="true" />,
       onSelect: () => {
         if (panelIds.includes(id)) { remove(id); return; }
@@ -80,17 +86,17 @@ export function useModelTools({ modelKey, view, features, store, mesh, disabled,
         setPanels(current => ({ modelKey, ids: [...new Set([...(current.modelKey === modelKey ? current.ids.filter(value => applied.includes(value)) : []), id])] }));
       }
     })),
-    panels: <div hidden={hidden} className="min-h-0 w-40 max-w-full space-y-2 overflow-y-auto" data-model-tool-panels=""
-      onPointerDownCapture={() => setHolding(true)}>
+    // The panels sit in the tool stack as its own items (`contents`); a press in any of them holds
+    // their order until the pointer lets go.
+    panels: <div className="contents" data-model-tool-panels="" onPointerDownCapture={() => setHolding(true)}>
       {[...(measure?.hasMeasurements ? ["measure"] : []), ...panelIds].map(id => {
         const tool = definitions.find(value => value.id === id);
-        return tool ? <section key={id} aria-label={`${tool.label} controls`}
-          className="pointer-events-auto overflow-hidden rounded-md border border-border bg-popover text-popover-foreground shadow-sm text-tiny">
-          <ToolPanel title={tool.label} label={`${tool.label} controls`} summary={tool.summary} collapsible
-            onClose={() => remove(id)}>
-            <div className="space-y-1 pb-1">{tool.controls}</div>
-          </ToolPanel>
-        </section> : null;
+        // Measure's results can run long, so they give way like a details panel; Explode and
+        // Clip are a row or two and keep their height.
+        return tool ? <ToolPanel key={id} title={tool.label} label={`${tool.label} controls`} summary={tool.summary} collapsible
+          fit={id === "measure" ? "details" : "fixed"} onClose={() => remove(id)}>
+          <div className="space-y-1 pb-1">{tool.controls}</div>
+        </ToolPanel> : null;
       })}
     </div>
   };

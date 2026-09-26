@@ -50,10 +50,8 @@ export {
 export { fuzzyFilter, fuzzyMatch } from "./fuzzy.js";
 export { FileIcon, FolderIcon, fileIconFor } from "./icons.jsx";
 export {
-  CAD_PANEL,
   FILE_PANEL_TREE,
   nextOpenPanel,
   resolveOpenPanel,
-  treePanel,
-  viewerPanels
+  treePanel
 } from "./panels.js";

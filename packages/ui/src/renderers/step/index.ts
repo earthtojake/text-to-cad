@@ -5,7 +5,6 @@ import type { PromptContext, PromptReference } from '@hardcore/core/prompt';
 import type { ComponentType } from 'react';
 import { isCadFile } from '@hardcore/core/lib/fileFormats.js';
 import { defineFileRenderer } from '../../file-viewer/registry.js';
-import { viewerPanels } from '../../file-viewer/navigation/panels.js';
 
 export type { CadLiveBinding, CadLiveController, CadLiveState, CadCameraSnapshot } from './live.js';
 import type { CadLiveBinding } from './live.js';
@@ -41,8 +40,6 @@ export function createStepRenderer({ client, ...services }: StepRendererOptions)
     id: 'step',
     priority: 100,
     matches: (file) => !OTHER_RENDERERS_FILE.test(file.path) && (file.mediaType === 'cad' || Boolean(isCadFile(file.path))),
-    // One Settings panel (Features, and Position when the file has joints), open by default.
-    panels: ({ ready }) => viewerPanels(ready, { file: true }),
     async prepare(context) {
       const prepared = await prepareWorkspaceEntry(client, context);
       return { data: { ...prepared.data, services }, dispose: prepared.dispose };

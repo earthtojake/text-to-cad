@@ -66,12 +66,14 @@ test('live CAD commands observe and control the mounted tiny STEP viewport witho
   const opened = await command('open-file') as { tabId: string };
   const tabId = opened.tabId;
   await expect(page.locator('[data-cad-surface] canvas').first()).toBeVisible({ timeout: 90_000 });
-  // Opened by a command rather than picked in the tree, the STEP opens on its own Settings
-  // panel, not on the tree; Display is a toolbar popover, never a panel in the nav row.
-  await expect(page.locator('header [data-file-panel=cad-file]')).toHaveAttribute('aria-pressed', 'true', { timeout: 90_000 });
-  await expect(page.locator('header [data-file-panel=cad-file]')).toHaveAttribute('aria-label', 'Settings');
-  await expect(page.locator('header [data-file-panel=cad-display]')).toHaveCount(0);
-  await expect(page.locator('[data-cad-display-popover]')).toHaveCount(0);
+  // Opened by a command rather than picked in the tree, the STEP opens in Select with its
+  // Features in the tool stack under the toolbar and the file tree closed: the nav row's only
+  // panel toggle is the file tree's, and Display is a tool whose panel is not up yet.
+  const stack = page.locator('[data-cad-tool-stack]');
+  await expect(stack.getByRole('region', { name: 'Features', exact: true })).toBeVisible({ timeout: 90_000 });
+  await expect(page.locator('header [data-file-panel]')).toHaveCount(1);
+  await expect(page.locator('header [data-file-panel=tree]')).toHaveCount(1);
+  await expect(stack.locator('[data-tool-panel][aria-label="Display settings"]')).toHaveCount(0);
   await expect(page.getByTestId('tree-toggle')).toHaveAttribute('aria-pressed', 'false');
   let state!: CadLiveState;
   await expect.poll(async () => {
@@ -82,28 +84,29 @@ test('live CAD commands observe and control the mounted tiny STEP viewport witho
   expect(state.revision).toBe(revision);
   expect(state.display).toEqual({ mode: 'solid' });
   const initialCamera = state.camera!;
-  // A lone part has no row of its own in the Features tree (it is presented as its features),
-  // so it is selected whole where a person selects it whole: the viewport, under Parts.
+  // Select's default mode is All: a press on a lone part picks the face under the pointer, and
+  // the pick's Reference joins the stack under Features.
   const selectTool = page.getByRole('group', { name: 'Interaction tools', exact: true }).getByRole('button', { name: 'Select', exact: true });
   await expect(selectTool).toHaveAttribute('aria-pressed', 'true');
-  await selectTool.click();
-  await page.getByRole('menuitemradio', { name: /^Parts/ }).click();
-  await expect(page.getByRole('menu')).toHaveCount(0);
+  await expect(selectTool.locator('[data-select-mode]')).toHaveAttribute('data-select-mode', 'all');
   const canvas = page.locator('[data-cad-surface] canvas').first();
   const canvasBox = (await canvas.boundingBox())!;
-  const details = page.getByRole('region', { name: 'Reference details', exact: true });
+  const details = stack.getByRole('region', { name: 'Reference details', exact: true });
   await canvas.click({ position: { x: canvasBox.width / 2, y: canvasBox.height / 2 } });
   await expect(details).toBeVisible();
   const selected = await command('viewer-state', tabId) as CadLiveState;
-  expect(selected.selection).toEqual(expect.arrayContaining([expect.objectContaining({ resource: expect.objectContaining({ path: 'part.step', revision }), target: { kind: 'whole-resource' } })]));
+  expect(selected.selection).toEqual([expect.objectContaining({ resource: expect.objectContaining({ path: 'part.step', revision }),
+    target: { kind: 'cad-selector', selectors: [expect.stringMatching(/\.f\d+$/)] } })]);
   const captured = await command('capture-view', tabId) as CadLiveState & { base64: string; mimeType: string };
   expect(captured.selection).toEqual(selected.selection); expect(captured.revision).toBe(revision);
   expect(captured.mimeType).toBe('image/png'); expect(Buffer.from(captured.base64, 'base64').subarray(0, 8)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
   fs.writeFileSync(test.info().outputPath('live-capture.png'), Buffer.from(captured.base64, 'base64'));
   expect((await command('cad-clear-selection', tabId) as CadLiveState).selection).toEqual([]);
   await expect(details).toHaveCount(0);
+  // A lone part has no row of its own and no Parts mode, so the whole part is selected through
+  // the live command; it shows its Reference the same way a pick does.
   const reselected = await command('select-reference', tabId, { selector: 'part.step' }) as CadLiveState;
-  expect(reselected.selection).toEqual(selected.selection);
+  expect(reselected.selection).toEqual([expect.objectContaining({ resource: expect.objectContaining({ path: 'part.step', revision }), target: { kind: 'whole-resource' } })]);
   await expect(details).toBeVisible();
   await command('cad-clear-selection', tabId);
   const movedCamera = { ...initialCamera, position: initialCamera.position.map((value, index) => value + (index === 0 ? 5 : 0)) };
@@ -118,9 +121,13 @@ test('live CAD commands observe and control the mounted tiny STEP viewport witho
   expect(renderedState.renderMode).toBe('render');
   expect(renderedState.display.mode).toBe('render');
   expect(renderedState.camera?.projection).toBe('perspective');
-  // Display is a popover tool at the end of the toolbar; its Mode follows the live command.
+  // Display is the last tool on the strip; its panel leads the stack and its Mode follows the
+  // live command.
   await page.locator('[data-cad-toolbar]').getByRole('button', { name: 'Display', exact: true }).click();
-  const displayMode = page.locator('[data-cad-display-popover]').getByRole('combobox', { name: 'Mode', exact: true });
+  const displayPanel = stack.locator('[data-tool-panel][aria-label="Display settings"]');
+  await expect(displayPanel).toBeVisible();
+  expect(await stack.locator('[data-tool-panel]:visible').first().getAttribute('aria-label')).toBe('Display settings');
+  const displayMode = displayPanel.getByRole('combobox', { name: 'Mode', exact: true });
   await expect(displayMode).toContainText('Render');
   const solidState = await command('cad-render-mode', tabId, { mode: 'inspect' }) as CadLiveState;
   expect(solidState.display.mode).toBe('solid');

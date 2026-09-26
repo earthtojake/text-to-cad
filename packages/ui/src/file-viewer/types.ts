@@ -107,11 +107,17 @@ export interface RendererViewProps {
   file: FileMetadata;
   source: FileSource;
   document: DocumentSession | null;
+  /**
+   * The open panel id, for a renderer that declares `panels` of its own (the desktop markdown's
+   * source view). The CAD renderers declare none and read none of `openPanel`, `panelSlot` or
+   * `onPanelOpen`: their controls are tool-stack panels, never the host's column.
+   */
   openPanel: string;
   /** Renderer status beside the filename. */
   navigationStatusSlot?: HTMLElement | null;
   /** Suspend the panel column (a renderer's own fullscreen); the open panel and its width are kept. */
   onPanelVisibilityChange?: (visible: boolean) => void;
+  /** The column's box for a declared `"slot"` panel to draw into. */
   panelSlot: HTMLElement | null;
   onPanelOpen: (id: string) => void;
   onReady: (ready: boolean) => void;

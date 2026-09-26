@@ -87,10 +87,11 @@ test('a shell renderer resolves deferred files, reuses warm assets, restores iso
   // The nav row's panel toggles, in order, each with whether its panel is the open one.
   const panels = pane => pane.locator('[data-file-panel]')
     .evaluateAll(buttons => buttons.map(button => `${button.getAttribute('aria-label')}:${button.getAttribute('aria-pressed')}`));
-  // A mesh's one panel is Display, which a file never opens with: it is opened by its toggle.
+  // A mesh's one panel is Display's, in the tool stack while Display is the tool: a file never
+  // opens with it; its tool shows it.
   const openDisplay = async pane => {
-    if (await pane.locator('[data-cad-toolbar]').getByRole('button', { name: 'Display', exact: true }).getAttribute('aria-expanded') !== 'true') await pane.locator('[data-cad-toolbar]').getByRole('button', { name: 'Display', exact: true }).click();
-    await pane.locator('[data-cad-display-popover]').waitFor();
+    if (await pane.locator('[data-cad-toolbar]').getByRole('button', { name: 'Display', exact: true }).getAttribute('aria-pressed') !== 'true') await pane.locator('[data-cad-toolbar]').getByRole('button', { name: 'Display', exact: true }).click();
+    await pane.locator('[data-tool-panel][aria-label="Display settings"]').waitFor();
   };
   const openSection = async title => {
     await openDisplay(first);
@@ -114,7 +115,7 @@ test('a shell renderer resolves deferred files, reuses warm assets, restores iso
   // The file opened directly and opened with nothing: a mesh has no panel of its own, and
   // Display, its only one, is never where a file opens. Nor is the tree.
   assert.deepEqual(await panels(first), ['Show files:false']);
-  assert.equal(await first.locator('[data-file-sheet]').count(), 0);
+  assert.equal(await first.locator('[data-file-panel-container]').count(), 0, 'nothing in the host\'s column');
   await openDisplay(first);
   await page.waitForFunction(() => Object.keys(window.cadHarness.state.renderers || {}).length > 0);
   assert.deepEqual(errors, []);
@@ -129,7 +130,6 @@ test('a shell renderer resolves deferred files, reuses warm assets, restores iso
   await page.waitForFunction(() => Math.abs((window.cadHarness.a.controller.readState().camera?.zoom ?? 0) - 1.1) < 1e-6);
   await openDisplay(first);
   assert.equal(await first.getByRole('button', { name: 'Theme settings', exact: true }).count(), 0);
-  assert.equal(await first.locator('[data-file-sheet="Theme"]').count(), 0);
   await first.locator('[data-cad-toolbar]').getByRole('button', { name: 'Display', exact: true }).click();
   await first.getByRole('button', { name: 'Take snapshot', exact: true }).click();
   await page.waitForFunction(() => window.cadHarness.captures.length === 1);
@@ -141,7 +141,7 @@ test('a shell renderer resolves deferred files, reuses warm assets, restores iso
   assert.deepEqual(captured.references[0].target, { kind: 'whole-resource' });
   assert.equal(captured.references[0].resource.workspaceId, 'one');
   assert.equal(captured.references[0].resource.path, 'part.stl');
-  await first.locator('[data-cad-display-popover]').waitFor({ state: 'detached' });
+  await first.locator('[data-tool-panel][aria-label="Display settings"]').waitFor({ state: 'detached' });
   // A mesh hands the shell no tools, so there is no strip over its viewport at
   // all: orbit, pan and zoom, and nothing to take up — nor Fullscreen, which is a STEP's.
   assert.equal(await first.getByRole('group', { name: 'Interaction tools' }).count(), 1, 'Display has a toolbar on every 3D file');
@@ -184,7 +184,7 @@ test('a shell renderer resolves deferred files, reuses warm assets, restores iso
   await page.evaluate(() => window.cadHarness.mounted(true));
   // Popover visibility is transient, not file state.
   await first.locator('[data-cad-toolbar]').getByRole('button', { name: 'Display', exact: true }).waitFor();
-  assert.equal(await first.locator('[data-cad-display-popover]').count(), 0);
+  assert.equal(await first.locator('[data-tool-panel][aria-label="Display settings"]').count(), 0);
   // The pane remounts before the viewport adopts the mesh and publishes its restored
   // camera. Wait for the actual presented frame, not an arbitrary settling delay.
   const restoreDiagnostic = await page.evaluate(() => {
@@ -369,7 +369,7 @@ test('a shell renderer resolves deferred files, reuses warm assets, restores iso
   await first.getByLabel('Surface opacity value', { exact: true }).press('Enter');
   await first.getByRole('combobox', { name: 'Surface style', exact: true }).click();
   await page.getByRole('option', { name: 'Flat', exact: true }).click();
-  assert.equal(await first.locator('[data-cad-display-popover]').isVisible(), true);
+  assert.equal(await first.locator('[data-tool-panel][aria-label="Display settings"]').isVisible(), true);
   await openSection('Surfaces');
   await first.getByRole('combobox', { name: 'Parts', exact: true }).click();
   await page.getByRole('option', { name: 'Single color', exact: true }).click();
@@ -669,11 +669,14 @@ test('the shell keeps its Draw session across fullscreen, and fullscreen drags a
   await pane.getByRole('button', { name: 'Draw', exact: true }).waitFor();
   assert.equal(await pane.getByRole('button', { name: 'Draw', exact: true }).getAttribute('aria-pressed'), 'true',
     'the session the sketch is in survives a trip through fullscreen');
-  // Repeated Draw opens its temporary settings without discarding the sketch.
+  // Its tools, color and history are a panel in the tool stack for as long as Draw is the tool —
+  // no corner menu — and a second press puts Draw down, panel and all.
+  const drawPanel = pane.locator('[data-tool-panel][aria-label="Drawing controls"]');
+  await drawPanel.waitFor();
+  assert.equal(await pane.getByRole('button', { name: 'Draw', exact: true }).locator('[data-tool-menu-corner]').count(), 0);
   await pane.getByRole('button', { name: 'Draw', exact: true }).click();
-  await page.locator('[role="menu"][aria-label="Drawing controls"]').waitFor();
-  await page.keyboard.press('Escape');
-  assert.equal(await pane.getByRole('button', { name: 'Draw', exact: true }).getAttribute('aria-pressed'), 'true');
+  await drawPanel.waitFor({ state: 'detached' });
+  assert.equal(await pane.getByRole('button', { name: 'Draw', exact: true }).getAttribute('aria-pressed'), 'false');
   assert.deepEqual(errors, []);
 });
 
@@ -1115,9 +1118,8 @@ test('a renderer says more about its load than a download: finding the file, edi
   assert.deepEqual(errors, []);
 });
 
-// Keyboard ownership between two viewers on one page, and the panel state the shell keeps
-// for a file across the viewer breakpoint.
-test('keys belong to the viewer that has them: arrows orbit one viewer, Escape is spent on that viewer\'s own popup, Draw keeps its Escape, and the Settings tab survives the breakpoint', async (t) => {
+// The tool stack under the strip, and keyboard ownership between two viewers on one page.
+test('the tool stack: one width, bounded by the viewer, resizable, one floating surface; Display and Draw are its panels; and keys belong to the viewer that has them', async (t) => {
   const temporary = await mkdtemp(join(tmpdir(), 'hardcore-shell-keys-'));
   let server, browser;
   t.after(async () => { await browser?.close(); if (server) await new Promise(resolve => server.close(resolve)); await rm(temporary, { recursive: true, force: true }); });
@@ -1145,36 +1147,105 @@ test('keys belong to the viewer that has them: arrows orbit one viewer, Escape i
   await page.goto(`http://127.0.0.1:${server.address().port}/?file=panel.harness`);
   const one = page.getByTestId('one');
   await one.locator('[aria-busy="false"] > div > canvas').first().waitFor();
-  const settings = one.locator('[data-file-panel="cad-file"]');
-  const sheet = one.locator('[data-file-sheet]');
-  await sheet.waitFor();
-  const tab = name => one.getByRole('tab', { name, exact: true });
+  const stack = one.locator('[data-cad-tool-stack]');
+  const tree = one.locator('[data-tool-panel][aria-label="Harness tree"]');
+  const reference = one.locator('[data-tool-panel][aria-label="Harness reference"]');
+  const keep = one.getByRole('button', { name: 'Keep', exact: true });
+  const kept = one.locator('[data-tool-panel][aria-label="Kept controls"]');
+  await tree.waitFor();
+  const viewer = async () => one.locator('[data-cad-scene-backdrop]').boundingBox();
+  const shown = () => one.locator('[data-cad-tool-stack] [data-tool-panel]').evaluateAll(panels => panels
+    .filter(panel => panel.getClientRects().length).map(panel => {
+      const body = panel.querySelector('[data-tool-panel-body]'), box = panel.getBoundingClientRect();
+      return { label: panel.getAttribute('aria-label'), top: box.top, bottom: box.bottom, height: box.height, width: box.width,
+        scrolls: body.scrollHeight > body.clientHeight + 1 };
+    }));
+  const withinViewer = async () => {
+    const [panels, box] = [await shown(), await viewer()];
+    assert.ok(panels.at(-1).bottom <= box.y + box.height - 14 + 1, `the stack ends inside the viewer: ${panels.at(-1).bottom} vs ${box.y + box.height}`);
+    return panels;
+  };
 
-  // THE SETTINGS TAB is the shell's: crossing the breakpoint (a second pane halves the width,
-  // and the column becomes a sheet) and back keeps the tab that was chosen.
-  await tab('Position').click();
-  assert.equal(await tab('Position').getAttribute('aria-selected'), 'true');
-  await page.evaluate(() => window.cadHarness.second(true));
-  await page.waitForFunction(() => document.querySelector('[data-testid="one"] .hardcore-file-viewer')?.getAttribute('data-viewer-layout') === 'mobile');
-  await page.evaluate(() => window.cadHarness.second(false));
-  await page.waitForFunction(() => document.querySelector('[data-testid="one"] .hardcore-file-viewer')?.getAttribute('data-viewer-layout') === 'desktop');
-  await sheet.waitFor();
-  assert.equal(await tab('Position').getAttribute('aria-selected'), 'true', 'the tab survived the remount');
+  // THE STACK. A tree far taller than the viewer, a Reference and a kept effect: every panel the
+  // stack's one width, the whole never past the viewer, the tree giving way and scrolling inside
+  // itself while the others keep their natural height.
+  await keep.click();
+  await kept.waitFor();
+  let panels = await withinViewer();
+  assert.deepEqual(panels.map(panel => panel.label), ['Harness tree', 'Harness reference', 'Kept controls']);
+  assert.deepEqual(new Set(panels.map(panel => panel.width)), new Set([190]), 'one width, the strip\'s base width with one more tool');
+  const [treePanel, referencePanel, keptPanel] = panels;
+  assert.equal(treePanel.scrolls, true, 'the tree gives way and scrolls inside itself');
+  assert.equal(referencePanel.scrolls, false, 'the Reference keeps its height while the tree can give way');
+  assert.equal(keptPanel.scrolls, false);
+  const keptHeight = keptPanel.height;
+  // A short viewer: the tree stops at its floor, and then the Reference gives way too; the kept
+  // panel never does.
+  await one.evaluate(element => { element.parentElement.style.height = '480px'; });
+  await page.waitForTimeout(200);
+  panels = await withinViewer();
+  assert.ok(Math.abs(panels[0].height - 128) <= 1, `the tree holds its floor: ${panels[0].height}`);
+  assert.equal(panels[1].scrolls, true, 'then the Reference gives way');
+  assert.equal(panels[2].height, keptHeight, 'a small panel keeps its height');
+  await one.evaluate(element => { element.parentElement.style.height = '720px'; });
+  await page.waitForTimeout(200);
 
-  // ESCAPE. A quick second Escape after closing a Select closes the Display sheet: a listbox
-  // on its way out does not hold the key.
-  await one.locator('[data-cad-toolbar]').getByRole('button', { name: 'Display', exact: true }).click();
-  const popover = one.locator('[data-cad-display-popover]');
-  await popover.waitFor();
+  // One handle, in a gutter right of the stack, widens every panel together; the width is the
+  // person's, kept by the host across files (both viewers share it) and bounded to the minimum.
+  const handle = one.getByRole('separator', { name: 'Resize tool panels', exact: true });
+  const handleBox = await handle.boundingBox();
+  assert.ok(handleBox.x >= treePanel.width + (await tree.boundingBox()).x + 2, 'the handle sits in a gutter beside the stack');
+  await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + 40);
+  await page.mouse.down();
+  await page.mouse.move(handleBox.x + handleBox.width / 2 + 60, handleBox.y + 40, { steps: 5 });
+  await page.mouse.up();
+  await page.waitForFunction(() => window.cadHarness.preferences.getSnapshot().toolStackWidth > 190);
+  const widened = await page.evaluate(() => window.cadHarness.preferences.getSnapshot().toolStackWidth);
+  assert.deepEqual(new Set((await shown()).map(panel => panel.width)), new Set([widened]), 'every panel follows');
+  await handle.focus();
+  await page.keyboard.press('Home');
+  await page.waitForFunction(() => window.cadHarness.preferences.getSnapshot().toolStackWidth === 160);
+  assert.deepEqual(new Set((await shown()).map(panel => panel.width)), new Set([160]), 'down to its minimum, narrower than the default');
+  await page.evaluate(() => window.cadHarness.preferences.update({ toolStackWidth: 190 }));
+
+  // ONE SURFACE for everything floating over the model: the strip, a stack panel, and a menu.
+  await one.locator('[data-cad-surface] canvas').first().click({ button: 'right', position: { x: 600, y: 400 } });
+  const menu = page.getByRole('menu');
+  await menu.waitFor();
+  const surface = locator => locator.evaluate(node => { const style = getComputedStyle(node); return [style.backgroundColor, style.backdropFilter, style.borderTopColor].join(' | '); });
+  // Located by CSS: the open menu hides the rest of the page from the accessibility tree.
+  const strip = await surface(one.locator('[data-cad-toolbar] [role=group]'));
+  assert.match(strip, /blur/);
+  assert.equal(await surface(one.locator('[data-tool-panel][aria-label="Harness tree"]')), strip, 'a stack panel is the strip\'s surface');
+  assert.equal(await surface(menu), strip, 'and so is a menu over the viewport');
+  await page.keyboard.press('Escape');
+  await menu.waitFor({ state: 'detached' });
+
+  // DISPLAY is a tool whose panel is its settings: it leads the stack while it is up, a kept
+  // effect stays highlighted beside it, and a second press puts it down.
+  const display = one.locator('[data-cad-toolbar]').getByRole('button', { name: 'Display', exact: true });
+  const displayPanel = one.locator('[data-tool-panel][aria-label="Display settings"]');
+  await display.click(); await displayPanel.waitFor();
+  assert.deepEqual((await withinViewer()).map(panel => panel.label), ['Display settings', 'Harness tree', 'Harness reference', 'Kept controls']);
+  assert.deepEqual(new Set((await shown()).map(panel => panel.width)), new Set([190]));
+  assert.equal(await keep.getAttribute('aria-pressed'), 'true', 'the kept effect stays highlighted while Display is the tool');
+  assert.equal(await display.getAttribute('aria-pressed'), 'true');
+  await display.click(); await displayPanel.waitFor({ state: 'detached' });
+
+  // ESCAPE. A quick second Escape after closing a Select puts Display down: a listbox on its way
+  // out does not hold the key. The stack's own panels are never Escape's to close.
+  await display.click(); await displayPanel.waitFor();
   await one.getByRole('combobox', { name: 'Mode', exact: true }).click();
   await page.getByRole('listbox').waitFor();
   await page.keyboard.press('Escape');
   await page.waitForTimeout(120);
+  assert.equal(await displayPanel.isVisible(), true, 'the first Escape was the listbox\'s');
   await page.keyboard.press('Escape');
-  await popover.waitFor({ state: 'detached' });
-  assert.equal(await sheet.isVisible(), true, 'the sidebar waits for a later Escape');
+  await displayPanel.waitFor({ state: 'detached' });
+  assert.equal(await display.getAttribute('aria-pressed'), 'false');
+  assert.equal(await tree.isVisible(), true, 'Escape leaves the stack\'s panels alone');
 
-  // Draw's surface keeps its Escape: the sidebar stays. Out of Draw, Escape shuts it.
+  // Draw's surface keeps its Escape: Draw stays, with its panel.
   await one.getByRole('button', { name: 'Draw', exact: true }).click();
   await one.locator('[data-drawing-ready]').waitFor();
   const canvas = await one.locator('[data-cad-drawing-overlay] canvas').last().boundingBox();
@@ -1183,43 +1254,20 @@ test('keys belong to the viewer that has them: arrows orbit one viewer, Escape i
   await one.locator('[data-cad-drawing-overlay] .excalidraw').focus();
   await page.keyboard.press('Escape');
   await page.waitForTimeout(150);
-  assert.equal(await sheet.isVisible(), true, 'Escape on the drawing surface is Draw\'s');
-  // Leaving Draw: Display is a tool, and closing its sheet hands back to no tool at all.
-  const display = one.locator('[data-cad-toolbar]').getByRole('button', { name: 'Display', exact: true });
-  await display.click(); await popover.waitFor();
-  await display.click(); await popover.waitFor({ state: 'detached' });
+  assert.equal(await one.getByRole('button', { name: 'Draw', exact: true }).getAttribute('aria-pressed'), 'true', 'Escape on the drawing surface is Draw\'s');
+  assert.equal(await one.locator('[data-tool-panel][aria-label="Drawing controls"]').isVisible(), true);
+  await one.getByRole('button', { name: 'Draw', exact: true }).click();
   await one.locator('[data-cad-drawing-overlay]').waitFor({ state: 'detached' });
-  await one.locator('[data-slot="cad-file-view"]').focus();
-  await page.keyboard.press('Escape');
-  await sheet.waitFor({ state: 'detached' });
-  assert.equal(await settings.getAttribute('aria-pressed'), 'false');
+  await keep.click();
+  await kept.waitFor({ state: 'detached' });
 
-  // KEPT PANELS. The Display sheet and a tool's menu open beside the panels a person keeps
-  // under the strip, never over them; and a kept effect stays highlighted while Display is up.
-  const keep = one.getByRole('button', { name: 'Keep', exact: true });
-  await keep.click();
-  const kept = await one.locator('[aria-label="Kept controls"]').boundingBox();
-  await display.click(); await popover.waitFor();
-  await page.waitForTimeout(200);
-  const sheetBox = await popover.boundingBox();
-  assert.ok(sheetBox.x >= kept.x + kept.width, `the Display sheet (x ${sheetBox.x}) opens beside the kept panel (right ${kept.x + kept.width})`);
-  assert.equal(await keep.getAttribute('aria-pressed'), 'true', 'the kept effect stays highlighted while Display is the tool');
-  assert.equal(await display.getAttribute('aria-pressed'), 'true');
-  await display.click(); await popover.waitFor({ state: 'detached' });
-  const draw = one.getByRole('button', { name: 'Draw', exact: true });
-  await draw.click(); await one.locator('[data-drawing-ready]').waitFor();
-  await draw.click();
-  const drawMenu = page.locator('[role="menu"][aria-label="Drawing controls"]');
-  await drawMenu.waitFor();
-  await page.waitForTimeout(200);
-  const menuBox = await drawMenu.boundingBox();
-  assert.ok(menuBox.x >= kept.x + kept.width, `the Draw menu (x ${menuBox.x}) opens beside the kept panel (right ${kept.x + kept.width})`);
-  await page.keyboard.press('Escape');
-  await drawMenu.waitFor({ state: 'detached' });
-  await display.click(); await popover.waitFor();
-  await display.click(); await popover.waitFor({ state: 'detached' });
-  await keep.click();
-  await one.locator('[aria-label="Kept controls"]').waitFor({ state: 'detached' });
+  // MOBILE: the same stack, the tree held to 40% of it (a second pane halves the width).
+  await page.evaluate(() => window.cadHarness.second(true));
+  await page.waitForFunction(() => document.querySelector('[data-testid="one"] .hardcore-file-viewer')?.getAttribute('data-viewer-layout') === 'mobile');
+  const [mobileTree, column] = await Promise.all([tree.boundingBox(), stack.boundingBox()]);
+  assert.ok(mobileTree.height <= column.height * 0.4 + 1, `the tree is capped on mobile: ${mobileTree.height} of ${column.height}`);
+  await page.evaluate(() => window.cadHarness.second(false));
+  await page.waitForFunction(() => document.querySelector('[data-testid="one"] .hardcore-file-viewer')?.getAttribute('data-viewer-layout') === 'desktop');
 
   // ARROWS orbit the viewer the key landed in, or the one under the pointer when it landed
   // on the page — never every viewer on the page.

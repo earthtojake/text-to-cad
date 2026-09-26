@@ -15,7 +15,7 @@ file-source adapter, browser persistence, and this app's branding, appearance an
 exposes CAD artifacts only, and the web app has no file-writing endpoints.
 Follow the [shared host contract](../../packages/ui/docs/viewer-host.md) when
 adding viewer features; browser effects belong in this app's adapters.
-The [shared Model tree](../../packages/ui/docs/cad-renderer.md#step-panel)
+The [shared Model tree](../../packages/ui/docs/cad-renderer.md#step-panels)
 owns expansion-based picking, lazy topology/feature inspection and isolation.
 Web uses the same tree and file-row primitives as desktop; its HTTP adapter
 does not decide which model nodes are expanded or selectable.
@@ -200,7 +200,7 @@ the UI package's asset documentation for asset provenance and regeneration.
 
 The shared [viewer design system](../../packages/ui/docs/settings-ui.md) is the
 authoritative contract for the [toolbar](../../packages/ui/docs/settings-ui.md#tools-and-lifecycle),
-[sidebars and mobile layout](../../packages/ui/docs/settings-ui.md#sidebars-and-mobile),
+[tool stack and mobile layout](../../packages/ui/docs/settings-ui.md#the-tool-stack),
 settings controls, selection and
 [fullscreen](../../packages/ui/docs/settings-ui.md#camera-animation-and-fullscreen).
 Keep those rules there rather than maintaining a separate web layout
@@ -208,16 +208,19 @@ specification.
 
 The web host owns URL/history, root-scoped persistence, appearance, version links
 and native service adapters. Shared renderers own all model interaction. STEP and
-robots open in Select; their one Settings sidebar holds Features (Links for a
-robot) and Position as two tabs when a file has both. Every 3D file has a
+robots open in Select, whose Features (Links for a robot) panel hangs under the
+toolbar with the rest of the tool stack; Position's panel replaces it while Position
+is the tool. The nav row has no panel of the file's: Show files is its one toggle.
+Every 3D file has a
 top-left toolbar ending in Display, static GLB files included; Animate appears
 only for files with routines or clips. DXF is a 2D canvas with pan, zoom and
-snapshot, without a 3D toolbar or settings panel.
+snapshot, without a 3D toolbar or tool stack.
 
-Below 720px of FileViewer width, sidebars become floating sheets over the viewer,
-the crumbs collapse to the current file, the view cube is hidden and no tool or
-pick opens a sidebar by itself. Fullscreen is the shared shell's top-right
-button: it keeps the navbar and suspends the sidebar, orbits by default and
+Below 720px of FileViewer width, the file tree becomes a floating sheet over the
+viewer, the crumbs collapse to the current file, the view cube is hidden and the
+tree panel of the tool stack takes at most 40% of its height. Fullscreen is the
+shared shell's top-right button: it keeps the navbar and suspends the file tree
+column and the tool stack, orbits by default and
 offers separate Orbit and animation menus; the host passes no fullscreen props.
 The camera is never stored, so a refresh frames the file anew; Display settings,
 pose and explode are kept per file through the shared state contract (see
@@ -282,9 +285,9 @@ and web stay consistent without host-specific copies of those controls.
 The web viewer has one navigation row. The native-GLB mark sits before breadcrumbs,
 and with no file open the app names itself "text-to-cad" beside it. At the right
 end, the version/update dropdown comes first, then the renderer's snapshot action,
-the file's Settings toggle and Show files. The dropdown contains release
+and Show files. The dropdown contains release
 instructions, release notes, GitHub and Discord. Appearance is injected as an icon-bearing dropdown beside Projection in
-the Display section, below the full-width Mode selector. The logo plays its existing native
+the Display panel's Display section, below the full-width Mode selector. The logo plays its existing native
 GLB animation on hover through the shared LoadingIcon, respecting reduced motion. `ViewerBrand`, `ViewerLinks` and `ViewerAppearance` stay web-owned;
 `FileViewer.leading`, `navigationActions` and `displayActions` provide the shared slots.
 The web favicon assets are static copies of the GLB-derived docs favicon, with no
