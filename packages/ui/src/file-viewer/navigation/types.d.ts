@@ -103,10 +103,6 @@ export type FilePanel = {
 };
 
 export const FILE_PANEL_TREE: string;
-export const CAD_PANEL: { readonly file: string };
-
-/** A viewer file's panels: its Settings when it has file-specific controls, or none. */
-export function viewerPanels(ready: boolean, options?: { file?: boolean }): FilePanel[];
 export function treePanel(open: string, options?: { empty?: boolean }): FilePanel;
 export function resolveOpenPanel(panels: FilePanel[], panel: string | null): FilePanel | null;
 export function nextOpenPanel(open: string, id: string): string;

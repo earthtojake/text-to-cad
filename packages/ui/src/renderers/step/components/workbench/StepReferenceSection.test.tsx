@@ -1,7 +1,7 @@
 import React from 'react';
 import {cleanup,fireEvent,render,screen,within} from '@testing-library/react';
 import {afterEach,beforeEach,expect,it,vi} from 'vitest';
-import {StepReferenceSection} from '../../../../../dist/renderers/step/components/workbench/StepReferenceSection.js';
+import {useStepReference} from '../../../../../dist/renderers/step/components/workbench/StepReferenceSection.js';
 Object.assign(globalThis,{React});
 beforeEach(()=>{
  vi.stubGlobal('ResizeObserver',class {observe(){} unobserve(){} disconnect(){}});
@@ -10,6 +10,14 @@ beforeEach(()=>{
 afterEach(()=>{cleanup();vi.restoreAllMocks();vi.unstubAllGlobals();});
 // jsdom has no scrolling implementation.
 HTMLElement.prototype.scrollIntoView ||= ()=>{};
+// The Reference panel as the tree draws it: the heading the hook gives, then its rows.
+function StepReferenceSection(props:any){
+ const reference=useStepReference(props);
+ return reference ? <section aria-label="Reference details"><h3>{reference.title}</h3>{reference.content}</section> : null;
+}
+const heading=()=>screen.getByRole('heading').textContent;
+// The picker's name and its "i/N", read apart.
+const picker=()=>{const label=screen.getByRole('combobox').querySelector('[data-reference-label]')!;return [label.firstElementChild!.textContent,label.querySelector('[data-reference-count]')!.textContent];};
 const arc={id:'o1.e1',normalizedSelector:'o1.e1',selectorType:'edge',pickData:{curveType:'circle',length:7.8,params:{radius:5,sweepRadians:Math.PI/2,center:[0,0,0]},center:[3,3,0]}};
 function browse(name:string){
  fireEvent.keyDown(screen.getByRole('combobox',{name:'Inspect selected reference'}),{key:'ArrowDown'});
@@ -28,14 +36,15 @@ it('shows arc dimensions and analytic center coordinates without disclosures or 
  expect(screen.queryByRole('combobox')).toBeNull();
 });
 
-it('keeps selection totals while directly browsing individual selected edges',()=>{
+it('browses individual selected edges from the heading, and shows only the browsed one\'s rows',()=>{
  const refs=[3,4].map((length,i)=>({id:`o1.e${i}`,selectorType:'edge',normalizedSelector:`o1.e${i}`,pickData:{curveType:'line',length}}));
  render(<StepReferenceSection references={refs}/>);
- expect(screen.getByText('Total length')).toBeTruthy();expect(screen.getByText('7 mm')).toBeTruthy();
- expect(screen.getByRole('combobox').textContent).toBe('Edge · o1.e1');
- browse('Edge · o1.e0');
- expect(screen.getByText('7 mm')).toBeTruthy();expect(screen.getByText('3 mm')).toBeTruthy();
- expect(screen.getByRole('combobox').textContent).toBe('Edge · o1.e0');
+ expect(screen.queryByText(/^Total/)).toBeNull();
+ expect(picker()).toEqual(['o1 · edge 1','2/2']);
+ expect(screen.getByText('4 mm')).toBeTruthy();
+ browse('o1 · edge 0');
+ expect(screen.getByText('3 mm')).toBeTruthy();expect(screen.queryByText('4 mm')).toBeNull();
+ expect(picker()).toEqual(['o1 · edge 0','1/2']);
  expect(screen.getByText('o1.e0')).toBeTruthy();
  expect(screen.queryByRole('button',{name:'Previous element'})).toBeNull();
 });
@@ -50,32 +59,52 @@ it('updates always-visible coordinates and normal when the selected reference ch
  expect(screen.getByText('Face · Planar')).toBeTruthy();
 });
 
-it('shows wrapping assembly facts and switches to the newest reference only when selection changes',()=>{
+it('heads several references with a picker naming the browsed one, and switches to the newest only when the selection changes',()=>{
  const name='camera_assembly_with_a_name_that_exceeds_the_panel_width';
  const selector='o1.8.1234567890.1234567890.1234567890.1234567890';
  const camera={id:selector,nodeType:'assembly',name,leafPartIds:['camera','mount'],children:[],bbox:{min:[0,0,0],max:[10,20,30]},copyText:'tom.step#camera'};
  const base={...camera,id:'o1.1',name:'Base',copyText:'tom.step#base'};
  const {rerender}=render(<StepReferenceSection references={[base,camera]}/>);
- expect(screen.getByText(name)).toBeTruthy();
+ // The picker is the heading: the name and id it shows are not repeated as rows.
+ expect(within(screen.getByRole('heading')).getByRole('combobox')).toBeTruthy();
+ expect(picker()).toEqual([name,'2/2']);
+ // The id is not the name: it is the ID row, what a copy carries.
+ expect(screen.getByText(selector)).toBeTruthy();
+ expect(screen.queryByText('Name')).toBeNull();
+ expect(screen.queryByText(/Selection ·|references/)).toBeNull();
  expect(screen.getByText('Subassembly')).toBeTruthy();
- expect(screen.getByText(selector).className).not.toContain('truncate');
  expect(screen.getByText('Parts')).toBeTruthy();
  expect(screen.getByText('Center')).toBeTruthy();
  expect(screen.queryByRole('button',{name:'Copy reference'})).toBeNull();
- browse('Base · o1.1');
- expect(screen.getByText('Base')).toBeTruthy();
+ browse('Base');
+ expect(picker()).toEqual(['Base','1/2']);
  rerender(<StepReferenceSection references={[{...base},{...camera}]}/>);
- expect(screen.getByText('Base')).toBeTruthy();
+ expect(picker()).toEqual(['Base','1/2']);
  rerender(<StepReferenceSection references={[base,camera,{...camera,id:'o1.9',name:'New part'}]}/>);
- expect(screen.getByText('New part')).toBeTruthy();
- expect(screen.getByRole('combobox').textContent).toBe('New part · o1.9');
+ expect(picker()).toEqual(['New part','3/3']);
 });
 
-it('shows a single component as compact read-only rows without losing its canonical path',()=>{
+it('shows the browsed part\'s own Volume, never a total over the selection',()=>{
+ // Two 10 mm cubes, as a mesh part's triangles: the volume is read off the displayed mesh.
+ const cube=(id:string)=>({id,nodeType:'part',name:id,leafPartIds:[id],children:[],bbox:{min:[0,0,0],max:[10,10,10]}});
+ const box=[[0,0,0],[10,0,0],[10,10,0],[0,10,0],[0,0,10],[10,0,10],[10,10,10],[0,10,10]].flat();
+ const faces=[0,2,1,0,3,2,4,5,6,4,6,7,0,1,5,0,5,4,1,2,6,1,6,5,2,3,7,2,7,6,3,0,4,3,4,7];
+ const meshData={vertices:new Float32Array([...box,...box]),indices:new Uint32Array([...faces,...faces.map(i=>i+8)]),
+  parts:[{id:'a',occurrenceId:'a',vertexOffset:0,vertexCount:8,triangleOffset:0,triangleCount:12},{id:'b',occurrenceId:'b',vertexOffset:8,vertexCount:8,triangleOffset:12,triangleCount:12}]};
+ const {rerender}=render(<StepReferenceSection references={[cube('a')]} meshData={meshData}/>);
+ expect(heading()).toBe('a');
+ expect(screen.getAllByText(/volume$/i).map(node=>node.textContent)).toEqual(['Volume']);
+ rerender(<StepReferenceSection references={[cube('a'),cube('b')]} meshData={meshData}/>);
+ expect(screen.getAllByText(/volume$/i).map(node=>node.textContent)).toEqual(['Volume']);
+ expect(screen.getByText('1,000 mm³')).toBeTruthy();
+ expect(screen.queryByText('2,000 mm³')).toBeNull();
+});
+
+it('heads a single component with its name and canonical path, as a label, and keeps its rows compact',()=>{
  render(<StepReferenceSection references={[{id:'o1.8',nodeType:'part',name:'Camera',leafPartIds:['o1.8'],children:[]}]}/>);
- expect(screen.getByText('Camera')).toBeTruthy();
- expect(screen.getByText('Component')).toBeTruthy();
+ expect(heading()).toBe('Camera');
  expect(screen.getByText('o1.8')).toBeTruthy();
+ expect(screen.getByText('Component')).toBeTruthy();
  expect(screen.queryByRole('button')).toBeNull();
  expect(screen.queryByRole('combobox')).toBeNull();
  expect(screen.queryByText('Details')).toBeNull();
@@ -104,7 +133,7 @@ it('material details follow the reference being browsed within a multi-selection
  render(<StepReferenceSection references={references} meshData={meshData} sourceAppearance={sourceAppearance}/>);
  const material=screen.getByRole('generic',{name:'Source material'});
  expect(within(material).getByText('Rubber')).toBeTruthy();
- browse('Face · o1.f1');
+ browse('o1 · face 1');
  expect(within(material).getByText('Steel')).toBeTruthy();
  expect(within(material).queryByText('Rubber')).toBeNull();
 });
@@ -113,4 +142,16 @@ it('retains bounding measurements as read-only facts when only part geometry is 
  render(<StepReferenceSection measurements={{size:[10,20,30],radii:[]}}/>);
  expect(screen.getByText('10 × 20 × 30 mm')).toBeTruthy();
  expect(screen.queryByRole('button')).toBeNull();
+});
+
+it('names a face or edge by its own label, else by its part and kind, never by its raw id',()=>{
+ const meshData={parts:[{id:'o1.1',occurrenceId:'o1.1',name:'base'}]};
+ const named={id:'topology|o1.1|face|o1.1.f3',normalizedSelector:'o1.1.f3',selectorType:'face',occurrenceId:'o1.1',label:'Mounting face',pickData:{surfaceType:'plane'}};
+ const {rerender}=render(<StepReferenceSection references={[named]} meshData={meshData}/>);
+ expect(heading()).toBe('Mounting face');
+ rerender(<StepReferenceSection references={[{...named,label:undefined}]} meshData={meshData}/>);
+ expect(heading()).toBe('base · face 3');
+ rerender(<StepReferenceSection references={[{id:'topology|o1.1|edge|o1.1.e4',normalizedSelector:'o1.1.e4',selectorType:'edge',occurrenceId:'o1.1',pickData:{curveType:'line',length:2}}]} meshData={meshData}/>);
+ expect(heading()).toBe('base · edge 4');
+ expect(screen.getByText('o1.1.e4')).toBeTruthy();
 });

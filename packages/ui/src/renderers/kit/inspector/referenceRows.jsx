@@ -17,12 +17,14 @@ export function formatNumber(value, digits = 2) {
 }
 
 // Label-column rows keep the value next to its label instead of pushing it to
-// the far edge, so the readout scans top-to-bottom.
+// the far edge, so the readout scans top-to-bottom. Sized for the tool stack's
+// narrowest width: a value wraps between words, and breaks inside one only when
+// the word alone is wider than its column (a long id).
 export function InfoRow({ label, children, title }) {
   return (
-    <TooltipHint content={title}><div className="grid grid-cols-[5rem_minmax(0,1fr)] items-baseline gap-2 py-1" >
+    <TooltipHint content={title}><div className="grid grid-cols-[4rem_minmax(0,1fr)] items-baseline gap-2 py-1" >
       <span className="text-tiny text-muted-foreground">{label}</span>
-      <div className="min-w-0 flex-1 text-tiny text-sidebar-foreground [overflow-wrap:anywhere]">{children}</div>
+      <div className="min-w-0 flex-1 text-tiny text-sidebar-foreground [overflow-wrap:break-word]">{children}</div>
     </div></TooltipHint>
   );
 }

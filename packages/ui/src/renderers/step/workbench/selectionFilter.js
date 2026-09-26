@@ -1,11 +1,31 @@
-export const SELECTION_FILTERS = [
-  { id: 'all', label: 'All', detail: 'Parts, faces and edges' },
-  { id: 'parts', label: 'Parts', detail: 'Whole components' },
-  { id: 'faces', label: 'Faces', detail: 'Faces only' },
-  { id: 'edges', label: 'Edges', detail: 'Edges only' },
-  { id: 'edge-chain', label: 'Edge chain', detail: 'Connected edges; stops at ambiguous branches', section: 'Connected selection' },
-  { id: 'tangent-faces', label: 'Tangent faces', detail: 'Smoothly joined faces; stops at sharp edges', section: 'Connected selection' },
+/**
+ * The Select tool's modes: exclusive, each with its own icon on the strip
+ * (`components/workbench/SelectionFilterMenu.jsx`). `assemblyOnly`: a single part is one
+ * thing, so picking parts in it would pick nothing but the whole.
+ */
+export const SELECT_MODES = [
+  { id: 'all', label: 'All' },
+  { id: 'parts', label: 'Parts', assemblyOnly: true },
+  { id: 'faces', label: 'Faces' },
+  { id: 'edges', label: 'Edges' },
 ];
+
+/**
+ * How a face or edge pick grows, independent of the mode and of each other: Tangent faces
+ * takes the smoothly joined faces with a picked face, Edge chain the connected edges with a
+ * picked edge. Each applies wherever its kind of topology is picked — All, and its own mode —
+ * and has no effect elsewhere.
+ */
+export const CONNECTED_SELECTION = [
+  { id: 'edgeChain', label: 'Edge chain', appliesIn: ['all', 'edges'] },
+  { id: 'tangentFaces', label: 'Tangent faces', appliesIn: ['all', 'faces'] },
+];
+export const NO_CONNECTED_SELECTION = Object.freeze({ edgeChain: false, tangentFaces: false });
+
+/** Whether a connected-selection option does anything under `mode`. */
+export function connectedSelectionApplies(id, mode) {
+  return CONNECTED_SELECTION.find(option => option.id === id)?.appliesIn.includes(mode) === true;
+}
 
 export const MEASURE_SELECTION_FILTERS = [
   { id: 'all', label: 'Any geometry', detail: 'Points, edges and faces' },
@@ -14,10 +34,11 @@ export const MEASURE_SELECTION_FILTERS = [
   { id: 'faces', label: 'Faces', detail: 'Snap to faces only' },
 ];
 
-export function filterSelectionReferences(references, filter) {
-  if (filter === 'parts') return [];
-  if (filter === 'faces' || filter === 'tangent-faces') return references.filter(r => r.selectorType === 'face');
-  if (filter === 'edges' || filter === 'edge-chain') return references.filter(r => r.selectorType === 'edge');
+/** What a viewport press can pick under a Select mode (or Measure's snapping). */
+export function filterSelectionReferences(references, mode) {
+  if (mode === 'parts') return [];
+  if (mode === 'faces') return references.filter(r => r.selectorType === 'face');
+  if (mode === 'edges') return references.filter(r => r.selectorType === 'edge');
   return references;
 }
 

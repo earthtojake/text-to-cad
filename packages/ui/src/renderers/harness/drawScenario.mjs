@@ -15,15 +15,13 @@ import assert from 'node:assert/strict';
  *   A page the harness has opened on a file whose renderer offers Draw.
  */
 export async function runDrawScenario({ page, pane, errors }) {
-  // Draw's corner menu, named by the tool that opens it, is portalled out of the pane.
-  const menu = page.getByRole('menu', { name: 'Draw', exact: true });
+  // Draw's tools, color and history: a panel in the tool stack for as long as Draw is the tool.
+  const menu = pane.locator('[data-tool-panel][aria-label="Drawing controls"]');
   const tool = name => menu.getByRole('button', { name, exact: true });
-  const openMenu = async () => { if (!await menu.isVisible()) await pane.getByRole('button', { name: 'Draw', exact: true }).click(); await menu.waitFor(); };
-  // A mark or a way of moving closes the menu once chosen; Color and Undo keep it open.
-  const choose = async (name, { keepsMenu = false } = {}) => {
-    await openMenu(); await tool(name).click();
-    if (keepsMenu) assert.equal(await menu.isVisible(), true, `${name} keeps the menu open`);
-    else await menu.waitFor({ state: 'detached' });
+  // Choosing anything keeps the panel: it is the tool's, not a menu.
+  const choose = async name => {
+    await tool(name).click();
+    assert.equal(await menu.isVisible(), true, `${name} keeps the panel`);
   };
   const camera = () => page.evaluate(() => window.cadHarness.a.controller.readState().camera);
   // What the static ink canvas holds: pixel counts by kind, and the ink's left edge in CSS pixels.
@@ -53,9 +51,10 @@ export async function runDrawScenario({ page, pane, errors }) {
   await draw.click();
   await pane.locator('[data-cad-drawing-overlay] canvas.excalidraw__canvas.interactive').waitFor();
   await page.waitForFunction(() => document.querySelector('[data-testid="one"] [data-drawing-ready]'));
-  await openMenu();
+  await menu.waitFor();
+  assert.equal(await pane.getByRole('button', { name: 'Draw', exact: true }).locator('[data-tool-menu-corner]').count(), 0, 'no corner menu');
   assert.equal(await tool('Pen').getAttribute('aria-pressed'), 'true', 'Draw opens on the pen');
-  // The menu's tools read left to right: the two ways of moving around what was drawn,
+  // The panel's tools read left to right: the two ways of moving around what was drawn,
   // then the marks; beneath a rule, the colour they are made in, undo/redo and Clear.
   assert.deepEqual(await menu.getByRole('group', { name: 'Drawing tools' }).getByRole('button')
     .evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
@@ -63,11 +62,10 @@ export async function runDrawScenario({ page, pane, errors }) {
   assert.deepEqual(await menu.getByRole('group', { name: 'Drawing settings' }).getByRole('button')
     .evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
   ['Color', 'Undo', 'Redo', 'Clear drawing']);
-  await page.keyboard.press('Escape');
-  await menu.waitFor({ state: 'detached' });
   assert.equal(await pane.locator('.layer-ui__wrapper').isVisible(), false, 'the SDK has no controls of its own here');
+  // Clear of the tool stack at the overlay's left, where the Drawing panel sits.
   const box = await pane.locator('[data-cad-drawing-overlay]').boundingBox();
-  const at = (x, y) => [box.x + x, box.y + y];
+  const at = (x, y) => [box.x + 300 + x, box.y + y];
 
   // Locked: a drag that would have orbited the model draws instead.
   const locked = await camera();
@@ -108,10 +106,8 @@ export async function runDrawScenario({ page, pane, errors }) {
   await drag(at(120, 220), at(300, 360));
   assert.equal(await draw.locator('[data-drawing-tool]').getAttribute('data-drawing-tool'), 'rectangle');
   // Color is for what comes next; the red ink stays red.
-  await choose('Color', { keepsMenu: true });
+  await choose('Color');
   await menu.getByRole('radio', { name: 'Neon green', exact: true }).click();
-  await page.keyboard.press('Escape');
-  await menu.waitFor({ state: 'detached' });
   await drag(at(330, 220), at(400, 300));
   const colored = await ink();
   assert.ok(colored.green > 50 && colored.red >= stroke.red, JSON.stringify(colored));
@@ -127,9 +123,7 @@ export async function runDrawScenario({ page, pane, errors }) {
   });
   assert.equal(await draw.locator('[data-drawing-tool]').getAttribute('data-drawing-tool'), 'fill');
   // One Undo, one fill.
-  await choose('Undo', { keepsMenu: true });
-  await page.keyboard.press('Escape');
-  await menu.waitFor({ state: 'detached' });
+  await choose('Undo');
   await page.waitForFunction(() => {
     const canvas = document.querySelector('[data-testid="one"] [data-cad-drawing-overlay] canvas.excalidraw__canvas.static');
     const { data } = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
@@ -150,7 +144,7 @@ export async function runDrawScenario({ page, pane, errors }) {
   // Leaving Draw ends the session and the sketch with it.
   await pane.getByRole('group', { name: 'Interaction tools' }).getByRole('button', { name: 'Select', exact: true }).click();
   await pane.locator('[data-cad-drawing-overlay]').waitFor({ state: 'detached' });
-  assert.equal(await page.getByRole('group', { name: 'Drawing tools' }).count(), 0);
+  assert.equal(await page.getByRole('group', { name: 'Drawing tools' }).count(), 0, 'its panel went with it');
   const left = await camera();
   for (const key of ['position', 'target']) left[key].forEach((value, index) => assert.ok(Math.abs(value - dragged[key][index]) < 1e-6, `the camera keeps the pose the sketch left it in: ${key}`));
   await draw.click();

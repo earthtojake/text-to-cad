@@ -2,22 +2,25 @@ import { useCallback, useMemo, useState } from 'react';
 import { buildPositionSection } from './MotionControlsSection.js';
 import { STEP_MODEL_ROOT_ID } from '@hardcore/core/lib/step/stepTree.js';
 import { buildIssuesSection } from './FileStatusSection.js';
-import { StepReferenceSection } from './StepReferenceSection.js';
+import { useStepReference } from './StepReferenceSection.js';
 import ModelingTree from './ModelingTree.jsx';
+import ToolPanel from '../../../kit/tools/ToolPanel.jsx';
 import { useStepModeling } from '../../workbench/useStepModeling.js';
 import { stepGeometryMeasurements } from '../../workbench/stepGeometryMeasurements.js';
 const EMPTY = [];
 
 /**
- * A STEP's Settings panel: its Features tree, Position, and its Issues when there are
- * any. Features (`role: "model"`) and Position (`role: "position"`) become two tabs when
- * both exist, Issues riding under Features (`kit/inspector/FilePanelTabs.jsx`). The sheet
- * around it, and the Display popover, are the shell's (`kit/shell/RendererShell.jsx`).
+ * A STEP's panels in the tool stack, top to bottom: while Select is the tool, **Features** (the
+ * filter and the model tree), the **Reference** for what is selected, and **Issues** when there
+ * are any; while Position is the tool, **Position**. Each stays mounted while its tool is not
+ * up, so the tree keeps its expansion, filter and scroll. The kept effects' panels follow them
+ * (`ModelTools.jsx`); the stack itself is the shell's (`kit/shell/RendererShell.jsx`).
  *
- * `open`: the panel is on screen, which is when recognition is worth running.
+ * `selectActive`: Features is on screen, which is when recognition is worth running and a pick
+ * is scrolled to. `selectMode` is the Select tool's mode, which the tree's disclosure follows.
  */
-export function useStepPanel({
-  client, open, selectedEntry, viewerLoading,
+export function useStepPanels({
+  client, selectActive, positionActive, selectedEntry, viewerLoading,
   geometryInspection = null, stepTreeRoot, isAssemblyView = false,
   selectedMeshData = null, selectedSourceAppearance = null,
   selectedPartIds = EMPTY, selectedReferenceIds = EMPTY, selectedReferences = EMPTY,
@@ -29,7 +32,7 @@ export function useStepPanel({
   // The menus a tree row carries: a part's descriptor per node, a feature's per set of faces
   // and edges (the viewport's menu over that topology), and the one set of actions behind both.
   menuForNode = null, menuForReferences = null, partMenuActions = null,
-  treeSelectionDisabled = false,
+  treeSelectionDisabled = false, selectMode = 'all', loadingGeometry = false,
   statusItems = EMPTY, positionRuntime = null,
 }) {
   const recognitionKey = `${selectedEntry?.file}:${geometryInspection?.revision}`;
@@ -39,7 +42,7 @@ export function useStepPanel({
     current.key === recognitionKey && current.ids.length === ids.length && current.ids.every((id, index) => id === ids[index])
       ? current : { key: recognitionKey, ids }
   )), [recognitionKey]);
-  const modeling = useStepModeling(selectedEntry, open && !treeSelectionDisabled && !viewerLoading, { client, requestedOccurrenceIds });
+  const modeling = useStepModeling(selectedEntry, selectActive && !treeSelectionDisabled && !viewerLoading, { client, requestedOccurrenceIds });
   const modelReferences = geometryInspection?.references || EMPTY;
   const modelParts = geometryInspection?.parts || EMPTY;
   const measuredSelection = useMemo(() => ({
@@ -50,14 +53,23 @@ export function useStepPanel({
     ])],
   }), [selectedReferences, selectedPartIds, modelParts]);
   const measurements = useMemo(() => stepGeometryMeasurements(measuredSelection, modelReferences, modelParts), [measuredSelection, modelReferences, modelParts]);
+  // A face or edge is named after its part as the tree names that part.
+  const partNames = useMemo(() => {
+    const names = new Map();
+    const visit = node => { if (!node) return; if (node.id) names.set(String(node.id), String(node.displayName || node.name || '').trim()); (node.children || EMPTY).forEach(visit); };
+    visit(stepTreeRoot);
+    return names;
+  }, [stepTreeRoot]);
+  const partName = useCallback(id => partNames.get(String(id || '')) || '', [partNames]);
+  const reference = useStepReference({ references: selectedReferences, meshData: selectedMeshData, sourceAppearance: selectedSourceAppearance, measurements, partName });
   if (!selectedEntry) return null;
-  const selectionDetails = selectedReferences.length || measuredSelection.partIds.length ? <StepReferenceSection
-    references={selectedReferences} meshData={selectedMeshData} sourceAppearance={selectedSourceAppearance} measurements={measurements}
-  /> : null;
-  const sections = [{
-    id: 'features', title: 'Features', role: 'model',
-    content: active => <ModelingTree key={`${selectedEntry.file}:${geometryInspection?.revision}`}
-      modeling={modeling} stepRoot={stepTreeRoot} active={active && open}
+  const selectionDetails = selectedReferences.length || measuredSelection.partIds.length ? reference : null;
+  const position = buildPositionSection({ poseRuntime: positionRuntime });
+  const issues = buildIssuesSection(statusItems);
+  return <>
+    {/* Features, then the Reference for a selection: both the tree's, which knows what is picked in it. */}
+    <ModelingTree key={`${selectedEntry.file}:${geometryInspection?.revision}`}
+      modeling={modeling} stepRoot={stepTreeRoot} active={selectActive} mode={selectMode} loading={loadingGeometry}
       onRequestRecognition={onRequestRecognition}
       disabled={treeSelectionDisabled || viewerLoading}
       references={modelReferences} selectedReferences={selectedReferences}
@@ -68,7 +80,9 @@ export function useStepPanel({
         onSelectTreeNode, onFocusTreeNode, onUnfocusTreeNode, onExitAllIsolate,
         onTogglePartVisibility, showAllHiddenParts, onCopySelection, onCopyTreeNodeReference, onHoverTreeNode,
         menuForNode, menuForReferences, partMenuActions}}
-    />,
-  }, buildPositionSection({ poseRuntime: positionRuntime }), buildIssuesSection(statusItems)].filter(Boolean);
-  return { title: 'Settings', sections };
+    />
+    {issues ? <ToolPanel title={issues.title} label="Issues" fit="details" collapsible hidden={!selectActive}>{issues.content}</ToolPanel> : null}
+    {/* No heading: its Pose row leads it. */}
+    {position ? <ToolPanel label="Position controls" fit="details" hidden={!positionActive}>{position.content}</ToolPanel> : null}
+  </>;
 }

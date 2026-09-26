@@ -28,6 +28,7 @@ Current intended use:
 - `cad-viewer:color-scheme`: the app's System/Light/Dark appearance preference,
   used when its cross-port appearance cookie is unavailable.
 - `cad-viewer:orbit:v1`: the fullscreen orbit speed (below).
+- `cad-viewer:tool-stack-width:v1`: the width of the viewer's tool stack (below).
 
 The host adapter is [cadPreferences.ts](../src/persistence/cadPreferences.ts),
 a thin wrapper over the shared `createStoredCadPreferences`
@@ -45,8 +46,8 @@ The host's [fileViewer.ts](../src/persistence/fileViewer.ts) reads and writes
 `hardcore:file-viewer:v1:<encoded rootId>` in `sessionStorage`. It holds the
 panel column's width, the tree's expanded directories and renderer state keyed
 by file and renderer. It never holds the open panel: a page load is a file
-opened directly, so it opens with the file's own default panel (`panel: null`),
-whatever the last page had open. `rootId` is the server's normalized
+opened directly, so it opens with the file's own default (`panel: null`: nothing,
+for a CAD file), whatever the last page had open. `rootId` is the server's normalized
 filesystem-root identity, independent of its port.
 Writes merge changed chrome fields into the latest record, and renderer keys
 through the shared `mergeChangedRecords` (`@hardcore/ui/file-viewer`), so
@@ -68,15 +69,17 @@ comes from the model and its sidecar, never session storage. Reuse the record's
 slices when adding a control instead of adding a separate storage key.
 
 The panel column's width comes from `@hardcore/ui/navigation`: `PANEL_DEFAULT_WIDTH`
-(280px) when nothing is stored, and `clampPanelWidth` for a stored width. Storage
+(280px) when nothing is stored, and `clampPanelWidth` (200–480px) for a stored width. Storage
 access is explicit in the host; constructing or importing a renderer never
 chooses a browser storage backend.
 
 Appearance uses a host cookie across viewer ports, with `cad-viewer:color-scheme`
 as its localStorage fallback; neither changes the per-file Render recipe.
 
-Fullscreen orbit speed uses `cad-viewer:orbit:v1`. The web adapter reads, writes
-and synchronizes that key through `createStoredCadPreferences`; the shared
-renderer discovers no browser storage. It is global across files and
+Fullscreen orbit speed uses `cad-viewer:orbit:v1`, and the tool stack's width (one
+width for every panel under the viewer's toolbar, 190px by default, 160px at least)
+`cad-viewer:tool-stack-width:v1`. The web adapter reads, writes and synchronizes
+both keys through `createStoredCadPreferences`; the shared
+renderer discovers no browser storage. Both are global across files and
 synchronized across tabs. Fullscreen camera changes are transient and never
 enter file-session snapshots.

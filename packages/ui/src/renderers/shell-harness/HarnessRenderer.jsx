@@ -7,6 +7,7 @@ import { Button } from "@hardcore/ui/primitives/button";
 import RendererShell from "../kit/shell/RendererShell.jsx";
 import { SHELL_TOOL, useRendererShell } from "../kit/shell/useRendererShell.js";
 import { createToolModes } from "../kit/tools/toolModes.js";
+import ToolPanel from "../kit/tools/ToolPanel.jsx";
 
 // TEST SCAFFOLDING. This renderer is never registered in a product: it exists so
 // the shell's own tools can be driven in a real browser under a frame that is
@@ -159,20 +160,25 @@ function HarnessSurface({ view, data }) {
     { id: "clear", label: "Clear the note", separatorBefore: true, disabled: !picked, onSelect: () => setPicked("") }
   ]), [picked]);
 
-  // `panel*.harness` stands in for a file with Settings (a model tab and a Position tab) and a
-  // retained effect: "Keep" keeps a panel under the strip, highlighted, whatever tool is up.
+  // `panel*.harness` stands in for a file whose tool stack is full: a tree far taller than any
+  // viewer, the Reference for a selection, and a retained effect — "Keep" keeps a small panel
+  // under them, highlighted, whatever tool is up.
   const [kept, setKept] = useState(false);
   const withPanel = view.file.path.startsWith("panel");
   const keepTool = { id: "keep", label: "Keep", icon: <span aria-hidden="true">K</span>, active: kept, disabled: shell.idle,
     onSelect: () => setKept(value => !value) };
-  const panel = withPanel ? { title: "Settings", sections: [
-    { id: "features", role: "model", title: "Features", content: <p data-harness-tab="features">Model tree</p> },
-    { id: "position", role: "position", title: "Position", content: <p data-harness-tab="position">Joints</p> }
-  ] } : null;
+  const rows = (count, name) => <ul className="px-2 py-1">{Array.from({ length: count }, (_, index) =>
+    <li key={index} className="flex h-6 items-center">{name} {index + 1}</li>)}</ul>;
+  const toolPanels = <>
+    {withPanel ? <>
+      <ToolPanel label="Harness tree" fit="tree" header={<p className="flex h-9 items-center border-b px-2">Filter</p>}>{rows(120, "Row")}</ToolPanel>
+      <ToolPanel title="Reference" label="Harness reference" fit="details" onClose={() => {}}>{rows(8, "Fact")}</ToolPanel>
+    </> : null}
+    {kept ? <ToolPanel title="Kept" label="Kept controls" onClose={() => setKept(false)}><div className="h-16 px-2">Kept</div></ToolPanel> : null}
+  </>;
 
-  return <RendererShell shell={shell} tools={withPanel ? [shell.tools.draw, keepTool] : [shell.tools.draw]} panel={panel}
-    toolPanels={kept ? <div className="w-40" data-harness-kept=""><section aria-label="Kept controls"
-      className="pointer-events-auto h-24 rounded-md border border-border bg-popover text-tiny">Kept</section></div> : null}
+  return <RendererShell shell={shell} tools={withPanel ? [shell.tools.draw, keepTool] : [shell.tools.draw]}
+    toolPanels={toolPanels}
     contextMenuItems={contextMenuItems} onContextMenuOpenChange={setMenuUp}
     frameProvider={frame => <HarnessFrameContext.Provider value={`frame:${stage}`}>{frame}</HarnessFrameContext.Provider>}
     onCanvasPointerDown={() => setPutDown(`put down @${stage}`)}

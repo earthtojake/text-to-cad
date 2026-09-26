@@ -1,17 +1,17 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { X } from "lucide-react";
-import { Button } from "@hardcore/ui/primitives/button";
 import { TreeRowSurface, TreeRowChevron, TreeRowLabel } from "@hardcore/ui/primitives/tree-row";
 import { TreeFilterHighlight, TreeFilterInput } from "@hardcore/ui/primitives/tree-filter";
 import { cn } from "@hardcore/ui/utils";
-import InspectorSplit from "../kit/inspector/InspectorSplit.jsx";
+import ToolPanel from "../kit/tools/ToolPanel.jsx";
 import RobotComponentDetails, { RobotLinkDetails, RobotLinksSummary } from "./LinkDetails.jsx";
 import { useTreeSearch } from "../kit/inspector/modelTreeSearch.js";
 import { buildRobotTree, robotComponentNodeId, robotLinkFacts, robotLinkNodeId, robotTreeAncestorIds } from "./robotTree.js";
 
 // The robot's kinematic tree, drawn with the Model tree's rows, filter and Reference
-// pane: links nest under their parent link through the joint between them (the row's
-// muted text), and the named objects inside a link's meshes are its leaves.
+// panel: links nest under their parent link through the joint between them (the row's
+// muted text), and the named objects inside a link's meshes are its leaves. Two panels of
+// the tool stack, on screen while Select is the tool: **Links**, and the **Reference** for
+// what is selected.
 //
 // Expansion starts at the first real choice. The root opens, and so does a chain of
 // single links below it (`base_footprint` > `base_link`), because a tree that opens on
@@ -52,11 +52,11 @@ function RobotRow({ node, depth = 0, pinned = false, highlighted, expanded, togg
   const open = pinned || expanded.has(node.id), branch = node.children.length > 0;
   const { choose, enter, leave } = rowHandlers(node, selection);
   return <li className="min-w-0" ref={element => { if (element) rowRefs.current.set(node.id, element); else rowRefs.current.delete(node.id); }}>
-    <TreeRowSurface active={highlighted.has(node.id)} className="gap-0 pr-0" style={{ paddingLeft: depth * 14 }}
+    <TreeRowSurface active={highlighted.has(node.id)} className="gap-0 pr-0" style={{ paddingLeft: depth * 12 }}
       onMouseEnter={enter} onMouseLeave={leave}>
       {pinned ? null : branch ? <button type="button" aria-label={`${open ? "Collapse" : "Expand"} ${node.label}`} aria-expanded={open}
-        className="grid size-7 shrink-0 place-items-center rounded focus-visible:ring-2 focus-visible:ring-ring"
-        onClick={() => toggle(node)}><TreeRowChevron expanded={open}/></button> : <span className="w-7 shrink-0"/>}
+        className="grid h-7 w-5 shrink-0 place-items-center rounded focus-visible:ring-2 focus-visible:ring-ring"
+        onClick={() => toggle(node)}><TreeRowChevron expanded={open}/></button> : <span className="w-5 shrink-0"/>}
       <button type="button" aria-label={`Select ${node.label}`} aria-pressed={highlighted.has(node.id)}
         onClick={choose} onFocus={enter} onBlur={leave}
         className={cn("flex h-full min-w-0 flex-1 items-center gap-1.5 rounded pr-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring", pinned && "pl-2")}>
@@ -95,7 +95,7 @@ function RobotSearchRow({ match, highlighted, cursor, selection }) {
  * @param {{ id: string, linkName: string }[]} props.parts Mesh parts: which viewport geometry belongs to which link.
  * @param {object} props.selection `useLinkSelection`, with `select`/`selectLink` routed through the Select tool.
  * @param {Map<string, string[]> | null} [props.groupNamesByLink] SRDF planning groups per link.
- * @param {boolean} [props.active] Whether the panel is showing; a hidden tree does not scroll to a selection.
+ * @param {boolean} [props.active] Whether Select is the tool, which is when the panels show; a hidden tree does not scroll to a selection.
  * @param {(filename: string) => string} [props.meshPath] The host path of a mesh the description names, or "" when it has none here.
  * @param {(path: string) => void} [props.onOpenFile] Opens a file the description names.
  */
@@ -143,25 +143,34 @@ export default function LinksSection({ description = null, components = EMPTY, p
   const linkFacts = useMemo(() => (shownLinkNames.length === 1
     ? robotLinkFacts(description, shownLinkNames[0], { groupNamesByLink }) : null),
   [shownLinkNames, description, groupNamesByLink]);
+  const selectedComponents = components.filter(component => selection.selectedComponentIds.includes(component.id));
+  // The heading names what is selected: one link or object by its name, several by what they are.
+  const referenceTitle = shownLinkNames.length === 1 ? shownLinkNames[0] : shownLinkNames.length ? "Links"
+    : selectedComponents.length === 1 ? selectedComponents[0].name : "Mesh objects";
   const details = linkFacts ? <RobotLinkDetails facts={linkFacts} meshPath={meshPath} onOpenFile={onOpenFile} onSelectLink={selection.selectLink} hasLinkRow={name => tree.nodesById.has(robotLinkNodeId(name))}/>
     : shownLinkNames.length ? <RobotLinksSummary linkNames={shownLinkNames}/>
     : selection.selectedComponentIds.length ? <RobotComponentDetails components={components} selectedIds={selection.selectedComponentIds}/> : null;
   const clearSelection = () => selection.select("");
 
-  return <div className="flex flex-col text-xs" aria-label="Robot links">
-    <TreeFilterInput label="Filter links" placeholder="Filter links…" value={query} onChange={changeQuery} onKeyDown={onSearchKeyDown}/>
-    <InspectorSplit title="Reference" label="Reference details" details={details}
-      actions={<Button type="button" variant="ghost" size="icon-xs" aria-label="Clear selection"  onClick={clearSelection}><X className="size-3.5" aria-hidden="true"/></Button>}>
-      <div ref={listRef} className="px-1 pt-1" aria-label="Robot tree area"
-        onClick={event => { if (!event.target.closest("li,button,input")) clearSelection(); }}>
-        {searching && <p role="status" className="px-2 py-1 text-micro text-muted-foreground">{found.total > found.matches.length ? `First ${found.matches.length} of ${found.total.toLocaleString()} matches` : `${found.total} ${found.total === 1 ? "match" : "matches"}`}</p>}
-        {searching ? found.matches.length
-          ? <ul aria-label="Link search results">{found.matches.map(match => <RobotSearchRow key={match.entry.node.id} {...{ match, highlighted, cursor: match.entry.node.id === cursorId, selection }}/>)}</ul>
-          : deferredQuery.trim() && <p className="px-3 py-6 text-center text-xs text-muted-foreground">{`No link matches “${deferredQuery.trim()}”`}</p>
-        : tree.roots.length
-          ? <ul aria-label="Robot links">{tree.roots.map(node => <RobotRow key={node.id} pinned={tree.roots.length === 1 && node.children.length > 0} {...{ node, highlighted, expanded, toggle, selection, rowRefs }}/>)}</ul>
-          : <p role="status" className="p-2 text-tiny text-muted-foreground">{description ? "This description has no links." : "Loading links…"}</p>}
+  return <>
+    {/* No heading: the filter is the panel's top row, and stays put while the tree scrolls under it. */}
+    <ToolPanel label="Links" fit="tree" hidden={!active}
+      header={<TreeFilterInput className="px-1" label="Filter links" placeholder="Filter links…" value={query} onChange={changeQuery} onKeyDown={onSearchKeyDown}/>}>
+      <div className="flex flex-col text-xs" aria-label="Robot links">
+        <div ref={listRef} className="px-1 py-1" aria-label="Robot tree area"
+          onClick={event => { if (!event.target.closest("li,button,input")) clearSelection(); }}>
+          {searching && <p role="status" className="px-2 py-1 text-micro text-muted-foreground">{found.total > found.matches.length ? `First ${found.matches.length} of ${found.total.toLocaleString()} matches` : `${found.total} ${found.total === 1 ? "match" : "matches"}`}</p>}
+          {searching ? found.matches.length
+            ? <ul aria-label="Link search results">{found.matches.map(match => <RobotSearchRow key={match.entry.node.id} {...{ match, highlighted, cursor: match.entry.node.id === cursorId, selection }}/>)}</ul>
+            : deferredQuery.trim() && <p className="px-3 py-6 text-center text-xs text-muted-foreground">{`No link matches “${deferredQuery.trim()}”`}</p>
+          : tree.roots.length
+            ? <ul aria-label="Robot links">{tree.roots.map(node => <RobotRow key={node.id} pinned={tree.roots.length === 1 && node.children.length > 0} {...{ node, highlighted, expanded, toggle, selection, rowRefs }}/>)}</ul>
+            : <p role="status" className="p-2 text-tiny text-muted-foreground">{description ? "This description has no links." : "Loading links…"}</p>}
+        </div>
       </div>
-    </InspectorSplit>
-  </div>;
+    </ToolPanel>
+    {details ? <ToolPanel title={referenceTitle} label="Reference details" closeLabel="Clear selection" fit="details" capped hidden={!active} onClose={clearSelection}>
+      <div className="px-2 pb-2">{details}</div>
+    </ToolPanel> : null}
+  </>;
 }

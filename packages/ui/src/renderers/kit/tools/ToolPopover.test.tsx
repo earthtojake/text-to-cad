@@ -4,7 +4,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import ToolPopover from '../../../../dist/renderers/kit/tools/ToolPopover.js';
 import FloatingToolBar from '../../../../dist/renderers/kit/tools/FloatingToolBar.js';
-import SelectionFilterMenu from '../../../../dist/renderers/step/components/workbench/SelectionFilterMenu.js';
+import SelectionFilterMenu, { SelectModeMenu } from '../../../../dist/renderers/step/components/workbench/SelectionFilterMenu.js';
 import { DrawingToolbar } from '../../../../dist/drawing/toolbar.js';
 
 beforeEach(() => vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} }));
@@ -86,4 +86,28 @@ it('a corner press selects first and only opens options when already selected', 
   expect(screen.getByRole('menu')).toBeTruthy();
   await user.hover(button);
   expect(screen.queryByRole('tooltip')).toBeNull();
+});
+
+it('the Select mode menu offers Parts only in an assembly, keeps inapplicable options disabled, and a tick leaves it open', async () => {
+  const user = userEvent.setup();
+  const connectedChange = vi.fn();
+  function Harness({ assembly, mode }: { assembly: boolean, mode: string }) {
+    return <FloatingToolBar tools={[{ id: 'select', label: 'Select', active: true, icon: null, secondPressOpensMenu: true, onSelect: () => {},
+      menu: trigger => <SelectModeMenu trigger={trigger} mode={mode} assembly={assembly} onModeChange={() => {}}
+        connected={{ edgeChain: false, tangentFaces: true }} onConnectedChange={connectedChange} /> }]} />;
+  }
+  const view = render(<Harness assembly={false} mode="faces" />);
+  await user.click(screen.getByRole('button', { name: 'Select', exact: true }));
+  expect(screen.getAllByRole('menuitemradio').map(item => item.textContent)).toEqual(['All', 'Faces', 'Edges']);
+  const chain = screen.getByRole('menuitemcheckbox', { name: 'Edge chain' });
+  expect(chain.getAttribute('aria-disabled')).toBe('true');
+  expect(screen.getByRole('menuitemcheckbox', { name: 'Tangent faces' }).getAttribute('aria-checked')).toBe('true');
+  await user.click(screen.getByRole('menuitemcheckbox', { name: 'Tangent faces' }));
+  expect(connectedChange).toHaveBeenCalledWith('tangentFaces', false);
+  expect(screen.getByRole('menu')).toBeTruthy();
+  await user.keyboard('{Escape}');
+  view.rerender(<Harness assembly mode="all" />);
+  await user.click(screen.getByRole('button', { name: 'Select', exact: true }));
+  expect(screen.getAllByRole('menuitemradio').map(item => item.textContent)).toEqual(['All', 'Parts', 'Faces', 'Edges']);
+  expect(screen.getByRole('menuitemcheckbox', { name: 'Edge chain' }).getAttribute('aria-disabled')).toBeNull();
 });

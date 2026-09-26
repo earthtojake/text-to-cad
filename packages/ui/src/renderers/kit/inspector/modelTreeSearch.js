@@ -1,6 +1,8 @@
 import { useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { fuzzyMatch } from '../../../file-viewer/navigation/fuzzy.js';
-import { panelScroller } from './FilePanelSections.jsx';
+
+/** The scroller a tree sits in (its tool-stack panel's body): a search keeps its place in it. */
+const panelScroller = element => element?.closest('[data-tool-panel-body]') ?? element;
 
 /**
  * A tree's filter box: a flat, ranked view over the presented tree, never a

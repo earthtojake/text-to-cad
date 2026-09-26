@@ -128,7 +128,7 @@ it('does not fetch geometry or start a worker when modeling is disabled',async()
 
 it('highlights a picked face’s feature while preserving its precise reference and details',async()=>{
  setup();const onSelect=vi.fn();
- render(<ModelingTree active entry={entry} references={refs()} selectedReferenceIds={['o1.f1']} onSelect={onSelect} selectionDetails={<p>Picked face details</p>}/>);
+ render(<ModelingTree active entry={entry} references={refs()} selectedReferenceIds={['o1.f1']} onSelect={onSelect} selectionDetails={{title:'Face · o1.f1',content:<p>Picked face details</p>}}/>);
  await respond({tree});expandIfCollapsed('Body 1');
  expect(screen.getByRole('button',{name:'Select Cut extrude 1'}).getAttribute('aria-pressed')).toBe('true');
  expect(screen.getByText('Picked face details')).toBeTruthy();
@@ -160,11 +160,13 @@ it('does not overwrite a newer viewport selection when a feature’s topology fi
  rerender(<ModelingTree {...props} selectedReferenceIds={['o1.e3']} references={refs()}/>);
  expect(onSelect).not.toHaveBeenCalled();
 });
-it('uses one static Reference heading and clears through the host',async()=>{
+it('heads the Reference panel with the reference being read, not a title, and clears through the host',async()=>{
  setup();const onClearSelection=vi.fn();
- const props={active:true,entry,references:refs(),selectedReferences:refs(),selectedReferenceIds:refs().map(r=>r.id),selectionDetails:<p>Face measurements</p>,onClearSelection};
+ const props={active:true,entry,references:refs(),selectedReferences:refs(),selectedReferenceIds:refs().map(r=>r.id),selectionDetails:{title:'Face · o1.f2',content:<p>Face measurements</p>},onClearSelection};
  const {rerender}=render(<ModelingTree {...props}/>);await respond({tree});expandIfCollapsed('Body 1');
- expect(screen.getByRole('heading',{name:'Reference'})).toBeTruthy();
+ const reference=within(screen.getByRole('region',{name:'Reference details'}));
+ expect(reference.getByRole('heading').textContent).toBe('Face · o1.f2');
+ expect(screen.queryByRole('heading',{name:'Reference'})).toBeNull();
  expect(screen.queryByRole('button',{name:'Hide selection details'})).toBeNull();
  fireEvent.click(screen.getByRole('button',{name:'Clear selection'}));expect(onClearSelection).toHaveBeenCalledTimes(1);
  rerender(<ModelingTree {...props} selectedReferences={[]} selectedReferenceIds={[]} selectionDetails={null}/>);
@@ -514,7 +516,7 @@ it('a folded row reads as selected only when the selection is what it stands for
  expect(screen.getByRole('button',{name:'Select plant_1 (2)'}).getAttribute('aria-pressed')).toBe('true');
 });
 
-it('joins touching selected rows into one block, and the isolation bar ends an isolation', () => {
+it('joins touching selected rows into one block, isolates from the row, and the isolation bar ends an isolation', () => {
   const onFocusTreeNode=vi.fn(),onUnfocusTreeNode=vi.fn(),onExitAllIsolate=vi.fn();
   const controls={expandedTreeNodeIds:['arm'],isAssemblyView:true,hiddenPartIds:[],focusedNodeIds:[] as string[],
     onSelectTreeNode:vi.fn(),onToggleTreeNode:vi.fn(),onTogglePartVisibility:vi.fn(),onFocusTreeNode,onUnfocusTreeNode,onExitAllIsolate};
@@ -526,15 +528,17 @@ it('joins touching selected rows into one block, and the isolation bar ends an i
   expect(surface('Wrist').style.borderTopLeftRadius).toBe('');
   expect(surface('Base').style.borderTopLeftRadius).toBe('0px');
   expect(surface('Arm').style.borderBottomLeftRadius).toBe('');
-  // Isolation is not a row action (a double-click isolates); isolated, the tree says so at
-  // the top and its Exit ends it.
-  expect(screen.queryByRole('button',{name:/Isolate/})).toBeNull();
+  // Isolate sits left of Hide on the row; isolated, it stays lit and the tree says so at the top.
+  const actions=screen.getByRole('button',{name:'Isolate Base'}).parentElement!;
+  expect([...actions.querySelectorAll('button')].map(button=>button.getAttribute('aria-label'))).toEqual(['Isolate Base','Hide Base']);
+  fireEvent.click(screen.getByRole('button',{name:'Isolate Base'}));
+  expect(onFocusTreeNode).toHaveBeenCalledWith('base');
   rerender(<ModelingTreeView {...props} partControls={{...controls,focusedNodeIds:['base']}}/>);
-  expect(screen.queryByRole('button',{name:/isolate/i})).toBeNull();
+  expect(screen.getByRole('button',{name:'Exit isolate Base'}).getAttribute('aria-pressed')).toBe('true');
   const bar=screen.getByRole('status',{name:'Isolation'});
   expect(bar.textContent).toContain('Isolated: Base');
   fireEvent.click(within(bar).getByRole('button',{name:'Exit'}));
   expect(onExitAllIsolate).toHaveBeenCalled();
-  expect(onFocusTreeNode).not.toHaveBeenCalled();
-  expect(onUnfocusTreeNode).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button',{name:'Exit isolate Base'}));
+  expect(onUnfocusTreeNode).toHaveBeenCalledWith('base');
 });

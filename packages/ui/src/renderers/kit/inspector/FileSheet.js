@@ -1,6 +1,5 @@
 import { TooltipHint } from "@hardcore/ui/primitives/tooltip";
-import { Children, createContext, useContext, useEffect, useId, useRef, useState } from "react";
-import { createPortal } from "react-dom";
+import { Children, useEffect, useId, useRef, useState } from "react";
 import { Minus, Plus } from "lucide-react";
 import { cn } from "@hardcore/ui/utils";
 import { Button } from "@hardcore/ui/primitives/button";
@@ -15,12 +14,6 @@ import {
   SelectValue
 } from "@hardcore/ui/primitives/select";
 
-const FILE_SHEET_CONTROL_TEXT_CLASSES = [
-  "[&_[data-slot=input]]:!text-tiny",
-  "[&_[data-slot=select-trigger]]:!text-tiny",
-  "[&_[data-slot=color-picker-trigger]]:!text-tiny"
-].join(" ");
-
 export const FILE_SHEET_CONTROL_ROW_CLASSES = "space-y-1 px-2";
 export const FILE_SHEET_ROW_STACK_CLASSES = "space-y-3";
 export const FILE_SHEET_SLIDER_FIELD_CLASSES = "space-y-1 px-2";
@@ -31,8 +24,6 @@ export const FILE_SHEET_INLINE_CONTROL_ROW_CLASSES = "px-2";
 export const FILE_SHEET_SECTION_TITLE_CLASSES = "text-xs text-sidebar-foreground";
 export const FILE_SHEET_FIELD_LABEL_CLASSES = "block min-w-0 truncate text-tiny leading-4 text-muted-foreground";
 export const FILE_SHEET_STATUS_TEXT_CLASSES = "px-2 text-tiny leading-4 text-muted-foreground";
-/** Host-owned panel content slot. Without a slot, render a plain fallback aside. */
-export const HostPanelSlotContext = createContext(null);
 
 // A trigger must clip and ellipsize its own value: the Radix trigger only sets
 // whitespace-nowrap, so without this a long option pushes its chevron out
@@ -79,18 +70,19 @@ export const FILE_SHEET_PRECISION_SLIDER_CLASSES = [
 /** A section heading: 28px, regular 12px, never a control (`docs/settings-ui.md`). */
 export const FILE_SHEET_SECTION_HEADING_CLASSES = "flex min-h-7 items-center px-2 py-1 text-xs font-normal leading-4 text-foreground";
 
-/** One section primitive for Display, file panels and standalone settings. */
+/**
+ * One settings section: a heading and its rows, under a top border when another section
+ * precedes it. `onOpenChange` makes the heading a disclosure: a Display feature gate
+ * (`gated`: open IS enabled, and a shut gate mounts nothing) or a fold. `onReveal` is what a
+ * press on an open section's title does (scroll the section into view).
+ */
 export function FileSheetSettingsSection({ title, children, open = true, onOpenChange,
-  gated = false, disabled = false, onReveal, headingAction = null, hideHeading = false, sectionId, index = 0, count = 1, sticky = false }) {
+  gated = false, disabled = false, onReveal, headingAction = null, sectionId }) {
   const titleId = useId();
   const contentId = useId();
   const collapsible = typeof onOpenChange === "function";
-  // Contents keeps sticky headings in the panel's shared scroll flow.
-  return <section aria-labelledby={titleId} data-file-panel-section={sectionId}
-    className={sticky ? "contents" : "[&+section]:border-t border-border"}>
-    <div hidden={hideHeading} data-mobile-panel-top-row={index === 0 ? "" : undefined} data-file-panel-heading="" className={cn("relative h-7 shrink-0 bg-background",
-      sticky && "sticky z-10", sticky && index > 0 && "border-t border-border")}
-      style={sticky ? { top: `${index * 1.75}rem`, bottom: `${(count - index - 1) * 1.75}rem` } : undefined}>
+  return <section aria-labelledby={titleId} data-settings-section={sectionId} className="[&+section]:border-t border-border">
+    <div data-settings-section-heading="" className="relative h-7 shrink-0">
       {collapsible ? <FileSheetToggleHeading as="h2" title={title} open={open} onOpenChange={onOpenChange}
         headingId={titleId} contentId={contentId} disabled={disabled} onTitleClick={onReveal}
         verbs={gated ? ["Enable", "Disable"] : ["Expand", "Collapse"]} />
@@ -99,8 +91,7 @@ export function FileSheetSettingsSection({ title, children, open = true, onOpenC
           : <span id={titleId} className={FILE_SHEET_SECTION_HEADING_CLASSES}>{title}</span>}</h2>}
       {headingAction && <div className="absolute right-1 top-0 flex h-7 items-center">{headingAction}</div>}
     </div>
-    <div id={contentId} hidden={!open} data-file-panel-body="" className={cn("space-y-1 pb-2",
-      !hideHeading && "[&>div>[data-slot=tree-filter]]:h-8 [&>div>[data-slot=tree-filter]]:pb-1")}>{!gated || open ? children : null}</div>
+    <div id={contentId} hidden={!open} data-settings-section-body="" className="space-y-1 pb-2">{!gated || open ? children : null}</div>
   </section>;
 }
 
@@ -115,7 +106,7 @@ export function FileSheetStaticSection({ title, children }) {
  * that opens it, while it is shut — and a trailing plus when shut and minus when open.
  * `verbs` name the two acts
  * for the button's label: `["Enable", "Disable"]` for a Display gate, `["Expand",
- * "Collapse"]` for a file panel's section a person folds away.
+ * "Collapse"]` for a section a person folds away.
  */
 export function FileSheetToggleHeading({ title, open, onOpenChange, headingId, contentId, verbs, disabled = false, onTitleClick, as: Heading = "h3" }) {
   const show = () => { if (!disabled) { onOpenChange(true); onTitleClick?.(); } };
@@ -697,15 +688,4 @@ export function FileSheetColorPicker({
       {...props}
     />
   );
-}
-
-/** A file's own panel, portaled into the host's panel column; its sections own their scrolling. */
-export default function FileSheet({ open, title, children }) {
-  const hostPanelSlot = useContext(HostPanelSlotContext);
-  // FileViewer owns the single column and its dimensions. Wait for its slot.
-  return open && hostPanelSlot
-    ? createPortal(<div className="flex h-full min-h-0 flex-col" data-file-sheet={title || ""}>
-      <div className={cn("flex min-h-0 flex-1 flex-col", FILE_SHEET_CONTROL_TEXT_CLASSES)}>{children}</div>
-    </div>, hostPanelSlot)
-    : null;
 }

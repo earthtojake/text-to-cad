@@ -51,7 +51,7 @@ export function stepMotionSources(entry) {
  *
  * In: the entry on screen, the model it moves (a partial progressive model plays tolerantly and
  * is not validated), and the stored record to restore from as the module and routines compile.
- * Out: what the Position tab and the playbar read and call, what the viewport draws a frame
+ * Out: what the Position panel and the playbar read and call, what the viewport draws a frame
  * from (`animationRuntime`), and `restore`, which the session record calls once before the
  * first paint.
  *
@@ -359,7 +359,7 @@ export function useStepMotion({ entry, fileKey, resources, meshData, meshPartial
     }
   };
 
-  // What the Position tab and the playbar read and call.
+  // What the Position panel and the playbar read and call.
   const positionControls = {
     status, error, definition,
     parameterValues: stepModuleParameterValues,

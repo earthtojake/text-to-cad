@@ -205,11 +205,15 @@ function DropdownMenuSubTrigger({
   );
 }
 
+// Portaled like the menu itself: rendered inside its parent menu, a submenu is positioned
+// against — and clipped by — that menu whenever it is a containing block (a translucent,
+// backdrop-blurred menu is one), which drew it off its trigger and out of sight.
 function DropdownMenuSubContent({
   className,
   ...props
 }) {
   return (
+    <DropdownMenuPrimitive.Portal>
     <DropdownMenuPrimitive.SubContent
       data-slot="dropdown-menu-sub-content"
       className={cn(
@@ -218,6 +222,7 @@ function DropdownMenuSubContent({
       )}
       {...props}
     />
+    </DropdownMenuPrimitive.Portal>
   );
 }
 

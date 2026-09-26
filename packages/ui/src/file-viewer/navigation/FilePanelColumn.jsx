@@ -8,13 +8,13 @@ import { hasOpenPopup } from "../../lib/popups.js";
  * The file surface's panel column: the one frame every panel is drawn in.
  *
  * There is one of these beside a file and never two, because there is one
- * open panel (`panels.js`). Whatever is in it — the file tree or a file's
- * Settings — gets the same border, the same width and the same handle. Below
- * the viewer breakpoint it is a floating sheet over the body instead.
+ * open panel (`panels.js`). Whatever is in it — the file tree or a panel a
+ * renderer declares — gets the same border, the same width and the same
+ * handle. Below the viewer breakpoint it is a floating sheet over the body
+ * instead.
  *
  * No title bar of the column's own. Each panel's own top row is its header —
- * the tree's filter, a file panel's first section — and the nav row's toggle is
- * how it closes.
+ * the tree's filter — and the nav row's toggle is how it closes.
  *
  * A collapsed panel is not rendered at all, so the toggle for it exists in
  * the document exactly once: in the nav row.
@@ -28,10 +28,14 @@ import { hasOpenPopup } from "../../lib/popups.js";
  * `aria-valuemin`/`max` on the handle below are the real numbers rather than a
  * second opinion. The mobile sheet is the default width.
  */
-// Fits a Position section's joint sliders and their typed values without scrolling sideways.
-export const PANEL_MIN_WIDTH = 256;
+// Fits the file tree's filter and a few levels of nesting without scrolling sideways; a name
+// truncates before the column gives way.
+export const PANEL_MIN_WIDTH = 200;
 export const PANEL_MAX_WIDTH = 480;
 export const PANEL_DEFAULT_WIDTH = 280;
+// A drag has to go well below the minimum — past half of it — before the column closes: one that
+// merely overshoots stops at the minimum. The keyboard never closes it; the toggle does.
+const PANEL_COLLAPSE_WIDTH = PANEL_MIN_WIDTH / 2;
 
 /** Whatever a caller has, clamped into the column's range. */
 export function clampPanelWidth(width) {
@@ -58,8 +62,8 @@ export function clampPanelWidth(width) {
 export function FilePanelColumn({ id, label, width, onWidthChange, onCollapse, children, hidden = false, mobile = false, portalContainer = null, onDismiss }) {
   const drag = useRef(null);
   const content = useRef(null);
-  const resize = (nextWidth) => {
-    if (nextWidth < PANEL_MIN_WIDTH && onCollapse) {
+  const resize = (nextWidth, { dragging = false } = {}) => {
+    if (dragging && nextWidth < PANEL_COLLAPSE_WIDTH && onCollapse) {
       drag.current = null;
       onCollapse();
     } else {
@@ -121,7 +125,7 @@ export function FilePanelColumn({ id, label, width, onWidthChange, onCollapse, c
         aria-valuenow={width}
         className="relative w-px shrink-0 touch-none cursor-col-resize bg-border transition-colors hover:bg-ring focus-visible:bg-ring focus-visible:outline-none before:absolute before:inset-y-0 before:-left-1 before:w-2"
         onPointerDown={onPointerDown}
-        onPointerMove={(event) => { if (drag.current?.pointerId === event.pointerId) resize(drag.current.right - event.clientX); }}
+        onPointerMove={(event) => { if (drag.current?.pointerId === event.pointerId) resize(drag.current.right - event.clientX, { dragging: true }); }}
         onPointerUp={stopDrag}
         onPointerCancel={stopDrag}
         onLostPointerCapture={() => { drag.current = null; }}

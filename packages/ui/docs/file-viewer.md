@@ -60,14 +60,14 @@ A definition's `panels({ open, ready, file, data })` returns the nav row's
 panels for one prepared document, so it can read what `prepare` found (`data`).
 Panel declarations use stable IDs and `content: "slot" | "body"`; FileViewer
 appends the file tree (`content: "tree"`) last. The nav row holds one toggle per
-panel, and one panel is open at a time. A viewer file declares at most one panel,
-its Settings (`viewerPanels`); whatever tabs that panel has are its own
-(`FilePanelTabs`, see [the design system](settings-ui.md#sidebars-and-mobile)).
-The renderer portals a slot panel into `panelSlot`; a body panel replaces its
-own content. `openPanel` and `onPanelOpen` keep every renderer panel exclusive
+panel, and one panel is open at a time. A CAD file declares none: its controls are
+panels of its own tool stack, over the viewport, shown by the tool they belong to
+([the design system](settings-ui.md#the-tool-stack)); nothing it does opens or turns
+this column. A renderer that declares a slot panel portals it into `panelSlot`; a
+body panel (the desktop markdown's source view) replaces its own content. `openPanel` and `onPanelOpen` keep every renderer panel exclusive
 with the file tree. `onReady(false)` suppresses panels whose surface could not
 start. `FileViewerState.panel` is `null` until someone chooses, which opens the
-first panel declared `defaultOpen` (a viewer file's Settings), or nothing; the
+first panel declared `defaultOpen`, or nothing; the
 tree is the default only when no file is open. `""` is nothing open. Which panel
 a newly shown file opens with is the host's to apply: `navigation.openFile(path,
 { target, panel })` names it — the tree, for a file picked in the tree, so the
@@ -81,13 +81,15 @@ panel column becomes a floating sheet over the body, opened only by its toggle
 while the stored `panel` and
 `panelWidth` stay as the wide layout left them; the breadcrumbs collapse to the
 current file. The width is a breakpoint boolean, never a pixel value, so a panel
-drag or a resize within one layout does not re-render the renderer.
+drag or a resize within one layout does not re-render the renderer. The column is
+280px by default, 200px at least and 480px at most (`FilePanelColumn.jsx`); a drag
+past the minimum stops at it, and only one below half the minimum closes the column.
 
 A renderer is handed, besides its document: `navigationStatusSlot`, the nav-row
 element after the filename where it portals its loading and update status (the
 row itself adds only the unsaved-changes dot); `onNavigationActionsChange`, for
 its nav-row actions (`FileNavigationAction`, with an optional shorter `hint`);
-`displayActions`, the host's controls for the Display popover;
+`displayActions`, the host's controls for the Display panel;
 `onPanelVisibilityChange(visible)`, which suspends the panel column and disables
 its toggles while keeping the open panel and width (the shell's fullscreen uses
 it; the next document restores it); and `appearance`. Host-specific empty,

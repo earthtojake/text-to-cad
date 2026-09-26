@@ -112,6 +112,23 @@ export function collectStepTreeTopologyLoadableNodeIds(root) {
   return uniqueStringList(ids);
 }
 
+/**
+ * Every node that holds other nodes (the assemblies and subassemblies): open, they show every
+ * part as a row, which is the tree the Select tool's Parts, Faces and Edges modes start from.
+ */
+export function collectStepTreeAssemblyNodeIds(root) {
+  const ids = [];
+  const stack = root ? [root] : [];
+  while (stack.length) {
+    const node = stack.pop();
+    const children = stepTreeNodeChildren(node);
+    const nodeId = stepTreeNodeIdForWorkspace(node);
+    if (nodeId && children.length && String(node?.nodeType || "").trim() !== "part") ids.push(nodeId);
+    for (let index = children.length - 1; index >= 0; index -= 1) stack.push(children[index]);
+  }
+  return uniqueStringList(ids);
+}
+
 /** Expanded descendants behind a collapsed ancestor do not request topology.
  * Isolation starts a new visible scope, independently of outside ancestors.
  */

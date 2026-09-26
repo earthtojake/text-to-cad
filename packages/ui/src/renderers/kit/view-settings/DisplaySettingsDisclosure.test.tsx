@@ -118,7 +118,7 @@ it('keeps one section order in every preset, Display first', () => {
   }
 });
 
-// Explode and Cross-section remain independent sidebar tools.
+// Explode and Cross-section remain independent STEP tools, with their own stack panels.
 function Tools() {
   const [store] = React.useState(() => createViewSettingsStore({ mode: 'solid' }));
   const { display: settings } = React.useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
@@ -131,7 +131,7 @@ function Tools() {
   </>;
 }
 
-it('Display has no Explode or Cross-section: they belong in the STEP sidebar', () => {
+it('Display has no Explode or Cross-section: they are STEP tools of their own', () => {
   render(<Harness />);
   for (const name of ['Explode', 'Clip', 'Cross-section']) expect(screen.queryByRole('heading', { name })).toBeNull();
   expect(screen.queryByRole('textbox', { name: 'Explode value' })).toBeNull();

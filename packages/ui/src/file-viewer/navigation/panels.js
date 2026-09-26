@@ -3,10 +3,12 @@
  *
  * ONE panel column, one width, one border, one resize handle
  * (`FilePanelColumn.jsx`) — and a list of things that can be in it: what the
- * file's renderer declares (a viewer file's own controls) and the file tree LAST. The nav row draws one icon button per
- * panel, in declaration order, and highlights the open one; pressing a toggle
- * opens that panel and closes whatever was open. Tabs inside a panel are the
- * panel's own business (a viewer file's Settings, `FilePanelTabs.jsx`).
+ * file's renderer declares and the file tree LAST. The nav row draws one icon
+ * button per panel, in declaration order, and highlights the open one; pressing
+ * a toggle opens that panel and closes whatever was open. A CAD file declares
+ * none: its controls are panels in the viewer's own tool stack, shown by the
+ * tool they belong to (`docs/settings-ui.md`), so nothing a renderer does opens
+ * or turns this column.
  *
  * The panel frame is shared across both apps: the tree is an
  * entry in this list, not a second column beside it with a design of its own.
@@ -21,14 +23,14 @@
  *
  * Pure but for its lucide glyphs, so `node --test` loads it with no bundler.
  */
-import { Folders, SlidersHorizontal } from "lucide-react";
+import { Folders } from "lucide-react";
 
 /**
  * Where a panel's content comes from — which is who draws it.
  *
  * `"tree"` and `"slot"` are both the panel column: the shared file tree, or a
- * box handed to the file's renderer to draw into (a viewer surface portals its
- * panels there, `panelSlot` in `docs/file-viewer.md`).
+ * box handed to the file's renderer to draw into (`panelSlot` in
+ * `docs/file-viewer.md`).
  * `"body"` is the one panel that is not a column at all — the desktop's
  * markdown source view is the same bytes read differently, so it replaces the
  * content instead of sitting beside it. It is still in this list, and still
@@ -44,9 +46,9 @@ import { Folders, SlidersHorizontal } from "lucide-react";
  * @property {FilePanelContent} content
  * @property {boolean} [defaultOpen]
  *   The panel a surface opens with when nobody has said (`panel: null`): the
- *   FIRST declaration that claims it wins. A viewer file's own controls claim it;
- *   the file tree never does, so a file opened directly
- *   shows its controls, or nothing when it has none.
+ *   FIRST declaration that claims it wins. The file tree claims it only when
+ *   there is no file to show, so a file opened directly opens with nothing
+ *   beside it unless its own declaration says otherwise.
  *
  * @typedef {object} FilePanelContext
  * @property {string} open
@@ -63,36 +65,6 @@ import { Folders, SlidersHorizontal } from "lucide-react";
  * a tab's `panel` field, which is why it is a plain string and not a symbol.
  */
 export const FILE_PANEL_TREE = "tree";
-
-/**
- * The file sidebar's id. Any other stored id — a retired panel's — resolves as
- * nothing open (`resolveOpenPanel`).
- */
-export const CAD_PANEL = Object.freeze({
-  file: "cad-file"
-});
-
-/**
- * A viewer file's sidebar, when it has file-specific controls. Display settings
- * live in the viewport toolbar's popover and never occupy this column.
- *
- * `file` asks for it: one panel, always labelled "Settings" under the sliders icon,
- * whatever the file is; false for a file whose only settings are Display's (a
- * mesh). It is the default: a file opened directly opens with its controls.
- *
- * Nothing until the surface is up: a pane whose runtime did not start shows a
- * failure card, and a toggle over a card would open nothing.
- *
- * @param {boolean} ready
- * @param {{ file?: boolean }} [options]
- * @returns {FilePanel[]}
- */
-export function viewerPanels(ready, { file = false } = {}) {
-  if (!ready) return [];
-  return [
-    ...(file ? [{ id: CAD_PANEL.file, label: "Settings", icon: SlidersHorizontal, content: "slot", defaultOpen: true }] : [])
-  ];
-}
 
 /**
  * The file tree, as the last entry in every panel list: the folders glyph is
@@ -122,8 +94,8 @@ export function treePanel(open, { empty = false } = {}) {
  * `null` — nobody has said — is the first panel claiming `defaultOpen`. `""`
  * is nothing open, and an id no panel in this list has is nothing open too: a
  * pane that was showing markdown's source and is pointed at a `.step`, or a
- * CAD pane whose surface has not come up, names a panel that is not there, and
- * the honest answer is that nothing is.
+ * stored id of a retired panel (a CAD file's old Settings, `cad-file`), names a
+ * panel that is not there, and the honest answer is that nothing is.
  *
  * @param {FilePanel[]} panels
  * @param {string|null} panel

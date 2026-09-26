@@ -2,7 +2,7 @@
 //
 // Neutral CAD viewing is what every load pays for. The photographic rig and
 // stage load only when an enabled lighting/background/floor group requires them.
-// The lightweight grouped settings panel is always available in every preset.
+// The lightweight grouped Display panel is always available in every preset.
 //
 // The scene half cannot be a React.lazy component: the viewport applies the studio
 // from effects, not from JSX. It is a module handle instead — `studioScene()`

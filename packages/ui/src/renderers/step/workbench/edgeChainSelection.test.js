@@ -13,7 +13,7 @@ test('selects open chains and closed loops across corners',()=>{
  assert.deepEqual(chain(refs),new Set(['a','b','c']));
  assert.deepEqual(chain(refs.slice(0,2)),new Set(['a','b']));
  assert.deepEqual(toggleReferenceGroupSelection(['a','b'],['a','b'],true),[]);
- assert.deepEqual(filterSelectionReferences([...refs,{id:'face',selectorType:'face'}],'edge-chain'),refs);
+ assert.deepEqual(filterSelectionReferences([...refs,{id:'face',selectorType:'face'}],'edges'),refs);
 });
 test('continues straight through a branch but never floods competing branches',()=>{
  const a=edge('a',[0,0,0],[1,0,0]), b=edge('b',[1,0,0],[2,0,0]), c=edge('c',[1,0,0],[1,1,0]);

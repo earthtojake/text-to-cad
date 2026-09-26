@@ -1,7 +1,6 @@
 import { Fragment } from "react";
 import { ToolbarButton } from "./ToolbarButton.js";
-
-export const FLOATING_TOOL_BAR_SURFACE_CLASS = "bg-background border border-border text-foreground shadow-sm";
+import { FLOATING_SURFACE_CLASS } from "./floatingSurface.js";
 
 /**
  * One tool of the strip. The strip draws it; whoever hands it over decides what
@@ -66,14 +65,12 @@ function toolButton(tool) {
  * tools it is handed, left to right, then each tool's `subToolbar` beneath. It
  * holds no state and knows no tool by name.
  *
- * @param {{ tools: ViewportTool[], trailing?: import("react").ReactNode }} props  `trailing`: drawn after the
- *   tools, in the same strip (the Display tool's popover trigger).
+ * @param {{ tools: ViewportTool[] }} props
  */
-export default function FloatingToolBar({ tools = [], trailing = null }) {
+export default function FloatingToolBar({ tools = [] }) {
   return (<div className="relative z-20 flex max-w-full shrink-0 flex-col items-end gap-1" data-cad-toolbar="tools">
-      <div role="group" aria-label="Interaction tools" className={`pointer-events-auto inline-flex max-w-full flex-wrap items-center gap-0.5 rounded-md ${tools.length === 1 && !trailing ? "p-0.5" : "min-h-8 p-1"} ${FLOATING_TOOL_BAR_SURFACE_CLASS}`}>
+      <div role="group" aria-label="Interaction tools" className={`pointer-events-auto inline-flex max-w-full flex-wrap items-center gap-0.5 rounded-md ${tools.length === 1 ? "p-0.5" : "min-h-8 p-1"} ${FLOATING_SURFACE_CLASS}`}>
         {tools.map(tool => <Fragment key={tool.id}>{toolButton(tool)}</Fragment>)}
-        {trailing}
       </div>
     {tools.map(tool => (tool.subToolbar ? <Fragment key={tool.id}>{tool.subToolbar}</Fragment> : null))}
   </div>);

@@ -11,6 +11,7 @@ import { readShellState } from "../kit/shell/shellState.js";
 import { useRendererShell } from "../kit/shell/useRendererShell.js";
 import { failureAlert } from "../kit/status/loadAlerts.js";
 import JointHandleOverlay from "../kit/tools/pose/JointHandleOverlay.jsx";
+import ToolPanel from "../kit/tools/ToolPanel.jsx";
 import { PointerPick } from "../kit/tools/select/usePointerPick.js";
 import { useDeclinedSelectReference, useWorkspaceDocument, workspaceLoadAlert } from "../workspace/useWorkspaceDocument.js";
 import PositionControls from "./PositionControls.jsx";
@@ -85,7 +86,7 @@ function RobotSurface({ view, data }) {
   }), []);
   const escape = useMemo(() => ({
     active: selection.active,
-    // Escape clears a selection before it shuts the open panel.
+    // Escape clears the selection.
     handle: () => { if (!selectionRef.current.active) return false; selectionRef.current.clear(); return true; }
   }), [selection.active]);
 
@@ -150,20 +151,16 @@ function RobotSurface({ view, data }) {
   const poseActive = !shell.presenting && posable && Boolean(scene) && toolMode === ROBOT_TOOL.POSE;
   const selectActive = !shell.presenting && Boolean(scene) && toolMode === ROBOT_TOOL.SELECT;
 
-  // Choosing a link or an object under another tool returns to Select first, and shows
-  // what was chosen where its details are: the robot's panel, with its Links.
-  const revealFileSection = shell.revealFileSection;
-  const reveal = useCallback(() => {
-    selectTool(ROBOT_TOOL.SELECT);
-    revealFileSection("links", { open: false });
-  }, [selectTool, revealFileSection]);
+  // Choosing a link or an object under another tool returns to Select first; its Links and the
+  // Reference for what was chosen are Select's panels, so they are then on screen.
+  const toSelect = useCallback(() => selectTool(ROBOT_TOOL.SELECT), [selectTool]);
   const treeSelection = useMemo(() => ({
     ...selection,
-    select: (id, options) => { selection.select(id, options); if (id) reveal(); },
-    selectLink: (name, options) => { selection.selectLink(name, options); if (name) reveal(); }
-  }), [selection, reveal]);
+    select: (id, options) => { selection.select(id, options); if (id) toSelect(); },
+    selectLink: (name, options) => { selection.selectLink(name, options); if (name) toSelect(); }
+  }), [selection, toSelect]);
   const pickSelection = selection.pick;
-  const handlePick = useCallback((hit, modifiers) => { pickSelection(hit, modifiers); if (hit) reveal(); }, [pickSelection, reveal]);
+  const handlePick = useCallback((hit, modifiers) => { pickSelection(hit, modifiers); if (hit) toSelect(); }, [pickSelection, toSelect]);
 
   // A mesh the description names, as the path the host opens. It resolves against the
   // opened file exactly as the mesh loader does (an SRDF's URDF is always beside it); a
@@ -176,25 +173,29 @@ function RobotSurface({ view, data }) {
   }, [hostPath]);
   const groupNamesByLink = useMemo(() => (robot?.description?.srdf ? srdfGroupNamesByLink(robot.description) : null), [robot]);
 
+  // Position is offered where a joint can be driven; until the robot has loaded that is not
+  // known, and it is shown, idle, meanwhile.
   const tools = [
     shell.tools.own({ id: ROBOT_TOOL.SELECT, label: "Select", icon: SELECT_ICON }),
-    posable ? shell.tools.own({ id: ROBOT_TOOL.POSE, label: "Position", icon: POSITION_ICON,
-      onSelect: () => {
-        if (!poseActive) selectTool(ROBOT_TOOL.POSE);
-        shell.revealFileSection("position");
-      } }) : null
+    !robot || posable ? shell.tools.own({ id: ROBOT_TOOL.POSE, label: "Position", icon: POSITION_ICON,
+      // Its panel is in the tool stack for as long as it is the tool.
+      onSelect: () => { if (!poseActive) selectTool(ROBOT_TOOL.POSE); } }) : null
   ].filter(Boolean);
-  // Links leads the panel; Position remains available independently of the tool.
-  const panel = { title: "Settings", sections: [
-    { id: "links", title: "Links", role: "model",
-      content: active => <LinksSection key={modelKey} active={active} description={robot?.description || null} components={robot?.components}
-        parts={robot?.parts} selection={treeSelection} groupNamesByLink={groupNamesByLink} meshPath={meshPath} onOpenFile={view.onOpenFile} /> },
-    posable && pose ? { id: "position", role: "position", title: "Position", content: <PositionControls key={robot.revision} pose={pose} /> } : null,
-    kind === "sdf" ? { id: "sdf", title: "SDF",
-      content: <SdfSection info={robot?.description?.sdf || null} movableJointCount={pose?.joints.length || 0} /> } : null
-  ] };
+  // The tool stack: Select's Links and Reference (and an SDF's own metadata), then Position's joints.
+  const linksShown = !shell.presenting && toolMode === ROBOT_TOOL.SELECT;
+  const toolPanels = <>
+    <LinksSection key={modelKey} active={linksShown} description={robot?.description || null} components={robot?.components}
+      parts={robot?.parts} selection={treeSelection} groupNamesByLink={groupNamesByLink} meshPath={meshPath} onOpenFile={view.onOpenFile} />
+    {kind === "sdf" ? <ToolPanel title="SDF" label="SDF" fit="details" collapsible defaultCollapsed hidden={!linksShown}>
+      <SdfSection info={robot?.description?.sdf || null} movableJointCount={pose?.joints.length || 0} />
+    </ToolPanel> : null}
+    {/* No heading: its Pose row leads it. */}
+    {posable && pose ? <ToolPanel label="Position controls" fit="details" hidden={!poseActive}>
+      <PositionControls key={robot.revision} pose={pose} />
+    </ToolPanel> : null}
+  </>;
 
-  return <RendererShell shell={shell} tools={tools} panel={panel}
+  return <RendererShell shell={shell} tools={tools} toolPanels={toolPanels}
     viewportOverlay={viewport => <>
       {poseActive ? <JointHandleOverlay handlesRef={handlesRef} layoutSeamRef={handleLayoutRef} {...viewport} /> : null}
       <PointerPick viewport={viewport} scene={scene} enabled={selectActive} onPick={handlePick} onHover={selection.hoverHit} />

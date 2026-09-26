@@ -49,6 +49,18 @@ browser lifetimes; [desktop README](../../../apps/desktop/README.md) documents
 native IPC, draft delivery and project persistence. Shared component tests can
 use the [explicit fake host](../src/host/testing/host.ts).
 
+## What a CAD renderer does not use
+
+A CAD renderer (STEP, GLB, mesh, robot, DXF) declares no `panels`, and reads none of
+`RendererViewProps.openPanel`, `panelSlot` or `onPanelOpen`: its controls are panels of
+its own tool stack over the viewport (`settings-ui.md#the-tool-stack`), and nothing it
+does opens, closes or turns the host's panel column. FileViewer still hands every
+renderer those props — they are the generic panel contract, which the file tree and
+the desktop markdown's source view use. A host's stored `panel` naming the retired CAD
+Settings panel (`cad-file`) resolves as nothing open. The tool stack's width is a
+viewer preference the host stores with `createStoredCadPreferences` (key
+`cad-viewer:tool-stack-width:v1`), beside the orbit speed.
+
 ## Fullscreen and renderer navigation actions
 
 Fullscreen is the shared shell's own presentation state; there is no host prop

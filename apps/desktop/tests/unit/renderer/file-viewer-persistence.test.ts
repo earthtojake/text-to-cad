@@ -8,7 +8,7 @@ describe("Desktop viewer preferences", () => {
     const retiredTheme = JSON.stringify({ version: 13, themeId: "cinematic", custom: { exposure: 1.2 } });
     localStorage.setItem("cad-viewer:theme", retiredTheme);
     localStorage.setItem("cad-viewer:tutorial-tips:v1", JSON.stringify({ version: 1, seen: ["copyReference", 5] }));
-    expect(createStoredCadPreferences(localStorage).getSnapshot()).toEqual({ orbit: { speed: 1 } });
+    expect(createStoredCadPreferences(localStorage).getSnapshot()).toEqual({ orbit: { speed: 1 }, toolStackWidth: 190 });
     expect(localStorage.getItem("cad-viewer:theme")).toBe(retiredTheme);
     localStorage.setItem("cad-viewer:tutorial-tips:v1", JSON.stringify({ version: 0, seen: ["copyReference"] }));
     expect(createStoredCadPreferences(localStorage).getSnapshot()).not.toHaveProperty("seenTips");

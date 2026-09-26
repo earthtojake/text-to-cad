@@ -1,5 +1,5 @@
 import { TooltipHint } from "@hardcore/ui/primitives/tooltip";
-import { useMemo } from "react";
+import { useMemo, useRef } from "react";
 import { Blend, Expand, Plus, RotateCcw, RotateCw, Sun, SunDim, X } from "lucide-react";
 import { ALL_VIEW_FEATURES, normalizeViewFeatures, normalizeViewSettings, resolveViewSettings, viewSettingsAreCustom } from "@hardcore/core/common/viewSettings.js";
 import { MAX_THEME_FILL_COLORS } from "@hardcore/core/lib/themeSettings.js";
@@ -7,11 +7,9 @@ import { Button } from "@hardcore/ui/primitives/button";
 import { DISPLAY_MODE_OPTIONS } from "./DisplayModeOptions.js";
 import {
   FileSheetColorPicker, FileSheetColorProperty,
-  FileSheetControlRow, FileSheetSelectRow,
+  FileSheetControlRow, FileSheetSelectRow, FileSheetSettingsSection,
   FileSheetFieldGrid, FileSheetNumberProperty, parseFileSheetNumberInput
 } from "../inspector/FileSheet.js";
-
-import FilePanelSections from "../inspector/FilePanelSections.jsx";
 import { OrthographicProjectionIcon, PerspectiveProjectionIcon } from "../camera/ProjectionModeIcons.js";
 
 const PROJECTIONS = Object.freeze({
@@ -79,9 +77,35 @@ function NumberProperty({ label, Icon, value, min, max, unit = "", digits = 2, o
     onValueCommit={draft => onChange(parseFileSheetNumberInput(draft, { fallback: value, min, max }))} />;
 }
 
+/**
+ * Display's sections, stacked in its panel's one scroller (the tool stack's panel body). A
+ * section with `onEnabledChange` is a feature gate (expanded IS enabled); the others are always
+ * open. A press on an open gate's title scrolls it into view within the scroller's natural range,
+ * never adding space to force it to the top, and never disables it.
+ */
+function DisplaySections({ sections }) {
+  const list = useRef(null);
+  const reveal = id => {
+    const element = list.current?.closest("[data-tool-panel-body]") || list.current;
+    const target = list.current?.querySelector(`[data-settings-section="${CSS.escape(id)}"] [data-settings-section-body]`);
+    if (!target) return;
+    const top = element.scrollTop + target.getBoundingClientRect().top - element.getBoundingClientRect().top
+      - (target.previousElementSibling?.getBoundingClientRect().height || 0);
+    element.scrollTop = Math.max(0, Math.min(top, element.scrollHeight - element.clientHeight));
+  };
+  return <div ref={list} data-settings-sections="">
+    {sections.filter(Boolean).map(section => {
+      const gated = typeof section.onEnabledChange === "function";
+      return <FileSheetSettingsSection key={section.id} sectionId={section.id} title={section.title} headingAction={section.headingAction}
+        open={gated ? section.enabled === true : true} onOpenChange={gated ? section.onEnabledChange : undefined}
+        gated={gated} onReveal={() => reveal(section.id)}>{section.content}</FileSheetSettingsSection>;
+    })}
+  </div>;
+}
+
 export function DisplaySettingsSection({
   viewSettings = {}, resolvedView, hostAppearance = "light", lightingQuality = "final", onViewSettingsPatch, onGroupEnabledChange, onModeChange, onViewReset,
-  features = ALL_VIEW_FEATURES, appearanceControl = null, sticky = true
+  features = ALL_VIEW_FEATURES, appearanceControl = null
 }) {
   const settings = useMemo(() => normalizeViewSettings(viewSettings), [viewSettings]);
   const view = resolvedView || resolveViewSettings(settings, { appearance: hostAppearance, lightingQuality, features });
@@ -158,7 +182,7 @@ export function DisplaySettingsSection({
           options={[{ value: "origin", label: "Model origin" }, { value: "lowest", label: "Lowest point" }]} />
       </>),
   ];
-  return <div className="flex min-h-0 flex-1 flex-col [&_[data-file-panel-heading]_.text-xs]:text-tiny">
-    <FilePanelSections sections={sections} sticky={sticky} />
+  return <div className="[&_[data-settings-section-heading]_.text-xs]:text-tiny">
+    <DisplaySections sections={sections} />
   </div>;
 }

@@ -163,12 +163,12 @@ test('an STL opens as one mesh with no tools: display settings, orbit, host comm
   // A mesh has no panel of its own: its only settings are Display's, and Display is never
   // where a file opens. So it opens with the column shut and the model given the room.
   assert.deepEqual(await panels(pane), ['Show files:false']);
-  assert.equal(await pane.locator('[data-file-sheet]').count(), 0);
+  assert.equal(await pane.locator('[data-tool-panel]').count(), 0, 'nothing in the tool stack until Display is taken up');
   await pane.locator('[data-cad-toolbar]').getByRole('button', { name: 'Display', exact: true }).click();
-  await pane.locator('[data-cad-display-popover]').waitFor();
+  await pane.locator('[data-tool-panel][aria-label="Display settings"]').waitFor();
   assert.deepEqual(await panels(pane), ['Show files:false']);
   assert.equal(await pane.getByRole('tab').count(), 0, 'a panel has no tabs inside it');
-  const displayMenu = pane.locator('[data-cad-display-popover]');
+  const displayMenu = pane.locator('[data-tool-panel][aria-label="Display settings"]');
   assert.match(await displayMenu.getByRole('combobox', { name: 'Mode', exact: true }).innerText(), /Solid/);
   const options = async label => {
     await displayMenu.getByRole('combobox', { name: label, exact: true }).click();
@@ -185,7 +185,7 @@ test('an STL opens as one mesh with no tools: display settings, orbit, host comm
   assert.deepEqual(await options('Projection'), ['Orthographic', 'Perspective']);
   assert.equal(await displayMenu.getByRole('button', { name: 'Reset', exact: true }).count(), 1);
   await pane.locator('[data-cad-toolbar]').getByRole('button', { name: 'Display', exact: true }).click();
-  await pane.locator('[data-cad-display-popover]').waitFor({ state: 'detached' });
+  await pane.locator('[data-tool-panel][aria-label="Display settings"]').waitFor({ state: 'detached' });
   // The column closing reaches the scene as a resize; let that frame land before comparing pictures.
   await page.waitForFunction(() => document.querySelector('[data-testid="one"] [aria-busy] > div > canvas').width >= 1190);
   await settle(page);
@@ -303,9 +303,9 @@ test('a 3MF is one mesh per object with its source colour; an uncoloured one tak
   // A 3MF's panels are a mesh's: Display alone, shut as it opens, and the same panel an STL has.
   assert.deepEqual(await panels(pane), ['Show files:false']);
   await pane.locator('[data-cad-toolbar]').getByRole('button', { name: 'Display', exact: true }).click();
-  await pane.locator('[data-cad-display-popover]').waitFor();
+  await pane.locator('[data-tool-panel][aria-label="Display settings"]').waitFor();
   await pane.locator('[data-cad-toolbar]').getByRole('button', { name: 'Display', exact: true }).click();
-  await pane.locator('[data-cad-display-popover]').waitFor({ state: 'detached' });
+  await pane.locator('[data-tool-panel][aria-label="Display settings"]').waitFor({ state: 'detached' });
   await page.waitForFunction(() => document.querySelector('[data-testid="one"] [aria-busy] > div > canvas').width >= 1190);
   await settle(page);
 

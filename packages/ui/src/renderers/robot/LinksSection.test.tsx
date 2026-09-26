@@ -204,8 +204,12 @@ it('reveals a selected hit with its ancestors expanded when the filter is cleare
   // A named object keeps its own selection and facts.
   fireEvent.click(screen.getByRole('button', { name: 'Select flange' }));
   expect(drawn()).toBe('[[],["wrist_link:v1/object/0"]]');
-  const component = within(screen.getByRole('region', { name: 'Reference details' })).getByLabelText('Component details').textContent!;
-  for (const fact of ['flange', 'wrist_link', '#336699', '1,200', '40.0 × 40.0 × 8.00 mm']) expect(component).toContain(fact);
+  const reference = within(screen.getByRole('region', { name: 'Reference details' }));
+  // The heading names it; the rows say the rest, never the name again.
+  expect(reference.getByRole('heading').textContent).toBe('flange');
+  const component = reference.getByLabelText('Component details').textContent!;
+  for (const fact of ['wrist_link', '#336699', '1,200', '40.0 × 40.0 × 8.00 mm']) expect(component).toContain(fact);
+  expect(component).not.toContain('flange');
 });
 
 it('a viewport pick of a surface selects its link; a named object selects itself, and Shift adds', () => {
@@ -239,9 +243,12 @@ it('a modified click adds a link to the selection, as it adds an object, and a p
   expect(drawn()).toBe('[["base_link","shoulder_link"],[]]');
   expect(screen.getAllByRole('button', { pressed: true }).map(row => row.getAttribute('aria-label')))
     .toEqual(['Select base_link', 'Select shoulder_link']);
-  const summary = within(screen.getByRole('region', { name: 'Reference details' })).getByLabelText('Link details');
-  expect(summary.textContent).toContain('2 links');
+  const reference = within(screen.getByRole('region', { name: 'Reference details' }));
+  // Several links head the panel as what they are, and list themselves once: no count line.
+  expect(reference.getByRole('heading').textContent).toBe('Links');
+  const summary = reference.getByLabelText('Link details');
   expect(summary.textContent).toContain('base_link, shoulder_link');
+  expect(summary.textContent).not.toMatch(/\d links|Selection ·/);
   fireEvent.click(screen.getByRole('button', { name: 'Select base_link' }), { metaKey: true });
   expect(drawn()).toBe('[["shoulder_link"],[]]');
   fireEvent.click(screen.getByRole('button', { name: 'Select base_link' }));

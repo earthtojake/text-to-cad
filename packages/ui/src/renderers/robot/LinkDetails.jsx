@@ -1,7 +1,8 @@
 import { TooltipHint } from "@hardcore/ui/primitives/tooltip";
 import { CoordValue, InfoRow, MonoValue } from "../kit/inspector/referenceRows.jsx";
 
-// The Reference pane at the foot of the Links section: what the selection IS.
+// The Reference panel under Links in the tool stack: what the selection IS. Its heading names
+// what is selected (`LinksSection.jsx`), so the rows never repeat the name.
 //
 // A link reads back what the description says about it (its inertial properties, its
 // visual and collision geometry, its parent joint with limits and origin); a named
@@ -121,7 +122,6 @@ function LimitRows({ joint }) {
 export function RobotLinkDetails({ facts, meshPath, onOpenFile, onSelectLink, hasLinkRow = () => true }) {
   const joint = facts.parentJoint;
   return <div className="flex min-w-0 flex-col text-tiny font-normal" aria-label="Link details">
-    <InfoRow label="Name">{facts.name}</InfoRow>
     <InfoRow label="Type">{facts.isRoot ? "Root link" : "Link"}</InfoRow>
     {facts.groups.length > 0 && <InfoRow label="Groups" title="Planning groups">{facts.groups.join(", ")}</InfoRow>}
     {facts.endEffectors.length > 0 && <InfoRow label="End effector">{facts.endEffectors.join(", ")}</InfoRow>}
@@ -157,7 +157,6 @@ export function RobotLinkDetails({ facts, meshPath, onOpenFile, onSelectLink, ha
 function ComponentDetails({ component }) {
   const size = component.sizeMillimetres;
   return <div className="flex min-w-0 flex-col text-tiny font-normal" aria-label="Component details">
-    <InfoRow label="Name">{component.name}</InfoRow>
     <InfoRow label="Type">Mesh object</InfoRow>
     <InfoRow label="Link">{component.linkName}</InfoRow>
     {/* A cadgen mesh export groups an object BY colour, so it tells two rows of one link apart. */}
@@ -173,7 +172,6 @@ function ComponentDetails({ component }) {
 /** Several links at once (a modified click adds one): which, as several objects are summarised. */
 export function RobotLinksSummary({ linkNames }) {
   return <div className="flex min-w-0 flex-col text-tiny font-normal" aria-label="Link details">
-    <p className="py-1 text-micro text-muted-foreground">Selection · {linkNames.length} links</p>
     <InfoRow label="Links">{linkNames.join(", ")}</InfoRow>
   </div>;
 }
@@ -184,7 +182,6 @@ export default function RobotComponentDetails({ components, selectedIds }) {
   if (selected.length > 1) {
     const triangles = selected.reduce((total, component) => total + component.triangleCount, 0);
     return <div className="flex min-w-0 flex-col text-tiny font-normal" aria-label="Component details">
-      <p className="py-1 text-micro text-muted-foreground">Selection · {selected.length} components</p>
       <InfoRow label="Links">{[...new Set(selected.map((component) => component.linkName))].join(", ")}</InfoRow>
       <InfoRow label="Triangles"><MonoValue>{formatCount(triangles)}</MonoValue></InfoRow>
     </div>;

@@ -18,76 +18,97 @@ Load this only when a task needs Viewer file-support details or UI control guida
   the pointer. The bottom-right cube (hidden below 720px and in fullscreen)
   changes direction without resetting zoom. Opening or reloading a file fits the
   model; the camera is never saved.
-- The top-left toolbar contains the tools supported by the file. STEP starts in
-  Select and offers Draw, Measure, Explode, Clip, Position when it has kinematics,
-  Animate when it has routines, and Display. Robots start in Select and may offer
-  Position. Meshes offer Display; animated GLBs also offer Animate. DXF uses a 2D
-  canvas: drag to pan, wheel/pinch to zoom, double-click to fit.
-- A corner triangle means options. First press selects; another press opens the
-  temporary menu. Select chooses its pick filter, Draw chooses drawing tools,
-  Measure chooses snapping, and Animate chooses Routine, Speed and Loop.
+- The top-left toolbar shows only the tools the file supports (an unavailable
+  tool is absent, not greyed). STEP starts in Select and offers Draw, Measure,
+  Explode (two or more parts), Clip, Position when it has kinematics, Animate when
+  it has routines, and Display. Robots start in Select and may offer Position.
+  Meshes offer Display; animated GLBs also offer Animate. DXF uses a 2D canvas:
+  drag to pan, wheel/pinch to zoom, double-click to fit.
+- A corner triangle means options, an ordinary dropdown under the button that
+  may overlap the panels below. First press selects; another press opens it.
+  Select chooses its mode, Measure snapping, Animate Routine, Speed and Loop.
+- STEP Select modes: All (pointer icon), Parts (assemblies only), Faces, Edges;
+  the Select button shows the mode's icon. Edge chain and Tangent faces are
+  checkboxes below them, independent of the mode and each other (Tangent faces
+  applies under All/Faces, Edge chain under All/Edges; otherwise disabled, kept).
+  The mode shapes the Features tree: All is your own expansion; Parts shows every
+  part, none expandable; Faces/Edges expand everything and load each part's
+  topology as its row scrolls into view. Outside All the tree cannot be expanded
+  or collapsed.
 - One tool owns picking. Leaving Select clears selection; leaving Draw clears
   drawings. Position edits persist. Animate sets Position values aside while it
   plays; leaving it stops playback and gives them back. Animate's Routine, Speed
   and Loop survive leaving it and Position edits. Completed measurements
   remain until their panel's X or main tool button clears them; unfinished picks
   are canceled when leaving Measure.
-- Explode and Clip open neutral panels beneath the toolbar. Editing applies the
+- Explode and Clip open neutral panels in the tool stack. Editing applies the
   effect; nonzero effects persist across tools. X or pressing the tool again
   resets/removes it. Unused zero-value panels disappear when selecting another
   tool, or when the pointer is released after a drag back to zero — never
-  mid-drag. Menus and the Display sheet open beside kept panels. Explode uses a
+  mid-drag. Explode uses a
   percentage; Clip uses an axis, Flip and one cut-percentage slider over the
   original model bounding box. 0% means no effect.
 - Select individual faces/edges in the viewport even when Features groups them.
   In an assembly, the first face/edge press on a part loads that part's faces
   and picks under the pointer; the part lights on hover until then.
   Shift-click adds to the selection (Shift, Ctrl or Cmd in a tree). Double-click
-  a component/subassembly to isolate; double-click away or the isolation bar's
-  Exit leaves. Double-click a face/edge to copy its file-prefixed reference; it
+  a component/subassembly, or its row's hover Isolate button (left of the eye),
+  to isolate; double-click away, the lit Isolate or the isolation bar's Exit
+  leaves. Double-click a face/edge to copy its file-prefixed reference; it
   stays selected. STEP context menus offer Zoom to Fit (the whole model, current
   angle) and Zoom to Selection.
 - Copy Reference/References appears only for a usable selection. Copy Drawing
   appears only with ink. The platform copy shortcut performs the same action
   unless a text field owns input. Copies complete silently.
 
-## Panels and display
+## Tool stack and display
 
-The navbar offers one optional Settings panel and the file explorer. Features
-and Position are separate tabs for STEP when both exist; robots use Links and
-Position. Without Position, the tree appears directly. Selecting Position opens
-its tab on desktop. A pick turns any open sidebar, the file explorer included,
-to Settings (Features or Links); it never opens a closed sidebar. On mobile
-(below 720px), panels float over the scene and tools neither open nor switch
-them automatically.
+The navbar's only panel toggle is the file explorer; a CAD file's controls are
+panels in the tool stack under the toolbar, shown by their tool, and no pick or
+tool opens, closes or switches the explorer. Under Select: Features (STEP) or
+Links (robots) — the filter box is its top row — then, with a selection, the
+Reference, then STEP Issues or SDF metadata. Under Position: the Position panel.
+Under Display or Draw: that tool's panel, first. Kept Measure results, Explode
+and Clip follow. All panels share one width (190px default, 160px minimum, up to
+half the viewer; drag or arrow-key the handle right of the stack; remembered
+across files) and never extend past the viewer: the tree scrolls first, then
+details panels; the Reference holds about eight rows before scrolling. On mobile
+(below 720px) the same stack applies, the tree taking at most 40% of it; the file
+explorer is a floating sheet. The file explorer column is 200px minimum and
+closes only when dragged below half of that.
+
+The Reference panel's header names the reference (a label, else part and kind,
+e.g. "base · face 3"; its ID is a row) with an X to clear; with several selected
+the header is a picker with "i/N" and the rows show the chosen one only.
 
 Position has a full-width Pose dropdown with Default and named poses, a Reset
 beside its label, then joint sliders/value inputs. Edits apply immediately and
-survive tool/tab changes. Reset restores authored defaults, including SRDF home.
-Issues live with Features; SDF metadata and robot link facts live with Links.
-Filters match model/link names; link filters also match joint names. References
-and link facts appear below the tree. File names retain their on-disk suffixes.
+survive tool changes. Reset restores authored defaults, including SRDF home.
+Filters match model/link names; link filters also match joint names. File names
+retain their on-disk suffixes.
 
-Display is a toolbar tool opening a compact properties sheet: Mode, Appearance
-and Projection; Surfaces; then optional Edges, Grid / Axes, Lighting, Background
-and Floor. Plus enables a section with defaults; minus disables it. There is no
-extra Enabled checkbox. Color and choice popups do not close the whole sheet.
+Display is a toolbar tool whose panel leads the stack: Mode, Appearance and
+Projection; Surfaces; then optional Edges, Grid / Axes, Lighting, Background and
+Floor. Plus enables a section with defaults; minus disables it. There is no
+extra Enabled checkbox. Color and choice popups close before the panel does.
 Mode presets are Solid, Render, X-ray, Hidden line and Wireframe where supported.
 Render defaults to perspective; other presets to orthographic. Meshes and robots
 offer Solid/Render without STEP topology effects. Manual changes show Custom.
 Reset restores the selected preset and clears Clip/Explode, without reframing
 and preserving pose and app appearance. Preset changes preserve applied model
-effects. Closing the sheet returns to the default tool.
+effects. Pressing Display again or Escape returns to the default tool; clicking
+the model does not close it.
 
 ## Fullscreen and host actions
 
 Fullscreen is a transparent top-right scene button, separate from Animate. It
-fills the area below the navbar, hides the sidebar, cube and editor tools, and
+fills the area below the navbar, hides the file explorer, tool stack, cube and
+editor tools, and
 starts orbit. Pointer movement reveals Exit, a separate Orbit menu, animation
 settings when clips exist, and a playbar (or an orbit play/pause). Controls share
 one idle timeout. Picks, Draw, Measure, Position and Explode/Clip are suspended,
 not discarded. Escape closes menus first, then exits. Exit restores the regular
-camera and prior sidebar state.
+camera, explorer and tool panels.
 
 The navbar's camera action captures the viewport. The web viewer's local backend
 can write a PNG to its machine's clipboard; desktop delivers to its composer.
