@@ -6,8 +6,8 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { _electron as electron, expect, test, type ElectronApplication, type Page, type Request } from "@playwright/test";
 import type { HardcoreApi } from "../../src/shared/ipc";
-import { cadRegistryEnvironment, cadRuntimeReady, cadTestProfile } from "./cad-runtime";
-import { selectFixtureSession } from "./session-fixture";
+import { cadRuntimeReady, cadTestProfile, cadgenEnvironment } from "./cad-runtime";
+import { openExplorerFile, selectFixtureSession } from "./session-fixture";
 
 declare const window: {
   hardcore: HardcoreApi;
@@ -53,8 +53,7 @@ export_build123d_step_file(
 function writeManyComponentStep(python: string, output: string) {
   execFileSync(python, ["-c", MANY_COMPONENT_STEP_SCRIPT, output], {
     cwd: project,
-    env: { ...process.env, ...cadRegistryEnvironment(userData), CADGEN_DAEMON: "0",
-      CADGEN_CACHE_DIR: path.join(userData, "cad-cache"), CADGEN_DAEMON_STATE_DIR: path.join(userData, "cad-daemon") },
+    env: cadgenEnvironment(userData),
     stdio: "pipe",
     timeout: 120_000,
   });
@@ -88,8 +87,7 @@ test.beforeAll(async () => {
   userData = cadTestProfile("cad-scenes");
   app = await electron.launch({
     args: [path.join(appRoot, "out/main/index.js"), `--user-data-dir=${userData}`],
-    env: { ...process.env, ...cadRegistryEnvironment(userData), NODE_ENV: "test", HARDCORE_FAKE_AGENT: path.join(appRoot, "tests/fake-agent/index.mjs"),
-      CADGEN_DAEMON: "0", CADGEN_CACHE_DIR: path.join(userData, "cad-cache"), CADGEN_DAEMON_STATE_DIR: path.join(userData, "cad-daemon") },
+    env: { ...cadgenEnvironment(userData), NODE_ENV: "test", HARDCORE_FAKE_AGENT: path.join(appRoot, "tests/fake-agent/index.mjs") },
   });
   page = await app.firstWindow();
   await page.waitForLoadState("domcontentloaded");
@@ -133,18 +131,7 @@ test.afterAll(async () => {
 });
 
 async function openFile(file: string) {
-  // Each session keeps its own explorer, and a session just made has its closed and empty
-  // (`docs/session-workspaces.md`): open it first.
-  const newTab = page.getByRole("button", { name: "New tab", exact: true });
-  if (!(await newTab.isVisible())) {
-    await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
-    await page.getByRole("button", { name: "Toggle explorer", exact: true }).click();
-  }
-  await newTab.click();
-  await page.getByRole("menuitem", { name: "File", exact: false }).click();
-  await page.getByLabel("Filter files").fill(file);
-  await page.getByRole("option", { name: file, exact: false }).first().click();
-  await expect(page.locator("[data-cad-surface] canvas").first()).toBeVisible({ timeout: 90_000 });
+  await openExplorerFile(page, file);
   // Picked in the tree, the file opens with the tree still up; these tests are about the
   // file, so its own panel is taken up.
   await expect(page.getByTestId("tree-toggle")).toHaveAttribute("aria-pressed", "true");

@@ -1,8 +1,12 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { finiteOr } from "@hardcore/core/common/numbers.js";
 import { EDGELESS_VIEW_FEATURES } from "@hardcore/core/common/viewSettings.js";
 import RendererShell from "../kit/shell/RendererShell.jsx";
+import { readShellState } from "../kit/shell/shellState.js";
 import { useRendererShell } from "../kit/shell/useRendererShell.js";
 import { useDeclinedSelectReference, useWorkspaceDocument, workspaceLoadAlert } from "../workspace/useWorkspaceDocument.js";
+import FeaLegend from "./FeaLegend.jsx";
+import { applyDeformation, readFeaResult, recolorByField } from "./feaResult.js";
 import { GLB_DECLINED_LIVE_COMMANDS } from "./tools.js";
 import { useGlbAnimation } from "./useGlbAnimation.js";
 import { useGlbScene } from "./useGlbScene.js";
@@ -17,18 +21,43 @@ function GlbSurface({ view, data }) {
     catalogError: document.catalogError, error: loaded.error, modelKey: document.modelKey, hasScene: Boolean(scene)
   }), [document.catalogError, loaded.error, document.modelKey, scene]);
 
+  // An FEA result (cadgen fea solve) carries its fields and true displacement in the
+  // file; the legend lets the field and the exaggeration be chosen per tab.
+  const fea = useMemo(() => readFeaResult(scene?.document?.scene), [scene]);
+  const [restored] = useState(() => readShellState(view.state).renderer || {});
+  const [feaField, setFeaField] = useState(() => (typeof restored.feaField === "string" ? restored.feaField : null));
+  const [feaScale, setFeaScale] = useState(() => finiteOr(restored.feaScale, null));
+  const activeField = fea ? fea.fields.find((entry) => entry.attribute === feaField) || fea.fields[0] : null;
+  const activeScale = fea ? finiteOr(feaScale, fea.deformationScale) : null;
+  const rendererState = useMemo(() => (fea ? { feaField, feaScale } : restored), [fea, feaField, feaScale, restored]);
+
   const requestRenderRef = useMemo(() => ({ current: null }), []);
   const animation = useGlbAnimation(scene?.document || null, () => requestRenderRef.current?.());
   const shell = useRendererShell({
     view, services: document.services, resource: document.resource, modelKey: document.modelKey, revisionKey: loaded.revision,
     features: EDGELESS_VIEW_FEATURES, scene,
     load: { busy: loaded.busy && !scene, updating: loaded.busy && Boolean(scene), progress: loaded.progress, alert: loadAlert },
-    animation, live: LIVE
+    animation, live: LIVE, rendererState
   });
   requestRenderRef.current = shell.requestRender;
   useDeclinedSelectReference(document);
 
-  return <RendererShell shell={shell} tools={[]} />;
+  useEffect(() => {
+    if (fea && recolorByField(fea.mesh, activeField, fea.ramp)) {
+      requestRenderRef.current?.();
+    }
+  }, [fea, activeField, requestRenderRef]);
+  useEffect(() => {
+    if (fea && applyDeformation(fea.mesh, activeScale, fea.deformationScale)) {
+      requestRenderRef.current?.();
+    }
+  }, [fea, activeScale, requestRenderRef]);
+
+  const overlay = fea ? (
+    <FeaLegend result={fea} field={activeField} scale={activeScale} onFieldChange={setFeaField} onScaleChange={setFeaScale} />
+  ) : null;
+
+  return <RendererShell shell={shell} tools={[]} viewportOverlay={overlay} />;
 }
 
 export default function GlbRenderer(props) {

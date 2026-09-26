@@ -14,12 +14,15 @@
  *   1. the pinned interpreter (`scripts/python-build.json`) is fetched into
  *      the cache — `~/.cache/hardcore/python` or `--cache`, which CI keys on
  *      the pin file — checked against the pinned sha256 and unpacked;
- *   2. `pip install --target <site-packages> <cadgen-wheel>` puts that exact
- *      release wheel and every pin of `resources/cadgen/constraints.txt` into
- *      it; PyPI supplies only the wheel's dependencies. The command uses
- *      `--only-binary=:all:` and the
- *      target's platform tags — so this works for a FOREIGN target too: pip
- *      never runs the target's interpreter, it only picks wheels for it;
+ *   2. `pip install --target <site-packages> <cadgen-wheel>[fea]` puts that
+ *      exact release wheel, its `fea` extra (the FEA mesher and solver) and
+ *      every pin of `resources/cadgen/constraints.txt` into it; PyPI supplies
+ *      only the wheel's dependencies. The command uses `--only-binary=:all:`
+ *      and the target's platform tags — so this works for a FOREIGN target
+ *      too: pip never runs the target's interpreter, it only picks wheels for
+ *      it. Then the wheel DATA files pip's `--target` mode silently drops
+ *      (netgen's OpenCascade libraries, `<dist>.data/data/lib/*`) are put back
+ *      where each dist-info RECORD says they are, from the same wheels;
  *   3. what a runtime never needs is pruned (the stdlib's test suite, every
  *      package's `tests`, static libraries, the console scripts pip wrote
  *      with a build-machine shebang), and then every module is compiled to
@@ -245,8 +248,17 @@ function prune(layout) {
 
 /** `python -I -c`: what `src/main/cad/runtime.ts` asks an interpreter, so the bundle is checked the way it is used. */
 const PROBE = [
-  "import json, cadgen, cadgen.viewer",
-  "print(json.dumps({'version': cadgen.__version__}))",
+  "import json, cadgen, cadgen.viewer, cadgen.fea",
+  // The FEA stack, in the order `cadgen fea solve` loads it: the CAD kernel
+  // first, then netgen (which loads its own OpenCascade RTLD_GLOBAL), then a
+  // real mesh of a unit cube -- an import alone would not catch a dropped
+  // shared library or two OpenCascades disagreeing in one process.
+  "import OCP.gp",
+  "import netgen.meshing as _ngm, netgen.occ as _ngocc, skfem, pyamg",
+  "_ngm.SetMessageImportance(0)",
+  "_mesh = _ngocc.OCCGeometry(_ngocc.Box((0, 0, 0), (1, 1, 1))).GenerateMesh(maxh=0.5)",
+  "assert len(_mesh.Elements3D()) > 0, 'netgen meshed nothing'",
+  "print(json.dumps({'version': cadgen.__version__, 'fea': True}))",
 ].join("; ");
 
 export const CADGEN_RUNTIME_FILES = [
@@ -280,22 +292,120 @@ function directorySize(dir) {
   return total;
 }
 
-/** Pip arguments that install the selected release wheel and its pinned closure. */
-export function runtimePipInstallArgs({ layout, asset, pyMinor, wheel, constraints }) {
+/**
+ * The cadgen extras the runtime ships. `fea` is netgen (the mesher, with its
+ * own OpenCascade), scikit-fem and pyamg: linear static stress behind
+ * `cadgen fea`. `snapshot` is not here: playwright wants a browser download
+ * at first use, which the runtime contract forbids.
+ */
+export const RUNTIME_EXTRAS = ["fea"];
+
+/** `--python-version/--implementation/--abi/--platform` for one target: what makes pip pick the target's wheels. */
+function targetSelectorArgs(asset, pyMinor) {
   const [major, minor] = pyMinor.split(".");
+  return [
+    "--python-version", pyMinor,
+    "--implementation", "cp",
+    "--abi", `cp${major}${minor}`,
+    ...asset.pip.platforms.flatMap((platform) => ["--platform", platform]),
+  ];
+}
+
+/** Pip arguments that install the selected release wheel (with the runtime's extras) and its pinned closure. */
+export function runtimePipInstallArgs({ layout, asset, pyMinor, wheel, constraints }) {
   return [
     "-m", "pip", "install",
     "--no-compile",
     "--no-warn-script-location",
     "--only-binary=:all:",
-    "--python-version", pyMinor,
-    "--implementation", "cp",
-    "--abi", `cp${major}${minor}`,
-    ...asset.pip.platforms.flatMap((platform) => ["--platform", platform]),
+    ...targetSelectorArgs(asset, pyMinor),
     "--target", layout.sitePackages,
     "-c", constraints,
-    wheel,
+    `${wheel}[${RUNTIME_EXTRAS.join(",")}]`,
   ];
+}
+
+/**
+ * Wheel data files a `pip install --target` dropped, by distribution.
+ *
+ * A wheel may carry files outside its package under `<dist>.data/data/lib/`
+ * (netgen-occt keeps every OpenCascade library there). pip's `--target` mode
+ * installs into a temporary prefix and moves only the package directories to
+ * the target, so those files are lost — and the dist-info RECORD still lists
+ * them, one level above site-packages (`../libTKernel.7.8.1.dylib`), which is
+ * exactly where netgen's importer then looks for them (`importlib.metadata`).
+ * Returns `Map<"name==version", [record paths]>` for every such file that is
+ * not on disk; empty when the install is complete. Console scripts
+ * (`../../bin/…`) are not data files: pip writes those into the target's
+ * `bin/`, which the prune step deletes anyway.
+ */
+export function missingWheelDataFiles(sitePackages) {
+  const missing = new Map();
+  if (!fs.existsSync(sitePackages)) {
+    return missing;
+  }
+  for (const entry of fs.readdirSync(sitePackages)) {
+    const record = path.join(sitePackages, entry, "RECORD");
+    if (!entry.endsWith(".dist-info") || !fs.existsSync(record)) {
+      continue;
+    }
+    // `<name>-<version>.dist-info`, the name already normalised the way pip accepts it.
+    const stem = entry.slice(0, -".dist-info".length);
+    const requirement = `${stem.slice(0, stem.lastIndexOf("-"))}==${stem.slice(stem.lastIndexOf("-") + 1)}`;
+    for (const line of fs.readFileSync(record, "utf8").split(/\r?\n/)) {
+      const file = line.split(",")[0];
+      if (/^\.\.\/(?!\.\.\/)/.test(file) && !fs.existsSync(path.resolve(sitePackages, file))) {
+        if (!missing.has(requirement)) {
+          missing.set(requirement, []);
+        }
+        missing.get(requirement).push(file);
+      }
+    }
+  }
+  return missing;
+}
+
+// Copies the named members of one wheel's `<dist>.data/data/lib/` straight to
+// where the RECORD says they go: argv = wheel, site-packages, record paths…
+const PLACE_WHEEL_DATA = `
+import os, sys, zipfile
+wheel, site, files = sys.argv[1], sys.argv[2], sys.argv[3:]
+with zipfile.ZipFile(wheel) as archive:
+    names = archive.namelist()
+    for file in files:
+        leaf = file[len("../"):]
+        member = next((n for n in names if n.endswith("/data/lib/" + leaf)), None)
+        if member is None:
+            raise SystemExit(f"{os.path.basename(wheel)} holds no data/lib/{leaf}")
+        destination = os.path.normpath(os.path.join(site, file))
+        os.makedirs(os.path.dirname(destination), exist_ok=True)
+        with archive.open(member) as source, open(destination, "wb") as target:
+            target.write(source.read())
+        os.chmod(destination, 0o755)
+`;
+
+/** Fetch each incomplete distribution's wheel again (pip's cache makes this cheap) and put its data files back. */
+export function restoreWheelDataFiles({ layout, asset, pyMinor, pipPython, env }) {
+  const restored = [];
+  for (const [requirement, files] of missingWheelDataFiles(layout.sitePackages)) {
+    const downloads = fs.mkdtempSync(path.join(os.tmpdir(), "hardcore-wheel-data-"));
+    try {
+      run(pipPython, [
+        "-m", "pip", "download", "--no-deps", "--only-binary=:all:",
+        ...targetSelectorArgs(asset, pyMinor),
+        "-d", downloads, requirement,
+      ], { env, quiet: true });
+      const wheel = fs.readdirSync(downloads).find((name) => name.endsWith(".whl"));
+      if (!wheel) {
+        throw new Error(`pip download produced no ${requirement} wheel`);
+      }
+      run(pipPython, ["-c", PLACE_WHEEL_DATA, path.join(downloads, wheel), layout.sitePackages, ...files], { quiet: true });
+      restored.push(...files.map((file) => path.relative(layout.root, path.resolve(layout.sitePackages, file))));
+    } finally {
+      fs.rmSync(downloads, { recursive: true, force: true });
+    }
+  }
+  return restored;
 }
 
 export async function bundleRuntime({ target, out, cache, wheels, version, python: explicitPython, build = PYTHON_BUILD }) {
@@ -340,6 +450,10 @@ export async function bundleRuntime({ target, out, cache, wheels, version, pytho
     PYTHONDONTWRITEBYTECODE: "1",
   };
   run(pipPython, runtimePipInstallArgs({ layout, asset, pyMinor, wheel: wheelPath, constraints }), { env: pipEnv });
+  const restored = restoreWheelDataFiles({ layout, asset, pyMinor, pipPython, env: pipEnv });
+  if (restored.length > 0) {
+    console.info(`restored ${restored.length} wheel data files pip --target dropped (${restored.slice(0, 3).join(", ")}${restored.length > 3 ? ", …" : ""})`);
+  }
 
   // 3. prune, then bytecode
   const removed = prune(layout);
@@ -369,10 +483,14 @@ export async function bundleRuntime({ target, out, cache, wheels, version, pytho
     console.info(`probe: cadgen ${parsed.version} imports, viewer imports`);
   } else {
     const distInfo = path.join(layout.sitePackages, `cadgen-${version}.dist-info`);
-    for (const required of [distInfo, path.join(layout.sitePackages, "cadgen", "__init__.py"), path.join(layout.sitePackages, "cadgen", "viewer")]) {
+    for (const required of [distInfo, path.join(layout.sitePackages, "cadgen", "__init__.py"), path.join(layout.sitePackages, "cadgen", "viewer"), path.join(layout.sitePackages, "netgen"), path.join(layout.sitePackages, "skfem"), path.join(layout.sitePackages, "pyamg")]) {
       if (!fs.existsSync(required)) {
         throw new Error(`the foreign bundle is missing ${path.relative(root, required)}`);
       }
+    }
+    const dropped = missingWheelDataFiles(layout.sitePackages);
+    if (dropped.size > 0) {
+      throw new Error(`the foreign bundle is missing wheel data files: ${[...dropped.values()].flat().join(", ")}`);
     }
     console.info("checked on disk (a foreign target cannot be executed here)");
   }

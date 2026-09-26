@@ -62,6 +62,11 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     "sdf validate": ("cadgen.cli.sdf_validate", "validate an SDF world or model"),
     "sdf snapshot": ("cadgen.cli.sdf_snapshot", "render an SDF to an image"),
     "srdf validate": ("cadgen.cli.srdf_validate", "validate an SRDF against its URDF"),
+    # Finite element analysis. `faces` lists a part's faces with the selectors a
+    # study names; `solve` runs one linear static study and writes the result
+    # GLB (a von Mises colour map on the deformed shape) with its JSON sidecar.
+    "fea faces": ("cadgen.cli.fea_faces", "list a part's faces with their #o1.fN selectors"),
+    "fea solve": ("cadgen.cli.fea_solve", "run a linear static stress study on a STEP part"),
     # Generic / services
     "doctor": ("cadgen.cli.doctor", "print installed cadgen and verify a skill's pin"),
     # The store. `store why <model>` is the debugging surface STORE.md describes.

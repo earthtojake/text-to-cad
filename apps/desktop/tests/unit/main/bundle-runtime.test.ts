@@ -111,7 +111,7 @@ describe("the runtime install", () => {
       constraints,
     });
 
-    expect(args.at(-1)).toBe(wheel);
+    expect(args.at(-1)).toBe(`${wheel}[fea]`);
     expect(args).toContain(constraints);
     expect(args).not.toContain("cadgen==9.9.9");
     expect(args).not.toContain("--find-links");

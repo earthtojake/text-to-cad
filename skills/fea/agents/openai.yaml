@@ -1,0 +1,4 @@
+interface:
+  display_name: "FEA"
+  short_description: "Linear static stress studies on STEP parts"
+  default_prompt: "Use $fea to fix faces, apply loads and report the stress, safety factor and displacement of this part."
