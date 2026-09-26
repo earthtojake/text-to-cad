@@ -147,9 +147,11 @@ export function materialiseSkillsRoot(options: {
   /** `<userData>/skills` — one directory per app version. */
   base: string;
   version: string;
+  /** Skills not to hand to agents this run: those of the plugins `HARDCORE_PLUGINS` leaves off. */
+  exclude?: readonly string[];
 }): SkillsRoot {
-  const { source, base, version } = options;
-  const skills = composedSkills(source);
+  const { source, base, version, exclude = [] } = options;
+  const skills = composedSkills(source).filter((skill) => !exclude.includes(skill.name));
   if (skills.length === 0) {
     return EMPTY_SKILLS;
   }

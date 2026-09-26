@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ArrowRight, Box, Check, FolderOpen, Loader2 } from "lucide-react";
 
+import { pluginEnabled } from "@plugins/renderer";
 import { Button } from "@renderer/components/ui/button";
 import { AgentMark } from "@renderer/features/settings/AgentMark";
 import { JobLog, useJob } from "@renderer/features/settings/AgentDrawer";
@@ -203,14 +204,17 @@ function StartStep({ onDone }: { onDone: () => void }) {
         A session always belongs to a folder. The agent reads and writes files there.
       </p>
       <div className="mt-6 grid gap-2">
-        <StartOption
-          busy={busy === "sample"}
-          description="An L-bracket to open, change and export. Copied to Documents › Hardcore Sample."
-          disabled={busy !== null}
-          icon={<Box className="size-4" />}
-          onClick={() => void trySample()}
-          title="Try the sample"
-        />
+        {/* The sample is a CAD part: the base app, without the CAD plugin, has nothing to open it with. */}
+        {pluginEnabled("cad") ? (
+          <StartOption
+            busy={busy === "sample"}
+            description="An L-bracket to open, change and export. Copied to Documents › Hardcore Sample."
+            disabled={busy !== null}
+            icon={<Box className="size-4" />}
+            onClick={() => void trySample()}
+            title="Try the sample"
+          />
+        ) : null}
         <StartOption
           busy={busy === "folder"}
           description="Start in a folder of your own, empty or not."

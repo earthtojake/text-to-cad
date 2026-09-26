@@ -11,6 +11,7 @@ export const SETTINGS_SECTIONS = [
   "appearance",
   "git",
   "shortcuts",
+  "plugins",
   "about",
 ] as const;
 
@@ -23,6 +24,7 @@ export const SETTINGS_SECTION_LABELS: Record<SettingsSection, string> = {
   appearance: "Appearance",
   git: "Git & Worktrees",
   shortcuts: "Keyboard shortcuts",
+  plugins: "Plugins",
   about: "About & Updates",
 };
 

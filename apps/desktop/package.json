@@ -11,6 +11,8 @@
   "main": "./out/main/index.js",
   "scripts": {
     "dev": "electron-vite dev",
+    "dev:base": "node scripts/dev-plugins.mjs none",
+    "dev:plugins": "node scripts/dev-plugins.mjs",
     "build": "node scripts/build.mjs",
     "preview": "electron-vite preview",
     "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit",

@@ -26,6 +26,7 @@ import { explorerHandlers, initExplorerServices } from "./explorer";
 import { gitHandlers } from "./git";
 import { runtimeHandlers } from "./runtime";
 import { onboardingHandlers } from "./onboarding";
+import { pluginsHandlers } from "./plugins";
 import { skillsHandlers } from "./skills";
 import { IpcError, broadcast, registerIpc, type IpcContext } from "./register";
 
@@ -85,6 +86,9 @@ const handlers = {
 
   /** First run: whether onboarding shows, and the sample project. */
   ...onboardingHandlers,
+
+  /** The plugins this run has (`HARDCORE_PLUGINS`) and what each adds. */
+  ...pluginsHandlers,
 
   /** P6: the native folder and file choosers Settings' path rows use. */
   ...dialogsHandlers,

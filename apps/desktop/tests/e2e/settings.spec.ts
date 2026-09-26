@@ -44,6 +44,7 @@ const PAGES: [slug: string, label: string][] = [
   ["appearance", "Appearance"],
   ["git", "Git & Worktrees"],
   ["shortcuts", "Keyboard shortcuts"],
+  ["plugins", "Plugins"],
   ["about", "About & Updates"],
 ];
 

@@ -45,6 +45,7 @@ import { agentsContract, agentsEvents } from "./agents";
 import { dialogsContract } from "./dialogs";
 import { runtimeContract, runtimeEvents } from "./runtime";
 import { onboardingContract } from "./onboarding";
+import { pluginsContract } from "./plugins";
 import { skillsContract } from "./skills";
 import { integrationsIpc, integrationsEvents } from "./integrations";
 import { cadIpc } from "./cad";
@@ -100,6 +101,9 @@ export const ipcContract = defineIpc({
 
   /** First run: whether onboarding shows, and the sample project. */
   ...onboardingContract,
+
+  /** The plugins this run has (`HARDCORE_PLUGINS`) and what each adds. */
+  ...pluginsContract,
 
   /** P6: the native folder and file choosers Settings' path rows use. */
   ...dialogsContract,

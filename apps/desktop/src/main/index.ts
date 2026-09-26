@@ -23,6 +23,7 @@ import { disposeSettingsEffects } from "./settings-effects";
 import { initTelemetry, track } from "./telemetry";
 import { initUpdater, stopUpdater } from "./updater";
 import { TITLEBAR_HEIGHT, trafficLightPosition } from "../shared/titlebar";
+import { enabledPluginIds } from "../plugins/main.mjs";
 import { restoreWindowState, trackWindowState } from "./window-state";
 
 const dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -215,6 +216,7 @@ if (!app.requestSingleInstanceLock()) {
     // actually written.
     db();
     console.info(`[db] ${databaseFile()}`);
+    console.info(`[plugins] ${enabledPluginIds.length ? enabledPluginIds.join(", ") : "none (base app)"}`);
     registerIpcHandlers();
     // The CAD runtime, the skills root, the viewer manager and the MCP
     // bridge, before the first window: the file tab's first

@@ -5,6 +5,7 @@ import { App } from "@renderer/app/App";
 import { applyCachedTheme } from "@renderer/hooks/use-theme";
 import { applyPlatformClass } from "@renderer/lib/platform";
 import { trackTitlebarInset } from "@renderer/lib/titlebar";
+import { loadPlugins } from "@renderer/state/plugins";
 import "@renderer/styles/globals.css";
 
 // Before the first paint: the leftmost pane reserves room for macOS's traffic
@@ -27,8 +28,12 @@ if (!root) {
   throw new Error("index.html is missing #root");
 }
 
-createRoot(root).render(
-  <StrictMode>
-    <App />
-  </StrictMode>,
-);
+// Which plugins this run has decides which viewers a file tab composes; it is one IPC round trip,
+// answered before anything else is asked, so it is read before the first render.
+void loadPlugins().finally(() => {
+  createRoot(root).render(
+    <StrictMode>
+      <App />
+    </StrictMode>,
+  );
+});

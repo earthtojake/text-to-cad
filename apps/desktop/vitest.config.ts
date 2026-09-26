@@ -28,6 +28,7 @@ const alias = [
   { find: "@preload", replacement: path.join(appRoot, "src", "preload") },
   { find: "@renderer", replacement: path.join(appRoot, "src", "renderer") },
   { find: "@shared", replacement: path.join(appRoot, "src", "shared") },
+  { find: "@plugins", replacement: path.join(appRoot, "src", "plugins") },
   // The pattern has to match the *whole* id: a RegExp alias is applied with
   // `id.replace(find, replacement)`, so `/\?worker$/` alone would leave the
   // module path glued to the front of the stub's.

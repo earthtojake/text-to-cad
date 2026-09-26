@@ -1,5 +1,5 @@
 /**
- * The six Settings pages (plan §10), each in its own module under `./pages/`.
+ * The Settings pages (plan §10, plus Plugins), each in its own module under `./pages/`.
  *
  * This file is only the switch. A page is a list of rows built from
  * `./SettingCard`, so the layout is not something a page gets to decide, and
@@ -11,6 +11,7 @@ import { AgentsPage } from "@renderer/features/settings/pages/AgentsPage";
 import { AppearancePage } from "@renderer/features/settings/pages/AppearancePage";
 import { GeneralPage } from "@renderer/features/settings/pages/GeneralPage";
 import { GitPage } from "@renderer/features/settings/pages/GitPage";
+import { PluginsPage } from "@renderer/features/settings/pages/PluginsPage";
 import { ShortcutsPage } from "@renderer/features/settings/pages/ShortcutsPage";
 import type { SettingsSection } from "@renderer/state/ui";
 
@@ -26,6 +27,8 @@ export function SettingsPage({ section }: { section: SettingsSection }) {
       return <GitPage />;
     case "shortcuts":
       return <ShortcutsPage />;
+    case "plugins":
+      return <PluginsPage />;
     case "about":
       return <AboutPage />;
   }

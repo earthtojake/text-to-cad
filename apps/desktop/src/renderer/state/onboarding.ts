@@ -1,5 +1,6 @@
 import { create } from "zustand";
 
+import { pluginEnabled } from "@plugins/renderer";
 import { useAgents } from "@renderer/state/agents";
 import { useProjects } from "@renderer/state/projects";
 import { useSessions } from "@renderer/state/sessions";
@@ -47,12 +48,14 @@ export function useChecklist(): ChecklistItem[] {
   const hasSession = useSessions((state) => state.sessions.some((session) => !session.archived));
   const hasFolder = useProjects((state) => state.draft !== null || state.activeId !== null);
   const viewerOpened = useSettings((state) => state.settings?.onboardingViewerOpened ?? false);
-  return [
+  const items: ChecklistItem[] = [
     { id: "agent", label: "Connect an agent", done: agentReady },
     { id: "folder", label: "Open a folder", done: hasFolder || hasSession },
-    { id: "session", label: "Ask for your first part", done: hasSession },
+    { id: "session", label: pluginEnabled("cad") ? "Ask for your first part" : "Start your first session", done: hasSession },
     { id: "viewer", label: "Open a part in the viewer", done: viewerOpened },
   ];
+  // Opening a part is the CAD plugin's; the base app's checklist ends at the first session.
+  return pluginEnabled("cad") ? items : items.filter((item) => item.id !== "viewer");
 }
 
 /** Whether the checklist belongs in the sidebar right now. */

@@ -941,10 +941,12 @@ for limits, asset licensing and the reuse boundary for future CAD overlays.
 
 ### File renderers
 
-The shared viewer renderers come from `@hardcore/ui/renderers/*`. Markdown, code,
-image, PDF and the unsupported fallback are this app's own, because web
-registers none of them: `features/explorer/renderers/{markdown,code,image,pdf,unsupported}`,
-each a `defineFileRenderer` registration from `@hardcore/ui/file-viewer` over the
+The app is a base app plus plugins ([`src/plugins/README.md`](src/plugins/README.md), with a
+step-by-step for writing one; `npm run dev:base` runs the base app alone). The base app's own
+viewers are Markdown, code, image and the unsupported fallback, in
+`features/explorer/renderers/{markdown,code,image,unsupported}`. Every other viewer is a plugin's,
+in `src/plugins/`: CAD (the shared renderers from `@hardcore/ui/renderers/*`), PDF, G-code and CSV.
+Each is a `defineFileRenderer` registration from `@hardcore/ui/file-viewer` over the
 package's public exports only (the contract a host renderer may rely on is
 `@hardcore/ui`'s [renderer contracts](../../packages/ui/docs/renderers.md)).
 Monaco, TipTap, remark and PDF.js are this app's dependencies, not the package's.

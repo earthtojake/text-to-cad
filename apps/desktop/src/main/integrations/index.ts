@@ -15,6 +15,7 @@ import { createTerminalActions } from "./terminals/actions";
 import { explorerTerminals } from "../ipc/explorer";
 import { BrowserConnections } from "../browser/connections";
 import { McpBridge, type BridgeSession } from "./mcp-bridge";
+import { disabledPluginSkills } from "../../plugins/main.mjs";
 import { EMPTY_SKILLS, materialiseSkillsRoot, skillsPreamble, SKILLS_ROOT_ENV, type SkillSummary, type SkillsRoot } from "./skills";
 let bridgeInstance: McpBridge | null = null;
 let skillsInstance: SkillsRoot = EMPTY_SKILLS;
@@ -99,6 +100,7 @@ function materialiseSkills(userData: string): SkillsRoot {
       source: path.join(resourcesDir(), "skills"),
       base: path.join(userData, "skills"),
       version: appVersion(),
+      exclude: disabledPluginSkills,
     });
     if (!composed.root) {
       console.info("[skills] nothing composed into resources/skills; run npm run build");

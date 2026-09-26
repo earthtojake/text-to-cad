@@ -15,6 +15,7 @@ const alias = {
   "@preload": path.join(appRoot, "src", "preload"),
   "@renderer": path.join(appRoot, "src", "renderer"),
   "@shared": path.join(appRoot, "src", "shared"),
+  "@plugins": path.join(appRoot, "src", "plugins"),
 };
 
 // The Aptabase key is baked in at build time, not read from the environment at

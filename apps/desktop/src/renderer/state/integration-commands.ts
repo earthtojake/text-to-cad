@@ -1,7 +1,8 @@
 /** Authenticated integration commands. Background reads never change project or focus. */
-import { isCadFile } from "@hardcore/core/lib/fileFormats.js";
 import { emptyDrawingDocument, parseDrawingScene } from "@hardcore/core/drawing";
 import { selectRenderer } from "@hardcore/ui/file-viewer";
+import { rendererPlugins } from "@plugins/renderer";
+import { imageResult } from "@plugins/results";
 import { createDesktopRenderers } from "@renderer/features/explorer/renderers";
 import type { IntegrationCommand } from "@shared/ipc/integrations";
 import type { ExplorerTab } from "@shared/types";
@@ -9,8 +10,7 @@ import { readSessionStrip, renameDrawingTab, tabTitle, openSessionTab, closeSess
 import { getDrawingScene } from "./drawings";
 import { useProjects } from "./projects";
 import { useSessions } from "./sessions";
-import { hasDirtyDocument, performDocumentCommand, performPdfCommand } from "./live-documents";
-import { performCadViewerCommand } from "./live-cad";
+import { hasDirtyDocument, performDocumentCommand } from "./live-documents";
 
 async function rendererIdForPath(projectId: string, root: string | null, path: string, tabId: string) {
   const composition = createDesktopRenderers(projectId, root, tabId);
@@ -53,12 +53,6 @@ async function scopedTab(command: IntegrationCommand, signal?: AbortSignal) {
   return tab;
 }
 
-async function imageResult(blob: Blob, metadata: Record<string, unknown>) {
-  const bytes = new Uint8Array(await blob.arrayBuffer());
-  let binary = ""; for (const byte of bytes) binary += String.fromCharCode(byte);
-  return { ...metadata, mimeType: blob.type, base64: btoa(binary) };
-}
-
 export async function performIntegrationCommand(command: IntegrationCommand, signal?: AbortSignal): Promise<unknown> {
   signal?.throwIfAborted();
   const owner = useSessions.getState().sessions.find(session => session.id === command.sessionId && session.projectId === command.projectId && !session.archived);
@@ -71,11 +65,12 @@ export async function performIntegrationCommand(command: IntegrationCommand, sig
     if (tab.kind !== "file" || !tab.path) throw new Error("This is not a document tab.");
     return performDocumentCommand(command.kind, { ...params, tabId: tab.id }, { ...scope, path: tab.path });
   }
-  if (command.kind.startsWith("pdf-")) {
+  const plugin = rendererPlugins().find(candidate => Object.values(candidate.manifest.commands).includes(command.kind));
+  if (plugin) {
     const tab = await scopedTab(command, signal);
     signal?.throwIfAborted();
-    if (tab.kind !== "file" || !tab.path) throw new Error("This is not a PDF tab.");
-    return performPdfCommand(command.kind, { ...params, tabId: tab.id }, { ...scope, path: tab.path });
+    if (tab.kind !== "file" || !tab.path) throw new Error(`This is not a ${plugin.manifest.name} tab.`);
+    return plugin.perform(command.kind, { ...params, tabId: tab.id }, { ...scope, path: tab.path });
   }
   switch (command.kind) {
     case "open-file": {
@@ -145,18 +140,6 @@ export async function performIntegrationCommand(command: IntegrationCommand, sig
       const tab = await openSessionTab(command.sessionId, command.projectId, scope.root, "terminal", { cwd: String(params.cwd ?? command.rootDirectory), ptyId: String(params.ptyId) }, signal);
       if (!tab) throw new Error("the explorer could not open a terminal tab");
       return { tabId: tab.id, ptyId: params.ptyId, cwd: params.cwd };
-    }
-    case "viewer-state":
-    case "select-reference":
-    case "cad-clear-selection":
-    case "cad-camera":
-    case "cad-reset-camera":
-    case "cad-render-mode":
-    case "capture-view": {
-      const tab = await scopedTab(command, signal);
-      signal?.throwIfAborted();
-      if (tab.kind !== "file" || !tab.path || !isCadFile(tab.path)) throw new Error("this tab does not contain a CAD model");
-      return performCadViewerCommand(command.kind, { ...params, tabId: tab.id }, { ...scope, path: tab.path });
     }
   }
 }

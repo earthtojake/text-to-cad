@@ -15,6 +15,7 @@ import type { cadIpc } from "../../shared/ipc/cad";
 import type { ViewerOrigin } from "../../shared";
 import { cadRuntime, viewers, warmCad } from "../cad";
 import { projects } from "../db/repositories";
+import { pluginEnabled } from "../../plugins/main.mjs";
 import { rootOf } from "./explorer";
 import type { IpcContext } from "./register";
 
@@ -42,7 +43,8 @@ export const cadHandlers = {
     },
 
     warm: ({ projectId, root }) => {
-      if (!projects.get(projectId)) {
+      // The base app (`HARDCORE_PLUGINS` without cad) never starts a CAD runtime.
+      if (!projects.get(projectId) || !pluginEnabled("cad")) {
         return;
       }
       // The suite adds a project in nearly every spec; a viewer and a daemon
