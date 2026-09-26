@@ -48,7 +48,6 @@ export function validatePromptContext(context) {
       requireValue(Array.isArray(part.references) && part.references.length > 0, 'annotation must be about at least one reference');
       part.references.forEach(validatePromptReference);
       requireValue(typeof part.text === 'string', 'annotation must contain its note');
-      requireValue(part.attachment === undefined || typeof part.attachment === 'string', 'annotation markup must name an attachment part');
     }
     else {
       requireValue(part.kind === 'attachment', 'unknown part kind');
@@ -57,11 +56,8 @@ export function validatePromptContext(context) {
       requireValue(part.about === undefined || (Array.isArray(part.about) && part.about.every(id => typeof id === 'string')), 'attachment relationships must name reference parts');
     }
   }
-  const attachments = new Set(context.parts.filter(part => part.kind === 'attachment').map(part => part.id));
   for (const part of context.parts) if (part.kind === 'attachment') {
     requireValue((part.about ?? []).every(id => references.has(id)), 'attachment refers to an absent reference');
-  } else if (part.kind === 'annotation' && part.attachment !== undefined) {
-    requireValue(attachments.has(part.attachment), 'annotation refers to an absent attachment');
   }
   return context;
 }
@@ -83,8 +79,8 @@ export function createPromptContext(parts, operationId = `${operationNamespace}:
 }
 export function referencePart(reference, id = 'reference') { return { id, kind: 'reference', reference: validatePromptReference(reference) }; }
 export function textPart(text, id = 'text') { return { id, kind: 'text', text }; }
-export function annotationPart(references, text, id = 'annotation', { attachment } = {}) {
-  return { id, kind: 'annotation', references: references.map(validatePromptReference), text, ...(attachment ? { attachment } : {}) };
+export function annotationPart(references, text, id = 'annotation') {
+  return { id, kind: 'annotation', references: references.map(validatePromptReference), text };
 }
 
 /** Keep machine identity structured; these strings are the portable human/prompt representation. */

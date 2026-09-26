@@ -24,7 +24,6 @@ import { shellLoadReport } from "./loadReport.js";
 import { createViewPromptContext, promptDeliveryError } from "./promptContext.js";
 import { readShellState, scopeShellCamera, shellPresentationKey, shellStatesEqual, writeShellState } from "./shellState.js";
 import { useViewerShortcuts } from "./useViewerShortcuts.js";
-import { useMarkupAnnotate } from "../../../host/markupAnnotation.js";
 
 /**
  * Fullscreen presentation's one state. The shell holds it unless the renderer passes it in
@@ -362,24 +361,6 @@ export function useRendererShell({
       await host.clipboard.writeImage(viewerRef.current.captureScreenshotBlob());
     } catch (error) { reportActionError(error); }
   }, [drawing.hasContent, host.clipboard, reportActionError]);
-  // Draw's Annotate: the view with its ink, and a note on it, as one annotation in the chat box; the
-  // ink clears for the next one (`host/markupAnnotation.ts`, shared with every viewer that marks up).
-  const drawingFile = () => {
-    const current = liveResourceRef.current?.() || resource;
-    return current?.kind === "workspace-file" ? current.path.split("/").pop() : "view";
-  };
-  const annotateDrawing = useMarkupAnnotate({
-    reference: useCallback(() => {
-      const current = liveResourceRef.current?.() || resource;
-      return current ? { resource: current, target: { kind: "whole-resource" }, label: "current view" } : null;
-    }, [resource]),
-    capture: useCallback(() => {
-      if (!viewerRef.current?.captureScreenshotBlob) return Promise.reject(new Error("The viewer is not ready"));
-      return viewerRef.current.captureScreenshotBlob();
-    }, []),
-    name: useCallback(() => `${drawingFile()}-markup.png`, [resource]),
-    onAdded: drawing.clear,
-  });
   const captureKey = services.captureRequest?.key ?? null;
   const appliedCaptureKey = useRef(null);
   useEffect(() => {
@@ -526,7 +507,7 @@ export function useRendererShell({
       runtimeLifecycle: stableRuntimeLifecycle,
       previewOrbitSpeed, setPreviewOrbitSpeed, viewerLoading, loading, presentationState,
       handlePresentationChange, viewerAlert, setRuntimeAlert,
-      copyActionRef, copyDrawing, annotateDrawing, reportDelivery: showPromptResult, copyShortcut: host.environment.platform === "darwin" ? "⌘C" : "Ctrl+C",
+      copyActionRef, copyDrawing, copyShortcut: host.environment.platform === "darwin" ? "⌘C" : "Ctrl+C",
       drawToolActive, drawing, animationAvailable, animation, capture, openPanel, display
     }
   };

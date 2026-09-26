@@ -1,20 +1,14 @@
 import { formatPromptAnnotation, type PromptReference } from "@hardcore/core/prompt";
-import type { PromptBlock } from "@shared/acp/types";
 import { MessageSquareDot, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { HoverCard, HoverCardContent, HoverCardTrigger } from "@renderer/components/ui/hover-card";
 import { cn } from "@renderer/lib/utils";
 import { useExplorer } from "@renderer/state/explorer";
-import type { DraftAnnotation, DraftAnnotationImage } from "@renderer/state/composer";
+import type { DraftAnnotation } from "@renderer/state/composer";
 
 import { REFERENCE_CHIP_CLASS, ReferenceChipContent } from "./ReferenceChip";
 import type { ReferenceScope } from "./ReferenceScope";
-
-/** A markup's picture, small, for the chip's list. */
-function MarkupThumbnail({ image }: { image: DraftAnnotationImage }) {
-  return <img alt="Markup" className="mt-1 max-h-24 rounded border object-contain" src={`data:${image.mimeType};base64,${image.base64}`} />;
-}
 
 const referencePath = (reference: PromptReference) =>
   reference.resource.kind === "workspace-file" ? reference.resource.path : reference.resource.url;
@@ -98,7 +92,6 @@ export function AnnotationsChip({
                       </span>
                     ))}
                     <span className="break-words">{annotation.text}</span>
-                    {annotation.image ? <MarkupThumbnail image={annotation.image} /> : null}
                   </span>
                 </button>
               </li>
@@ -123,18 +116,6 @@ export function withAnnotations(text: string, annotations: readonly DraftAnnotat
   if (annotations.length === 0) {
     return text;
   }
-  // A markup's image goes after the text, in this order: the line says which one it is.
-  let markup = 0;
-  const lines = annotations.map((annotation, index) => {
-    const line = `${index + 1}. ${formatPromptAnnotation(annotation, { labels: true })}`;
-    return annotation.image ? `${line} (on markup image ${++markup})` : line;
-  });
+  const lines = annotations.map((annotation, index) => `${index + 1}. ${formatPromptAnnotation(annotation, { labels: true })}`);
   return [text, ["Annotations:", ...lines].join("\n")].filter(Boolean).join("\n\n");
-}
-
-/** The annotations' markups as image blocks, in the order `withAnnotations` numbers them. */
-export function annotationImageBlocks(annotations: readonly DraftAnnotation[]): PromptBlock[] {
-  return annotations.flatMap((annotation) => annotation.image
-    ? [{ type: "image" as const, data: annotation.image.base64, mimeType: annotation.image.mimeType || "image/png", uri: null }]
-    : []);
 }

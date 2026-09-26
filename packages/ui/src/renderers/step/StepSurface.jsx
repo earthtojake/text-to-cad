@@ -33,7 +33,7 @@ import { registerLodDisplaySource } from "./render/lodSceneAdoption.js";
 import { ALL_VIEW_FEATURES } from "@hardcore/core/common/viewSettings.js";
 import { useModelTools } from "./components/workbench/ModelTools.jsx";
 import { useStepPanel } from "./components/workbench/StepPanel.js";
-import { AnnotateButton } from "../../host/AnnotateButton.js";
+import { AnnotateButton } from "./components/workbench/StepAnnotations.jsx";
 import AnnotationPins from "./components/workbench/AnnotationPins.jsx";
 import { annotationAnchor, annotationDelivered, createAnnotation } from "./workbench/stepAnnotations.js";
 import { CAD_PANEL } from "../../file-viewer/navigation/panels.js";

@@ -13,11 +13,8 @@ export type PromptPart =
   | { id: string; kind: 'text'; text: string }
   | { id: string; kind: 'reference'; reference: PromptReference }
   | { id: string; kind: 'attachment'; name: string; mimeType: string; content: Blob | Promise<Blob>; about?: readonly string[] }
-  /**
-   * A note the person pinned to geometry or to a markup: what it is about, and what they want done
-   * there. `attachment` names an attachment part of the same context: the markup the note is on.
-   */
-  | { id: string; kind: 'annotation'; references: readonly PromptReference[]; text: string; attachment?: string };
+  /** A note the person pinned to geometry: what it is about, and what they want done there. */
+  | { id: string; kind: 'annotation'; references: readonly PromptReference[]; text: string };
 export interface PromptContext { schemaVersion: 1; operationId: string; parts: readonly PromptPart[] }
 export interface PromptDestinationState {
   kind: 'composer' | 'clipboard' | 'unavailable';

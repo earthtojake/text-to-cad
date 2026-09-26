@@ -57,12 +57,3 @@ test('an annotation carries the geometry it is about and the note, and reads as 
   assert.throws(() => createPromptContext([{ id: 'a', kind: 'annotation', references: [], text: 'x' }]), /at least one reference/);
   assert.throws(() => createPromptContext([{ id: 'a', kind: 'annotation', references: [edge] }]), /its note/);
 });
-
-test('an annotation on a markup names the attachment the markup is in', () => {
-  const resource = { kind: 'workspace-file', workspaceId: 'w', path: 'drawings/clip.pdf' };
-  const page = { resource, target: { kind: 'whole-resource' }, label: 'clip.pdf, page 2' };
-  const image = { id: 'markup', kind: 'attachment', name: 'markup.png', mimeType: 'image/png', content: Promise.resolve(new Blob(['png'], { type: 'image/png' })) };
-  const context = createPromptContext([image, annotationPart([page], 'move this dimension off the hole', 'a1', { attachment: 'markup' })]);
-  assert.equal(context.parts[1].attachment, 'markup');
-  assert.throws(() => createPromptContext([annotationPart([page], 'x', 'a1', { attachment: 'missing' })]), /absent attachment/);
-});

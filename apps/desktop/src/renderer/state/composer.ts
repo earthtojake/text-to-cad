@@ -41,15 +41,12 @@ export type DraftPart =
   | { id: string; kind: "text"; text: string }
   | { id: string; kind: "reference"; text: string; label?: string; reference?: PromptReference }
   | { id: string; kind: "attachment"; file: File; about?: readonly string[] }
-  | { id: string; kind: "annotation"; references: PromptReference[]; text: string; image?: DraftAnnotationImage };
-/** A markup's picture, read once when it arrives: shown in the chip's list and sent as it is. */
-export type DraftAnnotationImage = { name: string; mimeType: string; base64: string };
+  | { id: string; kind: "annotation"; references: PromptReference[]; text: string };
 /**
- * A note the person pinned to geometry, or to a markup (`image`: the view with their ink), in this
- * draft. Annotations ride beside the text as one chip until the prompt is sent, then go out as a
- * numbered list after it, with their markups attached.
+ * A note the person pinned to geometry in the viewer, in this draft. Annotations ride beside the
+ * text as one chip until the prompt is sent, then go out as a numbered list after it.
  */
-export type DraftAnnotation = { id: string; references: PromptReference[]; text: string; image?: DraftAnnotationImage };
+export type DraftAnnotation = { id: string; references: PromptReference[]; text: string };
 export type AcceptedContext = {
   key: string; partIds: string[];
   /** Snapshot identities and ordering remain available without retaining binary content. */
@@ -120,7 +117,7 @@ export const useComposer = create<ComposerState>((set, get) => ({
       for (const part of parts) {
         if (part.kind === "attachment") { files.push(part.file); continue; }
         if (part.kind === "annotation") {
-          const annotation = { id: part.id, references: structuredClone(part.references), text: part.text, ...(part.image ? { image: part.image } : {}) };
+          const annotation = { id: part.id, references: structuredClone(part.references), text: part.text };
           annotations = [...(annotations ?? []).filter(existing => existing.id !== part.id), annotation];
           continue;
         }

@@ -82,36 +82,3 @@ it("the chat box tells the viewer which annotations it holds, and a new answer o
   useComposer.getState().removeAnnotations(key);
   expect(port.getSnapshot().held).toEqual([]);
 });
-
-it("a markup annotation arrives with its picture, and the picture is not also a loose attachment", async () => {
-  const { annotationPart, createPromptContext } = await import("@hardcore/core/prompt");
-  useSessions.setState({ sessions: [{ id: key, projectId: "p", archived: false, cwd: "/p" }] as never });
-  const { useProjects } = await import("@renderer/state/projects");
-  useProjects.setState({ projects: [{ id: "p", path: "/p", name: "p" }] as never });
-  const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 0, 0]);
-  const page: PromptReference = { resource: { kind: "workspace-file", workspaceId: "w", path: "clip.pdf" }, target: { kind: "whole-resource" }, label: "clip.pdf, page 2" };
-  const context = createPromptContext([
-    { id: "m1-image", kind: "attachment", name: "clip-markup.png", mimeType: "image/png", content: new Blob([png], { type: "image/png" }) },
-    annotationPart([page], "move this dimension off the hole", "m1", { attachment: "m1-image" }),
-  ]);
-  const result = await createDesktopPromptContext("p", null, "w", key).deliver(context);
-  expect(result.status).toBe("added");
-  const [held] = useComposer.getState().annotations[key] ?? [];
-  expect(held?.image?.name).toBe("clip-markup.png");
-  expect(held?.image?.base64).toBe(btoa(String.fromCharCode(...png)));
-  expect(useComposer.getState().pendingFiles[key] ?? []).toEqual([]);
-});
-
-it("markups go after the prompt as images, and each annotation line says which one it is on", async () => {
-  const { annotationImageBlocks } = await import("@renderer/features/session/composer/AnnotationsChip");
-  const image = { name: "m.png", mimeType: "image/png", base64: "AQID" };
-  const annotations = [
-    { id: "a1", text: "thicker", references: [edge("o1.1.f4", "Face 4")] },
-    { id: "m1", text: "move this dimension", references: [edge("o1.1")], image },
-  ];
-  expect(withAnnotations("", annotations)).toBe(
-    "Annotations:\n1. parts/bracket.step#o1.1.f4 (Face 4): thicker\n2. parts/bracket.step#o1.1: move this dimension (on markup image 1)",
-  );
-  const blocks = annotationImageBlocks(annotations);
-  expect(blocks).toEqual([{ type: "image", data: "AQID", mimeType: "image/png", uri: null }]);
-});

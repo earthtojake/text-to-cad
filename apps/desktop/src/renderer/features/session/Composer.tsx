@@ -41,7 +41,7 @@ import { dataUrlOf, rememberFiles } from "./composer/attachments";
 import { AttachmentImagePreview } from "./composer/AttachmentImagePreview";
 import { ComposerEditor, type ComposerEditorHandle } from "./composer/ComposerEditor";
 import { ReferenceScopeContext } from "./composer/ReferenceScope";
-import { AnnotationsChip, annotationImageBlocks, withAnnotations } from "./composer/AnnotationsChip";
+import { AnnotationsChip, withAnnotations } from "./composer/AnnotationsChip";
 import type { DraftAnnotation } from "@renderer/state/composer";
 
 const NO_ANNOTATIONS: DraftAnnotation[] = [];
@@ -159,7 +159,7 @@ export function Composer({
       if (!trimmed && message.files.length === 0) {
         return;
       }
-      const content = [...(await toPromptBlocks(trimmed, message.files)), ...annotationImageBlocks(pending)];
+      const content = await toPromptBlocks(trimmed, message.files);
       if (content.length === 0) {
         return;
       }

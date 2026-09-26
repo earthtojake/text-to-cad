@@ -20,7 +20,6 @@ import { ToolPanelStackContext } from "../tools/toolPanelStack.js";
 import { ViewportAnimationBar } from "../tools/playbar/ViewportAnimationBar.js";
 import ShellViewport from "./ShellViewport.jsx";
 import ViewportBottomAction, { drawingCaptureAction } from "./ViewportBottomAction.jsx";
-import { AnnotateButton } from "../../../host/AnnotateButton.jsx";
 import ViewportContextMenu from "./ViewportContextMenu.jsx";
 
 const TOOLBAR_POSITION = Object.freeze({ top: "14px", left: "14px", maxWidth: "calc(100% - 60px)" });
@@ -120,10 +119,7 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
   const hasContent = Boolean(scene) && !viewerLoading;
   const filePanelOpen = frame.openPanel === CAD_PANEL.file;
   const action = bottomAction || (frame.drawToolActive && frame.drawing.hasContent
-    ? { ...drawingCaptureAction({ disabled: viewerLoading || !hasContent, onInvoke: frame.copyDrawing }),
-      // Beside Copy Drawing: the drawing and a note on it, to the chat box as an annotation.
-      children: <AnnotateButton disabled={viewerLoading || !hasContent || !frame.annotateDrawing.available}
-        onSubmit={note => void frame.annotateDrawing.annotate(note).then(frame.reportDelivery)} placeholder="What should change here?" /> }
+    ? drawingCaptureAction({ disabled: viewerLoading || !hasContent, onInvoke: frame.copyDrawing })
     : null);
   frame.copyActionRef.current = () => {
     if (presenting) return false;
