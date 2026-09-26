@@ -4,10 +4,16 @@ import type { PromptContext, PromptContextPort, PromptDeliveryResult, PromptDest
 import { bindDraftDestination, DraftDestinationGone, draftDestinationIsCurrent, validateDraftDestination } from "@renderer/state/cad-draft";
 import type { DraftDestination } from "@renderer/state/cad-draft";
 import { useComposer } from "@renderer/state/composer";
-import type { DraftAnnotation, DraftPart } from "@renderer/state/composer";
+import type { DraftAnnotation, DraftAnnotationImage, DraftPart } from "@renderer/state/composer";
 import { useSessions } from "@renderer/state/sessions";
 
 const MAX_ATTACHMENT_BYTES = 20 * 1024 * 1024;
+async function base64Of(file: Blob): Promise<string> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let binary = "";
+  for (let index = 0; index < bytes.length; index += 0x8000) binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
+  return btoa(binary);
+}
 const NO_ANNOTATIONS: readonly DraftAnnotation[] = [];
 const message = (error: unknown) => error instanceof Error ? error.message : String(error);
 const capabilities = Object.freeze({ attachments: "images-and-text" as const, maxParts: 128, maxAttachmentBytes: MAX_ATTACHMENT_BYTES, maxTotalAttachmentBytes: 40 * 1024 * 1024, mixedTextAndImage: "atomic" as const });
@@ -61,14 +67,14 @@ export function createDesktopPromptContext(projectId: string, root: string | nul
     let bytes = 0;
     // A markup an annotation is on travels with the annotation, not as a loose attachment.
     const markups = new Set(context.parts.flatMap(part => part.kind === "annotation" && part.attachment ? [part.attachment] : []));
-    const markupFiles = new Map<string, File>();
+    const markupImages = new Map<string, DraftAnnotationImage>();
     for (const part of context.parts) {
       if (part.kind === "text") { parts.push({ ...part }); continue; }
       if (part.kind === "attachment") {
         const file = await attachmentFile(part);
         bytes += file.size;
         if (bytes > 40 * 1024 * 1024) throw new Error("Prompt attachments must total at most 40 MiB.");
-        if (markups.has(part.id)) markupFiles.set(part.id, file);
+        if (markups.has(part.id)) markupImages.set(part.id, { name: file.name, mimeType: file.type, base64: await base64Of(file) });
         else parts.push({ id: part.id, kind: "attachment", file, about: part.about });
         continue;
       }
@@ -76,7 +82,7 @@ export function createDesktopPromptContext(projectId: string, root: string | nul
         for (const reference of part.references) {
           if (reference.resource.kind === "workspace-file" && reference.resource.workspaceId !== workspaceId) throw new Error("This annotation belongs to another workspace.");
         }
-        const image = part.attachment ? markupFiles.get(part.attachment) : undefined;
+        const image = part.attachment ? markupImages.get(part.attachment) : undefined;
         parts.push({ id: part.id, kind: "annotation", text: part.text, references: [...part.references], ...(image ? { image } : {}) });
         continue;
       }

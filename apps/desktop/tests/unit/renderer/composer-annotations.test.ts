@@ -98,12 +98,13 @@ it("a markup annotation arrives with its picture, and the picture is not also a 
   expect(result.status).toBe("added");
   const [held] = useComposer.getState().annotations[key] ?? [];
   expect(held?.image?.name).toBe("clip-markup.png");
+  expect(held?.image?.base64).toBe(btoa(String.fromCharCode(...png)));
   expect(useComposer.getState().pendingFiles[key] ?? []).toEqual([]);
 });
 
 it("markups go after the prompt as images, and each annotation line says which one it is on", async () => {
   const { annotationImageBlocks } = await import("@renderer/features/session/composer/AnnotationsChip");
-  const image = new File([new Uint8Array([1, 2, 3])], "m.png", { type: "image/png" });
+  const image = { name: "m.png", mimeType: "image/png", base64: "AQID" };
   const annotations = [
     { id: "a1", text: "thicker", references: [edge("o1.1.f4", "Face 4")] },
     { id: "m1", text: "move this dimension", references: [edge("o1.1")], image },
@@ -111,6 +112,6 @@ it("markups go after the prompt as images, and each annotation line says which o
   expect(withAnnotations("", annotations)).toBe(
     "Annotations:\n1. parts/bracket.step#o1.1.f4 (Face 4): thicker\n2. parts/bracket.step#o1.1: move this dimension (on markup image 1)",
   );
-  const blocks = await annotationImageBlocks(annotations);
+  const blocks = annotationImageBlocks(annotations);
   expect(blocks).toEqual([{ type: "image", data: "AQID", mimeType: "image/png", uri: null }]);
 });

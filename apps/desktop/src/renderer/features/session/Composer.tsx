@@ -159,7 +159,7 @@ export function Composer({
       if (!trimmed && message.files.length === 0) {
         return;
       }
-      const content = [...(await toPromptBlocks(trimmed, message.files)), ...(await annotationImageBlocks(pending))];
+      const content = [...(await toPromptBlocks(trimmed, message.files)), ...annotationImageBlocks(pending)];
       if (content.length === 0) {
         return;
       }
