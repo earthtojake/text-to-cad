@@ -74,6 +74,7 @@ Two words are NOT retired, and each has exactly one meaning:
   index/surface/<surfaceInput>        attested extraction inputs → SURF object hash
   index/op/<sha256(op key)>           op-memo entries → object hash, or an inline value
   index/mesh/<key>                    tessellation entries → object hash
+  index/drawing/<sha256(scheme + document hash)>  a 2D drawing's render payload → object hash
 ```
 
 Nothing else lives under the root. A build's progress is process state, not
@@ -93,9 +94,13 @@ invalidate a consumer's private geometry.
 
 `objects/` is the **artifact side**: what geometry exists. `index/model`,
 `index/output` are the **code side**: what source produced a result and
-what it depended on. `index/op`, `index/component`, `index/surface` and
-`index/mesh` remember reusable derivations; surface and mesh jobs consume only
-immutable artifact inputs. `index/document` is the document lookup: `sha256(file bytes)` → the
+what it depended on. `index/op`, `index/component`, `index/surface`,
+`index/mesh` and `index/drawing` remember reusable derivations; surface, mesh
+and drawing jobs consume only immutable artifact inputs. `index/drawing` is a
+2D document's flattened render payload: its key hashes the extraction scheme
+(payload shape × the drawing library's release) together with the document's
+content hash, so the same bytes are never flattened twice and an upgrade lands
+on a new key instead of invalidating an old one in place. `index/document` is the document lookup: `sha256(file bytes)` → the
 tree describing those bytes (plus a mesh ledger keyed by format × tolerances
 × pose × appearance — the bare mesh doors read and write it, and a script run notes its
 declared meshes there too, so the two front doors never redo each other's work).
@@ -455,7 +460,12 @@ of:
 5. **A declared output does not match `outputs`.** Protects against a deleted,
    hand-edited or foreign `.step`/sidecar/mesh file beside the model.
 
-Mesh tolerances and argv flags are not inputs. Imported STEPs are inputs (a
+Mesh tolerances and argv flags are not inputs. A model run's
+`--mesh-tolerance` / `--mesh-angular-tolerance` override every declared mesh's
+tolerance for that run (flag > declaration > `@step` > default): each mesh's
+ledger entry records the pair the file was written at, so the declared meshes
+are re-cut from the current tree — the model is never rebuilt for it — and the
+next run without the flags restores them, once. Imported STEPs are inputs (a
 `read_step` file is in the closure), not models. `--force` rebuilds the named
 model only; its children go through the gate as usual. `cadgen store forget
 <model.py>` drops the record instead, so the next run — not this one — rebuilds

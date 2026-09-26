@@ -58,16 +58,15 @@ def compile(  # noqa: A001 - the verb IS "compile"; the builtin is not used here
     force: recompile even when the tree is already current.
     verbose: show detailed progress and timing on stderr.
     """
-    from cadgen._internal.doors import document_target
+    from cadgen._internal.doors import STEP_SUFFIXES, document_target
     from cadgen.step_artifact_cli import build_step_artifact
 
     # The document's BYTES are compiled, generated or imported alike; whether its
     # source has moved on is its model's business, not this door's.
-    document = document_target(target, suffixes=(".step", ".stp"))
+    document = document_target(target, suffixes=STEP_SUFFIXES)
     payload = build_step_artifact(
         repo_root=Path.cwd(),
         step=document,
-        source_path=None,
         force=force,
         verbose=verbose,
     )

@@ -53,8 +53,8 @@ def ensure_step_topology_artifact(
     surface it as opt-in diagnostics without adding overhead when `debug` is None."""
     started = time.perf_counter() if debug is not None else None
     try:
-        # Every CLI that needs a STEP package comes through here -- inspect, snapshot -- and
-        # the rebuild below can be the same multi-minute generator `cad gen` runs. It used to
+        # Every reader that needs a STEP's selector topology comes through here -- read_scene,
+        # selection snapshots -- and the extraction below can take minutes on a large model. It used to
         # report to the VIEWER only, so a terminal caller watched a silent
         # process while an open viewer showed the phases. The progress line is built here, at
         # the one shared entry point, rather than asked of every caller.

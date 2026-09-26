@@ -89,23 +89,27 @@ the CAD Viewer shows.
 cadgen snapshot path/to/robot.srdf review.png
 ```
 
-Hand it the `.srdf`; it routes by suffix and renders the paired URDF's geometry. Pose the robot with `--joint-values` — `{joint: degrees}` JSON,
-joints you do not name staying at the rest pose (the `"jointValues"` job field is the same
-thing in a packet). Robots are authored in metres and are framed on the robot scene scale
-automatically.
+Hand it the `.srdf`; it routes by suffix and renders the paired URDF's geometry — the same-folder `.urdf` whose `<robot name>` matches, exactly as `cadgen srdf validate` pairs them. No match, or more than one, is refused before anything renders, naming the robot name it looked for and the `.urdf` files it found. Pose the robot with `--joint-values` — `{joint: degrees}` JSON,
+joints you do not name staying where the CAD Viewer opens the robot: each at its default, then
+this SRDF's `home` group state if it declares one (the `"jointValues"` job field is the same
+thing in a packet). The snapshot draws the robot with the viewer's own scene, so it shows what
+the viewer shows, and a link mesh that cannot be loaded fails it rather than leaving the link
+out. Robots are authored in metres and are framed on the robot scene scale automatically.
 
-A normal snapshot uses deterministic light CAD lighting and hides grid and axis guides.
-Pass `--render light` or `--render dark` (or photographic Render JSON or a file path)
-for the shared Render scene. An envelope with no `studio` resolves Light in the CLI.
-Set its camera inside Render JSON; top-level `--camera`, `--display`, and `--joint-values`
-control normal snapshots and cannot be combined with Render. Robot link meshes have no CAD-edge or exploded assembly
-topology, so those display combinations are rejected clearly.
+A normal snapshot uses the Solid preset and Light appearance; omitted groups inherit preset defaults.
+Pass `--display render` for the shared photographic scene. Inline display JSON and
+JSON files use grouped settings such as `lighting`, `background`, and `floor`;
+`appearance` is `light` (default) or `dark`. Projection and focal length belong
+in `display.camera`. Top-level `--camera` and `--joint-values` remain active in every display
+mode. The display modes are `solid` and `render`: `edges`, `clip`, `exploded`, the
+`xray`, `hidden-line` and `wireframe` modes and the `hidden`/`off` surface styles
+describe a STEP model's CAD edges, parts and solids, and are refused by name here.
 
 Link meshes are resolved relative to the description, so they must be present: an
 unhydrated Git LFS pointer fails as "No link mesh loaded for robot". Run
 `git lfs checkout <mesh dir>` first.
 
-An SRDF's geometry comes from the URDF beside it, so it has no snapshot door of its
+An SRDF's geometry comes from its paired URDF, so it has no snapshot door of its
 own; the polymorphic `cadgen snapshot` routes one by suffix. The grammar is
 `cadgen snapshot TARGET [OUT] [flags]`, the same one every format door uses. Use
 `cadgen snapshot --help` for the complete current interface.

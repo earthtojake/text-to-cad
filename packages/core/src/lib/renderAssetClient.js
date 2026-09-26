@@ -1,0 +1,1009 @@
+import { cadResourceCacheKey } from "../client/resources.js";
+import {
+  STEP_EDGE_BARYCENTRIC_ATTRIBUTE,
+  STEP_EDGE_CLASS_ATTRIBUTE,
+  STEP_TOPOLOGY_EXTENSION,
+  STEP_TOPOLOGY_SCHEMA_VERSION,
+  isCurrentStepTopologySchemaVersion
+} from "../common/stepTopology.mjs";
+import { buildGlbDocumentFromBuffer, buildMeshDataFromGlbBuffer } from "./render/glbMeshData.js";
+import { buildMeshDataFromStlBuffer } from "./render/stlMeshData.js";
+import { buildMeshDataFrom3MfBuffer } from "./render/threeMfMeshData.js";
+import { loadGlbMeshDataInWorker } from "./render/glbMeshWorkerClient.js";
+import { loadStlMeshDataInWorker } from "./render/stlMeshWorkerClient.js";
+import {
+  reclaimIdleSurfWorkers as reclaimIdleSurfWorkerPool,
+  releaseSurfWorkerPoolWhenIdle,
+  surfWorkerMemoryStats as surfWorkerMemoryStatsFromPool,
+} from "./surf/surfWorkerClient.js";
+import {
+  TessellationCacheProbeMissError,
+  resolvedTessellationIdentity,
+  tessellationCacheKey,
+} from "./surf/tessellationCache.js";
+import {
+  assertAssetSourceScope,
+  assetSourceScopeMatches,
+  releaseAssetSourceScope
+} from "./renderAssetSourceScope.js";
+
+function isObject(value) {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function fetchError(url, response) {
+  return new Error(`Failed to fetch ${url}: ${response.status} ${response.statusText}`);
+}
+
+const jsonCache = new Map();
+const textCache = new Map();
+const arrayBufferCache = new Map();
+const arrayBufferPendingCache = new Map();
+const glbCache = new Map();
+const stlCache = new Map();
+const threeMfCache = new Map();
+const selectorCache = new Map();
+const displayEdgeCache = new Map();
+const topologyIndexCache = new Map();
+const urdfCache = new Map();
+const srdfCache = new Map();
+const sdfCache = new Map();
+const GIT_LFS_POINTER_PREFIX = "version https://git-lfs.github.com/spec/v1";
+const GIT_LFS_POINTER_SCAN_BYTES = 512;
+
+async function fetchJson(url, { signal, resources } = {}) {
+  if (resources) return resources.readJson(url, { signal });
+  const response = await fetch(url, { signal });
+  if (!response.ok) {
+    throw fetchError(url, response);
+  }
+  return response.json();
+}
+
+async function fetchText(url, { signal, resources } = {}) {
+  if (resources) return resources.readText(url, { signal });
+  const response = await fetch(url, { signal });
+  if (!response.ok) {
+    throw fetchError(url, response);
+  }
+  return response.text();
+}
+
+async function fetchArrayBuffer(url, { signal, resources } = {}) {
+  if (resources) return resources.readBytes(url, { signal });
+  const response = await fetch(url, { signal });
+  if (!response.ok) {
+    throw fetchError(url, response);
+  }
+  return response.arrayBuffer();
+}
+
+async function loadCached(cache, key, loader, { cachePending = true } = {}) {
+  if (!key) {
+    throw new Error("Missing asset cache key");
+  }
+  assertAssetSourceScope(cache, key);
+  if (cache.has(key)) {
+    const cached = cache.get(key);
+    if (cachePending || typeof cached?.then !== "function") {
+      return cached;
+    }
+  }
+  if (!cachePending) {
+    const payload = await loader();
+    cache.set(key, payload);
+    return payload;
+  }
+  let pending;
+  pending = loader().catch((error) => {
+    if (cache.get(key) === pending) {
+      cache.delete(key);
+      releaseAssetSourceScope(cache, key);
+    }
+    throw error;
+  });
+  cache.set(key, pending);
+  return pending;
+}
+
+function peekCached(cache, key) {
+  if (!assetSourceScopeMatches(cache, key)) {
+    return null;
+  }
+  const value = cache.get(key);
+  return value && typeof value.then !== "function" ? value : null;
+}
+
+function finalizeCached(cache, key, value) {
+  cache.set(key, value);
+  return value;
+}
+
+export function isAbortError(error) {
+  return error instanceof DOMException && error.name === "AbortError";
+}
+
+export function gitLfsPointerDetailsFromBuffer(buffer) {
+  const byteLength = Number(buffer?.byteLength || 0);
+  if (!Number.isFinite(byteLength) || byteLength <= 0) {
+    return null;
+  }
+  const preview = new TextDecoder("utf-8").decode(
+    new Uint8Array(buffer, 0, Math.min(byteLength, GIT_LFS_POINTER_SCAN_BYTES))
+  );
+  if (!preview.startsWith(GIT_LFS_POINTER_PREFIX)) {
+    return null;
+  }
+  const oid = preview.match(/^oid sha256:([0-9a-f]{64})\r?$/m)?.[1] || "";
+  const sizeText = preview.match(/^size ([0-9]+)\r?$/m)?.[1] || "";
+  const size = sizeText ? Number(sizeText) : null;
+  return {
+    oid,
+    size: Number.isSafeInteger(size) ? size : null,
+  };
+}
+
+function displayPathFromUrl(url) {
+  const rawUrl = String(url || "").trim();
+  if (!rawUrl) {
+    return "(unknown)";
+  }
+  try {
+    const baseUrl = typeof window !== "undefined" && window.location?.href
+      ? window.location.href
+      : "http://localhost/";
+    const parsed = new URL(rawUrl, baseUrl);
+    return decodeURIComponent(parsed.pathname || rawUrl);
+  } catch {
+    return rawUrl.split(/[?#]/)[0] || rawUrl;
+  }
+}
+
+export function assertNotGitLfsPointer(buffer, url, assetLabel = "Render asset") {
+  const pointer = gitLfsPointerDetailsFromBuffer(buffer);
+  if (!pointer) {
+    return;
+  }
+  const sizeText = pointer.size !== null ? ` Expected LFS object size: ${pointer.size} bytes.` : "";
+  const oidText = pointer.oid ? ` sha256:${pointer.oid}.` : "";
+  throw new Error(
+    `${assetLabel} is a Git LFS pointer, not downloaded mesh data: ${displayPathFromUrl(url)}.${oidText}${sizeText} Fetch the LFS object for this file and reload the viewer.`
+  );
+}
+
+function makeAbortError() {
+  if (typeof DOMException === "function") {
+    return new DOMException("The operation was aborted.", "AbortError");
+  }
+  const error = new Error("The operation was aborted.");
+  error.name = "AbortError";
+  return error;
+}
+
+function withConsumerAbort(promise, signal) {
+  if (!signal) {
+    return promise;
+  }
+  if (signal.aborted) {
+    return Promise.reject(makeAbortError());
+  }
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      signal.removeEventListener?.("abort", abort);
+    };
+    const abort = () => {
+      cleanup();
+      reject(makeAbortError());
+    };
+    signal.addEventListener?.("abort", abort, { once: true });
+    promise.then(
+      (value) => {
+        cleanup();
+        resolve(value);
+      },
+      (error) => {
+        cleanup();
+        reject(error);
+      }
+    );
+  });
+}
+
+export async function loadRenderJson(url, { signal, resources } = {}) {
+  const cacheKey = cadResourceCacheKey(resources, url);
+  const payload = await loadCached(jsonCache, cacheKey, () => fetchJson(url, { signal, resources }), { cachePending: !signal });
+  return finalizeCached(jsonCache, cacheKey, payload);
+}
+
+export function peekRenderJson(url, { resources } = {}) {
+  return peekCached(jsonCache, cadResourceCacheKey(resources, url));
+}
+
+export async function loadRenderText(url, { signal, resources } = {}) {
+  const cacheKey = cadResourceCacheKey(resources, url);
+  const payload = await loadCached(textCache, cacheKey, () => fetchText(url, { signal, resources }), { cachePending: !signal });
+  return finalizeCached(textCache, cacheKey, payload);
+}
+
+export async function loadRenderArrayBuffer(url, { signal, resources } = {}) {
+  const cacheKey = cadResourceCacheKey(resources, url);
+  if (!url) {
+    throw new Error("Missing asset cache key");
+  }
+  if (signal?.aborted) {
+    throw makeAbortError();
+  }
+  // After the abort check: a consumer that fetches nothing must not claim the URL for its source.
+  assertAssetSourceScope(arrayBufferCache, cacheKey, {
+    occupied: arrayBufferCache.has(cacheKey) || arrayBufferPendingCache.has(cacheKey)
+  });
+  const cached = peekCached(arrayBufferCache, cacheKey);
+  if (cached) {
+    return cached;
+  }
+  let pending = arrayBufferPendingCache.get(cacheKey);
+  if (!pending) {
+    pending = fetchArrayBuffer(url, { resources })
+      .then((payload) => finalizeCached(arrayBufferCache, cacheKey, payload))
+      .catch((error) => {
+        releaseAssetSourceScope(arrayBufferCache, cacheKey);
+        throw error;
+      })
+      .finally(() => {
+        if (arrayBufferPendingCache.get(cacheKey) === pending) {
+          arrayBufferPendingCache.delete(cacheKey);
+        }
+      });
+    arrayBufferPendingCache.set(cacheKey, pending);
+  }
+  return withConsumerAbort(pending, signal);
+}
+
+export async function loadRenderGlb(url, { signal, resources, preferWorker = false } = {}) {
+  const cacheKey = cadResourceCacheKey(resources, url);
+  const meshData = await loadCached(glbCache, cacheKey, async () => {
+    if (preferWorker) {
+      const workerMeshData = loadGlbMeshDataInWorker(url, { signal, resources });
+      if (workerMeshData) {
+        try {
+          return await workerMeshData;
+        } catch (error) {
+          if (signal?.aborted || isAbortError(error)) {
+            throw error;
+          }
+        }
+      }
+    }
+    const buffer = await loadRenderArrayBuffer(url, { signal, resources });
+    assertNotGitLfsPointer(buffer, url, "GLB render asset");
+    return buildMeshDataFromGlbBuffer(buffer, { resources, sourceUrl: url, signal });
+  }, { cachePending: !signal });
+  return finalizeCached(glbCache, cacheKey, meshData);
+}
+
+export function peekRenderGlb(url, { resources } = {}) {
+  return peekCached(glbCache, cadResourceCacheKey(resources, url));
+}
+
+// Interactive GLB documents are intentionally uncached: their scene graph is
+// mutable animation state and has one viewer owner with an explicit lifetime.
+export async function loadRenderGlbDocument(url, { signal, resources } = {}) {
+  const buffer = await loadRenderArrayBuffer(url, { signal, resources });
+  assertNotGitLfsPointer(buffer, url, "GLB render asset");
+  return buildGlbDocumentFromBuffer(buffer, { resources, sourceUrl: url, signal });
+}
+
+export async function loadRenderSurf(url, {
+  signal,
+  resources,
+  tessellation,
+  identity,
+  memoryEstimateBytes,
+  tessellationCache,
+} = {}) {
+  // Exact-surface component artifact (design/surface-rendering.md): the
+  // worker builds only the display payload. A compatible shared-cache entry
+  // contains geometry, display edges, bounds and appearance, so this path can
+  // skip both selector construction and the .surf request.
+  const cacheKey = surfTessellationCacheKey(url, tessellation, identity);
+  const meshData = await loadCached(glbCache, cacheKey, async () => {
+    return (await loadSurfPayload(url, {
+      signal,
+      resources,
+      tessellation,
+      identity,
+      memoryEstimateBytes,
+      tessellationCache,
+      capabilities: { render: true, selectors: false },
+    })).meshData;
+  }, { cachePending: !signal });
+  finalizeCached(glbCache, cacheKey, meshData);
+  // On the surf leash too: the package's componentMeshDataByCid owns the
+  // displayed arrays, and a pinned entry here kept a previous model's
+  // geometry alive across a file switch.
+  retainSurfEntry(glbCache, cacheKey);
+  return meshData;
+}
+
+// Hand the surf worker pool's isolates back once nothing is loading. The
+// generation-scoped wait prevents an overlapping package/LOD request from
+// leaving its conservative retained-memory estimate charged after it drains.
+export async function releaseSurfWorkers() {
+  return releaseSurfWorkerPoolWhenIdle();
+}
+
+export function reclaimIdleSurfWorkers() {
+  return reclaimIdleSurfWorkerPool();
+}
+
+export function surfWorkerMemoryStats() {
+  return surfWorkerMemoryStatsFromPool();
+}
+
+export async function loadRenderStl(url, { signal, resources } = {}) {
+  const cacheKey = cadResourceCacheKey(resources, url);
+  const meshData = await loadCached(stlCache, cacheKey, async () => {
+    const workerMeshData = loadStlMeshDataInWorker(url, { signal, resources });
+    if (workerMeshData) {
+      try {
+        return await workerMeshData;
+      } catch (error) {
+        if (signal?.aborted || isAbortError(error)) {
+          throw error;
+        }
+      }
+    }
+    const buffer = await loadRenderArrayBuffer(url, { signal, resources });
+    assertNotGitLfsPointer(buffer, url, "STL render asset");
+    return buildMeshDataFromStlBuffer(buffer);
+  }, { cachePending: !signal });
+  return finalizeCached(stlCache, cacheKey, meshData);
+}
+
+export function peekRenderStl(url, { resources } = {}) {
+  return peekCached(stlCache, cadResourceCacheKey(resources, url));
+}
+
+export async function loadRender3Mf(url, { signal, resources } = {}) {
+  const cacheKey = cadResourceCacheKey(resources, url);
+  const meshData = await loadCached(threeMfCache, cacheKey, async () => {
+    const buffer = await loadRenderArrayBuffer(url, { signal, resources });
+    assertNotGitLfsPointer(buffer, url, "3MF render asset");
+    return buildMeshDataFrom3MfBuffer(buffer);
+  }, { cachePending: !signal });
+  return finalizeCached(threeMfCache, cacheKey, meshData);
+}
+
+export function peekRender3Mf(url, { resources } = {}) {
+  return peekCached(threeMfCache, cadResourceCacheKey(resources, url));
+}
+
+function parseGlbContainer(arrayBuffer) {
+  const data = new DataView(arrayBuffer);
+  if (data.byteLength < 20 || data.getUint32(0, true) !== 0x46546c67 || data.getUint32(4, true) !== 2) {
+    throw new Error("Invalid GLB topology container");
+  }
+  const totalLength = Math.min(data.getUint32(8, true), data.byteLength);
+  let offset = 12;
+  let json = null;
+  let bin = null;
+  while (offset + 8 <= totalLength) {
+    const chunkLength = data.getUint32(offset, true);
+    const chunkType = data.getUint32(offset + 4, true);
+    offset += 8;
+    if (offset + chunkLength > totalLength) {
+      throw new Error("Invalid GLB chunk length");
+    }
+    if (chunkType === 0x4e4f534a) {
+      json = JSON.parse(new TextDecoder("utf-8").decode(arrayBuffer.slice(offset, offset + chunkLength)).trim());
+    } else if (chunkType === 0x004e4942) {
+      bin = {
+        buffer: arrayBuffer,
+        byteOffset: offset,
+        byteLength: chunkLength,
+      };
+    }
+    offset += chunkLength;
+  }
+  if (!json || !bin) {
+    throw new Error("GLB topology requires JSON and BIN chunks");
+  }
+  return { json, bin };
+}
+
+function glbBufferViewRange(gltf, bin, viewIndex) {
+  const index = Number(viewIndex);
+  const view = Array.isArray(gltf?.bufferViews) ? gltf.bufferViews[index] : null;
+  if (!Number.isInteger(index) || !view || Number(view.buffer || 0) !== 0) {
+    return null;
+  }
+  const byteOffset = bin.byteOffset + Number(view.byteOffset || 0);
+  const byteLength = Number(view.byteLength || 0);
+  if (!Number.isFinite(byteOffset) || !Number.isFinite(byteLength) || byteLength < 0) {
+    return null;
+  }
+  if (byteOffset < bin.byteOffset || byteOffset + byteLength > bin.byteOffset + bin.byteLength) {
+    return null;
+  }
+  return { byteOffset, byteLength };
+}
+
+function buildTypedView(glb, view) {
+  if (!isObject(view)) {
+    return null;
+  }
+  const range = glbBufferViewRange(glb.json, glb.bin, view.bufferView);
+  if (!range) {
+    return null;
+  }
+  const count = Number(view.count || 0);
+  const relativeOffset = Number(view.byteOffset || 0);
+  if (!Number.isFinite(count) || count < 0 || !Number.isFinite(relativeOffset) || relativeOffset < 0) {
+    return null;
+  }
+  const byteOffset = range.byteOffset + relativeOffset;
+  if (view.dtype === "float32") {
+    return new Float32Array(glb.bin.buffer, byteOffset, count);
+  }
+  if (view.dtype === "uint32") {
+    return new Uint32Array(glb.bin.buffer, byteOffset, count);
+  }
+  return null;
+}
+
+function buildSelectorBuffers(manifest, glb) {
+  const views = manifest?.buffers?.views;
+  if (!isObject(views)) {
+    return {};
+  }
+  const output = {};
+  for (const [name, view] of Object.entries(views)) {
+    const typed = buildTypedView(glb, view);
+    if (typed) {
+      output[name] = typed;
+    }
+  }
+  return output;
+}
+
+function glbPrimitivesHaveSurfaceEdgeAttributes(glb) {
+  const meshes = Array.isArray(glb?.json?.meshes) ? glb.json.meshes : [];
+  let primitiveCount = 0;
+  for (const mesh of meshes) {
+    for (const primitive of Array.isArray(mesh?.primitives) ? mesh.primitives : []) {
+      primitiveCount += 1;
+      const attributes = primitive?.attributes || {};
+      if (
+        attributes[STEP_EDGE_BARYCENTRIC_ATTRIBUTE] === undefined ||
+        attributes[STEP_EDGE_CLASS_ATTRIBUTE] === undefined
+      ) {
+        return false;
+      }
+    }
+  }
+  return primitiveCount > 0;
+}
+
+function stepTopologyExtension(glb) {
+  const extension = glb.json?.extensions?.[STEP_TOPOLOGY_EXTENSION];
+  if (!isObject(extension)) {
+    throw new Error(`GLB is missing ${STEP_TOPOLOGY_EXTENSION}`);
+  }
+  if (!isCurrentStepTopologySchemaVersion(extension.schemaVersion)) {
+    throw new Error(`Unsupported ${STEP_TOPOLOGY_EXTENSION} schemaVersion ${extension.schemaVersion || "unknown"}; expected ${STEP_TOPOLOGY_SCHEMA_VERSION}`);
+  }
+  if (extension.edgeView === undefined || extension.edgeView === null) {
+    throw new Error(`${STEP_TOPOLOGY_EXTENSION} edgeView is not available`);
+  }
+  if (!glbPrimitivesHaveSurfaceEdgeAttributes(glb)) {
+    throw new Error(`${STEP_TOPOLOGY_EXTENSION} requires ${STEP_EDGE_BARYCENTRIC_ATTRIBUTE} and ${STEP_EDGE_CLASS_ATTRIBUTE} on every STEP mesh primitive`);
+  }
+  return extension;
+}
+
+function parseJsonBufferView(glb, viewIndex, encoding = "utf-8") {
+  const range = glbBufferViewRange(glb.json, glb.bin, viewIndex);
+  if (!range) {
+    return null;
+  }
+  const bytes = new Uint8Array(glb.bin.buffer, range.byteOffset, range.byteLength);
+  return JSON.parse(new TextDecoder(String(encoding || "utf-8")).decode(bytes));
+}
+
+function topologyIndexFromGlbBuffer(arrayBuffer) {
+  const glb = parseGlbContainer(arrayBuffer);
+  const extension = stepTopologyExtension(glb);
+  const manifest = parseJsonBufferView(glb, extension.indexView, extension.encoding);
+  if (!isObject(manifest)) {
+    throw new Error(`${STEP_TOPOLOGY_EXTENSION} indexView is invalid`);
+  }
+  if (!isCurrentStepTopologySchemaVersion(manifest.schemaVersion)) {
+    throw new Error(`Unsupported ${STEP_TOPOLOGY_EXTENSION} index schemaVersion ${manifest.schemaVersion || "unknown"}; expected ${STEP_TOPOLOGY_SCHEMA_VERSION}`);
+  }
+  return manifest;
+}
+
+function selectorBundleFromGlbBuffer(arrayBuffer) {
+  const glb = parseGlbContainer(arrayBuffer);
+  const extension = stepTopologyExtension(glb);
+  const manifest = parseJsonBufferView(glb, extension.selectorView, extension.encoding);
+  if (!isObject(manifest)) {
+    throw new Error(`${STEP_TOPOLOGY_EXTENSION} selectorView is not available`);
+  }
+  if (!isCurrentStepTopologySchemaVersion(manifest.schemaVersion)) {
+    throw new Error(`Unsupported ${STEP_TOPOLOGY_EXTENSION} selector schemaVersion ${manifest.schemaVersion || "unknown"}; expected ${STEP_TOPOLOGY_SCHEMA_VERSION}`);
+  }
+  if (manifest?.buffers?.littleEndian === false) {
+    throw new Error("Big-endian selector buffers are not supported");
+  }
+  return {
+    manifest,
+    buffers: buildSelectorBuffers(manifest, glb),
+  };
+}
+
+function displayEdgeBundleFromGlbBuffer(arrayBuffer) {
+  const glb = parseGlbContainer(arrayBuffer);
+  const extension = stepTopologyExtension(glb);
+  const manifest = parseJsonBufferView(glb, extension.edgeView, extension.encoding);
+  if (!isObject(manifest)) {
+    throw new Error(`${STEP_TOPOLOGY_EXTENSION} edgeView is not available`);
+  }
+  if (!isCurrentStepTopologySchemaVersion(manifest.schemaVersion)) {
+    throw new Error(`Unsupported ${STEP_TOPOLOGY_EXTENSION} edgeView schemaVersion ${manifest.schemaVersion || "unknown"}; expected ${STEP_TOPOLOGY_SCHEMA_VERSION}`);
+  }
+  if (String(manifest.profile || "") !== "surface-edges") {
+    throw new Error(`${STEP_TOPOLOGY_EXTENSION} edgeView has unsupported profile ${manifest.profile || "unknown"}`);
+  }
+  if (manifest?.buffers?.littleEndian === false) {
+    throw new Error("Big-endian edgeView buffers are not supported");
+  }
+  return {
+    manifest,
+    buffers: buildSelectorBuffers(manifest, glb),
+  };
+}
+
+export async function loadRenderTopologyIndex(glbUrl, { signal, resources } = {}) {
+  const cacheKey = cadResourceCacheKey(resources, glbUrl);
+  const manifest = await loadCached(topologyIndexCache, cacheKey, async () => {
+    const arrayBuffer = await loadRenderArrayBuffer(glbUrl, { signal, resources });
+    assertNotGitLfsPointer(arrayBuffer, glbUrl, "GLB topology asset");
+    return topologyIndexFromGlbBuffer(arrayBuffer);
+  }, { cachePending: !signal });
+  return finalizeCached(topologyIndexCache, cacheKey, manifest);
+}
+
+export function peekRenderTopologyIndex(glbUrl, { resources } = {}) {
+  return peekCached(topologyIndexCache, cadResourceCacheKey(resources, glbUrl));
+}
+
+export async function loadRenderSelectorBundle(glbUrl, { signal, resources } = {}) {
+  const cacheKey = cadResourceCacheKey(resources, glbUrl);
+  const bundle = await loadCached(selectorCache, cacheKey, async () => {
+    const arrayBuffer = await loadRenderArrayBuffer(glbUrl, { signal, resources });
+    assertNotGitLfsPointer(arrayBuffer, glbUrl, "GLB selector topology asset");
+    return selectorBundleFromGlbBuffer(arrayBuffer);
+  }, { cachePending: !signal });
+  return finalizeCached(selectorCache, cacheKey, bundle);
+}
+
+export function peekRenderSelectorBundle(glbUrl, { resources } = {}) {
+  return peekCached(selectorCache, cadResourceCacheKey(resources, glbUrl));
+}
+
+export async function loadRenderDisplayEdgeBundle(glbUrl, { signal, resources } = {}) {
+  const cacheKey = cadResourceCacheKey(resources, glbUrl);
+  const bundle = await loadCached(displayEdgeCache, cacheKey, async () => {
+    const arrayBuffer = await loadRenderArrayBuffer(glbUrl, { signal, resources });
+    assertNotGitLfsPointer(arrayBuffer, glbUrl, "GLB display edge topology asset");
+    return displayEdgeBundleFromGlbBuffer(arrayBuffer);
+  }, { cachePending: !signal });
+  return finalizeCached(displayEdgeCache, cacheKey, bundle);
+}
+
+export function peekRenderDisplayEdgeBundle(glbUrl, { resources } = {}) {
+  return peekCached(displayEdgeCache, cadResourceCacheKey(resources, glbUrl));
+}
+
+// --- Exact-surface topology (design/surface-rendering.md R3) ---------------
+//
+// The .surf carries the same topology the GLB's STEP_TOPOLOGY tables did.
+// Worker requests declare whether they need render data, selectors, or both.
+// Initial display uses render only; selection and measurement synthesize the
+// selector bundle on demand. LOD requests both only for already-used topology;
+// later demand must use the displayed level's concrete tessellation key.
+
+const surfPayloadCache = new Map();
+
+// Every surf entry — a component's payload at any level, its selector bundle,
+// its display-edge bundle — lives on ONE bounded LRU leash. The consumers own
+// what they keep: the package's componentMeshDataByCid holds every displayed
+// meshData, the reference composition holds the bundles of the occurrences it
+// composed, the LOD working set holds its swapped levels. Retaining a second
+// reference here for the load's lifetime pinned every component's decoded
+// selector bundle (manifest rows + edge polylines) for the whole session; a
+// miss re-decodes from the shared tessellation cache in a worker. Mesh keys
+// include component identity, effective tolerances, tessellator algorithm and
+// payload compatibility; an app-facing LOD label never identifies geometry.
+//
+// The leash is bounded by COUNT and by BYTES. A count alone pinned whatever the
+// entries weighed: the tendon hand's components decode to ~90 MB each, so 24
+// of them held >2 GB of typed arrays here beside the copies the package and
+// the LOD working set already own, and the tab died at load time. The byte
+// ceiling evicts oldest-first until the decoded bytes fit; the count floor
+// keeps a few entries whatever they weigh, so small models behave as before
+// (their whole working set fits under the ceiling anyway).
+const SURF_CACHE_LIMIT = 24;
+const SURF_CACHE_MIN_ENTRIES = 4;
+const SURF_CACHE_MAX_BYTES = 256 * 1024 * 1024;
+const surfLeashConfig = { limit: SURF_CACHE_LIMIT, minEntries: SURF_CACHE_MIN_ENTRIES, maxBytes: SURF_CACHE_MAX_BYTES };
+const surfEntries = [];
+
+// Test seam: lower the ceilings to exercise eviction with small fixtures.
+// Returns the previous configuration so a test can restore it.
+export function configureSurfLeash(next = {}) {
+  const previous = { ...surfLeashConfig };
+  for (const key of ["limit", "minEntries", "maxBytes"]) {
+    if (Number.isFinite(Number(next[key]))) {
+      surfLeashConfig[key] = Number(next[key]);
+    }
+  }
+  return previous;
+}
+
+// Decoded typed-array bytes the leash retains, each buffer counted once (a
+// surf payload and its meshData entry share arrays). Pending entries weigh zero.
+function surfLeashBytes() {
+  const seen = new Set();
+  let total = 0;
+  for (const entry of surfEntries) {
+    const value = entry.cache.get(entry.key);
+    if (value && typeof value.then !== "function") {
+      total += typedArrayBytesOf(value, seen);
+    }
+  }
+  return total;
+}
+
+function evictOldestSurfEntry() {
+  const evicted = surfEntries.shift();
+  if (evicted.cache.get(evicted.key)?.then === undefined) {
+    evicted.cache.delete(evicted.key);
+    releaseAssetSourceScope(evicted.cache, evicted.key);
+  }
+}
+
+function retainSurfEntry(cache, key) {
+  const existing = surfEntries.findIndex((entry) => entry.cache === cache && entry.key === key);
+  if (existing !== -1) {
+    surfEntries.splice(existing, 1);
+  }
+  surfEntries.push({ cache, key });
+  while (surfEntries.length > surfLeashConfig.limit) {
+    evictOldestSurfEntry();
+  }
+  while (surfEntries.length > surfLeashConfig.minEntries && surfLeashBytes() > surfLeashConfig.maxBytes) {
+    evictOldestSurfEntry();
+  }
+}
+
+function typedArrayBytesOf(value, seen, visited = new Set()) {
+  if (!value || typeof value !== "object") {
+    return 0;
+  }
+  if (ArrayBuffer.isView(value)) {
+    if (seen.has(value.buffer)) {
+      return 0;
+    }
+    seen.add(value.buffer);
+    // A short view retains its whole backing allocation. TESS cache entries
+    // deliberately decode as disjoint zero-copy views over one packed buffer;
+    // charging the first view's length and suppressing the rest understated
+    // those entries by most of their actual retained bytes.
+    return value.buffer.byteLength;
+  }
+  if (value instanceof ArrayBuffer) {
+    if (seen.has(value)) {
+      return 0;
+    }
+    seen.add(value);
+    return value.byteLength;
+  }
+  if (visited.has(value)) {
+    return 0;
+  }
+  visited.add(value);
+  let total = 0;
+  for (const child of Object.values(value)) {
+    if (child && typeof child === "object") {
+      total += typedArrayBytesOf(child, seen, visited);
+    }
+  }
+  return total;
+}
+
+// Byte attribution of what these caches retain, for the memory harness:
+// typed-array bytes (each buffer counted once) and manifest row counts per
+// cache. Pending entries count as zero.
+export function renderAssetCacheStats({ excludeBuffers = [] } = {}) {
+  const seen = new Set(excludeBuffers);
+  const stats = {};
+  for (const [name, cache] of [
+    ["surfPayload", surfPayloadCache],
+    ["selector", selectorCache],
+    ["displayEdge", displayEdgeCache],
+    ["glb", glbCache],
+  ]) {
+    let typedBytes = 0;
+    let manifestRows = 0;
+    let entries = 0;
+    for (const value of cache.values()) {
+      if (!value || typeof value.then === "function") {
+        continue;
+      }
+      entries += 1;
+      typedBytes += typedArrayBytesOf(value, seen);
+      const manifest = value.manifest || value.bundle?.manifest;
+      for (const rows of [manifest?.faces, manifest?.edges, manifest?.shapes, manifest?.occurrences]) {
+        manifestRows += Array.isArray(rows) ? rows.length : 0;
+      }
+    }
+    stats[name] = { entries, typedBytes, manifestRows };
+  }
+  stats.surfLeash = {
+    entries: surfEntries.length,
+    limit: surfLeashConfig.limit,
+    bytes: surfLeashBytes(),
+    maxBytes: surfLeashConfig.maxBytes,
+    minEntries: surfLeashConfig.minEntries
+  };
+  return stats;
+}
+
+export function surfTessellationCacheKey(_url, tessellation, identity) {
+  return resolvedTessellationIdentity(
+    String(identity?.surfaceInput || ""),
+    String(identity?.surfaceObject || ""),
+    tessellation || {},
+  );
+}
+
+// Drop browser-cache references for an obsolete concrete surf level after its
+// replacement has committed. Scene records and selector compositions own the
+// values they still use, so deleting these Map entries cannot blank a view or
+// invalidate an exact measurement. Persistent tessellation-store records are
+// intentionally untouched.
+export function releaseRenderSurfLevel(url, { tessellation, identity } = {}) {
+  const baseKey = surfTessellationCacheKey(url, tessellation, identity);
+  const targets = [
+    ...[...surfPayloadCache.keys()]
+      .filter((key) => key.startsWith(`${baseKey}#cap=`))
+      .map((key) => [surfPayloadCache, key]),
+    [selectorCache, baseKey],
+    [displayEdgeCache, baseKey],
+    [glbCache, baseKey],
+  ];
+  let released = 0;
+  for (const [cache, key] of targets) {
+    const value = cache.get(key);
+    if (value && typeof value.then === "function") continue;
+    if (cache.delete(key)) {
+      releaseAssetSourceScope(cache, key);
+      released += 1;
+    }
+  }
+  for (let index = surfEntries.length - 1; index >= 0; index -= 1) {
+    const entry = surfEntries[index];
+    if (targets.some(([cache, key]) => cache === entry.cache && key === entry.key)) {
+      surfEntries.splice(index, 1);
+    }
+  }
+  return released;
+}
+
+function capabilityCacheKey(capabilities) {
+  return `${capabilities.render ? "r" : ""}${capabilities.selectors ? "s" : ""}`;
+}
+
+async function loadSurfPayloadInline(url, { signal, resources, tessellation, identity, capabilities, tessellationCache } = {}) {
+  const [
+    { parseSurf },
+    {
+      surfIndexFromCacheEntry,
+    },
+    { tessellateComponent },
+    { buildMeshDataFromSurf },
+    { buildSelectorBundleFromSurf },
+  ] = await Promise.all([
+    import("./surf/container.js"),
+    import("./surf/tessellationCache.js"),
+    import("./surf/tessellate.js"),
+    import("./surf/surfMeshData.js"),
+    import("./surf/surfSelectorBundle.js"),
+  ]);
+  const surfaceInput = String(identity?.surfaceInput || "");
+  const surfaceObject = String(identity?.surfaceObject || "");
+  if (!tessellationCache && identity?.tessellationProbe) throw new TessellationCacheProbeMissError(identity.tessellationProbe);
+  const cached = await tessellationCache?.getCachedComponentEntry(surfaceInput, tessellation || {}, {
+    signal,
+    probe: identity?.tessellationProbe || null,
+    strictProbe: Boolean(identity?.tessellationProbe),
+  });
+  const cachedIndex = surfIndexFromCacheEntry(cached);
+  // Render-only cache hits are complete without the exact-surface container.
+  // Selectors need its topology tables; incomplete older entries do too.
+  if (capabilities.render && !capabilities.selectors && cached && cachedIndex) {
+    return {
+      meshData: buildMeshDataFromSurf(cachedIndex, null, { component: cached.component }),
+    };
+  }
+  if (!url) throw new Error("Exact SURF bytes are not ready for this component");
+  const buffer = await loadRenderArrayBuffer(url, { signal, resources });
+  assertNotGitLfsPointer(buffer, url, "SURF render asset");
+  const { index, floats } = parseSurf(buffer);
+  // Same shared-cache behavior as the worker path: a registered provider
+  // turns a content-addressed component into a cache hit (tessellation
+  // skipped) or a write-back; no provider tessellates exactly as before.
+  const component = cached?.component || tessellateComponent(index, floats, tessellation || {});
+  if (!cached || !cachedIndex) {
+    await tessellationCache?.writeBackComponentEntry(surfaceInput, surfaceObject, tessellation || {}, component, index);
+  }
+  return {
+    ...(capabilities.render ? { meshData: buildMeshDataFromSurf(index, floats, { component }) } : {}),
+    ...(capabilities.selectors ? { bundle: buildSelectorBundleFromSurf(index, floats, { component }) } : {}),
+  };
+}
+
+async function loadSurfPayload(url, {
+  signal,
+  resources,
+  tessellation,
+  identity,
+  memoryEstimateBytes,
+  tessellationCache,
+  capabilities = { render: true, selectors: true },
+} = {}) {
+  const cacheKey = `${surfTessellationCacheKey(url, tessellation, identity)}#cap=${capabilityCacheKey(capabilities)}`;
+  const payload = await loadCached(surfPayloadCache, cacheKey, async () => {
+    const { loadSurfComponentInWorker } = await import("./surf/surfWorkerClient.js");
+    const workerPayload = loadSurfComponentInWorker(url, {
+      signal,
+      resources,
+      tessellation,
+      identity,
+      capabilities,
+      memoryEstimateBytes,
+      tessellationCache,
+    });
+    if (workerPayload) {
+      // Once a worker accepts the job, keep expensive tessellation off the UI
+      // thread even when that job fails. Propagate the failure; inline is only
+      // the compatibility path for environments where Workers never started.
+      return workerPayload;
+    }
+    return loadSurfPayloadInline(url, { signal, resources, tessellation, identity, capabilities, tessellationCache });
+  }, { cachePending: !signal });
+  finalizeCached(surfPayloadCache, cacheKey, payload);
+  retainSurfEntry(surfPayloadCache, cacheKey);
+  return payload;
+}
+
+/**
+ * Render data and, when requested, selectors for one concrete tessellation.
+ * A render-only refinement passes selectors:false; the caller reconciles any
+ * topology demanded during that load before publishing new triangles.
+ */
+export async function loadRenderSurfPayloadAtLevel(url, {
+  signal,
+  resources,
+  tessellation,
+  identity,
+  memoryEstimateBytes,
+  tessellationCache,
+  selectors = true,
+} = {}) {
+  return loadSurfPayload(url, {
+    signal,
+    resources,
+    tessellation,
+    identity,
+    memoryEstimateBytes,
+    tessellationCache,
+    capabilities: { render: true, selectors: selectors === true },
+  });
+}
+
+export async function loadRenderSurfSelectorBundle(surfUrl, {
+  signal,
+  resources,
+  tessellation,
+  identity,
+  memoryEstimateBytes,
+  tessellationCache,
+} = {}) {
+  const cacheKey = surfTessellationCacheKey(surfUrl, tessellation, identity);
+  const bundle = await loadCached(selectorCache, cacheKey, async () => {
+    return (await loadSurfPayload(surfUrl, {
+      signal,
+      resources,
+      tessellation,
+      identity,
+      memoryEstimateBytes,
+      tessellationCache,
+      capabilities: { render: false, selectors: true },
+    })).bundle;
+  }, { cachePending: !signal });
+  finalizeCached(selectorCache, cacheKey, bundle);
+  retainSurfEntry(selectorCache, cacheKey);
+  return bundle;
+}
+
+function urdfCacheKey(url) {
+  return String(url || "");
+}
+
+export async function loadRenderUrdf(url, { signal, resources } = {}) {
+  const cacheKey = cadResourceCacheKey(resources, urdfCacheKey(url));
+  const payload = await loadCached(urdfCache, cacheKey, async () => {
+    const [xmlText, { parseUrdf }] = await Promise.all([
+      loadRenderText(url, { signal, resources }),
+      import("./urdf/parseUrdf.js"),
+    ]);
+    return parseUrdf(xmlText, { sourceUrl: url, resolveResource: resources ? (reference) => resources.resolveDependency(url, reference, { kind: "robot" }) : undefined });
+  }, { cachePending: !signal });
+  return finalizeCached(urdfCache, cacheKey, payload);
+}
+
+export function peekRenderUrdf(url, { resources } = {}) {
+  return peekCached(urdfCache, cadResourceCacheKey(resources, urdfCacheKey(url)));
+}
+
+function srdfCacheKey(srdfUrl, urdfUrl = "") {
+  return [srdfUrl, urdfUrl].filter(Boolean).join("::");
+}
+
+export async function loadRenderSrdf(srdfUrl, { signal, resources, urdfUrl = "" } = {}) {
+  const cacheKey = cadResourceCacheKey(resources, srdfCacheKey(srdfUrl, urdfUrl));
+  const payload = await loadCached(srdfCache, cacheKey, async () => {
+    const [srdfText, urdfData, { parseSrdf, motionFromSrdf }] = await Promise.all([
+      loadRenderText(srdfUrl, { signal, resources }),
+      loadRenderUrdf(urdfUrl, { signal, resources }),
+      import("./urdf/parseSrdf.js"),
+    ]);
+    const srdfData = parseSrdf(srdfText, { sourceUrl: srdfUrl, urdfData });
+    return {
+      srdfData,
+      urdfData: {
+        ...urdfData,
+        motion: motionFromSrdf(srdfData),
+        srdf: srdfData
+      }
+    };
+  }, { cachePending: !signal });
+  return finalizeCached(srdfCache, cacheKey, payload);
+}
+
+export function peekRenderSrdf(srdfUrl, { resources, urdfUrl = "" } = {}) {
+  return peekCached(srdfCache, cadResourceCacheKey(resources, srdfCacheKey(srdfUrl, urdfUrl)));
+}
+
+function sdfCacheKey(url) {
+  return String(url || "");
+}
+
+export async function loadRenderSdf(url, { signal, resources } = {}) {
+  const cacheKey = cadResourceCacheKey(resources, sdfCacheKey(url));
+  const payload = await loadCached(sdfCache, cacheKey, async () => {
+    const [xmlText, { parseSdf }] = await Promise.all([
+      loadRenderText(url, { signal, resources }),
+      import("./urdf/parseSdf.js"),
+    ]);
+    return parseSdf(xmlText, { sourceUrl: url, resolveResource: resources ? (reference) => resources.resolveDependency(url, reference, { kind: "robot" }) : undefined });
+  }, { cachePending: !signal });
+  return finalizeCached(sdfCache, cacheKey, payload);
+}
+
+export function peekRenderSdf(url, { resources } = {}) {
+  return peekCached(sdfCache, cadResourceCacheKey(resources, sdfCacheKey(url)));
+}

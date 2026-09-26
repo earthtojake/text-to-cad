@@ -193,7 +193,7 @@ class SourceJobResults(unittest.TestCase):
 
         spec = _entry_spec_from_source(source_from_path(script))
         with mock.patch("cadgen._internal.mesh_export.run_mesh_exporter", side_effect=export):
-            _produce_declared_mesh_exports(spec, logger=None, announce=False, source_tree=old)
+            _produce_declared_mesh_exports(spec, logger=None, source_tree=old)
         self.assertEqual(seen, [old])
 
     def exercise_nested(self, *, discard=False, fail=False, mesh_parent=False, block_mesh=False):

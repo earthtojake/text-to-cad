@@ -1,0 +1,45 @@
+import React from 'react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { TooltipHint } from './tooltip.jsx';
+import { ToolbarButton } from './toolbar-button.jsx';
+Object.assign(globalThis, { React });
+beforeEach(() => vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} }));
+afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); });
+const hover = node => { fireEvent.pointerMove(node, { pointerType: 'mouse' }); act(() => vi.advanceTimersByTime(450)); };
+it('uses one short styled hint, dismisses on press, and suppresses disabled or selected tools', () => {
+  vi.useFakeTimers();
+  const { rerender } = render(<ToolbarButton label="Display">Icon</ToolbarButton>);
+  const button = screen.getByRole('button', { name: 'Display' });
+  hover(button);
+  expect(screen.getByRole('tooltip').textContent).toBe('Display');
+  expect(button.hasAttribute('title')).toBe(false);
+  fireEvent.pointerDown(button);
+  expect(screen.queryByRole('tooltip')).toBeNull();
+  rerender(<ToolbarButton label="Display" active>Icon</ToolbarButton>);
+  hover(screen.getByRole('button'));
+  expect(screen.queryByRole('tooltip')).toBeNull();
+  rerender(<ToolbarButton label="Display" disabled>Icon</ToolbarButton>);
+  hover(screen.getByRole('button'));
+  expect(screen.queryByRole('tooltip')).toBeNull();
+});
+it('shows full text only when a label is actually clipped', () => {
+  vi.useFakeTimers();
+  render(<TooltipHint content="Full part name" overflowOnly><span data-testid="label">Full part name</span></TooltipHint>);
+  const label = screen.getByTestId('label');
+  hover(label);
+  expect(screen.queryByRole('tooltip')).toBeNull();
+  Object.defineProperty(label, 'clientWidth', { value: 50 });
+  Object.defineProperty(label, 'scrollWidth', { value: 100 });
+  fireEvent.pointerLeave(label);
+  hover(label);
+  expect(screen.getByRole('tooltip').textContent).toBe('Full part name');
+});
+it('keeps obvious actions accessible without a tooltip', () => {
+  vi.useFakeTimers();
+  render(<ToolbarButton tooltip={false} label="Fullscreen">Icon</ToolbarButton>);
+  const button = screen.getByRole('button', { name: 'Fullscreen' });
+  hover(button);
+  expect(screen.queryByRole('tooltip')).toBeNull();
+  expect(button.hasAttribute('title')).toBe(false);
+});

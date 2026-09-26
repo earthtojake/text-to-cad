@@ -203,6 +203,81 @@ class Manifest(unittest.TestCase):
             with self.subTest(module=module), self.assertRaises(ModuleNotFoundError):
                 importlib.import_module(module)
 
+    def _dispatch(self, *argv: str) -> tuple[int, str, str]:
+        import contextlib
+        import io
+
+        out, err = io.StringIO(), io.StringIO()
+        with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            code = cli.main(list(argv))
+        return code, out.getvalue(), err.getvalue()
+
+    def test_every_retired_command_names_its_replacement(self):
+        # Law 8: a retired surface fails loudly with a teaching error naming its
+        # replacement -- never "unknown command", never an alias that still works.
+        cases = {
+            ("gen", "model.py"): ("cadgen gen has been removed", "python <model>.py"),
+            ("gen",): ("cadgen gen has been removed", "python <model>.py"),
+            ("step", "export", "part.step", "--stl", "part.stl"): (
+                "cadgen step export has been removed", "cadgen stl build IN.step", "cadgen glb build",
+                "cadgen 3mf build",
+            ),
+            ("step", "inspect", "part.step"): ("cadgen step inspect has been removed", "read_scene"),
+            ("srdf", "snapshot", "robot.srdf"): ("cadgen snapshot <file>.srdf",),
+        }
+        for argv, expected in cases.items():
+            with self.subTest(argv=argv):
+                code, out, err = self._dispatch(*argv)
+                self.assertEqual(2, code)
+                self.assertEqual("", out)
+                self.assertNotIn("unknown command", err)
+                for text in expected:
+                    self.assertIn(text, err)
+
+    def test_a_known_format_with_a_wrong_verb_lists_that_formats_verbs(self):
+        for noun, verbs in {"step": ("step build", "step snapshot"), "stl": ("stl build", "stl snapshot"),
+                            "srdf": ("srdf validate",), "dxf": ("dxf snapshot",)}.items():
+            for rest in (("bogus",), ()):
+                with self.subTest(noun=noun, rest=rest):
+                    code, out, err = self._dispatch(noun, *rest)
+                    self.assertEqual(2, code)
+                    self.assertEqual("", out)
+                    # The NOUN is right: it is never reported as the unknown thing.
+                    self.assertNotIn(f"unknown command {noun!r}", err)
+                    self.assertIn(f"usage: cadgen {noun} <verb>", err)
+                    for verb in verbs:
+                        self.assertIn(verb, err)
+                    self.assertNotIn("urdf validate" if noun != "urdf" else "sdf validate", err)
+
+    def test_a_formats_help_lists_its_verbs_and_exits_zero(self):
+        code, out, err = self._dispatch("glb", "--help")
+        self.assertEqual((0, ""), (code, err))
+        self.assertIn("glb build", out)
+        self.assertIn("glb snapshot", out)
+        self.assertNotIn("stl build", out)
+
+    def test_an_unknown_noun_lists_every_command(self):
+        code, out, err = self._dispatch("frobnicate", "build")
+        self.assertEqual(2, code)
+        self.assertIn("unknown command 'frobnicate'", err)
+        for command in ("step build", "stl build", "snapshot", "viewer"):
+            self.assertIn(command, err)
+
+    def test_the_summaries_say_what_the_doors_do(self):
+        # A mesh door tessellates a DOCUMENT; it reads no model declaration. And
+        # `step build` names everything it can annotate, not only kinematics.
+        _, out, _ = self._dispatch("--help")
+        self.assertNotIn("model's", out)
+        for summary in (
+            "write an STL mesh of a STEP document",
+            "write a 3MF mesh of a STEP document",
+            "write a GLB mesh of a STEP document",
+        ):
+            self.assertIn(summary, out)
+        line = next(text for text in out.splitlines() if text.strip().startswith("step build"))
+        for word in ("kinematics", "materials", "animation"):
+            self.assertIn(word, line)
+
     def test_a_name_that_is_not_a_door_raises_the_plain_attribute_error(self):
         # No retired-surface recognition: `cadgen.dxf` has no `build` door, and
         # the answer is Python's own error, not a note about history.

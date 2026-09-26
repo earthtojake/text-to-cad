@@ -1,4 +1,4 @@
-"""``cadgen dxf snapshot`` — render a drawing as its 3D flat pattern.
+"""``cadgen dxf snapshot`` — draw a ``.dxf`` flat, as the CAD Viewer draws it.
 
 A GENERATED CLI over :func:`cadgen.dxf.snapshot`. There is no parser here on
 purpose: everything the command accepts is derived from the verb function's
@@ -7,9 +7,10 @@ from a parameter (design/format-doors.md). Which input kinds the door accepts
 is declared once, beside the verb, in
 :data:`cadgen._internal.snapshot_door.DOOR_KINDS`.
 
-A drawing carries no assembly topology, so this door binds the same reduced
-MESH shape the mesh doors do: a drawing is parameterized by its source, not by
-``--kinematics``.
+A drawing is not a scene, so this door binds the narrowest shape of the seven
+(:func:`cadgen._internal.snapshot_door.drawing_snapshot_verb`): where, how big,
+and light or dark. Everything that describes a camera, a surface or a light is
+absent from the signature and therefore from the command.
 """
 
 from __future__ import annotations

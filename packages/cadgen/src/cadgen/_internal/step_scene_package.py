@@ -344,7 +344,8 @@ def _scene_from_selected_bytes(resolved_step_path: Path, payload: bytes) -> Load
         ) as snapshot:
             snapshot.write(payload)
             snapshot_path = Path(snapshot.name)
-        scene = _load_step_scene_text(snapshot_path, record_read=False)
+        # The kernel reads our private snapshot; a failure names the USER's file.
+        scene = _load_step_scene_text(snapshot_path, record_read=False, named=resolved_step_path)
     finally:
         if snapshot_path is not None:
             try:

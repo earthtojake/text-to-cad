@@ -1,13 +1,11 @@
-"""Photographic Render, technical output, and tessellation are closed schemas."""
+"""Unified display, technical output, and tessellation are closed schemas."""
 
 from __future__ import annotations
 
-import io
-import json
+import inspect
 import re
 import tempfile
 import unittest
-from contextlib import redirect_stderr, redirect_stdout
 from pathlib import Path
 
 from tests.python.support.paths import add_repo_path, repo_path
@@ -16,13 +14,14 @@ add_repo_path("packages/cadgen/src")
 
 from cadgen.snapshot_core import (  # noqa: E402
     MIN_RENDER_TESSELLATION,
-    RENDER_BACKDROP_KEYS,
-    RENDER_LIGHTING_KEYS,
+    DISPLAY_APPEARANCES,
+    DISPLAY_GROUP_KEYS,
+    DISPLAY_MODES,
     RENDER_QUALITY_IDS,
-    RENDER_STUDIO_IDS,
     SUPPORTED_OUTPUT_SETTINGS_KEYS,
     SUPPORTED_QUALITY_KEYS,
     SnapshotError,
+    load_display_option,
     normalize_common_job,
     validate_render_tessellation,
 )
@@ -37,131 +36,97 @@ def normalize(**settings: object) -> dict[str, object]:
     )
 
 
-class RenderKeySchemaTest(unittest.TestCase):
-    def test_render_ids_are_closed_and_cli_defaults_to_light(self):
-        self.assertEqual({"light", "dark"}, set(RENDER_STUDIO_IDS))
+class RenderDisplaySchemaTest(unittest.TestCase):
+    def test_presets_and_appearance_are_closed(self):
+        self.assertEqual({"solid", "render", "xray", "hidden-line", "wireframe"}, set(DISPLAY_MODES))
+        self.assertEqual({"light", "dark"}, set(DISPLAY_APPEARANCES))
         self.assertEqual({"preview", "final"}, set(RENDER_QUALITY_IDS))
-        self.assertEqual({"studio": "light"}, normalize(render={})["render"])
-        for invalid in ("unknown", None, True, [], {}):
-            with self.subTest(studio=invalid), self.assertRaisesRegex(
-                SnapshotError, "render.studio must be light or dark"
-            ):
-                normalize(render={"studio": invalid})
-        for invalid in ("unknown", None, False, [], {}):
-            with self.subTest(quality=invalid), self.assertRaisesRegex(
-                SnapshotError, "render.quality must be preview or final"
-            ):
-                normalize(render={"quality": invalid})
+        for mode in DISPLAY_MODES:
+            self.assertEqual({"mode": mode}, load_display_option(mode, cwd=Path(".")))
+        for invalid in ("shaded", "transparent", "hidden_edges", "unshaded", None, True, [], {}):
+            with self.subTest(mode=invalid), self.assertRaises(SnapshotError):
+                load_display_option({"mode": invalid}, cwd=Path("."))
+        for invalid in ("system", "LIGHT", None, False, [], {}):
+            with self.subTest(appearance=invalid), self.assertRaises(SnapshotError):
+                load_display_option({"appearance": invalid}, cwd=Path("."))
 
-    def test_render_values_are_strict_and_sparse(self):
-        render = {
-            "studio": "dark",
-            "quality": "preview",
-            "exposure": -1.25,
-            "lighting": {"rotation": 180, "size": 0.25, "fill": 1},
-            "backdrop": {"color": "#123456", "transparent": True, "ground": False, "groundPlacement": "lowest"},
+    def test_preset_names_do_not_depend_on_existing_output_directories(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "render").mkdir()
+            self.assertEqual({"mode": "render"}, load_display_option("render", cwd=root))
+
+    def test_groups_are_strict_sparse_overrides_in_every_mode(self):
+        display = {
+            "mode": "solid", "appearance": "dark",
+            "camera": {"projection": "perspective", "focalLength": 85},
+            "surfaces": {"style": "flat", "colorMode": "by-part", "colors": ["#abc"], "opacity": 0.5},
+            "edges": {"visibility": "all", "color": "#123456"},
+            "lighting": {"quality": "preview", "exposure": -1.25, "rotation": 180, "size": 0.25, "fill": 1},
+            "background": {"color": "#abc", "opacity": 0.4},
+            "floor": {"enabled": False, "placement": "origin", "opacity": 0.6},
+            "grid": {}, "axes": {"enabled": False},
+            "clip": {"enabled": True, "axis": "z", "offsets": {"z": 0.5}},
+            "exploded": {"enabled": True, "amount": 0.5},
         }
-        self.assertEqual(render, normalize(render=render)["render"])
-        self.assertEqual({"rotation", "size", "fill"}, set(RENDER_LIGHTING_KEYS))
-        self.assertEqual({"color", "transparent", "ground", "groundPlacement"}, set(RENDER_BACKDROP_KEYS))
+        self.assertEqual(display, load_display_option(display, cwd=Path(".")))
+        for name in DISPLAY_GROUP_KEYS:
+            self.assertEqual({name: {}}, load_display_option({name: {}}, cwd=Path(".")))
+            for invalid in (None, True, [], "off", {"typo": True}, {"enabled": 1}):
+                with self.subTest(group=name, invalid=invalid), self.assertRaises(SnapshotError):
+                    load_display_option({name: invalid}, cwd=Path("."))
 
+    def test_group_numbers_and_values_are_strict(self):
         invalid = (
-            {"exposure": True}, {"exposure": "0"}, {"exposure": -5.01}, {"exposure": 5.01},
-            {"lighting": []}, {"lighting": {"rotation": float("inf")}},
+            {"lighting": {"exposure": True}}, {"lighting": {"exposure": "0"}},
+            {"lighting": {"exposure": -5.01}}, {"lighting": {"rotation": float("inf")}},
             {"lighting": {"rotation": -180.01}}, {"lighting": {"size": 0.24}},
             {"lighting": {"size": 3.01}}, {"lighting": {"fill": -0.01}},
-            {"lighting": {"fill": 1.01}}, {"lighting": {"fill": False}},
-            {"lighting": {"key": 1}}, {"backdrop": []},
-            {"backdrop": {"color": "white"}}, {"backdrop": {"transparent": 1}},
-            {"backdrop": {"ground": "true"}}, {"backdrop": {"floor": True}},
-            {"backdrop": {"groundPlacement": "auto"}},
+            {"lighting": {"fill": 1.01}}, {"lighting": {"quality": "high"}},
+            {"background": {"color": "white"}}, {"background": {"opacity": True}},
+            {"background": {"opacity": -0.1}}, {"background": {"opacity": 1.1}},
+            {"floor": {"placement": "auto"}}, {"floor": {"color": "blue"}},
+            {"camera": {"focalLength": 19.9}}, {"camera": {"focalLength": 200.1}},
+            {"camera": {"projection": "ortho"}}, {"surfaces": {"style": "smooth"}},
+            {"surfaces": {"colorMode": "by_part"}}, {"surfaces": {"colors": []}},
+            {"surfaces": {"colors": ["white"]}}, {"edges": {"visibility": "hidden"}},
         )
-        for render_value in invalid:
-            with self.subTest(render=render_value), self.assertRaises(SnapshotError):
-                normalize(render=render_value)
+        for display in invalid:
+            with self.subTest(display=display), self.assertRaises(SnapshotError):
+                load_display_option(display, cwd=Path("."))
 
-    def test_render_camera_is_closed_and_display_is_not_a_render_field(self):
-        with self.assertRaisesRegex(SnapshotError, "camera has unknown key"):
-            normalize(render={"camera": {"projection": "perspective", "fov": 30}})
-        with self.assertRaisesRegex(SnapshotError, "camera projection"):
-            normalize(render={"camera": {"projection": "ortho"}})
-        for half_height in (0, -1, True, "12", float("inf"), float("nan")):
-            with self.subTest(orthographicHalfHeight=half_height), self.assertRaisesRegex(
-                SnapshotError, "orthographicHalfHeight must be a positive finite number"
-            ):
-                normalize(render={"camera": {"orthographicHalfHeight": half_height}})
-        self.assertEqual(
-            18.25,
-            normalize(render={"camera": {
-                "projection": "perspective", "orthographicHalfHeight": 18.25,
-            }})["render"]["camera"]["orthographicHalfHeight"],
-        )
-        for focal_length in (19.9, 200.1, True, "50", float("inf"), float("nan")):
-            with self.subTest(focalLength=focal_length), self.assertRaisesRegex(
-                SnapshotError, "focalLength must be a finite number between 20 and 200"
-            ):
-                normalize(render={"camera": {"focalLength": focal_length}})
-        self.assertEqual(
-            85,
-            normalize(render={"camera": {"focalLength": 85}})["render"]["camera"]["focalLength"],
-        )
-        with self.assertRaisesRegex(SnapshotError, r"render has unknown key\(s\): display"):
-            normalize(render={"display": {"mode": "shaded"}})
+    def test_old_nested_surfaces_are_rejected(self):
+        for key in ("render", "guides", "partColor"):
+            with self.subTest(key=key), self.assertRaises(SnapshotError):
+                load_display_option({key: {}}, cwd=Path("."))
+
+    def test_default_job_is_light_solid_without_overriding_groups(self):
+        self.assertEqual({"mode": "solid", "appearance": "light"}, normalize()["display"])
+        self.assertEqual({"mode": "render", "appearance": "light"}, normalize(display={"mode": "render"})["display"])
+        self.assertEqual({"mode": "solid", "appearance": "dark", "background": {"opacity": 0.3}},
+                         normalize(display={"appearance": "dark", "background": {"opacity": 0.3}})["display"])
 
     def test_animation_and_output_capture_controls_remain_composable(self):
         job = normalize(
-            render={"camera": {"preset": "front"}},
+            camera={"preset": "front"}, display={"mode": "render"},
             animation={"clip": "spin", "time": 0.5},
             output={"sizeProfile": "diagnostic", "viewLabels": True},
         )
-        self.assertEqual(job["render"]["camera"], {"preset": "front"})
+        self.assertEqual(job["camera"], {"preset": "front"})
+        self.assertEqual(job["display"]["mode"], "render")
         self.assertEqual(job["animation"], {"clip": "spin", "time": 0.5})
         self.assertEqual(job["output"], {"sizeProfile": "diagnostic", "viewLabels": True})
 
-    def test_generated_cli_rejects_a_cad_flag_before_clearing_output(self):
-        from cadgen.cli import step_snapshot
-
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            output = root / "out.png"
-            output.write_bytes(b"previous")
-            stdout = io.StringIO()
-            with redirect_stderr(io.StringIO()), redirect_stdout(stdout):
-                code = step_snapshot.main(
-                    [
-                        str(root / "missing.step"),
-                        str(output),
-                        "--render", "{}",
-                        "--display", "shaded",
-                        "--json",
-                    ]
-                )
-            self.assertEqual(1, code)
-            self.assertIn(
-                "top-level CAD control(s): display",
-                json.loads(stdout.getvalue()).get("error", ""),
-            )
-            self.assertEqual(b"previous", output.read_bytes())
-
-    def test_public_api_distinguishes_an_explicit_default_from_omission(self):
+    def test_public_api_has_one_display_surface_and_no_render_parameter(self):
         from cadgen import step
-
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            with self.assertRaisesRegex(SnapshotError, "top-level CAD control\\(s\\): camera"):
-                step.snapshot(
-                    root / "missing.step",
-                    root / "out.png",
-                    render={},
-                    camera=None,
-                )
-            with self.assertRaises(Exception) as omitted:
-                step.snapshot(root / "missing.step", root / "out.png", render={})
-            self.assertNotIn("top-level CAD control", str(omitted.exception))
+        signature = inspect.signature(step.snapshot)
+        self.assertIn("display", signature.parameters)
+        self.assertIn("camera", signature.parameters)
+        self.assertNotIn("render", signature.parameters)
 
     def test_output_and_quality_are_closed(self):
         output = {
-            "sizeProfile": "diagnostic", "padding": 0.1, "paddingPercent": 0.1,
+            "sizeProfile": "diagnostic", "padding": 0.1,
             "viewLabels": True, "tightFrame": True, "transparent": True, "renderScale": 2,
         }
         self.assertEqual(set(output), set(SUPPORTED_OUTPUT_SETTINGS_KEYS))
@@ -169,6 +134,9 @@ class RenderKeySchemaTest(unittest.TestCase):
         normalize(output=output, quality={"tessellation": {"chordTolerance": 0.001}})
         with self.assertRaisesRegex(SnapshotError, "output has unknown key"):
             normalize(output={"pixels": 2})
+        # One name per setting: the old second spelling of `padding` names its replacement.
+        with self.assertRaisesRegex(SnapshotError, r"output\.paddingPercent was removed; use output\.padding"):
+            normalize(output={"paddingPercent": 0.1})
 
 
 class RenderTessellationLimitsTest(unittest.TestCase):
@@ -191,7 +159,7 @@ class RenderTessellationLimitsTest(unittest.TestCase):
         validate_render_tessellation(None)
 
     def test_the_floors_match_the_page_that_tessellates(self):
-        source = repo_path("packages/cadgen-js/src/common/source.js").read_text(encoding="utf-8")
+        source = repo_path("packages/core/src/common/source.js").read_text(encoding="utf-8")
         block = re.search(r"RENDER_TESSELLATION_FLOORS = Object\.freeze\(\{(.*?)\}\)", source, re.S)
         self.assertIsNotNone(block, "source.js no longer declares RENDER_TESSELLATION_FLOORS")
         declared = {

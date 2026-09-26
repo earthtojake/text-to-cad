@@ -56,10 +56,10 @@ def read_scene(step_path: Path | str) -> StepScene:
     Keep this scene open for repeated queries; calling again reads/hashes the
     document again so a replacement cannot masquerade as the old revision.
     """
-    from cadgen._internal.doors import document_target
+    from cadgen._internal.doors import STEP_SUFFIXES, document_target
 
     path = _record_input(step_path, reader="read_scene")
-    document_target(path, suffixes=(".step", ".stp"))
+    document_target(path, suffixes=STEP_SUFFIXES)
     from cadgen._internal.step_scene_package import load_step_scene_cached
 
     return StepScene(load_step_scene_cached(path, lazy=True))

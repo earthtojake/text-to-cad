@@ -37,16 +37,20 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     # STEP. `build` writes a NEW document (IN OUT); `compile` only makes an
     # existing document's tree current and is INTERNAL — every door
     # and the viewer compile on demand, so no skill documentation names it.
-    "step build": ("cadgen.cli.step_build", "write a new STEP from one, with kinematics"),
+    "step build": (
+        "cadgen.cli.step_build",
+        "re-emit a STEP as a new one; can add kinematics, materials, animation",
+    ),
     "step compile": ("cadgen.cli.step_compile", "make a STEP's tree current"),
     "step snapshot": ("cadgen.cli.step_snapshot", "render a STEP model to an image"),
-    # Mesh formats — one door each: `build` writes the model's declared
-    # output(s), `snapshot` renders a mesh file. One format, one door.
-    "stl build": ("cadgen.cli.stl_build", "write a model's STL output(s)"),
+    # Mesh formats — one door each: `build` tessellates a STEP DOCUMENT into this
+    # format (the sibling default, or OUT) and reads no model declaration;
+    # `snapshot` renders a mesh file. One format, one door.
+    "stl build": ("cadgen.cli.stl_build", "write an STL mesh of a STEP document"),
     "stl snapshot": ("cadgen.cli.stl_snapshot", "render an STL mesh to an image"),
-    "3mf build": ("cadgen.cli.threemf_build", "write a model's 3MF output(s)"),
+    "3mf build": ("cadgen.cli.threemf_build", "write a 3MF mesh of a STEP document"),
     "3mf snapshot": ("cadgen.cli.threemf_snapshot", "render a 3MF mesh to an image"),
-    "glb build": ("cadgen.cli.glb_build", "write a model's GLB output(s)"),
+    "glb build": ("cadgen.cli.glb_build", "write a GLB mesh of a STEP document"),
     "glb snapshot": ("cadgen.cli.glb_snapshot", "render a GLB mesh to an image"),
     # DXF. A drawing has no derived state a door must materialize: the file is
     # the product, made by running its script (python <drawing>.py), and
@@ -86,8 +90,8 @@ def read_requirements_pin(requirements_path) -> str | None:
     """The exact ``cadgen==<version>`` a requirements.txt pins, or ``None``.
 
     ``None`` covers the non-cases uniformly: file absent/unreadable, or cadgen named
-    without a pin. Callers decide what a mismatch means (``cadgen doctor`` reports it;
-    :func:`enforce_requirements_pin` exits). A source checkout's editable install
+    without a pin. The caller decides what a mismatch means (``cadgen doctor`` reports
+    it and exits 3). A source checkout's editable install
     reports the repository's VERSION, which is what the checked-in pins name, so the
     pin matches there too. String comparison rather than
     PEP 440 on purpose: pins are written mechanically as exact ``==`` by
@@ -104,51 +108,25 @@ def read_requirements_pin(requirements_path) -> str | None:
     )
 
 
-def enforce_requirements_pin(requirements_path) -> None:
-    """Fail fast when a published skill's pinned cadgen is not the installed one.
-
-    A skill is published with `cadgen==<release>` in its requirements.txt, but nothing
-    makes pip re-resolve it on a machine that already has some other cadgen — the skill
-    then runs against a runtime it was never tested against and fails far from the
-    cause. The per-verb skill shims that used to call this on every invocation are
-    gone (skills are instruction-only over the ``cadgen`` front door); ``cadgen
-    doctor`` is the user-facing check now, and this remains the enforcing primitive.
-
-    Silent (the common cases) when :func:`read_requirements_pin` finds nothing to
-    enforce, or the pin matches. Exits 3 otherwise — the same code as "cadgen is not
-    installed", since both mean the same fix.
-    """
-    pin = read_requirements_pin(requirements_path)
-    if pin is None:
-        return
-
-    from cadgen import __version__ as installed
-
-    if pin == installed:
-        return
-    sys.stderr.write(
-        f"This skill is pinned to cadgen=={pin} but cadgen {installed} is installed.\n"
-        "From the skill directory run:\n"
-        "  python -m pip install -r requirements.txt\n"
-    )
-    raise SystemExit(3)
-
-
 # Commands the warm daemon can serve, mapped to its tool names. The daemon exists to
 # avoid paying the multi-second OCP/build123d import per invocation, so the handoff has to
 # happen BEFORE the command's module is imported -- which is why it lives here in dispatch
-# rather than inside each command. It served only the skill launchers until now, so
-# skill-shim launchers were an order of magnitude faster than the front door for no reason.
+# rather than inside each command.
 #
 # Snapshot orchestration stays in the caller. Its document compilation and
 # missing surfaces already use the build pool; rendering needs no kernel.
-_DAEMON_TOOLS = {
-    "step build": "step-build",
-    "step compile": "step-compile",
-    "stl build": "stl-build",
-    "3mf build": "3mf-build",
-    "glb build": "glb-build",
-}
+#
+# ONE table: a tool's name is its command with the space dashed, and its module is
+# the command's own (`_COMMANDS`). The daemon derives what it may import from here
+# (`daemon_tool_modules`), so a door cannot be warm on one side and unknown on the other.
+_WARM_COMMANDS = ("step build", "step compile", "stl build", "3mf build", "glb build")
+_DAEMON_TOOLS = {command: command.replace(" ", "-") for command in _WARM_COMMANDS}
+
+
+def daemon_tool_modules() -> dict[str, str]:
+    """``{daemon tool name: parser module}`` for every warm-served door."""
+    return {tool: _COMMANDS[command][0] for command, tool in _DAEMON_TOOLS.items()}
+
 
 def _run_via_daemon(tool: str, rest: list[str], prog: str) -> int | None:
     """Exit code when the daemon handled it, None to run in this process.
@@ -175,10 +153,51 @@ _USAGE_TAIL = (
 )
 
 
-def _usage() -> str:
+def _command_lines(names) -> str:
     width = max((len(name) for name in _COMMANDS), default=0)
-    lines = [f"  {name.ljust(width)}  {help_text}" for name, (_, help_text) in sorted(_COMMANDS.items())]
-    return _USAGE_HEAD + "\n".join(lines) + "\n" + _USAGE_TAIL
+    return "\n".join(f"  {name.ljust(width)}  {_COMMANDS[name][1]}" for name in sorted(names)) + "\n"
+
+
+def _usage() -> str:
+    return _USAGE_HEAD + _command_lines(_COMMANDS) + _USAGE_TAIL
+
+
+def _format_verbs(noun: str) -> list[str]:
+    """The two-word commands of one format noun (``step`` -> ``step build``, ...)."""
+    return [name for name in _COMMANDS if name.split(" ")[0] == noun and " " in name]
+
+
+def _format_usage(noun: str) -> str:
+    return (
+        f"usage: cadgen {noun} <verb> [args...]\n\n{noun} commands:\n"
+        + _command_lines(_format_verbs(noun))
+        + f"\nRun 'cadgen {noun} <verb> --help' for a command's own options.\n"
+    )
+
+
+# Law 8: every retired surface fails loudly with a teaching error naming its
+# replacement -- never an alias, never a shim. Matched on the leading words of argv;
+# `step inspect` keeps its own module (it is also reachable as `python -m`).
+_RETIRED: dict[tuple[str, ...], str] = {
+    ("gen",): (
+        "cadgen gen has been removed: generation has no CLI. A model script is a program "
+        "-- run it: python <model>.py (it gates, builds, and writes the STEP/DXF, the "
+        "sidecar and every declared mesh). Per-run flags ride the script's argv: "
+        "--force, --json, --verbose, --mesh-tolerance, --mesh-angular-tolerance."
+    ),
+    ("step", "export"): (
+        "cadgen step export has been removed: each mesh format is its own door. Use "
+        "cadgen stl build IN.step [OUT.stl], cadgen 3mf build IN.step [OUT.3mf] or "
+        "cadgen glb build IN.step [OUT.glb]; to write a new STEP document use "
+        "cadgen step build IN.step OUT.step. A model's maintained meshes are declared "
+        "with @stl/@threemf/@glb and written by python <model>.py."
+    ),
+    ("srdf", "snapshot"): (
+        "cadgen srdf snapshot does not exist: an SRDF's geometry comes from the URDF "
+        "beside it, so it has no snapshot door of its own. Use cadgen snapshot "
+        "<file>.srdf [OUT.png], which routes it by suffix."
+    ),
+}
 
 
 def _harden_std_stream_errors() -> None:
@@ -235,6 +254,10 @@ def main(argv: list[str] | None = None) -> int:
         from cadgen.cli.step_inspect.cli import main as retired_inspect
 
         return retired_inspect(argv[2:])
+    for words, message in _RETIRED.items():
+        if tuple(argv[: len(words)]) == words:
+            sys.stderr.write(message + "\n")
+            return 2
 
     # Longest match first, so `step build` beats a hypothetical `step`.
     command, rest = " ".join(argv[:2]), argv[2:]
@@ -243,7 +266,17 @@ def main(argv: list[str] | None = None) -> int:
         command, rest = argv[0], argv[1:]
         entry = _COMMANDS.get(command)
     if entry is None:
-        sys.stderr.write(f"cadgen: unknown command {command!r}\n\n" + _usage())
+        noun = argv[0]
+        if _format_verbs(noun):
+            # A known format with a missing, unknown or `--help` verb: the noun is
+            # right, so answer with ITS verbs rather than calling the noun unknown.
+            if rest[:1] and rest[0] in {"-h", "--help", "help"}:
+                sys.stdout.write(_format_usage(noun))
+                return 0
+            problem = f"unknown {noun} command {rest[0]!r}" if rest else f"{noun} needs a verb"
+            sys.stderr.write(f"cadgen: {problem}\n\n" + _format_usage(noun))
+            return 2
+        sys.stderr.write(f"cadgen: unknown command {noun!r}\n\n" + _usage())
         return 2
 
     # Before the command's module is imported: the daemon exists to avoid paying the
@@ -261,8 +294,7 @@ def main(argv: list[str] | None = None) -> int:
     # `cadgen step build --help` says "cadgen step build".
     # Not every command has a parser to name (the daemon owns its own), hence
     # the signature check rather than a blanket keyword.
-    import inspect  # only the dispatcher needs it; every skill shim imports this
-                    # module just for enforce_requirements_pin and should not pay for it.
+    import inspect  # only the dispatcher needs it; `--help` and the daemon handoff do not.
 
     if "prog" in inspect.signature(module.main).parameters:
         return int(module.main(rest, prog=f"cadgen {command}") or 0)

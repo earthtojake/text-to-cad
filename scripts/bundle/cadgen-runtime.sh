@@ -3,8 +3,8 @@ set -euo pipefail
 
 # Build cadgen's non-Python runtime INTO THE PACKAGE (packages/cadgen/src/cadgen/_runtime).
 #
-# cadgen executes three things it does not write in Python: Node builders (the DXF mesh
-# and the mesh exports are baked by a JS child), a headless browser bundle (the snapshot
+# cadgen executes three things it does not write in Python: Node builders (the mesh
+# exports are baked by a JS child), a headless browser bundle (the snapshot
 # CLI drives it in a page), and the CAD Viewer's built client (`cadgen viewer` serves
 # it). cadgen.assets resolves all three inside the distribution, so there is one copy
 # and one builder of that copy: this script. scripts/bundle/bundle.sh is the entry point
@@ -25,8 +25,8 @@ set -euo pipefail
 # that proves the wheel got them.
 #
 # `--check` skips the viewer stage because it is the expensive one (a vite build of
-# apps/viewer, which needs that app's node_modules) and because a checkout serves
-# apps/viewer/dist directly -- cadgen.assets prefers it, so nothing in a checkout reads
+# apps/web, which needs that app's node_modules) and because a checkout serves
+# apps/web/dist directly -- cadgen.assets prefers it, so nothing in a checkout reads
 # _runtime/viewer. `--print-outputs` lists the two directories a bundle always produces.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -41,7 +41,7 @@ RUNTIME_DIR="$REPO_ROOT/packages/cadgen/src/cadgen/_runtime"
 NODE_DIR="$RUNTIME_DIR/node"
 BROWSER_DIR="$RUNTIME_DIR/browser"
 VIEWER_DIR="$RUNTIME_DIR/viewer"
-VIEWER_APP_DIR="$REPO_ROOT/apps/viewer"
+VIEWER_APP_DIR="$REPO_ROOT/apps/web"
 VIEWER_PACKAGE_MANAGER="${CAD_VIEWER_PACKAGE_MANAGER:-}"
 
 SNAPSHOT_BUILD_DEPS_DIR="${CADGEN_SNAPSHOT_BUILD_DEPS_DIR:-$REPO_ROOT/tmp/cadgen-snapshot-build}"
@@ -49,12 +49,11 @@ SNAPSHOT_BUILD_DEPS_DIR="${CADGEN_SNAPSHOT_BUILD_DEPS_DIR:-$REPO_ROOT/tmp/cadgen
 # What each stage owes, checked after a --check build. A stage that emits nothing, or
 # emits one file and silently drops another, is the failure this catches before a wheel
 # carries the hole to a user.
-NODE_OUTPUTS=(dxf-mesh.mjs mesh-export.mjs package.json THIRD_PARTY_LICENSES.txt)
+NODE_OUTPUTS=(mesh-export.mjs package.json THIRD_PARTY_LICENSES.txt)
 BROWSER_OUTPUTS=(snapshot-render.js render.html THIRD_PARTY_LICENSES.txt)
 
 BUILDER_ENTRIES=(
-  "$REPO_ROOT/packages/cadgen-js/bin/dxf-mesh.mjs"
-  "$REPO_ROOT/packages/cadgen-js/bin/mesh-export.mjs"
+  "$REPO_ROOT/packages/core/bin/mesh-export.mjs"
 )
 
 MODE="write"
@@ -140,7 +139,7 @@ resolve_viewer_package_manager() {
     echo "$VIEWER_PACKAGE_MANAGER"
     return
   fi
-  if [ -f "$VIEWER_APP_DIR/package-lock.json" ]; then
+  if [ -f "$REPO_ROOT/package-lock.json" ]; then
     echo "npm"
     return
   fi
@@ -184,22 +183,40 @@ build_viewer_client() {
   rsync -a --delete --exclude "*.map" "$VIEWER_APP_DIR/dist/" "$target/"
 }
 
+build_stage_packages() {
+  # Node and browser runtime stages consume only @hardcore/core and must remain
+  # runnable in Python/core CI jobs that install that workspace alone. The
+  # Viewer is the only stage that also needs @hardcore/ui.
+  if [ "$STAGE_VIEWER" -eq 1 ] && [ "$MODE" != "check" ]; then
+    npm --prefix "$REPO_ROOT" run build:packages
+  elif [ "$STAGE_NODE" -eq 1 ] || [ "$STAGE_BROWSER" -eq 1 ]; then
+    npm --prefix "$REPO_ROOT" run build -w @hardcore/core
+  fi
+}
+
 # --- third-party notices --------------------------------------------------------------
-# The builders and the browser bundle inline three and meshoptimizer. Shipping
-# them inside a wheel is redistribution, and all three are MIT: the licence text has to
-# travel with the copy. esbuild keeps the per-file banners (--legal-comments=eof); this is
-# the human-readable summary beside them.
+# The builders and the browser bundle inline three and meshoptimizer, and the browser
+# bundle three-mesh-bvh too: the robot scene it shares with the viewer picks through it.
+# Shipping them inside a wheel is redistribution, and all of them are MIT: the licence text
+# has to travel with the copy. esbuild keeps the per-file banners (--legal-comments=eof);
+# this is the human-readable summary beside them. A stage passes one line per package it
+# inlines beyond the two every stage does.
 write_third_party_notices() {
   local target="$1"
-  cat > "$target/THIRD_PARTY_LICENSES.txt" <<'EOF'
-The JavaScript in this directory is bundled output. It inlines third-party code:
-
-  three          (MIT)  https://github.com/mrdoob/three.js
-  meshoptimizer  (MIT)  https://github.com/zeux/meshoptimizer
-
+  shift
+  local extra=""
+  local line
+  for line in "$@"; do extra="$extra  $line"$'\n'; done
+  {
+    printf '%s\n\n' "The JavaScript in this directory is bundled output. It inlines third-party code:"
+    printf '%s\n' "  three          (MIT)  https://github.com/mrdoob/three.js"
+    printf '%s\n' "  meshoptimizer  (MIT)  https://github.com/zeux/meshoptimizer"
+    printf '%s' "$extra"
+    printf '\n'
+    cat <<'EOF'
 Each bundle carries the originating licence banners at end of file
 (esbuild --legal-comments=eof). Exact versions are pinned by
-packages/cadgen-js/package-lock.json at the commit that produced these files.
+package-lock.json at the commit that produced these files.
 
 MIT License
 
@@ -221,6 +238,7 @@ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
 EOF
+  } > "$target/THIRD_PARTY_LICENSES.txt"
 }
 
 build_all() {
@@ -234,7 +252,8 @@ build_all() {
   if [ "$STAGE_BROWSER" -eq 1 ]; then
     ensure_snapshot_runtime_deps "$SNAPSHOT_BUILD_DEPS_DIR" 1
     build_snapshot_runtime "$root/browser" "$SNAPSHOT_BUILD_DEPS_DIR"
-    write_third_party_notices "$root/browser"
+    write_third_party_notices "$root/browser" \
+      "three-mesh-bvh (MIT)  https://github.com/gkjohnson/three-mesh-bvh"
     echo "Bundled ${root#"$REPO_ROOT"/}/browser"
   fi
   if [ "$STAGE_VIEWER" -eq 1 ] && [ "$MODE" != "check" ]; then
@@ -244,6 +263,7 @@ build_all() {
 }
 
 mkdir -p "$RUNTIME_DIR"
+build_stage_packages
 build_all "$RUNTIME_DIR"
 
 if [ "$MODE" = "check" ]; then

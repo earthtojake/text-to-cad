@@ -409,20 +409,23 @@ class SidecarTruthiness(ScannerTestCase):
         self.package("u.STP", {"kind": "assembly-package", "components": {"c0": {}}})
         self.assertTrue(self.entry("u.STP")["sourceUrl"].startswith("/u.STP.json?v="))
 
-    def test_a_sidecar_for_different_step_bytes_reports_annotation_error(self):
+    # A sidecar this build cannot read is no sidecar: the document renders, with
+    # no kinematics, no materials and no routine, and the entry says nothing
+    # about it. The migration is announced by the build and by the cad skill.
+    def test_a_sidecar_for_different_step_bytes_is_dropped_quietly(self):
         self.write("stale.step", "old\n")
         self.sidecar("stale.step", {"kinematics": {}})
         self.write("stale.step", "new\n")
         self.package("stale.step", {"kind": "assembly-package", "components": {"c0": {}}})
 
         entry = self.entry("stale.step")
-        self.assertIn("does not match stale.step sha256", entry["annotationError"])
+        self.assertNotIn("annotationError", entry)
         self.assertNotIn("sourceUrl", entry)
         self.assertNotIn("poseUrl", entry)
         self.assertTrue(entry["url"].startswith("/__cad/store?file="))
         self.assertEqual(entry["documentHash"], hashlib.sha256(b"new\n").hexdigest())
 
-    def test_a_schema_six_sidecar_is_a_hard_cutover_annotation_error(self):
+    def test_a_schema_six_sidecar_is_a_hard_cutover_and_is_dropped_quietly(self):
         self.write("old.step", "x\n")
         self.write(
             "old.step.json",
@@ -431,11 +434,11 @@ class SidecarTruthiness(ScannerTestCase):
         self.package("old.step", {"kind": "assembly-package", "components": {"c0": {}}})
 
         entry = self.entry("old.step")
-        self.assertIn("unsupported sidecar schema 6 (expected 9)", entry["annotationError"])
+        self.assertNotIn("annotationError", entry)
         self.assertNotIn("sourceUrl", entry)
         self.assertNotIn("poseUrl", entry)
 
-    def test_invalid_appearance_is_a_catalog_annotation_error(self):
+    def test_invalid_appearance_drops_the_sidecar_without_an_entry_field(self):
         self.write("bad-finish.step", "x\n")
         self.sidecar("bad-finish.step", {
             "appearance": {"materials": {"finish": {"name": "Finish", "roughness": "glossy"}}, "assignments": {"o1.1": "finish"}}
@@ -443,7 +446,7 @@ class SidecarTruthiness(ScannerTestCase):
         self.package("bad-finish.step", {"kind": "assembly-package", "components": {"c0": {}}})
 
         entry = self.entry("bad-finish.step")
-        self.assertIn("must be a finite number between 0 and 1", entry["annotationError"])
+        self.assertNotIn("annotationError", entry)
         self.assertNotIn("sourceUrl", entry)
         self.assertNotIn("appearanceHash", entry)
 

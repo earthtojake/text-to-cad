@@ -146,6 +146,18 @@ class ResultShape(unittest.TestCase):
         self.assertEqual(result.files, ())
         self.assertEqual(result.parts[0]["ref"], "#o1.1")
 
+    def test_debug_without_json_prints_one_line_per_input_after_the_saved_paths(self) -> None:
+        # `--debug` alone used to compute the diagnostics and print nothing.
+        result = SnapshotResult(
+            ok=True, files=(SnapshotFile(path=Path("/tmp/a.png"), kind="png"),), warnings=("low light",),
+            debug=({"input": "part.step", "stageTimings": {"renderMs": 12}},),
+        )
+        self.assertEqual(result.human_lines(), [
+            "saved snapshot: /tmp/a.png",
+            "warning: low light",
+            'debug: {"input":"part.step","stageTimings":{"renderMs":12}}',
+        ])
+
     def test_an_empty_inventory_still_prints_itself(self) -> None:
         # List mode with zero parts answers `[]`, not silence.
         listing = {"ok": True, "mode": "list", "parts": []}
@@ -332,8 +344,8 @@ class PublicVerbs(unittest.TestCase):
         The doors used to share ONE signature and refuse the options a format
         cannot act on at runtime — so `cadgen stl snapshot --help` advertised
         `--kinematics`, `--focus` and `--hide` to a reader holding a mesh, and
-        every one of them errored. Render, camera and the format-neutral parts
-        of Display are intentionally shared by every door.
+        every one of them errored. Camera and the unified format-neutral Display
+        object are intentionally shared by every door.
         """
         import importlib
         import inspect as inspect_module
@@ -350,18 +362,28 @@ class PublicVerbs(unittest.TestCase):
         )
         self.assertNotIn("joint_values", step, "a STEP model has no joints to pose")
 
-        for door in ("stl", "threemf", "glb", "dxf"):
+        for door in ("stl", "threemf", "glb"):
             with self.subTest(door=door):
                 mesh = parameters(f"cadgen.{door}")
-                self.assertLessEqual({"render", "camera", "display"}, mesh)
+                self.assertLessEqual({"camera", "display"}, mesh)
+                self.assertNotIn("render", mesh)
                 for absent in ("kinematics", "focus", "hide", "joint_values"):
                     self.assertNotIn(absent, mesh, f"{absent} has nothing to act on here")
+
+        # The drawing door is the narrowest of the four shapes: a DXF is drawn
+        # flat, so there is no scene to stage and nothing to pose or frame.
+        drawing = parameters("cadgen.dxf")
+        self.assertIn("appearance", drawing)
+        for absent in ("camera", "display", "mode", "view_labels",
+                       "kinematics", "focus", "hide", "joint_values", "section"):
+            self.assertNotIn(absent, drawing, f"{absent} describes a scene a drawing does not have")
 
         for door in ("urdf", "sdf"):
             with self.subTest(door=door):
                 robot = parameters(f"cadgen.{door}")
                 self.assertIn("joint_values", robot)
-                self.assertLessEqual({"render", "camera", "display"}, robot)
+                self.assertLessEqual({"camera", "display"}, robot)
+                self.assertNotIn("render", robot)
                 for absent in ("kinematics", "focus", "hide"):
                     self.assertNotIn(absent, robot, f"{absent} requires STEP topology")
 
@@ -385,7 +407,14 @@ class PublicVerbs(unittest.TestCase):
             return set(inspect_module.signature(verb).parameters)
 
         self.assertEqual(parameters("urdf") - {"joint_values"}, parameters("stl"))
-        self.assertEqual(parameters("stl"), parameters("dxf"))
+        # A drawing is deliberately NOT one of them: it shares the whole of what
+        # is left after the scene goes (where, how big, and which appearance),
+        # and adds nothing the mesh shape does not also mean.
+        self.assertLessEqual(
+            parameters("dxf") - {"appearance"},
+            parameters("stl"),
+            "the drawing door invented a spelling the mesh door does not have",
+        )
 
 
     def test_a_verb_with_no_target_says_so_rather_than_reading_stdin(self) -> None:

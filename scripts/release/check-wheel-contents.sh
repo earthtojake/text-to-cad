@@ -74,7 +74,6 @@ REQUIRED=(
   "cadgen/step_topology_artifact.py"
   "cadgen/_internal/node_resolve_register.mjs"
   "cadgen/_internal/node_resolve_hooks.mjs"
-  "cadgen/_runtime/node/dxf-mesh.mjs"
   "cadgen/_runtime/node/mesh-export.mjs"
   "cadgen/_runtime/node/package.json"
   "cadgen/_runtime/node/THIRD_PARTY_LICENSES.txt"

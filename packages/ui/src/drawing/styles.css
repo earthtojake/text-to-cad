@@ -1,0 +1,83 @@
+.hardcore-drawing-editor {
+  height: 100%;
+  width: 100%;
+  min-height: 0;
+  isolation: isolate;
+  color-scheme: light;
+}
+.hardcore-drawing-editor .excalidraw {
+  --ui-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --default-font: var(--ui-font);
+  --color-primary: #525252;
+  --color-primary-darker: #404040;
+  --color-primary-darkest: #262626;
+  --color-primary-light: #f5f5f5;
+  --color-primary-hover: #404040;
+  --color-brand-hover: #404040;
+  --color-brand-active: #525252;
+  --color-selection: #737373;
+  --color-surface-high: #f5f5f5;
+  --color-surface-mid: #fafafa;
+  --color-surface-low: #f5f5f5;
+  --color-surface-lowest: #fff;
+  --color-surface-primary-container: #e5e5e5;
+  --color-on-primary-container: #262626;
+  --color-on-surface: #262626;
+  --color-border-outline: #a3a3a3;
+  --color-border-outline-variant: #e5e5e5;
+  --default-button-size: 1.75rem;
+  --lg-button-size: 1.75rem;
+  --border-radius-md: 0.375rem;
+  --border-radius-lg: 0.375rem;
+  --editor-container-padding: 0.75rem;
+  --shadow-island: 0 1px 3px rgb(0 0 0 / 0.08), 0 0 0 1px #e5e5e5;
+  font-family: var(--ui-font);
+  font-size: var(--text-ui, 0.8125rem);
+}
+.hardcore-drawing-editor .excalidraw button,
+.hardcore-drawing-editor .excalidraw .dropdown-menu-item {
+  font-family: var(--ui-font);
+  font-size: var(--text-ui, 0.8125rem);
+}
+.hardcore-drawing-editor[data-drawing-mode="overlay"] .excalidraw { background: transparent; }
+/* The SDK paints its default white page until the given scene is in place. */
+.hardcore-drawing-editor[data-drawing-mode="overlay"]:not([data-drawing-ready]) .excalidraw { visibility: hidden; }
+
+/* `DrawingToolbar` is the editor's only control surface, here or placed by the
+   host. The canvases, the in-place text editor and the context menu stay;
+   every SDK control goes. These selectors follow the SDK's pinned DOM. */
+.hardcore-drawing-editor .layer-ui__wrapper,
+.hardcore-drawing-editor .App-top-bar,
+.hardcore-drawing-editor .App-bottom-bar,
+.hardcore-drawing-editor .FixedSideContainer { display: none; }
+
+.hardcore-drawing-editor { position: relative; }
+.hardcore-drawing-editor__toolbar {
+  position: absolute;
+  top: 0.75rem;
+  left: 50%;
+  z-index: 3;
+  width: max-content;
+  max-width: calc(100% - 1.5rem);
+  transform: translateX(-50%);
+  align-items: center;
+  pointer-events: none;
+}
+/* The editor is always light, whatever the application around it is. */
+.hardcore-drawing-editor .hardcore-drawing-toolbar {
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --border: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  color: var(--foreground);
+}
+/* Viewer actions do not show notifications, including the SDK's own messages. */
+.hardcore-drawing-editor .excalidraw .Toast { display: none; }

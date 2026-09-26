@@ -8,7 +8,7 @@ That is not hypothetical: the Orbit button was gated off per format independentl
 had to be fixed twice, and one format grew a parallel export route to an endpoint the
 server does not implement.
 
-The fix is the capability registry (``packages/cadgen-js/src/lib/renderCapabilities.js``):
+The fix is the capability registry (``packages/core/src/lib/renderCapabilities.js``):
 code asks *what a format can do*, not *what it is*. This test ratchets the old pattern
 downward so it cannot grow back — without it the count creeps up again one feature at a
 time and the unification silently rots.
@@ -24,20 +24,26 @@ import unittest
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-CLIENT_ROOT = REPO_ROOT / "apps" / "viewer" / "src" / "client"
+UI_ROOT = REPO_ROOT / "packages" / "ui" / "src"
+CLIENT_ROOT = UI_ROOT / "renderers" / "step"
 
 # Every remaining identity check is a unification candidate. Lower these as phases land;
 # never raise them.
-MAX_RENDER_FORMAT_CHECKS = 18
-MAX_FORMAT_PREDICATE_CALLS = 3
+#
+# 13 -> 0. Every check was the STEP renderer asking whether an entry was a STEP, inside a
+# renderer whose registry match already guarantees it. The file view asked eight times; the
+# STEP artifact helpers took a ``sourceFormat`` that only ever arrived as STEP (they existed
+# so a DXF, served by the same renderer then, would not get a STEP artifact card); the asset
+# loaders were allowlisted as "per-format" long after every other format had its own
+# renderer. At 0 this is a regression gate: one reappearing check fails it.
+MAX_RENDER_FORMAT_CHECKS = 0
+MAX_FORMAT_PREDICATE_CALLS = 0
 
 # Files allowed to know about concrete formats, because deciding *which* format an entry
 # is, or loading it, is their whole job. Everything else must go through capabilities.
 ALLOWLIST = {
     # The registry and the format enum themselves.
     "workbench/constants.js",
-    # Per-format loaders: genuinely different work per format.
-    "components/workbench/hooks/useCadAssets.js",
 }
 
 RENDER_FORMAT_MEMBER = re.compile(
@@ -80,7 +86,7 @@ class ViewerFormatCapabilityPolicyTest(unittest.TestCase):
             MAX_RENDER_FORMAT_CHECKS,
             "viewer client gained RENDER_FORMAT identity checks "
             f"({total} > {MAX_RENDER_FORMAT_CHECKS}). Gate on a capability from "
-            "cadgen-js/lib/renderCapabilities instead of on the format's identity. "
+            "@hardcore/core/lib/renderCapabilities instead of on the format's identity. "
             f"Heaviest files: {worst}",
         )
 
@@ -117,21 +123,43 @@ class ViewerFormatCapabilityPolicyTest(unittest.TestCase):
         These are the shell: if they start branching on format identity again, every
         feature added to one format stops reaching the others.
         """
-        for relative in (
-            "components/workbench/FloatingToolBar.js",
-            "components/workbench/CadRenderPane.js",
-            # The renderer itself: it draws every format, so a format check here is a
-            # feature one format gets and the others silently do not.
-            "components/CadViewer.js",
+        # The STEP scene and everything of it that lives in the kit's viewport
+        # (`CadViewer.js` and `CadRenderPane.js` before the renderer split). They show ONE
+        # family, so there is no format left for them to ask about. The sweep is asserted
+        # non-empty: a renamed directory would otherwise match nothing and pass in silence.
+        scene_sources = sorted(
+            path
+            for suffix in ("*.js", "*.jsx")
+            for path in (CLIENT_ROOT / "scene").glob(suffix)
+            if not path.name.endswith((".test.js", ".test.jsx"))
+        )
+        self.assertGreater(
+            len(scene_sources),
+            5,
+            f"swept no scene sources under {CLIENT_ROOT / 'scene'} — did the directory move?",
+        )
+        for path in (
+            # The STEP surface itself, on the shell since the renderer split finished: it shows
+            # ONE family, so it has no format left to ask about either. (It replaced
+            # `file-view/CadFileView.js`, and STEP's own `FloatingToolBar.js` went with it.)
+            CLIENT_ROOT / "StepSurface.jsx",
+            *scene_sources,
             # Status, alerts and the file list: every one of these was a per-format
             # cascade, and each cascade was a place a new format inherited the wrong
             # advice, the wrong icon or no spinner at all.
-            "workbench/viewerAlerts.js",
-            "workbench/entryIconKind.js",
-            "workbench/entryIconStatus.js",
-            "components/workbench/CadWorkspaceHome.js",
+            CLIENT_ROOT / "workbench/viewerAlerts.js",
+            UI_ROOT / "file-viewer/navigation/entryIconKind.js",
+            # The file list, which is now the SHARED file tree and the adapter that
+            # feeds it — drawn by the standalone viewer and by the desktop app alike,
+            # so a format check in either is a format one app lists and the other
+            # does not. (It replaced `components/workbench/CadWorkspaceHome.js` and
+            # `components/workbench/FileViewerSidebar.js`, which were the standalone's
+            # own home screen and left sidebar.)
+            UI_ROOT / "file-viewer/navigation/FileTree.jsx",
+            REPO_ROOT / "apps/web/src/adapters/fileSource.ts",
         ):
-            source = (CLIENT_ROOT / relative).read_text(encoding="utf-8")
+            source = path.read_text(encoding="utf-8")
+            relative = path.relative_to(REPO_ROOT).as_posix()
             self.assertEqual(
                 RENDER_FORMAT_MEMBER.findall(source),
                 [],

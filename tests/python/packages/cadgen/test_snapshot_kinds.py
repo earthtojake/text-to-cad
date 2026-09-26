@@ -46,6 +46,11 @@ DOOR_COMMANDS = {
     "sdf": "cadgen.cli.sdf_snapshot",
 }
 
+# Every door that stages a SCENE. A drawing is drawn flat, so `cadgen dxf
+# snapshot` has no display settings at all — `--appearance` alone decides its
+# background, and therefore the colour of its default pen.
+SCENE_DOORS = tuple(door for door in DOOR_COMMANDS if door != "dxf")
+
 
 def door_help(door: str) -> str:
     """One door's real ``--help``, generated from its verb's signature."""
@@ -229,13 +234,23 @@ class GeneratedHelpTests(unittest.TestCase):
         for present in ("--kinematics", "--animation", "--time", "--focus", "section", "--view-labels"):
             self.assertIn(present, step_help)
 
-    def test_render_is_one_option_everywhere_and_theme_teaches_the_cutover(self):
-        for door in DOOR_COMMANDS:
+    def test_display_is_the_one_view_option_on_every_door_that_has_a_scene(self):
+        for door in SCENE_DOORS:
             with self.subTest(door=door):
                 text = door_help(door)
-                self.assertIn("--render", text)
+                self.assertIn("--display", text)
+                self.assertNotIn("--render", text)
                 self.assertNotIn("--theme", text)
                 self.assertNotIn("--appearance", text)
+
+    def test_the_drawing_door_takes_an_appearance_instead_of_a_display(self):
+        # The exception, and the only one: there is no scene to configure, so
+        # `--appearance` is not a second spelling of `--display` — it is what
+        # is left when everything else has no meaning.
+        text = door_help("dxf")
+        self.assertIn("--appearance", text)
+        for absent in ("--display", "--camera", "--mode", "--view-labels", "--render", "--theme"):
+            self.assertNotIn(absent, text, f"{absent} describes a scene a drawing does not have")
 
     def test_every_door_takes_its_target_and_output_positionally(self):
         # One grammar across the schema: `cadgen <fmt> build TARGET [OUT]` and
@@ -247,8 +262,8 @@ class GeneratedHelpTests(unittest.TestCase):
                 self.assertNotIn("--input", text)
                 self.assertNotIn("--output", text)
 
-    def test_format_neutral_display_is_offered_everywhere(self):
-        for door in DOOR_COMMANDS:
+    def test_format_neutral_display_is_offered_to_every_scene_door(self):
+        for door in SCENE_DOORS:
             with self.subTest(door=door):
                 self.assertIn("--display", door_help(door))
 

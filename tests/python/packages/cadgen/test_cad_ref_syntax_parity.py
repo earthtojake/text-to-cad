@@ -1,8 +1,8 @@
 """The Python and JS selector grammars are two implementations of one language.
 
-`cadgen.cad_ref_syntax` and `cadgen-js/lib/cadRefs.js` parse the same refs, and before this fixture
+`cadgen.cad_ref_syntax` and `@hardcore/core/lib/cadRefs.js` parse the same refs, and before this fixture
 existed nothing checked that they agreed -- the grammar was copy-pasted into four places. Both
-suites read `packages/cadgen-js/src/lib/cadRefs.parity.json`, so a form added to one language and
+suites read `packages/core/src/lib/cadRefs.parity.json`, so a form added to one language and
 forgotten in the other fails here rather than in a user's pasted ref.
 """
 
@@ -24,7 +24,7 @@ from cadgen.cad_ref_syntax import (
 )
 
 
-FIXTURE_PATH = repo_path("packages", "cadgen-js", "src", "lib", "cadRefs.parity.json")
+FIXTURE_PATH = repo_path("packages", "core", "src", "lib", "cadRefs.parity.json")
 
 
 def _fixture() -> dict:
@@ -211,3 +211,12 @@ class RefFileGuardTest(unittest.TestCase):
         self.assertFalse(path_has_suffix("a/b/plate.stl", "late.stl"))
         self.assertFalse(path_has_suffix("plate.stl", "a/plate.stl"))
         self.assertFalse(path_has_suffix("a/b/plate.stl", ""))
+
+class ImportedFilenameTokenTests(unittest.TestCase):
+    def test_quoted_paths_round_trip(self) -> None:
+        for path in ['models/Hex Drive Screw (2).STEP', 'models/café #1 "screw".STEP']:
+            token = build_cad_token(path, 'o1.f2,o1.f3')
+            parsed = parse_cad_tokens(token)
+            self.assertEqual(1, len(parsed))
+            self.assertEqual(path, parsed[0].cad_path)
+            self.assertEqual(('o1.f2', 'o1.f3'), parsed[0].selectors)

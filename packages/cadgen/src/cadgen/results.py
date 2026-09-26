@@ -31,12 +31,9 @@ __all__ = [
 
 def _display(path: Path | None) -> str:
     """Cwd-relative where that is meaningful, else absolute. Messages only."""
-    if path is None:
-        return "-"
-    try:
-        return str(Path(path).resolve().relative_to(Path.cwd().resolve()))
-    except (OSError, ValueError):
-        return str(path)
+    from cadgen._internal.doors import display_path
+
+    return "-" if path is None else display_path(path)
 
 
 @dataclass(frozen=True)
@@ -80,10 +77,6 @@ class BuildResult:
     tree: str | None
     #: True when the freshness gate said the output was already current.
     skipped: bool
-    #: Declared artifacts produced (or healed) by THIS run. Outputs the ledger
-    #: already found current are not listed: the field answers "what did this
-    #: run write", not "what does the model declare".
-    exports: tuple[Path, ...] = ()
     #: True when the bytes were already current and only the sidecar (the
     #: kinematics/animation annotation) was refreshed.
     sidecar_only: bool = False
@@ -92,9 +85,7 @@ class BuildResult:
         if self.sidecar_only:
             return [f"annotated {_display(self.document)} (bytes unchanged)"]
         head = "current" if self.skipped else "built"
-        lines = [f"{head} {_display(self.document) if self.document else (self.tree or '')}"]
-        lines += [f"wrote {path.suffix.lstrip('.').upper()}: {_display(path)}" for path in self.exports]
-        return lines
+        return [f"{head} {_display(self.document) if self.document else (self.tree or '')}"]
 
 
 def _format_bytes(value: float) -> str:
@@ -156,8 +147,9 @@ class MeshExportFile:
     #: True when the mesh-export ledger already had this document at this
     #: tolerance pair, so nothing was re-tessellated.
     skipped: bool
-    #: The EFFECTIVE pair (run-level arg > declaration > @step model policy >
-    #: tessellator default, which is ``None``).
+    #: The EFFECTIVE pair the file was written at: the door's argument, else the
+    #: tessellator's default (1.5e-3 / 0.35) -- a number either way, never null.
+    #: A door reads no model declaration.
     mesh_tolerance: float | None = None
     mesh_angular_tolerance: float | None = None
     #: The clip baked into this file, for an animated GLB: ``{clip, fps,
@@ -276,6 +268,9 @@ class SnapshotResult:
             for entry in self.files
         ]
         lines += [f"warning: {warning}" for warning in self.warnings]
+        # `--debug` without `--json` still answers: one compact JSON line per input,
+        # so the diagnostics asked for are never computed and then thrown away.
+        lines += [f"debug: {json.dumps(entry, separators=(',', ':'), sort_keys=True)}" for entry in self.debug]
         return lines
 
 

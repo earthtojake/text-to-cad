@@ -27,7 +27,7 @@ from cadgen._internal.mesh_animation import AnimationSnapshot
 
 MESH_EXPORT_BUILDER = "mesh-export.mjs"
 MESH_EXPORT_RECORD_KIND = "mesh-export"
-# Mirrored by cadgen-js/glb/writeGlb.js. This is the final GLB serializer's
+# Mirrored by packages/core/src/lib/glb/writeGlb.js. This is the final GLB serializer's
 # revision, not the glTF container version and not a tessellation-cache salt.
 GLB_SERIALIZATION_VERSION = 3
 
@@ -144,8 +144,7 @@ def run_mesh_exporter(
             break
     missing = [job.out for job in jobs if not job.out.is_file()]
     if not payload.get("ok") or missing:
-        detail = str(payload.get("error") or proc.stderr or f"exit {proc.returncode}").strip()
-        raise RuntimeError(f"mesh export failed for {label}: {detail}")
+        raise RuntimeError(f"mesh export failed for {label}: {_exporter_failure_detail(proc, payload, missing)}")
     # What the sampling could not carry -- a frozen opacity, a tube shipped at
     # rest, a span past the end of a clip that does not loop -- rides the payload
     # to the caller's RESULT rather than the log. The builder refuses anything
@@ -153,6 +152,30 @@ def run_mesh_exporter(
     # them silently is the whole failure this door avoids. Logging them here as
     # well would say each one twice to a human and still leave --json silent.
     return payload
+
+
+def _exporter_failure_detail(proc: Any, payload: dict, missing: "list[Path]") -> str:
+    """Everything the Node exporter said about a failure, in one message.
+
+    The builder's own ``error`` comes first when it reported one -- but the exit
+    status and the tail of its stderr ride along ALWAYS. A failure that produced
+    no JSON (a crashed or killed process, an import error in the runtime) or that
+    claimed ``ok`` without writing its files used to surface as a bare ``exit 1``
+    or as nothing at all, which made a one-in-many flake undiagnosable."""
+    parts: list[str] = []
+    error = str(payload.get("error") or "").strip()
+    if error:
+        parts.append(error)
+    elif payload.get("ok") and missing:
+        parts.append("the exporter reported success but did not write " + ", ".join(path.name for path in missing))
+    elif not payload:
+        parts.append("the exporter printed no result")
+    parts.append(f"exit status {proc.returncode}")
+    stderr = str(proc.stderr or "").strip()
+    if stderr:
+        tail = stderr.splitlines()[-20:]
+        parts.append("exporter stderr:\n  " + "\n  ".join(tail))
+    return "; ".join(parts)
 
 
 def _tolerance_token(value: float | None) -> str:

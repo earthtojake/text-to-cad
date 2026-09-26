@@ -108,7 +108,6 @@ from cadgen.snapshot_core import (
     resolve_output_target,
     resolve_snapshot_route_file,
     snapshot_result,
-    validate_render_job_compatibility,
 )
 from cadgen._internal.cli_from_function import emit, result_payload
 
@@ -149,13 +148,8 @@ def options_from_argv(argv, entry=None):
 def job_from_argv(argv, entry=None):
     """One documented invocation, all the way to the render job it becomes."""
     return load_job_from_options(
-        options_from_argv(argv, entry), stdin=_TtyStringIO(), cwd=Path.cwd()
+        options_from_argv(argv, entry), cwd=Path.cwd()
     )
-
-
-class _TtyStringIO(io.StringIO):
-    def isatty(self) -> bool:
-        return True
 
 
 def _selector_artifact(*occurrence_ids: str) -> SimpleNamespace:
@@ -248,8 +242,9 @@ class SnapshotCliTests(unittest.TestCase):
 
     def test_the_door_advertises_only_what_it_takes(self) -> None:
         text = cad_snapshot_entry.build_parser().format_help()
-        for flag in ("--camera", "--display", "--render"):
+        for flag in ("--camera", "--display"):
             self.assertIn(flag, text)
+        self.assertNotIn("--render", text)
         for flag in self.NON_FLAGS:
             if flag.startswith("--"):
                 with self.subTest(flag=flag):
@@ -268,8 +263,7 @@ class SnapshotCliTests(unittest.TestCase):
 
     def test_display_shortcut_accepts_cad_display_modes(self) -> None:
         for raw_mode in (
-            "shaded", "shaded_edges", "transparent", "hidden_edges",
-            "hidden_lines_removed", "unshaded", "wireframe",
+            "solid", "render", "xray", "hidden-line", "wireframe",
         ):
             job = job_from_argv(
                 [
@@ -287,13 +281,13 @@ class SnapshotCliTests(unittest.TestCase):
                 "parts/STEP/cylindrical_cap.step",
                 "tmp/cap.png",
                 "--display",
-                '{"mode":"shaded","exploded":{"enabled":true,"amount":0.7}}',
+                '{"mode":"solid","exploded":{"enabled":true,"amount":0.7}}',
             ]
         )
         self.assertEqual(
             job["display"],
             {
-                "mode": "shaded",
+                "mode": "solid",
                 "exploded": {"enabled": True, "amount": 0.7},
             },
         )
@@ -308,127 +302,138 @@ class SnapshotCliTests(unittest.TestCase):
             ]
         )
 
-    def test_projection_belongs_to_camera(self) -> None:
-        with self.assertRaisesRegex(SnapshotError, "projection belongs in camera"):
-            self._display_job('{"projection":"ortho"}')
-        with self.assertRaisesRegex(SnapshotError, "orthographicHalfHeight belongs in camera"):
-            self._display_job('{"orthographicHalfHeight":24.5}')
-        with self.assertRaisesRegex(SnapshotError, "focalLength belongs in camera"):
-            self._display_job('{"focalLength":70}')
-        job = job_from_argv([
-            "parts/STEP/cylindrical_cap.step", "tmp/cap.png",
-            "--camera", '{"preset":"iso","projection":"orthographic"}',
-        ])
-        self.assertEqual(job["outputs"][0]["camera"]["projection"], "orthographic")
+    def test_projection_belongs_to_display_camera(self) -> None:
+        for key, value in (("projection", "orthographic"), ("focalLength", 85)):
+            with self.subTest(key=key), self.assertRaisesRegex(SnapshotError, "belongs in display.camera"):
+                self._display_job(json.dumps({key: value}))
+            with self.subTest(key=key), self.assertRaisesRegex(SnapshotError, "belongs in display.camera"):
+                job_from_argv(["part.step", "tmp/out.png", "--camera", json.dumps({key: value})])
+        job = self._display_job('{"camera":{"projection":"perspective","focalLength":85}}')
+        self.assertEqual(job["display"]["camera"], {"projection": "perspective", "focalLength": 85})
 
     def test_camera_accepts_orthographic_half_height(self) -> None:
         job = job_from_argv([
             "parts/STEP/cylindrical_cap.step", "tmp/cap.png",
-            "--camera", '{"projection":"orthographic","orthographicHalfHeight":24.5}',
+            "--camera", '{"orthographicHalfHeight":24.5}',
         ])
-        self.assertEqual(
-            job["outputs"][0]["camera"],
-            {"projection": "orthographic", "orthographicHalfHeight": 24.5},
-        )
+        self.assertEqual(job["outputs"][0]["camera"], {"orthographicHalfHeight": 24.5})
         with self.assertRaisesRegex(SnapshotError, "orthographicHalfHeight must be a positive finite number"):
-            job_from_argv([
-                "parts/STEP/cylindrical_cap.step", "tmp/cap.png",
-                "--camera", '{"orthographicHalfHeight":0}',
-            ])
+            job_from_argv(["part.step", "tmp/out.png", "--camera", '{"orthographicHalfHeight":0}'])
 
-    def test_camera_accepts_strict_focal_length(self) -> None:
-        job = job_from_argv([
-            "parts/STEP/cylindrical_cap.step", "tmp/cap.png",
-            "--camera", '{"projection":"perspective","focalLength":85}',
-        ])
-        self.assertEqual(
-            job["outputs"][0]["camera"],
-            {"projection": "perspective", "focalLength": 85},
-        )
-        with self.assertRaisesRegex(SnapshotError, "focalLength must be a finite number between 20 and 200"):
-            job_from_argv([
-                "parts/STEP/cylindrical_cap.step", "tmp/cap.png",
-                "--camera", '{"focalLength":19}',
-            ])
+    def test_display_camera_accepts_strict_focal_length(self) -> None:
+        for invalid in (19, 201, True, None, "85"):
+            with self.subTest(value=invalid), self.assertRaisesRegex(SnapshotError, "focalLength must be a finite number between 20 and 200"):
+                self._display_job(json.dumps({"camera": {"focalLength": invalid}}))
 
     def test_display_json_rejects_bad_mode_value(self) -> None:
-        with self.assertRaisesRegex(SnapshotError, "--display mode must be one of"):
+        with self.assertRaisesRegex(SnapshotError, "display.mode must be one of"):
             self._display_job('{"mode":"shadedd"}')
+
+    def test_step_only_display_settings_are_refused_for_other_inputs_by_name(self) -> None:
+        # Edges, Explode and Clip belong to a CAD model; the viewer does not offer them
+        # for a mesh, a robot or a drawing, and a snapshot that ignored the request in
+        # silence would be a picture of something nobody asked for.
+        validate = snapshot_core.validate_display_for_kind
+        for kind in ("step", "stp"):
+            validate({"mode": "wireframe", "edges": {"enabled": True}, "clip": {"axis": "x"},
+                      "exploded": {"amount": 0.5}}, kind=kind, input_label="part.step")
+        # A DXF is absent on purpose: it takes no display at all, so its own
+        # check (cadgen.snapshot_cli.check_drawing_render_job) refuses every key
+        # but `appearance` — a stricter rule, and this one steps aside for it.
+        validate({"mode": "wireframe", "clip": {"axis": "x"}}, kind="dxf", input_label="panel.dxf")
+        for kind in ("stl", "3mf", "glb", "urdf", "srdf", "sdf"):
+            validate({"mode": "solid", "appearance": "light"}, kind=kind, input_label=f"part.{kind}")
+            validate({"mode": "render", "lighting": {"exposure": 0.5}, "floor": {"placement": "lowest"},
+                      "surfaces": {"opacity": 0.5}, "grid": {"enabled": False}}, kind=kind, input_label=f"part.{kind}")
+            for request, named in (
+                ({"clip": {"axis": "x"}}, r"display\.clip applies to STEP models only"),
+                ({"exploded": {"amount": 0.4}}, r"display\.exploded applies to STEP models only"),
+                ({"edges": {"enabled": False}}, r"display\.edges applies to STEP models only"),
+                ({"mode": "xray"}, r"display\.mode 'xray' applies to STEP models only"),
+                ({"mode": "wireframe", "clip": {"axis": "z"}}, r"display\.clip, display\.mode 'wireframe' apply to STEP models only"),
+            ):
+                with self.subTest(kind=kind, request=request), self.assertRaisesRegex(SnapshotError, named):
+                    validate(request, kind=kind, input_label=f"part.{kind}")
+        with self.assertRaisesRegex(SnapshotError, r"part\.stl has no CAD edges.*'solid' and 'render'"):
+            validate({"mode": "hidden-line"}, kind="stl", input_label="part.stl")
+
+    def test_a_script_or_foreign_input_is_told_what_it_is_before_its_display_is_judged(self) -> None:
+        # The STEP-only display rule speaks about documents. A model script or a file no
+        # door renders must get its own refusal, not "model.py has no CAD edges".
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = self._mesh_job_env(temporary_directory, "model.py", b"print('hi')\n")
+            (Path(root) / "models" / "notes.txt").write_text("notes\n", encoding="utf-8")
+            for name in ("model.py", "notes.txt"):
+                with self.subTest(name=name), self.assertRaises(SnapshotError) as refusal:
+                    resolve_render_job_packet(
+                        {"input": f"models/{name}", "outputs": [{"path": "tmp/iso.png"}], "display": {"mode": "wireframe"}},
+                        cwd=root,
+                    )
+                self.assertNotIn("applies to STEP models only", str(refusal.exception))
 
     def test_display_json_rejects_retired_exploded_keys(self) -> None:
         # The exploded view is enabled + amount only; retired step-document/auto-hint
         # fields would silently no-op in the renderer, so the CLI rejects them loudly.
-        with self.assertRaisesRegex(SnapshotError, "exploded supports only enabled and amount"):
+        with self.assertRaisesRegex(SnapshotError, "display.exploded has unknown key"):
             self._display_job('{"exploded":{"axis":"z"}}')
-        with self.assertRaisesRegex(SnapshotError, "exploded supports only enabled and amount"):
+        with self.assertRaisesRegex(SnapshotError, "display.exploded has unknown key"):
             self._display_job('{"exploded":{"enabled":true,"auto":{"mode":"radial"}}}')
-        with self.assertRaisesRegex(SnapshotError, "exploded supports only enabled and amount"):
+        with self.assertRaisesRegex(SnapshotError, "display.exploded has unknown key"):
             self._display_job('{"exploded":{"enabled":true,"steps":[]}}')
 
     def test_display_json_accepts_the_viewer_edge_settings_shape(self) -> None:
         # Viewer-exported display settings can be pasted directly into a snapshot.
         self.assertEqual(
-            self._display_job('{"mode":"shaded_edges","edges":{"enabled":false,"silhouette":true}}')["display"],
-            {"mode": "shaded_edges", "edges": {"enabled": False, "silhouette": True}},
+            self._display_job('{"mode":"solid","edges":{"enabled":false,"visibility":"all"}}')["display"],
+            {"mode": "solid", "edges": {"enabled": False, "visibility": "all"}},
         )
 
     def test_display_json_accepts_valid_closed_set_values(self) -> None:
-        self.assertEqual(self._display_job('{"mode":"shaded"}')["display"], {"mode": "shaded"})
+        self.assertEqual(self._display_job('{"mode":"solid"}')["display"], {"mode": "solid"})
         self.assertEqual(
             self._display_job('{"exploded":{"enabled":true,"amount":1}}')["display"],
             {"exploded": {"enabled": True, "amount": 1}},
         )
 
-    def test_display_json_treats_empty_string_values_as_unset(self) -> None:
-        # The renderer treats an empty string as absent and falls back to the default, so
-        # validation must not false-reject empty strings an agent emits for unset fields.
-        self.assertEqual(self._display_job('{"mode":""}')["display"], {"mode": ""})
+    def test_display_json_rejects_empty_mode(self) -> None:
+        with self.assertRaises(SnapshotError):
+            self._display_job('{"mode":""}')
 
-    def test_render_accepts_the_exported_debug_envelope(self) -> None:
+    def test_display_accepts_the_exported_render_settings(self) -> None:
         job = job_from_argv(
             [
                 "parts/STEP/cylindrical_cap.step",
                 "tmp/cap.png",
-                "--render",
+                "--display",
                 json.dumps(
                     {
-                        "studio": "light",
-                        "quality": "final",
-                        "exposure": 0.6,
-                        "lighting": {"rotation": 35, "size": 1.4, "fill": 0.2},
-                        "backdrop": {"color": "#ffffff", "ground": True},
-                        "camera": {"direction": [1, -1, 0.8], "focalLength": 70},
+                        "mode": "render",
+                        "appearance": "light", "camera": {"focalLength": 70},
+                        "lighting": {"quality": "final", "exposure": 0.6, "rotation": 35, "size": 1.4, "fill": 0.2},
+                        "background": {"color": "#ffffff"}, "floor": {"enabled": True},
                     }
                 ),
+                "--camera", '{"direction":[1,-1,0.8]}',
             ]
         )
-        self.assertEqual(job["render"]["lighting"]["size"], 1.4)
-        self.assertEqual(job["render"]["camera"]["focalLength"], 70)
+        self.assertEqual(job["display"]["lighting"]["size"], 1.4)
+        self.assertEqual(job["display"]["camera"]["focalLength"], 70)
 
-    def test_empty_render_envelope_uses_light_through_generated_cli(self) -> None:
+    def test_render_display_shortcut_uses_the_unified_display_field(self) -> None:
         job = job_from_argv([
-            "parts/STEP/cylindrical_cap.step", "tmp/cap.png", "--render", "{}",
+            "parts/STEP/cylindrical_cap.step", "tmp/cap.png", "--display", "render",
         ])
-        self.assertEqual(job["render"], {"studio": "light"})
-        self.assertFalse(
-            {"camera", "display", "selection", "kinematics", "jointValues", "quality"}
-            & set(job)
-        )
+        self.assertEqual(job["display"], {"mode": "render"})
+        self.assertNotIn("render", job)
 
-    def test_top_level_camera_and_display_flags_conflict_with_render(self) -> None:
+    def test_common_camera_composes_with_render_display(self) -> None:
         job = job_from_argv([
             "parts/STEP/cylindrical_cap.step", "tmp/cap.png",
-            "--render", '{"camera":{"preset":"front"}}',
             "--camera", "back",
-            "--display", "wireframe",
+            "--display", "render",
         ])
-        self.assertEqual(job["render"]["camera"], {"preset": "front"})
-        self.assertEqual(job["camera"], "back")
-        self.assertEqual(job["display"], "wireframe")
-        with self.assertRaisesRegex(
-            SnapshotError, "top-level CAD control\\(s\\): camera, display"
-        ):
-            validate_render_job_compatibility(job)
+        self.assertEqual(job["outputs"][0]["camera"], "back")
+        self.assertEqual(job["display"], {"mode": "render"})
 
     def test_display_shortcut_rejects_unknown_modes(self) -> None:
         with self.assertRaisesRegex(SnapshotError, "Unsupported display mode"):
@@ -855,14 +860,14 @@ class SnapshotCliTests(unittest.TestCase):
             mesh_path.write_bytes(b"solid part\nendsolid part\n")
             job = {
                 "input": "models/part.stl",
-                "camera": {"projection": "ortho"},
+                "display": {"camera": {"projection": "ortho"}},
                 "outputs": [{"path": "tmp/iso.png", "camera": "iso"}],
             }
-            with self.assertRaisesRegex(SnapshotError, "projection must be orthographic or perspective"):
+            with self.assertRaisesRegex(SnapshotError, "display.camera.projection must be one of"):
                 resolve_render_job_packet(job, cwd=root)
-            job["camera"] = {"projection": "orthographic"}
+            job["display"] = {"camera": {"projection": "orthographic"}}
             packet = resolve_render_job_packet(job, cwd=root)
-            self.assertEqual(packet["jobs"][0]["camera"], {"projection": "orthographic"})
+            self.assertEqual(packet["jobs"][0]["display"]["camera"], {"projection": "orthographic"})
 
     def test_the_typed_result_cannot_carry_output_payload_blobs(self) -> None:
         """--json must not echo the rendered bytes back. dataUrl/text are how the browser
@@ -1163,7 +1168,7 @@ class SnapshotCliTests(unittest.TestCase):
     def test_render_job_rejects_selection_for_mesh_input(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = self._mesh_job_env(temporary_directory, "widget.glb", b"glTF")
-            with self.assertRaisesRegex(SnapshotError, "selection focus/hide/refs require STEP topology"):
+            with self.assertRaisesRegex(SnapshotError, "selection focus/hide require STEP topology"):
                 resolve_render_job_packet(
                     {
                         "input": "models/widget.glb",
@@ -1199,22 +1204,31 @@ class SnapshotCliTests(unittest.TestCase):
                     cwd=root,
                 )
 
-    def test_photographic_render_rejects_non_view_modes_before_kind_checks(self) -> None:
+    def test_render_display_rejects_non_view_modes_before_kind_checks(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = self._mesh_job_env(temporary_directory, "widget.glb", b"glTF")
             for mode in ("section", "list"):
                 with self.subTest(mode=mode), self.assertRaisesRegex(
-                    SnapshotError, "Photographic Render supports only view mode"
+                    SnapshotError, "Render display supports only view mode"
                 ):
                     resolve_render_job_packet(
                         {
                             "input": "models/widget.glb",
                             "mode": mode,
-                            "render": {},
+                            "display": {"mode": "render"},
                             "outputs": [] if mode == "list" else [{"path": "tmp/iso.png"}],
                         },
                         cwd=root,
                     )
+
+    def test_non_view_restriction_follows_lighting_not_the_preset_name(self) -> None:
+        with tempfile.TemporaryDirectory() as temporary_directory:
+            root = self._mesh_job_env(temporary_directory, "widget.glb", b"glTF")
+            base = {"input": "models/widget.glb", "mode": "list"}
+            with self.assertRaisesRegex(SnapshotError, "Render display supports only view mode"):
+                resolve_render_job_packet({**base, "display": {"mode": "solid", "lighting": {}}}, cwd=root)
+            packet = resolve_render_job_packet({**base, "display": {"mode": "render", "lighting": {"enabled": False}}}, cwd=root)
+            self.assertEqual("list", packet["jobs"][0]["mode"])
 
     def test_render_job_rejects_section_mode_for_mesh_input(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
@@ -1229,45 +1243,29 @@ class SnapshotCliTests(unittest.TestCase):
                     cwd=root,
                 )
 
-    def test_render_job_rejects_hidden_edges_display_for_mesh_input(self) -> None:
+    def test_mesh_and_robot_refuse_the_presets_made_of_cad_edges_and_keep_surface_styles(self) -> None:
+        # Hidden line, X-ray and Wireframe are drawn from CAD edges, which only a STEP model
+        # has. The surface STYLES are not: a mesh can still be drawn flat or unlit.
+        for filename, data in (("widget.glb", b"glTF"), ("arm.urdf", b"<robot name='arm'/>")):
+            with tempfile.TemporaryDirectory() as temporary_directory:
+                root = self._mesh_job_env(temporary_directory, filename, data)
+                base = {"input": f"models/{filename}", "outputs": [{"path": "tmp/iso.png", "camera": "iso"}]}
+                for mode in ("hidden-line", "xray", "wireframe"):
+                    with self.subTest(filename=filename, mode=mode), self.assertRaisesRegex(
+                            SnapshotError, rf"display\.mode '{mode}' applies to STEP models only; {filename}"):
+                        resolve_render_job_packet({**base, "display": {"mode": mode}}, cwd=root)
+                display = {"mode": "solid", "surfaces": {"style": "flat"}}
+                packet = resolve_render_job_packet({**base, "display": display}, cwd=root)
+                self.assertEqual({"appearance": "light", **display}, packet["jobs"][0]["display"])
+
+    def test_render_display_retains_per_output_camera(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = self._mesh_job_env(temporary_directory, "widget.glb", b"glTF")
-            for hidden_mode in ("shaded_edges", "hidden_edges", "hidden_lines_removed"):
-                with self.assertRaisesRegex(SnapshotError, "requires STEP CAD edges"):
-                    resolve_render_job_packet(
-                        {
-                            "input": "models/widget.glb",
-                            "display": {"mode": hidden_mode},
-                            "outputs": [{"path": "tmp/iso.png", "camera": "iso"}],
-                        },
-                        cwd=root,
-                    )
-
-    def test_render_rejects_incompatible_cad_state_and_retains_per_output_camera(self) -> None:
-        with tempfile.TemporaryDirectory() as temporary_directory:
-            root = self._mesh_job_env(temporary_directory, "widget.glb", b"glTF")
-            base = {
-                "input": "models/widget.glb",
-                "render": {"studio": "light", "camera": {"preset": "front"}},
-                "camera": {"preset": "back"},
-                "display": {"mode": "hidden_edges"},
-                "selection": {"focus": ["missing/selector"]},
-                "jointValues": {"joint": 30},
-                "quality": {"tessellation": {"chordTolerance": "ignored"}},
-            }
-            with self.assertRaisesRegex(
-                SnapshotError,
-                "top-level CAD control\\(s\\): camera, display, jointValues, "
-                "quality, selection",
-            ):
-                resolve_render_job_packet(
-                    {**base, "outputs": [{"path": "tmp/render.png"}]}, cwd=root,
-                )
-
             packet = resolve_render_job_packet(
                 {
                     "input": "models/widget.glb",
-                    "render": {"studio": "light", "camera": {"preset": "front"}},
+                    "display": {"mode": "render", "appearance": "light"},
+                    "camera": {"preset": "front"},
                     "outputs": [{"path": "tmp/overridden.png", "camera": {"preset": "top"}}],
                 },
                 cwd=root,
@@ -1277,7 +1275,7 @@ class SnapshotCliTests(unittest.TestCase):
     def test_render_job_rejects_exploded_display_for_mesh_input(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = self._mesh_job_env(temporary_directory, "widget.glb", b"glTF")
-            with self.assertRaisesRegex(SnapshotError, "exploded view requires STEP assembly"):
+            with self.assertRaisesRegex(SnapshotError, r"display\.exploded applies to STEP models only"):
                 resolve_render_job_packet(
                     {
                         "input": "models/widget.glb",
@@ -1299,14 +1297,13 @@ class SnapshotCliTests(unittest.TestCase):
         self.assertEqual(job["resolved"]["kind"], "glb")
         self.assertNotIn("render", job)
         self.assertEqual(
-            job["display"]["guides"],
-            {"grid": {"enabled": False}, "axis": {"enabled": False}},
+            job["display"], {"mode": "solid", "appearance": "light"},
         )
 
-    def test_render_job_allows_format_neutral_display_modes_for_mesh_input(self) -> None:
+    def test_render_job_allows_the_modes_a_mesh_has(self) -> None:
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = self._mesh_job_env(temporary_directory, "widget.glb", b"glTF")
-            for mode in ("shaded", "wireframe", "transparent", "unshaded"):
+            for mode in ("solid", "render"):
                 packet = resolve_render_job_packet(
                     {"input": "models/widget.glb", "display": {"mode": mode},
                      "outputs": [{"path": "tmp/iso.png", "camera": "iso"}]}, cwd=root)
@@ -1318,14 +1315,14 @@ class SnapshotCliTests(unittest.TestCase):
             packet = resolve_render_job_packet(
                 {
                     "input": "models/widget.glb",
-                    "display": {"mode": "shaded"},
-                    "camera": {"preset": "iso", "projection": "orthographic"},
+                    "display": {"mode": "solid", "camera": {"projection": "orthographic"}},
+                    "camera": {"preset": "iso"},
                     "outputs": [{"path": "tmp/iso.png"}],
                 },
                 cwd=root,
             )
-        self.assertEqual(packet["jobs"][0]["display"]["mode"], "shaded")
-        self.assertEqual(packet["jobs"][0]["camera"]["projection"], "orthographic")
+        self.assertEqual(packet["jobs"][0]["display"]["mode"], "solid")
+        self.assertEqual(packet["jobs"][0]["display"]["camera"]["projection"], "orthographic")
 
     def test_input_kind_leaves_plain_javascript_unsupported(self) -> None:
         self.assertEqual(snapshot_main.input_kind(Path("models/helper.js")), "")
@@ -1633,12 +1630,12 @@ class SnapshotCliTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temporary_directory:
             root = self._mesh_job_env(temporary_directory, "arm.urdf", b"<robot name='arm'/>\n")
             base = {"input": "models/arm.urdf", "outputs": [{"path": "tmp/iso.png"}]}
-            with self.assertRaisesRegex(SnapshotError, "selection focus/hide/refs require STEP topology"):
+            with self.assertRaisesRegex(SnapshotError, "selection focus/hide require STEP topology"):
                 resolve_render_job_packet({**base, "selection": {"focus": ["#o1"]}}, cwd=root)
             # A robot IS parametric, just not by STEP sidecar — the error says which key to use.
             with self.assertRaisesRegex(SnapshotError, "pose a URDF robot with jointValues"):
                 resolve_render_job_packet({**base, "kinematics": {"width": 5}}, cwd=root)
-            with self.assertRaisesRegex(SnapshotError, "cannot be exploded"):
+            with self.assertRaisesRegex(SnapshotError, r"display\.exploded applies to STEP models only; arm\.urdf"):
                 resolve_render_job_packet(
                     {**base, "display": {"exploded": {"enabled": True, "amount": 1}}}, cwd=root
                 )
@@ -1861,7 +1858,7 @@ class SnapshotCliTests(unittest.TestCase):
                     "o1.2",
                     "o1.3",
                 )
-                with self.assertRaisesRegex(SnapshotError, "selection.focus/refs and selection.hide cannot be used"):
+                with self.assertRaisesRegex(SnapshotError, "selection.focus and selection.hide cannot be used"):
                     resolve_render_job_packet(
                         {
                             "input": "models/assembly.step",
@@ -2049,7 +2046,7 @@ class SnapshotCliTests(unittest.TestCase):
             RUNTIME_DIR / "snapshot-render.js",
         ]
         forbidden = (
-            "packages/cadgen-js",
+            "packages/core",
             "skills/cad-viewer",
             "/node_modules/",
             "\\node_modules\\",
@@ -2065,51 +2062,48 @@ if __name__ == "__main__":
     unittest.main()
 
 
-class RenderOptionResolutionTests(unittest.TestCase):
-    """--render accepts a studio id or exported photographic Render JSON."""
+class RenderDisplayOptionResolutionTests(unittest.TestCase):
+    """--display accepts the render shortcut or exported unified display JSON."""
 
     def _job_for(self, root: Path, value: object):
         options = snapshot_main.SnapshotOptions(
             input="models/part.step", output="tmp/iso.png",
-            render=value, render_specified=True,
+            display=value, display_specified=True,
         )
-        return load_job_from_options(options, stdin=_TtyStringIO(), cwd=root)
+        return load_job_from_options(options, cwd=root)
 
-    def test_render_file_path_is_loaded_as_the_photographic_envelope(self):
+    def test_display_file_path_is_loaded_with_photographic_settings(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             models = root / "models"
             models.mkdir()
             body = {
-                "studio": "dark", "quality": "final", "exposure": -0.5,
-                "lighting": {"rotation": 20, "size": 1.2, "fill": 0.3},
-                "backdrop": {"color": "#181818", "ground": True},
-                "camera": {"direction": [1, -1, 0.8], "focalLength": 65},
+                "mode": "render",
+                "appearance": "dark",
+                "lighting": {"quality": "final", "exposure": -0.5, "rotation": 20, "size": 1.2, "fill": 0.3},
+                "background": {"color": "#181818"}, "floor": {"enabled": True},
             }
-            (models / "stage.render.json").write_text(json.dumps(body), encoding="utf-8")
-            render = self._job_for(root, "models/stage.render.json")["render"]
-        self.assertEqual(render["studio"], "dark")
-        self.assertEqual(render["lighting"]["size"], 1.2)
-        self.assertEqual(render["camera"]["focalLength"], 65)
+            (models / "stage.display.json").write_text(json.dumps(body), encoding="utf-8")
+            display = self._job_for(root, "models/stage.display.json")["display"]
+        self.assertEqual(display["appearance"], "dark")
+        self.assertEqual(display["lighting"]["size"], 1.2)
 
-    def test_render_preset_name_becomes_an_envelope(self):
-        job = self._job_for(Path.cwd(), "light")
-        self.assertEqual(job["render"], {"studio": "light"})
-        self.assertNotIn("camera", job)
-        self.assertNotIn("display", job)
+    def test_render_name_becomes_a_display_mode(self):
+        job = self._job_for(Path.cwd(), "render")
+        self.assertEqual(job["display"], {"mode": "render"})
 
-    def test_missing_render_file_raises(self):
+    def test_missing_display_file_raises(self):
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaisesRegex(snapshot_main.SnapshotError, "does not exist"):
-                self._job_for(Path(tmp), "models/no_such_render.json")
+                self._job_for(Path(tmp), "models/no_such_display.json")
 
-    def test_a_job_render_is_already_an_object(self):
+    def test_retired_job_render_key_is_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             models = root / "models"
             models.mkdir()
             (models / "part.stl").write_text("solid p\nendsolid p\n", encoding="utf-8")
-            with self.assertRaisesRegex(SnapshotError, "render JSON must be a render object"):
+            with self.assertRaisesRegex(SnapshotError, "unknown render job key.*render"):
                 resolve_render_job_packet(
                     {"input": "models/part.stl", "render": "light", "mode": "list"},
                     cwd=root,
@@ -2188,13 +2182,13 @@ class JobDisplayResolutionTests(unittest.TestCase):
         self.assertEqual(packet["jobs"][0]["display"]["mode"], "wireframe")
 
     def test_job_display_file_path_is_loaded_into_settings(self):
-        body = {"mode": "shaded_edges", "edges": {"enabled": True, "silhouette": False},
-                "guides": {"grid": {"enabled": False}}}
+        body = {"mode": "solid", "edges": {"enabled": True, "visibility": "visible"},
+                "grid": {"enabled": False}}
         packet = self._packet_for("models/stage.display.json", display_body=body)
         display = packet["jobs"][0]["display"]
         self.assertEqual(display["mode"], body["mode"])
         self.assertEqual(display["edges"], body["edges"])
-        self.assertEqual(display["guides"]["grid"], body["guides"]["grid"])
+        self.assertEqual(display["grid"], body["grid"])
 
     def test_job_display_invalid_mode_raises(self):
         with self.assertRaises(SnapshotError):
@@ -2417,7 +2411,7 @@ class StepAnimationFrameTests(unittest.TestCase):
         options = options_from_argv(
             ["--job", str(job_file), "--animation", "spin", "--time", "1"]
         )
-        payload = load_job_from_options(options, stdin=_TtyStringIO(), cwd=self.root)
+        payload = load_job_from_options(options, cwd=self.root)
         self.assertEqual({"clip": "spin", "time": 1.0}, payload["animation"])
 
     def test_time_without_animation_is_refused(self) -> None:
@@ -2520,7 +2514,7 @@ class StepAnimationFrameTests(unittest.TestCase):
         }
         self._step(kinematics=pose)
         packet = self._resolve(self._job(
-            render={"studio": "light"},
+            display={"mode": "render", "appearance": "light"},
             kinematics={"stroke": 1},
             animation={"clip": "spin", "time": 0.5},
         ))
@@ -2713,7 +2707,7 @@ class ExactOutputContractTests(unittest.TestCase):
         )
         code = emit(
             lambda: snapshot_main.run_snapshot(
-                options, kinds=STEP_KINDS, cwd=self.root, stdin=_TtyStringIO()
+                options, kinds=STEP_KINDS, cwd=self.root
             ),
             prog="cadgen step snapshot",
             as_json=False,

@@ -1,0 +1,1337 @@
+import { execFileSync } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+import {
+  _electron as electron,
+  expect,
+  test,
+  type ElectronApplication,
+  type Locator,
+  type Page,
+} from "@playwright/test";
+import { cadRegistryEnvironment, cadRuntimeReady, cadTestProfile } from "./cad-runtime";
+import { selectFixtureSession } from "./session-fixture";
+import { PANE_LIMITS } from "../../src/shared/types";
+
+/**
+ * The explorer against this repository, with an isolated CAD project.
+ *
+ * The project is the checkout the suite is running from — a real tree with a
+ * `.gitignore`, `node_modules`, LFS pointers and a hundred thousand files —
+ * because that is where the interesting failures are. A fixture directory of
+ * six files would pass while the tree ignored nothing and the watcher took ten
+ * seconds to start. CAD cases use a fresh project containing the same tiny STEP
+ * fixture, so catalog reads never traverse local app bundles or model artifacts.
+ *
+ * Every tab kind is opened and screenshotted. The screenshots are the point:
+ * they are the only check on whether the pane *looks* like an app, and the
+ * README says to look at them.
+ */
+
+declare const window: {
+  innerWidth: number;
+  localStorage: { getItem(key: string): string | null };
+  hardcore: {
+    projects: { addPath(request: { path: string }): Promise<{ id: string; name: string }> };
+    settings: { set(patch: { theme?: string; cadPythonOverride?: string | null }): Promise<unknown> };
+    explorer: { loadTabs(request: { sessionId: string }): Promise<unknown[]> };
+    runtime: { status(): Promise<{ state: string; python: string | null; source: string | null; cadgenVersion: string | null }> };
+  };
+};
+
+const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..", "..");
+const repoRoot = path.resolve(appRoot, "..", "..");
+// The project's display name is the directory's basename — which in a git
+// worktree is the worktree's name, not the repository's.
+const projectName = path.basename(repoRoot);
+
+/** Files in this repository the suite opens. All tracked, none generated. */
+// AGENTS.md rather than README.md: its source opens with a literal
+// `# AGENTS.md` heading, so "preview" and "source" are visibly different
+// documents. The root README opens with a block of raw HTML, which tells the
+// two apart far less clearly.
+const MARKDOWN = "AGENTS.md";
+const IMAGE = "apps/desktop/build/icon.png";
+const STEP = "tests/fixtures/cad/import-smoke.step";
+const CAD_LOAD_TIMEOUT_MS = 60_000;
+
+/**
+ * The CAD tests run against whatever runtime the app resolves on its own —
+ * the bundled one under `resources/runtime/<os>-<arch>/` when the bundler
+ * has run, else the checkout's `.venv` — so the app is launched WITHOUT
+ * `CAD_DESKTOP_PYTHON`. The first STEP test breaks the runtime on purpose
+ * (an override pointing nowhere) to see the failure card; the recovery test
+ * clears it and retries the same tab. The later render test skips itself on
+ * a local machine with no runtime at all.
+ * HARDCORE_E2E_REQUIRE_CAD=1 makes missing or stale runtimes fail qualification.
+ */
+let cadReady = false;
+
+/**
+ * The review test gets a repository of its own, built in `beforeAll`.
+ *
+ * Reviewing *this* checkout was the obvious thing and the wrong one: the
+ * screenshot then shows the state of the tree it is committed into, so every
+ * run changes it, which changes the review, which changes the screenshot. A
+ * fixture with one modified file and one untracked file is deterministic, and
+ * it is still a real repository with real `git` behind it.
+ */
+let reviewRepo: string;
+
+/**
+ * A directory holding copies of this repository's `README.md` and
+ * `AGENTS.md`.
+ *
+ * The editing test wants *these* files — raw HTML, badge images, GFM tables,
+ * hard-wrapped prose — and it wants to save them and diff the result, which
+ * is not something to do to the checkout the suite is running from.
+ */
+let docsDir: string;
+let allFilesDir: string;
+let cadDir: string;
+
+let app: ElectronApplication;
+let page: Page;
+let userData: string;
+
+test.beforeAll(async () => {
+  reviewRepo = makeReviewRepo();
+  cadDir = fs.mkdtempSync(path.join(os.tmpdir(), "hardcore-explorer-cad-"));
+  fs.mkdirSync(path.dirname(path.join(cadDir, STEP)), { recursive: true });
+  fs.copyFileSync(path.join(repoRoot, STEP), path.join(cadDir, STEP));
+  docsDir = fs.mkdtempSync(path.join(os.tmpdir(), "hardcore-docs-"));
+  for (const name of ["README.md", "AGENTS.md"]) {
+    fs.copyFileSync(path.join(repoRoot, name), path.join(docsDir, name));
+  }
+  allFilesDir = fs.mkdtempSync(path.join(os.tmpdir(), "hardcore-all-files-"));
+  fs.mkdirSync(path.join(allFilesDir, "STEP"));
+  fs.mkdirSync(path.join(allFilesDir, "node_modules"));
+  fs.writeFileSync(path.join(allFilesDir, "node_modules", "existing.txt"), "test-owned dependency");
+  fs.writeFileSync(path.join(allFilesDir, ".gitignore"), "/STEP/**\n!/STEP/**/\n*.unsupported\nnode_modules/\n");
+  fs.writeFileSync(path.join(allFilesDir, ".DS_Store"), "test-owned metadata");
+  fs.writeFileSync(path.join(allFilesDir, "output.unsupported"), Buffer.from([0, 1, 2]));
+  fs.copyFileSync(path.join(repoRoot, STEP), path.join(allFilesDir, "STEP", "tom.step"));
+  userData = cadTestProfile("explorer");
+  const { CAD_DESKTOP_PYTHON: _unset, ...inherited } = process.env;
+  const env = { ...inherited, ...cadRegistryEnvironment(userData), NODE_ENV: "test", HARDCORE_FAKE_AGENT: path.join(appRoot, "tests/fake-agent/index.mjs"), CADGEN_DAEMON: "0", CADGEN_CACHE_DIR: path.join(userData, "cad-cache"), CADGEN_DAEMON_STATE_DIR: path.join(userData, "cad-daemon") };
+  app = await electron.launch({
+    args: [path.join(appRoot, "out", "main", "index.js"), `--user-data-dir=${userData}`],
+    env,
+  });
+  page = await app.firstWindow();
+  await page.waitForLoadState("domcontentloaded");
+  page.on("console", message => { if (message.type() === "error") console.error(`[explorer renderer] ${message.text()}`); });
+  page.on("response", async response => {
+    if (response.status() >= 400 && response.url().includes("/__cad/")) {
+      console.error(`[explorer request] ${JSON.stringify({ status: response.status(), url: response.url(),
+        request: response.request().postData(), response: (await response.text().catch(String)).slice(0, 4000) })}`);
+    }
+  });
+
+  // Dark, so every screenshot in this file is comparable with the others.
+  await page.evaluate(() => window.hardcore.settings.set({ theme: "dark" }));
+
+  // The project is added through IPC rather than through the folder chooser:
+  // a native dialog cannot be driven from Playwright.
+  await selectFixtureSession(page, repoRoot);
+  await expect(page.getByText(projectName).first()).toBeVisible();
+  // The strip binds to the selected session asynchronously (it loads `explorer_tabs`
+  // and starts the watcher); `+` does nothing until it has.
+  await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
+  // The explorer pane starts closed and opens when something opens in it
+  // (plan §3). This suite is about what it *shows*, so it is opened once
+  // here rather than incidentally by the first file.
+  await page.getByRole("button", { name: "Toggle explorer" }).click();
+  await expect(page.getByTestId("explorer")).toBeVisible();
+});
+
+test.afterAll(async () => {
+  test.setTimeout(300_000);
+  await app?.close();
+  const runtimeLog = path.join(userData, "cad-runtime.log");
+  if (fs.existsSync(runtimeLog)) fs.copyFileSync(runtimeLog, test.info().outputPath("cad-runtime.log"));
+  fs.rmSync(userData, { recursive: true, force: true });
+  fs.rmSync(reviewRepo, { recursive: true, force: true });
+  fs.rmSync(docsDir, { recursive: true, force: true });
+  fs.rmSync(allFilesDir, { recursive: true, force: true });
+  fs.rmSync(cadDir, { recursive: true, force: true });
+});
+
+test.describe.configure({ mode: "serial" });
+
+test("opens a markdown file as a preview, then as source", async () => {
+  await newTab(page, "File");
+
+  // The tree is the way in, and it is what the filter is for. The root file
+  // ranks above the other AGENTS.md in the tree — depth is the tie-break.
+  await page.getByLabel("Filter files").fill(MARKDOWN);
+  await page.getByRole("option", { name: MARKDOWN, exact: false }).first().click();
+
+  // The breadcrumb names the file, and nothing above the root: a root crumb's
+  // menu would be files outside the project.
+  await expect(page.getByRole("button", { name: `Browse ${MARKDOWN}`, exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: `Browse ${projectName}`, exact: true })).toHaveCount(0);
+  // Rendered markdown: the heading is an H1, not a line beginning with `#`.
+  await expect(page.getByRole("heading", { level: 1, name: "AGENTS.md" })).toBeVisible();
+  await shoot("file-markdown-preview.png");
+
+  /*
+    The source view is markdown's one PANEL (`@hardcore/ui/navigation`'s `panels.js`), declared
+    the same way a CAD file declares its two: an icon button with
+    `aria-pressed`, at the right end of the row and immediately left of the
+    files toggle, which stays last. It used to be a special case in the
+    header with its own label.
+  */
+  const toggle = page.getByTestId("tree-toggle");
+  const source = page.getByRole("button", { name: "View source" });
+  const [toggleBox, sourceBox] = await Promise.all([toggle.boundingBox(), source.boundingBox()]);
+  expect(sourceBox!.x + sourceBox!.width).toBeLessThanOrEqual(toggleBox!.x + 1);
+  await expect(source).toHaveAttribute("aria-pressed", "false");
+  await expect(source).toHaveAttribute("data-file-panel", "source");
+  // Picked in the tree, the file opens with the tree, so a person can go on walking it:
+  // the tree is the open panel, and there is one panel column in the tab.
+  await expect(panels(page)).toHaveCount(1);
+  await expect(toggle).toHaveAttribute("aria-pressed", "true");
+
+  await source.click();
+  // Monaco is up, and it is showing the raw text — the `#` the preview ate.
+  await expect(page.locator(".monaco-editor").first()).toBeVisible();
+  await expect(page.locator(".view-lines").first()).toContainText("# AGENTS.md");
+  // The panel is open, and the files toggle did not move to make room.
+  const preview = page.getByRole("button", { name: "View preview" });
+  await expect(preview).toHaveAttribute("aria-pressed", "true");
+  expect(Math.abs((await toggle.boundingBox())!.x - toggleBox!.x)).toBeLessThan(1);
+  /*
+    ONE panel at a time, the tree included (the user's rule): the source view
+    is a panel of this list, so opening it closed the tree, and the files
+    toggle is no longer the pressed one. The tree used to be exempt — a
+    second column beside the renderer's panels, with a design of its own.
+  */
+  await expect(panels(page)).toHaveCount(0);
+  await expect(toggle).toHaveAttribute("aria-pressed", "false");
+  await expect(toggle).toHaveAttribute("aria-label", "Show files");
+  await shoot("file-markdown-source.png");
+
+  // ...and taking the tree back closes the source: back to the preview,
+  // without pressing the source toggle at all.
+  await toggle.click();
+  await expect(panels(page)).toHaveCount(1);
+  await expect(page.getByRole("heading", { level: 1, name: "AGENTS.md" })).toBeVisible();
+  await expect(source).toHaveAttribute("aria-pressed", "false");
+});
+
+test("expands three levels of the tree, and keeps them", async () => {
+  await newTab(page, "File");
+
+  // Jake's repro: `apps`, then `apps/web`, then `apps/web/src`. Each
+  // one is a lazy `explorer.list`, and each one used to be a click that shut
+  // the tree instead of opening it once a file was open under any of them.
+  const folder = (relative: string) => page.locator(`[role="treeitem"][data-path="${relative}"]`);
+
+  await folder("apps").click();
+  await expect(folder("apps/web")).toBeVisible();
+  await folder("apps/web").click();
+  await expect(folder("apps/web/src")).toBeVisible();
+  await folder("apps/web/src").click();
+
+  // The leaves of the third level, which is what "nothing happened" cost.
+  await expect(folder("apps/web/src/client")).toBeVisible();
+  await expect(folder("apps/web/src/shared")).toBeVisible();
+  await expect(folder("apps/web/src")).toHaveAttribute("aria-expanded", "true");
+
+  // Opening a file makes a tab, and a tab is a remount: the three levels have
+  // to still be there afterwards, and a click on one of them has to shut it
+  // rather than do nothing.
+  await folder("apps/web/src/client").click();
+  await page.locator(`[role="treeitem"][data-path="apps/web/src/client/unboundIdentifiers.test.js"]`).click();
+  await expect(page.getByRole("tab", { name: /unboundIdentifiers\.test\.js/ })).toBeVisible();
+  // Picked in the tree, the file opens with the tree still up.
+  await expect(page.getByTestId("tree-toggle")).toHaveAttribute("aria-pressed", "true");
+  await expect(folder("apps/web/src/client")).toBeVisible();
+
+  await folder("apps/web").click();
+  await expect(folder("apps/web/src")).toHaveCount(0);
+  await folder("apps/web").click();
+  await expect(folder("apps/web/src/client")).toBeVisible();
+
+  await shoot("file-tree-deep.png");
+  await page.getByRole("tab", { name: /unboundIdentifiers\.test\.js/ }).getByRole("button", { name: "Close unboundIdentifiers.test.js" }).click();
+});
+
+test("navigates by the breadcrumb's menus", async () => {
+  await newTab(page, "File");
+  await openFromTree("apps/web/src/client/unboundIdentifiers.test.js");
+  await expect(page.getByRole("tab", { name: /unboundIdentifiers\.test\.js/ })).toBeVisible();
+
+  // The header is the breadcrumb, the view toggle and the files toggle. The
+  // copy button and the `Open ▾` menu are gone: their items live in the
+  // entry menus now (below).
+  const header = page.getByTestId("explorer").locator("header");
+  await expect(header.getByRole("button", { name: "Copy path" })).toHaveCount(0);
+  await expect(header.getByRole("button", { name: "Open", exact: true })).toHaveCount(0);
+  await expect(header.getByRole("button", { name: /^Open\b/ })).toHaveCount(0);
+
+  // Wide enough for every folder to be its own crumb: the default pane folds
+  // them into `…`, which is a menu of folders in its own right. The session
+  // keeps its floor whatever the divider does, so the room comes from the
+  // window as well as from the sidebar.
+  await resizeWindow(1680, 1050);
+  await widenExplorer();
+
+  // There is no root crumb: the crumbs are the segments below the root, so
+  // `apps` is the first of them and the project's own name is not a crumb at
+  // all. A crumb for the root would have to list the root's neighbours, which
+  // are outside the project.
+  // `apps › web › src › client › unboundIdentifiers.test.js`, and no sixth crumb for the
+  // project the five of them are in.
+  const nav = header.getByRole("navigation", { name: "Breadcrumb" });
+  await expect(nav.getByRole("button", { name: /^Browse / })).toHaveCount(5);
+  await expect(nav.getByRole("button", { name: "Browse apps", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: `Browse ${projectName}`, exact: true })).toHaveCount(0);
+
+  // A folder crumb lists its NEIGHBOURS — its parent's listing — with itself
+  // marked; picking one navigates there.
+  // Radix names a menu after its trigger, so each one is addressed by the
+  // crumb that opened it — a menu on its way out is still in the DOM for
+  // the length of its exit animation.
+  await page.getByRole("button", { name: "Browse client", exact: true }).click();
+  const menu = page.getByRole("menu", { name: "Browse client" });
+  // `client` lives in `apps/web/src`, so the menu is that folder: itself
+  // marked, and `shared` beside it.
+  await expect(menu.getByRole("menuitem", { name: "client", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(menu.getByRole("menuitem", { name: "shared", exact: true })).toBeVisible();
+  // Not its own children, which is what it used to list.
+  await expect(menu.getByRole("menuitem", { name: "unboundIdentifiers.test.js", exact: true })).toHaveCount(0);
+  // Directories first: every one of these is a submenu, above any files.
+  await expect(menu.getByRole("menuitem").first()).toHaveAttribute("aria-haspopup", "menu");
+  await shoot("file-crumb-menu.png", true);
+  // Picking a neighbour navigates: its own listing is a submenu of it.
+  await menu.getByRole("menuitem", { name: "shared", exact: true }).hover();
+  const shared = page.getByRole("menu", { name: "shared" });
+  await expect(shared.getByRole("menuitem").first()).toBeVisible();
+  await page.keyboard.press("Escape");
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("menu")).toHaveCount(0);
+
+  // The file crumb lists its siblings, with itself marked; a sibling folder
+  // is a submenu of its own listing, and picking a file opens it in this tab.
+  await page.getByRole("button", { name: "Browse unboundIdentifiers.test.js", exact: true }).click();
+  const siblings = page.getByRole("menu", { name: "Browse unboundIdentifiers.test.js" });
+  await expect(siblings.getByRole("menuitem", { name: "unboundIdentifiers.test.js", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(siblings.getByRole("menuitem", { name: "components", exact: true })).toBeVisible();
+  await siblings.getByRole("menuitem", { name: "workbench" }).hover();
+  const submenu = page.getByRole("menu", { name: "workbench" });
+  await expect(submenu.getByRole("menuitem", { name: "sidebar.js", exact: true })).toBeVisible();
+  await submenu.getByRole("menuitem", { name: "sidebar.js", exact: true }).click();
+  await expect(page.getByRole("tab", { name: /sidebar\.js/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Browse sidebar.js", exact: true })).toBeVisible();
+  await expect(page.getByRole("tab", { name: /^unboundIdentifiers\.test\.js/ })).toHaveCount(0);
+  await expect(page.locator(".view-lines").first()).toBeVisible();
+  await expect(page.getByRole("menu")).toHaveCount(0);
+
+  // The file crumb's `⋯` opens the entry menu a right-click opens — the same
+  // table, drawn as a dropdown — and it has no `Open`, because the crumb IS
+  // the open file.
+  await page.getByTestId("crumb-actions").click();
+  const actions = page.getByRole("menu");
+  await expect(actions.getByRole("menuitem", { name: "Open", exact: true })).toHaveCount(0);
+  await expect(actions.getByRole("menuitem", { name: "Move to Trash" })).toBeVisible();
+  await pick("Copy relative path");
+  await expect
+    .poll(() => app.evaluate(({ clipboard }) => clipboard.readText()))
+    .toBe("apps/web/src/client/workbench/sidebar.js");
+
+  // Escape closes a crumb's menu.
+  await page.getByRole("button", { name: "Browse workbench", exact: true }).click();
+  await expect(page.getByRole("menu", { name: "Browse workbench" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("menu")).toHaveCount(0);
+
+  // A code file declares no panels of its own, so the tree is the whole list
+  // and the row's right end is the files toggle alone (`@hardcore/ui/navigation`'s `panels.js`).
+  await expect(header.locator("[data-file-panel]")).toHaveCount(1);
+  await expect(header.locator("[data-file-panel]")).toHaveAttribute("data-file-panel", "tree");
+  await expect(header.getByTestId("tree-toggle")).toBeVisible();
+
+  await restoreLayout();
+  await resizeWindow(1440, 900);
+  await page.getByRole("tab", { name: /sidebar\.js/ }).getByRole("button", { name: "Close sidebar.js" }).click();
+});
+
+test("keeps the files toggle where it is when the tree opens and shuts", async () => {
+  // The toggle is the right end of the header whether the tree is open or
+  // not. It used to move into the tree's own header when the tree opened.
+  const toggle = page.getByTestId("tree-toggle");
+  await expect(toggle).toHaveAttribute("aria-label", "Hide files");
+  const open = (await toggle.boundingBox())!;
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-label", "Show files");
+  await expect(page.getByLabel("Filter files")).toHaveCount(0);
+  const shut = (await toggle.boundingBox())!;
+  await toggle.click();
+  await expect(toggle).toHaveAttribute("aria-label", "Hide files");
+  await expect(page.getByLabel("Filter files")).toBeVisible();
+  const reopened = (await toggle.boundingBox())!;
+  for (const box of [shut, reopened]) {
+    expect(Math.abs(box.x - open.x)).toBeLessThan(1);
+    expect(Math.abs(box.y - open.y)).toBeLessThan(1);
+  }
+  // And the tree's own header is the filter, nothing else.
+  await expect(page.getByRole("button", { name: "Hide files" })).toHaveCount(1);
+});
+
+
+test("copies a relative path from a row's context menu", async () => {
+  await newTab(page, "File");
+  await openFromTree("apps/web/src/client/unboundIdentifiers.test.js");
+  const row = page.locator(`[role="treeitem"][data-path="apps/web/src/client/unboundIdentifiers.test.js"]`);
+  await expect(row).toBeVisible();
+
+  await openContextMenu(row);
+  const menu = page.getByRole("menu");
+  await expect(menu.getByRole("menuitem", { name: "Copy reference" })).toHaveCount(0);
+  await expect(menu.getByRole("menuitem", { name: "Move to Trash" })).toBeVisible();
+  await shoot("file-context-menu.png");
+  await pick("Copy relative path");
+  await expect.poll(() => app.evaluate(({ clipboard }) => clipboard.readText())).toBe("apps/web/src/client/unboundIdentifiers.test.js");
+
+  // Copy path is the absolute one. A file menu has no Copy reference, a CAD file's included:
+  // the paths say it, and a reference inside the file is the viewer's to copy.
+  await openContextMenu(row);
+  await pick("Copy path");
+  await expect.poll(() => app.evaluate(({ clipboard }) => clipboard.readText())).toBe(
+    fs.realpathSync(path.join(repoRoot, "apps/web/src/client/unboundIdentifiers.test.js")),
+  );
+  await page.locator(`[role="treeitem"][data-path="apps/web/src/client"]`).click();
+  const step = page.locator(`[role="treeitem"][data-path="${STEP}"]`);
+  await page.getByLabel("Filter files").fill(STEP);
+  await openContextMenu(page.getByRole("option", { name: STEP, exact: false }).first());
+  await expect(page.getByRole("menu").getByRole("menuitem", { name: "Copy relative path" })).toBeVisible();
+  await expect(page.getByRole("menu").getByRole("menuitem", { name: "Copy reference" })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await page.getByLabel("Filter files").fill("");
+  await expect(step).toHaveCount(0);
+  await page.getByRole("tab", { name: /unboundIdentifiers\.test\.js/ }).getByRole("button", { name: "Close unboundIdentifiers.test.js" }).click();
+});
+
+test("opens an image with its dimensions", async () => {
+  await newTab(page, "File");
+  await openFromTree(IMAGE);
+
+  const image = page.locator(`img[alt="icon.png"]`);
+  await expect(image).toBeVisible();
+  // The footer reports the real pixels, which is the reason to open a PNG here
+  // rather than in Preview.
+  await expect(page.getByText(/\d+ × \d+ · /)).toBeVisible();
+  // The tree reveals what is open: `apps › desktop › build` are expanded and
+  // the file is the selected row.
+  await expect(page.getByRole("treeitem", { name: "icon.png" })).toHaveAttribute(
+    "aria-selected",
+    "true",
+  );
+  await shoot("file-image.png");
+});
+
+test("shows the runtime's own error for a STEP file when the runtime cannot start", async () => {
+  await openStepWithUnavailableRuntime();
+  // The tab is not a placeholder: it says the runtime did not start,
+  // shows the interpreter's words, and offers to try again.
+  await expect(page.getByText("The CAD runtime did not start")).toBeVisible();
+  await expect(page.locator("[data-cad-failure=runtime-not-ready]")).toContainText("/nowhere/python");
+  await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Runtime status" })).toBeVisible();
+  // And no CAD panel toggles: the surface that draws those panels never came
+  // up, so the CAD declaration offers none (`@hardcore/ui/navigation`'s `panels.js`) and the
+  // tree is the whole list. Two lit buttons over a failure card would open
+  // nothing.
+  await expect(page.locator("[data-file-panel]")).toHaveCount(1);
+  await expect(page.locator("[data-file-panel]")).toHaveAttribute("data-file-panel", "tree");
+  await expect(page.getByTestId("tree-toggle")).toBeVisible();
+  // ...so what the one panel column holds is the tree the file was picked in,
+  // rather than a panel that cannot be drawn.
+  await expect(panels(page)).toHaveCount(1);
+  await expect(panels(page)).toHaveAttribute("data-file-panel-container", "tree");
+  await shoot("file-cad-failed.png");
+});
+
+test("retries the same STEP tab after restoring the CAD runtime", async () => {
+  // Keep the normal UI/setup budget separate from the full CAD load deadline.
+  test.setTimeout(60_000 + CAD_LOAD_TIMEOUT_MS);
+  // The serial suite reuses the failed tab and private cache. A filtered
+  // recovery run prepares that same starting state without loading geometry.
+  const failure = page.locator("[data-cad-failure=runtime-not-ready]");
+  if (await failure.count() === 0) {
+    await openStepWithUnavailableRuntime();
+  }
+  await expect(failure).toBeVisible();
+  const tab = page.getByRole("tab", { name: /import-smoke\.step/ });
+  const tabId = await tab.getAttribute("data-tab");
+  // With the override gone the runtime is whatever the app resolves; Try
+  // again asks for the viewer once more without reopening the file.
+  await page.evaluate(() => window.hardcore.settings.set({ cadPythonOverride: null }));
+  const status = await page.evaluate(() => window.hardcore.runtime.status());
+  cadReady = cadRuntimeReady(status);
+  if (cadReady) {
+    expect(status.cadgenVersion).toMatch(/^\d+\.\d+\.\d+/);
+    await page.getByRole("button", { name: "Try again" }).click();
+    await expect(tab).toHaveAttribute("data-tab", tabId!);
+    await expect(page.locator("canvas").first()).toBeVisible({ timeout: CAD_LOAD_TIMEOUT_MS });
+  }
+  // Closed either way: the render test opens it again from a clean tab.
+  await tab.hover();
+  await tab.getByRole("button", { name: "Close import-smoke.step" }).click();
+  await switchProject(repoRoot);
+});
+
+/** An invalid override gives every machine the same genuine runtime error. */
+async function openStepWithUnavailableRuntime() {
+  await page.evaluate(() => window.hardcore.settings.set({ cadPythonOverride: "/nowhere/python" }));
+  await switchProject(cadDir);
+  const broken = await page.evaluate(() => window.hardcore.runtime.status());
+  expect(broken.state).toBe("error");
+  await newTab(page, "File");
+  await openFromTree(STEP);
+}
+
+test("runs a command in a terminal tab", async () => {
+  await newTab(page, "Terminal");
+
+  await expect(page.locator(".xterm-screen")).toBeVisible();
+  // The shell is a *login* shell, so it reads the user's profile before it
+  // prompts. Typing into it before then is echoed by the tty and re-echoed by
+  // the shell afterwards, which is a mess in a screenshot and a race in a test.
+  await settleTerminal();
+  await page.locator(".xterm-helper-textarea").click();
+
+  // The command and its output have to be *different* strings, or the
+  // assertion passes on the echoed keystrokes without the shell ever running.
+  await page.keyboard.type("echo hardcore-$((6 * 7))");
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".xterm-rows")).toContainText("hardcore-42", { timeout: 20_000 });
+  await shoot("terminal.png");
+});
+
+test("replays a terminal's scrollback exactly once on reattach", async () => {
+  // Switching away unmounts the xterm; the pty keeps running in main. Coming
+  // back writes the buffered scrollback *and* subscribes to the live stream,
+  // and the two overlap — `terminal.data`'s sequence number is what stops the
+  // shell's output being written twice.
+  const before = await page.locator(".xterm-rows").innerText();
+  const seen = occurrences(before, "hardcore-42");
+  expect(seen).toBeGreaterThan(0);
+
+  await page.getByRole("tab").first().click();
+  await expect(page.locator(".xterm-screen")).toHaveCount(0);
+  await page.getByRole("tab", { name: /Terminal/ }).click();
+  await expect(page.locator(".xterm-screen")).toBeVisible();
+  await settleTerminal();
+
+  // The same count, not twice it. The whole point of the sequence number.
+  const after = await page.locator(".xterm-rows").innerText();
+  expect(occurrences(after, "hardcore-42")).toBe(seen);
+});
+
+test("browses to a URL in a browser tab", async () => {
+  await newTab(page, "Browser");
+
+  await expect(page.getByText("Start browsing")).toBeVisible();
+  await shoot("browser-empty.png");
+
+  await page.getByLabel("Address").fill("https://example.com");
+  await page.keyboard.press("Enter");
+  // The native browser is its own process; assert its chrome and host slot
+  // is what this suite can do without depending on the network.
+  await expect(page.locator("[data-browser-target]")).toBeAttached();
+  await expect(page.getByLabel("Address")).toHaveValue(/example\.com/);
+  // The tab is titled by host, not by the whole URL.
+  await expect(page.getByRole("tab", { name: /example\.com/ })).toBeVisible();
+  await page.waitForTimeout(2500);
+  await shoot("browser.png");
+});
+
+/**
+ * After the terminal and browser tests, not before: this one resizes the
+ * window, and the tests that click a tab by position want the strip as it
+ * first was.
+ */
+test("renders a STEP file through the bundled runtime's viewer", async () => {
+  test.skip(!cadReady, "no CAD runtime on this machine: no bundle under resources/runtime and no .venv");
+
+  const status = await page.evaluate(() => window.hardcore.runtime.status());
+  expect(status.state, JSON.stringify(status)).toBe("ready");
+  expect(["bundled", "checkout"]).toContain(status.source);
+
+  await switchProject(cadDir);
+  await newTab(page, "File");
+  await openFromTree(STEP);
+  // The recovery test closed its tab before switching projects. That close
+  // must persist, so reopening leaves one file tab and no blank duplicate.
+  await expect(page.locator("[data-tab-strip] [data-tab]")).toHaveCount(1);
+
+  // The viewer's surface: a WebGL canvas. The first open compiles the
+  // document in cadgen's build pool, so this is the slow assertion of the suite.
+  await expect(page.locator("canvas").first()).toBeVisible({ timeout: 60_000 });
+
+  /*
+    Picked in the tree, the STEP opens with the tree still up — a person walking
+    the tree keeps it — and in Select, so its Features are already the first
+    panel of the tool stack under the viewer's toolbar. The nav row's only panel
+    toggle is the file tree's: a STEP declares no panel of its own, and nothing
+    of the file's is drawn in this app's panel column. The stack is inside the
+    surface, over the model; the column is beside it, at 1440×900 and at
+    1280×800.
+  */
+  const filesToggle = page.getByTestId("tree-toggle");
+  await expect(page.getByRole("button", { name: "Hide files" })).toBeVisible();
+  await expect(filesToggle).toHaveAttribute("aria-pressed", "true");
+  expect(await page.locator("header [data-file-panel]").evaluateAll(toggles => toggles.map(toggle => toggle.getAttribute("aria-label"))))
+    .toEqual(["Hide files"]);
+  await expect(page.locator("[data-file-panel=cad-file], [data-file-panel=cad-display], [data-file-sheet]")).toHaveCount(0);
+  // The STEP model list is the Features panel's.
+  const tree = page.getByRole("list", { name: "Model", exact: true });
+  await expect(tree).toBeVisible({ timeout: 120_000 });
+  await expect(page.getByRole("region", { name: "Source features" })).toHaveCount(0);
+  await expect(page.getByRole("region", { name: "Surfaces" })).toHaveCount(0);
+  await page.waitForTimeout(1000);
+  await shoot("file-cad-default.png", true);
+  await expectToolStackOnModel();
+  await expectFilesBesideModel();
+  await resizeWindow(1280, 800);
+  await expectToolStackOnModel();
+  await expectFilesBesideModel();
+  await shoot("file-cad-default-1280x800.png", true);
+  /*
+    The files toggle closes the app's column and nothing else: the tool stack
+    is the viewer's, so the Features stay up over the model, and opening the
+    column again leaves them where they were.
+  */
+  await filesToggle.click();
+  await expect(page.getByRole("button", { name: "Show files" })).toBeVisible();
+  await expect(page.getByLabel("Filter files")).toHaveCount(0);
+  await expect(panels(page)).toHaveCount(0);
+  await expect(tree).toBeVisible();
+  await expectToolStackOnModel();
+  await shoot("file-cad-no-files.png", true);
+  await filesToggle.click();
+  await expect(page.getByRole("button", { name: "Hide files" })).toBeVisible();
+  await expect(page.getByLabel("Filter files")).toBeVisible();
+  await expect(panels(page)).toHaveCount(1);
+  await expect(panels(page)).toHaveAttribute("data-file-panel-container", "tree");
+  await expect(tree).toBeVisible();
+  await resizeWindow(1440, 900);
+
+  // At the explorer's widest — the sidebar hidden and the session at its
+  // 320px floor — the surface holds everything at once, which is how a person
+  // reviews a part. There is no fullscreen to reach for: the session pane is
+  // never taken away, so this is as wide as the explorer gets. The tree lists
+  // the document's solids once the compile lands.
+  await widenExplorer();
+  await expect(tree.getByRole("button", { name: /^Select / }).first()).toBeVisible();
+  await expectToolStackOnModel();
+  await page.waitForTimeout(1500);
+  await shoot("file-cad.png", true);
+  await resizeWindow(1280, 800);
+  await shoot("file-cad-1280x800.png", true);
+  await resizeWindow(1440, 900);
+
+  // No tab of any name in the viewer: the retired View, Model, Inspector, Settings and Display
+  // panels included. Display is the toolbar's last tool; while it is the tool its panel leads
+  // the stack in place of the Features, and it keeps its settings across a close.
+  await expect(page.locator("[data-cad-surface]").getByRole("tab")).toHaveCount(0);
+  const display = page.locator("[data-cad-toolbar]").getByRole("button", { name: "Display", exact: true });
+  const viewPanel = page.locator('[data-cad-tool-stack] [data-tool-panel][aria-label="Display settings"]');
+  const mode = viewPanel.getByRole("combobox", { name: "Mode", exact: true });
+  await display.click();
+  await expect(viewPanel).toBeVisible();
+  await expect(tree).toBeHidden();
+  await mode.click();
+  await page.getByRole("option", { name: "Wireframe", exact: true }).click();
+  await expect(viewPanel).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(viewPanel).toHaveCount(0);
+  await expect(tree).toBeVisible();
+  await display.click();
+  await expect(mode).toContainText("Wireframe");
+  await mode.click();
+  await page.getByRole("option", { name: "Solid", exact: true }).click();
+  await expect(page.getByRole("listbox")).toHaveCount(0);
+  await expect(mode).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(viewPanel).toHaveCount(0);
+  await expect(tree).toBeVisible();
+
+  // Measurements live under the toolbar tool and close when it is toggled off.
+  const measure = page.getByRole("button", { name: "Measure", exact: true });
+  await measure.click();
+  await expect(measure).toHaveAttribute("aria-pressed", "true");
+  // No panel until something is measured; a second press offers what measurements snap to.
+  const measurements = page.getByRole("region", { name: "Measurements" });
+  await expect(measurements).toHaveCount(0);
+  await measure.click();
+  await expect(page.getByRole("menuitemradio", { name: /Any geometry/ })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(measure).toHaveAttribute("aria-pressed", "true");
+  await shoot("file-cad-measure.png", true);
+  await page.getByRole("button", { name: "Select", exact: true }).click();
+  await expect(measure).toHaveAttribute("aria-pressed", "false");
+  await expect(measurements).toHaveCount(0);
+  await expect(tree).toBeVisible();
+
+  // The retired Theme editor and Settings panel leave no toggle and no empty panel behind: the
+  // files toggle is the row's one panel toggle, never a native title, and it opens the app's
+  // column beside the model while the Features stay on it.
+  await expect(page.getByRole("button", { name: "Theme settings", exact: true })).toHaveCount(0);
+  await expect(page.locator("[data-file-panel='cad-theme'], [data-file-panel='cad-file'], [data-file-sheet]")).toHaveCount(0);
+  await expect(filesToggle).not.toHaveAttribute("title", /./);
+  await expect(filesToggle).toHaveAttribute("aria-pressed", "true");
+  const parked = (await filesToggle.boundingBox())!;
+  await filesToggle.click();
+  await expect(filesToggle).toHaveAttribute("aria-pressed", "false");
+  await expect(panels(page)).toHaveCount(0);
+  await expect(tree).toBeVisible();
+  await shoot("file-cad-files-closed.png", true);
+  await filesToggle.click();
+  await expect(filesToggle).toHaveAttribute("aria-pressed", "true");
+  await expect(panels(page)).toHaveCount(1);
+  await expect(panels(page)).toHaveAttribute("data-file-panel-container", "tree");
+  await expect(page.getByLabel("Filter files")).toBeVisible();
+  await expect(tree).toBeVisible();
+  await expect(page.locator("[data-cad-surface] aside")).toHaveCount(0);
+  await expectFilesBesideModel();
+  await expectToolStackOnModel();
+  await shoot("file-cad-files.png", true);
+  expect(Math.abs((await filesToggle.boundingBox())!.x - parked.x)).toBeLessThan(1);
+
+  // Inspect uses one fixed scene recipe. Its canvas and guides follow the
+  // app appearance; opening a CAD file never owns the document's light/dark.
+  const paint = () => panels(page).evaluate((node) => node.ownerDocument.defaultView!.getComputedStyle(node).backgroundColor);
+  const panelDark = await paint();
+  await expect(page.locator("html")).toHaveClass(/\bdark\b/);
+  await expect.poll(sceneBackdrop).toBe("51,51,51");
+  await expect(page.locator("[data-cad-toolbar]").getByRole("button", { name: "Display", exact: true })).toBeVisible();
+
+  await page.evaluate(() => window.hardcore.settings.set({ theme: "light" }));
+  await expect(page.locator("html")).not.toHaveClass(/\bdark\b/);
+  await expect.poll(paint).not.toBe(panelDark);
+  await expect.poll(sceneBackdrop).toBe("240,244,249");
+  await expectCanvasFillsItsBox();
+  await shoot("file-cad-light-chrome.png", true);
+
+  await page.evaluate(() => window.hardcore.settings.set({ theme: "dark" }));
+  await expect(page.locator("html")).toHaveClass(/\bdark\b/);
+  await expect.poll(paint).toBe(panelDark);
+  await expect.poll(sceneBackdrop).toBe("51,51,51");
+  expect(await page.evaluate(() => window.localStorage.getItem("cad-viewer:theme"))).toBeNull();
+
+  await restoreLayout();
+});
+
+test("keeps every tab in one strip, with + at its end", async () => {
+  await switchProject(repoRoot);
+  // A file tab under the strip, not whichever tab happened to be last: this
+  // shot is about the strip and the layout, and a review of *this* repository
+  // in the background would make it change on every run.
+  await page.getByRole("tab").first().click();
+  // This session owns two file tabs, a terminal and a browser; CAD tabs belong
+  // to the fixture session and must not leak into this strip.
+  await expect(page.getByRole("tab")).toHaveCount(4);
+  // At a width four tabs of real names fill, narrower than the pane's default.
+  await explorerAt(STRIP_FULL);
+
+  // `+` trails the tabs inside their scrolling row rather than sitting in a
+  // corner of its own, and it is at the strip's right edge with four tabs of
+  // real names in a pane this wide. `tests/e2e/shell.spec.ts` is where the
+  // row is driven properly into overflow.
+  const strip = page.locator("[data-tab-strip]");
+  const plus = page.locator("[data-new-tab]");
+  const [stripBox, plusBox, firstTabBox] = await Promise.all([
+    strip.boundingBox(),
+    plus.boundingBox(),
+    page.getByRole("tab").first().boundingBox(),
+  ]);
+  expect(plusBox!.x).toBeGreaterThan(firstTabBox!.x);
+  // `+` ends where the explorer's toggle begins: that toggle is the strip's
+  // last control, pinned to the window's right edge, and `+` sits just
+  // inside it.
+  const toggleBox = (await strip.getByRole("button", { name: "Toggle explorer" }).boundingBox())!;
+  expect(toggleBox.x + toggleBox.width).toBeLessThanOrEqual(stripBox!.x + stripBox!.width + 1);
+  expect(plusBox!.x + plusBox!.width).toBeLessThanOrEqual(toggleBox.x + 1);
+  expect(plusBox!.x + plusBox!.width).toBeGreaterThan(toggleBox.x - 24);
+  await expect(page.getByRole("button", { name: "New tab", exact: true })).toBeVisible();
+  // And nothing that would take the session pane away.
+  await expect(page.getByRole("button", { name: "Expand explorer" })).toHaveCount(0);
+
+  await shoot("strip.png", true);
+  // Back to the default width, the viewer's wide layout, for the tests after this one.
+  await explorerAt(PANE_LIMITS.explorer.default);
+});
+
+test("persists the strip across a reload", async () => {
+  const before = await page.getByRole("tab").count();
+  await page.reload();
+  await page.waitForLoadState("domcontentloaded");
+  // Reload starts on the new-session screen. Restore the owning session,
+  // rather than treating its directory as an explorer owner.
+  await switchProject(repoRoot);
+  await expect(page.getByRole("tab")).toHaveCount(before, { timeout: 20_000 });
+});
+
+test("renders the explorer in light as well as dark", async () => {
+  await page.evaluate(() => window.hardcore.settings.set({ theme: "light" }));
+  await expect(page.locator("html")).not.toHaveClass(/\bdark\b/);
+  // Every kind of tab, in light: the markdown preview, the image, the
+  // terminal, the browser and — when a runtime is there — the CAD surface,
+  // whose appearance follows the app.
+  await page.getByRole("tab").first().click();
+  await shoot("explorer-light.png");
+  await page.getByRole("tab", { name: /icon\.png/ }).click();
+  await expect(page.locator(`img[alt="icon.png"]`)).toBeVisible();
+  await shoot("file-image-light.png");
+  await page.getByRole("tab", { name: /Terminal/ }).click();
+  await expect(page.locator(".xterm-screen")).toBeVisible();
+  await settleTerminal();
+  await shoot("terminal-light.png");
+  await page.getByRole("tab", { name: /example\.com/ }).click();
+  await expect(page.getByLabel("Address")).toHaveValue(/example\.com/);
+  await shoot("browser-light.png");
+  if (cadReady) {
+    await switchProject(cadDir);
+    await page.getByRole("tab", { name: /import-smoke\.step/ }).click();
+    await expect(page.getByRole("list", { name: "Model", exact: true })).toBeVisible({ timeout: 60_000 });
+    // The app stays light when the CAD surface remounts.
+    await expect(page.locator("html")).not.toHaveClass(/\bdark\b/);
+    await page.waitForTimeout(1000);
+    await shoot("file-cad-light.png", true);
+    await switchProject(repoRoot);
+  }
+  await page.getByRole("tab").first().click();
+  await page.evaluate(() => window.hardcore.settings.set({ theme: "dark" }));
+  await expect(page.locator("html")).toHaveClass(/\bdark\b/);
+});
+
+/**
+ * Second to last: this one switches projects too, so it sits with the review
+ * test at the end rather than in the middle of the strip's own tests.
+ */
+test("edits a markdown file in place and saves the lines it changed", async () => {
+  await selectFixtureSession(page, docsDir);
+  // Each new session starts with its own empty, closed explorer, at the default width.
+  await page.getByRole("button", { name: "Toggle explorer" }).click();
+  await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
+
+  await newTab(page, "File");
+  await page.getByLabel("Filter files").fill("AGENTS.md");
+  await page.getByRole("option", { name: "AGENTS.md", exact: false }).first().click();
+
+  // The document, not a preview of it: an H1 that is a real heading, and a
+  // paragraph a caret can be put into.
+  await expect(page.getByRole("heading", { level: 1, name: "AGENTS.md" })).toBeVisible();
+  // Scoped to the explorer: the composer is a ProseMirror editor as well
+  // (features/session/composer), and the first `.ProseMirror p` on the page
+  // is the chat box.
+  const paragraph = page.getByTestId("explorer").locator(".ProseMirror p").first();
+  await paragraph.click();
+  await page.keyboard.type("Edited in the app. ");
+
+  // The tab says so, and Cmd/Ctrl+S is the same save Monaco gets.
+  await expect(page.getByLabel("Unsaved changes")).toBeVisible();
+  await shoot("file-markdown-editable.png");
+  await page.keyboard.press(process.platform === "darwin" ? "Meta+s" : "Control+s");
+  await expect(page.getByLabel("Unsaved changes")).toHaveCount(0);
+
+  // The file on disk. The edited paragraph is re-printed; every other line of
+  // a 210-line document is exactly the line it was — which is the whole point
+  // of `packages/ui/src/renderers/markdown/document.ts`.
+  const before = fs.readFileSync(path.join(repoRoot, "AGENTS.md"), "utf8");
+  const after = fs.readFileSync(path.join(docsDir, "AGENTS.md"), "utf8");
+  // Re-wrapped to the column the file wraps at, so the typed words can land on
+  // either side of a newline.
+  expect(after.replace(/\s+/g, " ")).toContain("Edited in the app.");
+
+  // The other document, for the surfaces AGENTS.md has none of: raw HTML
+  // blocks, badge images and a GFM table.
+  await newTab(page, "File");
+  await page.getByLabel("Filter files").fill("README.md");
+  await page.getByRole("option", { name: "README.md", exact: false }).first().click();
+  await expect(page.getByRole("table")).toBeVisible();
+  await shoot("file-markdown-raw-blocks.png");
+
+  const editedBlock = before.split("\n\n")[1]!;
+  const untouched = before
+    .split("\n")
+    .filter((line) => line.trim() !== "" && !editedBlock.includes(line));
+  expect(untouched.length).toBeGreaterThan(100);
+  for (const line of untouched) {
+    expect(after, `a line nobody edited was rewritten: ${line}`).toContain(line);
+  }
+});
+
+/**
+ * Still in the docs directory: it is a scratch copy, so making, renaming
+ * and trashing things in it is fine, which it would not be in the checkout.
+ */
+test("makes a folder from the tree's menu, renames it, and moves it to the trash", async () => {
+  const tree = page.getByTestId("explorer").getByRole("tree");
+  const folder = (name: string) => page.locator(`[role="treeitem"][data-path="${name}"]`);
+  // The test above left its filter in the box; this one wants the tree.
+  await page.getByLabel("Filter files").fill("");
+  await expect(folder("README.md")).toBeVisible();
+
+  // The empty space under the rows is the root: New folder, typed in place.
+  await openContextMenu(tree, { x: 40, y: 200 });
+  await pick("New folder");
+  const field = page.getByLabel("New folder name");
+  await expect(field).toBeFocused();
+  await field.fill("parts");
+  await page.keyboard.press("Enter");
+  await expect(folder("parts")).toBeVisible();
+  expect(fs.statSync(path.join(docsDir, "parts")).isDirectory()).toBe(true);
+
+  // Rename, in the row. The stem is what is selected, so typing replaces it.
+  await openContextMenu(folder("parts"));
+  await pick("Rename");
+  const rename = page.getByLabel("Rename parts");
+  await expect(rename).toBeFocused();
+  await rename.fill("assemblies");
+  await page.keyboard.press("Enter");
+  await expect(folder("assemblies")).toBeVisible();
+  await expect(folder("parts")).toHaveCount(0);
+  expect(fs.existsSync(path.join(docsDir, "assemblies"))).toBe(true);
+  expect(fs.existsSync(path.join(docsDir, "parts"))).toBe(false);
+
+  // A file inside it, from the folder's own menu, opens once it is made.
+  await openContextMenu(folder("assemblies"));
+  await pick("New file");
+  await page.getByLabel("New file name").fill("notes.md");
+  await page.keyboard.press("Enter");
+  await expect(page.getByRole("tab", { name: /notes\.md/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Browse notes.md", exact: true })).toBeVisible();
+  expect(fs.readFileSync(path.join(docsDir, "assemblies", "notes.md"), "utf8")).toBe("");
+  // Made in the tree, it opens the way a pick there does: with the tree.
+  await expect(page.getByTestId("tree-toggle")).toHaveAttribute("aria-pressed", "true");
+
+  // F2 renames the cursor row from the keyboard, and Escape leaves it alone.
+  await folder("assemblies/notes.md").click();
+  await tree.focus();
+  await page.keyboard.press("F2");
+  await expect(page.getByLabel("Rename notes.md")).toBeFocused();
+  await page.keyboard.press("Escape");
+  await expect(page.getByLabel("Rename notes.md")).toHaveCount(0);
+  await expect(folder("assemblies/notes.md")).toBeVisible();
+
+  // Move to Trash: no dialog, the row goes, the tab that showed the file goes.
+  await openContextMenu(folder("assemblies"));
+  await pick("Move to Trash");
+  await expect(folder("assemblies")).toHaveCount(0);
+  await expect(page.getByRole("tab", { name: /notes\.md/ })).toHaveCount(0);
+  await expect.poll(() => fs.existsSync(path.join(docsDir, "assemblies"))).toBe(false);
+});
+
+/**
+ * Last, because it switches sessions and leaves a different explorer selected.
+ */
+test("reviews a repository's changes", async () => {
+  await selectFixtureSession(page, reviewRepo);
+  await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
+  // The pane's state is per session, so a session nobody has opened it in
+  // starts closed however wide the last one was.
+  await page.getByRole("button", { name: "Toggle explorer" }).click();
+  await expect(page.getByTestId("explorer")).toBeVisible();
+
+  await newTab(page, "Review");
+
+  await expect(page.getByRole("button", { name: /All changes/ })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Commit or push" })).toBeVisible();
+
+  // A tracked file, edited: git's own numstat.
+  await expect(page.getByRole("button", { name: /tracked\.txt/ }).last()).toContainText("+1");
+  // A new file's counts come from the file, not from `git diff` against a
+  // revision that has never seen it — `git diff --no-index` reports "the files
+  // differ" as exit code 1, and reading that as failure showed every added
+  // file as `+0 −0`.
+  await expect(page.getByRole("button", { name: /added\.txt/ }).last()).toContainText("+12");
+
+  // Both sections open by default and both diffs arrive. A review whose
+  // sections all say "Reading the diff…" is a list of filenames.
+  await expect(page.locator(".monaco-diff-editor")).toHaveCount(2, { timeout: 30_000 });
+
+  await shoot("review.png");
+  await page.evaluate(() => window.hardcore.settings.set({ theme: "light" }));
+  await expect(page.locator("html")).not.toHaveClass(/\bdark\b/);
+  await shoot("review-light.png");
+  await page.evaluate(() => window.hardcore.settings.set({ theme: "dark" }));
+});
+
+test("lists every file, refreshes ignored folders and opens unknown types as Not supported", async () => {
+  await selectFixtureSession(page, allFilesDir);
+  await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
+  await page.getByRole("button", { name: "Toggle explorer" }).click();
+  await newTab(page, "File");
+  const entry = (file: string) => page.locator(`[role="treeitem"][data-path="${file}"]`);
+  await expect(entry(".DS_Store")).toBeVisible();
+  await expect(entry("output.unsupported")).toBeVisible();
+  await entry("STEP").click();
+  await expect(entry("STEP/tom.step")).toBeVisible();
+
+  // Both recursive output watching and direct dependency-directory watching
+  // must refresh visible rows; no renderer needs to read these file contents.
+  fs.copyFileSync(path.join(repoRoot, STEP), path.join(allFilesDir, "STEP", "new.step"));
+  await expect(entry("STEP/new.step")).toBeVisible();
+  await entry("node_modules").click();
+  await expect(entry("node_modules/existing.txt")).toBeVisible();
+  fs.writeFileSync(path.join(allFilesDir, "node_modules", "new.unsupported"), Buffer.from([0, 3, 4]));
+  await expect(entry("node_modules/new.unsupported")).toBeVisible();
+  fs.unlinkSync(path.join(allFilesDir, "node_modules", "new.unsupported"));
+  await expect(entry("node_modules/new.unsupported")).toHaveCount(0);
+
+  await page.getByLabel("Filter files").fill("tom.step");
+  await expect(page.getByRole("option", { name: "STEP/tom.step", exact: false })).toBeVisible();
+  await page.getByLabel("Filter files").fill("output.unsupported");
+  await page.getByRole("option", { name: "output.unsupported", exact: false }).click();
+  await expect(page.getByText("Not supported", { exact: true })).toBeVisible();
+});
+
+/* -------------------------------------------------------------------------- */
+/* Helpers                                                                     */
+/* -------------------------------------------------------------------------- */
+
+/** Select the fixture's existing session and open its explorer pane. */
+async function switchProject(directory: string) {
+  await selectFixtureSession(page, directory);
+  await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
+  if (!(await page.getByTestId("explorer").isVisible())) {
+    await page.getByRole("button", { name: "Toggle explorer" }).click();
+  }
+  await expect(page.getByTestId("explorer")).toBeVisible();
+}
+
+/** Open a path through the tree's filter — the way a person would. */
+async function openFromTree(target: string) {
+  const filter = page.getByLabel("Filter files");
+  await filter.fill(target);
+  await page.getByRole("option", { name: target, exact: false }).first().click();
+  // Selection changes the mounted FileViewer. Do not clear the old tree or
+  // open a context menu before the host has activated the requested file.
+  // The EXPLORER's active file tab, scoped to its own tab list.
+  await expect(page.getByRole("tablist", { name: "Explorer tabs" }).locator('[role="tab"][aria-selected="true"]'))
+    .toHaveAttribute("title", target);
+  // Picked in the tree, the file opens with the tree: its filter is cleared for
+  // whatever comes next.
+  if (await filter.isVisible()) {
+    await filter.fill("");
+  }
+}
+
+/**
+ * macOS opens a context menu on right-button down. During its entry animation
+ * a clamped popup can overlap the initiating pointer, and Radix interprets a
+ * release over an item as drag-selection (including Move to Trash). Let the
+ * popup settle before release so these tests exercise their explicit item
+ * click, not an accidental drag-selection. Other platforms open on release.
+ */
+async function openContextMenu(target: Locator, position?: { x: number; y: number }) {
+  if (process.platform !== "darwin") {
+    await target.click({ button: "right", ...(position ? { position } : {}) });
+  } else {
+    await target.scrollIntoViewIfNeeded();
+    const box = await target.boundingBox();
+    if (!box) throw new Error("the context-menu target has no visible bounds");
+    await page.mouse.move(box.x + (position?.x ?? box.width / 2), box.y + (position?.y ?? box.height / 2));
+    await page.mouse.down({ button: "right" });
+    try {
+      const menu = page.getByRole("menu");
+      await expect(menu).toBeVisible();
+      await menu.evaluate((node) => Promise.all(
+        node.getAnimations({ subtree: true }).map((animation: { finished: Promise<unknown> }) =>
+          animation.finished.catch(() => {}),
+        ),
+      ));
+    } finally {
+      await page.mouse.up({ button: "right" });
+    }
+  }
+  await expect(page.getByRole("menu")).toBeVisible();
+}
+
+/**
+ * Pick an item from the open context menu, and wait for the menu to be
+ * gone. A menu on its way out is still in the DOM for its exit animation,
+ * and a right-click that lands during it is a dismiss, not a new menu.
+ */
+async function pick(item: string) {
+  await page.getByRole("menu").getByRole("menuitem", { name: item }).click();
+  await expect(page.getByRole("menu")).toHaveCount(0);
+}
+
+/**
+ * Screenshot the explorer pane, not the window.
+ *
+ * Two-thirds of a full-window shot is the sidebar and the session pane, which
+ * belong to other phases and are identical in all eleven of these. Clipping to
+ * the pane makes each image both a better review artifact and a third of the
+ * bytes — and these are committed, so they are read on every change.
+ *
+ * `whole` is for the two shots that *are* about the window: the strip under
+ * pressure, and the expanded layout.
+ */
+async function shoot(name: string, whole = false) {
+  const target = whole ? page : page.getByTestId("explorer");
+  await target.screenshot({ path: test.info().outputPath(name), animations: "disabled" });
+}
+
+/** How wide the explorer was before `widenExplorer`, so it can be put back. */
+let explorerBefore = 0;
+
+/**
+ * The explorer at its widest: the sidebar hidden and the session dragged down
+ * to its 320px floor. There is no fullscreen — the session pane is not
+ * collapsible, because the session is the app — so this is the whole of what
+ * "give the CAD surface some room" means now.
+ */
+async function widenExplorer() {
+  explorerBefore = (await page.getByTestId("explorer").boundingBox())!.width;
+  // The sidebar's own toggle. A hidden sidebar is not in the document at all,
+  // so once it is gone this locator finds nothing and the session's bar holds
+  // the only copy of the button.
+  await page.getByTestId("sidebar").getByRole("button", { name: "Toggle sidebar" }).click();
+  await expect(page.getByTestId("sidebar")).toHaveCount(0);
+  await dragSeparator(-4000);
+  await expect
+    .poll(async () => (await page.getByTestId("explorer").boundingBox())?.width ?? 0)
+    .toBeGreaterThan(explorerBefore);
+}
+
+/**
+ * Undo `widenExplorer`. By the distance it moved, not by four thousand
+ * pixels: a drag that overshoots the explorer's minimum by 40px closes the
+ * pane now, and this is meant to put the layout back, not to shut it.
+ */
+async function restoreLayout() {
+  const wide = (await page.getByTestId("explorer").boundingBox())!.width;
+  await dragSeparator(wide - explorerBefore);
+  await page
+    .locator("[data-session-header]")
+    .getByRole("button", { name: "Toggle sidebar" })
+    .click();
+  await expect(page.getByTestId("sidebar")).toHaveCount(1);
+}
+
+/** The width at which the strip's four tabs fill its row, so `+` reaches its end. */
+const STRIP_FULL = 560;
+
+/** Drag the explorer to `width`, from wherever the tests before left it. */
+async function explorerAt(width: number) {
+  await dragSeparator((await page.getByTestId("explorer").boundingBox())!.width - width);
+  await expect.poll(async () => (await page.getByTestId("explorer").boundingBox())?.width ?? 0).toBeCloseTo(width, -1);
+}
+
+/** Drag the separator between the session and the explorer; it clamps. */
+async function dragSeparator(by: number) {
+  const box = (await page.locator("[data-separator=explorer]").boundingBox())!;
+  const y = box.y + box.height / 2;
+  await page.mouse.move(box.x + box.width / 2, y);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2 + by, y, { steps: 12 });
+  await page.mouse.up();
+  await page.waitForTimeout(200);
+}
+
+async function resizeWindow(width: number, height: number) {
+  await app.evaluate(
+    ({ BrowserWindow }, size) => {
+      const [win] = BrowserWindow.getAllWindows();
+      win?.setSize(size.width, size.height);
+    },
+    { width, height },
+  );
+  await expect.poll(() => page.evaluate(() => window.innerWidth)).toBe(width);
+  await page.waitForTimeout(400);
+}
+
+/** The file tab's panel column — the app's, beside the viewer: the file tree. */
+function panels(target: Page) {
+  return target.locator("[data-file-panel-container]");
+}
+
+/**
+ * The file's controls are the viewer's tool stack: the Features panel hangs
+ * under the toolbar at its left edge, inside the surface and over the model,
+ * at the stack's stored width (190px by default, 160px at least), and it
+ * never runs past the surface's foot.
+ */
+async function expectToolStackOnModel() {
+  const surface = page.locator("[data-cad-surface]");
+  const features = page.locator("[data-cad-tool-stack]").getByRole("region", { name: "Features", exact: true });
+  await expect(features).toBeVisible();
+  await expect(page.getByRole("list", { name: "Model", exact: true })).toBeVisible();
+  const [surfaceBox, toolbarBox, featuresBox] = [(await surface.boundingBox())!,
+    (await page.locator("[data-cad-toolbar]").boundingBox())!, (await features.boundingBox())!];
+  const where = `surface ${JSON.stringify(surfaceBox)} toolbar ${JSON.stringify(toolbarBox)} features ${JSON.stringify(featuresBox)}`;
+  expect(Math.abs(featuresBox.x - toolbarBox.x), where).toBeLessThanOrEqual(1);
+  expect(featuresBox.y, where).toBeGreaterThanOrEqual(toolbarBox.y + toolbarBox.height);
+  expect(featuresBox.width, where).toBeGreaterThanOrEqual(159);
+  expect(featuresBox.width, where).toBeLessThanOrEqual(Math.max(191, surfaceBox.width / 2 + 1));
+  expect(featuresBox.x, where).toBeGreaterThanOrEqual(surfaceBox.x);
+  expect(featuresBox.y + featuresBox.height, where).toBeLessThanOrEqual(surfaceBox.y + surfaceBox.height + 1);
+}
+
+/**
+ * The app's column (the file tree) is beside the model, never a drawer over
+ * it: it does not overlap the surface, the model keeps a usable width, and
+ * the column runs the surface's height.
+ */
+async function expectFilesBesideModel() {
+  const surface = page.locator("[data-cad-surface]");
+  const column = panels(page);
+  await expect(column).toHaveAttribute("data-file-panel-container", "tree");
+  const surfaceBox = (await surface.boundingBox())!;
+  const columnBox = (await column.boundingBox())!;
+  const where = `surface ${JSON.stringify(surfaceBox)} column ${JSON.stringify(columnBox)}`;
+  expect(columnBox.width, where).toBeGreaterThanOrEqual(199);
+  expect(columnBox.x >= surfaceBox.x + surfaceBox.width - 2 || columnBox.x + columnBox.width <= surfaceBox.x + 2, where).toBe(true);
+  expect(surfaceBox.width, where).toBeGreaterThan(200);
+  expect(columnBox.height, where).toBeGreaterThan(surfaceBox.height * 0.9);
+}
+
+/**
+ * The window's own ground and the colour the scene is painted on, as `r,g,b`.
+ *
+ * Both are read through a 2D canvas because the app's tokens are `oklch()`
+ * and a theme's colours are hex, and a browser serialises a computed colour
+ * in the space it was authored in — so two colours that are the same colour
+ * compare unequal as strings. A canvas is the one converter every notation
+ * goes through the same way.
+ *
+ * The scene's backdrop has no DOM presence of its own (it is a three.js
+ * texture, and the viewport renderer keeps no drawing buffer), so the box the
+ * canvas fills carries it: the viewer paints that box the scene's edge colour
+ * for the frame between a resize and the renderer catching up.
+ */
+async function sceneBackdrop(): Promise<string> {
+  return page.locator("[data-cad-scene-backdrop]").evaluate((pane) => {
+    const doc = pane.ownerDocument;
+    const view = doc.defaultView!;
+    const asRgb = (color: string) => {
+      const context = doc.createElement("canvas").getContext("2d")!;
+      context.fillStyle = "#000000";
+      context.fillStyle = color;
+      context.fillRect(0, 0, 1, 1);
+      const [red, green, blue] = context.getImageData(0, 0, 1, 1).data;
+      return `${red},${green},${blue}`;
+    };
+    return asRgb(view.getComputedStyle(pane).backgroundColor);
+  });
+}
+
+/**
+ * The WebGL canvas covers its box exactly — no band of anything behind it.
+ *
+ * three.js sizes the canvas from a resize observer, a frame after its box
+ * changes, so this is a real thing to get wrong; the two overlay canvases
+ * over it are `aria-hidden` and laid out by CSS, which is why this asks for
+ * the one that is not.
+ */
+async function expectCanvasFillsItsBox() {
+  const pane = page.locator("[data-cad-scene-backdrop]");
+  const canvas = pane.locator('canvas:not([aria-hidden="true"])');
+  await expect(canvas).toHaveCount(1);
+  await expect
+    .poll(async () => {
+      const box = (await pane.boundingBox())!;
+      const drawn = (await canvas.boundingBox())!;
+      return [drawn.x - box.x, drawn.y - box.y, drawn.width - box.width, drawn.height - box.height]
+        .map((delta) => Math.round(Math.abs(delta)))
+        .every((delta) => delta <= 1);
+    })
+    .toBe(true);
+}
+
+/**
+ * Wait until the shell is at a prompt.
+ *
+ * The terminal is a *login* shell, so it runs the user's profile first —
+ * `nvm`, `rbenv`, whatever they have — and that arrives in bursts with gaps
+ * between them. "The text stopped changing" alone is not enough: a gap in the
+ * middle of a slow profile looks exactly like the end of one, and typing into
+ * that gap gets the keystrokes echoed by the tty and then again by the shell.
+ *
+ * So the real signal is a prompt waiting for input — a last line ending in one
+ * of the four prompt characters — with the stability check as the fallback for
+ * a prompt shaped like nothing in particular.
+ */
+async function settleTerminal() {
+  let previous = "";
+  let stableFor = 0;
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    const current = await page.locator(".xterm-rows").innerText();
+    const lines = current.split("\n").filter((line) => line.trim() !== "");
+    if (/[$%>#]\s*$/.test(lines.at(-1) ?? "")) {
+      return;
+    }
+    // Three seconds of silence, not one: a slow `nvm` in someone's profile
+    // pauses for well over a second in the middle, and typing into that pause
+    // is what put a stray echoed command line into this pane's screenshot.
+    stableFor = current !== "" && current === previous ? stableFor + 1 : 0;
+    if (stableFor >= 20) {
+      return;
+    }
+    previous = current;
+    await page.waitForTimeout(150);
+  }
+}
+
+function occurrences(haystack: string, needle: string): number {
+  return haystack.split(needle).length - 1;
+}
+
+/**
+ * A small git repository with one modified file and one untracked file.
+ *
+ * A real repository, run through the real `git`, because that is what
+ * `src/main/projects/git.ts` shells out to — but a *fixed* one, so the review
+ * screenshot shows the same thing on every run.
+ */
+function makeReviewRepo(): string {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "hardcore-review-repo-"));
+  const run = (...args: string[]) =>
+    execFileSync("git", args, { cwd: root, stdio: "ignore", env: gitEnv });
+
+  run("init", "--quiet", "--initial-branch=main");
+  fs.writeFileSync(path.join(root, "tracked.txt"), "one\ntwo\nthree\n");
+  run("add", "-A");
+  run("commit", "--quiet", "-m", "the state being reviewed against");
+
+  fs.writeFileSync(path.join(root, "tracked.txt"), "one\ntwo\nthree\nfour\n");
+  fs.writeFileSync(path.join(root, "added.txt"), "a line\n".repeat(12));
+  return root;
+}
+
+/**
+ * The fixture repository's identity, so it does not depend on the machine's
+ * `user.name` being set — on a fresh CI runner `git commit` fails without one.
+ */
+const gitEnv = {
+  ...process.env,
+  GIT_AUTHOR_NAME: "Hardcore Tests",
+  GIT_AUTHOR_EMAIL: "tests@example.invalid",
+  GIT_COMMITTER_NAME: "Hardcore Tests",
+  GIT_COMMITTER_EMAIL: "tests@example.invalid",
+};
+
+/**
+ * Open a tab of one kind. `+` is a menu of the four kinds now, so every open
+ * is two clicks — which is also the only way to reach a review or a terminal.
+ */
+async function newTab(page: Page, label: "File" | "Review" | "Browser" | "Terminal") {
+  await page.getByRole("button", { name: "New tab", exact: true }).click();
+  await page.getByRole("menuitem", { name: label }).click();
+  // A closing Radix menu can consume the next outside click. Start the next
+  // interaction only after it has closed and the new file view has mounted.
+  await expect(page.getByRole("menu")).toHaveCount(0);
+  if (label === "File") {
+    await expect(page.getByText("No file open", { exact: true })).toBeVisible();
+  }
+}

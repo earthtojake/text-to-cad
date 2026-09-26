@@ -584,10 +584,10 @@ def _run_script_generator_body(
         declared = _resolve_declared_kinematics(getattr(generator, "__cadgen_model__", None))
         # Record paths relative to the model folder so the assembly.json stays
         # portable. The base is the GENERATOR's folder, never the output's:
-        # with an explicit `--write <path>` the step_path moves to the output
-        # location, and basing the closure there changed every recorded
-        # relpath — the same source hashed differently depending on where its
-        # export was written, defeating every closure-keyed reuse.
+        # `out=` routes the step_path anywhere, and basing the closure there
+        # would change every recorded relpath — the same source hashing
+        # differently depending on where its document is written, defeating
+        # every closure-keyed reuse.
         # The closure a record carries: the script + its static closure (stopping at
         # child models — a result edge is tracked by pin, not by file), every file
         # that executed (hashed AT execution), and the data files the run declared.

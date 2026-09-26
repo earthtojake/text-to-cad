@@ -1,8 +1,8 @@
 """cadgen must ship the Node builders its own producers spawn.
 
-cadgen tessellates a DXF by spawning a Node child
+cadgen bakes a mesh export by spawning a Node child
 (``cadgen._internal.node_runtime``), and finds that child through ``cadgen.assets.
-node_builders_dir()`` -- the repo's live ``packages/cadgen-js/bin`` in a checkout, and the
+node_builders_dir()`` -- the repo's live ``packages/core/bin`` in a checkout, and the
 packaged ``cadgen/_runtime/node`` in an installed wheel.
 
 That packaged directory is BUILT, not committed, so this asserts on the bundler's output:
@@ -33,12 +33,10 @@ RUNTIME_DIR = REPO_ROOT / "packages" / "cadgen" / "src" / "cadgen" / "_runtime" 
 # Builder file name -> the cadgen module constant that names it, so a rename in either
 # place has to be a rename in both.
 BUILDER_CONSTANTS = {
-    "dxf-mesh.mjs": ("cadgen/snapshot_cli.py", "DXF_MESH_BUILDER"),
+    "mesh-export.mjs": ("cadgen/_internal/mesh_export.py", "MESH_EXPORT_BUILDER"),
 }
 
-REQUIRED_BUILDERS = (
-    "dxf-mesh.mjs",
-)
+REQUIRED_BUILDERS = tuple(BUILDER_CONSTANTS)
 
 # A bare specifier in an emitted bundle means a dependency that an installed cadgen -- which
 # ships no node_modules -- cannot resolve. Only node: builtins may survive.
@@ -93,7 +91,7 @@ class NodeBuilderBundleTests(unittest.TestCase):
                 )
 
     def test_emitted_builder_directory_is_marked_as_esm(self) -> None:
-        # The emitted directory declares ESM, matching packages/cadgen-js itself, so a builder
+        # The emitted directory declares ESM, matching packages/core itself, so a builder
         # emitted as a bare `.js` would still parse as a module rather than as CommonJS.
         manifest = RUNTIME_DIR / "package.json"
         self.assertTrue(manifest.is_file(), f"Missing {manifest.relative_to(REPO_ROOT)}")

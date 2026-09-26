@@ -2,7 +2,7 @@
 
 Reachable = every object referenced (transitively, through links) from a
 current record or document index, plus objects pointed at by component,
-op-memo and mesh entries, plus
+op-memo, mesh and drawing entries, plus
 anything modified within a grace period (default 1 h — the window in which a
 build may still hold a pin to a child's previous tree). No age-sweeps, no
 per-tier rules. Best-effort: deleting an object costs a rebuild, never
@@ -79,7 +79,7 @@ def reachable_objects() -> set[str]:
         except (OSError, ValueError, TypeError, KeyError):
             continue
         reachable.add(entry["object"])
-    for kind in ("op", "mesh"):
+    for kind in ("op", "mesh", "drawing"):
         for _name, path in iter_entries(kind):
             entry = read_entry(kind, path.name)
             if entry and entry.get("object"):
