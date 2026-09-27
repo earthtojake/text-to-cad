@@ -108,7 +108,7 @@ async function newPage({ lod = true } = {}) {
     await route.continue();
   });
   const page = await context.newPage();
-  page.setDefaultTimeout(10_000);
+  page.setDefaultTimeout(30_000);
   page.on("response", response => {
     if (response.status() < 400 || !response.url().startsWith(`${viewerOrigin}/__cad/`)) return;
     const read = response.text().then(body => {
@@ -435,6 +435,8 @@ async function parkPointer(page) {
   await page.mouse.move(viewport.width / 2, Math.max(1, (box?.y ?? 8) - 6));
 }
 
+const CAPTURE_DEADLINE_MS = 30_000;
+
 async function restingShot(page) {
   await parkPointer(page);
   const frame = await presentedFrame(page);
@@ -443,8 +445,10 @@ async function restingShot(page) {
   let session;
   let finished = false;
   let timer;
+  // A guard against a capture that hangs, not a speed check: on a loaded CI runner with software
+  // WebGL, copying and encoding one frame alone has taken over 5 s.
   const deadline = new Promise((_, reject) => {
-    timer = setTimeout(() => reject(new Error('capture: 10000ms deadline exceeded')), 10_000);
+    timer = setTimeout(() => reject(new Error(`capture: ${CAPTURE_DEADLINE_MS}ms deadline exceeded`)), CAPTURE_DEADLINE_MS);
   });
   const capture = async () => {
     const acquired = await page.context().newCDPSession(page);
