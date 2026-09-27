@@ -323,7 +323,9 @@ test('a static GLB opens on its native scene with no tools: display settings, or
   await ready(pane);
   await page.waitForFunction(() => window.cadHarness.a.controller?.readState().loading === false);
   const reopened = await page.evaluate(() => window.cadHarness.a.controller.readState());
-  assert.deepEqual(reopened.camera.position.map(value => Math.round(value * 100)), left.camera.position.map(value => Math.round(value * 100)), "reopening restores the camera the file was left at");
+  // Within a thousandth: the camera read when leaving can still be coasting its last hundredth.
+  assert.ok(reopened.camera.position.every((value, axis) => Math.abs(value - left.camera.position[axis]) <= 1e-3 * Math.max(1, Math.abs(left.camera.position[axis]))),
+    `reopening restores the camera the file was left at: ${JSON.stringify([reopened.camera.position, left.camera.position])}`);
   assert.ok(Math.abs(reopened.camera.zoom - left.camera.zoom) < 1e-6);
   assert.deepEqual([reopened.display.surfaces.colorMode, reopened.display.surfaces.color, reopened.display.grid.enabled], ['single', '#00c040', false]);
 
