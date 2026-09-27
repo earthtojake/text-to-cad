@@ -121,6 +121,22 @@ async function frameWhen(view, reached, what) {
   throw new assert.AssertionError({ message: `the drawn frame never ${what}`, actual: false, expected: true, operator: '==' });
 }
 
+/**
+ * The view at rest: a frame once two in a row are the same. One taken a fixed moment after a
+ * change can still be the interactive pass that an idle-quality repaint replaces later, and a
+ * baseline like that is one no later frame ever matches.
+ */
+async function restingFrame(view) {
+  let last = await view.frame();
+  for (let attempt = 0; attempt < 40; attempt += 1) {
+    await view.page.waitForTimeout(200);
+    const next = await view.frame();
+    if (differing(last, next) === 0) return next;
+    last = next;
+  }
+  throw new assert.AssertionError({ message: 'the drawn frame never came to rest', actual: false, expected: true, operator: '==' });
+}
+
 // A page over the fixture. Unless a test seeds a record of its own, or keeps the tab in
 // sessionStorage, the file's view is seeded with Orbit off in its Playback settings — a still
 // preview camera, so what moves in a frame is the model — as a previous session would have left it.
@@ -1137,8 +1153,7 @@ test('Position drives the mate and repaints, a named pose jumps, the Position kn
   assert.equal(await slider.inputValue(), '0.00°');
 
   await page.mouse.move(view.box.x + 20, view.box.y + view.box.height - 20);
-  await page.waitForTimeout(300);
-  const rest = await view.frame();
+  const rest = await restingFrame(view);
   const restArm = (await translations(page))['o1.2'];
   await slider.fill('60');
   await slider.press('Enter');
@@ -1269,8 +1284,7 @@ test('preview opens paused, its playbar plays and pauses the routine, and leavin
   const view = await open();
   const { page, pane, errors } = view;
   await page.mouse.move(view.box.x + 20, view.box.y + view.box.height - 20);
-  await page.waitForTimeout(300);
-  const toolsRest = await view.frame();
+  const toolsRest = await restingFrame(view);
   const restArm = (await translations(page))['o1.2'];
   // The tools view carries nothing of the routine's: no Animate tool, no transport.
   assert.equal(await view.tool('Animate').count(), 0);
@@ -2896,8 +2910,7 @@ test('a click selects at once, and a double-click ends where it did when a click
   await page.keyboard.press('Escape');
   await cleared();
   await page.mouse.move(...empty);
-  await page.waitForTimeout(300);
-  const faces = await view.frame();
+  const faces = await restingFrame(view);
   await page.mouse.move(...at([6, 6, 5]));
   await frameWhen(view, shot => differing(faces, shot) > 200, 'lit the hovered face');
   await page.mouse.move(...empty);
@@ -2906,8 +2919,7 @@ test('a click selects at once, and a double-click ends where it did when a click
   await frameWhen(view, shot => differing(faces, shot) <= 20, 'let go of the hovered face');
   await view.chooseSelectMode('Edges');
   await page.mouse.move(...empty);
-  await page.waitForTimeout(300);
-  const edges = await view.frame();
+  const edges = await restingFrame(view);
   await page.mouse.move(...at([10, 6, 5]));
   await frameWhen(view, shot => differing(edges, shot) > 10, 'lit the hovered edge');
   await page.mouse.move(...empty);
