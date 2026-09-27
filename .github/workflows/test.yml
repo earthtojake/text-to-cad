@@ -200,6 +200,10 @@ jobs:
 
       - name: Run shared UI tests
         if: needs.changes.outputs.ui == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.infra == 'true'
+        # One browser spec at a time: each renders WebGL in software here (SwiftShader), and
+        # several at once saturate the runner's four cores until clicks time out.
+        env:
+          UI_BROWSER_TEST_CONCURRENCY: "1"
         run: scripts/test/test-js.sh --select ui
 
       - name: Run the CAD Viewer client tests

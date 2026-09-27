@@ -201,6 +201,12 @@ spelling or UI copy when observable behavior already covers the requirement.
 Real kernel and browser tests remain necessary for geometry fidelity,
 cache reuse, rendering, and process-lifecycle behavior.
 
+The UI's browser specs (`packages/ui/**/*.browser.test.mjs`) run as their own
+pass, `UI_BROWSER_TEST_CONCURRENCY` files at a time (4 by default; the CI
+`viewer` job sets 1, because Linux renders their WebGL in software and several
+at once saturate the runner). `CAD_TEST_SWIFTSHADER=1` makes a macOS run use that same
+software renderer, to reproduce a CI-only browser failure locally.
+
 A test's COST is part of its design. A cold `python <model>.py` spends ~2.6 s
 importing the CAD kernel before it draws a box, so a file that runs one per
 assertion is mostly paying for imports: build a fixture the tests only READ once

@@ -14,6 +14,15 @@ import { DEFAULT_VIEW_DIRECTION, WORLD_UP } from '../../../../dist/renderers/kit
 import { CAD_DEFAULT_VERTICAL_FOV_DEGREES } from '../../../../dist/renderers/kit/camera/cameraLens.js';
 import { TOOL_PANEL_WIDTH } from '../../../../dist/renderers/kit/tools/toolStackLayout.js';
 
+// A software WebGL renderer (SwiftShader, llvmpipe: Linux CI) caps the pixel ratio at 1, idle and
+// moving (`useViewerRuntime.js`), so the hardware-only ratio checks read the policy that applies.
+const softwareWebGl = page => page.evaluate(() => {
+  const gl = document.createElement('canvas').getContext('webgl');
+  const info = gl?.getExtension('WEBGL_debug_renderer_info');
+  const name = String(info ? gl.getParameter(info.UNMASKED_RENDERER_WEBGL) : gl?.getParameter(gl.RENDERER) || '');
+  return /swiftshader|llvmpipe|softpipe|software rasterizer|lavapipe/i.test(name);
+});
+
 // The shell end to end, in a real browser, under the smallest renderer that mounts it: a
 // one-triangle mesh file. Everything asserted here is the shell's (kit/shell), so it holds
 // for every renderer built on it. Inline fixture bytes are served in memory with a private
@@ -48,7 +57,7 @@ test('a shell renderer resolves deferred files, reuses warm assets, restores iso
     else { response.setHeader('Content-Type', 'text/html'); response.end('<!doctype html><html><head><title>Host title</title><link rel="stylesheet" href="/styles.css"></head><body><div id="root"></div><script type="module" src="/harness.js"></script></body></html>'); }
   });
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
-  browser = await chromium.launch({ headless: true, args: process.platform === 'darwin'
+  browser = await chromium.launch({ headless: true, args: (process.platform === 'darwin' && process.env.CAD_TEST_SWIFTSHADER !== '1')
     ? ['--use-angle=metal']
     : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 2 });
@@ -478,7 +487,8 @@ test('a shell renderer resolves deferred files, reuses warm assets, restores iso
   assert.deepEqual(await page.evaluate(() => window.cadHarnessView.interruptions), [], 'settings never replace or cover the live canvas');
   assert.equal(requests.filter(path => path === '/one/mesh.stl').length, 1, 'view edits never reload geometry');
   const clears = await page.evaluate(() => window.cadBufferClears);
-  assert.ok(clears.length > 0, 'exercise actual Retina buffer resizes');
+  // A software renderer never changes its pixel ratio, so there is no Retina resize to exercise.
+  if (!(await softwareWebGl(page))) assert.ok(clears.length > 0, 'exercise actual Retina buffer resizes');
   assert.ok(clears.every(clear => clear.redrawn), 'no cleared framebuffer is left waiting for a later draw');
   assert.deepEqual(errors, []);
 });
@@ -514,7 +524,7 @@ test('a file opens framed at 100% of its own ruler: the open fit is the fit, wha
     else { response.setHeader('Content-Type', 'text/html'); response.end('<!doctype html><html><head><title>Host title</title><link rel="stylesheet" href="/styles.css"></head><body><div id="root"></div><script type="module" src="/harness.js"></script></body></html>'); }
   });
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
-  browser = await chromium.launch({ headless: true, args: process.platform === 'darwin'
+  browser = await chromium.launch({ headless: true, args: (process.platform === 'darwin' && process.env.CAD_TEST_SWIFTSHADER !== '1')
     ? ['--use-angle=metal'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
   page.setDefaultTimeout(15000);
@@ -620,7 +630,7 @@ test('the shell keeps its Draw session across preview, and preview drags are the
     else { response.setHeader('Content-Type', 'text/html'); response.end('<!doctype html><html><head><title>Host title</title><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/harness.css"></head><body><div id="root"></div><script type="module" src="/harness.js"></script></body></html>'); }
   });
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
-  browser = await chromium.launch({ headless: true, args: process.platform === 'darwin'
+  browser = await chromium.launch({ headless: true, args: (process.platform === 'darwin' && process.env.CAD_TEST_SWIFTSHADER !== '1')
     ? ['--use-angle=metal'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
   page.setDefaultTimeout(15000);
@@ -782,7 +792,7 @@ test('a scene that arrives in place is framed when whole, a renderer hears what 
     else { response.setHeader('Content-Type', 'text/html'); response.end('<!doctype html><html><head><title>Host title</title><link rel="stylesheet" href="/styles.css"></head><body><div id="root"></div><script type="module" src="/harness.js"></script></body></html>'); }
   });
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
-  browser = await chromium.launch({ headless: true, args: process.platform === 'darwin'
+  browser = await chromium.launch({ headless: true, args: (process.platform === 'darwin' && process.env.CAD_TEST_SWIFTSHADER !== '1')
     ? ['--use-angle=metal'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 2 });
   page.setDefaultTimeout(15000);
@@ -895,9 +905,14 @@ test('a scene that arrives in place is framed when whole, a renderer hears what 
     return { idle, moving };
   };
   const plain = await backingScale('one.harness');
-  assert.ok(plain.idle > 1.4 && plain.moving < plain.idle - 0.2, `an ordinary scene drops its pixel ratio while it moves: ${JSON.stringify(plain)}`);
   const hairline = await backingScale('hairline.harness');
-  assert.ok(hairline.idle === plain.idle && hairline.moving === hairline.idle, `a hairline scene keeps it: ${JSON.stringify(hairline)}`);
+  if (await softwareWebGl(page)) {
+    // Software WebGL: one pixel ratio, 1, whatever the scene and whether it moves.
+    assert.deepEqual([plain, hairline], [{ idle: 1, moving: 1 }, { idle: 1, moving: 1 }], `a software renderer holds a ratio of 1: ${JSON.stringify({ plain, hairline })}`);
+  } else {
+    assert.ok(plain.idle > 1.4 && plain.moving < plain.idle - 0.2, `an ordinary scene drops its pixel ratio while it moves: ${JSON.stringify(plain)}`);
+    assert.ok(hairline.idle === plain.idle && hairline.moving === hairline.idle, `a hairline scene keeps it: ${JSON.stringify(hairline)}`);
+  }
 
   // THE RUNTIME UNDER THE SCENE. A lost context is reported; the replacement runtime's
   // predecessor is released while its renderer is still alive, and named a handoff.
@@ -933,7 +948,7 @@ test('a renderer supplies the viewport menu, a bottom action that falls back to 
     else { response.setHeader('Content-Type', 'text/html'); response.end('<!doctype html><html><head><title>Host title</title><link rel="stylesheet" href="/styles.css"></head><body><div id="root"></div><script type="module" src="/harness.js"></script></body></html>'); }
   });
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
-  browser = await chromium.launch({ headless: true, args: process.platform === 'darwin'
+  browser = await chromium.launch({ headless: true, args: (process.platform === 'darwin' && process.env.CAD_TEST_SWIFTSHADER !== '1')
     ? ['--use-angle=metal'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
   page.setDefaultTimeout(15000);
@@ -1070,7 +1085,7 @@ test('a renderer says more about its load than a download: finding the file, edi
     else { response.setHeader('Content-Type', 'text/html'); response.end('<!doctype html><html><head><title>Host title</title><link rel="stylesheet" href="/styles.css"></head><body><div id="root"></div><script type="module" src="/harness.js"></script></body></html>'); }
   });
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
-  browser = await chromium.launch({ headless: true, args: process.platform === 'darwin'
+  browser = await chromium.launch({ headless: true, args: (process.platform === 'darwin' && process.env.CAD_TEST_SWIFTSHADER !== '1')
     ? ['--use-angle=metal'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
   page.setDefaultTimeout(15000);
@@ -1216,7 +1231,7 @@ test('the tool stack: every panel one width, the tree and Position each the pers
     else { response.setHeader('Content-Type', 'text/html'); response.end('<!doctype html><html><head><link rel="stylesheet" href="/styles.css"></head><body><div id="root"></div><script type="module" src="/harness.js"></script></body></html>'); }
   });
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
-  browser = await chromium.launch({ headless: true, args: process.platform === 'darwin'
+  browser = await chromium.launch({ headless: true, args: (process.platform === 'darwin' && process.env.CAD_TEST_SWIFTSHADER !== '1')
     ? ['--use-angle=metal'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
   const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
   page.setDefaultTimeout(15000);
