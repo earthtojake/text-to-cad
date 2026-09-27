@@ -150,6 +150,17 @@ async function open(t, file, { panel = true } = {}) {
     settled: () => page.waitForTimeout(400),
     async type(name, value, unit) { await robot.openPosition(); await robot.jointField(name, unit).fill(String(value)); await robot.jointField(name, unit).press('Enter'); },
     pressedRows: () => pane.locator('[aria-label="Robot tree area"] button[aria-pressed="true"]').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
+    // The pressed rows once they read `wanted` (in any order), or the assertion naming what they did read.
+    async pressed(wanted, message) {
+      const expected = [...wanted].sort();
+      let actual = [];
+      for (let attempt = 0; attempt < 25; attempt += 1) {
+        actual = (await robot.pressedRows()).sort();
+        if (JSON.stringify(actual) === JSON.stringify(expected)) return;
+        await page.waitForTimeout(200);
+      }
+      assert.deepEqual(actual, expected, message);
+    },
     // A selection is React state: it is on screen a render after whatever changed it.
     waitPressed: count => page.waitForFunction(wanted => document.querySelectorAll('[data-testid="one"] [aria-label="Robot tree area"] button[aria-pressed="true"]').length === wanted, count),
     // The nav row's panel toggles, in order, each with whether its panel is the open one.
@@ -431,7 +442,7 @@ test('Select picks links at once; a selection lives only under Select; Links sho
   assert.equal(await robot.linksPanel().isVisible(), false);
   await robot.tool('Select').click();
   await robot.linksPanel().waitFor();
-  assert.deepEqual(await robot.pressedRows(), []);
+  await robot.pressed([]);
   // The tree: a frame-only root is elided, so the base leads it, pinned (no chevron of its own).
   assert.equal(await pane.getByRole('button', { name: 'Select base_footprint', exact: true }).count(), 0);
   assert.equal(await pane.getByRole('button', { name: 'Collapse base', exact: true }).count(), 0);
@@ -440,7 +451,7 @@ test('Select picks links at once; a selection lives only under Select; Links sho
   // A row is the selection.
   await pane.getByRole('button', { name: 'Select upper_arm', exact: true }).click();
   assert.deepEqual(await robot.toolNames(), ['Select:true', 'Position:false']);
-  assert.deepEqual(await robot.pressedRows(), ['Select upper_arm']);
+  await robot.pressed(['Select upper_arm']);
   const reference = pane.getByRole('region', { name: 'Reference details', exact: true });
   await reference.getByText('shoulder', { exact: true }).first().waitFor();
   assert.match(await reference.innerText(), /arm/, 'the SRDF planning group of the link');
@@ -464,7 +475,7 @@ test('Select picks links at once; a selection lives only under Select; Links sho
   assert.ok(Math.abs((await linksPanel.boundingBox()).height - (await filterRow.boundingBox()).height - 2) <= 1, 'folded to its filter row');
   assert.ok((await reference.boundingBox()).y < pinned.y, 'the Reference moves up under it');
   await filterRow.getByRole('button', { name: 'Expand links', exact: true }).click();
-  assert.deepEqual(await robot.pressedRows(), ['Select upper_arm'], 'the tree kept its selection while folded');
+  await robot.pressed(['Select upper_arm'], 'the tree kept its selection while folded');
   // Leaving Select drops the selection, in the tree and the viewport alike.
   await robot.tool('Position').click();
   await robot.waitPressed(0);
@@ -500,15 +511,15 @@ test('Select picks links at once; a selection lives only under Select; Links sho
 
   // Escape clears the selection; the stack's panels are never its to close.
   await page.mouse.click(surface.x + 30, surface.y + surface.height - 30);
-  assert.deepEqual(await robot.pressedRows(), [], 'a click on nothing clears');
+  await robot.pressed([], 'a click on nothing clears');
   await page.mouse.click(...onScreen(spots.lift));
   await page.waitForFunction(() => document.querySelectorAll('[data-testid="one"] [aria-label="Robot tree area"] button[aria-pressed="true"]').length === 1);
-  assert.deepEqual(await robot.pressedRows(), ['Select carriage']);
+  await robot.pressed(['Select carriage']);
   assert.match(await reference.innerText(), /tool/, 'the end effector mounted on the link');
   // Shift adds a link to the selection, as it adds a named object.
   await page.keyboard.down('Shift'); await page.mouse.click(...onScreen(spots.shoulder)); await page.keyboard.up('Shift');
   await page.waitForFunction(() => document.querySelectorAll('[data-testid="one"] [aria-label="Robot tree area"] button[aria-pressed="true"]').length === 2);
-  assert.deepEqual((await robot.pressedRows()).sort(), ['Select carriage', 'Select upper_arm']);
+  await robot.pressed(['Select carriage', 'Select upper_arm']);
   assert.deepEqual((await page.evaluate(() => window.cadHarness.a.controller.readState())).selectedLinks.sort(), ['carriage', 'upper_arm']);
   await page.keyboard.press('Escape');
   await page.waitForFunction(() => document.querySelectorAll('[data-testid="one"] [aria-label="Robot tree area"] button[aria-pressed="true"]').length === 0);
@@ -519,10 +530,10 @@ test('Select picks links at once; a selection lives only under Select; Links sho
   // Named objects of a link's mesh select themselves, and Shift adds.
   await page.mouse.click(...visor);
   await page.waitForFunction(() => document.querySelectorAll('[data-testid="one"] [aria-label="Robot tree area"] button[aria-pressed="true"]').length === 1);
-  assert.deepEqual(await robot.pressedRows(), ['Select visor']);
+  await robot.pressed(['Select visor']);
   await page.keyboard.down('Shift'); await page.mouse.click(...antenna); await page.keyboard.up('Shift');
   await page.waitForFunction(() => document.querySelectorAll('[data-testid="one"] [aria-label="Robot tree area"] button[aria-pressed="true"]').length === 2);
-  assert.deepEqual((await robot.pressedRows()).sort(), ['Select antenna', 'Select visor']);
+  await robot.pressed(['Select antenna', 'Select visor']);
   assert.deepEqual((await page.evaluate(() => window.cadHarness.a.controller.readState())).selectedPartIds.sort(), ['head:v1/object/0', 'head:v1/object/1']);
 
   // What names something else can be followed: a parent link selects it, a mesh path opens it.
@@ -530,7 +541,7 @@ test('Select picks links at once; a selection lives only under Select; Links sho
   await reference.getByRole('button', { name: 'meshes/head.glb' }).click();
   assert.deepEqual(await page.evaluate(() => window.cadHarness.opened), ['meshes/head.glb']);
   await reference.getByRole('button', { name: 'base', exact: true }).first().click();
-  assert.deepEqual(await robot.pressedRows(), ['Select base']);
+  await robot.pressed(['Select base']);
   // The filter finds a link by the joint that carries it.
   await pane.getByRole('textbox', { name: 'Filter links', exact: true }).fill('nod');
   await pane.getByRole('list', { name: 'Link search results' }).getByRole('button', { name: 'Select head', exact: true }).waitFor();
@@ -540,7 +551,7 @@ test('Select picks links at once; a selection lives only under Select; Links sho
   const declined = await page.evaluate(() => window.cadHarness.a.controller.select(['#f1']).then(() => '', error => error.message));
   assert.match(declined, /no CAD references to select/);
   await page.evaluate(() => window.cadHarness.a.controller.clearSelection());
-  assert.deepEqual(await robot.pressedRows(), []);
+  await robot.pressed([]);
   assert.deepEqual(robot.errors, []);
 });
 
