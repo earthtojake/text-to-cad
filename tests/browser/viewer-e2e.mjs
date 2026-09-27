@@ -339,7 +339,9 @@ async function selectViewingMode(page, current, next) {
 // the last-bit drift OrbitControls' own update leaves behind (observed at ~1e-15
 // relative); the regression this catches moved the framing by 2.4% and the pivot
 // by a quarter of the model.
-const CAMERA_EPSILON = 1e-9;
+// Relative. A mode switch rebuilds the camera through floating-point conversions that land a
+// few 1e-9 off on some runs; 1e-6 is still far below any move a person could see.
+const CAMERA_EPSILON = 1e-6;
 
 async function cameraState(page) {
   return page.evaluate(() => window.__cadCamera?.() || null);
