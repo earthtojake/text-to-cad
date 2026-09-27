@@ -32,15 +32,16 @@ const args = parseArgs(process.argv.slice(2));
 const diagnosticDir = args.out || process.env.VIEWER_TEST_DIAGNOSTICS_DIR || "";
 const root = path.resolve(args.dir || ".");
 const fixtures = [
-  // `measure` mirrors renderCapabilities: a view that cannot measure has NO Measure
-  // button (hidden, not disabled).
-  { format: "stl", file: "smoke.stl", parts: false, measure: true },
-  { format: "3mf", file: "smoke.3mf", parts: false, measure: true },
-  { format: "glb", file: "smoke.glb", parts: false, measure: true },
-  { format: "step", file: "assembly.step", parts: true, measure: true },
-  { format: "dxf", file: "smoke.dxf", parts: false, measure: false },
-  { format: "urdf", file: "smoke.urdf", parts: false, measure: false },
-  { format: "srdf", file: "smoke.srdf", parts: false, measure: false },
+  // `tools` is the file's own tool strip (a mesh and a drawing have none: a tool that does not
+  // apply is hidden, not disabled); `threeD` has the viewport's Display settings and Preview.
+  { format: "stl", file: "smoke.stl", parts: false, tools: [], threeD: true },
+  { format: "3mf", file: "smoke.3mf", parts: false, tools: [], threeD: true },
+  { format: "glb", file: "smoke.glb", parts: false, tools: [], threeD: true },
+  { format: "step", file: "assembly.step", parts: true, tools: ["Select", "Draw", "Measure"], threeD: true },
+  // A drawing is line work, not shaded surfaces: its outline covers a fraction of what a solid does.
+  { format: "dxf", file: "smoke.dxf", parts: false, tools: [], threeD: false, minCoverage: 0.003 },
+  { format: "urdf", file: "smoke.urdf", parts: false, tools: ["Select", "Position"], threeD: true },
+  { format: "srdf", file: "smoke.srdf", parts: false, tools: ["Select", "Position"], threeD: true },
 ];
 const expectedBounds = { min: [39, -3, -5], max: [45, 3, 9] };
 const viewport = { width: 1400, height: 900 };
@@ -130,6 +131,7 @@ async function newPage({ lod = true } = {}) {
       : "";
     errors.push(`console: ${message.text()}${source}`);
   });
+  await page.addInitScript(MODEL_BOUNDS_SCRIPT);
   await page.addInitScript(({ lodOn }) => {
     if (!lodOn) window.__CAD_VIEWER_LOD__ = false;
     window.__viewerTestLodEvents = [];
@@ -200,25 +202,36 @@ async function openFile(page, file) {
     waitUntil: "domcontentloaded",
     timeout: 60_000,
   });
-  await page.getByRole("button", { name: /^Viewing mode:/ }).waitFor({ timeout: 60_000 });
+  // The file's viewer is mounted: every renderer draws into one `data-slot="cad-file-view"` frame,
+  // and its viewport says when it has what it was loading (`aria-busy="false"`).
+  await page.locator('[data-slot="cad-file-view"]').first().waitFor({ timeout: 60_000 });
   const canvas = page.locator("canvas").first();
   await canvas.waitFor({ state: "visible", timeout: 60_000 });
-  await page.waitForFunction(() => !document.querySelector(".cad-loading-overlay"), null, { timeout: 120_000 });
-  // Then settle on the seam that says the model reached the RENDERER, not on a
-  // second of wall clock. Every fixture format publishes it — the format gate
-  // asserts its bounds for all seven — so this is a state wait on a slow runner
-  // and a shortcut on a fast one. The short pause after it is for the frame to
-  // be painted, which has no seam of its own.
-  await page.waitForFunction(() => {
-    const placement = window.__cadModelPlacement;
-    const min = placement?.boundsMin;
-    const max = placement?.boundsMax;
-    return Array.isArray(min) && Array.isArray(max)
-      && min.some((value, axis) => Number(max[axis]) - Number(value) > 0);
-  }, null, { timeout: 120_000 });
+  await page.locator('[data-slot="cad-file-view"] [aria-busy="false"]').first().waitFor({ timeout: 120_000 });
+  // Then settle on the seam that says the model reached the RENDERER, not on a second of wall
+  // clock: every 3D renderer's viewport publishes the bounds it staged (`modelBounds`); a 2D
+  // drawing has none, and its viewport's `aria-busy` is the whole of it. The short pause after it
+  // is for the frame to be painted, which has no seam of its own.
+  if (!/\.dxf$/i.test(file)) {
+    await page.waitForFunction(() => {
+      const bounds = window.__cadModelBounds?.();
+      return Array.isArray(bounds?.min) && Array.isArray(bounds?.max)
+        && bounds.min.some((value, axis) => Number(bounds.max[axis]) - Number(value) > 0);
+    }, null, { timeout: 120_000 });
+  }
   await page.waitForTimeout(250);
   return canvas;
 }
+
+/** The staged model's bounds, from whichever seam its renderer publishes. */
+const MODEL_BOUNDS_SCRIPT = () => {
+  window.__cadModelBounds = () => {
+    const placement = window.__cadModelPlacement;
+    if (Array.isArray(placement?.boundsMin)) return { min: placement.boundsMin, max: placement.boundsMax };
+    const stage = window.__cadStage?.();
+    return stage?.bounds ? { min: stage.bounds.min, max: stage.bounds.max } : null;
+  };
+};
 
 function isHighlight(data, offset) {
   const r = data[offset];
@@ -294,25 +307,24 @@ function highlightComponents(selected, baseline, sceneWidth, mode = "face") {
   return { total: mask.reduce((sum, value) => sum + value, 0), sizes };
 }
 
+// The selected reference: the ID row of the Reference panel the selection opens in the tool stack.
 async function chipRef(page) {
   return page.evaluate(() => {
-    const buttons = [...document.querySelectorAll('button[aria-label="Copy reference"]')];
-    for (const button of buttons) {
-      if (!button.getBoundingClientRect().height) continue;
-      const reference = button.parentElement?.querySelector('code')?.textContent?.trim();
+    const panel = document.querySelector('[data-tool-panel][aria-label="Reference details"]');
+    if (!panel || !panel.getBoundingClientRect().height) return '';
+    for (const row of panel.querySelectorAll('[data-info-row]')) {
+      if (row.firstElementChild?.textContent?.trim() !== 'ID') continue;
+      const reference = row.lastElementChild?.textContent?.trim();
       if (/^o\d+(?:\.\d+)*(?:\.[a-z]\d+)?$/.test(reference || '')) return reference;
     }
     return '';
   });
 }
 
-// Desktop activation is deliberately delayed 220ms so a second click can still
-// become a double click, and the chip only changes once that timer commits.
-// Reading it a fixed 240ms after the click left ~20ms for the commit plus the
-// React render and lost that race on a fast Linux box. (No pair of these clicks
-// can become a real dblclick: Playwright dispatches each one with clickCount 1,
-// so the page never sees detail=2.) A miss must be waited out, a state change
-// must not be.
+// A click selects at once, but the Reference panel follows a render later, and a
+// software-GL runner renders slowly. (No pair of these clicks can become a real
+// dblclick: Playwright dispatches each one with clickCount 1, so the page never
+// sees detail=2.) A miss must be waited out, a state change must not be.
 const ACTIVATION_SETTLE_MS = 700;
 
 // MEASURED, do not shorten: polling for "a chip exists" and taking the first one
@@ -415,8 +427,16 @@ async function presentedFrame(page) {
 }
 
 // Park the pointer over the panel so a hover highlight cannot join the mask.
+// Where the pointer rests while a frame is read: the navigation row above the scene. The scene
+// fills the window, so any corner of it can be the model, and a pointer resting on the model
+// hovers it in the very colour a selection is read by.
+async function parkPointer(page) {
+  const box = await page.locator('canvas').first().boundingBox();
+  await page.mouse.move(viewport.width / 2, Math.max(1, (box?.y ?? 8) - 6));
+}
+
 async function restingShot(page) {
-  await page.mouse.move(viewport.width - 4, viewport.height - 4);
+  await parkPointer(page);
   const frame = await presentedFrame(page);
   const startedAt = Date.now();
   const stages = {};
@@ -576,7 +596,7 @@ async function pickingGate(tag, lod, { depth = "full" } = {}) {
     // All follows the model tree's expansion frontier. Exact entity tools open
     // the relevant part; merely activating Select must keep closed parts cheap.
     await page.getByRole("button", { name: "Select", exact: true }).click();
-    await page.getByRole("button", { name: /^Selection filter:/ }).click();
+    await page.getByRole("button", { name: /^Select mode:/ }).click();
     await page.getByRole("menuitemradio", { name: depth === "smoke" ? /^Faces/ : /^Edges/ }).click();
     await page.getByRole("button", { name: "Select", exact: true }).waitFor({ timeout: 60_000 });
     const box = await canvas.boundingBox();
@@ -704,7 +724,7 @@ async function pickingGate(tag, lod, { depth = "full" } = {}) {
     if (lod && !lodEvents.length) fail(`${tag}: no LOD swap fired`);
     if (!lod && lodEvents.length) fail(`${tag}: LOD-off page emitted swaps`);
 
-    await page.getByRole("button", { name: /^Selection filter:/ }).click();
+    await page.getByRole("button", { name: /^Select mode:/ }).click();
     await page.getByRole("menuitemradio", { name: /^Faces/ }).click();
     const { faceRef, ratio } = await facePickPhase(page, box, scene, tag);
     if (errors.length) fail(`${tag}: ${errors.join(" | ")}`);
@@ -747,10 +767,6 @@ async function canvasMenuItems(page, canvas) {
 }
 
 async function formatGate() {
-  // Desktop7f6 groups navigation under View controls and capture under Capture.
-  // Its Orbit action provides the immersive preview (the viewer's Preview mode).
-  // Require each action through that preserved layout, not one standalone button.
-  const tools = ["Select", "Draw", "View controls", "Capture"];
   // Framing lives in STEP's viewport menu and nowhere else: no other renderer opens a
   // viewport menu at all, and the Inspector's zoom readout and its menu are gone.
   const framing = ["Zoom to fit", "Zoom to selection"];
@@ -768,33 +784,31 @@ async function formatGate() {
       const canvas = await openFile(page, fixture.file);
       const shot = PNG.sync.read(await canvas.screenshot());
       const drawn = coverage(shot);
-      const placement = await page.evaluate(() => window.__cadModelPlacement || null);
-      const spans = placement?.boundsMin?.map((value, axis) => Number(placement.boundsMax?.[axis]) - Number(value)) || [];
-      if (!spans.some((value) => Number.isFinite(value) && value > 0)) {
-        failures.push(`${fixture.format}: no non-empty model bounds reached the renderer`);
+      if (fixture.threeD) {
+        const bounds = await page.evaluate(() => window.__cadModelBounds?.() || null);
+        const spans = bounds?.min?.map((value, axis) => Number(bounds.max?.[axis]) - Number(value)) || [];
+        if (!spans.some((value) => Number.isFinite(value) && value > 0)) {
+          failures.push(`${fixture.format}: no non-empty model bounds reached the renderer`);
+        }
       }
-      if (drawn < 0.03) failures.push(`${fixture.format}: no foreground model region (${drawn.toFixed(4)})`);
-      for (const label of tools) {
-        const button = page.locator(`button[aria-label="${label}"]`).first();
-        if (!(await button.count()) || !(await button.isEnabled())) failures.push(`${fixture.format}: missing or disabled ${label}`);
-      }
-      await page.getByRole('button', { name: 'View controls', exact: true }).click();
-      for (const action of ['Pan', 'Orbit']) {
-        const item = page.getByRole('menuitem', { name: action, exact: true });
-        if (!(await item.count()) || !(await item.isEnabled())) failures.push(`${fixture.format}: missing or disabled ${action}`);
-      }
-      await page.keyboard.press('Escape');
-      await page.getByRole('button', { name: 'Capture', exact: true }).click();
-      const capture = page.getByRole('menuitem', { name: 'Copy screenshot', exact: true });
-      if (!(await capture.count()) || !(await capture.isEnabled())) failures.push(`${fixture.format}: missing or disabled Copy screenshot`);
-      await page.keyboard.press('Escape');
-      const measure = page.locator('button[aria-label="Measure"]');
-      const measureCount = await measure.count();
-      if (fixture.measure && (!measureCount || !(await measure.first().isEnabled()))) {
-        failures.push(`${fixture.format}: missing or disabled Measure`);
-      } else if (!fixture.measure && measureCount) {
+      if (drawn < (fixture.minCoverage ?? 0.03)) failures.push(`${fixture.format}: no foreground model region (${drawn.toFixed(4)})`);
+      // The file's own tools, exactly: one that does not apply is hidden, not disabled.
+      const strip = await page.locator('[role="group"][aria-label="Interaction tools"] button').evaluateAll((buttons) =>
+        buttons.map((button) => button.getAttribute("aria-label")));
+      for (const label of fixture.tools) if (!strip.includes(label)) failures.push(`${fixture.format}: missing ${label} (strip: ${strip.join(", ")})`);
+      if (!fixture.tools.length && strip.length) failures.push(`${fixture.format}: a tool strip on a file with no tools (${strip.join(", ")})`);
+      if (!fixture.tools.includes("Measure") && strip.includes("Measure")) {
         failures.push(`${fixture.format}: Measure is offered on a view that cannot measure (must be hidden, not disabled)`);
       }
+      // A 3D view's top-right bar: Display settings, then Preview.
+      const topRight = await page.locator("[data-viewport-actions] button").evaluateAll((buttons) =>
+        buttons.map((button) => button.getAttribute("aria-label")));
+      if (fixture.threeD && JSON.stringify(topRight) !== JSON.stringify(["Display settings", "Preview"])) {
+        failures.push(`${fixture.format}: top-right bar is ${JSON.stringify(topRight)}`);
+      }
+      // Every file can be captured from the navigation row.
+      const snapshot = page.getByRole("button", { name: "Take snapshot", exact: true });
+      if (!(await snapshot.count()) || !(await snapshot.first().isEnabled())) failures.push(`${fixture.format}: missing or disabled Take snapshot`);
       const menu = await canvasMenuItems(page, canvas);
       if (fixture.parts) {
         for (const item of framing) if (!menu.includes(item)) failures.push(`${fixture.format}: menu missing ${item}`);
@@ -814,9 +828,21 @@ async function formatGate() {
   }
 }
 
+// Inspect and Render are the Display settings' Solid and Render presets, chosen from the Mode
+// dropdown of the popover the viewport's top-right bar opens.
+const VIEWING_PRESET = { Inspect: "Solid", Render: "Render" };
 async function selectViewingMode(page, current, next) {
-  await page.getByRole("button", { name: `Viewing mode: ${current}. Switch to ${next}`, exact: true }).click();
-  await page.getByRole("button", { name: `Viewing mode: ${next}. Switch to ${current}`, exact: true }).waitFor();
+  const popover = page.locator("[data-display-popover]");
+  if (!(await popover.count())) await page.getByRole("button", { name: "Display settings", exact: true }).click();
+  const mode = popover.getByRole("combobox", { name: "Mode", exact: true });
+  await mode.waitFor();
+  if ((await mode.innerText()).trim() !== VIEWING_PRESET[current]) fail(`viewing mode: expected ${current} before switching to ${next}`);
+  await mode.click();
+  await page.getByRole("option", { name: VIEWING_PRESET[next], exact: true }).click();
+  await page.waitForFunction((label) => document.querySelector('[data-display-popover] [role="combobox"][aria-label="Mode"]')?.textContent.trim() === label,
+    VIEWING_PRESET[next]);
+  await page.keyboard.press("Escape");
+  await popover.waitFor({ state: "detached" });
 }
 
 async function configureScene(page, setting) {
@@ -1112,11 +1138,13 @@ function matrixDistance(actual, expected) {
   return Math.max(...expected.map((value, index) => Math.abs(Number(actual[index]) - value)));
 }
 
-async function recordMatrix(page, partId) {
-  return page.evaluate((id) => {
-    const records = window.__cadDisplayRecords?.() || [];
-    return records.find((record) => record.partId === id)?.matrix || null;
-  }, partId);
+// A link's placement as the robot scene draws it (`__robotLinks`: row-major, relative to the
+// robot), read back column-major like the FK above.
+async function recordMatrix(page, linkName) {
+  return page.evaluate((name) => {
+    const frame = (window.__robotLinks?.() || []).find((row) => row.link === name)?.matrixWorld;
+    return Array.isArray(frame) ? [0, 1, 2, 3].flatMap((column) => [0, 1, 2, 3].map((row) => frame[row * 4 + column])) : null;
+  }, linkName);
 }
 
 // Poll rather than assert once: a joint edit and a group state both animate to
@@ -1125,12 +1153,12 @@ async function settledArmMatrix(page, angleDeg, what, tolerance = 1e-5) {
   const expected = shoulderFk(angleDeg);
   try {
     await page.waitForFunction(({ want, epsilon }) => {
-      const record = (window.__cadDisplayRecords?.() || []).find((row) => row.partId === "arm:v1");
-      const matrix = record?.matrix;
+      const frame = (window.__robotLinks?.() || []).find((row) => row.link === "arm")?.matrixWorld;
+      const matrix = Array.isArray(frame) ? [0, 1, 2, 3].flatMap((column) => [0, 1, 2, 3].map((row) => frame[row * 4 + column])) : null;
       return Array.isArray(matrix) && matrix.every((value, index) => Math.abs(value - want[index]) <= epsilon);
     }, { want: expected, epsilon: tolerance }, { timeout: 15_000 });
   } catch {
-    const actual = await recordMatrix(page, "arm:v1");
+    const actual = await recordMatrix(page, "arm");
     failures.push(`${what}: arm link renders at [${(actual || []).map((v) => Number(v).toFixed(4))}], `
       + `expected FK [${expected.map((v) => v.toFixed(4))}]`);
     return false;
@@ -1158,8 +1186,18 @@ function cameraDrift(actual, expected) {
   if (actual.projection !== expected.projection) {
     return Number.POSITIVE_INFINITY;
   }
+  // An orthographic picture does not depend on how far back along its line of sight the camera
+  // stands, only on which way it looks: its direction is compared, not its position.
+  const direction = (camera) => {
+    const offset = camera.position.map((value, index) => Number(value) - Number(camera.target[index]));
+    const length = Math.hypot(...offset) || 1;
+    return offset.map((value) => value / length);
+  };
+  const where = actual.projection === "orthographic"
+    ? direction(actual).map((value, index) => [value, direction(expected)[index]])
+    : actual.position.map((value, index) => [value, expected.position[index]]);
   const pairs = [
-    ...actual.position.map((value, index) => [value, expected.position[index]]),
+    ...where,
     ...actual.target.map((value, index) => [value, expected.target[index]]),
     [actual.zoom, expected.zoom],
     // The half-height belongs to the orthographic frustum. The seam reports the
@@ -1188,21 +1226,24 @@ async function cameraHeld(page, zeroPose, what) {
   return true;
 }
 
+// Reset view is the viewport menu's Zoom to fit: the model framed again, the camera not turned.
+// Only a renderer with a viewport menu (STEP) offers it, and only under Select, whose menu it is.
 async function resetView(page) {
-  await page.getByRole("button", { name: /Reset view/i }).first().click();
+  await page.getByRole("button", { name: "Select", exact: true }).click();
+  const box = await page.locator("canvas").first().boundingBox();
+  await page.mouse.click(box.x + box.width * 0.12, box.y + box.height * 0.86, { button: "right" });
+  await page.getByRole("menuitem", { name: "Zoom to fit", exact: true }).click();
   // Reset changes framing on the presented model. The pose and zero-pose
   // camera assertions do not require a queued LOD camera sample to finish;
   // actual geometry adoption, presentation and camera stability still do.
   await settledCameraFrame(page, { stage: "reset view", requireSettledLod: false });
 }
 
-// --- the camera each mode opens at ----------------------------------------
-// Inspect and Render are two cameras. Each fits the model's zero pose itself,
-// every time it is entered, so a switch never inherits the other mode's pose
-// and zoom -- which is what used to open Render inside the model, or Inspect at
-// a perspective distance read as an orthographic frame. A view the user framed
-// by hand still stands within its own mode; it simply does not follow them
-// across the switch, because switching IS the reset.
+// --- the camera across modes ----------------------------------------------
+// Inspect (Solid) and Render are Display presets over one view: a switch converts
+// the camera to the other projection, keeping what it looks at and how large it
+// draws it, and converting back returns the view exactly. A model opens framed
+// against its own zero pose.
 async function settledCameraFrame(page, { projection = null, stage, requireSettledLod = true, timeout = 60_000 } = {}) {
   const startedAt = Date.now();
   cameraReadiness.set(page, { ...cameraReadiness.get(page), pending: { stage, projection, requireSettledLod } });
@@ -1300,23 +1341,32 @@ async function modeCameraGate() {
       failures.push(`mode camera: Inspect did not open orthographic (${inspectFit?.projection})`);
     }
 
+    // Solid and Render are presets over ONE view: a switch converts the camera to the other
+    // projection, keeping what it looks at and how large it draws it, and a round trip is exact.
     await switchMode(page, "Inspect", "Render");
     const renderFit = await cameraState(page);
     if (!renderFit) failures.push("mode camera: the camera seam published nothing in Render");
+    else if (renderFit.target.some((value, axis) => Math.abs(value - inspectFit.target[axis]) > 1e-6)) {
+      failures.push(`mode camera: Render re-aimed the view — ${describeCamera(renderFit)}`);
+    }
 
     await switchMode(page, "Render", "Inspect");
     await cameraHeld(page, inspectFit, "returning to Inspect");
 
-    // A view taken by hand: it stands in Inspect, and stops at the switch.
+    // A view taken by hand survives a round trip, in either mode.
     await orbitAndZoom(page);
     const handFramed = await cameraMoved(page, inspectFit, "orbit and zoom in Inspect");
     if (handFramed) {
       await switchMode(page, "Inspect", "Render");
-      await cameraHeld(page, renderFit, "Render after a hand-framed Inspect view");
-      await orbitAndZoom(page);
-      await cameraMoved(page, renderFit, "orbit and zoom in Render");
       await switchMode(page, "Render", "Inspect");
-      await cameraHeld(page, inspectFit, "Inspect after a hand-framed Render view");
+      await cameraHeld(page, handFramed, "Inspect after a round trip through Render");
+      await switchMode(page, "Inspect", "Render");
+      await orbitAndZoom(page);
+      const renderFramed = await cameraMoved(page, renderFit, "orbit and zoom in Render");
+      await switchMode(page, "Render", "Inspect");
+      await switchMode(page, "Inspect", "Render");
+      if (renderFramed) await cameraHeld(page, renderFramed, "Render after a round trip through Inspect");
+      await switchMode(page, "Render", "Inspect");
     }
 
     // A different model is framed against ITS zero pose, not the camera the
@@ -1338,8 +1388,8 @@ async function modeCameraGate() {
     if (errors.length) failures.push(`mode camera: ${errors.join(" | ")}`);
     console.log(`  mode camera: Inspect ${describeCamera(inspectFit)}`);
     console.log(`  mode camera: Render  ${describeCamera(renderFit)}`);
-    console.log("  mode camera: every switch re-fits the mode being entered to the zero pose, "
-      + "a hand-framed view stays in its own mode, and a new model is framed against its own box");
+    console.log("  mode camera: a switch converts the view without re-aiming it, a round trip returns "
+      + "the view it started from, and a new model is framed against its own box");
   } finally {
     await context.close();
   }
@@ -1359,35 +1409,47 @@ async function kinematicsGate() {
     const { context, page, errors } = await newPage();
     try {
       await openFile(page, `named-components.${extension}`);
-      const initialPlacement = await page.evaluate(() => window.__cadModelPlacement);
-      for (const [field, expected] of [["boundsMin", [-0.05, -0.04, -0.01]], ["boundsMax", [0.05, 0.04, 0.07]]]) {
-        if (initialPlacement?.[field]?.some((value, axis) => Math.abs(value - expected[axis]) > 1e-6)) {
+      const initialBounds = await page.evaluate(() => window.__cadModelBounds?.());
+      for (const [field, expected] of [["min", [-0.05, -0.04, -0.01]], ["max", [0.05, 0.04, 0.07]]]) {
+        if (initialBounds?.[field]?.some((value, axis) => Math.abs(value - expected[axis]) > 1e-6)) {
           fail(`${extension} components: the linked objects changed the authored metre-scale robot bounds`);
         }
       }
-      await page.getByRole("tab", { name: "Components", exact: true }).click();
-      const tree = page.getByRole("tree", { name: "Robot components", exact: true });
-      const link = tree.locator('[role="treeitem"][aria-level="1"]');
-      if (await link.count() !== 1) fail(`${extension} components: expected one link with authored mesh objects`);
-      if (await link.getAttribute("aria-expanded") !== "false") fail(`${extension} components: link should start collapsed`);
-      await link.click();
-      const objects = tree.locator('[role="treeitem"][aria-level="2"]');
-      if (await objects.count() !== 2) fail(`${extension} components: linked assembly lost its two named objects`);
-      await objects.first().click();
-      if (await objects.first().getAttribute("aria-selected") !== "true") fail(`${extension} components: selecting an object did not select its tree row`);
-      await page.getByText("Triangles", { exact: true }).waitFor();
-      const sizeField = page.getByText("Size (mm)", { exact: true });
-      await sizeField.waitFor();
-      const dimensions = await sizeField.evaluate(label => label.parentElement.querySelector('[title]')?.textContent.split('×').map(Number));
+      // Select's Links tree: the named objects inside a link's meshes are its leaves (a small link
+      // opens with them showing; a long one starts closed).
+      const tree = page.locator('ul[aria-label="Robot links"]');
+      await tree.waitFor();
+      const disclosure = tree.getByRole("button", { name: /^(Expand|Collapse) / });
+      // A link's objects are known once its mesh is in, a moment after the robot is drawn.
+      await disclosure.first().waitFor({ timeout: 15_000 }).catch(() => {});
+      if (await disclosure.count() !== 1) {
+        const seen = await tree.getByRole("button").evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-label")));
+        fail(`${extension} components: expected one link with authored mesh objects (${seen.join(", ")})`);
+      }
+      const linkName = (await disclosure.getAttribute("aria-label")).replace(/^(Expand|Collapse) /, "");
+      if (await disclosure.getAttribute("aria-expanded") !== "true") await disclosure.click();
+      await tree.getByRole("button", { name: `Collapse ${linkName}`, exact: true }).waitFor();
+      const rows = tree.getByRole("button", { name: /^Select / });
+      const labels = await rows.evaluateAll((buttons) => buttons.map((button) => button.getAttribute("aria-label")));
+      const objects = labels.slice(labels.indexOf(`Select ${linkName}`) + 1);
+      if (objects.length !== 2) fail(`${extension} components: linked assembly lost its two named objects (${objects.join(", ")})`);
+      const object = rows.nth(labels.indexOf(`Select ${linkName}`) + 1);
+      await object.click();
+      if (await object.getAttribute("aria-pressed") !== "true") fail(`${extension} components: selecting an object did not select its tree row`);
+      const details = page.locator('[aria-label="Component details"]');
+      await details.getByText("Triangles", { exact: true }).waitFor();
+      const dimensions = await details.locator("[data-info-row]").evaluateAll((rows) => {
+        const size = rows.find((row) => row.firstElementChild?.textContent.trim() === "Size");
+        return size?.lastElementChild?.textContent.replace(/mm/, "").split("×").map((value) => Number(value.trim()));
+      });
       if (dimensions?.length !== 3 || dimensions.some(value => Math.abs(value - 10) > 0.001)) {
         fail(`${extension} components: a 10 mm linked object reports ${dimensions}`);
       }
       await saveReview(page, `robot-components-${extension}`);
-      const inspectRecords = await page.evaluate(() => window.__cadDisplayRecords?.() || []);
-      if (inspectRecords.filter(record => record.linkName === "arm").length !== 2) fail(`${extension} components: named objects were not split in the renderer`);
-      await page.getByRole("tab", { name: "Kinematics", exact: true }).click();
+      // Position: the joints, and an SRDF's named poses.
+      await page.getByRole("button", { name: "Position", exact: true }).click();
       await page.getByRole("textbox", { name: "shoulder value in deg", exact: true }).waitFor();
-      if (extension === "srdf") await page.getByRole("combobox", { name: "Preset position", exact: true }).waitFor();
+      if (extension === "srdf") await page.getByRole("combobox", { name: "Pose", exact: true }).waitFor();
       await saveReview(page, `robot-kinematics-${extension}`);
       if (errors.length) fail(`${extension} components: ${errors.join(" | ")}`);
     } finally { await context.close(); }
@@ -1395,12 +1457,12 @@ async function kinematicsGate() {
   const { context, page, errors } = await newPage();
   try {
     await openFile(page, "smoke.urdf");
-    const records = await page.evaluate(() => window.__cadDisplayRecords?.() || []);
+    const records = await page.evaluate(() => window.__robotLinks?.() || []);
     if (records.length !== 2) {
-      failures.push(`urdf kinematics: expected one record per link, saw ${records.length}`);
+      failures.push(`urdf kinematics: expected one frame per link, saw ${records.length}`);
     }
     // Rest pose: the child link sits at its joint origin, not piled on the root.
-    const base = await recordMatrix(page, "base:v1");
+    const base = await recordMatrix(page, "base");
     if (matrixDistance(base, IDENTITY_MATRIX) > 1e-6) {
       failures.push(`urdf kinematics: root link is not at the robot origin [${base}]`);
     }
@@ -1409,7 +1471,8 @@ async function kinematicsGate() {
     const zeroPoseCamera = await cameraState(page);
     if (!zeroPoseCamera) failures.push("urdf kinematics: the camera seam published nothing");
 
-    // The user's control, not the data behind it: type into the joint's value box.
+    // The user's control, not the data behind it: type into the joint's value box, in Position.
+    await page.getByRole("button", { name: "Position", exact: true }).click();
     const valueBox = page.getByRole("textbox", { name: "shoulder value in deg", exact: true });
     await valueBox.waitFor({ timeout: 15_000 });
     await valueBox.click();
@@ -1418,14 +1481,14 @@ async function kinematicsGate() {
     await settledArmMatrix(page, 45, "urdf joint value entry");
     await cameraHeld(page, zeroPoseCamera, "urdf joint value entry");
 
-    // And the slider itself, which commits through the scrub path. The Joints
-    // section is the only open one for a robot, so it owns the only slider.
-    const sliders = page.locator('[data-slot="slider"]');
+    // And the slider itself, which commits through the scrub path: the Position panel's one joint.
+    const sliders = page.locator('[data-tool-panel][aria-label="Position controls"] [role="slider"]');
     const sliderCount = await sliders.count();
     if (sliderCount !== 1) {
       failures.push(`urdf kinematics: expected the shoulder to be the only slider, saw ${sliderCount}`);
     } else {
-      const box = await sliders.first().boundingBox();
+      // Pressed along its track: the slider root around the thumb.
+      const box = await sliders.first().locator("xpath=ancestor::*[@data-orientation][1]").boundingBox();
       await page.mouse.click(box.x + box.width * 0.25, box.y + box.height / 2);
       await page.waitForTimeout(1500);
       const shown = await valueBox.inputValue();
@@ -1437,10 +1500,8 @@ async function kinematicsGate() {
         await cameraHeld(page, zeroPoseCamera, `urdf joint slider (${shown})`);
       }
     }
-    // Reset view is the one control that re-fits, and it re-fits to the zero
-    // pose -- not to the arm where the slider left it.
-    await resetView(page);
-    await cameraHeld(page, zeroPoseCamera, "urdf reset view while posed");
+    // (A robot has no viewport menu, so no Zoom to fit: the reset-while-posed contract is
+    // exercised on the STEP hinge below.)
     if (errors.length) failures.push(`urdf kinematics: ${errors.join(" | ")}`);
   } finally {
     await context.close();
@@ -1451,7 +1512,8 @@ async function kinematicsGate() {
     await openFile(srdf.page, "smoke.srdf");
     await settledArmMatrix(srdf.page, 0, "srdf rest pose");
     const srdfZeroPoseCamera = await cameraState(srdf.page);
-    const groupState = srdf.page.getByRole("combobox", { name: "Preset position", exact: true });
+    await srdf.page.getByRole("button", { name: "Position", exact: true }).click();
+    const groupState = srdf.page.getByRole("combobox", { name: "Pose", exact: true });
     await groupState.waitFor({ timeout: 15_000 });
     await groupState.click();
     await srdf.page.getByRole("option", { name: "lifted", exact: true }).click();
@@ -1474,7 +1536,7 @@ async function kinematicsGate() {
     await openFile(hinge.page, "hinge.step");
     const hingeZeroPoseCamera = await cameraState(hinge.page);
     if (!hingeZeroPoseCamera) failures.push("step kinematics: the camera seam published nothing");
-    await hinge.page.getByRole("tab", { name: "Kinematics", exact: true }).click();
+    await hinge.page.getByRole("button", { name: "Position", exact: true }).click();
     const swing = hinge.page.getByRole("textbox", { name: /^swing/ }).first();
     await swing.waitFor({ timeout: 15_000 });
     await swing.click();
@@ -1493,36 +1555,46 @@ async function kinematicsGate() {
       await cameraHeld(hinge.page, hingeZeroPoseCamera, "step reset view while posed");
     }
 
-    // A pose must not re-frame; a REVISION must. Saving a rebuilt model over the
-    // open one gives it a new zero pose, and a camera still fitted to the old one
-    // leaves the new geometry clipped outside the frame. The grown arm reaches
-    // x = 158 where the first revision stopped at 58, so the old frame cannot
-    // contain it.
+    if (hinge.errors.length) failures.push(`step kinematics: ${hinge.errors.join(" | ")}`);
+  } finally {
+    await hinge.context.close();
+  }
+
+  // A pose must not re-frame; a REVISION must. Saving a rebuilt model over the
+  // open one gives it a new zero pose, and a camera still fitted to the old one
+  // leaves the new geometry clipped outside the frame. The grown arm reaches
+  // x = 158 where the first revision stopped at 58, so the old frame cannot
+  // contain it. A fresh tab, because the re-fit is for a camera nobody chose: one
+  // the tab kept for this file (the Zoom to fit above saves one) is restored instead.
+  const revision = await newPage();
+  try {
+    await openFile(revision.page, "hinge.step");
+    const firstFit = await cameraState(revision.page);
     for (const name of ["hinge.step", "hinge.step.json"]) {
       fs.copyFileSync(path.join(root, ".revision", name), path.join(root, name));
     }
-    const grown = await hinge.page.waitForFunction(() => {
-      const placement = window.__cadModelPlacement;
-      return Number(placement?.boundsMax?.[0]) > 100;
+    const grown = await revision.page.waitForFunction(() => {
+      const bounds = window.__cadModelBounds?.();
+      return Number(bounds?.max?.[0]) > 100;
     }, null, { timeout: 60_000 }).then(() => true).catch(() => false);
     if (!grown) {
       failures.push("step revision: the viewer never picked up the rebuilt model");
     } else {
       // Settle: the fit lands in the same effect that adopts the new geometry.
-      await hinge.page.waitForTimeout(1_500);
-      const revised = await cameraState(hinge.page);
-      if (cameraDrift(revised, hingeZeroPoseCamera) <= CAMERA_EPSILON) {
+      await revision.page.waitForTimeout(1_500);
+      const revised = await cameraState(revision.page);
+      if (cameraDrift(revised, firstFit) <= CAMERA_EPSILON) {
         failures.push(`step revision: the camera kept the previous revision's frame — ${describeCamera(revised)}`);
-      } else if (!(Number(revised?.halfHeight) > Number(hingeZeroPoseCamera?.halfHeight))) {
+      } else if (!(Number(revised?.halfHeight) > Number(firstFit?.halfHeight))) {
         failures.push(`step revision: the model grew but the frame did not — ${describeCamera(revised)}, `
-          + `was ${describeCamera(hingeZeroPoseCamera)}`);
+          + `was ${describeCamera(firstFit)}`);
       } else if (Math.abs(Number(revised?.zoomPercent) - 100) > 0.5) {
         failures.push(`step revision: the new fit does not read as 100% (${revised?.zoomPercent})`);
       }
     }
-    if (hinge.errors.length) failures.push(`step kinematics: ${hinge.errors.join(" | ")}`);
+    if (revision.errors.length) failures.push(`step revision: ${revision.errors.join(" | ")}`);
   } finally {
-    await hinge.context.close();
+    await revision.context.close();
   }
   console.log("  kinematics: URDF rest FK, joint value entry, joint slider, an SRDF group state and a STEP mate "
     + "all place the child link and none of them move the camera off the zero-pose fit, "

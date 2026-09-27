@@ -696,9 +696,21 @@ test('hiding a part takes it off the screen, and the viewport menus offer what t
   const away = () => page.mouse.move(view.box.x + 20, view.box.y + view.box.height - 20);
   await away();
   await frameWhen(view, shot => differing(opened, shot) === 0, 'came back to what hiding the arm took away');
-  // Hover runs the other way too: resting on a tree row lights its part.
+  // Hover runs the other way too: resting on a tree row lights its part. These frames keep the
+  // tool stack on screen and are read to its right: hiding it for a screenshot is the pointer
+  // leaving the row, which on a slow (software) renderer lands before the hover is drawn.
+  const canvas = pane.locator('[aria-busy] > div > canvas').first();
+  const withStack = async () => { await settle(page); return PNG.sync.read(await canvas.screenshot()); };
+  const [canvasBox, stackBox] = [await canvas.boundingBox(), await pane.locator('[data-cad-tool-stack]').boundingBox()];
+  const rest = await withStack();
+  const rightOfStack = { x0: Math.ceil(stackBox.x + stackBox.width - canvasBox.x) + 4, y0: 0, x1: rest.width, y1: rest.height };
   await pane.getByRole('button', { name: 'Select arm', exact: true }).hover();
-  await frameWhen(view, shot => differing(opened, shot) > 2000, 'lit the part under the hovered row');
+  let lit = 0;
+  for (let attempt = 0; attempt < 16 && lit <= 2000; attempt += 1) {
+    lit = differing(rest, await withStack(), rightOfStack);
+    if (lit <= 2000) await page.waitForTimeout(200);
+  }
+  assert.ok(lit > 2000, `the drawn frame lit the part under the hovered row: ${lit} pixels changed`);
   await away();
   await frameWhen(view, shot => differing(opened, shot) === 0, 'and let go of it');
 
@@ -1631,8 +1643,14 @@ test('a package that arrives in pieces re-sizes its ground, its depth range and 
     chosen[key].forEach((value, index) => assert.ok(Math.abs(value - kept[key][index]) < 1e-6,
       `${key}[${index}] is the camera the person set, through every publish and the completion`));
   }
-  const reopenedFrame = await frame(reopened.pane);
-  assert.ok(differing(chosenFrame, reopenedFrame) < 500, 'reopening shows what the person left on screen');
+  // The picture settles a frame or two after the camera does (level of detail refines on a slow
+  // renderer), so it is read until it matches, and a picture that never does still fails.
+  let left = Infinity;
+  for (let attempt = 0; attempt < 16 && left >= 500; attempt += 1) {
+    left = differing(chosenFrame, await frame(reopened.pane));
+    if (left >= 500) await reopened.page.waitForTimeout(250);
+  }
+  assert.ok(left < 500, `reopening shows what the person left on screen: ${left} pixels differ`);
   assert.deepEqual(reopened.errors, []);
   assert.deepEqual(errors, []);
 });
@@ -1839,7 +1857,8 @@ test('preview\'s Playback settings: the routine, its speed, Loop and Autoplay, t
   await settings.getByRole('menuitemcheckbox', { name: 'Loop', exact: true }).click();
   assert.deepEqual(await checks(), ['Loop:false', 'Autoplay:false', 'Orbit:true'], 'the menu stays open');
   await speedItem().hover();
-  await page.locator('[role=menu][aria-label="Animation speed"]').getByRole('menuitemradio', { name: '2×', exact: true }).click();
+  // By keyboard: a submenu still easing in under a slow renderer is not stable under the pointer.
+  await page.locator('[role=menu][aria-label="Animation speed"]').getByRole('menuitemradio', { name: '2×', exact: true }).press('Enter');
   await settings.waitFor({ state: 'detached' });
   await openSettings();
   await routineItem().hover();
@@ -2776,18 +2795,18 @@ test('a click selects at once, and a double-click ends where it did when a click
   await page.evaluate(() => {
     window.__clipboardWrites = [];
     window.cadHarness.a.host.clipboard.writeText = async text => { window.__clipboardWrites.push(text); };
-    window.__pressAt = 0;
-    document.addEventListener('pointerup', () => { window.__pressAt = performance.now(); }, true);
+    // A probe timer set at the press, ahead of the viewer's own handlers: it fires before any wait
+    // the viewer could start there (the double-click window was 220 ms), however slow the frames.
+    window.__selectedByProbe = null;
+    document.addEventListener('pointerup', () => {
+      window.__selectedByProbe = null;
+      setTimeout(() => { window.__selectedByProbe = window.cadHarness.a.controller.readState().selectedPartIds.length > 0; }, 200);
+    }, true);
   });
-  // A click's selection is there by the next frame: nothing waits to tell it from a double-click.
+  // A click's selection does not wait to tell it from a double-click.
   await page.mouse.click(...at([15, 0, 4]));
-  const delay = await page.evaluate(() => new Promise(resolve => { const tick = () => {
-    const state = window.cadHarness.a.controller.readState();
-    if (state.selectedPartIds.length) resolve(performance.now() - window.__pressAt);
-    else if (performance.now() - window.__pressAt > 3000) resolve(Infinity);
-    else requestAnimationFrame(tick);
-  }; tick(); }));
-  assert.ok(delay < 220, `the arm is selected ${delay.toFixed(0)}ms after the press`);
+  await page.waitForFunction(() => window.__selectedByProbe !== null);
+  assert.equal(await page.evaluate(() => window.__selectedByProbe), true, 'the arm is selected before any double-click window could close');
   assert.deepEqual(await selection(), { parts: ['o1.2'], refs: [], isolated: [] });
 
   // A double-click on the base isolates it. Its first click picked the base; the double-click
@@ -3098,7 +3117,8 @@ test("preview's Playback settings are the file's: Orbit off, its speed, Loop off
   await settings.getByRole('menuitemcheckbox', { name: 'Loop', exact: true }).click();
   await settings.getByRole('menuitemcheckbox', { name: 'Autoplay', exact: true }).click();
   await settings.getByRole('menuitem', { name: /^Orbit speed/ }).hover();
-  await page.locator('[role=menu][aria-label="Orbit speed"]').getByRole('menuitemradio', { name: '2×', exact: true }).click();
+  // By keyboard: a submenu still easing in under a slow renderer is not stable under the pointer.
+  await page.locator('[role=menu][aria-label="Orbit speed"]').getByRole('menuitemradio', { name: '2×', exact: true }).press('Enter');
   await settings.waitFor({ state: 'detached' });
   await page.waitForFunction(() => Object.values(window.cadHarness.state.renderers || {})[0]?.playback?.orbitSpeed === 2);
   assert.deepEqual(await page.evaluate(() => Object.values(window.cadHarness.state.renderers)[0].playback), { orbit: false, orbitSpeed: 2, autoplay: true, loop: false },

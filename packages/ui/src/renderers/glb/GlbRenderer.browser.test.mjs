@@ -97,7 +97,7 @@ test('preview orbits every GLB, and an animated one plays its routines there alo
   assert.equal(await orbit.getAttribute('aria-checked'), 'false');
   await staticView.pane.getByRole('button', { name: 'Play orbit', exact: true }).waitFor();
   await staticView.page.getByRole('menuitem', { name: /Orbit speed/ }).hover();
-  await staticView.page.getByRole('menuitemradio', { name: '2×', exact: true }).click();
+  await staticView.page.locator('[role=menu][aria-label="Orbit speed"]').getByRole('menuitemradio', { name: '2×', exact: true }).press('Enter');
   await menu.waitFor({ state: 'hidden' });
   assert.equal(await staticView.pane.getByLabel('View cube', { exact: true }).count(), 0, 'preview draws no cube');
   await staticView.pane.getByRole('button', { name: 'Exit preview', exact: true }).click();

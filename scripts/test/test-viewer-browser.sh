@@ -223,40 +223,17 @@ fi
 rm -rf "$CADGEN_CACHE_DIR"
 mkdir -p "$CADGEN_CACHE_DIR"
 
-cat > "$project/smoke.dxf" <<'DXF'
-0
-SECTION
-2
-ENTITIES
-0
-LWPOLYLINE
-8
-OUTLINE
-90
-4
-70
-1
-10
--10
-20
--6
-10
-10
-20
--6
-10
-10
-20
-6
-10
--10
-20
-6
-0
-ENDSEC
-0
-EOF
-DXF
+# A closed 20 x 12 outline on layer OUTLINE, written by ezdxf (cadgen's DXF reader) so it is a
+# DXF the backend reads: a hand-written one lacks the subclass markers it requires.
+"$PYTHON" - "$project/smoke.dxf" <<'PY'
+import sys
+
+import ezdxf
+
+document = ezdxf.new()
+document.modelspace().add_lwpolyline([(-10, -6), (10, -6), (10, 6), (-10, 6)], close=True, dxfattribs={"layer": "OUTLINE"})
+document.saveas(sys.argv[1])
+PY
 
 cat > "$project/smoke.urdf" <<'URDF'
 <?xml version="1.0"?>
