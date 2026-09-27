@@ -2713,7 +2713,8 @@ test('mobile touch operates every STEP tool without hover or accidental pinch se
   await pane.getByRole('button', { name: /Copy Drawing|Add drawing/ }).waitFor();
   const draw = pane.locator('[data-tool-panel][aria-label="Drawing controls"]');
   await draw.getByRole('button', { name: 'Undo', exact: true }).tap();
-  assert.equal(await draw.getByRole('button', { name: 'Redo', exact: true }).isEnabled(), true);
+  // The undo lands in the SDK's stack first and in the button on its next render.
+  await draw.getByRole('button', { name: 'Redo', exact: true, disabled: false }).waitFor();
   await draw.getByRole('button', { name: 'Redo', exact: true }).tap();
   await draw.getByRole('button', { name: 'Line', exact: true }).tap();
   await gesture([[[90, 330]], [[190, 440]]]);
