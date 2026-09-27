@@ -1,5 +1,6 @@
 """Export ledgers retain the document selection that supplied their geometry."""
 
+import contextlib
 import hashlib
 import json
 import os
@@ -39,9 +40,12 @@ class MeshDocumentSnapshotTests(unittest.TestCase):
             spec = SimpleNamespace(step_path=document, entry_path=document, color=None, source="imported")
             captured_paths = []
 
+            @contextlib.contextmanager
             def prepare(*args, **kwargs):
+                # Stands in for the engine's OWNED view: this test's directory is its
+                # own, so nothing is removed on exit.
                 write_animation(after)
-                return spec, view
+                yield spec, view
 
             def node(argv, **kwargs):
                 captured = Path(argv[argv.index("--animation-source") + 1])
@@ -56,8 +60,7 @@ class MeshDocumentSnapshotTests(unittest.TestCase):
                 return SimpleNamespace(returncode=0, stdout='{"ok":true}', stderr="")
 
             with mock.patch.dict(os.environ, {"CADGEN_CACHE_DIR": str(root / "store")}), \
-                    mock.patch.object(door, "_resolve_mesh_package", side_effect=prepare), \
-                    mock.patch.object(door, "_effective_export_tolerances", return_value=(None, None)), \
+                    mock.patch.object(door, "_mesh_package", side_effect=prepare), \
                     mock.patch("subprocess.run", side_effect=node) as builder:
                 note_document_tree(document_hash, "tree-a")
                 door.export_cad_target(document, [("glb", out)], animation="show")

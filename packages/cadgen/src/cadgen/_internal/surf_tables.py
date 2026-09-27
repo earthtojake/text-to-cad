@@ -1,6 +1,6 @@
 """Selector tables from a component ``.surf`` (design/surface-rendering.md R5).
 
-The Python twin of ``cadgen-js/src/lib/surf/surfSelectorBundle.js`` for the
+The Python twin of ``@hardcore/core/src/lib/surf/surfSelectorBundle.js`` for the
 consumers that compose topology server-side (``assembly_lookup`` behind
 inspect and snapshot selector resolution). A ``.surf`` v2 stores the exact
 metrics (GProps areas/centers/lengths, BndLib bboxes) the GLB tables used

@@ -20,12 +20,12 @@ fi
 # when an output is actually missing.
 #
 # The two stages are asked for by name rather than going through bundle.sh: the tests read
-# exactly these, and the viewer stage is a vite build of apps/viewer that needs that app's
+# exactly these, and the viewer stage is a vite build of apps/web that needs that app's
 # node_modules -- which a Python-only checkout has no reason to install.
 ensure_packaged_runtime() {
   local runtime="$REPO_ROOT/packages/cadgen/src/cadgen/_runtime"
   local name
-  for name in node/dxf-mesh.mjs node/mesh-export.mjs browser/snapshot-render.js browser/render.html; do
+  for name in node/mesh-export.mjs browser/snapshot-render.js browser/render.html; do
     if [ ! -f "$runtime/$name" ]; then
       section "Building cadgen's packaged runtime (missing $name)"
       "$REPO_ROOT/scripts/bundle/cadgen-runtime.sh" --node --browser

@@ -3,7 +3,7 @@
 What Python owns of an animated export is the REQUEST — its closed key set, its
 bounds, the clip name checked against the module in the document's sidecar, and
 the freshness variant that makes an edited animation a miss. The sampling itself is
-JavaScript and is tested there (packages/cadgen-js/src/lib/export).
+JavaScript and is tested there (packages/core/src/lib/export).
 
 Every test below is a file that would otherwise have been written: a clip
 dropped into an STL, a bad fps discovered after a tessellation, a typo'd clip
@@ -335,7 +335,7 @@ class WhatCannotCarryAClip(unittest.TestCase):
         # tessellation, and must not surface as a Node stack trace.
         stderr = io.StringIO()
         with mock.patch(
-            "cadgen.step_export_target._resolve_mesh_package",
+            "cadgen.step_export_target._mesh_package",
             side_effect=AssertionError("the clip must be resolved before the package is"),
         ), contextlib.redirect_stderr(stderr):
             self.assertEqual(1, glb_build.main([
@@ -509,9 +509,8 @@ class WhatTheLedgerServes(unittest.TestCase):
         spec = mock.Mock()
         spec.step_path = self.document
         with mock.patch.object(
-            step_export_target, "_resolve_mesh_package", return_value=(spec, Path("/pkg"))
-        ), mock.patch.object(
-            step_export_target, "_effective_export_tolerances", return_value=(None, None)
+            step_export_target, "_mesh_package",
+            return_value=contextlib.nullcontext((spec, Path("/pkg"))),
         ), mock.patch.object(
             step_export_target, "_export_mesh_jobs", return_value=(written, baked)
         ):

@@ -10,9 +10,6 @@ from __future__ import annotations
 
 
 
-
-STEP_SUFFIXES = (".step", ".stp")
-
 IDENTITY_TRANSFORM: tuple[float, ...] = (
     1.0, 0.0, 0.0, 0.0,
     0.0, 1.0, 0.0, 0.0,

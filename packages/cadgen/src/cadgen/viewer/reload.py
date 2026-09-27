@@ -28,7 +28,7 @@ WHAT IS WATCHED
     The BUILT CLIENT is deliberately not watched. Development is
     ``npm run dev``, where Vite owns the client and HMR already handles it; a
     checkout's ``cadgen viewer`` serves the last ``npm run build`` on purpose
-    (see apps/viewer/README.md). Keeping a stale ``dist/`` in sync is not this
+    (see apps/web/README.md). Keeping a stale ``dist/`` in sync is not this
     module's job.
 
 HOW IT DECIDES

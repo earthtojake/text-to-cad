@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
+import { createRequire } from 'node:module';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
 
@@ -22,27 +23,42 @@ function fingerprint(roots, ignored = new Set()) {
 
 export function viewerRuntimeFingerprint() {
   return {
-    source: fingerprint(['apps/viewer/src', 'packages/cadgen-js/src', 'packages/cadgen/src/cadgen'], new Set(['_runtime', '__pycache__'])),
-    builtClient: fingerprint(['apps/viewer/dist']),
-    installedDependencies: Object.fromEntries(['apps/viewer', 'packages/cadgen-js'].map(root => [root,
-      Object.fromEntries(['three', 'three-mesh-bvh', 'react'].map(name => {
-        const file = path.join(repo, root, 'node_modules', name, 'package.json');
-        if (!fs.existsSync(file)) return [name, null];
-        const bytes = fs.readFileSync(file);
-        return [name, {
-          version: JSON.parse(bytes).version,
-          packageJson: fs.realpathSync(file),
-          packageJsonSha256: createHash('sha256').update(bytes).digest('hex'),
-        }];
-      }))
-    ])),
+    source: fingerprint(['apps/web/src', 'packages/ui/src', 'packages/core/src', 'packages/cadgen/src/cadgen'], new Set(['_runtime', '__pycache__'])),
+    builtClient: fingerprint(['apps/web/dist']),
+    installedDependencies: Object.fromEntries(['apps/web', 'packages/ui', 'packages/core'].map(root => {
+      const require = createRequire(path.join(repo, root, 'package.json'));
+      return [root, Object.fromEntries(['three', 'three-mesh-bvh', 'react'].map(name => {
+        let directory;
+        try { directory = path.dirname(require.resolve(name)); }
+        catch (error) {
+          if (error.code === 'MODULE_NOT_FOUND') return [name, null];
+          throw error;
+        }
+        // Packages can hide package.json with an exports map. Walk from their
+        // resolved entry so hoisted and package-local installations agree.
+        while (directory !== path.dirname(directory)) {
+          const file = path.join(directory, 'package.json');
+          if (fs.existsSync(file)) {
+            const bytes = fs.readFileSync(file);
+            const manifest = JSON.parse(bytes);
+            if (manifest.name === name) return [name, {
+              version: manifest.version,
+              packageJson: fs.realpathSync(file),
+              packageJsonSha256: createHash('sha256').update(bytes).digest('hex'),
+            }];
+          }
+          directory = path.dirname(directory);
+        }
+        throw new Error(`Cannot locate ${name} manifest for ${root}`);
+      }))];
+    })),
   };
 }
 
 // A disk fingerprint alone cannot prove which checkout a long-lived server
 // serves. Validate its entry document and referenced assets before measuring.
 export async function verifyServedViewerClient(origin, {
-  dist = path.join(repo, 'apps/viewer/dist'), fetchImpl = fetch,
+  dist = path.join(repo, 'apps/web/dist'), fetchImpl = fetch,
 } = {}) {
   const localIndex = fs.readFileSync(path.join(dist, 'index.html'));
   const assets = [...localIndex.toString().matchAll(/(?:src|href)="(\/assets\/[^"?#]+)"/g)].map(match => match[1]);

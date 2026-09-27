@@ -1,0 +1,105 @@
+// Reading the build-progress payload the artifact-status route attaches while a model is
+// generating (written by cadgen's coordination/record.py, served by cadgen.viewer's artifact.py).
+//
+// Each phase reports ITSELF. There is no overall percentage, because a build's phases have
+// no fixed relationship to each other: measured across this repo's models, `generate` is 11%
+// of one build and 84% of another. A single bar spanning all four therefore had to be
+// weighted by a guess, and on a first build — where nothing about the model has been
+// measured — the guess had no inputs, so the bar sat at exactly 0% for ten minutes and then
+// jumped to 46% when the phase ended.
+//
+// So a frame says which phase is running, where it sits in the run ("1/4"), and then ONE of:
+//
+//   * a real fraction — `done`/`total` — rendered as a bar with its count;
+//   * a `detail` label naming the sub-unit in flight, rendered as an indeterminate bar.
+//
+// Both are true statements about the present. Nothing here extrapolates, and there are no
+// clocks: this module is a pure formatter, so a frame renders the same whenever it is read.
+
+export const ARTIFACT_PROGRESS_POLL_MS = 400;
+export const ARTIFACT_STATUS_TIMEOUT_MS = 10_000;
+export const ARTIFACT_STATUS_FAILURE_LIMIT = 3;
+// The first poll runs sooner than the rest. The overlay grows the moment progress first
+// arrives, and that is the one layout shift the stacked design cannot avoid — so it should
+// happen while the loading state is still appearing, not a noticeable beat later. The build
+// reports its opening phase immediately, so there is something to read this early.
+export const ARTIFACT_PROGRESS_FIRST_POLL_MS = 120;
+
+function finiteNumber(value, fallback = 0) {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : fallback;
+}
+
+function nonNegativeInt(value) {
+  return Math.max(0, Math.round(finiteNumber(value, 0)));
+}
+
+// Normalizes the server payload into the shape the UI reads, or null when there is nothing
+// renderable. Defensive by intent: this is a file on disk written by another process, so a
+// partial or unexpected payload must degrade to "no progress", never to a broken overlay.
+export function normalizeArtifactProgress(raw) {
+  if (!raw || typeof raw !== "object") {
+    return null;
+  }
+  const phase = String(raw.phase || "").trim();
+  if (!phase) {
+    return null;
+  }
+  const total = raw.total === null || raw.total === undefined ? null : finiteNumber(raw.total, 0);
+  return {
+    phase,
+    label: String(raw.label || "").trim(),
+    detail: String(raw.detail || "").trim(),
+    index: nonNegativeInt(raw.index),
+    count: nonNegativeInt(raw.count),
+    done: nonNegativeInt(raw.done),
+    total: total === null ? null : Math.max(0, Math.round(total)),
+    // Never trust the flag over the count: a payload claiming `determinate` without a total
+    // would render "31/null".
+    determinate: Boolean(raw.determinate) && Number(total) > 0,
+    updatedAt: finiteNumber(raw.updatedAt, 0),
+    refreshedAt: finiteNumber(raw.refreshedAt, 0),
+    connectionLost: raw.connectionLost && typeof raw.connectionLost === "object"
+      ? {
+        failures: nonNegativeInt(raw.connectionLost.failures),
+        since: finiteNumber(raw.connectionLost.since, 0),
+        detail: String(raw.connectionLost.detail || "").trim()
+      }
+      : null
+  };
+}
+
+export function refreshArtifactProgress(progress, refreshedAt = Date.now()) {
+  return progress ? { ...progress, refreshedAt: finiteNumber(refreshedAt, 0), connectionLost: null } : null;
+}
+
+export function artifactProgressConnectionLost(progress, failure, failures, now = Date.now()) {
+  const prior = normalizeArtifactProgress(progress);
+  const stamp = finiteNumber(now, 0);
+  const detail = String(failure?.detail || failure?.message || failure || "The viewer did not respond.").trim();
+  const base = prior || normalizeArtifactProgress({
+    phase: "waiting",
+    label: "Waiting for build status",
+    determinate: false,
+    refreshedAt: 0
+  });
+  return {
+    ...base,
+    connectionLost: {
+      failures: nonNegativeInt(failures),
+      since: prior?.connectionLost?.since || stamp,
+      detail
+    }
+  };
+}
+
+export function artifactStatusFailure(error, attempts) {
+  const source = error?.failure && typeof error.failure === "object" ? error.failure : {};
+  const detail = String(source.detail || error?.message || error || "The viewer did not respond.").trim();
+  return {
+    ...source,
+    kind: "status",
+    attempts: nonNegativeInt(attempts),
+    detail: `Could not check build status after ${nonNegativeInt(attempts)} attempts: ${detail}`
+  };
+}

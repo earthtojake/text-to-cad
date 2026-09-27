@@ -1,6 +1,6 @@
 """The Python test runner must fail when it collects no tests.
 
-`packages/cadgen-js` and `viewer` both exit 1 from
+`packages/core` and `viewer` both exit 1 from
 `scripts/run-tests.mjs` when their collector finds nothing. `run_python_unittest`
 in `scripts/test/common.sh` is the Python side of the same gate, so a renamed or
 emptied test directory must stop CI rather than report a group that never ran.

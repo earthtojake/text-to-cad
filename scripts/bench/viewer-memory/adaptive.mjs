@@ -15,7 +15,7 @@ import { installCacheWriteProbe, collectHeapDiagnostics } from './heap-diagnosti
 import { adaptiveStatus, preservesCompleteAdaptiveView, createAdaptiveStabilityWindow, finishAdaptiveSettlePhase, adaptiveSettleAssertions, gradeAdaptiveOutcome, summarizeIntervals, processMemoryFromPs, mergeProcessPeak } from './adaptive-support.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
-const require = createRequire(new URL('../../../apps/viewer/package.json', import.meta.url));
+const require = createRequire(new URL('../../../apps/web/package.json', import.meta.url));
 const { chromium } = require(process.env.PLAYWRIGHT_FROM || 'playwright');
 const args = { timeoutMs: 180000, maxRendererMiB: 2048 };
 const flags = { '--url': 'url', '--file': 'file', '--out': 'out', '--screenshot': 'screenshot',
@@ -51,16 +51,18 @@ report.harness = Object.fromEntries(['adaptive.mjs', 'adaptive-support.mjs', 're
 report.playwright = { resolvedEntry: require.resolve(process.env.PLAYWRIGHT_FROM || 'playwright') };
 if (args.serverProvenance) report.serverProvenance = JSON.parse(fs.readFileSync(args.serverProvenance, 'utf8'));
 
-// Verify actual installs against their locks; BVH belongs to cadgen-js and need
+// Verify actual installs against the root lock; BVH belongs to core and need
 // not be a direct app dependency. Also prove emitted worker bytes, not just HTML.
 async function verifyAssets() {
   const proof = await verifyServedViewerClient(args.url);
   const dependencies = viewerRuntimeFingerprint().installedDependencies;
-  for (const [root, names] of [['apps/viewer', ['three', 'react']], ['packages/cadgen-js', ['three', 'three-mesh-bvh']]]) {
-    const lock = JSON.parse(fs.readFileSync(path.join(repo, root, 'package-lock.json')));
+  const lock = JSON.parse(fs.readFileSync(path.join(repo, 'package-lock.json')));
+  for (const [root, names] of [['apps/web', ['three', 'react']], ['packages/ui', ['three', 'react']], ['packages/core', ['three', 'three-mesh-bvh']]]) {
     for (const name of names) {
-      const locked = lock.packages[`node_modules/${name}`]?.version;
-      if (!locked || dependencies[root][name]?.version !== locked) throw new Error(`Installed ${root}/${name} differs from lock`);
+      const installed = dependencies[root][name];
+      const key = installed && path.relative(fs.realpathSync(repo), path.dirname(installed.packageJson)).split(path.sep).join('/');
+      const locked = key && lock.packages[key]?.version;
+      if (!locked || installed?.version !== locked) throw new Error(`Installed ${root}/${name} differs from the root lock`);
     }
   }
   const assets = path.join(proof.dist, 'assets');

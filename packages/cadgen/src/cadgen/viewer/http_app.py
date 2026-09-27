@@ -25,8 +25,10 @@ import hashlib
 import json
 import os
 import stat
+import sys
 import threading
 import time
+from hashlib import sha256
 from pathlib import Path
 
 from . import reload as dev_reload
@@ -54,7 +56,7 @@ __all__ = [
 ]
 
 POST_GUARD_HEADER = "x-cadgen-viewer"
-LOCAL_SERVER_FEATURES = ["path-directory"]
+LOCAL_SERVER_FEATURES = ["path-directory", "reveal-path"]
 _LOOPBACK_NAMES = frozenset({"127.0.0.1", "localhost", "::1"})
 
 TESS_CACHE_ROUTE_PREFIX = "/__tess_cache/"
@@ -229,6 +231,12 @@ class CadApp:
         root_path = self.backend.root_path
         self.root_path = root_path
         self.root_name = self.backend.root_name
+        # A connection port is ephemeral; persisted view state follows the
+        # canonical directory this server exposes.  Hash the realpath so
+        # symlink spellings share an identity without adding another machine
+        # path to every catalog response.
+        canonical_root = os.path.normcase(os.path.realpath(root_path))
+        self.root_id = f"local-fs:{sha256(os.fsencode(canonical_root)).hexdigest()}"
         self.host = host
         self.port = port
         # dist_dir is compared as a string prefix, so resolve it ONCE here and
@@ -277,6 +285,8 @@ class CadApp:
             "serverMode": "serve",
             "serverFeatures": LOCAL_SERVER_FEATURES,
             "backend": "local-fs",
+            "platform": sys.platform,
+            "rootId": self.root_id,
             # path.resolve(), NOT realpath: the launcher's registry and the
             # client both compare the spelling the operator gave.
             "rootPath": self.root_path,
@@ -290,6 +300,11 @@ class CadApp:
             "startedAt": self.started_at,
             "url": f"http://{self.host}:{self.port}",
         }
+
+    def read_catalog(self, preferred_file=None) -> dict:
+        """The backend catalog plus this connection's stable root identity."""
+        catalog = self.backend.read_catalog(preferred_file)
+        return {**catalog, "rootId": self.root_id}
 
     # --- gates ------------------------------------------------------------
 
@@ -343,7 +358,9 @@ class CadApp:
         an ordinary static server: serve the file if the bundle has it,
         otherwise fall back to index.html — EXCEPT under ``/assets/``, where a
         miss must be a 404 rather than HTML, or a stale hashed bundle reference
-        turns into an ES-module parse error instead of a readable status.
+        turns into an ES-module parse error instead of a readable status. The
+        drawing editor's fonts under ``/excalidraw/`` are the same: a family the
+        bundle leaves out must read as missing, not as an HTML "font".
         """
         if not self.dist_dir:
             # No built client. Answering here rather than joining against an
@@ -365,7 +382,7 @@ class CadApp:
             return
         if self._serve_file(response, file_path, content_type_for_static_asset(file_path)):
             return
-        if request_path.startswith("/assets/"):
+        if request_path.startswith(("/assets/", "/excalidraw/")):
             response.send_plain(404, "Not found")
             return
         index_html = os.path.join(self.dist_dir, "index.html")
@@ -424,6 +441,8 @@ class CadApp:
                     response.send_json(200, preview_update(
                         self.backend.root_path, query.get("file") or "", after=query.get("after")
                     ))
+                elif pathname == "/__cad/drawing":
+                    self._handle_drawing(request, response, query)
                 elif pathname == "/__cad/store":
                     self._handle_store_asset(request, response, query)
                 elif pathname == "/__cad/asset":
@@ -450,6 +469,23 @@ class CadApp:
             try:
                 if pathname == "/__cad/artifact":
                     self._handle_artifact_build(request, response, query)
+                elif pathname == "/__cad/reveal":
+                    from .reveal import reveal_path
+                    if int(request.headers.get("content-length") or 0) > 8192:
+                        response.send_empty(413, [("connection", "close")])
+                        return
+                    payload = json.loads(request.body())
+                    if type(payload) is not dict or set(payload) != {"path"}:
+                        raise ValueError("Reveal requires a path")
+                    reveal_path(self.backend.root_path, payload["path"])
+                    response.send_empty(204)
+                elif pathname == "/__cad/clipboard":
+                    from .clipboard import MAX_PNG_BYTES, copy_png
+                    if int(request.headers.get("content-length") or 0) > MAX_PNG_BYTES:
+                        response.send_empty(413, [("connection", "close")])
+                        return
+                    copy_png(request.body())
+                    response.send_empty(204)
                 elif pathname == "/__cad/surfaces":
                     if int(request.headers.get("content-length") or 0) > 128 * 1024:
                         response.send_empty(413, [("connection", "close")])
@@ -489,7 +525,7 @@ class CadApp:
     # --- placeholders filled by later steps of the port -------------------
 
     def _handle_catalog(self, request, response):
-        response.send_json(200, self.backend.read_catalog(request.query.get("file")))
+        response.send_json(200, self.read_catalog(request.query.get("file")))
 
     def _entry_ref_for_status(self, file_ref, catalog=None) -> str:
         """The catalog URL for this ref, or ``""``.
@@ -500,7 +536,7 @@ class CadApp:
         every model in the root per tick.
         """
         if catalog is None:
-            catalog = self.backend.read_catalog()
+            catalog = self.read_catalog(file_ref)
         entry = self.backend.catalog_entry_for_file_ref(catalog, file_ref)
         return str((entry or {}).get("url") or "")
 
@@ -539,7 +575,7 @@ class CadApp:
         # Scanned AFTER the build, success or failure, and republished by the
         # client — the import is precisely the event that changes what the
         # catalog says about this entry.
-        catalog = self.backend.read_catalog()
+        catalog = self.read_catalog(file_ref)
         payload = {
             **result,
             "ref": self._entry_ref_for_status(file_ref, catalog),
@@ -581,6 +617,25 @@ class CadApp:
             response.send_json(404, {"error": "Not found"})
             return
         response.stream_file(str(payload), stat_result, content_type)
+
+    def _handle_drawing(self, request, response, query):
+        """A ``.dxf`` flattened to 2D primitives (``drawings.py`` owns both rules).
+
+        NOT in ``_UNCOUNTED_ROUTES``: that set is for polls and parked waits,
+        and this one does real work — up to a second of CPU on a large drawing
+        — that a development restart would throw away, exactly like a compile.
+
+        The payload is already JSON bytes from the store's ``drawing`` index,
+        so it goes out through ``send_bytes`` rather than being decoded and
+        re-encoded on the way past.
+        """
+        from .drawings import drawing_payload_response
+
+        status, body = drawing_payload_response(self.backend.root_path, query.get("file") or "")
+        if isinstance(body, bytes):
+            response.send_bytes(status, body, "application/json; charset=utf-8")
+            return
+        response.send_json(status, body)
 
     def _handle_asset(self, request, response, query):
         candidate = self.backend.asset_path_for_file_ref(query.get("file") or "")

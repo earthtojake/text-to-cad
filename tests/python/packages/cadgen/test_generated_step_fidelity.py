@@ -66,13 +66,11 @@ class GeneratedStepFidelityTests(unittest.TestCase):
         cls._seed_dir.mkdir()
         generator = cls._seed_dir / "colored.py"
         generator.write_text(COLORED_ASSEMBLY_GENERATOR, encoding="utf-8")
-        payload = step_artifact_cli.build_step_artifact(
-            repo_root=Path.cwd(),
-            step=cls._seed_dir / "colored.step",
-            source_path=generator,
-        )
-        if not payload.get("ok"):
-            raise RuntimeError(f"the seed package could not be built: {payload}")
+        # Built the ONE way a generated document is: by running its model.
+        from cadgen.generation import generate_step_targets
+
+        if generate_step_targets([str(generator)]) != 0 or not (cls._seed_dir / "colored.step").is_file():
+            raise RuntimeError("the seed model wrote no colored.step")
 
     @classmethod
     def tearDownClass(cls) -> None:

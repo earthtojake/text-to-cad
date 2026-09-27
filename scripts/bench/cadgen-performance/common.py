@@ -28,7 +28,7 @@ def command(*args: str) -> str:
 
 def source_fingerprint() -> str:
     digest = hashlib.sha256()
-    roots = [REPO / "packages/cadgen/src/cadgen", REPO / "packages/cadgen-js/src"]
+    roots = [REPO / "packages/cadgen/src/cadgen", REPO / "packages/core/src"]
     for root in roots:
         for path in sorted(root.rglob("*")):
             if not path.is_file() or "_runtime" in path.parts or path.suffix not in {".py", ".js", ".mjs"}:

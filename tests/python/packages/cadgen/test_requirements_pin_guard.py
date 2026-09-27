@@ -1,32 +1,27 @@
-"""A published skill must not run against a cadgen it was not published against.
+"""What counts as a skill's cadgen pin.
 
 `scripts/release/pin-cadgen-requirements.sh` writes `cadgen==<release>` into every
 skill's requirements.txt at publish, but nothing makes pip re-resolve that on a machine
-where some other cadgen is already installed. The skill then runs on an untested runtime
-and fails somewhere far from the cause. `enforce_requirements_pin` is the entrypoint
-check that turns it into one line naming both versions.
+where some other cadgen is already installed. `cadgen doctor` is the check a skill
+teaches: it compares the installed version with the pin `read_requirements_pin` finds
+(test_doctor.py pins what it does with a mismatch -- exit 3, naming both versions).
 
-Its silence matters as much as its failure: a development checkout is deliberately
-unpinned (`cadgen[snapshot]`) so the editable install satisfies it, and the guard runs on
-EVERY skill invocation. A false positive there would break the repo's own workflows.
-
-The companion policy test that keeps the guard wired into the shims is
-tests/python/global/test_shim_pin_guard.py.
+What this file pins is the READER, because its silence matters as much as its answer:
+a bare `cadgen` line, a pinned neighbour or a comment must not read as a pin, or
+`cadgen doctor` would fail a checkout that has nothing to enforce.
 """
 
 from __future__ import annotations
 
-import contextlib
-import io
 import tempfile
 import unittest
 from pathlib import Path
 
 from cadgen import __version__ as INSTALLED
-from cadgen.cli import enforce_requirements_pin
+from cadgen.cli import read_requirements_pin
 
 
-class RequirementsPinGuard(unittest.TestCase):
+class RequirementsPin(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self._tmp.cleanup)
@@ -37,41 +32,29 @@ class RequirementsPinGuard(unittest.TestCase):
         path.write_text(body, encoding="utf-8")
         return path
 
-    def assertSilent(self, path: Path) -> None:
-        """The guard returns without writing anything — the overwhelmingly common case."""
-        stderr = io.StringIO()
-        with contextlib.redirect_stderr(stderr):
-            enforce_requirements_pin(path)
-        self.assertEqual(stderr.getvalue(), "")
-
-    # --- the cases that must stay silent ------------------------------------------
-    def test_missing_file_is_silent(self) -> None:
+    # --- nothing to enforce ---------------------------------------------------------
+    def test_a_missing_file_pins_nothing(self) -> None:
         # Not every skill ships a manifest; absent means nothing claims a version.
-        self.assertSilent(self.root / "requirements.txt")
+        self.assertIsNone(read_requirements_pin(self.root / "requirements.txt"))
 
-
-    def test_matching_pin_is_silent(self) -> None:
-        self.assertSilent(self._requirements(f"cadgen=={INSTALLED}\n"))
-
+    def test_a_bare_cadgen_line_pins_nothing(self) -> None:
+        self.assertIsNone(read_requirements_pin(self._requirements("cadgen\n")))
 
     def test_other_distributions_are_ignored(self) -> None:
         # A pinned NEIGHBOUR is not a cadgen pin. Guards against a loose prefix match.
-        self.assertSilent(self._requirements("playwright==1.0.0\ncadgen-extras==0.0.1\n"))
+        self.assertIsNone(
+            read_requirements_pin(self._requirements("playwright==1.0.0\ncadgen-extras==0.0.1\n"))
+        )
 
-    def test_comment_is_not_a_pin(self) -> None:
-        self.assertSilent(self._requirements("# cadgen==0.0.0\ncadgen\n"))
+    def test_a_comment_is_not_a_pin(self) -> None:
+        self.assertIsNone(read_requirements_pin(self._requirements("# cadgen==0.0.0\ncadgen\n")))
 
-    # --- the case it exists for -----------------------------------------------------
-    def test_mismatched_pin_exits_3_and_names_both_versions(self) -> None:
-        stderr = io.StringIO()
-        with contextlib.redirect_stderr(stderr), self.assertRaises(SystemExit) as caught:
-            enforce_requirements_pin(self._requirements("cadgen==0.0.0\n"))
-        # 3 is the shims' existing "cadgen is not installed" code: same fix, same exit.
-        self.assertEqual(caught.exception.code, 3)
-        message = stderr.getvalue()
-        self.assertIn("cadgen==0.0.0", message)
-        self.assertIn(INSTALLED, message)
-        self.assertIn("pip install -r requirements.txt", message)
+    # --- the pin ---------------------------------------------------------------------
+    def test_the_exact_pin_is_read_back(self) -> None:
+        self.assertEqual(INSTALLED, read_requirements_pin(self._requirements(f"cadgen=={INSTALLED}\n")))
+
+    def test_an_extras_pin_is_a_pin(self) -> None:
+        self.assertEqual("0.0.0", read_requirements_pin(self._requirements("cadgen[snapshot]==0.0.0\n")))
 
 
 if __name__ == "__main__":

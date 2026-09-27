@@ -4,7 +4,7 @@ The published distribution: everything that turns CAD source into documents,
 documents into derived state, and derived state into pixels and meshes. One
 PyPI package carrying both language halves — the Python engine under
 `src/cadgen/`, and the built JavaScript it executes under
-`src/cadgen/_runtime/` (the cadgen-js runtime and the CAD Viewer's client,
+`src/cadgen/_runtime/` (the shared JavaScript runtime and the CAD Viewer's client,
 bundled in at build time; the JS *source* lives in its own packages and never
 ships as source).
 
@@ -15,8 +15,8 @@ snapshots, the warm daemon and its build pool, and the CAD Viewer
 instance).
 
 **MAY DEPEND ON** — the Python ecosystem it declares (OCP/build123d lazily,
-never at namespace-import time) and the *built outputs* of `cadgen-js`.
-Never app code, never `cadgen-js` source at runtime.
+never at namespace-import time) and the bundled JavaScript runtime.
+Never app code, never JavaScript source at runtime.
 
 **DEPENDED ON BY** — every skill (as a pinned installed distribution). The
 CAD Viewer is not a dependent but a part: `cadgen.viewer` serves the client and
@@ -32,7 +32,7 @@ document and this one disagree, the mechanism document is right.
 |---|---|---|
 | [`STORE.md`](STORE.md) | The store's contract: layout, the two-sides law, tree/record shapes, the gate, invariants, link-vs-component, concurrency, GC, the daemon, lazy children, editing previews, debugging. Sectioned, with a table of contents | changing anything that writes to or reads from `~/.cache/cadgen`, or any build, door or reader that depends on it |
 | [`MEMO.md`](MEMO.md) | `@memo`: the author's purity contract, what declines reuse, and the three statements about process-wide geometric `Shape` identity while the decorator is installed | adding, using or diagnosing a memoized geometry factory — and before relying on `is_same`, `==` or `hash()` of a shape |
-| [`SNAPSHOTS.md`](SNAPSHOTS.md) | Snapshot `--debug --json`: every measured browser stage, what each one covers, and which durations must not be added together | reading snapshot timings or changing what they report |
+| [`SNAPSHOTS.md`](SNAPSHOTS.md) | Snapshots: display presets, what a mesh, robot or drawing snapshot draws (the CAD Viewer's own scene for it), requests and OUT, sizes, and `--debug --json` — every measured browser stage, what each one covers, and which durations must not be added together | changing what a snapshot draws or accepts, or reading snapshot timings |
 
 ## The design laws
 
@@ -44,8 +44,8 @@ when it works. Each carries a pressure-test to apply before writing code.
 A generated file (STEP, DXF, STL, GLB, 3MF) and its sidecar
 (`<name>.step.json`) stand alone, forever.
 
-*Pressure-test*: a generated file must be fully renderable — viewer,
-snapshot, inspect — by reading ONLY the generated file(s), the sidecar, and
+*Pressure-test*: a generated file must be fully readable — viewer,
+snapshot, `read_scene` — by reading ONLY the generated file(s), the sidecar, and
 the store's artifact side. Never the source. A file whose bytes have no tree
 in the store is compiled from those bytes (`cadgen step compile` semantics),
 never from source. Deleting every `.py` in a project must not change what
@@ -142,9 +142,10 @@ sync-tested.
 *Pressure-test*: for any option, "what is this called on the other two
 surfaces?" must answer with the same name and a role-determined payload —
 `kinematics` everywhere: on DECLARING surfaces (decorators, `step build`)
-it is the space (`{mates, couplings, poses, at}`); on CONSUMING surfaces
-(snapshot, mesh `build`) it is a point in that space (a preset name or
-`{dof: value}`). One name, one validator, no synonyms.
+it is the space (`{mates, couplings, poses}`); on the CONSUMING surface
+(snapshot) it is a point in that space (a preset name or `{dof: value}`).
+The mesh `build` doors take no `kinematics`: a mesh is the document's tree,
+tessellated as stored. One name, one validator, no synonyms.
 
 Geometry queries are a Python library surface, separate from document-format
 verbs. `read_step(path)` returns build123d geometry; `read_scene(path)` returns
@@ -207,7 +208,7 @@ The cardinal sin is plausible-wrong output at exit 0. No silent fallbacks,
 no globs, no guessing; a failed render leaves NO file at the requested
 path.
 
-### 11–14. Runtime laws (shared with cadgen-js)
+### 11–14. Runtime laws (shared with the bundled JavaScript runtime)
 
 Kinematics is pure data and choreography is pure JS, fully independent
 (11). Clients render from file + sidecar + the store's artifact side and never
@@ -218,7 +219,7 @@ store hit (13). Composition: importing binds, calling links — a parent
 depends on a child by its RESULT (the pinned tree), on a constant by its
 VALUE, on a helper by its FILE — and a model must never `read_step` its own
 output (14). The bundled runtime under `_runtime/` is the JS half of these;
-the laws' JS statements live with the cadgen-js source. That runtime is built
+the laws' JS statements live in that runtime. It is built
 when the wheel is packaged and travels only inside it: the source tree never
 carries a built copy, so an installed cadgen and the sources that produced it
 cannot disagree.
@@ -232,7 +233,7 @@ nothing outside the package.
 
 *Pressure-test*: every sentence in the package's markdown must be true and
 actionable for someone who only ran `pip install cadgen`. Naming a bundled
-thing ("the cadgen-js runtime bundled at build time") passes; a repo path
+thing ("the JavaScript runtime bundled at build time") passes; a repo path
 to its source, a repo script, or a repo workflow does not.
 
 ### 16. Decorator inputs never change the geometry
@@ -342,3 +343,8 @@ teach it — doors compile a document's missing tree on demand.
 Developed in [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-cad);
 that repo's contributor guide carries the development workflow (tests,
 bundling, versioning).
+
+The viewer exposes `POST /__cad/clipboard` for explicit viewport PNG copies. It
+uses the same host and custom-header POST gates as other mutation routes, limits
+images to 20 MiB, and delegates native delivery to `viewer/clipboard.py`. It never
+reads the clipboard. Unsupported desktop clipboard environments return an error.

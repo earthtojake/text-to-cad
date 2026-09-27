@@ -1,14 +1,14 @@
 """The dependency-direction and ships-alone laws, held by test rather than prose.
 
 Boundary law (packages/README.md and each package's README): apps import
-packages; packages never import apps; cadgen-js is framework-free — no
+packages; packages never import apps; @hardcore/core is framework-free — no
 React, no app or workflow state. Ships-alone law: cadgen (the built PyPI
-distribution), the CAD Viewer (mirrored unchanged to the standalone
-earthtojake/cad-viewer repo) and every skill (the Skills CLI installs
+distribution) and every skill (the Skills CLI installs
 skills/<name> ALONE; plugin installers copy the published tree, which has no
 models/ and whose packages/ is never installed) each work in isolation outside
 this repo, so their markdown must not refer to anything outside the package.
-Prose drifts; this does not.
+The private apps are workspace consumers; their READMEs describe that workspace.
+The web app ships as compiled assets inside cadgen, not as a source mirror.
 """
 
 from __future__ import annotations
@@ -19,8 +19,8 @@ from pathlib import Path
 
 from tests.python.support.paths import repo_path
 
-CADGEN_JS_SRC = repo_path("packages/cadgen-js/src")
-CADGEN_JS_BIN = repo_path("packages/cadgen-js/bin")
+CADGEN_JS_SRC = repo_path("packages/core/src")
+CADGEN_JS_BIN = repo_path("packages/core/bin")
 CADGEN_SRC = repo_path("packages/cadgen/src")
 
 _IMPORT_RE = re.compile(
@@ -61,7 +61,7 @@ class CadgenJsIsFrameworkFree(unittest.TestCase):
         self.assertEqual(
             offenders,
             [],
-            "cadgen-js is framework-free shared code (its README, Boundary "
+            "@hardcore/core is framework-free shared code (its README, Boundary "
             "laws): no React, nothing from apps/. Move app-flavored code "
             "into the app that owns it.",
         )
@@ -98,11 +98,8 @@ class PackagesNeverImportApps(unittest.TestCase):
 
 # The ships-alone law. Two surfaces leave this repo whole:
 #   - packages/cadgen builds into the PyPI wheel (README.md is its long
-#     description; cadgen-js and the viewer client arrive already bundled
+#     description; @hardcore/core and the viewer client arrive already bundled
 #     under _runtime/).
-#   - apps/viewer is the CAD Viewer's client package: it names cadgen-js (its
-#     one dependency) and its own files, never the repo's tooling or the
-#     cadgen source it is served by.
 #   - skills/ installs standalone: the Skills CLI copies skills/<name> by
 #     itself, and Claude Code and Codex copy the PUBLISHED tree, which has no
 #     models/ and never installs its packages/ — so a skill that points at this
@@ -125,20 +122,6 @@ _MD_ISOLATION_ROOTS: dict[str, tuple[str, ...]] = {
         r"models/",
         r"tests/",
         r"scripts/",
-        r"requirements-dev",
-        r"AGENTS\.md",
-        r"CONTRIBUTING\.md",
-        r"\.github/",
-    ),
-    # The viewer client owns scripts/, skills/smui/, and imports
-    # packages/cadgen-js — those stay legal; the repo's families do not.
-    "apps/viewer": (
-        r"apps/",
-        r"packages/cadgen(?!-js)",
-        r"skills/(?!smui)",
-        r"models/",
-        r"tests/",
-        r"scripts/(?:bundle|dev|test|release|install|viewer|github-workflows)/",
         r"requirements-dev",
         r"AGENTS\.md",
         r"CONTRIBUTING\.md",
@@ -208,12 +191,11 @@ class PackagedMarkdownShipsAlone(unittest.TestCase):
         self.assertEqual(
             offenders,
             [],
-            "Ships-alone law: cadgen installs from PyPI, apps/viewer "
-            "mirrors unchanged into earthtojake/cad-viewer, and skills "
+            "Ships-alone law: cadgen installs from PyPI and skills "
             "install alone (the Skills CLI copies skills/<name> by itself; "
             "the published tree has no models/), so their markdown must be "
             "true and actionable with "
-            "this repo gone. Name the bundled thing ('the cadgen-js runtime "
+            "this repo gone. Name the bundled thing ('the @hardcore/core runtime "
             "bundled at build time'), not the repo path to its source; give "
             "a skill a self-contained exemplar in its references/, not a "
             "pointer at this repo's example projects; move repo-development "

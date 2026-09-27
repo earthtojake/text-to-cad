@@ -2,7 +2,7 @@
 
 `skills/cad/references/supported-exports.md` promises that a mesh export is
 watertight. The tessellator's own guarantee is pinned next to it, in
-`packages/cadgen-js/src/lib/surf/tessellateWatertight.test.js`; this test pins
+`packages/core/src/lib/surf/tessellateWatertight.test.js`; this test pins
 what a USER gets — the bytes of a written STL, read back with nothing but
 `struct` — for the ordinary part the issue reported: a rectangular plate with a
 single cylindrical through-hole.

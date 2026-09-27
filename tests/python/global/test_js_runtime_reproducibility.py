@@ -24,22 +24,22 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
-VIEWER_DIR = REPO_ROOT / "apps" / "viewer"
+VIEWER_DIR = REPO_ROOT / "apps" / "web"
 # The resolver lives with the viewer client's bundle stage: the cadgen runtime
 # bundler builds the client into the wheel (--viewer), so it owns the choice.
 VIEWER_BUNDLER = REPO_ROOT / "scripts" / "bundle" / "cadgen-runtime.sh"
-CADJS_RUNNER = REPO_ROOT / "packages" / "cadgen-js" / "scripts" / "run-tests.mjs"
+CADJS_RUNNER = REPO_ROOT / "packages" / "core" / "scripts" / "run-tests.mjs"
 TEST_RUNNERS = (
     CADJS_RUNNER,
-    REPO_ROOT / "apps" / "viewer" / "scripts" / "run-tests.mjs",
+    VIEWER_DIR / "scripts" / "run-tests.mjs",
 )
 
 
 def _cadgen_js_node_floor() -> str:
-    """The single declared Node major the cadgen-js suite refuses to start below."""
+    """The single declared Node major the @hardcore/core suite refuses to start below."""
     floors = set(re.findall(r"nodeMajor < (\d+)", CADJS_RUNNER.read_text(encoding="utf-8")))
     if len(floors) != 1:
-        raise AssertionError(f"the cadgen-js runner states {len(floors)} Node floors")
+        raise AssertionError(f"the @hardcore/core runner states {len(floors)} Node floors")
     return floors.pop()
 
 
@@ -63,7 +63,7 @@ def resolved_viewer_package_manager(*lockfiles: str, override: str = "") -> str:
     with tempfile.TemporaryDirectory() as temp_dir:
         root = Path(temp_dir)
         bin_dir = root / "bin"
-        viewer_dir = root / "apps" / "viewer"
+        viewer_dir = root / "apps" / "web"
         bin_dir.mkdir()
         viewer_dir.mkdir(parents=True)
         for command in ("npm", "pnpm"):
@@ -71,12 +71,14 @@ def resolved_viewer_package_manager(*lockfiles: str, override: str = "") -> str:
             executable.write_text("#!/usr/bin/env sh\nexit 0\n", encoding="utf-8")
             executable.chmod(0o755)
         for lockfile in lockfiles:
-            (viewer_dir / lockfile).touch()
+            destination = root if lockfile == "package-lock.json" else viewer_dir
+            (destination / lockfile).touch()
 
         env = os.environ.copy()
         env.update(
             {
                 "PATH": f"{bin_dir}:{env.get('PATH', '')}",
+                "REPO_ROOT": str(root),
                 # The resolver reads the viewer SOURCE dir; the two bundlers have
                 # spelled that variable differently over time, so set both.
                 "VIEWER_SRC": str(viewer_dir),
@@ -98,7 +100,8 @@ def resolved_viewer_package_manager(*lockfiles: str, override: str = "") -> str:
 class ViewerPackageManagerIsDecidedByTheLockfileTest(unittest.TestCase):
     def test_the_repository_commits_exactly_one_viewer_lockfile(self) -> None:
         # The premise of every case below: there is one committed answer to appeal to.
-        self.assertTrue((VIEWER_DIR / "package-lock.json").is_file())
+        self.assertTrue((REPO_ROOT / "package-lock.json").is_file())
+        self.assertFalse((VIEWER_DIR / "package-lock.json").exists())
         self.assertFalse(
             (VIEWER_DIR / "pnpm-lock.yaml").exists(),
             "two committed lockfiles would make the build's package manager ambiguous again",
@@ -147,7 +150,7 @@ class TestRunnersStartOnCurrentNodeTest(unittest.TestCase):
         # a hand-copied second number in the message is how the two drift.
         runner = CADJS_RUNNER.read_text(encoding="utf-8")
         floors = set(re.findall(r"nodeMajor < (\d+)", runner))
-        self.assertEqual(1, len(floors), f"the cadgen-js runner states {len(floors)} Node floors")
+        self.assertEqual(1, len(floors), f"the @hardcore/core runner states {len(floors)} Node floors")
         declared = floors.pop()
         self.assertIn(f"Node {declared} or newer", runner)
 
@@ -160,15 +163,14 @@ class TestRunnersStartOnCurrentNodeTest(unittest.TestCase):
             self.assertGreaterEqual(
                 version,
                 declared,
-                "CI runs a Node the cadgen-js suite refuses to start on",
+                "CI runs a Node the @hardcore/core suite refuses to start on",
             )
 
     def test_viewer_declares_the_module_type_its_tests_rely_on(self) -> None:
         # The flag existed to force module semantics; the durable answer is that every
         # package that owns .js tests declares itself a module package.
         for package_json in (
-            REPO_ROOT / "packages" / "cadgen-js" / "package.json",
-            REPO_ROOT / "packages" / "cadgen-js" / "package.json",
+            REPO_ROOT / "packages" / "core" / "package.json",
             VIEWER_DIR / "package.json",
         ):
             with self.subTest(package=package_json.parent.name):

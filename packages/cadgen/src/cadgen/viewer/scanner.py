@@ -570,8 +570,12 @@ def read_step_catalog_metadata(descriptor, source_path=None, *, document_hash=No
         return {}
     # Everything SOURCE-derived rides the model-side sidecar
     # (<name>.step.json); the store assembly.json is STEP-pure.
+    #
+    # A sidecar this build cannot read is no sidecar: the document renders with
+    # no kinematics, no materials and no routine, and the viewer says nothing
+    # about it. The migration is announced where it can be acted on -- the build
+    # and the cad skill -- not beside a model that is on screen and correct.
     sidecar = None
-    annotation_error = None
     if source_path:
         from cadgen._internal.source_sidecar import (
             SidecarAppearanceError,
@@ -585,9 +589,8 @@ def read_step_catalog_metadata(descriptor, source_path=None, *, document_hash=No
             sidecar = read_source_sidecar(source_path, document_hash=document_hash)
             if isinstance(sidecar, dict) and sidecar.get("appearance") is not None:
                 validate_appearance_targets(descriptor, sidecar["appearance"])
-        except (SidecarAppearanceError, SidecarBindingError, SidecarSchemaError) as error:
+        except (SidecarAppearanceError, SidecarBindingError, SidecarSchemaError):
             sidecar = None
-            annotation_error = str(error)
     entry_kind = descriptor.get("entryKind")
     kinematics = sidecar.get("kinematics") if isinstance(sidecar, dict) else None
     appearance = sidecar.get("appearance") if isinstance(sidecar, dict) else None
@@ -603,8 +606,6 @@ def read_step_catalog_metadata(descriptor, source_path=None, *, document_hash=No
         "kinematics": kinematics if _is_js_object(kinematics) else None,
         "appearance": appearance if isinstance(appearance, dict) else None,
     }
-    if annotation_error:
-        result["annotationError"] = annotation_error
     return result
 
 
@@ -676,8 +677,6 @@ def _build_step_entry(
         "documentHash": document_hash,
         "bytes": len(descriptor_body.encode("utf-8")),
     }
-    if metadata.get("annotationError"):
-        entry["annotationError"] = metadata["annotationError"]
     if metadata.get("hasSourceSidecar"):
         # The model-side sidecar is mutable independently of the STEP bytes.
         # Its URL therefore carries the ordinary asset version while the STEP

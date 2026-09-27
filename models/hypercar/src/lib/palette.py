@@ -2,7 +2,7 @@
 
 IMPORTANT -- colour space.  The render pipeline treats build123d ``Color``
 channels as **linear** RGB and converts them to sRGB for display
-(``packages/cadgen-js/src/lib/assembly/meshData.js`` ``linearChannelToSrgbByte``).
+(``packages/core/src/lib/assembly/meshData.js`` ``linearChannelToSrgbByte``).
 So ``Color(0.5, 0.5, 0.5)`` shows up as roughly ``#BCBCBC``, not ``#808080``.
 
 Every colour here is therefore authored as the sRGB hex you actually want to

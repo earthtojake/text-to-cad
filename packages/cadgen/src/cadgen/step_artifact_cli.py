@@ -1,31 +1,34 @@
+"""Compile one STEP/STP DOCUMENT into the store: its tree and components.
+
+The engine behind ``cadgen step compile`` (:func:`cadgen.step.compile`) and the
+compile job every door and the CAD Viewer submit for a document the store has no
+tree for (``cadgen.daemon.executors.submit_compile``). One input, one behaviour:
+the document's BYTES are read and their tree published. No model script is
+accepted, parsed or run here -- a script is a program, and ``python <model>.py``
+is its one door (README laws 1 and 7).
+
+There is no command line in this module: the command is the generated
+``cadgen step compile`` (``cadgen.cli.step_compile``).
+"""
+
 from __future__ import annotations
 
-import argparse
-from dataclasses import dataclass, replace
-import json
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Callable
 
 from cadgen.cli_logging import CliLogger
 from cadgen.cli_progress import cli_progress_line
 from cadgen._internal.generation import (
     EntrySpec,
-    _assembly_glb_package_current,
-    _existing_topology_artifact_matches_spec_without_scene,
-    _entry_spec_from_source,
     _generate_part_outputs,
-    _generated_assembly_glb_closure_current,
     _manifest_records_edge_visibility_classes,
-    _produce_declared_mesh_exports,
-    run_script_generator,
 )
-from cadgen.coordination import PHASE_GENERATE, STEP_PACKAGE, ProgressEvent, artifact_build
-from cadgen.metadata import normalize_mesh_numeric
+from cadgen.coordination import PHASE_GENERATE, STEP_PACKAGE, artifact_build
+from cadgen._internal.doors import STEP_SUFFIXES
 from cadgen.catalog import build_scope
 from cadgen.render import relative_to_cwd
-from cadgen._internal.step_scene import LoadedStepScene, step_file_hash
+from cadgen._internal.step_scene import step_file_hash
 from cadgen._internal.step_scene_package import load_step_scene_exact
-from cadgen.catalog import iter_cad_sources, source_from_path
 from cadgen.step_targets import (
     StepTopologyArtifact,
 )
@@ -33,7 +36,7 @@ from cadgen.step_targets import (
 
 @dataclass(frozen=True, kw_only=True)
 class _ImportedArtifactSnapshot(StepTopologyArtifact):
-    """One verified imported selection, owned only by this currency check."""
+    """One verified document selection, owned only by this currency check."""
 
     document_hash: str
     tree: str
@@ -53,56 +56,25 @@ def _cad_ref_for_step(repo_root: Path, step_path: Path) -> str:
     return relative[: -len(suffix)] if suffix else relative
 
 
-def _build_entry_spec(
-    repo_root: Path,
-    step_path: Path,
-    scene: LoadedStepScene,
-    *,
-    mesh_tolerance: float | None = None,
-    mesh_angular_tolerance: float | None = None,
-) -> EntrySpec:
-    cad_ref = _cad_ref_for_step(repo_root, step_path)
+def _build_entry_spec(repo_root: Path, step_path: Path) -> EntrySpec:
+    """The spec of a DOCUMENT: keyed by its own path, with no script behind it.
+    It carries no mesh tolerances -- a tree is tessellation-free."""
     return EntrySpec(
         source_ref=_relative_to_base(repo_root, step_path),
-        cad_ref=cad_ref,
+        cad_ref=_cad_ref_for_step(repo_root, step_path),
         source_path=step_path,
         display_name=step_path.stem,
         source="imported",
         step_path=step_path,
-        mesh_tolerance=mesh_tolerance,
-        mesh_angular_tolerance=mesh_angular_tolerance,
     )
 
 
-def _entries_by_step_path_for_repo(repo_root: Path, spec: EntrySpec) -> dict[Path, EntrySpec]:
-    entries: dict[Path, EntrySpec] = {}
-    try:
-        for source in iter_cad_sources(repo_root):
-            entry_spec = _entry_spec_from_source(source)
-            if entry_spec.step_path is not None:
-                entries[entry_spec.step_path.resolve()] = entry_spec
-    except Exception:  # noqa: BLE001 - a repo scan failure degrades to only the requested spec
-        entries = {}
-    if spec.step_path is not None:
-        entries[spec.step_path.resolve()] = spec
-    return entries
-
-
-def _result_payload(
-    spec: EntrySpec,
-    *,
-    source_kind: str,
-    step_hash: str | None = None,
-    source_hash: str | None = None,
-    stats: dict[str, object] | None = None,
-    load_elapsed_ms: float | None = None,
-    skipped: bool = False,
-) -> dict[str, object]:
+def _compiled_result_payload(spec: EntrySpec, stats: dict[str, object] | None) -> dict[str, object]:
     from cadgen.catalog import result_tree_for
     from cadgen.store.trees import tree_kind_for
 
     tree = result_tree_for(spec.entry_path)
-    payload: dict[str, object] = {
+    return {
         "ok": True,
         "document": relative_to_cwd(spec.step_path),
         # The tree these bytes resolve to (index/document → tree): the result's
@@ -110,408 +82,140 @@ def _result_payload(
         "tree": tree,
         # Off the tree (store.trees.tree_kind) — the one place kind is decided.
         "entryKind": tree_kind_for(tree) or "part",
-        "sourceKind": source_kind,
         "stats": stats or {},
     }
-    if source_hash:
-        payload["sourceHash"] = source_hash
-    if load_elapsed_ms is not None:
-        payload["loadElapsedMs"] = round(load_elapsed_ms, 1)
-    if skipped:
-        payload["skipped"] = True
-    return payload
 
 
-def _generated_result_payload(spec: EntrySpec, scene: LoadedStepScene, stats: dict[str, object] | None = None) -> dict[str, object]:
-    source_kind = str(getattr(scene, "source_kind", "step") or "step").strip().lower()
-    step_hash = str(getattr(scene, "step_hash", "") or "").strip()
-    if not step_hash and spec.step_path is not None and spec.step_path.is_file():
-        step_hash = step_file_hash(spec.step_path)
-    return _result_payload(
-        spec,
-        source_kind=source_kind,
-        step_hash=step_hash or None,
-        source_hash=getattr(scene, "source_hash", None) if source_kind == "python" else None,
-        stats=stats,
-        load_elapsed_ms=scene.load_elapsed * 1000.0,
-    )
-
-
-def _existing_result_payload(spec: EntrySpec, artifact: StepTopologyArtifact) -> dict[str, object] | None:
+def _existing_result_payload(
+    spec: EntrySpec, artifact: _ImportedArtifactSnapshot
+) -> dict[str, object] | None:
     from cadgen._internal.source_sidecar import read_source_sidecar
 
-    # Bind declarations to the bytes beside the sidecar, not the topology
-    # manifest's remembered digest. The document may have been replaced after
-    # that artifact was produced.
+    # Bind the answer to the bytes on disk NOW, not the snapshot's remembered
+    # digest: the document may have been replaced after the lookup.
     step_hash = step_file_hash(spec.step_path)
-    if isinstance(artifact, _ImportedArtifactSnapshot) and step_hash != artifact.document_hash:
+    if step_hash != artifact.document_hash:
         return None
-    sidecar = read_source_sidecar(spec.step_path, document_hash=step_hash) or {}
-    source_kind = "python" if sidecar else "step"
-    source_hash = str(sidecar.get("sourceHash") or "")
+    # "Current" is said about the document AND the declarations beside it: a
+    # sidecar bound to other bytes fails loudly here (SidecarBindingError) rather
+    # than being reported current and then refused by the reader that follows.
+    # Nothing is taken from it -- a compile's answer is the tree.
+    read_source_sidecar(spec.step_path, document_hash=step_hash)
     stats = artifact.manifest.get("stats")
-    if isinstance(artifact, _ImportedArtifactSnapshot):
-        # capture_tree already classified this exact root before flattening.
-        # Do not select a newer document index or reopen the tree for its kind.
-        payload: dict[str, object] = {
-            "ok": True,
-            "document": relative_to_cwd(spec.step_path),
-            "tree": artifact.tree,
-            "entryKind": artifact.kind,
-            "sourceKind": source_kind,
-            "stats": stats if isinstance(stats, dict) else {},
-            "skipped": True,
-        }
-        if source_hash:
-            payload["sourceHash"] = source_hash
-        return payload
-    return _result_payload(
-        spec,
-        source_kind=source_kind,
-        step_hash=step_hash or None,
-        source_hash=source_hash or None,
-        stats=stats if isinstance(stats, dict) else {},
-        skipped=True,
-    )
+    # capture_tree already classified this exact root before flattening.
+    # Do not select a newer document index or reopen the tree for its kind.
+    return {
+        "ok": True,
+        "document": relative_to_cwd(spec.step_path),
+        "tree": artifact.tree,
+        "entryKind": artifact.kind,
+        "stats": stats if isinstance(stats, dict) else {},
+        "skipped": True,
+    }
 
 
-def _current_artifact_for_spec(spec: EntrySpec) -> StepTopologyArtifact | None:
-    if spec.source == "imported":
-        from cadgen.catalog import result_snapshot_for
-        from cadgen.store.objects import object_path
-        from cadgen.store.trees import capture_tree
+def _current_artifact_for_spec(spec: EntrySpec) -> _ImportedArtifactSnapshot | None:
+    """The complete tree the store holds for this document's bytes, or None.
 
-        if spec.step_path is None or not spec.step_path.is_file():
-            return None
-        snapshot = result_snapshot_for(spec.entry_path)
-        if snapshot is None:
-            return None
-        try:
-            manifest, _ = capture_tree(snapshot[1], retain_payloads=False)
-        except (OSError, ValueError):
-            return None
-        if not _manifest_records_edge_visibility_classes(manifest):
-            return None
-        return _ImportedArtifactSnapshot(
-            cad_path=spec.cad_ref,
-            source_path=spec.source_path,
-            step_path=spec.step_path,
-            artifact_path=object_path(snapshot[1]),
-            manifest=manifest,
-            document_hash=snapshot[0],
-            tree=snapshot[1],
-        )
-
-    # A compile completes when its native geometry is available. Display
-    # derivations belong to their consumers and must never run in this gate.
-    if not (
-        _existing_topology_artifact_matches_spec_without_scene(spec)
-        and _generated_assembly_glb_closure_current(spec)
-        and _assembly_glb_package_current(spec)
-    ):
-        return None
+    A compile completes when its native geometry is available. Display
+    derivations belong to their consumers and must never run in this gate."""
     from cadgen.catalog import result_snapshot_for
     from cadgen.store.objects import object_path
     from cadgen.store.trees import capture_tree
 
+    if spec.step_path is None or not spec.step_path.is_file():
+        return None
     snapshot = result_snapshot_for(spec.entry_path)
     if snapshot is None:
         return None
     try:
-        manifest, _ = capture_tree(snapshot[1])
+        manifest, _ = capture_tree(snapshot[1], retain_payloads=False)
     except (OSError, ValueError):
         return None
-    return StepTopologyArtifact(
+    if not _manifest_records_edge_visibility_classes(manifest):
+        return None
+    return _ImportedArtifactSnapshot(
         cad_path=spec.cad_ref,
         source_path=spec.source_path,
         step_path=spec.step_path,
         artifact_path=object_path(snapshot[1]),
         manifest=manifest,
+        document_hash=snapshot[0],
+        tree=snapshot[1],
     )
-
-
-def _with_declared_exports(
-    payload: dict[str, object], spec: EntrySpec, *, logger: CliLogger | None
-) -> dict[str, object]:
-    """Produce the model's declared mesh exports and list what this run wrote.
-
-    Declared `@stl`/`@glb`/`@threemf` outputs are CONTENT-gated, not
-    build-gated: a current model whose STL was deleted heals it here from the
-    store package without a rebuild — the same thing a model-script run does on
-    its own no-op path, so the two front doors cannot disagree about what a
-    finished build leaves on disk.
-    """
-    written = _produce_declared_mesh_exports(spec, logger=logger, announce=False)
-    if written:
-        payload["exports"] = [relative_to_cwd(path) for path in written]
-    return payload
-
-
-def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(
-        prog="python -m cadgen.step_artifact_cli",
-        description="Compile one STEP/STP file or @step model script into the store (its tree and components).",
-    )
-    parser.add_argument("--repo-root", required=True, help="Repository/workspace root for relative STEP metadata.")
-    parser.add_argument("--step", required=True, help="STEP/STP source file to process.")
-    parser.add_argument(
-        "--source-path",
-        help=(
-            "Python @step source for a generated model. Selects generator mode: the build "
-            "runs the generator in-process and writes only the tree; the logical "
-            "--step path need not exist on disk. Without it, --step must be an existing "
-            "STEP/STP file (imported model)."
-        ),
-    )
-    parser.add_argument("--force", action="store_true", help="Regenerate even if a current artifact exists.")
-    parser.add_argument("--mesh-tolerance", type=float, help="Override automatic mesh linear deflection.")
-    parser.add_argument("--mesh-angular-tolerance", type=float, help="Override automatic mesh angular deflection.")
-    parser.add_argument("--verbose", action="store_true", help="Show detailed timing on stderr.")
-    return parser
-
-
-def _fan_out_sink(
-    cli_sink: Callable[[ProgressEvent], None],
-    extra: Callable[[ProgressEvent], None] | None,
-) -> Callable[[ProgressEvent], None]:
-    """Deliver each event to the CLI line and to an in-process listener.
-
-    The listener is isolated: a caller whose sink raises (a viewer whose client
-    socket has gone away mid-build, say) must lose its progress, not the build.
-    """
-    if extra is None:
-        return cli_sink
-
-    def fan_out(event: ProgressEvent) -> None:
-        cli_sink(event)
-        try:
-            extra(event)
-        except Exception:  # noqa: BLE001 - reporting must never fail a build
-            pass
-
-    return fan_out
 
 
 def build_step_artifact(
     *,
     repo_root: Path,
     step: Path,
-    source_path: Path | None = None,
     force: bool = False,
-    mesh_tolerance: float | None = None,
-    mesh_angular_tolerance: float | None = None,
     verbose: bool = False,
     logger: CliLogger | None = None,
-    sink: Callable[[ProgressEvent], None] | None = None,
 ) -> dict[str, object]:
-    """Build the GLB/topology artifact for one STEP/.step.py and RETURN the result
-    payload (the exact dict the CLI prints). This is the single source of truth,
-    callable in-process by a long-lived warm-OCCT worker AND wrapped by main();
-    it raises on error (the CLI shell owns argv parsing + JSON stdout).
+    """Compile the DOCUMENT ``step`` into the store and return the result payload
+    (``ok``, ``document``, ``tree``, ``entryKind``, ``stats``; ``skipped`` when the
+    tree for these bytes already existed). Raises on error.
 
-    Passing ``source_path`` selects GENERATOR mode: the @step source runs
-    in-process and only the tree is written — the logical ``step``
-    path never needs to exist on disk (STEP is exported on demand elsewhere).
-    Without ``source_path``, ``step`` must be an existing imported STEP/STP file.
-
-    ``sink`` receives every :class:`ProgressEvent` alongside the CLI's own line, so an
-    in-process caller can watch the build as DATA rather than reading back the status
-    record the run happens to publish. The CAD Viewer's compile worker uses this: it is
-    what lets an import report its phase and counts live, instead of the viewer scraping
-    a file whose location depends on which producer wrote it."""
+    ``step`` must be an existing STEP/STP file. The document itself is never
+    written, and nothing appears beside it: the tree is keyed by its bytes."""
     repo_root = Path(repo_root).expanduser().resolve()
     step_path = Path(step).expanduser().resolve()
-    from_generator = source_path is not None
-    if from_generator:
-        script_path = Path(source_path).expanduser().resolve()
-        if not script_path.is_file():
-            raise FileNotFoundError(f"Python generator does not exist for logical STEP path: {script_path}")
-        source = source_from_path(script_path)
-        if source is None:
-            raise RuntimeError(f"Python generator is not a @step CAD source: {script_path}")
-        spec = _entry_spec_from_source(source)
-        if spec.step_path is None or spec.step_path.resolve() != step_path:
-            if spec.step_path is None:
-                raise RuntimeError(f"Python generator does not map to logical STEP path: {step_path}")
-            spec = replace(
-                spec,
-                cad_ref=_cad_ref_for_step(repo_root, step_path),
-                display_name=step_path.stem,
-                step_path=step_path,
-            )
-    elif not step_path.is_file():
+    if not step_path.is_file():
         raise FileNotFoundError(f"STEP file does not exist: {step_path}")
-    if step_path.suffix.lower() not in {".step", ".stp"}:
+    if step_path.suffix.lower() not in STEP_SUFFIXES:
         raise ValueError(f"Expected a STEP/STP file: {step_path}")
-
 
     if logger is None:
         logger = CliLogger("step-artifact", verbose=verbose)
-    mesh_tolerance = normalize_mesh_numeric(mesh_tolerance, field_name="mesh_tolerance")
-    mesh_angular_tolerance = normalize_mesh_numeric(mesh_angular_tolerance, field_name="mesh_angular_tolerance")
-    if from_generator:
-        existing_spec = spec
-        if mesh_tolerance is not None or mesh_angular_tolerance is not None:
-            existing_spec = replace(
-                existing_spec,
-                mesh_tolerance=mesh_tolerance if mesh_tolerance is not None else existing_spec.mesh_tolerance,
-                mesh_angular_tolerance=(
-                    mesh_angular_tolerance
-                    if mesh_angular_tolerance is not None
-                    else existing_spec.mesh_angular_tolerance
-                ),
-            )
-    else:
-        existing_spec = EntrySpec(
-            source_ref=_relative_to_base(repo_root, step_path),
-            cad_ref=_cad_ref_for_step(repo_root, step_path),
-            source_path=step_path,
-            display_name=step_path.stem,
-            source="imported",
-            step_path=step_path,
-            mesh_tolerance=mesh_tolerance,
-            mesh_angular_tolerance=mesh_angular_tolerance,
-        )
+    spec = _build_entry_spec(repo_root, step_path)
     # Cheap early exit for the overwhelmingly common "nothing to do" call. It is NOT
     # the real gate -- see the is_current= re-check below, which is the one that has
     # to be right.
     if not force:
-        existing_artifact = _current_artifact_for_spec(existing_spec)
+        existing_artifact = _current_artifact_for_spec(spec)
         if existing_artifact is not None:
-            payload = _existing_result_payload(existing_spec, existing_artifact)
+            payload = _existing_result_payload(spec, existing_artifact)
             if payload is not None:
-                return _with_declared_exports(payload, existing_spec, logger=logger)
+                return payload
 
-    # Progress covers generation and declared outputs. Its scope is the model
-    # path, which remains stable while a rebuild changes the result's tree.
-    scope = build_scope(existing_spec.entry_path) if existing_spec.entry_path else None
-    # This builds exactly what a model-script run builds, and reported nothing while doing it:
-    # the sidecar went to the viewer and a terminal caller watched a silent process.
+    # Progress is scoped to the document's path, which stays stable while a
+    # recompile changes the result's tree.
+    scope = build_scope(spec.entry_path) if spec.entry_path else None
     with cli_progress_line(
-        existing_spec.source_ref, logger=logger, fallback="Building..."
+        spec.source_ref, logger=logger, fallback="Building..."
     ) as progress_sink, artifact_build(
         STEP_PACKAGE,
         scope,
-        is_current=lambda: _current_artifact_for_spec(existing_spec) is not None,
+        is_current=lambda: _current_artifact_for_spec(spec) is not None,
         force=force,
-        # The caller's sink runs ALONGSIDE the CLI line, never instead of it: a
-        # terminal watching this build still gets its bar when the viewer is
-        # also listening. A caller's sink must not be able to fail the build, so
-        # it is guarded here rather than trusted.
-        sink=_fan_out_sink(progress_sink, sink),
+        sink=progress_sink,
     ) as progress:
         if progress.skipped:
-            artifact = _current_artifact_for_spec(existing_spec)
+            artifact = _current_artifact_for_spec(spec)
             if artifact is not None:
-                payload = _existing_result_payload(existing_spec, artifact)
+                payload = _existing_result_payload(spec, artifact)
                 if payload is not None:
-                    return _with_declared_exports(payload, existing_spec, logger=logger)
-        import contextlib
+                    return payload
+        from cadgen.daemon import broker
 
-        with contextlib.ExitStack() as slot:
-            if from_generator:
-                from cadgen._internal.doors import announce_rebuild
-                from cadgen.store.gate import stale
-
-                document = existing_spec.step_path
-                verdict = stale(existing_spec.script_path) if existing_spec.script_path else None
-                announce_rebuild(
-                    "step compile",
-                    document,
-                    reason=(
-                        "--force" if force
-                        else "no document on disk" if not document.is_file()
-                        else verdict.reason() if verdict is not None and verdict.stale
-                        else "its tree is missing or stale"
-                    ),
-                    source=existing_spec.script_path or existing_spec.source_path,
-                    verb="compiling its tree",
-                )
-                scene = run_script_generator(
-                    existing_spec,
-                    "step",
-                    logger=logger,
-                    force=force,
-                    progress=progress,
-                )
-                if scene is None:
-                    raise RuntimeError(f"Python generator did not produce a STEP scene: {existing_spec.source_ref}")
-                # The generation pipeline's contract: a generated model's build
-                # ALWAYS produces its STEP file (assembled from the tree —
-                # design/step-document-architecture.md), no matter which front
-                # door asked (a model-script run, `cadgen step build`, inspect).
-                import dataclasses
-
-                spec = existing_spec
-                if spec.step_export_path is None and spec.step_path is not None:
-                    spec = dataclasses.replace(spec, step_export_path=spec.step_path)
-            else:
-                from cadgen.daemon import broker
-
-                # An imported document's compile is a JOB (STORE.md §9): its kernel
-                # work -- the read and the component emit -- holds a job slot the way
-                # a model body does. (A generated document's run takes its own slot
-                # inside run_script_generator.)
-                slot.enter_context(broker.held(existing_spec.source_ref))
-                # _generate_part_outputs reports this phase itself when it does the loading;
-                # here the scene is preloaded, so the parse would otherwise go unreported.
-                progress.phase(PHASE_GENERATE)
-                with logger.timed(f"load STEP {relative_to_cwd(step_path)}"):
-                    scene = load_step_scene_exact(step_path)
-                spec = _build_entry_spec(
-                    repo_root,
-                    step_path,
-                    scene,
-                    mesh_tolerance=mesh_tolerance,
-                    mesh_angular_tolerance=mesh_angular_tolerance,
-                )
+        # A document's compile is a JOB (STORE.md §9): its kernel work -- the read
+        # and the component emit -- holds a job slot the way a model body does.
+        with broker.held(spec.source_ref):
+            # _generate_part_outputs reports this phase itself when it does the loading;
+            # here the scene is preloaded, so the parse would otherwise go unreported.
+            progress.phase(PHASE_GENERATE)
+            with logger.timed(f"load STEP {relative_to_cwd(step_path)}"):
+                scene = load_step_scene_exact(step_path)
             result = _generate_part_outputs(
                 spec,
                 # A document compile has no source dependencies to discover.
-                # Its requested spec is sufficient; generation currently uses
-                # this map only as invocation bookkeeping.
-                entries_by_step_path=(
-                    _entries_by_step_path_for_repo(repo_root, spec)
-                    if from_generator else {spec.step_path.resolve(): spec}
-                ),
+                entries_by_step_path={spec.step_path.resolve(): spec},
                 preloaded_scene=scene,
-                require_step_file=not from_generator,
+                require_step_file=True,
                 force=force,
                 logger=logger,
                 progress=progress,
             )
     stats = result.selector_bundle.manifest.get("stats") if result.selector_bundle is not None else {}
-    return _with_declared_exports(
-        _generated_result_payload(spec, scene, stats if isinstance(stats, dict) else {}),
-        spec,
-        logger=logger,
-    )
-
-
-def run_cli_payload(argv: list[str] | None = None) -> dict[str, object]:
-    """Parse CLI ``argv`` and run :func:`build_step_artifact`, RETURNING its payload
-    (no printing, no logger.total()). The in-process primitive shared by ``main()``
-    and the CAD Viewer's warm worker."""
-    args = build_parser().parse_args(argv)
-    logger = CliLogger("step-artifact", verbose=bool(args.verbose))
-    payload = build_step_artifact(
-        repo_root=Path(args.repo_root),
-        step=Path(args.step),
-        source_path=Path(args.source_path) if args.source_path else None,
-        force=bool(args.force),
-        mesh_tolerance=args.mesh_tolerance,
-        mesh_angular_tolerance=args.mesh_angular_tolerance,
-        logger=logger,
-    )
-    logger.total()
-    return payload
-
-
-def main(argv: list[str] | None = None) -> int:
-    payload = run_cli_payload(argv)
-    print(json.dumps(payload, separators=(",", ":")))
-    return 0
-
-
-if __name__ == "__main__":
-    raise SystemExit(main())
+    return _compiled_result_payload(spec, stats if isinstance(stats, dict) else {})

@@ -18,17 +18,16 @@ Two invariants this module exists to hold:
    child in a ``finally``. An orphaned Node process still writing into an output after
    its run has reported done is the single failure mode the whole "a thin Python process
    owns the child" design was chosen to prevent.
-2. **Bare specifiers resolve through the exports map.** The published skill runtime ships
-   ``packages/cadgen-js`` as SOURCE with no ``node_modules`` beside the entry, so the
-   child is spawned with ``NODE_PATH=<packages dir>``: a ``NODE_PATH`` entry is treated as a
-   ``node_modules`` directory, which makes ``packages/cadgen-js`` resolve as the package
-   ``cadgen-js`` *through its exports map*. A directory ``--alias`` cannot do this -- it
+2. **Bare specifiers resolve through the exports map.** A source checkout runs compiled
+   ``packages/core`` builders whose package lives in the root workspace, so the
+   child is spawned with ``NODE_PATH=<root node_modules>``. That resolves
+   ``@hardcore/core`` *through its exports map*. A directory ``--alias`` cannot do this -- it
    bypasses the exports map entirely. Same mechanism the bundler uses
    (``scripts/bundle/lib/node_builders.sh``).
 
    **Correction to the design doc, measured here:** NODE_PATH alone is NOT sufficient for a
    real ``node`` child. Node's *ESM* resolver ignores NODE_PATH (verified on v22.22.0:
-   ``import "cadgen-js/glb/progressStream.js"`` throws ERR_MODULE_NOT_FOUND while
+   ``import "@hardcore/core/glb/progressStream.js"`` throws ERR_MODULE_NOT_FOUND while
    ``require.resolve`` of the same specifier under the same env returns the right file).
    The bundler never hit this because esbuild implements NODE_PATH itself. So the child is
    also spawned with ``--import node_resolve_register.mjs``, whose resolve hook forwards a
@@ -124,15 +123,18 @@ def cad_node_executable(repo_root: Path | str | None = None) -> str:
 def node_package_root() -> Path:
     """The directory to put on ``NODE_PATH`` for a builder child.
 
-    Only the DEV path needs this: a source checkout runs the live ``packages/cadgen-js/bin``
-    sources, whose bare ``cadgen-js/...`` specifiers resolve through the resolve hook
-    against a ``packages`` directory. A packaged builder is esbuilt self-contained and
+    Only the DEV path needs this: a source checkout runs the live ``packages/core/bin``
+    sources, whose bare ``@hardcore/core/...`` specifiers resolve through the resolve hook
+    against the root ``node_modules`` workspace links. A packaged builder is self-contained and
     imports nothing bare, so the value is inert there.
 
     Derived from :func:`cadgen.assets.node_builders_dir` so there is ONE resolution order
     (assets.py) rather than two that can disagree.
     """
-    return node_builders_dir().parent.parent
+    builders = node_builders_dir()
+    if builders.parent.name == "core" and builders.parent.parent.name == "packages":
+        return builders.parents[2] / "node_modules"
+    return builders.parent.parent
 
 
 def node_builder_script(name: str) -> Path:
@@ -148,12 +150,10 @@ def node_builder_script(name: str) -> Path:
     missing = dev_node_modules_missing(builders)
     if missing is not None:
         raise NodeBuilderError(
-            f"cadgen is running from a source checkout ({builders.parent}) whose "
-            f"node_modules is missing: {missing}. The live builders import 'three' and "
-            "friends from it, so every mesh export and DXF preview fails until it exists. "
-            "In a lightweight worktree, symlink packages/cadgen-js/node_modules from the "
-            "primary checkout, or run `npm install` there -- see CONTRIBUTING.md, "
-            "'Viewer Development In This Repo'."
+            f"cadgen is running from a source checkout ({builders.parent}) whose root "
+            f"node_modules is missing: {missing}. The compiled core builders resolve "
+            "their workspace package and dependencies there; run `npm ci` at the "
+            "repository root before using them."
         )
     path = builders / str(name)
     if not path.is_file():
@@ -173,7 +173,7 @@ def node_child_env(
     *,
     package_root: Path | str | None = None,
 ) -> dict[str, str]:
-    """``os.environ`` plus a ``NODE_PATH`` that resolves bare ``cadgen-js``
+    """``os.environ`` plus a ``NODE_PATH`` that resolves bare ``@hardcore/core``
     specifiers through their exports maps. ``extra`` is overlaid last and wins, including
     over ``NODE_PATH`` -- a caller that knows better is not second-guessed."""
     env = dict(os.environ)

@@ -204,7 +204,7 @@ class JobRules(unittest.TestCase):
             video='{"fps": 24}',
             video_specified=True,
         )
-        job = load_job_from_options(options, stdin=io.StringIO(), cwd=Path.cwd())
+        job = load_job_from_options(options, cwd=Path.cwd())
         self.assertEqual(job["video"]["fps"], 24)
         self.assertEqual(job["video"]["quality"], DEFAULT_VIDEO_QUALITY)
         self.assertEqual(job["animation"], {"clip": "demo", "time": 0.0})

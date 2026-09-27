@@ -126,14 +126,22 @@ cadgen 3mf snapshot 3MF/bracket.3mf tmp/bracket_3mf.png
 cadgen glb snapshot meshes/bracket.glb tmp/bracket_glb.png
 ```
 
-A mesh carries no CAD topology. Its snapshot door accepts `--display` for the
-format-neutral `shaded`, `wireframe`, `transparent`, and `unshaded` modes, and
-accepts `--render` for the photographic view. The two settings are separate:
-`--display` cannot be combined with `--render`. Mesh doors do not have
+A mesh carries no CAD topology. Its snapshot door accepts `--display solid`
+(the default) and `--display render` for the photographic view. Inline JSON and
+JSON files use the grouped display object (`camera`, `surfaces`, `lighting`,
+`background`, `floor`, `grid`, `axes`). Omitted groups inherit the preset.
+`edges`, `clip`, `exploded`, the `xray`, `hidden-line` and `wireframe` presets
+and the `hidden`/`off` surface styles are STEP-only and are refused by name.
+Mesh doors do not have
 `--focus`/`--hide`, `--kinematics`, or `--animation`/`--time`, and reject
-`--mode section`; meshes have no canonical CAD occurrences, edges, kinematics,
+`--mode section`; meshes have no canonical CAD occurrences, kinematics,
 or render-module clips for those controls to act on. `cadgen step snapshot`
 refuses a mesh input and names the door that takes it.
+
+The picture is the scene the CAD Viewer draws for the same file, built by the same code:
+an STL or a 3MF is its objects in their colours, and a GLB is its own glTF scene (nodes,
+skins, morph targets and authored materials), so `--display render` shows the finish the
+file authored. A GLB's clips play in the viewer; its snapshot is the file at rest.
 
 For a mesh-only model, this is its required visual review. When a STEP is also
 produced, review that document and render the mesh when tessellation or external
@@ -159,9 +167,18 @@ Use these flags when the default mesh density is wrong for the part:
 On a document export command, these flags select the tolerances for that export;
 omitting them uses the defaults above. The command does not inherit the source
 model's mesh declarations. On a model-script run, the same flags temporarily
-override its declared tolerances. Use tighter values for curved-surface fidelity
-and looser values when a coarser mesh meets the requirements. Linear tolerance
-is relative, not an absolute deflection in millimetres.
+override its declared tolerances — every declaration's, including one that sets
+its own (flag > declaration > `@step` > default): the declared meshes are re-cut
+at the flag's values for that run, and the next run without the flags restores
+them. Use tighter values for curved-surface fidelity and looser values when a
+coarser mesh meets the requirements. `--json` results report the effective pair,
+the defaults included.
+
+Linear tolerance is relative, not an absolute deflection in millimetres, and is
+refused above `0.05` (a twentieth of the bounding diagonal — past that the mesh
+no longer follows the part). For an absolute chord deviation of X mm on a part
+whose bounding diagonal is D mm, pass X/D: 0.1 mm on a 200 mm part is `5e-4`.
+The same bound applies to `mesh_tolerance=` on a decorator.
 
 ## Workflow
 

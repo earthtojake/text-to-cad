@@ -61,7 +61,6 @@ class ImportedCompileSnapshot(unittest.TestCase):
         expected_stats = trees.capture_tree(first["tree"], retain_payloads=False)[0]["stats"]
         forbidden = AssertionError("imported hit did extra work")
         with mock.patch.object(trees, "capture_tree", wraps=trees.capture_tree) as capture, \
-             mock.patch.object(artifact, "iter_cad_sources", side_effect=forbidden), \
              mock.patch.object(artifact, "load_step_scene_exact", side_effect=forbidden), \
              mock.patch.object(component_package, "decode_geometry_component", side_effect=forbidden), \
              mock.patch.object(surface_extract, "extract_surface_component", side_effect=forbidden), \
@@ -140,6 +139,7 @@ class ImportedCompileSnapshot(unittest.TestCase):
              mock.patch.object(trees, "tree_kind_for", side_effect=forbidden), \
              mock.patch.object(source_sidecar, "read_source_sidecar", wraps=source_sidecar.read_source_sidecar) as sidecar:
             payload = artifact._existing_result_payload(spec, current)
+        # The one thing read beside the tree: the sidecar's BINDING to these bytes.
         sidecar.assert_called_once_with(document, document_hash=current.document_hash)
         self.assertEqual(payload["tree"], first["tree"])
         self.assertEqual(payload["entryKind"], "assembly")
@@ -174,25 +174,17 @@ class ImportedCompileSnapshot(unittest.TestCase):
         self.assertEqual(document.read_bytes(), replacement)
         self.assertEqual(self.compile(document)["tree"], actual["tree"])
 
-    def test_current_generated_compile_still_heals_declared_export(self):
-        from cadgen.step_artifact_cli import build_step_artifact
-
-        script = self.root / "declared.py"
-        script.write_text(
-            "from cadgen import step, stl\n"
-            "from build123d import Solid\n"
-            "@step\n@stl\n"
-            "def declared():\n    return Solid.make_box(1, 2, 3)\n",
-            encoding="utf-8",
-        )
-        document = script.with_suffix(".step")
-        exported = script.with_suffix(".stl")
-        first = build_step_artifact(repo_root=self.root, step=document, source_path=script)
-        original = exported.read_bytes()
-        exported.unlink()
-        healed = build_step_artifact(repo_root=self.root, step=document, source_path=script)
-        self.assertEqual(exported.read_bytes(), original)
-        self.assertEqual(healed["tree"], first["tree"])
+    def test_a_corrupt_document_is_reported_by_the_users_path(self):
+        # The kernel parses a private temporary COPY of the bytes (so a replaced file
+        # cannot make the digest lie). A failure must still name the file the user
+        # gave, never cadgen's copy -- which no longer exists by the time they read it.
+        document = self.root / "broken.step"
+        document.write_text("ISO-10303-21;\nthis is not a STEP document\n", encoding="utf-8")
+        with self.assertRaises(RuntimeError) as caught:
+            self.compile(document)
+        message = str(caught.exception)
+        self.assertIn(str(document), message)
+        self.assertNotIn("cadgen-step-import-", message)
 
 
 if __name__ == "__main__":

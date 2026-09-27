@@ -42,7 +42,6 @@ PENDING = {
     "tests/python/packages/cadgen/test_kinematics_build.py",
     "tests/python/packages/cadgen/test_step_export_reuse.py",
     "tests/python/packages/cadgen/test_step_write_determinism.py",
-    "tests/python/skills/dxf/test_snapshot_cli.py",
 }
 
 

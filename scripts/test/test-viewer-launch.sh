@@ -14,7 +14,7 @@
 # script chooses no port: it reads the port from the --json line, exactly as an agent
 # does. It serves the client the WHEEL ships -- cadgen/_runtime/viewer, written by
 # scripts/bundle/bundle.sh -- pinned through CADGEN_VIEWER_DIST so a checkout's own
-# apps/viewer/dist cannot stand in for it. Run bundle.sh first, exactly as test.yml does.
+# apps/web/dist cannot stand in for it. Run bundle.sh first, exactly as test.yml does.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

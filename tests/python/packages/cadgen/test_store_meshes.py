@@ -21,7 +21,7 @@ add_repo_path("packages/cadgen/src")
 from cadgen.store import meshes
 from cadgen.store.index import entry_path, write_entry
 from cadgen.store.objects import object_path, put_object
-from cadgen.viewer.tess_cache import read_tess_cache_batch, read_tess_cache_probe
+from cadgen.store.tess_cache import read_tess_cache_batch, read_tess_cache_probe
 
 class MeshStoreContract(unittest.TestCase):
     @classmethod
@@ -127,9 +127,9 @@ class MeshStoreContract(unittest.TestCase):
         row = meshes.write(self.key, self.payload)
         request = {"entries": [{"tessellationInput": self.key, "object": row["object"], "maxBytes": row["byteLength"]}]}
         body = json.dumps(request).encode()
-        with mock.patch("cadgen.viewer.tess_cache.TESS_CACHE_BATCH_MAX_BYTES", row["byteLength"] + 16):
+        with mock.patch("cadgen.store.tess_cache.TESS_CACHE_BATCH_MAX_BYTES", row["byteLength"] + 16):
             self.assertEqual(int.from_bytes(read_tess_cache_batch(body)[12:16], "little"), row["byteLength"])
-        with mock.patch("cadgen.viewer.tess_cache.TESS_CACHE_BATCH_MAX_BYTES", row["byteLength"] + 12):
+        with mock.patch("cadgen.store.tess_cache.TESS_CACHE_BATCH_MAX_BYTES", row["byteLength"] + 12):
             self.assertEqual(read_tess_cache_batch(body), b"TESB" + (1).to_bytes(4, "little") + (1).to_bytes(4, "little") + b"\0" * 4)
         request["entries"][0]["object"] = "f" * 64
         self.assertEqual(int.from_bytes(read_tess_cache_batch(json.dumps(request).encode())[12:16], "little"), 0)

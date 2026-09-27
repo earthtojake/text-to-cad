@@ -1,5 +1,5 @@
 // Refresh the hero showcase assets from the repo model. The hero renders the
-// planetary gear STEP the same way every cadgen-js client does — from the
+// planetary gear STEP the same way every @hardcore/core client does — from the
 // TREE behind the document (assembly.json + exact-surface components) plus
 // its schema-v9 SIDECAR (<name>.step.json: kinematics + embedded animation) — served
 // as plain static files so production (Vercel) needs no backend and no Git LFS.

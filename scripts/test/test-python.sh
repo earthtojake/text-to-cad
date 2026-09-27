@@ -74,7 +74,7 @@ if [ "$SELECT" = "all" ] || [ "$SELECT" = "cadgen" ]; then
 fi
 
 # The backend alone, for a pull request that only moves the Viewer's client: nothing under
-# apps/viewer is read by any other cadgen test.
+# apps/web is read by any other cadgen test.
 if [ "$SELECT" = "viewer" ]; then
   run_suite "CAD Viewer backend Python tests" "tests/python/packages/cadgen/viewer" "packages/cadgen/src"
 fi

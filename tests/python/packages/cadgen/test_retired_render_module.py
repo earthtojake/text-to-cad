@@ -12,8 +12,8 @@ once per run on stderr, naming the replacement -- including on the run that
 rebuilds NOTHING, because a model whose tree is already current takes the no-op
 path and would otherwise sail past the check.
 
-The viewer says the same thing as a model warning (law 1: a door never refuses
-a document). That is ``viewer/test_artifact_status.py``.
+The viewer says nothing: it shows the document it is handed, and the absence of
+the routine is visible there already. The build is the one announcement.
 """
 
 from __future__ import annotations
@@ -84,6 +84,10 @@ class RetiredRenderModuleWarns(unittest.TestCase):
         self.assertIn("part.step.js", built.stderr)
         self.assertIn("@step(animation=...)", built.stderr)
         self.assertIn("kinematics", built.stderr)
+        # It says what is lost and that it is a migration to do: the build is the only
+        # place this is announced, so a remark that reads as optional goes undone.
+        self.assertIn("missing from this model", built.stderr)
+        self.assertIn("Migrate it now", built.stderr)
         # A stray file nothing reads does not stop the build.
         self.assertTrue(self.document.is_file(), "the build did not write its document")
 

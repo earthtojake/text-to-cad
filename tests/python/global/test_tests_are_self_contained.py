@@ -47,10 +47,12 @@ def _test_files():
         paths.update(TESTS.rglob(f"*.{extension}"))
     for extension in ("py", "sh"):
         paths.update((REPO_ROOT / "scripts" / "test").rglob(f"*.{extension}"))
-    for package in (REPO_ROOT / "packages" / "cadgen-js", REPO_ROOT / "apps" / "viewer"):
-        for folder in ("src", "scripts"):
+    for package in (REPO_ROOT / "packages" / "core", REPO_ROOT / "packages" / "ui",
+                    REPO_ROOT / "apps" / "web", REPO_ROOT / "apps" / "desktop"):
+        for folder in ("src", "scripts", "tests"):
             for extension in ("js", "mjs", "cjs", "jsx", "ts", "tsx"):
-                paths.update((package / folder).rglob(f"*.test.{extension}"))
+                for pattern in (f"*.test.{extension}", f"*.spec.{extension}"):
+                    paths.update((package / folder).rglob(pattern))
     for path in sorted(paths):
         if "__pycache__" in path.parts or path.resolve() in EXEMPT:
             continue

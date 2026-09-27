@@ -33,20 +33,12 @@ import json
 from pathlib import Path
 from typing import Any
 
+from cadgen._internal.doors import STEP_SUFFIXES, display_path as _display
 from cadgen.cli_logging import CliLogger
-
-STEP_SUFFIXES = (".step", ".stp")
 
 
 def _fail(message: str) -> ValueError:
     return ValueError(message)
-
-
-def _display(path: Path) -> str:
-    try:
-        return str(Path(path).resolve().relative_to(Path.cwd().resolve()))
-    except (OSError, ValueError):
-        return str(path)
 
 
 def load_kinematics_space(raw: object, *, where: str) -> Any | None:
@@ -377,7 +369,7 @@ def _emit(
     scene.animation = animation
 
     out.parent.mkdir(parents=True, exist_ok=True)
-    spec = _build_entry_spec(Path.cwd().resolve(), scene.step_path, scene)
+    spec = _build_entry_spec(Path.cwd().resolve(), scene.step_path)
     from dataclasses import replace as _replace
 
     from cadgen.catalog import build_scope

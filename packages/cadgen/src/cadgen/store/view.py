@@ -137,6 +137,11 @@ def materialize_view_surfaces(descriptor: dict) -> dict:
     return descriptor
 
 
+# A tree is a content-addressed, immutable object, so the cid -> object map
+# read out of it is the same on every call and is kept per (store root, tree)
+# for the process's life. The viewer server resolves one component request
+# per component of an assembly through here, and flattening a 600-occurrence
+# tree costs ~11 ms of CPU each time: 485 requests for one 483-component
 def component_object_for_ref(ref: str, descriptor: dict[str, Any] | None = None) -> tuple[str, str] | None:
     """``components/<cid>.surf`` -> (object hash, suffix) through ``assembly.json``
     (a view's assembly.json); a bare object hash in place of the cid also resolves.

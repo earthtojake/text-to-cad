@@ -2,7 +2,7 @@
 //
 //   node src/lib/anim_eval.mjs <clip> <t0,t1,...|N> [labels.json] > out.json
 //
-// Mirrors packages/cadgen-js/src/common/animationRuntime.js exactly: every
+// Mirrors packages/core/src/common/animationRuntime.js exactly: every
 // frame starts from rest, .rotate(axis, deg, origin) / .translate(v) PREMULTIPLY
 // (later calls act in world space on the already-moved part), m.get() takes a
 // label or an occurrence-id list. Occurrence ids are resolved through the

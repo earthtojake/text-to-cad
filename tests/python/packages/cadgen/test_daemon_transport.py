@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 import tempfile
 import threading
@@ -12,6 +13,40 @@ import uuid
 
 from cadgen.daemon import client, transport
 from cadgen.daemon.transport import Channel
+
+
+class PrivateAddressTest(unittest.TestCase):
+    @unittest.skipIf(os.name == "nt", "Windows private brokers use named pipes")
+    def test_deep_tmpdir_falls_back_to_short_authenticated_socket_path(self) -> None:
+        deep = "/tmp/" + "private-profile/" * 10
+        with mock.patch.object(tempfile, "gettempdir", return_value=deep):
+            address = transport.private_address("0123456789ab")
+        self.assertEqual(Path(address).parent, Path("/tmp"))
+        self.assertLess(len(os.fsencode(address)), 100)
+        listener = transport.Server(address, b"private-key")
+        self.addCleanup(transport.clear_address, address)
+        self.addCleanup(listener.close)
+        received: list[bytes | None] = []
+        errors: list[BaseException] = []
+
+        def accept() -> None:
+            try:
+                channel = listener.accept()
+                if channel is None:
+                    raise AssertionError("listener closed before accepting the authenticated client")
+                with channel:
+                    received.append(channel.recv(1))
+            except BaseException as error:
+                errors.append(error)
+
+        thread = threading.Thread(target=accept, daemon=True)
+        thread.start()
+        with transport.connect(address, b"private-key") as channel:
+            channel.send(b"authenticated")
+        thread.join(2)
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(errors, [])
+        self.assertEqual(received, [b"authenticated"])
 
 
 class _BlockingCloseConnection:

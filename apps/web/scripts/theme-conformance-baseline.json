@@ -1,0 +1,130 @@
+[
+  {
+    "renderer": "mesh",
+    "themeId": "workbench-light",
+    "activeThemeId": "workbench-light",
+    "background": [
+      239.94,
+      243.95,
+      248.96
+    ],
+    "surface": [
+      221.62,
+      228.14,
+      234.61
+    ],
+    "errors": []
+  },
+  {
+    "renderer": "mesh",
+    "themeId": "workbench-dark",
+    "activeThemeId": "workbench-dark",
+    "background": [
+      24.05,
+      31.05,
+      40.05
+    ],
+    "surface": [
+      46.21,
+      54.94,
+      64.63
+    ],
+    "errors": []
+  },
+  {
+    "renderer": "mesh",
+    "themeId": "cinematic",
+    "activeThemeId": "cinematic",
+    "background": [
+      10.87,
+      11.25,
+      13.99
+    ],
+    "surface": [
+      57.93,
+      57.83,
+      59.76
+    ],
+    "errors": []
+  },
+  {
+    "renderer": "mesh",
+    "themeId": "vibrant",
+    "activeThemeId": "vibrant",
+    "background": [
+      224.66,
+      226.58,
+      229.16
+    ],
+    "surface": [
+      199.93,
+      212.28,
+      231.96
+    ],
+    "errors": []
+  },
+  {
+    "renderer": "mesh",
+    "themeId": "blue",
+    "activeThemeId": "blue",
+    "background": [
+      1.78,
+      29.21,
+      58.51
+    ],
+    "surface": [
+      25.29,
+      80.02,
+      113.28
+    ],
+    "errors": []
+  },
+  {
+    "renderer": "mesh",
+    "themeId": "pink",
+    "activeThemeId": "pink",
+    "background": [
+      33.04,
+      4.76,
+      20.25
+    ],
+    "surface": [
+      91.97,
+      30.15,
+      66.19
+    ],
+    "errors": []
+  },
+  {
+    "renderer": "mesh",
+    "themeId": "clay-sunrise",
+    "activeThemeId": "clay-sunrise",
+    "background": [
+      216.27,
+      172.87,
+      124.72
+    ],
+    "surface": [
+      211.25,
+      170.17,
+      130.57
+    ],
+    "errors": []
+  },
+  {
+    "renderer": "mesh",
+    "themeId": "terminal",
+    "activeThemeId": "terminal",
+    "background": [
+      2.75,
+      21.57,
+      12.05
+    ],
+    "surface": [
+      17.74,
+      47.5,
+      31.8
+    ],
+    "errors": []
+  }
+]

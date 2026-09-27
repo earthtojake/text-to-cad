@@ -2,7 +2,7 @@
 
 The render pipeline treats a build123d ``Color``'s channels as **linear** RGB and
 converts them to sRGB on the way to the screen
-(``packages/cadgen-js/src/lib/assembly/meshData.js``, ``linearChannelToSrgbByte``).
+(``packages/core/src/lib/assembly/meshData.js``, ``linearChannelToSrgbByte``).
 So ``Color(0.5, 0.5, 0.5)`` does not display as ``#808080`` -- it displays as
 roughly ``#BCBCBC``. Picking channel values off a hex palette by eye therefore
 produces a washed-out, desaturated model, with no error to explain it.

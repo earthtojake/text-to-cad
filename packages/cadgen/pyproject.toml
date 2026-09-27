@@ -29,9 +29,9 @@ classifiers = [
 # ezdxf stopped being a WRITING dependency when @dxf moved to build123d geometry
 # (design/dxf-build123d.md) -- the engine writes through build123d's ExportDXF
 # and no author-facing contract mentions ezdxf. It remains a READING one, which
-# is not going away: cadgen.drawing_render parses a .dxf to render it, and
-# cadgen.drawing_checks parses one to validate it post-hoc. A DXF reader needs a
-# DXF parser. Dropping the declaration would leave those two modules resting on
+# is not going away: cadgen.drawing_payload flattens a .dxf to draw it (for the
+# Viewer's pane and for `cadgen dxf snapshot` alike), and cadgen.drawing_checks
+# parses one to validate it post-hoc. A DXF reader needs a DXF parser. Dropping the declaration would leave those two modules resting on
 # build123d's own dependency list, and they would fail at a user's runtime, not
 # at install, the day that list changes.
 #

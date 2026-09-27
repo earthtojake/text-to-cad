@@ -1,0 +1,143 @@
+<?xml version="1.0"?>
+<!--
+  Joint playground: one of every joint the viewer poses, built from primitives so it
+  needs no mesh files. Metres and radians.
+
+    turntable   continuous  about +Z             (no limits: spins freely)
+    shoulder    revolute    about +Y, -90..90 deg
+    elbow       revolute    about +Y,   0..135 deg (one-sided limit)
+    wrist_roll  revolute    about +X, -180..180 deg (axis along the link)
+    lift        prismatic   along +Z, 0..0.25 m
+    slide       prismatic   along +X, -0.15..0.15 m (symmetric)
+    skew        revolute    about a diagonal axis (1 1 0), -60..60 deg
+    finger_left prismatic   along +Y, 0..0.04 m
+    finger_right prismatic  mimics finger_left with multiplier -1
+    wheel_*     continuous  about +Y (two of them, to check side-by-side handles)
+    camera_mount fixed      (must get no handle)
+-->
+<robot name="joint_playground">
+  <material name="base"><color rgba="0.23 0.25 0.29 1"/></material>
+  <material name="light"><color rgba="0.82 0.84 0.87 1"/></material>
+  <material name="accent"><color rgba="0.95 0.55 0.15 1"/></material>
+  <material name="blue"><color rgba="0.22 0.47 0.85 1"/></material>
+  <material name="green"><color rgba="0.20 0.66 0.45 1"/></material>
+
+  <link name="base_link">
+    <inertial><mass value="4.0"/><origin xyz="0 0 0.03"/><inertia ixx="0.05" ixy="0" ixz="0" iyy="0.08" iyz="0" izz="0.12"/></inertial>
+    <visual><origin xyz="0 0 0.03"/><geometry><box size="0.9 0.5 0.06"/></geometry><material name="base"/></visual>
+    <collision><origin xyz="0 0 0.03"/><geometry><box size="0.9 0.5 0.06"/></geometry></collision>
+  </link>
+
+  <!-- Arm: continuous turntable, two revolutes, a roll about the link's own axis, a gripper. -->
+  <link name="turntable_link">
+    <inertial><mass value="0.8"/><inertia ixx="0.002" ixy="0" ixz="0" iyy="0.002" iyz="0" izz="0.004"/></inertial>
+    <visual><origin xyz="0 0 0.02"/><geometry><cylinder radius="0.09" length="0.04"/></geometry><material name="light"/></visual>
+  </link>
+  <joint name="turntable" type="continuous">
+    <parent link="base_link"/><child link="turntable_link"/>
+    <origin xyz="-0.25 0 0.06"/><axis xyz="0 0 1"/>
+  </joint>
+
+  <link name="upper_arm_link">
+    <inertial><mass value="0.6"/><origin xyz="0 0 0.11"/><inertia ixx="0.003" ixy="0" ixz="0" iyy="0.003" iyz="0" izz="0.0005"/></inertial>
+    <visual><origin xyz="0 0 0.11"/><geometry><box size="0.05 0.05 0.22"/></geometry><material name="accent"/></visual>
+  </link>
+  <joint name="shoulder" type="revolute">
+    <parent link="turntable_link"/><child link="upper_arm_link"/>
+    <origin xyz="0 0 0.06"/><axis xyz="0 1 0"/>
+    <limit lower="-1.5708" upper="1.5708" effort="20" velocity="2"/>
+  </joint>
+
+  <link name="forearm_link">
+    <inertial><mass value="0.4"/><origin xyz="0 0 0.09"/><inertia ixx="0.001" ixy="0" ixz="0" iyy="0.001" iyz="0" izz="0.0002"/></inertial>
+    <visual><origin xyz="0 0 0.09"/><geometry><box size="0.04 0.04 0.18"/></geometry><material name="light"/></visual>
+  </link>
+  <joint name="elbow" type="revolute">
+    <parent link="upper_arm_link"/><child link="forearm_link"/>
+    <origin xyz="0 0 0.22"/><axis xyz="0 1 0"/>
+    <limit lower="0" upper="2.3562" effort="12" velocity="3"/>
+  </joint>
+
+  <link name="wrist_link">
+    <inertial><mass value="0.15"/><inertia ixx="0.0001" ixy="0" ixz="0" iyy="0.0001" iyz="0" izz="0.0001"/></inertial>
+    <visual><origin xyz="0 0 0.02" rpy="0 0 0"/><geometry><box size="0.07 0.1 0.03"/></geometry><material name="blue"/></visual>
+  </link>
+  <joint name="wrist_roll" type="revolute">
+    <parent link="forearm_link"/><child link="wrist_link"/>
+    <origin xyz="0 0 0.18"/><axis xyz="0 0 1"/>
+    <limit lower="-3.1416" upper="3.1416" effort="4" velocity="6"/>
+  </joint>
+
+  <link name="finger_left_link">
+    <visual><origin xyz="0 0 0.03"/><geometry><box size="0.05 0.012 0.06"/></geometry><material name="green"/></visual>
+  </link>
+  <joint name="finger_left" type="prismatic">
+    <parent link="wrist_link"/><child link="finger_left_link"/>
+    <origin xyz="0 0.008 0.035"/><axis xyz="0 1 0"/>
+    <limit lower="0" upper="0.04" effort="5" velocity="0.2"/>
+  </joint>
+  <link name="finger_right_link">
+    <visual><origin xyz="0 0 0.03"/><geometry><box size="0.05 0.012 0.06"/></geometry><material name="green"/></visual>
+  </link>
+  <joint name="finger_right" type="prismatic">
+    <parent link="wrist_link"/><child link="finger_right_link"/>
+    <origin xyz="0 -0.008 0.035"/><axis xyz="0 1 0"/>
+    <limit lower="-0.04" upper="0" effort="5" velocity="0.2"/>
+    <mimic joint="finger_left" multiplier="-1" offset="0"/>
+  </joint>
+
+  <!-- Two prismatics stacked: a vertical lift carrying a horizontal slide. -->
+  <link name="lift_link">
+    <inertial><mass value="0.5"/><inertia ixx="0.001" ixy="0" ixz="0" iyy="0.001" iyz="0" izz="0.001"/></inertial>
+    <visual><origin xyz="0 0 0.15"/><geometry><cylinder radius="0.025" length="0.3"/></geometry><material name="light"/></visual>
+  </link>
+  <joint name="lift" type="prismatic">
+    <parent link="base_link"/><child link="lift_link"/>
+    <origin xyz="0.2 0.12 0.06"/><axis xyz="0 0 1"/>
+    <limit lower="0" upper="0.25" effort="50" velocity="0.3"/>
+  </joint>
+  <link name="slide_link">
+    <inertial><mass value="0.3"/><inertia ixx="0.0005" ixy="0" ixz="0" iyy="0.0005" iyz="0" izz="0.0005"/></inertial>
+    <visual><geometry><box size="0.12 0.06 0.04"/></geometry><material name="blue"/></visual>
+  </link>
+  <joint name="slide" type="prismatic">
+    <parent link="lift_link"/><child link="slide_link"/>
+    <origin xyz="0 0 0.32"/><axis xyz="1 0 0"/>
+    <limit lower="-0.15" upper="0.15" effort="20" velocity="0.4"/>
+  </joint>
+
+  <!-- A revolute about an axis that is no world axis, to check the handle follows it. -->
+  <link name="skew_link">
+    <visual><origin xyz="0 0 0.08"/><geometry><box size="0.03 0.03 0.16"/></geometry><material name="accent"/></visual>
+  </link>
+  <joint name="skew" type="revolute">
+    <parent link="base_link"/><child link="skew_link"/>
+    <origin xyz="0.2 -0.14 0.06"/><axis xyz="1 1 0"/>
+    <limit lower="-1.0472" upper="1.0472" effort="8" velocity="2"/>
+  </joint>
+
+  <!-- A pair of wheels: two continuous joints side by side. -->
+  <link name="wheel_left_link">
+    <visual><origin rpy="1.5708 0 0"/><geometry><cylinder radius="0.07" length="0.03"/></geometry><material name="base"/></visual>
+  </link>
+  <joint name="wheel_left" type="continuous">
+    <parent link="base_link"/><child link="wheel_left_link"/>
+    <origin xyz="0.38 0.27 0.03"/><axis xyz="0 1 0"/>
+  </joint>
+  <link name="wheel_right_link">
+    <visual><origin rpy="1.5708 0 0"/><geometry><cylinder radius="0.07" length="0.03"/></geometry><material name="base"/></visual>
+  </link>
+  <joint name="wheel_right" type="continuous">
+    <parent link="base_link"/><child link="wheel_right_link"/>
+    <origin xyz="0.38 -0.27 0.03"/><axis xyz="0 1 0"/>
+  </joint>
+
+  <!-- Fixed: part of the robot, never a handle. -->
+  <link name="camera_link">
+    <visual><geometry><sphere radius="0.03"/></geometry><material name="blue"/></visual>
+  </link>
+  <joint name="camera_mount" type="fixed">
+    <parent link="base_link"/><child link="camera_link"/>
+    <origin xyz="-0.4 0.2 0.09"/>
+  </joint>
+</robot>

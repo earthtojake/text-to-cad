@@ -3,8 +3,8 @@
 What a door owns is the mapping from argv to ONE engine call — the tessellation
 itself belongs to `cadgen._internal.mesh_export` and is tested against real
 geometry elsewhere. So these pin the mapping: each door's format string, `OUT`
-omitted meaning the model's declarations, an explicit `OUT`, the tolerance
-overrides, `--force`, and the Result the CLI prints.
+omitted meaning the sibling default (model output declarations are not read), an
+explicit `OUT`, the tolerance overrides, `--force`, and the Result the CLI prints.
 
 Derivation rules (which flags exist at all) are pinned in
 test_cli_from_function.py, and the parser⇄signature identity in
@@ -44,8 +44,10 @@ _WROTE_STL = {
             "format": "stl",
             "path": "/abs/sample.stl",
             "skipped": False,
-            "meshTolerance": None,
-            "meshAngularTolerance": None,
+            # The engine reports the EFFECTIVE pair: the tessellator's defaults
+            # when the door was given none, never null.
+            "meshTolerance": 1.5e-3,
+            "meshAngularTolerance": 0.35,
         }
     ],
 }
@@ -88,13 +90,20 @@ class DoorArguments(unittest.TestCase):
                 self.assertEqual(0, module.main([str(self.document)]))
             self.assertEqual([(fmt, None)], export.call_args.args[1])
 
-    def test_a_bare_target_asks_for_the_declarations(self):
-        # `OUT` omitted is None all the way to the engine, where it means EVERY
-        # variant of this format the DOCUMENT's sidecar declares.
+    def test_a_bare_target_is_the_sibling_default_not_a_declaration(self):
+        # `OUT` omitted is None all the way to the engine, where it means ONE file:
+        # the sibling `<name>.<ext>` beside the document. Model output declarations
+        # are not read -- a door has no script to read them from.
         with _engine() as export:
             self.assertEqual(0, stl_build.main([str(self.document)]))
         self.assertEqual(self.document, export.call_args.args[0])
         self.assertEqual([("stl", None)], export.call_args.args[1])
+        from cadgen.step_export_target import _resolve_export_output
+
+        self.assertEqual(
+            self.document.with_suffix(".stl"),
+            _resolve_export_output("stl", None, document=self.document),
+        )
 
     def test_an_explicit_out_is_one_ad_hoc_export(self):
         with _engine() as export:
@@ -102,8 +111,10 @@ class DoorArguments(unittest.TestCase):
         self.assertEqual([("stl", Path("meshes/sample.stl"))], export.call_args.args[1])
 
     def test_a_model_script_is_refused_by_naming_the_run(self):
+        # The REAL engine: it owns the one validation of TARGET, and refuses a
+        # script before it looks anything up.
         stderr = io.StringIO()
-        with _engine(), contextlib.redirect_stderr(stderr):
+        with contextlib.redirect_stderr(stderr):
             self.assertEqual(1, stl_build.main(["parts/sample.py"]))
         # The teaching error prints the path in the NATIVE spelling, so that is
         # what a Windows reader can paste back into a shell.
@@ -117,7 +128,7 @@ class DoorArguments(unittest.TestCase):
                     [
                         str(self.document),
                         "--mesh-tolerance",
-                        "0.2",
+                        "0.02",
                         "--mesh-angular-tolerance",
                         "0.25",
                         "--force",
@@ -126,7 +137,7 @@ class DoorArguments(unittest.TestCase):
                 ),
             )
         kwargs = export.call_args.kwargs
-        self.assertEqual(0.2, kwargs["mesh_tolerance"])
+        self.assertEqual(0.02, kwargs["mesh_tolerance"])
         self.assertEqual(0.25, kwargs["mesh_angular_tolerance"])
         self.assertTrue(kwargs["force"])
         self.assertTrue(kwargs["verbose"])
@@ -173,14 +184,14 @@ class DoorResults(unittest.TestCase):
                     "path": "/abs/draft.stl",
                     "skipped": True,
                     "meshTolerance": 0.008,
-                    "meshAngularTolerance": None,
+                    "meshAngularTolerance": 0.35,
                 },
                 {
                     "format": "stl",
                     "path": "/abs/print.stl",
                     "skipped": False,
                     "meshTolerance": 0.0004,
-                    "meshAngularTolerance": None,
+                    "meshAngularTolerance": 0.35,
                 },
             ],
         }
@@ -242,6 +253,88 @@ class DoorResults(unittest.TestCase):
             self.assertEqual(1, stl_build.main([str(self.document), "sample.bin"]))
         self.assertIn("stl OUT must end with .stl", err.getvalue())
         self.assertNotIn("Traceback", err.getvalue())
+
+
+class DoorTolerances(unittest.TestCase):
+    """A mesh tolerance is RELATIVE: the ONE normaliser refuses a value that can
+    only be an absolute deflection, wherever it enters, by saying so."""
+
+    def setUp(self) -> None:
+        import tempfile
+
+        stack = contextlib.ExitStack()
+        self.addCleanup(stack.close)
+        root = Path(stack.enter_context(tempfile.TemporaryDirectory())).resolve()
+        self.document = root / "sample.step"
+        self.document.write_text("ISO-10303-21;\n", encoding="utf-8")
+
+    def test_every_door_refuses_an_absolute_looking_tolerance_before_any_work(self):
+        for fmt, module, _ in DOORS:
+            err = io.StringIO()
+            with self.subTest(format=fmt), mock.patch(
+                "cadgen._internal.doors.document_snapshot",
+                side_effect=AssertionError("refused before the document is looked up"),
+            ), contextlib.redirect_stderr(err):
+                self.assertEqual(1, module.main([str(self.document), "--mesh-tolerance", "1"]))
+            self.assertIn("RELATIVE", err.getvalue())
+            self.assertIn("at most 0.05", err.getvalue())
+            self.assertIn("X/D", err.getvalue())
+
+    def test_the_bound_itself_is_accepted_and_the_angle_is_not_bounded_by_it(self):
+        from cadgen.metadata import MESH_TOLERANCE_MAX, normalize_mesh_numeric
+
+        self.assertEqual(MESH_TOLERANCE_MAX, normalize_mesh_numeric(MESH_TOLERANCE_MAX, field_name="mesh_tolerance"))
+        self.assertEqual(0.5, normalize_mesh_numeric(0.5, field_name="mesh_angular_tolerance"))
+        with self.assertRaisesRegex(ValueError, "RELATIVE"):
+            normalize_mesh_numeric(0.0501, field_name="mesh_tolerance")
+
+    def test_a_decorator_argument_is_refused_by_the_same_rule(self):
+        from cadgen import stl
+
+        with self.assertRaisesRegex(TypeError, "@stl mesh_tolerance 2 is too large.*RELATIVE"):
+            stl(mesh_tolerance=2.0)
+
+
+class ExporterFailures(unittest.TestCase):
+    """A failed Node exporter is diagnosable from the error alone."""
+
+    def _fail(self, *, returncode: int, stdout: str, stderr: str) -> str:
+        import tempfile
+        from types import SimpleNamespace
+
+        from cadgen._internal import mesh_export
+
+        with tempfile.TemporaryDirectory() as raw:
+            job = mesh_export.MeshExportJob("stl", Path(raw) / "never-written.stl")
+            proc = SimpleNamespace(returncode=returncode, stdout=stdout, stderr=stderr)
+            with mock.patch("subprocess.run", return_value=proc), \
+                    mock.patch("cadgen._internal.node_runtime.cad_node_executable", return_value="node"), \
+                    mock.patch("cadgen._internal.node_runtime.node_builder_script", return_value="mesh-export.mjs"), \
+                    self.assertRaises(RuntimeError) as caught:
+                mesh_export.run_mesh_exporter(
+                    Path(raw), [job], name="part", default_color=None, logger=mock.MagicMock(),
+                )
+        return str(caught.exception)
+
+    def test_a_crash_with_no_result_carries_its_exit_status_and_stderr(self):
+        message = self._fail(returncode=134, stdout="", stderr="FATAL ERROR: heap out of memory\n at tessellate")
+        self.assertIn("mesh export failed for stl", message)
+        self.assertIn("printed no result", message)
+        self.assertIn("exit status 134", message)
+        self.assertIn("heap out of memory", message)
+
+    def test_a_reported_error_still_carries_the_exporters_stderr(self):
+        message = self._fail(
+            returncode=1, stdout='{"ok": false, "error": "component c1 has no surfaces"}',
+            stderr="warn: retrying component c1",
+        )
+        self.assertIn("component c1 has no surfaces", message)
+        self.assertIn("exit status 1", message)
+        self.assertIn("retrying component c1", message)
+
+    def test_a_claimed_success_that_wrote_nothing_is_named(self):
+        message = self._fail(returncode=0, stdout='{"ok": true}', stderr="")
+        self.assertIn("reported success but did not write never-written.stl", message)
 
 
 class DoorImports(unittest.TestCase):

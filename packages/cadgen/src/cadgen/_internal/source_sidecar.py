@@ -413,11 +413,14 @@ def read_source_sidecar(
     if not sidecar_schema_is_current(payload):
         found = payload.get("schemaVersion", "none")
         artifact = Path(step_path)
+        # Says what is lost and that it is a migration to DO: read as a passing warning,
+        # a model keeps shipping with no kinematics, materials or routines at all.
         raise SidecarSchemaError(
             f"{source_sidecar_path(artifact).name}: unsupported sidecar schema {found} "
-            f"(expected {SOURCE_SIDECAR_SCHEMA_VERSION}) — rebuild the model "
-            f"(python {artifact.stem}.py) or re-annotate the document "
-            f"(cadgen step build)"
+            f"(expected {SOURCE_SIDECAR_SCHEMA_VERSION}), so the kinematics, materials and "
+            f"animation it declares cannot be read and this model poses and plays nothing. "
+            f"Migrate it now: rebuild the model (python {artifact.stem}.py) or re-annotate "
+            f"the document (cadgen step build)"
         )
     expected = _verified_document_hash(step_path, document_hash)
     found = str(payload.get("documentHash") or "").strip().lower()

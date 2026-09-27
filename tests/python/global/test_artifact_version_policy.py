@@ -32,13 +32,13 @@ ROOT = REPO_ROOT
 
 class TopologySchemaVersionMirrorTest(unittest.TestCase):
     def test_python_and_js_declare_the_same_topology_schema_version(self) -> None:
-        source = (ROOT / "packages/cadgen-js/src/common/stepTopology.mjs").read_text(encoding="utf-8")
+        source = (ROOT / "packages/core/src/common/stepTopology.mjs").read_text(encoding="utf-8")
         match = re.search(r"STEP_TOPOLOGY_SCHEMA_VERSION\s*=\s*(\d+)", source)
-        self.assertIsNotNone(match, "cadgen-js must declare STEP_TOPOLOGY_SCHEMA_VERSION")
+        self.assertIsNotNone(match, "@hardcore/core must declare STEP_TOPOLOGY_SCHEMA_VERSION")
         self.assertEqual(
             STEP_TOPOLOGY_SCHEMA_VERSION,
             int(match.group(1)),
-            "cadgen and cadgen-js disagree on STEP_topology schemaVersion; the JS client throws "
+            "cadgen and @hardcore/core disagree on STEP_topology schemaVersion; the JS client throws "
             "on a mismatch, so a bump has to land in both languages together",
         )
 
@@ -103,17 +103,6 @@ class DeadVersionsStayDeadTest(unittest.TestCase):
     A number nobody checks is not a contract; it is a value that looks load-bearing
     and invites a reader to reason about compatibility that was never enforced.
     """
-
-    def test_dxf_render_schema_version_is_gone_from_both_languages(self) -> None:
-        for relative in (
-            "packages/cadgen/src/cadgen/drawing_render.py",
-            "packages/cadgen-js/src/lib/dxf/parseDxf.js",
-        ):
-            self.assertNotIn(
-                "DXF_RENDER_SCHEMA_VERSION",
-                (ROOT / relative).read_text(encoding="utf-8"),
-                f"{relative} stamped a version nothing ever read",
-            )
 
     def test_viewer_server_info_schema_version_is_gone(self) -> None:
         self.assertNotIn(

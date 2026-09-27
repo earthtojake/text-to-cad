@@ -22,7 +22,7 @@ from cadgen.label_refs import (
 )
 
 
-FIXTURE_PATH = repo_path("packages", "cadgen-js", "src", "lib", "cadRefs.parity.json")
+FIXTURE_PATH = repo_path("packages", "core", "src", "lib", "cadRefs.parity.json")
 
 
 def _alias_cases() -> list[dict]:

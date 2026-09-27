@@ -7,7 +7,7 @@ import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { viewerRuntimeFingerprint, verifyServedViewerClient } from './fingerprint.mjs';
 import { installWorkerProbe } from './worker-probe.mjs';
-const require = createRequire(new URL('../../../apps/viewer/package.json', import.meta.url));
+const require = createRequire(new URL('../../../apps/web/package.json', import.meta.url));
 const { chromium } = require(process.env.PLAYWRIGHT_FROM || 'playwright');
 
 const args = {};
@@ -49,7 +49,7 @@ function publishEditBytes(bytes){
 }
 const git=(...argv)=>execFileSync('git',argv,{cwd:repo,encoding:'utf8'}).trim();
 const revision=git('rev-parse','HEAD');
-const runtimeChanges=git('status','--porcelain','--','packages/cadgen-js/src','apps/viewer/src','packages/cadgen/src/cadgen');
+const runtimeChanges=git('status','--porcelain','--','packages/core/src','packages/ui/src','apps/web/src','packages/cadgen/src/cadgen');
 const profile=fs.mkdtempSync(path.join(os.tmpdir(),'viewer-cycle-'));
 const errors=[];
 const failed=[];
@@ -312,7 +312,7 @@ if(edits.length){
   result.assertions.editWorkersReclaimed=edits.every(edit=>(edit.snapshot.probe?.memoryPolicy?.retainedByCategory?.workerResidentEstimated||0)===0);
   result.editPlateau={kind:'saved STEP byte replacement in the same tab; source execution excluded',target:editFixture.target,variant:editFixture.variant,fixtureIdentity:edits.map(edit=>edit.variant?'variant':'original'),heapUsed:edits.map(edit=>edit.snapshot.heap?.used),ownedBytes:edits.map(edit=>edit.snapshot.probe?.memoryPolicy?.estimatedOwnedBytes),gpuBytes:edits.map(edit=>edit.snapshot.gpu.liveBytes),gpuBufferCounts:edits.map(edit=>edit.snapshot.gpu.liveBufferCount)};
 }
-result.environment={node:process.version,platform:process.platform,arch:process.arch,cpu:os.cpus()[0]?.model,totalMemoryBytes:os.totalmem(),revision,runtimeChangesAtStart:runtimeChanges,runtimeChangesAtEnd:git('status','--porcelain','--','packages/cadgen-js/src','apps/viewer/src','packages/cadgen/src/cadgen'),url:base,file:repeatedFile,other:otherFile,browserCache:'fresh profile initially; same profile for switches',tessellationCache:'preexisting server cache; neither cleared nor controlled by this harness',plateauInteraction:'initial selection preserved across tab switches; pointer parked outside viewport content',viewport:{width:1400,height:900},angle:'metal',lod:'default',minimumLevel};
+result.environment={node:process.version,platform:process.platform,arch:process.arch,cpu:os.cpus()[0]?.model,totalMemoryBytes:os.totalmem(),revision,runtimeChangesAtStart:runtimeChanges,runtimeChangesAtEnd:git('status','--porcelain','--','packages/core/src','packages/ui/src','apps/web/src','packages/cadgen/src/cadgen'),url:base,file:repeatedFile,other:otherFile,browserCache:'fresh profile initially; same profile for switches',tessellationCache:'preexisting server cache; neither cleared nor controlled by this harness',plateauInteraction:'initial selection preserved across tab switches; pointer parked outside viewport content',viewport:{width:1400,height:900},angle:'metal',lod:'default',minimumLevel};
 fs.mkdirSync(path.dirname(path.resolve(args.out)),{recursive:true});
 fs.writeFileSync(args.out,JSON.stringify(result,null,2)+'\n');
 if (!Object.values(result.assertions).every(Boolean)) process.exitCode=1;

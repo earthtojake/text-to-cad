@@ -1,0 +1,26 @@
+Hardcore drawing editor: @excalidraw/excalidraw 0.18.1
+
+Excalidraw is MIT licensed. Its bundled font families carry the separate
+licenses in this directory. Copyright notices were transcribed from the
+installed SDK's WOFF2 name tables (and its source maps). Font files remain
+unmodified, including their embedded copyright and license metadata.
+
+Assistant, Cascadia Code, Excalifont, Lilita One, Nunito, Virgil and Xiaolai:
+SIL Open Font License 1.1. Comic Shanns Mono: MIT.
+Liberation Sans 2.1.5: SIL Open Font License 1.1. The SDK's legacy
+GPL Liberation 1.05 is omitted and replaced with the unmodified upstream
+TTF from the pinned @betteroffice/fonts 0.2.0 package. Its OFL notice is
+copied from that package during the build.
+
+Sources:
+https://github.com/excalidraw/excalidraw/tree/v0.18.1/packages/excalidraw/fonts
+https://github.com/excalidraw/excalidraw/blob/v0.18.1/LICENSE
+https://github.com/microsoft/cascadia-code/blob/v2009.22/LICENSE
+https://github.com/liberationfonts/liberation-fonts/tree/2.1.5
+https://github.com/openooxml/betteroffice/tree/b6fa1f98b62199f83984b96692f4e25c4a8231e4/packages/fonts
+
+Build adaptation: the SDK's CDN font fallback is replaced with the app's
+local asset directory. Fonts are served locally in development and packaged
+under excalidraw/fonts beside the app's index.html for offline operation. A
+build may omit a font family (the web CAD Viewer omits Xiaolai); its notice
+still ships.

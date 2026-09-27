@@ -19,10 +19,12 @@ from pathlib import Path
 
 from cadgen._internal.cli_from_function import (
     NotDerivable,
+    RetiredOption,
     cli_from_function,
     parse_docstring,
     parser_dests,
     result_payload,
+    retired_options,
     run_cli,
 )
 
@@ -97,6 +99,47 @@ class Derivation(unittest.TestCase):
         self.assertIn("Do the thing to TARGET.", cli_from_function(verb, prog="t").format_help())
 
 
+class Metavars(unittest.TestCase):
+    """A flag's metavar is its parameter's last word -- until two flags of one
+    command would share it; then each takes leading words until they differ."""
+
+    def test_the_last_word_names_the_value(self):
+        def one(target: Path, *, size_profile: str | None = None, focus: tuple[str, ...] = ()) -> Result:
+            """Summary."""
+
+        actions = {a.dest: a.metavar for a in cli_from_function(one, prog="t")._actions}
+        self.assertEqual("PROFILE", actions["size_profile"])
+        self.assertEqual("FOCUS", actions["focus"])
+
+    def test_two_flags_never_share_a_metavar(self):
+        def two(
+            target: Path, *, mesh_tolerance: float | None = None,
+            mesh_angular_tolerance: float | None = None, deform_tolerance: float | None = None,
+        ) -> Result:
+            """Summary."""
+
+        actions = {a.dest: a.metavar for a in cli_from_function(two, prog="t")._actions}
+        self.assertEqual("MESH_TOLERANCE", actions["mesh_tolerance"])
+        self.assertEqual("ANGULAR_TOLERANCE", actions["mesh_angular_tolerance"])
+        self.assertEqual("DEFORM_TOLERANCE", actions["deform_tolerance"])
+
+    def test_every_generated_door_has_distinct_metavars(self):
+        import collections
+        import importlib
+
+        from cadgen import cli
+
+        for command, (module_name, _) in sorted(cli._COMMANDS.items()):
+            module = importlib.import_module(module_name)
+            if not hasattr(module, "VERB"):
+                continue
+            with self.subTest(command=command):
+                metavars = collections.Counter(
+                    a.metavar for a in module.build_parser()._actions if a.option_strings and a.metavar
+                )
+                self.assertEqual({}, {name: n for name, n in metavars.items() if n > 1})
+
+
 class OutsideTheSubset(unittest.TestCase):
     """Each of these must be an ADAPTER, and the helper has to say so."""
 
@@ -137,6 +180,89 @@ class OutsideTheSubset(unittest.TestCase):
 
         with self.assertRaises(NotDerivable):
             cli_from_function(bad, prog="t")
+
+
+class RetiredFlags(unittest.TestCase):
+    """A flag the verb USED to take: gone from the signature, still answered.
+
+    A deleted parameter leaves nothing to derive from, so without this the
+    hard cutover reaches the caller as argparse's ``unrecognized arguments``,
+    which names neither the reason nor the replacement. These assert the
+    MESSAGE, not just that something failed.
+    """
+
+    TEACHING = "gizmos posed a 3D scene; this door draws a flat picture. Pass --appearance instead."
+
+    def door(self):
+        def snapshot(target: Path, *, appearance: str = "light") -> Result:
+            """Summary."""
+            return Result(ok=True, path=target)
+
+        snapshot.__cadgen_retired_options__ = {"--gizmo": self.TEACHING}
+        return snapshot
+
+    def test_the_declaration_is_read_off_the_verb(self):
+        self.assertEqual({"--gizmo": self.TEACHING}, retired_options(self.door()))
+        self.assertEqual({}, retired_options(verb))
+
+    def test_help_does_not_advertise_a_retired_flag(self):
+        help_text = cli_from_function(self.door(), prog="t").format_help()
+        self.assertNotIn("--gizmo", help_text)
+        self.assertIn("--appearance", help_text)
+
+    def test_a_retired_flag_is_not_part_of_the_signature_surface(self):
+        # The signature-sync policy test compares these against the verb's
+        # parameters; a retirement that leaked in would read as a flag the
+        # function cannot express.
+        parser = cli_from_function(self.door(), prog="t")
+        self.assertEqual(("target", "appearance", "json_output"), parser_dests(parser))
+
+    def test_every_spelling_the_flag_ever_had_is_refused_with_the_teaching(self):
+        parser = cli_from_function(self.door(), prog="cadgen thing snapshot")
+        for argv in (
+            ["a.dxf", "--gizmo", "iso"],   # a flag that took a value
+            ["a.dxf", "--gizmo=iso"],      # ...spelled with an equals sign
+            ["a.dxf", "--gizmo"],          # a flag that took none
+            ["--gizmo", "a.dxf"],          # before the positional
+        ):
+            with self.subTest(argv=argv):
+                with self.assertRaises(RetiredOption) as raised:
+                    parser.parse_args(argv)
+                message = str(raised.exception)
+                self.assertIn("cadgen thing snapshot no longer takes --gizmo", message)
+                self.assertIn(self.TEACHING, message)
+
+    def test_the_refusal_is_the_message_alone_and_a_failing_exit(self):
+        err = io.StringIO()
+        with contextlib.redirect_stderr(err):
+            code = run_cli(self.door(), ["a.dxf", "--gizmo", "iso"], prog="t", stdout=io.StringIO())
+        self.assertEqual(2, code)
+        printed = err.getvalue()
+        self.assertIn(self.TEACHING, printed)
+        # The two things the caller was getting instead of an explanation.
+        self.assertNotIn("unrecognized arguments", printed)
+        self.assertNotIn("usage:", printed)
+
+    def test_a_live_flag_still_parses_beside_a_retired_one(self):
+        parser = cli_from_function(self.door(), prog="t")
+        self.assertEqual("dark", parser.parse_args(["a.dxf", "--appearance", "dark"]).appearance)
+
+    def test_a_retirement_the_signature_still_declares_is_rejected(self):
+        # Both would mean the flag works AND teaches that it does not.
+        def confused(target: Path, *, appearance: str = "light") -> Result:
+            """Summary."""
+
+        confused.__cadgen_retired_options__ = {"--appearance": "gone"}
+        with self.assertRaisesRegex(NotDerivable, r"--appearance is declared retired"):
+            cli_from_function(confused, prog="t")
+
+    def test_a_retirement_must_name_a_long_flag(self):
+        def confused(target: Path) -> Result:
+            """Summary."""
+
+        confused.__cadgen_retired_options__ = {"gizmo": "gone"}
+        with self.assertRaisesRegex(NotDerivable, r"must be a --long spelling"):
+            cli_from_function(confused, prog="t")
 
 
 class Serialization(unittest.TestCase):

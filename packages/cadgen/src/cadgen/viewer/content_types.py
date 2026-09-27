@@ -22,7 +22,10 @@ _STATIC_CONTENT_TYPES = {
     ".json": "application/json; charset=utf-8",
     ".map": "application/json; charset=utf-8",
     ".svg": "image/svg+xml",
+    ".ttf": "font/ttf",
+    ".txt": "text/plain; charset=utf-8",
     ".wasm": "application/wasm",
+    ".woff2": "font/woff2",
 }
 
 # CAD assets (/__cad/asset, /__cad/store). Unknown -> octet-stream.

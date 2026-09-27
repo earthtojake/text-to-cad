@@ -1,12 +1,12 @@
 """The release version stamp has to reach every version field it owns.
 
 `scripts/release/sync-version.mjs` can name several paths that are the SAME FILE: a mirrored
-`apps/viewer/packages/...` entry is a symlink to the canonical package. Each target reads its file
+`apps/web/packages/...` entry is a symlink to the canonical package. Each target reads its file
 before any write happens, so two targets stamping one file means the last write wins -- and a
 mirror declaring fewer fields than the canonical target silently reverts the field only the
 canonical one knows about.
 
-That is not hypothetical: adding a package's version to `packages/cadgen-js/package-lock.json`
+That is not hypothetical: adding a package's version to `packages/core/package-lock.json`
 without adding it to that file's two symlinked mirrors made the 0.4.10 release fail its own
 version gate, after the bump and before anything was published.
 
@@ -27,6 +27,7 @@ from pathlib import Path
 from tests.python.support.paths import repo_path
 
 SYNC_SCRIPT = repo_path("scripts", "release", "sync-version.mjs")
+PERMANENT_PLACEHOLDER_VERSIONS = {"apps/desktop": "0.0.0"}
 
 
 def _node(script: str, cwd: Path | None = None) -> str:
@@ -45,16 +46,16 @@ def _node(script: str, cwd: Path | None = None) -> str:
 class VersionSyncMirrorTests(unittest.TestCase):
     def test_targets_naming_one_file_are_merged_into_one_write(self) -> None:
         """Two targets on the same real file become one target holding both field sets."""
-        if not repo_path("apps", "viewer", "packages", "cadgen-js").is_symlink():
+        if not repo_path("apps", "web", "packages", "core").is_symlink():
             self.skipTest("not in the development symlink layout")
         # The script resolves target paths against the repo root, so the pair below has to be
         # real repo paths: the canonical lockfile and the mirror that symlinks to it.
         script = (
             "const { mergeTargetsByRealPath } = await import(%s);\n"
             "const merged = mergeTargetsByRealPath([\n"
-            '  { path: "packages/cadgen-js/package-lock.json",'
+            '  { path: "packages/core/package-lock.json",'
             ' fields: [["version"], ["packages", "", "version"]] },\n'
-            '  { path: "apps/viewer/packages/cadgen-js/package-lock.json", fields: [["version"]], required: false },\n'
+            '  { path: "apps/web/packages/core/package-lock.json", fields: [["version"]], required: false },\n'
             "]);\n"
             "console.log(JSON.stringify({ count: merged.length, fields: merged[0].fields,"
             " treatedAsRequired: merged[0].required !== false }));"
@@ -97,6 +98,19 @@ class VersionSyncMirrorTests(unittest.TestCase):
                 if "node_modules" in name:
                     continue
                 with self.subTest(path=target["path"], entry=name or "<root>"):
+                    if name in PERMANENT_PLACEHOLDER_VERSIONS:
+                        placeholder = PERMANENT_PLACEHOLDER_VERSIONS[name]
+                        self.assertEqual(
+                            placeholder,
+                            entries[name].get("version"),
+                            f"{name} must retain its permanent {placeholder} manifest placeholder",
+                        )
+                        self.assertNotIn(
+                            ("packages", name, "version"),
+                            declared,
+                            f"{name} gets its release version at package time and must not be stamped",
+                        )
+                        continue
                     self.assertIn(
                         ("packages", name, "version"),
                         declared,

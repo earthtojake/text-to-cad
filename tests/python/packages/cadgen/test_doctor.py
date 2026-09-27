@@ -103,13 +103,55 @@ class DoctorTests(unittest.TestCase):
         self.assertIn("OK", out)
         self.assertIn(str(req), out)
 
-    def test_mismatch_exits_3_with_the_install_instruction(self) -> None:
-        with TemporaryDirectory() as tmp:
+    def mismatch(self, editable: str | None) -> tuple[int, str]:
+        with mock.patch.object(doctor, "_editable_source", return_value=editable), \
+                TemporaryDirectory() as tmp:
             (Path(tmp) / "requirements.txt").write_text("cadgen==0.0.0.dev0\n", encoding="utf-8")
             code, _, err = _run([tmp])
+        return code, err
+
+    def test_mismatch_exits_3_with_the_install_instruction(self) -> None:
+        code, err = self.mismatch(None)
         self.assertEqual(code, 3)
         self.assertIn("MISMATCH", err)
         self.assertIn("pip install -r requirements.txt", err)
+
+    def test_an_editable_install_is_told_to_re_record_itself_not_to_replace_itself(self) -> None:
+        # An editable install's version is a snapshot taken when it was
+        # installed, so its code can already BE the pinned version while the
+        # metadata is behind. `pip install -r requirements.txt` would exchange
+        # the source tree for a published release -- the wrong fix, and the one
+        # the report used to name for every mismatch.
+        source = str(Path("/src/packages/cadgen"))
+        code, err = self.mismatch(source)
+        self.assertEqual(code, 3)
+        self.assertIn("MISMATCH", err)
+        self.assertIn("EDITABLE", err)
+        self.assertIn(f"pip install -e {source}", err)
+        self.assertIn("recorded when", err, "the report says WHY the version is stale")
+        self.assertNotIn("\n  python -m pip install -r requirements.txt\n", err)
+
+    def test_an_editable_source_is_read_off_this_install(self) -> None:
+        # In a checkout cadgen IS editable; a wheel install records no
+        # direct_url.json at all. Either answer is correct, and neither may
+        # raise -- a doctor that crashes reporting a mismatch is worse than the
+        # mismatch.
+        source = doctor._editable_source()
+        if source is not None:
+            self.assertTrue(Path(source).is_dir(), source)
+
+    def test_an_unreadable_direct_url_record_is_not_editable(self) -> None:
+        class Record:
+            def __init__(self, text: str | None) -> None:
+                self.text = text
+
+            def read_text(self, _name: str) -> str | None:
+                return self.text
+
+        for text in (None, "", "{not json", "[]", '{"url": "file:///s"}', '{"dir_info": {}}'):
+            with self.subTest(text=text):
+                with mock.patch("importlib.metadata.distribution", return_value=Record(text)):
+                    self.assertIsNone(doctor._editable_source())
 
 
 class KernelProbeTest(unittest.TestCase):

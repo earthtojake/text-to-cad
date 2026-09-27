@@ -5,7 +5,7 @@ should serve (the cwd IS the served directory)::
 
     cd /absolute/dir && cadgen viewer        # or: python -m cadgen.viewer
 
-The client is built from ``apps/viewer`` in the source repository and ships in
+The client is built from ``apps/web`` in the source repository and ships in
 the wheel under ``cadgen/_runtime/viewer`` (see ``cadgen.assets.viewer_dist_dir``).
 
 Nothing in this package may import the CAD kernel (OCP, build123d) at module

@@ -1,0 +1,217 @@
+import { RENDER_FORMAT, normalizeFormat } from "./fileFormats.js";
+
+// WHAT EACH RENDER FORMAT CAN DO — one table, so viewer code asks "can this format
+// do X?" instead of "is this format Y?".
+//
+// Every identity check spread through the client (`renderFormat === RENDER_FORMAT.DXF`,
+// `isMeshRenderFormat(...)`, the `xxxMode` boolean piles) is a place a new format has to
+// be hand-added and a place an improvement fails to reach the other formats. That is not
+// hypothetical: the Orbit button was gated off per format independently and had to be
+// fixed twice, and one format grew a whole parallel export route to an endpoint the server
+// does not implement. Both were "this format was not on the list" bugs.
+//
+// So: a format is a ROW here plus a render backend (see viewer/docs/render-types.md).
+// Shared behaviour lives in the viewer shell and reads this table; it is never re-derived
+// from the format's identity.
+//
+// Rules for changing this file:
+// - Add a capability when the SECOND format needs it, never speculatively.
+// - Capabilities are DATA. No behaviour, no imports beyond the format enum.
+// - Format-specific *content* (STEP's tree, DXF's bends) stays format-specific — the
+//   flags below decide WHICH panels mount, not what is in them.
+
+// How parameters reach the viewer. One consumer surface over the possible stores.
+export const PARAMETER_SOURCE = Object.freeze({
+  SIDECAR: "sidecar"
+});
+
+// WHICH ASSET the viewer loads for this format. A DXF loads a DRAWING: the server's
+// flattened 2D payload, not a mesh, so every "is it loaded yet?" check has to ask about the
+// drawing. Loader implementations stay per-format; this only names which one.
+export const ASSET_KIND = Object.freeze({
+  MESH: "mesh",
+  DRAWING: "drawing",
+  ROBOT: "robot"
+});
+
+// The file-list glyph. A table rather than a cascade of format tests: the icon is the most
+// purely per-format fact in the client, and it was the longest identity cascade.
+export const ENTRY_ICON_KIND = Object.freeze({
+  LOADING: "loading",
+  DXF: "dxf",
+  ROBOT: "robot",
+  STEP: "step",
+  STL_MESH: "stl-mesh",
+  THREE_MF_MESH: "3mf-mesh",
+  GLB_MESH: "glb-mesh"
+});
+
+// The toolbar cluster. ALL of these act on the VIEWPORT, not on the geometry, so every
+// format WITH a viewport gets every one of them — a mesh can be panned and annotated
+// exactly as a STEP assembly can. Select is the only one that needs a caveat: on a format
+// without `topology` it is inert, and stays visible so the toolbar keeps one shape rather
+// than reflowing as you move between files.
+//
+// This is the place a format DECLINES a tool, and the shell reads it through
+// `supportsTool`. DXF is the row that declines: a drawing is painted on a canvas with no
+// toolbar over it at all, so it claims none of these rather than advertising four buttons
+// that exist nowhere.
+const VIEWPORT_TOOLS = Object.freeze({
+  select: true,
+  draw: true,
+  orbit: true,
+  screenshot: true
+});
+const NO_VIEWPORT_TOOLS = Object.freeze({
+  select: false,
+  draw: false,
+  orbit: false,
+  screenshot: false
+});
+
+const MESH_CAPABILITIES = Object.freeze({
+  assetKind: ASSET_KIND.MESH,
+  iconKind: ENTRY_ICON_KIND.STL_MESH,
+  parts: false,
+  topology: false,
+  // Measure is a STEP tool: it snaps to B-rep topology. A mesh has only triangle corners.
+  measure: false,
+  exploded: false,
+  displayModes: false,
+  clip: false,
+  params: null,
+  animations: false,
+  artifactManaged: false,
+});
+
+const ROBOT_CAPABILITIES = Object.freeze({
+  assetKind: ASSET_KIND.ROBOT,
+  iconKind: ENTRY_ICON_KIND.ROBOT,
+  // No selection. A URDF is a link tree, so links CAN be made pickable — that was tried and
+  // removed: selecting one gives you nothing to do with it. There is no copyable reference
+  // for a link the way there is for a STEP face or occurrence, so the whole affordance was
+  // a selection highlight and no payload. On every non-STEP format the select TOOL stays
+  // visible and inert: it is the default mode, and in it the left button orbits and the
+  // right button pans, which is all a robot needs.
+  parts: false,
+  topology: false,
+  measure: false,
+  exploded: false,
+  displayModes: false,
+  clip: false,
+  params: null,
+  animations: false,
+  artifactManaged: false,
+});
+
+const DEFAULT_CAPABILITIES = Object.freeze({
+  assetKind: ASSET_KIND.MESH,
+  iconKind: ENTRY_ICON_KIND.STEP,
+  tools: VIEWPORT_TOOLS,
+  parts: false,
+  topology: false,
+  measure: false,
+  exploded: false,
+  displayModes: false,
+  clip: false,
+  params: null,
+  animations: false,
+  // Formats whose VIEWPORT CONTENT comes from a generated package, so the viewer checks
+  // freshness and may block on a build.
+  //
+  // This is a SUBSET of `owns_entry` in cadgen/viewer/artifact.py, not a mirror of it.
+  // Anything listed here and NOT owned by the server blocks forever, so a format the
+  // viewer renders from its own file must stay out of it.
+  artifactManaged: false,
+});
+
+export const RENDER_CAPABILITIES = Object.freeze({
+  [RENDER_FORMAT.STEP]: Object.freeze({
+    ...DEFAULT_CAPABILITIES,
+    iconKind: ENTRY_ICON_KIND.STEP,
+    parts: true,
+    topology: true,
+    measure: true,
+    exploded: true,
+    displayModes: true,
+    clip: true,
+    params: PARAMETER_SOURCE.SIDECAR,
+    animations: true,
+    artifactManaged: true,
+  }),
+  [RENDER_FORMAT.STL]: Object.freeze({ ...DEFAULT_CAPABILITIES, ...MESH_CAPABILITIES }),
+  [RENDER_FORMAT.THREE_MF]: Object.freeze({
+    ...DEFAULT_CAPABILITIES,
+    ...MESH_CAPABILITIES,
+    iconKind: ENTRY_ICON_KIND.THREE_MF_MESH
+  }),
+  [RENDER_FORMAT.GLB]: Object.freeze({
+    ...DEFAULT_CAPABILITIES,
+    ...MESH_CAPABILITIES,
+    iconKind: ENTRY_ICON_KIND.GLB_MESH,
+    // Content-gated after parse: only embedded playable clips mount controls.
+    animations: true
+  }),
+  // A DXF is NOT on the 3D shell (packages/ui/src/renderers/dxf): the pane is a canvas
+  // painted from `GET /__cad/drawing`. What survives here is what the file LIST and the
+  // asset layer still ask — the icon and which asset to load — plus the claim the row
+  // has to withdraw: there is no viewport, and so no viewport tools.
+  [RENDER_FORMAT.DXF]: Object.freeze({
+    ...DEFAULT_CAPABILITIES,
+    assetKind: ASSET_KIND.DRAWING,
+    iconKind: ENTRY_ICON_KIND.DXF,
+    tools: NO_VIEWPORT_TOOLS,
+  }),
+  [RENDER_FORMAT.URDF]: Object.freeze({ ...DEFAULT_CAPABILITIES, ...ROBOT_CAPABILITIES }),
+  [RENDER_FORMAT.SRDF]: Object.freeze({ ...DEFAULT_CAPABILITIES, ...ROBOT_CAPABILITIES }),
+  [RENDER_FORMAT.SDF]: Object.freeze({ ...DEFAULT_CAPABILITIES, ...ROBOT_CAPABILITIES })
+});
+
+// Extension aliases that name the same render format.
+const FORMAT_ALIASES = Object.freeze({
+  stp: RENDER_FORMAT.STEP,
+  gltf: RENDER_FORMAT.GLB
+});
+
+// Capabilities for a render format. An unrecognised format gets the conservative default
+// row: it renders, and every optional capability is off.
+//
+// Deliberately NOT normalizeRenderFormat(), which resolves anything unknown to STEP. That
+// is the right default when picking a loader, and exactly wrong here — it would hand an
+// unrecognised entry STEP's full capability set (parts, topology, clip, artifact-managed
+// gating) and fail open on every one of them.
+export function renderCapabilities(renderFormat) {
+  const normalized = normalizeFormat(renderFormat);
+  const resolved = FORMAT_ALIASES[normalized] || normalized;
+  return RENDER_CAPABILITIES[resolved] || DEFAULT_CAPABILITIES;
+}
+
+// `renderCapabilities(f).tools[tool]`, with the lookup and the missing-tool case handled.
+export function supportsTool(renderFormat, tool) {
+  return renderCapabilities(renderFormat).tools?.[tool] === true;
+}
+
+// Reads one boolean capability. Keeps call sites free of optional chaining and makes the
+// policy ratchet's allowlist easy to describe: capability reads look like this.
+export function hasCapability(renderFormat, capability) {
+  return renderCapabilities(renderFormat)[capability] === true;
+}
+
+// Which parameter store backs this format, or "" when it has no parameters. The viewer
+// resolves it once into a single active parameter runtime, so copy/paste/reset are
+// written once rather than once per store.
+export function parameterSourceKind(renderFormat) {
+  return renderCapabilities(renderFormat).params || "";
+}
+
+export function isArtifactManagedFormat(renderFormat) {
+  return renderCapabilities(renderFormat).artifactManaged === true;
+}
+
+export function assetKindForRenderFormat(renderFormat) {
+  return renderCapabilities(renderFormat).assetKind;
+}
+
+export function entryIconKindForRenderFormat(renderFormat) {
+  return renderCapabilities(renderFormat).iconKind;
+}

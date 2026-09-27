@@ -19,10 +19,9 @@ python -m pip install -r requirements.txt
 ```
 
 Drawings are build123d geometry, so a drawing build loads the CAD kernel like a
-STEP build does (~2.5s cold; the warm daemon absorbs it on re-runs). Only
-`cadgen dxf snapshot` additionally needs **Node 20 or newer on `PATH`** — it
-meshes the flat pattern on demand through a bundled Node one-shot; a missing
-`node` is reported at render time.
+STEP build does (~2.5s cold; the warm daemon absorbs it on re-runs).
+`cadgen dxf snapshot` needs no Node at all: it flattens the drawing with `ezdxf`
+(which arrives with cadgen) and paints it in the bundled headless browser.
 
 ## Purpose
 
@@ -39,8 +38,8 @@ no-op; a drawing that calls a part model — `bracket()` inside its body — is
 stale whenever that part's GEOMETRY changes and current when it does not;
 `cadgen store why <drawing>.py` explains the verdict; `--force` rebuilds it
 anyway. The CAD Viewer and `dxf snapshot` read the `.dxf` file itself, so the
-file you hand a cutting service and the file the viewer renders are one and
-the same.
+file you hand a cutting service, the file the viewer draws and the file a
+snapshot renders are one and the same.
 
 ## The contract
 
@@ -209,8 +208,8 @@ cadgen store why <drawing>.py                  # why the drawing is stale or cur
 
 **Running the script (its `__main__` call) is the only door.** There is no
 `cadgen dxf build`: a `.dxf` has no derived state a command must materialize —
-the file IS the product, the CAD Viewer parses it directly, and `dxf snapshot`
-meshes it on demand. The drawing's gate makes a rebuild cheap: an unchanged
+the file IS the product, and both the CAD Viewer and `dxf snapshot` draw it
+straight from its own bytes. The drawing's gate makes a rebuild cheap: an unchanged
 source whose `.dxf` still verifies and whose part children are unchanged is a
 no-op, and `--force` rebuilds anyway. The bytes are a function of the
 drawing's GEOMETRY, so a cold run and a warm daemon worker write the same
@@ -240,19 +239,21 @@ One script, one drawing: run each script you want built. Do not put output paths
 in the `@dxf` function's return value; `out=` on the decorator is the only
 place a drawing names its destination (relative to the script).
 
-`cadgen dxf snapshot` renders a drawing's 3D flat pattern to a PNG still:
+`cadgen dxf snapshot` draws a drawing flat, to a PNG still — the same picture
+the CAD Viewer shows, from the same flattening, through the same drawing code:
 
 ```bash
 cadgen dxf snapshot path/to/imported.dxf review.png
-cadgen dxf snapshot path/to/drawing.dxf review.png --camera top
+cadgen dxf snapshot path/to/drawing.dxf review.png --appearance dark
 ```
 
 It takes the `.dxf` document only — a model script is refused by name (run
-`python <drawing>.py`, then snapshot the drawing it wrote). The command meshes
-the flat pattern on demand through the bundled Node one-shot and
-renders it through the shared snapshot CLI (`cadgen.snapshot_cli`) and the same
-headless browser runtime every rendering skill uses. A normal snapshot uses
-deterministic light CAD lighting and hides grid and axis guides.
+`python <drawing>.py`, then snapshot the drawing it wrote). The whole drawing is
+fitted to the image and painted head on, in the pens the file declares; an
+entity with no pen of its own (ACI 7) takes the appearance's foreground on its
+background. The command flattens the drawing with `ezdxf` and renders it through
+the shared snapshot CLI (`cadgen.snapshot_cli`) and the same headless browser
+runtime every rendering skill uses.
 
 OUT — the second positional — is written exactly as given, with a relative path resolved against the
 current working directory. The target is deleted before the render starts and the
@@ -264,14 +265,15 @@ a stale image. A directory (`tmp/` as OUT) is the
 don't-care case and gets a generated timestamped name inside it, printed on the
 `saved snapshot:` line.
 
-Grammar: `cadgen dxf snapshot TARGET [OUT] [flags]`. Flags: `--mode view|list`,
-`--camera`, `--render`, `--display`, `--size-profile`, `--width`/`--height`,
-`--job`, `--view-labels`, `--debug`, `--json`. `--render` opts into the photographic
-scene and accepts `light`, `dark`, compact Render JSON, or a file path.
-Set the photographic camera inside Render JSON. Top-level `--camera` and `--display`
-control normal drawing snapshots and cannot be combined with Render.
-A drawing has no selectors, kinematics, section mode, exploded assembly structure,
-or CAD-edge topology, and those combinations are absent or rejected clearly.
+Grammar: `cadgen dxf snapshot TARGET [OUT] [flags]`. Flags: `--appearance
+light|dark`, `--size-profile`, `--width`/`--height`, `--job`, `--debug`,
+`--json`. That is the whole surface: a drawing is not a scene, so there is no
+camera to pose, no display settings to configure, no render mode, no parts to
+list, no section to cut and no view to label — `--camera`, `--display`,
+`--mode` and `--view-labels` are not flags this command has. A `--job` file that
+carries any of them (or `scale`, an output `label`/`viewLabel`, or
+`output.padding`/`viewLabels`/`tightFrame`) is refused by name before anything
+is rendered; a job's `output.renderScale` and `output.transparent` still apply.
 
 No CLI inspects an existing `.dxf`. For entity/layer checks read it with `ezdxf`
 directly (it arrives with build123d), and `validate_dxf_file` for the drawing checks;
@@ -294,10 +296,11 @@ python path/to/source.py --force
 ## Viewer integration
 
 The CAD Viewer catalogs `.dxf` files only (artifacts, never scripts) and is a static
-visualization tool: it renders the `.dxf` that exists on disk (parsing and meshing it
-itself — 2D line work for dimensioned drawings, a fold-able 3D flat pattern for cut
-layouts) and never runs a script. A drawing with no `.dxf` yet simply does not appear
-until its script has been run; regenerating after edits is likewise the script's job.
+visualization tool: it draws the `.dxf` that exists on disk — a straight 2D render of
+the sheet, with no 3D view — and never runs a script. A drawing with no `.dxf` yet
+simply does not appear until its script has been run; regenerating after edits is
+likewise the script's job. A DXF pane has no tools, no toolbar and no sidebar: a
+drawing is a finished 2D document, so the pane pans, zooms and fits, and nothing else.
 There is no in-viewer export. An imported `.dxf` renders directly with no artifact
 management.
 

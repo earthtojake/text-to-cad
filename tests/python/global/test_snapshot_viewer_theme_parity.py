@@ -1,298 +1,146 @@
-"""Python snapshots accept exactly the shared scene/camera/display vocabulary."""
-
+"""Behavioral parity for the shared Viewer and Python snapshot display schema."""
 from __future__ import annotations
 
 import json
-import re
 import subprocess
 import unittest
+from pathlib import Path
 
 from tests.python.support.paths import add_repo_path, repo_path
 
 add_repo_path("packages/cadgen/src")
-
-from cadgen.snapshot_core import (  # noqa: E402
-    CAMERA_OPTION_KEYS,
-    DISPLAY_AXIS_GUIDE_KEYS,
-    DISPLAY_CLIP_KEYS,
-    DISPLAY_EDGE_KEYS,
-    DISPLAY_EXPLODED_KEYS,
-    DISPLAY_GRID_GUIDE_KEYS,
-    DISPLAY_GUIDE_KEYS,
-    DISPLAY_MODES,
-    DISPLAY_OPTION_KEYS,
-    DISPLAY_PART_COLOR_KEYS,
-    PART_COLOR_MODES,
-    RENDER_BACKDROP_KEYS,
-    RENDER_LIGHTING_KEYS,
-    RENDER_QUALITY_IDS,
-    RENDER_STUDIO_IDS,
-    SUPPORTED_RENDER_KEYS,
-    SnapshotError,
-    validate_camera_option,
-    validate_render_option,
-    validate_render_job_compatibility,
+from cadgen.snapshot_core import (
+    CAMERA_OPTION_KEYS, DISPLAY_GROUP_KEYS, DISPLAY_MODES, DISPLAY_OPTION_KEYS,
+    DISPLAY_SURFACE_STYLES, PART_COLOR_MODES, SnapshotError,
+    normalize_common_job, validate_camera_option,
     validate_display_settings_values,
 )
 
-SCENE = repo_path("packages/cadgen-js/src/common/sceneSettings.js")
-CAMERA = repo_path("packages/cadgen-js/src/common/camera.js")
-DISPLAY = repo_path("packages/cadgen-js/src/common/displaySettings.js")
+VIEW = repo_path("packages/core/src/common/viewSettings.js")
+CAMERA = repo_path("packages/core/src/common/camera.js")
+VALIDATOR = repo_path("packages/core/src/common/snapshotJobValidation.js")
 
 
-def exported_strings(path, export: str) -> set[str]:
-    source = path.read_text(encoding="utf-8")
-    match = re.search(
-        rf"export const {re.escape(export)}\s*=\s*Object\.freeze\(\[(.*?)\]\);",
-        source,
-        re.S,
-    )
-    assert match, f"{path.name} no longer exports {export} as a frozen array"
-    return set(re.findall(r'"([^"]+)"', match.group(1)))
-
-
-def frozen_enum_values(path, export: str, next_export: str) -> set[str]:
-    source = path.read_text(encoding="utf-8")
-    start = source.index(f"export const {export} =")
-    end = source.index(f"export const {next_export}", start)
-    return set(re.findall(r':\s*"([^"]+)"', source[start:end]))
-
-
-class SharedSceneContractParityTests(unittest.TestCase):
-    def test_snapshot_render_conflicts_match_shared_js(self):
-        cases = [
-            {},
-            {"display": {"mode": "wireframe"}},
-            {"render": {}},
-            {"render": {"camera": {"preset": "front"}, "quality": "preview"}},
-            {"render": {}, "animation": {"clip": "spin", "time": 1},
-             "outputs": [{"camera": "front", "width": 640}]},
-            *({"render": {}, key: value}
-              for key in ("camera", "display", "selection", "kinematics", "jointValues", "quality")
-              for value in (None, {})),
-            {"render": {}, "mode": "section"},
-            {"render": {}, "mode": "list"},
-            {"render": None},
-        ]
-        validator = repo_path("packages/cadgen-js/src/common/snapshotJobValidation.js")
-        script = f"""
+def javascript(expression: str, payload=None):
+    script = f"""
 import fs from "node:fs";
-import {{ validateSnapshotRenderJob }} from {json.dumps(validator.as_uri())};
+import * as view from {json.dumps(VIEW.as_uri())};
+import {{ CAMERA_SPEC_KEYS, normalizeCameraSpec }} from {json.dumps(CAMERA.as_uri())};
+import {{ validateSnapshotRenderJob }} from {json.dumps(VALIDATOR.as_uri())};
 const cases = JSON.parse(fs.readFileSync(0, "utf8"));
-console.log(JSON.stringify(cases.map((job) => {{
-  try {{ validateSnapshotRenderJob(job); return true; }}
-  catch {{ return false; }}
-}})));
+const accepts = fn => {{ try {{ fn(); return true; }} catch {{ return false; }} }};
+console.log(JSON.stringify({expression}));
 """
-        completed = subprocess.run(
-            ["node", "--input-type=module", "-e", script],
-            input=json.dumps(cases), text=True, capture_output=True, check=True,
-            cwd=repo_path(),
-        )
-        python_accepted = []
-        for job in cases:
-            try:
-                if "render" in job:
-                    validate_render_option(job["render"], source_label="parity test")
-                validate_render_job_compatibility(job)
-            except SnapshotError:
-                python_accepted.append(False)
-            else:
-                python_accepted.append(True)
-        self.assertEqual([True] * 5 + [False] * 6 + [True] * 2 + [False] * 7, python_accepted)
-        self.assertEqual(python_accepted, json.loads(completed.stdout))
+    completed = subprocess.run(["node", "--input-type=module", "-e", script],
+                               input=json.dumps(payload), text=True, capture_output=True,
+                               check=True, cwd=repo_path())
+    return json.loads(completed.stdout)
 
-    def test_render_envelope_keys_match(self):
-        self.assertEqual(exported_strings(SCENE, "RENDER_PAYLOAD_KEYS"), set(SUPPORTED_RENDER_KEYS))
 
-    def test_studio_ids_match(self):
-        self.assertEqual(
-            frozen_enum_values(SCENE, "RENDER_STUDIO", "RENDER_STUDIO_PRESETS"),
-            set(RENDER_STUDIO_IDS),
-        )
+def python_accepts(values, validator):
+    result = []
+    for value in values:
+        try:
+            validator(value)
+        except SnapshotError:
+            result.append(False)
+        else:
+            result.append(True)
+    return result
 
-    def test_render_quality_and_nested_keys_match(self):
-        self.assertEqual(
-            frozen_enum_values(SCENE, "RENDER_QUALITY", "RENDER_QUALITY_PRESETS"),
-            set(RENDER_QUALITY_IDS),
-        )
-        self.assertEqual(exported_strings(SCENE, "RENDER_LIGHTING_KEYS"), set(RENDER_LIGHTING_KEYS))
-        self.assertEqual(exported_strings(SCENE, "RENDER_BACKDROP_KEYS"), set(RENDER_BACKDROP_KEYS))
 
-    def test_strict_render_values_match_shared_js(self):
-        cases = [
-            {},
-            {"studio": "light", "quality": "final", "exposure": 0},
-            {"studio": "studio-light"},
-            {"studio": []},
-            {"studio": {}},
-            {"studio": True},
-            {"studio": None},
-            {"quality": "high"},
-            {"quality": []},
-            {"quality": {}},
-            {"quality": False},
-            {"quality": None},
-            {"display": {}},
-            {"settings": {}},
-            {"appearance": "dark"},
-            {"_comment": "unsupported"},
-            {"exposure": True},
-            {"exposure": 5.01},
-            {"lighting": {"rotation": -180, "size": 0.25, "fill": 1}},
-            {"lighting": {"rotation": -180.01}},
-            {"lighting": {"size": "1"}},
-            {"lighting": {"fill": False}},
-            {"lighting": {"key": 1}},
-            {"backdrop": {"color": "#abc", "transparent": False, "ground": True}},
-            {"backdrop": {"color": "white"}},
-            {"backdrop": {"transparent": 0}},
-            {"backdrop": {"floor": True}},
-        ]
-        script = f"""
-import fs from "node:fs";
-import {{ normalizeRenderPayload }} from {json.dumps(SCENE.as_uri())};
-const cases = JSON.parse(fs.readFileSync(0, "utf8"));
-console.log(JSON.stringify(cases.map((render) => {{
-  try {{ normalizeRenderPayload(render); return true; }}
-  catch {{ return false; }}
-}})));
-"""
-        completed = subprocess.run(
-            ["node", "--input-type=module", "-e", script],
-            input=json.dumps(cases),
-            text=True,
-            capture_output=True,
-            check=True,
-            cwd=repo_path(),
-        )
-        js_accepted = json.loads(completed.stdout)
-        python_accepted = []
-        for render in cases:
-            try:
-                validate_render_option(render, source_label="parity test")
-            except SnapshotError:
-                python_accepted.append(False)
-            else:
-                python_accepted.append(True)
-        self.assertEqual(js_accepted, python_accepted)
-        self.assertEqual(
-            [True, True, False, False, False, False, False, False, False, False,
-             False, False, False, False, False, False, False, False, True, False, False,
-             False, False, True, False, False, False],
-            python_accepted,
-        )
-
-    def test_camera_keys_match(self):
-        self.assertEqual(exported_strings(CAMERA, "CAMERA_SPEC_KEYS"), set(CAMERA_OPTION_KEYS))
-
-    def test_malformed_camera_numbers_fail_in_python_and_shared_js(self):
-        malformed = [
-            {"position": [1, 2, "3"]},
-            {"target": [1, 2, True]},
-            {"up": None},
-            {"direction": [1, 2, 3, 4]},
-            {"zoom": "2"},
-            {"zoom": True},
-            {"zoom": None},
-            {"orthographicHalfHeight": "12"},
-            {"orthographicHalfHeight": False},
-            {"orthographicHalfHeight": None},
-            {"focalLength": "50"},
-            {"focalLength": True},
-            {"focalLength": 19.9},
-            {"focalLength": 200.1},
-            {"focalLength": None},
-        ]
-        script = f"""
-import fs from "node:fs";
-import {{ normalizeCameraSpec }} from {json.dumps(CAMERA.as_uri())};
-const cases = JSON.parse(fs.readFileSync(0, "utf8"));
-console.log(JSON.stringify(cases.map((camera) => {{
-  try {{ normalizeCameraSpec(camera, {{ strict: true }}); return true; }}
-  catch {{ return false; }}
-}})));
-"""
-        completed = subprocess.run(
-            ["node", "--input-type=module", "-e", script],
-            input=json.dumps(malformed),
-            text=True,
-            capture_output=True,
-            check=True,
-            cwd=repo_path(),
-        )
-        js_accepted = json.loads(completed.stdout)
-        python_accepted = []
-        for camera in malformed:
-            try:
-                validate_camera_option(camera, source_label="parity test")
-            except SnapshotError:
-                python_accepted.append(False)
-            else:
-                python_accepted.append(True)
-        self.assertEqual(js_accepted, python_accepted)
-        self.assertEqual([False] * len(malformed), python_accepted)
-
-    def test_display_keys_match(self):
-        self.assertEqual(exported_strings(DISPLAY, "DISPLAY_SETTINGS_KEYS"), set(DISPLAY_OPTION_KEYS))
-
-    def test_display_modes_match(self):
-        self.assertEqual(
-            frozen_enum_values(DISPLAY, "CAD_DISPLAY_MODE", "CAD_DISPLAY_MODE_VALUES"),
-            set(DISPLAY_MODES),
-        )
-        self.assertEqual(
-            frozen_enum_values(DISPLAY, "CAD_PART_COLOR_MODE", "CAD_PART_COLOR_MODE_VALUES"),
-            set(PART_COLOR_MODES),
-        )
-
-    def test_nested_display_keys_match(self):
-        pairs = {
-            "DISPLAY_EDGE_SETTINGS_KEYS": DISPLAY_EDGE_KEYS,
-            "DISPLAY_GUIDE_SETTINGS_KEYS": DISPLAY_GUIDE_KEYS,
-            "DISPLAY_GRID_GUIDE_SETTINGS_KEYS": DISPLAY_GRID_GUIDE_KEYS,
-            "DISPLAY_AXIS_GUIDE_SETTINGS_KEYS": DISPLAY_AXIS_GUIDE_KEYS,
-            "DISPLAY_PART_COLOR_SETTINGS_KEYS": DISPLAY_PART_COLOR_KEYS,
-            "DISPLAY_EXPLODED_SETTINGS_KEYS": DISPLAY_EXPLODED_KEYS,
-            "DISPLAY_CLIP_SETTINGS_KEYS": DISPLAY_CLIP_KEYS,
+class SharedDisplayContractParityTests(unittest.TestCase):
+    def test_exported_closed_key_sets_and_enums_match(self):
+        expected = {
+            "VIEW_PRESET_VALUES": DISPLAY_MODES,
+            "VIEW_SETTINGS_KEYS": DISPLAY_OPTION_KEYS,
+            "VIEW_SURFACE_STYLE_VALUES": DISPLAY_SURFACE_STYLES,
+            "VIEW_COLOR_MODE_VALUES": PART_COLOR_MODES,
+            **{f"VIEW_{name.upper()}_KEYS": keys for name, keys in DISPLAY_GROUP_KEYS.items()
+               if name not in {"clip", "exploded"}},
         }
-        for exported, expected in pairs.items():
-            with self.subTest(export=exported):
-                self.assertEqual(exported_strings(DISPLAY, exported), set(expected))
-        self.assertEqual(set(DISPLAY_EDGE_KEYS), {"enabled", "silhouette"})
-        self.assertEqual(set(DISPLAY_GRID_GUIDE_KEYS), {"enabled"})
+        actual = javascript("Object.fromEntries(cases.map(key => [key, view[key]]))", list(expected))
+        for name, values in expected.items():
+            with self.subTest(export=name):
+                self.assertEqual(set(actual[name]), set(values))
 
-    def test_snapshot_and_viewer_accept_only_edge_visibility_and_grid_toggle(self):
-        cases = [
-            {"edges": {"enabled": True, "silhouette": False}},
-            {"guides": {"grid": {"enabled": False}}},
-            *({"edges": {key: value}} for key, value in (
-                ("color", "#ffffff"), ("thickness", 3), ("opacity", 0.5),
-                ("classes", {"feature": {"thickness": 2}}), ("highlightThickness", 3),
-            )),
-            *({"guides": {"grid": {key: value}}} for key, value in (
-                ("density", 2), ("opacity", 0.5), ("cellColor", "#ffffff"), ("centerColor", "#000000"),
-            )),
+    def test_display_values_match_in_both_languages(self):
+        valid = [
+            {}, *({"mode": mode} for mode in DISPLAY_MODES),
+            {"appearance": "dark"},
+            *({group: {}} for group in DISPLAY_GROUP_KEYS),
+            *({group: {"enabled": False}} for group in DISPLAY_GROUP_KEYS),
+            {"camera": {"projection": "perspective", "focalLength": 20}},
+            {"camera": {"projection": "orthographic", "focalLength": 200}},
+            {"surfaces": {"style": "flat", "colorMode": "by-part", "colors": ["#aBc", "#123456"], "opacity": 0}},
+            {"lighting": {"quality": "preview", "exposure": -5, "rotation": -180, "size": 0.25, "fill": 0}},
+            {"lighting": {"quality": "final", "exposure": 5, "rotation": 180, "size": 3, "fill": 1}},
+            {"background": {"opacity": 0.35}}, {"edges": {"visibility": "all", "color": "#fff"}},
+            {"floor": {"placement": "lowest", "opacity": 1}},
+            {"clip": {"enabled": True, "axis": "y", "offset": 0.5, "offsets": {"x": 0, "y": 1}, "invert": False}},
+            {"exploded": {"enabled": True, "amount": 1}},
         ]
-        script = f'''
-import fs from "node:fs";
-import {{ validateDisplaySettings }} from {json.dumps(DISPLAY.as_uri())};
-console.log(JSON.stringify(JSON.parse(fs.readFileSync(0,"utf8")).map(value => {{
-  try {{ validateDisplaySettings(value); return true; }} catch {{ return false; }}
-}})));
-'''
-        completed = subprocess.run(["node", "--input-type=module", "-e", script],
-                                   input=json.dumps(cases), text=True, capture_output=True, check=True)
-        accepted = []
-        for case in cases:
-            try:
-                validate_display_settings_values(case, source_label="fixed ink parity")
-            except SnapshotError:
-                accepted.append(False)
-            else:
-                accepted.append(True)
-        self.assertEqual(accepted, [True, True] + [False] * 9)
-        self.assertEqual(accepted, json.loads(completed.stdout))
+        invalid = [
+            None, [], True, "solid", {"render": {}}, {"guides": {}}, {"partColor": {}},
+            *({"mode": value} for value in (None, [], {}, True, "", "SOLID", "shaded", "hidden_line")),
+            *({"appearance": value} for value in (None, [], {}, True, "system")),
+            *({group: value} for group in DISPLAY_GROUP_KEYS for value in (None, [], True, "off", {"typo": 1}, {"enabled": 0})),
+            *({"camera": {"focalLength": value}} for value in (None, "50", True, 19.9, 200.1)),
+            *({"surfaces": {"colors": value}} for value in (None, [], "#fff", ["white"], ["#fff"] * 51)),
+            {"surfaces": {"colorMode": "by_part"}}, {"surfaces": {"style": "solid"}},
+            {"surfaces": {"opacity": 1.01}}, {"surfaces": {"opacity": True}},
+            {"edges": {"visibility": "hidden"}}, {"edges": {"silhouette": True}},
+            {"lighting": {"quality": None}}, {"lighting": {"exposure": -5.01}},
+            {"lighting": {"rotation": -180.1}}, {"lighting": {"size": 0.24}},
+            {"lighting": {"fill": "0.5"}}, {"floor": {"placement": "auto"}},
+            {"background": {"opacity": -0.1}}, {"background": {"color": "white"}},
+            {"clip": {"axis": "w"}}, {"clip": {"offsets": {"w": 0.5}}},
+            {"clip": {"offsets": None}}, {"exploded": {"amount": 1.01}},
+        ]
+        cases = valid + invalid
+        python = python_accepts(cases, lambda value: validate_display_settings_values(value, source_label="parity"))
+        shared = javascript("cases.map(value => accepts(() => view.normalizeViewSettings(value)))", cases)
+        for index, value in enumerate(cases):
+            with self.subTest(value=value):
+                self.assertEqual(index < len(valid), python[index])
+                self.assertEqual(python[index], shared[index])
+
+    def test_python_packets_resolve_to_the_same_preset_and_overrides(self):
+        cases = [
+            {}, {"mode": "render"}, {"mode": "xray"}, {"mode": "hidden-line"}, {"mode": "wireframe"},
+            {"mode": "solid", "lighting": {"exposure": 1}},
+            {"mode": "render", "floor": {"enabled": False}, "background": {"opacity": 0.35}},
+            {"mode": "render", "camera": {"projection": "orthographic"}, "grid": {"color": "#abc"}},
+        ]
+        packets = [normalize_common_job({"input": "part.step", "outputs": [{"path": "out.png"}], "display": value},
+                                      mode="view", resolved_cwd=Path("."), timestamp="parity")["display"] for value in cases]
+        expected = javascript("cases.map(value => view.resolveViewSettings(value))", cases)
+        actual = javascript("cases.map(value => view.resolveViewSettings(value))", packets)
+        self.assertEqual(expected, actual)
+        self.assertEqual("perspective", actual[1]["camera"]["projection"])
+        self.assertEqual("orthographic", actual[0]["camera"]["projection"])
+        self.assertTrue(actual[5]["lighting"]["enabled"])
+        self.assertFalse(actual[6]["floor"]["enabled"])
+        self.assertEqual(0.35, actual[6]["background"]["opacity"])
+        self.assertTrue(actual[7]["grid"]["enabled"])
+        self.assertEqual("#aabbcc", actual[7]["grid"]["color"])
+
+    def test_public_camera_keys_match_the_shared_pose_fields(self):
+        self.assertEqual(set(javascript('CAMERA_SPEC_KEYS.filter(key => !["projection", "focalLength"].includes(key))')), set(CAMERA_OPTION_KEYS))
+
+    def test_camera_pose_and_projection_have_one_home(self):
+        cases = [
+            {"preset": "front"}, {"orthographicHalfHeight": 12},
+            {"position": [1, 2, 3], "target": [0, 0, 0]},
+            {"projection": "orthographic"}, {"focalLength": 85},
+            {"position": [1, 2, "3"]}, {"up": None}, {"direction": [0, 0, 0]},
+            {"zoom": "2"}, {"orthographicHalfHeight": False}, {"typo": 1},
+        ]
+        python = python_accepts(cases, lambda value: validate_camera_option(value, source_label="parity"))
+        shared = javascript("cases.map(camera => accepts(() => { validateSnapshotRenderJob({camera}); normalizeCameraSpec(camera, {strict:true}); }))", cases)
+        self.assertEqual([True] * 3 + [False] * 8, python)
+        self.assertEqual(python, shared)
+
 
 if __name__ == "__main__":
     unittest.main()

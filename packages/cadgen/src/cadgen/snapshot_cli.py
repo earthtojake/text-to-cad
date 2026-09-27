@@ -9,34 +9,49 @@ everything downstream of that:
 
     run_snapshot(options, kinds=("step", "stp"), runtime_dir=...)
 
-It lives in cadgen rather than in the CAD skill because a skill may not import another
-skill's code (AGENTS.md), and the robot resolver alone is needed by three skills at once.
 The split against :mod:`cadgen.snapshot_core` is by ROLE, not by format: the core owns the
 headless browser, the job/render/display normalisation and output writing; this module owns
-the command line and the per-kind resolution that decides what a given input even is.
+the options-to-job step and the per-kind resolution that decides what a given input even is.
 
-Every input kind resolves here, and a skill enables a subset. An input the running skill
-does not enable is rejected BY NAME with a pointer to the skill that owns it, so a `.urdf`
-handed to the CAD skill is told where to go rather than failing on a missing resolver.
+Every input kind resolves here, and each door enables a subset
+(:data:`cadgen._internal.snapshot_door.DOOR_KINDS`). An input the running door does not
+enable is refused BY NAME with what the door does accept, so a `.urdf` handed to
+`cadgen step snapshot` is told so rather than failing on a missing resolver.
+
+A job goes through two steps, and the split between them is the output contract.
+PREPARING a job decides every refusal that can be decided from the request and the
+input's kind, and builds nothing; only then are the declared outputs cleared.
+RESOLVING it builds what the render needs (the STEP tree, a drawing's payload). So a
+refused request leaves an existing OUT untouched, and a failed build or render
+leaves no file at all.
 """
 
 from __future__ import annotations
 
 import asyncio
 import copy
+import functools
 import json
 import math
-import re
 import sys
 from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
 
 import cadgen.cad_ref_syntax as cad_ref_syntax
 import cadgen.lookup as lookup
 from cadgen.assets import browser_runtime_dir
 from cadgen._internal.doors import document_snapshot
+# A drawing's refusals are written once, beside the signature whose absences
+# they explain, so the flag that is gone and the job key that is refused say
+# the same thing about the same request.
+from cadgen._internal.snapshot_door import (
+    DRAWING_IS,
+    DRAWING_NO_VIEW_NAME,
+    drawing_camera_refusal,
+    drawing_mode_refusal,
+    drawing_scene_refusal,
+)
 from cadgen.store.view import view_dir_for
 from cadgen.step_targets import ResolvedStepTarget, StepTopologyArtifact, StepTopologyArtifactError
 
@@ -54,36 +69,32 @@ from cadgen.occurrence_groups import (
 from cadgen.cli_progress import cli_progress_line
 from cadgen.results import SnapshotResult
 from cadgen.snapshot_core import (
-    DISPLAY_MODE_ALIASES,
-    DISPLAY_OPTION_KEYS,
-    MESH_SUPPORTED_RENDER_MODES,
+    SELECTION_KEYS,
     SUPPORTED_JOB_KEYS,
-    SUPPORTED_RENDER_MODES,
     SnapshotError,
     asset_url_for_path,
+    check_mesh_render_job,
     clear_render_output_targets,
     declared_output_path,
-    effective_display_request,
+    display_modes_for_kind,
     is_plain_object,
-    validate_render_job_compatibility,
-    load_render_option,
     load_display_option,
     load_json_text,
     normalize_common_job,
+    normalize_render_mode,
     normalize_snapshot_job_packet,
     parse_camera_option,
+    parse_section_option,
     path_is_inside_or_equal,
+    refuse_cad_model_requests,
     render_snapshot,
     resolve_mesh_render_job,
     has_kinematics_render_values,
-    validate_output_settings,
-    validate_quality_settings,
-    validate_render_option,
     selection_filter_values,
     selection_value_list,
     snapshot_timestamp,
-    validate_direct_settings_payload,
-    validate_display_settings_values,
+    validate_display_for_kind,
+    validate_selection_keys,
 )
 from cadgen.snapshot_video import (
     ffmpeg_binary,
@@ -92,10 +103,6 @@ from cadgen.snapshot_video import (
     video_container_for_path,
 )
 
-
-# SUPPORTED_RENDER_MODES is the union across every kind -- "is that a mode at all?" -- so
-# each kind still has to name its own.
-STEP_SUPPORTED_RENDER_MODES = {"view", "section", "list"}
 
 # Snapshot artifact resolution stays kernel-free. Kept module-level so callers
 # testing request resolution can substitute the artifact boundary.
@@ -118,8 +125,6 @@ class SnapshotOptions:
     output: str = ""
     mode: str = "view"
     mode_specified: bool = False
-    render: object = None
-    render_specified: bool = False
     display: object = ""
     display_specified: bool = False
     camera: object = None
@@ -134,6 +139,8 @@ class SnapshotOptions:
     animation_specified: bool = False
     video: object = None
     video_specified: bool = False
+    section: object = None
+    section_specified: bool = False
     joint_values: object = None
     joint_values_specified: bool = False
     focus: list[str] | None = None
@@ -258,7 +265,7 @@ def option_focus_hide_specified(options: SnapshotOptions) -> bool:
 def merge_focus_hide_options(job: dict[str, object], options: SnapshotOptions) -> None:
     if not option_focus_hide_specified(options):
         return
-    if options.focus and options.hide and "render" not in job:
+    if options.focus and options.hide:
         raise SnapshotError("--focus and --hide cannot be used in the same snapshot command")
     selection = dict(job.get("selection") if is_plain_object(job.get("selection")) else {})
     if options.focus:
@@ -268,12 +275,9 @@ def merge_focus_hide_options(job: dict[str, object], options: SnapshotOptions) -
     job["selection"] = selection
 
 
-
-
-
-
-
-
+def option_display_modes(options: SnapshotOptions) -> frozenset[str] | None:
+    """The preset vocabulary a bad ``--display`` word is told: TARGET's kind's."""
+    return display_modes_for_kind(input_kind(Path(options.input))) if options.input else None
 
 
 def apply_option_overrides_to_job(job: object, options: SnapshotOptions, *, cwd: Path) -> object:
@@ -285,12 +289,14 @@ def apply_option_overrides_to_job(job: object, options: SnapshotOptions, *, cwd:
             options.view_labels,
             options.debug,
             options.size_profile,
+            options.width is not None,
+            options.height is not None,
             options.kinematics_specified,
             options.animation_specified,
             options.video_specified,
+            options.section_specified,
             options.joint_values_specified,
             options.display_specified,
-            options.render_specified,
             options.camera_specified,
             option_focus_hide_specified(options),
         ]
@@ -298,37 +304,37 @@ def apply_option_overrides_to_job(job: object, options: SnapshotOptions, *, cwd:
         return job
     next_job = copy.deepcopy(job)
     if options.mode_specified:
-        next_job["mode"] = options.mode
+        next_job["mode"] = normalize_render_mode(options.mode)
     if options.debug:
         next_job["debug"] = True
-    if options.render_specified:
-        next_job["render"] = load_render_option(options.render, cwd=cwd)
-    render_enabled = "render" in next_job
     merge_focus_hide_options(next_job, options)
     if options.kinematics_specified:
-        next_job["kinematics"] = (
-            options.kinematics
-            if render_enabled
-            else parse_kinematics_option(options.kinematics)
-        )
+        next_job["kinematics"] = parse_kinematics_option(options.kinematics)
     if options.joint_values_specified:
-        next_job["jointValues"] = (
-            options.joint_values
-            if render_enabled
-            else parse_joint_values_option(options.joint_values)
-        )
+        next_job["jointValues"] = parse_joint_values_option(options.joint_values)
     if options.display_specified:
-        next_job["display"] = (
-            options.display if render_enabled else load_display_option(options.display, cwd=cwd)
-        )
+        next_job["display"] = load_display_option(options.display, cwd=cwd)
     if options.camera_specified:
-        next_job["camera"] = (
-            options.camera if render_enabled else parse_camera_option(options.camera)
-        )
+        next_job["camera"] = parse_camera_option(options.camera)
     if options.animation_specified:
         next_job["animation"] = parse_animation_option(options.animation, options.animation_time)
     if options.video_specified:
         next_job["video"] = parse_video_option(options.video, cwd=cwd)
+    if options.section_specified:
+        next_job["section"] = parse_section_option(options.section)
+    if options.width is not None or options.height is not None:
+        # Size lives on each output, so the override lands on every one of them —
+        # the same "every job in the packet" reach the other overrides have.
+        outputs = []
+        for output in next_job.get("outputs") if isinstance(next_job.get("outputs"), list) else []:
+            sized = {"path": output} if isinstance(output, str) else dict(output) if is_plain_object(output) else output
+            if is_plain_object(sized):
+                if options.width is not None:
+                    sized["width"] = options.width
+                if options.height is not None:
+                    sized["height"] = options.height
+            outputs.append(sized)
+        next_job["outputs"] = outputs
     output_settings = dict(next_job.get("output") if is_plain_object(next_job.get("output")) else {})
     if options.view_labels:
         output_settings["viewLabels"] = True
@@ -349,52 +355,53 @@ def apply_option_overrides_to_payload(payload: object, options: SnapshotOptions,
     return apply_option_overrides_to_job(payload, options, cwd=cwd)
 
 
-def load_job_from_options(
-    options: SnapshotOptions,
-    *,
-    stdin: Any = sys.stdin,
-    cwd: Path | None = None,
-) -> object:
+def read_job_file(raw_job: str, *, cwd: Path) -> object:
+    """The render-job JSON ``--job`` names. A job is a FILE: there is no stdin form."""
+    if raw_job.strip() == "-":
+        raise SnapshotError(
+            "--job takes the path of a render-job JSON file; reading a job from stdin "
+            "(--job -) was removed — write the job to a file and pass its path"
+        )
+    job_path = (cwd / Path(raw_job).expanduser()).resolve()
+    if not job_path.exists():
+        raise SnapshotError(f"--job file does not exist: {raw_job}")
+    if job_path.is_dir():
+        raise SnapshotError(f"--job names a directory, not a render-job JSON file: {raw_job}")
+    try:
+        text = job_path.read_text(encoding="utf-8")
+    except (OSError, UnicodeDecodeError) as exc:
+        raise SnapshotError(f"Cannot read --job file {raw_job}: {exc}") from exc
+    return load_json_text(text, str(job_path))
+
+
+def load_job_from_options(options: SnapshotOptions, *, cwd: Path | None = None) -> object:
     resolved_cwd = (cwd or Path.cwd()).resolve()
     if options.job:
-        if options.job == "-":
-            text = stdin.read()
-            source_label = "stdin"
-        else:
-            job_path = (resolved_cwd / Path(options.job).expanduser()).resolve()
-            text = job_path.read_text(encoding="utf-8")
-            source_label = str(job_path)
-        return apply_option_overrides_to_payload(load_json_text(text, source_label), options, cwd=resolved_cwd)
-
-    if not stdin.isatty() and not options.input:
-        text = stdin.read()
-        if text.strip():
-            return apply_option_overrides_to_payload(load_json_text(text, "stdin"), options, cwd=resolved_cwd)
+        return apply_option_overrides_to_payload(
+            read_job_file(options.job, cwd=resolved_cwd), options, cwd=resolved_cwd
+        )
 
     if not options.input:
-        raise SnapshotError("render requires a TARGET, --job, or stdin JSON")
-    if options.mode != "list" and not options.output:
+        raise SnapshotError("render requires a TARGET or --job: snapshot TARGET OUT")
+    mode = normalize_render_mode(options.mode)
+    if mode != "list" and not options.output:
         raise SnapshotError("render requires an OUT path for non-list modes: snapshot TARGET OUT")
 
     output: dict[str, object] = {
         "path": options.output,
     }
-    if options.camera_specified and not options.render_specified:
+    if options.camera_specified:
         output["camera"] = parse_camera_option(options.camera)
-    if options.width:
+    if options.width is not None:
         output["width"] = options.width
-    if options.height:
+    if options.height is not None:
         output["height"] = options.height
 
     job: dict[str, object] = {
         "input": options.input,
-        "mode": options.mode,
-        "outputs": [] if options.mode == "list" else [output],
+        "mode": mode,
+        "outputs": [] if mode == "list" else [output],
     }
-    if options.render_specified:
-        job["render"] = load_render_option(options.render, cwd=resolved_cwd)
-        if options.camera_specified:
-            job["camera"] = options.camera
     output_settings: dict[str, object] = {}
     if options.view_labels:
         output_settings["viewLabels"] = True
@@ -403,33 +410,23 @@ def load_job_from_options(
     if output_settings:
         job["output"] = output_settings
     if options.display_specified:
-        job["display"] = (
-            options.display
-            if options.render_specified
-            else load_display_option(options.display, cwd=resolved_cwd)
+        job["display"] = load_display_option(
+            options.display, cwd=resolved_cwd, modes=option_display_modes(options)
         )
     if options.kinematics_specified:
-        job["kinematics"] = (
-            options.kinematics
-            if options.render_specified
-            else parse_kinematics_option(options.kinematics)
-        )
+        job["kinematics"] = parse_kinematics_option(options.kinematics)
     if options.animation_specified:
         job["animation"] = parse_animation_option(options.animation, options.animation_time)
     if options.video_specified:
         job["video"] = parse_video_option(options.video, cwd=resolved_cwd)
+    if options.section_specified:
+        job["section"] = parse_section_option(options.section)
     if options.joint_values_specified:
-        job["jointValues"] = (
-            options.joint_values
-            if options.render_specified
-            else parse_joint_values_option(options.joint_values)
-        )
+        job["jointValues"] = parse_joint_values_option(options.joint_values)
     if options.debug:
         job["debug"] = True
     merge_focus_hide_options(job, options)
     return job
-
-
 
 
 def input_kind(file_path: Path) -> str:
@@ -466,10 +463,6 @@ def resolve_input_path(raw_input: object, *, cwd: Path) -> Path:
     return selected
 
 
-
-
-
-
 def reference_root_for_input(input_path: Path, cwd: Path) -> Path:
     return cwd if path_is_inside_or_equal(input_path, cwd) else input_path.parent
 
@@ -493,9 +486,9 @@ def load_ensure_step_topology_artifact():
 def _ensure_snapshot_step_artifact(target, *, require_selector=False, debug=None):
     """Resolve saved bytes through the artifact pool, without importing a kernel.
 
-    A snapshot needs the surface view and optional composed selector tables.
-    The legacy topology builder also imports generation and decodes native
-    shapes; compilation and missing surfaces belong to the pool instead.
+    A snapshot needs the surface view and, for a selection, the selector tables
+    composed from its descriptor. Compiling a document the store has no tree for
+    belongs to the pool (:func:`cadgen._internal.doors.document_snapshot`).
     """
     from cadgen.selector_types import SelectorBundle
 
@@ -503,17 +496,20 @@ def _ensure_snapshot_step_artifact(target, *, require_selector=False, debug=None
     package_dir = view_dir_for(tree, document_hash=document_hash)
     descriptor = json.loads((package_dir / "assembly.json").read_text(encoding="utf-8"))
     if debug is not None:
-        debug.update(source="imported", assembly=True, selectorReextracted=False,
-                     composed=bool(require_selector))
+        # What this resolution actually selected — nothing here is a constant.
+        debug.update(
+            documentHash=document_hash,
+            tree=tree,
+            view=str(package_dir),
+            componentCount=len(descriptor.get("components") or {}),
+            occurrenceCount=len(descriptor.get("occurrences") or []),
+            selectorIndex=bool(require_selector),
+        )
     return StepTopologyArtifact(
         cad_path=target.cad_path, source_path=target.source_path,
         step_path=target.step_path, artifact_path=package_dir, manifest=descriptor,
         selector_bundle=SelectorBundle(manifest=descriptor) if require_selector else None,
     )
-
-
-
-
 
 
 def selector_value_requires_topology(value: str) -> bool:
@@ -669,12 +665,8 @@ def normalize_render_job_selection(
     selection = job.get("selection") if is_plain_object(job.get("selection")) else None
     if selection is None:
         return None
-    if any(selection_value_list(selection.get(key)) for key in ("focus", "refs")) and selection_value_list(
-        selection.get("hide")
-    ):
-        raise SnapshotError("selection.focus/refs and selection.hide cannot be used in the same snapshot job")
     normalized = dict(selection)
-    for key in ("focus", "refs", "hide"):
+    for key in SELECTION_KEYS:
         if key not in selection:
             continue
         normalized[key] = normalize_selection_filter_values(
@@ -734,7 +726,64 @@ def unrenderable_sdf_geometry(input_path: Path) -> list[tuple[str, str]]:
     return found
 
 
-def robot_joint_names(kind: str, input_path: Path) -> frozenset[str] | None:
+def _robot_name(description: Path) -> str | None:
+    """The root ``<robot name>`` of a URDF or SRDF, or None when it cannot be read."""
+    import xml.etree.ElementTree as ET
+
+    try:
+        for _event, element in ET.iterparse(str(description), events=("start",)):
+            if str(element.tag).rsplit("}", 1)[-1] != "robot":
+                return None
+            return str(element.attrib.get("name") or "").strip() or None
+    except (OSError, ET.ParseError):
+        return None
+    return None
+
+
+def paired_urdf_for_srdf(srdf_path: Path) -> Path:
+    """The URDF whose geometry an SRDF renders, or a refusal naming the search.
+
+    An SRDF carries planning semantics only. It pairs with the same-folder
+    ``.urdf`` whose ``<robot name>`` matches — the rule ``cadgen srdf validate``
+    and the Viewer use — and exactly one may match. Anything else used to reach
+    the browser with no URDF at all and come back as a stack trace.
+    """
+    from cadgen.srdf_validation import find_paired_urdf
+
+    folder = srdf_path.parent
+    robot_name = _robot_name(srdf_path)
+    rule = (
+        "An SRDF renders the geometry of the same-folder .urdf whose <robot name> "
+        "matches its own, and exactly one may match (check with `cadgen srdf validate`)."
+    )
+    if not robot_name:
+        raise SnapshotError(
+            f"{srdf_path.name} has no readable <robot name>, so its URDF cannot be found. {rule}"
+        )
+    paired, matches = find_paired_urdf(robot_name, folder)
+    if paired is not None:
+        return paired
+    if matches:
+        raise SnapshotError(
+            f"{srdf_path.name} is ambiguous: {len(matches)} .urdf files in {folder} declare "
+            f"<robot name={robot_name!r}> ({', '.join(match.name for match in matches)}). {rule}"
+        )
+    candidates = sorted(folder.glob("*.urdf"))
+    found = (
+        "; it holds " + ", ".join(
+            f"{candidate.name} (robot {(_robot_name(candidate) or 'unreadable')!r})"
+            for candidate in candidates[:6]
+        ) + (f" and {len(candidates) - 6} more" if len(candidates) > 6 else "")
+        if candidates
+        else "; it holds no .urdf files"
+    )
+    raise SnapshotError(
+        f"{srdf_path.name} has no paired URDF: no .urdf in {folder} declares "
+        f"<robot name={robot_name!r}>{found}. {rule}"
+    )
+
+
+def robot_joint_names(kind: str, description: Path) -> frozenset[str] | None:
     """The joint names a pose request may name, or None when they cannot be read.
 
     The browser is what ASSEMBLES a robot, so this module never had the joint list and a
@@ -742,22 +791,17 @@ def robot_joint_names(kind: str, input_path: Path) -> frozenset[str] | None:
     rendered the rest pose, which is the one failure a posed review cannot survive. The
     STEP door already refuses an unknown DOF by name; robots now do the same.
 
-    The answer is only ever used to REFUSE a name that is definitely not in the
-    description. A description this cannot parse returns None and renders exactly as
-    before, so the check can never make the door stricter about geometry than the renderer
-    that has to draw it.
+    ``description`` is the file that DECLARES the joints: the SDF or URDF itself, or an
+    SRDF's paired URDF. The answer is only ever used to REFUSE a name that is definitely
+    not in the description. A description this cannot parse returns None and renders
+    exactly as before, so the check can never make the door stricter about geometry than
+    the renderer that has to draw it.
     """
-    source_path = input_path
-    if kind == "srdf":
-        # An SRDF carries semantics only; its joints are the sibling URDF's.
-        source_path = input_path.with_suffix(".urdf")
-        if not source_path.exists():
-            return None
     try:
         if kind == "sdf":
             from cadgen.sdf_source import read_sdf_source
 
-            return frozenset(joint.name for joint in read_sdf_source(source_path).joints)
+            return frozenset(joint.name for joint in read_sdf_source(description).joints)
         import warnings
 
         from cadgen.urdf_source import read_urdf_source
@@ -767,74 +811,33 @@ def robot_joint_names(kind: str, input_path: Path) -> frozenset[str] | None:
         # joint names must not start narrating them over the snapshot's own output.
         with warnings.catch_warnings():
             warnings.simplefilter("ignore")
-            return frozenset(joint.name for joint in read_urdf_source(source_path).joints)
+            return frozenset(joint.name for joint in read_urdf_source(description).joints)
     except Exception:
         return None
 
 
-
-
-def resolve_robot_render_job(
+def check_robot_render_job(
     job: dict[str, object],
     *,
     kind: str,
     input_path: Path,
-    root_path: Path,
-    resolved_cwd: Path,
-    timestamp: str | None,
-    job_index: int = 0,
-    job_count: int = 1,
-    **_kind_context: object,
+    mode: str,
+    **_context: object,
 ) -> dict[str, object]:
-    """Resolve a robot description (`.urdf` / `.srdf` / `.sdf`).
+    """What a robot description (`.urdf` / `.srdf` / `.sdf`) cannot be asked for.
 
-    The browser assembles the robot: the parser resolves each link mesh against the
-    description's own URL, so this hands over one asset URL and the pose, and the shared
-    mesh backend renders the result. STEP-only options are rejected up front."""
-    job = validate_render_job_compatibility(job)
+    Everything here is decided from the request and the description's own XML, before
+    anything is cleared: the STEP-only options, undrawable SDF geometry, the SRDF's
+    pairing, and the joint names a pose may use."""
     label = kind.upper()
-
-    if selection_filter_values(job):
-        raise SnapshotError(
-            f"selection focus/hide/refs require STEP topology; {label} robots have no "
-            "part/subassembly selectors"
-        )
-    if has_kinematics_render_values(job.get("kinematics")):
-        raise SnapshotError(
-            f"kinematics values require a STEP model; pose a {label} robot with jointValues"
-        )
-    if job.get("animation") is not None:
-        raise SnapshotError(
-            f"an animation frame requires a STEP model with a sidecar; {label} robots have no clips"
-        )
-    if job.get("video") is not None:
-        raise SnapshotError(
-            f"a video renders an animation clip; {label} robots have no clips to render"
-        )
-
-    mode = str(job.get("mode") or "view").strip().lower()
-    if mode not in SUPPORTED_RENDER_MODES:
-        raise SnapshotError(f"Unsupported render mode: {mode or '(missing)'}")
-    if mode not in MESH_SUPPORTED_RENDER_MODES:
-        supported = ", ".join(sorted(MESH_SUPPORTED_RENDER_MODES))
-        raise SnapshotError(
-            f"{mode} mode requires STEP topology; {label} robots support: {supported}"
-        )
-
-    display = effective_display_request(job)
-    raw_display_mode = re.sub(r"[\s-]+", "_", str(display.get("mode") or "").strip().lower())
-    canonical_display_mode = DISPLAY_MODE_ALIASES.get(raw_display_mode, raw_display_mode)
-    if canonical_display_mode in {"shaded_edges", "hidden_edges", "hidden_lines_removed"}:
-        raise SnapshotError(
-            f"{canonical_display_mode} display mode is not supported for {label} robots; "
-            "robot link meshes have no CAD edge topology"
-        )
-    exploded = display.get("exploded") if is_plain_object(display.get("exploded")) else None
-    if exploded is not None and exploded.get("enabled"):
-        raise SnapshotError(
-            f"exploded view requires STEP assembly occurrence structure; {label} robots "
-            "cannot be exploded"
-        )
+    refuse_cad_model_requests(
+        job,
+        mode=mode,
+        subject=f"{label} robots",
+        pose_hint=f"pose a {label} robot with jointValues",
+        tessellation_hint="a robot's link meshes are existing meshes",
+        joints=True,
+    )
 
     if kind == "sdf":
         unrenderable = unrenderable_sdf_geometry(input_path)
@@ -852,6 +855,9 @@ def resolve_robot_render_job(
                 "leave those links out of the picture."
             )
 
+    # An SRDF carries semantics; its geometry and its joints are the paired URDF's.
+    urdf_path = paired_urdf_for_srdf(input_path) if kind == "srdf" else None
+
     joint_values = job.get("jointValues")
     if joint_values is not None and not is_plain_object(joint_values):
         raise SnapshotError("jointValues must be an object of joint name to angle")
@@ -859,7 +865,7 @@ def resolve_robot_render_job(
         for name, value in joint_values.items():
             if not isinstance(value, (int, float)) or isinstance(value, bool):
                 raise SnapshotError(f"jointValues[{name}] must be a number (degrees)")
-        declared = robot_joint_names(kind, input_path)
+        declared = robot_joint_names(kind, urdf_path or input_path)
         if declared is not None:
             unknown = sorted(str(name) for name in joint_values if str(name) not in declared)
             if unknown:
@@ -868,6 +874,28 @@ def resolve_robot_render_job(
                     f"This {label} declares: {', '.join(sorted(declared)) or '(none)'}"
                 )
 
+    # Robots are authored in METRES; the CAD profile assumes millimetres, and its floor,
+    # grid and lighting radii are sized accordingly. Default the robot profile so a robot
+    # frames like a robot without the caller having to know the unit convention.
+    if not str(job.get("scale") or "").strip():
+        job["scale"] = "urdf"
+    return {"urdf_path": urdf_path}
+
+
+def resolve_robot_render_job(
+    job: dict[str, object],
+    *,
+    kind: str,
+    input_path: Path,
+    root_path: Path,
+    urdf_path: Path | None = None,
+    **_kind_context: object,
+) -> dict[str, object]:
+    """Resolve a robot description (`.urdf` / `.srdf` / `.sdf`).
+
+    The browser assembles the robot: the parser resolves each link mesh against the
+    description's own URL, so this hands over one asset URL and the pose, and the shared
+    mesh backend renders the result."""
     # Link meshes are referenced relative to the description, so the served root has to
     # contain both. The description's own directory is the natural root and matches how the
     # viewer serves a robot from its model folder.
@@ -879,35 +907,31 @@ def resolve_robot_render_job(
         "kind": kind,
         "url": asset_url,
     }
-    if kind == "srdf":
-        # An SRDF carries semantics; its geometry comes from the URDF beside it.
-        urdf_path = input_path.with_suffix(".urdf")
-        if urdf_path.exists():
-            resolved["urdfUrl"] = asset_url_for_path(urdf_path, root_path)
-    if joint_values:
-        resolved["jointValues"] = dict(joint_values)
+    if urdf_path is not None:
+        resolved["urdfUrl"] = asset_url_for_path(urdf_path, root_path)
+    if job.get("jointValues"):
+        resolved["jointValues"] = dict(job["jointValues"])
     if bool(job.get("debug")):
         resolved["debug"] = {"robotSource": {"kind": kind}}
-
-    # Robots are authored in METRES; the CAD profile assumes millimetres, and its floor,
-    # grid and lighting radii are sized accordingly. Default the robot profile so a robot
-    # frames like a robot without the caller having to know the unit convention.
-    if not str(job.get("scale") or "").strip():
-        job = {**job, "scale": "urdf"}
-
-    normalized = normalize_common_job(
-        job,
-        mode=mode,
-        resolved_cwd=resolved_cwd,
-        timestamp=timestamp,
-        job_index=job_index,
-        job_count=job_count,
-    )
-    normalized["resolved"] = resolved
-    return normalized
+    return {**job, "resolved": resolved}
 
 
-def resolve_render_job(
+@dataclass(slots=True)
+class PreparedRenderJob:
+    """One job whose REQUEST has been accepted, with nothing built for it yet."""
+
+    #: The commonly-normalized job (:func:`cadgen.snapshot_core.normalize_common_job`).
+    job: dict[str, object]
+    kind: str
+    input_path: Path
+    root_path: Path
+    reference_root: Path
+    resolved_cwd: Path
+    #: What the kind's check learned that its resolver needs (an SRDF's paired URDF).
+    context: dict[str, object]
+
+
+def prepare_render_job(
     raw_job: object,
     *,
     cwd: Path | None = None,
@@ -915,7 +939,13 @@ def resolve_render_job(
     kinds: frozenset[str] | None = None,
     job_index: int = 0,
     job_count: int = 1,
-) -> dict[str, object]:
+) -> PreparedRenderJob:
+    """Accept or refuse one job's REQUEST. Builds nothing and deletes nothing.
+
+    Every refusal that can be decided from the request, the input's kind and the
+    files beside it happens here, so the caller can clear the declared outputs
+    only once the whole packet has been accepted.
+    """
     if not is_plain_object(raw_job):
         raise SnapshotError("render job must be an object")
     job = copy.deepcopy(raw_job)
@@ -928,7 +958,7 @@ def resolve_render_job(
         # --focus/--hide are the one flag pair whose job spelling is not the
         # bare flag name: they nest under "selection". Name that, or the
         # generic message sends the author back to a flag list that is right.
-        misplaced = [key for key in unknown_keys if key in {"focus", "hide", "refs"}]
+        misplaced = [key for key in unknown_keys if key in SELECTION_KEYS]
         hint = (
             f" ({', '.join(misplaced)} nest under the selection object: "
             f'"selection": {{"{misplaced[0]}": ["#o1.2"]}})'
@@ -945,63 +975,11 @@ def resolve_render_job(
     if not raw_input:
         raise SnapshotError("render job is missing input")
 
-    # Validate Render and its incompatible top-level CAD controls before any
-    # of them can trigger parsing or a format capability check. Animation
-    # remains composable with the photographic scene.
-    render_enabled = "render" in job
-    if render_enabled:
-        job["render"] = validate_render_option(job["render"], source_label="job render")
-        job = validate_render_job_compatibility(job)
-
-    # A normal job's own `display` string gets the same treatment as the --display
-    # flag: a mode name, an inline JSON object, or a path to a display JSON.
-    # Without this it fell through to normalize_common_job, which accepts only
-    # a plain object, so a mode name, a file path, or a typo could lose the
-    # requested display policy.
-    raw_display = job.get("display")
-    if isinstance(raw_display, str) and raw_display.strip():
-        job["display"] = load_display_option(raw_display, cwd=resolved_cwd)
-
-    raw_camera = job.get("camera")
-    if raw_camera is not None:
-        job["camera"] = parse_camera_option(raw_camera)
-
-    # Validate the new common envelopes before a STEP input can trigger package
-    # compilation. normalize_common_job repeats these guards for callers that
-    # invoke a kind resolver directly.
-    if "output" in job:
-        job["output"] = validate_output_settings(job["output"])
-    if "quality" in job:
-        job["quality"] = validate_quality_settings(job["quality"])
-
-    # A display object embedded in a full JSON job gets the same closed-key and
-    # closed-value guard as --display.
-    if is_plain_object(job.get("display")):
-        job["display"] = validate_direct_settings_payload(
-            job["display"],
-            option_name="--display",
-            source_label="job display",
-            allowed_keys=DISPLAY_OPTION_KEYS,
-            setting_label="display settings",
-        )
-        validate_display_settings_values(job["display"], source_label="job display")
-
-    # Still evidence omits viewport guides. An explicit Render controls its own
-    # studio display; only normal CAD snapshots receive this sparse base
-    # override, so it cannot cancel a studio's camera or display defaults.
-    if "render" not in job:
-        display = dict(job.get("display") if is_plain_object(job.get("display")) else {})
-        guides = dict(display.get("guides") if is_plain_object(display.get("guides")) else {})
-        guides.setdefault("grid", {"enabled": False})
-        guides.setdefault("axis", {"enabled": False})
-        display["guides"] = guides
-        job["display"] = display
+    if job.get("camera") is not None:
+        job["camera"] = parse_camera_option(job["camera"])
 
     input_path = resolve_input_path(raw_input, cwd=resolved_cwd)
-    root_path = input_path.parent.resolve()
-    reference_root = reference_root_for_input(input_path, resolved_cwd)
     kind = input_kind(input_path)
-    source_path = input_path
     if kind == "python":
         # Scripts are RUN, never rendered: `python <script>` writes the
         # document, and snapshot renders the document.
@@ -1010,48 +988,112 @@ def resolve_render_job(
         raise SnapshotError(script_target_message(input_path))
     if kinds is not None:
         reject_unsupported_kind(kind, input_path, kinds)
-    resolver = KIND_RESOLVERS.get(kind)
-    if resolver is None:
+    if kind not in KIND_RESOLVERS:
         raise SnapshotError(
             f"snapshot cannot render {input_path.suffix or 'that file'} inputs: {input_path}"
         )
-    return resolver(
+
+    # After the refusals above: a script or a foreign file is told what IT is,
+    # not what its display settings would have meant. A job's own `display` gets
+    # the same treatment as the --display flag — a mode name, an inline JSON
+    # object, or a path to a display JSON — and is validated ONCE: here, unless
+    # the flag already put a validated one on the job.
+    display = load_display_option(
+        job["display"] if job.get("display") is not None else {},
+        cwd=resolved_cwd,
+        modes=display_modes_for_kind(kind),
+    )
+    validate_display_for_kind(display, kind=kind, input_label=input_path.name)
+    job["display"] = display
+    mode = normalize_render_mode(job.get("mode"))
+    lighting = display.get("lighting")
+    lighting_enabled = (
+        lighting.get("enabled", True) if is_plain_object(lighting) else display.get("mode") == "render"
+    )
+    if lighting_enabled and mode != "view":
+        raise SnapshotError("Render display supports only view mode")
+
+    validate_selection_keys(job)
+    selection = job.get("selection") if is_plain_object(job.get("selection")) else {}
+    if selection_value_list(selection.get("focus")) and selection_value_list(selection.get("hide")):
+        raise SnapshotError("selection.focus and selection.hide cannot be used in the same snapshot job")
+
+    context = KIND_CHECKS[kind](job, kind=kind, input_path=input_path, mode=mode) or {}
+    normalized = normalize_common_job(
         job,
-        kind=kind,
-        input_path=input_path,
-        root_path=root_path,
-        source_path=source_path,
-        reference_root=reference_root,
+        mode=mode,
         resolved_cwd=resolved_cwd,
         timestamp=timestamp,
         job_index=job_index,
         job_count=job_count,
     )
+    return PreparedRenderJob(
+        job=normalized,
+        kind=kind,
+        input_path=input_path,
+        root_path=input_path.parent.resolve(),
+        reference_root=reference_root_for_input(input_path, resolved_cwd),
+        resolved_cwd=resolved_cwd,
+        context=dict(context),
+    )
 
 
-def resolve_step_render_job(
+def resolve_prepared_render_job(prepared: PreparedRenderJob) -> dict[str, object]:
+    """Build what an accepted job's render needs and attach it as ``resolved``."""
+    return KIND_RESOLVERS[prepared.kind](
+        prepared.job,
+        kind=prepared.kind,
+        input_path=prepared.input_path,
+        root_path=prepared.root_path,
+        reference_root=prepared.reference_root,
+        resolved_cwd=prepared.resolved_cwd,
+        **prepared.context,
+    )
+
+
+def resolve_render_job(
+    raw_job: object,
+    *,
+    cwd: Path | None = None,
+    timestamp: str | None = None,
+    kinds: frozenset[str] | None = None,
+    job_index: int = 0,
+    job_count: int = 1,
+) -> dict[str, object]:
+    return resolve_prepared_render_job(
+        prepare_render_job(
+            raw_job, cwd=cwd, timestamp=timestamp, kinds=kinds,
+            job_index=job_index, job_count=job_count,
+        )
+    )
+
+
+def check_step_render_job(
     job: dict[str, object],
     *,
     kind: str,
     input_path: Path,
-    root_path: Path,
-    source_path: Path,
-    reference_root: Path,
-    resolved_cwd: Path,
-    timestamp: str | None,
-    job_index: int = 0,
-    job_count: int = 1,
-    **_kind_context: object,
-) -> dict[str, object]:
-    job = validate_render_job_compatibility(job)
+    mode: str,
+    **_context: object,
+) -> None:
+    """What a STEP request can be refused for without its tree.
+
+    The request shapes, the mode rules, the video's container and encoder, and —
+    read from the sidecar beside the document, which costs a hash rather than a
+    compile — the pose and clip NAMES. Selection refs are the one STEP refusal
+    left to resolution: they are checked against the tree itself.
+    """
+    if job.get("jointValues") is not None:
+        raise SnapshotError(
+            "jointValues pose a robot description (URDF, SRDF or SDF); "
+            "pose a STEP model with kinematics"
+        )
     has_param_render = has_kinematics_render_values(job.get("kinematics"))
-    # The frame request is validated for SHAPE up front (a packet may carry it
-    # directly, so it did not necessarily pass through the flag parser); which
-    # clip it names is checked against the sidecar further down.
+    # The frame request is validated for SHAPE here (a packet may carry it
+    # directly, so it did not necessarily pass through the flag parser).
     animation_request: dict[str, object] | None = None
-    raw_animation = job.get("animation")
-    if raw_animation is not None:
-        animation_request = normalize_animation_request(raw_animation, where="render job animation")
+    if job.get("animation") is not None:
+        animation_request = normalize_animation_request(job["animation"], where="render job animation")
         job["animation"] = animation_request
     # A video is the SPAN of a clip, so it needs the clip, and it cannot also be
     # a moment of one. The flag pair is refused at the door (snapshot_door);
@@ -1074,119 +1116,37 @@ def resolve_step_render_job(
                 "begins with video start instead"
             )
         job["video"] = video_request
-        # Both of these are decided before the tree is built, let alone rendered.
-        # `normalize_common_job` checks the container too, for a packet that never
-        # comes past here -- but it runs AFTER the STEP package is compiled, which
-        # is the slowest part of a snapshot, and a typo in a file extension is not
-        # worth minutes. An encoder discovered missing at the end of those same
+        # A typo in a file extension is not worth the minutes a cold STEP takes to
+        # compile, and an encoder discovered missing at the end of those same
         # minutes is the other failure this ordering exists to prevent.
         for output in job.get("outputs") or []:
             video_container_for_path(declared_output_path(output))
         ffmpeg_binary()
-    # A render is a READ of the tree behind the document's bytes (compiled from
-    # them on demand below when the store has none). Whether the document's
-    # source has moved on is its model's business, never a render's.
-    # Kinematics values drive the model's sidecar kinematics block.
-    debug_enabled = bool(job.get("debug"))
-    step_artifact_debug: dict[str, object] | None = {} if debug_enabled else None
-    artifact = ensure_render_job_step_artifact(
-        job,
-        reference_root=reference_root,
-        input_path=source_path,
-        step_path=input_path,
-        require_selector=selection_requires_selector_topology(job),
-        debug_info=step_artifact_debug,
-    )
-    expected_cad_path = cad_ref_for_step_path(reference_root, input_path)
-    normalized_selection = normalize_render_job_selection(
-        job,
-        expected_cad_path=expected_cad_path,
-        selector_index=artifact_selector_index(artifact),
-    )
-
-    # Select the document digest and tree in one lookup. Materialising by that
-    # tree, rather than resolving the mutable path again, keeps every component
-    # URL and the sidecar binding on the same revision.
-    document_hash, selected_tree = document_snapshot(source_path)
-    package_dir = view_dir_for(selected_tree, document_hash=document_hash)
-    if not package_dir.is_dir():
-        raise SnapshotError(f"STEP/STP render input has no tree in the store: {package_dir}")
-
-    mode = str(job.get("mode") or "view").strip().lower()
-    if mode not in SUPPORTED_RENDER_MODES:
-        raise SnapshotError(f"Unsupported render mode: {mode or '(missing)'}")
-    if mode not in STEP_SUPPORTED_RENDER_MODES:
-        supported = ", ".join(sorted(STEP_SUPPORTED_RENDER_MODES))
-        raise SnapshotError(
-            f"{mode} mode is not supported for STEP inputs; STEP supports: {supported}"
-        )
     if has_param_render and mode != "view":
         raise SnapshotError("kinematics values support only view mode; set display.mode for display-style changes")
     if animation_request is not None and mode != "view":
         raise SnapshotError("an animation frame supports only view mode; set display.mode for display-style changes")
+    if has_param_render or animation_request is not None:
+        from cadgen._internal.source_sidecar import read_source_sidecar
 
-    resolved: dict[str, object] = {
-        "rootPath": str(root_path),
-        "inputPath": str(input_path),
-        "inputUrl": asset_url_for_path(input_path, root_path),
-        "kind": kind,
-        # The hash of the tree this job renders: the geometry's identity in the
-        # result (cadgen.results.SnapshotFile.tree), never a directory.
-        "tree": selected_tree,
-    }
-    # tree (the canonical render artifact for every STEP model): inline
-    # the assembly.json and pre-resolve one asset URL per unique component GLB so the renderer
-    # fetches and composes them in world space.
-    descriptor = json.loads((package_dir / "assembly.json").read_text())
-    artifact_manifest = getattr(artifact, "manifest", None)
-    if isinstance(artifact_manifest, Mapping) and artifact_manifest != descriptor:
-        raise SnapshotError(
-            "STEP/STP render input changed while its topology was being resolved; retry the snapshot"
+        check_step_pose_and_clip_names(
+            job, read_source_sidecar(input_path) or {}, input_name=input_path.name
         )
-    # This is the renderer's private descriptor loaded from the selected view,
-    # never the immutable tree object.
-    descriptor["documentHash"] = document_hash
-    from cadgen.snapshot_core import asset_url_for_store_path
 
-    component_urls = {
-        cid: asset_url_for_store_path(package_dir / str(entry.get("surf", "")))
-        for cid, entry in (descriptor.get("components") or {}).items()
-    }
-    resolved["package"] = {"descriptor": descriptor, "componentUrls": component_urls}
-    from cadgen._internal.source_sidecar import (
-        read_source_sidecar,
-        source_sidecar_path,
-        validate_appearance_targets,
-    )
 
-    resolved["documentHash"] = document_hash
-    sidecar = read_source_sidecar(source_path, document_hash=document_hash) or {}
-    if sidecar.get("appearance") is not None:
-        # Validate canonical occurrence targets here for a clean CLI error;
-        # the browser repeats the same check before it composes its own copy.
-        validate_appearance_targets(descriptor, sidecar["appearance"])
-    if sidecar:
-        # The shared JS source resolver validates the same document binding and
-        # composes appearance into its private descriptor. Inline data avoids a
-        # second browser fetch and leaves the store descriptor untouched.
-        resolved["sourceSidecar"] = sidecar
-    kinematics_block = (
-        sidecar.get("kinematics") if isinstance(sidecar.get("kinematics"), dict) else None
-    )
+def check_step_pose_and_clip_names(
+    job: Mapping[str, object], sidecar: Mapping[str, object], *, input_name: str
+) -> None:
+    """A pose NAME, every DOF id and the clip name, against what the model declares.
+
+    A typo must fail as a clean CLI error naming what the model has, not as a
+    stack trace out of the browser runtime — which repeats these checks, with the
+    compiled clips in hand, as the backstop and the authority for a module that
+    builds its clips indirectly.
+    """
+    kinematics_block = sidecar.get("kinematics") if isinstance(sidecar.get("kinematics"), dict) else None
+    preset = job.get("kinematics")
     if kinematics_block:
-        # Typed mates are the articulation mechanism: --kinematics DOF values
-        # fold through the shared FK evaluator (cadgen-js kinematicsModule),
-        # which reads the sidecar's kinematics section.
-        resolved["stepParameterUrl"] = asset_url_for_path(source_sidecar_path(source_path), root_path)
-    # Animation and materials come from the same pinned annotation snapshot.
-    animation_block = sidecar.get("animation")
-    animation_source_text = animation_block["source"] if animation_block is not None else None
-    if kinematics_block:
-        # A pose NAME and every DOF id are validated HERE, against the
-        # declaration the CLI just loaded — a typo must fail as a clean CLI
-        # error, not as a stack trace out of the browser runtime (which repeats
-        # both checks as a backstop).
-        preset = job.get("kinematics")
         if isinstance(preset, str) and preset.strip():
             poses = kinematics_block.get("poses")
             declared = sorted(poses) if isinstance(poses, dict) else []
@@ -1209,27 +1169,24 @@ def resolve_step_render_job(
                     f"Unknown kinematics DOF(s): {', '.join(unknown)}. "
                     f"This model declares: {', '.join(sorted(dofs)) or '(none)'}"
                 )
-    elif has_param_render:
+    elif has_kinematics_render_values(preset):
         raise SnapshotError(
-            f"{input_path.name} declares no kinematics, so pose values have nothing to "
+            f"{input_name} declares no kinematics, so pose values have nothing to "
             "drive — declare kinematics= (typed mates) on the model's @step; "
             "see the cad skill's kinematics reference"
         )
-    if animation_request is not None:
-        if animation_source_text is None:
+    animation_request = job.get("animation")
+    if is_plain_object(animation_request):
+        animation_block = sidecar.get("animation")
+        if animation_block is None:
             raise SnapshotError(
-                f"{input_path.name} has no animation in its sidecar. "
+                f"{input_name} has no animation in its sidecar. "
                 "Declare animation= on @step or pass --animation to cadgen step build."
             )
-        # The clip NAME is validated HERE against the module the CLI just read —
-        # a typo must fail as a clean CLI error naming the clips the model has,
-        # not as a stack trace out of the browser runtime (which repeats the
-        # check, with the compiled clips in hand, as the backstop and the
-        # authority for a module that builds its clips indirectly).
         from cadgen._internal.animation_source import declared_clip_ids
 
         clip_name = str(animation_request["clip"])
-        declared_clips = declared_clip_ids(animation_source_text)
+        declared_clips = declared_clip_ids(animation_block["source"])
         if declared_clips is not None and clip_name not in declared_clips:
             raise SnapshotError(
                 f"Unknown animation clip: {clip_name}. "
@@ -1239,22 +1196,212 @@ def resolve_step_render_job(
                     else "This model declares no animation clips"
                 )
             )
+
+
+def resolve_step_render_job(
+    job: dict[str, object],
+    *,
+    kind: str,
+    input_path: Path,
+    root_path: Path,
+    reference_root: Path,
+    **_kind_context: object,
+) -> dict[str, object]:
+    """Build what a STEP render needs: its tree, its selector index, its sidecar.
+
+    ``job`` is the prepared job (:func:`check_step_render_job` accepted the
+    request). A render is a READ of the tree behind the document's bytes, compiled
+    from them on demand when the store has none. Whether the document's source has
+    moved on is its model's business, never a render's.
+    """
+    debug_enabled = bool(job.get("debug"))
+    step_artifact_debug: dict[str, object] | None = {} if debug_enabled else None
+    artifact = ensure_render_job_step_artifact(
+        job,
+        reference_root=reference_root,
+        input_path=input_path,
+        step_path=input_path,
+        require_selector=selection_requires_selector_topology(job),
+        debug_info=step_artifact_debug,
+    )
+    normalized_selection = normalize_render_job_selection(
+        job,
+        expected_cad_path=cad_ref_for_step_path(reference_root, input_path),
+        selector_index=artifact_selector_index(artifact),
+    )
+
+    # Select the document digest and tree in one lookup. Materialising by that
+    # tree, rather than resolving the mutable path again, keeps every component
+    # URL and the sidecar binding on the same revision.
+    document_hash, selected_tree = document_snapshot(input_path)
+    package_dir = view_dir_for(selected_tree, document_hash=document_hash)
+    if not package_dir.is_dir():
+        raise SnapshotError(f"STEP/STP render input has no tree in the store: {package_dir}")
+
+    resolved: dict[str, object] = {
+        "rootPath": str(root_path),
+        "inputPath": str(input_path),
+        "inputUrl": asset_url_for_path(input_path, root_path),
+        "kind": kind,
+        # The hash of the tree this job renders: the geometry's identity in the
+        # result (cadgen.results.SnapshotFile.tree), never a directory.
+        "tree": selected_tree,
+    }
+    # tree (the canonical render artifact for every STEP model): inline
+    # the assembly.json and pre-resolve one asset URL per unique component so the renderer
+    # fetches and composes them in world space.
+    descriptor = json.loads((package_dir / "assembly.json").read_text(encoding="utf-8"))
+    artifact_manifest = getattr(artifact, "manifest", None)
+    if isinstance(artifact_manifest, Mapping) and artifact_manifest != descriptor:
+        raise SnapshotError(
+            "STEP/STP render input changed while its topology was being resolved; retry the snapshot"
+        )
+    # This is the renderer's private descriptor loaded from the selected view,
+    # never the immutable tree object.
+    descriptor["documentHash"] = document_hash
+    from cadgen.snapshot_core import asset_url_for_store_path
+
+    component_urls = {
+        cid: asset_url_for_store_path(package_dir / str(entry.get("surf", "")))
+        for cid, entry in (descriptor.get("components") or {}).items()
+    }
+    resolved["package"] = {"descriptor": descriptor, "componentUrls": component_urls}
+    from cadgen._internal.source_sidecar import (
+        read_source_sidecar,
+        source_sidecar_path,
+        validate_appearance_targets,
+    )
+
+    resolved["documentHash"] = document_hash
+    # Kinematics, animation and materials come from the same pinned annotation
+    # snapshot. The pose and clip names were checked when the job was prepared.
+    sidecar = read_source_sidecar(input_path, document_hash=document_hash) or {}
+    if sidecar.get("appearance") is not None:
+        # Validate canonical occurrence targets here for a clean CLI error;
+        # the browser repeats the same check before it composes its own copy.
+        validate_appearance_targets(descriptor, sidecar["appearance"])
+    if sidecar:
+        # The shared JS source resolver validates the same document binding and
+        # composes appearance into its private descriptor. Inline data avoids a
+        # second browser fetch and leaves the store descriptor untouched.
+        resolved["sourceSidecar"] = sidecar
+    if isinstance(sidecar.get("kinematics"), dict) and sidecar["kinematics"]:
+        # Typed mates are the articulation mechanism: --kinematics DOF values
+        # fold through the shared FK evaluator (@hardcore/core kinematicsModule),
+        # which reads the sidecar's kinematics section.
+        resolved["stepParameterUrl"] = asset_url_for_path(source_sidecar_path(input_path), root_path)
     if debug_enabled:
         resolved["debug"] = {"stepArtifact": step_artifact_debug}
 
+    resolved_job = {**job, "resolved": resolved}
     if normalized_selection is not None:
-        job["selection"] = normalized_selection
+        resolved_job["selection"] = normalized_selection
+    return resolved_job
 
-    normalized = normalize_common_job(
+
+# A DXF is DRAWN, not staged: `cadgen dxf snapshot` paints the same
+# `cadgen.drawing_payload` the CAD Viewer's DXF pane paints, with the same
+# core code (@hardcore/core/lib/drawing2d), so the CLI cannot show a picture
+# the viewer cannot. Everything below is what that costs the option surface.
+#
+# `appearance` is the whole of a drawing's display: it picks the background,
+# and therefore the colour of an entity with no pen of its own (ACI 7).
+DRAWING_DISPLAY_KEYS = frozenset({"appearance"})
+# Output settings that still mean something for a picture with no scene.
+DRAWING_OUTPUT_SETTINGS_KEYS = frozenset({"sizeProfile", "renderScale", "transparent"})
+# ...and why each of the others does not.
+DRAWING_OUTPUT_SETTING_REASONS = {
+    "padding": (
+        "a drawing is fitted with the fixed gutter the viewer leaves around it, "
+        "and there is no camera to pull further back"
+    ),
+    "viewLabels": DRAWING_NO_VIEW_NAME,
+    "tightFrame": (
+        "a tight frame re-fits a camera to projected geometry; a drawing is already "
+        "framed on the bounds of what it draws"
+    ),
+}
+
+
+def _drawing_output_cameras(job: Mapping[str, object]) -> bool:
+    outputs = job.get("outputs") if isinstance(job.get("outputs"), list) else []
+    return any(is_plain_object(output) and output.get("camera") is not None for output in outputs)
+
+
+def _drawing_output_labels(job: Mapping[str, object]) -> list[str]:
+    outputs = job.get("outputs") if isinstance(job.get("outputs"), list) else []
+    return sorted({
+        key
+        for output in outputs
+        if is_plain_object(output)
+        for key in ("label", "viewLabel")
+        if output.get(key) is not None
+    })
+
+
+def check_drawing_render_job(
+    job: Mapping[str, object], *, input_path: Path, mode: str, **_context: object
+) -> None:
+    """What a drawing cannot be asked for: anything that describes a 3D scene.
+
+    This door used to render a DXF as a 3D flat pattern, so it took a camera,
+    display settings and a render mode. It does not any more — the viewer shows
+    a drawing, and what the viewer cannot show the CLI does not render — and
+    every one of those requests is refused BY NAME here rather than accepted
+    and quietly ignored. This is also the path `cadgen snapshot` routes a `.dxf`
+    through, so the two cannot disagree.
+
+    The flag half of the same cutover (`cadgen dxf snapshot --camera`) is
+    refused while parsing, from the same sentences
+    (`cadgen._internal.snapshot_door.DRAWING_RETIRED_OPTIONS`): one request, one
+    answer, whichever surface it arrives on.
+    """
+    label = input_path.name
+    display = job.get("display") if is_plain_object(job.get("display")) else {}
+    scene = sorted(f"display.{key}" for key in set(display) - DRAWING_DISPLAY_KEYS)
+    if scene:
+        raise SnapshotError(
+            drawing_scene_refusal(", ".join(scene), label, plural=len(scene) != 1)
+        )
+    if job.get("camera") is not None or _drawing_output_cameras(job):
+        raise SnapshotError(drawing_camera_refusal(label))
+    if mode != "view" or job.get("section") is not None:
+        raise SnapshotError(drawing_mode_refusal(label))
+    if job.get("scale") is not None:
+        raise SnapshotError(
+            f"scale picks the units a 3D scene is lit and framed for (cad or urdf); {DRAWING_IS} "
+            f"in its own drawing units, so {label} has no scene to scale."
+        )
+    labels = _drawing_output_labels(job)
+    if labels:
+        raise SnapshotError(
+            f"an output's {' and '.join(labels)} names the view burnt into the image; {DRAWING_IS} "
+            f"and {label} has no view to name."
+        )
+    settings = job.get("output") if is_plain_object(job.get("output")) else {}
+    unsupported = sorted(set(settings) - DRAWING_OUTPUT_SETTINGS_KEYS)
+    if unsupported:
+        # Every one of them, with its own reason: fixing them one refusal per run
+        # is three runs to learn what one message can say.
+        reasons = "; ".join(
+            f"{key} — {DRAWING_OUTPUT_SETTING_REASONS.get(key, DRAWING_IS)}" for key in unsupported
+        )
+        named = ", ".join(f"output.{key}" for key in unsupported)
+        raise SnapshotError(
+            f"{named} {'has' if len(unsupported) == 1 else 'have'} no meaning for a DXF "
+            f"({reasons}). A drawing's output takes: "
+            f"{', '.join(sorted(DRAWING_OUTPUT_SETTINGS_KEYS))}."
+        )
+    # The refusals every non-STEP input shares (selection, poses, clips, videos,
+    # tessellation). Mode and section are already decided above, with a sentence
+    # about drawings rather than about mesh inputs.
+    refuse_cad_model_requests(
         job,
         mode=mode,
-        resolved_cwd=resolved_cwd,
-        timestamp=timestamp,
-        job_index=job_index,
-        job_count=job_count,
+        subject="DXF drawings",
+        pose_hint="a DXF drawing has no kinematics",
+        tessellation_hint="a DXF drawing is line work, not a tessellated surface",
     )
-    normalized["resolved"] = resolved
-    return normalized
 
 
 def resolve_drawing_render_job(
@@ -1262,159 +1409,97 @@ def resolve_drawing_render_job(
     *,
     kind: str,
     input_path: Path,
-    root_path: Path,
-    resolved_cwd: Path,
-    timestamp: str | None,
-    job_index: int = 0,
-    job_count: int = 1,
     **_kind_context: object,
 ) -> dict[str, object]:
-    """Resolve a drawing input (`.dxf` or a `@dxf` model script).
+    """Resolve a `.dxf` drawing: its 2D render payload, on a path the page can fetch.
 
-    A drawing has no geometry of its own to render: what the viewport shows is
-    the 3D flat pattern. There is no drawing package any more (design/
-    standalone-viewer.md Phase A) — a generator's product is its `.dxf` sibling
-    (made current through the ordinary gen no-op gate) and the mesh is produced
-    on demand by the bundled Node one-shot (bin/dxf-mesh.mjs: parseDxf ->
-    buildDxfPreviewMeshData -> writeGlb) into a temp GLB the ordinary mesh path
-    renders. Drawings carry no CAD topology, so the STEP-only options are
-    rejected the way they are for every other non-STEP kind.
+    There is no drawing package and nothing to build — the `.dxf` IS the
+    product. What the render needs is the SAME payload
+    (:mod:`cadgen.drawing_payload`) the Viewer's `GET /__cad/drawing` answers
+    with: ezdxf flattens the modelspace once, the store caches it by the
+    document's content hash, and the page draws it.
     """
-    job = validate_render_job_compatibility(job)
-    if selection_filter_values(job):
-        raise SnapshotError(
-            "selection focus/hide/refs require STEP topology; drawings have no "
-            "part/subassembly selectors"
-        )
-    if has_kinematics_render_values(job.get("kinematics")):
-        raise SnapshotError(
-            "kinematics values require a STEP model; a drawing is parameterized by its @dxf source"
-        )
-    if job.get("animation") is not None:
-        raise SnapshotError(
-            "an animation frame requires a STEP document with embedded animation in its sidecar; "
-            "drawings have no clips"
-        )
-    if job.get("video") is not None:
-        raise SnapshotError(
-            "a video renders an animation clip; drawings have no clips to render"
-        )
-
-    mode = str(job.get("mode") or "view").strip().lower()
-    if mode not in SUPPORTED_RENDER_MODES:
-        raise SnapshotError(f"Unsupported render mode: {mode or '(missing)'}")
-    if mode not in MESH_SUPPORTED_RENDER_MODES:
-        supported = ", ".join(sorted(MESH_SUPPORTED_RENDER_MODES))
-        raise SnapshotError(
-            f"{mode} mode requires STEP topology; drawings support: {supported}"
-        )
-
-    display = effective_display_request(job)
-    raw_display_mode = re.sub(r"[\s-]+", "_", str(display.get("mode") or "").strip().lower())
-    canonical_display_mode = DISPLAY_MODE_ALIASES.get(raw_display_mode, raw_display_mode)
-    if canonical_display_mode in {"shaded_edges", "hidden_edges", "hidden_lines_removed"}:
-        raise SnapshotError(
-            f"{canonical_display_mode} display mode is not supported for drawings; "
-            "a drawing mesh has no CAD edge topology"
-        )
-    exploded = display.get("exploded") if is_plain_object(display.get("exploded")) else None
-    if exploded is not None and exploded.get("enabled"):
-        raise SnapshotError(
-            "exploded view requires STEP assembly occurrence structure; drawings cannot be exploded"
-        )
-
-    preview = drawing_mesh_path(input_path, force=bool(job.get("force")))
-    # The mesh is a temp artifact beside nothing the caller serves, so serve it
-    # from its own directory when it falls outside the cwd.
-    serve_root = resolved_cwd if path_is_inside_or_equal(preview, resolved_cwd) else preview.parent
-    return resolve_mesh_render_job(
-        job,
-        kind="glb",
-        input_path=preview,
-        root_path=serve_root,
-        resolved_cwd=resolved_cwd,
-        timestamp=timestamp,
-        job_index=job_index,
-        job_count=job_count,
-    )
+    payload_path = drawing_payload_file(input_path)
+    serve_root = payload_path.parent
+    resolved: dict[str, object] = {
+        "rootPath": str(serve_root),
+        "inputPath": str(input_path),
+        "kind": kind,
+        "drawingUrl": asset_url_for_path(payload_path, serve_root),
+    }
+    if bool(job.get("debug")):
+        resolved["debug"] = {"drawingSource": {"kind": kind, "payloadBytes": payload_path.stat().st_size}}
+    return {**job, "resolved": resolved}
 
 
-# The snapshot mesher: DXF text on stdin -> one GLB. Bundled into _runtime/node
-# by scripts/bundle/cadgen-runtime.sh; the name is pinned by test_node_builder_bundles.
-DXF_MESH_BUILDER = "dxf-mesh.mjs"
+@functools.lru_cache(maxsize=1)
+def _drawing_payload_dir() -> Path:
+    """One directory per process for resolved drawing payloads, removed at exit.
 
-
-def drawing_mesh_path(source: Path, *, force: bool = False) -> Path:
-    """Mesh the drawing on demand and return a GLB path for the mesh renderer.
-
-    The `.dxf` is meshed as-is: a drawing has no derived state a door
-    materializes, and a `@dxf` script is made current by running it. The mesh is
-    produced by the bundled dxf-mesh.mjs one-shot into the snapshot's temp space
-    — nothing is cached, matching the viewer, which parses and meshes the `.dxf`
-    client-side.
+    The page fetches the payload over the host's loopback asset server, which
+    serves FILES; inlining a megabyte of JSON into the job would instead push it
+    through the Playwright driver pipe as one escaped protocol message, which is
+    the transport that fails on real drawings. The expensive half — ezdxf — is
+    cached in the store, so this is only ever a write of bytes already in hand.
     """
-    import subprocess
+    import atexit
+    import shutil
     import tempfile
 
-    from cadgen._internal.node_runtime import cad_node_executable, node_builder_script
+    directory = Path(tempfile.mkdtemp(prefix="cadgen-drawing-payload-"))
+    atexit.register(shutil.rmtree, directory, True)
+    return directory
 
-    del force  # a .dxf is the product; there is nothing to regenerate here
+
+def drawing_payload_file(source: Path) -> Path:
+    """The `.dxf`'s 2D render payload, written where the render can fetch it.
+
+    Named by the payload's own content hash, so two jobs over the same drawing
+    (and two runs in one process) share one file.
+    """
+    from hashlib import sha256
+
+    from cadgen._internal.atomic_replace import write_bytes_atomic
+    from cadgen.drawing_payload import DrawingReadError, drawing_payload_bytes
+
     if not source.name.lower().endswith(".dxf"):
         raise SnapshotError(f"snapshot input must be a .dxf document: {source}")
     if not source.is_file():
         raise SnapshotError(f"snapshot input does not exist: {source}")
-    dxf_path = source
-    out_dir = Path(tempfile.mkdtemp(prefix="cadgen-dxf-snapshot-"))
-    out_path = out_dir / f"{dxf_path.stem}.glb"
-    proc = subprocess.run(
-        [str(cad_node_executable()), str(node_builder_script(DXF_MESH_BUILDER)),
-         "--out", str(out_path), "--name", dxf_path.stem],
-        input=dxf_path.read_text(encoding="utf-8", errors="replace"),
-        capture_output=True,
-        text=True,
-    )
-    lines = [line.strip() for line in proc.stdout.splitlines() if line.strip()]
-    payload: dict = {}
-    for line in reversed(lines):
-        if line.startswith("{"):
-            try:
-                payload = json.loads(line)
-            except ValueError:
-                pass  # unreadable: the raw line is reported below instead
-            break
-    if not payload.get("ok") or not out_path.is_file():
-        # The builder's own words first, then whatever it actually printed. An
-        # unparseable stdout line used to leave "exit 0" as the entire message,
-        # which named neither the line nor the reason it could not be read.
-        detail = str(
-            payload.get("error")
-            or proc.stderr.strip()
-            or (lines[-1] if lines else "")
-            or f"exit {proc.returncode}"
-        ).strip()
-        raise SnapshotError(f"could not mesh {dxf_path.name}: {detail}")
-    return out_path.resolve()
+    try:
+        data = drawing_payload_bytes(source)
+    except DrawingReadError as error:
+        # The payload reader's messages already name the file and what to do
+        # about it; this only moves them onto the snapshot's error type.
+        raise SnapshotError(str(error)) from None
+    payload_path = _drawing_payload_dir() / f"{sha256(data).hexdigest()}.drawing.json"
+    if not payload_path.is_file():
+        write_bytes_atomic(payload_path, data)
+    return payload_path
 
 
 # Kind dispatch for render-job resolution. Every resolver takes the same
 # signature (job plus the resolved input-kind context) and returns the common
 # normalized job shape with a kind-specific ``resolved`` payload — adding a new
 # input kind is one table entry, not another if-chain arm plus a copied tail.
-KIND_RESOLVERS: dict[str, Callable[..., dict[str, object]]] = {
-    "step": resolve_step_render_job,
-    "stp": resolve_step_render_job,
-    "glb": resolve_mesh_render_job,
-    "stl": resolve_mesh_render_job,
-    "3mf": resolve_mesh_render_job,
-    "dxf": resolve_drawing_render_job,
-    "urdf": resolve_robot_render_job,
-    "srdf": resolve_robot_render_job,
-    "sdf": resolve_robot_render_job,
+_STEP_KIND = (check_step_render_job, resolve_step_render_job)
+_MESH_KIND = (check_mesh_render_job, resolve_mesh_render_job)
+_ROBOT_KIND = (check_robot_render_job, resolve_robot_render_job)
+_KINDS: dict[str, tuple[Callable[..., object], Callable[..., dict[str, object]]]] = {
+    "step": _STEP_KIND,
+    "stp": _STEP_KIND,
+    "glb": _MESH_KIND,
+    "stl": _MESH_KIND,
+    "3mf": _MESH_KIND,
+    "dxf": (check_drawing_render_job, resolve_drawing_render_job),
+    "urdf": _ROBOT_KIND,
+    "srdf": _ROBOT_KIND,
+    "sdf": _ROBOT_KIND,
 }
-
-# Every kind now resolves to itself: `.py` inputs are refused outright
-# (documents-only), so there is no generator kind to expand into.
-KIND_ENABLES: dict[str, tuple[str, ...]] = {}
+# Each kind is a CHECK (what its request can be refused for, deciding nothing
+# that needs a build) and a RESOLVER (what its render needs built).
+KIND_CHECKS = {kind: check for kind, (check, _resolve) in _KINDS.items()}
+KIND_RESOLVERS = {kind: resolve for kind, (_check, resolve) in _KINDS.items()}
 
 
 # What each kind is called in errors, and the order a reader wants them listed
@@ -1431,15 +1516,15 @@ _KIND_HELP_ORDER = ("step", "stp", "3mf", "glb", "stl", "dxf", "urdf", "srdf", "
 
 
 def enabled_kinds(kinds: Sequence[str]) -> frozenset[str]:
-    """Expand a skill's declared kinds to the full set its resolvers accept."""
+    """A door's declared kinds, checked against the kinds that resolve at all."""
     resolved: set[str] = set()
     for kind in kinds:
         name = str(kind).strip().lower()
         if not name:
             continue
-        if name not in KIND_RESOLVERS and name not in KIND_ENABLES:
+        if name not in KIND_RESOLVERS:
             raise SnapshotError(f"unknown snapshot input kind: {kind!r}")
-        resolved.update(KIND_ENABLES.get(name, (name,)))
+        resolved.add(name)
     return frozenset(resolved)
 
 
@@ -1480,61 +1565,52 @@ def reject_unsupported_kind(kind: str, input_path: Path, enabled: frozenset[str]
     )
 
 
-def resolve_render_job_packet(
+def prepare_render_job_packet(
     raw_payload: object,
     *,
     cwd: Path | None = None,
     kinds: frozenset[str] | None = None,
-) -> dict[str, object]:
+) -> tuple[bool, list[PreparedRenderJob]]:
+    """Accept or refuse every job in the packet; build and delete nothing."""
     single, jobs = normalize_snapshot_job_packet(raw_payload)
     # ONE timestamp for the whole packet: a multi-view run reads as one run, not
     # as N runs that happened to be close together. That is also why every
     # generated name in the packet needs a discriminator that covers the job as
     # well as the output (see generated_output_name).
     timestamp = snapshot_timestamp()
-    return {
-        "single": single,
-        "jobs": [
-            resolve_render_job(
-                job,
-                cwd=cwd,
-                timestamp=timestamp,
-                kinds=kinds,
-                job_index=index,
-                job_count=len(jobs),
-            )
-            for index, job in enumerate(jobs)
-        ],
-    }
+    return single, [
+        prepare_render_job(
+            job,
+            cwd=cwd,
+            timestamp=timestamp,
+            kinds=kinds,
+            job_index=index,
+            job_count=len(jobs),
+        )
+        for index, job in enumerate(jobs)
+    ]
 
 
+def resolve_prepared_job_packet(single: bool, prepared: Sequence[PreparedRenderJob]) -> dict[str, object]:
+    return {"single": single, "jobs": [resolve_prepared_render_job(job) for job in prepared]}
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+def resolve_render_job_packet(
+    raw_payload: object,
+    *,
+    cwd: Path | None = None,
+    kinds: frozenset[str] | None = None,
+) -> dict[str, object]:
+    single, prepared = prepare_render_job_packet(raw_payload, cwd=cwd, kinds=kinds)
+    return resolve_prepared_job_packet(single, prepared)
 
 
 def snapshot_narrator(logger: CliLogger) -> Callable[[str], None] | None:
     """Words for a run the progress line cannot paint, or None when it can.
 
-    `cli_progress_line` disables itself on a non-tty, and `cadgen step snapshot`
-    is served by the warm daemon: the worker's stderr is a frame relay whose
-    `isatty()` is False, so everything the bar would have shown reaches nobody
-    on the door that serves `--video`. These lines fill exactly that gap. Under
+    `cli_progress_line` disables itself on a non-tty, so a snapshot run from a
+    script, a pipe or an agent's tool call shows nothing for as long as it takes —
+    and `--video` takes minutes. These lines fill exactly that gap. Under
     --verbose the bar stands down for the logger, and lines are what the caller
     asked for anyway.
 
@@ -1565,7 +1641,6 @@ async def run_snapshot_async(
     kinds: Sequence[str],
     runtime_dir: Path | None = None,
     cwd: Path | None = None,
-    stdin: Any = sys.stdin,
 ) -> SnapshotResult:
     """Render whatever ``options`` describes and report what was written.
 
@@ -1574,26 +1649,24 @@ async def run_snapshot_async(
     options object. Nothing here prints, so the two cannot report differently.
     """
     enabled = enabled_kinds(kinds)
-    raw_payload = load_job_from_options(options, stdin=stdin, cwd=cwd)
-    # Render/CAD incompatibilities are request errors. Refuse them before even
-    # clearing output paths, and well before input resolution can start an
-    # artifact build or load the CAD kernel.
-    for raw_job in normalize_snapshot_job_packet(raw_payload)[1]:
-        if is_plain_object(raw_job):
-            validate_render_job_compatibility(raw_job)
-    # Clear the declared outputs FIRST -- before resolution, which is where a bad
+    raw_payload = load_job_from_options(options, cwd=cwd)
+    # Accept the whole request FIRST. A refused request -- an unknown key, a
+    # setting this input cannot take, options that conflict -- was never going to
+    # write anything, so it must leave an existing OUT exactly as it found it.
+    single, prepared = prepare_render_job_packet(raw_payload, cwd=cwd, kinds=enabled)
+    # Then clear the declared outputs, BEFORE resolution, which is where a bad
     # input actually fails. The path a caller names is the path it gets, and that
     # is only safe to promise if a run that never renders leaves nothing behind for
     # the caller to read as though it had.
     clear_render_output_targets(
         normalize_snapshot_job_packet(raw_payload)[1], resolved_cwd=cwd or Path.cwd()
     )
-    # Resolution is where a STEP or drawing package gets built, and on a cold model that is
+    # Resolution is where a STEP tree gets compiled, and on a cold model that is
     # the SLOWEST part of a snapshot -- longer than the render. It is deliberately NOT
     # wrapped in a phase of ours: that build reports its own phases through artifact_build,
     # and a second painter on the same terminal would both interleave with it and replace
     # its detail with the single word "resolving".
-    packet = resolve_render_job_packet(raw_payload, cwd=cwd, kinds=enabled)
+    packet = resolve_prepared_job_packet(single, prepared)
     logger = CliLogger("snapshot", verbose=False)
     with cli_progress_line(
         snapshot_progress_label(packet), logger=logger, fallback="Rendering..."
@@ -1620,11 +1693,6 @@ def run_snapshot(
     kinds: Sequence[str],
     runtime_dir: Path | None = None,
     cwd: Path | None = None,
-    stdin: Any = sys.stdin,
 ) -> SnapshotResult:
     """:func:`run_snapshot_async` for a synchronous caller (the CLI, the verbs)."""
-    return asyncio.run(
-        run_snapshot_async(
-            options, kinds=kinds, runtime_dir=runtime_dir, cwd=cwd, stdin=stdin
-        )
-    )
+    return asyncio.run(run_snapshot_async(options, kinds=kinds, runtime_dir=runtime_dir, cwd=cwd))

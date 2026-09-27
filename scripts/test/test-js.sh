@@ -1,19 +1,43 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# shellcheck source=scripts/test/common.sh
+# Shared JavaScript suites; Electron's native tests use apps/desktop's own runner.
+# --select lets a small change run only the affected workspace and its build.
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
-
+SELECT=all
+while [ "$#" -gt 0 ]; do
+  case "$1" in
+    --select) SELECT="${2:?--select wants core|ui|web|all}"; shift ;;
+    --select=*) SELECT="${1#--select=}" ;;
+    *) echo "test-js.sh: unknown argument $1" >&2; exit 2 ;;
+  esac
+  shift
+done
+case "$SELECT" in
+  core|ui|web|all) ;;
+  *) echo "test-js.sh: --select wants core|ui|web|all, not '$SELECT'" >&2; exit 2 ;;
+esac
 cd "$REPO_ROOT"
-
-section "cadgen-js tests"
-npm --prefix packages/cadgen-js test
-
-section "CAD Viewer tests"
-npm --prefix apps/viewer run test
-
-# The viewer-memory benchmark drivers are manual, but the pure helpers they are
-# built from (grading, completion, fingerprints, probes) are ordinary units with
-# no browser and no platform dependency, so they run with the rest of the suite.
-section "viewer benchmark helper tests"
-node --test scripts/bench/viewer-memory/*.test.mjs
+if [ "$SELECT" = core ]; then
+  npm run build --workspace @hardcore/core
+else
+  npm run build:packages
+fi
+node --test scripts/test/check-dependencies.test.mjs
+node scripts/test/check-dependencies.mjs
+node --test scripts/test/check-kit-boundaries.test.mjs
+node scripts/test/check-kit-boundaries.mjs
+if [ "$SELECT" = core ] || [ "$SELECT" = all ]; then
+  section "@hardcore/core tests"
+  npm --prefix packages/core test
+  section "viewer benchmark helper tests"
+  node --test scripts/bench/viewer-memory/*.test.mjs
+fi
+if [ "$SELECT" = ui ] || [ "$SELECT" = all ]; then
+  section "@hardcore/ui tests"
+  npm --prefix packages/ui test
+fi
+if [ "$SELECT" = web ] || [ "$SELECT" = all ]; then
+  section "CAD Viewer tests"
+  npm --prefix apps/web run test
+fi

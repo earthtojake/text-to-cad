@@ -19,8 +19,6 @@ from pathlib import Path
 
 from cadgen.results import MeshExportFile, MeshExportResult
 
-STEP_SUFFIXES = (".step", ".stp")
-
 
 def mesh_build(
     fmt: str,
@@ -60,15 +58,14 @@ def mesh_build(
             "an animated export is ad hoc: name an OUT path. Omitting OUT writes a static "
             "sibling .glb beside the document; choose a destination for the animated file"
         )
-    from cadgen._internal.doors import document_target
     from cadgen.cli_logging import CliLogger
     from cadgen.step_export_target import export_cad_target
 
-    # The door reads the tree behind the document's BYTES (a compile job when the
-    # store has none); it never refuses a document or runs its script.
-    document = document_target(target, suffixes=STEP_SUFFIXES)
+    # The engine validates TARGET (once: doors.document_target) and reads the tree
+    # behind the document's BYTES (a compile job when the store has none); it
+    # never refuses a document or runs its script.
     payload = export_cad_target(
-        document,
+        target,
         [(fmt, None if out is None else Path(out).expanduser())],
         mesh_tolerance=mesh_tolerance,
         mesh_angular_tolerance=mesh_angular_tolerance,

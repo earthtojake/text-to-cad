@@ -5,7 +5,7 @@ from pathlib import Path
 import shutil
 import subprocess
 
-CODEC = Path(__file__).resolve().parents[3] / "packages/cadgen-js/src/lib/surf/tessellationCache.js"
+CODEC = Path(__file__).resolve().parents[3] / "packages/core/src/lib/surf/tessellationCache.js"
 
 @lru_cache(maxsize=1)
 def tessellation_fixture():

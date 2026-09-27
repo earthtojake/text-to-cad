@@ -514,6 +514,12 @@ cadgen step build vendor/hinge.step STEP/hinge.step \
 
 Re-running is a no-op; editing only these annotations refreshes the sidecar
 without re-emitting a byte. Vendor metadata (PMI, GD&T) does not survive the round trip.
+OUT's root is named after OUT: the root `PRODUCT` and the header's `FILE_NAME`
+take OUT's file stem (`STEP/hinge.step` → `hinge`), exactly as a model script's
+document is named after the file it writes — so the same input re-emitted to two
+paths yields two differently named documents. Names below the root are kept, so
+`#label` references to the parts keep resolving; do not address the root by the
+name IN carried.
 **Choose the door by how the model will evolve**: a shape you will keep changing
 belongs in a model script (a thin wrapper that reads the foreign STEP), while
 a one-shot canonicalization or annotation of a file you do not own is exactly
@@ -553,6 +559,11 @@ same geometry/output contract.
 
 Results go to stdout; progress and errors go to stderr. Model runs accept
 `--json` for machine-readable results and `--verbose` for timings/full tracebacks.
+A `--json` result names its `document` by absolute path, and a `--json` failure
+is one `{"ok": false, "error": "..."}` line on stdout with exit status 1 — the
+same envelope every `cadgen` command prints. `python part.py --help` lists the
+per-run flags. A script builds the models its `__main__` block calls; no flag
+selects one.
 For long model bodies, optional `report` and `track` calls expose progress:
 
 ```python

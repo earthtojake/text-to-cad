@@ -165,6 +165,45 @@ class MeshExportMetadataTest(unittest.TestCase):
         self.assertEqual({d.fmt for d in model.mesh_exports}, {"stl"})
 
 
+class RunLevelToleranceTest(unittest.TestCase):
+    """`python model.py --mesh-tolerance X`: flag > declaration > @step > default,
+    decided in ONE place (generation_spec._apply_step_options_to_spec)."""
+
+    def _spec(self):
+        from cadgen._internal.generation_spec import EntrySpec, ResolvedMeshExport
+
+        step = Path("/models/widget.step")
+        return EntrySpec(
+            source_ref="widget.py", cad_ref="widget", source_path=step, display_name="widget",
+            source="generated", step_path=step, mesh_tolerance=2e-3,
+            mesh_exports=(
+                ResolvedMeshExport("stl", Path("/models/widget.stl"), mesh_tolerance=4e-4, mesh_angular_tolerance=0.2),
+                ResolvedMeshExport("glb", Path("/models/widget.glb")),
+            ),
+        )
+
+    def test_a_flag_overrides_the_model_and_every_declaration(self) -> None:
+        from cadgen._internal.generation_spec import _apply_step_options_to_spec
+        from cadgen.catalog import StepImportOptions
+
+        spec = _apply_step_options_to_spec(self._spec(), StepImportOptions(mesh_tolerance=0.01))
+        self.assertEqual(0.01, spec.mesh_tolerance)
+        self.assertEqual([0.01, 0.01], [export.mesh_tolerance for export in spec.mesh_exports])
+        # The flag that was NOT given leaves each declaration's own value alone.
+        self.assertEqual([0.2, None], [export.mesh_angular_tolerance for export in spec.mesh_exports])
+
+        angled = _apply_step_options_to_spec(self._spec(), StepImportOptions(mesh_angular_tolerance=0.1))
+        self.assertEqual([0.1, 0.1], [export.mesh_angular_tolerance for export in angled.mesh_exports])
+        self.assertEqual([4e-4, None], [export.mesh_tolerance for export in angled.mesh_exports])
+
+    def test_no_flag_changes_nothing(self) -> None:
+        from cadgen._internal.generation_spec import _apply_step_options_to_spec
+        from cadgen.catalog import StepImportOptions
+
+        spec = self._spec()
+        self.assertIs(spec, _apply_step_options_to_spec(spec, StepImportOptions()))
+
+
 class MeshExportProductionTest(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory(prefix="mesh-export-decl-")
@@ -239,6 +278,39 @@ class MeshExportProductionTest(unittest.TestCase):
         self._run("-c", door, "STEP/widget.step", "--force")
         self.assertEqual(glb_before, (self.project / "STEP" / "widget.glb").read_bytes())
         self.assertEqual(step_before, (self.project / "STEP" / "widget.step").read_bytes())
+
+    def test_a_run_level_tolerance_overrides_every_declaration_for_that_run_only(self) -> None:
+        # ONE precedence rule: run-level flag > declaration > @step > default. The
+        # 3MF DECLARES mesh_tolerance=5e-3 and the flag used to be ignored for it
+        # while applying to its unflagged neighbours.
+        meshes = {
+            "STL": self.project / "STL" / "widget.stl",
+            "GLB": self.project / "STEP" / "widget.glb",
+            "3MF": self.project / "3MF" / "widget.3mf",
+        }
+
+        def wrote(proc: subprocess.CompletedProcess) -> set[str]:
+            return {name for name in meshes if f"wrote {name}" in proc.stderr}
+
+        self.assertEqual(set(meshes), wrote(self._run("src/widget.py")))
+        declared = {name: path.read_bytes() for name, path in meshes.items()}
+
+        flagged = self._run("src/widget.py", "--mesh-tolerance", "0.02")
+        self.assertEqual(set(meshes), wrote(flagged), "the flag must reach a declaration that sets its own tolerance")
+        for name, path in meshes.items():
+            self.assertNotEqual(declared[name], path.read_bytes(), f"{name} was not re-cut at the flag's tolerance")
+        self.assertNotIn("Building geometry", flagged.stderr, "a tolerance never rebuilds the model")
+
+        # The no-op decision compares against the tolerance each file on disk was
+        # ACTUALLY written at: the same flags again write nothing...
+        self.assertEqual(set(), wrote(self._run("src/widget.py", "--mesh-tolerance", "0.02")))
+        # ...the override was temporary, so an unflagged run restores every declared
+        # export, byte for byte, exactly once...
+        self.assertEqual(set(meshes), wrote(self._run("src/widget.py")))
+        for name, path in meshes.items():
+            self.assertEqual(declared[name], path.read_bytes(), name)
+        # ...and the next unflagged run is a no-op again, not a rewrite on alternate runs.
+        self.assertEqual(set(), wrote(self._run("src/widget.py")))
 
     def test_a_declared_export_the_exporter_could_not_write_leaves_the_model_stale(self) -> None:
         # Regression: a build whose mesh export FAILED still published a record

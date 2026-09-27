@@ -10,8 +10,8 @@ from pathlib import Path, PurePosixPath
 
 from .metadata import GeneratorMetadata, normalize_mesh_numeric, parse_generator_metadata
 
+from ._internal.doors import STEP_SUFFIXES
 
-STEP_SUFFIXES = (".step", ".stp")
 # Discovery skips EVERY dot-directory (matching the CAD Viewer's catalog scan),
 # plus these well-known build/dependency dirs. An enumerated dot-list rotted
 # here once: `.claude/worktrees/` checkouts carrying pre-rename sources
