@@ -1,7 +1,6 @@
 # Packages
 
-Three shared packages support the applications in `apps/docs`, `apps/web` and
-`apps/desktop`:
+Three shared packages support the applications in `apps/docs` and `apps/web`:
 
 | Directory | Identity | Responsibility |
 | --- | --- | --- |

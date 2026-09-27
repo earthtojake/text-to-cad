@@ -22,9 +22,8 @@ Creates the immutable release identity for the current repo version:
 2. verifies a new version is greater than the latest local release tag
 3. creates the release tag for VERSION (`v<VERSION>`) and pushes it to origin
 4. creates a GitHub Release for that tag with generated notes, and attaches
-   every file given with --asset (Python distributions, desktop installers,
-   updater manifests and blockmaps), so the release page carries the exact
-   bytes that shipped
+   the distribution files given with --asset (the wheel and sdist that went to
+   PyPI), so the release page carries the exact bytes that shipped
 
 Options:
   --target REF  Commit/ref to tag. Defaults to HEAD.

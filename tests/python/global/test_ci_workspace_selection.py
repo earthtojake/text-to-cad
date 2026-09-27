@@ -8,7 +8,7 @@ from tests.python.support.paths import REPO_ROOT
 
 WORKFLOW = (REPO_ROOT / ".github/workflows/test.yml").read_text(encoding="utf-8")
 JOBS = dict(re.findall(r"^  ([a-z][\w-]*):\n(.*?)(?=^  [a-z][\w-]*:\n|\Z)", WORKFLOW.split("\njobs:\n", 1)[1], re.M | re.S))
-CLASSES = {"cadgen", "core", "ui", "viewer", "desktop", "skills", "docs", "infra"}
+CLASSES = {"cadgen", "core", "ui", "viewer", "skills", "docs", "infra"}
 
 
 def selected_jobs(*changed: str) -> set[str]:
@@ -30,14 +30,11 @@ def selected_jobs(*changed: str) -> set[str]:
 
 
 class WorkspaceWorkflowSelection(unittest.TestCase):
-    def test_ui_change_reaches_both_hosts_without_engine_or_docs_suites(self):
-        self.assertEqual(selected_jobs("ui"), {"viewer", "desktop", "skills", "packaging"})
+    def test_ui_change_reaches_the_web_host_without_engine_or_docs_suites(self):
+        self.assertEqual(selected_jobs("ui"), {"viewer", "skills", "packaging"})
 
-    def test_web_change_does_not_run_desktop(self):
+    def test_web_change_runs_only_viewer_policy_and_packaging(self):
         self.assertEqual(selected_jobs("viewer"), {"viewer", "skills", "packaging"})
-
-    def test_desktop_change_stays_in_desktop_and_policy(self):
-        self.assertEqual(selected_jobs("desktop"), {"desktop", "skills"})
 
     def test_docs_change_stays_in_docs(self):
         self.assertEqual(selected_jobs("docs"), {"docs"})
@@ -66,7 +63,6 @@ class WorkspaceWorkflowSelection(unittest.TestCase):
         self.assertIn("'packages/core/**'", JOBS["changes"])
         self.assertIn("'packages/ui/**'", JOBS["changes"])
         self.assertIn("'apps/web/**'", JOBS["changes"])
-        self.assertIn("'apps/desktop/**'", JOBS["changes"])
 
     def test_existing_required_check_names_remain_available(self):
         names = {re.search(r"^    name: (.+)$", body, re.M)[1] for body in JOBS.values()}

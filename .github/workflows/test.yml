@@ -1,12 +1,12 @@
 # One job per concern, selected by the dependency graph. Shared core feeds
-# cadgen's runtime, UI, web, docs and desktop; UI feeds web and desktop. Apps
-# never feed another app. Policy checks run for changed shared contracts without
-# also running every skill suite. Runtime outputs are built only where needed.
+# cadgen's runtime, UI, web and docs; UI feeds web. Apps never feed another
+# app. Policy checks run for changed shared contracts without also running
+# every skill suite. Runtime outputs are built only where needed.
 #
 # The check name "cadgen-js" is retained because main requires it; that job now
 # tests @hardcore/core. All eight existing required check names remain stable.
-# Desktop (macOS) also runs for desktop/shared/runtime changes. Prose-only root
-# changes run Version Check only; skill/package Markdown remains test input.
+# Prose-only root changes run Version Check only; skill/package Markdown remains
+# test input.
 name: Test
 
 on:
@@ -34,7 +34,6 @@ jobs:
       core: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.core == 'true' }}
       ui: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.ui == 'true' }}
       viewer: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.viewer == 'true' }}
-      desktop: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.desktop == 'true' }}
       skills: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.skills == 'true' }}
       docs: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.docs == 'true' }}
       infra: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.infra == 'true' }}
@@ -55,8 +54,6 @@ jobs:
               - 'packages/core/**'
             ui:
               - 'packages/ui/**'
-            desktop:
-              - 'apps/desktop/**'
             viewer:
               - 'apps/web/**'
               - 'tests/browser/**'
@@ -234,7 +231,7 @@ jobs:
   skills:
     name: skills
     needs: changes
-    if: needs.changes.outputs.skills == 'true' || needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.infra == 'true' || needs.changes.outputs.ui == 'true' || needs.changes.outputs.viewer == 'true' || needs.changes.outputs.desktop == 'true'
+    if: needs.changes.outputs.skills == 'true' || needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.infra == 'true' || needs.changes.outputs.ui == 'true' || needs.changes.outputs.viewer == 'true'
     runs-on: ubuntu-latest
     env:
       CADGEN_TEST_JOBS: "4"
@@ -322,69 +319,3 @@ jobs:
           [ "${#wheels[@]}" -eq 1 ] || { echo "Expected one verified wheel" >&2; exit 1; }
           scripts/test/test-installed.sh --wheel "${wheels[0]}"
 
-  # Electron/native integration follows only its actual dependencies.
-  desktop:
-    name: Desktop (macOS)
-    needs: changes
-    if: needs.changes.outputs.desktop == 'true' || needs.changes.outputs.ui == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.infra == 'true'
-    runs-on: macos-latest
-
-    steps:
-      - name: Check out repository
-        uses: actions/checkout@v7
-
-      # ui-browser: the unit tests include the PDF renderer's Chromium suite
-      # (apps/desktop/tests/browser); the Electron e2e needs no Playwright browser.
-      - name: Set up desktop and CAD dependencies
-        uses: ./.github/actions/setup-deps
-        with:
-          npm: packages/core packages/ui apps/desktop
-          playwright: "false"
-          ui-browser: "true"
-
-      # The app's renderer supplies the UI. CAD tests need only the source
-      # Python service and Node/browser assets, not a packaged SPA or downloaded
-      # multiarchitecture runtime. CadRuntime discovers this private checkout venv.
-      - name: Prepare the checkout CAD runtime and native modules
-        run: |
-          python -m venv --system-site-packages .venv
-          .venv/bin/python -m pip install --no-deps --ignore-installed -e ./packages/cadgen
-          scripts/bundle/cadgen-runtime.sh --node --browser
-          npm run native:rebuild -w hardcore
-
-      - name: Typecheck
-        run: npm --prefix apps/desktop run typecheck
-
-      - name: Lint
-        run: npm --prefix apps/desktop run lint
-
-      - name: Run unit tests
-        run: npm --prefix apps/desktop test
-
-      - name: Build
-        run: npm --prefix apps/desktop run build
-
-      - name: Run the Electron integration suite
-        env:
-          HARDCORE_E2E_REQUIRE_CAD: "1"
-        run: npm --prefix apps/desktop run e2e
-
-      # The screenshots the e2e writes are the cheapest review of whether the app
-      # still looks like an app; a failed run's are the more interesting ones.
-      - name: Upload Playwright screenshots
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v7
-        with:
-          name: desktop-screenshots
-          path: apps/desktop/test-results/**/*.png
-          if-no-files-found: ignore
-          retention-days: 3
-
-      - name: Upload failed Electron traces
-        if: failure()
-        uses: actions/upload-artifact@v7
-        with:
-          name: desktop-test-results
-          path: apps/desktop/test-results/
-          if-no-files-found: ignore
-          retention-days: 3

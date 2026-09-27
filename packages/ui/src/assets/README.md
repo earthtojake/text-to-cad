@@ -17,7 +17,7 @@ prefers reduced motion, when the document is hidden, or when the icon's
 `environment.reducedMotion` (the desktop's Reduce motion setting). No additional
 WebGL context or animation loop runs in the application.
 
-To regenerate, install the desktop dependencies, Chromium for Playwright, and
+To regenerate, run `npm ci` at the repository root, then install Chromium for Playwright and
 the WebP CLI tools (`img2webp`, `cwebp`). Then, from the repository root:
 
 ```sh

@@ -48,7 +48,7 @@ def _test_files():
     for extension in ("py", "sh"):
         paths.update((REPO_ROOT / "scripts" / "test").rglob(f"*.{extension}"))
     for package in (REPO_ROOT / "packages" / "core", REPO_ROOT / "packages" / "ui",
-                    REPO_ROOT / "apps" / "web", REPO_ROOT / "apps" / "desktop"):
+                    REPO_ROOT / "apps" / "web"):
         for folder in ("src", "scripts", "tests"):
             for extension in ("js", "mjs", "cjs", "jsx", "ts", "tsx"):
                 for pattern in (f"*.test.{extension}", f"*.spec.{extension}"):

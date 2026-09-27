@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Shared JavaScript suites; Electron's native tests use apps/desktop's own runner.
+# Shared JavaScript suites: @hardcore/core, @hardcore/ui and the web app.
 # --select lets a small change run only the affected workspace and its build.
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 SELECT=all

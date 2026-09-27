@@ -1,6 +1,7 @@
 // Bake Jake's PR #374 icon into a decorative loading image. No 3D renderer
-// runs alongside the CAD viewport. Regeneration needs desktop npm dependencies
-// and the WebP CLI tools; normal builds use the checked-in images.
+// runs alongside the CAD viewport. Regeneration needs @hardcore/ui's npm
+// dependencies (a root `npm ci`), Playwright's Chromium and the WebP CLI tools;
+// normal builds use the checked-in images.
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,9 +9,9 @@ import { createRequire } from "node:module";
 import { execFileSync } from "node:child_process";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const require = createRequire(path.join(root, "apps/desktop/package.json"));
+const require = createRequire(path.join(root, "packages/ui/package.json"));
 const { build } = require("esbuild");
-const { chromium } = require("playwright");
+const { chromium } = require("@playwright/test");
 const sourceCommit = "ed6a16b25936031adfa0a6d4705d80e1c712eb37";
 const sourcePath = "apps/docs/src/lib/icon/model.mjs";
 const out = path.join(root, "packages/ui/src/assets");
@@ -73,7 +74,7 @@ const bundle = await build({
       };
     `,
   },
-  nodePaths: [path.join(root, "apps/desktop/node_modules")],
+  nodePaths: [path.join(root, "packages/ui/node_modules"), path.join(root, "node_modules")],
   bundle: true,
   write: false,
   format: "iife",
