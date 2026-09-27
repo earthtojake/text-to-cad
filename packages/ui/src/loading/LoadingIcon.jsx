@@ -1,5 +1,5 @@
 import { createElement, useEffect, useState } from "react";
-import animation from "../assets/loading.webp";
+import animation from "../assets/loading.avif";
 import still from "../assets/loading-still.webp";
 
 /**

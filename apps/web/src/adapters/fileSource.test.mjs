@@ -10,7 +10,7 @@ const temporary = await mkdtemp(join(tmpdir(), 'text-to-cad-web-source-'));
 const output = join(temporary, 'host.mjs');
 await build({
   stdin: { contents: `export * from './adapters/fileSource.ts';`, resolveDir: fileURLToPath(new URL('../', import.meta.url)) },
-  bundle: true, platform: 'node', conditions: ['production'], format: 'esm', outfile: output, loader: { '.webp': 'dataurl', '.css': 'empty' },
+  bundle: true, platform: 'node', conditions: ['production'], format: 'esm', outfile: output, loader: { '.webp': 'dataurl', '.avif': 'dataurl', '.css': 'empty' },
 });
 const { createWebFileSource, createWebFileActions } = await import(pathToFileURL(output).href);
 after(() => rm(temporary, { recursive: true, force: true }));

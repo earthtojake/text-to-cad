@@ -30,7 +30,7 @@ const HARNESS_SIZE = '<style>#root > div { width: var(--harness-width, 800px) !i
 let temporary, server, browser;
 before(async () => {
   temporary = await mkdtemp(join(tmpdir(), 'text-to-cad-dxf-browser-'));
-  await build({ entryPoints: [fileURLToPath(new URL('../harness/index.tsx', import.meta.url))], outfile: join(temporary, 'harness.js'), bundle: true, format: 'esm', platform: 'browser', conditions: ['production'], jsx: 'automatic', loader: { '.webp': 'dataurl', '.woff2': 'dataurl' } });
+  await build({ entryPoints: [fileURLToPath(new URL('../harness/index.tsx', import.meta.url))], outfile: join(temporary, 'harness.js'), bundle: true, format: 'esm', platform: 'browser', conditions: ['production'], jsx: 'automatic', loader: { '.webp': 'dataurl', '.avif': 'dataurl', '.woff2': 'dataurl' } });
   const bundle = await readFile(join(temporary, 'harness.js'));
   const css = await readFile(new URL('../../../dist/styles.css', import.meta.url));
   const files = ['sample.dxf', 'empty.dxf', 'broken.dxf'];

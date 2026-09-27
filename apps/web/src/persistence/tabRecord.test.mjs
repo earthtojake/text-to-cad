@@ -10,7 +10,7 @@ const temporary = await mkdtemp(join(tmpdir(), 'text-to-cad-web-tab-'));
 const output = join(temporary, 'tab.mjs');
 await build({
   stdin: { contents: `export * from './persistence/tabRecord.ts'; export { createTabStore, TAB_RECORD_VERSION } from '@text-to-cad/ui/tab-store';`, resolveDir: fileURLToPath(new URL('../', import.meta.url)) },
-  bundle: true, platform: 'node', conditions: ['production'], format: 'esm', outfile: output, loader: { '.webp': 'dataurl', '.css': 'empty' },
+  bundle: true, platform: 'node', conditions: ['production'], format: 'esm', outfile: output, loader: { '.webp': 'dataurl', '.avif': 'dataurl', '.css': 'empty' },
   // The tab store reaches the shared column's width bounds through a React module; nothing of it renders here.
   external: ['react', 'react-dom', 'lucide-react', 'radix-ui'],
 });

@@ -179,7 +179,7 @@ function harnessBundle() {
   bundled ??= (async () => {
     const temporary = await mkdtemp(join(tmpdir(), 'text-to-cad-step-browser-'));
     try {
-      await build({ entryPoints: [fileURLToPath(new URL('./index.tsx', import.meta.url))], outfile: join(temporary, 'harness.js'), bundle: true, format: 'esm', platform: 'browser', conditions: ['production'], jsx: 'automatic', loader: { '.webp': 'dataurl', '.woff2': 'dataurl' } });
+      await build({ entryPoints: [fileURLToPath(new URL('./index.tsx', import.meta.url))], outfile: join(temporary, 'harness.js'), bundle: true, format: 'esm', platform: 'browser', conditions: ['production'], jsx: 'automatic', loader: { '.webp': 'dataurl', '.avif': 'dataurl', '.woff2': 'dataurl' } });
       // Two stylesheets: the package's compiled one, and the one esbuild extracts
       // from what the bundle imports (the drawing editor's). Without the second the
       // editor has no layout and sizes its canvas from an unconstrained container.

@@ -1,7 +1,7 @@
 // Bake Jake's PR #374 icon into a decorative loading image. No 3D renderer
 // runs alongside the CAD viewport. Regeneration needs @text-to-cad/ui's npm
-// dependencies (a root `npm ci`), Playwright's Chromium and the WebP CLI tools;
-// normal builds use the checked-in images.
+// dependencies (a root `npm ci`), Playwright's Chromium and the repo's Python
+// (`.venv`, whose Pillow encodes AVIF and WebP); normal builds use the checked-in images.
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -93,8 +93,19 @@ try {
     files.push(file);
   }
   await fs.mkdir(out, { recursive: true });
-  execFileSync("img2webp", ["-loop", "0", "-lossy", "-q", "85", "-d", String(frameMs), ...files, "-o", path.join(out, "loading.webp")]);
-  execFileSync("cwebp", ["-quiet", "-lossless", files[0], "-o", path.join(out, "loading-still.webp")]);
+  // Animated AVIF codes each frame against the last, so the slow orbit costs little: at
+  // quality 70 with full-resolution colour (4:4:4) it is a third of the lossy-q85 WebP it
+  // replaced and closer to the rendered frames, on light and dark backgrounds alike.
+  const python = process.env.PYTHON || path.join(root, ".venv/bin/python");
+  execFileSync(python, ["-c", `
+import sys
+from PIL import Image
+out, *files = sys.argv[1:]
+frames = [Image.open(file).convert("RGBA") for file in files]
+frames[0].save(out + "/loading.avif", "AVIF", save_all=True, append_images=frames[1:],
+               duration=${frameMs}, loop=0, quality=70, speed=4, subsampling="4:4:4")
+frames[0].save(out + "/loading-still.webp", "WEBP", lossless=True)
+`, out, ...files]);
   console.log(`Rendered ${frames} frames, ${frames * frameMs / 1000}s loop -> ${path.relative(root, out)}`);
 } finally {
   await browser.close();
