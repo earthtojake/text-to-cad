@@ -42,7 +42,7 @@
   "devDependencies": {
     "playwright": "^1.63.0",
     "esbuild": "0.27.7",
-    "typescript": "5.9.3",
+    "typescript": "7.0.2",
     "@types/three": "^0.186.0",
     "@types/node": "22.20.1"
   },
