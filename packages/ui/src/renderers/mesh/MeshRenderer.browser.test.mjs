@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { after, before, test } from 'node:test';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -49,14 +49,19 @@ const FILES = {
   'broken.stl': Buffer.from('solid this is prose and not a mesh\nfacet normal but never a vertex\n'),
 };
 
-async function serveHarness(t) {
-  const temporary = await mkdtemp(join(tmpdir(), 'hardcore-mesh-browser-'));
-  let server, browser;
-  t.after(async () => { await browser?.close(); if (server) await new Promise(resolve => server.close(resolve)); await rm(temporary, { recursive: true, force: true }); });
+// The harness renders its panes at a fixed CSS size; the spec draws them smaller, so a software
+// GL (CI's SwiftShader) has fewer pixels to fill and a capture fewer to read.
+const HARNESS_SIZE = '<style>#root > div { width: 800px !important; height: 500px !important; }</style>';
+
+// One harness bundle, one server and one browser for the file; every test opens its own page.
+// (A browser's first WebGL page pays for compiling the viewer's shaders; later pages reuse them.)
+let temporary, server, browser;
+const requests = [];
+before(async () => {
+  temporary = await mkdtemp(join(tmpdir(), 'hardcore-mesh-browser-'));
   await build({ entryPoints: [fileURLToPath(new URL('../harness/index.tsx', import.meta.url))], outfile: join(temporary, 'harness.js'), bundle: true, format: 'esm', platform: 'browser', conditions: ['production'], jsx: 'automatic', loader: { '.webp': 'dataurl', '.woff2': 'dataurl' } });
   const bundle = await readFile(join(temporary, 'harness.js'));
   const css = await readFile(new URL('../../../dist/styles.css', import.meta.url));
-  const requests = [];
   server = createServer((request, response) => {
     const url = new URL(request.url, 'http://test');
     requests.push(url.pathname);
@@ -71,26 +76,32 @@ async function serveHarness(t) {
     } else if (url.pathname.endsWith('/__cad/server')) {
       response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify({ rootId: root, rootPath: '/models', backend: 'cadgen' }));
     } else if (FILES[name]) { response.setHeader('Content-Type', 'application/octet-stream'); response.end(FILES[name]); }
-    else { response.setHeader('Content-Type', 'text/html'); response.end('<!doctype html><html><head><title>Host title</title><link rel="stylesheet" href="/styles.css"></head><body><div id="root"></div><script type="module" src="/harness.js"></script></body></html>'); }
+    else { response.setHeader('Content-Type', 'text/html'); response.end(`<!doctype html><html><head><title>Host title</title><link rel="stylesheet" href="/styles.css">${HARNESS_SIZE}</head><body><div id="root"></div><script type="module" src="/harness.js"></script></body></html>`); }
   });
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
   browser = await chromium.launch({ headless: true, args: (process.platform === 'darwin' && process.env.CAD_TEST_SWIFTSHADER !== '1')
     ? ['--use-angle=metal'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
-  const open = async (file) => {
-    const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
-    page.setDefaultTimeout(15000);
-    const errors = [];
-    page.on('pageerror', error => errors.push(error.message));
-    await page.addInitScript(() => {
-      window.Worker = undefined;
-      for (const name of ['localStorage', 'sessionStorage']) {
-        Object.defineProperty(window, name, { get() { throw new Error(`Renderer accessed ${name}`); } });
-      }
-    });
-    await page.goto(`http://127.0.0.1:${server.address().port}/?file=${file}`);
-    return { page, errors, pane: page.getByTestId('one') };
-  };
-  return { open, requests };
+});
+after(async () => {
+  await browser?.close();
+  if (server) await new Promise(resolve => server.close(resolve));
+  if (temporary) await rm(temporary, { recursive: true, force: true });
+});
+
+async function open(t, file) {
+  const page = await browser.newPage({ viewport: { width: 800, height: 500 }, deviceScaleFactor: 1 });
+  t.after(() => page.close());
+  page.setDefaultTimeout(15000);
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.addInitScript(() => {
+    window.Worker = undefined;
+    for (const name of ['localStorage', 'sessionStorage']) {
+      Object.defineProperty(window, name, { get() { throw new Error(`Renderer accessed ${name}`); } });
+    }
+  });
+  await page.goto(`http://127.0.0.1:${server.address().port}/?file=${file}`);
+  return { page, errors, pane: page.getByTestId('one') };
 }
 
 const ready = pane => pane.locator('[aria-busy="false"] > div > canvas').first().waitFor();
@@ -151,8 +162,8 @@ const isRed = ([r, g, b]) => r > 150 && g < 90 && b < 90;
 const isBlue = ([r, g, b]) => b > 150 && r < 90 && g < 130;
 
 test('an STL opens as one mesh with no tools: display settings, orbit, host commands and state all work', async (t) => {
-  const { open, requests } = await serveHarness(t);
-  const { page, pane, errors } = await open('part.stl');
+  const requested = requests.length;
+  const { page, pane, errors } = await open(t, 'part.stl');
   await ready(pane);
   assert.deepEqual(errors, []);
 
@@ -188,7 +199,7 @@ test('an STL opens as one mesh with no tools: display settings, orbit, host comm
   await pane.getByRole('button', { name: 'Display settings', exact: true }).click();
   await pane.page().locator('[data-display-popover]').waitFor({ state: 'detached' });
   // The column closing reaches the scene as a resize; let that frame land before comparing pictures.
-  await page.waitForFunction(() => document.querySelector('[data-testid="one"] [aria-busy] > div > canvas').width >= 1190);
+  await page.waitForFunction(() => document.querySelector('[data-testid="one"] [aria-busy] > div > canvas').width >= 790);
   await settle(page);
 
   await display(page, GUIDES_OFF);
@@ -231,12 +242,17 @@ test('an STL opens as one mesh with no tools: display settings, orbit, host comm
   await page.mouse.up();
   await page.waitForFunction(position => JSON.stringify(window.cadHarness.a.controller.readState().camera.position) !== position, JSON.stringify(before.position));
   // The drag's damping coasts for a moment; a host camera lands on a view at rest.
-  await page.waitForFunction(() => {
-    const position = JSON.stringify(window.cadHarness.a.controller.readState().camera.position);
-    const still = window.lastCameraPosition === position;
-    window.lastCameraPosition = position;
-    return still;
-  }, null, { polling: 250 });
+  // At rest: the live camera the same over several frames running.
+  await page.waitForFunction(() => new Promise(resolve => {
+    let still = 0, last = null;
+    const step = () => {
+      const position = JSON.stringify(window.__cadCamera().position);
+      still = position === last ? still + 1 : 0;
+      last = position;
+      if (still >= 5) resolve(true); else requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }));
 
   // A secondary press on the canvas is the camera's: the viewer opens no menu of
   // its own, and the browser's own stays off the canvas.
@@ -245,7 +261,9 @@ test('an STL opens as one mesh with no tools: display settings, orbit, host comm
     document.addEventListener('contextmenu', event => window.nativeMenu.push(event.defaultPrevented));
   });
   await page.mouse.click(canvas.x + canvas.width / 2, canvas.y + canvas.height / 2, { button: 'right' });
-  await page.waitForTimeout(200);
+  // The press has reached the page, and a menu it opened would be up two frames on.
+  await page.waitForFunction(() => window.nativeMenu.length > 0);
+  await settle(page);
   assert.equal(await page.getByRole('menu').count(), 0);
   assert.deepEqual(await page.evaluate(() => window.nativeMenu), [true], 'the native menu is still prevented');
 
@@ -292,14 +310,13 @@ test('an STL opens as one mesh with no tools: display settings, orbit, host comm
     "reopening restores the camera the file was left at");
   assert.ok(Math.abs(reopened.camera.zoom - left.camera.zoom) < 1e-6);
   assert.deepEqual([reopened.display.surfaces.colorMode, reopened.display.surfaces.color, reopened.display.grid.enabled, reopened.display.floor.enabled], ['single', '#00c040', true, true]);
-  assert.equal(requests.filter(path => path === '/one/part.stl').length, 1, 'reopening a file reuses its decoded mesh without another asset request');
+  assert.equal(requests.slice(requested).filter(path => path === '/one/part.stl').length, 1, 'reopening a file reuses its decoded mesh without another asset request');
 
   assert.deepEqual(errors, []);
 });
 
 test('a 3MF is one mesh per object with its source colour; an uncoloured one takes the viewer\'s', async (t) => {
-  const { open } = await serveHarness(t);
-  const { page, pane, errors } = await open('pair.3mf');
+  const { page, pane, errors } = await open(t, 'pair.3mf');
   await ready(pane);
   await page.waitForFunction(() => window.cadHarness.a.controller?.readState().loading === false);
   await noTools(pane);
@@ -309,7 +326,7 @@ test('a 3MF is one mesh per object with its source colour; an uncoloured one tak
   await pane.page().locator('[data-display-popover]').waitFor();
   await pane.getByRole('button', { name: 'Display settings', exact: true }).click();
   await pane.page().locator('[data-display-popover]').waitFor({ state: 'detached' });
-  await page.waitForFunction(() => document.querySelector('[data-testid="one"] [aria-busy] > div > canvas').width >= 1190);
+  await page.waitForFunction(() => document.querySelector('[data-testid="one"] [aria-busy] > div > canvas').width >= 790);
   await settle(page);
 
   await display(page, GUIDES_OFF);
@@ -338,7 +355,7 @@ test('a 3MF is one mesh per object with its source colour; an uncoloured one tak
   assert.deepEqual(errors, []);
 
   // No colour in the file: every object is the viewer's surface colour, the one an STL gets.
-  const plain = await open('plain.3mf');
+  const plain = await open(t, 'plain.3mf');
   await ready(plain.pane);
   await plain.page.waitForFunction(() => window.cadHarness.a.controller?.readState().loading === false);
   await display(plain.page, { ...GUIDES_OFF, surfaces: { style: 'flat' } });
@@ -349,8 +366,7 @@ test('a 3MF is one mesh per object with its source colour; an uncoloured one tak
 });
 
 test('a corrupt mesh raises the viewer\'s load alert and an empty one says there is no geometry', async (t) => {
-  const { open } = await serveHarness(t);
-  const broken = await open('broken.stl');
+  const broken = await open(t, 'broken.stl');
   const alert = broken.pane.getByRole('alert');
   await alert.waitFor();
   assert.match(await alert.innerText(), /Couldn’t load the model/);
@@ -359,7 +375,7 @@ test('a corrupt mesh raises the viewer\'s load alert and an empty one says there
   assert.equal(await alert.getByRole('button', { name: 'Try again', exact: true }).count(), 1);
   assert.equal(await alert.getByText('Details', { exact: true }).count(), 1);
 
-  const empty = await open('empty.stl');
+  const empty = await open(t, 'empty.stl');
   await empty.pane.getByRole('alert').waitFor();
   assert.match(await empty.pane.getByRole('alert').innerText(), /No geometry to display/);
   assert.match(await empty.pane.getByRole('alert').innerText(), /empty\.stl/);

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { after, before, test } from 'node:test';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -22,10 +22,14 @@ const BAD_DXF_MESSAGE = 'plate.dxf is not a readable DXF document: run `ezdxf au
 const MODEL = { width: 100, height: 60 };
 const DRAWINGS = { 'sample.dxf': SAMPLE, 'empty.dxf': EMPTY };
 
-async function serveHarness(t) {
-  const temporary = await mkdtemp(join(tmpdir(), 'hardcore-dxf-browser-'));
-  let server, browser;
-  t.after(async () => { await browser?.close(); if (server) await new Promise(resolve => server.close(resolve)); await rm(temporary, { recursive: true, force: true }); });
+// The harness renders its panes at a fixed CSS size; the spec draws them smaller, so a software
+// GL (CI's SwiftShader) paints and a screenshot reads fewer pixels. A resize writes the variables.
+const HARNESS_SIZE = '<style>#root > div { width: var(--harness-width, 800px) !important; height: var(--harness-height, 500px) !important; }</style>';
+
+// One harness bundle, one server and one browser for the file; every test opens its own page.
+let temporary, server, browser;
+before(async () => {
+  temporary = await mkdtemp(join(tmpdir(), 'hardcore-dxf-browser-'));
   await build({ entryPoints: [fileURLToPath(new URL('../harness/index.tsx', import.meta.url))], outfile: join(temporary, 'harness.js'), bundle: true, format: 'esm', platform: 'browser', conditions: ['production'], jsx: 'automatic', loader: { '.webp': 'dataurl', '.woff2': 'dataurl' } });
   const bundle = await readFile(join(temporary, 'harness.js'));
   const css = await readFile(new URL('../../../dist/styles.css', import.meta.url));
@@ -46,20 +50,26 @@ async function serveHarness(t) {
         { kind: 'dxf', file, rootRelativeFile: file, url: `/${file}`, hash: `${root}-${file}`, bytes: 4096 })) }));
     } else if (url.pathname.endsWith('/__cad/server')) {
       response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify({ rootId: root, rootPath: '/models', backend: 'cadgen' }));
-    } else { response.setHeader('Content-Type', 'text/html'); response.end('<!doctype html><html><head><title>Host title</title><link rel="stylesheet" href="/styles.css"></head><body><div id="root"></div><script type="module" src="/harness.js"></script></body></html>'); }
+    } else { response.setHeader('Content-Type', 'text/html'); response.end(`<!doctype html><html><head><title>Host title</title><link rel="stylesheet" href="/styles.css">${HARNESS_SIZE}</head><body><div id="root"></div><script type="module" src="/harness.js"></script></body></html>`); }
   });
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
   browser = await chromium.launch({ headless: true });
-  const open = async (file) => {
-    const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1 });
-    page.setDefaultTimeout(20000);
-    const errors = [];
-    page.on('pageerror', error => errors.push(error.message));
-    await page.addInitScript(() => { window.Worker = undefined; });
-    await page.goto(`http://127.0.0.1:${server.address().port}/?file=${file}`);
-    return { page, errors, pane: page.getByTestId('one') };
-  };
-  return { open };
+});
+after(async () => {
+  await browser?.close();
+  if (server) await new Promise(resolve => server.close(resolve));
+  if (temporary) await rm(temporary, { recursive: true, force: true });
+});
+
+async function open(t, file) {
+  const page = await browser.newPage({ viewport: { width: 800, height: 500 }, deviceScaleFactor: 1 });
+  t.after(() => page.close());
+  page.setDefaultTimeout(20000);
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.addInitScript(() => { window.Worker = undefined; });
+  await page.goto(`http://127.0.0.1:${server.address().port}/?file=${file}`);
+  return { page, errors, pane: page.getByTestId('one') };
 }
 
 const canvasOf = pane => pane.locator('[data-drawing-surface] canvas').first();
@@ -69,10 +79,20 @@ const drawn = async (pane) => {
   await pane.locator('[aria-busy="false"]').first().waitFor();
   await settle(pane.page());
 };
-/** The frame ON SCREEN, not a re-render: what the person is actually looking at. */
-async function frame(pane) {
-  await settle(pane.page());
-  return PNG.sync.read(await canvasOf(pane).screenshot());
+/**
+ * The frame ON SCREEN, not a re-render: what the person is actually looking at — once it has
+ * come to rest (two screenshots alike) and, given the frame from before a change, once it
+ * shows that change. Never the one frame that happened to follow the change.
+ */
+async function frame(pane, before = null) {
+  let last = null;
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    await settle(pane.page());
+    const shot = await canvasOf(pane).screenshot();
+    if (last?.equals(shot) && !before?.shot.equals(shot)) return Object.assign(PNG.sync.read(shot), { shot });
+    last = shot;
+  }
+  throw new Error(before ? 'the drawing never came to rest showing the change' : 'the drawing never came to rest');
 }
 const pixel = (image, x, y) => {
   const offset = (Math.round(y) * image.width + Math.round(x)) * 4;
@@ -119,27 +139,33 @@ const countWhere = (image, predicate) => {
   return count;
 };
 const reddish = (r, g, b) => r - g > 60 && r - b > 60;
-/** The extreme luminance along one row: the middle of a hairline, not its antialiased skirt. */
-function rowExtreme(image, y, pick) {
+/**
+ * The extreme luminance of the default pen's ink. Every other pen in the fixture has a hue, and
+ * so does its antialiased skirt; a neutral pixel off the backdrop is default-pen line-work. The
+ * extreme is where a hairline covers its pixel most (a corner of the outline, where two meet),
+ * wherever the fit puts the outline between pixels.
+ */
+function neutralExtreme(image, pick) {
+  const backdrop = pixel(image, 0, 0);
   let best = null;
-  for (let x = 0; x < image.width; x += 1) {
-    const value = pixel(image, x, y);
+  for (let offset = 0; offset < image.data.length; offset += 4) {
+    const value = [image.data[offset], image.data[offset + 1], image.data[offset + 2]];
+    if (Math.max(...value) - Math.min(...value) > 6 || near(value, backdrop)) continue;
     const luminance = value[0] + value[1] + value[2];
     if (best === null || pick(luminance, best.luminance)) best = { value, luminance };
   }
+  assert.ok(best, 'no default-pen ink on this canvas');
   return best.value;
 }
-const darkestOnRow = (image, y) => rowExtreme(image, y, (next, best) => next < best);
-const lightestOnRow = (image, y) => rowExtreme(image, y, (next, best) => next > best);
+const darkestInk = image => neutralExtreme(image, (next, best) => next < best);
+const lightestInk = image => neutralExtreme(image, (next, best) => next > best);
 const wheelAt = (page, box, point, deltaY) => page.mouse.move(box.x + point.x, box.y + point.y)
   .then(() => page.mouse.wheel(0, deltaY));
 /** The wheel delta this renderer reads as `factor`: it zooms by exp(-deltaY * 0.0015). */
 const deltaForFactor = factor => -Math.log(factor) / 0.0015;
-const state = page => page.evaluate(() => window.cadHarness.a.controller.readState());
 
 test('a drawing opens fitted and centred, in the theme’s ink, and flips with the theme', async (t) => {
-  const { open } = await serveHarness(t);
-  const { page, pane, errors } = await open('sample.dxf');
+  const { page, pane, errors } = await open(t, 'sample.dxf');
   await drawn(pane);
 
   const light = await frame(pane);
@@ -153,10 +179,10 @@ test('a drawing opens fitted and centred, in the theme’s ink, and flips with t
   // reaches to the 16 px gutter and no further.
   assert.ok(Math.abs(box.height - (light.height - 32)) <= 3, `fitted to the gutter: ${box.height} in ${light.height}`);
 
-  // Default pen: the theme's foreground, on the theme's background. The outline's
-  // left edge is default-pen line-work.
+  // Default pen: the theme's foreground, on the theme's background. The outline is
+  // default-pen line-work.
   assert.ok(near(box.backdrop, [255, 255, 255], 12), `light background: ${box.backdrop}`);
-  const edgeLight = darkestOnRow(light, Math.round(light.height / 2));
+  const edgeLight = darkestInk(light);
   assert.ok(edgeLight[0] < 110 && edgeLight[1] < 110 && edgeLight[2] < 110, `dark ink on light: ${edgeLight}`);
 
   // The red circle is red — its own pen, not the theme's.
@@ -164,10 +190,10 @@ test('a drawing opens fitted and centred, in the theme’s ink, and flips with t
 
   // One payload serves both themes: flipping the app's tokens repaints, it does not refetch.
   await page.evaluate(() => document.documentElement.classList.add('dark'));
-  const dark = await frame(pane);
+  const dark = await frame(pane, light);
   const darkBox = inkBox(dark);
   assert.ok(darkBox.backdrop[0] < 110, `dark background: ${darkBox.backdrop}`);
-  const edgeDark = lightestOnRow(dark, Math.round(dark.height / 2));
+  const edgeDark = lightestInk(dark);
   assert.ok(edgeDark[0] > 200 && edgeDark[1] > 200 && edgeDark[2] > 200, `light ink on dark: ${edgeDark}`);
   assert.ok(countWhere(dark, reddish) > 200, 'and the red circle is still red');
   // The view did not move while the ink changed.
@@ -176,8 +202,7 @@ test('a drawing opens fitted and centred, in the theme’s ink, and flips with t
 });
 
 test('a solid hatch’s island is a hole, not a filled square', async (t) => {
-  const { open } = await serveHarness(t);
-  const { pane, errors } = await open('sample.dxf');
+  const { pane, errors } = await open(t, 'sample.dxf');
   await drawn(pane);
   const image = await frame(pane);
   const box = inkBox(image);
@@ -196,19 +221,19 @@ test('a solid hatch’s island is a hole, not a filled square', async (t) => {
 });
 
 test('strokes stay hairlines when the drawing is zoomed in eight times', async (t) => {
-  const { open } = await serveHarness(t);
-  const { page, pane, errors } = await open('sample.dxf');
+  const { page, pane, errors } = await open(t, 'sample.dxf');
   await drawn(pane);
-  const fitted = inkBox(await frame(pane));
+  const fittedShot = await frame(pane);
+  const fitted = inkBox(fittedShot);
   const canvas = await canvasOf(pane).boundingBox();
   // A column 90% of the way across crosses the bottom outline and nothing else
   // once the drawing is blown up, so its one run IS that stroke's thickness.
   const column = Math.round(fitted.minX + fitted.width * 0.9);
-  const bottomAtFit = columnRuns(await frame(pane), column).at(-1);
+  const bottomAtFit = columnRuns(fittedShot, column).at(-1);
 
   // Zoom about a point ON that bottom edge, so the edge stays under the column.
   await wheelAt(page, canvas, { x: column, y: fitted.maxY }, deltaForFactor(8));
-  const zoomed = await frame(pane);
+  const zoomed = await frame(pane, fittedShot);
   const bottomAtZoom = columnRuns(zoomed, column).at(-1);
 
   assert.ok(bottomAtFit <= 4, `a hairline at 100%: ${bottomAtFit} px`);
@@ -225,10 +250,10 @@ test('strokes stay hairlines when the drawing is zoomed in eight times', async (
 });
 
 test('the wheel zooms about the pointer, dragging pans, and a double-click fits again', async (t) => {
-  const { open } = await serveHarness(t);
-  const { page, pane, errors } = await open('sample.dxf');
+  const { page, pane, errors } = await open(t, 'sample.dxf');
   await drawn(pane);
-  const fitted = inkBox(await frame(pane));
+  const fittedShot = await frame(pane);
+  const fitted = inkBox(fittedShot);
   const canvas = await canvasOf(pane).boundingBox();
 
   // The point under the pointer does not move: put it on the drawing's bottom-left
@@ -236,7 +261,8 @@ test('the wheel zooms about the pointer, dragging pans, and a double-click fits 
   // measures the drawing rather than the pane's edges.
   const anchor = { x: fitted.minX, y: fitted.maxY };
   await wheelAt(page, canvas, anchor, deltaForFactor(0.5));
-  const zoomed = inkBox(await frame(pane));
+  const zoomedShot = await frame(pane, fittedShot);
+  const zoomed = inkBox(zoomedShot);
   assert.ok(Math.abs(zoomed.minX - anchor.x) <= 2 && Math.abs(zoomed.maxY - anchor.y) <= 2,
     `the corner under the pointer stayed put: (${zoomed.minX}, ${zoomed.maxY}) vs (${anchor.x}, ${anchor.y})`);
   assert.ok(Math.abs(zoomed.height / fitted.height - 0.5) < 0.03, `and it halved: ${zoomed.height / fitted.height}`);
@@ -248,51 +274,34 @@ test('the wheel zooms about the pointer, dragging pans, and a double-click fits 
   await page.mouse.down();
   await page.mouse.move(canvas.x + canvas.width / 2 + 140, canvas.y + canvas.height / 2 - 45, { steps: 8 });
   await page.mouse.up();
-  const panned = inkBox(await frame(pane));
+  const pannedShot = await frame(pane, zoomedShot);
+  const panned = inkBox(pannedShot);
   assert.ok(Math.abs((panned.minX - zoomed.minX) - 140) <= 2, `panned right 140: ${panned.minX - zoomed.minX}`);
   assert.ok(Math.abs((panned.maxY - zoomed.maxY) + 45) <= 2, `panned up 45: ${panned.maxY - zoomed.maxY}`);
   assert.ok(Math.abs(panned.height - zoomed.height) <= 2, 'panning is not zooming');
 
   // A double-click frames the whole drawing again.
   await page.mouse.dblclick(canvas.x + canvas.width / 2, canvas.y + canvas.height / 2);
-  const refitted = inkBox(await frame(pane));
+  const refitted = inkBox(await frame(pane, pannedShot));
   assert.ok(Math.abs(refitted.height - fitted.height) <= 2 && Math.abs(refitted.centreX - fitted.centreX) <= 2,
     `back to the fit: ${JSON.stringify(refitted)} vs ${JSON.stringify(fitted)}`);
   assert.deepEqual(errors, []);
 });
 
-test('the cursor says the drawing can be dragged, and says so louder while it is', async (t) => {
-  const { open } = await serveHarness(t);
-  const { page, pane, errors } = await open('sample.dxf');
-  await drawn(pane);
-  const canvas = canvasOf(pane);
-  const cursor = () => canvas.evaluate(node => getComputedStyle(node).cursor);
-  assert.equal(await cursor(), 'grab');
-  const box = await canvas.boundingBox();
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(box.x + box.width / 2 + 30, box.y + box.height / 2, { steps: 3 });
-  assert.equal(await cursor(), 'grabbing');
-  await page.mouse.up();
-  assert.equal(await cursor(), 'grab');
-  assert.deepEqual(errors, []);
-});
-
 test('a pane that is resized re-fits only while the view is still the one it opened with', async (t) => {
-  const { open } = await serveHarness(t);
-  const { page, pane, errors } = await open('sample.dxf');
+  const { page, pane, errors } = await open(t, 'sample.dxf');
   await drawn(pane);
   const shrink = height => page.evaluate(next => {
-    document.querySelector('[data-testid="one"]').parentElement.style.height = next;
+    document.querySelector('[data-testid="one"]').parentElement.style.setProperty('--harness-height', next);
   }, height);
 
   // Untouched: the drawing is re-framed for the pane it now has.
-  const fitted = inkBox(await frame(pane));
-  await shrink('420px');
-  await settle(page);
-  const refitted = inkBox(await frame(pane));
+  const fittedShot = await frame(pane);
+  const fitted = inkBox(fittedShot);
+  await shrink('300px');
+  const resized = await frame(pane, fittedShot);
+  const refitted = inkBox(resized);
   assert.ok(refitted.height < fitted.height * 0.8, `re-fitted smaller: ${fitted.height} -> ${refitted.height}`);
-  const resized = await frame(pane);
   assert.ok(Math.abs(refitted.height - (resized.height - 32)) <= 3, `fitted to the new pane: ${refitted.height} in ${resized.height}`);
 
   // Touched: the person's framing is theirs and a resize does not take it back — but it is
@@ -302,11 +311,10 @@ test('a pane that is resized re-fits only while the view is still the one it ope
   // would instead crop the drawing where it stood when the pane narrowed.
   const canvas = await canvasOf(pane).boundingBox();
   await wheelAt(page, canvas, { x: canvas.width / 2, y: canvas.height / 2 }, deltaForFactor(0.5));
-  const chosenShot = await frame(pane);
+  const chosenShot = await frame(pane, resized);
   const chosen = inkBox(chosenShot);
-  await shrink('640px');
-  await settle(page);
-  const grownShot = await frame(pane);
+  await shrink('460px');
+  const grownShot = await frame(pane, chosenShot);
   const kept = inkBox(grownShot);
   // The canvas is the pane less its navbar; the share of it the drawing covers is the
   // person's zoom, and that is what survives.
@@ -319,44 +327,8 @@ test('a pane that is resized re-fits only while the view is still the one it ope
   assert.deepEqual(errors, []);
 });
 
-test('a DXF has no panels of its own, no tools and no preview', async (t) => {
-  const { open } = await serveHarness(t);
-  const { page, pane, errors } = await open('sample.dxf');
-  await drawn(pane);
-
-  // The nav row's only panel is the host's file tree: a drawing declares none, not even
-  // Display, and opened directly it opens with nothing (the tree is not where a file opens).
-  const panels = () => pane.locator('[data-file-panel]')
-    .evaluateAll(buttons => buttons.map(button => `${button.getAttribute('aria-label')}:${button.getAttribute('aria-pressed')}`));
-  assert.deepEqual(await panels(), ['Show files:false'], 'the file tree, one press away, and nothing else');
-  assert.equal(await pane.locator('[data-tool-panel]').count(), 0, 'and no tool panel: a drawing has no tools');
-  assert.equal(await pane.getByRole('group', { name: 'Interaction tools' }).count(), 0, 'no tool strip');
-  for (const name of ['Orbit', 'Draw', 'Select', 'Measure', 'Position', 'Animate', 'Preview']) {
-    assert.equal(await pane.getByRole('button', { name, exact: true }).count(), 0, name);
-  }
-  for (const name of ['Switch to 2D view', 'Switch to 3D view']) {
-    assert.equal(await pane.getByRole('button', { name, exact: true }).count(), 0, name);
-  }
-  assert.equal(await pane.getByRole('tab').count(), 0, 'no Material, Bends, Layers or Display tabs');
-  // What a drawing offers: a snapshot, and nothing else. Zooming is the pointer's —
-  // wheel or pinch about it, drag to pan, double-click to fit — so the navbar carries
-  // no zoom buttons, and there is no zoom control anywhere else in the viewer either.
-  assert.equal(await pane.getByRole('button', { name: 'Take snapshot', exact: true }).count(), 1);
-  for (const name of ['Zoom in', 'Zoom out', 'Reset Zoom', 'Zoom to fit', 'Zoom controls']) {
-    assert.equal(await pane.getByRole('button', { name, exact: true }).count(), 0, name);
-  }
-
-  // The snapshot is the drawing WITH its background, delivered through the host.
-  await pane.getByRole('button', { name: 'Take snapshot', exact: true }).click();
-  await page.waitForFunction(() => window.cadHarness.captures.length === 1);
-  assert.deepEqual(await page.evaluate(() => [window.cadHarness.captures[0].file, window.cadHarness.captures[0].type]),
-    ['sample.dxf', 'image/png']);
-  assert.deepEqual(errors, []);
-});
-
 test('an unreadable drawing shows the server’s own sentence, and an empty one says it is empty', async (t) => {
-  const { open } = await serveHarness(t);
-  const broken = await open('broken.dxf');
+  const broken = await open(t, 'broken.dxf');
   const alert = broken.pane.getByRole('alert');
   await alert.waitFor();
   const text = await alert.innerText();
@@ -366,7 +338,7 @@ test('an unreadable drawing shows the server’s own sentence, and an empty one 
   assert.match(text, /Try again/);
   assert.equal(await broken.pane.locator('[data-viewer-loading]').count(), 0, 'and not a spinner forever');
 
-  const empty = await open('empty.dxf');
+  const empty = await open(t, 'empty.dxf');
   await drawn(empty.pane);
   await empty.pane.locator('[data-drawing-empty]').waitFor();
   assert.match(await empty.pane.locator('[data-drawing-empty]').innerText(), /no geometry in its modelspace/);
@@ -375,12 +347,12 @@ test('an unreadable drawing shows the server’s own sentence, and an empty one 
 });
 
 test('the view a person chose comes back when the tab is reopened', async (t) => {
-  const { open } = await serveHarness(t);
-  const { page, pane, errors } = await open('sample.dxf');
+  const { page, pane, errors } = await open(t, 'sample.dxf');
   await drawn(pane);
   const canvas = await canvasOf(pane).boundingBox();
+  const fittedShot = await frame(pane);
   await wheelAt(page, canvas, { x: canvas.width * 0.35, y: canvas.height * 0.6 }, deltaForFactor(3));
-  const chosen = inkBox(await frame(pane));
+  const chosen = inkBox(await frame(pane, fittedShot));
 
   const key = JSON.stringify(['sample.dxf', 'dxf']);
   await page.waitForFunction(stateKey => window.cadHarness.state.renderers?.[stateKey]?.camera?.scale > 0, key);
@@ -396,59 +368,5 @@ test('the view a person chose comes back when the tab is reopened', async (t) =>
   const reopened = inkBox(await frame(pane));
   assert.ok(Math.abs(reopened.minX - chosen.minX) <= 2 && Math.abs(reopened.height - chosen.height) <= 2,
     `reopened where it was left: ${JSON.stringify(reopened)} vs ${JSON.stringify(chosen)}`);
-  assert.deepEqual(errors, []);
-});
-
-test('host commands a flat drawing cannot answer are declined in words', async (t) => {
-  const { open } = await serveHarness(t);
-  const { page, pane, errors } = await open('sample.dxf');
-  await drawn(pane);
-
-  const refuse = (call) => page.evaluate(async (source) => {
-    const controller = window.cadHarness.a.controller;
-    // eslint-disable-next-line no-new-func
-    return new Function('controller', `return (${source})(controller)`)(controller).then(() => '', error => error.message);
-  }, call);
-
-  assert.match(await refuse('c => c.select({ selectors: ["o1.f1"] })'), /A DXF is a 2D drawing without CAD references/);
-  assert.match(await refuse('c => c.clearSelection()'), /never has a selection to clear/);
-  assert.match(await refuse('c => c.setCamera({ position: [0, 0, 1], target: [0, 0, 0], up: [0, 1, 0] })'), /no camera to pose/);
-  assert.match(await refuse('c => c.setRenderMode(true)'), /no Display settings/);
-
-  // What it CAN do: report itself, fit again, and hand over a PNG. There is no zoom
-  // command and no zoom readout: no host ever sent one, and nothing read the percentage.
-  const snapshot = await state(page);
-  assert.equal(snapshot.loading, false);
-  assert.equal(snapshot.camera, null);
-  assert.deepEqual(snapshot.selection, []);
-  assert.equal('zoomPercent' in snapshot, false, 'the live state carries no zoom percentage');
-  // setZoom is gone with the UI that was its only caller: no host ever sent it.
-  assert.equal(await page.evaluate(() => typeof window.cadHarness.a.controller.setZoom), 'undefined');
-
-  const fitted = inkBox(await frame(pane));
-  const canvas = await canvasOf(pane).boundingBox();
-  await wheelAt(page, canvas, { x: fitted.minX, y: fitted.maxY }, deltaForFactor(0.5));
-  assert.ok(Math.abs(inkBox(await frame(pane)).height / fitted.height - 0.5) < 0.03, 'the wheel still zooms the drawing');
-  await page.evaluate(() => window.cadHarness.a.controller.resetCamera());
-  assert.ok(Math.abs(inkBox(await frame(pane)).height - fitted.height) <= 2, 'resetCamera fits the drawing again');
-
-  const captured = await page.evaluate(async () => {
-    const blob = await window.cadHarness.a.controller.capture();
-    return { type: blob.type, size: blob.size };
-  });
-  assert.equal(captured.type, 'image/png');
-  assert.ok(captured.size > 1000, `a real picture: ${captured.size} bytes`);
-  assert.deepEqual(errors, []);
-});
-
-// A host asking a drawing to select something is answered, not ignored.
-test('a select-reference request is consumed without a notification', async (t) => {
-  const { open } = await serveHarness(t);
-  const { page, pane, errors } = await open('sample.dxf');
-  await drawn(pane);
-  await page.evaluate(() => window.cadHarness.selectReference('o1.f1'));
-  await page.waitForFunction(() => !window.cadHarness.a.commands.getSnapshot().selectReference);
-  assert.equal(await page.evaluate(() => window.cadHarness.a.commands.getSnapshot().selectReference ?? null), null,
-    'the declined request is acknowledged');
   assert.deepEqual(errors, []);
 });

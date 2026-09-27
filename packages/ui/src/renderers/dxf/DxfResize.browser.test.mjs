@@ -21,6 +21,11 @@ import { chromium } from 'playwright';
 // The committed `/__cad/drawing` payload the DXF spec uses (see `__fixtures__/README.md`).
 const SAMPLE = JSON.parse(await readFile(new URL('./__fixtures__/sample.drawing.json', import.meta.url), 'utf8'));
 
+// The harness renders its pane at a fixed CSS size; the spec draws it smaller (a Retina buffer
+// of fewer pixels to paint and digest) and resizes it through these variables. It stays wider
+// than the viewer's mobile breakpoint (720px) throughout, so a resize is only ever a resize.
+const HARNESS_SIZE = '<style>#root > div { width: var(--harness-width, 800px) !important; height: var(--harness-height, 500px) !important; }</style>';
+
 async function serveHarness(t) {
   const temporary = await mkdtemp(join(tmpdir(), 'hardcore-dxf-resize-browser-'));
   let server, browser;
@@ -39,17 +44,23 @@ async function serveHarness(t) {
       response.end(JSON.stringify({ rootId: root, entries: [{ kind: 'dxf', file: 'sample.dxf', rootRelativeFile: 'sample.dxf', url: '/sample.dxf', hash: `${root}-sample.dxf`, bytes: 4096 }] }));
     } else if (url.pathname.endsWith('/__cad/server')) {
       response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify({ rootId: root, rootPath: '/models', backend: 'cadgen' }));
-    } else { response.setHeader('Content-Type', 'text/html'); response.end('<!doctype html><html><head><link rel="stylesheet" href="/styles.css"></head><body><div id="root"></div><script type="module" src="/harness.js"></script></body></html>'); }
+    } else { response.setHeader('Content-Type', 'text/html'); response.end(`<!doctype html><html><head><link rel="stylesheet" href="/styles.css">${HARNESS_SIZE}</head><body><div id="root"></div><script type="module" src="/harness.js"></script></body></html>`); }
   });
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
   browser = await chromium.launch({ headless: true });
   // A Retina page: the canvas is device pixels, the pane CSS pixels.
-  const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 2 });
+  const page = await browser.newPage({ viewport: { width: 800, height: 500 }, deviceScaleFactor: 2 });
   page.setDefaultTimeout(20000);
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
   await page.addInitScript(() => {
     window.Worker = undefined;
+    // The pane's size, in one layout step.
+    window.resize = (width, height) => {
+      const root = document.querySelector('#root > div');
+      root.style.setProperty('--harness-width', width);
+      if (height) root.style.setProperty('--harness-height', height);
+    };
     // Every paint starts by setting the canvas transform: counting those counts paints.
     const original = CanvasRenderingContext2D.prototype.setTransform;
     CanvasRenderingContext2D.prototype.setTransform = function (...args) {
@@ -98,9 +109,17 @@ async function installProbe(page) {
   await frames(page, 3);
 }
 
+// The picture once it has come to rest: the same over two frames running, not whatever a
+// fixed count of frames after the resize happened to show.
 const settledPicture = async (page) => {
-  await frames(page, 4);
-  return page.evaluate(() => window.__dxfProbe.picture());
+  let last = null;
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    await frames(page, 2);
+    const picture = await page.evaluate(() => window.__dxfProbe.picture());
+    if (last && picture.digest === last.digest && picture.pixels === last.pixels) return picture;
+    last = picture;
+  }
+  throw new Error('the drawing never came to rest at its new size');
 };
 
 function assertPaintedAtNewSize(record, ratio, settled, label) {
@@ -120,15 +139,15 @@ test('a drawing pane resized in one step paints the drawing at its new size in t
 
   // 1. The pane narrows and shortens in one step, as a window snap or a sibling column does.
   await page.evaluate(() => window.__dxfProbe.mark());
-  await page.evaluate(() => { const root = document.querySelector('#root > div'); root.style.width = '820px'; root.style.height = '560px'; });
+  await page.evaluate(() => resize('730px', '400px'));
   await page.waitForFunction(() => window.__dxfProbe.records.length > 0);
   const [narrowed] = await page.evaluate(() => window.__dxfProbe.records);
-  assert.ok(narrowed.cssWidth < 900, `the pane narrowed (${narrowed.cssWidth}px)`);
+  assert.ok(narrowed.cssWidth < 760, `the pane narrowed (${narrowed.cssWidth}px)`);
   assertPaintedAtNewSize(narrowed, ratio, await settledPicture(page), 'one-step narrowing');
 
   // 2. And grows back in one step.
   await page.evaluate(() => window.__dxfProbe.mark());
-  await page.evaluate(() => { const root = document.querySelector('#root > div'); root.style.width = '1200px'; root.style.height = '720px'; });
+  await page.evaluate(() => resize('800px', '500px'));
   await page.waitForFunction(() => window.__dxfProbe.records.length > 0);
   const [widened] = await page.evaluate(() => window.__dxfProbe.records);
   assertPaintedAtNewSize(widened, ratio, await settledPicture(page), 'one-step widening');
@@ -138,13 +157,12 @@ test('a drawing pane resized in one step paints the drawing at its new size in t
   await pane.locator('[data-file-panel][aria-label="Show files"]').click();
   await page.waitForFunction(() => window.__dxfProbe.records.length > 0);
   const [treeOpened] = await page.evaluate(() => window.__dxfProbe.records);
-  assert.ok(treeOpened.cssWidth < 1150, `the file tree took room from the drawing (${treeOpened.cssWidth}px)`);
+  assert.ok(treeOpened.cssWidth < 780, `the file tree took room from the drawing (${treeOpened.cssWidth}px)`);
   assertPaintedAtNewSize(treeOpened, ratio, await settledPicture(page), 'file tree opening');
 
   // 4. A drag resizes once per frame: every frame is painted at its own size, once.
   await page.evaluate(() => window.__dxfProbe.mark());
   const paintsPerFrame = await page.evaluate(() => new Promise(resolve => {
-    const root = document.querySelector('#root > div');
     const perFrame = [];
     let last = window.__canvasPaints || 0;
     let step = 0;
@@ -153,7 +171,7 @@ test('a drawing pane resized in one step paints the drawing at its new size in t
       if (step > 0) perFrame.push(now - last);
       last = now;
       if (step === 10) { resolve(perFrame); return; }
-      root.style.width = `${1200 - (step + 1) * 24}px`;
+      resize(`${800 - (step + 1) * 7}px`);
       step += 1;
       requestAnimationFrame(tick);
     };

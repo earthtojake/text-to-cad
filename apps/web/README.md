@@ -180,12 +180,13 @@ Headless CAD checks use Playwright with Metal on macOS and SwiftShader on
 Linux/Windows. Use the same graphics backend for baseline/refactor image
 comparisons.
 
-From the repository root, `scripts/test/test-viewer-browser.sh --ci` exercises
-the bundled client's format, picking, kinematics (robot joints, an SRDF group
-state, a STEP mate) and camera contracts with fresh temporary fixtures and a private server/cache. Omit `--ci`
-to include full cold/warm/disabled-LOD picking, scene placement and Render quality
-checks. `--out /tmp/viewer-review` retains screenshots and bounded failure
-diagnostics; the runner cleans up its project and processes on exit.
+From the repository root, `scripts/test/test-viewer-browser.sh` exercises the
+bundled client's format and camera contracts through the real backend, with fresh
+temporary fixtures and a private server/cache; it runs exactly what CI runs
+(picking and kinematics run on every PR in the `packages/ui` browser specs).
+`--only format|camera` runs one gate, and `--out /tmp/viewer-review` retains
+screenshots and bounded failure diagnostics; the runner cleans up its project and
+processes on exit.
 
 ### Branded loading indicator
 

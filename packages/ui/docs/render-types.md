@@ -159,7 +159,7 @@ input. The internal `themeSettings` recipe remains a renderer implementation
 detail, normalized through the shared core schema so every backend receives the
 same lighting, materials and stage settings.
 
-The shared browser qualification in `scripts/test/test-viewer-browser.sh`
-checks mode framing, scene presentation and exact picking across formats; its
-full run also covers Studio, read-only materials and quality. It uses isolated generated
-fixtures rather than a sweep of saved theme presets.
+The browser qualification in `scripts/test/test-viewer-browser.sh` opens every
+load path through the real backend and bundle and checks mode framing and revision
+re-fits; picking and the display presets are the `packages/ui` browser specs'. Both use
+isolated generated fixtures rather than a sweep of saved theme presets.

@@ -8,7 +8,7 @@ from tests.python.support.paths import REPO_ROOT
 
 WORKFLOW = (REPO_ROOT / ".github/workflows/test.yml").read_text(encoding="utf-8")
 JOBS = dict(re.findall(r"^  ([a-z][\w-]*):\n(.*?)(?=^  [a-z][\w-]*:\n|\Z)", WORKFLOW.split("\njobs:\n", 1)[1], re.M | re.S))
-CLASSES = {"cadgen", "core", "ui", "viewer", "skills", "docs", "infra"}
+CLASSES = {"cadgen", "core", "ui", "web", "skills", "docs", "infra"}
 
 
 def selected_jobs(*changed: str) -> set[str]:
@@ -30,11 +30,18 @@ def selected_jobs(*changed: str) -> set[str]:
 
 
 class WorkspaceWorkflowSelection(unittest.TestCase):
-    def test_ui_change_reaches_the_web_host_without_engine_or_docs_suites(self):
-        self.assertEqual(selected_jobs("ui"), {"viewer", "skills", "packaging"})
+    def test_every_test_runner_runs_in_ci(self):
+        # A runner no job calls is a suite that never runs: every test runs in CI (AGENTS.md).
+        # `test.sh` only chains the others.
+        runners = sorted(path.name for path in (REPO_ROOT / "scripts/test").glob("test-*.sh"))
+        self.assertTrue(runners)
+        self.assertEqual([name for name in runners if f"scripts/test/{name}" not in WORKFLOW], [])
 
-    def test_web_change_runs_only_viewer_policy_and_packaging(self):
-        self.assertEqual(selected_jobs("viewer"), {"viewer", "skills", "packaging"})
+    def test_ui_change_reaches_the_web_host_without_engine_or_docs_suites(self):
+        self.assertEqual(selected_jobs("ui"), {"web", "skills", "packaging"})
+
+    def test_web_change_runs_only_web_policy_and_packaging(self):
+        self.assertEqual(selected_jobs("web"), {"web", "skills", "packaging"})
 
     def test_docs_change_stays_in_docs(self):
         self.assertEqual(selected_jobs("docs"), {"docs"})
@@ -45,7 +52,7 @@ class WorkspaceWorkflowSelection(unittest.TestCase):
         self.assertEqual(selected_jobs("infra"), expected)
 
     def test_python_change_does_not_run_core_unit_tests(self):
-        self.assertEqual(selected_jobs("cadgen"), set(JOBS) - {"changes", "version", "cadgen-js"})
+        self.assertEqual(selected_jobs("cadgen"), set(JOBS) - {"changes", "version", "core-js"})
 
     def test_prose_change_runs_no_conditional_suite(self):
         self.assertEqual(selected_jobs(), set())
@@ -64,9 +71,10 @@ class WorkspaceWorkflowSelection(unittest.TestCase):
         self.assertIn("'packages/ui/**'", JOBS["changes"])
         self.assertIn("'apps/web/**'", JOBS["changes"])
 
-    def test_existing_required_check_names_remain_available(self):
+    def test_required_check_names_are_the_jobs(self):
+        # main's branch protection requires exactly these names (CONTRIBUTING.md, Repository settings).
         names = {re.search(r"^    name: (.+)$", body, re.M)[1] for body in JOBS.values()}
-        self.assertTrue({"Version Check", "cadgen (Linux)", "cadgen (Windows)", "cadgen-js", "viewer", "skills", "docs", "packaging"} <= names)
+        self.assertTrue({"Version Check", "cadgen (Linux)", "cadgen (Windows)", "core-js", "web", "skills", "docs", "packaging"} <= names)
 
 
 if __name__ == "__main__":

@@ -115,9 +115,18 @@ for the full flow, the resume path, the rehearsal, and local/manual fallbacks.
   generate small fixtures in fresh temporary directories or use tiny test-owned
   fixtures, with their own cache stores and cleanup. Repo `tmp/` is fine.
   Enforced by `tests/python/global/test_tests_are_self_contained.py`.
-- Every test file is reached by a runner under `scripts/test/`, and a collector
-  that finds nothing fails the run rather than reporting a group that never
-  ran — so a renamed or emptied test directory stops CI instead of going quiet.
+- Every test runs in CI. Each test file is reached by a runner under
+  `scripts/test/`, every runner is called by a `test.yml` job on the changes that
+  can break it, and a collector that finds nothing fails the run rather than
+  reporting a group that never ran. A test no CI job runs is dead: wire it in or
+  delete it. There are no manual-only test gates. Enforced by
+  `tests/python/global/test_ci_workspace_selection.py`.
+- Tests and CI are short and succinct. Test a contract, a user flow or a fixed bug,
+  once, at the cheapest level that exercises the real path: a unit or jsdom test
+  first, a real browser (WebGL) only for what needs one. Await the condition, never
+  a fixed sleep or a wall-clock bound; a flaky test is fixed or deleted, never
+  retried. CI time is a budget: the `web` job stays within 6 minutes, and a
+  change that lengthens any job says what it costs and why in its PR.
 - Benchmarks under `scripts/bench/` are manual and their output is never
   committed: reports, logs, profiles and screenshots go to an ignored `tmp/`.
   Only their pure helper units run in a test runner.

@@ -166,6 +166,32 @@ export function stepCatalogEntry({ view, sidecar, assembly, file }) {
 }
 
 /**
+ * The page a spec opens, and so the viewer: it fills the page. Small, because a software renderer
+ * (CI's SwiftShader) pays for every pixel of every frame; but tall enough that a tree row's
+ * context menu opens below the pointer rather than being pushed up under it.
+ */
+export const VIEWPORT = Object.freeze({ width: 800, height: 600 });
+
+// The harness bundle, built once per process: every server a spec starts (a second fixture, a
+// staged one) serves the same bytes, so none of them bundles the viewer again.
+let bundled;
+function harnessBundle() {
+  bundled ??= (async () => {
+    const temporary = await mkdtemp(join(tmpdir(), 'hardcore-step-browser-'));
+    try {
+      await build({ entryPoints: [fileURLToPath(new URL('./index.tsx', import.meta.url))], outfile: join(temporary, 'harness.js'), bundle: true, format: 'esm', platform: 'browser', conditions: ['production'], jsx: 'automatic', loader: { '.webp': 'dataurl', '.woff2': 'dataurl' } });
+      // Two stylesheets: the package's compiled one, and the one esbuild extracts
+      // from what the bundle imports (the drawing editor's). Without the second the
+      // editor has no layout and sizes its canvas from an unconstrained container.
+      return { bundle: await readFile(join(temporary, 'harness.js')), bundledCss: await readFile(join(temporary, 'harness.css')).catch(() => '') };
+    } finally {
+      await rm(temporary, { recursive: true, force: true });
+    }
+  })();
+  return bundled;
+}
+
+/**
  * Serve the harness over the STEP fixture and hand back an `open`.
  *
  * @param {{ after: (cleanup: () => unknown) => void }} lifetime — a test context, or
@@ -186,20 +212,13 @@ export async function serveStepHarness(t, { onRequest, progressive = false, sing
   const opened = {}, gates = {};
   const hold = name => { gates[name] = new Promise(resolve => { opened[name] = resolve; }); };
   for (const name of ['a', 'b']) hold(name);
-  const temporary = await mkdtemp(join(tmpdir(), 'hardcore-step-browser-'));
   let server, browser;
   const pages = new Set();
   t.after(async () => {
     await browser?.close();
     if (server) await new Promise(resolve => server.close(resolve));
-    await rm(temporary, { recursive: true, force: true });
   });
-  await build({ entryPoints: [fileURLToPath(new URL('./index.tsx', import.meta.url))], outfile: join(temporary, 'harness.js'), bundle: true, format: 'esm', platform: 'browser', conditions: ['production'], jsx: 'automatic', loader: { '.webp': 'dataurl', '.woff2': 'dataurl' } });
-  const bundle = await readFile(join(temporary, 'harness.js'));
-  // Two stylesheets: the package's compiled one, and the one esbuild extracts
-  // from what the bundle imports (the drawing editor's). Without the second the
-  // editor has no layout and sizes its canvas from an unconstrained container.
-  const bundledCss = await readFile(join(temporary, 'harness.css')).catch(() => '');
+  const { bundle, bundledCss } = await harnessBundle();
   const css = await readFile(new URL('../../../dist/styles.css', import.meta.url));
   const requests = [];
 
@@ -262,7 +281,7 @@ export async function serveStepHarness(t, { onRequest, progressive = false, sing
     if (url.pathname.endsWith(`/${fixture.file}.json`)) { if (fixture.sidecar) json(response, fixture.sidecar); else notFound(response); return; }
     if (/\.(woff2|ttf)$/.test(url.pathname)) { notFound(response); return; }
     response.setHeader('Content-Type', 'text/html');
-    response.end('<!doctype html><html><head><title>Host title</title><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/harness.css"></head><body><div id="root"></div><script type="module" src="/harness.js"></script></body></html>');
+    response.end('<!doctype html><html><head><title>Host title</title><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/harness.css"><style>body { margin: 0 } #root > div { width: 100vw !important; height: 100vh !important }</style></head><body><div id="root"></div><script type="module" src="/harness.js"></script></body></html>');
   });
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
   browser = await chromium.launch({ headless: true, args: (process.platform === 'darwin' && process.env.CAD_TEST_SWIFTSHADER !== '1')
@@ -275,9 +294,10 @@ export async function serveStepHarness(t, { onRequest, progressive = false, sing
    * 'session'` keeps the tab record in the page's own sessionStorage instead, so a reload of the
    * page is a reload of the tab and a new page is a new tab; `init` is a function run in the page
    * before the app, as `page.addInitScript` runs it. Every page is its own browser context: a new tab.
+   * The viewer fills the page (`VIEWPORT`), whatever size the harness's own layout gives it.
    */
   const open = async ({ timeout = 30000, record = null, store = null, hasTouch = false, init = null } = {}) => {
-    const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1, hasTouch });
+    const page = await browser.newPage({ viewport: VIEWPORT, deviceScaleFactor: 1, hasTouch });
     pages.add(page);
     t.after(() => page.close().catch(() => {}));
     page.setDefaultTimeout(timeout);

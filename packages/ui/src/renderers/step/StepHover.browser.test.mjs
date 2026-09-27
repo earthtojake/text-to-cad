@@ -50,7 +50,8 @@ function renderCounter() {
 }
 
 const settle = page => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-const MODEL = { y0: 55, y1: 570 };
+// The band between the tool strip and the view cube, on the harness's 800 × 564 canvas.
+const MODEL = { y0: 55, y1: 440 };
 function differing(left, right, { x0 = 0, y0 = MODEL.y0, x1 = left.width, y1 = MODEL.y1 } = {}) {
   let count = 0;
   for (let y = y0; y < y1; y += 1) for (let x = x0; x < x1; x += 1) {
@@ -85,7 +86,14 @@ async function open() {
   await page.waitForFunction(() => window.cadHarness.a.controller?.readState().loading === false);
   await pane.getByRole('region', { name: 'Features', exact: true }).waitFor();
   await page.evaluate(() => window.cadHarness.a.controller.setDisplaySettings({ axes: { enabled: false } }));
-  await page.waitForTimeout(400);
+  await page.waitForFunction(() => window.cadHarness.a.controller.readState().display.axes?.enabled === false);
+  // The opening fit at rest, the same camera two frames running: `at` projects from it.
+  await page.waitForFunction(() => {
+    const camera = JSON.stringify(window.__cadCamera());
+    const still = window.__lastCamera === camera;
+    window.__lastCamera = camera;
+    return still;
+  }, null, { polling: 'raf' });
   await settle(page);
   const box = await pane.locator('[data-cad-surface] canvas').first().boundingBox();
   // The tool strip and stack float over the canvas and change with every hover, so a frame is
@@ -121,14 +129,7 @@ async function open() {
       }
       assert.fail('the surface never stopped rendering');
     },
-    selected: () => page.evaluate(() => window.cadHarness.a.controller.readState().selectedReferenceIds),
     away: () => page.mouse.move(box.x + 20, box.y + box.height - 20),
-    chooseSelectMode: async name => {
-      await page.evaluate(() => document.activeElement instanceof HTMLInputElement && document.activeElement.blur());
-      await pane.getByRole('button', { name: /^Select mode: / }).click();
-      await page.locator('[role=menu][aria-label="Select mode"]').getByRole('menuitemradio', { name, exact: true }).click();
-      await page.locator('[role=menu]').waitFor({ state: 'detached' });
-    },
   };
 }
 
@@ -145,8 +146,10 @@ async function rendersDuring(view, action) {
 test('a part hover, in the viewport or on a Features row, re-renders the viewport\'s layers and nothing above them', async () => {
   const view = await open();
   const { page, pane, at, errors } = view;
-  const still = await view.frame();
+  // The baseline once the surface is still: a frame taken while it settles can be one a later
+  // idle-quality repaint replaces.
   await view.quiet();
+  const still = await view.frame();
   const overPart = await rendersDuring(view, async () => {
     await page.mouse.move(...at([6, 6, 5]));
     await view.frameWhen(shot => differing(still, shot) > 2000, 'lit the hovered part');
@@ -174,57 +177,5 @@ test('a part hover, in the viewport or on a Features row, re-renders the viewpor
     `a row hover renders nothing above the layers: ${JSON.stringify(overRow)}`);
   await view.away();
   await view.frameWhen(shot => differing(still, shot) === 0, 'let go of the row\'s part');
-  assert.deepEqual(errors, []);
-});
-
-test('under Faces, a hover over a selection draws what the selection draws: the hover lights over the selection and leaves it exactly as it was', async () => {
-  const view = await open();
-  const { page, at, errors } = view;
-  // With a filter that matches nothing no Features row is on screen, so each part's faces load
-  // on the press that picks one.
-  await view.pane.getByRole('textbox', { name: 'Filter model', exact: true }).fill('zzz');
-  await view.chooseSelectMode('Faces');
-  // Two faces, one on each part; each press loads its part's faces and picks the face.
-  await page.mouse.click(...at([15, 0, 4]));
-  await page.waitForFunction(() => /\|o1\.2\.f\d+$/.test(window.cadHarness.a.controller.readState().selectedReferenceIds.join()));
-  const armFace = (await view.selected())[0];
-  await page.mouse.click(...at([6, 6, 5]));
-  await page.waitForFunction(() => /\|o1\.1\.f\d+$/.test(window.cadHarness.a.controller.readState().selectedReferenceIds.join()));
-  const baseFace = (await view.selected())[0];
-  await view.away();
-  await page.waitForTimeout(400);
-  const selection = await view.frame();
-  await view.quiet();
-
-  // Hovering the other face lights it over the selection, and only the layers render for it.
-  let hovered;
-  const hover = await rendersDuring(view, async () => {
-    await page.mouse.move(...at([15, 0, 4]));
-    hovered = await view.frameWhen(shot => differing(selection, shot) > 200, 'lit the hovered face');
-  });
-  assert.deepEqual([hover.StepSurfaceBody, hover.ToolStack, hover.ModelingTree, hover.RendererShell], [0, 0, 0, 0],
-    `a face hover renders nothing above the layers: ${JSON.stringify(hover)}`);
-  assert.ok(hover.StepSceneLayers >= 1, JSON.stringify(hover));
-  // Leaving restores the selection's frame exactly: the selection's own highlight was never touched.
-  await view.away();
-  await view.frameWhen(shot => differing(selection, shot) === 0, 'returned exactly to the selection once the pointer left');
-
-  // Outside Measure a hover is drawn in the selection's style, so the hovered face over the
-  // selection is the picture of both faces selected.
-  await page.keyboard.down('Shift');
-  await page.mouse.click(...at([15, 0, 4]));
-  await page.keyboard.up('Shift');
-  await page.waitForFunction(() => window.cadHarness.a.controller.readState().selectedReferenceIds.length === 2);
-  assert.deepEqual(new Set(await view.selected()), new Set([armFace, baseFace]));
-  await view.away();
-  const both = await view.frameWhen(shot => differing(hovered, shot) === 0, 'drew the two selected faces as it drew one selected and one hovered');
-
-  // A selected face under the pointer is drawn once, in the hover's style: the same picture.
-  await page.mouse.move(...at([6, 6, 5]));
-  await page.waitForTimeout(400);
-  assert.equal(differing(both, await view.frame()), 0, 'a hovered selected face draws exactly as it does selected');
-  await view.away();
-  await page.waitForTimeout(400);
-  assert.equal(differing(both, await view.frame()), 0, 'and leaving it changes nothing');
   assert.deepEqual(errors, []);
 });

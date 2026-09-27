@@ -3,8 +3,9 @@
 # app. Policy checks run for changed shared contracts without also running
 # every skill suite. Runtime outputs are built only where needed.
 #
-# The check name "cadgen-js" is retained because main requires it; that job now
-# tests @hardcore/core. All eight existing required check names remain stable.
+# Check names are the jobs' concerns: `core-js` tests packages/core, `web` tests
+# packages/ui and apps/web and drives the bundled viewer. main's required checks
+# name all eight jobs.
 # Prose-only root changes run Version Check only; skill/package Markdown remains
 # test input.
 name: Test
@@ -33,7 +34,7 @@ jobs:
       cadgen: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.cadgen == 'true' }}
       core: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.core == 'true' }}
       ui: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.ui == 'true' }}
-      viewer: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.viewer == 'true' }}
+      web: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.web == 'true' }}
       skills: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.skills == 'true' }}
       docs: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.docs == 'true' }}
       infra: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.infra == 'true' }}
@@ -54,7 +55,7 @@ jobs:
               - 'packages/core/**'
             ui:
               - 'packages/ui/**'
-            viewer:
+            web:
               - 'apps/web/**'
               - 'tests/browser/**'
             skills:
@@ -158,8 +159,8 @@ jobs:
         run: scripts/test/test-python.sh --keep-going --select cadgen --print-weights
         shell: bash
 
-  cadgen-js:
-    name: cadgen-js
+  core-js:
+    name: core-js
     needs: changes
     if: needs.changes.outputs.core == 'true' || needs.changes.outputs.infra == 'true'
     runs-on: ubuntu-latest
@@ -182,10 +183,10 @@ jobs:
   # The client is platform-agnostic JS, so Linux only. It runs on a cadgen change too:
   # the launch step serves the bundled client through the real backend and draws it in
   # Playwright's Chromium, which is why this job keeps the Playwright install.
-  viewer:
-    name: viewer
+  web:
+    name: web
     needs: changes
-    if: needs.changes.outputs.viewer == 'true' || needs.changes.outputs.ui == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.infra == 'true'
+    if: needs.changes.outputs.web == 'true' || needs.changes.outputs.ui == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.infra == 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -207,7 +208,7 @@ jobs:
         run: scripts/test/test-js.sh --select ui
 
       - name: Run the CAD Viewer client tests
-        if: needs.changes.outputs.viewer == 'true' || needs.changes.outputs.ui == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.infra == 'true'
+        if: needs.changes.outputs.web == 'true' || needs.changes.outputs.ui == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.infra == 'true'
         run: scripts/test/test-js.sh --select web
 
       - name: Bundle production outputs
@@ -219,7 +220,7 @@ jobs:
       - name: Exercise the bundled viewer in Chromium
         env:
           VIEWER_TEST_DIAGNOSTICS_DIR: ${{ runner.temp }}/viewer-browser
-        run: scripts/test/test-viewer-browser.sh --ci
+        run: scripts/test/test-viewer-browser.sh
 
       - name: Upload failed viewer diagnostics
         if: failure()
@@ -235,7 +236,7 @@ jobs:
   skills:
     name: skills
     needs: changes
-    if: needs.changes.outputs.skills == 'true' || needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.infra == 'true' || needs.changes.outputs.ui == 'true' || needs.changes.outputs.viewer == 'true'
+    if: needs.changes.outputs.skills == 'true' || needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.infra == 'true' || needs.changes.outputs.ui == 'true' || needs.changes.outputs.web == 'true'
     runs-on: ubuntu-latest
     env:
       CADGEN_TEST_JOBS: "4"
@@ -284,7 +285,7 @@ jobs:
   packaging:
     name: packaging
     needs: changes
-    if: needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.viewer == 'true' || needs.changes.outputs.ui == 'true' || needs.changes.outputs.infra == 'true'
+    if: needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.web == 'true' || needs.changes.outputs.ui == 'true' || needs.changes.outputs.infra == 'true'
     runs-on: ubuntu-latest
 
     steps:

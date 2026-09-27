@@ -235,8 +235,8 @@ requested separately. A manual dispatch runs every job.
 | --- | --- | --- |
 | Version Check | every change | canonical version, derived metadata, skill pins |
 | cadgen (Linux/Windows) | cadgen, core, infrastructure | Python engine, daemon, CLI and viewer backend |
-| cadgen-js | core, infrastructure | `@hardcore/core` and benchmark helper units |
-| viewer | web, UI, core, cadgen, infrastructure | affected UI/web units, bundled launch, format/picking/kinematics/camera browser checks |
+| core-js | core, infrastructure | `@hardcore/core` and benchmark helper units |
+| web | web, UI, core, cadgen, infrastructure | UI and web units, the UI browser specs, bundled launch, format/camera browser checks through the backend |
 | skills | skills or runtime/host contracts | repo policy; skill CLI suites only for skills, cadgen, core or infrastructure |
 | docs | docs, skills, cadgen, core, infrastructure | static asset contract, lint, Next build, icon verification |
 | packaging | cadgen, core, UI, web, infrastructure | clean bundle, wheel contents, installed CLI behavior |
@@ -247,11 +247,8 @@ Here `cadgen`, `core` and `UI` mean their package directories and tests;
 Root prose, manual model changes and `LICENSE` run only Version Check. Skill
 and package Markdown is test input and follows its owning component.
 
-The eight existing required check names remain unchanged; `cadgen-js` is the
-legacy GitHub check name for `@hardcore/core`, not a package to install. A
-skipped job satisfies its required check; renaming required checks needs a
-matching branch-protection update. Do not change repository settings as a side
-effect of a code refactor.
+A skipped job satisfies its required check. Renaming a job renames its required
+check, so it lands together with a matching branch-protection update.
 
 A web-only edit does not run the Python engine. A UI edit exercises the web
 host. Core changes reach every consumer. Policy checks for a host edit do not
@@ -418,14 +415,14 @@ snapshot tests; their revisions can differ:
 npx --no-install playwright install chromium
 .venv/bin/python -m playwright install chromium
 scripts/bundle/bundle.sh
-scripts/test/test-viewer-browser.sh --ci
-scripts/test/test-viewer-browser.sh --only kinematics
 scripts/test/test-viewer-browser.sh
+scripts/test/test-viewer-browser.sh --only camera
 ```
 
-Use `--with-deps` when installing browsers on Linux. The CI subset covers
-formats, picking, kinematics and camera behavior; the full browser gate adds
-placement, appearance and quality transitions. Backend tests live in
+Use `--with-deps` when installing browsers on Linux. The browser suite runs
+exactly what CI runs: every load path (STEP, STL, DXF, URDF) and the camera
+across modes and a saved revision, through the real backend (picking and
+kinematics are the `packages/ui` browser specs' on every PR). Backend tests live in
 `tests/python/packages/cadgen/viewer` and are selected with
 `scripts/test/test-python.sh --select viewer`. Client tests do not cover them.
 Nothing in `cadgen.viewer` imports the CAD kernel at module scope.
@@ -639,7 +636,7 @@ draft release unless `--publish` is passed.
 ### Repository settings
 
 `main` requires a PR with eight stable status checks — `Version
-Check`, `cadgen (Linux)`, `cadgen (Windows)`, `cadgen-js`, `viewer`, `skills`,
+Check`, `cadgen (Linux)`, `cadgen (Windows)`, `core-js`, `web`, `skills`,
 `docs`, `packaging` — strict (up to date with `main`), squash merges only, a
 linear history, no force pushes and no deletions. A job skipped by its path
 condition satisfies its check, so a prose pull request merges on Version Check

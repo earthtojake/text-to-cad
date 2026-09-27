@@ -83,10 +83,20 @@ export async function runDrawScenario({ page, pane, errors }) {
   // Exactly, to the last bit a frame's camera readback carries: the pose is re-derived from the controls each time.
   const afterStroke = await camera();
   for (const key of ['position', 'target', 'up']) afterStroke[key].forEach((value, index) => assert.ok(Math.abs(value - locked[key][index]) < 1e-9, `drawing never moves the camera: ${key}[${index}]`));
-  assert.deepEqual([afterStroke.zoom, afterStroke.projection], [locked.zoom, locked.projection]);
+  // The zoom likewise: the lock re-derives it from the editor's, which rounds in the last bits.
+  assert.ok(Math.abs(afterStroke.zoom - locked.zoom) < 1e-9, `drawing never zooms: ${locked.zoom} -> ${afterStroke.zoom}`);
+  assert.equal(afterStroke.projection, locked.projection);
   const stroke = await ink();
   assert.ok(stroke.red > 50, `neon red ink: ${JSON.stringify(stroke)}`);
   await settles('Undo', true);
+  await settles('Redo', false);
+  // Undo and Redo trade places in the history buttons, the one stroke going and coming back.
+  await choose('Undo');
+  await settles('Undo', false);
+  await settles('Redo', true);
+  await choose('Redo');
+  await settles('Undo', true);
+  await settles('Redo', false);
 
   // Pan belongs to the editor; the camera follows along its own plane.
   await page.mouse.move(...at(200, 300));

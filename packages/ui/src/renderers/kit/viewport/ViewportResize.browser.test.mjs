@@ -27,6 +27,12 @@ function stlBox([sx, sy, sz]) {
 }
 const FILES = { 'part.stl': Buffer.from(stlBox([20, 12, 30])) };
 
+// The harness renders its viewer at a fixed CSS size; the spec draws it smaller (a Retina
+// drawing buffer of fewer pixels for a software GL to fill) and resizes it through these
+// variables. It stays wider than the viewer's mobile breakpoint (720px) throughout, so a
+// resize is only ever a resize.
+const HARNESS_SIZE = '<style>#root > div { width: var(--harness-width, 800px) !important; height: var(--harness-height, 500px) !important; }</style>';
+
 async function serveHarness(t) {
   const temporary = await mkdtemp(join(tmpdir(), 'hardcore-resize-browser-'));
   let server, browser;
@@ -47,19 +53,25 @@ async function serveHarness(t) {
     } else if (url.pathname.endsWith('/__cad/server')) {
       response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify({ rootId: root, rootPath: '/models', backend: 'cadgen' }));
     } else if (FILES[name]) { response.setHeader('Content-Type', 'application/octet-stream'); response.end(FILES[name]); }
-    else { response.setHeader('Content-Type', 'text/html'); response.end('<!doctype html><html><head><link rel="stylesheet" href="/styles.css"></head><body><div id="root"></div><script type="module" src="/harness.js"></script></body></html>'); }
+    else { response.setHeader('Content-Type', 'text/html'); response.end(`<!doctype html><html><head><link rel="stylesheet" href="/styles.css">${HARNESS_SIZE}</head><body><div id="root"></div><script type="module" src="/harness.js"></script></body></html>`); }
   });
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
   browser = await chromium.launch({ headless: true, args: (process.platform === 'darwin' && process.env.CAD_TEST_SWIFTSHADER !== '1')
     ? ['--use-angle=metal'] : ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
   const open = async () => {
     // A Retina page: the drawing buffer is device pixels, the box CSS pixels.
-    const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 2 });
+    const page = await browser.newPage({ viewport: { width: 800, height: 500 }, deviceScaleFactor: 2 });
     page.setDefaultTimeout(15000);
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     await page.addInitScript(() => {
       window.Worker = undefined;
+      // The viewer's box, resized in one layout step.
+      window.resize = (width, height) => {
+        const root = document.querySelector('#root > div');
+        root.style.setProperty('--harness-width', width);
+        if (height) root.style.setProperty('--harness-height', height);
+      };
       // Every draw call the page's WebGL makes, so a test can see a frame being drawn.
       for (const Context of [window.WebGLRenderingContext, window.WebGL2RenderingContext]) {
         for (const name of ['drawArrays', 'drawElements', 'drawArraysInstanced', 'drawElementsInstanced']) {
@@ -76,6 +88,20 @@ async function serveHarness(t) {
   };
   return { open };
 }
+
+// Opening over: no draw call for longer than the viewport's open-fit window. Opening settles
+// in steps (the open fit, the panel column, the projection), each a draw, and until it has been
+// quiet for OPEN_FIT_SETTLE_MS (600 ms, `ShellViewport.jsx`) a resize re-fits instead of
+// rescaling. Awaited as a quiet spell, however long a slow GL takes to reach it.
+const idle = page => page.waitForFunction(() => new Promise(resolve => {
+  let last = window.__glDraws || 0, since = performance.now();
+  const step = () => {
+    const now = window.__glDraws || 0;
+    if (now !== last) { last = now; since = performance.now(); }
+    if (performance.now() - since >= 700) resolve(true); else requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}));
 
 const frames = (page, count = 2) => page.evaluate(n => new Promise(resolve => {
   const step = left => (left ? requestAnimationFrame(() => step(left - 1)) : resolve());
@@ -168,22 +194,22 @@ test('a viewer resized in one step paints the model at its new size in that same
   const { open } = await serveHarness(t);
   const { page, pane, errors } = await open();
   // Let opening settle (the open fit, the panel column, the projection) before resizing.
-  await page.waitForTimeout(900);
+  await idle(page);
   await installProbe(page);
   const ratio = await restingRatio(page);
   assert.ok(ratio >= 1, `resting pixel ratio ${ratio}`);
 
   // 1. The viewer's own box narrows in one step, as a window snap or a sibling column does.
   await page.evaluate(() => window.__resizeProbe.mark());
-  await page.evaluate(() => { document.querySelector('#root > div').style.width = '860px'; });
+  await page.evaluate(() => resize('730px', '400px'));
   await page.waitForFunction(() => window.__resizeProbe.records.length > 0);
   const [narrowed] = await page.evaluate(() => window.__resizeProbe.records);
-  assert.ok(narrowed.cssWidth < 900, `the box narrowed (${narrowed.cssWidth}px)`);
+  assert.ok(narrowed.cssWidth < 760, `the box narrowed (${narrowed.cssWidth}px)`);
   assertPaintedAtNewSize(narrowed, ratio, await settledSignature(page), 'one-step narrowing');
 
   // 2. And widens back in one step.
   await page.evaluate(() => window.__resizeProbe.mark());
-  await page.evaluate(() => { document.querySelector('#root > div').style.width = '1200px'; });
+  await page.evaluate(() => resize('800px', '500px'));
   await page.waitForFunction(() => window.__resizeProbe.records.length > 0);
   const [widened] = await page.evaluate(() => window.__resizeProbe.records);
   assertPaintedAtNewSize(widened, ratio, await settledSignature(page), 'one-step widening');
@@ -193,14 +219,13 @@ test('a viewer resized in one step paints the model at its new size in that same
   await pane.locator('[data-file-panel][aria-label="Show files"]').click();
   await page.waitForFunction(() => window.__resizeProbe.records.length > 0);
   const [treeOpened] = await page.evaluate(() => window.__resizeProbe.records);
-  assert.ok(treeOpened.cssWidth < 1150, `the file tree took room from the viewer (${treeOpened.cssWidth}px)`);
+  assert.ok(treeOpened.cssWidth < 780, `the file tree took room from the viewer (${treeOpened.cssWidth}px)`);
   assertPaintedAtNewSize(treeOpened, ratio, await settledSignature(page), 'file tree opening');
 
   // 4. A drag resizes once per frame; every frame is painted at its own size, and the
   //    viewport draws no more than one picture per frame to do it.
   await page.evaluate(() => window.__resizeProbe.mark());
   const drawsPerFrame = await page.evaluate(() => new Promise(resolve => {
-    const root = document.querySelector('#root > div');
     const perFrame = [];
     let last = window.__glDraws || 0;
     let step = 0;
@@ -209,7 +234,7 @@ test('a viewer resized in one step paints the model at its new size in that same
       if (step > 0) perFrame.push(now - last);
       last = now;
       if (step === 12) { resolve(perFrame); return; }
-      root.style.width = `${1200 - (step + 1) * 20}px`;
+      resize(`${800 - (step + 1) * 5}px`);
       step += 1;
       requestAnimationFrame(tick);
     };
