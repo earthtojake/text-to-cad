@@ -125,7 +125,7 @@ for the full flow, the resume path, the rehearsal, and local/manual fallbacks.
   once, at the cheapest level that exercises the real path: a unit or jsdom test
   first, a real browser (WebGL) only for what needs one. Await the condition, never
   a fixed sleep or a wall-clock bound; a flaky test is fixed or deleted, never
-  retried. CI time is a budget: the `web` job stays within 6 minutes, and a
+  retried. CI time is a budget: the `web` job stays within 7 minutes, and a
   change that lengthens any job says what it costs and why in its PR.
 - Benchmarks under `scripts/bench/` are manual and their output is never
   committed: reports, logs, profiles and screenshots go to an ignored `tmp/`.
