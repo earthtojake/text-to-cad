@@ -65,7 +65,7 @@ class RenderDisplaySchemaTest(unittest.TestCase):
             "lighting": {"quality": "preview", "exposure": -1.25, "rotation": 180, "size": 0.25, "fill": 1},
             "background": {"color": "#abc", "opacity": 0.4},
             "floor": {"enabled": False, "placement": "origin", "opacity": 0.6},
-            "grid": {}, "axes": {"enabled": False},
+            "grid": {"density": 2}, "axes": {"enabled": False},
             "clip": {"enabled": True, "axis": "z", "offsets": {"z": 0.5}},
             "exploded": {"enabled": True, "amount": 0.5},
         }
@@ -90,6 +90,7 @@ class RenderDisplaySchemaTest(unittest.TestCase):
             {"camera": {"projection": "ortho"}}, {"surfaces": {"style": "smooth"}},
             {"surfaces": {"colorMode": "by_part"}}, {"surfaces": {"colors": []}},
             {"surfaces": {"colors": ["white"]}}, {"edges": {"visibility": "hidden"}},
+            {"grid": {"density": 0.24}}, {"grid": {"density": 4.01}}, {"grid": {"density": "2"}},
         )
         for display in invalid:
             with self.subTest(display=display), self.assertRaises(SnapshotError):

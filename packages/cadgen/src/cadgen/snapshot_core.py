@@ -185,7 +185,7 @@ DISPLAY_EDGE_KEYS = frozenset({"enabled", "visibility", "color"})
 DISPLAY_LIGHTING_KEYS = frozenset({"enabled", "quality", "exposure", "rotation", "size", "fill"})
 DISPLAY_BACKGROUND_KEYS = frozenset({"enabled", "color", "opacity"})
 DISPLAY_FLOOR_KEYS = frozenset({"enabled", "placement", "color", "opacity"})
-DISPLAY_GRID_KEYS = frozenset({"enabled", "color", "opacity"})
+DISPLAY_GRID_KEYS = frozenset({"enabled", "color", "opacity", "density"})
 DISPLAY_AXES_KEYS = frozenset({"enabled", "color", "opacity"})
 DISPLAY_CLIP_KEYS = frozenset({"enabled", "axis", "offset", "offsets", "invert"})
 DISPLAY_EXPLODED_KEYS = frozenset({"enabled", "amount"})
@@ -405,6 +405,7 @@ def validate_display_settings_values(
         for key, bounds in {
             "camera": {"focalLength": (20, 200)},
             "lighting": {"exposure": (-5, 5), "rotation": (-180, 180), "size": (0.25, 3), "fill": (0, 1)},
+            "grid": {"density": (0.25, 4)},
             "exploded": {"amount": (0, 1)}, "clip": {"offset": (0, 1)},
         }.get(name, {}).items():
             if key in value:
