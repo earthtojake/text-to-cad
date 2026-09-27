@@ -124,6 +124,7 @@ export interface RendererViewProps {
   onReady: (ready: boolean) => void;
   onOpenFile: (path: string, options?: { target: "current" | "new" }) => void;
   appearance: { colorScheme: "light" | "dark" };
+  /** The file's saved view as it stood when this renderer opened it; later saves do not come back. */
   state: JsonValue | undefined;
   onStateChange: (state: JsonValue) => void;
   reload: () => void;

@@ -83,8 +83,13 @@ export function FileViewer({ file, host, renderers, state, onStateChange, leadin
   const setRendererState = useCallback((value: JsonValue) => { if (latest.current.sourceId === source.id && rendererStateKey) changeState((previous) => ({ ...previous, renderers: { ...previous.renderers, [rendererStateKey]: value } })); }, [changeState, rendererStateKey, source.id]);
 
   // The renderer is re-rendered only when what it is handed changes: not by a panel drag, a
-  // navbar action it published, or anything else this frame redraws for itself.
-  const rendererState = state.renderers?.[rendererStateKey];
+  // navbar action it published, or anything else this frame redraws for itself. Its `state` is the
+  // record as it stood when this renderer opened the file: what it saves after that is its own and
+  // does not come back to it, so a save never re-renders the view that made it.
+  const openedState = useRef<{ key: unknown; value: JsonValue | undefined }>({ key: undefined, value: undefined });
+  const openedKey = `${String(key)}\u0000${rendererStateKey}`;
+  if (openedState.current.key !== openedKey) openedState.current = { key: openedKey, value: state.renderers?.[rendererStateKey] };
+  const rendererState = openedState.current.value;
   const shown = loaded.status === "ready" ? loaded : null;
   const rendererBody = useMemo(() => {
     if (!shown) return null;
