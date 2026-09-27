@@ -66,6 +66,7 @@ async function serveHarness(t) {
     page.on('pageerror', error => errors.push(error.message));
     await page.addInitScript(() => {
       window.Worker = undefined;
+      window.__cadPreviewChromeIdleMs = 5000;
       for (const name of ['localStorage', 'sessionStorage']) {
         Object.defineProperty(window, name, { get() { throw new Error(`Renderer accessed ${name}`); } });
       }
@@ -134,7 +135,7 @@ test('preview orbits every GLB, and an animated one plays its routines there alo
   await pane.getByRole('button', { name: 'Play animation', exact: true }).click();
   await pane.getByRole('button', { name: 'Display settings', exact: true }).click();
   await page.locator('[data-display-popover]').waitFor();
-  await page.waitForTimeout(1300);
+  await page.waitForTimeout(await page.evaluate(() => window.__cadPreviewChromeIdleMs) + 300);
   assert.equal(await pane.locator('[data-preview-controls]').getAttribute('data-visible'), 'true', 'an open popover holds preview\'s controls');
   assert.equal(await playing(), true);
   await page.keyboard.press('Escape');

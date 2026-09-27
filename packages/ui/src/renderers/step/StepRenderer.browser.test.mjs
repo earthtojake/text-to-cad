@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { after, before, test } from 'node:test';
+import { after, afterEach, before, test } from 'node:test';
 import { PNG } from 'pngjs';
 import { serveStepHarness } from '../harness/stepScenario.mjs';
 import { TOOL_PANEL_WIDTH } from '../../../dist/renderers/kit/tools/toolStackLayout.js';
@@ -18,6 +18,7 @@ import { TOOL_PANEL_WIDTH } from '../../../dist/renderers/kit/tools/toolStackLay
 let harness;
 const cleanups = [];
 before(async () => { harness = await serveStepHarness({ after: cleanup => cleanups.push(cleanup) }); });
+afterEach(async () => { await harness?.closePages(); });
 after(async () => { for (const cleanup of cleanups.reverse()) await cleanup(); });
 
 const settle = page => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
@@ -2250,7 +2251,8 @@ test('Preview\'s settings and playback share visibility while editor controls st
   assert.equal(await pane.locator('[data-preview-controls]').getAttribute('data-visible'), 'true');
   await pane.getByRole('button', { name: 'Playback settings', exact: true }).click();
   await page.getByRole('menu').waitFor();
-  await page.waitForTimeout(1200);
+  // Past the chrome's idle, as this page runs it.
+  await page.waitForTimeout(await page.evaluate(() => window.__cadPreviewChromeIdleMs) + 200);
   assert.equal(await pane.locator('[data-preview-controls]').getAttribute('data-visible'), 'true', 'open settings stay available');
   await page.keyboard.press('Escape');
   assert.equal(await sheet.isVisible(), false, 'menu dismissal does not exit Preview');

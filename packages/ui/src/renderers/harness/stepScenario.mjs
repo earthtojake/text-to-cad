@@ -188,6 +188,7 @@ export async function serveStepHarness(t, { onRequest, progressive = false, sing
   for (const name of ['a', 'b']) hold(name);
   const temporary = await mkdtemp(join(tmpdir(), 'hardcore-step-browser-'));
   let server, browser;
+  const pages = new Set();
   t.after(async () => {
     await browser?.close();
     if (server) await new Promise(resolve => server.close(resolve));
@@ -277,13 +278,14 @@ export async function serveStepHarness(t, { onRequest, progressive = false, sing
    */
   const open = async ({ timeout = 30000, record = null, store = null, hasTouch = false, init = null } = {}) => {
     const page = await browser.newPage({ viewport: { width: 1280, height: 800 }, deviceScaleFactor: 1, hasTouch });
+    pages.add(page);
     t.after(() => page.close().catch(() => {}));
     page.setDefaultTimeout(timeout);
     const errors = [];
     page.on('pageerror', error => errors.push(error.message));
     // No Worker: the surf tessellator falls back to the main thread, which is
     // what `renderAssetClient` does for a host without one.
-    await page.addInitScript(() => { window.Worker = undefined; });
+    await page.addInitScript(() => { window.Worker = undefined; window.__cadPreviewChromeIdleMs = 5000; });
     if (record) await page.addInitScript(stored => { window.__cadTabRecord = stored; }, record);
     // A script of the test's own that must run before the app does (a render counter on
     // React's devtools hook, say).
@@ -291,5 +293,8 @@ export async function serveStepHarness(t, { onRequest, progressive = false, sing
     await page.goto(`http://127.0.0.1:${server.address().port}/?file=${fixture.file}${store === 'session' ? '&store=session' : ''}`);
     return { page, errors, pane: page.getByTestId('one') };
   };
-  return { open, requests, fixture, entry, port: () => server.address().port, release: gate => opened[gate]?.(), hold };
+  // A test's pages, closed when it ends: one left in preview, orbiting, would keep a software
+  // renderer busy through every test after it.
+  const closePages = async () => { for (const page of pages) await page.close().catch(() => {}); pages.clear(); };
+  return { open, closePages, requests, fixture, entry, port: () => server.address().port, release: gate => opened[gate]?.(), hold };
 }

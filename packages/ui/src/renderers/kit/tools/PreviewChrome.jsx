@@ -3,6 +3,9 @@ import { ToolbarTooltipScope } from "@hardcore/ui/primitives/toolbar-button";
 import { VIEWPORT_INSET_PX, VIEWPORT_TOP_BAR_PX } from "../shell/viewportLayout.js";
 
 export const PREVIEW_CHROME_IDLE_MS = 1000;
+// A browser test on a slow software renderer stretches the idle (`window.__cadPreviewChromeIdleMs`)
+// so the chrome is not put away between two of its steps.
+const previewChromeIdleMs = () => Number(globalThis.window?.__cadPreviewChromeIdleMs) || PREVIEW_CHROME_IDLE_MS;
 
 const BAR_POSITION = Object.freeze({ top: `${VIEWPORT_INSET_PX}px`, right: `${VIEWPORT_INSET_PX}px`, height: VIEWPORT_TOP_BAR_PX });
 
@@ -40,7 +43,7 @@ export default function PreviewChrome({ active, surface, hold = false, actions, 
       if (pressing || event?.target?.closest?.('[data-preview-hover-hold]')) return;
       timer = setTimeout(() => {
         if (!surface.querySelector("[data-preview-hover-hold]:hover")) setVisible(false);
-      }, PREVIEW_CHROME_IDLE_MS);
+      }, previewChromeIdleMs());
     };
     const leave = () => wake();
     const focus = () => wake();
