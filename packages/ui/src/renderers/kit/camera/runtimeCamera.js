@@ -368,6 +368,19 @@ export function syncRuntimeCameraProjection(runtime, projection, { scheduleIdle 
     nextCamera.near = previousCamera.near;
     nextCamera.far = previousCamera.far;
     nextCamera.zoom = Number.isFinite(previousCamera.zoom) && previousCamera.zoom > 0 ? previousCamera.zoom : 1;
+    // Orthographic to perspective keeps the framing too: the perspective camera stands, along the
+    // line it looks down, at the distance whose half height is the orthographic one — the exact
+    // inverse of the half height the other direction reads off a perspective camera (above), so
+    // Solid to Render and back returns the view it started from.
+    const orthographicHalfHeight = previousCamera?.isOrthographicCamera ? Number(previousCamera.userData?.cadHalfHeight) : NaN;
+    const target = runtime.controls?.target;
+    if (nextCamera.isPerspectiveCamera && Number.isFinite(orthographicHalfHeight) && orthographicHalfHeight > 0 && target) {
+      const direction = nextCamera.position.clone().sub(target);
+      const tangent = Math.tan((Math.max(Number(nextCamera.fov) || 48, 1e-3) * Math.PI) / 360);
+      if (direction.lengthSq() > 1e-18 && tangent > 0) {
+        nextCamera.position.copy(target).addScaledVector(direction.normalize(), (orthographicHalfHeight * nextCamera.zoom) / tangent);
+      }
+    }
     runtime.camera = nextCamera;
     runtime.controls.object = nextCamera;
   }

@@ -168,6 +168,8 @@ export function useViewportCamera({
       syncViewPlaneOrientation(runtime);
     }
     if (reset) {
+      // Asking for the fit hands the camera back to it: a later revision frames itself again.
+      runtime.userMovedCamera = false;
       return true;
     }
     // Fallback for when the refit bails — no usable bounds yet, so there is

@@ -214,7 +214,8 @@ export function sameZeroPoseBounds(a, b, epsilon = ZERO_POSE_REVISION_EPSILON) {
 // deliberate choice about this model and an automatic fit would throw it away on
 // every save. A mode change does NOT stand down -- switching mode is itself the
 // deliberate act, and it carries Reset view's meaning for the mode being
-// entered. Reset view still takes a stood-down camera to the new zero pose.
+// entered. Reset view still takes a stood-down camera to the new zero pose, and
+// hands it back: the fit it lands on is nobody's choice, so a later revision re-fits.
 //
 // `userMovedCamera` is the only deliberate camera this function can see. The other
 // one is the camera a file KEPT, restored when the model was first framed, and it
