@@ -114,36 +114,11 @@ and never owns a package for one (`owns_dxf_path` always answers False).
 
 ## Standing gate
 
-`apps/web/scripts/e2e-format-sweep.mjs` loads one fixture per format against a running
-viewer and asserts each draws something with no page errors:
-
-```bash
-# From the models root:
-cadgen viewer --host 127.0.0.1 --json
-
-# From the repository root, using the URL printed by the launcher:
-node apps/web/scripts/e2e-format-sweep.mjs --dir <abs-models-root> --url <viewer-url> [--out <dir>]
-```
-
-The fixtures must exist under the served root. To test this checkout's client,
-build it and select its `dist/` explicitly as described in the
-[web app README](../../../apps/web/README.md#launching). The harnesses belong to
-the web host because they exercise the shared renderer through a running app.
-
-Run it for any change to shared viewer code. It uses `page.screenshot()` against a
-Metal-backed context on purpose: a blank-but-error-free viewport is the signature failure
-mode here (a shader that fails to compile, a gate that hides the geometry), sampling the
-canvas with `drawImage` reports every format blank because the drawing buffer is not
-preserved, and the software rasteriser hides real GPU failures. It has already earned its
-keep — it caught a temporal-dead-zone crash that blanked all six formats and that the
-build and unit tests both passed.
-
-**Method warning: do not run large sweeps back to back.** Chaining full runs (or launching
-several browsers in quick succession) exhausts GPU
-contexts and reports large numbers of *false* blanks — a run that reported 33 blank models
-reported zero on a clean run of the same build, twice. Let the previous run's browser fully
-exit before starting another, and treat any mass-blank result as suspect until reproduced
-from a cold start. Isolate a single suspect model rather than trusting one bulk run.
+The `web` CI job's `scripts/test/test-viewer-browser.sh` opens one fixture per load path
+(STEP, STL, DXF, URDF) through the real backend and the bundled viewer and asserts each
+draws something with no page errors: a blank-but-error-free viewport is the signature
+failure here (a shader that fails to compile, a gate that hides the geometry). It runs on
+every change to shared viewer code; there is no separate manual sweep.
 
 ## Known non-uniformities
 
