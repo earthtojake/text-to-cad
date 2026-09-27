@@ -112,7 +112,8 @@ async function assertPairedRow(section, label, control) {
  */
 async function frameWhen(view, reached, what) {
   let last;
-  for (let attempt = 0; attempt < 16; attempt += 1) {
+  // Up to ~8 s: a software renderer's idle-quality repaint can land seconds after the pointer stops.
+  for (let attempt = 0; attempt < 40; attempt += 1) {
     last = await view.frame();
     if (reached(last)) return last;
     await view.page.waitForTimeout(200);
@@ -2177,7 +2178,8 @@ test('animated Render bounds follow moving geometry without moving the camera or
   const before = await page.evaluate(() => ({ camera: window.__cadCamera(), stage: window.__cadStage() }));
   // Autoplay is off: the playbar's play button starts the routine.
   await pane.getByRole('toolbar', { name: 'Animation playback' }).getByRole('button', { name: 'Play animation', exact: true }).click();
-  await page.waitForFunction(() => window.__cadStage().bounds.max[0] > 35, null, { timeout: 10000 });
+  // Until the arm has travelled as far as the assertion below asks, not just started.
+  await page.waitForFunction(restMax => window.__cadStage().bounds.max[0] > restMax + 12, before.stage.bounds.max[0], { timeout: 10000 });
   // The pointer stayed on the playbar, which holds preview's controls up: pause there.
   await pane.getByRole('button', { name: 'Pause animation', exact: true }).click();
   await settle(page);
@@ -2890,7 +2892,9 @@ test('a click selects at once, and a double-click ends where it did when a click
   await page.mouse.move(...at([6, 6, 5]));
   await frameWhen(view, shot => differing(faces, shot) > 200, 'lit the hovered face');
   await page.mouse.move(...empty);
-  await frameWhen(view, shot => differing(faces, shot) === 0, 'let go of the hovered face');
+  // Let go: back to the unlit frame, give or take a software renderer's few pixels of noise
+  // (the lit face changes hundreds).
+  await frameWhen(view, shot => differing(faces, shot) <= 20, 'let go of the hovered face');
   await view.chooseSelectMode('Edges');
   await page.mouse.move(...empty);
   await page.waitForTimeout(300);
@@ -2898,7 +2902,7 @@ test('a click selects at once, and a double-click ends where it did when a click
   await page.mouse.move(...at([10, 6, 5]));
   await frameWhen(view, shot => differing(edges, shot) > 10, 'lit the hovered edge');
   await page.mouse.move(...empty);
-  await frameWhen(view, shot => differing(edges, shot) === 0, 'let go of the hovered edge');
+  await frameWhen(view, shot => differing(edges, shot) <= 2, 'let go of the hovered edge');
 
   // A drag orbits and selects nothing; a right-click opens the menu and selects nothing.
   await view.chooseSelectMode('All');
