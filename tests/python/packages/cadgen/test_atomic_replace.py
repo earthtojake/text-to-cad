@@ -1,4 +1,4 @@
-"""Every artifact rename retries the one Windows error that is worth retrying.
+"""Every artifact rename retries the Windows errors that are worth retrying.
 
 A cached artifact is written to a temp file and renamed into place. On a Windows SMB share that
 rename can lose to ``WinError 32`` -- the redirector still holds the handle Python just closed --
@@ -6,6 +6,10 @@ which under a parallel component build fails reliably (issue #241: 8 workers fai
 on a NAS, one worker succeeded). PR #244 fixed the rename inside the GLB writer; this pins the
 policy for all of them, because there are seven in a build's write path and hardening one moves
 the failure to the next.
+
+The second is a held DESTINATION: NTFS refuses a rename over a file another process has open with
+``WinError 5``, which is how two builds of one model -- each reading back what it just published
+-- failed a byte-identical save on the Windows runner.
 """
 
 from __future__ import annotations
@@ -28,6 +32,12 @@ CADGEN_SRC = REPO_ROOT / "packages" / "cadgen" / "src" / "cadgen"
 def sharing_violation() -> PermissionError:
     error = PermissionError(13, "file is being used by another process")
     error.winerror = atomic_replace.WINDOWS_SHARING_VIOLATION
+    return error
+
+
+def access_denied() -> PermissionError:
+    error = PermissionError(13, "Access is denied")
+    error.winerror = atomic_replace.WINDOWS_ACCESS_DENIED
     return error
 
 
@@ -64,6 +74,7 @@ class ReplaceAtomicTest(unittest.TestCase):
         self.assertEqual(len(atomic_replace.RETRY_DELAYS_SECONDS), sleep.call_count)
 
     def test_every_other_error_surfaces_at_once(self) -> None:
+        # "to.glb" does not exist: a denial with no file at the target is a real one.
         for winerror in (5, 2, None):
             error = PermissionError(13, "denied")
             if winerror is not None:
@@ -74,6 +85,68 @@ class ReplaceAtomicTest(unittest.TestCase):
                     with self.assertRaises(PermissionError):
                         atomic_replace.replace_atomic("from.tmp", "to.glb")
                 sleep.assert_not_called()
+
+    def test_a_denial_onto_an_existing_file_is_a_held_destination_and_is_retried(self) -> None:
+        """What NTFS answers a rename over a file another process has open.
+
+        Two builds of one model publish the same record, entries and document, and each reads
+        back what it wrote, so the loser of the race finds the winner's read open on its target.
+        That ``5`` is a handle about to close, not a denial.
+        """
+        import tempfile
+
+        with tempfile.TemporaryDirectory(prefix="cad-atomic-") as temp_dir:
+            source = Path(temp_dir) / "record.tmp"
+            source.write_bytes(b"new")
+            target = Path(temp_dir) / "record"
+            target.write_bytes(b"old")
+            attempts = []
+            real_replace = os.replace
+
+            def held_twice(src, dst):
+                attempts.append(src)
+                if len(attempts) <= 2:
+                    raise access_denied()
+                real_replace(src, dst)
+
+            with mock.patch.object(atomic_replace.os, "replace", side_effect=held_twice), \
+                 mock.patch.object(atomic_replace.time, "sleep") as sleep:
+                atomic_replace.replace_atomic(source, target)
+
+            self.assertEqual(b"new", target.read_bytes())
+            self.assertEqual(3, len(attempts))
+            self.assertEqual([(0.05,), (0.1,)], [call.args for call in sleep.call_args_list])
+
+    def test_a_denial_onto_a_directory_surfaces_at_once(self) -> None:
+        import tempfile
+
+        with tempfile.TemporaryDirectory(prefix="cad-atomic-") as temp_dir:
+            target = Path(temp_dir) / "in-the-way"
+            target.mkdir()
+            error = access_denied()
+            with mock.patch.object(atomic_replace.os, "replace", side_effect=error), \
+                 mock.patch.object(atomic_replace.time, "sleep") as sleep:
+                with self.assertRaises(PermissionError) as raised:
+                    atomic_replace.replace_atomic(Path(temp_dir) / "from.tmp", target)
+            self.assertIs(error, raised.exception)
+            sleep.assert_not_called()
+
+    def test_a_destination_held_past_both_ladders_reports_the_denial(self) -> None:
+        import tempfile
+
+        with tempfile.TemporaryDirectory(prefix="cad-atomic-") as temp_dir:
+            source = Path(temp_dir) / "record.tmp"
+            source.write_bytes(b"new")
+            target = Path(temp_dir) / "record"
+            target.write_bytes(b"old")
+            error = access_denied()
+            with mock.patch.object(atomic_replace.os, "replace", side_effect=error) as replace, \
+                 mock.patch.object(atomic_replace.time, "sleep"):
+                with self.assertRaises(PermissionError) as raised:
+                    atomic_replace.replace_atomic(source, target)
+            self.assertIs(error, raised.exception)
+            self.assertEqual(2 * (len(atomic_replace.RETRY_DELAYS_SECONDS) + 1), replace.call_count)
+            self.assertEqual(b"old", target.read_bytes())
 
     def test_an_exhausted_ladder_retries_from_a_copy_the_server_has_not_seen(self) -> None:
         """Issue #274 after 0.4.13, and the gate run on #283.

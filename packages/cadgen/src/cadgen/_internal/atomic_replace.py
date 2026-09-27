@@ -14,8 +14,9 @@ component rename one frame away.
 
 Deliberately narrow:
 
-* only ``WinError 32`` retries. A denial (5) or a missing directory is a real error and must
-  surface at once, not 350 ms later.
+* only ``WinError 32``, and ``WinError 5`` onto an existing FILE, retry (see below for the
+  second). A denial with no file in the way -- a read-only folder, a directory at the target --
+  or a missing directory is a real error and must surface at once, not 350 ms later.
 * the attribute does not exist off Windows, so this is exactly ``os.replace`` on POSIX.
 * five attempts over 750 ms, then the original error propagates. A rename that cannot win in
   that window is not a deferred close, and a build that hangs retrying is worse than one that
@@ -50,10 +51,20 @@ GLB rename, which streams its bytes to disk and hands this helper a finished fil
 sites do the same, and a branch in flight adds a seventh. Hardening the writer would have left all
 of them out, which is the rule the docstring above already states.
 
-What this cannot do: ``os.replace`` is also refused when something holds the DESTINATION open --
-a reader with the artifact mapped, or a virus scanner sweeping it. No source-side trick reaches
-that case, and the second ladder is simply a bounded futile wait when it happens. The reported and
-measured failure is the source handle; this covers that one.
+The DESTINATION has its own failure, and it answers with a different code. NTFS refuses to
+rename over a file that any process holds open -- ``MoveFileEx`` without POSIX semantics, which is
+what ``os.replace`` is -- and says ``WinError 5`` (ERROR_ACCESS_DENIED), not 32. The store is
+built to have that happen: there are no locks (STORE.md §7), two builds of one model publish the
+same entries, records, trees and document, and each reads back what it just wrote -- the record,
+the tree, the ``.step`` it hashes to verify the save. So the loser of that race finds the winner
+reading the very file it is replacing, or renaming onto it at the same instant, and a ``5`` that
+was never a denial failed a byte-identical publish the contract calls idempotent. POSIX renames
+over an open file without complaint, which is why only Windows saw it. The hold is a
+read-back that ends in milliseconds, so the same ladder waits it out; the retry is keyed on a
+FILE at the target, because that is the only case where a ``5`` can be somebody else's
+handle. A read-only file there is a real denial that now surfaces after the bounded wait instead
+of at once -- the price, and a small one. The copy below does nothing for a held destination; it
+is one more bounded wait.
 """
 
 from __future__ import annotations
@@ -67,6 +78,9 @@ from pathlib import Path
 # ERROR_SHARING_VIOLATION: the file is open in another process -- or, on SMB, was open a moment
 # ago and the server has not caught up.
 WINDOWS_SHARING_VIOLATION = 32
+# ERROR_ACCESS_DENIED: what a rename answers when another process holds the DESTINATION open
+# (or is renaming onto it). Retried only when a file is there -- see the module docstring.
+WINDOWS_ACCESS_DENIED = 5
 RETRY_DELAYS_SECONDS = (0.05, 0.1, 0.2, 0.4)
 
 
@@ -80,7 +94,9 @@ def open_with_ladder(path: Path | str, mode: str):
     tail in place: the file OCCT had just closed is reopened up to three times
     per export.
 
-    Deliberately narrow, exactly like ``_run_ladder``: only WinError 32 waits.
+    Deliberately narrow: only WinError 32 waits. (A rename also waits out a
+    denial onto an existing file -- that is a held DESTINATION, which an open
+    for reading never has.)
     A denial (5), a missing file, or a bad mode is a real error and surfaces at
     once rather than 750 ms later, and off Windows ``winerror`` does not exist,
     so this is precisely ``open()`` on POSIX.
@@ -112,18 +128,31 @@ def temp_suffix() -> str:
     return f".{os.getpid()}.{os.urandom(4).hex()}.tmp"
 
 
-def _run_ladder(temp_path: Path | str, target_path: Path | str) -> OSError | None:
-    """Run the bounded retry, returning the sharing violation it could not beat.
+def _held(error: OSError, target_path: Path | str) -> bool:
+    """Whether a refused rename is a handle someone will let go of.
 
-    Any other error propagates at once: a denial (5) or a missing directory is a real error and
-    must surface immediately, not 750 ms later.
+    A sharing violation always is. A denial is only when a FILE is at the target: that is the
+    code NTFS gives a rename over a file another process has open. With nothing there, or a
+    directory in the way, a denial is a real one.
+    """
+    code = getattr(error, "winerror", None)
+    if code == WINDOWS_SHARING_VIOLATION:
+        return True
+    return code == WINDOWS_ACCESS_DENIED and os.path.isfile(target_path)
+
+
+def _run_ladder(temp_path: Path | str, target_path: Path | str) -> OSError | None:
+    """Run the bounded retry, returning the held-handle refusal it could not beat.
+
+    Any other error propagates at once: a real denial or a missing directory must surface
+    immediately, not 750 ms later.
     """
     for delay in (*RETRY_DELAYS_SECONDS, None):
         try:
             os.replace(temp_path, target_path)
             return None
         except OSError as error:
-            if getattr(error, "winerror", None) != WINDOWS_SHARING_VIOLATION:
+            if not _held(error, target_path):
                 raise
             if delay is None:
                 return error
