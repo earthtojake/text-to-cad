@@ -1,6 +1,6 @@
-# @hardcore/ui
+# @text-to-cad/ui
 
-The shared React interface for Hardcore. `FileViewer` is the complete file tab:
+The shared React interface for text-to-cad. `FileViewer` is the complete file tab:
 its breadcrumb row, menus, content, file tree, one panel column, loading and
 error states, and common edit/save/reload lifecycle. `apps/web` consumes this
 component through the package's compiled exports; a host's own project, session
@@ -13,9 +13,9 @@ remain local where their appearance differs.
 
 ## Ownership and dependencies
 
-UI may import `@hardcore/core` and browser-safe React dependencies. It must not
+UI may import `@text-to-cad/core` and browser-safe React dependencies. It must not
 import an application, Electron, Node services, desktop IPC schemas, app stores,
-or `window.hardcore`. Hosts inject file access, capabilities, navigation,
+or `window.textToCad`. Hosts inject file access, capabilities, navigation,
 persistence, appearance and CAD services. Importing a package starts no polling,
 workers or host storage writes and changes neither document title nor theme.
 
@@ -108,14 +108,14 @@ the host's source returns. A host that exposes arbitrary files registers a
 fallback renderer (`fallback: true`) for the types nothing else matches.
 
 ```tsx
-import { FileViewer } from '@hardcore/ui/file-viewer';
-import { createStepRenderer } from '@hardcore/ui/renderers/step';
-import { createDxfRenderer } from '@hardcore/ui/renderers/dxf';
-import { createGlbRenderer } from '@hardcore/ui/renderers/glb';
-import { createMeshRenderer } from '@hardcore/ui/renderers/mesh';
-import { createRobotRenderer } from '@hardcore/ui/renderers/robot';
-import '@hardcore/ui/tokens.css';
-import '@hardcore/ui/styles.css';
+import { FileViewer } from '@text-to-cad/ui/file-viewer';
+import { createStepRenderer } from '@text-to-cad/ui/renderers/step';
+import { createDxfRenderer } from '@text-to-cad/ui/renderers/dxf';
+import { createGlbRenderer } from '@text-to-cad/ui/renderers/glb';
+import { createMeshRenderer } from '@text-to-cad/ui/renderers/mesh';
+import { createRobotRenderer } from '@text-to-cad/ui/renderers/robot';
+import '@text-to-cad/ui/tokens.css';
+import '@text-to-cad/ui/styles.css';
 
 // One viewer renderer per file family, sharing one client and one preference source.
 const renderers = [createStepRenderer({ client, preferences }), createDxfRenderer({ client, preferences }),
@@ -183,7 +183,7 @@ recognition metadata after the runtime descriptor also matches, avoiding surface
 requests on a warm reopen without retaining another copy of the geometry.
 
 The host owns where state lives; the package owns what it is. Everything the
-viewer keeps is one tab record (`@hardcore/ui/tab-store`: the tab's settings and
+viewer keeps is one tab record (`@text-to-cad/ui/tab-store`: the tab's settings and
 each file's view — its camera, Display settings and the renderer's own slices),
 thrown out with the tab and kept across a reload. The web keeps it in
 `sessionStorage`, the desktop in its per-tab store; both hand `createTabStore` one
@@ -199,8 +199,8 @@ From the repository root:
 npm ci
 npx --no-install playwright install chromium
 npm run build:packages
-npm run typecheck --workspace @hardcore/ui
-npm test --workspace @hardcore/ui
+npm run typecheck --workspace @text-to-cad/ui
+npm test --workspace @text-to-cad/ui
 npm run check:boundaries
 ```
 

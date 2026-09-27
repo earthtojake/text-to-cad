@@ -3,6 +3,6 @@
   "git": {
     "deploymentEnabled": false
   },
-  "installCommand": "cd ../.. && npm ci --workspace @hardcore/core --workspace cad-skills-docs",
+  "installCommand": "cd ../.. && npm ci --workspace @text-to-cad/core --workspace cad-skills-docs",
   "buildCommand": "cd ../.. && npm run build:docs"
 }

@@ -17,7 +17,7 @@ import {
   buildSelectorRuntime,
   composeSelectorRuntimes,
   createSelectorRuntimeComposer
-} from "@hardcore/core/lib/selectors/runtime.js";
+} from "@text-to-cad/core/lib/selectors/runtime.js";
 
 // The options one occurrence's selector runtime is built with. Shared by the initial topology
 // composition, the LOD re-composition and the incremental composer so all of them build picking

@@ -5,8 +5,8 @@ Three shared packages support the applications in `apps/docs` and `apps/web`:
 | Directory | Identity | Responsibility |
 | --- | --- | --- |
 | [cadgen](cadgen/README.md) | Python distribution `cadgen` | CAD engine, store, CLI, build daemon, HTTP service and bundled runtime outputs |
-| [core](core/README.md) | `@hardcore/core` | Framework-independent JS/TS geometry, rendering and explicit CAD service client |
-| [ui](ui/README.md) | `@hardcore/ui` | Complete shared FileViewer, injectable renderers, navigation, controls and styles |
+| [core](core/README.md) | `@text-to-cad/core` | Framework-independent JS/TS geometry, rendering and explicit CAD service client |
+| [ui](ui/README.md) | `@text-to-cad/ui` | Complete shared FileViewer, injectable renderers, navigation, controls and styles |
 
 This migration is a pure refactor. All apps retain their existing UI, UX and
 functionality. Web and desktop both consume the same FileViewer; their adapters

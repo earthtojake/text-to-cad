@@ -1,7 +1,7 @@
 import { useCallback, useLayoutEffect, useRef } from "react";
 import { applyPerspectiveSnapshot, cancelCameraTransition, captureRuntimeViewportFitScale, readPerspectiveSnapshot, readScopedPerspectiveSnapshot, recenterRuntimeTarget, setRuntimeZoomPercent, syncRuntimeViewportFraming, transitionCameraToViewPreset, zoomRuntimeToBounds } from "./runtimeCamera.js";
-import { runtimeModelKeyMatches } from "@hardcore/core/lib/viewer/modelRuntime.js";
-import { perspectiveSnapshotEqual, perspectiveSnapshotMatchesScene, resolvePerspectiveSnapshot } from "@hardcore/core/lib/perspective.js";
+import { runtimeModelKeyMatches } from "@text-to-cad/core/lib/viewer/modelRuntime.js";
+import { perspectiveSnapshotEqual, perspectiveSnapshotMatchesScene, resolvePerspectiveSnapshot } from "@text-to-cad/core/lib/perspective.js";
 import { DEFAULT_VIEW_DIRECTION, VIEW_CUBE_DRAG_RAD_PER_PX, VIEW_PLANE_FACE_BY_ID, WORLD_UP, applyOrbitDelta, clearKeyboardOrbitState, readViewPlaneOrientation, runtimeFramingBounds } from "./viewportCameraKit.js";
 
 /**

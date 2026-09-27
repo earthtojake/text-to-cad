@@ -1,4 +1,4 @@
-import { SCENE_QUALITY, resolveSceneQuality } from "@hardcore/core/common/sceneSettings.js";
+import { SCENE_QUALITY, resolveSceneQuality } from "@text-to-cad/core/common/sceneSettings.js";
 import { previewDisplaySettings } from "../view-settings/viewerDisplaySettings.js";
 
 // The two ways one viewport draws the SAME Display settings. The settings are the file's and are

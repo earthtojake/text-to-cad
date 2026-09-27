@@ -1,4 +1,4 @@
-Hardcore drawing editor: @excalidraw/excalidraw 0.18.1
+text-to-cad drawing editor: @excalidraw/excalidraw 0.18.1
 
 Excalidraw is MIT licensed. Its bundled font families carry the separate
 licenses in this directory. Copyright notices were transcribed from the

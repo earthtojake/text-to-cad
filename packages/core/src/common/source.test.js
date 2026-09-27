@@ -168,7 +168,7 @@ test("macro tessellation changes the rendered surface and uses its own cache ent
   // "an explicit macro request re-tessellates and keys its own cache entry", which
   // 1e-3/0.1 proves exactly as well as the floor does — at 1/10th the work. Asking
   // for 1e-4/0.025 here built a 1.7M-index mesh and cost ~4.5 s, which was the
-  // whole @hardcore/core suite's critical path.
+  // whole @text-to-cad/core suite's critical path.
   const fineJob = { ...base, quality: { tessellation: { chordTolerance: .001, angleTolerance: .1 } } };
   const fine = await loadSource(fineJob);
   assert.ok(fine.meshData.indices.length > coarse.meshData.indices.length);

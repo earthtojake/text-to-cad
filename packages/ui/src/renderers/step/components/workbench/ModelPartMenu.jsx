@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect } from 'react';
-import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from '@hardcore/ui/primitives/context-menu';
+import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from '@text-to-cad/ui/primitives/context-menu';
 import { useHostReference } from '../../file-view/hostReference.js';
 import { AssemblyPartMenuItems } from './AssemblyContextMenuItems.js';
 

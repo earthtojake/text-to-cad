@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
-import { createPromptContext, referencePart, textPart } from '@hardcore/core/prompt';
+import { createPromptContext, referencePart, textPart } from '@text-to-cad/core/prompt';
 import { ViewerHostContext } from './context.js';
 import { PromptContextAction } from './PromptContextAction.js';
 import { testHost } from './testing/host.js';

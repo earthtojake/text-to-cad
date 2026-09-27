@@ -1,6 +1,6 @@
 "use client";
 
-import { createHttpCadResourceProvider } from "@hardcore/core/client";
+import { createHttpCadResourceProvider } from "@text-to-cad/core/client";
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
 import { Line2 } from "three/examples/jsm/lines/Line2.js";
@@ -12,18 +12,18 @@ import {
   animationClipDuration,
   findAnimationClip,
   firstAnimationClipId,
-} from "@hardcore/core/common/animationClock.js";
-import { CAD_SCENE_SCALE, buildModel } from "@hardcore/core/common/cadScene.js";
-import { loadSourceAnimation } from "@hardcore/core/common/renderModule.js";
-import { renderModel } from "@hardcore/core/common/renderModel.js";
+} from "@text-to-cad/core/common/animationClock.js";
+import { CAD_SCENE_SCALE, buildModel } from "@text-to-cad/core/common/cadScene.js";
+import { loadSourceAnimation } from "@text-to-cad/core/common/renderModule.js";
+import { renderModel } from "@text-to-cad/core/common/renderModel.js";
 import {
   loadSource,
   packageSourceFromBaseUrl,
   stepParameterRuntime,
-} from "@hardcore/core/common/source.js";
-import { cloneThemePresetSettings } from "@hardcore/core/common/themeSettings.js";
+} from "@text-to-cad/core/common/source.js";
+import { cloneThemePresetSettings } from "@text-to-cad/core/common/themeSettings.js";
 
-// The hero renders the planetary gear STEP the way every @hardcore/core client
+// The hero renders the planetary gear STEP the way every @text-to-cad/core client
 // renders a STEP: the model's render package (exact surfaces, tessellated in
 // the browser) plus its sidecar (kinematics for the mate graph, copied
 // animation clips for choreography). No GLB export, no site-local gear math —

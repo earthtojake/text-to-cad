@@ -1,4 +1,4 @@
-import { cn } from "@hardcore/ui/utils";
+import { cn } from "@text-to-cad/ui/utils";
 
 /**
  * The one empty state, used by every pane in both apps.

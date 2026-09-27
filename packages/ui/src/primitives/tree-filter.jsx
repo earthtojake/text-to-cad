@@ -1,5 +1,5 @@
 import { Search, X } from 'lucide-react';
-import { cn } from '@hardcore/ui/utils';
+import { cn } from '@text-to-cad/ui/utils';
 
 /**
  * The filter box above a tree, and the highlight its matches use. Shared by the

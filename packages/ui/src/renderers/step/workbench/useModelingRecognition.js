@@ -1,4 +1,4 @@
-import { cadResourceCacheKey } from "@hardcore/core/client";
+import { cadResourceCacheKey } from "@text-to-cad/core/client";
 import { resolveSurfaceComponents } from "./surfaceResolution.js";
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { loadPackageDescriptor } from '../components/workbench/hooks/packageDescriptorCache.js';

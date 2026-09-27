@@ -1,5 +1,5 @@
-import { surfTessellationCacheKey } from "@hardcore/core/lib/renderAssetClient.js";
-import { lodTessellationForLevel, normalizeLodLevel } from "@hardcore/core/lib/surf/lodPolicy.js";
+import { surfTessellationCacheKey } from "@text-to-cad/core/lib/renderAssetClient.js";
+import { lodTessellationForLevel, normalizeLodLevel } from "@text-to-cad/core/lib/surf/lodPolicy.js";
 
 export function matchingDisplayedPackageContext(displayed, meshState, file) {
   const expectedFile = String(file || "");

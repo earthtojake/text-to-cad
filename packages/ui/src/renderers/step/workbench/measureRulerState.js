@@ -1,4 +1,4 @@
-import { isFinitePoint, measurementFromPicks } from "@hardcore/core/lib/viewer/measurement.js";
+import { isFinitePoint, measurementFromPicks } from "@text-to-cad/core/lib/viewer/measurement.js";
 
 export const MEASURE_RULER_MAX_MEASUREMENTS = 20;
 

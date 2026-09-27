@@ -35,7 +35,7 @@ function collectTests(dir, tests = []) {
 const nodeMajor = Number(process.versions.node.split(".")[0] || 0);
 if (nodeMajor > 0 && nodeMajor < 22) {
   console.error(
-    `@hardcore/core tests require Node 22 or newer (running ${process.versions.node}): 22 is this `
+    `@text-to-cad/core tests require Node 22 or newer (running ${process.versions.node}): 22 is this `
     + "repository's declared runtime floor."
   );
   process.exit(1);
@@ -48,7 +48,7 @@ const tests = (
     : testRoots.filter((root) => fs.existsSync(root)).flatMap((root) => collectTests(root))
 ).sort();
 if (!tests.length) {
-  console.error("No @hardcore/core tests found.");
+  console.error("No @text-to-cad/core tests found.");
   process.exit(1);
 }
 

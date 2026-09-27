@@ -4,7 +4,7 @@ import test from "node:test";
 import { resolveServerFsAllow } from "./serverFsAllow.mjs";
 
 test("server fs allow list includes the real path behind a symlinked package root", () => {
-  // A checkout that reaches @hardcore/core through a link: the real path is allowed too.
+  // A checkout that reaches @text-to-cad/core through a link: the real path is allowed too.
   const realpath = (value) =>
     value === "/repo/viewer/packages/core/src" ? "/repo/packages/core/src" : value;
   const allow = resolveServerFsAllow(["/repo/viewer", "/repo/viewer/packages/core/src"], { realpath });

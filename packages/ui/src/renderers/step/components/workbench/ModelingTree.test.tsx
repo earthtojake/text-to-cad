@@ -1,5 +1,5 @@
 import React from 'react';
-import { createCadClient } from '@hardcore/core/client';
+import { createCadClient } from '@text-to-cad/core/client';
 let client: ReturnType<typeof createCadClient>;
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';

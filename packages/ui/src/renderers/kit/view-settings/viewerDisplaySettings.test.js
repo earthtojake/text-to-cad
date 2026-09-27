@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { normalizeViewSettings, resetViewSettings, resolveViewSettings, viewSettingsAreCustom } from '@hardcore/core/common/viewSettings.js';
+import { normalizeViewSettings, resetViewSettings, resolveViewSettings, viewSettingsAreCustom } from '@text-to-cad/core/common/viewSettings.js';
 import { DISPLAY_MODE_OPTIONS } from './DisplayModeOptions.js';
 import {
   cameraForViewSettings, mergeViewerDisplaySettings, previewDisplaySettings,
@@ -47,7 +47,7 @@ test('preset camera changes retain the actual camera position, target and zoom',
 });
 
 test('the viewer Preview baseline is inherited without an override or Custom state', async () => {
-  const { resolveViewSceneSettings } = await import('@hardcore/core/common/sceneSettings.js');
+  const { resolveViewSceneSettings } = await import('@text-to-cad/core/common/sceneSettings.js');
   const options = { lightingQuality: 'preview' };
   const scene = resolveViewSceneSettings({ display: { mode: 'render' }, ...options });
   assert.equal(scene.view.lighting.quality, 'preview');

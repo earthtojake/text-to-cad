@@ -1,6 +1,6 @@
 import {
   findAssemblyNode
-} from "@hardcore/core/lib/assembly/meshData.js";
+} from "@text-to-cad/core/lib/assembly/meshData.js";
 
 export function assemblyPathToNode(root, nodeId) {
   const normalizedNodeId = String(nodeId || "").trim();

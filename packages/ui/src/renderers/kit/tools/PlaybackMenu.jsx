@@ -2,9 +2,9 @@ import { Settings } from "lucide-react";
 import {
   DropdownMenuCheckboxItem, DropdownMenuLabel, DropdownMenuRadioGroup, DropdownMenuRadioItem, DropdownMenuSeparator,
   DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger
-} from "@hardcore/ui/primitives/dropdown-menu";
-import { ToolbarButton } from "@hardcore/ui/primitives/toolbar-button";
-import { cn } from "@hardcore/ui/utils";
+} from "@text-to-cad/ui/primitives/dropdown-menu";
+import { ToolbarButton } from "@text-to-cad/ui/primitives/toolbar-button";
+import { cn } from "@text-to-cad/ui/utils";
 import { FLOATING_SURFACE_CLASS } from "./floatingSurface.js";
 import { PLAYBACK_SPEEDS } from "./playbar/ViewportAnimationBar.js";
 import ToolPopover from "./ToolPopover.jsx";

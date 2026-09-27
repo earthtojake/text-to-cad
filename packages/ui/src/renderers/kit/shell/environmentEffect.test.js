@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
 import * as THREE from 'three';
-import { applyPhotographicStudio, disposePhotographicStudio } from '@hardcore/core/common/photographicStudio.js';
+import { applyPhotographicStudio, disposePhotographicStudio } from '@text-to-cad/core/common/photographicStudio.js';
 import { parse } from '@babel/parser';
 import traverseModule from '@babel/traverse';
 import { createFramePresentation } from '../viewport/framePresentation.js';

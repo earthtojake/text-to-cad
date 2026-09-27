@@ -1,10 +1,10 @@
-import { normalizeStepModuleParameterValues } from "@hardcore/core/common/stepModule.js";
+import { normalizeStepModuleParameterValues } from "@text-to-cad/core/common/stepModule.js";
 
 // What the Position section commits once a model's sidecar has resolved.
 //
 // A NULL definition is a documented outcome, not a failure: a sidecar with no
 // `kinematics` section compiles to null ("nothing to pose", see
-// @hardcore/core/common/kinematicsModule). The sidecar URL is set whenever a sidecar
+// @text-to-cad/core/common/kinematicsModule). The sidecar URL is set whenever a sidecar
 // exists at all, and an ANIMATION-ONLY model has one, so this resolves for a
 // model that will never have a pose. Reading the definition's defaults there
 // threw a TypeError that the load effect's own .catch() turned into an error

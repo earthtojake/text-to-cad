@@ -26,7 +26,7 @@ interface DrawingFontRolldownPlugin {
 }
 
 export interface DrawingAssetsPlugin {
-  name: "hardcore-offline-drawing-assets";
+  name: "text-to-cad-offline-drawing-assets";
   enforce: "pre";
   config(config?: unknown, env?: unknown): {
     optimizeDeps: {

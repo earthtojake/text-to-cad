@@ -58,7 +58,7 @@ const HARNESS_SIZE = '<style>#root > div { width: 800px !important; height: 500p
 let temporary, server, browser;
 const requests = [];
 before(async () => {
-  temporary = await mkdtemp(join(tmpdir(), 'hardcore-mesh-browser-'));
+  temporary = await mkdtemp(join(tmpdir(), 'text-to-cad-mesh-browser-'));
   await build({ entryPoints: [fileURLToPath(new URL('../harness/index.tsx', import.meta.url))], outfile: join(temporary, 'harness.js'), bundle: true, format: 'esm', platform: 'browser', conditions: ['production'], jsx: 'automatic', loader: { '.webp': 'dataurl', '.woff2': 'dataurl' } });
   const bundle = await readFile(join(temporary, 'harness.js'));
   const css = await readFile(new URL('../../../dist/styles.css', import.meta.url));

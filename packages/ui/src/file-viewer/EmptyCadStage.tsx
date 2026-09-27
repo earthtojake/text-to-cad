@@ -1,5 +1,5 @@
 import { useMemo, type ComponentType } from 'react';
-import { resolveSceneSettings } from '@hardcore/core/common/sceneSettings.js';
+import { resolveSceneSettings } from '@text-to-cad/core/common/sceneSettings.js';
 import type { EmptyCadBackdropProps } from './empty.js';
 import { useChromeBackdropColor } from '../renderers/kit/look/useChromeBackdropColor.js';
 import { sceneBackdropEdgeColor } from '../renderers/kit/look/chromeBackdrop.js';

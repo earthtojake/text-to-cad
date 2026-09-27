@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Camera } from "lucide-react";
-import { cn } from "@hardcore/ui/utils";
+import { cn } from "@text-to-cad/ui/utils";
 import { usePromptDestination, useViewerHost } from "../../host/context.js";
 import ViewerAlertCard from "../kit/status/ViewerAlertCard.jsx";
 import ViewerLoadingOverlay from "../kit/status/ViewerLoadingOverlay.js";

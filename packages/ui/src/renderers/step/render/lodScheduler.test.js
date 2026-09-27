@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { LOD_TESSELLATION_LEVELS, nextLevel } from "@hardcore/core/lib/surf/lodPolicy.js";
+import { LOD_TESSELLATION_LEVELS, nextLevel } from "@text-to-cad/core/lib/surf/lodPolicy.js";
 
 import { createLodScheduler } from "./lodScheduler.js";
 import { estimateViewportLodMemory } from "./viewportLodMemory.js";

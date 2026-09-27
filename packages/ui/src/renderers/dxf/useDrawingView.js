@@ -24,7 +24,7 @@ import {
   screenToModel,
   zoomLimits,
   zoomTransform
-} from "@hardcore/core/lib/drawing2d/index.js";
+} from "@text-to-cad/core/lib/drawing2d/index.js";
 import { IDLE_PIXEL_RATIO_CAP, getPixelRatioCap } from "../kit/viewport/pixelRatio.js";
 import { readDrawingThemeColors } from "./themeColors.js";
 

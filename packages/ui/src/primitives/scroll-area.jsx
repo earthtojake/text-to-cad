@@ -1,7 +1,7 @@
 import * as React from "react"
 import { ScrollArea as ScrollAreaPrimitive } from "radix-ui"
 
-import { cn } from "@hardcore/ui/utils"
+import { cn } from "@text-to-cad/ui/utils"
 
 /**
  * The one scroll region of the viewer's chrome (shadcn's ScrollArea): thin overlay bars in the

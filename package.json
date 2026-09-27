@@ -1,5 +1,5 @@
 {
-  "name": "hardcore-workspace",
+  "name": "text-to-cad-workspace",
   "version": "0.6.6",
   "private": true,
   "type": "module",
@@ -10,11 +10,11 @@
     "apps/docs"
   ],
   "scripts": {
-    "build:packages": "npm run build -w @hardcore/core && npm run build -w @hardcore/ui",
-    "build:web": "npm run build:packages && npm run build -w @hardcore/web",
-    "build:docs": "npm run build -w @hardcore/core && npm run build -w cad-skills-docs",
-    "dev:web": "npm run build:packages && npm run dev -w @hardcore/web",
-    "dev:docs": "npm run build -w @hardcore/core && npm run dev -w cad-skills-docs",
+    "build:packages": "npm run build -w @text-to-cad/core && npm run build -w @text-to-cad/ui",
+    "build:web": "npm run build:packages && npm run build -w @text-to-cad/web",
+    "build:docs": "npm run build -w @text-to-cad/core && npm run build -w cad-skills-docs",
+    "dev:web": "npm run build:packages && npm run dev -w @text-to-cad/web",
+    "dev:docs": "npm run build -w @text-to-cad/core && npm run dev -w cad-skills-docs",
     "test": "scripts/test/test-js.sh",
     "check:boundaries": "node scripts/test/check-dependencies.mjs && node scripts/test/check-kit-boundaries.mjs"
   },

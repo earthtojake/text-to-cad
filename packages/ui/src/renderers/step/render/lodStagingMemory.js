@@ -1,4 +1,4 @@
-import { MESH_DATA_ARRAY_FIELDS } from "@hardcore/core/lib/render/meshTransfer.js";
+import { MESH_DATA_ARRAY_FIELDS } from "@text-to-cad/core/lib/render/meshTransfer.js";
 
 const owners = new Map();
 

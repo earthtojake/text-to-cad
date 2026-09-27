@@ -1,8 +1,8 @@
 import path from "node:path";
 
 // Development tooling and its tests consume the root workspace's compiled
-// @hardcore/core export, just like the app.
-import { pathIsInside } from "@hardcore/core/lib/pathUtils.mjs";
+// @text-to-cad/core export, just like the app.
+import { pathIsInside } from "@text-to-cad/core/lib/pathUtils.mjs";
 
 export function resolveDirectoryRoot({
   directoryRoot = "",

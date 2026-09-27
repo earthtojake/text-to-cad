@@ -1,8 +1,8 @@
 # Hosting the shared FileViewer
 
-The complete file-tab interface lives in `@hardcore/ui/file-viewer`. Web and
+The complete file-tab interface lives in `@text-to-cad/ui/file-viewer`. Web and
 desktop both render that component. Navigation controls are lower-level
-`@hardcore/ui/navigation` exports used by FileViewer; apps do not assemble a
+`@text-to-cad/ui/navigation` exports used by FileViewer; apps do not assemble a
 second shell from them.
 
 Web supplies a read-only catalog source, the viewer renderer registrations, URL
@@ -16,5 +16,5 @@ Native file operations are desktop capabilities. Web offers copy-path actions
 and, when the server advertises `reveal-path`, reveal in the file manager; it has
 no filesystem-writing or editing endpoints.
 
-See the app README for commands and `@hardcore/ui`'s README and type declarations
+See the app README for commands and `@text-to-cad/ui`'s README and type declarations
 for the source, renderer and lifetime contracts.

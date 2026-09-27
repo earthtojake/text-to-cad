@@ -177,7 +177,7 @@ export const VIEWPORT = Object.freeze({ width: 800, height: 600 });
 let bundled;
 function harnessBundle() {
   bundled ??= (async () => {
-    const temporary = await mkdtemp(join(tmpdir(), 'hardcore-step-browser-'));
+    const temporary = await mkdtemp(join(tmpdir(), 'text-to-cad-step-browser-'));
     try {
       await build({ entryPoints: [fileURLToPath(new URL('./index.tsx', import.meta.url))], outfile: join(temporary, 'harness.js'), bundle: true, format: 'esm', platform: 'browser', conditions: ['production'], jsx: 'automatic', loader: { '.webp': 'dataurl', '.woff2': 'dataurl' } });
       // Two stylesheets: the package's compiled one, and the one esbuild extracts

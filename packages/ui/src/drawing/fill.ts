@@ -1,7 +1,7 @@
 import { convertToExcalidrawElements, exportToCanvas, getCommonBounds } from '@excalidraw/excalidraw';
 import type { AppState, BinaryFiles } from '@excalidraw/excalidraw/types';
 import type { ExcalidrawElement } from '@excalidraw/excalidraw/element/types';
-import { FILL_ANALYSIS_MAX_DIMENSION, FILL_CONNECT_GAP_PX, findFillRegion, pairNearbyBoundaryEndpoints } from '@hardcore/core/lib/drawing/fillRegion.js';
+import { FILL_ANALYSIS_MAX_DIMENSION, FILL_CONNECT_GAP_PX, findFillRegion, pairNearbyBoundaryEndpoints } from '@text-to-cad/core/lib/drawing/fillRegion.js';
 
 /**
  * The Fill tool, which the SDK does not have: click inside drawn ink and the

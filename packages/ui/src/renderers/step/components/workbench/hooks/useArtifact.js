@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-import { serverErrorMessage } from "@hardcore/core/client";
+import { serverErrorMessage } from "@text-to-cad/core/client";
 import {
   ARTIFACT_PROGRESS_FIRST_POLL_MS,
   ARTIFACT_PROGRESS_POLL_MS,

@@ -6,7 +6,7 @@ distribution — and the built client ships inside that same wheel. One instance
 serves ONE directory, fixed at start; the page is always the bare origin and
 `?file=` selects an artifact inside that root. There is no hosted deployment.
 
-This app is the browser host of `@hardcore/ui/file-viewer`, not the owner of
+This app is the browser host of `@text-to-cad/ui/file-viewer`, not the owner of
 the shared CAD interface.
 
 **Owns:** URL selection, browser history, document title/appearance, catalog
@@ -25,7 +25,7 @@ cache; recognition is separate from cadgen compilation and Python inspection.
 See [feature detection](../../packages/ui/docs/feature-detection.md) for rules,
 limits and cancellation. This app supplies resources, not recognition logic.
 
-**May depend on:** compiled `@hardcore/ui` and `@hardcore/core` exports and app
+**May depend on:** compiled `@text-to-cad/ui` and `@text-to-cad/core` exports and app
 libraries. Never another application's source. Shared packages never import
 this app. The Python wheel consumes only the production build.
 
@@ -150,18 +150,18 @@ the build — detection only; it keeps serving.
 
 ## Shared interface
 
-This app exports no components. Other hosts use `@hardcore/ui/file-viewer` with
+This app exports no components. Other hosts use `@text-to-cad/ui/file-viewer` with
 registered renderers and explicit services. Viewer content is registered through
-`@hardcore/ui/renderers/step`, for `.dxf` `@hardcore/ui/renderers/dxf`, for `.glb`
-`@hardcore/ui/renderers/glb`, for `.stl` and `.3mf` `@hardcore/ui/renderers/mesh`, and
-for `.urdf`, `.srdf` and `.sdf` `@hardcore/ui/renderers/robot` (`App.tsx` registers all
+`@text-to-cad/ui/renderers/step`, for `.dxf` `@text-to-cad/ui/renderers/dxf`, for `.glb`
+`@text-to-cad/ui/renderers/glb`, for `.stl` and `.3mf` `@text-to-cad/ui/renderers/mesh`, and
+for `.urdf`, `.srdf` and `.sdf` `@text-to-cad/ui/renderers/robot` (`App.tsx` registers all
 five with the same client and preferences); all loading,
 selection, panel and tool behavior is shared. Public declarations, styles and worker assets are built in that
 package. See `docs/shell.md` for the host boundary and `docs/storage.md` for
 browser persistence. CAD control guidance lives with the UI package.
 
-`vite.config.mjs` adds the shared `@hardcore/ui/drawing-assets` plugin so the
-Excalidraw editor in `@hardcore/ui/drawing` never fetches a font from a CDN:
+`vite.config.mjs` adds the shared `@text-to-cad/ui/drawing-assets` plugin so the
+Excalidraw editor in `@text-to-cad/ui/drawing` never fetches a font from a CDN:
 `drawing-assets.js` and `excalidraw/` are served in dev and emitted into
 `dist/`. The 12 MB Xiaolai CJK family is excluded from this build to keep the
 wheel small; CJK text falls back to a system font. See
@@ -190,7 +190,7 @@ processes on exit.
 
 ### Branded loading indicator
 
-`@hardcore/ui/loading-icon` exports the decorative `LoadingIcon` independently of
+`@text-to-cad/ui/loading-icon` exports the decorative `LoadingIcon` independently of
 the CAD renderer, so a host can show loading feedback without eagerly importing the
 CAD surface. `size` controls its pixel dimensions (default 96), `className` its
 placement, and `active={false}` uses the still pose. The host owns status text.
@@ -229,7 +229,7 @@ pose and explode are kept per file through the shared state contract (see
 
 Authored material information lives in the selection's reference details; editing
 it requires changing the source model or annotations. The viewer has no Materials
-or Theme editor. These controls live in `@hardcore/ui`; see the UI package's
+or Theme editor. These controls live in `@text-to-cad/ui`; see the UI package's
 Render and LOD playbooks.
 
 Large assemblies load progressively and refine visible components within memory
@@ -276,7 +276,7 @@ to the renderer's selection action, rather than the file menu.
 
 The host body uses the shared `text-ui` token (13px at the normal root scale).
 Menus, tabs and tree rows follow the same default from
-[`@hardcore/ui`](../../packages/ui/README.md); settings sheets preserve their
+[`@text-to-cad/ui`](../../packages/ui/README.md); settings sheets preserve their
 compact 11px labels and values. The shared renderer owns reference
 layout, projected-bounds camera fitting and labeled orientation axes, so desktop
 and web stay consistent without host-specific copies of those controls.

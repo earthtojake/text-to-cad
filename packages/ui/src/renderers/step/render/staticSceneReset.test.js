@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import * as THREE from "three";
-import { buildModel } from "@hardcore/core/common/cadScene.js";
-import { applySceneState } from "@hardcore/core/common/applySceneState.js";
-import { buildComposedPackageMeshData } from "@hardcore/core/lib/assembly/meshData.js";
-import { resetStepModuleRecordEffects } from "@hardcore/core/common/stepModuleEffects.js";
-import { applyPartVisualState } from "@hardcore/core/lib/viewer/partVisualState.js";
-import { applyDisplayRecordTransform, syncRuntimeStepClipPlane } from "@hardcore/core/lib/viewer/modelRuntime.js";
-import { syncTopologyDisplayEdgeLine } from "@hardcore/core/lib/viewer/topologyDisplayEdgeLine.js";
+import { buildModel } from "@text-to-cad/core/common/cadScene.js";
+import { applySceneState } from "@text-to-cad/core/common/applySceneState.js";
+import { buildComposedPackageMeshData } from "@text-to-cad/core/lib/assembly/meshData.js";
+import { resetStepModuleRecordEffects } from "@text-to-cad/core/common/stepModuleEffects.js";
+import { applyPartVisualState } from "@text-to-cad/core/lib/viewer/partVisualState.js";
+import { applyDisplayRecordTransform, syncRuntimeStepClipPlane } from "@text-to-cad/core/lib/viewer/modelRuntime.js";
+import { syncTopologyDisplayEdgeLine } from "@text-to-cad/core/lib/viewer/topologyDisplayEdgeLine.js";
 import {
   createStaticSceneReset,
   staticSceneResetEligible

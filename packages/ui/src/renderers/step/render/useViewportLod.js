@@ -8,11 +8,11 @@
 // debugging: `window.__CAD_VIEWER_LOD__ = false` before loading a model.
 import { useCallback, useEffect, useRef } from "react";
 
-import { loadRenderSurfPayloadAtLevel, reclaimIdleSurfWorkers, releaseSurfWorkers, releaseRenderSurfLevel } from "@hardcore/core/lib/renderAssetClient.js";
+import { loadRenderSurfPayloadAtLevel, reclaimIdleSurfWorkers, releaseSurfWorkers, releaseRenderSurfLevel } from "@text-to-cad/core/lib/renderAssetClient.js";
 import { completedPackages, renderAssetCacheStatsWithPackages } from "./completedPackageCache.js";
-import { estimateMeshRenderCost } from "@hardcore/core/lib/render/meshCost.js";
-import { LOD_DEFAULT_LEVEL, lodTessellationForLevel } from "@hardcore/core/lib/surf/lodPolicy.js";
-import { normalizeSceneQuality, resolveSceneQuality, SCENE_QUALITY } from "@hardcore/core/common/sceneSettings.js";
+import { estimateMeshRenderCost } from "@text-to-cad/core/lib/render/meshCost.js";
+import { LOD_DEFAULT_LEVEL, lodTessellationForLevel } from "@text-to-cad/core/lib/surf/lodPolicy.js";
+import { normalizeSceneQuality, resolveSceneQuality, SCENE_QUALITY } from "@text-to-cad/core/common/sceneSettings.js";
 
 import { createLodScheduler } from "./lodScheduler.js";
 import { syncSurfWorkerMemory } from "./surfWorkerMemoryPolicy.js";

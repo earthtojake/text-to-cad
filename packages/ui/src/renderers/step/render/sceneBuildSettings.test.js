@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import * as THREE from "three";
-import { buildModel } from "@hardcore/core/common/cadScene.js";
+import { buildModel } from "@text-to-cad/core/common/cadScene.js";
 
 import { sceneBuildStructuralKey } from "./sceneBuildSettings.js";
 

@@ -1,7 +1,7 @@
 # Client-side STEP feature detection
 
 Feature detection helps people navigate and select geometry in the shared Model
-tree. It belongs to the STEP renderer in `@hardcore/ui`; web and desktop run the
+tree. It belongs to the STEP renderer in `@text-to-cad/ui`; web and desktop run the
 same code. It reads saved geometry through the injected CAD resource service.
 It never reads model source, writes artifacts or executes a CAD kernel.
 

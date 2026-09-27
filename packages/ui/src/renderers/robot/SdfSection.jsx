@@ -1,4 +1,4 @@
-import { TooltipHint } from "@hardcore/ui/primitives/tooltip";
+import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 import { FILE_SHEET_FIELD_LABEL_CLASSES, FileSheetFieldGrid, FileSheetSubsection, FileSheetValueField } from "../kit/inspector/FileSheet.js";
 
 function formatSdfNumber(value, fallback = "0") {

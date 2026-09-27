@@ -1247,7 +1247,7 @@ test('a reload of the tab brings back the view — camera, Display, Clip, Explod
   // The tree as isolation shows it: the base's rows, opened.
   const rowsLeft = await view.rows();
   assert.ok(rowsLeft.length > 1, `the tree has the base's rows before the reload: ${rowsLeft.join(', ')}`);
-  assert.deepEqual(await page.evaluate(() => Object.keys(sessionStorage)), ['hardcore:tab:harness'], 'one record, and nothing else in the tab');
+  assert.deepEqual(await page.evaluate(() => Object.keys(sessionStorage)), ['text-to-cad:tab:harness'], 'one record, and nothing else in the tab');
 
   await view.reload();
   const back = await view.state();

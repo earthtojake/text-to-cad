@@ -1,4 +1,4 @@
-import { SurfaceResolutionError } from "@hardcore/core/client";
+import { SurfaceResolutionError } from "@text-to-cad/core/client";
 export { SurfaceResolutionError };
 
 export function resolveSurfaceComponents(descriptor, requested, { signal, client } = {}) {

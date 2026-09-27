@@ -1,15 +1,15 @@
 import { useCallback, useMemo } from "react";
-import { resolveDisplayMaterialSettings } from "@hardcore/core/common/sceneSettings.js";
-import { PHOTOGRAPHIC_STUDIO_MATERIAL_SETTINGS } from "@hardcore/core/common/photographicStudioRig.js";
-import { shouldShowRecordDisplayEdges } from "@hardcore/core/lib/viewer/displayEdgePolicy.js";
+import { resolveDisplayMaterialSettings } from "@text-to-cad/core/common/sceneSettings.js";
+import { PHOTOGRAPHIC_STUDIO_MATERIAL_SETTINGS } from "@text-to-cad/core/common/photographicStudioRig.js";
+import { shouldShowRecordDisplayEdges } from "@text-to-cad/core/lib/viewer/displayEdgePolicy.js";
 import {
   displayModeForcesEdges, displayModeIsWireframe, displayModeShowsEdges, displayModeShowsThroughEdges
-} from "@hardcore/core/lib/displaySettings.js";
-import { VIEWER_PICK_MODE } from "@hardcore/core/lib/viewer/constants.js";
-import { normalizePartIdList, referenceMatchesFocusedPart } from "@hardcore/core/lib/viewer/partVisualState.js";
-import { toNumber } from "@hardcore/core/lib/viewer/modelRuntime.js";
-import { BASE_VIEWER_THEME } from "@hardcore/core/lib/viewer/stageTheme.js";
-import { shouldRenderTopologyDisplayEdges } from "@hardcore/core/common/topologyDisplayEdgeRuntime.js";
+} from "@text-to-cad/core/lib/displaySettings.js";
+import { VIEWER_PICK_MODE } from "@text-to-cad/core/lib/viewer/constants.js";
+import { normalizePartIdList, referenceMatchesFocusedPart } from "@text-to-cad/core/lib/viewer/partVisualState.js";
+import { toNumber } from "@text-to-cad/core/lib/viewer/modelRuntime.js";
+import { BASE_VIEWER_THEME } from "@text-to-cad/core/lib/viewer/stageTheme.js";
+import { shouldRenderTopologyDisplayEdges } from "@text-to-cad/core/common/topologyDisplayEdgeRuntime.js";
 import { clamp } from "../../kit/camera/viewportCameraKit.js";
 import { createViewerRenderStateResolver } from "../../kit/view-settings/renderState.js";
 

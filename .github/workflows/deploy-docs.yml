@@ -3,7 +3,7 @@ name: Deploy Docs
 # Deploys the docs site from a ref of this repository -- main by default.
 #
 # The docs app is a website, not something anyone installs. It builds against
-# compiled @hardcore/core exports, built through the root npm workspace. It
+# compiled @text-to-cad/core exports, built through the root npm workspace. It
 # needs the shared source tree and root lockfile, which every ref
 # of main is. Releases pass the release commit itself, which carries the bumped
 # VERSION and the stamped apps/docs/package.json the site header reads. To

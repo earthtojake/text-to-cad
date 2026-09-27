@@ -1,4 +1,4 @@
-# @hardcore/core
+# @text-to-cad/core
 
 The shared JavaScript half of cadgen: everything the distribution and its
 clients need to turn cached geometry into pixels, meshes, and motion.
@@ -11,11 +11,11 @@ this package's source nor supply ambient module declarations.
 helpers. Never React, ReactDOM, Electron, Next.js, UI or application source.
 Browser entry points never import Node-only code. Node builders remain in `bin/`.
 
-**Consumers:** `@hardcore/ui`, docs, web and desktop apps, and runtime bundlers.
-`@hardcore/core/client` communicates with `cadgen.viewer` over HTTP; this
+**Consumers:** `@text-to-cad/ui`, docs, web and desktop apps, and runtime bundlers.
+`@text-to-cad/core/client` communicates with `cadgen.viewer` over HTTP; this
 protocol relationship never imports Python or discovers an interpreter.
 
-`@hardcore/core/drawing` validates bounded Excalidraw v2 scene snapshots for the
+`@text-to-cad/core/drawing` validates bounded Excalidraw v2 scene snapshots for the
 desktop's temporary sketch tabs. It imports no editor, React, filesystem or
 storage service. Document limits and shared editor/host ownership are described
 in [the drawing contract](../ui/docs/drawing.md); the mechanism is
@@ -187,7 +187,7 @@ Where the mechanism is written:
 
 ## Public modules and lifetimes
 
-Use `@hardcore/core/client`, `/common/*`, `/lib/*` and `/glb/*` exports.
+Use `@text-to-cad/core/client`, `/common/*`, `/lib/*` and `/glb/*` exports.
 Construct `createCadClient({ origin, workspaceId })` in a host. Construction is
 inert; subscriptions start catalog polling. `dispose()` stops polling, aborts
 requests and disposes render sessions. The client lazily owns its cache provider
@@ -221,7 +221,7 @@ cannot replace either base.
 ## Working on core
 
 From the root workspace run `npm ci`, `npm run build:packages`,
-`npm test --workspace @hardcore/core` and `npm run check:boundaries`.
+`npm test --workspace @text-to-cad/core` and `npm run check:boundaries`.
 Rebuild compiled packages after shared edits; apps resolve `dist/` exports.
 
 The Node test runner collects `*.test.js` and `*.test.mjs` under `src/` and
@@ -236,7 +236,7 @@ canonical release versions during normal development.
 
 ## Portable prompt context
 
-`@hardcore/core/prompt` exports lightweight non-React bundle/reference types,
+`@text-to-cad/core/prompt` exports lightweight non-React bundle/reference types,
 runtime validation and canonical text serialization. Text, typed resource
 references and attachments travel in one ordered, immutable snapshot with an
 operation ID; attachment relationships name reference parts. Text ranges use

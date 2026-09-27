@@ -1,7 +1,7 @@
 // Vite's `server.fs.allow` roots for the dev server.
 //
 // Vite checks a module id AFTER resolving it, so ids arrive as real paths. The
-// client imports @hardcore/core from `packages/core` OUTSIDE the app root, and a
+// client imports @text-to-cad/core from `packages/core` OUTSIDE the app root, and a
 // checkout may reach it through a link (a worktree, a linked node_modules), in
 // which case allowing only the spelled path leaves the real path outside the
 // list and Vite refuses to serve anything it resolves through it -- notably

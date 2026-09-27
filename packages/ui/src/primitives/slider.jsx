@@ -1,7 +1,7 @@
 import * as React from "react"
 import { Slider as SliderPrimitive } from "radix-ui"
 
-import { cn } from "@hardcore/ui/utils"
+import { cn } from "@text-to-cad/ui/utils"
 
 // The decimals a step is written with ("0.25" → 2): what a reported value is rounded to.
 function stepDecimals(step) {

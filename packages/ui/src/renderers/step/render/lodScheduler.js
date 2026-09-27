@@ -14,7 +14,7 @@ import {
   normalizeLodLevel,
   projectedChordErrorPx,
   settledLevel,
-} from "@hardcore/core/lib/surf/lodPolicy.js";
+} from "@text-to-cad/core/lib/surf/lodPolicy.js";
 import { lodSampleNumberEqual } from "./lodSamplePrecision.js";
 
 export const LOD_DEBOUNCE_MS = 200;

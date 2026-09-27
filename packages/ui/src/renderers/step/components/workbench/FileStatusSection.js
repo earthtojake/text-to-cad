@@ -1,10 +1,10 @@
-import { TooltipHint } from "@hardcore/ui/primitives/tooltip";
+import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 import { useEffect, useState } from "react";
 import { Check, Copy } from "lucide-react";
-import { Badge } from "@hardcore/ui/primitives/badge";
-import { Button } from "@hardcore/ui/primitives/button";
+import { Badge } from "@text-to-cad/ui/primitives/badge";
+import { Button } from "@text-to-cad/ui/primitives/button";
 import { useViewerHost } from '../../../../host/context.js';
-import { cn } from "@hardcore/ui/utils";
+import { cn } from "@text-to-cad/ui/utils";
 import {
   FILE_STATUS_LEVELS,
   formatFileStatusItemForAgent,

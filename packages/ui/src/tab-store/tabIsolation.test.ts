@@ -8,7 +8,7 @@ import { DEFAULT_PLAYBACK } from '../renderers/kit/tools/playbar/playbackPrefere
 // Each browser tab has a sessionStorage of its own, and a reload of the tab keeps it: a web host
 // hands the tab store exactly that, under one key (`renderers/harness/index.tsx`). A tab here is
 // one such storage; a reload is a new store over the same one.
-const KEY = 'hardcore:tab:test';
+const KEY = 'text-to-cad:tab:test';
 function browserTab(): { storage: Storage; record: () => TabRecordStorage } {
   const values = new Map<string, string>();
   const storage = {

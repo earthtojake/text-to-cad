@@ -6,8 +6,8 @@
 // the surface to select geometry named by a reference from the host.
 import { createContext, useContext } from "react";
 
-import { isNativeCadSelector, parseCadRefToken } from "@hardcore/core/lib/cadRefs.js";
-import { STEP_TREE_TOPOLOGY_NODE_PREFIX, stepTreeNodeChildren } from "@hardcore/core/lib/step/stepTree.js";
+import { isNativeCadSelector, parseCadRefToken } from "@text-to-cad/core/lib/cadRefs.js";
+import { STEP_TREE_TOPOLOGY_NODE_PREFIX, stepTreeNodeChildren } from "@text-to-cad/core/lib/step/stepTree.js";
 
 // The same two spellings stepTreeSelection.js uses, repeated here rather than
 // imported: that module reaches for `@/workbench/...`, and this one is read

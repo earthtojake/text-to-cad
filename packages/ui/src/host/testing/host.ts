@@ -1,4 +1,4 @@
-import { unavailablePromptContext } from '@hardcore/core/prompt';
+import { unavailablePromptContext } from '@text-to-cad/core/prompt';
 import type { ViewerHost } from '../types.js';
 /** Explicit effect-free host for shared component tests. Never a production default. */
 export function testHost(overrides: Partial<ViewerHost> = {}): ViewerHost {

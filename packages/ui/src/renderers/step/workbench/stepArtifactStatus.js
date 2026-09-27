@@ -1,4 +1,4 @@
-import { entryHasMesh } from "@hardcore/core/lib/entryAssets.js";
+import { entryHasMesh } from "@text-to-cad/core/lib/entryAssets.js";
 
 const STEP_ARTIFACT_GENERATION_FAILURE_DISPLAY_THRESHOLD = 3;
 

@@ -1,10 +1,10 @@
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
-import { createCadClient } from '@hardcore/core/client';
+import { createCadClient } from '@text-to-cad/core/client';
 import { useModelingRecognition as useRecognition } from './useModelingRecognition.js';
 import { useStepModeling as useStepModelingHook } from './useStepModeling.js';
 import { completedPackages } from '../render/completedPackageCache.js';
-import { entryMeshAssetSignature } from '@hardcore/core/lib/entryAssets.js';
+import { entryMeshAssetSignature } from '@text-to-cad/core/lib/entryAssets.js';
 import { completedModelingRecognition, modelingRecognitionKey } from './modelingRecognitionCache.js';
 import { installRuntimePackageDescriptor } from '../components/workbench/hooks/packageDescriptorCache.js';
 

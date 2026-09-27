@@ -3,15 +3,15 @@ import test from "node:test";
 
 import {
   normalizeStepClipSettings
-} from "@hardcore/core/lib/viewer/clipPlane.js";
+} from "@text-to-cad/core/lib/viewer/clipPlane.js";
 import {
   cloneThemePresetSettings,
   normalizeThemeSettings
-} from "@hardcore/core/lib/themeSettings.js";
+} from "@text-to-cad/core/lib/themeSettings.js";
 import {
   CAD_DISPLAY_MODE,
   normalizeDisplaySettings
-} from "@hardcore/core/lib/displaySettings.js";
+} from "@text-to-cad/core/lib/displaySettings.js";
 import {
   normalizeViewerRenderState
 } from "./renderState.js";
@@ -64,7 +64,7 @@ test("Inspect edge visibility does not revive legacy custom outline styling", ()
 });
 
 test("grouped View passes independent surface and edge choices through to the renderer", async () => {
-  const { resolveViewSceneSettings } = await import('@hardcore/core/common/sceneSettings.js');
+  const { resolveViewSceneSettings } = await import('@text-to-cad/core/common/sceneSettings.js');
   for (const mode of ['solid', 'render', 'xray', 'hidden-line', 'wireframe']) {
     const resolved = resolveViewSceneSettings({ display: { mode,
       edges: { enabled: false, color: '#bada55', visibility: 'visible' },
@@ -82,9 +82,9 @@ test("grouped View passes independent surface and edge choices through to the re
 // look from the same settings AFTER normalizing them here, so this pins that the two routes to
 // `resolveSceneSurfaceLook` land on one look for every preset, appearance and surface choice.
 test("the viewport and the snapshot CLI resolve one surface look from one setting", async () => {
-  const { resolveSceneSurfaceLook, resolveViewSceneSettings } = await import('@hardcore/core/common/sceneSettings.js');
-  const { headlessSceneDress } = await import('@hardcore/core/common/headlessScene.js');
-  const { EDGELESS_VIEW_FEATURES } = await import('@hardcore/core/common/viewSettings.js');
+  const { resolveSceneSurfaceLook, resolveViewSceneSettings } = await import('@text-to-cad/core/common/sceneSettings.js');
+  const { headlessSceneDress } = await import('@text-to-cad/core/common/headlessScene.js');
+  const { EDGELESS_VIEW_FEATURES } = await import('@text-to-cad/core/common/viewSettings.js');
   const displays = [];
   for (const mode of ['solid', 'render']) for (const appearance of ['light', 'dark']) {
     for (const surfaces of [undefined, { colorMode: 'by-part' }, { colorMode: 'single', color: '#ff8800' }, { style: 'flat', opacity: 0.5 }]) {

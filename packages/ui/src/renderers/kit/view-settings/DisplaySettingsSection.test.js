@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { EDGELESS_VIEW_FEATURES, resolveViewSettings, viewSettingsAreCustom } from "@hardcore/core/common/viewSettings.js";
+import { EDGELESS_VIEW_FEATURES, resolveViewSettings, viewSettingsAreCustom } from "@text-to-cad/core/common/viewSettings.js";
 import { elements, render } from "../../../../scripts/reactHarness.mjs";
 import { DISPLAY_MODE_OPTIONS } from "./DisplayModeOptions.js";
 import { DisplaySettingsSection } from "./DisplaySettingsSection.js";

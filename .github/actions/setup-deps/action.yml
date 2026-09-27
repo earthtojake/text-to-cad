@@ -62,10 +62,10 @@ runs:
         done
         npm ci "${args[@]}"
         case " $NPM_WORKSPACES " in
-          *" packages/core "*) npm run build --workspace @hardcore/core ;;
+          *" packages/core "*) npm run build --workspace @text-to-cad/core ;;
         esac
         case " $NPM_WORKSPACES " in
-          *" packages/ui "*) npm run build --workspace @hardcore/ui ;;
+          *" packages/ui "*) npm run build --workspace @text-to-cad/ui ;;
         esac
 
     # npm and Python Playwright can require different Chromium revisions.

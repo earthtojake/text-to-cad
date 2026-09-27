@@ -1,5 +1,5 @@
 import type { DocumentDrafts, LiveTextDocument, LivePdfDocument } from './documents.js';
-import type { PromptContextPort } from '@hardcore/core/prompt';
+import type { PromptContextPort } from '@text-to-cad/core/prompt';
 import type { FileActions, FileSource } from '../file-viewer/types.js';
 
 /** Environmental effects are supplied by the app; shared UI never discovers a clipboard. */

@@ -249,7 +249,7 @@ test("nothing that writes bytes calls an unspecified Math function", () => {
     if (file.pathname.endsWith(".test.js") || file.pathname.endsWith(".test.mjs")) continue;
     for (const [index, line] of code(file).split("\n").entries()) {
       const hits = line.match(UNSPECIFIED);
-      if (hits) offenders.push(`${file.pathname.split("/@hardcore/core/")[1]}:${index + 1}: ${hits.join(", ")}`);
+      if (hits) offenders.push(`${file.pathname.split("/@text-to-cad/core/")[1]}:${index + 1}: ${hits.join(", ")}`);
     }
   }
   assert.deepEqual(offenders, [], `use lib/surf/trig.js (or exact arithmetic) instead:\n${offenders.join("\n")}`);

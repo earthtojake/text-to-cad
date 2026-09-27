@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { createEnvironmentResource } from '@hardcore/core/common/environmentMap.js';
+import { createEnvironmentResource } from '@text-to-cad/core/common/environmentMap.js';
 
 let renderer;
 self.onmessage = async ({ data: { configuration, size } }) => {

@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { CircleAlert, X } from "lucide-react";
-import { Button } from "@hardcore/ui/primitives/button";
-import { ScrollArea } from "@hardcore/ui/primitives/scroll-area";
-import { cn } from "@hardcore/ui/utils";
+import { Button } from "@text-to-cad/ui/primitives/button";
+import { ScrollArea } from "@text-to-cad/ui/primitives/scroll-area";
+import { cn } from "@text-to-cad/ui/utils";
 import { useViewerMobile } from "../../../file-viewer/responsive.js";
 
 /**

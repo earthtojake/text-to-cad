@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { resolveSceneQuality } from '@hardcore/core/common/sceneSettings.js';
+import { resolveSceneQuality } from '@text-to-cad/core/common/sceneSettings.js';
 import { VIEWER_RENDER_PROFILE, previewSceneQuality, renderProfileKeepsPixelRatio, sceneForRenderProfile } from './renderProfile.js';
 
 const scene = quality => ({

@@ -1,6 +1,6 @@
-import { URDF_JOINT_VALUE_EPSILON } from "@hardcore/core/lib/urdf/jointValues.js";
-import { clampJointValueDeg } from "@hardcore/core/lib/urdf/kinematics.js";
-import { robotOpeningPose, srdfGroupStateJointValuesToDisplay } from "@hardcore/core/lib/urdf/motion.js";
+import { URDF_JOINT_VALUE_EPSILON } from "@text-to-cad/core/lib/urdf/jointValues.js";
+import { clampJointValueDeg } from "@text-to-cad/core/lib/urdf/kinematics.js";
+import { robotOpeningPose, srdfGroupStateJointValuesToDisplay } from "@text-to-cad/core/lib/urdf/motion.js";
 import { cloneJointValueMap, findBestMatchingJointValueState } from "./robotMotion.js";
 
 // A robot's pose: the value of every joint a person can drive (degrees, or metres for a

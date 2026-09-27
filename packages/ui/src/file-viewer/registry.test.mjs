@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { build } from "esbuild";
 
-const temporary = await mkdtemp(join(tmpdir(), "hardcore-registry-test-"));
+const temporary = await mkdtemp(join(tmpdir(), "text-to-cad-registry-test-"));
 const output = join(temporary, "registry.mjs");
 await build({ entryPoints: [fileURLToPath(new URL("./registry.ts", import.meta.url))], bundle: true, platform: "node", format: "esm", outfile: output });
 const { defineFileRenderer, selectRenderer, validateRenderers } = await import(pathToFileURL(output).href);

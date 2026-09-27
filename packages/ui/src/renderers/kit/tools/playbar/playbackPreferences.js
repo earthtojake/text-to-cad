@@ -3,7 +3,7 @@
 // and across a reload of the tab. Orbit on or off and its speed; Autoplay; and — once chosen —
 // the speed and the loop the routine plays with, while unset the routine's own authored values.
 // Importing this module has no environmental effects.
-import { clampAnimationSpeed } from "@hardcore/core/common/animationClock.js";
+import { clampAnimationSpeed } from "@text-to-cad/core/common/animationClock.js";
 
 export const MAX_ORBIT_SPEED = 5;
 export const DEFAULT_PLAYBACK = Object.freeze({ orbit: true, orbitSpeed: 1, autoplay: false });

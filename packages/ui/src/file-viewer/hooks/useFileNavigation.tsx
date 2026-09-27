@@ -1,4 +1,4 @@
-import { TooltipHint } from "@hardcore/ui/primitives/tooltip";
+import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 import { Ellipsis } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "../../primitives/dropdown-menu.jsx";

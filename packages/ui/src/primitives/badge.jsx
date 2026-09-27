@@ -1,6 +1,6 @@
 import { cva } from "class-variance-authority";
 
-import { cn } from "@hardcore/ui/utils"
+import { cn } from "@text-to-cad/ui/utils"
 
 const badgeVariants = cva(
   "inline-flex w-fit shrink-0 items-center justify-center gap-1 overflow-hidden rounded-md border px-2 py-0.5 text-xs whitespace-nowrap transition-colors [&>svg]:size-3",

@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import test from 'node:test';
 import { parse } from '@babel/parser';
 import traverseModule from '@babel/traverse';
-import { clonePerspectiveSnapshot } from '@hardcore/core/lib/perspective.js';
+import { clonePerspectiveSnapshot } from '@text-to-cad/core/lib/perspective.js';
 import { cameraForViewSettings, viewerDisplaySettingsForCamera } from '../view-settings/viewerDisplaySettings.js';
 import { createViewSettingsStore } from '../view-settings/viewSettingsStore.js';
 

@@ -4,7 +4,7 @@ import test from "node:test";
 import {
   STEP_MODULE_SCHEMA_VERSION,
   normalizeStepModuleDefinition
-} from "@hardcore/core/common/stepModule.js";
+} from "@text-to-cad/core/common/stepModule.js";
 
 import { resolveStepModuleLoad } from "./stepModuleLoad.js";
 

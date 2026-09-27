@@ -1,6 +1,6 @@
 import { cleanup, renderHook, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
-import { createHttpCadResourceProvider } from '@hardcore/core/client';
+import { createHttpCadResourceProvider } from '@text-to-cad/core/client';
 import { useRobotDocument } from '../../../dist/renderers/robot/useRobotDocument.js';
 
 const triangle = `solid test

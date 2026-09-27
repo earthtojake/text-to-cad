@@ -8,7 +8,7 @@ import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const require = createRequire(import.meta.url);
-const temporary = await mkdtemp(join(tmpdir(), 'hardcore-appearance-'));
+const temporary = await mkdtemp(join(tmpdir(), 'text-to-cad-appearance-'));
 const output = join(temporary, 'appearance.mjs');
 after(() => rm(temporary, { recursive: true, force: true }));
 await build({

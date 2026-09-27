@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import * as THREE from "three";
 
-import { kinematicsDeltas } from "@hardcore/core/common/kinematicsRuntime.js";
+import { kinematicsDeltas } from "@text-to-cad/core/common/kinematicsRuntime.js";
 
 import { stepJointHandles, stepPosableDofs } from "./jointHandles.js";
 

@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { EDGELESS_VIEW_FEATURES } from "@hardcore/core/common/viewSettings.js";
+import { EDGELESS_VIEW_FEATURES } from "@text-to-cad/core/common/viewSettings.js";
 import RendererShell from "../kit/shell/RendererShell.jsx";
 import { useRendererShell } from "../kit/shell/useRendererShell.js";
 import { noGeometryAlert } from "../kit/status/loadAlerts.js";

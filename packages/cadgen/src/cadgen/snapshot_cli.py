@@ -1287,7 +1287,7 @@ def resolve_step_render_job(
         resolved["sourceSidecar"] = sidecar
     if isinstance(sidecar.get("kinematics"), dict) and sidecar["kinematics"]:
         # Typed mates are the articulation mechanism: --kinematics DOF values
-        # fold through the shared FK evaluator (@hardcore/core kinematicsModule),
+        # fold through the shared FK evaluator (@text-to-cad/core kinematicsModule),
         # which reads the sidecar's kinematics section.
         resolved["stepParameterUrl"] = asset_url_for_path(source_sidecar_path(input_path), root_path)
     if debug_enabled:
@@ -1301,7 +1301,7 @@ def resolve_step_render_job(
 
 # A DXF is DRAWN, not staged: `cadgen dxf snapshot` paints the same
 # `cadgen.drawing_payload` the CAD Viewer's DXF pane paints, with the same
-# core code (@hardcore/core/lib/drawing2d), so the CLI cannot show a picture
+# core code (@text-to-cad/core/lib/drawing2d), so the CLI cannot show a picture
 # the viewer cannot. Everything below is what that costs the option surface.
 #
 # `appearance` is the whole of a drawing's display: it picks the background,

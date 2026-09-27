@@ -17,7 +17,7 @@ What it pins is the shared contract, not the implementation:
 The last case is the PARITY case, and it uses the SAME fixture the viewer's
 browser test serves (`packages/ui/src/renderers/dxf/__fixtures__/sample.dxf`):
 one drawing, two renderers, key pixels at positions computed from
-`@hardcore/core/lib/drawing2d`'s fit maths, restated here. If the CLI and the
+`@text-to-cad/core/lib/drawing2d`'s fit maths, restated here. If the CLI and the
 pane ever disagree about the frame, one of the two suites says so.
 
 One browser, one packet: a `--job` file renders every case in a single run.

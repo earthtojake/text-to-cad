@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState } from "react";
 import * as THREE from "three";
-import { entryMeshAssetHash, entryMeshAssetUrl, meshAssetKeyForEntry } from "@hardcore/core/lib/entryAssets.js";
-import { isAbortError } from "@hardcore/core/lib/renderAssetClient.js";
-import { loadRenderMeshByUrl } from "@hardcore/core/lib/render/meshLoaders.js";
-import { buildMeshScene } from "@hardcore/core/lib/render/meshScene.js";
+import { entryMeshAssetHash, entryMeshAssetUrl, meshAssetKeyForEntry } from "@text-to-cad/core/lib/entryAssets.js";
+import { isAbortError } from "@text-to-cad/core/lib/renderAssetClient.js";
+import { loadRenderMeshByUrl } from "@text-to-cad/core/lib/render/meshLoaders.js";
+import { buildMeshScene } from "@text-to-cad/core/lib/render/meshScene.js";
 
 const READING = Object.freeze({ phase: "read", label: "Reading model", done: 0, total: 0, determinate: false });
 const LOADING = Object.freeze({ phase: "geometry", label: "Loading geometry", done: 0, total: 1, determinate: true });

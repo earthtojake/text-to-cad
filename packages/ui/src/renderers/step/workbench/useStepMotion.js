@@ -5,15 +5,15 @@ import {
   animationRenderFrame,
   buildDefaultAnimationState,
   findAnimationClip
-} from "@hardcore/core/common/animationClock.js";
+} from "@text-to-cad/core/common/animationClock.js";
 import {
   kinematicsModuleDefinitionFromSidecar,
   loadKinematicsModuleDefinition,
   previewKinematicsModuleDefinition
-} from "@hardcore/core/common/kinematicsModule.js";
-import { loadSourceAnimation, validateAnimationClips } from "@hardcore/core/common/renderModule.js";
-import { validateSourceSidecar } from "@hardcore/core/common/sourceSidecar.js";
-import { entryPoseUrl } from "@hardcore/core/lib/entryAssets.js";
+} from "@text-to-cad/core/common/kinematicsModule.js";
+import { loadSourceAnimation, validateAnimationClips } from "@text-to-cad/core/common/renderModule.js";
+import { validateSourceSidecar } from "@text-to-cad/core/common/sourceSidecar.js";
+import { entryPoseUrl } from "@text-to-cad/core/lib/entryAssets.js";
 import { tolerantAnimationClip } from "../components/workbench/hooks/packageProgressiveLoad.js";
 import { useAnimationClockStore } from "./animationClockStore.js";
 import { cadPathForEntry, fileKey as fileKeyOf } from "./entryPaths.js";

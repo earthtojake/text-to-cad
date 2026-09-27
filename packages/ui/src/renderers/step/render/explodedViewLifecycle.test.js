@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { Matrix4 } from 'three';
 import { inactiveExplodedViewNeedsReset } from './explodedViewLifecycle.js';
-import { clearExplodedViewRecords } from '@hardcore/core/lib/viewer/explodedView.js';
+import { clearExplodedViewRecords } from '@text-to-cad/core/lib/viewer/explodedView.js';
 
 test('initial and retained rest records need no reset on another publication', () => {
   const records = [{}, { explodedViewMatrix: null }];

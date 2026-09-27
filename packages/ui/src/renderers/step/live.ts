@@ -1,4 +1,4 @@
-import type { PromptReference } from '@hardcore/core/prompt';
+import type { PromptReference } from '@text-to-cad/core/prompt';
 import type { LiveCameraSnapshot, LiveViewBinding, LiveViewController, LiveViewState } from '../kit/shell/liveBinding.js';
 
 export type CadCameraSnapshot = LiveCameraSnapshot;

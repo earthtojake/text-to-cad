@@ -4,7 +4,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import { drawingAssetsPlugin } from "@hardcore/ui/drawing-assets";
+import { drawingAssetsPlugin } from "@text-to-cad/ui/drawing-assets";
 
 import { resolveDirectoryRoot as resolveViewerDirectoryRoot } from "./scripts/directoryRoot.mjs";
 import { resolveServerFsAllow } from "./scripts/serverFsAllow.mjs";
@@ -241,7 +241,7 @@ export default defineConfig(async ({ command }) => ({
           })()
         : undefined,
     fs: {
-      // @hardcore/core lives outside the app root, so it must be allowed explicitly;
+      // @text-to-cad/core lives outside the app root, so it must be allowed explicitly;
       // real paths too, in case a checkout reaches it through a link. See
       // scripts/serverFsAllow.mjs.
       allow: resolveServerFsAllow([repoRoot], {

@@ -9,7 +9,7 @@ const appStateKeys = ['viewBackgroundColor', 'gridSize', 'gridStep', 'gridModeEn
 const record = value => !!value && typeof value === 'object' && !Array.isArray(value);
 
 export function emptyDrawingDocument() {
-  return { type: 'excalidraw', version: 2, source: 'Hardcore', elements: [], appState: { viewBackgroundColor: '#ffffff' }, files: {} };
+  return { type: 'excalidraw', version: 2, source: 'text-to-cad', elements: [], appState: { viewBackgroundColor: '#ffffff' }, files: {} };
 }
 
 /** Bound and validate untrusted JSON before the editor's own version restoration. */
@@ -67,5 +67,5 @@ export function parseDrawingScene(serialized) {
     const zoom = input.appState.zoom?.value;
     if (Number.isFinite(zoom) && zoom >= 0.1 && zoom <= 30) appState.zoom = { value: zoom };
   }
-  return { type: 'excalidraw', version: 2, source: 'Hardcore', elements, appState, files };
+  return { type: 'excalidraw', version: 2, source: 'text-to-cad', elements, appState, files };
 }

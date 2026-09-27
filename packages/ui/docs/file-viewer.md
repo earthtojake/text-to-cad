@@ -1,9 +1,9 @@
 # FileViewer
 
-`@hardcore/ui/file-viewer` exports the complete file tab: breadcrumbs, entry
+`@text-to-cad/ui/file-viewer` exports the complete file tab: breadcrumbs, entry
 menus, the file tree, one panel column, renderer loading, and the text editing
 session. It imports no concrete renderer. Applications compose registrations
-from the separate `@hardcore/ui/renderers/*` entry points and their own
+from the separate `@text-to-cad/ui/renderers/*` entry points and their own
 `defineFileRenderer` definitions ([renderers](renderers.md)).
 
 ```tsx
@@ -22,7 +22,7 @@ lifetime. Changing their object identity cancels outstanding document work.
 `source.id` is a stable root identity, independent of a server's temporary port.
 Every path is relative to that source; containment and authorization remain in
 the host service. The host controls navigation and keeps `FileViewerState` in its
-tab store (`@hardcore/ui/tab-store`; `useTabViewerState` derives it for one root). Its
+tab store (`@text-to-cad/ui/tab-store`; `useTabViewerState` derives it for one root). Its
 `renderers` section uses encoded file-path/renderer-ID pairs, each the file's view
 under this root, while `panel`, `panelWidth`, and `expandedDirectories` describe chrome
 — the width and the expansion are the tab's, the open panel the page's own.

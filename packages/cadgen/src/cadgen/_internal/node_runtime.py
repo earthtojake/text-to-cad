@@ -21,13 +21,13 @@ Two invariants this module exists to hold:
 2. **Bare specifiers resolve through the exports map.** A source checkout runs compiled
    ``packages/core`` builders whose package lives in the root workspace, so the
    child is spawned with ``NODE_PATH=<root node_modules>``. That resolves
-   ``@hardcore/core`` *through its exports map*. A directory ``--alias`` cannot do this -- it
+   ``@text-to-cad/core`` *through its exports map*. A directory ``--alias`` cannot do this -- it
    bypasses the exports map entirely. Same mechanism the bundler uses
    (``scripts/bundle/lib/node_builders.sh``).
 
    **Correction to the design doc, measured here:** NODE_PATH alone is NOT sufficient for a
    real ``node`` child. Node's *ESM* resolver ignores NODE_PATH (verified on v22.22.0:
-   ``import "@hardcore/core/glb/progressStream.js"`` throws ERR_MODULE_NOT_FOUND while
+   ``import "@text-to-cad/core/glb/progressStream.js"`` throws ERR_MODULE_NOT_FOUND while
    ``require.resolve`` of the same specifier under the same env returns the right file).
    The bundler never hit this because esbuild implements NODE_PATH itself. So the child is
    also spawned with ``--import node_resolve_register.mjs``, whose resolve hook forwards a
@@ -124,7 +124,7 @@ def node_package_root() -> Path:
     """The directory to put on ``NODE_PATH`` for a builder child.
 
     Only the DEV path needs this: a source checkout runs the live ``packages/core/bin``
-    sources, whose bare ``@hardcore/core/...`` specifiers resolve through the resolve hook
+    sources, whose bare ``@text-to-cad/core/...`` specifiers resolve through the resolve hook
     against the root ``node_modules`` workspace links. A packaged builder is self-contained and
     imports nothing bare, so the value is inert there.
 
@@ -173,7 +173,7 @@ def node_child_env(
     *,
     package_root: Path | str | None = None,
 ) -> dict[str, str]:
-    """``os.environ`` plus a ``NODE_PATH`` that resolves bare ``@hardcore/core``
+    """``os.environ`` plus a ``NODE_PATH`` that resolves bare ``@text-to-cad/core``
     specifiers through their exports maps. ``extra`` is overlaid last and wins, including
     over ``NODE_PATH`` -- a caller that knows better is not second-guessed."""
     env = dict(os.environ)

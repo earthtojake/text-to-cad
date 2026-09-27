@@ -1,7 +1,7 @@
 import React, { useRef, useState } from 'react';
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { animationRenderFrame, buildDefaultAnimationState, findAnimationClip } from '@hardcore/core/common/animationClock.js';
+import { animationRenderFrame, buildDefaultAnimationState, findAnimationClip } from '@text-to-cad/core/common/animationClock.js';
 import { AnimationClockProvider, createAnimationClock } from '../../../../dist/renderers/step/workbench/animationClockStore.js';
 import { useStepMotionControls } from '../../../../dist/renderers/step/workbench/useStepMotionControls.js';
 

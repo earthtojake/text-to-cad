@@ -1,15 +1,15 @@
 import { useEffect } from "react";
 import * as THREE from "three";
-import { createTopologyDisplayEdgeObject as createSharedTopologyDisplayEdgeObject } from "@hardcore/core/common/renderEdges.js";
-import { syncRuntimeStepClipPlane } from "@hardcore/core/lib/viewer/modelRuntime.js";
-import { applyPartVisualState, FOCUSED_DIMMED_SURFACE_OPACITY, normalizePartIdList } from "@hardcore/core/lib/viewer/partVisualState.js";
-import { REFERENCE_HIGHLIGHT_WIDTH_MULTIPLIER, REFERENCE_SELECTED_COLOR } from "@hardcore/core/lib/viewer/referenceGeometry.js";
-import { syncDisplayMeshFaceIds, syncSelectorPickGroups } from "@hardcore/core/lib/viewer/selectorPickGroups.js";
-import { BASE_VIEWER_THEME } from "@hardcore/core/lib/viewer/stageTheme.js";
-import { syncTopologyDisplayEdgeLine } from "@hardcore/core/lib/viewer/topologyDisplayEdgeLine.js";
+import { createTopologyDisplayEdgeObject as createSharedTopologyDisplayEdgeObject } from "@text-to-cad/core/common/renderEdges.js";
+import { syncRuntimeStepClipPlane } from "@text-to-cad/core/lib/viewer/modelRuntime.js";
+import { applyPartVisualState, FOCUSED_DIMMED_SURFACE_OPACITY, normalizePartIdList } from "@text-to-cad/core/lib/viewer/partVisualState.js";
+import { REFERENCE_HIGHLIGHT_WIDTH_MULTIPLIER, REFERENCE_SELECTED_COLOR } from "@text-to-cad/core/lib/viewer/referenceGeometry.js";
+import { syncDisplayMeshFaceIds, syncSelectorPickGroups } from "@text-to-cad/core/lib/viewer/selectorPickGroups.js";
+import { BASE_VIEWER_THEME } from "@text-to-cad/core/lib/viewer/stageTheme.js";
+import { syncTopologyDisplayEdgeLine } from "@text-to-cad/core/lib/viewer/topologyDisplayEdgeLine.js";
 import { clamp } from "../../kit/camera/viewportCameraKit.js";
 import { clearSceneGroup } from "./useStepSceneSync.js";
-import { explodedPickSelectorRuntime } from "@hardcore/core/common/topologyDisplayEdgeRuntime.js";
+import { explodedPickSelectorRuntime } from "@text-to-cad/core/common/topologyDisplayEdgeRuntime.js";
 
 const EXPLODED_PICK_SETTLE_MS = 150;
 

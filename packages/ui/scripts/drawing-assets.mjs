@@ -1,5 +1,5 @@
 /**
- * Offline Excalidraw assets for every app that loads `@hardcore/ui/drawing`:
+ * Offline Excalidraw assets for every app that loads `@text-to-cad/ui/drawing`:
  * HTTP development, file:// Electron production, and the static web build.
  */
 import fs from "node:fs";
@@ -98,7 +98,7 @@ export function drawingAssetsPlugin({ exclude = [] } = {}) {
   assertExclude(exclude);
   let files;
   return {
-    name: "hardcore-offline-drawing-assets",
+    name: "text-to-cad-offline-drawing-assets",
     enforce: "pre",
     // Keep dependency optimization: SDK transitive CommonJS dependencies need
     // browser-compatible wrappers. Apply the same adaptation inside esbuild,
@@ -111,7 +111,7 @@ export function drawingAssetsPlugin({ exclude = [] } = {}) {
           optimizeDeps: {
             rolldownOptions: {
               plugins: [{
-                name: "hardcore-offline-drawing-fonts",
+                name: "text-to-cad-offline-drawing-fonts",
                 transform: {
                   filter: { id: SDK_CHUNK },
                   handler(code) {
@@ -128,7 +128,7 @@ export function drawingAssetsPlugin({ exclude = [] } = {}) {
         optimizeDeps: {
           esbuildOptions: {
             plugins: [{
-              name: "hardcore-offline-drawing-fonts",
+              name: "text-to-cad-offline-drawing-fonts",
               setup(build) {
                 build.onLoad({ filter: SDK_CHUNK }, args => {
                   const code = fs.readFileSync(args.path, "utf8");

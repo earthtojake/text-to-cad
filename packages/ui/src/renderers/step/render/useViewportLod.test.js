@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { dispatchViewportLodStatus, syncViewportLodLimitation, viewportLodMinimumLevel, viewportLodSampleForQuality } from "./useViewportLod.js";
-import { settledLevel } from "@hardcore/core/lib/surf/lodPolicy.js";
+import { settledLevel } from "@text-to-cad/core/lib/surf/lodPolicy.js";
 import { createViewerMemoryPolicy } from "./viewerMemoryPolicy.js";
 
 test("partial fallback retains the unresolved camera target and only clears after it resolves", () => {

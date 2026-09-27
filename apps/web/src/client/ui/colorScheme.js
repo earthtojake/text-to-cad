@@ -1,5 +1,5 @@
 // The app's appearance: System, Light or Dark. It is one of the tab's settings
-// (`settings.appearance` of the tab record, `@hardcore/ui/tab-store`); this module says what
+// (`settings.appearance` of the tab record, `@text-to-cad/ui/tab-store`); this module says what
 // the ids are and how System resolves against the OS, and applies the answer to the document.
 export const SYSTEM_COLOR_SCHEME_ID = "system";
 export const LIGHT_COLOR_SCHEME_ID = "light";

@@ -1,5 +1,5 @@
 import { Monitor, Moon, Sun } from "lucide-react";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@hardcore/ui/primitives/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@text-to-cad/ui/primitives/select";
 import { COLOR_SCHEMES } from "../../ui/colorScheme.js";
 
 const ICONS = { system: Monitor, light: Sun, dark: Moon };

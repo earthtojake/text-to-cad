@@ -56,7 +56,7 @@ function firstPaint({ record, prefersDark = false, blocked = false }) {
     document: { documentElement: root },
     window: { matchMedia: () => ({ matches: prefersDark }), get sessionStorage() {
       if (blocked) throw new Error("blocked");
-      return { getItem: (key) => (key === "hardcore:tab:v1" && record !== undefined ? JSON.stringify(record) : null) };
+      return { getItem: (key) => (key === "text-to-cad:tab:v1" && record !== undefined ? JSON.stringify(record) : null) };
     } }
   });
   return root;

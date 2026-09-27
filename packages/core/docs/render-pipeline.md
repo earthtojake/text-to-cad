@@ -1,6 +1,6 @@
 # Render Pipeline
 
-`@hardcore/core` exposes a staged render pipeline for shared viewer, docs, and generated
+`@text-to-cad/core` exposes a staged render pipeline for shared viewer, docs, and generated
 snapshot browser-runtime work. A STEP document goes:
 
 ```js
@@ -204,7 +204,7 @@ CAD snapshots may still use logarithmic depth: they render one fixed configurati
 import {
   loadSource,
   stepParameterRuntime
-} from "@hardcore/core/common/source.js";
+} from "@text-to-cad/core/common/source.js";
 ```
 
 `loadSource(input, options)` returns a normalized STEP render source:
@@ -260,7 +260,7 @@ source into the runtime object `buildModel` accepts.
 import {
   buildModel,
   fitCameraToModel
-} from "@hardcore/core/common/cadScene.js";
+} from "@text-to-cad/core/common/cadScene.js";
 ```
 
 `buildModel(THREE, source, settings)` returns a model API:
@@ -429,7 +429,7 @@ the Viewer accepts that component geometry.
 Use this module for interactive browser canvases, including the docs hero.
 
 ```js
-import { renderModel } from "@hardcore/core/common/renderModel.js";
+import { renderModel } from "@text-to-cad/core/common/renderModel.js";
 ```
 
 `renderModel(THREE, model, options)` returns an interactive viewport API:
@@ -484,7 +484,7 @@ import {
   renderModel,
   captureModel,
   renderMeshJob
-} from "@hardcore/core/common/renderMeshScene.js";
+} from "@text-to-cad/core/common/renderMeshScene.js";
 ```
 
 `renderJobContext(meshData, job)` resolves the shared scene contract plus
@@ -537,7 +537,7 @@ camera does not breathe between frames.
   carries, so its rows run down the tree from the root).
 
 It does not write files. The CAD skill snapshot CLI writes the returned data to
-disk. Consumers use compiled `@hardcore/core` exports; generated snapshot browser assets
+disk. Consumers use compiled `@text-to-cad/core` exports; generated snapshot browser assets
 bundle this entrypoint into cadgen's packaged runtime (`cadgen/_runtime/browser`).
 
 `renderMeshJob(meshData, job)` is a compatibility wrapper that builds a context,
@@ -590,9 +590,9 @@ Interactive viewer/docs usage:
 
 ```js
 import * as THREE from "three";
-import { loadSource, stepParameterRuntime } from "@hardcore/core/common/source.js";
-import { buildModel } from "@hardcore/core/common/cadScene.js";
-import { renderModel } from "@hardcore/core/common/renderModel.js";
+import { loadSource, stepParameterRuntime } from "@text-to-cad/core/common/source.js";
+import { buildModel } from "@text-to-cad/core/common/cadScene.js";
+import { renderModel } from "@text-to-cad/core/common/renderModel.js";
 
 const source = await loadSource({
   kind: "step",
@@ -622,14 +622,14 @@ family through `common/headlessScene.js` into the same `renderModel`/`captureMod
 
 ```js
 import * as THREE from "three";
-import { loadSource } from "@hardcore/core/common/source.js";
-import { buildModel } from "@hardcore/core/common/cadScene.js";
+import { loadSource } from "@text-to-cad/core/common/source.js";
+import { buildModel } from "@text-to-cad/core/common/cadScene.js";
 import {
   captureModel,
   modelOptionsForRenderJob,
   renderJobContext,
   renderModel
-} from "@hardcore/core/common/renderMeshScene.js";
+} from "@text-to-cad/core/common/renderMeshScene.js";
 
 const source = await loadSource(job);
 const context = renderJobContext(source.meshData, job);

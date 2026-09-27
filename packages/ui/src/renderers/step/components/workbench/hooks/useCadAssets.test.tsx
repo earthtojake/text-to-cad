@@ -1,12 +1,12 @@
 import { act, cleanup, renderHook } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { createHash } from 'node:crypto';
-import { createHttpCadResourceProvider } from '@hardcore/core/client';
-import { entryHasMesh, entryHasReferences } from '@hardcore/core/lib/entryAssets.js';
-import { renderAssetCacheStats } from '@hardcore/core/lib/renderAssetClient.js';
+import { createHttpCadResourceProvider } from '@text-to-cad/core/client';
+import { entryHasMesh, entryHasReferences } from '@text-to-cad/core/lib/entryAssets.js';
+import { renderAssetCacheStats } from '@text-to-cad/core/lib/renderAssetClient.js';
 import { createTessellationCache, encodeComponentTessellation, tessellationPayloadFacts,
-  tessellationCacheKey, validateTessellationProbeRow } from '@hardcore/core/lib/surf/tessellationCache.js';
-import { lodTessellationForLevel } from '@hardcore/core/lib/surf/lodPolicy.js';
+  tessellationCacheKey, validateTessellationProbeRow } from '@text-to-cad/core/lib/surf/tessellationCache.js';
+import { lodTessellationForLevel } from '@text-to-cad/core/lib/surf/lodPolicy.js';
 import { completedPackages } from '../../../render/completedPackageCache.js';
 import { viewerMemoryPolicy } from '../../../render/viewerMemoryPolicy.js';
 import { useCadAssets } from './useCadAssets.js';

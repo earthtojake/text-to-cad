@@ -79,7 +79,7 @@ def require_browser_runtime(directory: Path | str) -> Path:
     """The snapshot browser runtime, or :class:`AssetMissing` naming how to get it.
 
     Unlike the builders, this one has no live source to fall back on: ``render.html`` is
-    written by the bundler and ``snapshot-render.js`` is an esbuild of @hardcore/core, so a
+    written by the bundler and ``snapshot-render.js`` is an esbuild of @text-to-cad/core, so a
     checkout that has never bundled cannot render at all. Without this the failure was a
     404 inside a headless browser page.
     """

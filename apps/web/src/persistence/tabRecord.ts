@@ -1,4 +1,4 @@
-import type { TabRecordStorage } from '@hardcore/ui/tab-store';
+import type { TabRecordStorage } from '@text-to-cad/ui/tab-store';
 
 /**
  * Where the web host keeps the tab record: one `sessionStorage` entry. sessionStorage is the
@@ -6,7 +6,7 @@ import type { TabRecordStorage } from '@hardcore/ui/tab-store';
  * duplicated one included, starts empty. The inline script in `index.html` reads this same key
  * for the first paint's appearance, so the key and the record's shape are shared with it.
  */
-export const TAB_RECORD_KEY = 'hardcore:tab:v1';
+export const TAB_RECORD_KEY = 'text-to-cad:tab:v1';
 
 export function sessionTabRecord(storage: Pick<Storage, 'getItem' | 'setItem'>): TabRecordStorage {
   return {

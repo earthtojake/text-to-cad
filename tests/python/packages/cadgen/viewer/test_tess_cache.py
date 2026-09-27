@@ -39,7 +39,7 @@ def admitted(key=GOOD_KEY, size=None):
     return {"tessellationInput": key, "object": FIXTURE["facts"]["object"],
             "maxBytes": len(PAYLOAD) if size is None else size}
 
-# The authoritative codec: @hardcore/core in this repository. The suite is root-owned
+# The authoritative codec: @text-to-cad/core in this repository. The suite is root-owned
 # and runs from a checkout, so the source path is always present -- no skip.
 REPO_ROOT = Path(__file__).resolve().parents[5]
 CADGEN_JS_CODEC = REPO_ROOT / "packages" / "core" / "src" / "lib" / "surf" / "tessellationCache.js"
@@ -188,7 +188,7 @@ class BatchFramingMatchesTheAuthoritativeCodec(TessCacheTestCase):
     """The Python encoder's bytes must decode with the JS decoder that owns the format.
 
     Neither precondition is allowed to make this disappear quietly. A missing
-    codec is a FAILURE — @hardcore/core ships with the app, so its absence means the
+    codec is a FAILURE — @text-to-cad/core ships with the app, so its absence means the
     tree is broken, not that this machine is unusual. A missing `node` is a
     failure too: the client is a JavaScript app, so anywhere this suite runs
     can run its decoder. Skipping on either is how the check went dead the
@@ -200,7 +200,7 @@ class BatchFramingMatchesTheAuthoritativeCodec(TessCacheTestCase):
         if not CADGEN_JS_CODEC.is_file():
             raise AssertionError(
                 f"the authoritative tessellation-cache codec is missing: {CADGEN_JS_CODEC}. "
-                "@hardcore/core is vendored at packages/core and ships with this app; "
+                "@text-to-cad/core is vendored at packages/core and ships with this app; "
                 "without it the Python encoder's framing is verified by nothing."
             )
         if not shutil.which("node"):

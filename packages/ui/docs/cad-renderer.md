@@ -2,7 +2,7 @@
 
 The CAD viewer is the viewport, floating toolbar, the tool stack under it,
 reference interactions, measurement and drawing tools, animation, loading artwork
-and alerts, in `@hardcore/ui`. The rules of its chrome — which tools a file has, how
+and alerts, in `@text-to-cad/ui`. The rules of its chrome — which tools a file has, how
 they take and give back the pointer, the tool stack, preview, the keyboard — are the
 [design system](settings-ui.md); this document is the mechanism behind them.
 
@@ -23,7 +23,7 @@ per file family, each a vertical slice over the kit: `src/renderers/dxf`
 `src/renderers/mesh` (STL and 3MF, [Mesh renderer](#mesh-renderer)),
 `src/renderers/robot` (URDF, SRDF and SDF, [Robot renderer](#robot-renderer)) and
 `src/renderers/step` (STEP and STP, [STEP renderer](#step-and-source-separation)). The kit imports itself, shared UI
-(`primitives`, `lib`, `drawing`) and the format-blind half of `@hardcore/core`
+(`primitives`, `lib`, `drawing`) and the format-blind half of `@text-to-cad/core`
 (`lib/viewer/*`, `lib/perspective.js`, `common/viewSettings.js`,
 `common/sceneSettings.js`, the Render studio); a renderer imports the kit, never
 the reverse.
@@ -32,16 +32,16 @@ the reverse.
 | --- | --- |
 | `viewport/` | `useViewerRuntime` (three.js renderer lifecycle, on-demand render loop and `requestRender`, resize and device-pixel-ratio caps, context loss, keyboard orbit, teardown), `renderProfile` (`VIEWER_RENDER_PROFILE`: the tools view and preview drawing the same Display settings — `sceneForRenderProfile`, `previewSceneQuality`, `renderProfileKeepsPixelRatio`), `framePresentation`, `viewportBuffer`, `renderDepthPolicy`, `sceneObjects` (`disposeSceneObject`), DOM helpers. The scene in the viewport is its owner's: teardown calls the injected `disposeScene(runtime)` and `disposeStudio(runtime)`. |
 | `camera/` | `runtimeCamera` (zoom percent against the authored framing, projection and lens sync, perspective snapshots, eased transitions, fit-to-bounds, recentre), `useViewportCamera` (that behaviour bound to a mounted viewport: the perspective kept by a mounted view, the preview camera swap and its restore, the reset that Zoom to fit and the live `resetCamera` share, view-cube presets, which turn the camera and keep its zoom and target), `viewportCameraKit` and `viewportCameraFit`, `orbitControls`, `zoomPivotReanchor`, `zoomSpeeds`, `cameraLens`, `ViewPlaneControl` (view cube). |
-| `look/` | `stageEffects` (lighting rig scaled to the model, floor, glow and shadow catcher, grid and origin axes), the Render studio boundary (`renderStudioChunk`, `studioEnvironmentCache` and its worker). `chromeBackdrop` and `useChromeBackdropColor` (the frame colour around a scene). The surface LOOK is data the viewport resolves and a scene applies to its own materials: `@hardcore/core/lib/viewer/surfaceLook.js` (`createSurfaceLook(THREE, root).apply(look)`) does it for any authored material tree. The viewport resolves it with core's `resolveSceneSurfaceLook` (`common/sceneSettings.js`), the resolver the snapshot CLI dresses the same scenes with. |
+| `look/` | `stageEffects` (lighting rig scaled to the model, floor, glow and shadow catcher, grid and origin axes), the Render studio boundary (`renderStudioChunk`, `studioEnvironmentCache` and its worker). `chromeBackdrop` and `useChromeBackdropColor` (the frame colour around a scene). The surface LOOK is data the viewport resolves and a scene applies to its own materials: `@text-to-cad/core/lib/viewer/surfaceLook.js` (`createSurfaceLook(THREE, root).apply(look)`) does it for any authored material tree. The viewport resolves it with core's `resolveSceneSurfaceLook` (`common/sceneSettings.js`), the resolver the snapshot CLI dresses the same scenes with. |
 | `view-settings/` | The settings model and store (`viewSettingsStore`, `useViewSettings`, `viewerDisplaySettings`, `renderState`), applying a change to a viewport (`useAppliedViewSettings`, `viewUpdateCoordinator`, `viewUpdateGate`, `viewUpdatePlan`), and the Display tool's content (`DisplaySettingsSection`, `DisplayModeOptions`; the shell draws it as a stack panel while Display is the tool). |
-| `tools/` | `FloatingToolBar` (the dumb strip), `toolModes` (the tool-mode state machine), `ToolModeMenu` (a tool's exclusive modes: one button in its panel's header row and its dropdown), `ToolPopover` (an ordinary dropdown from its button, on a `side` and `align`ed start or end: preview's Playback settings, upward from the playbar), `ToolStack` (the bounded column under the strip, which scrolls only when what cannot give way still does not fit), `ToolPanel` (one panel of it: `fit` says how it gives way when the viewer is short, `resizable` makes it the person's to size — width, height and corner handles, moving only it — and every panel but Drawing folds to its first row; `ToolPanelCollapse` is the chevron for a panel whose first row is its content's), `toolStackLayout` (every panel's width, the resizable panels' sizes and the folded panels: defaults, bounds and their stored record), `floatingSurface` (the two surfaces, defined together: the strip's and every menu's over the viewport, and the stack panels' more transparent one), and the format-blind tools: `draw/` (overlay, view lock, `useDrawingViewLock`), `PreviewChrome` (the top-right bar in both modes, and preview's controls and their visibility), `PlaybackMenu` (preview's Playback settings: Animation — Routine, Speed, Loop, Autoplay — then Orbit and its speed), `preview/` (orbit preferences), `playbar/` (`ViewportAnimationBar`, `animationClock`, `usePlaybackFrames`, `playbackPreferences`: the file's Playback settings — orbit and its speed, Autoplay, the routine's chosen Speed and Loop), `pose/` (the handle overlay, canvas, drag mathematics), `select/` (`usePointerPick`: taps and hover through a scene's own `pick`). Screenshot capture is `@hardcore/core/lib/viewer/screenshotCapture.js`. |
+| `tools/` | `FloatingToolBar` (the dumb strip), `toolModes` (the tool-mode state machine), `ToolModeMenu` (a tool's exclusive modes: one button in its panel's header row and its dropdown), `ToolPopover` (an ordinary dropdown from its button, on a `side` and `align`ed start or end: preview's Playback settings, upward from the playbar), `ToolStack` (the bounded column under the strip, which scrolls only when what cannot give way still does not fit), `ToolPanel` (one panel of it: `fit` says how it gives way when the viewer is short, `resizable` makes it the person's to size — width, height and corner handles, moving only it — and every panel but Drawing folds to its first row; `ToolPanelCollapse` is the chevron for a panel whose first row is its content's), `toolStackLayout` (every panel's width, the resizable panels' sizes and the folded panels: defaults, bounds and their stored record), `floatingSurface` (the two surfaces, defined together: the strip's and every menu's over the viewport, and the stack panels' more transparent one), and the format-blind tools: `draw/` (overlay, view lock, `useDrawingViewLock`), `PreviewChrome` (the top-right bar in both modes, and preview's controls and their visibility), `PlaybackMenu` (preview's Playback settings: Animation — Routine, Speed, Loop, Autoplay — then Orbit and its speed), `preview/` (orbit preferences), `playbar/` (`ViewportAnimationBar`, `animationClock`, `usePlaybackFrames`, `playbackPreferences`: the file's Playback settings — orbit and its speed, Autoplay, the routine's chosen Speed and Loop), `pose/` (the handle overlay, canvas, drag mathematics), `select/` (`usePointerPick`: taps and hover through a scene's own `pick`). Screenshot capture is `@text-to-cad/core/lib/viewer/screenshotCapture.js`. |
 | `inspector/` | `FileSheet` and its row and section primitives, `modelTreeSearch` (`useTreeSearch`, the ranked flat search every tree shares), `VirtualRows` (a long tree's rows, windowed), `referenceRows` (`InfoRow`, `MonoValue`, `CoordValue`), `kinematicsControls` (the `Pose` row that heads every Position section, with its Reset). The tree row and filter box are `primitives/tree-row` and `primitives/tree-filter`. |
 | `status/` | `LoadingIndicator` and `ViewerLoadingOverlay`, `ViewerAlertCard` (the card over the viewport, and `viewportAlert`, which alert it shows), `MissingFileAlert`, `ViewUpdateStatus`, `loadingState` (`viewerLoadingState`), `loadAlerts` (`failureAlert`, `noGeometryAlert`). |
 | `shell/` | The host glue every renderer needs that is not about its scene: see [Shell](#shell). |
 
 **What a view opts into.** The Display panel and `resolveViewSettings` take explicit
 lists, `features: { sections, modes, surfaceStyles }` (`ViewFeatures` in
-`@hardcore/core/common/viewSettings.js`): the sections the panel mounts
+`@text-to-cad/core/common/viewSettings.js`): the sections the panel mounts
 (`VIEW_SECTION_IDS`), the presets and the surface styles it lists. A section left
 out resolves off whatever was saved, and the saved settings are never rewritten.
 Core names two lists, `ALL_VIEW_FEATURES` and `EDGELESS_VIEW_FEATURES` (no Edges,
@@ -74,7 +74,7 @@ The viewport adopts `object3D`, frames `restBounds`, lights and floors `bounds`,
 and hands over the surface look the Display settings resolved
 (`{ materialSettings, authored, surface: { style, opacity } }`); it only ever
 detaches a scene, whose owner disposes it. `buildModel`
-(`@hardcore/core/common/cadScene.js`) exposes `object3D`, `bounds`, `restBounds`
+(`@text-to-cad/core/common/cadScene.js`) exposes `object3D`, `bounds`, `restBounds`
 and `dispose()`; the GLB and mesh renderers' scenes implement all of it but `pick`,
 and the robot renderer's all of it. `pick(ray)` is what `usePointerPick` calls: the
 hook owns the pointer (which press is a tap, one hover pick per frame, the
@@ -116,7 +116,7 @@ flattener.
 
 `cadgen snapshot` of a GLB, an STL, a 3MF or a robot description draws the scene the
 viewer draws, because both call the same builder. A family's scene construction lives in
-`@hardcore/core` (no React, no DOM beyond three.js); its renderer here keeps the loading
+`@text-to-cad/core` (no React, no DOM beyond three.js); its renderer here keeps the loading
 state, the tools and the panels, and the snapshot page (`common/headlessScene.js`, routed
 from `common/headlessRenderEntry.js`) keeps only what a still has and a viewport does
 not: the camera fit, the studio set up per output, and PNG encoding.
@@ -260,7 +260,7 @@ through `renderers/shell-harness` in `RendererShell.browser.test.mjs`.
 
 ## DXF renderer
 
-`createDxfRenderer` (`@hardcore/ui/renderers/dxf`, id `dxf`) shows a `.dxf`. The CAD
+`createDxfRenderer` (`@text-to-cad/ui/renderers/dxf`, id `dxf`) shows a `.dxf`. The CAD
 renderer does not match one.
 
 It is **not on the shell**, and that is the whole design: a DXF is a finished 2D
@@ -276,7 +276,7 @@ the viewer was inventing from the file; a drawing is not that.
   the client receives five primitive shapes in DXF coordinates, y up. **This renderer
   never parses DXF.** The payload is cached server-side by the document's content
   hash, so reopening a file costs a round trip and nothing else.
-- **Drawing is core's** (`@hardcore/core/lib/drawing2d`), so the headless snapshot
+- **Drawing is core's** (`@text-to-cad/core/lib/drawing2d`), so the headless snapshot
   bundle paints the same picture from the same payload: `fitTransform` / `zoomTransform`
   / `panTransform` (one uniform scale and a translation; the y flip lives in the
   transform, not in the geometry), `prepareDrawing(payload)` (paths built ONCE, per
@@ -296,7 +296,7 @@ the viewer was inventing from the file; a drawing is not that.
   serves both themes: flipping `.dark` repaints, it does not refetch. The tokens are
   read off the pane, and a mutation on `<html>` schedules a frame. When they cannot be
   read — and in the snapshot bundle, which has no stylesheet at all — the pair comes
-  from `@hardcore/core/lib/appTheme.js`, the one place both colours are written down.
+  from `@text-to-cad/core/lib/appTheme.js`, the one place both colours are written down.
 - **Fills are even-odd, and each one is filled on its own.** A `filled-paths`
   primitive's inner rings are its holes; merging two overlapping regions of one colour
   into a single path would turn their overlap into a hole as well. Fills go down
@@ -343,7 +343,7 @@ the viewer was inventing from the file; a drawing is not that.
 
 ## GLB renderer
 
-`createGlbRenderer` (`@hardcore/ui/renderers/glb`, id `glb`) shows a `.glb` as
+`createGlbRenderer` (`@text-to-cad/ui/renderers/glb`, id `glb`) shows a `.glb` as
 its NATIVE glTF scene, always: one path whether or not a clip is playing. The
 STEP renderer does not match `.glb`.
 
@@ -383,14 +383,14 @@ STEP renderer does not match `.glb`.
 
 ## Mesh renderer
 
-`createMeshRenderer` (`@hardcore/ui/renderers/mesh`, id `mesh`) shows an `.stl`
+`createMeshRenderer` (`@text-to-cad/ui/renderers/mesh`, id `mesh`) shows an `.stl`
 or a `.3mf` as what it is: triangles, and in a 3MF a colour per object. The CAD
 renderer does not match either.
 
 - **Scene** (core's `lib/render/meshScene.js`, `buildMeshScene`, which the snapshot CLI draws an STL or a 3MF with too): one `Mesh` per object of the file (an STL is
   one; a 3MF has one per object and material) and nothing else: no part table,
   display records, edges, clip planes, explode matrices or selectors. Geometries
-  come from `@hardcore/core/lib/render/meshObjects.js` (`buildMeshObjects`): views
+  come from `@text-to-cad/core/lib/render/meshObjects.js` (`buildMeshObjects`): views
   over the arrays core decoded, never copies, with the display normals of
   `meshNormals.js` (creased at 30° up to `CREASED_NORMAL_MAX_TRIANGLES`, plain
   vertex normals above it) and a 3MF's build transforms baked in.
@@ -423,7 +423,7 @@ renderer does not match either.
 
 ## Robot renderer
 
-`createRobotRenderer` (`@hardcore/ui/renderers/robot`, id `robot`) shows a
+`createRobotRenderer` (`@text-to-cad/ui/renderers/robot`, id `robot`) shows a
 `.urdf`, `.srdf` or `.sdf` as its kinematic tree. One renderer, three parsers:
 an SRDF is its paired URDF with the SRDF's semantics on it (group states, end
 effectors, planning groups), an SDF a robot with one more section. Nothing below the
@@ -514,11 +514,11 @@ loader asks which it is. The STEP renderer matches none of them.
 ## Host integration
 
 ```tsx
-import { createCadClient } from '@hardcore/core/client';
-import { FileViewer } from '@hardcore/ui/file-viewer';
-import { createStepRenderer } from '@hardcore/ui/renderers/step';
-import { createCadPreferences } from '@hardcore/ui/renderers/workspace';
-import '@hardcore/ui/styles.css';
+import { createCadClient } from '@text-to-cad/core/client';
+import { FileViewer } from '@text-to-cad/ui/file-viewer';
+import { createStepRenderer } from '@text-to-cad/ui/renderers/step';
+import { createCadPreferences } from '@text-to-cad/ui/renderers/workspace';
+import '@text-to-cad/ui/styles.css';
 
 const client = createCadClient({
   origin: backendOrigin,
@@ -564,12 +564,12 @@ and [the host's side](viewer-host.md#preview-and-renderer-navigation-actions).
 All package exports are compiled ESM with declarations. Consumers need no
 source aliases, JSX transforms for dependency `.js`, or cross-app stylesheet
 paths. A bundler must support the emitted `new URL(..., import.meta.url)` worker
-assets, which remain inside `@hardcore/core`.
+assets, which remain inside `@text-to-cad/core`.
 
 ## Preferences and the file's view
 
 Everything the viewer keeps is the tab's: one record, `{ version, settings, files }`,
-thrown out with the tab and kept across a reload (`@hardcore/ui/tab-store`; the host
+thrown out with the tab and kept across a reload (`@text-to-cad/ui/tab-store`; the host
 side is in [viewer-host.md](viewer-host.md#files-state-and-shutdown)). The host hands
 the store one adapter — a synchronous read and write of the whole record — and the
 package owns the record. Nothing under `renderers/` touches storage, on import,
@@ -621,7 +621,7 @@ Its typed context builder shares the same capture/reference pipeline; it does
 not expose the CAD scene. See [ViewerHost](viewer-host.md) for lifetime, focus,
 selection invalidation, supported content and clipboard representation limits.
 
-An optional `ViewerCommandSource` (`@hardcore/ui/renderers/workspace`) has the same
+An optional `ViewerCommandSource` (`@text-to-cad/ui/renderers/workspace`) has the same
 subscription shape and publishes
 `selectReference: { selector, key? }` or `captureRequest: { key }`. A fresh key
 requests another operation even when its selector or target file is unchanged.
@@ -637,7 +637,7 @@ nonce, so an old acknowledgement cannot clear a newer request or replay after a
 remount. A capture waits for ready geometry; a selected reference waits until it
 can resolve against the current model.
 
-`@hardcore/ui/file-viewer/presentation` exports the lightweight
+`@text-to-cad/ui/file-viewer/presentation` exports the lightweight
 `ViewerLoadingOverlay` and `MissingFileAlert` for host bootstrap and generic
 viewer loading/error presentations. Their markup and wording are the original
 CAD artwork. They mount inside a relative container and require no CAD client.
@@ -730,16 +730,16 @@ axes and retains its snap and drag interactions.
 See [settings controls](settings-ui.md), [render capabilities](render-types.md)
 and [renderer contracts](renderers.md) for changes inside the shared package.
 
-The optional `@hardcore/ui/file-viewer/empty` entry exports `EmptyCadBackdrop` for the web host’s missing-file presentation. It lazily mounts an empty CAD viewport with the host’s `colorScheme`, and overlays its `children`. It owns no file access, catalog subscription, or persisted state. This preserves the original grid and camera behind `MissingFileAlert` without loading CAD into the master viewer. Its stage (`file-viewer/EmptyCadStage.tsx`) is `ShellViewport` with a null scene, built out of the kit alone: the file viewer MOUNTS a renderer through the registry and imports none itself, because a static edge into a slice pulls that family — and three.js with it — into every host that shows any file at all. `scripts/test/check-kit-boundaries.mjs` enforces that alongside the kit and slice rules.
+The optional `@text-to-cad/ui/file-viewer/empty` entry exports `EmptyCadBackdrop` for the web host’s missing-file presentation. It lazily mounts an empty CAD viewport with the host’s `colorScheme`, and overlays its `children`. It owns no file access, catalog subscription, or persisted state. This preserves the original grid and camera behind `MissingFileAlert` without loading CAD into the master viewer. Its stage (`file-viewer/EmptyCadStage.tsx`) is `ShellViewport` with a null scene, built out of the kit alone: the file viewer MOUNTS a renderer through the registry and imports none itself, because a static edge into a slice pulls that family — and three.js with it — into every host that shows any file at all. `scripts/test/check-kit-boundaries.mjs` enforces that alongside the kit and slice rules.
 
 ## STEP scene and viewport
 
-`createStepRenderer` (`@hardcore/ui/renderers/step`, id `step`) shows a `.step` or
+`createStepRenderer` (`@text-to-cad/ui/renderers/step`, id `step`) shows a `.step` or
 `.stp`. Its scene and everything of it that lives in the viewport are on the kit;
 `src/renderers/step/scene` is that half.
 
 - **Scene** (`scene/stepScene.js`): a kit scene around core's `buildModel`
-  (`@hardcore/core/common/cadScene.js`, which is also the headless renderer's and
+  (`@text-to-cad/core/common/cadScene.js`, which is also the headless renderer's and
   the docs hero's and does not move). ONE identity for as long as a file is
   mounted: two stable roots (surfaces, and linework for the viewport's edge layer)
   around whatever build is live. A STEP does not arrive once — a large assembly is

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { setImmediate } from 'node:timers';
-import { resolveViewSceneSettings } from '@hardcore/core/common/sceneSettings.js';
+import { resolveViewSceneSettings } from '@text-to-cad/core/common/sceneSettings.js';
 import { createViewUpdateCoordinator } from './viewUpdateCoordinator.js';
 import { viewPreparationKey } from './viewUpdatePlan.js';
 

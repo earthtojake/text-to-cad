@@ -5,7 +5,7 @@
  * the 3D scene feeds: captures, render mode, bounds, shadows and picking.
  */
 
-import { CAD_EDGE_HIGHLIGHT_COLOR } from "@hardcore/core/common/displaySettings.js";
+import { CAD_EDGE_HIGHLIGHT_COLOR } from "@text-to-cad/core/common/displaySettings.js";
 
 /** The arm's length on screen, pivot to knob. */
 export const JOINT_HANDLE_ARM_PX = 44;

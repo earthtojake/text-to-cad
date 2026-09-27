@@ -1,4 +1,4 @@
-import { parseCadRefSelector, parseCadRefToken } from "@hardcore/core/lib/cadRefs.js";
+import { parseCadRefSelector, parseCadRefToken } from "@text-to-cad/core/lib/cadRefs.js";
 
 function featureSelectors(definition) {
   return (Array.isArray(definition?.features) ? definition.features : [])

@@ -21,12 +21,12 @@ import {
   ContextMenuSeparator,
   ContextMenuShortcut,
   ContextMenuTrigger
-} from "@hardcore/ui/primitives/context-menu";
+} from "@text-to-cad/ui/primitives/context-menu";
 import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuShortcut
-} from "@hardcore/ui/primitives/dropdown-menu";
+} from "@text-to-cad/ui/primitives/dropdown-menu";
 
 import { ALL_ENTRY_CAPABILITIES, FIELD_ENTRY_ACTIONS, entryMenu } from "./entry-menu.js";
 

@@ -1,8 +1,8 @@
-import { normalizeFormat } from "@hardcore/core/lib/fileFormats.js";
+import { normalizeFormat } from "@text-to-cad/core/lib/fileFormats.js";
 import {
   entryIconKindForRenderFormat,
   ENTRY_ICON_KIND
-} from "@hardcore/core/lib/renderCapabilities.js";
+} from "@text-to-cad/core/lib/renderCapabilities.js";
 
 export { ENTRY_ICON_KIND };
 

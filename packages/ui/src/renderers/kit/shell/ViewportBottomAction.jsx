@@ -1,8 +1,8 @@
 import { useViewerMobile } from "../../../file-viewer/responsive.js";
 import { VIEWPORT_BOTTOM_CENTER } from "./viewportLayout.js";
 import { useLayoutEffect, useRef, useState } from "react";
-import { Button } from "@hardcore/ui/primitives/button";
-import { cn } from "@hardcore/ui/utils";
+import { Button } from "@text-to-cad/ui/primitives/button";
+import { cn } from "@text-to-cad/ui/utils";
 
 const ACTION_CLASS = "pointer-events-auto border border-primary/20 bg-primary/85 text-primary-foreground shadow-lg shadow-black/20 hover:bg-primary/75 focus-visible:ring-primary/35";
 const METRICS_CLASS = "h-11 w-fit min-w-0 max-w-full shrink overflow-hidden px-5 text-sm";

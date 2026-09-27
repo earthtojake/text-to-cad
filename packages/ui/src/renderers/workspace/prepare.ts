@@ -1,4 +1,4 @@
-import type { CadWorkspaceService, CadEntry, CadRenderSession, CadServerInfo } from '@hardcore/core/client';
+import type { CadWorkspaceService, CadEntry, CadRenderSession, CadServerInfo } from '@text-to-cad/core/client';
 import type { PrepareContext, PreparedDocument } from '../../file-viewer/types.js';
 
 /** The backend connection a viewer renderer is registered with: ready, or obtained when a file first needs it. */

@@ -2,7 +2,7 @@ import { normalizeTabSettings, type TabSettings } from '../../tab-store/tabRecor
 import type { SettingsSource } from '../../tab-store/tabStore.js';
 
 /**
- * What the viewer renderers read as their preferences: the tab's settings (`@hardcore/ui/tab-store`).
+ * What the viewer renderers read as their preferences: the tab's settings (`@text-to-cad/ui/tab-store`).
  * A host hands every renderer its tab store's `settings`; a renderer built without one gets an
  * in-memory source with the defaults, which is what a test or a headless host wants.
  */

@@ -1,6 +1,6 @@
 # Viewer host contract
 
-`FileViewer` requires one explicit `ViewerHost` from `@hardcore/ui/host`.
+`FileViewer` requires one explicit `ViewerHost` from `@text-to-cad/ui/host`.
 Shared UI implements rendering and document interaction; apps supply environmental
 effects. No shared feature discovers Electron, browser clipboard, a backend URL,
 persistent storage or page navigation. DOM, canvas, workers and layout remain
@@ -29,18 +29,18 @@ are for reading and maintaining the contracts.
 
 | Contract | Definition | Public entry point |
 | --- | --- | --- |
-| `ViewerHost`, `ClipboardPort` | [Host types](../src/host/types.ts) | `@hardcore/ui/host` |
-| `FileSource`, `FileActions`, mutation receipts, `FileViewerState` | [File viewer types](../src/file-viewer/types.ts) | `@hardcore/ui/file-viewer` |
-| `PromptContextPort`, bundles, references and delivery receipts | [Prompt types](../../core/src/prompt/types.ts) | `@hardcore/core/prompt` |
-| `CadWorkspaceService`, `CadResourceProvider`, worker tickets | [CAD service types](../../core/src/client/types.ts) | `@hardcore/core/client` |
-| `StepRendererSlots`, selection props, `CadLiveBinding` | [STEP registration](../src/renderers/step/index.ts) | `@hardcore/ui/renderers/step` |
-| `TabStore`, `TabRecordStorage`, `createTabStore`, `useTabViewerState` (the tab's one store: its settings, its file views, and `FileViewer`'s state from both) | [Tab store](../src/tab-store/tabStore.ts), [the record](../src/tab-store/tabRecord.ts) | `@hardcore/ui/tab-store` |
-| `CadPreferenceSource`, `createCadPreferences` (the tab's settings as renderers read them) | [Viewer preferences](../src/renderers/workspace/preferences.ts) | `@hardcore/ui/renderers/workspace` |
-| `DxfRendererOptions` (2D drawings; declares no panel, and declines every camera, display and selection command) | [DXF registration](../src/renderers/dxf/index.ts) | `@hardcore/ui/renderers/dxf` |
-| `GlbRendererOptions`, `LiveViewBinding`, `LiveViewController` | [GLB registration](../src/renderers/glb/index.ts), [live binding](../src/renderers/kit/shell/liveBinding.ts) | `@hardcore/ui/renderers/glb` |
-| `MeshRendererOptions` (STL, 3MF), `LiveViewBinding`, `LiveViewController` | [Mesh registration](../src/renderers/mesh/index.ts) | `@hardcore/ui/renderers/mesh` |
-| `RobotRendererOptions` (URDF, SRDF, SDF), `RobotLiveController`, `RobotLiveState` (`selectedLinks`, `selectedPartIds`) | [Robot registration](../src/renderers/robot/index.ts) | `@hardcore/ui/renderers/robot` |
-| `ViewerCommands`, `ViewerCommandSource` (the host requests every viewer renderer takes) | [Viewer commands](../src/renderers/workspace/commands.ts) | `@hardcore/ui/renderers/workspace` |
+| `ViewerHost`, `ClipboardPort` | [Host types](../src/host/types.ts) | `@text-to-cad/ui/host` |
+| `FileSource`, `FileActions`, mutation receipts, `FileViewerState` | [File viewer types](../src/file-viewer/types.ts) | `@text-to-cad/ui/file-viewer` |
+| `PromptContextPort`, bundles, references and delivery receipts | [Prompt types](../../core/src/prompt/types.ts) | `@text-to-cad/core/prompt` |
+| `CadWorkspaceService`, `CadResourceProvider`, worker tickets | [CAD service types](../../core/src/client/types.ts) | `@text-to-cad/core/client` |
+| `StepRendererSlots`, selection props, `CadLiveBinding` | [STEP registration](../src/renderers/step/index.ts) | `@text-to-cad/ui/renderers/step` |
+| `TabStore`, `TabRecordStorage`, `createTabStore`, `useTabViewerState` (the tab's one store: its settings, its file views, and `FileViewer`'s state from both) | [Tab store](../src/tab-store/tabStore.ts), [the record](../src/tab-store/tabRecord.ts) | `@text-to-cad/ui/tab-store` |
+| `CadPreferenceSource`, `createCadPreferences` (the tab's settings as renderers read them) | [Viewer preferences](../src/renderers/workspace/preferences.ts) | `@text-to-cad/ui/renderers/workspace` |
+| `DxfRendererOptions` (2D drawings; declares no panel, and declines every camera, display and selection command) | [DXF registration](../src/renderers/dxf/index.ts) | `@text-to-cad/ui/renderers/dxf` |
+| `GlbRendererOptions`, `LiveViewBinding`, `LiveViewController` | [GLB registration](../src/renderers/glb/index.ts), [live binding](../src/renderers/kit/shell/liveBinding.ts) | `@text-to-cad/ui/renderers/glb` |
+| `MeshRendererOptions` (STL, 3MF), `LiveViewBinding`, `LiveViewController` | [Mesh registration](../src/renderers/mesh/index.ts) | `@text-to-cad/ui/renderers/mesh` |
+| `RobotRendererOptions` (URDF, SRDF, SDF), `RobotLiveController`, `RobotLiveState` (`selectedLinks`, `selectedPartIds`) | [Robot registration](../src/renderers/robot/index.ts) | `@text-to-cad/ui/renderers/robot` |
+| `ViewerCommands`, `ViewerCommandSource` (the host requests every viewer renderer takes) | [Viewer commands](../src/renderers/workspace/commands.ts) | `@text-to-cad/ui/renderers/workspace` |
 
 Start with the actual composition in [web App](../../../apps/web/src/App.tsx).
 Its imports lead to the app-owned `host/`, `adapters/` and persistence
@@ -58,7 +58,7 @@ renderer those props — they are the generic panel contract, which the file tre
 the desktop markdown's source view use. A host's stored `panel` naming the retired CAD
 Settings panel (`cad-file`) resolves as nothing open. The tool stack's layout — the
 sizes a person dragged the tree and Position panels to, and the folded panels — is one
-of the tab's settings (`settings.toolStack` of the tab record, `@hardcore/ui/tab-store`),
+of the tab's settings (`settings.toolStack` of the tab record, `@text-to-cad/ui/tab-store`),
 beside the orbit speed and playback.
 
 ## Preview and renderer navigation actions
@@ -127,7 +127,7 @@ inserts into a compatible draft; web prepares clipboard representations. Ordinar
 explicit copy/paste controls use the separate `ClipboardPort`. Delivery never
 submits a prompt.
 
-The portable types and validators live at `@hardcore/core/prompt`. One versioned
+The portable types and validators live at `@text-to-cad/core/prompt`. One versioned
 bundle contains ordered text, reference and attachment parts with unique IDs.
 An attachment has a MIME type, name and Blob or Promise of Blob. Its optional
 `about` array names reference-part IDs, so a screenshot and several selections
@@ -222,7 +222,7 @@ all affected tabs; web is a read-only CAD catalog, with no arbitrary filesystem
 access or editing.
 
 State remains controlled through FileViewer props, and everything the viewer keeps
-is the tab's (`@hardcore/ui/tab-store`): one record per tab, `{ version, settings,
+is the tab's (`@text-to-cad/ui/tab-store`): one record per tab, `{ version, settings,
 files }`, thrown out with the tab and kept across a reload. The host supplies where it
 lives through one adapter, `TabRecordStorage` — a synchronous read and write of the
 whole record: the web over `sessionStorage`, the desktop over its per-tab store — and

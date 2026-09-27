@@ -8,7 +8,7 @@
 //
 // Plain functions, no `@/` imports and no React, so `node --test` loads this
 // file directly; `document` arrives as an argument for the same reason.
-import { APP_THEME_COLORS } from "@hardcore/core/lib/appTheme.js";
+import { APP_THEME_COLORS } from "@text-to-cad/core/lib/appTheme.js";
 
 /** The `--background` pair, written out: what the tokens resolve to.
  *

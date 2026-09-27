@@ -1,4 +1,4 @@
-import type { ClipboardPort } from '@hardcore/ui/host';
+import type { ClipboardPort } from '@text-to-cad/ui/host';
 import { copyImageBlobToClipboard, copyTextToClipboard, readTextFromClipboard } from './browserClipboard.js';
 
 export function browserClipboardSupportsImages(): boolean {

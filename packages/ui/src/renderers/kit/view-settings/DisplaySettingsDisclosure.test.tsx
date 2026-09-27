@@ -2,7 +2,7 @@ import React from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { resolveViewSettings } from '@hardcore/core/common/viewSettings.js';
+import { resolveViewSettings } from '@text-to-cad/core/common/viewSettings.js';
 import { createViewSettingsStore } from './viewSettingsStore.js';
 import { DisplaySettingsSection } from '../../../../dist/renderers/kit/view-settings/DisplaySettingsSection.js';
 import { CrossSectionControls, ExplodeControls, clipSummary } from '../../../../dist/renderers/step/components/workbench/ModelViewControls.js';

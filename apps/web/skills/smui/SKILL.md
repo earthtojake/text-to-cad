@@ -1,6 +1,6 @@
 # Shared UI styling for the CAD Viewer
 
-The CAD Viewer is a Vite and Tailwind v4 host of `@hardcore/ui`. Shared
+The CAD Viewer is a Vite and Tailwind v4 host of `@text-to-cad/ui`. Shared
 components and CAD controls live in that package; the web app owns its top bar
 and browser-specific composition. In a repository checkout, read
 `packages/ui/README.md` before changing a
@@ -22,7 +22,7 @@ both color schemes and at narrow widths.
   `text-destructive`.
 - The web entry stylesheet,
   [globals.css](../../src/client/styles/globals.css), imports
-  `@hardcore/ui/tokens.css` and `@hardcore/ui/styles.css`. Shared utility classes
+  `@text-to-cad/ui/tokens.css` and `@text-to-cad/ui/styles.css`. Shared utility classes
   and assets are built by the UI package; apps do not scan another package's
   source or duplicate its token definitions.
 - The host supplies the color scheme and applies its existing `.dark` behavior.
@@ -31,8 +31,8 @@ both color schemes and at narrow widths.
 - Preserve the current font, text case, radius, opacity and shadows of the
   affected component. There is no additional Nord palette, glass-surface rule,
   uppercase-label rule or monospace requirement to apply.
-- Import reusable controls through `@hardcore/ui/primitives/*` and `cn` through
-  `@hardcore/ui/utils`. The class-merging helper lives in
+- Import reusable controls through `@text-to-cad/ui/primitives/*` and `cn` through
+  `@text-to-cad/ui/utils`. The class-merging helper lives in
   `packages/ui/src/lib/utils.js`.
   Keep existing host-specific controls when their appearance or behavior differs.
 

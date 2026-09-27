@@ -1,4 +1,4 @@
-import { TooltipHint } from "@hardcore/ui/primitives/tooltip";
+import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 import { Check } from "lucide-react";
 import { useMemo, useState } from "react";
 
@@ -10,9 +10,9 @@ import {
   DropdownMenuSubContent,
   DropdownMenuSubTrigger,
   DropdownMenuTrigger
-} from "@hardcore/ui/primitives/dropdown-menu";
-import { cn } from "@hardcore/ui/utils";
-import { ScrollArea } from "@hardcore/ui/primitives/scroll-area";
+} from "@text-to-cad/ui/primitives/dropdown-menu";
+import { cn } from "@text-to-cad/ui/utils";
+import { ScrollArea } from "@text-to-cad/ui/primitives/scroll-area";
 
 import { menuEntries, nameOf, stepToward } from "./crumbs.js";
 import { FileIcon, FolderIcon } from "./icons.jsx";

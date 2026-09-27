@@ -4,12 +4,12 @@ import { TOOL_PANEL_BUTTON_CLASS } from "../../../kit/tools/ToolPanel.jsx";
 import { referenceMeasurements } from "../../workbench/referenceMeasurements.js";
 import { stepSelectionMaterialInfo } from "../../workbench/stepSelectionMaterial.js";
 import { nodeVolume } from "../../workbench/partVolume.js";
-import { STEP_MODEL_ROOT_ID } from "@hardcore/core/lib/step/stepTree.js";
-import { stepPartNameFromFile, stepProductName } from "@hardcore/core/lib/step/productName.js";
+import { STEP_MODEL_ROOT_ID } from "@text-to-cad/core/lib/step/stepTree.js";
+import { stepPartNameFromFile, stepProductName } from "@text-to-cad/core/lib/step/productName.js";
 
-import { TooltipHint } from "@hardcore/ui/primitives/tooltip";
+import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 import { CoordValue, InfoRow, MonoValue, formatNumber } from "../../../kit/inspector/referenceRows.jsx";
-import { Select, SelectContent, SelectItem, SelectTrigger } from "@hardcore/ui/primitives/select";
+import { Select, SelectContent, SelectItem, SelectTrigger } from "@text-to-cad/ui/primitives/select";
 
 // A selected "element" is either a topology reference (face / edge / solid,
 // carrying reference.pickData) or an assembly node (component / subassembly).

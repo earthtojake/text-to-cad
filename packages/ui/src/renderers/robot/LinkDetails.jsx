@@ -1,4 +1,4 @@
-import { TooltipHint } from "@hardcore/ui/primitives/tooltip";
+import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 import { CoordValue, InfoRow, MonoValue } from "../kit/inspector/referenceRows.jsx";
 
 // The Reference panel under Links in the tool stack: what the selection IS. Its heading names

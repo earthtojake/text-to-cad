@@ -31,7 +31,7 @@ const HARNESS_SIZE = '<style>#root > div { width: 800px !important; height: 500p
 // reuse them.)
 let temporary, bundle, compiledCss, browser;
 before(async () => {
-  temporary = await mkdtemp(join(tmpdir(), 'hardcore-shell-browser-'));
+  temporary = await mkdtemp(join(tmpdir(), 'text-to-cad-shell-browser-'));
   await build({ entryPoints: [fileURLToPath(new URL('../../harness/index.tsx', import.meta.url))], outfile: join(temporary, 'harness.js'), bundle: true, format: 'esm', platform: 'browser', conditions: ['production'], jsx: 'automatic', loader: { '.webp': 'dataurl', '.woff2': 'dataurl' } });
   bundle = await readFile(join(temporary, 'harness.js'));
   compiledCss = await readFile(new URL('../../../../dist/styles.css', import.meta.url));

@@ -1,11 +1,11 @@
 import {
   normalizeThemeSettings
-} from "@hardcore/core/lib/themeSettings.js";
+} from "@text-to-cad/core/lib/themeSettings.js";
 import {
   normalizeDisplaySettings
-} from "@hardcore/core/lib/displaySettings.js";
+} from "@text-to-cad/core/lib/displaySettings.js";
 
-import { resolveCadEdgeSettings } from "@hardcore/core/common/cadInk.js";
+import { resolveCadEdgeSettings } from "@text-to-cad/core/common/cadInk.js";
 import { shareSettingsValue } from "./shareSettingsValue.js";
 
 // Normalization must not invalidate unchanged scene subsystems. The resolver

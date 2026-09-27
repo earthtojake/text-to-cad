@@ -1,4 +1,4 @@
-import { STEP_MODEL_ROOT_ID } from "@hardcore/core/lib/step/stepTree.js";
+import { STEP_MODEL_ROOT_ID } from "@text-to-cad/core/lib/step/stepTree.js";
 import { buildSelectionCopyPayload, buildWholeStepEntryCopyReference, copyTextLines } from "../workbench/referenceSelection.js";
 import {
   copyPayloadWithSelectedIdFallback,

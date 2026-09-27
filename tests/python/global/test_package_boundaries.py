@@ -1,7 +1,7 @@
 """The dependency-direction and ships-alone laws, held by test rather than prose.
 
 Boundary law (packages/README.md and each package's README): apps import
-packages; packages never import apps; @hardcore/core is framework-free — no
+packages; packages never import apps; @text-to-cad/core is framework-free — no
 React, no app or workflow state. Ships-alone law: cadgen (the built PyPI
 distribution) and every skill (the Skills CLI installs
 skills/<name> ALONE; plugin installers copy the published tree, which has no
@@ -61,7 +61,7 @@ class CadgenJsIsFrameworkFree(unittest.TestCase):
         self.assertEqual(
             offenders,
             [],
-            "@hardcore/core is framework-free shared code (its README, Boundary "
+            "@text-to-cad/core is framework-free shared code (its README, Boundary "
             "laws): no React, nothing from apps/. Move app-flavored code "
             "into the app that owns it.",
         )
@@ -98,7 +98,7 @@ class PackagesNeverImportApps(unittest.TestCase):
 
 # The ships-alone law. Two surfaces leave this repo whole:
 #   - packages/cadgen builds into the PyPI wheel (README.md is its long
-#     description; @hardcore/core and the viewer client arrive already bundled
+#     description; @text-to-cad/core and the viewer client arrive already bundled
 #     under _runtime/).
 #   - skills/ installs standalone: the Skills CLI copies skills/<name> by
 #     itself, and Claude Code and Codex copy the PUBLISHED tree, which has no
@@ -195,7 +195,7 @@ class PackagedMarkdownShipsAlone(unittest.TestCase):
             "install alone (the Skills CLI copies skills/<name> by itself; "
             "the published tree has no models/), so their markdown must be "
             "true and actionable with "
-            "this repo gone. Name the bundled thing ('the @hardcore/core runtime "
+            "this repo gone. Name the bundled thing ('the @text-to-cad/core runtime "
             "bundled at build time'), not the repo path to its source; give "
             "a skill a self-contained exemplar in its references/, not a "
             "pointer at this repo's example projects; move repo-development "

@@ -1,7 +1,7 @@
-import { TooltipHint } from "@hardcore/ui/primitives/tooltip";
+import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 import { RotateCcw, Spline } from "lucide-react";
-import { Button } from "@hardcore/ui/primitives/button";
-import { cn } from "@hardcore/ui/utils";
+import { Button } from "@text-to-cad/ui/primitives/button";
+import { cn } from "@text-to-cad/ui/utils";
 import { FILE_SHEET_FIELD_LABEL_CLASSES, FileSheetSelectRow } from "./FileSheet.js";
 
 export const NO_PRESET_VALUE = "__none__";

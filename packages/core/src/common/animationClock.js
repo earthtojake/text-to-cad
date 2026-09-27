@@ -1,8 +1,8 @@
 // The animation TRANSPORT, shared by every client (viewer Animation tab,
 // the docs hero, any embed): which clip is active, where the clock
 // is, and how fast it runs. Choreography itself lives in the render module
-// embedded in the document sidecar, loaded by @hardcore/core/common/renderModule
-// and compiled by @hardcore/core/common/animationRuntime; this module owns only the
+// embedded in the document sidecar, loaded by @text-to-cad/core/common/renderModule
+// and compiled by @text-to-cad/core/common/animationRuntime; this module owns only the
 // transport around it.
 //
 // Independence, restated in code: nothing here reads a step-module definition,

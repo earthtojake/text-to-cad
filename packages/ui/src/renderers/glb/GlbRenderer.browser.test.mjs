@@ -8,7 +8,7 @@ import { createServer } from 'node:http';
 import { build } from 'esbuild';
 import { chromium } from 'playwright';
 import { PNG } from 'pngjs';
-import { writeGlb } from '@hardcore/core/glb/writeGlb.js';
+import { writeGlb } from '@text-to-cad/core/glb/writeGlb.js';
 
 // Inline fixtures, served from memory: two boxes with authored colours, the same
 // pair with one box driven by a clip whose first key IS the rest pose, and bytes
@@ -41,7 +41,7 @@ const HARNESS_SIZE = '<style>#root > div { width: 800px !important; height: 500p
 // (A browser's first WebGL page pays for compiling the viewer's shaders; later pages reuse them.)
 let temporary, server, browser;
 before(async () => {
-  temporary = await mkdtemp(join(tmpdir(), 'hardcore-glb-browser-'));
+  temporary = await mkdtemp(join(tmpdir(), 'text-to-cad-glb-browser-'));
   await build({ entryPoints: [fileURLToPath(new URL('../harness/index.tsx', import.meta.url))], outfile: join(temporary, 'harness.js'), bundle: true, format: 'esm', platform: 'browser', conditions: ['production'], jsx: 'automatic', loader: { '.webp': 'dataurl', '.woff2': 'dataurl' } });
   const bundle = await readFile(join(temporary, 'harness.js'));
   const css = await readFile(new URL('../../../dist/styles.css', import.meta.url));

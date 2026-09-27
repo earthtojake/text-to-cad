@@ -1,9 +1,9 @@
-import { TooltipHint } from "@hardcore/ui/primitives/tooltip";
+import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 import { Children, useEffect, useId, useRef, useState } from "react";
 import { Minus, Plus } from "lucide-react";
-import { cn } from "@hardcore/ui/utils";
-import { Button } from "@hardcore/ui/primitives/button";
-import { ColorPicker } from "@hardcore/ui/primitives/color-picker";
+import { cn } from "@text-to-cad/ui/utils";
+import { Button } from "@text-to-cad/ui/primitives/button";
+import { ColorPicker } from "@text-to-cad/ui/primitives/color-picker";
 import {
   Select,
   SelectContent,
@@ -12,7 +12,7 @@ import {
   SelectLabel,
   SelectTrigger,
   SelectValue
-} from "@hardcore/ui/primitives/select";
+} from "@text-to-cad/ui/primitives/select";
 
 export const FILE_SHEET_CONTROL_ROW_CLASSES = "space-y-1 px-2";
 export const FILE_SHEET_ROW_STACK_CLASSES = "space-y-3";

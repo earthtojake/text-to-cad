@@ -1,7 +1,7 @@
 import { Excalidraw, CaptureUpdateAction, convertToExcalidrawElements, exportToBlob, newElementWith, serializeAsJSON, viewportCoordsToSceneCoords } from '@excalidraw/excalidraw';
 import type { AppState, BinaryFiles, ExcalidrawImperativeAPI, ExcalidrawInitialDataState } from '@excalidraw/excalidraw/types';
 import type { ExcalidrawElement, FileId } from '@excalidraw/excalidraw/element/types';
-import { emptyDrawingDocument, MAX_DRAWING_BYTES, parseDrawingScene } from '@hardcore/core/drawing';
+import { emptyDrawingDocument, MAX_DRAWING_BYTES, parseDrawingScene } from '@text-to-cad/core/drawing';
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useDrawingSession } from './session.js';
 import { DEFAULT_OVERLAY_DRAWING_COLOR, DRAWING_TOOLS, DrawingToolbar } from './toolbar.jsx';
@@ -294,7 +294,7 @@ export function DrawingEditor({ initialScene, name = 'Drawing', mode = 'canvas',
       // An image that cannot be decoded is simply not inserted.
     }
   };
-  return <div ref={root} className="hardcore-drawing-editor" data-drawing-mode={mode} data-drawing-ready={initialized ? '' : undefined}
+  return <div ref={root} className="text-to-cad-drawing-editor" data-drawing-mode={mode} data-drawing-ready={initialized ? '' : undefined}
     onDropCapture={event => {
       // The SDK restores scene metadata embedded in PNGs as well as JSON files.
       // Insert dropped rasters directly so a drop can never replace this sketch.
@@ -343,6 +343,6 @@ export function DrawingEditor({ initialScene, name = 'Drawing', mode = 'canvas',
       onChange={change} onLinkOpen={(_element, event) => event.preventDefault()}
       UIOptions={{ canvasActions: { loadScene: false, saveToActiveFile: false, export: false,
         saveAsImage: false, toggleTheme: false, changeViewBackgroundColor: false } }} />
-    {toolbar ? <DrawingToolbar drawing={session} className="hardcore-drawing-editor__toolbar" /> : null}
+    {toolbar ? <DrawingToolbar drawing={session} className="text-to-cad-drawing-editor__toolbar" /> : null}
   </div>;
 }

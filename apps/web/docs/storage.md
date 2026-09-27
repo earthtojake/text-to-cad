@@ -23,10 +23,10 @@ in the URL.
 ## The tab record
 
 Everything the viewer keeps is one record in `sessionStorage`, under
-`hardcore:tab:v1` — sessionStorage is the browser's own tab: it survives a reload
+`text-to-cad:tab:v1` — sessionStorage is the browser's own tab: it survives a reload
 and goes with the tab. The host's part is the adapter,
 [tabRecord.ts](../src/persistence/tabRecord.ts): a synchronous read and write of
-the whole record, handed to `createTabStore` (`@hardcore/ui/tab-store`), which
+the whole record, handed to `createTabStore` (`@text-to-cad/ui/tab-store`), which
 owns the record's shape, its version and its normalization
 ([tabRecord.ts](../../../packages/ui/src/tab-store/tabRecord.ts)). `main.tsx`
 builds the one store; `App.tsx` reads `FileViewer`'s state out of it

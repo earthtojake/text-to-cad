@@ -1,6 +1,6 @@
 """The Python and JS selector grammars are two implementations of one language.
 
-`cadgen.cad_ref_syntax` and `@hardcore/core/lib/cadRefs.js` parse the same refs, and before this fixture
+`cadgen.cad_ref_syntax` and `@text-to-cad/core/lib/cadRefs.js` parse the same refs, and before this fixture
 existed nothing checked that they agreed -- the grammar was copy-pasted into four places. Both
 suites read `packages/core/src/lib/cadRefs.parity.json`, so a form added to one language and
 forgotten in the other fails here rather than in a user's pasted ref.

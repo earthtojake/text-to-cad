@@ -1,5 +1,5 @@
-import { readCadWorkerTicket } from "@hardcore/core/client";
-import { parseSurf } from '@hardcore/core/lib/surf/container.js';
+import { readCadWorkerTicket } from "@text-to-cad/core/client";
+import { parseSurf } from '@text-to-cad/core/lib/surf/container.js';
 import { buildModelingTree } from './modelingTree.js';
 
 // One requested component, bounded input, and a disposable worker. Never generate CAD.

@@ -1,9 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import * as THREE from "three";
-import { EDGELESS_VIEW_FEATURES } from "@hardcore/core/common/viewSettings.js";
-import { createSurfaceLook } from "@hardcore/core/lib/viewer/surfaceLook.js";
-import { createPromptContext, referencePart, textPart } from "@hardcore/core/prompt";
-import { Button } from "@hardcore/ui/primitives/button";
+import { EDGELESS_VIEW_FEATURES } from "@text-to-cad/core/common/viewSettings.js";
+import { createSurfaceLook } from "@text-to-cad/core/lib/viewer/surfaceLook.js";
+import { createPromptContext, referencePart, textPart } from "@text-to-cad/core/prompt";
+import { Button } from "@text-to-cad/ui/primitives/button";
 import RendererShell from "../kit/shell/RendererShell.jsx";
 import { SHELL_TOOL, useRendererShell } from "../kit/shell/useRendererShell.js";
 import { createToolModes } from "../kit/tools/toolModes.js";

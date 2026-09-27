@@ -1,10 +1,10 @@
-import { TooltipHint } from "@hardcore/ui/primitives/tooltip";
+import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 import { useViewerMobile } from "../../../file-viewer/responsive.js";
-import { Popover, PopoverTrigger, PopoverContent } from "@hardcore/ui/primitives/popover";
+import { Popover, PopoverTrigger, PopoverContent } from "@text-to-cad/ui/primitives/popover";
 import { useEffect, useState } from 'react';
 import { LoaderCircle, RotateCcw } from 'lucide-react';
-import { cn } from '@hardcore/ui/utils';
-import { Button } from '@hardcore/ui/primitives/button';
+import { cn } from '@text-to-cad/ui/utils';
+import { Button } from '@text-to-cad/ui/primitives/button';
 
 // Presentation only: the caller owns placement. No overlay, scene access or
 // control disabling. Delay avoids flashing a spinner for next-frame updates.

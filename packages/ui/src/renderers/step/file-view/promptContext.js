@@ -1,4 +1,4 @@
-import { createPromptContext, referencePart, textPart } from '@hardcore/core/prompt';
+import { createPromptContext, referencePart, textPart } from '@text-to-cad/core/prompt';
 
 /** Assemble a snapshot once, before asynchronous image encoding or host routing. */
 export function createCadPromptContext({ resource, references = [], text = '', capture, operationId }) {

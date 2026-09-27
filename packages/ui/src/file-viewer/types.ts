@@ -64,7 +64,7 @@ export interface FileViewerState {
   expandedDirectories?: readonly string[];
   /**
    * Each file's view under `JSON.stringify([file path, renderer id])`: what the host's tab store
-   * holds for this root (`@hardcore/ui/tab-store`), and where a renderer's `onStateChange` lands.
+   * holds for this root (`@text-to-cad/ui/tab-store`), and where a renderer's `onStateChange` lands.
    */
   renderers?: Record<string, JsonValue>;
 }

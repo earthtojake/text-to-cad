@@ -1,6 +1,6 @@
 # Drawing editor
 
-`@hardcore/ui/drawing` exports `DrawingEditor` and its `DrawingController`, plus
+`@text-to-cad/ui/drawing` exports `DrawingEditor` and its `DrawingController`, plus
 `exportDrawingScenePng(serialized)` for an unfocused retained scene capture.
 It wraps Excalidraw 0.18.1 (MIT), supports React 19, and is imported lazily by
 the desktop Drawing tab. Web and docs do not import it. Excalidraw was chosen
@@ -53,7 +53,7 @@ tool instead of a return to selection. Color sets what is drawn next
 not; the swatches are neon so ink stands out from a shaded model. Fill area is
 this editor's tool, not the SDK's (`drawing/fill.ts`): a press renders the ink
 without earlier fills, finds the area around the point with
-`@hardcore/core/lib/drawing/fillRegion.js` — as drawn, then with nearby stroke
+`@text-to-cad/core/lib/drawing/fillRegion.js` — as drawn, then with nearby stroke
 ends joined, then guessed from what the ink does enclose, ignoring rays that
 leave through a gap — and appends a closed, strokeless, 35%-opacity line element
 (inserting below existing elements would cost a second, invisible undo step). A fill is an ordinary element: it moves, erases and undoes. The
@@ -63,7 +63,7 @@ Drawing names belong to the host, which updates the editor name and prompt
 attachment title without recreating the scene or persisting it.
 
 ```tsx
-import { DrawingEditor } from '@hardcore/ui/drawing';
+import { DrawingEditor } from '@text-to-cad/ui/drawing';
 
 <DrawingEditor initialScene={sceneJson}
   onReady={controller => { drawing.current = controller; }}
@@ -89,7 +89,7 @@ encoding and then look up whichever chat happens to be active.
 
 ## In-memory scenes
 
-`@hardcore/core/drawing` is the pure document boundary. `parseDrawingScene`
+`@text-to-cad/core/drawing` is the pure document boundary. `parseDrawingScene`
 accepts Excalidraw v2 JSON, bounds it to 20 MiB and 10,000 elements, validates
 coordinates, and retains only portable app state. Supported content is
 freehand ink, lines, arrows, rectangles, ellipses, diamonds, text, frames and
@@ -132,7 +132,7 @@ viewport-sized, without selection handles, at the editor's own pixel ratio.
 
 ## Offline assets and upgrades
 
-The Vite plugin `@hardcore/ui/drawing-assets` (`scripts/drawing-assets.mjs`,
+The Vite plugin `@text-to-cad/ui/drawing-assets` (`scripts/drawing-assets.mjs`,
 notices in `licenses/excalidraw/`) serves the editor fonts in development and
 emits them into a host's build. Every host that loads this entry point adds it
 to its Vite config: desktop's renderer and the web Viewer both do. A script

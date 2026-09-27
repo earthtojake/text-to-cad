@@ -1,19 +1,19 @@
 import { createRoot } from 'react-dom/client';
 import { useState } from 'react';
-import { FileViewer } from '@hardcore/ui/file-viewer';
-import type { FileSource } from '@hardcore/ui/file-viewer';
-import { createCadClient } from '@hardcore/core/client';
-import { createTabStore, memoryTabRecord, useTabViewerState } from '@hardcore/ui/tab-store';
-import type { TabRecordStorage } from '@hardcore/ui/tab-store';
-import { createStepRenderer } from '@hardcore/ui/renderers/step';
-import { createDxfRenderer } from '@hardcore/ui/renderers/dxf';
-import { createGlbRenderer } from '@hardcore/ui/renderers/glb';
-import { createMeshRenderer } from '@hardcore/ui/renderers/mesh';
-import { createRobotRenderer } from '@hardcore/ui/renderers/robot';
-import { createHarnessRenderer } from '@hardcore/ui/renderers/shell-harness';
-import type { ViewerHost } from '@hardcore/ui/host';
-import type { CadLiveController } from '@hardcore/ui/renderers/step';
-import type { ViewerCommands as CadCommands } from '@hardcore/ui/renderers/workspace';
+import { FileViewer } from '@text-to-cad/ui/file-viewer';
+import type { FileSource } from '@text-to-cad/ui/file-viewer';
+import { createCadClient } from '@text-to-cad/core/client';
+import { createTabStore, memoryTabRecord, useTabViewerState } from '@text-to-cad/ui/tab-store';
+import type { TabRecordStorage } from '@text-to-cad/ui/tab-store';
+import { createStepRenderer } from '@text-to-cad/ui/renderers/step';
+import { createDxfRenderer } from '@text-to-cad/ui/renderers/dxf';
+import { createGlbRenderer } from '@text-to-cad/ui/renderers/glb';
+import { createMeshRenderer } from '@text-to-cad/ui/renderers/mesh';
+import { createRobotRenderer } from '@text-to-cad/ui/renderers/robot';
+import { createHarnessRenderer } from '@text-to-cad/ui/renderers/shell-harness';
+import type { ViewerHost } from '@text-to-cad/ui/host';
+import type { CadLiveController } from '@text-to-cad/ui/renderers/step';
+import type { ViewerCommands as CadCommands } from '@text-to-cad/ui/renderers/workspace';
 
 // The one file both panes open: `?file=arm.urdf` for a test whose fixture is not the default mesh.
 const file = new URLSearchParams(location.search).get('file') || 'part.stl';
@@ -24,7 +24,7 @@ const opened: string[] = [];
 // `window.__cadTabRecord`, so "reopen this file" is a real open against a stored record), or over
 // this page's sessionStorage (`?store=session`), so a reload of the page is a reload of the tab
 // and a new page is a new tab. Nothing under `renderers/` touches either.
-const KEY = 'hardcore:tab:harness';
+const KEY = 'text-to-cad:tab:harness';
 const sessionRecord = (): TabRecordStorage => ({
   read: () => JSON.parse(sessionStorage.getItem(KEY) || 'null'),
   write: record => sessionStorage.setItem(KEY, JSON.stringify(record)),

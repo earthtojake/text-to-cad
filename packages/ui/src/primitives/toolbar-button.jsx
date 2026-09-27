@@ -1,7 +1,7 @@
 import { createContext, useContext } from "react";
-import { Button } from "@hardcore/ui/primitives/button";
-import { TooltipHint } from "@hardcore/ui/primitives/tooltip";
-import { cn } from "@hardcore/ui/utils";
+import { Button } from "@text-to-cad/ui/primitives/button";
+import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
+import { cn } from "@text-to-cad/ui/utils";
 
 // The icon button every floating toolbar is made of: the CAD interaction tools,
 // the drawing tools under them, and the standalone drawing editor's toolbar.

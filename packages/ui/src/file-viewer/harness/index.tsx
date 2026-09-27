@@ -1,7 +1,7 @@
 import { createRoot } from "react-dom/client";
 import { createPortal } from "react-dom";
 import { useEffect, useMemo, useState } from "react";
-import { unavailablePromptContext } from "@hardcore/core/prompt";
+import { unavailablePromptContext } from "@text-to-cad/core/prompt";
 import { FileText } from "lucide-react";
 import { FileViewer, defineFileRenderer } from "../index.js";
 import type { FileSource, FileActions, FileMetadata, FileRendererProps, FileViewerState, JsonValue, TextDocument } from "../types.js";

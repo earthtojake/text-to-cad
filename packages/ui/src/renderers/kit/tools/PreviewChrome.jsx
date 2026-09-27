@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ToolbarTooltipScope } from "@hardcore/ui/primitives/toolbar-button";
+import { ToolbarTooltipScope } from "@text-to-cad/ui/primitives/toolbar-button";
 import { VIEWPORT_INSET_PX, VIEWPORT_TOP_BAR_PX } from "../shell/viewportLayout.js";
 
 export const PREVIEW_CHROME_IDLE_MS = 1000;

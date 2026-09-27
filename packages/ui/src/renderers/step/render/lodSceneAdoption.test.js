@@ -6,7 +6,7 @@ import {
   registerLodDisplaySource,
 } from "./lodSceneAdoption.js";
 import { updateLodMeshState, updateLodReferenceState } from "./lodPublication.js";
-import { applySourceAppearanceToMeshData, sourceAppearanceGeometry } from "@hardcore/core/common/sourceSidecar.js";
+import { applySourceAppearanceToMeshData, sourceAppearanceGeometry } from "@text-to-cad/core/common/sourceSidecar.js";
 
 function source(mesh, extra = []) {
   return { parts: ["a1", "a2"].map(id => ({ id, occurrenceId: id, componentId: "a", sourceMesh: mesh })).concat(extra) };

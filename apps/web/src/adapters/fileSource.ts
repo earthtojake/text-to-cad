@@ -1,6 +1,6 @@
-import type { ClipboardPort } from '@hardcore/ui/host';
-import type { FileActions, FileChange, FileEntry, FileMetadata, FileSource } from '@hardcore/ui/file-viewer';
-import type { createCadClient, CadEntry, CadServerInfo } from '@hardcore/core/client';
+import type { ClipboardPort } from '@text-to-cad/ui/host';
+import type { FileActions, FileChange, FileEntry, FileMetadata, FileSource } from '@text-to-cad/ui/file-viewer';
+import type { createCadClient, CadEntry, CadServerInfo } from '@text-to-cad/core/client';
 
 export type CadClient = ReturnType<typeof createCadClient>;
 export const catalogPath = (entry: CadEntry): string => String(entry.rootRelativeFile || entry.file || '').trim().replace(/\\/g, '/').replace(/^\/+/, '').replace(/\/+$/, '');

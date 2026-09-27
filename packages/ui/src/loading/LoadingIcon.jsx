@@ -1,6 +1,6 @@
 import { createElement, useEffect, useState } from "react";
-import animation from "../assets/hardcore-loading.webp";
-import still from "../assets/hardcore-still.webp";
+import animation from "../assets/loading.webp";
+import still from "../assets/loading-still.webp";
 
 /**
  * Decorative: the surrounding loading status owns the accessible announcement. It animates

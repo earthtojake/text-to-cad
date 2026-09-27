@@ -41,7 +41,7 @@ export function renderAssetSourceScope() {
 
 // The scope of a resolved render job is the DOCUMENT it renders, never a model script. The
 // snapshot driver always resolves and emits it (cadgen/snapshot_cli.py sets resolved.inputPath
-// from an already-resolved absolute path), and @hardcore/core already reads the same field for
+// from an already-resolved absolute path), and @text-to-cad/core already reads the same field for
 // cadPath, so this is not a new field dependency.
 //
 // A resolved job fails CLOSED: batched jobs are the ones that share a page, so a job that presents

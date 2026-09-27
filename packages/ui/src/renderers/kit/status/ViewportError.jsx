@@ -1,4 +1,4 @@
-import { cn } from "@hardcore/ui/utils";
+import { cn } from "@text-to-cad/ui/utils";
 import { useViewerMobile } from "../../../file-viewer/responsive.js";
 
 /**

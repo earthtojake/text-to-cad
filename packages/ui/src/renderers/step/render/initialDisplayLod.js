@@ -1,4 +1,4 @@
-import { LOD_DEFAULT_LEVEL, lodTessellationForLevel } from "@hardcore/core/lib/surf/lodPolicy.js";
+import { LOD_DEFAULT_LEVEL, lodTessellationForLevel } from "@text-to-cad/core/lib/surf/lodPolicy.js";
 
 export const LARGE_ASSEMBLY_INITIAL_COARSE_COMPONENTS = 64;
 export const DEFAULT_SURF_DECODE_EXPANSION_ESTIMATE = 64;

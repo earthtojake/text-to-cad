@@ -1,4 +1,4 @@
-import { LOD_CHORD_LEVELS, LOD_TESSELLATION_LEVELS } from "@hardcore/core/lib/surf/lodPolicy.js";
+import { LOD_CHORD_LEVELS, LOD_TESSELLATION_LEVELS } from "@text-to-cad/core/lib/surf/lodPolicy.js";
 
 export const LOD_SELECTOR_AND_GPU_ESTIMATE_MULTIPLIER = 2.5;
 export const LOD_WORKER_TEMP_ESTIMATE_MULTIPLIER = 2;

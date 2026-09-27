@@ -15,9 +15,9 @@ import {
   viewerGithubReleaseUrl,
   viewerSkillsInstallCommandFromText
 } from "../../../shared/viewerConfig.mjs";
-import { Button } from "@hardcore/ui/primitives/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, DropdownMenuItem, DropdownMenuSeparator } from "@hardcore/ui/primitives/dropdown-menu";
-import { cn } from "@hardcore/ui/utils";
+import { Button } from "@text-to-cad/ui/primitives/button";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger, DropdownMenuItem, DropdownMenuSeparator } from "@text-to-cad/ui/primitives/dropdown-menu";
+import { cn } from "@text-to-cad/ui/utils";
 import { copyTextToClipboard } from "../../../host/browserClipboard.js";
 import viewerPackage from "../../../../package.json";
 

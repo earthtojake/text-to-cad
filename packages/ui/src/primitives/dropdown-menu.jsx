@@ -4,8 +4,8 @@ import * as React from "react";
 import { Check, ChevronRight } from "lucide-react";
 import { DropdownMenu as DropdownMenuPrimitive } from "radix-ui";
 
-import { cn } from "@hardcore/ui/utils"
-import { ScrollArea } from "@hardcore/ui/primitives/scroll-area";
+import { cn } from "@text-to-cad/ui/utils"
+import { ScrollArea } from "@text-to-cad/ui/primitives/scroll-area";
 
 function DropdownMenu({
   ...props

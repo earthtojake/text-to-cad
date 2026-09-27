@@ -1,10 +1,10 @@
-import { TooltipHint } from "@hardcore/ui/primitives/tooltip";
+import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 import { ToolPanelCollapse } from "../tools/ToolPanel.jsx";
 import { useMemo, useRef } from "react";
 import { Blend, Expand, Plus, RotateCcw, RotateCw, Sun, SunDim, X } from "lucide-react";
-import { ALL_VIEW_FEATURES, normalizeViewFeatures, normalizeViewSettings, resolveViewSettings, viewSettingsAreCustom } from "@hardcore/core/common/viewSettings.js";
-import { MAX_THEME_FILL_COLORS } from "@hardcore/core/lib/themeSettings.js";
-import { Button } from "@hardcore/ui/primitives/button";
+import { ALL_VIEW_FEATURES, normalizeViewFeatures, normalizeViewSettings, resolveViewSettings, viewSettingsAreCustom } from "@text-to-cad/core/common/viewSettings.js";
+import { MAX_THEME_FILL_COLORS } from "@text-to-cad/core/lib/themeSettings.js";
+import { Button } from "@text-to-cad/ui/primitives/button";
 import { DISPLAY_MODE_OPTIONS } from "./DisplayModeOptions.js";
 import {
   FileSheetColorPicker, FileSheetColorProperty,

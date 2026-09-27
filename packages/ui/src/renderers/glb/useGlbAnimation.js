@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import * as THREE from "three";
 import {
   advanceAnimationElapsed, animationNowMs, clampAnimationElapsed, clampAnimationSpeed
-} from "@hardcore/core/common/animationClock.js";
-import { createGlbAnimationRuntime, disposeGlbAnimationRuntime, setGlbAnimationTime } from "@hardcore/core/lib/render/glbAnimationRuntime.js";
+} from "@text-to-cad/core/common/animationClock.js";
+import { createGlbAnimationRuntime, disposeGlbAnimationRuntime, setGlbAnimationTime } from "@text-to-cad/core/lib/render/glbAnimationRuntime.js";
 import { createAnimationClock } from "../kit/tools/playbar/animationClock.js";
 import { usePlaybackFrames } from "../kit/tools/playbar/usePlaybackFrames.js";
 

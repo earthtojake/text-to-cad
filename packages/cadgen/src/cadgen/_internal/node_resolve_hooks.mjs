@@ -1,11 +1,11 @@
 /**
- * ESM resolve hook: make bare `@hardcore/core/...` specifiers resolvable in a builder child that
+ * ESM resolve hook: make bare `@text-to-cad/core/...` specifiers resolvable in a builder child that
  * has no `node_modules`.
  *
  * A source checkout runs builders from `packages/core` with no `node_modules` beside the
- * entry, so a builder's bare `import … from "@hardcore/core/glb/…"` has
+ * entry, so a builder's bare `import … from "@text-to-cad/core/glb/…"` has
  * nothing to resolve against. `NODE_PATH=<root node_modules>` fixes that for CommonJS,
- * resolving the workspace link for `@hardcore/core` *through its exports map* -- but
+ * resolving the workspace link for `@text-to-cad/core` *through its exports map* -- but
  * **Node's ESM resolver ignores
  * NODE_PATH entirely** (verified on v22.22.0: the import throws ERR_MODULE_NOT_FOUND while
  * `require.resolve` on the same specifier, same env, returns the right file). esbuild honors

@@ -10,23 +10,23 @@ import {
   releaseRenderSurfLevel,
   releaseSurfWorkers,
   surfTessellationCacheKey
-} from "@hardcore/core/lib/renderAssetClient.js";
+} from "@text-to-cad/core/lib/renderAssetClient.js";
 import {
   assemblyRootFromTopology,
   buildComposedPackageMeshData
-} from "@hardcore/core/lib/assembly/meshData.js";
+} from "@text-to-cad/core/lib/assembly/meshData.js";
 import {
   applySourceAppearance,
   validateSourceSidecar
-} from "@hardcore/core/common/sourceSidecar.js";
-import { mapWithConcurrency } from "@hardcore/core/lib/async/concurrency.js";
+} from "@text-to-cad/core/common/sourceSidecar.js";
+import { mapWithConcurrency } from "@text-to-cad/core/lib/async/concurrency.js";
 import {
   lodTessellationForLevel,
   normalizeLodLevel
-} from "@hardcore/core/lib/surf/lodPolicy.js";
+} from "@text-to-cad/core/lib/surf/lodPolicy.js";
 import {
   isTessellationCacheProbeMissError,
-} from "@hardcore/core/lib/surf/tessellationCache.js";
+} from "@text-to-cad/core/lib/surf/tessellationCache.js";
 import {
   installRuntimePackageDescriptor,
   loadPackageDescriptor,
@@ -52,10 +52,10 @@ import {
   entrySelectorTopologyAssetUrl,
   entrySourceSidecarUrl,
   entryTopologyAssetUrl
-} from "@hardcore/core/lib/entryAssets.js";
-import { reclaimIdleSurfWorkers } from "@hardcore/core/lib/renderAssetClient.js";
-import { estimateMeshRenderCost } from "@hardcore/core/lib/render/meshCost.js";
-import { PERF_MEASURE_NAMES, perfMeasure, perfStart } from "@hardcore/core/lib/viewer/perfMarks.js";
+} from "@text-to-cad/core/lib/entryAssets.js";
+import { reclaimIdleSurfWorkers } from "@text-to-cad/core/lib/renderAssetClient.js";
+import { estimateMeshRenderCost } from "@text-to-cad/core/lib/render/meshCost.js";
+import { PERF_MEASURE_NAMES, perfMeasure, perfStart } from "@text-to-cad/core/lib/viewer/perfMarks.js";
 import {
   composePackageSelectorRuntime,
   compositionUsesComponent,

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Shared JavaScript suites: @hardcore/core, @hardcore/ui and the web app.
+# Shared JavaScript suites: @text-to-cad/core, @text-to-cad/ui and the web app.
 # --select lets a small change run only the affected workspace and its build.
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 SELECT=all
@@ -19,7 +19,7 @@ case "$SELECT" in
 esac
 cd "$REPO_ROOT"
 if [ "$SELECT" = core ]; then
-  npm run build --workspace @hardcore/core
+  npm run build --workspace @text-to-cad/core
 else
   npm run build:packages
 fi
@@ -28,13 +28,13 @@ node scripts/test/check-dependencies.mjs
 node --test scripts/test/check-kit-boundaries.test.mjs
 node scripts/test/check-kit-boundaries.mjs
 if [ "$SELECT" = core ] || [ "$SELECT" = all ]; then
-  section "@hardcore/core tests"
+  section "@text-to-cad/core tests"
   npm --prefix packages/core test
   section "viewer benchmark helper tests"
   node --test scripts/bench/viewer-memory/*.test.mjs
 fi
 if [ "$SELECT" = ui ] || [ "$SELECT" = all ]; then
-  section "@hardcore/ui tests"
+  section "@text-to-cad/ui tests"
   npm --prefix packages/ui test
 fi
 if [ "$SELECT" = web ] || [ "$SELECT" = all ]; then

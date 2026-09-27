@@ -10,7 +10,7 @@ import { chromium } from "playwright";
 
 let server, browser, temporary, page;
 before(async () => {
-  temporary = await mkdtemp(join(tmpdir(), "hardcore-file-viewer-browser-"));
+  temporary = await mkdtemp(join(tmpdir(), "text-to-cad-file-viewer-browser-"));
   await build({ entryPoints: [fileURLToPath(new URL("./harness/index.tsx", import.meta.url))], outfile: join(temporary, "harness.js"), bundle: true, format: "esm", platform: "browser", jsx: "automatic" });
   const bundle = await readFile(join(temporary, "harness.js"));
   server = createServer((request, response) => {

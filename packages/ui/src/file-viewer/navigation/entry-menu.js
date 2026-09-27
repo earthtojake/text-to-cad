@@ -20,7 +20,7 @@
  * items in the same order, minus the ones it cannot perform. A section left
  * empty by the filter disappears with its separator.
  *
- * Pure, and imports only `@hardcore/core`, so `node --test` loads it without the
+ * Pure, and imports only `@text-to-cad/core`, so `node --test` loads it without the
  * bundler's aliases.
  */
 

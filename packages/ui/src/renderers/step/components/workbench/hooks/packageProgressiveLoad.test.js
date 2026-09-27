@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { buildComposedPackageMeshData } from "@hardcore/core/lib/assembly/meshData.js";
+import { buildComposedPackageMeshData } from "@text-to-cad/core/lib/assembly/meshData.js";
 
 import {
   PROGRESSIVE_PUBLISH_FIRST_BYTES,
@@ -25,7 +25,7 @@ import {
   PROGRESSIVE_LOAD_UNMEASURED_SHARE
 } from "./packageProgressiveLoad.js";
 import { createViewerMemoryPolicy } from "../../../render/viewerMemoryPolicy.js";
-import { createAnimationFrame } from "@hardcore/core/common/animationRuntime.js";
+import { createAnimationFrame } from "@text-to-cad/core/common/animationRuntime.js";
 import * as THREE from "three";
 
 const IDENTITY_4X4 = [1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1];

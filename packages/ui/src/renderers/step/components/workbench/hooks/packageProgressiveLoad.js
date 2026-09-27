@@ -9,8 +9,8 @@
 // loaded so far through the SAME reference-based composition a viewport-LOD
 // level swap uses (buildComposedPackageMeshData shares component buffers, it
 // copies nothing), publishing each batch. The last publish is the full model.
-import { buildComposedPackageMeshData } from "@hardcore/core/lib/assembly/meshData.js";
-import { estimateMeshRenderCost } from "@hardcore/core/lib/render/meshCost.js";
+import { buildComposedPackageMeshData } from "@text-to-cad/core/lib/assembly/meshData.js";
+import { estimateMeshRenderCost } from "@text-to-cad/core/lib/render/meshCost.js";
 import { ViewerMemoryLimitError } from "../../../render/viewerMemoryPolicy.js";
 
 // A batch publishes as soon as EITHER ceiling is crossed by the components

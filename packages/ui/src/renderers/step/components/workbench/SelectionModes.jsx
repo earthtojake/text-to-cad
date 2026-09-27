@@ -1,6 +1,6 @@
 import { useId } from 'react';
 import { CONNECTED_SELECTION, MEASURE_SNAP_MODES, SELECT_MODES, connectedSelectionApplies } from '../../workbench/selectionFilter.js';
-import { DropdownMenuCheckboxItem } from '@hardcore/ui/primitives/dropdown-menu';
+import { DropdownMenuCheckboxItem } from '@text-to-cad/ui/primitives/dropdown-menu';
 import ToolModeMenu from "../../../kit/tools/ToolModeMenu.jsx";
 
 // The two tools that pick in modes share one set of drawings. Each mode has ONE glyph, drawn on

@@ -1,17 +1,17 @@
 import { useEffect, useRef } from "react";
 import * as THREE from "three";
-import { resolveStepModuleFeatures } from "@hardcore/core/common/stepModule.js";
+import { resolveStepModuleFeatures } from "@text-to-cad/core/common/stepModule.js";
 import {
   buildStepModuleContext, createStepModuleEffectsApi, resetStepModuleRecordEffects
-} from "@hardcore/core/common/stepModuleEffects.js";
-import { applySceneState } from "@hardcore/core/common/applySceneState.js";
+} from "@text-to-cad/core/common/stepModuleEffects.js";
+import { applySceneState } from "@text-to-cad/core/common/applySceneState.js";
 import {
   explodedPickSelectorRuntime, resolveTopologyDisplayEdgeRuntimes, shouldRenderTopologyDisplayEdges
-} from "@hardcore/core/common/topologyDisplayEdgeRuntime.js";
-import { applyDisplayRecordTransform, syncRuntimeStepClipPlane } from "@hardcore/core/lib/viewer/modelRuntime.js";
-import { applyPartVisualState, FOCUSED_DIMMED_SURFACE_OPACITY } from "@hardcore/core/lib/viewer/partVisualState.js";
-import { syncDisplayMeshFaceIds, syncSelectorPickGroups } from "@hardcore/core/lib/viewer/selectorPickGroups.js";
-import { syncTopologyDisplayEdgeLine } from "@hardcore/core/lib/viewer/topologyDisplayEdgeLine.js";
+} from "@text-to-cad/core/common/topologyDisplayEdgeRuntime.js";
+import { applyDisplayRecordTransform, syncRuntimeStepClipPlane } from "@text-to-cad/core/lib/viewer/modelRuntime.js";
+import { applyPartVisualState, FOCUSED_DIMMED_SURFACE_OPACITY } from "@text-to-cad/core/lib/viewer/partVisualState.js";
+import { syncDisplayMeshFaceIds, syncSelectorPickGroups } from "@text-to-cad/core/lib/viewer/selectorPickGroups.js";
+import { syncTopologyDisplayEdgeLine } from "@text-to-cad/core/lib/viewer/topologyDisplayEdgeLine.js";
 import { usePlaybackFrames } from "../../kit/tools/playbar/usePlaybackFrames.js";
 import { useAnimationClockStore } from "../workbench/animationClockStore.js";
 import { clearSceneGroup, updateTransformedRuntimeState } from "./useStepSceneSync.js";

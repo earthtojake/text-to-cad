@@ -1,5 +1,5 @@
-import { STEP_MODEL_ROOT_ID, stepTreeNodeIsTopology, stepTreeNodeLeafPartIds, stepTreeNodeLabel } from '@hardcore/core/lib/step/stepTree.js';
-import { stepProductName } from '@hardcore/core/lib/step/productName.js';
+import { STEP_MODEL_ROOT_ID, stepTreeNodeIsTopology, stepTreeNodeLeafPartIds, stepTreeNodeLabel } from '@text-to-cad/core/lib/step/stepTree.js';
+import { stepProductName } from '@text-to-cad/core/lib/step/productName.js';
 import { unique } from './modelingGeometry.js';
 
 const folders = {boss:'Bosses',pocket:'Pockets',hole:'Bores',cut:'Cuts',round:'Edge blends'};

@@ -2,7 +2,7 @@ import { createPortal } from "react-dom";
 import { VIEWPORT_BOTTOM_CENTER, VIEWPORT_INSET_PX } from "./viewportLayout.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Play, Pause, X } from "lucide-react";
-import { ToolbarButton } from "@hardcore/ui/primitives/toolbar-button";
+import { ToolbarButton } from "@text-to-cad/ui/primitives/toolbar-button";
 import PreviewChrome from "../tools/PreviewChrome.jsx";
 import { useViewerMobile } from "../../../file-viewer/responsive.js";
 import ViewerAlertCard from "../status/ViewerAlertCard.jsx";

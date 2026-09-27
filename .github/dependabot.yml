@@ -3,7 +3,7 @@
 # `dependencies` label, which .github/release.yml files under Maintenance.
 #
 # packages/cadgen's pins are the Python floor a released wheel is built against, so
-# they are reviewed like any other change; @hardcore/core/viewer/docs are the three npm
+# they are reviewed like any other change; @text-to-cad/core/viewer/docs are the three npm
 # trees CI installs (.github/actions/setup-deps).
 version: 2
 updates:

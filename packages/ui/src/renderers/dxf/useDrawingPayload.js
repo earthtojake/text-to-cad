@@ -8,7 +8,7 @@
  * is the whole of this renderer's input.
  */
 import { useEffect, useMemo, useState } from "react";
-import { DRAWING_SCHEMA_VERSION, prepareDrawing } from "@hardcore/core/lib/drawing2d/index.js";
+import { DRAWING_SCHEMA_VERSION, prepareDrawing } from "@text-to-cad/core/lib/drawing2d/index.js";
 import { failureAlert } from "../kit/status/loadAlerts.js";
 
 /** A payload from a cadgen that does not agree with this build about the shape. */
@@ -26,7 +26,7 @@ class DrawingSchemaError extends Error {
 /**
  * Load and prepare one drawing.
  *
- * @param {{ client: import("@hardcore/core/client").CadWorkspaceService, file: string, revision?: string }} options
+ * @param {{ client: import("@text-to-cad/core/client").CadWorkspaceService, file: string, revision?: string }} options
  * @returns {{ drawing: object|null, error: unknown, loading: boolean }}
  */
 export function useDrawingPayload({ client, file, revision = "" }) {

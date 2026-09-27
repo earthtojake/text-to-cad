@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { TreeRowSurface, TreeRowChevron, TreeRowLabel } from "@hardcore/ui/primitives/tree-row";
-import { TreeFilterHighlight, TreeFilterInput } from "@hardcore/ui/primitives/tree-filter";
-import { cn } from "@hardcore/ui/utils";
+import { TreeRowSurface, TreeRowChevron, TreeRowLabel } from "@text-to-cad/ui/primitives/tree-row";
+import { TreeFilterHighlight, TreeFilterInput } from "@text-to-cad/ui/primitives/tree-filter";
+import { cn } from "@text-to-cad/ui/utils";
 import ToolPanel, { ToolPanelCollapse } from "../kit/tools/ToolPanel.jsx";
 import { TOOL_PANEL_REFERENCE_HEIGHT } from "../kit/tools/toolStackLayout.js";
 import { useViewerMobile } from "../../file-viewer/responsive.js";

@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef } from "react";
 import { advanceAnimationElapsed, animationClipDuration, animationNowMs,
   clampAnimationElapsed, clampAnimationSpeed, findAnimationClip, firstAnimationClipId,
-  shouldPublishAnimationFrame } from "@hardcore/core/common/animationClock.js";
-import { normalizeParameterValue, normalizeParameterValues } from "@hardcore/core/common/parameters.js";
+  shouldPublishAnimationFrame } from "@text-to-cad/core/common/animationClock.js";
+import { normalizeParameterValue, normalizeParameterValues } from "@text-to-cad/core/common/parameters.js";
 import { poseValuesForPreset } from "../components/workbench/PoseControlsSection.js";
 import { useAnimationClockStore } from "./animationClockStore.js";
 

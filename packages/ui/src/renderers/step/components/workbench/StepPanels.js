@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { buildPositionSection } from './MotionControlsSection.js';
-import { STEP_MODEL_ROOT_ID } from '@hardcore/core/lib/step/stepTree.js';
+import { STEP_MODEL_ROOT_ID } from '@text-to-cad/core/lib/step/stepTree.js';
 import { buildIssuesSection } from './FileStatusSection.js';
 import { useStepReference } from './StepReferenceSection.js';
 import ModelingTree from './ModelingTree.jsx';

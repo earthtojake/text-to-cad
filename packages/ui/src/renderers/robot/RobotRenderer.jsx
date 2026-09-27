@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import * as THREE from "three";
 import { MousePointer2 } from "lucide-react";
-import { EDGELESS_VIEW_FEATURES } from "@hardcore/core/common/viewSettings.js";
-import { resolveLocalAssetFileRef } from "@hardcore/core/lib/urdf/meshAssetUrl.js";
-import { createRobotScene } from "@hardcore/core/lib/urdf/robotScene.js";
-import { srdfGroupNamesByLink } from "@hardcore/core/lib/urdf/parseSrdf.js";
-import { VIEWER_SCENE_SCALE } from "@hardcore/core/lib/viewer/sceneScale.js";
+import { EDGELESS_VIEW_FEATURES } from "@text-to-cad/core/common/viewSettings.js";
+import { resolveLocalAssetFileRef } from "@text-to-cad/core/lib/urdf/meshAssetUrl.js";
+import { createRobotScene } from "@text-to-cad/core/lib/urdf/robotScene.js";
+import { srdfGroupNamesByLink } from "@text-to-cad/core/lib/urdf/parseSrdf.js";
+import { VIEWER_SCENE_SCALE } from "@text-to-cad/core/lib/viewer/sceneScale.js";
 import RendererShell from "../kit/shell/RendererShell.jsx";
 import { readFileView } from "../kit/shell/fileView.js";
 import { useRendererShell } from "../kit/shell/useRendererShell.js";

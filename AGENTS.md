@@ -58,8 +58,8 @@ for the full flow, the resume path, the rehearsal, and local/manual fallbacks.
   root is the plugin package; its skills are `skills/` directly.
 - `models/`: sample and durable CAD/robot-description fixtures.
 - `apps/web/`: the CAD Viewer's React client (its backend is `cadgen.viewer`).
-- `packages/core`: `@hardcore/core`, shared CAD/runtime/client code without React.
-- `packages/ui`: `@hardcore/ui`, the shared FileViewer, renderers, controls and styles.
+- `packages/core`: `@text-to-cad/core`, shared CAD/runtime/client code without React.
+- `packages/ui`: `@text-to-cad/ui`, the shared FileViewer, renderers, controls and styles.
 - `packages/cadgen`: the published distribution — STEP/GLB/topology generation,
   the skill CLI parsers, the CAD Viewer backend + client, and the Node/browser
   runtimes it executes.

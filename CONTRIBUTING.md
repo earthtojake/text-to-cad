@@ -36,7 +36,7 @@ Push the branch to `origin` and open the pull request against
 
 Choose the setup for the environment where the tools and tests will run. Every
 environment needs Git LFS and Python 3.11 or newer. Install Node.js 22 for the
-packaged runtime, Viewer, `@hardcore/core`, or documentation site; Python-only work
+packaged runtime, Viewer, `@text-to-cad/core`, or documentation site; Python-only work
 can defer Node until a selected test needs a generated runtime stage.
 
 ### Linux, macOS, and WSL
@@ -235,7 +235,7 @@ requested separately. A manual dispatch runs every job.
 | --- | --- | --- |
 | Version Check | every change | canonical version, derived metadata, skill pins |
 | cadgen (Linux/Windows) | cadgen, core, infrastructure | Python engine, daemon, CLI and viewer backend |
-| core-js | core, infrastructure | `@hardcore/core` and benchmark helper units |
+| core-js | core, infrastructure | `@text-to-cad/core` and benchmark helper units |
 | web | web, UI, core, cadgen, infrastructure | UI and web units, the UI browser specs, bundled launch, format/camera browser checks through the backend |
 | skills | skills or runtime/host contracts | repo policy; skill CLI suites only for skills, cadgen, core or infrastructure |
 | docs | docs, skills, cadgen, core, infrastructure | static asset contract, lint, Next build, icon verification |
@@ -329,13 +329,13 @@ Canonical source directories are:
 One source tree ships whole and must work in isolation outside this repo — the
 ships-alone law, enforced by the markdown-isolation check in
 `tests/python/global/test_package_boundaries.py`: `packages/cadgen` builds into
-the PyPI wheel with @hardcore/core and the viewer client bundled in at build time; its
+the PyPI wheel with @text-to-cad/core and the viewer client bundled in at build time; its
 README is the PyPI long description. Markdown under it must be true and
-actionable with this repo gone: name the bundled thing ("the @hardcore/core runtime
+actionable with this repo gone: name the bundled thing ("the @text-to-cad/core runtime
 bundled at build time"), never the repo path to its source, and keep commands
 relative to the package itself. Repo-development guidance belongs here, not in
 the package. `apps/web` is a client package with a boundary of its own
-(`apps/web/scripts/selfContained.test.mjs`): it imports @hardcore/core and @hardcore/ui by their public exports; relative
+(`apps/web/scripts/selfContained.test.mjs`): it imports @text-to-cad/core and @text-to-cad/ui by their public exports; relative
 imports remain inside its directory.
 
 ## Working On cadgen In This Repo
@@ -354,7 +354,7 @@ imports remain inside its directory.
 ## Viewer Development In This Repo
 
 The apps are `docs` and `web`. Framework-independent CAD code lives
-in `@hardcore/core`; `@hardcore/ui` owns the complete FileViewer and injectable
+in `@text-to-cad/core`; `@text-to-cad/ui` owns the complete FileViewer and injectable
 renderers. Apps consume compiled public exports. Apps never import another app,
 and packages never import apps. `npm run check:boundaries` checks the graph,
 including aliases, re-exports and dynamic imports.
@@ -369,13 +369,13 @@ Install from the repository root, selecting only the workflow being exercised:
 
 ```bash
 # Python engine/runtime or shared core work:
-npm ci --workspace @hardcore/core
-npm run build --workspace @hardcore/core
+npm ci --workspace @text-to-cad/core
+npm run build --workspace @text-to-cad/core
 # Viewer and shared UI work:
-npm ci --workspace @hardcore/core --workspace @hardcore/ui --workspace @hardcore/web
+npm ci --workspace @text-to-cad/core --workspace @text-to-cad/ui --workspace @text-to-cad/web
 npm run build:packages
 # Docs work:
-npm ci --workspace @hardcore/core --workspace cad-skills-docs
+npm ci --workspace @text-to-cad/core --workspace cad-skills-docs
 npm run build:docs
 ```
 

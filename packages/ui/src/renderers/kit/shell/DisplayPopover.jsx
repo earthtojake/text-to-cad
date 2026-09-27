@@ -1,8 +1,8 @@
 import { SlidersHorizontal, X } from "lucide-react";
-import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "@hardcore/ui/primitives/popover";
-import { ScrollArea } from "@hardcore/ui/primitives/scroll-area";
-import { ToolbarButton } from "@hardcore/ui/primitives/toolbar-button";
-import { cn } from "@hardcore/ui/utils";
+import { Popover, PopoverClose, PopoverContent, PopoverTrigger } from "@text-to-cad/ui/primitives/popover";
+import { ScrollArea } from "@text-to-cad/ui/primitives/scroll-area";
+import { ToolbarButton } from "@text-to-cad/ui/primitives/toolbar-button";
+import { cn } from "@text-to-cad/ui/utils";
 import { FLOATING_SURFACE_CLASS } from "../tools/floatingSurface.js";
 import { TOOL_PANEL_BUTTON_CLASS } from "../tools/ToolPanel.jsx";
 

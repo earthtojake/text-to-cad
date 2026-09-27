@@ -1,7 +1,7 @@
 """The Python<->Node builder bridge.
 
 Every test here spawns a REAL node child running a REAL script that imports the REAL
-``@hardcore/core/glb/progressStream.js`` helper through ``NODE_PATH``. That is deliberate: the
+``@text-to-cad/core/glb/progressStream.js`` helper through ``NODE_PATH``. That is deliberate: the
 three things this module actually promises -- that bare specifiers resolve through the
 exports map, that NDJSON reaches the run, and that no child outlives it -- are
 all properties of a separate process, and a mocked ``Popen`` proves none of them.
@@ -37,11 +37,11 @@ from cadgen.coordination import DRAWING_PACKAGE, artifact_build  # noqa: E402
 _NODE = shutil.which("node")
 
 # The helper is imported by BARE SPECIFIER, so every script below is also a live test of the
-# NODE_PATH mechanism: @hardcore/core/package.json maps "./glb/*" -> "./src/lib/glb/*", and only
+# NODE_PATH mechanism: @text-to-cad/core/package.json maps "./glb/*" -> "./src/lib/glb/*", and only
 # a NODE_PATH entry (not a directory alias) resolves through an exports map.
 _IMPORT = (
     'import { reportPhase, reportTotal, reportAdvance, reportResult } '
-    'from "@hardcore/core/glb/progressStream.js";\n'
+    'from "@text-to-cad/core/glb/progressStream.js";\n'
 )
 
 
@@ -296,11 +296,11 @@ class DiscoveryTest(NodeRuntimeTestCase):
         # dir with no node_modules above it, so they all depend on this. Pinned explicitly
         # because the mechanism is subtle: Node's ESM resolver ignores NODE_PATH, so the
         # bridge's --import hook forwards the miss to the CJS resolver, which reads NODE_PATH
-        # AND applies the exports map. `@hardcore/core/glb/*` is mapped to `./src/lib/glb/*`, so gluing
+        # AND applies the exports map. `@text-to-cad/core/glb/*` is mapped to `./src/lib/glb/*`, so gluing
         # the specifier onto the package directory would look for src/glb/ -- which does not
         # exist. Resolving it proves the map was consulted rather than a path joined.
         script = self.script(
-            'reportResult({ ok: true, url: import.meta.resolve("@hardcore/core/glb/writeGlb.js") });\n'
+            'reportResult({ ok: true, url: import.meta.resolve("@text-to-cad/core/glb/writeGlb.js") });\n'
         )
         payload = run_node_builder(script, run=Recorder())
         self.assertTrue(

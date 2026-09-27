@@ -1,10 +1,10 @@
-import { TooltipHint } from "@hardcore/ui/primitives/tooltip";
+import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from "@hardcore/ui/primitives/context-menu";
-import { ScrollArea } from "@hardcore/ui/primitives/scroll-area";
-import { TreeFilterHighlight, TreeFilterInput } from "@hardcore/ui/primitives/tree-filter";
-import { TREE_ROW_HEIGHT, TreeRowSurface, TreeRowChevron, TreeRowLabel } from "@hardcore/ui/primitives/tree-row";
+import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from "@text-to-cad/ui/primitives/context-menu";
+import { ScrollArea } from "@text-to-cad/ui/primitives/scroll-area";
+import { TreeFilterHighlight, TreeFilterInput } from "@text-to-cad/ui/primitives/tree-filter";
+import { TREE_ROW_HEIGHT, TreeRowSurface, TreeRowChevron, TreeRowLabel } from "@text-to-cad/ui/primitives/tree-row";
 
 import { EntryMenuItems, useEntryMenuFocusGuard } from "./EntryMenu.jsx";
 import { ALL_ENTRY_CAPABILITIES } from "./entry-menu.js";

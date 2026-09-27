@@ -6,7 +6,7 @@ import {
   parseParameterValuesPasteText,
   resolveParameterNumberControlStep
 } from "./parameterControls.js";
-import { normalizeStepModuleDefinition } from "@hardcore/core/common/stepModule.js";
+import { normalizeStepModuleDefinition } from "@text-to-cad/core/common/stepModule.js";
 
 // Exercised against a STEP module definition on purpose: these helpers back BOTH
 // parameter stores through the single runtime-keyed handler set in CadWorkspace, and

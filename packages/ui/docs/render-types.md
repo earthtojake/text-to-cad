@@ -29,7 +29,7 @@ each of those families with the scene builder its renderer uses
 The DXF slice does not even have a scene: it is a canvas painted from
 `GET /__cad/drawing`, so none of the viewport capabilities below describes it — and its
 row says so, with `assetKind: drawing` and no tools. `cadgen dxf snapshot` paints the same
-payload with the same code (`@hardcore/core/lib/drawing2d`), so the CLI cannot produce a
+payload with the same code (`@text-to-cad/core/lib/drawing2d`), so the CLI cannot produce a
 picture the pane could not.
 
 ## The capability registry
@@ -74,7 +74,7 @@ imperative viewer API. A renderer's **scene** (the contract `renderers/kit/scene
 
 1. **Consume content**: the document its renderer loaded (a STEP's mesh data, a GLB's native
    scene, a mesh file's objects, a robot's parts). A GLB's, a mesh's and a robot's scene is
-   built in `@hardcore/core`, where the snapshot CLI builds the same one.
+   built in `@text-to-cad/core`, where the snapshot CLI builds the same one.
 2. **Publish bounds** so the shared fit and its zoom baseline work. The mesh
    path does this via `applyRuntimeModelBounds` after composing; a backend with no mesh
    calls back with its own bounds instead.
@@ -152,7 +152,7 @@ Recorded so they are not mistaken for bugs, and so the next person knows the cos
 
 ## Scene recipe conformance
 
-Inspect and Render resolve through `@hardcore/core/common/sceneSettings.js`.
+Inspect and Render resolve through `@text-to-cad/core/common/sceneSettings.js`.
 Inspect's fixed light/dark workbench basis follows app appearance; Render uses
 its independent studio configuration. Legacy CAD theme preferences are not an
 input. The internal `themeSettings` recipe remains a renderer implementation

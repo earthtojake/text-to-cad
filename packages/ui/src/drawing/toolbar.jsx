@@ -1,6 +1,6 @@
 import { Circle, Eraser, Hand, Minus, PaintBucket, SquareMousePointer, MoveUpRight, Pencil, Redo2, Square, Trash2, Type, Undo2 } from 'lucide-react';
 import { useState } from 'react';
-import { ToolbarButton } from '@hardcore/ui/primitives/toolbar-button';
+import { ToolbarButton } from '@text-to-cad/ui/primitives/toolbar-button';
 
 /**
  * The shared drawing controls: a CAD tool dropdown, and the
@@ -114,7 +114,7 @@ export function DrawingToolbar({ drawing, className = '', layout = 'toolbar' }) 
     // A grid of 24px columns spread across the width, so however wide the panel is the buttons
     // wrap into even columns, the same columns in both rows.
     const grid = "grid min-w-0 grid-cols-[repeat(auto-fill,1.5rem)] justify-between gap-0.5";
-    return <div className={`hardcore-drawing-toolbar ${className}`} data-drawing-controls="">
+    return <div className={`text-to-cad-drawing-toolbar ${className}`} data-drawing-controls="">
       <div role="group" aria-label="Drawing tools" className={grid}>{DRAWING_TOOLBAR_TOOLS.map(toolButton)}</div>
       {/* The rule runs the panel's full width, through its inset. */}
       <div role="separator" aria-orientation="horizontal" className="-mx-1 my-1 h-px bg-border" data-drawing-rule="" />
@@ -122,7 +122,7 @@ export function DrawingToolbar({ drawing, className = '', layout = 'toolbar' }) 
       {palette}
     </div>;
   }
-  return <div className={`hardcore-drawing-toolbar flex max-w-full flex-col items-end gap-1 ${className}`}>
+  return <div className={`text-to-cad-drawing-toolbar flex max-w-full flex-col items-end gap-1 ${className}`}>
     <div role="group" aria-label="Drawing tools" className={SURFACE}>
       {DRAWING_TOOLBAR_TOOLS.map(toolButton)}
       {settings}

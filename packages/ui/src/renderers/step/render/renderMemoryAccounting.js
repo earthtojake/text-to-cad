@@ -4,9 +4,9 @@
 // into surface geometry, CAD edge lines and raycast BVHs, beside the render
 // asset caches' own accounting. It also refreshes the shared admission ledger.
 import { renderAssetCacheStatsWithPackages } from "./completedPackageCache.js";
-import { cadEdgeInstanceSets } from "@hardcore/core/common/cadEdgeInstances.js";
-import { builtGeometryBvhBytes } from "@hardcore/core/lib/viewer/raycastBvh.js";
-import { MESH_DATA_ARRAY_FIELDS } from "@hardcore/core/lib/render/meshTransfer.js";
+import { cadEdgeInstanceSets } from "@text-to-cad/core/common/cadEdgeInstances.js";
+import { builtGeometryBvhBytes } from "@text-to-cad/core/lib/viewer/raycastBvh.js";
+import { MESH_DATA_ARRAY_FIELDS } from "@text-to-cad/core/lib/render/meshTransfer.js";
 import { lodStagingBuffers, syncSelectorCacheAccounting } from "./lodStagingMemory.js";
 import { viewerMemoryPolicy } from "./viewerMemoryPolicy.js";
 

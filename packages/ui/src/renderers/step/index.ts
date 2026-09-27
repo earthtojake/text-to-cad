@@ -1,9 +1,9 @@
 // Viewer preferences are the workspace module's, shared by every renderer:
-// a host reads them from `@hardcore/ui/renderers/workspace`, not through a slice.
+// a host reads them from `@text-to-cad/ui/renderers/workspace`, not through a slice.
 import { createCadPreferences, prepareWorkspaceEntry, type CadPreferenceSource, type PreparedWorkspaceEntry, type ViewerCommandSource, type WorkspaceClientOption } from "../workspace/index.js";
-import type { PromptContext, PromptReference } from '@hardcore/core/prompt';
+import type { PromptContext, PromptReference } from '@text-to-cad/core/prompt';
 import type { ComponentType } from 'react';
-import { isCadFile } from '@hardcore/core/lib/fileFormats.js';
+import { isCadFile } from '@text-to-cad/core/lib/fileFormats.js';
 import { defineFileRenderer } from '../../file-viewer/registry.js';
 
 export type { CadLiveBinding, CadLiveController, CadLiveState, CadCameraSnapshot } from './live.js';
@@ -20,7 +20,7 @@ export interface StepRendererSlots { selectionExtras?: ComponentType<StepSelecti
 export interface StepRendererOptions {
   client: WorkspaceClientOption;
   slots?: StepRendererSlots;
-  /** The host's requests every viewer answers (`@hardcore/ui/renderers/workspace`). */
+  /** The host's requests every viewer answers (`@text-to-cad/ui/renderers/workspace`). */
   commands?: ViewerCommandSource;
   live?: CadLiveBinding;
   preferences?: CadPreferenceSource;

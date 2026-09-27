@@ -8,7 +8,7 @@ import { createServer } from 'node:http';
 import { build } from 'esbuild';
 import { chromium } from 'playwright';
 import { PNG } from 'pngjs';
-import { writeGlb } from '@hardcore/core/glb/writeGlb.js';
+import { writeGlb } from '@text-to-cad/core/glb/writeGlb.js';
 
 // The robot renderer end to end in a real browser, over inline fixtures made of
 // primitives: a URDF, the SRDF paired with it (a "home" state, a named pose, an end
@@ -84,7 +84,7 @@ let server, browser, temporary;
 // Bumped by a test to publish a new revision of every description.
 let revision = 1;
 before(async () => {
-  temporary = await mkdtemp(join(tmpdir(), 'hardcore-robot-browser-'));
+  temporary = await mkdtemp(join(tmpdir(), 'text-to-cad-robot-browser-'));
   await build({ entryPoints: [fileURLToPath(new URL('../harness/index.tsx', import.meta.url))], outfile: join(temporary, 'harness.js'), bundle: true, format: 'esm', platform: 'browser', conditions: ['production'], jsx: 'automatic', loader: { '.webp': 'dataurl', '.woff2': 'dataurl' } });
   const bundle = await readFile(join(temporary, 'harness.js'));
   const css = await readFile(new URL('../../../dist/styles.css', import.meta.url));

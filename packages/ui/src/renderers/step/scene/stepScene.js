@@ -1,4 +1,4 @@
-import { buildModel } from "@hardcore/core/common/cadScene.js";
+import { buildModel } from "@text-to-cad/core/common/cadScene.js";
 
 // The STEP renderer's kit scene (`kit/scene.js`): ONE identity for as long as a file
 // is mounted, around whatever core's `buildModel` has built for it right now.

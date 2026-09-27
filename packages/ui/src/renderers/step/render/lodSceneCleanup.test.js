@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import * as THREE from "three";
-import { buildModel } from "@hardcore/core/common/cadScene.js";
+import { buildModel } from "@text-to-cad/core/common/cadScene.js";
 import { disposeViewerCadScene } from "./lodSceneCleanup.js";
 import { createLodSceneAdoption } from "./lodSceneAdoption.js";
 import { createLodScheduler } from "./lodScheduler.js";

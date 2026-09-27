@@ -1,7 +1,7 @@
 import { createContext, useCallback, useContext, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { ChevronDown, ChevronUp, X } from "lucide-react";
-import { cn } from "@hardcore/ui/utils";
-import { ScrollArea } from "@hardcore/ui/primitives/scroll-area";
+import { cn } from "@text-to-cad/ui/utils";
+import { ScrollArea } from "@text-to-cad/ui/primitives/scroll-area";
 import { FLOATING_CHROME_SURFACE_CLASS } from "./floatingSurface.js";
 import { ToolStackContext } from "./ToolStack.jsx";
 import { TOOL_PANEL_MIN_HEIGHT, TOOL_PANEL_WIDTH, clampToolPanelHeight, clampToolPanelWidth } from "./toolStackLayout.js";

@@ -4,7 +4,7 @@
 //
 //   1. IMPORTS. The kit imports itself, shared UI (primitives, lib, drawing,
 //      file-viewer navigation helpers) and the format-blind half of
-//      @hardcore/core. It never imports a renderer, and never a core module that
+//      @text-to-cad/core. It never imports a renderer, and never a core module that
 //      belongs to one file family. Renderers import the kit; never the reverse.
 //   2. WORDS. No file-format or STEP-assembly concept appears in it, in code or in
 //      comments: a comment that explains a kit module by naming a format is the
@@ -19,7 +19,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 export const KIT_ROOT = 'packages/ui/src/renderers/kit';
 
 // Core modules that belong to one file family, or to the STEP assembly pipeline.
-const FAMILY_CORE_IMPORT = /^@hardcore\/core\/(?:glb\/|lib\/(?:assembly|dxf|export|glb|render|selectors|step|surf|urdf)\/|lib\/(?:cadRefs|entryAssets|fileFormats|renderCapabilities|renderAssetClient|stepRenderAssetClient)\.js|common\/(?:cadScene|renderMeshScene|stepModule\w*|topology\w*|applySceneState)\.js)/;
+const FAMILY_CORE_IMPORT = /^@text-to-cad\/core\/(?:glb\/|lib\/(?:assembly|dxf|export|glb|render|selectors|step|surf|urdf)\/|lib\/(?:cadRefs|entryAssets|fileFormats|renderCapabilities|renderAssetClient|stepRenderAssetClient)\.js|common\/(?:cadScene|renderMeshScene|stepModule\w*|topology\w*|applySceneState)\.js)/;
 
 const FORBIDDEN_WORDS = [
   ['a file format', /urdf|srdf|(?<![a-z])sdf(?![a-z])|glb|gltf|dxf|(?<![a-z])stl(?![a-z])|3mf|b-?rep(?![a-z])/i],
@@ -69,8 +69,8 @@ export function checkKitBoundaries(repo, { allowlist = KIT_WORD_ALLOWLIST } = {}
         if (specifier.startsWith('.')) {
           const target = path.resolve(path.dirname(file), specifier);
           if (target.startsWith(renderers) && !target.startsWith(root + path.sep)) errors.push(`${at} imports a renderer (${specifier}); renderers import the kit, never the reverse`);
-          if (!target.startsWith(path.join(repo, 'packages/ui/src') + path.sep)) errors.push(`${at} imports outside @hardcore/ui sources (${specifier})`);
-        } else if (/^@hardcore\/ui\/renderers\//.test(specifier)) errors.push(`${at} imports a renderer (${specifier})`);
+          if (!target.startsWith(path.join(repo, 'packages/ui/src') + path.sep)) errors.push(`${at} imports outside @text-to-cad/ui sources (${specifier})`);
+        } else if (/^@text-to-cad\/ui\/renderers\//.test(specifier)) errors.push(`${at} imports a renderer (${specifier})`);
         else if (FAMILY_CORE_IMPORT.test(specifier)) errors.push(`${at} imports a file-family core module (${specifier})`);
       }
       for (const [rule, pattern] of FORBIDDEN_WORDS) {
@@ -112,7 +112,7 @@ export function checkRendererSlices(repo, { slices = RENDERER_SLICES } = {}) {
           if (specifier.startsWith('.')) {
             const target = path.resolve(path.dirname(file), specifier);
             if (target.startsWith(renderers + path.sep)) owner = path.relative(renderers, target).split(path.sep)[0];
-          } else owner = /^@hardcore\/ui\/renderers\/([^/]+)/.exec(specifier)?.[1] || '';
+          } else owner = /^@text-to-cad\/ui\/renderers\/([^/]+)/.exec(specifier)?.[1] || '';
           if (owner && owner !== slice && !SLICE_SHARED.includes(owner)) {
             errors.push(`${repoRel}:${index + 1} imports the "${owner}" renderer (${specifier}); a renderer imports the kit, the workspace module, shared UI and core, never another renderer`);
           }
@@ -147,7 +147,7 @@ export function checkFileViewerBoundary(repo, { shared = SLICE_SHARED } = {}) {
         if (specifier.startsWith('.')) {
           const target = path.resolve(path.dirname(file), specifier);
           if (target.startsWith(renderers + path.sep)) owner = path.relative(renderers, target).split(path.sep)[0];
-        } else owner = /^@hardcore\/ui\/renderers\/([^/]+)/.exec(specifier)?.[1] || '';
+        } else owner = /^@text-to-cad\/ui\/renderers\/([^/]+)/.exec(specifier)?.[1] || '';
         if (owner && !shared.includes(owner)) {
           errors.push(`${repoRel}:${index + 1} imports the "${owner}" renderer (${specifier}); the file viewer mounts a renderer through the registry and imports only the kit and the workspace module`);
         }
@@ -199,7 +199,7 @@ function namedImports(code) {
 }
 
 function resolveSource(repo, file, specifier) {
-  const core = /^@hardcore\/core\/(lib|common)\/(.+)$/.exec(specifier);
+  const core = /^@text-to-cad\/core\/(lib|common)\/(.+)$/.exec(specifier);
   if (core) return `packages/core/src/${core[1]}/${core[2]}`;
   if (specifier.startsWith('.')) return path.relative(repo, path.resolve(path.dirname(path.join(repo, file)), specifier)).split(path.sep).join('/');
   return specifier;

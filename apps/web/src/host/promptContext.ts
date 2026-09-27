@@ -1,5 +1,5 @@
-import { createPromptDeliveryLedger, formatPromptContextText, validatePromptContext } from '@hardcore/core/prompt';
-import type { PromptContextPort, PromptDeliveryResult, PromptDestinationState, ResourceRef } from '@hardcore/core/prompt';
+import { createPromptDeliveryLedger, formatPromptContextText, validatePromptContext } from '@text-to-cad/core/prompt';
+import type { PromptContextPort, PromptDeliveryResult, PromptDestinationState, ResourceRef } from '@text-to-cad/core/prompt';
 import type { WebClipboard } from './clipboard';
 
 /** Prepare portable clipboard content without claiming an external composer pasted it. */

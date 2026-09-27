@@ -1,11 +1,11 @@
-.hardcore-drawing-editor {
+.text-to-cad-drawing-editor {
   height: 100%;
   width: 100%;
   min-height: 0;
   isolation: isolate;
   color-scheme: light;
 }
-.hardcore-drawing-editor .excalidraw {
+.text-to-cad-drawing-editor .excalidraw {
   --ui-font: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   --default-font: var(--ui-font);
   --color-primary: #525252;
@@ -34,25 +34,25 @@
   font-family: var(--ui-font);
   font-size: var(--text-ui, 0.8125rem);
 }
-.hardcore-drawing-editor .excalidraw button,
-.hardcore-drawing-editor .excalidraw .dropdown-menu-item {
+.text-to-cad-drawing-editor .excalidraw button,
+.text-to-cad-drawing-editor .excalidraw .dropdown-menu-item {
   font-family: var(--ui-font);
   font-size: var(--text-ui, 0.8125rem);
 }
-.hardcore-drawing-editor[data-drawing-mode="overlay"] .excalidraw { background: transparent; }
+.text-to-cad-drawing-editor[data-drawing-mode="overlay"] .excalidraw { background: transparent; }
 /* The SDK paints its default white page until the given scene is in place. */
-.hardcore-drawing-editor[data-drawing-mode="overlay"]:not([data-drawing-ready]) .excalidraw { visibility: hidden; }
+.text-to-cad-drawing-editor[data-drawing-mode="overlay"]:not([data-drawing-ready]) .excalidraw { visibility: hidden; }
 
 /* `DrawingToolbar` is the editor's only control surface, here or placed by the
    host. The canvases, the in-place text editor and the context menu stay;
    every SDK control goes. These selectors follow the SDK's pinned DOM. */
-.hardcore-drawing-editor .layer-ui__wrapper,
-.hardcore-drawing-editor .App-top-bar,
-.hardcore-drawing-editor .App-bottom-bar,
-.hardcore-drawing-editor .FixedSideContainer { display: none; }
+.text-to-cad-drawing-editor .layer-ui__wrapper,
+.text-to-cad-drawing-editor .App-top-bar,
+.text-to-cad-drawing-editor .App-bottom-bar,
+.text-to-cad-drawing-editor .FixedSideContainer { display: none; }
 
-.hardcore-drawing-editor { position: relative; }
-.hardcore-drawing-editor__toolbar {
+.text-to-cad-drawing-editor { position: relative; }
+.text-to-cad-drawing-editor__toolbar {
   position: absolute;
   top: 0.75rem;
   left: 50%;
@@ -64,7 +64,7 @@
   pointer-events: none;
 }
 /* The editor is always light, whatever the application around it is. */
-.hardcore-drawing-editor .hardcore-drawing-toolbar {
+.text-to-cad-drawing-editor .text-to-cad-drawing-toolbar {
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --secondary: oklch(0.97 0 0);
@@ -80,4 +80,4 @@
   color: var(--foreground);
 }
 /* Viewer actions do not show notifications, including the SDK's own messages. */
-.hardcore-drawing-editor .excalidraw .Toast { display: none; }
+.text-to-cad-drawing-editor .excalidraw .Toast { display: none; }

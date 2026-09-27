@@ -1,5 +1,5 @@
 {
-  "name": "@hardcore/ui",
+  "name": "@text-to-cad/ui",
   "version": "0.6.6",
   "private": true,
   "type": "module",
@@ -79,7 +79,7 @@
     "@betteroffice/fonts": "0.2.0",
     "class-variance-authority": "0.7.1",
     "radix-ui": "1.6.7",
-    "@hardcore/core": "*",
+    "@text-to-cad/core": "*",
     "clsx": "^2.1.1",
     "tailwind-merge": "^3.7.0",
     "@excalidraw/excalidraw": "0.18.1"

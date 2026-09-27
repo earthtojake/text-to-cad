@@ -1,9 +1,9 @@
-import { normalizeViewSettings } from "@hardcore/core/common/viewSettings.js";
-import { annotatePerspectiveSnapshot, clonePerspectiveSnapshot } from "@hardcore/core/lib/perspective.js";
+import { normalizeViewSettings } from "@text-to-cad/core/common/viewSettings.js";
+import { annotatePerspectiveSnapshot, clonePerspectiveSnapshot } from "@text-to-cad/core/lib/perspective.js";
 import { normalizePlayback } from "../tools/playbar/playbackPreferences.js";
 
 // A file's view: the one record the host keeps for a file in its tab, under
-// `[root, file path, renderer id]` (`@hardcore/ui/tab-store`). One flat, versioned object:
+// `[root, file path, renderer id]` (`@text-to-cad/ui/tab-store`). One flat, versioned object:
 //
 //   { version: 2, camera, display, playback, renderer }
 //

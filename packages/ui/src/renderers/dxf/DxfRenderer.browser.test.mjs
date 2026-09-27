@@ -29,7 +29,7 @@ const HARNESS_SIZE = '<style>#root > div { width: var(--harness-width, 800px) !i
 // One harness bundle, one server and one browser for the file; every test opens its own page.
 let temporary, server, browser;
 before(async () => {
-  temporary = await mkdtemp(join(tmpdir(), 'hardcore-dxf-browser-'));
+  temporary = await mkdtemp(join(tmpdir(), 'text-to-cad-dxf-browser-'));
   await build({ entryPoints: [fileURLToPath(new URL('../harness/index.tsx', import.meta.url))], outfile: join(temporary, 'harness.js'), bundle: true, format: 'esm', platform: 'browser', conditions: ['production'], jsx: 'automatic', loader: { '.webp': 'dataurl', '.woff2': 'dataurl' } });
   const bundle = await readFile(join(temporary, 'harness.js'));
   const css = await readFile(new URL('../../../dist/styles.css', import.meta.url));

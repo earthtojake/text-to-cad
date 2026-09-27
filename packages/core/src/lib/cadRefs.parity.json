@@ -1,5 +1,5 @@
 {
-  "comment": "Shared contract for the CAD selector grammar. The Python parser (cadgen.cad_ref_syntax) and the JS parser (@hardcore/core/lib/cadRefs.js) are separate implementations of the same language; this fixture is the only thing that keeps them honest. Every case must hold in BOTH. Cases tagged phase 1 cover label selectors.",
+  "comment": "Shared contract for the CAD selector grammar. The Python parser (cadgen.cad_ref_syntax) and the JS parser (@text-to-cad/core/lib/cadRefs.js) are separate implementations of the same language; this fixture is the only thing that keeps them honest. Every case must hold in BOTH. Cases tagged phase 1 cover label selectors.",
   "selectorCases": [
     {
       "phase": 0,

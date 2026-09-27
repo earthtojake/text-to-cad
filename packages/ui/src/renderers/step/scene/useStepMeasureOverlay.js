@@ -10,13 +10,13 @@ import {
   measureLabelText,
   measureSeriesColor,
   screenSpaceDimensionLayout
-} from "@hardcore/core/lib/viewer/measureDimension.js";
+} from "@text-to-cad/core/lib/viewer/measureDimension.js";
 import {
   MEASURE_SNAP_LABELS,
   entityMeasurementFromPick,
   formatEntityMeasurement
-} from "@hardcore/core/lib/viewer/measurement.js";
-import { projectWorldPointToClient } from "@hardcore/core/lib/viewer/measureRuler.js";
+} from "@text-to-cad/core/lib/viewer/measurement.js";
+import { projectWorldPointToClient } from "@text-to-cad/core/lib/viewer/measureRuler.js";
 
 import { measureRulerDraftMeasurement } from "../workbench/measureRulerState.js";
 

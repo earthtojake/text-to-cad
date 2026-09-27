@@ -1,4 +1,4 @@
-import { Alert, AlertDescription, AlertTitle } from "@hardcore/ui/primitives/alert";
+import { Alert, AlertDescription, AlertTitle } from "@text-to-cad/ui/primitives/alert";
 
 export interface MissingFileAlertProps {
   missingFileRef: string;

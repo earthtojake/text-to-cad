@@ -1,6 +1,6 @@
-import type { PromptReference, ResourceRef } from '@hardcore/core/prompt';
+import type { PromptReference, ResourceRef } from '@text-to-cad/core/prompt';
 import type { JsonValue } from '../../../file-viewer/types.js';
-import { normalizeViewSettings, resolveViewSettings } from '@hardcore/core/common/viewSettings.js';
+import { normalizeViewSettings, resolveViewSettings } from '@text-to-cad/core/common/viewSettings.js';
 import { mergeViewerDisplaySettings } from '../view-settings/viewerDisplaySettings.js';
 
 // The live command surface: what an app-owned tool (an agent, a test) may ask of

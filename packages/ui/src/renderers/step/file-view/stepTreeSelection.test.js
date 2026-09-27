@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { STEP_MODEL_ROOT_ID } from '@hardcore/core/lib/step/stepTree.js';
+import { STEP_MODEL_ROOT_ID } from '@text-to-cad/core/lib/step/stepTree.js';
 import { selectableViewerNodeIdsForExpandedTree } from '../workbench/assemblyIsolation.js';
 import {
   collectStepTreeRevealExpansionIds,

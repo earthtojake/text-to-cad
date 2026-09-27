@@ -16,7 +16,7 @@
  * stylesheet to read, so that constant is the one place the two colours are
  * written down and the CLI and this pane cannot drift.
  */
-import { APP_THEME_COLORS } from "@hardcore/core/lib/appTheme.js";
+import { APP_THEME_COLORS } from "@text-to-cad/core/lib/appTheme.js";
 import { cssColorToHex } from "../kit/look/chromeBackdrop.js";
 
 /** What a pane falls back to when the tokens cannot be read at all. */

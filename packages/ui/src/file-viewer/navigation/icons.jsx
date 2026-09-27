@@ -9,7 +9,7 @@
  * The nine formats the CAD Viewer renders are the exception, and they are not
  * an exception to that rule: they go through the viewer's own `EntryIcon`, so
  * a `.stl` is the triangle it is made of and a `.step` is a solid cube,
- * everywhere either app lists files. `@hardcore/core`'s `fileFormats` decides
+ * everywhere either app lists files. `@text-to-cad/core`'s `fileFormats` decides
  * which nine those are — one authority, reachable from both apps.
  */
 import {
@@ -28,7 +28,7 @@ import {
   Table
 } from "lucide-react";
 import { createElement } from "react";
-import { renderFormatFromPath } from "@hardcore/core/lib/fileFormats.js";
+import { renderFormatFromPath } from "@text-to-cad/core/lib/fileFormats.js";
 
 import EntryIcon from "./EntryIcon.jsx";
 

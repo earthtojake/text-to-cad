@@ -15,8 +15,8 @@
  * consumes the list and knows nothing about the format.
  */
 
-import { effectiveDofValues, kinematicsDofs, kinematicsMates } from "@hardcore/core/common/kinematicsRuntime.js";
-import { axisAngleTransform, multiplyTransforms, transformPoint, translationTransform } from "@hardcore/core/lib/urdf/kinematics.js";
+import { effectiveDofValues, kinematicsDofs, kinematicsMates } from "@text-to-cad/core/common/kinematicsRuntime.js";
+import { axisAngleTransform, multiplyTransforms, transformPoint, translationTransform } from "@text-to-cad/core/lib/urdf/kinematics.js";
 
 import {
   add,

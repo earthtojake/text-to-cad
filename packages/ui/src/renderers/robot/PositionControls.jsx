@@ -1,7 +1,7 @@
 import { memo, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import { cn } from "@hardcore/ui/utils";
-import { Slider } from "@hardcore/ui/primitives/slider";
-import { TooltipHint } from "@hardcore/ui/primitives/tooltip";
+import { cn } from "@text-to-cad/ui/utils";
+import { Slider } from "@text-to-cad/ui/primitives/slider";
+import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 import {
   FILE_SHEET_PRECISION_SLIDER_CLASSES, FileSheetSliderField, FileSheetStatusText, parseFileSheetNumberInput
 } from "../kit/inspector/FileSheet.js";

@@ -10,11 +10,11 @@ import { createHoverStore } from "./workbench/hoverStore.js";
 
 import * as THREE from "three";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { hasAuthoredMaterials } from "@hardcore/core/common/inspectEnvironment.js";
-import { displayRecordsBounds, mergeBoundsList } from "@hardcore/core/lib/viewer/autoZoom.js";
-import { VIEWER_PICK_MODE } from "@hardcore/core/lib/viewer/constants.js";
-import { runtimeModelKeyMatches, toNumber } from "@hardcore/core/lib/viewer/modelRuntime.js";
-import { normalizePartIdList } from "@hardcore/core/lib/viewer/partVisualState.js";
+import { hasAuthoredMaterials } from "@text-to-cad/core/common/inspectEnvironment.js";
+import { displayRecordsBounds, mergeBoundsList } from "@text-to-cad/core/lib/viewer/autoZoom.js";
+import { VIEWER_PICK_MODE } from "@text-to-cad/core/lib/viewer/constants.js";
+import { runtimeModelKeyMatches, toNumber } from "@text-to-cad/core/lib/viewer/modelRuntime.js";
+import { normalizePartIdList } from "@text-to-cad/core/lib/viewer/partVisualState.js";
 import RendererShell from "../kit/shell/RendererShell.jsx";
 import { presentationIsPending, usePresentationReport, usePreviewState, useRendererShell } from "../kit/shell/useRendererShell.js";
 import { shellPresentationKey } from "../kit/shell/fileView.js";
@@ -30,7 +30,7 @@ import { viewportMenuEntries } from "./components/workbench/AssemblyContextMenuI
 import { useViewportLod } from "./render/useViewportLod.js";
 import { lodSceneMayMove, sampleLodCamera } from "./render/lodCameraSample.js";
 import { registerLodDisplaySource } from "./render/lodSceneAdoption.js";
-import { ALL_VIEW_FEATURES } from "@hardcore/core/common/viewSettings.js";
+import { ALL_VIEW_FEATURES } from "@text-to-cad/core/common/viewSettings.js";
 import { useModelTools } from "./components/workbench/ModelTools.jsx";
 import { useStepPanels } from "./components/workbench/StepPanels.js";
 import { stepMotionSources, useStepMotion } from "./workbench/useStepMotion.js";
@@ -72,13 +72,13 @@ import {
   entryHasMesh,
   entryHasReferences,
   entryMeshAssetSignature
-} from "@hardcore/core/lib/entryAssets.js";
+} from "@text-to-cad/core/lib/entryAssets.js";
 import {
   hasMeshGeometry,
   hasStepGlbByteCost,
   isLargeMeshData,
   isLargeStepGlbEntry
-} from "@hardcore/core/lib/render/meshCost.js";
+} from "@text-to-cad/core/lib/render/meshCost.js";
 import { createAnimationClock, AnimationClockProvider } from "./workbench/animationClockStore.js";
 import { measureFilterSnaps } from "./workbench/measureRulerState.js";
 import { useStepMeasure } from "./workbench/useStepMeasure.js";
@@ -86,7 +86,7 @@ import { cadFileParamForEntry, fileKey } from "./workbench/entryPaths.js";
 import {
   stepModuleTopologyOccurrenceIds
 } from "./workbench/topologyCapabilities.js";
-import { shortestUniquePathSuffixes } from "@hardcore/core/lib/filePathSuffix.js";
+import { shortestUniquePathSuffixes } from "@text-to-cad/core/lib/filePathSuffix.js";
 import { stepJointHandles, stepPosableDofs } from "./workbench/jointHandles.js";
 import {
   buildFileStatusItems,
@@ -102,7 +102,7 @@ import {
   flattenAssemblyLeafParts,
   leafPartIdsForAssemblySelection,
   resolveAssemblyPickedPartId
-} from "@hardcore/core/lib/assembly/meshData.js";
+} from "@text-to-cad/core/lib/assembly/meshData.js";
 import {
   assemblyNodeContainsNode,
   minimalAssemblyIsolationNodeIds,
@@ -114,11 +114,11 @@ import {
   buildStepTreeRootWithTopology,
   STEP_MODEL_ROOT_ID,
   STEP_MODEL_RENDER_PART_ID
-} from "@hardcore/core/lib/step/stepTree.js";
+} from "@text-to-cad/core/lib/step/stepTree.js";
 import {
   normalizeStepModuleParameterValues,
   resolveStepModuleFeatures
-} from "@hardcore/core/common/stepModule.js";
+} from "@text-to-cad/core/common/stepModule.js";
 import {
   meshStateIsComplete,
   shouldRetainCompleteSameFileMesh
@@ -130,7 +130,7 @@ import { createCadPromptContext } from "./file-view/promptContext.js";
 import { modelMenuDescriptor, partMenuDescriptor, topologyMenuDescriptor } from "./file-view/stepMenus.js";
 import { nodeCopyText, selectionCopyPayload } from "./file-view/stepCopy.js";
 import { HostReferenceContext, referenceLabel, referencesFromCopyText, resolveSelectorSelection } from "./file-view/hostReference.js";
-import { applySourceAppearanceToMeshData, sourceAppearanceGeometry } from "@hardcore/core/common/sourceSidecar.js";
+import { applySourceAppearanceToMeshData, sourceAppearanceGeometry } from "@text-to-cad/core/common/sourceSidecar.js";
 // The selection filters that pick faces or edges, never the part.
 const TOPOLOGY_FILTERS = new Set(["faces", "edges"]);
 const EMPTY_MATERIAL_OVERRIDES = Object.freeze({});

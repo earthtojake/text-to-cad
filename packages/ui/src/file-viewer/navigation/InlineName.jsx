@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-import { cn } from "@hardcore/ui/utils";
+import { cn } from "@text-to-cad/ui/utils";
 
 /**
  * The field a name is typed into, in place: a rename over a tree row or a

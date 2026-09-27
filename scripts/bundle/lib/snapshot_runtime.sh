@@ -4,7 +4,7 @@
 # scripts/bundle/cadgen-runtime.sh.
 #
 # The snapshot CLI drives this bundle in a Playwright page. It is built from the same
-# @hardcore/core entrypoint the CAD Viewer uses, so the picture a snapshot produces matches the
+# @text-to-cad/core entrypoint the CAD Viewer uses, so the picture a snapshot produces matches the
 # viewport; STEP models, meshes and drawings all render through it.
 #
 # Callers set SNAPSHOT_RUNTIME_BUILD_DEPS_DIR (npm scratch) before sourcing, or accept the
@@ -140,7 +140,7 @@ build_snapshot_runtime() {
   rm -rf "$target_dir"
   mkdir -p "$target_dir"
   write_snapshot_render_html "$target_dir"
-  # NODE_PATH resolves @hardcore/core's remaining bare imports directly
+  # NODE_PATH resolves @text-to-cad/core's remaining bare imports directly
   # from workspace outputs, honoring the package's exports map, and resolves the
   # pinned meshoptimizer out of the tmp toolchain, so the bundle stays hermetic
   # on fresh checkouts with no packages/core/node_modules.

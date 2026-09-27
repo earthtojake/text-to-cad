@@ -8,7 +8,7 @@ import {
   Triangle
 } from "lucide-react";
 
-import { cn } from "@hardcore/ui/utils";
+import { cn } from "@text-to-cad/ui/utils";
 import {
   ENTRY_ICON_KIND,
   entryIconKind

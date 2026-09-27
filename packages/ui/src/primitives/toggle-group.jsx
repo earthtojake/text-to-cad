@@ -1,8 +1,8 @@
 import * as React from "react"
 import { ToggleGroup as ToggleGroupPrimitive } from "radix-ui"
 
-import { cn } from "@hardcore/ui/utils"
-import { toggleVariants } from "@hardcore/ui/primitives/toggle"
+import { cn } from "@text-to-cad/ui/utils"
+import { toggleVariants } from "@text-to-cad/ui/primitives/toggle"
 
 const ToggleGroupContext = React.createContext({
   size: "default",

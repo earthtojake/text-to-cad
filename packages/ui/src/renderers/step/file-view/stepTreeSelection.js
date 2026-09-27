@@ -2,15 +2,15 @@
 // Lifted verbatim out of CadWorkspace when the file surface moved into
 // <CadFileView>; nothing here changed but its address.
 import { canonicalCadRefCopyText, uniqueStringList } from "../workbench/referenceSelection.js";
-import { buildCadRefToken, isNativeCadSelector, parseCadRefSelector } from "@hardcore/core/lib/cadRefs.js";
-import { findAssemblyNode } from "@hardcore/core/lib/assembly/meshData.js";
+import { buildCadRefToken, isNativeCadSelector, parseCadRefSelector } from "@text-to-cad/core/lib/cadRefs.js";
+import { findAssemblyNode } from "@text-to-cad/core/lib/assembly/meshData.js";
 import {
   collectStepTreeAncestorIds,
   flattenVisibleStepTreeRows,
   STEP_MODEL_ROOT_ID,
   STEP_TREE_TOPOLOGY_NODE_PREFIX,
   stepTreeNodeChildren
-} from "@hardcore/core/lib/step/stepTree.js";
+} from "@text-to-cad/core/lib/step/stepTree.js";
 
 export function stepTreeNodeIdForWorkspace(node) {
   return String(node?.id || node?.occurrenceId || "").trim();

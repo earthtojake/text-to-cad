@@ -184,13 +184,13 @@ build_viewer_client() {
 }
 
 build_stage_packages() {
-  # Node and browser runtime stages consume only @hardcore/core and must remain
+  # Node and browser runtime stages consume only @text-to-cad/core and must remain
   # runnable in Python/core CI jobs that install that workspace alone. The
-  # Viewer is the only stage that also needs @hardcore/ui.
+  # Viewer is the only stage that also needs @text-to-cad/ui.
   if [ "$STAGE_VIEWER" -eq 1 ] && [ "$MODE" != "check" ]; then
     npm --prefix "$REPO_ROOT" run build:packages
   elif [ "$STAGE_NODE" -eq 1 ] || [ "$STAGE_BROWSER" -eq 1 ]; then
-    npm --prefix "$REPO_ROOT" run build -w @hardcore/core
+    npm --prefix "$REPO_ROOT" run build -w @text-to-cad/core
   fi
 }
 

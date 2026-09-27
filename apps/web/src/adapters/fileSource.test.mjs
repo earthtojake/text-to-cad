@@ -6,7 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
-const temporary = await mkdtemp(join(tmpdir(), 'hardcore-web-source-'));
+const temporary = await mkdtemp(join(tmpdir(), 'text-to-cad-web-source-'));
 const output = join(temporary, 'host.mjs');
 await build({
   stdin: { contents: `export * from './adapters/fileSource.ts';`, resolveDir: fileURLToPath(new URL('../', import.meta.url)) },

@@ -1,10 +1,10 @@
-import { cadResourceCacheKey } from "@hardcore/core/client";
-import { buildComposedPackageMeshData } from "@hardcore/core/lib/assembly/meshData.js";
-import { entryAssetUrl, entryMeshAssetSignature } from "@hardcore/core/lib/entryAssets.js";
-import { entrySourceFormat } from "@hardcore/core/lib/fileFormats.js";
-import { renderCapabilities } from "@hardcore/core/lib/renderCapabilities.js";
-import { renderAssetCacheStats, surfTessellationCacheKey } from "@hardcore/core/lib/renderAssetClient.js";
-import { lodTessellationForLevel, normalizeLodLevel } from "@hardcore/core/lib/surf/lodPolicy.js";
+import { cadResourceCacheKey } from "@text-to-cad/core/client";
+import { buildComposedPackageMeshData } from "@text-to-cad/core/lib/assembly/meshData.js";
+import { entryAssetUrl, entryMeshAssetSignature } from "@text-to-cad/core/lib/entryAssets.js";
+import { entrySourceFormat } from "@text-to-cad/core/lib/fileFormats.js";
+import { renderCapabilities } from "@text-to-cad/core/lib/renderCapabilities.js";
+import { renderAssetCacheStats, surfTessellationCacheKey } from "@text-to-cad/core/lib/renderAssetClient.js";
+import { lodTessellationForLevel, normalizeLodLevel } from "@text-to-cad/core/lib/surf/lodPolicy.js";
 
 const MAX_PACKAGES = 8;
 const MAX_BYTES = 256 * 1024 * 1024;

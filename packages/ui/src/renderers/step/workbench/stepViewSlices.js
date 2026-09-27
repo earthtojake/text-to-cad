@@ -1,4 +1,4 @@
-import { entryAssetHash } from "@hardcore/core/lib/entryAssets.js";
+import { entryAssetHash } from "@text-to-cad/core/lib/entryAssets.js";
 
 // The STEP renderer's own slices of the file's view (`kit/shell/fileView.js`): what it was
 // left looking at and posed to. The shell keeps the camera and the Display settings;

@@ -17,7 +17,7 @@ import {
   couplingValueForDrivenDof,
   effectiveDofValues,
   kinematicsDrivenDofs
-} from "@hardcore/core/common/kinematicsRuntime.js";
+} from "@text-to-cad/core/common/kinematicsRuntime.js";
 
 function kinematicsBlock(definition) {
   const block = definition?.manifest?.kinematics;

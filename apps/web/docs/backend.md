@@ -124,10 +124,10 @@ document indexes, output records and cache-root resolution.
 The tessellation routes likewise delegate reads, writes and TESB batch framing
 to `cadgen.store.tess_cache`. `index/mesh/<key>` points to the object containing
 the cached bytes. The shared JavaScript entry codec and key scheme live in
-`@hardcore/core/lib/surf/tessellationCache.js`. Cache names are validated before
+`@text-to-cad/core/lib/surf/tessellationCache.js`. Cache names are validated before
 access because this shared store is outside the served root.
 
-The browser host constructs a `CadClient` from `@hardcore/core/client` and
+The browser host constructs a `CadClient` from `@text-to-cad/core/client` and
 injects it into the viewer renderers. Catalog subscriptions share the client's
 two-second poll and stop when its last subscriber leaves. Each prepared render
 session owns its tessellation provider, work queue and cancellation signal;
@@ -174,7 +174,7 @@ block inserts placed — so the client draws primitives and never parses DXF.
 
 `cadgen dxf snapshot` draws the SAME payload: its resolver calls
 `cadgen.drawing_payload` too, writes the bytes where the headless page can fetch
-them, and the page paints them with `@hardcore/core/lib/drawing2d` — the module
+them, and the page paints them with `@text-to-cad/core/lib/drawing2d` — the module
 the DXF pane paints with. One flattening, one renderer, so the CLI cannot
 produce a picture this route could not.
 

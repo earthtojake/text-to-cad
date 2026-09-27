@@ -1,5 +1,5 @@
 import { Fragment } from "react";
-import { ToolbarButton } from "@hardcore/ui/primitives/toolbar-button";
+import { ToolbarButton } from "@text-to-cad/ui/primitives/toolbar-button";
 import { FLOATING_CHROME_SURFACE_CLASS } from "./floatingSurface.js";
 
 /**

@@ -1,4 +1,4 @@
-import { jointValueMapsClose } from "@hardcore/core/lib/urdf/jointValues.js";
+import { jointValueMapsClose } from "@text-to-cad/core/lib/urdf/jointValues.js";
 
 const toFiniteNumber = (value, fallback = 0) => (Number.isFinite(Number(value)) ? Number(value) : fallback);
 

@@ -5,19 +5,19 @@ import {
   isWebGlContextCreationError,
   isSoftwareWebGlRenderer,
   runtimeErrorMessage
-} from "@hardcore/core/lib/viewer/webglSupport.js";
+} from "@text-to-cad/core/lib/viewer/webglSupport.js";
 import {
   createCadWebGlRenderer
-} from "@hardcore/core/common/webglRenderer.js";
-import { fitCameraDepthToBounds } from "@hardcore/core/common/renderOptions.js";
+} from "@text-to-cad/core/common/webglRenderer.js";
+import { fitCameraDepthToBounds } from "@text-to-cad/core/common/renderOptions.js";
 import {
   screenSpaceLineDeviceResolution
-} from "@hardcore/core/common/renderEdges.js";
+} from "@text-to-cad/core/common/renderEdges.js";
 import {
   resolveInteractionPixelRatioCap
-} from "@hardcore/core/lib/viewer/renderQuality.js";
+} from "@text-to-cad/core/lib/viewer/renderQuality.js";
 import { updateOrbitControls } from "../camera/orbitControls.js";
-import { PERF_MEASURE_NAMES, perfMeasure, perfStart } from "@hardcore/core/lib/viewer/perfMarks.js";
+import { PERF_MEASURE_NAMES, perfMeasure, perfStart } from "@text-to-cad/core/lib/viewer/perfMarks.js";
 import { viewerDepthSettings, viewerLogarithmicDepthBuffer } from "./renderDepthPolicy.js";
 import { createZoomPivotReanchor } from "../camera/zoomPivotReanchor.js";
 import { createFramePresentation } from "./framePresentation.js";

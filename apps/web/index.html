@@ -15,7 +15,7 @@
         const prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
         let preference = "system";
         try {
-          const record = JSON.parse(window.sessionStorage.getItem("hardcore:tab:v1") || "null");
+          const record = JSON.parse(window.sessionStorage.getItem("text-to-cad:tab:v1") || "null");
           const stored = record && record.version === 1 && record.settings ? record.settings.appearance : "system";
           preference = known(stored) ? stored : "system";
         } catch {
