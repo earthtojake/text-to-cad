@@ -2182,6 +2182,14 @@ test('animated Render bounds follow moving geometry without moving the camera or
   await page.waitForFunction(restMax => window.__cadStage().bounds.max[0] > restMax + 12, before.stage.bounds.max[0], { timeout: 10000 });
   // The pointer stayed on the playbar, which holds preview's controls up: pause there.
   await pane.getByRole('button', { name: 'Pause animation', exact: true }).click();
+  // The routine loops, so a slow pause can land back near rest: scrub to its end, the arm at its
+  // furthest, and measure a pose that does not depend on when the pause landed. Just short of the
+  // end (End, then a page back to 3.9 s): a looping routine's end is its start.
+  const time = pane.getByRole('slider', { name: 'Animation time', exact: true });
+  await time.focus();
+  await page.keyboard.press('End');
+  await page.keyboard.press('PageDown');
+  await page.waitForFunction(restMax => window.__cadStage().bounds.max[0] > restMax + 12, before.stage.bounds.max[0], { timeout: 10000 });
   await settle(page);
   const after = await page.evaluate(() => ({ camera: window.__cadCamera(), stage: window.__cadStage(), records: window.__cadDisplayRecords() }));
   assert.ok(after.stage.bounds.max[0] > before.stage.bounds.max[0] + 10, 'live bounds include the translated arm');
