@@ -86,7 +86,10 @@ export function useStepExplode(layers) {
     const THREE = runtime.THREE;
     const animationModelKey = modelKey || "";
     const modelChanged = animation.modelKey !== animationModelKey;
-    const baseBounds = runtime.modelBounds || meshData?.bounds;
+    // The layout is centred on the REST placement, never on the bounds as drawn: those include
+    // the explosion itself (and a pose), so recomputing from them — a reload that restores an
+    // explosion, a rebuild, an amount change — would re-centre the parts and drift the model.
+    const baseBounds = runtime.zeroPoseBounds || meshData?.bounds || runtime.modelBounds;
     const targetProgress = explodedViewActive ? explodeAmount : 0;
     const wasEnabled = animation.enabled === true;
     animation.modelKey = animationModelKey;

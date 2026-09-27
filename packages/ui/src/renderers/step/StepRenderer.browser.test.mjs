@@ -2986,6 +2986,8 @@ test('a reload of the tab brings back the view — camera, Display, Clip, Explod
   await page.evaluate(() => window.cadHarness.a.controller.setCamera({ ...window.cadHarness.a.controller.readState().camera, position: [60, -20, 25], target: [4, 1, 0], zoom: 1.3 }));
   await page.waitForFunction(() => Object.values(window.cadHarness.state.renderers || {})[0]?.camera?.zoom === 1.3);
   const left = await view.state();
+  // Where the explosion put every part, to be found in the same place after the reload.
+  const explodedLeft = await translations(page);
   // The tree as isolation shows it: the base's rows, opened.
   const rowsLeft = await view.rows();
   assert.ok(rowsLeft.length > 1, `the tree has the base's rows before the reload: ${rowsLeft.join(', ')}`);
@@ -2999,6 +3001,14 @@ test('a reload of the tab brings back the view — camera, Display, Clip, Explod
   }
   assert.deepEqual([back.display.mode, back.display.clip.enabled, back.display.clip.axis, back.display.exploded.enabled, back.display.exploded.amount],
     ['wireframe', true, 'x', true, 0.3], 'the Display settings, Clip and Explode come back');
+  // An explosion restored on load lays the parts out exactly as the live one did: it is centred on
+  // the rest placement, so the restored camera still frames the same picture.
+  const sameLayout = async () => {
+    const now = await translations(page);
+    return Object.keys(explodedLeft).every(id => now[id] && explodedLeft[id].every((value, axis) => Math.abs(value - now[id][axis]) < 1e-6));
+  };
+  for (let tries = 0; tries < 20 && !(await sameLayout()); tries += 1) await page.waitForTimeout(100);
+  assert.ok(await sameLayout(), `every exploded part comes back where it was: ${JSON.stringify({ before: explodedLeft, after: await translations(page) })}`);
   assert.deepEqual([back.hiddenPartIds, back.isolatedPartIds.length], [['o1.2'], 1], 'the hidden and the isolated parts come back');
   assert.deepEqual(await view.rows(), rowsLeft, 'the tree comes back as it was, expanded');
   assert.deepEqual([back.selectedPartIds, back.selectedReferenceIds], [[], []], 'the selection does not');
