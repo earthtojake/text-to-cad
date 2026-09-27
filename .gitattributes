@@ -11,6 +11,8 @@ assets/**/*.md !filter !diff !merge text
 *.stl filter=lfs diff=lfs merge=lfs -text
 *.3mf filter=lfs diff=lfs merge=lfs -text
 *.dxf filter=lfs diff=lfs merge=lfs -text
+# Test fixtures are read by CI, which checks out without LFS: they stay plain files.
+packages/**/__fixtures__/*.dxf -filter -diff -merge text
 *.glb filter=lfs diff=lfs merge=lfs -text
 *.gltf filter=lfs diff=lfs merge=lfs -text
 *.obj filter=lfs diff=lfs merge=lfs -text

@@ -1,5 +1,6 @@
 """Snapshot clipboard endpoint: explicit POST, bounded PNG data, native delivery."""
 import unittest
+from pathlib import Path
 from unittest import mock
 from cadgen.viewer.clipboard import copy_png, MAX_PNG_BYTES
 from .test_http_layer import ServerFixture
@@ -20,7 +21,7 @@ class ClipboardTests(unittest.TestCase):
             args = run.call_args.args[0]
             self.assertEqual(args[0], '/usr/bin/osascript')
             self.assertIn('item 1 of argv', args[2])
-            self.assertTrue(args[3].endswith('/snapshot.png'))
+            self.assertEqual(Path(args[3]).name, 'snapshot.png')
 
     def test_route_requires_browser_guard_and_delivers_png(self):
         server = ServerFixture()

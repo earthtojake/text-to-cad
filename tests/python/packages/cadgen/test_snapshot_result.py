@@ -153,7 +153,8 @@ class ResultShape(unittest.TestCase):
             debug=({"input": "part.step", "stageTimings": {"renderMs": 12}},),
         )
         self.assertEqual(result.human_lines(), [
-            "saved snapshot: /tmp/a.png",
+            # The platform's own spelling of the path: backslashes on Windows.
+            f"saved snapshot: {Path('/tmp/a.png')}",
             "warning: low light",
             'debug: {"input":"part.step","stageTimings":{"renderMs":12}}',
         ])
