@@ -1,5 +1,6 @@
 "use client";
 
+import { Download } from "lucide-react";
 import Image from "next/image";
 import Link from "next/link";
 import { ThemeToggle } from "@/components/theme-toggle";
@@ -122,6 +123,16 @@ export function SiteHeaderClient({
         </nav>
 
         <div className="ml-auto flex shrink-0 items-center gap-1 sm:ml-0">
+          {/* The app is the headline: one filled button, to its section. */}
+          <Button
+            asChild
+            className="card-glow h-8 gap-1.5 px-3 text-ui uppercase tracking-[1.5px]"
+          >
+            <a href="#desktop" aria-label="Download the desktop app">
+              <Download className="size-3.5" aria-hidden="true" />
+              Download
+            </a>
+          </Button>
           <Tooltip>
             <TooltipTrigger asChild>
               <Button

@@ -1,5 +1,6 @@
 import { ExternalLink } from "lucide-react";
 import { CopyButton } from "@/components/copy-button";
+import { DesktopSection } from "@/components/desktop-section";
 import { HeroSection } from "@/components/hero-section";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
@@ -208,6 +209,8 @@ export default function Home() {
       <div className="mx-auto w-full max-w-[1200px] px-4 py-4 sm:px-6">
         <div className="min-w-0 space-y-2">
           <HeroSection />
+
+          <DesktopSection />
 
           <section aria-label="Install text-to-cad" className="py-6">
             <div className="max-w-3xl space-y-3">
