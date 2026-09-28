@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 
 import { BrowserWindow, app, nativeImage, nativeTheme, shell } from "electron";
 
+import { migrateLegacyUserData } from "./legacy-data";
 import { initIntegrations, shutdownIntegrations } from "./integrations";
 import { initCad, shutdownCad } from "./cad";
 import { browserService } from "./browser/service";
@@ -74,6 +75,13 @@ function windowBackgroundColor(): string {
  */
 app.setName("text-to-cad");
 if (!app.commandLine.hasSwitch("user-data-dir")) {
+  // A machine that ran the app as Hardcore has its threads under that name;
+  // the first launch under this one takes a copy (`legacy-data.ts`).
+  try {
+    if (migrateLegacyUserData(app.getPath("appData")) === "copied") console.info("[data] copied the Hardcore data directory to text-to-cad");
+  } catch (error) {
+    console.warn(`[data] could not copy the Hardcore data directory: ${error instanceof Error ? error.message : String(error)}`);
+  }
   app.setPath("userData", path.join(app.getPath("appData"), "text-to-cad"));
   app.setPath("sessionData", app.getPath("userData"));
 }
