@@ -3481,6 +3481,30 @@ export default function CadWorkspace({
     }
   }, [robotSelection.select, selectedUrdfComponents, isDesktop]);
 
+  // Robot components hide through the same hiddenPartIds as STEP parts, so the viewer
+  // already skips them for drawing and picking (as the text-to-cad-fourbar viewer had it).
+  const handleUrdfComponentVisibilityChange = useCallback((componentIds, visible) => {
+    const componentIdSet = new Set(selectedUrdfComponents.map((component) => component.id));
+    const validIds = [...new Set(
+      (Array.isArray(componentIds) ? componentIds : [])
+        .map((id) => String(id || "").trim())
+        .filter((id) => id && componentIdSet.has(id))
+    )];
+    if (!validIds.length) {
+      return;
+    }
+    const changedIdSet = new Set(validIds);
+    setHiddenPartIds((current) => {
+      if (visible) {
+        const next = current.filter((id) => !changedIdSet.has(id));
+        return next.length === current.length ? current : next;
+      }
+      const currentIdSet = new Set(current);
+      const addedIds = validIds.filter((id) => !currentIdSet.has(id));
+      return addedIds.length ? [...current, ...addedIds] : current;
+    });
+  }, [selectedUrdfComponents]);
+
   const buildActiveTabSnapshot = useCallback(() => {
     return cloneTabSnapshot({
       referenceQuery,
@@ -7826,6 +7850,8 @@ export default function CadWorkspace({
                 joints={movableUrdfJoints}
                 components={selectedUrdfComponents}
                 componentSelection={{ ...robotSelection, select: selectRobotComponent }}
+                hiddenComponentIds={hiddenPartIds}
+                onComponentVisibilityChange={handleUrdfComponentVisibilityChange}
                 groupStates={selectedUrdfGroupStates}
                 activeGroupStateId={activeSelectedUrdfGroupStateId}
                 jointValues={selectedUrdfJointValues}

@@ -262,6 +262,8 @@ export default function UrdfFileSheet({
   joints,
   components = [],
   componentSelection,
+  hiddenComponentIds = [],
+  onComponentVisibilityChange,
   groupStates,
   activeGroupStateId,
   jointValues,
@@ -413,6 +415,8 @@ export default function UrdfFileSheet({
           selectedIds={componentSelection.selectedIds}
           onSelect={componentSelection.select}
           onHover={componentSelection.hover}
+          hiddenComponentIds={hiddenComponentIds}
+          onVisibilityChange={onComponentVisibilityChange}
         />
       )
     } : null,

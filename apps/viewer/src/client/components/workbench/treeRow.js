@@ -49,7 +49,7 @@ export function treeRowClassName({ selected = false, hovered = false, muted = fa
     "cursor-pointer text-sidebar-foreground hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
     "focus-visible:bg-sidebar-accent focus-visible:text-sidebar-accent-foreground",
     selected
-      ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground"
+      ? "bg-sidebar-accent font-medium text-sidebar-accent-foreground ring-1 ring-inset ring-sidebar-ring/50"
       : hovered && "bg-sidebar-accent text-sidebar-accent-foreground",
     muted && "opacity-45"
   );
