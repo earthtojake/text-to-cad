@@ -65,7 +65,7 @@ function sourceObjectMesh(mesh, part) {
   };
 }
 
-// Every visual is a component (as the text-to-cad-fourbar viewer had it): clicking any
+// Every visual is a component: clicking any
 // part of the robot selects its row in the tree. A visual whose mesh carries no named
 // objects is one component, named for its mesh (the visual's label).
 function wholeVisual(visual) {
@@ -81,7 +81,7 @@ function splitVisual(visual) {
     const sourceMesh = sourceObjectMesh(visual.sourceMesh, object);
     // One unsliceable object forfeits the components for its VISUAL, not the visual's
     // geometry: dropping the object alone would silently delete triangles from the
-    // render, so the visual stays whole and simply contributes no component rows.
+    // render, so the visual stays whole as one selectable component.
     if (!sourceMesh) return [wholeVisual(visual)];
     split.push({
       ...visual,

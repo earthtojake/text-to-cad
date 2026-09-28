@@ -294,6 +294,12 @@ stack.
   keeps its height. If what cannot give way still does not fit, the column
   itself scrolls — a panel is never cut. On mobile the tree starts closed and,
   opened, may take the whole column, giving way as other panels join it.
+- **Robot visibility.** Links and visual components have a trailing eye action in
+  both the tree and its search results. It appears on hover or keyboard focus,
+  stays visible when geometry is hidden, and uses the shared tooltip. A link
+  controls only its own visuals, not child links. Hidden rows are muted; a
+  partially hidden link hides its remaining visuals on the next press. Selected
+  robot rows keep an inset outline as well as their accent fill.
 - **Closing the tree.** Select's tree (Features, Links) does not fold: the X at
   its filter row's end ("Close features") closes it, `hidden` and kept mounted
   with its expansion, filter, selection and scroll, and Select stays the tool —
