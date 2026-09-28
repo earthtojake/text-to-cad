@@ -528,6 +528,12 @@ export const SettingsSchema = z.object({
    * turning it off stops the next one rather than the next launch.
    */
   telemetry: z.boolean().default(true),
+  /**
+   * Whether the first-launch notice — what telemetry sends, with a Turn off
+   * button — has been shown. Nothing is sent before it has
+   * (`src/main/telemetry.ts`, "Nothing before the person has been told").
+   */
+  telemetryNoticeShown: z.boolean().default(false),
 
   /* Appearance */
   theme: ThemePreferenceSchema.default("system"),

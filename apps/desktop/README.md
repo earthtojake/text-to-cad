@@ -97,6 +97,28 @@ vocabulary — adding a fifth is a change to that type:
 
 Aptabase adds the app version, the OS and a per-install random id. Nothing here
 carries a path, a file name, a project name, a prompt, or an agent's output.
+Where each comes from: `app_launched` in `src/main/index.ts`, `session_created`
+from the session manager once a session exists, `file_opened` through
+`telemetry.fileOpened` from the explorer store's one open path (main keeps the
+extension), `settings_changed` in the settings handler. A release whose secret
+is missing says so in its Desktop job (`::warning`), because a build without the
+key is silent forever.
+
+Three more rules, from how the tools people trust do it (Homebrew, VS Code,
+Next.js, .NET):
+
+- **Nothing before the person has been told.** The first launch shows a
+  notice — the four events in a line, a Turn off button, Details to Settings —
+  and until it has been shown once (`telemetryNoticeShown`) events wait in a
+  small queue for that run; they go out when it has, or are dropped if Turn
+  off was pressed first (`src/renderer/features/settings/telemetry-notice.ts`).
+- **The environment can say no.** `DO_NOT_TRACK=1` (the Console Do Not Track
+  convention), `TEXT_TO_CAD_TELEMETRY=0`, any `CI`, and the suites'
+  `NODE_ENV=test` each switch it off for every profile, and Settings names the
+  variable that did (`src/main/telemetry-env.ts`).
+- **What was sent is a list, not a promise.** Settings › General prints every
+  event sent this run with its properties (`telemetry.log`), so "what has it
+  phoned home?" is answered by looking.
 
 ## UI typography
 

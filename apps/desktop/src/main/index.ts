@@ -77,6 +77,11 @@ if (!app.commandLine.hasSwitch("user-data-dir")) {
   app.setPath("userData", path.join(app.getPath("appData"), "text-to-cad"));
   app.setPath("sessionData", app.getPath("userData"));
 }
+// Before `whenReady`, on purpose: the Aptabase SDK refuses an `initialize` that
+// arrives after the app is ready ("Tracking will be disabled"), which is where
+// this call used to sit — so no event ever left, key or no key. Nothing here
+// reads the database; `track` reads the setting per event, once it is open.
+initTelemetry();
 
 function createWindow() {
   const state = restoreWindowState();
@@ -223,7 +228,6 @@ if (!app.requestSingleInstanceLock()) {
     await initCad();
     await initIntegrations({ sendCommand: (command) => broadcast("integrations.command", command), cancelCommand: requestId => broadcast("integrations.cancel", { requestId }) });
     installMenu(() => BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0] ?? null);
-    initTelemetry();
     createWindow();
     initUpdater();
     // One idle adapter per agent the index says is in use, a second and a

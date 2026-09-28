@@ -148,6 +148,13 @@ afterEach(() => {
 void originalLaunch;
 
 describe("SessionManager", () => {
+  it("counts a created session by its agent id, and only once it exists", async () => {
+    const counted: { name: string; agent: string }[] = [];
+    const { manager, cwd } = await setup({ track: (event) => counted.push(event) });
+    await manager.create({ projectId: "p1", agentId: "claude-code", cwd, gitMode: "none" });
+    expect(counted).toEqual([{ name: "session_created", agent: "claude-code" }]);
+  });
+
   it("creates a row, connects, titles the session from the first prompt, and tallies changes", async () => {
     const { repo, broadcasts, manager, cwd } = await setup();
     const session = await manager.create({ projectId: "p1", agentId: "claude-code", cwd, gitMode: "none" });

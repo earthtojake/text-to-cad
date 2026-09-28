@@ -3,6 +3,7 @@
  * row, through one `SessionManager`. `ipc/index.ts` spreads `acpHandlers`
  * into the contract; main calls `shutdownAcp` on quit.
  */
+import { track } from "../telemetry";
 import { randomUUID } from "node:crypto";
 
 import { app } from "electron";
@@ -74,6 +75,7 @@ export const sessionManager: SessionManager = new SessionManager({
   detector,
   spawnTerminal: spawnPtyTerminal,
   broadcast,
+  track,
   // Every session gets the text-to-cad MCP server, with a token that names it.
   mcpServers: mcpServersFor,
   forgetProbe: (probeId) => forgetSession(probeId),

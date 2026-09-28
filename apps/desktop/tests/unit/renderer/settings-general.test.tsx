@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 
 import { TooltipProvider } from "@text-to-cad/ui/primitives/tooltip";
@@ -24,5 +24,17 @@ describe("Settings › General", () => {
       expect(screen.getByText(event, { exact: true })).toBeInTheDocument();
     }
     expect(screen.getByText(/never the name or the path/)).toBeInTheDocument();
+  });
+
+  it("prints what was sent this run, and why nothing is when nothing can be", async () => {
+    vi.mocked(window.textToCad.telemetry.status).mockResolvedValue({ available: false, reason: "environment", variable: "DO_NOT_TRACK" });
+    vi.mocked(window.textToCad.telemetry.log).mockResolvedValue({ events: [
+      { name: "app_launched", props: {}, at: 0 },
+      { name: "file_opened", props: { extension: "step" }, at: 1000 },
+    ] });
+    render(<TooltipProvider><SettingsRoute /></TooltipProvider>);
+    expect(await screen.findByText(/DO_NOT_TRACK is set/)).toBeInTheDocument();
+    expect(await screen.findByText(/Sent this run: 2 events/)).toBeInTheDocument();
+    expect(screen.getByText(/file_opened extension=step/)).toBeInTheDocument();
   });
 });

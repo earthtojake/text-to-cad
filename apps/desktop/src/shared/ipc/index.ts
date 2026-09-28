@@ -45,6 +45,7 @@ import { agentsContract, agentsEvents } from "./agents";
 import { dialogsContract } from "./dialogs";
 import { runtimeContract, runtimeEvents } from "./runtime";
 import { onboardingContract } from "./onboarding";
+import { telemetryContract } from "./telemetry";
 import { skillsContract } from "./skills";
 import { integrationsIpc, integrationsEvents } from "./integrations";
 import { cadIpc } from "./cad";
@@ -100,6 +101,8 @@ export const ipcContract = defineIpc({
 
   /** First run: whether onboarding shows, and the sample project. */
   ...onboardingContract,
+  /** Usage counts: whether this build can send, and what it sent this run. */
+  ...telemetryContract,
 
   /** P6: the native folder and file choosers Settings' path rows use. */
   ...dialogsContract,

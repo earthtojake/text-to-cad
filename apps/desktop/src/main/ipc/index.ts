@@ -11,7 +11,7 @@ import { BrowserWindow, app, dialog, shell } from "electron";
 import { ipcContract, type IpcContract } from "../../shared/ipc";
 import { projects, settings } from "../db/repositories";
 import { viewers } from "../cad";
-import { track } from "../telemetry";
+import { flushTelemetryQueue, track } from "../telemetry";
 import { applySettingsEffects } from "../settings-effects";
 import { acpHandlers } from "./acp";
 import { agentOptionsHandlers } from "./agent-options";
@@ -26,6 +26,7 @@ import { explorerHandlers, initExplorerServices } from "./explorer";
 import { gitHandlers } from "./git";
 import { runtimeHandlers } from "./runtime";
 import { onboardingHandlers } from "./onboarding";
+import { telemetryHandlers } from "./telemetry";
 import { skillsHandlers } from "./skills";
 import { IpcError, broadcast, registerIpc, type IpcContext } from "./register";
 
@@ -85,6 +86,7 @@ const handlers = {
 
   /** First run: whether onboarding shows, and the sample project. */
   ...onboardingHandlers,
+  ...telemetryHandlers,
 
   /** P6: the native folder and file choosers Settings' path rows use. */
   ...dialogsHandlers,
@@ -106,9 +108,14 @@ const handlers = {
       if (previous.cadPythonOverride !== next.cadPythonOverride) {
         viewers().stopAll();
       }
+      // The notice has been shown: what waited for it goes out first, or is
+      // dropped if the notice was used to turn telemetry off.
+      if (patch.telemetryNoticeShown === true && !previous.telemetryNoticeShown) flushTelemetryQueue();
       // The field's NAME, never its value: "someone changed the git mode" is a
       // product question, "to what" is their business (src/main/telemetry.ts).
+      // The notice's own flag is bookkeeping, not a choice, and is not counted.
       for (const key of Object.keys(patch) as (keyof typeof patch & string)[]) {
+        if (key === "telemetryNoticeShown") continue;
         track({ name: "settings_changed", key });
       }
       return next;

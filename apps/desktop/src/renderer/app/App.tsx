@@ -9,6 +9,7 @@ import { useSettingsShortcuts } from "@renderer/hooks/use-settings-shortcuts";
 import { useApplyTheme } from "@renderer/hooks/use-theme";
 import { Toaster } from "@renderer/components/ui/sonner";
 import { TooltipProvider } from "@renderer/components/ui/tooltip";
+import { showTelemetryNoticeIfNeeded } from "@renderer/features/settings/telemetry-notice";
 import { hydrate, subscribeToMain } from "@renderer/state/bridge";
 import { useShowWelcome } from "@renderer/state/onboarding";
 import { useUi } from "@renderer/state/ui";
@@ -29,7 +30,8 @@ export function App() {
 
   useEffect(() => {
     const detach = subscribeToMain();
-    void hydrate();
+    // The telemetry notice, once, after settings are in: nothing is sent before it.
+    void hydrate().then(showTelemetryNoticeIfNeeded);
     return detach;
   }, []);
 

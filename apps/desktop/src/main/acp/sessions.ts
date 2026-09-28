@@ -120,6 +120,12 @@ export type SessionManagerDeps = {
   clientVersion?: string;
   newId: () => string;
   /**
+   * A session was created: the usage count (`src/main/telemetry.ts`,
+   * `session_created`), given as a dependency so this module never imports the
+   * SDK and a test can see the call.
+   */
+  track?: (event: { name: "session_created"; agent: string }) => void;
+  /**
    * Replace a provider's launch line. The e2e suite points every agent at
    * `tests/fake-agent`; nothing else sets this.
    */
@@ -361,6 +367,8 @@ export class SessionManager {
     await this.applyPreferences(session, connection);
     const updated = this.update(session.id, { acpSessionId: connection.acpSessionId, status: "idle" });
     this.deps.broadcast("session.state", { sessionId: session.id, state: connection.state });
+    // Counted once it exists: a create that failed above threw before this.
+    this.deps.track?.({ name: "session_created", agent: session.agentId });
     return updated;
   }
 

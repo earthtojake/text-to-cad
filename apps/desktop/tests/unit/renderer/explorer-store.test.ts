@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { dedupeFileTabs, getDrawingTab, tabTitle, useExplorer } from "@renderer/state/explorer";
+import { dedupeFileTabs, getDrawingTab, openSessionTab, tabTitle, updateSessionTab, useExplorer } from "@renderer/state/explorer";
 import { deleteDrawingScene } from "@renderer/state/drawings";
 
 vi.mock("@renderer/state/drawings", () => ({ deleteDrawingScene: vi.fn() }));
@@ -50,6 +50,7 @@ describe("the explorer strip", () => {
     vi.useFakeTimers();
     vi.clearAllMocks();
     vi.mocked(window.textToCad.explorer.saveTabs).mockReset().mockResolvedValue(undefined);
+    vi.mocked(window.textToCad.telemetry.fileOpened).mockReset().mockResolvedValue(undefined);
     vi.mocked(window.textToCad.explorer.loadTabs).mockReset().mockResolvedValue([]);
     reset();
   });
@@ -58,6 +59,20 @@ describe("the explorer strip", () => {
     await useExplorer.getState().bindSession(null, null);
     await vi.runOnlyPendingTimersAsync();
     vi.useRealTimers();
+  });
+
+  it("counts every file opened, by path, for main to reduce to an extension — through each of the three doors", async () => {
+    const { openFile } = useExplorer.getState();
+    openFile("out/bracket.step");
+    openFile("out/bracket.step");
+    openFile("README.md");
+    // The tree's and an agent's door, then a tab moving to another file.
+    const tab = await openSessionTab("s-count", "/p", null, "file", { path: "tree.step" });
+    await updateSessionTab("s-count", tab.id, { path: "next.stl" });
+    await openSessionTab("s-count", "/p", null, "terminal");
+    expect(vi.mocked(window.textToCad.telemetry.fileOpened).mock.calls.map(([request]) => request.path))
+      .toEqual(["out/bracket.step", "out/bracket.step", "README.md", "tree.step", "next.stl"]);
+    useExplorer.getState().discardSessionResources("s-count");
   });
 
   it("opens each of the five kinds into one strip", () => {

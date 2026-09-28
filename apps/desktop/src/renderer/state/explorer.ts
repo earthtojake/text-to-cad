@@ -517,6 +517,7 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
     if (!projectId) {
       return null;
     }
+    countFileOpened(filePath);
     const target = root === undefined ? get().root : root;
     // Opening is the stronger reveal; a stale one would keep two rows lit.
     set({ reveal: null });
@@ -856,12 +857,24 @@ function disposeTab(tab: ExplorerTab, discard = false, preserveDocuments = false
   if (tab.kind === "browser") void window.textToCad.browser.close({ sessionId: tab.sessionId, projectId: tab.projectId, root: tab.root, tabId: tab.id }).catch(() => {});
 }
 
+/**
+ * The count of files opened, by extension only: main keeps that and drops the
+ * rest (`telemetry.fileOpened`). Three doors give a file tab its path — the
+ * store's `openFile` (a link, an annotation), `openSessionTab` (the tree, an
+ * agent's `open_file`) and `updateSessionTab` (a tab moving to another file) —
+ * and each counts once. Never awaited: a count is not a reason to wait.
+ */
+function countFileOpened(path: string): void {
+  void window.textToCad.telemetry.fileOpened({ path }).catch(() => {});
+}
+
 export async function openSessionTab<K extends ExplorerTabKind>(sessionId: string, projectId: string, root: ExplorerRoot, kind: K, init?: TabInit[K], signal?: AbortSignal): Promise<ExplorerTab> {
   await readSessionStrip(sessionId);
   signal?.throwIfAborted();
   const strip = currentStrip(sessionId)!;
   const rooted = { ...((kind === "file" || kind === "drawing" || kind === "browser") ? { root } : kind === "terminal" ? { cwd: root } : {}), ...init };
   const path = kind === "file" ? (init as TabInit["file"])?.path : null;
+  if (typeof path === "string" && path) countFileOpened(path);
   // A panel asked for is the panel the file shows, in whichever tab shows it; none asked for
   // leaves a tab already showing the file as it is.
   const panel = kind === "file" ? (init as TabInit["file"])?.panel : undefined;
@@ -920,6 +933,7 @@ export async function updateSessionTab(sessionId: string, tabId: string, patch: 
   signal?.throwIfAborted();
   const strip = currentStrip(sessionId)!;
   if (!strip.tabs.some(tab => tab.id === tabId)) throw new Error("This tab is closed.");
+  if ("path" in patch && typeof patch.path === "string" && patch.path) countFileOpened(patch.path);
   updateSessionStrip(sessionId, { ...strip, tabs: strip.tabs.map(tab => tab.id === tabId
     ? { ...tab, ...patch, id: tab.id, sessionId: tab.sessionId, projectId: tab.projectId, kind: tab.kind } as ExplorerTab : tab) });
 }
