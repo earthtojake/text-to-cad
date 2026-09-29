@@ -299,8 +299,9 @@ After creating or updating DXF drawings, **always run the command below
 and return live links**, even if a viewer is already running. Snapshots and
 validation do not replace this step. Use it also to open existing files.
 
-Launch from the model workspace (usually `models/`), whose cwd becomes the
-browsable root—not from the skill or a deep output folder:
+Run from the directory containing the project’s models, usually `models/`.
+The viewer lists files recursively beneath this directory, so choose it rather
+than an individual artifact’s output folder.
 
 ```bash
 cd /absolute/path/to/model-workspace && cadgen viewer --host 127.0.0.1 --json
@@ -311,8 +312,7 @@ JSON line; never guess the port. Verify each artifact exists under the root,
 then append `?file=<URL-encoded path relative to that root>` to return one link
 per file. For directory review, return the origin alone.
 
-Do not stop existing viewers unless asked. Report launch failures explicitly
-and return the artifacts and available validation results.
+If launching fails, report the failure explicitly.
 
 The viewer renders saved DXF files as read-only 2D drawings; it never runs
 generation scripts. Drag to pan, wheel/pinch to zoom, double-click to fit.
