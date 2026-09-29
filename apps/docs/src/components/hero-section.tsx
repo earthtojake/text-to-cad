@@ -1,50 +1,38 @@
 import Link from "next/link";
-import { Button } from "@/components/ui/button";
 import Image from "next/image";
+import { Button } from "@/components/ui/button";
 import { HeroStepRender } from "@/components/hero-step-render";
-
-function HeroSubtitle({ className = "" }: { className?: string }) {
-  return (
-    <p
-      className={`text-[15px] font-medium leading-6 text-foreground sm:text-[17px] sm:leading-7 lg:text-[19px] lg:leading-8 ${className}`}
-    >
-      Give your agent CAD superpowers.{" "}
-      <span className="mt-2 block text-sm font-normal leading-6 text-muted-foreground">
-        100% open source + free, runs locally
-      </span>
-    </p>
-  );
-}
 
 export function HeroSection() {
   return (
-    <section className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
-      {/* Wordmark and byline stack on smaller screens. */}
-      <div className="grid min-w-0 lg:grid-cols-3">
-        <div className="flex min-w-0 items-center px-4 py-4 sm:px-5 lg:col-span-2 lg:min-h-[156px] lg:px-6 lg:py-5">
-          <h1 className="sr-only">text.to.cad</h1>
-          <Image
-            src="/brand/logo-text2cad.png"
-            alt=""
-            width={3157}
-            height={512}
-            priority
-            className="h-auto w-full"
-            sizes="(min-width: 1200px) 750px, (min-width: 1024px) 65vw, 100vw"
-          />
-        </div>
-
-        <div className="flex min-w-0 items-center border-t border-border px-4 py-4 sm:px-5 lg:col-span-1 lg:min-h-[156px] lg:border-l lg:border-t-0 lg:px-6 lg:py-5">
-          <div className="space-y-4">
-            <HeroSubtitle className="w-full" />
-            <Button asChild className="px-4">
-              <Link href="#installation">Get started</Link>
-            </Button>
+    <section className="space-y-8">
+      <div className="space-y-6 pt-4 sm:pt-6">
+        <h1 className="sr-only">text.to.cad</h1>
+        <Image
+          src="/brand/logo-text2cad.png"
+          alt=""
+          width={3157}
+          height={512}
+          priority
+          className="h-auto w-full max-w-[800px]"
+          sizes="(min-width: 848px) 800px, 100vw"
+        />
+        <div className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
+          <div className="max-w-4xl space-y-3">
+            <p className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl lg:text-4xl">
+              Give your agent CAD superpowers.
+            </p>
+            <p className="text-lg leading-relaxed text-muted-foreground sm:text-xl">
+              100% open source and free, runs locally with your favorite agent.
+            </p>
           </div>
+          <Button asChild size="lg" className="shrink-0 self-start px-5 sm:self-auto">
+            <Link href="#installation">Get started</Link>
+          </Button>
         </div>
       </div>
 
-      <div className="h-[260px] min-h-0 border-t border-border bg-background sm:h-[300px] lg:h-[340px]">
+      <div className="h-[260px] min-h-0 overflow-hidden rounded-xl border border-border bg-background sm:h-[300px] lg:h-[340px]">
         <HeroStepRender />
       </div>
     </section>
