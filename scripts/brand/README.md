@@ -20,10 +20,10 @@ no curved profile segments in any letter.
 E has three full-width, one-unit horizontal bars and a 1.5-unit spine. The 2
 matches these stroke weights, with one-unit horizontal bars, 1.5-unit side
 strokes and half-unit gaps. X keeps four square corner blocks and a filled,
-two-unit-wide midpoint. Half-unit 45° cuts trim the outer shoulders;
+two-unit-wide midpoint. Half-unit 45° cuts meet at the outer waist at y=2;
 quarter-unit 45° cuts ease its inner notch corners while retaining flat notch
 bottoms. The bottom half mirrors the top half across y=2, with inner notch
-bottoms at y=0.75 and y=3.25. The 2 has just one half-unit 45° cut, at its
+bottoms at y=1.25 and y=2.75. The 2 has just one half-unit 45° cut, at its
 top-right corner. Every other corner and inner opening stays square.
 No letter uses fillets.
 Coplanar faces are merged, so there are no decorative grid lines.
