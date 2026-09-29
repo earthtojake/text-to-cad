@@ -427,7 +427,13 @@ def impeller_nut():
 
 def _bearing(y0, y1, ri, ro_i, ri_o, ro, ball_d, n):
     """(inner race + balls, outer race). Grooves: inner groove r = ball/2 - 0.1 (balls
-    fused into it), outer groove ball/2 + 0.3."""
+    fused into it), outer groove ball/2 + 0.3.
+
+    Each ball's sphere has its poles along the bearing axis (+-Y) and its seam meridian on
+    the outward radial, so neither lies in the seat where the ball joins the inner race. With
+    the default sphere (poles +-Z, seam through +X) the seam or a pole ran through that seat on
+    most balls, and OCCT's STEP round trip re-trimmed some of those spheres on the wrong side
+    of the seat loop: the races read back 19 % (front) and 7.5 % (rear) short."""
     ym = (y0 + y1) / 2.0
     rpc = (ro_i + ri_o) / 2.0
     rb = ball_d / 2.0
@@ -439,7 +445,9 @@ def _bearing(y0, y1, ri, ro_i, ri_o, ro, ball_d, n):
     outer = outer - tor_o
     tor_i = bd.Pos(0, ym, 0) * bd.Rot(90, 0, 0) * bd.Torus(rpc, rb - 0.1)
     inner = inner - tor_i
-    balls = [bd.Pos(*S.inplane(360.0 * i / n, rpc, ym)) * bd.Sphere(rb) for i in range(n)]
+    balls = [bd.Solid.make_sphere(rb, geo.plane(S.inplane(360.0 * i / n, rpc, ym), (0.0, 1.0, 0.0),
+                                                S.inplane(360.0 * i / n)))
+             for i in range(n)]
     inner = _one(C.fuse_all([inner] + balls))
     return inner, outer
 

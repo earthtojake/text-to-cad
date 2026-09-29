@@ -5,9 +5,11 @@ Final assembly `models/radial/STEP/radial.step` (geometry 2026-09-25 03:23; re-s
 Paths under `tmp/` below (renders, videos, gate logs) are generated and not committed. Rebuild with
 `python src/radial.py`, then run the tools in `src/README.md`.
 
-**Builds with read-back verification (cadgen PR #449):** `reduction` and `blower` fail. OCCT's STEP
-translation loses volume on three bearing parts (see the correction under Validation). The build
-reports the failure instead of storing damaged solids. Fixing those parts is open work.
+**Bearing STEP round trips:** the three bearing fixes from the original model worktree are
+included. An isolated check on 2026-09-29 with unmodified main cadgen confirmed valid source and
+saved solids with a maximum relative volume difference of 1.01e-7. No full engine rebuild was
+repeated for the renderer/model split; the original worktree records a successful full build
+with PR #449 on 2026-09-27.
 
 ## Figures and sources
 
@@ -57,7 +59,19 @@ The animation's JS runtime matches kin.py to 3.5e-12 across all moving labels (a
   | `impeller:bearing_front` | | −19% |
   | `impeller:bearing_rear` | | −7.5% |
 
-  All three are internal bearing parts. Fixing them in the model is not yet done.
+  **Fixed:** preserve the dimensions and labels, but orient the sphere seams and poles clear of
+  their boolean trimming loops. Thrust balls use radial poles and a +Y seam; impeller balls
+  use bearing-axis poles and outward radial seams. These are the original model's 2026-09-27
+  fixes, carried into the sample sources. Isolated STEP round trips on 2026-09-29 produced:
+
+  | part | volume written | volume read back |
+  |---|---|---|
+  | `propshaft:thrust_balls` | 49,564.131808 mm³ | 49,564.136788 mm³ |
+  | `impeller:bearing_front` | 5,963.905259 mm³ | 5,963.905259 mm³ |
+  | `impeller:bearing_rear` | 3,587.927839 mm³ | 3,587.927839 mm³ |
+
+  All three source and saved shapes pass validity checks. This check builds only the three
+  bearing shapes; it does not rebuild the engine or certify its teardown choreography.
 - **Static interference:** every leaf pair at rest, 11,538 pairs, **0 clashes**
   (`tmp/final/gate_static5.log`). The first final run found one clash: the new accessory fuel line
   through cylinder 6's intake elbow (164.7 mm³). It was re-routed with ≥ 14.9 mm clearance and

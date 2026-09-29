@@ -408,6 +408,11 @@ BALL_R = 8.5
 BALL_PR = 62.75
 
 
+def _ball(centre, r, pole, seam):
+    """Sphere of radius r at centre, poles along `pole`, seam meridian through `seam`."""
+    return bd.Solid.make_sphere(r, geo.plane(centre, pole, seam))
+
+
 def thrust_inner():
     """Inner race: deep groove concentric with the ball path, 0.25 mm running clearance.
     (Balls fused INTO the race left a sphere/torus seat that fails BRepCheck after the STEP
@@ -419,8 +424,15 @@ def thrust_inner():
 
 
 def thrust_balls():
-    """18 balls strung on their cage ring (one body; 18 = 3-fold for the 480 deg loop)."""
-    balls = [bd.Pos(*S.inplane(20.0 * i, BALL_PR, BRG_BALL_Y)) * bd.Rot(90, 0, 0) * bd.Sphere(BALL_R)
+    """18 balls strung on their cage ring (one body; 18 = 3-fold for the 480 deg loop).
+
+    Each ball's sphere has its poles on the ball's radial line and its seam meridian through
+    +Y, so neither touches the two holes the cage ring leaves in the sphere (at +-tangent).
+    With the old orientation (poles +-Y, seam through +X) the seam crossed a cage hole on the
+    balls near in-plane 0 and 180 deg, and OCCT's STEP round trip re-trimmed four of those
+    spheres on the wrong side of the hole: the part read back 22 % (four balls) short."""
+    balls = [_ball(S.inplane(20.0 * i, BALL_PR, BRG_BALL_Y), BALL_R, pole=S.inplane(20.0 * i),
+                   seam=(0.0, 1.0, 0.0))
              for i in range(BALL_N)]
     cage = _rev([(59.5, BRG_BALL_Y - 2.5), (66.0, BRG_BALL_Y - 2.5), (66.0, BRG_BALL_Y + 2.5),
                  (59.5, BRG_BALL_Y + 2.5)])
