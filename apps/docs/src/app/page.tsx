@@ -140,7 +140,7 @@ function InstallCommands() {
   );
 }
 
-function SkillsInstallCommand() {
+function SkillsInstallCommand({ prominent = false }: { prominent?: boolean }) {
   return (
     <div className={COMMAND_BOX_CLASS}>
       <div className="flex min-h-[54px] min-w-0 max-w-full items-stretch">
@@ -150,6 +150,7 @@ function SkillsInstallCommand() {
         <CopyButton
           text={skillsInstallCommand}
           label="Copy Skills CLI install command"
+          prominent={prominent}
           compact
         />
       </div>
@@ -207,9 +208,9 @@ export default function Home() {
           <section aria-label="Install text-to-cad" className="py-6">
             <div className="max-w-3xl space-y-3">
               <h2 className="text-sm font-medium text-foreground">
-                Try It Now
+                Get Started
               </h2>
-              <SkillsInstallCommand />
+              <SkillsInstallCommand prominent />
             </div>
           </section>
 

@@ -107,8 +107,10 @@ face winding, flush roots, rigid crowns, endpoints and the orbit loop.
 
 The site uses shadcn's neutral light surfaces and the viewer's charcoal dark
 surfaces, system sans-serif type, and the same 0.625rem radius scale. Blue primary
-actions use the logo’s front-face blue (`#249ddd`) with dark labels; command
-text remains monospace. The unboxed wordmark and prominent tagline sit above
+actions use the logo’s darker side-face blue (`#1475ad`) with white labels
+(5.03:1 contrast); the solid hover shade (`#126da3`) gives 5.61:1. The Copy
+button under Get Started is the primary action; other copy buttons stay
+secondary. Command text remains monospace. The unboxed wordmark and prominent tagline sit above
 the independently framed CAD demo. The app owns
 its tokens and primitives in `src/app/globals.css` and `src/components/ui/`,
 without importing another app or the CAD UI package. Keep the palette aligned

@@ -7,6 +7,7 @@ type CopyButtonProps = {
   text: string;
   label?: string;
   compact?: boolean;
+  prominent?: boolean;
 };
 
 type CopyStatus = "idle" | "copied" | "error";
@@ -15,6 +16,7 @@ export function CopyButton({
   text,
   label = "Copy command",
   compact = false,
+  prominent = false,
 }: CopyButtonProps) {
   const [status, setStatus] = useState<CopyStatus>("idle");
 
@@ -44,9 +46,9 @@ export function CopyButton({
   return (
     <Button
       type="button"
-      variant={isError ? "destructive" : "secondary"}
-      size="sm"
-      className={`m-2 min-w-[4.25rem] self-center ${compact ? "px-2.5" : "px-3"}`}
+      variant={isError ? "destructive" : prominent ? "default" : "secondary"}
+      size={prominent ? "lg" : "sm"}
+      className={`m-2 min-w-[4.25rem] self-center ${prominent ? "min-w-20 px-4" : compact ? "px-2.5" : "px-3"}`}
       onClick={copyText}
       aria-label={buttonLabel}
       aria-live="polite"
