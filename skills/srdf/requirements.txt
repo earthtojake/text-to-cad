@@ -1,1 +1,1 @@
-cadgen[snapshot]==0.7.2
+cadgen[snapshot]==0.7.3
