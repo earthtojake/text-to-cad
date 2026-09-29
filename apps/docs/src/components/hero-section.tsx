@@ -1,4 +1,5 @@
 import Image from "next/image";
+import wordmark from "../../public/brand/logo-text2cad.png";
 import { HeroStepRender } from "@/components/hero-step-render";
 
 export function HeroSection() {
@@ -7,10 +8,8 @@ export function HeroSection() {
       <div className="space-y-6 pt-4 sm:pt-6">
         <h1 className="sr-only">text.to.cad</h1>
         <Image
-          src="/brand/logo-text2cad.png"
+          src={wordmark}
           alt=""
-          width={3157}
-          height={512}
           priority
           className="h-auto w-full max-w-[800px]"
           sizes="(min-width: 848px) 800px, 100vw"
