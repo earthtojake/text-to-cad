@@ -133,13 +133,13 @@ export function SiteHeaderClient({
           className="flex shrink-0 items-center text-foreground transition hover:text-primary"
         >
           <Image
-            src="/brand/logo-c.svg"
+            src="/brand/logo-cad.svg"
             alt=""
-            width={22}
+            width={52}
             height={22}
             priority
             unoptimized
-            className="size-[22px] shrink-0"
+            className="h-[22px] w-auto shrink-0"
           />
         </Link>
 

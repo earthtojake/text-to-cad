@@ -69,7 +69,7 @@ scripts/         # asset checks
 
 ## Brand and loading icon
 
-The header and favicons use the blue C with soft relief shading. The homepage
+The header uses the blue CAD wordmark and favicons use C, both with soft relief shading. The homepage
 and repository README use the TEXT2CAD PNG. `/icon` provides downloadable
 C, CAD and TEXT2CAD SVGs and PNGs, followed by the original animated loading-icon
 playground. The original mesh, animation and the shared UI loading assets stay
