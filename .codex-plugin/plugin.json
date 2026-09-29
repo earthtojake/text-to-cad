@@ -1,7 +1,7 @@
 {
   "name": "cad",
   "version": "0.7.3",
-  "description": "CAD, robotics, fabrication, and local review skills packaged for agent plugin installs.",
+  "description": "Give your agent CAD superpowers.",
   "author": {
     "name": "earthtojake",
     "url": "https://github.com/earthtojake"
@@ -21,9 +21,9 @@
   ],
   "skills": "./skills/",
   "interface": {
-    "displayName": "text-to-cad",
-    "shortDescription": "CAD, robotics, fabrication, and local review skills.",
-    "longDescription": "text-to-cad packages local agent workflows for generating CAD, inspecting models, sourcing STEP parts, writing robot description files, slicing mesh files, and preparing fabrication handoffs.",
+    "displayName": "CAD",
+    "shortDescription": "Give your agent CAD superpowers.",
+    "longDescription": "CAD packages local agent workflows for generating CAD, inspecting models, sourcing STEP parts, writing robot description files, slicing mesh files, and preparing fabrication handoffs.",
     "developerName": "earthtojake",
     "category": "Productivity",
     "capabilities": [
@@ -36,6 +36,6 @@
       "Generate a URDF and review it locally.",
       "Slice a mesh into printer-ready G-code."
     ],
-    "brandColor": "#00A676"
+    "brandColor": "#249DDD"
   }
 }

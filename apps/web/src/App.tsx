@@ -81,7 +81,7 @@ function RootView({ client, server, tabStore }: { client: CadClient; server: Cad
     };
   }, [client]);
   useEffect(() => {
-    document.title = selectedEntry ? `text-to-cad | ${selectedEntry.file.split(/[\\/]/).pop()}` : 'text-to-cad';
+    document.title = selectedEntry ? `CAD | ${selectedEntry.file.split(/[\\/]/).pop()}` : 'CAD';
     if (selectedEntry && !readCadParam()) writeCadParam(file, { history: 'replace' });
   }, [file, selectedEntry]);
   const shownFile = useRef(file);
@@ -108,7 +108,7 @@ function RootView({ client, server, tabStore }: { client: CadClient; server: Cad
   return <div className="flex h-svh flex-col overflow-hidden"><div className="min-h-0 flex-1">
     <FileViewer file={file || null} host={host} renderers={renderers} state={state} onStateChange={onStateChange}
       // The app names itself wherever no crumbs do: no file, or one still resolving.
-      leading={<ViewerBrand title={navigationPath ? "" : "text-to-cad"} />} navigationActions={<ViewerLinks />}
+      leading={<ViewerBrand />} navigationActions={<ViewerLinks />}
       displayActions={<ViewerAppearance colorSchemePreference={appearance.preference} resolvedColorSchemeMode={appearance.colorScheme} onColorSchemePreferenceChange={changeColorScheme} />}
       navigationPath={navigationPath}
       onError={error => console.error(error)} presentation={{

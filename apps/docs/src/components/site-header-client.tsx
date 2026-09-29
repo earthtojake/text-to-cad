@@ -89,7 +89,7 @@ export function SiteHeaderClient({
           className="flex min-w-0 items-center gap-2 text-foreground transition hover:text-primary"
         >
           <Image
-            src="/favicon.png?v=mesh-blue"
+            src="/brand/logo-c.svg"
             alt=""
             width={22}
             height={22}

@@ -109,8 +109,8 @@ export function IconPlayground() {
   }
 
   return (
-    <main className={styles.playground} style={{ background: palettes[palette].background }}>
-      <h1 className="sr-only">Animated 3D icon</h1>
+    <section aria-label="Loading animation playground" className={styles.playground} style={{ background: palettes[palette].background }}>
+      <h2 className="sr-only">Animated loading icon</h2>
       <div ref={viewport} className={styles.viewport}>
         <canvas ref={canvas} aria-label="3D spiral icon. Drag to rotate and scroll to zoom." />
       </div>
@@ -147,6 +147,6 @@ export function IconPlayground() {
           </select>
         </label>
       </div>
-    </main>
+    </section>
   );
 }

@@ -1,14 +1,6 @@
-import { useState } from "react";
-import LoadingIcon from "@text-to-cad/ui/loading-icon";
+import logoUrl from "../../assets/logo-c.svg";
 
-/** The icon at the head of the nav row, and the app's name beside it while no file is open. */
-export default function ViewerBrand({ title = "" }) {
-  const [hovered, setHovered] = useState(false);
-  return <>
-    <span aria-hidden="true" className="mr-1 size-5 shrink-0"
-      onPointerEnter={() => setHovered(true)} onPointerLeave={() => setHovered(false)}>
-      <LoadingIcon size={20} active={hovered} />
-    </span>
-    {title ? <span className="truncate text-foreground">{title}</span> : null}
-  </>;
+/** The C brand mark remains visible while a file loads. */
+export default function ViewerBrand() {
+  return <img src={logoUrl} alt="CAD" width={20} height={20} className="mr-1 size-5 shrink-0 object-contain" />;
 }
