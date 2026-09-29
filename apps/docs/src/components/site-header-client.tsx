@@ -157,10 +157,10 @@ export function SiteHeaderClient({
               {label}
             </a>
           ))}
-          <VersionLink version={version} />
         </nav>
 
         <div className="ml-auto flex shrink-0 items-center gap-1">
+          <VersionLink version={version} />
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
