@@ -295,48 +295,27 @@ python path/to/source.py --force
 
 ## Viewer integration
 
-After creating or updating DXF drawings, you **must run the viewer
-launch command** and return a live link to each created or updated artifact.
+After creating or updating DXF drawings, **always run the command below
+and return live links**, even if a viewer is already running. Snapshots and
+validation do not replace this step. Use it also to open existing files.
 
-Run the command even if a viewer may already be running: it starts or reuses
-an instance for this workspace automatically. Do not skip this step because
-snapshots or geometry validation already passed. For a request only to open or
-visually review an existing file, use this section directly; no authoring or
-regeneration is required.
+Launch from the model workspace (usually `models/`), whose cwd becomes the
+browsable root—not from the skill or a deep output folder:
 
 ```bash
-cd /absolute/path/to/model-workspace
-cadgen viewer --host 127.0.0.1 --json
+cd /absolute/path/to/model-workspace && cadgen viewer --host 127.0.0.1 --json
 ```
 
-Launch from the user's model workspace, usually the project's `models/`
-directory or a suitable common parent of the requested files. The cwd is the
-served root and determines the browsable catalog; do not launch from the skill
-directory or an artifact's deep output folder.
+The launcher starts or reuses the correct instance. Read `url` from its final
+JSON line; never guess the port. Verify each artifact exists under the root,
+then append `?file=<URL-encoded path relative to that root>` to return one link
+per file. For directory review, return the origin alone.
 
-Read `url` from the final JSON stdout line; do not guess the port. For each
-artifact, verify it exists beneath the served root, then append
-`?file=<URL-encoded path relative to that root>` to the returned origin. For
-example, `DXF/panel.dxf` becomes `<returned-origin>?file=DXF%2Fpanel.dxf`.
-Return one live link per artifact; for directory review, return the origin alone.
-An artifact outside the served root needs a viewer launched from its workspace.
+Do not stop existing viewers unless asked. Report launch failures explicitly
+and return the artifacts and available validation results.
 
-Use the interpreter where this skill's requirements are installed. If `cadgen`
-is not on PATH, use `python -m cadgen.cli viewer --host 127.0.0.1 --json` with
-that interpreter. Interactive viewing does not require Playwright's Chromium.
-`cadgen viewer list` shows running instances and their roots. Do not stop an
-existing viewer unless asked; `cadgen viewer stop --port <n>` stops that instance.
-If launching fails, report the failure explicitly and return the artifacts and
-available validation results.
-
-The CAD Viewer catalogs `.dxf` files only (artifacts, never scripts) and is a static
-visualization tool: it draws the `.dxf` that exists on disk — a straight 2D render of
-the sheet, with no 3D view — and never runs a script. A drawing with no `.dxf` yet
-simply does not appear until its script has been run; regenerating after edits is
-likewise the script's job. A DXF pane has no tools, no toolbar and no sidebar: a
-drawing is a finished 2D document, so the pane pans, zooms and fits, and nothing else.
-There is no in-viewer export. An imported `.dxf` renders directly with no artifact
-management. Drag to pan, wheel or pinch to zoom, and double-click to fit.
+The viewer renders saved DXF files as read-only 2D drawings; it never runs
+generation scripts. Drag to pan, wheel/pinch to zoom, double-click to fit.
 
 ## Validation
 
