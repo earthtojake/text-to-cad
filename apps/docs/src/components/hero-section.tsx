@@ -1,3 +1,5 @@
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
 import Image from "next/image";
 import { HeroStepRender } from "@/components/hero-step-render";
 
@@ -7,7 +9,7 @@ function HeroSubtitle({ className = "" }: { className?: string }) {
       className={`text-[15px] font-medium leading-6 text-foreground sm:text-[17px] sm:leading-7 lg:text-[19px] lg:leading-8 ${className}`}
     >
       Give your agent CAD superpowers.{" "}
-      <span className="text-primary">
+      <span className="mt-2 block text-sm font-normal leading-6 text-muted-foreground">
         100% open source + free, runs locally
       </span>
     </p>
@@ -16,7 +18,7 @@ function HeroSubtitle({ className = "" }: { className?: string }) {
 
 export function HeroSection() {
   return (
-    <section className="border border-border bg-card">
+    <section className="overflow-hidden rounded-xl border border-border bg-card shadow-sm">
       {/* Wordmark and byline stack on smaller screens. */}
       <div className="grid min-w-0 lg:grid-cols-3">
         <div className="flex min-w-0 items-center px-4 py-4 sm:px-5 lg:col-span-2 lg:min-h-[156px] lg:px-6 lg:py-5">
@@ -33,7 +35,12 @@ export function HeroSection() {
         </div>
 
         <div className="flex min-w-0 items-center border-t border-border px-4 py-4 sm:px-5 lg:col-span-1 lg:min-h-[156px] lg:border-l lg:border-t-0 lg:px-6 lg:py-5">
-          <HeroSubtitle className="w-full" />
+          <div className="space-y-4">
+            <HeroSubtitle className="w-full" />
+            <Button asChild className="px-4">
+              <Link href="#installation">Get started</Link>
+            </Button>
+          </div>
         </div>
       </div>
 

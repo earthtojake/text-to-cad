@@ -46,11 +46,11 @@ type HeroClip = ReturnType<typeof findAnimationClip>;
 
 const STEP_PREVIEW_PALETTES = {
   dark: {
-    background: "#111820",
-    border: "#3b4553",
+    background: "#292929",
+    border: "#414141",
     fill: ["#c7d0d8", "#aeb9c3", "#d9dee3", "#8f9ba7"],
-    headerBackground: "rgba(17, 24, 32, 0.9)",
-    headerText: "#c9d3df",
+    headerBackground: "#303030",
+    headerText: "#d4d4d4",
     keyLight: "#f6f8fb",
     keyLightIntensity: 2.5,
     fillLight: "#7f95ad",
@@ -59,11 +59,11 @@ const STEP_PREVIEW_PALETTES = {
     ambientLightIntensity: 1.85,
   },
   light: {
-    background: "#eef1f5",
-    border: "#c9cfda",
+    background: "#fafafa",
+    border: "#e5e5e5",
     fill: ["#d7dce0", "#cdd3d8", "#e4e7ea", "#bfc7ce"],
-    headerBackground: "rgba(238, 241, 245, 0.9)",
-    headerText: "#4c566a",
+    headerBackground: "#ffffff",
+    headerText: "#737373",
     keyLight: "#ffffff",
     keyLightIntensity: 2.6,
     fillLight: "#cfd8e3",
@@ -337,7 +337,7 @@ export function HeroStepRender() {
         />
       </div>
       <div
-        className="flex min-h-8 shrink-0 items-center justify-between gap-3 border-t px-3 py-[7px] text-label uppercase leading-none tracking-[1.5px]"
+        className="flex min-h-8 shrink-0 items-center justify-between gap-3 border-t px-3 py-[7px] font-mono text-label leading-none"
         style={{
           backgroundColor: palette.headerBackground,
           borderColor: palette.border,

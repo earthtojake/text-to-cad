@@ -102,3 +102,12 @@ npm --prefix apps/docs run icon:verify
 
 `npm run check` also generates and verifies the GLB, checking closed meshes,
 face winding, flush roots, rigid crowns, endpoints and the orbit loop.
+
+## Visual system
+
+The site uses shadcn's neutral light surfaces and the viewer's charcoal dark
+surfaces, system sans-serif type, and the same 0.625rem radius scale. Blue primary
+actions distinguish installation; command text remains monospace. The app owns
+its tokens and primitives in `src/app/globals.css` and `src/components/ui/`,
+without importing another app or the CAD UI package. Keep the palette aligned
+with `packages/ui/src/styles/tokens.css` when the viewer's base theme changes.

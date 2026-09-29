@@ -31,9 +31,9 @@ export function ThemeToggle() {
       <TooltipTrigger asChild>
         <Button
           type="button"
-          variant="outline"
+          variant="ghost"
           size="icon"
-          className="card-glow h-8 w-8 border-border bg-card text-foreground hover:bg-secondary hover:text-primary"
+          className="text-muted-foreground hover:text-foreground"
           onClick={toggleTheme}
           aria-label="Toggle light and dark mode"
         >

@@ -53,7 +53,7 @@ function VersionLink({ version }: { version: string }) {
 
   return (
     <a
-      className="hidden px-2.5 py-1.5 text-ui text-muted-foreground transition hover:bg-secondary hover:text-foreground md:inline-flex"
+      className="hidden rounded-md px-2.5 py-1.5 text-ui text-muted-foreground transition hover:bg-secondary hover:text-foreground md:inline-flex"
       href={`${GITHUB_REPO_URL}/releases`}
       target="_blank"
       rel="noreferrer"
@@ -107,16 +107,16 @@ export function SiteHeaderClient({
           className="ml-auto hidden items-center gap-1 sm:flex"
         >
           <a
-            className="px-2.5 py-1.5 text-ui text-muted-foreground transition hover:bg-secondary hover:text-foreground"
+            className="rounded-md px-2.5 py-1.5 text-ui text-muted-foreground transition hover:bg-secondary hover:text-foreground"
             href="#skills"
           >
-            SKILLS
+            Skills
           </a>
           <a
-            className="px-2.5 py-1.5 text-ui text-muted-foreground transition hover:bg-secondary hover:text-foreground"
+            className="rounded-md px-2.5 py-1.5 text-ui text-muted-foreground transition hover:bg-secondary hover:text-foreground"
             href="#installation"
           >
-            INSTALL
+            Install
           </a>
           <VersionLink version={version} />
         </nav>
@@ -126,9 +126,9 @@ export function SiteHeaderClient({
             <TooltipTrigger asChild>
               <Button
                 asChild
-                variant="outline"
+                variant="ghost"
                 size="icon"
-                className="card-glow h-8 w-8 border-border bg-card text-foreground hover:bg-secondary hover:text-primary"
+                className="text-muted-foreground hover:text-foreground"
               >
                 <a
                   href={discordUrl}
@@ -146,8 +146,8 @@ export function SiteHeaderClient({
             <TooltipTrigger asChild>
               <Button
                 asChild
-                variant="outline"
-                className="card-glow h-8 border-border bg-card px-2 text-foreground hover:bg-secondary hover:text-primary"
+                variant="ghost"
+                className="px-2 text-muted-foreground hover:text-foreground"
               >
                 <a
                   href={GITHUB_REPO_URL}
@@ -157,7 +157,7 @@ export function SiteHeaderClient({
                 >
                   <GitHubLogo className="size-3.5" />
                   {githubStars !== null ? (
-                    <span className="text-label font-medium tabular-nums tracking-wider">
+                    <span className="text-label font-medium tabular-nums">
                       {formatGitHubStars(githubStars)}
                     </span>
                   ) : null}

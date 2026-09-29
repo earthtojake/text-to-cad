@@ -1,4 +1,3 @@
-@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,300;0,400;0,500;0,600;0,700;1,400&display=swap");
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
@@ -7,162 +6,82 @@
 
 :root {
   color-scheme: light;
+  /* Viewer neutral surfaces, with blue reserved for the docs primary action. */
+  --radius: 0.625rem;
+  --background: oklch(1 0 0);
+  --foreground: oklch(0.145 0 0);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.145 0 0);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.145 0 0);
+  --primary: oklch(0.546 0.245 262.881);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.556 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.985 0 0);
+  --border: oklch(0.922 0 0);
+  --input: oklch(0.922 0 0);
+  --ring: oklch(0.708 0 0);
+  --chart-1: oklch(0.646 0.222 41.116);
+  --chart-2: oklch(0.6 0.118 184.704);
+  --chart-3: oklch(0.398 0.07 227.392);
+  --chart-4: oklch(0.828 0.189 84.429);
+  --chart-5: oklch(0.769 0.188 70.08);
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
 
-  --background: hsl(218 27% 94%);
-  --foreground: hsl(220 16% 22%);
-  --card: hsl(218 27% 89%);
-  --card-foreground: hsl(220 16% 22%);
-  --popover: hsl(218 27% 89%);
-  --popover-foreground: hsl(220 16% 22%);
-  --primary: hsl(213 32% 40%);
-  --primary-foreground: hsl(0 0% 100%);
-  --secondary: hsl(219 28% 84%);
-  --secondary-foreground: hsl(220 16% 22%);
-  --muted: hsl(219 28% 84%);
-  --muted-foreground: hsl(220 17% 28%);
-  --accent: hsl(213 20% 86%);
-  --accent-foreground: hsl(213 32% 40%);
-  --destructive: hsl(355 60% 45%);
-  --destructive-foreground: hsl(0 0% 100%);
-  --border: hsl(219 18% 72%);
-  --input: hsl(219 18% 72%);
-  --ring: hsl(213 32% 40%);
-  --chart-1: hsl(213 32% 44%);
-  --chart-2: hsl(210 34% 42%);
-  --chart-3: hsl(92 30% 36%);
-  --chart-4: hsl(40 70% 35%);
-  --chart-5: hsl(311 28% 42%);
-  --sidebar-background: hsl(218 27% 89%);
-  --sidebar: var(--sidebar-background);
-  --sidebar-foreground: hsl(220 16% 22%);
-  --sidebar-primary: hsl(213 32% 40%);
-  --sidebar-primary-foreground: hsl(0 0% 100%);
-  --sidebar-accent: hsl(213 20% 86%);
-  --sidebar-accent-foreground: hsl(213 32% 40%);
-  --sidebar-border: hsl(219 18% 72%);
-  --sidebar-ring: hsl(213 32% 40%);
-
-  --smui-frost-1: 176 30% 35%;
-  --smui-frost-2: 193 40% 38%;
-  --smui-frost-3: 210 34% 40%;
-  --smui-frost-4: 213 32% 36%;
-  --smui-red: 355 55% 44%;
-  --smui-orange: 14 55% 44%;
-  --smui-yellow: 40 70% 34%;
-  --smui-green: 92 35% 34%;
-  --smui-purple: 311 28% 40%;
-  --smui-surface-0: 218 27% 94%;
-  --smui-surface-1: 218 27% 89%;
-  --smui-surface-2: 219 28% 84%;
-  --smui-surface-3: 219 20% 76%;
-  --smui-border-hover: 220 17% 50%;
-
-  --font-sans: "JetBrains Mono", "JetBrains Mono Fallback", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  --font-serif: "JetBrains Mono", "JetBrains Mono Fallback", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  --font-mono: "JetBrains Mono", "JetBrains Mono Fallback", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  --font-heading: "JetBrains Mono", "JetBrains Mono Fallback", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  --radius: 0rem;
-  --shadow-x: 0;
-  --shadow-y: 0;
-  --shadow-blur: 0;
-  --shadow-spread: 0px;
-  --shadow-opacity: 0;
-  --shadow-color: hsl(0 0% 0%);
-  --shadow-2xs: none;
-  --shadow-xs: none;
-  --shadow-sm: none;
-  --shadow: none;
-  --shadow-md: none;
-  --shadow-lg: none;
-  --shadow-xl: none;
-  --shadow-2xl: none;
-  --tracking-normal: 0em;
-  --spacing: 0.25rem;
-  --text-label: 11px;
-  --text-ui: 13px;
-  --text-heading: 22px;
-  --text-stat: 26px;
-  --text-hero: 42px;
 }
 
 .dark {
   color-scheme: dark;
-  --background: hsl(213 16% 12%);
-  --foreground: hsl(213 27% 88%);
-  --card: hsl(217 16% 15.5%);
-  --card-foreground: hsl(213 27% 88%);
-  --popover: hsl(217 16% 15.5%);
-  --popover-foreground: hsl(213 27% 88%);
-  --primary: hsl(193 44% 67%);
-  --primary-foreground: hsl(213 16% 12%);
-  --secondary: hsl(216 15% 19%);
-  --secondary-foreground: hsl(213 27% 88%);
-  --muted: hsl(216 15% 19%);
-  --muted-foreground: hsl(213 14% 65%);
-  --accent: hsl(193 10% 16%);
-  --accent-foreground: hsl(193 44% 67%);
-  --destructive: hsl(355 52% 64%);
-  --destructive-foreground: hsl(219 28% 94%);
-  --border: hsl(217 17% 28%);
-  --input: hsl(217 17% 28%);
-  --ring: hsl(193 44% 67%);
-  --chart-1: hsl(193 44% 67%);
-  --chart-2: hsl(213 32% 52%);
-  --chart-3: hsl(92 28% 65%);
-  --chart-4: hsl(40 71% 73%);
-  --chart-5: hsl(311 24% 63%);
-  --sidebar-background: hsl(217 16% 15.5%);
-  --sidebar: var(--sidebar-background);
-  --sidebar-foreground: hsl(213 27% 88%);
-  --sidebar-primary: hsl(193 44% 67%);
-  --sidebar-primary-foreground: hsl(213 16% 12%);
-  --sidebar-accent: hsl(193 10% 16%);
-  --sidebar-accent-foreground: hsl(193 44% 67%);
-  --sidebar-border: hsl(217 17% 28%);
-  --sidebar-ring: hsl(193 44% 67%);
+  /* Match the viewer’s charcoal surface hierarchy. */
+  --background: oklch(0.28 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.31 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.31 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.546 0.245 262.881);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.34 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.34 0 0);
+  --muted-foreground: oklch(0.75 0 0);
+  --accent: oklch(0.38 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --destructive-foreground: oklch(0.985 0 0);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --sidebar: oklch(0.30 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.38 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
 
-  --smui-frost-1: 176 25% 65%;
-  --smui-frost-2: 193 44% 67%;
-  --smui-frost-3: 210 34% 63%;
-  --smui-frost-4: 213 32% 52%;
-  --smui-red: 355 52% 64%;
-  --smui-orange: 14 51% 63%;
-  --smui-yellow: 40 71% 73%;
-  --smui-green: 92 28% 65%;
-  --smui-purple: 311 24% 63%;
-  --smui-surface-0: 213 16% 12%;
-  --smui-surface-1: 217 16% 15.5%;
-  --smui-surface-2: 216 15% 19%;
-  --smui-surface-3: 215 14% 22%;
-  --smui-border-hover: 216 12% 37%;
-
-  --font-sans: "JetBrains Mono", "JetBrains Mono Fallback", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  --font-serif: "JetBrains Mono", "JetBrains Mono Fallback", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  --font-mono: "JetBrains Mono", "JetBrains Mono Fallback", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  --font-heading: "JetBrains Mono", "JetBrains Mono Fallback", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  --radius: 0rem;
-  --shadow-x: 0;
-  --shadow-y: 0;
-  --shadow-blur: 0;
-  --shadow-spread: 0px;
-  --shadow-opacity: 0;
-  --shadow-color: hsl(0 0% 0%);
-  --shadow-2xs: none;
-  --shadow-xs: none;
-  --shadow-sm: none;
-  --shadow: none;
-  --shadow-md: none;
-  --shadow-lg: none;
-  --shadow-xl: none;
-  --shadow-2xl: none;
-  --text-label: 11px;
-  --text-ui: 13px;
-  --text-heading: 22px;
-  --text-stat: 26px;
-  --text-hero: 42px;
 }
 
-@theme {
+@theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -187,7 +106,6 @@
   --color-chart-3: var(--chart-3);
   --color-chart-4: var(--chart-4);
   --color-chart-5: var(--chart-5);
-  --color-sidebar-background: var(--sidebar-background);
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
@@ -197,47 +115,15 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 
-  --font-sans: "JetBrains Mono", "JetBrains Mono Fallback", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  --font-mono: "JetBrains Mono", "JetBrains Mono Fallback", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  --font-serif: "JetBrains Mono", "JetBrains Mono Fallback", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-  --font-heading: "JetBrains Mono", "JetBrains Mono Fallback", ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
-
-  --radius-sm: var(--radius);
-  --radius-md: var(--radius);
+  --font-sans: ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
-  --radius-xl: var(--radius);
-
-  --shadow-2xs: none;
-  --shadow-xs: none;
-  --shadow-sm: none;
-  --shadow: none;
-  --shadow-md: none;
-  --shadow-lg: none;
-  --shadow-xl: none;
-  --shadow-2xl: none;
-
+  --radius-xl: calc(var(--radius) + 4px);
   --text-label: 11px;
   --text-ui: 13px;
   --text-heading: 22px;
-  --text-stat: 26px;
-  --text-hero: 42px;
-}
-
-@theme inline {
-  --color-smui-frost-1: hsl(var(--smui-frost-1));
-  --color-smui-frost-2: hsl(var(--smui-frost-2));
-  --color-smui-frost-3: hsl(var(--smui-frost-3));
-  --color-smui-frost-4: hsl(var(--smui-frost-4));
-  --color-smui-red: hsl(var(--smui-red));
-  --color-smui-orange: hsl(var(--smui-orange));
-  --color-smui-yellow: hsl(var(--smui-yellow));
-  --color-smui-green: hsl(var(--smui-green));
-  --color-smui-purple: hsl(var(--smui-purple));
-  --color-smui-surface-0: hsl(var(--smui-surface-0));
-  --color-smui-surface-1: hsl(var(--smui-surface-1));
-  --color-smui-surface-2: hsl(var(--smui-surface-2));
-  --color-smui-surface-3: hsl(var(--smui-surface-3));
-  --color-smui-border-hover: hsl(var(--smui-border-hover));
 }
 
 @layer base {
@@ -251,24 +137,13 @@
 
   body {
     @apply min-h-screen bg-background text-foreground antialiased;
-    letter-spacing: var(--tracking-normal);
   }
 
   ::selection {
-    background: hsl(var(--smui-frost-2) / 0.2);
-    color: hsl(var(--smui-frost-2));
-  }
-}
-
-@layer components {
-  .card-glow {
-    transition:
-      border-color 0.15s ease,
-      background-color 0.15s ease,
-      color 0.15s ease;
+    background: color-mix(in oklch, var(--primary) 20%, transparent);
   }
 
-  .card-glow:hover {
-    border-color: hsl(var(--smui-border-hover));
+  @media (prefers-reduced-motion: reduce) {
+    html { scroll-behavior: auto; }
   }
 }
