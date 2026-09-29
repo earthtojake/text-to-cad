@@ -86,7 +86,8 @@ export function SiteHeaderClient({
       <div className="mx-auto flex h-full w-full max-w-[1200px] items-center gap-3 px-4 sm:px-6">
         <Link
           href="/"
-          className="flex min-w-0 items-center gap-2 text-foreground transition hover:text-primary"
+          aria-label="text-to-cad home"
+          className="flex shrink-0 items-center text-foreground transition hover:text-primary"
         >
           <Image
             src="/brand/logo-c.svg"
@@ -97,14 +98,11 @@ export function SiteHeaderClient({
             unoptimized
             className="size-[22px] shrink-0"
           />
-          <span className="min-w-0 truncate text-sm font-medium">
-            text-to-cad
-          </span>
         </Link>
 
         <nav
           aria-label="Primary"
-          className="ml-auto hidden items-center gap-1 sm:flex"
+          className="hidden items-center gap-1 sm:flex"
         >
           <a
             className="rounded-md px-2.5 py-1.5 text-ui text-muted-foreground transition hover:bg-secondary hover:text-foreground"
@@ -121,7 +119,7 @@ export function SiteHeaderClient({
           <VersionLink version={version} />
         </nav>
 
-        <div className="ml-auto flex shrink-0 items-center gap-1 sm:ml-0">
+        <div className="ml-auto flex shrink-0 items-center gap-1">
           <Tooltip>
             <TooltipTrigger asChild>
               <Button
