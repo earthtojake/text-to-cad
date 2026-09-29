@@ -100,11 +100,8 @@ const skillGroups = [
   },
 ];
 
-// Command boxes cap at half the 1200px content shell rather than filling it: a command is a
-// short line, and a full-bleed box puts a lot of empty card to the right of it. A cap, not a
-// width -- a narrow screen still gets the whole column.
 const COMMAND_BOX_CLASS =
-  "min-w-0 max-w-[min(600px,100%)] overflow-hidden rounded-lg border border-border bg-card shadow-xs";
+  "min-w-0 w-full overflow-hidden rounded-lg border border-border bg-card shadow-xs";
 
 function InstallCommand({
   item,
@@ -175,7 +172,7 @@ function SectionIntro({
       >
         {title}
       </h2>
-      <p className="mt-2 max-w-3xl text-sm leading-6 text-muted-foreground">
+      <p className="mt-2 text-sm leading-6 text-muted-foreground">
         {description}
       </p>
     </div>
@@ -206,7 +203,7 @@ export default function Home() {
           <HeroSection />
 
           <section aria-label="Install text-to-cad" className="py-6">
-            <div className="max-w-3xl space-y-3">
+            <div className="w-full space-y-3">
               <h2 className="text-sm font-medium text-foreground">
                 Get Started
               </h2>
@@ -227,9 +224,9 @@ export default function Home() {
 
             <div className="overflow-hidden rounded-xl border border-border bg-card">
               <div className="grid grid-cols-[minmax(0,1fr)] border-b border-border px-3.5 py-2.5 text-xs font-medium text-muted-foreground md:grid-cols-[minmax(9rem,12rem)_minmax(0,1fr)_max-content] md:gap-5 md:pl-0 md:pr-3.5">
-                <span className="md:pl-3.5">skill</span>
-                <span className="hidden md:block">summary</span>
-                <span className="hidden text-right md:block">source</span>
+                <span className="md:pl-3.5">Skill</span>
+                <span className="hidden md:block">Summary</span>
+                <span className="hidden text-right md:block">Source</span>
               </div>
               <ul className="divide-y divide-border">
                 {skillGroups.map((skill) => (
@@ -270,7 +267,7 @@ export default function Home() {
               description="Install text-to-cad with the Skills CLI. Provider-native plugin installs are available as a secondary path."
             />
 
-            <div className="max-w-3xl space-y-3">
+            <div className="w-full space-y-3">
               <SkillsInstallCommand />
               <p className="text-sm leading-6 text-muted-foreground">
                 <span className="text-foreground">Run the same command to update.</span>{" "}
