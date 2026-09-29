@@ -82,20 +82,20 @@ test('web host preserves compact navigation, history, root state and focus refre
     assert.deepEqual(await autoReloadOptions().fetchServerInfo(), { ok: true, identityToken: 'restarted' });
     assert.deepEqual(serverCalls[0], { fresh: true });
     assert.equal(snapshot().navigationPath, null);
-    assert.equal(snapshot().leading.props.title, 'text-to-cad', 'while the file is resolving there are no crumbs, so the app names itself');
+    assert.equal(snapshot().leading.props.title, undefined, 'the brand mark needs no loading placeholder');
     await act(() => {
       catalog = { ...catalog, entries: [{ file: 'one.step' }, { file: 'folder/two.step' }], hydrated: true, refreshing: false, revision: 1 };
       for (const listener of listeners) listener();
     });
     assert.equal(snapshot().navigationPath, 'one.step');
-    assert.equal(snapshot().leading.props.title, '', 'once the crumbs name the file the title goes');
+    assert.equal(snapshot().leading.props.title, undefined);
     // A page load is a file opened directly, so it opens on that file's own default panel
     // (`null`) — a narrow window included — and never on one a previous page left open.
     assert.equal(snapshot().state.panel, null);
     assert.equal('narrowCrumbs' in snapshot(), false);
     assert.equal('fullscreen' in snapshot(), false, 'fullscreen is each viewer\'s own, never the host\'s');
     assert.equal('lifecycle' in snapshot().host, false);
-    assert.equal(window.document.title, 'text-to-cad | one.step');
+    assert.equal(window.document.title, 'CAD | one.step');
     const historyLength = window.history.length;
     await act(() => snapshot().host.navigation.openFile('missing.step'));
     assert.equal(window.history.length, historyLength);
@@ -131,11 +131,12 @@ test('web host preserves compact navigation, history, root state and focus refre
     await act(() => { window.history.replaceState({}, '', '?file=folder/missing.step'); window.dispatchEvent(new window.PopStateEvent('popstate')); });
     assert.equal(snapshot().file, 'folder/missing.step');
     assert.equal(snapshot().navigationPath, 'folder/missing.step', 'a missing file, nested or not, keeps its crumbs once the catalog has answered');
-    assert.equal(snapshot().leading.props.title, '', 'a file, even a missing one, is named by its crumbs');
-    // No file at all: the app names itself beside its icon, where the crumbs would be.
+    assert.equal(snapshot().leading.props.title, undefined);
+    // With no file open, the brand mark remains without placeholder text.
     await act(() => { window.history.replaceState({}, '', '/'); window.dispatchEvent(new window.PopStateEvent('popstate')); });
     assert.ok(!snapshot().file);
-    assert.equal(snapshot().leading.props.title, 'text-to-cad');
+    assert.equal(snapshot().leading.props.title, undefined);
+    assert.equal(window.document.title, 'CAD');
     await act(() => { window.history.replaceState({}, '', '?file=one.step'); window.dispatchEvent(new window.PopStateEvent('popstate')); });
     await act(() => window.dispatchEvent(new window.Event('focus')));
     assert.equal(calls.length, 1);

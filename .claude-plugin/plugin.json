@@ -1,7 +1,7 @@
 {
   "name": "cad",
   "version": "0.7.3",
-  "description": "CAD, robotics, fabrication, and local review skills.",
+  "description": "Give your agent CAD superpowers.",
   "author": {
     "name": "earthtojake",
     "url": "https://github.com/earthtojake"

@@ -283,16 +283,16 @@ and web stay consistent without host-specific copies of those controls.
 
 ### Compact navigation
 
-The web viewer has one navigation row. The native-GLB mark sits before breadcrumbs,
-and with no file open the app names itself "text-to-cad" beside it. At the right
+The web viewer has one navigation row. The shaded blue C mark (20px) sits before
+breadcrumbs, including while loading or with no file open. Browser titles use
+"CAD | <filename>", or "CAD" when no file is selected. At the right
 end, the version/update dropdown comes first, then the renderer's snapshot action,
 and Show files. The dropdown contains release
 instructions, release notes, GitHub and Discord. Appearance is injected as an icon-bearing dropdown beside Projection in
-the Display panel's Display section, below the full-width Mode selector. The logo plays its existing native
-GLB animation on hover through the shared LoadingIcon, respecting reduced motion. `ViewerBrand`, `ViewerLinks` and `ViewerAppearance` stay web-owned;
+the Display panel's Display section, below the full-width Mode selector. The original animated mark remains the shared LoadingIcon for loading states. `ViewerBrand`, `ViewerLinks` and `ViewerAppearance` stay web-owned;
 `FileViewer.leading`, `navigationActions` and `displayActions` provide the shared slots.
-The web favicon assets are static copies of the GLB-derived docs favicon, with no
-runtime dependency between apps. Refresh them together when that mark changes.
+The web logo and favicons are generated alongside the docs brand assets, with no
+runtime dependency between apps. See [the brand recipe](../../scripts/brand/README.md).
 
 The web camera action copies only the viewport PNG through guarded
 `POST /__cad/clipboard`, avoiding browser clipboard permission prompts. The local

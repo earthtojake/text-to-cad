@@ -4,18 +4,18 @@
     "name": "earthtojake"
   },
   "interface": {
-    "displayName": "text-to-cad"
+    "displayName": "CAD"
   },
   "metadata": {
-    "description": "CAD, robotics, fabrication, and local review plugins."
+    "description": "Give your agent CAD superpowers."
   },
-  "description": "CAD, robotics, fabrication, and local review plugins.",
+  "description": "Give your agent CAD superpowers.",
   "version": "0.7.3",
   "plugins": [
     {
       "name": "cad",
       "source": "./",
-      "description": "CAD, robotics, fabrication, and local review skills.",
+      "description": "Give your agent CAD superpowers.",
       "version": "0.7.3",
       "author": {
         "name": "earthtojake"

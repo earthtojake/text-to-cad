@@ -261,65 +261,6 @@
 }
 
 @layer components {
-  @keyframes ascii-terminal-reveal {
-    0% {
-      clip-path: inset(0 100% 0 0);
-      opacity: 1;
-    }
-
-    82% {
-      clip-path: inset(0 0 0 0);
-      opacity: 1;
-    }
-
-    100% {
-      clip-path: inset(0 0 0 0);
-      opacity: 1;
-    }
-  }
-
-  @keyframes ascii-terminal-sheen {
-    0% {
-      transform: translateX(-115%);
-    }
-
-    72% {
-      transform: translateX(115%);
-    }
-
-    100% {
-      transform: translateX(115%);
-    }
-  }
-
-  .ascii-terminal-reveal {
-    animation: ascii-terminal-reveal 1.05s steps(16, end) both;
-    overflow: hidden;
-  }
-
-  .ascii-terminal-reveal::after {
-    animation: ascii-terminal-sheen 1.05s ease-out both;
-    background: linear-gradient(
-      90deg,
-      transparent 0%,
-      color-mix(in srgb, var(--primary) 8%, transparent) 34%,
-      var(--primary) 50%,
-      color-mix(in srgb, var(--foreground) 45%, transparent) 62%,
-      transparent 100%
-    );
-    content: "";
-    inset: 0;
-    pointer-events: none;
-    position: absolute;
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .ascii-terminal-reveal,
-    .ascii-terminal-reveal::after {
-      animation: none;
-    }
-  }
-
   .card-glow {
     transition:
       border-color 0.15s ease,

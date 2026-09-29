@@ -51,7 +51,7 @@ const client = createCadClient({ origin: '', shouldPoll: () => document.visibili
 let icon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
 if (!icon) { icon = document.createElement('link'); icon.rel = 'icon'; document.head.append(icon); }
 icon.type = 'image/png'; icon.href = faviconUrl;
-document.title = 'text-to-cad';
+document.title = 'CAD';
 const controller = new AbortController();
 function dispose() { controller.abort(); root.unmount(); client.dispose(); window.removeEventListener('pagehide', onPageHide); }
 function onPageHide(event: PageTransitionEvent) { if (!event.persisted) dispose(); }

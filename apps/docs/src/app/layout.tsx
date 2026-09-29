@@ -75,13 +75,13 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: "/favicon.ico?v=mesh-blue", type: "image/x-icon" },
+      { url: "/favicon.ico?v=soft-relief-c", type: "image/x-icon" },
     ],
     shortcut: [
-      { url: "/favicon.ico?v=mesh-blue", type: "image/x-icon" },
+      { url: "/favicon.ico?v=soft-relief-c", type: "image/x-icon" },
     ],
     apple: [
-      { url: "/favicon.png?v=mesh-blue", type: "image/png" },
+      { url: "/favicon.png?v=soft-relief-c", type: "image/png" },
     ],
   },
   robots: {

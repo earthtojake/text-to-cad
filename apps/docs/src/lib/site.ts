@@ -1,6 +1,6 @@
 const DEFAULT_SITE_ORIGIN = "https://www.texttocad.dev";
-const SITE_DESCRIPTION = "A library of agent skills for CAD, CAE and CAM";
-const SITE_TITLE = `text-to-cad | ${SITE_DESCRIPTION}`;
+const SITE_DESCRIPTION = "Give your agent CAD superpowers.";
+const SITE_TITLE = `text-to-cad | ${SITE_DESCRIPTION.replace(/\.$/, "")}`;
 
 function normalizeOrigin(value: string | undefined, fallback: string) {
   const candidate = value?.trim() || fallback;
