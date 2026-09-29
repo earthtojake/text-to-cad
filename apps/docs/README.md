@@ -111,8 +111,8 @@ actions use muted shades of the logo's pastel blue through shadcn semantic
 tokens: #2c7197 in light mode and #30779d in dark mode, with #f5fbff labels.
 Text contrast is 5.14:1 and 4.73:1 respectively; the solid darker hover shades
 also exceed 4.5:1. Focus rings use a deeper brand blue on white and the logo's
-pale highlight on charcoal. The Copy button under Get Started is the primary
-action; other copy buttons stay secondary. Get Started uses the same heading
+pale highlight on charcoal. All installation Copy buttons use the same blue
+primary action style. Get Started uses the same heading
 scale as Skills. Install boxes and explanatory text fill the content width.
 Command text remains monospace. The unboxed wordmark and prominent tagline sit above
 the independently framed CAD demo. The app owns

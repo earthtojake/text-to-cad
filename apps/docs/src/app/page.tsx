@@ -120,6 +120,7 @@ function InstallCommand({
         <CopyButton
           text={item.command}
           label={`Copy ${item.agent} install command`}
+          prominent
           compact
         />
       </div>
@@ -268,7 +269,7 @@ export default function Home() {
             />
 
             <div className="w-full space-y-3">
-              <SkillsInstallCommand />
+              <SkillsInstallCommand prominent />
               <p className="text-sm leading-6 text-muted-foreground">
                 <span className="text-foreground">Run the same command to update.</span>{" "}
                 <code className="text-foreground">add</code> re-fetches the package and
