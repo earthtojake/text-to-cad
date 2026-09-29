@@ -11,7 +11,7 @@ Use this reference when editing robot-description structure, frame placement, me
 5. Apply URDF frame semantics exactly: joint origin in parent frame, child link frame at joint frame, joint axis in joint frame, visual/collision/inertial origins in link frame (see `references/frame-semantics.md`).
 6. Author links, joints, limits, axes, origins, inertials, and geometry per `references/authoring-contract.md`. Compute derived numbers — inertia tensors, unit conversions, mirrored transforms — with formulas or a helper script; never freehand them (see `references/inertials.md`).
 7. Validate with `cadgen urdf validate <file.urdf>` and fix findings until clean.
-8. Run the rest of the verification recipe in `references/validation.md`: external tools when available, then a `$cad-viewer` sweep of every movable joint against the ledger's positive-motion statements.
+8. Run the rest of the verification recipe in `references/validation.md`: external tools when available, then a [CAD Viewer](../SKILL.md#cad-viewer) sweep of every movable joint against the ledger's positive-motion statements.
 9. Report smoke tests run, checks skipped, and remaining assumptions.
 
 ## Spatial-Reasoning Guardrails

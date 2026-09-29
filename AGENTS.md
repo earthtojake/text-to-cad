@@ -150,7 +150,7 @@ for the full flow, the resume path, the rehearsal, and local/manual fallbacks.
 - The CAD Viewer is `cadgen viewer`: the server is `cadgen.viewer` (Python, in
   `packages/cadgen`), the React client's source is `apps/web/` and its build
   ships in the wheel at `cadgen/_runtime/viewer` (built, never committed; a
-  checkout serves `apps/web/dist`). The cad-viewer skill is instructions over that verb.
+  checkout serves `apps/web/dist`). The CAD, DXF and robot-description skills document that verb directly.
   Nothing in `cadgen.viewer` imports the CAD kernel at module scope — the one
   kernel action, importing a foreign STEP, is a compile job in cadgen's build
   pool, never work the server process does.

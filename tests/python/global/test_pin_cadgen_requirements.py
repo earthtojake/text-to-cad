@@ -125,7 +125,7 @@ class PinScriptBehaviourTest(unittest.TestCase):
 
     def test_pins_every_manifest_it_finds(self):
         a = self._write("skills/cad/requirements.txt", f"{UNPINNED}\n")
-        b = self._write("skills/cad-viewer/requirements.txt", f"{UNPINNED}\n")
+        b = self._write("skills/urdf/requirements.txt", f"{UNPINNED}\n")
         c = self._write("skills/dxf/requirements.txt", f"{UNPINNED}\n")
         self._run()
         for path in (a, b, c):

@@ -9,7 +9,7 @@
 #
 # The command below is that command: `cadgen viewer --host 127.0.0.1 --json`, spelled
 # `python -m cadgen.viewer` so the interpreter is explicit. Keep it identical to the one
-# in skills/cad-viewer/SKILL.md; if the doc changes, this changes with it. Launching is
+# in skills/cad/SKILL.md; keep its launch options aligned with this test. Launching is
 # unconditional (the server rolls to a free port and prints the real URL/port), so this
 # script chooses no port: it reads the port from the --json line, exactly as an agent
 # does. It serves the client the WHEEL ships -- cadgen/_runtime/viewer, written by
@@ -39,7 +39,7 @@ export CADGEN_VIEWER_DIST="$RUNTIME"
 log="$(mktemp)"
 serve_root="$(mktemp -d)"
 # This is the interpreter that plays the role of "the one that installed
-# skills/cad-viewer/requirements.txt" -- the server is a module of that cadgen.
+# skills/cad/requirements.txt" -- the server is a module of that cadgen.
 #
 # Resolution FALLS BACK instead of demanding a repo venv, because there are two
 # venv-less callers and both are ordinary:

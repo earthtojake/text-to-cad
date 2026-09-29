@@ -241,7 +241,7 @@ class ExplicitPort(LauncherFixture):
 class AnnounceIsConnectable(LauncherFixture):
     """The printed URL is connectable the instant it appears.
 
-    The cad-viewer skill tells an agent to read the URL the command prints and
+    The CAD skills tell an agent to read the URL the command prints and
     fetch it; the launch smoke test does the same. Both are only sound if the
     announce follows the bind: the socket must be bound and LISTENING (and the
     real app attached) before either the human ``CAD Viewer URL:`` line or the

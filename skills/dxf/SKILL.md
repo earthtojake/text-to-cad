@@ -1,6 +1,6 @@
 ---
 name: dxf
-description: Generate, regenerate, and validate 2D DXF drawings from Python build123d sources. Use for DXF files, `.py` drawing scripts, @dxf models, 2D profiles, outlines, templates, gaskets, panels, flat patterns, laser/plasma/waterjet cut layouts, and 2D drawing exports of CAD geometry.
+description: Generate, regenerate, and validate 2D DXF drawings from Python build123d sources. Use for DXF files, `.py` drawing scripts, @dxf models, 2D profiles, outlines, templates, gaskets, panels, flat patterns, laser/plasma/waterjet cut layouts, and 2D drawing exports of CAD geometry. Open and visually review existing DXF files in CAD Viewer.
 ---
 
 # DXF generation and validation
@@ -277,7 +277,7 @@ is rendered; a job's `output.renderScale` and `output.transparent` still apply.
 
 No CLI inspects an existing `.dxf`. For entity/layer checks read it with `ezdxf`
 directly (it arrives with build123d), and `validate_dxf_file` for the drawing checks;
-review geometry visually with `$cad-viewer`.
+review geometry visually in CAD Viewer (see [Viewer integration](#viewer-integration)).
 
 ## Workflow
 
@@ -295,6 +295,40 @@ python path/to/source.py --force
 
 ## Viewer integration
 
+After creating or updating DXF drawings, you **must run the viewer
+launch command** and return a live link to each created or updated artifact.
+
+Run the command even if a viewer may already be running: it starts or reuses
+an instance for this workspace automatically. Do not skip this step because
+snapshots or geometry validation already passed. For a request only to open or
+visually review an existing file, use this section directly; no authoring or
+regeneration is required.
+
+```bash
+cd /absolute/path/to/model-workspace
+cadgen viewer --host 127.0.0.1 --json
+```
+
+Launch from the user's model workspace, usually the project's `models/`
+directory or a suitable common parent of the requested files. The cwd is the
+served root and determines the browsable catalog; do not launch from the skill
+directory or an artifact's deep output folder.
+
+Read `url` from the final JSON stdout line; do not guess the port. For each
+artifact, verify it exists beneath the served root, then append
+`?file=<URL-encoded path relative to that root>` to the returned origin. For
+example, `DXF/panel.dxf` becomes `<returned-origin>?file=DXF%2Fpanel.dxf`.
+Return one live link per artifact; for directory review, return the origin alone.
+An artifact outside the served root needs a viewer launched from its workspace.
+
+Use the interpreter where this skill's requirements are installed. If `cadgen`
+is not on PATH, use `python -m cadgen.cli viewer --host 127.0.0.1 --json` with
+that interpreter. Interactive viewing does not require Playwright's Chromium.
+`cadgen viewer list` shows running instances and their roots. Do not stop an
+existing viewer unless asked; `cadgen viewer stop --port <n>` stops that instance.
+If launching fails, report the failure explicitly and return the artifacts and
+available validation results.
+
 The CAD Viewer catalogs `.dxf` files only (artifacts, never scripts) and is a static
 visualization tool: it draws the `.dxf` that exists on disk — a straight 2D render of
 the sheet, with no 3D view — and never runs a script. A drawing with no `.dxf` yet
@@ -302,7 +336,7 @@ simply does not appear until its script has been run; regenerating after edits i
 likewise the script's job. A DXF pane has no tools, no toolbar and no sidebar: a
 drawing is a finished 2D document, so the pane pans, zooms and fits, and nothing else.
 There is no in-viewer export. An imported `.dxf` renders directly with no artifact
-management.
+management. Drag to pan, wheel or pinch to zoom, and double-click to fit.
 
 ## Validation
 
@@ -342,10 +376,8 @@ Report only checks that actually ran.
 
 ## Handoff
 
-After creating or modifying DXF drawings, you must ALWAYS hand the explicit `.dxf`
-file path(s) to `$cad-viewer` when that skill is installed and include its live
-viewer link(s) in the final response. If `$cad-viewer` is unavailable or startup fails, report
-that and rely on `ezdxf` checks instead of silently omitting the handoff.
+Run the mandatory launch step in [Viewer integration](#viewer-integration)
+and include the resulting live links. Report any launch failure explicitly.
 
 Final responses should include generated files, returned viewer links, validation
 actually run, and assumptions.

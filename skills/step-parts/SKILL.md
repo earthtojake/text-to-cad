@@ -26,10 +26,6 @@ When a CAD assembly includes named off-the-shelf actuators, servos, motors, elec
 5. When the user asks to download or save a STEP file, download its `stepUrl`, then verify the file with the record's `sha256` when present.
 6. Return the local path when downloaded, plus the selected part id and page/API URLs so the user can trace provenance.
 
-## CAD Viewer Handoff
-
-After completing step.parts work that creates or updates a local `.step` or `.stp` file, you must ALWAYS hand the explicit file path to `$cad-viewer` when that skill is installed. `$cad-viewer` must start CAD Viewer if it is not already running and return link(s) to the relevant created or updated file(s); if `$cad-viewer` is unavailable or startup fails, report that instead of silently omitting the handoff.
-
 ## Bundled Downloader
 
 Use `scripts/download_step_part.py` for deterministic search, download, and checksum verification:

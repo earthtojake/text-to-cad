@@ -163,7 +163,7 @@ jobs:
           "$RUNNER_TEMP/install-test/bin/python" -m pip install --quiet --no-deps "$wheel"
           (cd "$RUNNER_TEMP" && "$RUNNER_TEMP/install-test/bin/cadgen" --help >/dev/null)
           (cd "$RUNNER_TEMP" && "$RUNNER_TEMP/install-test/bin/cadgen" viewer --help >/dev/null)
-          "$RUNNER_TEMP/install-test/bin/cadgen" doctor skills/cad-viewer
+          "$RUNNER_TEMP/install-test/bin/cadgen" doctor skills/cad
           scripts/test/test-installed.sh --wheel "$wheel"
 
       # The distribution is kept whether or not it ships: a rehearsal's artifact is

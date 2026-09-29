@@ -50,7 +50,7 @@ For each non-fixed joint:
 
 ### CAD Viewer static review
 
-After generating or modifying an `.sdf`, hand the explicit path to `$cad-viewer` for a live viewer link when available.
+After generating or modifying an `.sdf`, run the [CAD Viewer launch command](../SKILL.md#cad-viewer) and return a live link. Report any launch failure explicitly.
 
 - confirm direct model links, joints, frames, visuals, and collisions are placed correctly;
 - confirm includes, plugins, sensors, lights, nested models, and unsupported geometry are listed as static metadata;
@@ -68,7 +68,7 @@ For each sensor or plugin:
 
 ### Visual review
 
-When CAD Viewer or an equivalent viewer is available through `$cad-viewer`, return the viewer link. Visual review is useful but insufficient: it can catch gross placement and mesh problems, but it cannot prove axis frames, inertials, dynamics, or plugin behavior.
+Return the live CAD Viewer link, or explicitly report why launching failed. Visual review is useful but insufficient: it can catch gross placement and mesh problems, but it cannot prove axis frames, inertials, dynamics, or plugin behavior.
 
 ## Report format
 

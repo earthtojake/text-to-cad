@@ -12,7 +12,7 @@ Use this reference when editing SDF robot model structure, world structure, mesh
 6. For every pose and axis, state the frame in which it is expressed. Write `relative_to` / `expressed_in` explicitly wherever ambiguity would otherwise remain (see `references/frame-semantics.md`).
 7. Author the XML per the golden skeletons in `references/examples.md`. Compute derived numbers — inertia tensors, unit conversions — with formulas or a throwaway helper script; never freehand them.
 8. Validate with `cadgen sdf validate <file.sdf>`; review errors as structural guardrails, not exhaustive simulator proof.
-9. Hand new or modified `.sdf` files to `$cad-viewer` for live viewer links when available.
+9. Run the [CAD Viewer launch command](../SKILL.md#cad-viewer) for new or modified `.sdf` files and return live links. Report any launch failure explicitly.
 10. Run available smoke tests (`gz sdf --check`, simulator load).
 11. Report assumptions and skipped checks.
 
@@ -65,7 +65,7 @@ For plugins and sensors, record:
 
 Do not invent plugin parameters. Incorrect plugin XML can pass lightweight validation and still fail at simulator load time.
 
-CAD Viewer reviews SDF files as static model/world structure through `$cad-viewer` links. Do not add a `cad-viewer-input-motion` plugin to get motion out of it — the Viewer recognizes that plugin only to report that it is ignored. Use simulator-native controllers, plugins, or test harnesses for simulator behavior.
+CAD Viewer reviews SDF files as static model/world structure through live viewer links. Do not add a `cad-viewer-input-motion` plugin to get motion out of it — the Viewer recognizes that plugin only to report that it is ignored. Use simulator-native controllers, plugins, or test harnesses for simulator behavior.
 
 ## Existing SDF inspection
 

@@ -34,11 +34,6 @@ const skillGroups = [
       "Creates and edits CAD models from plain-language or image requests, with STEP as the main output along with options to export to STL, 3MF and GLB.",
   },
   {
-    name: "CAD Viewer",
-    path: "skills/cad-viewer",
-    summary: "Shows local browser previews for CAD and robot files.",
-  },
-  {
     name: "step.parts",
     path: "skills/step-parts",
     summary:

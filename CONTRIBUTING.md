@@ -554,7 +554,7 @@ is involved) and deletes the branch. The merged commit is THE release commit.
    assertion that the wheel about to ship really holds `_runtime/node`,
    `_runtime/browser` and `_runtime/viewer`.
 3. Install test: the built wheel into a fresh venv — `cadgen --help`, `cadgen
-   viewer --help`, `cadgen doctor skills/cad-viewer` — then
+   viewer --help`, `cadgen doctor skills/cad` — then
    `scripts/test/test-installed.sh --wheel <built-wheel>`; the distribution is uploaded as a workflow
    artifact (`cadgen-<version>`).
 4. **On `main` only:** PyPI upload (`skip-existing`, so a rerun is a no-op),

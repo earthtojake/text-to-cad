@@ -1,6 +1,6 @@
 ---
 name: urdf
-description: URDF robot description authoring and validation. Use when creating, editing, inspecting, validating, or debugging `.urdf` files, robot links, joints, limits, inertials, visual/collision geometry, mesh references, frame conventions, or robot-description artifacts. Use the SRDF skill for MoveIt2 semantic groups and IK/path-planning semantics; use the CAD skill for STEP/STL/3MF/DXF/GLB outputs.
+description: URDF robot description authoring and validation. Use when creating, editing, inspecting, validating, or debugging `.urdf` files, robot links, joints, limits, inertials, visual/collision geometry, mesh references, frame conventions, or robot-description artifacts. Use the SRDF skill for MoveIt2 semantic groups and IK/path-planning semantics; use the CAD skill for STEP/STL/3MF/DXF/GLB outputs. Open and visually review existing URDF files in CAD Viewer.
 ---
 
 # URDF
@@ -20,7 +20,7 @@ carries the Python build runtime and the JavaScript it executes. Install it once
 python -m pip install -r requirements.txt
 ```
 
-Rendering additionally needs a browser, which pip cannot supply:
+Snapshots additionally need a browser, which pip cannot supply:
 
 ```bash
 python -m playwright install chromium
@@ -37,9 +37,46 @@ python -m playwright install chromium
 7. Validate every created or modified `.urdf` with `cadgen urdf validate` before reporting completion. See `references/validation.md`.
 8. Helper scripts are allowed and encouraged for computation, but they are scaffolding, not the artifact's source of truth. For complex or genuinely parametric models it is reasonable to keep a model-local helper script on disk next to related source code (for example STEP generator sources) and note it in the ledger; this is optional, and the checked-in `.urdf` remains canonical.
 
-## CAD Viewer Handoff
+## CAD Viewer
 
-After completing URDF work that creates or modifies a `.urdf`, you must ALWAYS hand the explicit file path to `$cad-viewer` when that skill is installed. `$cad-viewer` must start CAD Viewer if it is not already running and return link(s) to the relevant created or updated file(s); if `$cad-viewer` is unavailable or startup fails, report that instead of silently omitting the handoff.
+After creating or updating URDF files, you **must run the viewer
+launch command** and return a live link to each created or updated artifact.
+
+Run the command even if a viewer may already be running: it starts or reuses
+an instance for this workspace automatically. Do not skip this step because
+snapshots or geometry validation already passed. For a request only to open or
+visually review an existing file, use this section directly; no authoring or
+regeneration is required.
+
+```bash
+cd /absolute/path/to/model-workspace
+cadgen viewer --host 127.0.0.1 --json
+```
+
+Launch from the user's model workspace, usually the project's `models/`
+directory or a suitable common parent of the requested files. The cwd is the
+served root and determines the browsable catalog; do not launch from the skill
+directory or an artifact's deep output folder.
+
+Read `url` from the final JSON stdout line; do not guess the port. For each
+artifact, verify it exists beneath the served root, then append
+`?file=<URL-encoded path relative to that root>` to the returned origin. For
+example, `robots/arm.urdf` becomes `<returned-origin>?file=robots%2Farm.urdf`.
+Return one live link per artifact; for directory review, return the origin alone.
+An artifact outside the served root needs a viewer launched from its workspace.
+
+Use the interpreter where this skill's requirements are installed. If `cadgen`
+is not on PATH, use `python -m cadgen.cli viewer --host 127.0.0.1 --json` with
+that interpreter. Interactive viewing does not require Playwright's Chromium.
+`cadgen viewer list` shows running instances and their roots. Do not stop an
+existing viewer unless asked; `cadgen viewer stop --port <n>` stops that instance.
+If launching fails, report the failure explicitly and return the artifacts and
+available validation results.
+
+Open the `.urdf` with its referenced meshes available. After authoring or
+changing the robot, review mesh scale and placement, then sweep every movable
+joint against the design ledger's positive-motion statements. Returning a link
+alone does not complete that review; report any sweep you could not perform.
 
 ## Workflow
 

@@ -1,6 +1,6 @@
 ---
 name: srdf
-description: MoveIt2 SRDF authoring, validation, and planning-semantics workflow. Use when creating, editing, inspecting, or validating `.srdf` files, MoveIt planning groups, virtual joints, passive joints, end effectors, group states, disabled collisions, URDF-paired planning semantics, or SRDF handoff for live review. Use the URDF skill for robot structure, the SDF skill for simulator descriptions, and the cad-viewer skill for rendering and live review links.
+description: MoveIt2 SRDF authoring, validation, and planning-semantics workflow. Use when creating, editing, inspecting, or validating `.srdf` files, MoveIt planning groups, virtual joints, passive joints, end effectors, group states, disabled collisions, URDF-paired planning semantics, or SRDF handoff for live review. Use the URDF skill for robot structure and the SDF skill for simulator descriptions. Open and visually review existing SRDF files in CAD Viewer.
 ---
 
 # SRDF
@@ -22,7 +22,7 @@ carries the Python build runtime and the JavaScript it executes. Install it once
 python -m pip install -r requirements.txt
 ```
 
-Rendering additionally needs a browser, which pip cannot supply:
+Snapshots additionally need a browser, which pip cannot supply:
 
 ```bash
 python -m playwright install chromium
@@ -36,9 +36,46 @@ python -m playwright install chromium
 
 Do not place geometry, inertials, joint origins, link poses, mesh references, physical joint limits, transmissions, or `ros2_control` interfaces in SRDF.
 
-## CAD Viewer Handoff
+## CAD Viewer
 
-After completing SRDF work that creates or modifies a `.srdf`, you must ALWAYS hand the explicit file path to `$cad-viewer` when that skill is installed. `$cad-viewer` must start CAD Viewer if it is not already running and return link(s) to the relevant created or updated file(s). If `$cad-viewer` is unavailable or startup fails, report that instead of silently omitting the handoff.
+After creating or updating SRDF files, you **must run the viewer
+launch command** and return a live link to each created or updated artifact.
+
+Run the command even if a viewer may already be running: it starts or reuses
+an instance for this workspace automatically. Do not skip this step because
+snapshots or geometry validation already passed. For a request only to open or
+visually review an existing file, use this section directly; no authoring or
+regeneration is required.
+
+```bash
+cd /absolute/path/to/model-workspace
+cadgen viewer --host 127.0.0.1 --json
+```
+
+Launch from the user's model workspace, usually the project's `models/`
+directory or a suitable common parent of the requested files. The cwd is the
+served root and determines the browsable catalog; do not launch from the skill
+directory or an artifact's deep output folder.
+
+Read `url` from the final JSON stdout line; do not guess the port. For each
+artifact, verify it exists beneath the served root, then append
+`?file=<URL-encoded path relative to that root>` to the returned origin. For
+example, `robots/arm.srdf` becomes `<returned-origin>?file=robots%2Farm.srdf`.
+Return one live link per artifact; for directory review, return the origin alone.
+An artifact outside the served root needs a viewer launched from its workspace.
+
+Use the interpreter where this skill's requirements are installed. If `cadgen`
+is not on PATH, use `python -m cadgen.cli viewer --host 127.0.0.1 --json` with
+that interpreter. Interactive viewing does not require Playwright's Chromium.
+`cadgen viewer list` shows running instances and their roots. Do not stop an
+existing viewer unless asked; `cadgen viewer stop --port <n>` stops that instance.
+If launching fails, report the failure explicitly and return the artifacts and
+available validation results.
+
+Open the `.srdf` beside its paired `.urdf`: pairing requires the same robot
+name and exactly one matching URDF in that folder. Review planning groups,
+named group states and joint controls. Visual review does not establish
+collision or planning correctness.
 
 ## Required workflow
 
