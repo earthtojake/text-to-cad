@@ -17,7 +17,7 @@ models/
 ├── assemblies/       demo ASSEMBLIES, one src/<assembly>/ group each
 ├── drawings/         2D `@dxf` drawings, one script each
 ├── thang010146/      imported, annotated mechanism assemblies
-├── f1/ f14d/ hypercar/ moonwatch/ motorbike/ qdd_actuator/ w16/
+├── f1/ f14d/ hypercar/ moonwatch/ motorbike/ qdd_actuator/ radial/ w16/
 ├── tendon_hand/      tendon-driven research hand (source-only)
 ├── falcon_heavy/     SpaceX public-source reconstruction
 ├── juno/ lyra/       authored robot description packages (URDF/SRDF)
@@ -113,6 +113,12 @@ Models that need a **folder of their own** rather than a single loose script.
   one virtual `drive` DOF gears the rotor, carrier, both ball cages and the
   three planets through the 4.5:1 planetary reduction, with the exploded
   teardown embedded in `qdd_actuator.py`.
+- [radial/](radial/src/README.md): nine-cylinder supercharged radial aircraft engine, as a
+  museum restoration. Eighteen system models are linked by `src/radial.py`, with a
+  master/articulating rod train, a 1/8-speed cam ring, a 3:2 planetary reduction and a
+  10:1 blower. It has a sectioned cylinder, a crankcase window, and `running` and
+  `explode` clips. Its hand-off notes (`REPORT.md`, `GAUNTLET.md`, `BUILDING.md`,
+  `BUGS.md`) sit beside the source.
 - [w16/](w16/src/README.md): quad-turbo 8.0 L W16, sectioned museum cutaway —
   thirteen system models linked by `src/w16.py`, with `crank` and `explode`
   clips from its embedded `ANIMATION_JS`. Its hand-off notes (`REPORT.md`,

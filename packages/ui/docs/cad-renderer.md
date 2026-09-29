@@ -1240,7 +1240,11 @@ No component renders for a playing frame. The viewer's pose pass is one function
 with two callers: React runs it when something it reads changes (a scrub, a
 pose, a display setting, a new mesh) and publishes it through a ref; while a
 routine plays, the animation clock calls that same function once per tick
-(`usePlaybackFrames`; the GLB renderer drives its mixer the same way). The
+(`usePlaybackFrames`; the GLB renderer drives its mixer the same way). Both
+callers draw the routine at ONE time: while it plays, that is the clock's, never
+the time React holds (where playback started, written back only when it stops),
+so a pass React re-runs mid-play — a detail swap, a progressive publish, a display
+change — draws the frame the next tick would (`playbackFrameTime`). The
 scrubber is the clock's only React subscriber. Because the pass runs inside
 the tick, the clock's adaptive pacing measures a frame's real cost. A frame that
 only moved parts skips material and instance-membership reconciliation: the

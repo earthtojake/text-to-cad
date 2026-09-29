@@ -112,6 +112,28 @@ test('conservative projection pruning agrees with exhaustive segments on a multi
     assert.ok(Math.abs(actual.distanceSq-expected.distanceSq)<1e-10);
   }
 });
+test('projection onto a coil spring helix lands on the exact closest point and returns that point\'s frame',()=>{
+  // A valve spring's rest centerline is a multi-turn helix of cubic segments, and a routine that
+  // compresses the springs projects every vertex of every spring onto one. The closest point is
+  // solved (Newton from the nearest table sample), not bracketed to a tolerance.
+  const segments=[],r=17,k=4/3*Math.tan(Math.PI/8),pitch=6;
+  for(let j=0;j<22;j++) {
+    const a=j*Math.PI/2,b=a+Math.PI/2,z=j*pitch/4;
+    segments.push({kind:'bezier',points:[[r*Math.cos(a),r*Math.sin(a),z],[r*(Math.cos(a)-k*Math.sin(a)),r*(Math.sin(a)+k*Math.cos(a)),z+pitch/12],[r*(Math.cos(b)+k*Math.sin(b)),r*(Math.sin(b)-k*Math.cos(b)),z+pitch/6],[r*Math.cos(b),r*Math.sin(b),z+pitch/4]]});
+  }
+  const path=compileTubePath({normal:[0,0,1],segments});
+  for(let j=1;j<200;j++) {
+    const distance=path.length*j/200,frame=sampleTubePath(path,distance),angle=j*2.39996;
+    // A point on the wire's surface: 2 mm out from the centerline, in its normal plane.
+    const p=frame.point.map((v,i)=>v+2*(Math.cos(angle)*frame.normal[i]+Math.sin(angle)*frame.binormal[i]));
+    const projected=projectTubePath(path,p);
+    assert.ok(Math.abs(projected.distance-distance)<1e-9,`distance ${projected.distance} != ${distance}`);
+    assert.ok(Math.abs(Math.hypot(...projected.transverse)-2)<1e-9);
+    assert.ok(Math.abs(projected.axial)<1e-9);
+    const sampled=sampleTubePath(path,projected.distance);
+    for(const key of ['point','tangent','normal','binormal','curvature']) near(projected.frame[key],sampled[key],1e-9);
+  }
+});
 test('broken centerlines and unknown keys fail loudly rather than drawing plausible wrong ropes',()=>{
   assert.throws(()=>compileTubePath({normal:[0,0,1],segments:[line([0,0,0],[1,0,0]),line([2,0,0],[3,0,0])]}),/discontinuity/);
   assert.throws(()=>compileTubePath({normal:[0,0,1],segments:[line([0,0,0],[1,0,0]),line([1,0,0],[1,1,0])]}),/tangent-continuous/);

@@ -42,7 +42,11 @@ scene-quality tier up (`kit/viewport/renderProfile.js`) without changing the Dis
 setting. The chrome does not report detail levels: the STEP renderer
 records first geometry and standard detail for benchmark harnesses only
 (`window.__cadViewerQuality`, `useViewportQualityStatus`), and background file
-writing stays quiet.
+writing stays quiet. That record lives in the STEP surface, so it takes a scheduler
+snapshot only when the status it derives would change (`lodSnapshotStatusKey`): a
+preview orbit resamples the camera on every frame, and a snapshot per frame would
+re-render the whole surface per frame — while a model streams in, redoing the
+partial model's derived state each time.
 
 ## 2. What refinement samples
 

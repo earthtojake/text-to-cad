@@ -5,7 +5,7 @@ import {
 } from "@text-to-cad/core/common/animationClock.js";
 import { createGlbAnimationRuntime, disposeGlbAnimationRuntime, setGlbAnimationTime } from "@text-to-cad/core/lib/render/glbAnimationRuntime.js";
 import { createAnimationClock } from "../kit/tools/playbar/animationClock.js";
-import { usePlaybackFrames } from "../kit/tools/playbar/usePlaybackFrames.js";
+import { playbackFrameTime, usePlaybackFrames } from "../kit/tools/playbar/usePlaybackFrames.js";
 
 function clipRows(document) {
   return (document?.clips || []).map((clip, index) => ({
@@ -117,7 +117,7 @@ export function useGlbAnimation(document, requestRender) {
       setGlbAnimationTime(mixer, elapsedSec);
       requestRenderRef.current?.();
     };
-    frameRef.current(stateRef.current.elapsedSec);
+    frameRef.current(playbackFrameTime(clock, stateRef.current));
     return () => {
       frameRef.current = null;
       mixerRef.current = null;

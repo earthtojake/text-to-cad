@@ -77,6 +77,22 @@ export function lodSnapshotForModel(record, modelKey) {
 }
 
 /**
+ * What of a scheduler snapshot the status below (and the two scoping reads above) can see, as one
+ * comparable string. The scheduler publishes a snapshot for every camera sample that changed its
+ * planning inputs, and a preview orbit changes the camera on every frame: a snapshot that differs
+ * only in what the status never reads is not a new status, and must not become React state.
+ */
+export function lodSnapshotStatusKey(snapshot) {
+  if (!snapshot) return "";
+  const reasons = [...new Set((snapshot.unmetTargets || []).map((target) => String(target?.reason || "")))].sort();
+  return JSON.stringify([
+    snapshot.modelKey ?? null, snapshot.file ?? null, snapshot.disposed === true, Number(snapshot.componentCount) || 0,
+    snapshot.standardSettled === true, snapshot.quality ?? null, snapshot.qualitySettled === true, Boolean(snapshot.busy),
+    Boolean(snapshot.pendingEvaluation), Boolean(snapshot.sceneFailed), Number(snapshot.belowMinimum) || 0, reasons
+  ]);
+}
+
+/**
  * Map genuine displayed geometry plus the LOD scheduler's public state to one
  * compact label. `modelComplete` prevents an early progressive batch from
  * presenting its temporary standard level as the finished model.

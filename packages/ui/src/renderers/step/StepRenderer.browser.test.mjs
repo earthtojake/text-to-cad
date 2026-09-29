@@ -857,6 +857,43 @@ test('preview opens paused, its playbar plays and pauses the routine without mov
   assert.deepEqual(errors, []);
 });
 
+test('a pose pass React re-runs while a routine plays draws the clock, never the time playback started from', async () => {
+  // The pose pass has two callers: the clock per playing tick, and React whenever something the
+  // pass reads changes (a detail swap, a progressive publish, a display change). React's copy of
+  // the time is where playback STARTED, so a re-run mid-play used to put the model back there for
+  // a frame: on a routine that starts at rest, a flash of the rest pose on every re-run.
+  const view = await open();
+  const { page, pane, errors } = view;
+  await view.enterPreview();
+  const bar = pane.getByRole('toolbar', { name: 'Animation playback' });
+  await bar.getByRole('button', { name: 'Play animation' }).click();
+  await page.waitForFunction(() => window.__cadDisplayRecords().find(record => record.partId === 'o1.2').matrix[1] > 0.2);
+  // Hold the clock where it is: animation frames are queued, not run, so no tick can repaint the
+  // pose over whatever React's pass draws. The pass itself is not a frame: a display change
+  // reaches it through a task (`afterViewPaint`'s fallback), with frames held.
+  const [ticked, rerun] = await page.evaluate(async () => {
+    const arm = () => Array.from(window.__cadDisplayRecords().find(record => record.partId === 'o1.2').matrix);
+    window.__heldFrames = [];
+    window.__releaseFrames = window.requestAnimationFrame;
+    window.requestAnimationFrame = callback => { window.__heldFrames.push(callback); return 0; };
+    await new Promise(resolve => setTimeout(resolve, 150));
+    const beforeRerun = arm();
+    const edges = window.cadHarness.a.controller.readState().display.edges?.enabled !== false;
+    window.cadHarness.a.controller.setDisplaySettings({ edges: { enabled: !edges } });
+    await new Promise(resolve => setTimeout(resolve, 600));
+    return [beforeRerun, arm()];
+  });
+  await page.evaluate(() => {
+    window.requestAnimationFrame = window.__releaseFrames;
+    for (const callback of window.__heldFrames.splice(0)) window.requestAnimationFrame(callback);
+  });
+  assert.ok(ticked[1] > 0.2, 'the routine had turned the arm away from its start');
+  ticked.forEach((value, index) => assert.ok(Math.abs(value - rerun[index]) < 1e-9,
+    `React's pass drew the routine where the clock is, not where it started: ${ticked} != ${rerun}`));
+  await view.exitPreview();
+  assert.deepEqual(errors, []);
+});
+
 test('Measure reads a distance between two picks', async () => {
   const view = await open();
   const { page, pane, at, errors } = view;

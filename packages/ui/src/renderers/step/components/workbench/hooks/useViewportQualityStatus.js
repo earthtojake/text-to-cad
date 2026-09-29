@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { lodSnapshotForFile, lodSnapshotForModel, viewportQualityStatus } from "../../../workbench/viewportQualityStatus.js";
+import {
+  lodSnapshotForFile, lodSnapshotForModel, lodSnapshotStatusKey, viewportQualityStatus
+} from "../../../workbench/viewportQualityStatus.js";
 
 function readLodSnapshot() {
   if (typeof window === "undefined" || typeof window.__cadViewportLod !== "function") {
@@ -41,9 +43,16 @@ export function useViewportQualityStatus({
     standardQualityAt: null
   }));
 
+  // What the accepted snapshot says, as far as the status can see (`lodSnapshotStatusKey`). This hook
+  // lives in the STEP surface, so every accepted snapshot re-renders the whole surface: a preview
+  // orbit resamples the camera on every frame, and while a model streams in each of those renders
+  // redoes the partial model's derived state. Only a snapshot that changes the status is accepted.
+  const acceptedRef = useRef({ modelKey: "", key: "" });
+
   useEffect(() => {
     // A prior file's scheduler may still be mounted for this render. Wait for
     // its status event instead of treating its snapshot as the new model.
+    acceptedRef.current = { modelKey, key: "" };
     setLodRecord({ modelKey, snapshot: null });
     setMemoryRecord({ modelKey, limitation: null });
     setTimeline({ modelKey, firstPreviewAt: null, standardQualityAt: null });
@@ -53,6 +62,10 @@ export function useViewportQualityStatus({
     const acceptSnapshot = (snapshot) => {
       const current = lodSnapshotForFile(snapshot, fileRef.current);
       if (current?.modelKey === modelKeyRef.current) {
+        const key = lodSnapshotStatusKey(current);
+        const accepted = acceptedRef.current;
+        if (accepted.modelKey === modelKeyRef.current && accepted.key === key) return;
+        acceptedRef.current = { modelKey: modelKeyRef.current, key };
         setLodRecord({ modelKey: modelKeyRef.current, snapshot: current });
       }
     };

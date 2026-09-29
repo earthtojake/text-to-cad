@@ -205,16 +205,21 @@ function segmentPoint(segment, distance) {
   return add(segment.center, rotate(segment.radial, segment.axis, distance / segment.radius * segment.sign));
 }
 
+// The frame at Bezier parameter `t`, whose table entry at or below `t` is `lower`.
+function bezierFrame(segment, t, lower) {
+  const first = bezierDerivative(segment.points, t);
+  const speed = length(first);
+  const tangent = mul(first, 1 / speed);
+  const normal = transport(lower.normal, lower.tangent, tangent);
+  const second = bezierSecond(segment.points, t);
+  const curvature = mul(sub(second, mul(tangent, dot(second, tangent))), 1 / (speed * speed));
+  return { point: bezierAt(segment.points, t), tangent, normal, binormal: cross(tangent, normal), curvature };
+}
+
 function segmentFrame(segment, distance) {
   if (segment.kind === "bezier") {
     const { t, lower } = bezierParameter(segment, distance);
-    const first = bezierDerivative(segment.points, t);
-    const speed = length(first);
-    const tangent = mul(first, 1 / speed);
-    const normal = transport(lower.normal, lower.tangent, tangent);
-    const second = bezierSecond(segment.points, t);
-    const curvature = mul(sub(second, mul(tangent, dot(second, tangent))), 1 / (speed * speed));
-    return { point: bezierAt(segment.points, t), tangent, normal, binormal: cross(tangent, normal), curvature };
+    return bezierFrame(segment, t, lower);
   }
   const angle = segment.kind === "arc" ? distance / segment.radius * segment.sign : 0;
   const tangent = angle ? rotate(segment.tangent, segment.axis, angle) : segment.tangent;
@@ -419,7 +424,70 @@ function tablePoints(segment) {
   return segment.tablePoints;
 }
 
-function closestBezierDistance(segment, point) {
+// Newton's method on g(t) = (B(t) - p) · B'(t), half the squared distance's derivative, from the
+// nearest table sample and kept inside its bracket. It lands where the bracketing search below
+// does, in a handful of allocation-free steps instead of seventy cubic evaluations: a rest mesh
+// projects every vertex, and a coil spring's 22-segment helix made that projection most of the
+// seconds a routine spent taking its springs. Null on a stretch where g is not increasing (not a
+// minimum) or without convergence; the bracketing search then decides, as it always did.
+function newtonClosestBezierT(P, p, t0, lo, hi) {
+  const [a, b, c, d] = P;
+  let t = t0;
+  for (let i = 0; i < 24; i++) {
+    const q = 1 - t;
+    const w0 = q * q * q, w1 = 3 * q * q * t, w2 = 3 * q * t * t, w3 = t * t * t;
+    const u0 = 3 * q * q, u1 = 6 * q * t, u2 = 3 * t * t;
+    let g = 0;
+    let dg = 0;
+    for (let k = 0; k < 3; k++) {
+      const offset = w0 * a[k] + w1 * b[k] + w2 * c[k] + w3 * d[k] - p[k];
+      const first = u0 * (b[k] - a[k]) + u1 * (c[k] - b[k]) + u2 * (d[k] - c[k]);
+      const second = 6 * q * (c[k] - 2 * b[k] + a[k]) + 6 * t * (d[k] - 2 * c[k] + b[k]);
+      g += offset * first;
+      dg += first * first + offset * second;
+    }
+    if (!(dg > 0)) {
+      return null;
+    }
+    const next = Math.min(hi, Math.max(lo, t - g / dg));
+    if (Math.abs(next - t) <= 1e-14) {
+      return next;
+    }
+    t = next;
+  }
+  return null;
+}
+
+function ternaryClosestBezierT(P, point, lo, hi) {
+  for (let i = 0; i < 35; i++) {
+    const a = lo + (hi - lo) / 3;
+    const b = hi - (hi - lo) / 3;
+    if (distanceSq(point, bezierAt(P, a)) < distanceSq(point, bezierAt(P, b))) {
+      hi = b;
+    } else {
+      lo = a;
+    }
+  }
+  return (lo + hi) / 2;
+}
+
+// The table entry at or below `t`.
+function bezierTableEntry(table, t) {
+  let lo = 0;
+  let hi = table.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if (table[mid].t <= t) {
+      lo = mid;
+    } else {
+      hi = mid - 1;
+    }
+  }
+  return table[lo];
+}
+
+/** The closest point of a Bezier segment: its parameter, its table entry and its arc length. */
+function closestBezierPoint(segment, point) {
   const points = tablePoints(segment);
   let bestIndex = 0;
   let bestD = Infinity;
@@ -432,20 +500,12 @@ function closestBezierDistance(segment, point) {
       bestIndex = i;
     }
   }
-  let lo = segment.table[Math.max(0, bestIndex - 1)].t;
-  let hi = segment.table[Math.min(segment.table.length - 1, bestIndex + 1)].t;
-  for (let i = 0; i < 35; i++) {
-    const a = lo + (hi - lo) / 3;
-    const b = hi - (hi - lo) / 3;
-    if (distanceSq(point, bezierAt(segment.points, a)) < distanceSq(point, bezierAt(segment.points, b))) {
-      hi = b;
-    } else {
-      lo = a;
-    }
-  }
-  const bestT = (lo + hi) / 2;
-  const lower = segment.table.findLast((entry) => entry.t <= bestT) || segment.table[0];
-  return lower.s + bezierLength(segment.points, lower.t, bestT);
+  const lo = segment.table[Math.max(0, bestIndex - 1)].t;
+  const hi = segment.table[Math.min(segment.table.length - 1, bestIndex + 1)].t;
+  const t = newtonClosestBezierT(segment.points, point, segment.table[bestIndex].t, lo, hi)
+    ?? ternaryClosestBezierT(segment.points, point, lo, hi);
+  const lower = bezierTableEntry(segment.table, t);
+  return { t, lower, distance: lower.s + bezierLength(segment.points, lower.t, t) };
 }
 
 function closestArcDistance(segment, point) {
@@ -463,38 +523,78 @@ function closestArcDistance(segment, point) {
   return local;
 }
 
-/** Closest exact analytic centerline point, used once per immutable rest mesh. */
-export function projectTubePath(path, point) {
+const projectionScratch = new WeakMap();
+
+function closestOnPath(path, point) {
   let best = null;
-  const candidates = path.segments
-    .map((segment) => ({ segment, bound: boundsDistanceSq(segment.bounds, point) }))
-    .sort((a, b) => a.bound - b.bound);
-  for (const { segment, bound } of candidates) {
-    if (best && bound > best.distanceSq + 1e-12) {
+  // Segments nearest-bound first, in scratch arrays kept per path: a rest mesh projects every
+  // vertex, and the call is synchronous, so one path never has two projections in flight.
+  const segments = path.segments;
+  let scratch = projectionScratch.get(segments);
+  if (!scratch) {
+    scratch = { bounds: new Float64Array(segments.length), order: new Int32Array(segments.length) };
+    projectionScratch.set(segments, scratch);
+  }
+  const { bounds, order } = scratch;
+  for (let i = 0; i < segments.length; i++) {
+    const bound = boundsDistanceSq(segments[i].bounds, point);
+    let j = i;
+    while (j > 0 && bounds[j - 1] > bound) {
+      bounds[j] = bounds[j - 1];
+      order[j] = order[j - 1];
+      j -= 1;
+    }
+    bounds[j] = bound;
+    order[j] = i;
+  }
+  for (let rank = 0; rank < segments.length; rank++) {
+    const segment = segments[order[rank]];
+    if (best && bounds[rank] > best.distanceSq + 1e-12) {
       break;
     }
+    // Candidates compare by their closest POINT; only the winner's frame is ever built.
     let local;
-    if (segment.kind === "line") {
-      local = dot(sub(point, segment.start), segment.tangent);
-    } else if (segment.kind === "bezier") {
-      local = closestBezierDistance(segment, point);
+    let closest = null;
+    let nearest;
+    if (segment.kind === "bezier") {
+      closest = closestBezierPoint(segment, point);
+      local = Math.max(0, Math.min(segment.length, closest.distance));
+      nearest = bezierAt(segment.points, closest.t);
     } else {
-      local = closestArcDistance(segment, point);
+      local = segment.kind === "line"
+        ? dot(sub(point, segment.start), segment.tangent)
+        : closestArcDistance(segment, point);
+      local = Math.max(0, Math.min(segment.length, local));
+      nearest = segmentPoint(segment, local);
     }
-    local = Math.max(0, Math.min(segment.length, local));
-    const frame = segmentFrame(segment, local);
-    const delta = sub(point, frame.point);
-    const d2 = dot(delta, delta);
+    const d2 = distanceSq(point, nearest);
     if (!best || d2 < best.distanceSq) {
-      best = {
-        distance: segment.offset + local,
-        distanceSq: d2,
-        transverse: [dot(delta, frame.normal), dot(delta, frame.binormal)],
-        axial: dot(delta, frame.tangent)
-      };
+      best = { segment, local, closest, distanceSq: d2 };
     }
   }
   return best;
+}
+
+/** Arc length along `path` of its closest point to `point`: the projection without its frame. */
+function projectTubeDistance(path, point) {
+  const best = closestOnPath(path, point);
+  return best.segment.offset + best.local;
+}
+
+/** Closest exact analytic centerline point, used once per immutable rest mesh. */
+export function projectTubePath(path, point) {
+  const { segment, local, closest } = closestOnPath(path, point);
+  // A Bezier's frame straight from its closest parameter: no round trip through arc length.
+  const frame = closest ? bezierFrame(segment, closest.t, closest.lower) : segmentFrame(segment, local);
+  const delta = sub(point, frame.point);
+  return {
+    distance: segment.offset + local,
+    distanceSq: dot(delta, delta),
+    transverse: [dot(delta, frame.normal), dot(delta, frame.binormal)],
+    axial: dot(delta, frame.tangent),
+    // The rest frame there, which a mapping reads rather than sampling it again.
+    frame
+  };
 }
 
 // Values, not object identity: a deformation is a SPEC, and two specs with the
@@ -658,6 +758,27 @@ function clipPolygon(polygon, cut, above) {
   );
 }
 
+// The six orders of a triangle's corners by vertex id, ties kept in corner order.
+const ID_ORDERS = [[0, 1, 2], [0, 2, 1], [2, 0, 1], [1, 0, 2], [1, 2, 0], [2, 1, 0]];
+
+// A refined vertex's identity, shared by every triangle that cuts it: the source vertices it
+// interpolates, in id order, with their weights ("id:weight" joined by commas). Built without the
+// intermediate arrays: a refined spring coil asks for it a quarter of a million times.
+function refinedVertexKey(ids, corner) {
+  const [a, b, c] = ids;
+  const order = a <= b
+    ? (b <= c ? ID_ORDERS[0] : a <= c ? ID_ORDERS[1] : ID_ORDERS[2])
+    : (a <= c ? ID_ORDERS[3] : b <= c ? ID_ORDERS[4] : ID_ORDERS[5]);
+  let key = "";
+  for (const k of order) {
+    const weight = Math.round(corner[k + 1] * 1e10);
+    if (weight) {
+      key += `${key ? "," : ""}${ids[k]}:${weight}`;
+    }
+  }
+  return key;
+}
+
 // STEP tessellation need not have intermediate rings on a straight cylinder.
 // Split its existing triangles at rest-arc-length bands once, interpolating all
 // attributes. This changes tessellation only, never the original rest surface.
@@ -670,11 +791,11 @@ function refineRestMesh(THREE, source, rest, base, step) {
   const distances = new Float64Array(position.count);
   const projectedPositions = new Map();
   for (let i = 0; i < position.count; i++) {
-    const key = [position.getX(i), position.getY(i), position.getZ(i)].join(",");
+    const key = `${position.getX(i)},${position.getY(i)},${position.getZ(i)}`;
     let distance = projectedPositions.get(key);
     if (distance === undefined) {
       vertex.fromBufferAttribute(position, i).applyMatrix4(base);
-      distance = projectTubePath(rest, vertex.toArray()).distance;
+      distance = projectTubeDistance(rest, vertex.toArray());
       projectedPositions.set(key, distance);
     }
     distances[i] = distance;
@@ -712,12 +833,7 @@ function refineRestMesh(THREE, source, rest, base, step) {
           fail(`refined tube exceeds ${MAX_REFINED_TRIANGLES} triangles; increase maxSegmentLength`);
         }
         for (const corner of corners) {
-          const key = ids
-            .map((id, k) => [id, Math.round(corner[k + 1] * 1e10)])
-            .filter(([, weight]) => weight)
-            .sort((a, b) => a[0] - b[0])
-            .map((pair) => pair.join(":"))
-            .join(",");
+          const key = refinedVertexKey(ids, corner);
           let vertexIndex = vertices.get(key);
           if (vertexIndex === undefined) {
             vertexIndex = vertices.size;
@@ -755,10 +871,9 @@ function mappingFor(THREE, attribute, normals, rest, baseMatrix, gpu = false) {
   const normalMatrix = new THREE.Matrix3().getNormalMatrix(baseMatrix);
   const normal = new THREE.Vector3();
   for (let i = 0; i < attribute.count; i++) {
-    const key = [
-      attribute.getX(i), attribute.getY(i), attribute.getZ(i),
-      ...(normals ? [normals.getX(i), normals.getY(i), normals.getZ(i)] : [])
-    ].join(",");
+    const key = normals
+      ? `${attribute.getX(i)},${attribute.getY(i)},${attribute.getZ(i)},${normals.getX(i)},${normals.getY(i)},${normals.getZ(i)}`
+      : `${attribute.getX(i)},${attribute.getY(i)},${attribute.getZ(i)}`;
     const existing = unique.get(key);
     if (existing !== undefined) {
       indices[i] = existing;
@@ -769,7 +884,7 @@ function mappingFor(THREE, attribute, normals, rest, baseMatrix, gpu = false) {
     indices[i] = slot;
     point.fromBufferAttribute(attribute, i).applyMatrix4(baseMatrix);
     const projected = projectTubePath(rest, [point.x, point.y, point.z]);
-    const frame = sampleTubePath(rest, projected.distance);
+    const frame = projected.frame;
     const offset = add(mul(frame.normal, projected.transverse[0]), mul(frame.binormal, projected.transverse[1]));
     const metric = 1 - dot(frame.curvature, offset);
     if (metric <= EPS) {
@@ -898,8 +1013,8 @@ function refineLineGeometry(THREE, object, source, rest, base, step) {
     const vb = ends ? i : vertexOf(i, 1);
     a.fromBufferAttribute(starts || sourcePosition, va);
     b.fromBufferAttribute(ends || sourcePosition, vb);
-    const sa = projectTubePath(rest, world.copy(a).applyMatrix4(base).toArray()).distance;
-    const sb = projectTubePath(rest, world.copy(b).applyMatrix4(base).toArray()).distance;
+    const sa = projectTubeDistance(rest, world.copy(a).applyMatrix4(base).toArray());
+    const sb = projectTubeDistance(rest, world.copy(b).applyMatrix4(base).toArray());
     const divisions = Math.max(1, Math.ceil(Math.abs(sb - sa) / step));
     for (let j = 0; j < divisions; j++) {
       for (const t of [j / divisions, (j + 1) / divisions]) {

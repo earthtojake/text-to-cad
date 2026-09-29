@@ -12,7 +12,7 @@ import { applyDisplayRecordTransform, syncRuntimeStepClipPlane } from "@text-to-
 import { applyPartVisualState, FOCUSED_DIMMED_SURFACE_OPACITY } from "@text-to-cad/core/lib/viewer/partVisualState.js";
 import { syncDisplayMeshFaceIds, syncSelectorPickGroups } from "@text-to-cad/core/lib/viewer/selectorPickGroups.js";
 import { syncTopologyDisplayEdgeLine } from "@text-to-cad/core/lib/viewer/topologyDisplayEdgeLine.js";
-import { usePlaybackFrames } from "../../kit/tools/playbar/usePlaybackFrames.js";
+import { playbackFrameTime, usePlaybackFrames } from "../../kit/tools/playbar/usePlaybackFrames.js";
 import { useAnimationClockStore } from "../workbench/animationClockStore.js";
 import { clearSceneGroup, updateTransformedRuntimeState } from "./useStepSceneSync.js";
 
@@ -127,7 +127,8 @@ export function useStepPose(layers) {
 
   // The frame function playback runs per clock tick, published by the pass below.
   const stepPoseFrameRef = useRef(null);
-  usePlaybackFrames(useAnimationClockStore(), stepAnimationPlaying, stepPoseFrameRef);
+  const animationClock = useAnimationClockStore();
+  usePlaybackFrames(animationClock, stepAnimationPlaying, stepPoseFrameRef);
 
   useEffect(() => {
     const runtime = runtimeRef.current;
@@ -306,7 +307,8 @@ export function useStepPose(layers) {
       }
       runtime.requestRender?.();
     };
-    poseFrame(Number(stepAnimationRuntime?.elapsedSec) || 0);
+    // While the routine plays the clock is its time, not the time it started from: see playbackFrameTime.
+    poseFrame(playbackFrameTime(animationClock, stepAnimationRuntime));
     stepPoseFrameRef.current = animationClip ? poseFrame : null;
     return () => {
       if (stepPoseFrameRef.current === poseFrame) stepPoseFrameRef.current = null;

@@ -1,0 +1,7 @@
+{
+  "studio": "dark",
+  "quality": "final",
+  "exposure": 0.55,
+  "lighting": { "rotation": 70, "size": 3, "fill": 1 },
+  "backdrop": { "color": "#18191c", "ground": true, "groundPlacement": "lowest" }
+}
