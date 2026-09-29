@@ -107,12 +107,14 @@ face winding, flush roots, rigid crowns, endpoints and the orbit loop.
 
 The site uses shadcn's neutral light surfaces and the viewer's charcoal dark
 surfaces, system sans-serif type, and the same 0.625rem radius scale. Blue primary
-actions use shadcn's blue palette through semantic tokens: blue-700 in light
-mode and blue-600 in dark mode, with blue-50 labels. Text contrast is 6.26:1
-and 4.82:1 respectively; the solid darker hover shades also exceed 4.5:1.
-Focus rings use blue-500 / blue-400. The Copy button under Get Started is the
-primary action; other copy buttons stay secondary. Install boxes and their
-explanatory text fill the content width. Command text remains monospace. The unboxed wordmark and prominent tagline sit above
+actions use muted shades of the logo's pastel blue through shadcn semantic
+tokens: #2c7197 in light mode and #30779d in dark mode, with #f5fbff labels.
+Text contrast is 5.14:1 and 4.73:1 respectively; the solid darker hover shades
+also exceed 4.5:1. Focus rings use a deeper brand blue on white and the logo's
+pale highlight on charcoal. The Copy button under Get Started is the primary
+action; other copy buttons stay secondary. Get Started uses the same heading
+scale as Skills. Install boxes and explanatory text fill the content width.
+Command text remains monospace. The unboxed wordmark and prominent tagline sit above
 the independently framed CAD demo. The app owns
 its tokens and primitives in `src/app/globals.css` and `src/components/ui/`,
 without importing another app or the CAD UI package. Keep the palette aligned

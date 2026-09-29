@@ -204,7 +204,7 @@ export default function Home() {
 
           <section aria-label="Install text-to-cad" className="py-6">
             <div className="w-full space-y-3">
-              <h2 className="text-sm font-medium text-foreground">
+              <h2 className="text-heading font-semibold tracking-tight text-foreground">
                 Get Started
               </h2>
               <SkillsInstallCommand prominent />

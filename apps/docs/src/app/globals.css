@@ -14,10 +14,10 @@
   --card-foreground: oklch(0.145 0 0);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
-  /* Shadcn blue palette: blue-700 / blue-800 with blue-50 labels. */
-  --primary: oklch(0.488 0.243 264.376);
-  --primary-hover: oklch(0.424 0.199 265.638);
-  --primary-foreground: oklch(0.97 0.014 254.604);
+  /* Muted shades of the logo’s pastel blue, deepened for light labels. */
+  --primary: #2c7197;
+  --primary-hover: #24658a;
+  --primary-foreground: #f5fbff;
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0 0);
@@ -28,7 +28,7 @@
   --destructive-foreground: oklch(0.985 0 0);
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
-  --ring: oklch(0.623 0.214 259.815);
+  --ring: #2c7197;
   --chart-1: oklch(0.646 0.222 41.116);
   --chart-2: oklch(0.6 0.118 184.704);
   --chart-3: oklch(0.398 0.07 227.392);
@@ -54,10 +54,10 @@
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.31 0 0);
   --popover-foreground: oklch(0.985 0 0);
-  /* Brighter blue-600 in dark mode; blue-700 on hover. */
-  --primary: oklch(0.546 0.245 262.881);
-  --primary-hover: oklch(0.488 0.243 264.376);
-  --primary-foreground: oklch(0.97 0.014 254.604);
+  /* A softer, brighter brand blue on charcoal surfaces. */
+  --primary: #30779d;
+  --primary-hover: #2c7197;
+  --primary-foreground: #f5fbff;
   --secondary: oklch(0.34 0 0);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.34 0 0);
@@ -68,7 +68,7 @@
   --destructive-foreground: oklch(0.985 0 0);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.707 0.165 254.624);
+  --ring: #94d9fa;
   --chart-1: oklch(0.488 0.243 264.376);
   --chart-2: oklch(0.696 0.17 162.48);
   --chart-3: oklch(0.769 0.188 70.08);
