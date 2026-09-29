@@ -75,8 +75,8 @@ and hands over the surface look the Display settings resolved
 (`{ materialSettings, authored, surface: { style, opacity } }`); it only ever
 detaches a scene, whose owner disposes it. `buildModel`
 (`@text-to-cad/core/common/cadScene.js`) exposes `object3D`, `bounds`, `restBounds`
-and `dispose()`; the GLB and mesh renderers' scenes implement all of it but `pick`,
-and the robot renderer's all of it. `pick(ray)` is what `usePointerPick` calls: the
+and `dispose()`; the mesh renderer's scene and a plain GLB's implement all of it but
+`pick`; an implicit part's GLB scene and the robot renderer's implement all of it. `pick(ray)` is what `usePointerPick` calls: the
 hook owns the pointer (which press is a tap, one hover pick per frame, the
 cursor), the scene says what is under the ray, and its renderer says what a hit
 means. A tap acts at once: nothing waits to tell it from a double-click.
@@ -363,9 +363,14 @@ STEP renderer does not match `.glb`.
   flag, or the grey a STEP export stamps on uncoloured parts) takes the viewer's
   surface colour in Inspect.
 - **Display**: `EDGELESS_VIEW_FEATURES` (Solid and Render; no Edges, Clip or Explode).
-- **Tools**: none. The renderer hands the shell no tools of its own (`tools={[]}`), so
+- **Tools**: none for a plain GLB. The renderer hands the shell no tools of its own, so
   there is no tool strip: a GLB picks nothing, so there is no Select, no filter menu,
-  no copy-references action and no viewport context menu.
+  no copy-references action and no viewport context menu. A GLB an implicit part
+  wrote (`cadgen implicit`: one glTF node per primitive in the author's code, its
+  extras naming the leaf and the source line that made it) is the exception: its
+  scene lists `leaves` and implements `pick`, the renderer offers Select, a Leaves
+  panel and a Reference panel whose Add to prompt hands the agent the file plus one
+  line per picked leaf naming its source line (`glb/LeafSection.jsx`).
 - **Animation** (`glb/useGlbAnimation.js`): clips play in preview alone, through the
   shell's Playback settings and the playbar under the model (`RendererShell.jsx`).
   The file OPENS AT REST — one `AnimationMixer` on the native scene, built by the
@@ -375,8 +380,10 @@ STEP renderer does not match `.glb`.
 - **Panels**: the file tree alone: the registration declares none, so a GLB opens
   with no panel open. Preview is the shell's, as for every 3D file, with the
   Animation settings when the file has clips.
-- **Host commands**: the base live commands; `select` and `clearSelection` are
-  declined with a sentence, and a `selectReference` host request is consumed and
+- **Host commands**: the base live commands; `select` is declined with a sentence
+  (a GLB has no CAD selectors; an implicit part's GLB selects leaves by pointer only),
+  `clearSelection` clears the leaves of a GLB that names them and is declined for
+  one that does not, and a `selectReference` host request is consumed and
   acknowledged without changing the view.
 - **State**: the shell record under `[path, "glb"]`. Records written under
   `[path, "cad"]` are not migrated.
@@ -415,8 +422,10 @@ renderer does not match either.
 - **Alerts**: a file that fails to parse raises the load alert ("Couldn’t load
   the model", with the loader's error in Details); one that parses to no
   triangles raises "No geometry to display".
-- **Host commands**: the base live commands; `select` and `clearSelection` are
-  declined with a sentence, and a `selectReference` host request is consumed and
+- **Host commands**: the base live commands; `select` is declined with a sentence
+  (a GLB has no CAD selectors; an implicit part's GLB selects leaves by pointer only),
+  `clearSelection` clears the leaves of a GLB that names them and is declined for
+  one that does not, and a `selectReference` host request is consumed and
   acknowledged without changing the view.
 - **State**: the shell record under `[path, "mesh"]`. Records written under
   `[path, "cad"]` are not migrated.

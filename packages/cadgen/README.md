@@ -297,6 +297,15 @@ materials, or animation; no
 src/cadgen/
   <format>.py            # public namespaces: step, stl, threemf, glb, dxf,
                          #   urdf, srdf, sdf — each binds its verbs
+  implicit.py            # parts as signed distance fields: the field DSL,
+                         #   @implicit.part (writes GLB/STL + a tape, no
+                         #   store: there is no B-rep), `build`/`measure`
+                         #   over a tape, and `step` (the tree's exact subset
+                         #   as a B-rep, via build123d; `to_brep` is the
+                         #   library form). Engine in _internal/implicit/
+                         #   (numpy only: field, mesh = surface nets with
+                         #   dual-contouring placement, writers, tape,
+                         #   measure; brep.py is the one kernel user)
   authoring.py           # @step/@dxf/@stl/@glb/@threemf decorators; a call
                          #   builds at top level and composes (a lazy child)
                          #   inside a body; a model's outputs are what they

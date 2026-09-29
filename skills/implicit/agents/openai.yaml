@@ -1,0 +1,4 @@
+interface:
+  display_name: "Implicit"
+  short_description: "Parts as signed distance fields: shapes are math, meshed for print."
+  default_prompt: "Use $implicit to model a part as signed distance fields in Python, mesh it to GLB/STL, measure walls and clearances on the field, and hand the mesh to $cad-viewer."

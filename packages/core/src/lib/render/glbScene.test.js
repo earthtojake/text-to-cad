@@ -92,3 +92,56 @@ test("dispose releases the document once: geometry, materials and textures, and 
   assert.deepEqual(released, { geometry: 1, material: 1, texture: 1, standIn: 1 });
   assert.doesNotThrow(() => scene.setSurfaceLook(look()), "a late look from the viewport is ignored, never applied to released materials");
 });
+
+function implicitDocument() {
+  // What `cadgen implicit` writes: one node per leaf, its extras naming the leaf and its source line.
+  const scene = new THREE.Group();
+  const leaf = (index, label, kind, site, x) => {
+    const mesh = new THREE.Mesh(new THREE.BoxGeometry(1, 1, 1), new THREE.MeshStandardMaterial({ color: "#88aacc" }));
+    mesh.position.x = x;
+    mesh.name = label;
+    mesh.userData = { cadOccurrenceId: `implicit:${index}`, cadSourceKind: "implicit", cadUpAxis: "y", implicitLeaf: index,
+      implicitKind: kind, implicitLabel: label, implicitSite: site, implicitTriangles: 12 };
+    return mesh;
+  };
+  const body = leaf(0, "body", "box", "housing.py:6", 0);
+  const bore = leaf(1, "bore", "cylinder", "housing.py:7", 3);
+  scene.add(bore, body);
+  return { document: { scene, clips: [], cadRootMatrix: new THREE.Matrix4().identity().toArray(), restBounds: { min: [-1, -1, -1], max: [4, 1, 1] }, animatedBounds: null }, body, bore };
+}
+
+test("a plain GLB has no leaves and does not pick", () => {
+  const scene = createGlbScene(THREE, glbDocument().document);
+  assert.deepEqual(scene.leaves, []);
+  assert.equal(scene.pick, undefined);
+  assert.equal(scene.setHighlight, undefined);
+});
+
+test("an implicit part's GLB lists its leaves in leaf order and picks the leaf under a ray", () => {
+  const { document } = implicitDocument();
+  const scene = createGlbScene(THREE, document);
+  assert.deepEqual(scene.leaves.map(leaf => [leaf.id, leaf.label, leaf.kind, leaf.site, leaf.triangles]),
+    [["implicit:0", "body", "box", "housing.py:6", 12], ["implicit:1", "bore", "cylinder", "housing.py:7", 12]]);
+  const down = (x) => new THREE.Ray(new THREE.Vector3(x, 0, 10), new THREE.Vector3(0, 0, -1));
+  const hit = scene.pick(down(3));
+  assert.deepEqual([hit.id, hit.leaf, hit.label, hit.kind, hit.site], ["implicit:1", 1, "bore", "cylinder", "housing.py:7"]);
+  assert.equal(scene.pick(down(0)).label, "body");
+  assert.equal(scene.pick(down(8)), null);
+});
+
+test("a highlight paints the hovered and selected leaves and round-trips through the look", () => {
+  const { document, body, bore } = implicitDocument();
+  const scene = createGlbScene(THREE, document);
+  scene.setSurfaceLook(look());
+  const base = body.material.color.getHexString();
+  scene.setHighlight({ hovered: "implicit:0", selected: ["implicit:1"] });
+  assert.notEqual(body.material.color.getHexString(), base, "hover tints the leaf");
+  assert.equal(bore.renderOrder, 23, "a selected leaf draws after its neighbours");
+  assert.ok(bore.material.emissiveIntensity > 0);
+  scene.setHighlight({});
+  assert.equal(body.material.color.getHexString(), base, "clearing restores the look");
+  assert.equal(bore.renderOrder, 0);
+  scene.setSurfaceLook(look({ authored: true }));
+  scene.setHighlight({ selected: ["implicit:0"] });
+  assert.equal(body.renderOrder, 23, "a highlight survives a look change");
+});

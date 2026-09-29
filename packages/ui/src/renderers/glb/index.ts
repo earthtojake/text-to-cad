@@ -10,9 +10,9 @@ export type { LiveCameraSnapshot, LiveViewBinding, LiveViewController, LiveViewS
 export interface GlbRendererOptions {
   client: WorkspaceClientOption;
   preferences?: CadPreferenceSource;
-  /** Host requests. One to select a reference is consumed and declined in words: a GLB has none. */
+  /** Host requests. One to select a reference is consumed and declined in words: a GLB has no CAD selectors (an implicit part's GLB selects its leaves by pointer only). */
   commands?: ViewerCommandSource;
-  /** The mounted view's live command surface. Selection commands are declined, loudly. */
+  /** The mounted view's live command surface. Selection commands are declined, loudly, unless the GLB names leaves (then `clearSelection` clears them). */
   live?: LiveViewBinding<any>;
 }
 export interface PreparedGlbDocument extends PreparedWorkspaceEntry {

@@ -60,7 +60,8 @@ none.
 | --- | --- |
 | STEP | Select, Position (movable joints only), Draw, Measure, Explode (two or more parts), Clip |
 | URDF / SRDF / SDF | Select, Position (posable joints only) |
-| GLB / STL / 3MF | none |
+| GLB | none; Select for an implicit part's GLB (its nodes name leaves) |
+| STL / 3MF | none |
 | DXF | none: a 2D canvas with the snapshot action only |
 
 There is no separator or activity dot. There is no Animate tool: routines play in

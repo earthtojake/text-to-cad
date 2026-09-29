@@ -34,6 +34,12 @@ const skillGroups = [
       "Creates and edits CAD models from plain-language or image requests, with STEP as the main output along with options to export to STL, 3MF and GLB.",
   },
   {
+    name: "Implicit",
+    path: "skills/implicit",
+    summary:
+      "Models parts as signed distance fields: shapes as math, booleans as min/max, fillets and shells as offsets; meshed to GLB/STL with walls and clearances measured on the field.",
+  },
+  {
     name: "CAD Viewer",
     path: "skills/cad-viewer",
     summary: "Shows local browser previews for CAD and robot files.",

@@ -61,6 +61,11 @@ dependencies = [
   "matplotlib",
   "pillow",
   "shapely",
+  # The implicit engine (`cadgen.implicit`: signed distance fields contoured
+  # with surface nets) is numpy and nothing else -- deliberately, so a part
+  # meshes wherever cadgen runs. build123d brings numpy already; cadgen
+  # declares what it imports.
+  "numpy>=1.26",
 ]
 
 # Extras gate DEPENDENCIES, not files: the JavaScript runtime ships to everyone because it
