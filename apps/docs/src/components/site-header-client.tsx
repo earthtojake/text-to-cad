@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
@@ -9,6 +10,12 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+
+const NAV_SECTIONS = [
+  { id: "installation", label: "Install" },
+  { id: "skills", label: "Skills" },
+  { id: "plugins", label: "Plugins" },
+] as const;
 
 const GITHUB_REPO_URL = "https://github.com/earthtojake/text-to-cad";
 
@@ -74,6 +81,42 @@ export function SiteHeaderClient({
   discordUrl: string;
   version: string;
 }) {
+  const [activeSection, setActiveSection] = useState<string>("installation");
+
+  useEffect(() => {
+    let frame = 0;
+    const updateActiveSection = () => {
+      frame = 0;
+      const sections = NAV_SECTIONS.map(({ id }) => document.getElementById(id));
+      if (!sections.some(Boolean)) {
+        setActiveSection("");
+        return;
+      }
+      let active = "installation";
+      for (const section of sections) {
+        if (section && section.getBoundingClientRect().top <= 96) {
+          active = section.id;
+        }
+      }
+      // The final section may not be tall enough to reach the header.
+      if (window.scrollY > 0 && window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2) {
+        active = "plugins";
+      }
+      setActiveSection(active);
+    };
+    const scheduleUpdate = () => {
+      if (!frame) frame = window.requestAnimationFrame(updateActiveSection);
+    };
+    updateActiveSection();
+    window.addEventListener("scroll", scheduleUpdate, { passive: true });
+    window.addEventListener("resize", scheduleUpdate);
+    return () => {
+      window.removeEventListener("scroll", scheduleUpdate);
+      window.removeEventListener("resize", scheduleUpdate);
+      window.cancelAnimationFrame(frame);
+    };
+  }, []);
+
   const githubLabel =
     githubStars === null
       ? "Open text-to-cad on GitHub"
@@ -104,18 +147,16 @@ export function SiteHeaderClient({
           aria-label="Primary"
           className="hidden items-center gap-1 sm:flex"
         >
-          <a
-            className="rounded-md px-2.5 py-1.5 text-ui text-muted-foreground transition hover:bg-secondary hover:text-foreground"
-            href="#skills"
-          >
-            Skills
-          </a>
-          <a
-            className="rounded-md px-2.5 py-1.5 text-ui text-muted-foreground transition hover:bg-secondary hover:text-foreground"
-            href="#installation"
-          >
-            Install
-          </a>
+          {NAV_SECTIONS.map(({ id, label }) => (
+            <a
+              key={id}
+              href={`/#${id}`}
+              aria-current={activeSection === id ? "location" : undefined}
+              className={`rounded-md px-2.5 py-1.5 text-ui transition hover:bg-secondary hover:text-foreground ${activeSection === id ? "text-foreground" : "text-muted-foreground"}`}
+            >
+              {label}
+            </a>
+          ))}
           <VersionLink version={version} />
         </nav>
 

@@ -6,7 +6,7 @@
 
 :root {
   color-scheme: light;
-  /* Viewer neutral surfaces, with blue reserved for the docs primary action. */
+  /* Viewer neutral surfaces, with blue for brand emphasis and primary actions. */
   --radius: 0.625rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
@@ -15,6 +15,7 @@
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.145 0 0);
   /* Muted shades of the logo’s pastel blue, deepened for light labels. */
+  --brand: #2c7197;
   --primary: #2c7197;
   --primary-hover: #24658a;
   --primary-foreground: #f5fbff;
@@ -55,6 +56,7 @@
   --popover: oklch(0.31 0 0);
   --popover-foreground: oklch(0.985 0 0);
   /* A softer, brighter brand blue on charcoal surfaces. */
+  --brand: #62b7ec;
   --primary: #30779d;
   --primary-hover: #2c7197;
   --primary-foreground: #f5fbff;
@@ -92,6 +94,7 @@
   --color-card-foreground: var(--card-foreground);
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
+  --color-brand: var(--brand);
   --color-primary: var(--primary);
   --color-primary-hover: var(--primary-hover);
   --color-primary-foreground: var(--primary-foreground);

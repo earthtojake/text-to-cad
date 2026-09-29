@@ -203,10 +203,10 @@ export default function Home() {
         <div className="min-w-0 space-y-2">
           <HeroSection />
 
-          <section aria-label="Install text-to-cad" className="py-6">
+          <section id="installation" aria-labelledby="installation-title" className="scroll-mt-20 py-6">
             <div className="w-full space-y-3">
-              <h2 className="text-heading font-semibold tracking-tight text-foreground">
-                Get Started
+              <h2 id="installation-title" className="text-heading font-semibold tracking-tight text-foreground">
+                Install
               </h2>
               <SkillsInstallCommand prominent />
             </div>
@@ -258,54 +258,20 @@ export default function Home() {
           </section>
 
           <section
-            id="installation"
-            aria-labelledby="installation-title"
+            id="plugins"
+            aria-labelledby="plugins-title"
             className="scroll-mt-20 space-y-3 py-6"
           >
             <SectionIntro
-              id="installation-title"
-              title="Install"
-              description="Install text-to-cad with the Skills CLI. Provider-native plugin installs are available as a secondary path."
+              id="plugins-title"
+              title="Plugins"
+              description="Provider-native plugins are an alternative to installing with the Skills CLI."
             />
-
-            <div className="w-full space-y-3">
-              <SkillsInstallCommand prominent />
-              <p className="text-sm leading-6 text-muted-foreground">
-                <span className="text-foreground">Run the same command to update.</span>{" "}
-                <code className="text-foreground">add</code> re-fetches the package and
-                overwrites what is installed, so it refreshes existing skills and picks up any
-                skill added in a newer release.{" "}
-                <code className="text-foreground">npx skills update</code> only walks your
-                lockfile, so it silently misses new ones. Neither removes a skill that was
-                retired upstream — drop one with{" "}
-                <code className="text-foreground">npx skills remove &lt;skill&gt;</code>.
-              </p>
-              <div className="pt-3">
-                <h3 className="mb-3 text-sm font-medium text-foreground">
-                  Plugin Installs
-                </h3>
-                <InstallCommands />
-              </div>
-              <p className="text-sm leading-6 text-muted-foreground">
-                Skills CLI installation is preferred for regular use. Restart
-                your agent if newly installed skills do not appear. The Codex
-                plugin install requires Codex 0.142.0 or newer; older versions
-                skip the plugin silently.
-              </p>
-              <p className="text-sm leading-6 text-muted-foreground">
-                Local development symlink guidance lives in{" "}
-                <a
-                  className="inline-flex items-center gap-1 text-foreground underline underline-offset-4 transition hover:text-muted-foreground"
-                  href="https://github.com/earthtojake/text-to-cad/blob/main/CONTRIBUTING.md"
-                  rel="noreferrer"
-                  target="_blank"
-                >
-                  CONTRIBUTING.md
-                  <ExternalLink className="size-3" aria-hidden="true" />
-                </a>
-                .
-              </p>
-            </div>
+            <InstallCommands />
+            <p className="text-sm leading-6 text-muted-foreground">
+              Restart your agent if newly installed skills do not appear. The Codex
+              plugin requires Codex 0.142.0 or newer; older versions skip it silently.
+            </p>
           </section>
         </div>
       </div>

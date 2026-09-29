@@ -112,10 +112,14 @@ tokens: #2c7197 in light mode and #30779d in dark mode, with #f5fbff labels.
 Text contrast is 5.14:1 and 4.73:1 respectively; the solid darker hover shades
 also exceed 4.5:1. Focus rings use a deeper brand blue on white and the logo's
 pale highlight on charcoal. All installation Copy buttons use the same blue
-primary action style. Get Started uses the same heading
-scale as Skills. Install boxes and explanatory text fill the content width.
-Command text remains monospace. The unboxed wordmark and prominent tagline sit above
-the independently framed CAD demo. The app owns
+primary action style. Install uses the same heading scale as Skills. The header lists Install, Skills
+and Plugins, with Install active by default and the active link following the
+visible section. Install has one Skills CLI command; Plugins contains only
+provider-native installation commands and guidance. Install boxes and explanatory text fill the content width.
+Command text remains monospace. The unboxed wordmark and one prominent tagline
+sit above the independently framed CAD demo. “100% open source and free.” follows
+“Give your agent CAD superpowers.” in blue, using a lighter brand shade on dark
+surfaces. The app owns
 its tokens and primitives in `src/app/globals.css` and `src/components/ui/`,
 without importing another app or the CAD UI package. Keep the palette aligned
 with `packages/ui/src/styles/tokens.css` when the viewer's base theme changes.
