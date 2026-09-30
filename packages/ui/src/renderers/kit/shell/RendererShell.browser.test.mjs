@@ -258,20 +258,21 @@ test('a file opens framed at 100% of its own ruler: the open fit is the fit, wha
 
   // Home resets the complete view; cube faces keep the current zoom and target.
   const canvas = pane.locator('[aria-busy] > div > canvas').first();
-  // The share of the drawn frame that is the model: read left of the viewport's own chrome
-  // down its right side (the top-right bar and the view cube), which is drawn over every frame.
+  // The share of the drawn frame that is the model: read the middle/upper canvas region,
+  // clear of the bottom prompt action and the viewport controls at the right edge.
   const inkFraction = async () => {
     const png = PNG.sync.read(await canvas.screenshot());
     const background = [png.data[0], png.data[1], png.data[2]];
     const columns = Math.floor(png.width * 0.8);
+    const rows = Math.floor(png.height * 0.8);
     let drawn = 0;
-    for (let y = 0; y < png.height; y += 1) for (let x = 0; x < columns; x += 1) {
+    for (let y = 0; y < rows; y += 1) for (let x = 0; x < columns; x += 1) {
       const offset = (y * png.width + x) * 4;
       const delta = Math.abs(png.data[offset] - background[0]) + Math.abs(png.data[offset + 1] - background[1])
         + Math.abs(png.data[offset + 2] - background[2]);
       if (delta > 32) drawn += 1;
     }
-    return drawn / (columns * png.height);
+    return drawn / (columns * rows);
   };
   const settleInk = async (reached, what) => {
     for (let attempt = 0; attempt < 60; attempt += 1) {
@@ -301,6 +302,25 @@ test('a file opens framed at 100% of its own ruler: the open fit is the fit, wha
   await page.evaluate(() => window.cadHarness.a.controller.resetCamera());
   const recovered = await settleInk(ink => ink > 0.05, 'Zoom to Fit frames the plate after panning away');
   assert.ok(recovered > lost * 5);
+  const fitted = await page.evaluate(() => window.__cadCamera());
+  assert.ok(Math.hypot(fitted.position[0] - fitted.target[0], fitted.position[1] - fitted.target[1]) / Math.abs(fitted.position[2] - fitted.target[2]) < 0.001,
+    'Zoom to fit retains the top-view orientation');
+  await pane.getByRole('button', { name: 'Reset view', exact: true }).click();
+  const defaultDirection = new THREE.Vector3(...DEFAULT_VIEW_DIRECTION).normalize().toArray();
+  await page.waitForFunction(expectedDirection => {
+    const camera = window.__cadCamera();
+    const delta = camera.position.map((value, index) => value - camera.target[index]);
+    const length = Math.hypot(...delta);
+    return delta.every((value, index) => Math.abs(value / length - expectedDirection[index]) < 1e-5)
+      && Math.abs(camera.zoomPercent - 100) < 0.01;
+  }, defaultDirection);
+  const reset = await page.evaluate(() => window.__cadCamera());
+  assert.ok(Math.abs(reset.halfHeight - opened.halfHeight) / opened.halfHeight < 0.01,
+    'Reset restores the opening orientation and fitted zoom');
+  await pane.getByRole('button', { name: 'Preview', exact: true }).click();
+  await pane.getByRole('button', { name: 'Exit preview', exact: true }).waitFor();
+  await pane.getByRole('button', { name: 'Reset view', exact: true }).click();
+  await pane.getByRole('button', { name: 'Preview', exact: true }).waitFor();
   assert.deepEqual(errors, []);
 });
 
@@ -432,6 +452,18 @@ test('a renderer says more about its load than a download: finding the file, edi
   assert.equal(await overlay.count(), 0, 'a plain load covers nothing');
   assert.equal(await card.count(), 0, 'and raises nothing');
 
+  // THE CUBE IS THE TOP-RIGHT CORNER'S, below the Display and Preview buttons: the bottom
+  // row is left to the host (a composer, on some) and to the bottom action.
+  const frameBox = await canvasElement.boundingBox();
+  const actionsBox = await pane.locator('[data-viewport-actions]').boundingBox();
+  const cubeBox = await pane.getByLabel('View cube', { exact: true }).boundingBox();
+  assert.ok(cubeBox.y < frameBox.y + 16 && actionsBox.y >= cubeBox.y + cubeBox.height,
+    'the view cube occupies the top-right corner above the action buttons');
+  assert.ok(Math.abs(cubeBox.x + cubeBox.width / 2 - actionsBox.x - actionsBox.width / 2) < 1,
+    'the buttons are centred underneath the cube');
+  assert.ok(cubeBox.x + cubeBox.width > frameBox.x + frameBox.width - 20,
+    'the view cube stays against the right edge');
+
   // FINDING: the wait before the file is even located covers the viewport, and says
   // so as such rather than as a phase of reading it.
   await stage('finding');
@@ -447,6 +479,13 @@ test('a renderer says more about its load than a download: finding the file, edi
   assert.equal(await card.count(), 0);
   await updating.waitFor();
   assert.match(await updating.innerText(), /Updating model/);
+  const updateBox = await updating.boundingBox();
+  const toolsBox = await pane.getByRole('group', { name: 'Interaction tools' }).boundingBox();
+  const middleY = box => box.y + box.height / 2;
+  assert.ok(Math.abs(middleY(updateBox) - middleY(toolsBox)) < 1,
+    `model update status is vertically centred with the tool strip: ${JSON.stringify({ updateBox, toolsBox, actionsBox })}`);
+  assert.equal(await pane.locator('[data-file-navigation-status] [data-view-update-status]').count(), 0,
+    'the filename row does not carry model update status');
 
   // THE PREVIEW ENDS IT: the result is on screen, so the wait is over even though the
   // write is not.
@@ -501,7 +540,7 @@ test('a renderer says more about its load than a download: finding the file, edi
   // THE SNAPSHOT IS THE RENDERER'S TO ASSEMBLE. Its own reference vocabulary goes
   // through its own builder — and the resource it names is the one on screen.
   const before = await page.evaluate(() => window.cadHarness.captures.length);
-  await pane.getByRole('button', { name: 'Take snapshot', exact: true }).click();
+  await pane.getByRole('button', { name: 'Add To Prompt', exact: true }).click();
   await page.waitForFunction(count => window.cadHarness.captures.length > count, before);
   assert.deepEqual(await page.evaluate(() => {
     const context = window.cadHarness.captures.at(-1);

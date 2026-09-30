@@ -10,6 +10,7 @@ import { useWorkspaceDocument } from "../workspace/useWorkspaceDocument.js";
 import { drawingLoadAlert, useDrawingPayload } from "./useDrawingPayload.js";
 import { useDrawingView } from "./useDrawingView.js";
 import { readFileView, writeFileView } from "../kit/shell/fileView.js";
+import ViewportBottomAction, { promptCaptureAction } from "../kit/shell/ViewportBottomAction.jsx";
 import { drawingTransformCamera, readDrawingTransform } from "./drawingTransform.js";
 
 /**
@@ -39,6 +40,7 @@ const SAVE_DELAY_MS = 180;
 function DxfSurface({ view, data }) {
   const host = useViewerHost();
   const destination = usePromptDestination();
+  const composer = destination.kind === "composer";
   const workspace = useWorkspaceDocument({ view, data });
   const file = workspace.entry?.file || view.file.path;
   const payload = useDrawingPayload({ client: workspace.client, file, revision: workspace.resource.revision });
@@ -129,17 +131,18 @@ function DxfSurface({ view, data }) {
   // ---- the navbar ------------------------------------------------------------
   // One action, and it is not the camera's. Zooming a drawing is the pointer's job —
   // wheel or pinch about the pointer, drag to pan, double-click to fit — so there are
-  // no zoom buttons to press, here or anywhere else in the viewer.
+  // no zoom buttons to press, here or anywhere else in the viewer. A composer
+  // destination has no snapshot here: its Add To Prompt at the bottom is the one action.
   const actionsRef = useRef({ snapshot });
   actionsRef.current = { snapshot };
   useEffect(() => {
-    const actions = [
+    const actions = composer ? [] : [
       { id: "snapshot", label: "Take snapshot", hint: "Snapshot", icon: Camera, disabled: !ready || !promptAvailable,
         onInvoke: () => actionsRef.current.snapshot() }
     ];
     onNavigationActionsChange?.(actions);
     return () => onNavigationActionsChange?.([]);
-  }, [onNavigationActionsChange, ready, promptAvailable]);
+  }, [onNavigationActionsChange, composer, ready, promptAvailable]);
 
   // ---- the live command surface ----------------------------------------------
   const runtimeRef = useRef(null);
@@ -175,6 +178,9 @@ function DxfSurface({ view, data }) {
         <ViewerLoadingOverlay loading={{ opening: payload.loading && !alert, progress: { label: "Reading drawing" } }}
           operationKey={file} />
         <ViewerAlertCard alert={alert || (actionError ? { severity: "error", kind: "status", blocking: false, title: "Couldn’t capture the drawing", message: actionError } : null)} hasContent={Boolean(payload.drawing)} onReload={view.reload} />
+        {composer ? <ViewportBottomAction {...promptCaptureAction({ disabled: !ready || !promptAvailable,
+          reason: !promptAvailable ? destination.reason : "Wait for the drawing to load.",
+          onInvoke: snapshot })} /> : null}
       </div>
     </div>
   );

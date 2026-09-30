@@ -1,5 +1,5 @@
-import React, { forwardRef, useRef } from 'react';
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import React, { forwardRef, useImperativeHandle, useRef } from 'react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
 // The shell's surfaces a RENDERER fills — the viewport menu, the bottom action, the camera-settled
@@ -9,10 +9,11 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 // on, a runtime whose renderer's canvas is the scene's), and records the props the shell wired, so
 // the camera reports reach the renderer through exactly the callbacks the real viewport calls.
 // The viewport's own half of those reports (a resize, a preview camera) is ShellViewport.test.tsx.
-const viewport = vi.hoisted(() => ({ props: null as any }));
+const viewport = vi.hoisted(() => ({ props: null as any, resetView: vi.fn(() => true) }));
 vi.mock('../../../../dist/renderers/kit/shell/ShellViewport.js', () => ({
-  default: forwardRef(function StandInViewport(props: any, _ref) {
+  default: forwardRef(function StandInViewport(props: any, ref) {
     viewport.props = props;
+    useImperativeHandle(ref, () => ({ captureScreenshotBlob: async () => new Blob(['pixels'], { type: 'image/png' }), resetView: viewport.resetView }));
     const hostRef = useRef<HTMLDivElement | null>(null);
     const runtimeRef = useRef<any>(null);
     const context = { hostRef, runtimeRef, mountRef: hostRef, viewerReadyTick: 1, commitScene: () => true };
@@ -27,23 +28,26 @@ import { ViewerHostContext } from '../../../../dist/host/context.js';
 import { testHost } from '../../../../dist/host/testing/host.js';
 
 beforeEach(() => {
+  viewport.resetView.mockClear();
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
   vi.stubGlobal('matchMedia', (query: string) => ({ matches: false, media: query, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} }));
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); viewport.props = null; });
 
-function mount() {
+function mount(host = testHost(), state?: unknown) {
+  const save = vi.fn();
+  const navigation = vi.fn();
   let settings: any = { toolStack: { panels: {}, collapsed: {} } };
   const listeners = new Set<() => void>();
   const preferences = { getSnapshot: () => settings, subscribe: (listener: () => void) => { listeners.add(listener); return () => listeners.delete(listener); },
     update: (patch: any) => { settings = { ...settings, ...patch }; listeners.forEach(listener => listener()); } };
   const props = { source: { id: 'one', rootName: 'one' }, file: { path: 'one.harness', name: 'one.harness', kind: 'file' }, document: null,
     openPanel: '', panelSlot: null, onPanelOpen() {}, onReady() {}, onOpenFile() {}, appearance: { colorScheme: 'light' },
-    state: undefined, onStateChange() {}, reload() {}, data: { services: { preferences } } };
-  const view = render(<ViewerHostContext.Provider value={testHost()}><HarnessRenderer {...(props as any)} /></ViewerHostContext.Provider>);
+    state, onStateChange: save, onNavigationActionsChange: navigation, reload() {}, data: { services: { preferences } } };
+  const view = render(<ViewerHostContext.Provider value={host}><HarnessRenderer {...(props as any)} /></ViewerHostContext.Provider>);
   const canvas = view.container.querySelector('[data-stand-in-viewport] > canvas') as HTMLCanvasElement;
   const overlay = (name: string) => view.container.querySelector(`[data-harness-${name}]`)!.textContent;
-  return { ...view, canvas, overlay };
+  return { ...view, canvas, overlay, save, navigation };
 }
 
 // A secondary press as the browser delivers one: down, (moves), up, all on the canvas.
@@ -115,6 +119,66 @@ it('the renderer\'s bottom action shows its count when the reference does not fi
   } finally { scrollWidth.mockRestore(); clientWidth.mockRestore(); }
 });
 
+it('one shared Add To Prompt action is the only bottom control, independent of the active tool and absent in Preview', () => {
+  const destination = { kind: 'composer', available: true } as const;
+  const { container } = mount(testHost({ promptContext: { getSnapshot: () => destination, subscribe: () => () => {}, deliver: async () => ({ status: 'added', partIds: [] }) } }));
+  const action = () => container.querySelector('[data-viewport-bottom-actions]') as HTMLElement | null;
+  expect(action()).not.toBeNull();
+  expect(within(action()!).getAllByRole('button')).toHaveLength(1);
+  expect(within(action()!).getByRole('button', { name: 'Add To Prompt' }).className).toContain('bg-white');
+  act(() => { fireEvent.click(screen.getByRole('button', { name: 'Draw' })); });
+  expect(within(action()!).getAllByRole('button')).toHaveLength(1);
+  act(() => { fireEvent.click(screen.getByRole('button', { name: 'Preview' })); });
+  expect(action()).toBeNull();
+  expect(container.querySelector('[data-file-navigation-overlay]')).toBeNull();
+});
+
+it('Add To Prompt sends a screenshot and tool context through the composer port', async () => {
+  const deliver = vi.fn(async (_context: unknown) => ({ status: 'added' as const }));
+  const writeImage = vi.fn(async () => {});
+  const destination = { kind: 'composer', available: true } as const;
+  const host = testHost({
+    promptContext: { getSnapshot: () => destination, subscribe: () => () => {}, deliver } as any,
+    clipboard: { writeText: async () => {}, readText: async () => '', writeImage },
+  });
+  const { container } = mount(host);
+  const button = within(container.querySelector('[data-viewport-bottom-actions]') as HTMLElement).getByRole('button', { name: 'Add To Prompt' });
+  expect((button as HTMLButtonElement).disabled).toBe(false);
+  fireEvent.click(button);
+  await waitFor(() => expect(deliver).toHaveBeenCalledTimes(1));
+  const context = deliver.mock.calls[0][0] as any;
+  expect(context.parts.map((part: any) => part.kind)).toEqual(['reference', 'text', 'attachment']);
+  expect((await context.parts[2].content).type).toBe('image/png');
+  expect(writeImage).not.toHaveBeenCalled();
+});
+
+it('clipboard destinations retain the snapshot action and Copy Drawing with ink, without Add To Prompt', async () => {
+  const destination = { kind: 'clipboard', available: true } as const;
+  const writeImage = vi.fn(async () => {}), deliver = vi.fn();
+  const { container, navigation } = mount(testHost({
+    promptContext: { getSnapshot: () => destination, subscribe: () => () => {}, deliver } as any,
+    clipboard: { writeText: async () => {}, readText: async () => '', writeImage },
+  }));
+  expect(screen.queryByRole('button', { name: 'Add To Prompt' })).toBeNull();
+  // The bottom row is the renderer's own action (the harness's reference), not a prompt one.
+  expect(container.querySelector('[data-viewport-bottom-actions] [data-harness-bottom-action]')).not.toBeNull();
+  const snapshot = navigation.mock.calls.at(-1)![0];
+  expect(snapshot.map((action: any) => action.label)).toEqual(['Take snapshot']);
+  act(() => snapshot[0].onInvoke());
+  await waitFor(() => expect(writeImage).toHaveBeenCalledTimes(1));
+  fireEvent.click(screen.getByRole('button', { name: 'Draw' }));
+  expect(container.querySelector('[data-viewport-bottom-actions]')).toBeNull();
+  act(() => viewport.props.drawing.onContentChange(true));
+  const copy = screen.getByRole('button', { name: /Copy Drawing/ });
+  expect(copy.className).toContain('bg-primary/85');
+  expect(copy.className).not.toContain('bg-white');
+  fireEvent.click(copy);
+  await waitFor(() => expect(writeImage).toHaveBeenCalledTimes(2));
+  expect(deliver).not.toHaveBeenCalled();
+  fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+  expect(container.querySelector('[data-viewport-bottom-actions]')).toBeNull();
+});
+
 it('the renderer is told the camera settled, through what the viewport reports: a recorded move and its own settle', () => {
   const { overlay } = mount();
   expect(overlay('camera-settles')).toBe('0');
@@ -130,4 +194,44 @@ it('the renderer is told the camera settled, through what the viewport reports: 
   act(() => { viewport.props.onPerspectiveChange({ position: [4, 5, 6], target: [0, 0, 0], up: [0, 0, 1], zoom: 2, projection: 'orthographic' }); });
   act(() => { viewport.props.onCameraSettled(); });
   expect(overlay('camera-settles')).toBe('4');
+});
+
+// The full reset crosses the renderer callback and the shell's tool/preview
+// lifecycle; it must reach the camera only after those changes commit.
+it('Reset view clears inspection edits, preserves appearance and exits Preview before resetting the camera', () => {
+  const appearance = { mode: 'xray', edges: { enabled: true, visibility: 'all' } };
+  const { canvas, overlay, unmount, save } = mount(testHost(), { version: 2, display: {
+    ...appearance, clip: { enabled: true, axis: 'x', offset: 0.3 }, exploded: { enabled: true, amount: 0.4 }
+  } });
+  secondaryTap(canvas, 300, 200);
+  fireEvent.click(screen.getByRole('menuitem', { name: 'Note the press' }));
+  expect(overlay('menu-note')).toBe('300,200');
+  fireEvent.click(screen.getByRole('button', { name: 'Draw' }));
+  expect(viewport.props.drawingEnabled).toBe(true);
+  const clearInk = vi.fn();
+  act(() => viewport.props.drawing.onReady({ clear: clearInk }));
+  viewport.resetView.mockImplementationOnce(() => {
+    expect(viewport.props.drawingEnabled).toBe(false);
+    expect(overlay('menu-note')).toBe('');
+    return true;
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Reset view' }));
+  expect(clearInk).toHaveBeenCalledTimes(1);
+  expect(viewport.resetView).toHaveBeenCalledTimes(1);
+  fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+  expect(viewport.props.previewMode).toBe(true);
+  viewport.resetView.mockImplementationOnce(() => {
+    expect(viewport.props.previewMode).toBe(false);
+    return true;
+  });
+  fireEvent.click(screen.getByRole('button', { name: 'Reset view' }));
+  expect(viewport.resetView).toHaveBeenCalledTimes(2);
+  expect(screen.getByRole('button', { name: 'Preview' })).toBeTruthy();
+  unmount();
+  const display = save.mock.calls.at(-1)![0].display;
+  expect(display).toMatchObject(appearance);
+  expect(display.clip?.enabled ?? false).toBe(false);
+  expect(display.exploded?.enabled ?? false).toBe(false);
+  expect(display.clip?.offset ?? 0).toBe(0);
+  expect(display.exploded?.amount ?? 0).toBe(0);
 });

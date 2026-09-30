@@ -171,15 +171,22 @@ export async function runDrawScenario({ page, pane, errors }) {
   await fillsInside();
   assert.equal(await draw.locator('[data-drawing-tool]').getAttribute('data-drawing-tool'), 'fill');
 
-  // The bottom action copies the view with its ink to the host's clipboard, as a PNG.
+  // The shared prompt action sends the view with its ink to the host as a PNG.
   await page.evaluate(() => {
-    window.__drawingCopies = [];
-    window.cadHarness.a.host.clipboard.writeImage = async pending => { const blob = await pending; window.__drawingCopies.push({ size: blob.size, type: blob.type }); };
+    window.__drawingPrompts = [];
+    const port = window.cadHarness.a.host.promptContext;
+    const originalDeliver = port.deliver;
+    port.deliver = async context => {
+      const image = context.parts.find(part => part.kind === 'attachment');
+      const blob = await image.content;
+      window.__drawingPrompts.push({ size: blob.size, type: blob.type });
+      return originalDeliver(context);
+    };
   });
-  await pane.getByRole('button', { name: /^Copy Drawing/ }).click();
-  await page.waitForFunction(() => window.__drawingCopies.length === 1);
-  const [copied] = await page.evaluate(() => window.__drawingCopies);
-  assert.ok(copied.type === 'image/png' && copied.size > 100, JSON.stringify(copied));
+  await pane.getByRole('button', { name: 'Add To Prompt', exact: true }).click();
+  await page.waitForFunction(() => window.__drawingPrompts.length === 1);
+  const [added] = await page.evaluate(() => window.__drawingPrompts);
+  assert.ok(added.type === 'image/png' && added.size > 100, JSON.stringify(added));
 
   // Leaving Draw ends the session and the sketch with it; the tool and colour in hand wait for the next.
   await pane.getByRole('group', { name: 'Interaction tools' }).getByRole('button', { name: 'Select', exact: true }).click();

@@ -1,6 +1,7 @@
 import React from 'react';
 import { cleanup, fireEvent, render, screen, act } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
+import { ViewerMobileContext } from '../../../../dist/file-viewer/responsive.js';
 import PreviewChrome, { PREVIEW_CHROME_IDLE_MS } from '../../../../dist/renderers/kit/tools/PreviewChrome.js';
 
 afterEach(() => { cleanup(); vi.useRealTimers(); });
@@ -22,6 +23,9 @@ it('keeps editor controls hidden throughout Preview and restores them on exit, w
   // The same bar, in the same place, in either mode.
   expect(container.querySelector('[data-viewport-actions]')).toBe(bar);
   expect(screen.getByRole('button', { name: 'Display settings' })).toBeTruthy();
+  expect((bar as HTMLElement).style.top).toBe('calc(4px + 6rem)');
+  rerender(<ViewerMobileContext.Provider value={true}><PreviewChrome active={false} actions={actions} /></ViewerMobileContext.Provider>);
+  expect((container.querySelector('[data-viewport-actions]') as HTMLElement).style.top).toBe('calc(4px + 6rem)');
 });
 
 it('fades preview controls together, keeps their hover area awake, and never reveals editing tools', () => {

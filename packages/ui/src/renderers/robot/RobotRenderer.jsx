@@ -97,7 +97,8 @@ function RobotSurface({ view, data }) {
     features: EDGELESS_VIEW_FEATURES, toolModes: ROBOT_TOOL_MODES, scene,
     sceneScaleMode: VIEWER_SCENE_SCALE.URDF,
     load: { busy: (loaded.busy && !scene) || (Boolean(robot) && !scene), updating: loaded.busy && Boolean(scene), progress: loaded.progress, alert: loadAlert },
-    live, escape, rendererState
+    live, escape, rendererState,
+    onResetView: () => { poseRef.current?.reset(); selectionRef.current.clear(); }
   });
   shellRef.current = shell;
   useDeclinedSelectReference(document);

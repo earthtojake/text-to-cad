@@ -170,7 +170,7 @@ test('an STL opens as one mesh with no tools: display settings, orbit, host comm
   // Nothing of a mesh picks, measures, poses, plays or is drawn on: the viewport
   // simply orbits, pans and zooms, with no strip over it.
   await noTools(pane);
-  assert.equal(await pane.getByRole('button', { name: /Copy|Add to prompt/i }).count(), 0, 'no copy-references action');
+  assert.equal(await pane.getByRole('button', { name: 'Add To Prompt', exact: true }).count(), 1, 'a model without selection can attach its view');
 
   // A mesh has no panel of its own: its only settings are Display's, and Display is never
   // where a file opens. So it opens with the column shut and the model given the room.
@@ -285,7 +285,7 @@ test('an STL opens as one mesh with no tools: display settings, orbit, host comm
   assert.equal(await page.evaluate(() => window.cadHarness.a.commands.getSnapshot().selectReference ?? null), null, 'the declined request is acknowledged');
 
   // The navbar snapshot and a host's capture request go through the same prompt port.
-  await pane.getByRole('button', { name: 'Take snapshot', exact: true }).click();
+  await pane.getByRole('button', { name: 'Add To Prompt', exact: true }).click();
   await page.waitForFunction(() => window.cadHarness.captures.length === 1);
   const captured = await page.evaluate(() => window.cadHarness.captures[0]);
   assert.deepEqual([captured.file, captured.type, captured.references.length], ['part.stl', 'image/png', 1]);

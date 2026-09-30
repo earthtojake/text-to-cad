@@ -144,6 +144,7 @@ function HarnessSurface({ view, data }) {
     features: EDGELESS_VIEW_FEATURES, toolModes: HARNESS_TOOL_MODES, scene,
     load: { busy: false, ...stageLoad },
     live, onCameraSettled, runtimeLifecycle,
+    onResetView: () => { setPicked(""); setKept(false); setPosing(false); },
     // A renderer whose references are its own vocabulary assembles its own snapshot.
     promptContext: ({ resource: shown, references, capture }) => createPromptContext([
       referencePart({ resource: { ...shown }, target: { kind: "whole-resource" } }, "source"),

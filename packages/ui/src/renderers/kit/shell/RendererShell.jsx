@@ -1,7 +1,6 @@
-import { createPortal } from "react-dom";
-import { VIEWPORT_BOTTOM_CENTER, VIEWPORT_INSET_PX } from "./viewportLayout.js";
+import { VIEWPORT_BOTTOM_CENTER, VIEWPORT_INSET_PX, VIEWPORT_TOP_BAR_PX } from "./viewportLayout.js";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Play, Pause, X } from "lucide-react";
+import { Play, Pause, RotateCcw, X } from "lucide-react";
 import { ToolbarButton } from "@text-to-cad/ui/primitives/toolbar-button";
 import PreviewChrome from "../tools/PreviewChrome.jsx";
 import { useViewerMobile } from "../../../file-viewer/responsive.js";
@@ -28,7 +27,7 @@ const INSET = `${VIEWPORT_INSET_PX}px`;
 const TOOLBAR_POSITION = Object.freeze({ top: INSET, left: INSET, bottom: INSET, maxWidth: "calc(100% - 76px)" });
 const MODEL_UPDATE_STATUS = Object.freeze({ pending: true, label: "Updating model…" });
 // The top-right bar's buttons are transparent over the model.
-const BAR_BUTTON_CLASS = "size-6 bg-transparent hover:bg-transparent dark:hover:bg-transparent";
+const BAR_BUTTON_CLASS = "size-5 bg-transparent hover:bg-transparent dark:hover:bg-transparent";
 
 /**
  * The frame every file-family renderer draws itself in: the viewport box with
@@ -61,6 +60,8 @@ const BAR_BUTTON_CLASS = "size-6 bg-transparent hover:bg-transparent dark:hover:
  *   than through `useRendererShell`'s `animation`. Routines play in preview alone.
  *   `bottomAction`
  *   replaces Draw's (copy the view with its ink) while the renderer's own tool is active.
+ *   A composer destination's Add To Prompt (`frame.promptAction`) takes the place of both:
+ *   it carries the view and whatever is selected.
  *   `contextMenuItems`: what THIS renderer offers on a secondary tap over the canvas; the
  *   gesture, the anchor and the dismissal are the shell's (`ViewportContextMenu.jsx`), and a
  *   renderer that passes none has no viewport menu at all. `onContextMenuOpenChange(open)`
@@ -144,9 +145,8 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
   </>;
 
   const hasContent = Boolean(scene) && !viewerLoading;
-  const action = bottomAction || (frame.drawToolActive && frame.drawing.hasContent
-    ? drawingCaptureAction({ disabled: viewerLoading || !hasContent, onInvoke: frame.copyDrawing })
-    : null);
+  const action = frame.promptAction || bottomAction || (frame.drawToolActive && frame.drawing.hasContent
+    ? drawingCaptureAction({ disabled: viewerLoading || !hasContent, onInvoke: frame.copyDrawing }) : null);
   frame.copyActionRef.current = () => {
     if (previewing) return false;
     if (frame.drawToolActive && frame.drawing.hasContent) { frame.copyDrawing(); return true; }
@@ -219,7 +219,7 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
                     runtimeLifecycle={frame.runtimeLifecycle}
                   >{overlay}</ShellViewport>
                   {!previewing ? <ViewerAlertCard key={frame.modelKey} alert={frame.viewerAlert} hasContent={hasContent} onReload={view.reload} /> : null}
-                  {!previewing && action ? <ViewportBottomAction shortcut={frame.copyShortcut} {...action} /> : null}
+                  {!previewing && action ? <ViewportBottomAction shortcut={frame.promptAction ? "" : frame.copyShortcut} {...action} /> : null}
                 </div>
               </div>
 
@@ -230,12 +230,15 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
               <PreviewChrome active={previewing} surface={frame.hostElement} hold={displayOpen}
                 actions={() => <>
                   <DisplayPopover open={displayOpen} onOpenChange={setDisplayOpen} disabled={shell.idle}>{frame.display}</DisplayPopover>
+                  <ToolbarButton label="Reset view" className={BAR_BUTTON_CLASS} disabled={shell.idle} onClick={shell.resetView}>
+                    <RotateCcw className="size-3" strokeWidth={1.5} aria-hidden="true" />
+                  </ToolbarButton>
                   {previewing
                     ? <ToolbarButton key="exit" tooltip={false} label="Exit preview" className={BAR_BUTTON_CLASS} onClick={leavePreview}>
-                      <X className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+                      <X className="size-3" strokeWidth={1.5} aria-hidden="true" />
                     </ToolbarButton>
                     : <ToolbarButton key="preview" label="Preview" className={BAR_BUTTON_CLASS} disabled={shell.idle} onClick={enterPreview}>
-                      <Play className="size-3.5" strokeWidth={1.5} aria-hidden="true" />
+                      <Play className="size-3" strokeWidth={1.5} aria-hidden="true" />
                     </ToolbarButton>}
                 </>}
                 playbar={onMenuOpenChange => {
@@ -265,8 +268,12 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
               {/* One place says the view is catching up: a newer revision of the file loading behind the
                   model on screen, or a Display change being prepared — the latter's failure first, since
                   it is the one with something to retry. */}
-              {view.navigationStatusSlot ? createPortal(<ViewUpdateStatus status={frame.loading.updating && !frame.viewUpdate.status.error
-                ? MODEL_UPDATE_STATUS : frame.viewUpdate.status} onRetry={frame.viewUpdate.retry} />, view.navigationStatusSlot) : null}
+              <div className="pointer-events-none absolute left-1/2 z-30 flex max-w-[calc(100%-1rem)] -translate-x-1/2 items-center"
+                style={{ top: VIEWPORT_INSET_PX, height: VIEWPORT_TOP_BAR_PX }} data-viewport-status="">
+                <ViewUpdateStatus status={frame.loading.updating && !frame.viewUpdate.status.error
+                  ? MODEL_UPDATE_STATUS : frame.viewUpdate.status} onRetry={frame.viewUpdate.retry}
+                  className="rounded-md bg-background/95 px-1 py-0.5 shadow-sm" />
+              </div>
               <ViewerLoadingOverlay
                 loading={frame.presentationState?.file === frame.modelKey && frame.presentationState?.covering ? null : frame.loading}
                 operationKey={frame.modelKey}

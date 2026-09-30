@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { after, afterEach, before, test } from 'node:test';
 import { PNG } from 'pngjs';
+import { parseCadRefToken } from '@text-to-cad/core/lib/cadRefs.js';
 import { serveStepHarness } from '../harness/stepScenario.mjs';
 import { TOOL_PANEL_WIDTH } from '../../../dist/renderers/kit/tools/toolStackLayout.js';
 
@@ -33,12 +34,12 @@ const restingCamera = async page => {
   }, null, { polling: 'raf' });
 };
 /** The last thing the viewport actually DREW. */
-const frame = async (pane) => { await settle(pane.page()); return PNG.sync.read(await pane.locator('[aria-busy] > div > canvas').first().screenshot({ style: '[data-slot=popover-content], [data-slot=dropdown-menu-content], [data-slot=dropdown-menu-sub-content], [data-cad-tool-groups] { visibility: hidden !important; }' })); };
+const frame = async (pane) => { await settle(pane.page()); return PNG.sync.read(await pane.locator('[aria-busy] > div > canvas').first().screenshot({ style: '[data-slot=popover-content], [data-slot=dropdown-menu-content], [data-slot=dropdown-menu-sub-content], [data-cad-tool-groups], [aria-label="View cube"] { visibility: hidden !important; }' })); };
 // A canvas screenshot also catches what is drawn OVER the canvas: the tool strip
 // along the top, the tool stack's panels under it (hidden for the shot: they change with
-// every tool and selection) and the view cube in the bottom-right corner. None is the
-// model, so every measurement of the picture is taken in the band between them (the
-// harness page is `VIEWPORT`, 800 × 600: an 800 × 564 canvas, the cube's top at ~445). Pixel
+// every tool and selection) and the top-right view cube (also hidden for the shot). None is the
+// model. Measurements keep the original model band of the 800 × 600 harness
+// (an 800 × 564 canvas), so control placement cannot affect part-color counts. Pixel
 // counts below are for this band, 385 × 800: half what the tests once measured at 1200 × 720.
 const MODEL = { y0: 55, y1: 440 };
 function differing(left, right, { x0 = 0, y0 = 0, x1 = left.width, y1 = left.height } = MODEL) {
@@ -403,9 +404,9 @@ test('Select picks parts and faces, a selection lives only under Select, and the
   }
   await page.evaluate(() => document.documentElement.classList.remove('dark'));
   assert.doesNotMatch(await reference.innerText(), /Selection ·|references|Total/);
-  // The bottom action is the Select tool’s: it copies, and says what in words, never the IDs.
-  await pane.getByRole('button', { name: /^Copy References/ }).waitFor();
-  assert.equal(await pane.getByRole('button', { name: /^Copy Reference\b/ }).count(), 0, 'one action, pluralised');
+  // Selection changes the prompt context, not the count or label of its one action.
+  await pane.getByRole('button', { name: 'Add To Prompt', exact: true }).waitFor();
+  assert.equal(await pane.locator('[data-viewport-bottom-actions] button').count(), 1);
   await page.keyboard.press('Escape');
   await page.waitForFunction(() => window.cadHarness.a.controller.readState().selectedPartIds.length === 0);
 
@@ -439,7 +440,7 @@ test('Select picks parts and faces, a selection lives only under Select, and the
   // And what it delivers: the snapshot carries the file, the references carry the selection.
   await page.evaluate(() => window.cadHarness.a.controller.select({ selectors: ['o1.1'] }));
   await page.waitForFunction(() => window.cadHarness.a.controller.readState().selectedPartIds.length === 1);
-  await pane.getByRole('button', { name: 'Take snapshot', exact: true }).click();
+  await pane.getByRole('button', { name: 'Add To Prompt', exact: true }).click();
   await page.waitForFunction(() => window.cadHarness.captures.length === 1);
   const captured = await page.evaluate(() => window.cadHarness.captures[0]);
   assert.equal(captured.type, 'image/png');
@@ -806,9 +807,10 @@ test('preview opens paused, its playbar plays and pauses the routine without mov
   await page.waitForTimeout(300);
   assert.deepEqual((await translations(page))['o1.2'], restArm, 'nothing plays until its play button is pressed');
   const rest = await view.frame();
-  // The transport, then Playback settings: the cog at the playbar's right end.
+  // Preview puts away prompt actions, leaving only playback controls.
   assert.deepEqual(await bar.getByRole('button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))), ['Play animation', 'Playback settings']);
   assert.equal(await bar.getByRole('slider', { name: 'Animation time', exact: true }).count(), 1);
+  assert.equal(await pane.getByRole('button', { name: 'Add To Prompt' }).count(), 0);
 
   await bar.getByRole('button', { name: 'Play animation' }).click();
   await page.waitForFunction(() => window.__cadDisplayRecords().find(record => record.partId === 'o1.2').matrix[1] > 0.2);
@@ -1086,7 +1088,7 @@ test('mobile touch: a tap selects, and a two-finger pinch zooms without selectin
 });
 
 test('a click selects at once, and a double-click ends where it did when a click waited: the part isolated, isolation left, or the face copied and kept, on the selection its first click found', async () => {
-  const view = await open();
+  const view = await open({ init: () => { window.__cadPromptDestination = 'clipboard'; } });
   const { page, box, at, errors } = view;
   const selection = () => page.evaluate(() => { const state = window.cadHarness.a.controller.readState();
     return { parts: state.selectedPartIds, refs: state.selectedReferenceIds, isolated: state.isolatedPartIds }; });
@@ -1111,6 +1113,11 @@ test('a click selects at once, and a double-click ends where it did when a click
   await page.waitForFunction(() => window.__selectedByProbe !== null);
   assert.equal(await page.evaluate(() => window.__selectedByProbe), true, 'the arm is selected before any double-click window could close');
   assert.deepEqual(await selection(), { parts: ['o1.2'], refs: [], isolated: [] });
+  assert.equal(await view.pane.getByRole('button', { name: 'Add To Prompt', exact: true }).count(), 0);
+  await view.pane.getByRole('button', { name: /^Copy Reference(?:\s|$)/ }).click();
+  await page.waitForFunction(() => window.__clipboardWrites.length === 1);
+  assert.equal(await page.evaluate(() => window.__clipboardWrites[0]), 'hinge_block.step#o1.2');
+  await page.evaluate(() => { window.__clipboardWrites = []; });
 
   // A double-click on the base isolates it. Its first click picked the base; the double-click
   // put the arm back before isolating — and isolating clears the selection, as it always has.
@@ -1189,6 +1196,10 @@ test('a click selects at once, and a double-click ends where it did when a click
   await settle(page);
   assert.deepEqual((await selection()).refs, both, 'an empty-space double-click keeps the selection its first click found');
   assert.equal(await copies(), 4, 'and copies nothing');
+  await view.pane.getByRole('button', { name: /^Copy References(?:\s|$)/ }).click();
+  await page.waitForFunction(() => window.__clipboardWrites.length === 5);
+  const copiedSelection = parseCadRefToken(await page.evaluate(() => window.__clipboardWrites[4]));
+  assert.deepEqual([...copiedSelection.selectors].sort(), both.map(reference => reference.split('|').at(-1)).sort());
 
   // Hover is untouched: under Faces the face under the pointer lights, under Edges the edge does.
   await page.keyboard.press('Escape');

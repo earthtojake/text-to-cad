@@ -25,7 +25,7 @@ const METRICS_CLASS = "h-11 w-fit min-w-0 max-w-full shrink overflow-hidden px-5
  * the disabled state and the label node.
  */
 export default function ViewportBottomAction({
-  label, shortLabel = "", disabled = false, onInvoke, render = null, children = null, shortcut = ""
+  label, shortLabel = "", disabled = false, reason, onInvoke, render = null, children = null, shortcut = "", className: actionClassName
 }) {
   const mobile = useViewerMobile();
   const rulerRef = useRef(null);
@@ -48,9 +48,9 @@ export default function ViewportBottomAction({
   const metrics = cn(METRICS_CLASS, mobile && "h-10 px-4");
   const shown = shortLabel && !fits ? shortLabel : label;
   const content = <><span className="block min-w-0 max-w-full truncate">{shown}</span>{shortcut && !mobile ? <kbd className="ml-3 shrink-0 font-sans text-xs opacity-65">{shortcut}</kbd> : null}</>;
-  const className = cn(ACTION_CLASS, metrics);
+  const className = cn(ACTION_CLASS, metrics, actionClassName);
   return (
-    <div style={{ bottom: VIEWPORT_BOTTOM_CENTER }} className="pointer-events-none absolute inset-x-4 z-20 translate-y-1/2 flex min-w-0 justify-center">
+    <div style={{ bottom: VIEWPORT_BOTTOM_CENTER }} className="pointer-events-none absolute inset-x-4 z-20 translate-y-1/2 flex min-w-0 justify-center" data-viewport-bottom-actions="">
       {shortLabel ? (
         <span aria-hidden="true" className={cn("pointer-events-none invisible absolute left-0 top-0", metrics)}>
           <span ref={rulerRef} className="block min-w-0 max-w-full truncate">{label}</span>
@@ -59,7 +59,7 @@ export default function ViewportBottomAction({
       {render
         ? render({ className, disabled, children: content })
         : <Button type="button" variant="default" size="sm" className={className}
-            disabled={disabled} onClick={() => void onInvoke?.()} >{content}</Button>}
+            disabled={disabled} aria-description={disabled ? reason : undefined} onClick={() => void onInvoke?.()} >{content}</Button>}
       {children ? <div className="pointer-events-auto ml-2">{children}</div> : null}
     </div>
   );
@@ -71,4 +71,10 @@ export function drawingCaptureAction({ disabled = false, onInvoke }) {
     label: "Copy Drawing",
     disabled, onInvoke
   };
+}
+
+/** Composer delivery combines the view and the active tool's context. */
+export function promptCaptureAction({ disabled = false, reason, onInvoke }) {
+  return { label: "Add To Prompt", disabled, reason, onInvoke,
+    className: "border-white bg-white text-neutral-950 hover:bg-white/90 focus-visible:ring-white/50" };
 }

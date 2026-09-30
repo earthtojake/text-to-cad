@@ -67,7 +67,9 @@ async function open(t, file) {
   page.setDefaultTimeout(20000);
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
-  await page.addInitScript(() => { window.Worker = undefined; });
+  // A clipboard host, like web: these tests drive and measure the drawing itself, and a
+  // composer's Add To Prompt would sit over it (DxfRenderer.test.tsx covers that action).
+  await page.addInitScript(() => { window.Worker = undefined; window.__cadPromptDestination = 'clipboard'; });
   await page.goto(`http://127.0.0.1:${server.address().port}/?file=${file}`);
   return { page, errors, pane: page.getByTestId('one') };
 }
@@ -82,13 +84,15 @@ const drawn = async (pane) => {
 /**
  * The frame ON SCREEN, not a re-render: what the person is actually looking at — once it has
  * come to rest (two screenshots alike) and, given the frame from before a change, once it
- * shows that change. Never the one frame that happened to follow the change.
+ * shows that change. Never the one frame that happened to follow the change. The bottom
+ * action floats over the drawing and is not the drawing, so it is hidden for the shot.
  */
+const DRAWING_ONLY = '[data-viewport-bottom-actions] { visibility: hidden !important; }';
 async function frame(pane, before = null) {
   let last = null;
   for (let attempt = 0; attempt < 60; attempt += 1) {
     await settle(pane.page());
-    const shot = await canvasOf(pane).screenshot();
+    const shot = await canvasOf(pane).screenshot({ style: DRAWING_ONLY });
     if (last?.equals(shot) && !before?.shot.equals(shot)) return Object.assign(PNG.sync.read(shot), { shot });
     last = shot;
   }

@@ -36,7 +36,7 @@ export default function FloatingToolBar({ tools = [] }) {
   // No tools, no strip: an empty bar is not drawn (a mesh file, or one whose only tool's panel is always up).
   if (!tools.length) return null;
   return (<div className="relative z-20 flex max-w-full shrink-0 flex-col items-end gap-1" data-cad-toolbar="tools">
-      <div role="group" aria-label="Interaction tools" className={`pointer-events-auto inline-flex max-w-full flex-wrap items-center gap-0.5 rounded-md ${tools.length === 1 ? "p-0.5" : "min-h-8 p-1"} ${FLOATING_CHROME_SURFACE_CLASS}`}>
+      <div role="group" aria-label="Interaction tools" className={`pointer-events-auto inline-flex min-h-8 max-w-full flex-wrap items-center gap-0.5 rounded-md p-1 ${FLOATING_CHROME_SURFACE_CLASS}`}>
         {tools.map(tool => <Fragment key={tool.id}>{toolButton(tool)}</Fragment>)}
       </div>
   </div>);

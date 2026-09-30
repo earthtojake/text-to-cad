@@ -30,6 +30,9 @@ export function createViewSettingsStore(initial = {}, defaults = {}) {
     patch: patch => commit(mergeViewerDisplaySettings(snapshot.display, patch)),
     selectPreset: mode => commit(viewerDisplaySettingsForMode(snapshot.display, mode)),
     reset: () => commit(resetViewSettings(snapshot.display)),
+    // View reset drops retained inspection effects, preserving Display edits.
+    // One commit prevents subscribers from observing a partially reset view.
+    resetTools: () => commit({ ...snapshot.display, clip: { enabled: false }, exploded: { enabled: false } }),
     setEnabled(group, enabled) {
       if (!["clip", "exploded", ...VIEW_GROUP_KEYS].includes(group)) throw new Error(`Unknown view group: ${group}`);
       if (snapshot.scene.view[group].enabled === enabled) return snapshot;

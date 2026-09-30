@@ -253,8 +253,8 @@ tree asks for the tree, so the tree stays up while a person walks it; any other 
 gets nothing. No panel is saved in a file's record.
 The binding [viewer design system](docs/settings-ui.md) defines tool lifecycle,
 the tool stack, mobile layout, section density, keyboard scope, tooltips
-and preview. RendererShell owns the top-left toolbar, the bottom-right cube and
-the top-right bar: Display settings, then Preview. Preview is the shell's own
+and preview. RendererShell owns the top-left toolbar, the top-right cube and
+the bar below it: Display settings, Reset view, then Preview. Preview is the shell's own
 mode, where routines play and the model orbits, and preserves the parent
 navbar. Keep app-specific effects in the
 [host contract](docs/viewer-host.md), not in renderer components.

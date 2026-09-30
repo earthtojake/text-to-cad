@@ -171,7 +171,7 @@ test('a static GLB opens on its native scene with no tools: display settings, or
   // Nothing of a GLB picks, measures, poses or is drawn on: the viewport simply
   // orbits, pans and zooms, with no strip over it.
   await noTools(pane);
-  assert.equal(await pane.getByRole('button', { name: /Copy|Add to prompt/i }).count(), 0, 'no copy-references action');
+  assert.equal(await pane.getByRole('button', { name: 'Add To Prompt', exact: true }).count(), 1, 'a model without selection can attach its view');
 
   // A GLB has no panel of its own: its only settings are Display's, and Display is never
   // where a file opens. So it opens with the column shut and the model given the room.
@@ -273,7 +273,7 @@ test('a static GLB opens on its native scene with no tools: display settings, or
   assert.deepEqual(await page.evaluate(() => window.nativeMenu), [true]);
 
   // The navbar snapshot goes through the prompt port.
-  await pane.getByRole('button', { name: 'Take snapshot', exact: true }).click();
+  await pane.getByRole('button', { name: 'Add To Prompt', exact: true }).click();
   await page.waitForFunction(() => window.cadHarness.captures.length === 1);
   const captured = await page.evaluate(() => window.cadHarness.captures[0]);
   assert.deepEqual([captured.file, captured.type, captured.references.length], ['static.glb', 'image/png', 1]);

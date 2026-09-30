@@ -15,7 +15,6 @@ import {
 } from "@text-to-cad/core/lib/viewer/stageTheme.js";
 import { buildRuntimeInitializationAlert } from "@text-to-cad/core/lib/viewer/webglSupport.js";
 import { THEME_FLOOR_MODES } from "@text-to-cad/core/lib/themeSettings.js";
-import { useViewerMobile } from "../../../file-viewer/responsive.js";
 import ViewPlaneControl from "../camera/ViewPlaneControl.js";
 import { CAD_DEFAULT_VERTICAL_FOV_DEGREES, explicitViewerFocalLength, perspectiveDistanceScale } from "../camera/cameraLens.js";
 import { PREVIEW_AUTO_ROTATE_SPEED } from "../camera/orbitControls.js";
@@ -51,8 +50,8 @@ import { IDLE_PIXEL_RATIO_CAP, INTERACTION_IDLE_DELAY_MS, INTERACTION_PIXEL_RATI
 import { disposeSceneObject } from "../viewport/sceneObjects.js";
 import { useViewerRuntime } from "../viewport/useViewerRuntime.js";
 import ViewportError from "../status/ViewportError.jsx";
+import { VIEWPORT_CUBE_SIZE, VIEWPORT_CORNER_INSET_PX } from "./viewportLayout.js";
 
-const VIEW_PLANE_CONTROL_SIZE = "7rem";
 const STORED_CAMERA_COORDINATES = "cad-z-up-v1";
 /** How long after the open-time fit the viewport and projection may still be settling. */
 const OPEN_FIT_SETTLE_MS = 600;
@@ -124,7 +123,6 @@ const ShellViewport = forwardRef(function ShellViewport({
   if (scene && !isKitScene(scene)) {
     throw new Error("ShellViewport needs a kit scene: { object3D, bounds, dispose() } (kit/scene.js).");
   }
-  const mobile = useViewerMobile();
   const normalizedSceneScaleMode = normalizeSceneScaleMode(sceneScaleMode);
   const normalizedProjection = normalizeCameraProjection(projection);
   const defaultGridRadius = defaultSceneGridRadius(normalizedSceneScaleMode);
@@ -286,7 +284,7 @@ const ShellViewport = forwardRef(function ShellViewport({
   const coordinateSystemFor = useCallback(() => STORED_CAMERA_COORDINATES, []);
   const {
     activateViewPlaneFace, orbitFromViewCube, applyInitialPerspective, emitPerspectiveChange,
-    resetZoomAndPan, syncPreviewCamera, syncViewPlaneOrientation
+    resetZoomAndPan, resetView, syncPreviewCamera, syncViewPlaneOrientation
   } = useViewportCamera({
     coordinateSystemFor, activeViewPlaneFaceRef, previewCameraRef,
     lastEmittedPerspectiveRef, cameraMovedRef, modelBounds: scene?.restBounds || scene?.bounds || null, modelKey, modelKeyRef,
@@ -389,6 +387,7 @@ const ShellViewport = forwardRef(function ShellViewport({
     // Frame the model again, from where the camera looks now. A renderer's "Zoom to
     // fit" and the live `resetCamera` command are both this one act.
     resetZoom() { return resetZoomAndPan({ animate: true }); },
+    resetView,
     // The scene moved its own bounds (a pose, a frame of a routine): lighting, shadows and
     // the floor follow it NOW, with no React render, no re-adoption and no reframe.
     syncSceneBounds() {
@@ -404,7 +403,7 @@ const ShellViewport = forwardRef(function ShellViewport({
       if (!bounds || !runtime) return false;
       return zoomRuntimeToBounds(runtime, bounds, sceneScaleModeRef.current, { animate, modelOffset: modelTransformRef.current.offset });
     }
-  }), [activateViewPlaneFace, modelKey, normalizedSceneScaleMode, resetZoomAndPan, scene]);
+  }), [activateViewPlaneFace, modelKey, normalizedSceneScaleMode, resetZoomAndPan, resetView, scene]);
 
   // Read-only debug/test seam: the LIVE camera of the viewport that mounted last, so a
   // browser test can assert that moving a model leaves the framing exactly where it was.
@@ -989,16 +988,16 @@ const ShellViewport = forwardRef(function ShellViewport({
       {drawingOverlayActive ? <DrawingOverlay drawing={drawing} onReady={handleDrawingReady} onContentChange={handleDrawingContent} onViewportChange={followDrawingViewport} /> : null}
       {overlay}
       {/* The cube is the tools view's: preview has no cube to draw or keep in step with the orbit. */}
-      {!mobile && !previewMode && <div className="pointer-events-none absolute inset-0">
+      {!previewMode && <div className="pointer-events-none absolute inset-0">
       <ViewPlaneControl
         showViewPlane
         disabled={drawingOverlayActive}
         isLoading={isLoading}
         meshData={scene}
         // Close into the corner: the cube's box is larger than the cube, whose labels overhang it.
-        viewPlaneOffsetRight={4}
-        viewPlaneOffsetBottom={12}
-        viewPlaneSize={VIEW_PLANE_CONTROL_SIZE}
+        viewPlaneOffsetRight={VIEWPORT_CORNER_INSET_PX}
+        viewPlaneOffsetTop={VIEWPORT_CORNER_INSET_PX}
+        viewPlaneSize={VIEWPORT_CUBE_SIZE}
         compact={false}
         activeViewPlaneFace={activeViewPlaneFace}
         viewPlaneFaces={VIEW_PLANE_FACES}

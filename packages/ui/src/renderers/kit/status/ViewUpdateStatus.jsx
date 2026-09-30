@@ -21,7 +21,7 @@ export function ViewUpdateStatus({ status, onRetry, className }) {
   if (!status.error && !visible) return null;
   const label = status.error ? `Couldn’t update view: ${status.error}` : status.label || 'Updating view…';
   if (mobile) return <Popover>
-    <PopoverTrigger asChild><Button variant="ghost" size="icon-xs" className="size-6 shrink-0" aria-label={label}  data-view-update-status>
+    <PopoverTrigger asChild><Button variant="ghost" size="icon-xs" className="pointer-events-auto size-6 shrink-0" aria-label={label}  data-view-update-status>
       {status.error ? <RotateCcw className="size-3.5" /> : <LoaderCircle className="size-3.5 animate-spin" />}
     </Button></PopoverTrigger>
     <PopoverContent className="w-max max-w-64 px-3 py-2 text-tiny" align="start">
@@ -29,7 +29,7 @@ export function ViewUpdateStatus({ status, onRetry, className }) {
       {status.error && <Button variant="ghost" size="sm" onClick={onRetry}>Retry</Button>}
     </PopoverContent>
   </Popover>;
-  return <div className={cn('pointer-events-auto flex min-w-0 items-center gap-2 bg-transparent text-xs text-muted-foreground', className)}
+  return <div className={cn('flex min-w-0 items-center gap-2 bg-transparent text-xs text-muted-foreground', status.error ? 'pointer-events-auto' : 'pointer-events-none', className)}
     role={status.error ? 'alert' : 'status'} aria-live="polite" data-view-update-status>
     {status.error ? <><TooltipHint content={status.error}><span >Couldn’t update view</span></TooltipHint>
       <Button size="icon-xs" variant="ghost" aria-label="Retry view update" onClick={onRetry}><RotateCcw className="size-3.5" /></Button></>

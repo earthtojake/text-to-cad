@@ -83,7 +83,9 @@ replace a new file's actions. Publish only when action metadata changes; stable
 commands should read the current viewport through a ref, avoiding parent/child
 render loops. These actions use existing host capabilities for effects. For
 example, CAD's snapshot delivers through `host.promptContext`, which binds the
-destination before waiting for the image. It never detects the platform.
+destination before waiting for the image. A composer destination has no snapshot
+action: its Add To Prompt lives at the bottom of the viewport instead. Neither
+route detects the platform.
 
 `navigation.openFile(path, { target, panel })` shows a file in this view
 (`"current"`) or in a new one, where the host has more than one (`"new"`). `panel`
@@ -168,7 +170,8 @@ CAD's `slots.selectionExtras` mounts an optional React component beside shared
 selection actions. It receives immutable typed selection, `selectionKey`,
 disabled state and `createContext({text, capture})`. It receives no scene, stores,
 IPC or arbitrary internal setters. Shared actions remain visible. Neither app
-mounts one today.
+mounts one today. The slot shares the bottom row with Copy Reference(s), so a
+composer destination, whose bottom row is the shell's Add To Prompt, does not show it.
 
 The renderer owns placement and visibility. A contributed popover owns its focus,
 Escape handling and cleanup, stops events it consumes, and closes or invalidates
@@ -298,10 +301,16 @@ host controls before renderer navigation actions (such as Snapshot), and
 preview; the host owns callbacks and preferences. These slots do not imply platform detection
 or move application-specific release/network behavior into shared UI.
 
-For snapshot actions, clipboard destinations receive the viewport PNG directly
-through `ClipboardPort.writeImage`; composer destinations retain prompt-context
-delivery. Native clipboard effects remain in the host implementation.
-
+For `destination.kind === "composer"`, the single bottom Add To Prompt action
+always includes a viewport PNG and adds selected references when present. It uses
+`PromptContextPort`; the host binds its destination during the gesture, so a later
+image encode cannot redirect it. The action is absent in Preview, and it takes the
+place of both the snapshot action and the selection's Copy Reference(s). Clipboard
+destinations keep both: the snapshot action receives the viewport PNG directly
+through `ClipboardPort.writeImage`, and the bottom action is Copy Reference(s), or
+Copy Drawing while Draw has ink. The choice follows the subscribed destination
+capability, never an app name. Native clipboard effects remain in the host
+implementation.
 
 The viewport's Copy Reference(s) and Copy Drawing actions use `ClipboardPort`
 directly, including on desktop. Their copy shortcut and double-click topology

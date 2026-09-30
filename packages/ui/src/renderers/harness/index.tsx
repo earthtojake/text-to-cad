@@ -56,7 +56,7 @@ function workspace(id: string) {
     stat: async (path) => ({ path, name: path, kind: 'file', size: 400, extension: path.split('.').pop() || '' }),
     list: async () => [{ path: file, name: file, kind: 'file' }]
   };
-  const destination = { kind: 'composer' as const, available: true };
+  const destination = { kind: (window as unknown as { __cadPromptDestination?: 'clipboard' }).__cadPromptDestination || 'composer' as const, available: true };
   const host: ViewerHost = { files: source, navigation: { openFile(path) { opened.push(path); } }, environment: { colorScheme: 'dark', platform: keyboardPlatform },
     clipboard: { writeText: async () => {}, readText: async () => '', writeImage: async () => {} },
     promptContext: { getSnapshot: () => destination, subscribe: () => () => {}, deliver: async context => {

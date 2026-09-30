@@ -195,7 +195,7 @@ const barButtons = () => [...document.querySelector('[data-viewport-actions]')!.
 it('Display is a popover beside Preview, never a tool: opened over Draw it leaves Draw in hand with its panel, and the stack as it was', async () => {
   const user = userEvent.setup();
   frame();
-  expect(barButtons()).toEqual(['Display settings', 'Preview']);
+  expect(barButtons()).toEqual(['Display settings', 'Reset view', 'Preview']);
   expect(within(screen.getByRole('group', { name: 'Interaction tools' })).queryByRole('button', { name: /^Display/ })).toBeNull();
   await user.click(tool('Keep'));
   await user.click(tool('Draw'));
@@ -259,7 +259,7 @@ it("Preview puts the strip and the stack away and keeps the bar, never opening t
   expect([chrome.hidden, chrome.hasAttribute('inert')]).toEqual([true, true]);
   expect(chrome.contains(document.querySelector('[data-cad-tool-stack]'))).toBe(true);
   expect(displayPopover()).toBeNull();
-  expect(barButtons()).toEqual(['Display settings', 'Exit preview']);
+  expect(barButtons()).toEqual(['Display settings', 'Reset view', 'Exit preview']);
   expect(viewportProps.current.previewMode).toBe(true);
   await user.click(screen.getByRole('button', { name: 'Exit preview' }));
   expect(chrome.hidden).toBe(false);

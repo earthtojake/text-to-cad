@@ -1549,6 +1549,7 @@ function StepSurfaceBody({ view, data }) {
   // and every one of them reads the view as it stands when it is CALLED.
   const stepLiveStateRef = useRef(() => ({}));
   const stepLiveCommandsRef = useRef({});
+  const resetViewStateRef = useRef(() => {});
   const stepLiveCommands = useMemo(() => Object.fromEntries(
     ["select", "clearSelection"].map(name => [name, (...args) => stepLiveCommandsRef.current[name]?.(...args)])
   ), []);
@@ -1600,6 +1601,7 @@ function StepSurfaceBody({ view, data }) {
     promptContext: createCadPromptContext,
     escape: { active: escapeActive, handle: () => escapeRef.current() },
     rendererState: session.rendererState,
+    onResetView: () => resetViewStateRef.current(),
     onCameraSettled: () => onLodCameraMoved(),
     preserveInteractionPixelRatio: viewPolicy.wireframeMode || viewPolicy.edgesVisible,
     runtimeLifecycle: stepRuntimeLifecycle,
@@ -3121,6 +3123,19 @@ function StepSurfaceBody({ view, data }) {
   // What a snapshot depicts: the references the selection resolves to, in this renderer's own
   // vocabulary (`createCadPromptContext` speaks it).
   promptReferencesRef.current = () => referencesForHost(canonicalCopySelectionLines.join("\n"));
+  // Reset view puts the inspection back as a file opens: nothing selected, hidden or
+  // isolated, no measurement, and every joint at its rest pose.
+  resetViewStateRef.current = () => {
+    clearAssemblySelectionForFocus();
+    setSelectionFilter("all");
+    setConnectedSelection(NO_CONNECTED_SELECTION);
+    setPendingTopologyPick(null);
+    setHiddenPartIds([]);
+    setIsolatedAssemblyNodeIds([]);
+    measure.clear();
+    measure.setFilter("all");
+    motion.positionControls.onResetMotion();
+  };
   stepLiveCommandsRef.current = {
     select({ selectors, replace = true }) {
       const names = uniqueStringList(selectors.flatMap(selector => String(selector).split(',').map(value => value.trim())).filter(Boolean));
