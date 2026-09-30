@@ -1,23 +1,13 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { ArrowLeft, FileText } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createCadClient } from '@text-to-cad/core/client';
 import { unavailablePromptContext, type ResourceRef } from '@text-to-cad/core/prompt';
-import { FileViewer } from '@text-to-cad/ui/file-viewer';
-import { EmptyCadBackdrop } from '@text-to-cad/ui/file-viewer/empty';
-import { MissingFileAlert, ViewerLoadingOverlay } from '@text-to-cad/ui/file-viewer/presentation';
-import type { ViewerHost } from '@text-to-cad/ui/host';
-import { useModelThumbnail } from '@text-to-cad/ui/library';
-import { EmptyState } from '@text-to-cad/ui/navigation';
-import { Button } from '@text-to-cad/ui/primitives/button';
-import { createDxfRenderer } from '@text-to-cad/ui/renderers/dxf';
-import { createGlbRenderer } from '@text-to-cad/ui/renderers/glb';
-import { createMeshRenderer } from '@text-to-cad/ui/renderers/mesh';
-import { createRobotRenderer } from '@text-to-cad/ui/renderers/robot';
-import { createStepRenderer } from '@text-to-cad/ui/renderers/step';
-import { useTabViewerState, type TabStore } from '@text-to-cad/ui/tab-store';
+import { CadViewer, createCadFileActions, createCatalogFileSource, normalizeCatalogPath, pathUnderRoot, referencePath, rootPath } from '@text-to-cad/ui/cad-viewer';
+import type { ViewerHost, ViewerLinks } from '@text-to-cad/ui/host';
+import type { ModelLibrarySource } from '@text-to-cad/ui/library';
+import type { TabStore } from '@text-to-cad/ui/tab-store';
 import type { Bridge } from './host/bridge';
 import { frameClipboard } from './host/clipboard';
-import { absolutePath, catalogPath, createCatalogSource, createFileActions, createFilesystemSource, relativePath } from './host/files';
+import { createFilesystemSource } from './host/files';
 import type { LiveRegistry } from './host/live';
 import { createComposerPromptContext } from './host/prompt';
 import type { Launch, Root, Server } from './host/server';
@@ -29,13 +19,18 @@ export interface ViewReporter {
 }
 
 /**
- * One model, one root: the shared FileViewer over this host. Everything differs by data --
- * the root it browses, whether it browses at all, where Add to prompt goes -- never by where
+ * One root's view: the shared CAD viewer over this host — the model a launch names, or with none,
+ * the home (the library, and the root's explorer where the launch browses). Everything differs by
+ * data — the root it browses, whether it browses at all, where Add to prompt goes — never by where
  * the view is.
  */
-export default function ModelView({ launch, root: launchedRoot, sequence, bridge, server, tabStore, live, colorScheme, platform, reporter, onHome, compact = false, composer = true }: {
-  launch: Launch; root: Root; sequence: number; bridge: Bridge; server: Server; tabStore: TabStore; live: LiveRegistry;
-  colorScheme: 'light' | 'dark'; platform: string; reporter: ViewReporter; onHome?: () => void;
+export default function ModelView({ launch, root: launchedRoot, sequence, bridge, server, tabStore, live, links, colorScheme, platform, reporter, onLaunch, onHome, compact = false, composer = true }: {
+  launch: Launch; root: Root; sequence: number; bridge: Bridge; server: Server; tabStore: TabStore; live: LiveRegistry; links: ViewerLinks;
+  colorScheme: 'light' | 'dark'; platform: string; reporter: ViewReporter;
+  /** Show what the server launched: a model, possibly under another root. */
+  onLaunch(launch: Launch): void;
+  /** Show this view's home. */
+  onHome(): void;
   /** Shown small, inline in the chat: the renderer draws the model, not its tools. */
   compact?: boolean;
   /** Add to prompt reaches the host's composer; without one, the viewer offers no prompt action. */
@@ -50,66 +45,60 @@ export default function ModelView({ launch, root: launchedRoot, sequence, bridge
   }), [tunnel]);
   useEffect(() => () => client.dispose(), [client]);
   const sourceId = `local-fs:${root.path}`;
-  // The file on screen, as the root names it.
-  const [file, setFile] = useState(() => (launch.model && relativePath(root, launch.model)) || '');
+  const global = root.kind === 'global';
+  // The file on screen, as the root names it; '' is the home.
+  const launched = () => (launch.model && pathUnderRoot(root.path, launch.model)) || '';
+  const [file, setFile] = useState(launched);
   const showing = useRef(file);
   showing.current = file;
   // A project browses its catalog; a filesystem is read a folder at a time.
-  const source = useMemo(() => root.kind === 'global'
+  const source = useMemo(() => global
     ? createFilesystemSource(client, root, tunnel, { id: sourceId, explore: launch.explore, showing: () => showing.current || null })
-    : createCatalogSource(client, root, { id: sourceId, explore: launch.explore }), [client, root, tunnel, sourceId, launch.explore]);
-  const resolvePath = useCallback((resource: ResourceRef) => {
-    if (resource.kind === 'url') return resource.url;
-    if (resource.workspaceId !== sourceId) throw new Error('This reference belongs to another folder.');
-    return absolutePath(root, resource.path);
-  }, [root, sourceId]);
+    : createCatalogFileSource(client, { id: sourceId, rootName: root.name, browse: launch.explore }), [client, root, tunnel, sourceId, launch.explore, global]);
+  const resolvePath = useCallback((resource: ResourceRef) => referencePath(resource, { workspaceId: sourceId, root: root.path }), [root, sourceId]);
   const composerContext = useMemo(() => composer ? createComposerPromptContext(bridge, { resolvePath }) : null, [composer, bridge, resolvePath]);
   useEffect(() => () => composerContext?.dispose(), [composerContext]);
   const promptContext = composerContext ?? unavailablePromptContext;
-  const fileActions = useMemo(() => createFileActions(root, frameClipboard, platform), [root, platform]);
-  const preferences = tabStore.settings;
-  const renderers = useMemo(() => [
-    createStepRenderer({ client, preferences, live: live.binding }),
-    createDxfRenderer({ client, preferences, live: live.binding }),
-    createGlbRenderer({ client, preferences, live: live.binding }),
-    createMeshRenderer({ client, preferences, live: live.binding }),
-    createRobotRenderer({ client, preferences, live: live.binding }),
-  ], [client, preferences, live]);
-  const catalog = useSyncExternalStore(client.subscribe, client.getSnapshot, client.getSnapshot);
-  const { state, onStateChange, setPanel } = useTabViewerState(tabStore, source.id);
+  // The file menu: its paths, and Reveal in the desktop's file manager (the server is on this machine).
+  const fileActions = useMemo(() => createCadFileActions({
+    root: root.path, platform, clipboard: frameClipboard,
+    // A path relative to a whole filesystem is its absolute path, less the first slash.
+    relative: !global,
+    reveal: path => server.reveal(root, path),
+  }), [root, platform, server, global]);
 
-  useEffect(() => { setFile((launch.model && relativePath(root, launch.model)) || ''); }, [launch, root, sequence]);
-  const model = file ? absolutePath(root, file) : null;
+  useEffect(() => { setFile(launched()); }, [launch, root, sequence]);
+  const model = file ? rootPath(root.path, file) : null;
   useEffect(() => { reporter.showing(model, resolvePath); }, [reporter, model, resolvePath]);
-  useEffect(() => {
-    const refresh = () => { if (document.visibilityState !== 'hidden') void client.refresh({ markRefreshing: false }).catch(() => {}); };
-    document.addEventListener('visibilitychange', refresh);
-    return () => document.removeEventListener('visibilitychange', refresh);
-  }, [client]);
-  useModelThumbnail(live, model, async (png, shown) => server.recents({ action: 'thumbnail', path: shown, png: encodeBase64(new Uint8Array(await png.arrayBuffer())) }));
 
-  const open = useCallback((path: string, options?: { panel?: string }) => {
-    // A project's files are its catalog's; a filesystem's catalog is only the file on screen.
-    if (root.kind !== 'global' && !client.getSnapshot().entries.some(candidate => catalogPath(candidate) === path)) return;
-    setFile(path);
-    setPanel(options?.panel ?? null);
-  }, [client, root.kind, setPanel]);
-  const host = useMemo<ViewerHost>(() => ({
-    files: source, fileActions, clipboard: frameClipboard, promptContext,
-    navigation: { openFile: open }, environment: compact ? { colorScheme, platform, compact } : { colorScheme, platform },
-  }), [source, fileActions, promptContext, open, colorScheme, platform, compact]);
+  const opened = useRef(onLaunch);
+  opened.current = onLaunch;
+  // The models opened before, from every view and the web viewer; Open Model picks one from disk
+  // with the desktop's chooser. Opening switches this same view to the model.
+  const library = useMemo<ModelLibrarySource>(() => ({
+    list: () => server.recents(),
+    change: (action, entry) => server.recents({ action, path: entry.path }),
+    thumbnail: name => server.thumbnails([name]).then(found => found[name] ? `data:image/png;base64,${found[name]}` : null),
+    open: entry => server.launch(entry.path).then(next => opened.current(next)),
+    pick: () => server.pickModel().then(result => { if (result.launch) opened.current(result.launch); }),
+  }), [server]);
+  const home = useRef(onHome);
+  home.current = onHome;
+  // Showing another file: from the home, the server launches it (and remembers it, and says which
+  // root it is under); from a model, it is this root's, shown in place.
+  const show = useCallback((next: string) => {
+    if (!next) { home.current(); return; }
+    if (!showing.current) { void server.launch(rootPath(root.path, next)).then(launchedModel => opened.current(launchedModel), error => console.error(error)); return; }
+    setFile(next);
+  }, [server, root]);
+  const host = useMemo<Omit<ViewerHost, 'navigation'>>(() => ({
+    files: source, fileActions, clipboard: frameClipboard, promptContext, links,
+    environment: compact ? { colorScheme, platform, compact } : { colorScheme, platform },
+  }), [source, fileActions, promptContext, links, colorScheme, platform, compact]);
 
-  const selected = catalog.entries.find(entry => catalogPath(entry) === file);
-  const navigationPath = !launch.explore ? null : selected ? catalogPath(selected) : catalog.hydrated ? file || null : null;
-  const empty = <div className="pointer-events-auto absolute inset-0 z-10 bg-background">
-    <EmptyState icon={FileText} title="No model open" description={launch.explore ? 'Pick one from the files, or ask the agent to show one.' : 'Ask the agent to show a model.'} />
-  </div>;
-  const leading = onHome ? <Button variant="ghost" size="icon-sm" aria-label="Back to CAD home" onClick={onHome}><ArrowLeft aria-hidden="true" /></Button> : undefined;
-  return <FileViewer file={file || null} host={host} renderers={renderers} state={state} onStateChange={onStateChange}
-    leading={leading} navigationPath={navigationPath} onError={error => console.error(error)}
-    presentation={{
-      empty: <div className="relative h-full">{empty}</div>,
-      loading: <div className="relative h-full"><ViewerLoadingOverlay viewerLoading /></div>,
-      error: () => <div className="relative h-full">{catalog.error ? empty : <EmptyCadBackdrop colorScheme={colorScheme}><MissingFileAlert missingFileRef={file} rootPath={root.path} /></EmptyCadBackdrop>}</div>,
-    }} />;
+  return <CadViewer client={client} host={host} tabStore={tabStore} live={live} file={file} onShow={show}
+    // A filesystem's catalog holds only the file on screen: what its explorer lists is the filesystem's.
+    accept={global ? path => normalizeCatalogPath(path) || null : undefined}
+    rootPath={root.path} library={library}
+    onThumbnail={async (png, pictured) => server.recents({ action: 'thumbnail', path: rootPath(root.path, pictured), png: encodeBase64(new Uint8Array(await png.arrayBuffer())) })} />;
 }

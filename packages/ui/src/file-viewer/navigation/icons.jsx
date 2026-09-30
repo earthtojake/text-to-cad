@@ -1,5 +1,5 @@
 /**
- * One icon per file type, for a file tree, a breadcrumb menu and a tab strip.
+ * One icon per file type, for a file tree, a menu and a tab strip.
  *
  * lucide only, and one weight: a tree whose rows carry six different icon
  * families reads as noise. What the icon has to do at 14px is separate a

@@ -190,9 +190,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   for (const [name, text, standalone] of [['logo-c', 'C', true], ['logo-cad', 'CAD', false], ['logo-text2cad', 'TEXT2CAD', false]]) {
     await writeFile(path.join(out, `${name}.svg`), logoSvg(text, { standalone }));
   }
-  await copyFile(path.join(out, 'logo-c.svg'), path.join(root, 'apps/web/src/client/assets/logo-c.svg'));
+  // The viewer's navbar and home draw the C and the CAD wordmark from the shared UI package.
+  for (const name of ['logo-c', 'logo-cad']) await copyFile(path.join(out, `${name}.svg`), path.join(root, `packages/ui/src/assets/${name}.svg`));
   const cadSources = path.join(root, 'models/branding/src');
   await mkdir(cadSources, { recursive: true });
   await writeFile(path.join(cadSources, 'profiles.json'), `${JSON.stringify(logoProfiles(), null, 2)}\n`);
-  console.log('Generated C, CAD and TEXT2CAD; synchronized the viewer mark and CAD profiles.');
+  console.log('Generated C, CAD and TEXT2CAD; synchronized the viewer marks and CAD profiles.');
 }

@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { Files } from 'lucide-react';
 import { ToolbarButton } from '../../dist/primitives/toolbar-button.js';
-import { PanelToggle } from '../../dist/file-viewer/navigation/FileNavRow.js';
+import { PanelToggle } from '../../dist/file-viewer/navigation/ViewerNavbar.js';
 import FloatingToolBar from '../../dist/renderers/kit/tools/FloatingToolBar.js';
 import PreviewChrome from '../../dist/renderers/kit/tools/PreviewChrome.js';
 

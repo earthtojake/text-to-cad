@@ -1,31 +1,14 @@
-import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
-import { Ellipsis } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "../../primitives/dropdown-menu.jsx";
-import { EntryContextMenu, EntryMenuItems, FILE_PANEL_TREE, InlineName, parentOf, useEntryMenuFocusGuard } from "../navigation/index.js";
-import type { CrumbSource, EntryAction, FileTreeSource, MenuEntryTarget, TreeEdit, TreeEditRequest } from "../navigation/index.js";
+import { FILE_PANEL_TREE } from "../navigation/index.js";
+import type { EntryAction, FileTreeSource, MenuEntryTarget, NavbarFile, TreeEdit, TreeEditRequest } from "../navigation/index.js";
 import type { FileActions, FileChange, FileEntry, FileMutationResult, FileSource, FileViewerProps, FileViewerState } from "../types.js";
-import { movedFilePath, reconcileFileTree } from "../fileChanges.js";
+import { movedFilePath, parentOf, reconcileFileTree } from "../fileChanges.js";
 import { errorMessage } from "./useFileDocument.js";
 import type { ViewerHost } from "../../host/types.js";
 
 type MenuAction = (action: EntryAction, entry: MenuEntryTarget) => void;
-function CrumbActions({ entry, capabilities, platform, onAction }: {
-  entry: MenuEntryTarget; capabilities: ReadonlySet<EntryAction>; platform: "darwin" | "win32" | "linux"; onAction: MenuAction;
-}) {
-  const guard = useEntryMenuFocusGuard(onAction);
-  return <DropdownMenu modal={false}>
-    <DropdownMenuTrigger asChild><TooltipHint content="File actions"><button aria-label="File actions"  data-testid="crumb-actions" type="button"
-      className="flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring data-[state=open]:bg-accent data-[state=open]:text-accent-foreground">
-      <Ellipsis className="size-3.5" />
-    </button></TooltipHint></DropdownMenuTrigger>
-    <DropdownMenuContent align="start" className="w-56" data-entry-menu={entry.path} onCloseAutoFocus={guard.onCloseAutoFocus} sideOffset={6}>
-      <EntryMenuItems capabilities={capabilities} entry={entry} onAction={guard.onAction} platform={platform} surface="dropdown" />
-    </DropdownMenuContent>
-  </DropdownMenu>;
-}
 
-/** One shared cache feeds breadcrumb menus and tree rows for this mounted root. */
+/** One shared cache feeds the explorer's rows for this mounted root; the navbar's ⋯ shares its menu. */
 export function useFileNavigation({ source, actions, state, onStateChange, onOpenFile, path, onError }: {
   source: FileSource; actions?: FileActions; state: FileViewerState; onStateChange: FileViewerProps["onStateChange"];
   onOpenFile: ViewerHost["navigation"]["openFile"]; path: string | null; onError?: FileViewerProps["onError"];
@@ -141,9 +124,10 @@ export function useFileNavigation({ source, actions, state, onStateChange, onOpe
     catch (error) { if (current.current.source === source) report(error); return false; }
   }, [source, load, report, mutate]);
   const onAction = useCallback<MenuAction>((action, entry) => {
-    if (action === "open") onOpenFile(entry.path, entry.surface === "crumb" ? { target: "new" } : { target: "new", panel: FILE_PANEL_TREE });
+    if (action === "open") onOpenFile(entry.path, { target: "new", panel: FILE_PANEL_TREE });
     else if (action === "rename") {
-      if (entry.path === path && entry.surface === "crumb" && path !== null) setRenaming({ sourceId: source.id, path });
+      // The navbar's ⋯ renames the open file where its name is; a row's menu, in its row.
+      if (entry.path === path && entry.surface === "navbar" && path !== null) setRenaming({ sourceId: source.id, path });
       else askTree({ mode: "rename", entry });
     } else if (action === "new-file" || action === "new-folder") askTree({ mode: "create", directory: entry.path, kind: action === "new-file" ? "file" : "directory" });
     else if (action === "trash") void trash(entry);
@@ -160,19 +144,19 @@ export function useFileNavigation({ source, actions, state, onStateChange, onOpe
   }, [source, report]);
   const tree: FileTreeSource = { rootName: source.rootName, expanded, setExpanded, listings, load, revision, paths, platform, capabilities, onAction,
     rename: source.rename ? rename : undefined, create: source.create ? create : undefined, trash: source.trash ? trash : undefined };
-  const crumbs: CrumbSource = {
-    useListing(directory) {
-      const listed = listings[directory];
-      useEffect(() => { if (listed === undefined) load(directory); }, [directory, listed]);
-      return listed ?? null;
+  // The open file as the navbar names it: the explorer's menu for it, and a field over its name
+  // while it is being renamed.
+  const renamingPath = renaming?.sourceId === source.id && renaming.path === path ? path : null;
+  const file: NavbarFile | null = path === null ? null : {
+    path, capabilities, platform, onAction,
+    renaming: renamingPath === null ? null : {
+      cancel: () => setRenaming(null),
+      async commit(name) {
+        const renamed = await rename({ path: renamingPath, kind: "file" }, name);
+        if (renamed !== null) setRenaming(previous => previous?.sourceId === source.id && previous.path === renamingPath ? null : previous);
+        return renamed !== null;
+      },
     },
-    wrapCrumb: ({ crumb, children }) => <EntryContextMenu capabilities={capabilities} entry={{ path: crumb.path, kind: crumb.kind === "file" ? "file" : "directory", surface: "crumb" }} onAction={onAction} platform={platform}>{children}</EntryContextMenu>,
-    renderCrumbActions: ({ crumb }) => <CrumbActions entry={{ path: crumb.path, kind: "file", surface: "crumb" }} capabilities={capabilities} platform={platform} onAction={onAction} />,
-    renderRename: ({ crumb }) => renaming?.sourceId === source.id && renaming.path === path && path !== null ? <InlineName initial={crumb.label} kind="file" label="Rename file" className="max-w-64" onCancel={() => setRenaming(null)} onCommit={async (name) => {
-      const renamed = await rename({ path: crumb.path, kind: "file" }, name);
-      if (renamed !== null) setRenaming(previous => previous?.sourceId === source.id && previous.path === crumb.path ? null : previous);
-      return renamed !== null;
-    }} /> : null,
   };
-  return { tree, crumbs, edit: editing?.sourceId === source.id ? editing.edit : null };
+  return { tree, file, edit: editing?.sourceId === source.id ? editing.edit : null };
 }

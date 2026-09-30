@@ -97,7 +97,7 @@ export interface PrepareContext {
   refresh?: boolean;
 }
 export interface PreparedDocument<T> { data: T; text?: TextDocument; dispose?: () => void }
-/** Renderer-owned actions shown before the common panel buttons. Never persisted. */
+/** Renderer-owned actions shown at the navbar's right, before any declared panel's toggle. Never persisted. */
 export interface FileNavigationAction {
   id: string;
   /** The accessible name. */
@@ -166,12 +166,12 @@ export interface FileViewerProps {
   renderers: readonly RendererRegistration[];
   state: FileViewerState;
   onStateChange: (next: FileViewerState) => void;
-  leading?: ReactNode;
-  /** Host content before renderer actions in the navbar. */
-  navigationActions?: ReactNode;
   /** Host controls inside the CAD Display popover. */
   displayActions?: ReactNode;
-  /** Override the selected path shown by breadcrumbs and tree, e.g. before a catalog resolves. */
+  /**
+   * Override the selected path the navbar names and the explorer marks, e.g. `null` while a host
+   * catalog is still resolving the requested file. It does not change the requested document.
+   */
   navigationPath?: string | null;
   reveal?: { path: string; directory: boolean; nonce?: number } | null;
   onError?: (error: Error) => void;

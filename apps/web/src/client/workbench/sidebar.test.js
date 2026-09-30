@@ -2,61 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
-  cadFileParamForEntry,
-  findEntryByUrlPath,
   normalizeCadFileQueryParam,
   writeCadParam
 } from "./sidebar.js";
-
-test("findEntryByUrlPath matches catalog-root file params exactly", () => {
-  const entry = {
-    file: "examples/sample_assembly.step",
-    kind: "assembly"
-  };
-
-  assert.equal(
-    findEntryByUrlPath([entry], "examples/sample_assembly.step"),
-    entry
-  );
-  assert.equal(
-    findEntryByUrlPath([entry], "examples/sample_assembly"),
-    null
-  );
-});
-
-test("findEntryByUrlPath matches local backend root-relative file params", () => {
-  const entry = {
-    file: "/tmp/workspace/models/examples/sample_assembly.step",
-    rootRelativeFile: "examples/sample_assembly.step",
-    kind: "assembly"
-  };
-
-  assert.equal(
-    findEntryByUrlPath([entry], "examples/sample_assembly.step"),
-    entry
-  );
-  assert.equal(
-    findEntryByUrlPath([entry], "/tmp/workspace/models/examples/sample_assembly.step"),
-    null
-  );
-  assert.equal(
-    findEntryByUrlPath([entry], "models/examples/sample_assembly.step"),
-    null
-  );
-});
-
-test("cadFileParamForEntry keeps directory navigation root-relative", () => {
-  const entry = {
-    file: "/tmp/workspace/models/examples/sample_assembly.step",
-    rootRelativeFile: "examples/sample_assembly.step",
-    kind: "assembly"
-  };
-
-  assert.equal(
-    cadFileParamForEntry(entry),
-    "examples/sample_assembly.step"
-  );
-});
 
 test("normalizeCadFileQueryParam normalizes file params as relative paths", () => {
   assert.equal(normalizeCadFileQueryParam("parts/sample_plate.step"), "parts/sample_plate.step");

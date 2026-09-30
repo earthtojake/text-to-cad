@@ -15,12 +15,9 @@ import {
 import { Fragment, createElement, useMemo, useRef } from "react";
 
 import {
-  ContextMenu,
-  ContextMenuContent,
   ContextMenuItem,
   ContextMenuSeparator,
-  ContextMenuShortcut,
-  ContextMenuTrigger
+  ContextMenuShortcut
 } from "@text-to-cad/ui/primitives/context-menu";
 import {
   DropdownMenuItem,
@@ -31,18 +28,18 @@ import {
 import { ALL_ENTRY_CAPABILITIES, FIELD_ENTRY_ACTIONS, entryMenu } from "./entry-menu.js";
 
 /**
- * The menu on a file or a folder — the tree's rows, the breadcrumb's crumbs,
- * and the empty space under the tree (which is the root). What is in it is
- * `entry-menu.js`; what it DOES is the host's, handed in as one `onAction`
- * callback, because "copy this path" means an IPC round trip in the desktop
- * app and a clipboard write in a browser tab.
+ * The menu on a file or a folder — the explorer's rows, the empty space under
+ * them (which is the root), and the navbar's ⋯ after the open file's name. What
+ * is in it is `entry-menu.js`; what it DOES is the host's, handed in as one
+ * `onAction` callback, because "copy this path" means an IPC round trip in one
+ * app and a clipboard write in another.
  *
- * `EntryMenuItems` is exported on its own because the tree does not wrap every
- * row in a menu of its own: one menu over the whole list, aimed at whichever
- * row was clicked, is one Radix root instead of three hundred. It also draws
- * in a dropdown (`surface="dropdown"`) for the file crumb's `⋯` button, which
- * opens by click rather than by right-click: Radix's two menu primitives take
- * the same item props, so one table and one set of actions serve both doors.
+ * The explorer does not wrap every row in a menu of its own: one right-click
+ * menu over the whole list, aimed at whichever row was clicked, is one Radix
+ * root instead of three hundred. The navbar's ⋯ draws the same items in a
+ * dropdown (`surface="dropdown"`), opened by a click: Radix's two menu
+ * primitives take the same item props, so one table and one set of actions
+ * serve both doors.
  */
 
 const SURFACES = {
@@ -141,50 +138,5 @@ export function EntryMenuItems({
         </Fragment>
       ))}
     </>
-  );
-}
-
-/**
- * One element's own right-click menu — a crumb.
- *
- * A host with no actions to offer gets no menu at all rather than an empty
- * one: `entryMenu` filtered by an empty capability set is an empty list, and a
- * right-click that opens a blank popover is worse than a right-click that does
- * nothing.
- *
- * @param {object} props
- * @param {import("./entry-menu.js").MenuEntryTarget} props.entry
- * @param {import("./entry-menu.js").Platform} props.platform
- * @param {ReadonlySet<import("./entry-menu.js").EntryAction>} [props.capabilities]
- * @param {(action: import("./entry-menu.js").EntryAction, entry: import("./entry-menu.js").MenuEntryTarget) => void} props.onAction
- * @param {import("react").ReactNode} props.children
- */
-export function EntryContextMenu({
-  entry,
-  platform,
-  capabilities = ALL_ENTRY_CAPABILITIES,
-  onAction,
-  children
-}) {
-  const guard = useEntryMenuFocusGuard(onAction);
-  if (entryMenu(entry, platform, capabilities).length === 0) {
-    return children;
-  }
-  return (
-    <ContextMenu modal={false}>
-      <ContextMenuTrigger asChild>{children}</ContextMenuTrigger>
-      <ContextMenuContent
-        className="w-56"
-        data-entry-menu={entry.path}
-        onCloseAutoFocus={guard.onCloseAutoFocus}
-      >
-        <EntryMenuItems
-          capabilities={capabilities}
-          entry={entry}
-          onAction={guard.onAction}
-          platform={platform}
-        />
-      </ContextMenuContent>
-    </ContextMenu>
   );
 }

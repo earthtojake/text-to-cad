@@ -1,19 +1,19 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react';
-import { FolderX, Maximize2 } from 'lucide-react';
+import { Maximize2 } from 'lucide-react';
 import type { ResourceRef } from '@text-to-cad/core/prompt';
-import { EmptyState } from '@text-to-cad/ui/navigation';
+import { viewerLinks } from '@text-to-cad/ui/links';
 import { Button } from '@text-to-cad/ui/primitives/button';
 import { createTabStore, memoryTabRecord } from '@text-to-cad/ui/tab-store';
+import { version } from '../package.json';
 import type { Bridge, HostContext } from './host/bridge';
 import { watchViewEvents } from './host/events';
 import { createLiveRegistry, describeView } from './host/live';
 import { watchSupersession, type Presentation } from './host/presentation';
 import { reachesComposer } from './host/prompt';
 import type { Launch, Root, Server, Session } from './host/server';
-import Home from './Home';
 import ModelView, { type ViewReporter } from './ModelView';
 
-interface Showing { launch: Launch; sequence: number; fromHome: boolean }
+interface Showing { launch: Launch; sequence: number }
 
 const rootKey = (root: Root) => `${root.kind}:${root.path}`;
 // The host's sandbox need not be a secure context, where randomUUID is missing.
@@ -100,7 +100,7 @@ export default function App({ bridge, server, launch: initial, session, presenta
   // Once a newer view of this chat is up: this one's last frame (or null), and nothing else.
   const [still, setStill] = useState<string | null | undefined>(undefined);
   const superseded = still !== undefined;
-  const [showing, setShowing] = useState<Showing>({ launch: initial, sequence: 0, fromHome: false });
+  const [showing, setShowing] = useState<Showing>({ launch: initial, sequence: 0 });
   const shown = useRef<{ model: string | null; resolvePath: (resource: ResourceRef) => string }>({ model: null, resolvePath: unresolved });
   const reporter = useMemo<ViewReporter>(() => ({
     showing(model, resolvePath) {
@@ -127,7 +127,7 @@ export default function App({ bridge, server, launch: initial, session, presenta
     if (superseded) return;
     const lifetime = new AbortController();
     watchViewEvents(server, { id: view, surface, model: () => shown.current.model }, {
-      show: launch => setShowing(previous => ({ launch, sequence: previous.sequence + 1, fromHome: previous.fromHome || previous.launch.page === 'home' })),
+      show: launch => setShowing(previous => ({ launch, sequence: previous.sequence + 1 })),
       capture: async () => {
         const controller = live.current();
         if (!controller) throw new Error('No model is showing in this CAD view.');
@@ -148,25 +148,19 @@ export default function App({ bridge, server, launch: initial, session, presenta
     return () => { lifetime.abort(); stop(); window.removeEventListener('pointerdown', touched, true); window.removeEventListener('focus', touched); };
   }, [bridge, server, view, surface, live, superseded]);
 
+  // The navbar's links: the same three as every app's, followed through the host (a frame cannot open one itself).
+  const links = useMemo(() => viewerLinks({ version, open: url => bridge.request('ui/open-link', { url }).then(() => {}) }), [bridge]);
+  // A view opened on the home goes back to that home; one opened on a model, to its own root's.
   const home = initial.page === 'home' ? initial : null;
+  const goHome = () => setShowing(previous => ({ launch: home ?? { ...previous.launch, page: 'home', model: null }, sequence: previous.sequence + 1 }));
+  const show = (launch: Launch) => setShowing(previous => ({ launch, sequence: previous.sequence + 1 }));
   const { launch } = showing;
   if (superseded) {
     return <Frame bridge={bridge} context={context} insets={insets} inline={inline} bottomCenter={bottomCenter} expandable={false}><Superseded still={still} /></Frame>;
   }
-  if (launch.page === 'home') {
-    return <Frame bridge={bridge} context={context} insets={insets} inline={inline} bottomCenter={bottomCenter}>
-      <Home server={server} onOpen={next => setShowing(previous => ({ launch: next, sequence: previous.sequence + 1, fromHome: true }))}
-        onOpenLink={url => bridge.request('ui/open-link', { url }).then(() => {})} />
-    </Frame>;
-  }
-  if (!launch.root) {
-    return <Frame bridge={bridge} context={context} insets={insets} inline={inline} bottomCenter={bottomCenter}>
-      <EmptyState icon={FolderX} title="No model open" description="This chat has no project folder. Ask the agent to show a model by its path." />
-    </Frame>;
-  }
   return <Frame bridge={bridge} context={context} insets={insets} inline={inline} bottomCenter={bottomCenter}>
     <ModelView key={rootKey(launch.root)} launch={launch} root={launch.root} sequence={showing.sequence} bridge={bridge} server={server}
-      tabStore={tabStore} live={live} colorScheme={colorScheme} platform={session.platform} reporter={reporter} compact={inline} composer={composer}
-      onHome={home && showing.fromHome ? () => setShowing(previous => ({ launch: home, sequence: previous.sequence + 1, fromHome: false })) : undefined} />
+      tabStore={tabStore} live={live} links={links} colorScheme={colorScheme} platform={session.platform} reporter={reporter} compact={inline} composer={composer}
+      onLaunch={show} onHome={goHome} />
   </Frame>;
 }

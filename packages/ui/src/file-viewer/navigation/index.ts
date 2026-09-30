@@ -2,7 +2,7 @@ import * as runtime from "./runtime.js";
 import type * as Contract from "./types.js";
 
 export * from "./runtime.js";
-export type { EntryAction, Platform, EntryMenuItem, MenuEntryTarget, FilePanelContent, FilePanel, TreeEntry, TreeEditRequest, TreeEdit, FileTreeSource, CrumbKind, Crumb, ListingEntry, CrumbSource } from "./types.js";
+export type { EntryAction, Platform, EntryMenuItem, MenuEntryTarget, FilePanelContent, FilePanel, TreeEntry, TreeEditRequest, TreeEdit, FileTreeSource, NavbarFile } from "./types.js";
 
 export const ALL_ENTRY_CAPABILITIES = runtime.ALL_ENTRY_CAPABILITIES as typeof Contract.ALL_ENTRY_CAPABILITIES;
 export const WEB_ENTRY_CAPABILITIES = runtime.WEB_ENTRY_CAPABILITIES as typeof Contract.WEB_ENTRY_CAPABILITIES;
@@ -13,7 +13,6 @@ export const entryMenuActions = runtime.entryMenuActions as typeof Contract.entr
 export const revealLabel = runtime.revealLabel as typeof Contract.revealLabel;
 export const useEntryMenuFocusGuard = runtime.useEntryMenuFocusGuard as typeof Contract.useEntryMenuFocusGuard;
 export const EntryMenuItems = runtime.EntryMenuItems as typeof Contract.EntryMenuItems;
-export const EntryContextMenu = runtime.EntryContextMenu as typeof Contract.EntryContextMenu;
 export const FILE_PANEL_TREE = runtime.FILE_PANEL_TREE as typeof Contract.FILE_PANEL_TREE;
 export const treePanel = runtime.treePanel as typeof Contract.treePanel;
 export const resolveOpenPanel = runtime.resolveOpenPanel as typeof Contract.resolveOpenPanel;
@@ -28,12 +27,14 @@ export const InlineName = runtime.InlineName as typeof Contract.InlineName;
 export const EmptyState = runtime.EmptyState as typeof Contract.EmptyState;
 export const fuzzyMatch = runtime.fuzzyMatch as typeof Contract.fuzzyMatch;
 export const fuzzyFilter = runtime.fuzzyFilter as typeof Contract.fuzzyFilter;
-export const buildCrumbs = runtime.buildCrumbs as typeof Contract.buildCrumbs;
-export const parentOf = runtime.parentOf as typeof Contract.parentOf;
-export const Breadcrumbs = runtime.Breadcrumbs as typeof Contract.Breadcrumbs;
-export const FileNavRow = runtime.FileNavRow as typeof Contract.FileNavRow;
+export const FileExplorer = runtime.FileExplorer as typeof Contract.FileExplorer;
+export const ViewerNavbar = runtime.ViewerNavbar as typeof Contract.ViewerNavbar;
+export const NavbarLinks = runtime.NavbarLinks as typeof Contract.NavbarLinks;
 export const PanelToggle = runtime.PanelToggle as typeof Contract.PanelToggle;
 export const FileIcon = runtime.FileIcon as typeof Contract.FileIcon;
 export const FolderIcon = runtime.FolderIcon as typeof Contract.FolderIcon;
+export const GitHubMark = runtime.GitHubMark as typeof Contract.GitHubMark;
+export const DiscordMark = runtime.DiscordMark as typeof Contract.DiscordMark;
+export { TEXT_TO_CAD_LINKS, releaseNotesUrl, releaseVersion, viewerLinks } from "./links.js";
 
 export { default as EntryIcon } from "./EntryIcon.jsx";

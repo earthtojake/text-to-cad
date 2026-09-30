@@ -1,16 +1,11 @@
-export const DEFAULT_VIEWER_GITHUB_URL = "https://github.com/earthtojake/text-to-cad";
-export const DEFAULT_VIEWER_DISCORD_URL = "https://discord.gg/5FGB9DwJYU";
-// `add` rather than `update`: both refresh what is installed, but only `add` picks up a skill
-// that is NEW in a release, because `update` walks the lockfile. Releases here do add skills,
-// so `update` would quietly leave them out. (`install` is an undocumented alias for `add`.)
-// Skills only: the skill text tells the agent when and how to install or upgrade cadgen.
-export const DEFAULT_VIEWER_SKILLS_INSTALL_COMMAND = "npx skills add earthtojake/text-to-cad";
+import { TEXT_TO_CAD_LINKS, releaseVersion } from "@text-to-cad/ui/links";
 
-// The other way to take an update: hand this to your agent instead of running the command
-// yourself. One short line -- it is read at a glance in a popover, and it is pasted into a chat
-// where the agent already knows the rest of the job.
-export const DEFAULT_VIEWER_SKILLS_UPDATE_PROMPT =
-  "Update the text-to-cad skills with `npx skills add earthtojake/text-to-cad`.";
+// The links every app's navbar draws, by default (`@text-to-cad/ui/links`); this build may point
+// GitHub and Discord elsewhere (`VIEWER_GITHUB_URL`, `VIEWER_DISCORD_URL`).
+export const DEFAULT_VIEWER_GITHUB_URL = TEXT_TO_CAD_LINKS.github;
+export const DEFAULT_VIEWER_DISCORD_URL = TEXT_TO_CAD_LINKS.discord;
+export const DEFAULT_VIEWER_SKILLS_INSTALL_COMMAND = TEXT_TO_CAD_LINKS.install.command;
+export const DEFAULT_VIEWER_SKILLS_UPDATE_PROMPT = TEXT_TO_CAD_LINKS.install.prompt;
 
 export function normalizeViewerDefaultFile(value = "") {
   const rawValue = String(value ?? "").trim();
@@ -47,13 +42,8 @@ export function viewerGithubRepositoryUrl(value = "", fallback = DEFAULT_VIEWER_
 
 /** A release VERSION as displayed and compared: a GitHub `tag_name` (`v0.5.0`, or the bare
  * `0.4.28` releases before 0.5.0 used) or a `refs/tags/...` ref, with the tag dressing removed.
- * The one place the `v` is stripped; everything downstream sees bare versions. */
-export function normalizeViewerReleaseVersion(value = "") {
-  return String(value ?? "")
-    .trim()
-    .replace(/^refs\/tags\//iu, "")
-    .replace(/^v(?=\d)/iu, "");
-}
+ * The one place the `v` is stripped (`@text-to-cad/ui/links`); everything downstream sees bare versions. */
+export const normalizeViewerReleaseVersion = releaseVersion;
 
 /** The tag a release VERSION is published under: `v<version>` from 0.5.0 on. */
 export function viewerReleaseTagName(version = "") {

@@ -186,7 +186,7 @@ return <RendererShell shell={shell} tools={tools} toolPanels={<>{selectPanels}{k
   viewportOverlay={viewport => <PointerPick viewport={viewport} scene={scene} enabled={selecting} onPick={pick} onHover={hover} />} />;
 ```
 
-A CAD registration declares no `panels`: the nav row shows the file tree's toggle alone,
+A CAD registration declares no `panels`: the navbar's only toggle is the file explorer's,
 and a renderer ignores `openPanel`, `panelSlot` and `onPanelOpen`. Its controls are
 `ToolPanel`s in the tool stack, each `hidden` while its tool is not up (a tree keeps its
 state), each its content's height, with `fit` saying how it gives way on a short viewer:
@@ -338,7 +338,7 @@ the viewer was inventing from the file; a drawing is not that.
   island, TEXT, a bulged LWPOLYLINE); `make_fixture.py` regenerates the pair.
   `DxfRenderer.browser.test.mjs` serves it and asserts on PIXELS — the fit, the theme
   flip, the red circle, the unfilled island, the hairline at 800%, zoom about the
-  pointer, pan, re-fit, the resize rule, and that the file tree is the nav row's only
+  pointer, pan, re-fit, the resize rule, and that the file explorer is the navbar's only
   panel, with no tab, tool strip or preview.
 
 ## GLB renderer
@@ -491,7 +491,7 @@ loader asks which it is. The STEP renderer matches none of them.
   nothing: its Reference joins the stack under Links. Escape clears the selection. Hover and selection are drawn by the scene (`setHighlight`), with
   the highlight ink a STEP part wears; hover is not React state. A robot has no
   viewport menu and so no framing items; opening the file again fits it afresh.
-- **Panels**: the file tree alone in the nav row. The tool stack holds, under Select,
+- **Panels**: the file explorer alone in the navbar. The tool stack holds, under Select,
   **Links** ([Robot links](#robot-links): the filter as its top row, no title), the
   **Reference** with a selection, and **SDF** for an `.sdf` (`SdfSection.jsx`, folded
   until opened); under Position, **Position**.
@@ -554,10 +554,10 @@ runtime recovery actions. Construction does not fetch files or load Three.js.
 Preparation resolves metadata with the viewer's abort signal; the component
 and viewport are imported lazily after renderer selection.
 
-A CAD renderer declares no panel of the host's: the nav row's only toggle is the file
-tree's, and the renderer's controls are panels of its own tool stack. Display is a
+A CAD renderer declares no panel of the host's: the navbar's only toggle is the file
+explorer's, and the renderer's controls are panels of its own tool stack. Display is a
 popover from the viewport's top-right bar, beside Preview. Preview is the shell's own state in
-every 3D renderer, with no host prop: the parent navbar and the host's panel column stay
+every 3D renderer, with no host prop: the parent navbar and the host's explorer stay
 as they are while it lasts; see [preview](settings-ui.md#camera-animation-and-preview)
 and [the host's side](viewer-host.md#preview-and-renderer-navigation-actions).
 
@@ -1307,8 +1307,8 @@ source lists files. No CAD registration declares `panels`: every
 CAD file has the tree alone, its controls being panels of its own tool stack. The
 tree is FileViewer's own (`treePanel`), always last. Display is a popover in the
 viewport's top-right bar and never a panel of the host's. The renderer's update status is
-in the viewport, centred at its top, never in the nav row. So a composer host that
-shows one file without browsing has an empty navbar, and FileViewer draws none.
+in the viewport, centred at its top, never in the navbar. So a host shown small in a
+conversation (`compact`) has no navbar at all: its card names what it shows.
 
 With nothing chosen (`panel: null`) a CAD file opens with nothing beside it; the tree
 is the default only when no file is open at all. On mobile a file opens with no sheet

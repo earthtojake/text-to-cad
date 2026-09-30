@@ -37,7 +37,7 @@ async function serveHarness(t) {
   const temporary = await mkdtemp(join(tmpdir(), 'text-to-cad-resize-browser-'));
   let server, browser;
   t.after(async () => { await browser?.close(); if (server) await new Promise(resolve => server.close(resolve)); await rm(temporary, { recursive: true, force: true }); });
-  await build({ entryPoints: [fileURLToPath(new URL('../../harness/index.tsx', import.meta.url))], outfile: join(temporary, 'harness.js'), bundle: true, format: 'esm', platform: 'browser', conditions: ['production'], jsx: 'automatic', loader: { '.webp': 'dataurl', '.avif': 'dataurl', '.woff2': 'dataurl' } });
+  await build({ entryPoints: [fileURLToPath(new URL('../../harness/index.tsx', import.meta.url))], outfile: join(temporary, 'harness.js'), bundle: true, format: 'esm', platform: 'browser', conditions: ['production'], jsx: 'automatic', loader: { '.webp': 'dataurl', '.avif': 'dataurl', '.woff2': 'dataurl', '.svg': 'dataurl' } });
   const bundle = await readFile(join(temporary, 'harness.js'));
   const css = await readFile(new URL('../../../../dist/styles.css', import.meta.url));
   server = createServer((request, response) => {
@@ -214,13 +214,13 @@ test('a viewer resized in one step paints the model at its new size in that same
   const [widened] = await page.evaluate(() => window.__resizeProbe.records);
   assertPaintedAtNewSize(widened, ratio, await settledSignature(page), 'one-step widening');
 
-  // 3. The person's own one-step resize: the file tree opening beside the viewer.
+  // 3. The file explorer opens OVER the viewer: its box keeps its size, so nothing is resized.
   await page.evaluate(() => window.__resizeProbe.mark());
   await pane.locator('[data-file-panel][aria-label="Show files"]').click();
-  await page.waitForFunction(() => window.__resizeProbe.records.length > 0);
-  const [treeOpened] = await page.evaluate(() => window.__resizeProbe.records);
-  assert.ok(treeOpened.cssWidth < 780, `the file tree took room from the viewer (${treeOpened.cssWidth}px)`);
-  assertPaintedAtNewSize(treeOpened, ratio, await settledSignature(page), 'file tree opening');
+  await pane.locator('[data-file-explorer]').waitFor();
+  await frames(page, 2);
+  assert.deepEqual(await page.evaluate(() => window.__resizeProbe.records), [], 'opening the explorer resized nothing');
+  await pane.locator('[data-file-panel][aria-label="Hide files"]').click();
 
   // 4. A drag resizes once per frame; every frame is painted at its own size, and the
   //    viewport draws no more than one picture per frame to do it.

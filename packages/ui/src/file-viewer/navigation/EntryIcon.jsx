@@ -15,7 +15,7 @@ import {
 } from "./entryIconKind.js";
 
 // One icon table for every surface that lists files — the sidebar, the
-// breadcrumb menu, and the home list — so a file cannot read as one thing in
+// explorer, and the home list — so a file cannot read as one thing in
 // one place and something else in another.
 const ENTRY_ICON_COMPONENTS = {
   [ENTRY_ICON_KIND.LOADING]: LoaderCircle,

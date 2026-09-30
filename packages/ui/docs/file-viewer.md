@@ -1,10 +1,13 @@
 # FileViewer
 
-`@text-to-cad/ui/file-viewer` exports the complete file tab: breadcrumbs, entry
-menus, the file tree, one panel column, renderer loading, and the text editing
-session. It imports no concrete renderer. Applications compose registrations
-from the separate `@text-to-cad/ui/renderers/*` entry points and their own
-`defineFileRenderer` definitions ([renderers](renderers.md)).
+`@text-to-cad/ui/file-viewer` exports the complete file tab: the navbar, entry
+menus, the file explorer, the column a file's declared panels open in, renderer
+loading, and the text editing session. It imports no concrete renderer.
+Applications compose registrations from the separate `@text-to-cad/ui/renderers/*`
+entry points and their own `defineFileRenderer` definitions ([renderers](renderers.md)).
+A CAD host composes `CadViewer` (`@text-to-cad/ui/cad-viewer`), which is this
+component with the five CAD renderers, the home and the catalog rules
+([viewer host](viewer-host.md)).
 
 ```tsx
 <FileViewer
@@ -32,7 +35,6 @@ operations. Storage methods and separate native `host.fileActions` capabilities 
 which entry-menu items appear.
 Rename and create fields, menu focus, and panel switching remain in FileViewer;
 the host performs the operation and can update other tabs affected by it.
-The `leading` slot can label a host-specific root, such as a worktree.
 
 Sources receive an `AbortSignal` for each read and write. Noncancellable reads
 still check the signal before returning. Writes and mutations report committed
@@ -58,19 +60,23 @@ during a pending save survive its response. External changes reload clean
 documents; dirty documents retain their draft and show the existing reload
 choice.
 
-A definition's `panels({ open, ready, file, data })` returns the nav row's
+A definition's `panels({ open, ready, file, data })` returns the navbar's
 panels for one prepared document, so it can read what `prepare` found (`data`).
 Panel declarations use stable IDs and `content: "slot" | "body"`; FileViewer
-appends the file tree (`content: "tree"`) last. The nav row holds one toggle per
-panel, and one panel is open at a time. A CAD file declares none: its controls are
+appends the file tree (`content: "tree"`) last. The navbar holds one toggle per
+panel — the explorer's at its left, after the home mark, a declared panel's at its
+right — and one panel is open at a time. The tree is the file explorer, which
+floats over the body's left, inset 8px like the tool strip, on a solid background
+above the tools, and never resizes the body; a declared panel opens in the column
+at the body's right. A CAD file declares none: its controls are
 panels of its own tool stack, over the viewport, shown by the tool they belong to
 ([the design system](settings-ui.md#the-tool-stack)); nothing it does opens or turns
-this column. A renderer that declares a slot panel portals it into `panelSlot`; a
+the explorer. A renderer that declares a slot panel portals it into `panelSlot`; a
 body panel (the desktop markdown's source view) replaces its own content. `openPanel` and `onPanelOpen` keep every renderer panel exclusive
 with the file tree. `onReady(false)` suppresses panels whose surface could not
 start. `FileViewerState.panel` is `null` until someone chooses, which opens the
 first panel declared `defaultOpen`, or nothing; the
-tree is the default only when no file is open. `""` is nothing open. Which panel
+tree is the default only when no file is open and the host has no home to show. `""` is nothing open. Which panel
 a newly shown file opens with is the host's to apply: `navigation.openFile(path,
 { target, panel })` names it — the tree, for a file picked in the tree, so the
 tree stays up while a person walks it — and without one a file shown in place or
@@ -78,14 +84,14 @@ in a new view opens at `null`, while a view already showing the file keeps its
 panel.
 
 Below 720px of its own width FileViewer is mobile (`useViewerMobile`): the
-panel column becomes a floating sheet over the body, opened only by its toggle
-(an empty tab still opens on its tree) and closed on every document change,
-while the stored `panel` and
-`panelWidth` stay as the wide layout left them; the breadcrumbs collapse to the
-current file. The width is a breakpoint boolean, never a pixel value, so a panel
-drag or a resize within one layout does not re-render the renderer. The column is
-220px by default, 140px at least and 480px at most (`FilePanelColumn.jsx`); a drag
-past the minimum stops at it, and only one below half the minimum closes the column.
+explorer and the panel column become floating sheets over the body, opened only
+by their toggles (an empty tab with no home still opens on its tree) and closed on
+every document change and by a pick in the tree, while the stored `panel` and
+`panelWidth` stay as the wide layout left them. The width is a breakpoint boolean,
+never a pixel value, so a panel drag or a resize within one layout does not
+re-render the renderer. The explorer and the column are 220px by default, 140px at
+least and 480px at most (`panelWidth.js`); a drag past the minimum stops at it, and
+only one below half the minimum closes the panel.
 
 A renderer is handed, besides its document: `onNavigationActionsChange`, for
 its nav-row actions (`FileNavigationAction`, with an optional shorter `hint`);
@@ -94,18 +100,22 @@ Its loading and update status are its own to show: a CAD renderer shows them in
 its viewport. Host-specific empty,
 loading, and error artwork can be supplied through `presentation`, without
 duplicating the tab's placement. `presentation.home` is a host's own page for a
-tab with no file (the web Viewer's model library) in place of `empty`: an empty
+tab with no file (every CAD host's model library) in place of `empty`: an empty
 tab opens on its file tree because the tree is all there is to reach for, but not
-over a home on a phone, where the tree is a sheet that would cover it. Per-file renderer state is also accepted during
+over a home, which is a page to see: the explorer floats over it and would cover it. Per-file renderer state is also accepted during
 a departing renderer's cleanup, while it still belongs to the same root.
 `navigationPath` can keep navigation unselected while a requested file is still
 being resolved by a host catalog. It does not change the requested document.
 
-The nav row is drawn only when it holds something: crumbs, `leading`,
-`navigationActions`, a renderer's actions, a panel toggle, or the unsaved-changes
-dot. A host that shows one file without browsing it (`navigationPath: null`, a
-source with no `list`) and puts nothing at either end gets the file with no row
-above it: its own frame already names the file.
+The navbar is drawn only when it holds something: the way home
+(`navigation.home`, with a file open), the explorer's toggle (a source with
+`list`), the open file's name (`navigationPath` names it: the file's own path by
+default, `null` while a host resolves it), a renderer's actions, a panel toggle,
+the host's `links`, or the unsaved-changes dot — and never for a `compact` host,
+whose frame already names what it shows. The C mark leads every row that is drawn.
+The name has a ⋯ with the explorer's menu for the file when the host can do
+anything with it; it has no right-click menu and no crumbs: folders are the
+explorer's to show.
 
 The browser harness beside FileViewer exercises injected renderers, dirty and
 revision state, delayed writes, changes, root isolation, navigation actions,

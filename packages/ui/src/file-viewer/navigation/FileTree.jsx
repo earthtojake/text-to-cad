@@ -13,8 +13,8 @@ import { FileIcon, FolderIcon } from "./icons.jsx";
 import { InlineName } from "./InlineName.jsx";
 
 /**
- * The file surface's tree — the rightmost panel in the nav row's list, in
- * BOTH apps (`panels.js`).
+ * The file surface's tree — the file explorer's content, in every app
+ * (`panels.js`, `FileExplorer.jsx`).
  *
  * Lazy: a directory's children are fetched when it is first expanded and kept
  * afterwards. A recursive read of a repository with `node_modules` in it costs
@@ -35,8 +35,7 @@ import { InlineName } from "./InlineName.jsx";
  * ## The source adapter
  *
  * Where a listing comes from is the one thing the two hosts do not share, so
- * it is a prop rather than an import — the same shape `Breadcrumbs.jsx` takes,
- * for the same reason. The desktop reads a directory at a time over IPC with
+ * it is a prop rather than an import. The desktop reads a directory at a time over IPC with
  * gitignore semantics and a watcher behind it; the web host derives listings
  * from its catalog, so its tree shows the CAD files the catalog knows
  * and the directories containing them. That is the honest web subset and the
@@ -83,9 +82,8 @@ const INDENT = 12;
 
 /**
  * The one inline field the tree can show: a rename over a row, or a new entry
- * in a folder. An edit asked for from OUTSIDE — a crumb's `Rename` or `New
- * folder` — arrives as the same thing plus a nonce, so asking twice is two
- * requests.
+ * in a folder. An edit asked for from OUTSIDE — the navbar's `Rename` — arrives
+ * as the same thing plus a nonce, so asking twice is two requests.
  *
  * @typedef {{ mode: "rename", entry: import("./entry-menu.js").MenuEntryTarget }
  *   | { mode: "create", directory: string, kind: "file"|"directory" }} TreeEditRequest
@@ -99,7 +97,7 @@ const INDENT = 12;
  * @param {{ path: string, directory: boolean }|null} [props.reveal]
  *   A path to expand to and select without opening it. Wins over `activePath`
  *   for the reveal and the scroll; the open file stays highlighted too.
- * @param {TreeEdit|null} [props.edit] A rename or a create the breadcrumb asked for.
+ * @param {TreeEdit|null} [props.edit] A rename or a create asked for from outside the tree.
  * @param {(path: string) => void} props.onOpen
  */
 export function FileTree({ source, activePath, reveal = null, edit = null, onOpen }) {
@@ -305,7 +303,7 @@ export function FileTree({ source, activePath, reveal = null, edit = null, onOpe
   const menuGuard = useEntryMenuFocusGuard(onMenuAction);
 
   /**
-   * A crumb asked for an edit. The folders above it are opened and read first
+   * An edit asked for from outside. The folders above it are opened and read first
    * — a field in a folder the tree has shut is a field nobody sees — and the
    * request is honoured once per nonce.
    */

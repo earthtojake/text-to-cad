@@ -8,7 +8,7 @@ const view = (camera: unknown) => ({ version: 2, camera, display: null, renderer
 test('the record normalizes: every setting to its bounds, the files to well-keyed plain objects, and another version to the defaults', () => {
   expect(readTabRecord(undefined)).toEqual(defaultTabRecord());
   expect(defaultTabRecord()).toEqual({ version: TAB_RECORD_VERSION, settings: {
-    fileTree: { width: 220, expanded: {} }, toolStack: { panels: {}, collapsed: {} }, appearance: 'system',
+    fileTree: { width: 220, expanded: {} }, toolStack: { panels: {}, collapsed: {} }, appearance: 'system', library: { layout: 'grid' },
   }, files: {} });
   for (const raw of [null, 'x', [], { version: 0, settings: { appearance: 'dark' } }, { version: 2, settings: { appearance: 'dark' } }]) {
     expect(readTabRecord(raw), JSON.stringify(raw)).toEqual(defaultTabRecord());
@@ -16,12 +16,13 @@ test('the record normalizes: every setting to its bounds, the files to well-keye
   const record = readTabRecord({ version: TAB_RECORD_VERSION, settings: {
     fileTree: { width: 9999, expanded: { root: ['a', 'a', 7, 'b'], other: 'x' } },
     toolStack: { panels: { tree: { width: 12 } }, collapsed: { tree: true, 'Not an id': true } },
-    orbit: { speed: 99 }, playback: { autoplay: true }, appearance: 'cinematic',
+    orbit: { speed: 99 }, playback: { autoplay: true }, appearance: 'cinematic', library: { layout: 'shelf' },
   }, files: { [tabFileKey('root', 'a.step', 'step')]: view(1), '["root","b.step"]': view(2), 'junk': view(3), [tabFileKey('root', 'c.step', 'step')]: 'not a view' } });
   expect(record.settings).toEqual({
     fileTree: { width: 480, expanded: { root: ['a', 'b'] } }, toolStack: { panels: { tree: { width: 164 } }, collapsed: { tree: true } },
-    appearance: 'system',
+    appearance: 'system', library: { layout: 'grid' },
   });
+  expect(readTabRecord({ version: TAB_RECORD_VERSION, settings: { library: { layout: 'list' } }, files: {} }).settings.library).toEqual({ layout: 'list' });
   expect('orbit' in record.settings || 'playback' in record.settings).toBe(false, 'playback is a file view\'s, never a setting');
   expect(Object.keys(record.files)).toEqual([tabFileKey('root', 'a.step', 'step')]);
 });

@@ -28,9 +28,11 @@ reference host `basic-host` does.
 
 - **One page, told what to show.** Every surface loads this one page. The tool
   that opened it returns a *launch* — `page` (`home` or `viewer`), `model`,
-  `root`, `explore` — and the page renders it. The server computes the root from
-  the workspace; the page never guesses where it is, and nothing here branches on
-  a surface's name (`surface` is only reported back to the server).
+  `root`, `explore` — and the page renders it: the shared CAD viewer over the
+  launch's root, showing its model or, with none, the home. Every launch names a
+  root, the home's included. The server computes the root from the workspace; the
+  page never guesses where it is, and nothing here branches on a surface's name
+  (`surface` is only reported back to the server).
 - **The root follows context, as the host's own file tree does.** A model in the
   thread's project (Codex's workspace, or the roots a host lists) browses that
   project's catalog: `workspace`. A model with no project around it — the
@@ -38,8 +40,10 @@ reference host `basic-host` does.
   rooted at `/` or its drive and never walked. Its explorer reads each folder it
   opens (`/__cad/list`) from wherever the model is, up and down, and its catalog
   holds only the file on screen; a hidden folder the file is in still shows, so
-  the tree reaches it. A surface that shows one file (*Open with CAD*, an inline
-  card) has no explorer, and reads only that file.
+  the tree reaches it. The home browses the workspace, else the filesystem the
+  user's home is on, and a file picked in its explorer is launched by the server
+  (`cad_launch`), as the library's are. A surface that shows one file (*Open with
+  CAD*, an inline card) has no explorer, and reads only that file.
 - **Told how it is presented, before it greets the host.** A host that mounts
   views inline is served the page with `<meta name="cad-presentation"
   content="inline">` in its head: the page offers that host `inline` and
@@ -78,19 +82,23 @@ reference host `basic-host` does.
 | Module | What it is |
 | --- | --- |
 | `bridge.ts` | JSON-RPC 2.0 over `postMessage`: requests, the opening tool's result, host context, teardown |
-| `server.ts` | typed calls to the server's tools |
+| `server.ts` | typed calls to the server's tools, `cad_reveal` among them: the file menu's Reveal, in the desktop's file manager (the server is on the person's machine) |
 | `tunnel.ts` | the `fetch` over `cad_http` |
-| `files.ts` | the read-only `FileSource`s: a project's, from its catalog, and a filesystem's, a folder at a time, whose copied references name files by absolute path; no listing when the launch does not browse |
+| `files.ts` | a filesystem's read-only `FileSource`, a folder at a time, whose copied references name files by absolute path (a project's is `@text-to-cad/ui/catalog`'s, as the web Viewer's is); no listing when the launch does not browse |
 | `prompt.ts` | Add to prompt: the composer via `ui/update-model-context`, references as absolute paths; `reachesComposer`, whether the host has one |
 | `live.ts`, `events.ts` | the mounted view's live controller (`@text-to-cad/ui/host`'s registry), and the `cad_events` long-poll that answers the agent (`show`, `capture`, `describe`) |
 | `presentation.ts` | how the host presents the page, and the election that retires older inline views |
 
-Pages: `Home.tsx` (the model library the web Viewer shows too,
-`@text-to-cad/ui/library`, with this host's Open Model: the desktop's file
-chooser) and `ModelView.tsx` (the FileViewer for one launch); `App.tsx` switches
-between them and frames them (full page, or an inline card with its full-size
-button). In a tab, the viewer's bottom action sits on the line of Codex's
-composer, which floats over the page (`--cad-viewport-bottom-center`).
+`ModelView.tsx` is the page: the shared `CadViewer` (`@text-to-cad/ui/cad-viewer`,
+the one the web Viewer shows) over one launch's root, with this host's ports — its
+tunnel, its composer, its file menu (copy path, copy relative path under a project,
+Reveal through `cad_reveal`), the navbar's links, followed through `ui/open-link`,
+and its library, with Open Model: the desktop's file chooser. With no model it is
+the home; the navbar's C mark goes back to it (the launch a view opened on, when it
+opened on the home). `App.tsx` frames it (full page, or an inline card with its
+full-size button). In a tab, the viewer's bottom action sits on the line of Codex's
+composer, which floats over the page (`--cad-viewport-bottom-center`), and the
+home's and the explorer's lists scroll clear of it (`--cad-host-bottom-inset`).
 
 ## Develop
 

@@ -1,5 +1,6 @@
 import { createPromptDeliveryLedger, formatPromptContextText, validatePromptContext } from '@text-to-cad/core/prompt';
 import type { PromptContextPort, PromptDeliveryResult, PromptDestinationState, ResourceRef } from '@text-to-cad/core/prompt';
+import { referencePath } from '@text-to-cad/ui/catalog';
 import type { WebClipboard } from './clipboard';
 
 /** Prepare portable clipboard content without claiming an external composer pasted it. */
@@ -10,12 +11,8 @@ export function createWebPromptContext(workspaceId: string, rootPath: string, cl
   };
   const state: PromptDestinationState = Object.freeze({ kind: 'clipboard', available: true, capabilities });
   const ledger = createPromptDeliveryLedger({ busyMessage: 'Wait for pending clipboard operations before copying more.' });
-  const resolvePath = (resource: ResourceRef) => {
-    if (resource.kind === 'url') return resource.url;
-    if (resource.workspaceId !== workspaceId) throw new Error('This reference belongs to another served workspace.');
-    if (!rootPath) throw new Error('The viewer did not identify its served root.');
-    return `${rootPath.replace(/[\\/]+$/, '').replace(/\\/g, '/')}/${resource.path}`;
-  };
+  // A reference names the file by its complete path under the served folder, as every app's does.
+  const resolvePath = (resource: ResourceRef) => referencePath(resource, { workspaceId, root: rootPath });
   return {
     getSnapshot: () => state,
     subscribe: () => () => {},

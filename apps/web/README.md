@@ -9,10 +9,12 @@ serves ONE directory, fixed at start; the page is always the bare origin and
 This app is the browser host of `@text-to-cad/ui/file-viewer`, not the owner of
 the shared CAD interface.
 
-**Owns:** URL selection, browser history, document title/appearance, catalog
-file-source adapter, browser persistence, and this app's branding, appearance and release links.
-`src/App.tsx` composes an explicit `ViewerHost` and one renderer per file family. The catalog
-exposes CAD artifacts only, and the web app has no file-writing endpoints.
+**Owns:** URL selection, browser history, document title/appearance, browser
+persistence, the file menu's reveal route, and this app's release check.
+`src/App.tsx` composes an explicit `ViewerHost` and hands it to the shared
+`CadViewer` (`@text-to-cad/ui/cad-viewer`), which registers one renderer per file
+family and draws the navbar, the explorer and the home. The catalog exposes CAD
+artifacts only, and the web app has no file-writing endpoints.
 Follow the [shared host contract](../../packages/ui/docs/viewer-host.md) when
 adding viewer features; browser effects belong in this app's adapters.
 The [shared Model tree](../../packages/ui/docs/cad-renderer.md#step-panels)
@@ -31,12 +33,12 @@ this app. The Python wheel consumes only the production build.
 
 ```text
 src/
-  App.tsx               FileViewer browser host and renderer registration
+  App.tsx               the CadViewer's browser host: URL, history, title and appearance
   main.tsx              host/client bootstrap and cleanup
-  adapters/             read-only catalog file source and capabilities, the model library
-  host/                 browser clipboard, prompt delivery and development auto-reload
-  persistence/          root-scoped view state and the orbit preference store
-  client/               navigation branding, release menu, appearance and styling
+  adapters/             the file menu's actions (copies, reveal) and the model library
+  host/                 browser clipboard, prompt delivery, the navbar's links and release check, development auto-reload
+  persistence/          the tab record in sessionStorage
+  client/               appearance control and styling
   shared/               app build/runtime configuration helpers
 ```
 
@@ -183,8 +185,8 @@ This app exports no components. Other hosts use `@text-to-cad/ui/file-viewer` wi
 registered renderers and explicit services. Viewer content is registered through
 `@text-to-cad/ui/renderers/step`, for `.dxf` `@text-to-cad/ui/renderers/dxf`, for `.glb`
 `@text-to-cad/ui/renderers/glb`, for `.stl` and `.3mf` `@text-to-cad/ui/renderers/mesh`, and
-for `.urdf`, `.srdf` and `.sdf` `@text-to-cad/ui/renderers/robot` (`App.tsx` registers all
-five with the same client and preferences); all loading,
+for `.urdf`, `.srdf` and `.sdf` `@text-to-cad/ui/renderers/robot` (`CadViewer` registers all
+five with the same client and preferences, as it does for the MCP app); all loading,
 selection, panel and tool behavior is shared. Public declarations, styles and worker assets are built in that
 package. See `docs/shell.md` for the host boundary and `docs/storage.md` for
 browser persistence. CAD control guidance lives with the UI package.
@@ -240,16 +242,16 @@ The web host owns URL/history, root-scoped persistence, appearance, version link
 and native service adapters. Shared renderers own all model interaction. STEP and
 robots open in Select, whose Features (Links for a robot) panel hangs under the
 toolbar with the rest of the tool stack; Position's panel replaces it while Position
-is the tool. The nav row has no panel of the file's: Show files is its one toggle.
+is the tool. The navbar has no panel of the file's: the explorer's is its one toggle.
 STEP and robot files have a
 top-left toolbar; GLB, STL and 3MF have none. Every 3D file has Display settings
 and Preview in the top-right bar. DXF is a 2D canvas with pan, zoom and
 snapshot, without a 3D toolbar or tool stack.
 
-Below 720px of FileViewer width, the file tree becomes a floating sheet over the
-viewer, the crumbs collapse to the current file, the view cube is hidden and the
-tree panel of the tool stack starts folded. Preview is the shared shell's
-top-right button: it keeps the navbar and the file tree column, hides the toolbar
+The file explorer floats over the view's left and never resizes it. Below 720px of
+FileViewer width it is a floating sheet over the viewer, the view cube is hidden and
+the tree panel of the tool stack starts folded. Preview is the shared shell's
+top-right button: it keeps the navbar and the explorer, hides the toolbar
 and tool stack, orbits by default, plays routines (on entry only with Autoplay on)
 and offers Playback and Display settings; the host passes no preview props.
 The camera is never stored, so a refresh frames the file anew; Display settings,
@@ -263,7 +265,7 @@ Render and LOD playbooks.
 
 Large assemblies load progressively and refine visible components within memory
 budgets. Warm tessellations can render before exact surface derivation. The
-navbar carries opening/update status beside the filename (a progress icon on
+viewport carries opening/update status, centred at its top (a progress icon on
 mobile); initial loading may also use the viewport overlay, and an error is a card over the viewport whose Details keep the complete
 compiler output and whose Try again reloads only that file. A failed update the
 model survives can be dismissed, leaving the previous version to inspect.
@@ -288,23 +290,30 @@ exposes no general write operations.
 
 ### Home
 
-With no file open, the Viewer shows its Home: the model library every CAD view
-shares (`@text-to-cad/ui/library`, the page the MCP app shows too), limited to
-the models under the folder this Viewer serves: pinned and recent, with
-pictures, searchable. Opening one shows it in place. There is no Open Model:
-the files are in the tree beside it. The file on screen joins the library, with
-a picture once it has drawn, through `GET|POST /__cad/recents` and
-`GET /__cad/recents/thumbnail`; `cadgen.viewer.recents` keeps it in the user's
-state directory, shared with every other Viewer and the MCP app.
+With no file open, the Viewer shows its Home, the same page the MCP app shows
+(`@text-to-cad/ui/library`, drawn by `CadViewer`): the CAD wordmark centred at the
+top, then "Files" with its search and a grid/list switch (kept in the tab's
+settings), and the models every CAD view shares that sit under the folder this
+Viewer serves — pinned first — as solid cards (a picture over the file's name and
+when it was edited) or rows. It is drawn on the viewport's own colour. Opening one
+shows it in place. There is no Open Model: the files are in the explorer. The file
+on screen joins the library through `GET|POST /__cad/recents`, with a picture taken
+once it has settled — the model framed whole from the default direction, whatever
+the camera — served by `GET /__cad/recents/thumbnail`; `cadgen.viewer.recents` keeps
+it in the user's state directory, shared with every other Viewer and the MCP app,
+and reports each file's modification time for "Edited 16h ago".
 
 ### File storage and host actions
 
-The web `FileSource` is a read-only CAD catalog. It exposes stat, directory
-listing and path search without text writes or native filesystem mutations.
-Catalog content/revision changes are distinct from transient metadata progress,
-so progress updates do not restart a prepared document. Native path copying and
-file reveal live in the separate host actions adapter. Path copying uses the
-clipboard port. Reveal uses guarded `POST /__cad/reveal` with a root-relative
+The web `FileSource` is the served folder's read-only CAD catalog
+(`createCatalogFileSource` from `@text-to-cad/ui/catalog`, the one the MCP app uses
+for a project). It exposes stat, directory listing and path search without text
+writes or native filesystem mutations. Catalog content/revision changes are
+distinct from transient metadata progress, so progress updates do not restart a
+prepared document. Native path copying and file reveal live in the separate host
+actions adapter (`src/adapters/fileActions.ts`, over the shared
+`createCadFileActions`), which the navbar's ⋯ and the explorer's right-click menu
+share. Path copying uses the clipboard port. Reveal uses guarded `POST /__cad/reveal` with a root-relative
 path; the backend rejects paths outside the served directory, including symlink
 escapes, and opens the native file manager without a shell. The menu uses the
 server platform to label Finder, Explorer, or the Linux file manager, and only
@@ -320,19 +329,23 @@ compact 11px labels and values. The shared renderer owns reference
 layout, projected-bounds camera fitting and labeled orientation axes, so desktop
 and web stay consistent without host-specific copies of those controls.
 
-### Compact navigation
+### Navigation
 
-The web viewer has one navigation row. The shaded blue C mark (20px) sits before
-breadcrumbs, including while loading or with no file open; with a file open, it
-leads Home. Browser titles use
-"CAD | <filename>", or "CAD" when no file is selected. At the right
-end, the version/update dropdown comes first, then the renderer's snapshot action,
-and Show files. The dropdown contains release
-instructions, release notes, GitHub and Discord. Appearance is injected as an icon-bearing dropdown beside Projection in
-the Display panel's Display section, below the full-width Mode selector. The original animated mark remains the shared LoadingIcon for loading states. `ViewerBrand`, `ViewerLinks` and `ViewerAppearance` stay web-owned;
-`FileViewer.leading`, `navigationActions` and `displayActions` provide the shared slots.
-The web logo and favicons are generated alongside the docs brand assets, with no
-runtime dependency between apps. See [the brand recipe](../../scripts/brand/README.md).
+The Viewer has the one navbar every app shares (see
+[the host contract](../../packages/ui/docs/viewer-host.md#host-chrome-slots)): at the
+left the C mark — Home from a file, the brand on the Home — the explorer's toggle
+and the open file's name with its ⋯; at the right the renderer's snapshot action,
+then the version, GitHub and Discord. This host supplies the links
+(`src/host/viewerLinks.js`): its version, the GitHub and Discord its build names
+(`VIEWER_GITHUB_URL`, `VIEWER_DISCORD_URL`), and what GitHub's latest-release API
+says, so the version reads "Update" when a newer release is out; links open in a new
+tab. Browser titles use "CAD | <filename>", or "CAD" when no file is selected.
+Appearance is injected as an icon-bearing dropdown beside Projection in the Display
+panel's Display section, below the full-width Mode selector (`ViewerAppearance`,
+through `displayActions`). The original animated mark remains the shared LoadingIcon
+for loading states. The C and CAD marks are the UI package's; the favicons are this
+app's, generated alongside the docs brand assets. See
+[the brand recipe](../../scripts/brand/README.md).
 
 The web camera action copies only the viewport PNG through guarded
 `POST /__cad/clipboard`, avoiding browser clipboard permission prompts. The local

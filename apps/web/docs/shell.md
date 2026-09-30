@@ -1,14 +1,18 @@
-# Hosting the shared FileViewer
+# Hosting the shared CAD viewer
 
-The complete file-tab interface lives in `@text-to-cad/ui/file-viewer`. Web and
-desktop both render that component. Navigation controls are lower-level
+The CAD viewer every app shows is `@text-to-cad/ui/cad-viewer`'s `CadViewer`: the
+shared FileViewer over one root's CAD catalog, its five renderers, the home (the
+model library) with no file open, catalog following, the loading and missing-file
+pages and the library's pictures. Navigation controls are lower-level
 `@text-to-cad/ui/navigation` exports used by FileViewer; apps do not assemble a
 second shell from them.
 
-Web supplies a read-only catalog source, the viewer renderer registrations, URL
-navigation, browser persistence and appearance. It fills FileViewer's slots with
-its own brand (`leading`), release links (`navigationActions`) and appearance
-control (`displayActions`); the nav row, toolbar, sidebars and preview are the
+Web supplies the served folder's catalog (`createCatalogFileSource` from
+`@text-to-cad/ui/catalog`), URL navigation (`onShow`, `?file=` and history),
+browser persistence, the document title and appearance. It hands the viewer its
+links (`ViewerHost.links`: its version, its build's GitHub and Discord, and what
+its release check found, `src/host/viewerLinks.js`) and its appearance control
+(`displayActions`); the navbar, the explorer, the toolbar and preview are the
 shared package's. The root workspace builds UI's ESM, declarations, CSS and
 worker assets before building the app; no source alias or JSX loader is needed.
 

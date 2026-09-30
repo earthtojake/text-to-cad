@@ -2,58 +2,83 @@ import React from 'react';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { FilePanelColumn, PANEL_MIN_WIDTH, PANEL_MAX_WIDTH, filePanelName } from '../../../dist/file-viewer/navigation/FilePanelColumn.js';
+import { FileExplorer } from '../../../dist/file-viewer/navigation/FileExplorer.js';
 
 afterEach(cleanup);
-it('resizes any panel down to the minimum by keyboard and stops there: the keyboard never closes it', () => {
+const pointer = (handle: HTMLElement, type: string, x: number) => {
+  const event = new Event(type, { bubbles: true });
+  Object.assign(event, { button: 0, pointerId: 1, clientX: x });
+  fireEvent(handle, event);
+};
+const capture = (handle: HTMLElement) => { handle.setPointerCapture = vi.fn(); handle.hasPointerCapture = () => true; handle.releasePointerCapture = vi.fn(); };
+
+it('resizes the explorer and a panel down to the minimum by keyboard and stops there: the keyboard never closes either', () => {
   expect(PANEL_MIN_WIDTH).toBe(140);
-  for (const id of ['tree', 'source']) {
+  const panels = [
+    // The explorer's handle is its right edge, so ArrowRight widens it; the column's is its left, so ArrowLeft does.
+    { draw: (props: object) => <FileExplorer label="Files" {...props as any}>Content</FileExplorer>, wider: 'ArrowRight', narrower: 'ArrowLeft' },
+    { draw: (props: object) => <FilePanelColumn id="source" label="Source" {...props as any}>Content</FilePanelColumn>, wider: 'ArrowLeft', narrower: 'ArrowRight' },
+  ];
+  for (const { draw, wider, narrower } of panels) {
     const resize = vi.fn(), collapse = vi.fn();
-    render(<FilePanelColumn id={id} label={id} width={PANEL_MIN_WIDTH} onWidthChange={resize} onCollapse={collapse}>Content</FilePanelColumn>);
+    render(draw({ width: PANEL_MIN_WIDTH, onWidthChange: resize, onCollapse: collapse }));
     const handle = screen.getByRole('separator');
     fireEvent.keyDown(handle, { key: 'Home' });
     expect(resize).toHaveBeenLastCalledWith(PANEL_MIN_WIDTH);
-    fireEvent.keyDown(handle, { key: 'ArrowRight' });
+    fireEvent.keyDown(handle, { key: narrower });
     expect(resize).toHaveBeenLastCalledWith(PANEL_MIN_WIDTH);
+    fireEvent.keyDown(handle, { key: wider });
+    expect(resize).toHaveBeenLastCalledWith(PANEL_MIN_WIDTH + 16);
     expect(collapse).not.toHaveBeenCalled();
     fireEvent.keyDown(handle, { key: 'End' });
     expect(resize).toHaveBeenLastCalledWith(PANEL_MAX_WIDTH);
     cleanup();
   }
 });
-it('a drag past the minimum stops at it, closes only well below it, and a cancelled drag resizes nothing', () => {
+
+it('drags the explorer\'s right edge from its left: past the minimum it stops at it, and only well below it closes', () => {
   const resize = vi.fn(), collapse = vi.fn();
-  const { container } = render(<div><FilePanelColumn id="tree" label="Files" width={320} onWidthChange={resize} onCollapse={collapse}>Content</FilePanelColumn></div>);
-  const handle = screen.getByRole('separator');
-  handle.setPointerCapture = vi.fn(); handle.hasPointerCapture = () => true; handle.releasePointerCapture = vi.fn();
-  container.firstElementChild!.getBoundingClientRect = () => ({ right: 1000 } as DOMRect);
-  const pointer = (type: string, x: number) => {
-    const event = new Event(type, { bubbles: true });
-    Object.assign(event, { button: 0, pointerId: 1, clientX: x });
-    fireEvent(handle, event);
-  };
-  pointer('pointerdown', 680); pointer('pointermove', 700);
+  render(<FileExplorer label="Files" width={320} onWidthChange={resize} onCollapse={collapse}>Content</FileExplorer>);
+  const handle = screen.getByRole('separator', { name: 'Resize files panel' });
+  capture(handle);
+  handle.parentElement!.getBoundingClientRect = () => ({ left: 8 } as DOMRect);
+  pointer(handle, 'pointerdown', 328); pointer(handle, 'pointermove', 308);
   expect(resize).toHaveBeenLastCalledWith(300);
-  pointer('pointercancel', 700); pointer('pointermove', 900);
+  pointer(handle, 'pointercancel', 308); pointer(handle, 'pointermove', 500);
   expect(resize).toHaveBeenCalledTimes(1);
-  pointer('pointerdown', 700);
-  // Just under the minimum: held at it.
-  pointer('pointermove', 1000 - PANEL_MIN_WIDTH + 30);
+  pointer(handle, 'pointerdown', 308);
+  pointer(handle, 'pointermove', 8 + PANEL_MIN_WIDTH - 30);
   expect(resize).toHaveBeenLastCalledWith(PANEL_MIN_WIDTH);
   expect(collapse).not.toHaveBeenCalled();
-  // Past half of it: closed.
-  pointer('pointermove', 1000 - PANEL_MIN_WIDTH / 2 + 1);
+  pointer(handle, 'pointermove', 8 + PANEL_MIN_WIDTH / 2 - 1);
   expect(collapse).toHaveBeenCalledOnce();
-  pointer('pointermove', 680);
-  expect(resize).toHaveBeenCalledTimes(2);
+  // It floats: inset from the view's corner like the tool strip, above what it covers.
+  const panel = screen.getByRole('complementary', { name: 'Files' });
+  expect([panel.style.top, panel.style.left, panel.style.bottom, panel.style.width]).toEqual(['8px', '8px', '8px', '320px']);
 });
-it("names its resize handle and its sheet after the panel, never after the toggle's verb", () => {
+
+it('drags a declared panel\'s left border from the column\'s right, and a cancelled drag resizes nothing', () => {
+  const resize = vi.fn(), collapse = vi.fn();
+  const { container } = render(<div><FilePanelColumn id="details" label="Details" width={320} onWidthChange={resize} onCollapse={collapse}>Content</FilePanelColumn></div>);
+  const handle = screen.getByRole('separator');
+  capture(handle);
+  container.firstElementChild!.getBoundingClientRect = () => ({ right: 1000 } as DOMRect);
+  pointer(handle, 'pointerdown', 680); pointer(handle, 'pointermove', 700);
+  expect(resize).toHaveBeenLastCalledWith(300);
+  pointer(handle, 'pointercancel', 700); pointer(handle, 'pointermove', 900);
+  expect(resize).toHaveBeenCalledTimes(1);
+});
+
+it("names a panel's handle and its sheet after the panel, never after the toggle's verb", () => {
   expect(['Hide files', 'Show files', 'files'].map(filePanelName)).toEqual(['files', 'files', 'files']);
-  for (const label of ['Hide files', 'Show files']) {
-    render(<FilePanelColumn id="tree" label={label} width={280} onWidthChange={vi.fn()}>Content</FilePanelColumn>);
-    expect(screen.getByRole('separator').getAttribute('aria-label')).toBe('Resize files panel');
+  for (const label of ['Hide details', 'Show details']) {
+    render(<FilePanelColumn id="details" label={label} width={280} onWidthChange={vi.fn()}>Content</FilePanelColumn>);
+    expect(screen.getByRole('separator').getAttribute('aria-label')).toBe('Resize details panel');
     cleanup();
-    render(<FilePanelColumn id="tree" label={label} width={280} onWidthChange={vi.fn()} mobile>Content</FilePanelColumn>);
-    expect(screen.getByRole('dialog', { name: 'files' })).toBeTruthy();
+    render(<FilePanelColumn id="details" label={label} width={280} onWidthChange={vi.fn()} mobile>Content</FilePanelColumn>);
+    expect(screen.getByRole('dialog', { name: 'details' })).toBeTruthy();
     cleanup();
   }
+  render(<FileExplorer label="Files" width={280} onWidthChange={vi.fn()} mobile>Content</FileExplorer>);
+  expect(screen.getByRole('dialog', { name: 'Files' })).toBeTruthy();
 });

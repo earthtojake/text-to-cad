@@ -2,16 +2,6 @@ import { normalizeViewerDefaultFile } from "../../shared/viewerConfig.mjs";
 
 const CAD_QUERY_PARAM = "file";
 
-export function fileKey(entry) {
-  return String(entry?.file || "").trim();
-}
-
-export function cadFileParamForEntry(entry) {
-  const file = fileKey(entry);
-  const rootRelativeFile = String(entry?.rootRelativeFile || "").trim();
-  return rootRelativeFile || file;
-}
-
 function writeUrl(url, { history = "replace" } = {}) {
   const nextSearch = url.searchParams.toString();
   const nextUrl = `${url.pathname}${nextSearch ? `?${nextSearch}` : ""}${url.hash}`;
@@ -52,14 +42,6 @@ export function readCadParam() {
   return normalizedValue || null;
 }
 
-
-export function findEntryByUrlPath(entries, urlPath) {
-  const normalizedUrlPath = normalizeCadFileQueryParam(urlPath);
-  if (!normalizedUrlPath) {
-    return null;
-  }
-  return entries.find((entry) => normalizeUrlPath(cadFileParamForEntry(entry)) === normalizedUrlPath) || null;
-}
 
 export function writeCadParam(urlPath, { history = "replace" } = {}) {
   if (typeof window === "undefined") {

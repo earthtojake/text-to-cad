@@ -1,11 +1,11 @@
 /**
  * What the menu on a file or a folder offers, as data.
  *
- * One table for the tree's rows and the breadcrumb's crumbs, in BOTH apps, so
- * a file cannot have one menu in one place and another menu two hundred
- * pixels away — or one menu in the desktop app and a different one in the
- * standalone viewer. `EntryMenu.jsx` draws it; the host performs it; the unit
- * test reads it directly.
+ * One table for the explorer's rows and the navbar's ⋯, in every app, so a
+ * file cannot have one menu in one place and another menu two hundred pixels
+ * away — or one menu in one app and a different one in another.
+ * `EntryMenu.jsx` draws it; the host performs it; the unit test reads it
+ * directly.
  *
  * Path copies come first, followed by opening/reveal actions, the edits
  * together, and the one destructive item alone at the bottom — the OS trash,
@@ -75,9 +75,9 @@ export const FIELD_ENTRY_ACTIONS = Object.freeze(new Set(["rename", "new-file", 
  * @typedef {object} MenuEntryTarget
  * @property {string} path Root-relative; `""` is the root itself, which has no rename and no trash.
  * @property {"file"|"directory"} kind
- * @property {"tree"|"crumb"} [surface]
- *   Where the menu was asked for. A breadcrumb names what the tab already
- *   shows, so its menu has no Open; the tree's rows do. Default: the tree.
+ * @property {"tree"|"navbar"} [surface]
+ *   Where the menu was asked for. The navbar names what the view already
+ *   shows, so its menu has no Open; the explorer's rows do. Default: the tree.
  */
 
 /** What the OS calls its file browser. */
@@ -137,10 +137,10 @@ function directorySections({ target, platform, rename, trash, copies }) {
 
 function fileSections({ target, platform, rename, trash, copies }) {
   // One tab per file (the store dedupes), so there is no "open in new tab";
-  // and a crumb IS the open file, so it does not offer Open at all.
+  // and the navbar's name IS the open file, so its menu does not offer Open at all.
   return [
     copies,
-    ...(target.surface === "crumb" ? [] : [[{ action: "open", label: "Open" }]]),
+    ...(target.surface === "navbar" ? [] : [[{ action: "open", label: "Open" }]]),
     [
       { action: "open-default", label: "Open with default app" },
       { action: "open-with", label: "Open with…" },

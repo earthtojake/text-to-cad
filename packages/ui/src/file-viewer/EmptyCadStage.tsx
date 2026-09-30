@@ -1,8 +1,6 @@
-import { useMemo, type ComponentType } from 'react';
-import { resolveSceneSettings } from '@text-to-cad/core/common/sceneSettings.js';
+import type { ComponentType } from 'react';
 import type { EmptyCadBackdropProps } from './empty.js';
-import { useChromeBackdropColor } from '../renderers/kit/look/useChromeBackdropColor.js';
-import { sceneBackdropEdgeColor } from '../renderers/kit/look/chromeBackdrop.js';
+import { useSceneBackdrop } from '../renderers/kit/look/useSceneBackdrop.js';
 import ShellViewport from '../renderers/kit/shell/ShellViewport.jsx';
 
 // The kit's viewport with no scene in it: the grid, the axes and the camera, and nothing else.
@@ -18,12 +16,9 @@ const Viewport = ShellViewport as unknown as ComponentType<{
 }>;
 
 export default function EmptyCadStage({ colorScheme = 'light' }: Omit<EmptyCadBackdropProps, 'children'>) {
-  const prefersDark = colorScheme === 'dark';
-  const chromeBackdropColor = useChromeBackdropColor(prefersDark);
-  const scene = useMemo(() => resolveSceneSettings({ appearance: colorScheme, prefersDark }), [colorScheme, prefersDark]);
-  const sceneBackdrop = sceneBackdropEdgeColor(scene.theme.background, chromeBackdropColor);
+  const { backdrop, scene } = useSceneBackdrop(colorScheme);
   // Empty and populated CAD stages share the same opinionated Inspect basis.
-  return <div className="absolute inset-0" data-cad-scene-backdrop={sceneBackdrop} style={{ backgroundColor: sceneBackdrop }}>
+  return <div className="absolute inset-0" data-cad-scene-backdrop={backdrop} style={{ backgroundColor: backdrop }}>
     <Viewport
       scene={null}
       modelKey=""

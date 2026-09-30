@@ -7,14 +7,15 @@ persistent storage or page navigation. DOM, canvas, workers and layout remain
 shared. Missing optional methods mean an operation is unsupported.
 
 The host contains `files`, optional native `fileActions`, `clipboard`,
-`promptContext`, `navigation`, `environment` and the optional live-document
-bindings `documents` and `pdf`. `environment` carries the resolved `colorScheme`,
+`promptContext`, `navigation` (with an optional `home`), the optional navbar
+`links`, `environment` and the optional live-document bindings `documents` and
+`pdf`. `environment` carries the resolved `colorScheme`,
 the keyboard `platform` (`darwin` shows ⌘, anything else Ctrl), the app's own
 `reducedMotion`, honoured beside the system's `prefers-reduced-motion`, and
 `compact`: a host showing the view small, inline in a conversation, where a CAD
 renderer draws the model and its bottom action but not its tools, its top-right
-bar or its view cube (the host offers its own way to full size, where it drops
-`compact`). CAD is a separate registration supplied with a
+bar or its view cube, and FileViewer draws no navbar (the host offers its own way
+to full size, where it drops `compact`). CAD is a separate registration supplied with a
 `CadWorkspaceService`; the generic FileViewer does not import CAD. The HTTP CAD
 adapter can serve both apps, while desktop owns native runtime startup/recovery.
 See [workspace resources](../../core/docs/workspace-resources.md) for resource
@@ -46,9 +47,13 @@ are for reading and maintaining the contracts.
 | `RobotRendererOptions` (URDF, SRDF, SDF), `RobotLiveController`, `RobotLiveState` (`selectedLinks`, `selectedPartIds`) | [Robot registration](../src/renderers/robot/index.ts) | `@text-to-cad/ui/renderers/robot` |
 | `ViewerCommands`, `ViewerCommandSource` (the host requests every viewer renderer takes) | [Viewer commands](../src/renderers/workspace/commands.ts) | `@text-to-cad/ui/renderers/workspace` |
 | `createLiveRegistry`, `LiveRegistry` (the host's handle on the mounted view: its renderers' `live`) | [Live registry](../src/host/liveRegistry.ts) | `@text-to-cad/ui/host` |
-| `ModelLibrary`, `ModelLibrarySource`, `useModelThumbnail` (a host's home: the models opened before; `pick` only where the host has a file chooser) | [Model library](../src/library/ModelLibrary.tsx), [thumbnails](../src/library/thumbnails.ts) | `@text-to-cad/ui/library` |
+| `ModelLibrary`, `ModelLibrarySource`, `useModelThumbnail` (a host's home: the models opened before, pinned first, as cards or rows; `pick` only where the host has a file chooser) | [Model library](../src/library/ModelLibrary.tsx), [thumbnails](../src/library/thumbnails.ts) | `@text-to-cad/ui/library` |
+| `CadViewer` (FileViewer over one root's CAD catalog: the five CAD renderers, catalog following, the home, the loading and missing-file pages, the library's pictures) | [CAD viewer](../src/cad-viewer/CadViewer.tsx) | `@text-to-cad/ui/cad-viewer` |
+| `createCatalogFileSource`, `createCadFileActions`, `rootPath`, `pathUnderRoot`, `referencePath` (a CAD catalog as a read-only `FileSource`, the file menu's copies and reveal, the paths a root names a file by) | [Catalog](../src/cad-viewer/catalog.ts) | `@text-to-cad/ui/catalog` |
+| `ViewerLinks`, `viewerLinks` (the navbar's version, GitHub and Discord, and how a link is followed) | [Host types](../src/host/types.ts), [links](../src/file-viewer/navigation/links.js) | `@text-to-cad/ui/links` |
 
-Start with the actual composition in [web App](../../../apps/web/src/App.tsx).
+Start with the actual compositions: [web App](../../../apps/web/src/App.tsx) and the
+MCP app's [ModelView](../../../apps/mcp/src/ModelView.tsx), both one `CadViewer`.
 Its imports lead to the app-owned `host/`, `adapters/` and persistence
 implementations. [Web storage](../../../apps/web/docs/storage.md) documents
 browser lifetimes. Shared component tests can
@@ -59,7 +64,7 @@ use the [explicit fake host](../src/host/testing/host.ts).
 A CAD renderer (STEP, GLB, mesh, robot, DXF) declares no `panels`, and reads none of
 `RendererViewProps.openPanel`, `panelSlot` or `onPanelOpen`: its controls are panels of
 its own tool stack over the viewport (`settings-ui.md#the-tool-stack`), and nothing it
-does opens, closes or turns the host's panel column. FileViewer still hands every
+does opens, closes or turns the host's explorer or panel column. FileViewer still hands every
 renderer those props — they are the generic panel contract, which the file tree and
 the desktop markdown's source view use. A host's stored `panel` naming the retired CAD
 Settings panel (`cad-file`) resolves as nothing open. The tool stack's layout — the
@@ -81,8 +86,8 @@ file's routine plays on entry only when its Autoplay is on. The rules are in
 [settings-ui.md](settings-ui.md#camera-animation-and-preview).
 
 A renderer can publish `FileNavigationAction[]` through
-`RendererViewProps.onNavigationActionsChange`. The shared navbar shows these
-before its panel toggles. Each action declares its icon, accessible label, an
+`RendererViewProps.onNavigationActionsChange`. The shared navbar shows these at
+its right, before any declared panel's toggle and the host's links. Each action declares its icon, accessible label, an
 optional shorter hover `hint`, disabled state and invocation callback. Registration belongs to the mounted
 file generation: publish an empty list on cleanup; departing renderers cannot
 replace a new file's actions. Publish only when action metadata changes; stable
@@ -95,7 +100,10 @@ no prompt workflow (`unavailablePromptContext`, kind `unavailable`) has neither:
 both are left out, not disabled. Neither route detects the platform.
 
 `navigation.openFile(path, { target, panel })` shows a file in this view
-(`"current"`) or in a new one, where the host has more than one (`"new"`). `panel`
+(`"current"`) or in a new one, where the host has more than one (`"new"`).
+`navigation.home()`, where the host has a home, shows it in this view: the navbar's
+C mark is the way to it from a file (a burger under the pointer), and on the home
+itself the mark is the brand. `CadViewer` implements both over the host's `onShow`. `panel`
 is the panel the file opens with: FileViewer asks for the tree (`"tree"`) for a
 file picked in the tree, so the tree stays up while a person walks it. Without a
 panel, a file shown in place or in a new view starts at `FileViewerState.panel:
@@ -197,6 +205,14 @@ shared UI does not infer view state from a backend catalog or stored tab state.
 
 The controller selects available selectors, clears selection, applies a camera,
 resets framing, applies grouped View settings, selects presets and captures a PNG.
+`thumbnail({ width, height })` is a library card's picture: it waits for the view
+to settle — the renderer's own live state saying the whole file is loaded and
+drawn, never a timer — then draws the model framed whole from the default
+direction at the card's aspect, on transparency, off to the side of the view, so
+the person's camera, panels and window never show in it and nothing on screen
+changes (`kit/viewport/thumbnail.js`; a DXF paints its fitted drawing on a canvas
+of its own). A view that goes before it settles rejects it. `useModelThumbnail`
+keeps one per file per mounted view, and only for the file the view still shows.
 `readState().display` and `setDisplaySettings(patch)` use the same sparse grouped
 schema as snapshots: `mode` selects `solid`, `render`, `xray`, `hidden-line`, or
 `wireframe`; camera, surfaces, edges, lighting, background, floor, grid and axes
@@ -301,12 +317,25 @@ permit its compilation in CSP without enabling JavaScript eval.
 
 ## Host chrome slots
 
-`FileViewer.leading` adds host content before breadcrumbs. `navigationActions` adds
-host controls before renderer navigation actions (such as Snapshot), and
-`displayActions` passes host-owned appearance controls into the Display section beside Projection via
-`RendererViewProps`. The shell handles placement and hides the toolbar in
-preview; the host owns callbacks and preferences. These slots do not imply platform detection
-or move application-specific release/network behavior into shared UI.
+FileViewer draws ONE navbar, the same in every app and over every page. Left: the
+C mark — `navigation.home` from a file, the brand on the home — then the file
+explorer's toggle where the host's files can be browsed (`files.list`), then the
+open file's name and its ⋯ menu, which is the explorer's own entry menu for that
+file (no right-click on the name). Right: the renderer's navigation actions, any
+declared panel's toggle, then `links` — the version, GitHub and Discord as icons
+(`NavbarLinks.jsx`). The version opens a menu of what it is and how to update it;
+a host that checks for newer releases says what it found (`links.latest`), and the
+version then reads "Update". A link opens the ordinary way unless the host supplies
+`links.open` (a page in a sandboxed frame hands it to its host). `displayActions`
+passes host-owned appearance controls into the Display section beside Projection
+via `RendererViewProps`. The shell handles placement and hides the toolbar in
+preview; the host owns callbacks and preferences. None of these imply platform
+detection or move application-specific release/network behavior into shared UI.
+
+The explorer floats over the body's left (`FileExplorer.jsx`), inset like the
+tool strip and above it, and never resizes the view; a file's declared panels open
+in the column at the body's right (`FilePanelColumn.jsx`). One panel is open at a
+time, the explorer included.
 
 For `destination.kind === "composer"`, the single bottom Add To Prompt action
 always includes a viewport PNG and adds selected references when present. It uses
@@ -341,5 +370,5 @@ row stops above it. Both are lengths, like any design token, and say nothing
 about which host it is.
 
 A renderer's update status is its own: the CAD renderers show it centred at the
-top of the viewport, level with the tool strip. The host's nav row carries none,
-and a host that browses nothing and puts nothing at either end of it gets no row.
+top of the viewport, level with the tool strip. The navbar carries none, and a host
+that shows one file without naming it, browsing it or linking anywhere gets no row.

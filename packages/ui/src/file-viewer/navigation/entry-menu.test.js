@@ -29,15 +29,11 @@ test("a file puts path copies before open, edit and trash actions", () => {
   ]);
 });
 
-test("a breadcrumb gets the same menu without Open — the crumb is the open file", () => {
-  const fromCrumb = entryMenuActions({ path: "src/index.ts", kind: "file", surface: "crumb" }, "darwin");
+test("the navbar's ⋯ gets the explorer's menu without Open — the name is the open file", () => {
+  const fromNavbar = entryMenuActions({ path: "src/index.ts", kind: "file", surface: "navbar" }, "darwin");
   const fromTree = entryMenuActions({ path: "src/index.ts", kind: "file", surface: "tree" }, "darwin");
-  assert.ok(!fromCrumb.includes("open"));
-  assert.deepEqual(fromCrumb, fromTree.filter((action) => action !== "open"));
-  assert.deepEqual(
-    entryMenuActions({ path: "src", kind: "directory", surface: "crumb" }, "darwin"),
-    entryMenuActions({ path: "src", kind: "directory" }, "darwin")
-  );
+  assert.ok(!fromNavbar.includes("open"));
+  assert.deepEqual(fromNavbar, fromTree.filter((action) => action !== "open"));
 });
 
 test("File menus omit the redundant Copy reference action", () => {

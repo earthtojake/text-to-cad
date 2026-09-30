@@ -11,11 +11,14 @@ import { chromium } from "playwright";
 let server, browser, temporary, page;
 before(async () => {
   temporary = await mkdtemp(join(tmpdir(), "text-to-cad-file-viewer-browser-"));
-  await build({ entryPoints: [fileURLToPath(new URL("./harness/index.tsx", import.meta.url))], outfile: join(temporary, "harness.js"), bundle: true, format: "esm", platform: "browser", jsx: "automatic" });
+  await build({ entryPoints: [fileURLToPath(new URL("./harness/index.tsx", import.meta.url))], outfile: join(temporary, "harness.js"), bundle: true, format: "esm", platform: "browser", jsx: "automatic", loader: { ".svg": "dataurl" } });
   const bundle = await readFile(join(temporary, "harness.js"));
+  // The package's own stylesheet, so the chrome is laid out as a host lays it out.
+  const styles = await readFile(fileURLToPath(new URL("../../dist/styles.css", import.meta.url)));
   server = createServer((request, response) => {
     if (request.url === "/harness.js") { response.setHeader("Content-Type", "text/javascript"); response.end(bundle); }
-    else { response.setHeader("Content-Type", "text/html"); response.end('<!doctype html><html><body><div id="root"></div><script type="module" src="/harness.js"></script></body></html>'); }
+    else if (request.url === "/styles.css") { response.setHeader("Content-Type", "text/css"); response.end(styles); }
+    else { response.setHeader("Content-Type", "text/html"); response.end('<!doctype html><html><head><link rel="stylesheet" href="/styles.css"></head><body><div id="root"></div><script type="module" src="/harness.js"></script></body></html>'); }
   });
   await new Promise((resolve, reject) => { server.once("error", reject); server.listen(0, "127.0.0.1", resolve); });
   browser = await chromium.launch({ headless: true });
@@ -100,24 +103,25 @@ test("panel exclusivity, capability menus, rename and create use the shared chro
   await page.getByTestId("tree-toggle").click();
   await page.getByRole("tree").waitFor();
   assert.equal(await page.getByText("Injected panel").count(), 0);
-  await page.getByTestId("crumb-actions").click();
+  // The navbar's ⋯ is the explorer's menu for the open file: what the host can do, and no more.
+  await page.getByTestId("file-actions").click();
   assert.equal(await page.getByRole("menuitem", { name: /Reveal|Open with|Move to trash/ }).count(), 0);
   await page.getByRole("menuitem", { name: /^Rename/ }).click();
   await page.getByRole("textbox", { name: "Rename file", exact: true }).fill("renamed.txt");
   await page.getByRole("textbox", { name: "Rename file", exact: true }).press("Enter");
-  await page.getByRole("button", { name: "Browse renamed.txt", exact: true }).waitFor();
+  await page.locator('[data-file-name]', { hasText: "renamed.txt" }).waitFor();
   // The tab follows the file to its new name through the host, and keeps the panel it had.
   assert.deepEqual(await page.evaluate(() => window.harness.opened.at(-1)), { path: "renamed.txt", options: { target: "current", panel: "tree" } });
   await page.getByRole("tree").dispatchEvent("contextmenu", { button: 2 });
   await page.getByRole("menuitem", { name: /New file/ }).click();
   await page.getByRole("textbox", { name: "New file name", exact: true }).fill("created.txt");
   await page.getByRole("textbox", { name: "New file name", exact: true }).press("Enter");
-  await page.getByRole("button", { name: "Browse created.txt", exact: true }).waitFor();
+  await page.locator('[data-file-name]', { hasText: "created.txt" }).waitFor();
   // Made in the tree, the file is opened the way a pick there opens one: with the tree.
   assert.deepEqual(await page.evaluate(() => window.harness.opened.at(-1)), { path: "created.txt", options: { target: "new", panel: "tree" } });
   assert.equal(await page.getByRole("tree").count(), 1);
 });
-test("an empty tab opens on the tree, a pick in the tree opens the file with the tree, and a crumb opens it on its own default", async () => {
+test("an empty tab opens on the tree, and a pick in the tree opens the file with the tree", async () => {
   // With no file to show, the tree is the one thing to reach for: it is what an empty tab opens on.
   await reset();
   await page.evaluate(() => window.harness.open(null));
@@ -145,27 +149,13 @@ test("an empty tab opens on the tree, a pick in the tree opens the file with the
   await page.waitForTimeout(200);
   assert.deepEqual(await page.evaluate(() => window.harness.state.expandedDirectories), ["", "nested", "nested/deep"]);
   assert.equal(await revealed.isVisible(), true, "and the folders it was revealed in are still open");
-
-  // A crumb is not the tree: it opens the file on its own default — for a document, no panel —
-  // and not on whatever the last file had open (here, its renderer's Details).
-  await page.evaluate(() => window.harness.open("notes.txt"));
-  await waitValue("root-a original");
-  await page.getByRole("button", { name: "Details", exact: true }).click();
-  await page.getByText("Injected panel").waitFor();
-  await page.getByRole("button", { name: "Browse notes.txt", exact: true }).click();
-  await page.getByRole("menu", { name: "Browse notes.txt" }).getByRole("menuitem", { name: "next.txt", exact: true }).click();
-  await waitValue("root-a next");
-  assert.deepEqual(await page.evaluate(() => window.harness.opened.at(-1)), { path: "next.txt", options: { target: "current" } });
-  assert.equal(await page.getByText("Injected panel").count(), 0, "the last file's panel is not the next one's");
-  assert.equal(await page.getByRole("tree").count(), 0);
-  assert.equal(await page.evaluate(() => window.harness.state.panel), null, "the field is back to the file's own default");
 });
-test("the panel column's width stays bounded", async () => {
+test("the explorer's width stays bounded", async () => {
   await reset();
   await page.getByTestId("tree-toggle").click();
   await page.getByRole("tree").waitFor();
   await page.evaluate(() => window.harness.width(99999));
-  // The width is bounded at the column's maximum. (The store write renders on React's
+  // The width is bounded at the explorer's maximum. (The store write renders on React's
   // schedule, so the handle is read once it has.)
   const handle = page.getByRole("separator", { name: "Resize files panel" });
   await page.waitForFunction(() => document.querySelector('[role="separator"][aria-label="Resize files panel"]')?.getAttribute("aria-valuenow") !== "300");
@@ -257,21 +247,22 @@ test("a departing renderer flushes its own state on file changes and reloads, bu
   assert.deepEqual(await page.evaluate(() => window.harness.state.renderers['["next.txt","in-memory"]']), { drawing: 'pending stroke' });
 });
 
-test("host breadcrumb policy stays scoped to the active document", async () => {
+test("the navbar names the open file by its name, and nothing while the host has not named it", async () => {
   await reset();
+  const name = () => page.locator('[data-file-name]');
   await page.evaluate(() => { window.harness.a.add('nested/deep/file.txt'); window.harness.open('nested/deep/file.txt'); });
   await waitValue('added');
-  // Every folder is its own crumb on a desktop-width viewer: there is no folding into one ellipsis.
-  assert.equal(await page.getByRole('button', { name: /…/ }).count(), 0);
-  await page.getByRole('button', { name: 'Browse nested', exact: true }).waitFor();
-  await page.getByRole('button', { name: 'Browse deep', exact: true }).waitFor();
+  assert.equal(await name().textContent(), 'file.txt');
+  // No crumbs: the folders are the explorer's to show.
+  assert.equal(await page.locator('[data-crumb]').count(), 0);
   await page.evaluate(() => window.harness.open('next.txt'));
   await waitValue('root-a next');
   await page.evaluate(() => window.harness.navigationPath(null));
-  assert.equal(await page.getByRole('navigation', { name: 'Breadcrumb' }).getByRole('button').count(), 0);
+  await name().waitFor({ state: 'detached' });
+  assert.equal(await page.getByTestId('file-actions').count(), 0);
   assert.equal(await document().inputValue(), 'root-a next');
   await page.evaluate(() => window.harness.navigationPath(undefined));
-  await page.getByRole('button', { name: 'Browse next.txt', exact: true }).waitFor();
+  await page.locator('[data-file-name]', { hasText: 'next.txt' }).waitFor();
 });
 
 test("late trash completion does not issue new requests into the previous root", async () => {
@@ -299,18 +290,23 @@ test("catalog arrival restarts the initial pending directory listing", async () 
   assert.ok(await page.evaluate(() => window.harness.events.filter(event => event === 'root-a:list').length >= 2));
 });
 
-test("mobile breadcrumbs show only the file and its actions across a single breakpoint", async () => {
+test("the explorer floats over the view's left, inset like its tool strip, and opening it resizes nothing", async () => {
   await reset();
-  await page.evaluate(() => { window.harness.a.add('nested/deep/file.txt'); window.harness.open('nested/deep/file.txt'); });
-  await page.getByRole('button', { name: 'Browse file.txt', exact: true }).waitFor();
-  const pane = page.getByTestId('primary');
-  await pane.evaluate(element => { element.parentElement.style.width = '390px'; });
-  await page.waitForFunction(() => document.querySelector('[data-viewer-layout]')?.dataset.viewerLayout === 'mobile');
-  assert.equal(await pane.locator('[data-crumb="directory"], [data-crumb="ellipsis"]').count(), 0);
-  assert.equal(await pane.getByTestId('crumb-actions').count(), 1);
-  await pane.evaluate(element => { element.parentElement.style.width = '720px'; });
-  await page.waitForFunction(() => document.querySelector('[data-viewer-layout]')?.dataset.viewerLayout === 'desktop');
-  assert.equal(await pane.locator('[data-crumb="directory"]').count(), 2);
+  const pane = page.getByTestId("primary");
+  const view = () => pane.getByRole("textbox", { name: "Document", exact: true }).evaluate(element => element.closest('.overflow-hidden')?.getBoundingClientRect().toJSON());
+  const before = await view();
+  await page.getByTestId("tree-toggle").click();
+  await page.getByRole("tree").waitFor();
+  assert.deepEqual(await view(), before, "the view keeps its box");
+  const [explorer, body] = await Promise.all([
+    pane.locator('[data-file-explorer]').evaluate(element => element.getBoundingClientRect().toJSON()),
+    pane.locator('[data-file-explorer]').evaluate(element => element.parentElement.getBoundingClientRect().toJSON()),
+  ]);
+  assert.deepEqual([explorer.left - body.left, explorer.top - body.top, body.bottom - explorer.bottom], [8, 8, 8]);
+  // A pick in it keeps it up on a wide view, beside the file it opened.
+  await page.locator('[role="treeitem"][data-path="next.txt"]').click();
+  await waitValue("root-a next");
+  assert.equal(await page.getByRole("tree").count(), 1);
 });
 
 test("a narrow empty tab still opens on its tree, and a file picked there opens with nothing over it", async () => {

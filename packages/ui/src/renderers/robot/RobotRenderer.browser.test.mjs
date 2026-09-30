@@ -85,7 +85,7 @@ let server, browser, temporary;
 let revision = 1;
 before(async () => {
   temporary = await mkdtemp(join(tmpdir(), 'text-to-cad-robot-browser-'));
-  await build({ entryPoints: [fileURLToPath(new URL('../harness/index.tsx', import.meta.url))], outfile: join(temporary, 'harness.js'), bundle: true, format: 'esm', platform: 'browser', conditions: ['production'], jsx: 'automatic', loader: { '.webp': 'dataurl', '.avif': 'dataurl', '.woff2': 'dataurl' } });
+  await build({ entryPoints: [fileURLToPath(new URL('../harness/index.tsx', import.meta.url))], outfile: join(temporary, 'harness.js'), bundle: true, format: 'esm', platform: 'browser', conditions: ['production'], jsx: 'automatic', loader: { '.webp': 'dataurl', '.avif': 'dataurl', '.woff2': 'dataurl', '.svg': 'dataurl' } });
   const bundle = await readFile(join(temporary, 'harness.js'));
   const css = await readFile(new URL('../../../dist/styles.css', import.meta.url));
   server = createServer((request, response) => {

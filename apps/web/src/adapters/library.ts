@@ -32,7 +32,7 @@ export function createWebLibrary({ open }: { open(file: string): void }): ModelL
 export const recordOpened = (file: string) => change({ action: 'open', file });
 
 /** Its picture, for the library's cards. */
-export async function recordThumbnail(file: string, png: Blob) {
+export async function recordThumbnail(png: Blob, file: string) {
   const bytes = new Uint8Array(await png.arrayBuffer());
   let binary = '';
   for (let index = 0; index < bytes.length; index += 0x8000) binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));

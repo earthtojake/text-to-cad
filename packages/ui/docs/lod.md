@@ -225,7 +225,7 @@ displayed, with nothing announced. A later successful no-op run without a new
 preview, or an expired preview with a validated saved result, uses the saved
 file instead.
 
-**What the viewport shows.** The breadcrumb carries no status. Opening and
+**What the viewport shows.** The navbar carries no status. Opening and
 updating are the viewport's loading overlay (`ViewerLoadingOverlay`). A failure is
 a card over the viewport (`kit/status/ViewerAlertCard.jsx`) with its explanation,
 its next step and the full diagnostic under Details: an error always shows, and a

@@ -2,6 +2,8 @@ import type { FileChange, FileEntry } from "./types.js";
 
 export const isSameOrUnder = (path: string, ancestor: string) => path === ancestor || path.startsWith(`${ancestor}/`);
 export const movedFilePath = (path: string, from: string, to: string) => isSameOrUnder(path, from) ? to + path.slice(from.length) : path;
+/** The directory an entry lives in: `""` at the root. */
+export const parentOf = (path: string) => { const slash = path.lastIndexOf("/"); return slash < 0 ? "" : path.slice(0, slash); };
 
 /** A committed move preserves expanded subtrees; deletion removes every cached descendant. */
 export function reconcileFileTree<T extends FileEntry>(

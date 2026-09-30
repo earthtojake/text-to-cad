@@ -62,6 +62,18 @@
       "types": "./dist/library/index.d.ts",
       "import": "./dist/library/index.js"
     },
+    "./cad-viewer": {
+      "types": "./dist/cad-viewer/index.d.ts",
+      "import": "./dist/cad-viewer/index.js"
+    },
+    "./catalog": {
+      "types": "./dist/cad-viewer/catalog.d.ts",
+      "import": "./dist/cad-viewer/catalog.js"
+    },
+    "./links": {
+      "types": "./dist/file-viewer/navigation/links.d.ts",
+      "import": "./dist/file-viewer/navigation/links.js"
+    },
     "./drawing": {
       "types": "./dist/drawing/index.d.ts",
       "import": "./dist/drawing/index.js"

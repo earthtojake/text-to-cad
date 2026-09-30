@@ -1,7 +1,8 @@
 # Brand assets
 
 `generate-logos.mjs` is the source for the blue C, CAD and TEXT2CAD SVGs in
-`apps/docs/public/brand/` and the viewer's copy of C. Run it with Node from
+`apps/docs/public/brand/` and the viewer's copies of C and CAD (`packages/ui/src/assets/`,
+the navbar's home mark and the home page's wordmark in both apps). Run it with Node from
 any directory. No fonts, raster tracing or runtime dependencies.
 
 All letters are three units wide, four tall, and extruded two units deep.

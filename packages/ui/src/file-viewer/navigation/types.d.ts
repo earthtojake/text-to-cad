@@ -34,11 +34,11 @@ export type EntryMenuItem = {
 export type MenuEntryTarget = {
   path: string;
   kind: "file" | "directory";
-  /** A crumb names the open file, so its menu has no `Open`. Default: the tree. */
-  surface?: "tree" | "crumb";
+  /** The navbar names the open file, so its ⋯ menu has no `Open`. Default: the tree. */
+  surface?: "tree" | "navbar";
 };
 
-/** Everything, for a host with a filesystem and an OS behind it: this app. */
+/** Everything, for a host with a filesystem and an OS behind it. */
 export const ALL_ENTRY_CAPABILITIES: ReadonlySet<EntryAction>;
 /** What a browser tab can honestly do: the standalone viewer's set. */
 export const WEB_ENTRY_CAPABILITIES: ReadonlySet<EntryAction>;
@@ -79,15 +79,6 @@ export const EntryMenuItems: ComponentType<{
   surface?: "context" | "dropdown";
 }>;
 
-/** One element's own right-click menu — a crumb. */
-export const EntryContextMenu: ComponentType<{
-  entry: MenuEntryTarget;
-  platform: Platform;
-  capabilities?: ReadonlySet<EntryAction>;
-  onAction: EntryMenuAction;
-  children: ReactNode;
-}>;
-
 /* -------------------------------------------------------------------- */
 /* The panel column and its list                                         */
 /* -------------------------------------------------------------------- */
@@ -112,7 +103,10 @@ export const PANEL_MAX_WIDTH: number;
 export const PANEL_DEFAULT_WIDTH: number;
 export function clampPanelWidth(width: number): number;
 
-/** The one frame every panel is drawn in: one border, one width, one handle. */
+/**
+ * The column a file's own declared panels open in, at the view's right: one border, one width,
+ * one handle. The file tree is not one of them: it is the explorer (`FileExplorer`).
+ */
 export const FilePanelColumn: ComponentType<{
   mobile?: boolean;
   portalContainer?: HTMLElement | null;
@@ -146,8 +140,8 @@ export type TreeEdit = TreeEditRequest & { nonce: number };
 
 /**
  * Where the tree's listings come from and what its menu does — the one thing
- * the two hosts do not share. This app's is `features/explorer/tree-source.ts`;
- * the standalone viewer's walks its catalog.
+ * the hosts do not share. A catalog host walks its catalog; a filesystem host
+ * reads a folder at a time.
  */
 export type FileTreeSource = {
   /** Named in the "… is empty" line. */
@@ -181,7 +175,7 @@ export const FileTree: ComponentType<{
   activePath: string | null;
   /** A path to expand to and select without opening it. */
   reveal?: { path: string; directory: boolean } | null;
-  /** A rename or a create the breadcrumb asked for. */
+  /** A rename or a create the navbar's menu asked for. */
   edit?: TreeEdit | null;
   onOpen: (path: string) => void;
 }>;
@@ -219,77 +213,57 @@ export function fuzzyFilter(
   limit?: number,
 ): { path: string; indices: number[] }[];
 
-export type CrumbKind = "directory" | "file";
-
-/** One crumb: a path segment BELOW the root, and the directory its menu lists. */
-export type Crumb = {
-  kind: CrumbKind;
-  label: string;
-  title: string;
-  path: string;
-  /** The crumb's PARENT — the menu is its neighbours. */
-  menu: string;
-  current: string;
-};
-
-/** One row of a crumb's menu, in the crumb path space. */
-export type ListingEntry = {
-  path: string;
-  name: string;
-  kind: "file" | "directory";
-  /** The host's own payload, handed back on open. */
-  value?: unknown;
-};
-
 /**
- * Where the breadcrumb's listings and entry menus come from — the one thing
- * the two hosts do not share. This app's is
- * `features/explorer/crumb-source.tsx`.
+ * The file explorer: a panel floating over the view's left, inset like the tool strip, above
+ * everything under it; it never resizes the view. Below the viewer breakpoint, a sheet.
  */
-export type CrumbSource = {
-  /**
-   * One directory's entries, or null while they are on their way. Called as
-   * a React hook, unconditionally, once per open menu.
-   */
-  useListing: (directory: string) => readonly ListingEntry[] | null;
-  /** Wraps a crumb's trigger — the right-click entry menu. */
-  wrapCrumb?: (args: { crumb: Crumb; children: ReactNode }) => ReactNode;
-  /** Drawn after the FILE crumb: the `⋯` that opens the same menu by click. */
-  renderCrumbActions?: (args: { crumb: Crumb }) => ReactNode;
-  /** Drawn INSTEAD of the file crumb while the host is renaming it; null draws the crumb. */
-  renderRename?: (args: { crumb: Crumb }) => ReactNode;
-};
-
-export function buildCrumbs(input: { path: string | null }): Crumb[];
-
-/** The directory an entry lives in: `""` at the root. */
-export function parentOf(path: string): string;
-
-export const Breadcrumbs: ComponentType<{
-  crumbs: Crumb[];
-  source: CrumbSource;
-  activePath: string | null;
-  onOpen: (path: string, entry: ListingEntry) => void;
+export const FileExplorer: ComponentType<{
+  label: string;
+  width: number;
+  onWidthChange: (width: number) => void;
+  onCollapse?: () => void;
+  mobile?: boolean;
+  portalContainer?: HTMLElement | null;
+  onDismiss?: () => void;
+  children: ReactNode;
 }>;
 
+/** The open file as the navbar names it, with the explorer's menu for it. */
+export type NavbarFile = {
+  /** Root-relative. */
+  path: string;
+  capabilities: ReadonlySet<EntryAction>;
+  platform: Platform;
+  onAction: EntryMenuAction;
+  /** While the host renames the file: a field over its name. */
+  renaming?: { commit: (name: string) => Promise<boolean>; cancel: () => void } | null;
+};
+
 /**
- * The row above a file: the breadcrumb, then whatever the host hangs off the
- * ends. `leading` sits inside the breadcrumb's overflow box and truncates
- * with it; `status` follows the last crumb; `trailing` is the right end and
- * never shrinks.
+ * The one navbar, over a file and over a host's home. Left: the home mark, the explorer's toggle,
+ * the open file's name and its ⋯. Right: `trailing` (the file's actions, its panels' toggles),
+ * then the host's links.
  */
-export const FileNavRow: ComponentType<{
-  crumbs: Crumb[];
-  source: CrumbSource;
-  activePath: string | null;
-  onOpen: (path: string, entry: ListingEntry) => void;
-  leading?: ReactNode;
+export const ViewerNavbar: ComponentType<{
+  onHome?: () => void;
+  explorer?: { open: boolean; onToggle: () => void } | null;
+  file?: NavbarFile | null;
   status?: ReactNode;
   trailing?: ReactNode;
+  links?: import("../../host/types.js").ViewerLinks;
+  clipboard: import("../../host/types.js").ClipboardPort;
+  onError?: (error: Error) => void;
   className?: string;
 }>;
 
-/** One panel's toggle at the end of the nav row; `active` is its panel being open. */
+/** The version, GitHub and Discord, as the navbar's right end draws them. */
+export const NavbarLinks: ComponentType<{
+  links: import("../../host/types.js").ViewerLinks;
+  clipboard: import("../../host/types.js").ClipboardPort;
+  onError?: (error: Error) => void;
+}>;
+
+/** One panel's toggle in the navbar; `active` is its panel being open. */
 export const PanelToggle: ComponentType<{
   icon: ElementType;
   label: string;
@@ -305,3 +279,5 @@ export const PanelToggle: ComponentType<{
  */
 export const FileIcon: ComponentType<{ path: string; className?: string }>;
 export const FolderIcon: ComponentType<{ open: boolean; className?: string }>;
+export const GitHubMark: ComponentType<{ className?: string }>;
+export const DiscordMark: ComponentType<{ className?: string }>;

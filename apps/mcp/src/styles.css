@@ -7,12 +7,3 @@
 }
 
 .cad-notice { display: grid; place-items: center; height: 100%; padding: 24px; box-sizing: border-box; }
-
-/* The home page's frame; the library itself is @text-to-cad/ui's. */
-.cad-library-brand { margin-bottom: 24px; }
-.cad-library-logo { display: block; width: auto; height: 32px; }
-.cad-library-footer { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; margin-top: 36px; font-size: 11px; color: var(--muted-foreground); }
-.cad-library-footer a { border-radius: 2px; transition: color .15s ease; }
-.cad-library-footer a:hover { color: var(--foreground); }
-.cad-library-footer a:focus-visible { outline: 2px solid var(--ring); outline-offset: 4px; }
-@media (prefers-reduced-motion: reduce) { .cad-library-footer a { transition: none; } }

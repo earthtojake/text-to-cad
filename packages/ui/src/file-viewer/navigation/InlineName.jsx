@@ -4,7 +4,7 @@ import { cn } from "@text-to-cad/ui/utils";
 
 /**
  * The field a name is typed into, in place: a rename over a tree row or a
- * crumb, a new file or folder in the tree.
+ * the navbar's file name, a new file or folder in the tree.
  *
  * Finder's rules. The stem is selected and the extension is not, because
  * renaming `bracket.step` is nearly always about `bracket`. Enter commits,

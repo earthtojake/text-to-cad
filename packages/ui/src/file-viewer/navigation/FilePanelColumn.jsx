@@ -5,19 +5,15 @@ import { useRef } from "react";
 import { hasOpenPopup } from "../../lib/popups.js";
 
 /**
- * The file surface's panel column: the one frame every panel is drawn in.
+ * The column a file's own declared panels open in, at the view's right: one border, one width,
+ * one handle, for whatever a renderer declares (`panels.js`). The file tree is not one of them:
+ * it is the explorer, which floats over the view's left (`FileExplorer.jsx`). One panel is open
+ * at a time, the explorer included, so this column and the explorer are never both up. Below the
+ * viewer breakpoint the column is a floating sheet over the body instead.
  *
- * There is one of these beside a file and never two, because there is one
- * open panel (`panels.js`). Whatever is in it — the file tree or a panel a
- * renderer declares — gets the same border, the same width and the same
- * handle. Below the viewer breakpoint it is a floating sheet over the body
- * instead.
- *
- * No title bar of the column's own. Each panel's own top row is its header —
- * the tree's filter — and the nav row's toggle is how it closes.
- *
- * A collapsed panel is not rendered at all, so the toggle for it exists in
- * the document exactly once: in the nav row.
+ * No title bar of the column's own. Each panel's own top row is its header, and the navbar's
+ * toggle is how it closes. A collapsed panel is not rendered at all, so the toggle for it exists in
+ * the document exactly once: in the navbar.
  */
 
 /**

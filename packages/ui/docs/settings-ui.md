@@ -14,18 +14,18 @@ belong to apps through the [host contract](viewer-host.md).
 
 ## Ownership and layout
 
-FileViewer owns the nav row, the breadcrumbs, the panel column (the file tree)
-and which panel is open. RendererShell owns the scene's chrome: the toolbar, the
+FileViewer owns the navbar, the file explorer (the host's file tree), the column a
+file's declared panels open in, and which panel is open. RendererShell owns the scene's chrome: the toolbar, the
 tool stack under it, the view cube, the bottom action, the playbar and
 preview mode. Renderers supply their tools, their document state and their tool
 panels; the shell never inspects a format's parts, joints or topology. A CAD
-file's controls are never a panel of the host's column: no pick or tool opens,
-closes or turns it.
+file's controls are never a panel of the host's: no pick or tool opens, closes or
+turns the explorer.
 
 | The host (web, desktop) supplies | The shared UI decides |
 | --- | --- |
 | Where the tab record lives (`TabRecordStorage`: the web's sessionStorage, the desktop's per-tab store) | The record: its settings (the tree, the tool stack's layout, the appearance) and each file's view (its camera, Display settings, Playback settings and renderer slices), what is written when, and what is never stored (`@text-to-cad/ui/tab-store`, `kit/shell/fileView.js`) |
-| `leading`, `navigationActions` and `displayActions` (an appearance control) | The nav row's order, the snapshot action and the panel toggles |
+| `navigation.home`, `links` (its version, GitHub, Discord, how a link opens) and `displayActions` (an appearance control) | The navbar's order and look, the version's menu, the snapshot action and the panel toggles |
 | `host.files`, `fileActions`, `navigation`, `clipboard`, `promptContext` | When a copy, capture or open happens and what it carries |
 | `host.environment`: color scheme, keyboard `platform`, `reducedMotion` | How the chrome honours them |
 | `onError`, for errors the viewer hands up | Preview, tooltips, keyboard scope, the tool stack, the camera |
@@ -33,10 +33,16 @@ closes or turns it.
 Hosts pass no preview, chrome-visibility or notification props; there are
 none.
 
-- **Nav row.** Leading content, breadcrumbs and the loading status, then host
-  actions, the renderer's actions (the snapshot camera) and one toggle per
-  declared panel, **Show files** last. A CAD file declares none: its toggle
-  row is the file tree's alone.
+- **Navbar.** One row, the same in every app and on every page. Left: the C mark
+  (home, a burger under the pointer; the brand on the home itself), the file
+  explorer's toggle, then the open file's name and its ⋯ — the explorer's own menu
+  for that file; the name has no right-click menu and there are no crumbs. Right:
+  the renderer's actions (the snapshot camera), a declared panel's toggle, then the
+  version, GitHub and Discord as icons. A CAD file declares no panel. The home
+  page has the same row; a view shown small in a conversation (`compact`) has none.
+- **File explorer** floats over the view's left, inset 8px like the toolbar, on a
+  solid background above the tools. Opening it never resizes the view or moves its
+  tools; it stays up while a person walks the tree.
 - **Toolbar** at top-left, 8px in — the gap between it and the stack under it.
   At top-right, 2px in, the view cube sits above a centred bar of 20px
   transparent buttons with 12px icons: **Display settings** (cog),
@@ -302,7 +308,7 @@ stack.
   native `overflow-auto` scroller in chrome; `src/designSystem.test.js` holds it.
 - **Nothing opens elsewhere.** A pick shows its Reference in the stack; the
   Position tool shows its panel by being chosen. No pick or tool opens, closes
-  or turns the host's panel column, on desktop or mobile.
+  or turns the host's explorer, on desktop or mobile.
 
 Tree rows inset their backgrounds 4px from the panel edges, and the filter row
 shares that inset. A tree in the stack (Features, Links) is dense (`TreeRowSurface`'s
@@ -320,17 +326,18 @@ Model and link filters share `TreeFilterInput`.
 **Mobile** is below 720px of FileViewer width — the one viewer breakpoint
 (`useViewerMobile`); chrome never uses window breakpoints. The tool stack is
 the same stack, but Select's tree (Features, Links) starts folded, so the model
-has the screen until the person opens it. The host's panels (the file tree) become non-modal floating
-sheets over the viewer (280px, inset 8px) that never resize or move the scene
-or shift the page; a sheet has a compact X, outside dismissal and Escape.
-Breadcrumbs collapse to the current file's crumb; the cube and the shortcut
-hint are hidden. Touch works for every tool: one finger orbits, two pan and
+has the screen until the person opens it. The host's panels (the explorer at the
+left, a declared panel at the right) become non-modal floating sheets over the
+viewer (280px, inset 8px) that never resize or move the scene or shift the page; a
+sheet has a compact X, outside dismissal and Escape, and a pick in the explorer
+closes it. The navbar is the same row; the cube and the shortcut hint are hidden. Touch works for every tool: one finger orbits, two pan and
 zoom, a tap picks; a pinch, a cancelled pointer or a camera drag is never a
 pick.
 
-**The file tree's column** (the host's) is 220px by default, 140px at least and
-480px at most. A drag past the minimum stops at it; only a drag below half the
-minimum closes the column, and the keyboard never does. The next open starts at
+**The file explorer** (the host's) is 220px by default, 140px at least and 480px
+at most, sized by its right edge; a declared panel's column shares those bounds,
+sized by its left. A drag past the minimum stops at it; only a drag below half the
+minimum closes the panel, and the keyboard never does. The next open starts at
 220px.
 
 ## Display settings and section primitives
@@ -465,7 +472,7 @@ STEP context-menu items; the live `resetCamera` command takes the same fit path.
 **Preview** is available for every 3D file, animated or not, and is the shell's
 own state (`previewing`); hosts neither start nor observe it. Its button is the
 play icon in the top-right bar ("Preview"). It fills the viewer below the
-host's nav row, which stays, and beside the host's column, which stays as it was
+host's navbar, which stays, and under the host's explorer, which stays as it was
 and can still be opened and shut; the toolbar, the tool stack and its resize
 handles, joint handles, cube, bottom action and context menu are gone. It starts
 orbiting, unless the file's Playback settings turned its orbit off. Its top-right bar is the tools view's bar in the same place:
@@ -517,7 +524,7 @@ pressed in while focus is on the page. Editable targets keep their own keys.
   then Draw's canvas spends its own Escape; then the renderer's (STEP: an
   unfinished measurement, then the Measure tool, then the selection, then
   isolation; robots: the selection). The tool stack's panels and the host's
-  column are never Escape's to close.
+  explorer are never Escape's to close (a phone's sheet is dismissed like any sheet).
 - **Resize handles** (the stack's width, a panel's cap) are separators in the
   tab order: arrows nudge by 16px, Home and End go to the bounds, and a folded
   panel's handle opens it on ArrowDown or End.
@@ -541,7 +548,7 @@ pending one. A hint appears on focus only for keyboard navigation (a Tab), never
 when a closing menu hands focus back.
 
 The viewer shows no toasts or notifications: copy, snapshot and prompt actions
-complete silently. Progress stays in the nav row; a failed action is the
+complete silently. Progress stays in the viewport; a failed action is the
 viewport's alert card; errors handed to the host's `onError` are the host's to
 show.
 
