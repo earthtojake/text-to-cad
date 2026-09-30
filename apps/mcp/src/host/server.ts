@@ -1,9 +1,12 @@
 import type { Bridge, CallOptions, ToolResult } from './bridge';
 
-/** The launch/view protocol this page speaks with `cadgen mcp` (its `PROTOCOL`). */
-export const PROTOCOL = 1;
+/**
+ * The launch/view protocol this page speaks with `cadgen mcp` (its `PROTOCOL`). 2: every launch
+ * names a root, the home's included, and the page reveals files (`cad_reveal`).
+ */
+export const PROTOCOL = 2;
 
-/** Where a view browses: its project's catalog (`workspace`), or the model's filesystem, a folder at a time (`global`). */
+/** Where a view browses: its project's catalog (`workspace`), or a filesystem, a folder at a time (`global`). */
 export interface Root { kind: 'workspace' | 'global'; path: string; name: string }
 /** What an opening tool tells the page to show. The server decides all of it. */
 export interface Launch {
@@ -11,14 +14,15 @@ export interface Launch {
   page: 'home' | 'viewer';
   surface?: string;
   model: string | null;
-  root: Root | null;
+  /** Where the view browses, whether or not a model is open: the server always says. */
+  root: Root;
   explore: boolean;
   /** A view mounted inline: its token (the agent names it by that) and its place among the chat's views. */
   view?: string;
   order?: { createdAt: number; seq: number };
 }
 export interface Session { protocol: number; build: string; version: string; platform: string; workspace: Root[] }
-export interface Recent { path: string; name: string; folder: string; opened: number; pinned: boolean; missing: boolean; thumbnail: string | null }
+export interface Recent { path: string; name: string; folder: string; opened: number; modified: number | null; pinned: boolean; missing: boolean; thumbnail: string | null }
 export type ViewEvent =
   | { seq: number; type: 'show'; launch: Launch }
   | { seq: number; type: 'capture' | 'describe'; requestId: string };
@@ -57,6 +61,8 @@ export function createServer(bridge: Pick<Bridge, 'callTool'>) {
       call('cad_capture_reply', { requestId, ...reply }),
     http: (args: { root: Pick<Root, 'kind' | 'path'>; method: string; url: string; headers: Record<string, string>; body: string }, options?: CallOptions) =>
       call<HttpReply>('cad_http', args, options),
+    /** Show a file of `root` in the desktop's file manager (the server runs on the person's machine). */
+    reveal: (root: Pick<Root, 'kind' | 'path'>, path: string) => call('cad_reveal', { root: { kind: root.kind, path: root.path }, path }).then(() => {}),
   };
 }
 export type Server = ReturnType<typeof createServer>;

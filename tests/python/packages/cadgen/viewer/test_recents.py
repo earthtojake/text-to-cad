@@ -30,6 +30,17 @@ class RecentStoreTest(unittest.TestCase):
         self.assertEqual(store.read_thumbnail(entries[1].thumbnail), b"\x89PNG fake")
         self.assertIsNone(store.read_thumbnail("../escape.png"))
 
+    def test_a_model_says_when_its_file_last_changed_and_a_gone_one_says_nothing(self) -> None:
+        store = RecentStore(self.tmp / "state")
+        model = self.tmp / "part.stl"
+        model.write_bytes(b"solid t\nendsolid t\n")
+        os.utime(model, (1_700_000_000, 1_700_000_000))
+        store.opened(str(model))
+        store.opened(str(self.tmp / "gone.stl"))
+        shown = {entry["name"]: entry for entry in (recent.public() for recent in store.list())}
+        self.assertEqual((shown["part.stl"]["modified"], shown["part.stl"]["missing"]), (1_700_000_000, False))
+        self.assertEqual((shown["gone.stl"]["modified"], shown["gone.stl"]["missing"]), (None, True))
+
     def test_two_processes_append_at_once_and_foreign_lines_are_skipped(self) -> None:
         code = "import sys\nfrom cadgen.viewer.recents import RecentStore\nstore = RecentStore(__import__('pathlib').Path(sys.argv[1]))\n" \
                "for index in range(200):\n    store.opened(f'/{sys.argv[2]}/{index}.stl')\n"
@@ -38,10 +49,15 @@ class RecentStoreTest(unittest.TestCase):
             self.assertEqual(writer.wait(120), 0)
         log = self.tmp / "recents" / "recents.jsonl"
         with open(log, "a", encoding="utf-8") as handle:
-            handle.write('{"v":99,"op":"open","path":"/future.stl"}\n{"v":1,"op":"rename","path":"/x/0.stl"}\nnot json\n')
-        paths = {entry.path for entry in RecentStore(self.tmp).list()}
+            # A version from the future, an op nobody knows, a torn line, and a screenshot of a view from before
+            # a model's picture was its own (`thumb`): none of them is read.
+            handle.write('{"v":99,"op":"open","path":"/future.stl"}\n{"v":1,"op":"rename","path":"/x/0.stl"}\nnot json\n'
+                         '{"v":1,"op":"thumb","path":"/x/0.stl","thumbnail":"old.png"}\n')
+        entries = RecentStore(self.tmp).list()
+        paths = {entry.path for entry in entries}
         self.assertEqual(len(paths), 200)  # the store keeps the newest 200 of the 400
         self.assertNotIn("/future.stl", paths)
+        self.assertEqual({entry.thumbnail for entry in entries}, {None})
 
 
 if __name__ == "__main__":

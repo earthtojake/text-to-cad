@@ -41,7 +41,7 @@
      "explore": false,
      "model": "<tmp>/project/parts/bracket.stl",
      "page": "viewer",
-     "protocol": 1,
+     "protocol": 2,
      "root": {
       "kind": "global",
       "name": "/",
@@ -60,11 +60,15 @@
    ],
    "structuredContent": {
     "launch": {
-     "explore": false,
+     "explore": true,
      "model": null,
      "page": "home",
-     "protocol": 1,
-     "root": null,
+     "protocol": 2,
+     "root": {
+      "kind": "workspace",
+      "name": "project",
+      "path": "<tmp>/project"
+     },
      "surface": "sidebar"
     }
    }
@@ -76,7 +80,7 @@
      "explore": true,
      "model": "<tmp>/project/parts/bracket.stl",
      "page": "viewer",
-     "protocol": 1,
+     "protocol": 2,
      "root": {
       "kind": "workspace",
       "name": "project",
@@ -92,7 +96,7 @@
      "explore": true,
      "model": "<tmp>/downloads/loose.stl",
      "page": "viewer",
-     "protocol": 1,
+     "protocol": 2,
      "root": {
       "kind": "global",
       "name": "/",
@@ -113,7 +117,7 @@
      "explore": true,
      "model": "<tmp>/project/parts/bracket.stl",
      "page": "viewer",
-     "protocol": 1,
+     "protocol": 2,
      "root": {
       "kind": "workspace",
       "name": "project",
@@ -155,7 +159,7 @@
      "explore": true,
      "model": "<tmp>/project/parts/bracket.stl",
      "page": "viewer",
-     "protocol": 1,
+     "protocol": 2,
      "root": {
       "kind": "workspace",
       "name": "project",
@@ -811,6 +815,56 @@
    },
    "name": "cad_recents",
    "title": "CAD recents"
+  },
+  {
+   "_meta": {
+    "ui": {
+     "visibility": [
+      "app"
+     ]
+    }
+   },
+   "annotations": {
+    "destructiveHint": false,
+    "openWorldHint": false,
+    "readOnlyHint": true
+   },
+   "description": "Show a file of the view's root in the desktop's file manager. Only for an explicit Reveal action.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "path": {
+      "type": "string"
+     },
+     "root": {
+      "additionalProperties": false,
+      "properties": {
+       "kind": {
+        "enum": [
+         "workspace",
+         "global"
+        ],
+        "type": "string"
+       },
+       "path": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "kind",
+       "path"
+      ],
+      "type": "object"
+     }
+    },
+    "required": [
+     "root",
+     "path"
+    ],
+    "type": "object"
+   },
+   "name": "cad_reveal",
+   "title": "Reveal in file manager"
   }
  ]
 }

@@ -5,7 +5,7 @@ each shows what it can open: the MCP app all of it, a Viewer the models under
 the folder it serves.
 
 The store is an append-only log of events -- ``open``, ``pin``, ``unpin``,
-``remove``, ``thumb`` -- folded into a list on read. It is user state, not a
+``remove``, ``picture`` -- folded into a list on read. It is user state, not a
 derived artifact, so it lives in the state directory and never in the cadgen
 cache (the cache holds only what file bytes imply).
 
@@ -14,6 +14,12 @@ and after an update, old and new versions side by side. So each write appends
 one line under an exclusive lock, readers skip lines they cannot parse and events
 they do not know, and compaction writes a new file and renames it into place
 under the same lock. Nothing is ever migrated in place.
+
+A model's picture is a ``picture`` event: the model framed whole from the default
+direction at a card's size, on transparency, taken once its view has settled. The
+screenshots of whatever the view showed that came before it were ``thumb`` events,
+which this reader does not know, so a model shows no picture until a view shows it
+again -- then its canonical one.
 """
 
 from __future__ import annotations
@@ -22,6 +28,7 @@ import contextlib
 import hashlib
 import json
 import os
+import stat
 import sys
 import time
 from dataclasses import dataclass
@@ -70,12 +77,18 @@ class Recent:
     thumbnail: str | None = None
 
     def public(self) -> dict[str, Any]:
-        exists = os.path.isfile(self.path)
+        try:
+            status = os.stat(self.path)
+        except OSError:
+            status = None
+        exists = status is not None and stat.S_ISREG(status.st_mode)
         return {
             "path": self.path,
             "name": os.path.basename(self.path),
             "folder": os.path.dirname(self.path),
             "opened": self.opened,
+            # When the file last changed, in seconds, for "Edited 16h ago"; None once it is gone.
+            "modified": status.st_mtime if exists else None,
             "pinned": self.pinned,
             "missing": not exists,
             "thumbnail": self.thumbnail,
@@ -105,7 +118,7 @@ class RecentStore:
         target = self.thumbnails / name
         if not target.exists():
             write_bytes_atomic(target, png)
-        self._append({"op": "thumb", "path": path, "thumbnail": name})
+        self._append({"op": "picture", "path": path, "thumbnail": name})
         return name
 
     def read_thumbnail(self, name: str) -> bytes | None:
@@ -135,7 +148,7 @@ class RecentStore:
                 entries[path].pinned = op == "pin"
             elif op == "remove":
                 entries.pop(path, None)
-            elif op == "thumb" and path in entries and isinstance(event.get("thumbnail"), str):
+            elif op == "picture" and path in entries and isinstance(event.get("thumbnail"), str):
                 entries[path].thumbnail = event["thumbnail"]
         ordered = sorted(entries.values(), key=lambda entry: (not entry.pinned, -entry.opened))
         return ordered[:LIMIT]
@@ -177,7 +190,7 @@ class RecentStore:
             if entry.pinned:
                 folded.append({"v": SCHEMA, "t": entry.opened, "op": "pin", "path": entry.path})
             if entry.thumbnail:
-                folded.append({"v": SCHEMA, "t": entry.opened, "op": "thumb", "path": entry.path, "thumbnail": entry.thumbnail})
+                folded.append({"v": SCHEMA, "t": entry.opened, "op": "picture", "path": entry.path, "thumbnail": entry.thumbnail})
         write_bytes_atomic(self.log, "".join(json.dumps(event, separators=(",", ":")) + "\n" for event in folded).encode("utf-8"))
 
     @contextlib.contextmanager

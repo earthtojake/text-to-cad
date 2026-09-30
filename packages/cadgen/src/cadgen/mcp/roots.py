@@ -40,6 +40,11 @@ def filesystem_of(model: str) -> Root:
     return Root(GLOBAL, _anchor(model))
 
 
+def home_filesystem() -> Root:
+    """The global root a view with no project and no model browses: the one the user's home is on."""
+    return Root(GLOBAL, _anchor(os.path.expanduser("~")))
+
+
 def _anchor(path: str) -> str:
     drive, _ = os.path.splitdrive(os.path.abspath(path))
     return drive + os.sep if drive else os.sep

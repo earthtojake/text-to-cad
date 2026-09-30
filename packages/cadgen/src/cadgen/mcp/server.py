@@ -48,7 +48,7 @@ from urllib.parse import unquote, urlparse
 from cadgen.viewer.scanner import SOURCE_EXTENSIONS, catalog_lists
 
 from .protocol import INVALID_PARAMS, METHOD_NOT_FOUND, Connection, RequestContext, RpcError, claim_stdout
-from .roots import Root, ThreadWorkspace, filesystem_of
+from .roots import Root, ThreadWorkspace, filesystem_of, home_filesystem
 from .ui import MIME, RESOURCE_META, AppPage
 from .views import POLL_SECONDS, NoAnswer, ViewRegistry
 
@@ -56,8 +56,9 @@ LOG = logging.getLogger("cadgen.mcp")
 
 NAME = "text_to_cad"
 TITLE = "CAD"
-# The launch/view protocol between this server and its page.
-PROTOCOL = 1
+# The launch/view protocol between this server and its page. 2: every launch names a root, the
+# home's included, and the page reveals files (`cad_reveal`).
+PROTOCOL = 2
 _PROTOCOL_VERSIONS = ("2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05")
 _RESOURCE_NOT_FOUND = -32002
 EXTENSIONS = sorted(SOURCE_EXTENSIONS)
@@ -381,6 +382,9 @@ class Server:
                 _object({"action": {"type": "string", "enum": ["list", "pin", "unpin", "remove", "thumbnail", "thumbnails"]},
                          "path": {"type": "string"}, "png": {"type": "string"},
                          "names": {"type": "array", "items": {"type": "string"}}})),
+            app("cad_reveal", "Reveal in file manager",
+                "Show a file of the view's root in the desktop's file manager. Only for an explicit Reveal action.",
+                _object({"root": _ROOT, "path": {"type": "string"}}, ["root", "path"])),
         ]
 
     # -- calls -----------------------------------------------------------------
@@ -418,6 +422,10 @@ class Server:
         project = self._project_of(model)
         return Root("workspace", project) if project else filesystem_of(model)
 
+    def _home_root(self) -> Root:
+        """Where a view with no model browses: the thread's workspace, else the filesystem of the user's home."""
+        return self.workspace.root() or home_filesystem()
+
     def _launch(self, model: str | None, *, surface: str | None = None, explore: bool = True) -> dict[str, Any]:
         # An inline view is a card in the chat: it shows the model, not a file browser.
         explore = explore and self.tabs
@@ -429,8 +437,7 @@ class Server:
             self._model = model
             self._remember(model)
         else:
-            root = self.workspace.root()
-            launch["root"] = root.public() if root else None
+            launch["root"] = self._home_root().public()
         return launch
 
     def _mounted(self, launch: dict[str, Any]) -> dict[str, Any]:
@@ -465,11 +472,14 @@ class Server:
         return path
 
     def _tool_cad_home(self, arguments, context):
+        # The home browses where a view with no model would: the workspace, else the filesystem. An
+        # inline card, which shows no file browser, only names it.
+        root = self._home_root().public()
         if not self.tabs:
-            launch = self._mounted({"protocol": PROTOCOL, "page": "home", "surface": "inline", "model": None, "root": None, "explore": False})
+            launch = self._mounted({"protocol": PROTOCOL, "page": "home", "surface": "inline", "model": None, "root": root, "explore": False})
             return _text(f"CAD is showing in the chat (view {launch['view']}).", {"launch": launch})
         return _text("CAD is open.", {"launch": {"protocol": PROTOCOL, "page": "home", "surface": "sidebar",
-                                                  "model": None, "root": None, "explore": False}})
+                                                  "model": None, "root": root, "explore": True}})
 
     def _tool_cad_tab(self, arguments, context):
         current = next((view.model for view in self.views.live(context.meta.get("threadId")) if view.model), None) or self._model
@@ -653,6 +663,26 @@ class Server:
         headers = arguments.get("headers") if isinstance(arguments.get("headers"), dict) else {}
         return _data(self.tunnel.serve(accepted, method=str(arguments.get("method") or "GET"),
                                        url=str(arguments.get("url") or ""), headers=headers, body=body))
+
+    def _tool_cad_reveal(self, arguments, context):
+        """Reveal a file of a root this thread may browse, exactly as the CAD Viewer reveals one (``cadgen.viewer.reveal``)."""
+        import subprocess
+
+        from cadgen.viewer.backend import ForbiddenAssetError
+        from cadgen.viewer.reveal import reveal_path
+
+        root = arguments.get("root")
+        if not isinstance(root, dict):
+            raise ToolFailed("a reveal needs the root the file is under")
+        try:
+            reveal_path(self.workspace.accept(root).path, arguments.get("path"))
+        except ForbiddenAssetError as error:
+            raise ToolFailed("That file is not under this view's folder.") from error
+        except FileNotFoundError as error:
+            raise ToolFailed("That file is no longer there.") from error
+        except (ValueError, OSError, subprocess.SubprocessError) as error:
+            raise ToolFailed(f"The file manager could not show that file: {error}") from error
+        return _data({})
 
     def _tool_cad_recents(self, arguments, context):
         action = arguments.get("action") or "list"

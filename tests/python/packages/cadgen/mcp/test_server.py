@@ -13,6 +13,7 @@ import threading
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from cadgen.mcp.protocol import RequestContext
 from cadgen.viewer.recents import RecentStore
@@ -166,6 +167,36 @@ class TabServerTest(_Session):
             effect = self.call("cad_http", {"root": root, "method": "POST", "url": route, "body": ""})["structuredContent"]
             self.assertEqual(effect["status"], 404)
 
+    def test_the_home_browses_the_workspace_else_the_filesystem_the_users_home_is_on(self) -> None:
+        home = self.launch("cad_home")
+        self.assertEqual((home["page"], home["model"], home["explore"]), ("home", None, True))
+        self.assertEqual((home["root"]["kind"], home["root"]["path"]), ("workspace", str(self.workspace)))
+        homeless = Server(launch_cwd=None, page=AppPage(self.tmp / "app"), recents=RecentStore(self.tmp / "other"))
+        homeless.handle("initialize", {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": CODEX}, None)
+        context = RequestContext(1, {"threadId": "t"}, self.connection)
+        for tool in ("cad_home", "cad_tab"):
+            launch = homeless.handle("tools/call", {"name": tool, "arguments": {}}, context)["structuredContent"]["launch"]
+            self.assertEqual((launch["root"]["kind"], launch["root"]["path"]),
+                             ("global", os.path.splitdrive(os.path.expanduser("~"))[0] + os.sep))
+
+    def test_the_page_reveals_a_file_only_under_a_root_this_thread_may_browse(self) -> None:
+        root = {"kind": "workspace", "path": str(self.workspace)}
+        target = (self.workspace / "parts" / "bracket.stl").resolve()
+        # The desktop's file manager is never opened by a test: the call it would make is recorded.
+        with mock.patch("cadgen.viewer.reveal.sys.platform", "darwin"), mock.patch("cadgen.viewer.reveal.subprocess.run") as run:
+            self.assertEqual(self.call("cad_reveal", {"root": root, "path": "parts/bracket.stl"})["structuredContent"], {})
+            run.assert_called_once()
+            self.assertEqual(run.call_args.args[0], ["/usr/bin/open", "-R", str(target)])
+            refusals = [
+                {"root": {"kind": "workspace", "path": str(self.tmp / "elsewhere")}, "path": "loose.stl"},  # not this thread's
+                {"root": root, "path": "../elsewhere/loose.stl"},  # out of the root
+                {"root": root, "path": "parts/nope.stl"},  # not there
+            ]
+            for arguments in refusals:
+                refused = self.call("cad_reveal", arguments)
+                self.assertTrue(refused["isError"], arguments)
+            run.assert_called_once()
+
     def test_a_global_root_reads_a_folder_at_a_time_and_catalogs_only_what_is_shown(self) -> None:
         # A model under a hidden folder, as an agent's worktree is: shown, though no listing shows the folder.
         hidden = self.tmp / "elsewhere" / ".worktree"
@@ -221,7 +252,9 @@ class InlineServerTest(_Session):
         self.assertEqual((second["root"]["kind"], second["model"]), ("global", str(self.tmp / "elsewhere" / "loose.stl")))
         shown = self.call("cad_show", {"path": "parts/bracket.stl"})
         self.assertIn(shown["structuredContent"]["launch"]["view"], shown["content"][0]["text"])
-        self.assertEqual(self.launch("cad_home")["page"], "home")
+        # A home card names where it is, and browses nothing: the card shows the library alone.
+        home = self.launch("cad_home")
+        self.assertEqual((home["page"], home["explore"], home["root"]["kind"]), ("home", False, "workspace"))
 
     def test_the_agent_reads_only_the_view_it_names(self) -> None:
         model = str(self.workspace / "parts" / "bracket.stl")
