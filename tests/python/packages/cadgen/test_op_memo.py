@@ -833,16 +833,28 @@ class CurrentInputKeyTest(unittest.TestCase):
 
 class OpMemoFailureTest(unittest.TestCase):
     def setUp(self):
-        import tempfile
-
         op_memo.install()
         op_memo.clear()
+        self._fresh_store()
+        self.addCleanup(op_memo.clear)
+
+    def _fresh_store(self):
+        import tempfile
+
         tmp = tempfile.TemporaryDirectory()
         self.addCleanup(tmp.cleanup)
         env = mock.patch.dict(os.environ, {"CADGEN_OP_MEMO": "1", "CADGEN_CACHE_DIR": tmp.name})
         env.start()
         self.addCleanup(env.stop)
-        self.addCleanup(op_memo.clear)
+        op_memo.clear()
+
+    def _recorded_failures(self) -> list:
+        import json
+        from pathlib import Path
+
+        entries = Path(os.environ["CADGEN_CACHE_DIR"]) / "index" / "op"
+        return [p.name for p in entries.glob("*") if "failed" in json.loads(p.read_text(encoding="utf-8"))] \
+            if entries.is_dir() else []
 
     def test_a_failing_op_is_replayed_without_rerunning_the_kernel(self):
         """A memo-hit re-execution used to re-run every op that FAILED: only
@@ -850,14 +862,14 @@ class OpMemoFailureTest(unittest.TestCase):
         largest down paid a full OCCT fillet (plus build123d's validity check)
         for every rejected rung on every re-execution. A failure is a function
         of the same keyed inputs; it is recorded and replayed, from RAM and
-        from disk, as the same exception type and message."""
+        from disk, as the same exception type and arguments."""
         from build123d.topology import Solid
 
         def attempt(part):
             try:
                 part.fillet(30.0, part.edges())
             except ValueError as exc:
-                return str(exc)
+                return type(exc), exc.args
             self.fail("an oversized fillet must fail")
 
         part = _build_part()
@@ -908,8 +920,88 @@ class OpMemoFailureTest(unittest.TestCase):
         part = _build_part()
         with self.assertRaises(ValueError):
             part.fillet(30.0, part.edges())
+        self.assertEqual(len(self._recorded_failures()), 1)
         os.environ["CADGEN_OP_MEMO"] = "0"
         hits = op_memo.stats()["failure_hits"]
         with self.assertRaises(ValueError):
             part.fillet(30.0, part.edges())
         self.assertEqual(op_memo.stats()["failure_hits"], hits)
+
+    def test_a_failure_on_held_edges_is_not_recorded(self):
+        """Edges selected before a memoized boolean are foreign to its result,
+        a fresh reconstruction, and build123d's fillet fails on them whatever
+        their geometry. The key sees content, so the recorded failure answered
+        the corrected call that re-selects the same edges from the current
+        part, and the fillet vanished behind ``except ValueError`` -- in the
+        same process and, from the disk tier, in every later one, ``--force``
+        or not. A failure is recorded only when every selector is native."""
+        from build123d import Axis, Box, Cylinder, GeomType, Pos
+
+        def top(part):
+            return part.edges().group_by(Axis.Z)[-1].filter_by(GeomType.LINE)
+
+        def bored():
+            part = Box(20, 20, 10) - Cylinder(3, 10)
+            held = top(part)
+            return part - Pos(6, 6, -5) * Cylinder(1, 6), held
+
+        os.environ["CADGEN_OP_MEMO"] = "0"
+        part, _held = bored()
+        expected = part.fillet(1.0, top(part)).volume
+        os.environ["CADGEN_OP_MEMO"] = "1"
+        for fresh_process in (False, True):
+            with self.subTest(fresh_process=fresh_process):
+                self._fresh_store()
+                part, held = bored()
+                with self.assertRaises(ValueError):
+                    part.fillet(1.0, held)  # the author's bug: foreign edges
+                self.assertEqual(self._recorded_failures(), [])
+                if fresh_process:
+                    op_memo.clear()
+                fixed = part.fillet(1.0, top(part))  # the fix: the same edges, native
+                self.assertAlmostEqual(fixed.volume, expected, places=6)
+                self.assertLess(fixed.volume, part.volume - 1.0)
+
+    def test_a_recorded_failure_answers_only_native_selectors(self):
+        """The recorded key can come back with foreign selectors, which build123d
+        skips: filleting a box's vertical edge plus a twin's top edge rounds the
+        vertical one and succeeds, where the all-native call failed on the top
+        edge. The recorded failure answers the native call, never that one."""
+        import copy
+
+        from build123d import Axis
+        from build123d.topology import Solid
+
+        box = Solid.make_box(20, 20, 4)
+        twin = copy.deepcopy(box)  # identical content, new TShapes
+        vertical = box.edges().filter_by(Axis.Z).sort_by(Axis.X)[0]
+        own_top = box.edges().group_by(Axis.Z)[-1].sort_by(Axis.X)[-1]
+        twin_top = twin.edges().group_by(Axis.Z)[-1].sort_by(Axis.X)[-1]
+        with self.assertRaises(ValueError):
+            box.fillet(5.0, [vertical, own_top])  # radius above the thickness
+        self.assertEqual(len(self._recorded_failures()), 1)
+        mixed = box.fillet(5.0, [vertical, twin_top])  # the same key
+        self.assertLess(mixed.volume, box.volume)
+        hits = op_memo.stats()["failure_hits"]
+        with mock.patch("build123d.topology.three_d.BRepFilletAPI_MakeFillet",
+                        side_effect=AssertionError("the kernel ran on a recorded failure")):
+            with self.assertRaises(ValueError):
+                box.fillet(5.0, [vertical, own_top])
+        self.assertEqual(op_memo.stats()["failure_hits"], hits + 1)
+
+
+class OpMemoDaemonEnvTest(unittest.TestCase):
+    def test_a_daemon_job_sees_the_clients_op_memo_switches(self):
+        """``CADGEN_OP_MEMO=0`` recomputes every op only if it reaches the warm
+        worker running the job: the client forwards both switches, the worker
+        applies them per job over its own environment, and the memo reads them
+        at call time (with the memo off, its RAM tier is bypassed too)."""
+        from cadgen.daemon import client, worker
+
+        with mock.patch.dict(os.environ, {"CADGEN_OP_MEMO": "0", "CADGEN_OP_MEMO_DISK": "0"}):
+            request = {"env": client.forwarded_env()}
+        with mock.patch.dict(os.environ, {"CADGEN_OP_MEMO": "1", "CADGEN_OP_MEMO_DISK": "1"}):
+            worker._apply_request_env(request)
+            self.assertEqual((op_memo._enabled(), op_memo._disk_enabled()), (False, False))
+            worker._apply_request_env({"env": {}})  # a client that set neither
+            self.assertEqual((op_memo._enabled(), op_memo._disk_enabled()), (True, True))

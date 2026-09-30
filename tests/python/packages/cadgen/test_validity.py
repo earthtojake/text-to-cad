@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from unittest import mock
 
-from build123d import Compound, Pos, Rot, Shell, Solid
+from build123d import Compound, Pos, Rot, Shell, Solid, Wire
 from OCP.TopoDS import TopoDS
 from cadgen._internal import op_memo
 from cadgen.geometry import (GeometryError, boundary_edges, is_sound, is_valid, self_intersections,
@@ -342,6 +342,62 @@ class CheckVerdictTests(_FreshStore):
                 self.assertTrue(is_valid(box))
                 self.assertTrue(is_sound(box))
         self.assertEqual((analyzer.calls, checker.calls, digests.calls), (2, 2, 0))
+
+
+class VerdictScopeTests(_FreshStore):
+    """Where ``is_valid``/``is_sound`` answer without a key. A null or empty
+    shape gets build123d's own answer, never ``ValueError``: model code gates
+    empty intermediates. A shape without faces or with few edges is checked
+    directly: its key's BREP digest plus the store write cost more than the
+    check (a sweep of every face and edge of a 406-face plate went from 0.36 s
+    to 0.90 s cold and wrote 1,618 index entries)."""
+
+    def _index_entries(self):
+        from pathlib import Path
+        entries = Path(os.environ["CADGEN_CACHE_DIR"]) / "index" / "op"
+        return sorted(p.name for p in entries.glob("*")) if entries.is_dir() else []
+
+    def test_null_and_empty_shapes_answer_like_build123d(self):
+        from OCP.BRep import BRep_Builder
+        from OCP.TopoDS import TopoDS_Shell, TopoDS_Solid, TopoDS_Wire
+
+        def empty(topods, make):
+            make(topods)
+            return topods
+
+        builder = BRep_Builder()
+        shapes = (Solid(), Compound([]), Solid(empty(TopoDS_Solid(), builder.MakeSolid)),
+                  Shell(empty(TopoDS_Shell(), builder.MakeShell)), Wire(empty(TopoDS_Wire(), builder.MakeWire)))
+        null = Solid()
+        null.wrapped = TopoDS_Solid()  # a null native shape, where build123d's property asserts
+        digests = _Counting(op_memo._tshape_digest)
+        with mock.patch("cadgen._internal.op_memo._tshape_digest", digests):
+            self.assertEqual([is_valid(shape) for shape in shapes], [True, True, True, False, False])
+            self.assertEqual([is_valid(shape) for shape in shapes], [shape.is_valid for shape in shapes])
+            self.assertIs(is_valid(null), True)
+            # The boolean kernel rejects an empty argument (BOPAlgo_BadType): a verdict, not an error.
+            self.assertEqual([is_sound(shape) for shape in (*shapes, null)], [False] * 6)
+        self.assertEqual(digests.calls, 0)
+        self.assertEqual(self._index_entries(), [])
+
+    def test_small_shapes_are_checked_without_a_key(self):
+        box = Solid.make_box(10, 10, 10)
+        checks = (is_valid, is_sound, topology_errors, self_intersections)
+        digests = _Counting(op_memo._tshape_digest)
+        with mock.patch("cadgen._internal.op_memo._tshape_digest", digests):
+            for shape in (box.vertices()[0], box.edges()[0], box.wires()[0], box.faces()[0]):
+                for check in checks:
+                    uncached = self._uncached(check, shape)
+                    self.assertEqual(check(shape), uncached)
+            self.assertEqual((digests.calls, self._index_entries()), (0, []))
+            for check in checks:  # a solid is worth its key
+                check(box)
+        self.assertEqual(digests.calls, len(checks))
+        self.assertEqual(len(self._index_entries()), len(checks))
+
+    def _uncached(self, check, shape):
+        with mock.patch.dict(os.environ, {"CADGEN_OP_MEMO": "0"}):
+            return check(shape)
 
 
 class OcctListIterationTests(unittest.TestCase):

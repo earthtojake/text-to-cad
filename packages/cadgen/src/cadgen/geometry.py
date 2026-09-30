@@ -225,8 +225,9 @@ def overlap_volume(a: Solid, b: Solid) -> float:
 # exactly that identity -- the location-stripped BREP digest and the location
 # matrix, bound to the loaded build123d/OCP runtime -- in its RAM and disk
 # tiers, so an identical shape gets the stored verdict instead of a rerun.
-# ``is_valid`` and ``is_sound`` store a bare boolean (``op_memo.memoized_check``,
-# the tier ``Shape.is_valid`` itself answers from). The diagnostics store more: a
+# ``is_valid`` and ``is_sound`` store a bare boolean (``op_memo.memoized_check``);
+# build123d's own ``Shape.is_valid`` property is plain and stores nothing. The
+# diagnostics store more: a
 # verdict holds only issue codes and, per affected entity, its index in the
 # checked copy's ``TopExp.MapShapes`` order and its orientation; never native
 # geometry. A hit decodes it against a fresh private copy of the caller's
@@ -235,6 +236,63 @@ def overlap_volume(a: Solid, b: Solid) -> float:
 # A check that raises stores nothing. An entity the index cannot address
 # stores None, which reruns the check on every call. The op name names the
 # check: change what one computes and change its name with it.
+#
+# A verdict is stored only for a shape worth its key (``_stored``): the key
+# digests the whole BREP and a miss writes an index entry, which for a small
+# shape costs more than the check. Median ms, direct / stored miss / disk hit
+# (macOS arm64, OCP 7.9.3):
+#
+#                        is_valid          is_sound
+#   edge                 0.009/0.37/0.08   0.022/0.40/0.09
+#   plane face           0.08/0.44/0.10    0.12/0.47/0.10
+#   cylinder solid       0.10/0.48/0.11    0.89/1.30/0.11
+#   box solid            0.30/0.78/0.18    0.62/1.21/0.20
+#   face with 16 holes   0.70/1.21/0.26    0.78/1.41/0.26
+#   plate with 64 holes  14.2/18.7/2.9     84.7/92.3/3.2
+#
+# A wire's digest outgrows its check at every size (512 edges: 2.0 direct,
+# 2.6 per disk hit), so a shape without faces is checked directly, as is one
+# with fewer than ``_STORED_EDGE_USES`` edge uses: a tiny gate never pays a
+# miss, at the price of the odd small solid's ``is_sound`` hit (the cylinder).
+# The diagnostics run the same kernel checks and follow the same rule.
+
+# Edge uses: each face's boundary edges as ``TopExp_Explorer`` visits them.
+# A box has 24, a cylinder 6, a plane face 4.
+_STORED_EDGE_USES = 16
+
+
+def _stored(wrapped) -> bool:
+    """Whether a verdict on ``wrapped`` is worth its key: faces and at least
+    ``_STORED_EDGE_USES`` edge uses. Counting stops at the threshold."""
+    from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE, TopAbs_ShapeEnum
+    from OCP.TopExp import TopExp_Explorer
+
+    if wrapped.ShapeType() in (TopAbs_ShapeEnum.TopAbs_VERTEX, TopAbs_ShapeEnum.TopAbs_EDGE,
+                               TopAbs_ShapeEnum.TopAbs_WIRE):
+        return False
+    if not TopExp_Explorer(wrapped, TopAbs_FACE).More():
+        return False
+    uses = TopExp_Explorer(wrapped, TopAbs_EDGE)
+    for _ in range(_STORED_EDGE_USES):
+        if not uses.More():
+            return False
+        uses.Next()
+    return True
+
+
+def _verdict_input(shape):
+    """The native shape a pass/fail verdict is about, or None for a null shape.
+
+    Unlike the measurements, ``is_valid`` and ``is_sound`` accept null and
+    empty geometry: build123d's ``is_valid`` answers for it, and a gate in a
+    model body must not crash on an empty intermediate.
+    """
+    from build123d import Shape
+
+    if not isinstance(shape, Shape):
+        raise TypeError(f"expected Shape, got {type(shape).__name__}")
+    wrapped = shape._wrapped
+    return None if wrapped is None or wrapped.IsNull() else wrapped
 
 
 def _entity_map(private):
@@ -268,7 +326,8 @@ def _reused(op_name: str, wrapped, run, decode):
 
     ``private`` is a fresh owned copy of ``wrapped``. A miss returns the
     kernel's own answer; a hit decodes the stored one against a fresh copy.
-    A shape the op memo cannot key is checked directly, as is a stored None.
+    A shape the op memo cannot key is checked directly, as is a stored None
+    and a shape too small to be worth a key (``_stored``).
     """
     from cadgen._internal import op_memo
 
@@ -282,7 +341,7 @@ def _reused(op_name: str, wrapped, run, decode):
 
     try:
         # CADGEN_OP_MEMO=0 skips the key: its digest serializes the whole shape.
-        key = op_memo.oriented_shape_key(wrapped) if op_memo._enabled() else None
+        key = op_memo.oriented_shape_key(wrapped) if op_memo._enabled() and _stored(wrapped) else None
     except Exception:  # noqa: BLE001 - an unkeyable shape is still checkable
         key = None
     if key is None:
@@ -299,15 +358,21 @@ def _reused(op_name: str, wrapped, run, decode):
 
 def is_valid(shape: Shape) -> bool:
     """``BRepCheck_Analyzer``'s verdict on the shape: the same answer as
-    build123d's ``Shape.is_valid``, which the op memo answers from the same
-    stored verdict. An identical shape (geometry, placement, orientation)
-    reuses it; a kernel failure raises and stores nothing. What is invalid,
-    and where, is ``topology_errors``'s question.
+    build123d's ``Shape.is_valid`` property, including for null and empty
+    shapes (a null shape is valid; an empty one gets BRepCheck's verdict:
+    an empty compound or solid passes, an empty shell or wire fails). A
+    shape with faces and enough edges stores its verdict and an identical
+    one (geometry, placement, orientation) reuses it; a smaller shape is
+    checked directly, which is cheaper than the key. A kernel failure raises
+    ``GeometryError`` and stores nothing. What is invalid, and where, is
+    ``topology_errors``'s question.
     """
     from cadgen._internal import op_memo
     from OCP.BRepCheck import BRepCheck_Analyzer
 
-    wrapped = _wrapped(shape)
+    wrapped = _verdict_input(shape)
+    if wrapped is None:
+        return True
 
     def check() -> bool:
         analyzer = BRepCheck_Analyzer(wrapped)
@@ -315,7 +380,9 @@ def is_valid(shape: Shape) -> bool:
         return bool(analyzer.IsValid())
 
     try:
-        return op_memo.memoized_check(op_memo.IS_VALID_OP, wrapped, check)
+        if not _stored(wrapped):
+            return check()
+        return op_memo.memoized_check("geometry.is_valid.v1", wrapped, check)
     except GeometryError:
         raise
     except Exception as exc:
@@ -326,17 +393,22 @@ def is_sound(shape: Shape) -> bool:
     """The boolean kernel's argument check (``BRepAlgoAPI_Check``) passes the
     shape: BRepCheck-valid, no self-intersections, no too-small edges, and an
     argument type a boolean accepts. This is what a fuse or cut demands of an
-    operand, and it can be expensive. An identical shape (geometry, placement,
-    orientation) reuses the stored verdict; a check the kernel could not
-    complete raises ``GeometryError`` and stores nothing. Closure, solid
-    count and signed volume are separate questions; the faulty entities are
+    operand, and it can be expensive. A null or empty shape is not sound: the
+    kernel rejects it as an argument type (``BOPAlgo_BadType``), a verdict,
+    not an error. A shape with faces and enough edges stores its verdict and
+    an identical one (geometry, placement, orientation) reuses it; a smaller
+    shape is checked directly. A check the kernel could not complete raises
+    ``GeometryError`` and stores nothing. Closure, solid count and signed
+    volume are separate questions; the faulty entities are
     ``self_intersections``'s.
     """
     from cadgen._internal import op_memo
     from OCP.BOPAlgo import BOPAlgo_CheckStatus
     from OCP.BRepAlgoAPI import BRepAlgoAPI_Check
 
-    wrapped = _wrapped(shape)
+    wrapped = _verdict_input(shape)
+    if wrapped is None:
+        return False  # BRepAlgoAPI_Check on a null shape: BOPAlgo_BadType
     inconclusive = (BOPAlgo_CheckStatus.BOPAlgo_CheckUnknown, BOPAlgo_CheckStatus.BOPAlgo_OperationAborted)
 
     def check() -> bool:
@@ -351,6 +423,8 @@ def is_sound(shape: Shape) -> bool:
         return bool(checker.IsValid())
 
     try:
+        if not _stored(wrapped):
+            return check()
         return op_memo.memoized_check("geometry.is_sound.v1", wrapped, check)
     except GeometryError:
         raise
@@ -363,8 +437,9 @@ def topology_errors(shape: Shape) -> tuple[GeometryIssue, ...]:
 
     Codes are OCCT's ``BRepCheck_*`` status names. Open shells and reversed
     solids can have valid topology. Closure, signed volume and expensive
-    boolean self-intersection testing are separate questions. An identical
-    shape (geometry, placement, orientation) reuses the stored verdict.
+    boolean self-intersection testing are separate questions. A shape with
+    faces and enough edges stores its verdict and an identical one
+    (geometry, placement, orientation) reuses it.
     """
     from OCP.BRepCheck import BRepCheck_Analyzer, BRepCheck_NoError
 
@@ -439,8 +514,8 @@ def self_intersections(shape: Shape) -> tuple[GeometryIssue, ...]:
 
     This can be expensive. Codes are OCCT's ``BOPAlgo_SelfIntersect``; affected
     entities are owned copies. Inconclusive/failed checks raise an exception.
-    An identical shape (geometry, placement, orientation) reuses the stored
-    verdict.
+    A shape with faces and enough edges stores its verdict and an identical
+    one (geometry, placement, orientation) reuses it.
     """
     from OCP.BOPAlgo import BOPAlgo_CheckStatus
     from OCP.BRepAlgoAPI import BRepAlgoAPI_Check

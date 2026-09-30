@@ -31,7 +31,10 @@ Numeric selectors belong to one saved revision.
 
 For construction, select by the feature's geometry or datum where practical:
 normal, axis, plane, position or curve type. Re-evaluate selections after an
-operation that changes the relevant topology.
+operation that changes the relevant topology. Select a fillet's or chamfer's
+edges from the solid it rounds, after that solid's last operation: during a
+cadgen build an operation returns new native topology, so edges held from
+before it are not the solid's own, and a fillet or chamfer fails on them.
 
 During a cadgen build, geometric equality and hashing can recognize equivalent
 reconstructed subshapes rather than requiring the same native handle. Coincident
@@ -201,9 +204,11 @@ intermediates around the suspect operation. A validity gate inside a model
 body — a retry ladder that accepts a fillet only when the result is sound, a
 stage check on a casting — uses `cadgen.geometry.is_valid` and `is_sound`
 (the `BRepAlgoAPI_Check` verdict, which also identifies Boolean-suitability
-issues such as tiny edges), never a raw kernel checker: their verdicts are
-stored, so a stale re-execution that replays its ops from the op memo does not
-repay every gate. There is no need to run an expensive diagnostic after every
+issues such as tiny edges), never a raw kernel checker: their verdicts on
+anything the size of a box or larger are stored, so a stale re-execution that
+replays its ops from the op memo does not repay every gate. A rejected fillet
+or chamfer rung is replayed from the op memo too, but only when its edges are
+the solid's own. There is no need to run an expensive diagnostic after every
 simple operation. Any repair must preserve the dimensions being checked. See
 [inspection](inspection-and-validation.md).
 

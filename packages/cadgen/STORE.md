@@ -90,16 +90,26 @@ salts on document-byte keys. Computed results and disk hits share the same
 process LRU limit; dropping a RAM entry does not delete its persistent entry or
 invalidate a consumer's private geometry.
 
+An op that raises a plain `ValueError` is recorded inline and a hit re-raises
+it without the kernel, but only when every vertex, edge, wire, face or shell
+argument of an instance op (the edges a fillet rounds) is a native sub-shape
+of `self`. build123d finds those by TShape and location while the key sees
+content, so a fillet that failed on edges held across a memoized op would
+otherwise answer the corrected call that re-selects the same edges.
+
 `cadgen.geometry`'s checks (`is_valid`, `is_sound`, `topology_errors`,
 `self_intersections`) store their verdicts as inline `index/op` values, keyed
 by the check's name and version, the checked shape's location-stripped BREP
-digest, its location matrix and its orientation. `is_valid` and `is_sound`
+digest, its location matrix and its orientation. Only a shape with faces and
+at least 16 edge uses is stored; for a smaller one the key and the write cost
+more than the check, so it is checked directly. `is_valid` and `is_sound`
 store a boolean. A diagnostic's verdict holds
 issue codes and each affected entity's `TopExp.MapShapes` index and
 orientation, never native geometry; a hit rebuilds the owned entities from a
 private copy of the caller's shape. A failed or inconclusive check stores
-nothing, and `CADGEN_OP_MEMO=0` runs every check. These are answers to a
-caller's question, and no build or publication step consults them.
+nothing, and `CADGEN_OP_MEMO=0` runs every check. build123d's own
+`shape.is_valid` property stores nothing. These are answers to a caller's
+question, and no build or publication step consults them.
 
 ### The two sides of the store — a law
 
