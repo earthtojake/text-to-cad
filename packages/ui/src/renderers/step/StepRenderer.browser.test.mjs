@@ -876,7 +876,12 @@ test('a pose pass React re-runs while a routine plays draws the clock, never the
     window.__heldFrames = [];
     window.__releaseFrames = window.requestAnimationFrame;
     window.requestAnimationFrame = callback => { window.__heldFrames.push(callback); return 0; };
-    await new Promise(resolve => setTimeout(resolve, 150));
+    // The tick already queued through the real rAF still runs, in the next frame, and it poses
+    // the model synchronously. Wait for that frame, not for a time: on a software-WebGL runner it
+    // can land after any fixed wait, and then its tick moves the arm mid-test. A callback asked
+    // of the real rAF now runs in that same frame, after the tick; the tick's own next request is
+    // held.
+    await new Promise(resolve => window.__releaseFrames.call(window, resolve));
     const beforeRerun = arm();
     const edges = window.cadHarness.a.controller.readState().display.edges?.enabled !== false;
     window.cadHarness.a.controller.setDisplaySettings({ edges: { enabled: !edges } });
