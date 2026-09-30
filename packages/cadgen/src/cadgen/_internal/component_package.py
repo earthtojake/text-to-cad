@@ -649,6 +649,9 @@ def _point_signature(shape: Any) -> tuple:
     ordinary decoder normalization remains the existing v4 behavior. Native
     table indices preserve the point-to-geometry association. No pointer or
     native object escapes this call, and no approximate comparison is used.
+    Placements compare as numbers, so a negative zero equals zero: a decoder
+    recomposes a location chain whose product can carry the other sign (the
+    w16 sump pan's rotated bosses), and that is the same placement.
     """
     from OCP.BinTools import BinTools_ShapeSet
     from OCP.TopAbs import TopAbs_VERTEX
@@ -673,7 +676,8 @@ def _point_signature(shape: Any) -> tuple:
 
     def placement(location):
         transform = location.Transformation()
-        return struct.pack(">12d", *(transform.Value(i, j) for i in range(1, 4) for j in range(1, 5)))
+        # `+ 0.0` folds -0.0 into 0.0 and leaves every other value unchanged.
+        return struct.pack(">12d", *(transform.Value(i, j) + 0.0 for i in range(1, 4) for j in range(1, 5)))
 
     result = []
     for ordinal, vertex in point_vertices:
