@@ -987,8 +987,9 @@ const ShellViewport = forwardRef(function ShellViewport({
       ) : null}
       {drawingOverlayActive ? <DrawingOverlay drawing={drawing} onReady={handleDrawingReady} onContentChange={handleDrawingContent} onViewportChange={followDrawingViewport} /> : null}
       {overlay}
-      {/* The cube is the tools view's: preview has no cube to draw or keep in step with the orbit. */}
-      {!previewMode && <div className="pointer-events-none absolute inset-0">
+      {/* The cube is the tools view's: preview has no cube to draw or keep in step with the orbit,
+          and a model still loading has none to orient. */}
+      {!previewMode && !isLoading && <div className="pointer-events-none absolute inset-0">
       <ViewPlaneControl
         showViewPlane
         disabled={drawingOverlayActive}

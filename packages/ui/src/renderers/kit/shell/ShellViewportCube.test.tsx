@@ -15,9 +15,9 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
 const scene = { object3D: { isObject3D: true }, bounds: { min: [0, 0, 0], max: [1, 1, 1] }, dispose() {} };
-it('the view cube is drawn in the tools view, on a phone as on desktop, and never in preview; nor are orbit buttons or camera controls', () => {
-  const viewport = (mobile: boolean, previewMode: boolean) => <ViewerMobileContext.Provider value={mobile}>
-    <ShellViewport modelKey="part" scene={scene} isLoading={false} previewMode={previewMode} /></ViewerMobileContext.Provider>;
+it('the view cube is drawn in the tools view, on a phone as on desktop, and never in preview or while the model loads; nor are orbit buttons or camera controls', () => {
+  const viewport = (mobile: boolean, previewMode: boolean, isLoading = false) => <ViewerMobileContext.Provider value={mobile}>
+    <ShellViewport modelKey="part" scene={scene} isLoading={isLoading} previewMode={previewMode} /></ViewerMobileContext.Provider>;
   const { rerender } = render(viewport(false, false));
   expect(screen.getAllByLabelText('View cube')).toHaveLength(1);
   const extras = () => [screen.queryAllByRole('button', { name: /^Orbit (?:left|right|up|down)$/ }).length, document.querySelectorAll('[data-cad-camera-controls]').length];
@@ -27,4 +27,6 @@ it('the view cube is drawn in the tools view, on a phone as on desktop, and neve
   rerender(viewport(true, false));
   expect(screen.getAllByLabelText('View cube')).toHaveLength(1);
   expect(extras()).toEqual([0, 0]);
+  rerender(viewport(false, false, true));
+  expect(screen.queryByLabelText('View cube')).toBeNull();
 });

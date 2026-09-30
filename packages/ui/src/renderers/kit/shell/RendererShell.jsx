@@ -145,6 +145,10 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
   </>;
 
   const hasContent = Boolean(scene) && !viewerLoading;
+  // While the model loads, the viewer shows none of its own chrome: no tools, no top-right bar,
+  // no cube, no bottom action -- only the load itself. They arrive with the model, and stay
+  // through a rebuild that keeps it on screen (that is `updating`, not loading).
+  const chromeHidden = viewerLoading;
   const action = frame.promptAction || bottomAction || (frame.drawToolActive && frame.drawing.hasContent
     ? drawingCaptureAction({ disabled: viewerLoading || !hasContent, onInvoke: frame.copyDrawing }) : null);
   frame.copyActionRef.current = () => {
@@ -219,7 +223,7 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
                     runtimeLifecycle={frame.runtimeLifecycle}
                   >{overlay}</ShellViewport>
                   {!previewing ? <ViewerAlertCard key={frame.modelKey} alert={frame.viewerAlert} hasContent={hasContent} onReload={view.reload} /> : null}
-                  {!previewing && action ? <ViewportBottomAction shortcut={frame.promptAction ? "" : frame.copyShortcut} {...action} /> : null}
+                  {!previewing && !chromeHidden && action ? <ViewportBottomAction shortcut={frame.promptAction ? "" : frame.copyShortcut} {...action} /> : null}
                 </div>
               </div>
 
@@ -228,7 +232,7 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
                   for Preview; under the model, the playbar (a static file's, the orbit's play and
                   pause), with Playback settings' cog at its right end. */}
               <PreviewChrome active={previewing} surface={frame.hostElement} hold={displayOpen}
-                actions={() => <>
+                actions={chromeHidden ? undefined : () => <>
                   <DisplayPopover open={displayOpen} onOpenChange={setDisplayOpen} disabled={shell.idle}>{frame.display}</DisplayPopover>
                   <ToolbarButton label="Reset view" className={BAR_BUTTON_CLASS} disabled={shell.idle} onClick={shell.resetView}>
                     <RotateCcw className="size-3" strokeWidth={1.5} aria-hidden="true" />
@@ -257,11 +261,11 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
                   </div>;
                 }}>
 
-              <div className="group/tool-stack pointer-events-none absolute z-20 flex flex-col items-start gap-2" style={TOOLBAR_POSITION}
+              {chromeHidden ? null : <div className="group/tool-stack pointer-events-none absolute z-20 flex flex-col items-start gap-2" style={TOOLBAR_POSITION}
                 data-mobile={mobile ? "" : undefined} data-cad-tool-groups="">
                 <FloatingToolBar tools={tools} />
                 <ToolStack hidden={previewing} mobile={mobile} layout={frame.toolStack} onLayoutChange={frame.changeToolStack}>{shellPanels}{toolPanels}</ToolStack>
-              </div>
+              </div>}
 
               </PreviewChrome>
 

@@ -192,6 +192,24 @@ it("on a phone a tree's default cap is the whole column, not half of it", () => 
 const displayPopover = () => document.querySelector<HTMLElement>('[data-display-popover]');
 const barButtons = () => [...document.querySelector('[data-viewport-actions]')!.querySelectorAll('button')].map(button => button.getAttribute('aria-label'));
 
+it('while the model loads the viewer shows none of its own chrome, and all of it returns with the model', () => {
+  frame();
+  const stage = (name: string) => act(() => { fireEvent.click(document.querySelector(`[data-harness-stage="${name}"]`)!); });
+  expect(screen.getByRole('group', { name: 'Interaction tools' })).toBeTruthy();
+  expect(barButtons()).toEqual(['Display settings', 'Reset view', 'Preview']);
+  expect(document.querySelector('[data-viewport-bottom-actions]')).not.toBeNull();
+  stage('finding');
+  expect(screen.queryByRole('group', { name: 'Interaction tools' })).toBeNull();
+  expect(document.querySelector('[data-cad-tool-stack]')).toBeNull();
+  expect(barButtons()).toEqual([]);
+  expect(document.querySelector('[data-viewport-bottom-actions]')).toBeNull();
+  expect(viewportProps.current.isLoading).toBe(true);
+  stage('idle');
+  expect(screen.getByRole('group', { name: 'Interaction tools' })).toBeTruthy();
+  expect(barButtons()).toEqual(['Display settings', 'Reset view', 'Preview']);
+  expect(document.querySelector('[data-viewport-bottom-actions]')).not.toBeNull();
+});
+
 it('Display is a popover beside Preview, never a tool: opened over Draw it leaves Draw in hand with its panel, and the stack as it was', async () => {
   const user = userEvent.setup();
   frame();
