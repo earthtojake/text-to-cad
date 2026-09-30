@@ -322,12 +322,18 @@ export function useViewerRuntime({
         container.clientHeight || height || 1
       );
 
-      const syncScreenSpaceLineMaterials = () => {
-        const { width: nextWidth, height: nextHeight } = lineMaterialResolution();
+      // Every screen-space line at one resolution: the viewport's own, or — for a frame drawn
+      // off to the side at another size (a library card's picture) — that frame's, until the
+      // viewport's is synced back.
+      const setScreenSpaceLineResolution = (nextWidth, nextHeight) => {
         for (const material of screenSpaceLineMaterials) {
           material?.resolution?.set?.(nextWidth, nextHeight);
         }
         runtimeRef.current?.cadScene?.runtime?.syncScreenSpaceLineMaterials?.(nextWidth, nextHeight);
+      };
+      const syncScreenSpaceLineMaterials = () => {
+        const { width: nextWidth, height: nextHeight } = lineMaterialResolution();
+        setScreenSpaceLineResolution(nextWidth, nextHeight);
       };
 
       const registerScreenSpaceLineMaterial = (material) => {
@@ -877,7 +883,8 @@ export function useViewerRuntime({
         // The scene sync calls this after building or updating a model so line
         // materials created for it (the cadScene's own registry) start at the
         // viewport's resolution rather than waiting for a resize.
-        syncScreenSpaceLineMaterials
+        syncScreenSpaceLineMaterials,
+        setScreenSpaceLineResolution
       };
       applySceneBackground(runtimeRef.current, viewerTheme);
       applyInitialPerspective?.(runtimeRef.current);

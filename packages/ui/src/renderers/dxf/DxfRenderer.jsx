@@ -5,6 +5,7 @@ import { usePromptDestination, useViewerHost } from "../../host/context.js";
 import ViewerAlertCard from "../kit/status/ViewerAlertCard.jsx";
 import ViewerLoadingOverlay from "../kit/status/ViewerLoadingOverlay.js";
 import { attachLiveBinding } from "../kit/shell/liveBinding.js";
+import { useWhenSettled } from "../kit/shell/useWhenSettled.js";
 import { createViewPromptContext, promptDeliveryError } from "../kit/shell/promptContext.js";
 import { useWorkspaceDocument } from "../workspace/useWorkspaceDocument.js";
 import { drawingLoadAlert, useDrawingPayload } from "./useDrawingPayload.js";
@@ -71,7 +72,7 @@ function DxfSurface({ view, data }) {
     drawing: payload.drawing, restored, colorScheme: view.appearance?.colorScheme === "dark" ? "dark" : "light",
     onViewMoved: rememberView
   });
-  const { canvasRef, capture, containerRef, dragging, fit } = drawingView;
+  const { canvasRef, capture, containerRef, dragging, fit, thumbnail } = drawingView;
 
   // ---- host chrome -----------------------------------------------------------
   useEffect(() => { onReady?.(true); }, [onReady]);
@@ -157,13 +158,16 @@ function DxfSurface({ view, data }) {
     resetCamera() { fit(); },
     setDisplaySettings() { throw new Error(NO_DISPLAY); },
     setRenderMode() { throw new Error(NO_DISPLAY); },
-    capture
+    capture,
+    thumbnail
   };
+  // A drawing has settled once it is read and painted: a library card's picture waits for that.
+  const whenSettled = useWhenSettled(() => ready);
   const binding = data.services.live;
   useEffect(() => {
     if (!binding) return undefined;
-    return attachLiveBinding(binding, () => runtimeRef.current, { declined: DECLINED_LIVE_COMMANDS });
-  }, [binding]);
+    return attachLiveBinding(binding, () => runtimeRef.current, { declined: DECLINED_LIVE_COMMANDS, ready: whenSettled });
+  }, [binding, whenSettled]);
 
   return (
     <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-background text-foreground"

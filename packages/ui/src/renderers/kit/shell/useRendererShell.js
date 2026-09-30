@@ -22,6 +22,7 @@ import { shellLoadReport } from "./loadReport.js";
 import { createViewPromptContext, promptDeliveryError } from "./promptContext.js";
 import { fileViewsEqual, plainShellCamera, readFileView, readFileViewSlices, scopeShellCamera, shellPresentationKey, writeFileView } from "./fileView.js";
 import { useViewerShortcuts } from "./useViewerShortcuts.js";
+import { useWhenSettled } from "./useWhenSettled.js";
 
 /**
  * Preview mode's one state: the viewer with its tools put away, orbiting the model and
@@ -485,8 +486,14 @@ export function useRendererShell({
       if (!viewerRef.current?.captureScreenshotBlob) throw new Error("The viewer cannot capture this model yet.");
       return viewerRef.current.captureScreenshotBlob();
     },
+    thumbnail(size) {
+      if (!viewerRef.current?.captureThumbnail) throw new Error("The viewer cannot picture this model yet.");
+      return viewerRef.current.captureThumbnail(size);
+    },
     ...(live.commands || {})
   };
+  // Settled is what live state says: the file whole, on screen, drawn, and the renderer not busy.
+  const whenSettled = useWhenSettled(() => !liveRuntimeRef.current.readState().loading);
   const liveBinding = services.live;
   const commandNames = Object.keys(live.commands || {}).sort().join("\n");
   const declinedRef = useRef(live.declined);
@@ -494,9 +501,9 @@ export function useRendererShell({
   useEffect(() => {
     if (!liveBinding) return undefined;
     return attachLiveBinding(liveBinding, () => liveRuntimeRef.current, {
-      commands: commandNames ? commandNames.split("\n") : [], declined: declinedRef.current || {}
+      commands: commandNames ? commandNames.split("\n") : [], declined: declinedRef.current || {}, ready: whenSettled
     });
-  }, [liveBinding, commandNames]);
+  }, [liveBinding, commandNames, whenSettled]);
 
   // ---- what the frame and the renderer read ---------------------------------
   // The Display panel's content: every renderer's, built here from its display settings.

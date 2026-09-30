@@ -48,6 +48,7 @@ import { createViewUpdateGate } from "../view-settings/viewUpdateGate.js";
 import { viewerTransitionBackdrop } from "../viewport/framePresentation.js";
 import { IDLE_PIXEL_RATIO_CAP, INTERACTION_IDLE_DELAY_MS, INTERACTION_PIXEL_RATIO_CAP, getPixelRatioCap } from "../viewport/pixelRatio.js";
 import { disposeSceneObject } from "../viewport/sceneObjects.js";
+import { renderThumbnail } from "../viewport/thumbnail.js";
 import { useViewerRuntime } from "../viewport/useViewerRuntime.js";
 import ViewportError from "../status/ViewportError.jsx";
 import { VIEWPORT_CUBE_SIZE, VIEWPORT_CORNER_INSET_PX } from "./viewportLayout.js";
@@ -68,8 +69,8 @@ function clearGroup(group) {
  * it. The scene stays its renderer's: this component detaches it, never disposes it.
  *
  * The imperative handle is what the shell drives: view settings preparation and
- * presentation, screenshot pixels, the reset that frames the model, framing a
- * given box, and stored perspectives.
+ * presentation, screenshot pixels and a library card's picture, the reset that frames the model,
+ * framing a given box, and stored perspectives.
  */
 const ShellViewport = forwardRef(function ShellViewport({
   scene = null,
@@ -367,6 +368,17 @@ const ShellViewport = forwardRef(function ShellViewport({
       if (!runtime?.renderer || !runtime?.scene || !runtime?.camera) throw new Error("The viewer is not ready");
       return await buildCompositeScreenshotBlob(runtime, drawingControllerRef.current?.inkCanvas() || null, {
         backgroundColor: resolveElementBackgroundColor(runtime.renderer.domElement)
+      });
+    },
+    // The model on its own, for a library card: framed whole from the default direction at the
+    // card's size, whatever the camera on screen (`kit/viewport/thumbnail.js`).
+    async captureThumbnail({ width, height }) {
+      await viewUpdateBindingRef.current?.whenReady();
+      const runtime = runtimeRef.current;
+      if (!runtime?.renderer || !scene) throw new Error("The viewer is not ready");
+      return renderThumbnail(runtime, {
+        bounds: scene.restBounds || scene.bounds, modelOffset: modelTransformRef.current.offset,
+        sceneScaleMode: normalizedSceneScaleMode, width, height
       });
     },
     activateViewPlaneFace,

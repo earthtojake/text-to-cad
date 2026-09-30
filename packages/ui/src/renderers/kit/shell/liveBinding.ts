@@ -41,6 +41,12 @@ export interface LiveViewController<State extends LiveViewState = LiveViewState>
   setRenderMode(enabled: boolean): Promise<State>;
   /** This returns a frozen image only; the host owns its transport and destination. */
   capture(): Promise<Blob>;
+  /**
+   * A picture for a library card, once the view has settled — its whole file loaded and drawn —
+   * of the model framed whole from the default direction at `size`, whatever the camera on
+   * screen, the panels over it or the window's size. Nothing on screen changes.
+   */
+  thumbnail(size: { width: number; height: number }): Promise<Blob>;
 }
 export interface LiveViewBinding<Controller = LiveViewController> {
   /** Bind the mounted view only. Cleanup may retain readState() as an inactive snapshot. */
@@ -54,9 +60,17 @@ export interface LiveViewRuntime<State extends LiveViewState = LiveViewState> {
   setDisplaySettings(patch: { [key: string]: JsonValue }): void;
   setRenderMode(enabled: boolean): void;
   capture(): Promise<Blob>;
+  /** The card's picture, drawn off to the side of the view (`kit/viewport/thumbnail.js`). */
+  thumbnail(size: { width: number; height: number }): Promise<Blob>;
 }
 export interface LiveBindingOptions {
   settle?: () => Promise<void>;
+  /**
+   * Resolves once the view shows its whole file, drawn: at once when it already does, else on the
+   * renderer's own render that makes it so, never on a timer (`useWhenSettled`); it rejects when
+   * the view goes first. A thumbnail waits for it. Default: at once.
+   */
+  ready?: () => Promise<void>;
   /** Commands this renderer adds: `runtime[name](...args)` runs as one admitted mutation. */
   commands?: readonly string[];
   /** Host commands this renderer has no meaning for, each with the error its caller reads. */
@@ -72,7 +86,7 @@ const scopeKey = (state: { resource: ResourceRef; revision: string }) => JSON.st
 /** Mounted-view adapter. It never retains a scene after detach. */
 export function attachLiveBinding<State extends LiveViewState, Controller extends LiveViewController<State>>(
   binding: LiveViewBinding<Controller>, readRuntime: () => LiveViewRuntime<State>,
-  { settle = settleFrame, commands = [], declined = {} }: LiveBindingOptions = {}): () => void {
+  { settle = settleFrame, ready = () => Promise.resolve(), commands = [], declined = {} }: LiveBindingOptions = {}): () => void {
   for (const name of HOST_LIVE_COMMANDS) {
     if (commands.includes(name) === Object.hasOwn(declined, name)) {
       throw new Error(`A renderer's live binding must either implement or decline the host command "${name}".`);
@@ -138,6 +152,14 @@ export function attachLiveBinding<State extends LiveViewState, Controller extend
       const { runtime, scope } = admit();
       const pending = runtime.capture();
       const blob = await pending;
+      checkScope(scope);
+      return blob;
+    },
+    async thumbnail(size) {
+      if (!active) throw new Error('Show the model tab before controlling its viewer.');
+      await ready();
+      const { runtime, scope } = admit();
+      const blob = await runtime.thumbnail(size);
       checkScope(scope);
       return blob;
     },

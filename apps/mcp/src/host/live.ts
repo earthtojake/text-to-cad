@@ -1,11 +1,10 @@
 import { formatPromptReference } from '@text-to-cad/core/prompt';
 import type { PromptReference, ResourceRef } from '@text-to-cad/core/prompt';
-import { createLiveRegistry as createRegistry, type LiveRegistry as Registry } from '@text-to-cad/ui/host';
+import { createLiveRegistry as createRegistry, type LiveRegistry as Registry, type LiveView } from '@text-to-cad/ui/host';
 
 /** What every renderer's live controller answers, whichever family it is. */
-export interface LiveController {
-  readState(): { revision?: string; active?: boolean; loading?: boolean; selection?: readonly PromptReference[]; camera?: unknown; display?: Record<string, unknown>; renderMode?: string };
-  capture(): Promise<Blob>;
+export interface LiveController extends LiveView {
+  readState(): ReturnType<LiveView['readState']> & { revision?: string; selection?: readonly PromptReference[]; camera?: unknown; display?: Record<string, unknown>; renderMode?: string };
 }
 
 /**
