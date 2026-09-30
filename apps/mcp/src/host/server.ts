@@ -3,7 +3,8 @@ import type { Bridge, CallOptions, ToolResult } from './bridge';
 /** The launch/view protocol this page speaks with `cadgen mcp` (its `PROTOCOL`). */
 export const PROTOCOL = 1;
 
-export interface Root { kind: 'workspace' | 'folder'; path: string; name: string }
+/** Where a view browses: its project's catalog (`workspace`), or the model's filesystem, a folder at a time (`global`). */
+export interface Root { kind: 'workspace' | 'global'; path: string; name: string }
 /** What an opening tool tells the page to show. The server decides all of it. */
 export interface Launch {
   protocol: number;

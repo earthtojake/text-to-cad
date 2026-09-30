@@ -45,10 +45,10 @@ import uuid
 from typing import Any
 from urllib.parse import unquote, urlparse
 
-from cadgen.viewer.scanner import SOURCE_EXTENSIONS
+from cadgen.viewer.scanner import SOURCE_EXTENSIONS, catalog_lists
 
 from .protocol import INVALID_PARAMS, METHOD_NOT_FOUND, Connection, RequestContext, RpcError, claim_stdout
-from .roots import Root, ThreadWorkspace, folder_of, listed_under
+from .roots import Root, ThreadWorkspace, filesystem_of
 from .ui import MIME, RESOURCE_META, AppPage
 from .views import POLL_SECONDS, NoAnswer, ViewRegistry
 
@@ -61,7 +61,6 @@ PROTOCOL = 1
 _PROTOCOL_VERSIONS = ("2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05")
 _RESOURCE_NOT_FOUND = -32002
 EXTENSIONS = sorted(SOURCE_EXTENSIONS)
-_MAX_THUMBNAIL_BYTES = 512 * 1024
 _DESCRIBE_SECONDS = 2.0
 
 # Clients that present CAD as tabs (see the module docstring); every other client is shown views inline,
@@ -118,7 +117,7 @@ def _object(properties: dict[str, Any] | None = None, required: list[str] | None
 
 _PATH = {"type": "string", "description": "A CAD file: an absolute path, or relative to the thread's workspace."}
 _VIEW = {"type": "string", "description": "A view id from cad_view; defaults to the most recently used viewer."}
-_ROOT = _object({"kind": {"type": "string", "enum": ["workspace", "folder"]}, "path": {"type": "string"}}, ["kind", "path"])
+_ROOT = _object({"kind": {"type": "string", "enum": ["workspace", "global"]}, "path": {"type": "string"}}, ["kind", "path"])
 _SHOWN_PATH = {"type": "string", "description": "A CAD file: an absolute path, or relative to the project folder the chat works in."}
 _SHOWN_VIEW = {"type": "string", "description": "The view that cad_show returned."}
 _READ_ONLY = {"readOnlyHint": True, "destructiveHint": False, "openWorldHint": False}
@@ -182,7 +181,7 @@ class Server:
     @property
     def recents(self):
         if self._recents is None:
-            from .recents import RecentStore
+            from cadgen.viewer.recents import RecentStore
 
             self._recents = RecentStore()
         return self._recents
@@ -406,9 +405,18 @@ class Server:
 
     # launches -----------------------------------------------------------------
 
-    def _root_for(self, model: str) -> Root:
+    def _project_of(self, model: str) -> str | None:
+        """The workspace folder whose catalog lists ``model``, if any.
+
+        A model the agent writes under ``build/`` or a hidden folder is still the thread's, but the
+        workspace's catalog never shows it, so it has no project around it to browse.
+        """
         folder = self.workspace.contains(model)
-        return Root("workspace", folder) if folder and listed_under(folder, model) else folder_of(model)
+        return folder if folder and catalog_lists(folder, model) else None
+
+    def _root_for(self, model: str) -> Root:
+        project = self._project_of(model)
+        return Root("workspace", project) if project else filesystem_of(model)
 
     def _launch(self, model: str | None, *, surface: str | None = None, explore: bool = True) -> dict[str, Any]:
         # An inline view is a card in the chat: it shows the model, not a file browser.
@@ -477,7 +485,8 @@ class Server:
             path = _file_uri_path(file.get("resourceUri")) if isinstance(file, dict) else None
         model = self._model_path(path)
         launch = self._launch(model, surface="file", explore=False)
-        launch["root"] = folder_of(model).public()
+        # Shown on its own: the one file, read without the catalog of any folder.
+        launch["root"] = filesystem_of(model).public()
         return _text(f"{os.path.basename(model)} is open in CAD.", {"launch": launch})
 
     def _tool_cad_open(self, arguments, context):
@@ -536,7 +545,8 @@ class Server:
 
         from .browser import ViewerUnavailable, model_link, viewer_url
 
-        folder = self._root_for(model).path
+        # The Viewer serves one folder and walks all of it: the project, else the model's own folder.
+        folder = self._project_of(model) or os.path.dirname(model)
         self._model = model
         self._remember(model)
         try:
@@ -660,13 +670,12 @@ class Server:
             elif action == "remove":
                 store.remove(path)
             elif action == "thumbnail":
+                from cadgen.viewer.recents import thumbnail_png
+
                 try:
-                    png = base64.b64decode(arguments.get("png") or "", validate=True)
-                except (ValueError, binascii.Error) as error:
-                    raise ToolFailed("the thumbnail is not base64") from error
-                if not png.startswith(b"\x89PNG") or len(png) > _MAX_THUMBNAIL_BYTES:
-                    raise ToolFailed("a thumbnail is a PNG of at most 512 KiB")
-                store.thumbnail(path, png)
+                    store.thumbnail(path, thumbnail_png(arguments.get("png")))
+                except ValueError as error:
+                    raise ToolFailed(str(error)) from error
             else:
                 raise ToolFailed(f"unknown action {action!r}")
         return _data({"recents": [entry.public() for entry in store.list()]})

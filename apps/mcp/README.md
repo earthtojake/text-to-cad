@@ -31,6 +31,15 @@ reference host `basic-host` does.
   `root`, `explore` — and the page renders it. The server computes the root from
   the workspace; the page never guesses where it is, and nothing here branches on
   a surface's name (`surface` is only reported back to the server).
+- **The root follows context, as the host's own file tree does.** A model in the
+  thread's project (Codex's workspace, or the roots a host lists) browses that
+  project's catalog: `workspace`. A model with no project around it — the
+  sidebar's Open Model, a chat with no folder — browses its filesystem: `global`,
+  rooted at `/` or its drive and never walked. Its explorer reads each folder it
+  opens (`/__cad/list`) from wherever the model is, up and down, and its catalog
+  holds only the file on screen; a hidden folder the file is in still shows, so
+  the tree reaches it. A surface that shows one file (*Open with CAD*, an inline
+  card) has no explorer, and reads only that file.
 - **Told how it is presented, before it greets the host.** A host that mounts
   views inline is served the page with `<meta name="cad-presentation"
   content="inline">` in its head: the page offers that host `inline` and
@@ -71,14 +80,17 @@ reference host `basic-host` does.
 | `bridge.ts` | JSON-RPC 2.0 over `postMessage`: requests, the opening tool's result, host context, teardown |
 | `server.ts` | typed calls to the server's tools |
 | `tunnel.ts` | the `fetch` over `cad_http` |
-| `files.ts` | the read-only `FileSource` over the catalog; no listing when the launch does not browse |
+| `files.ts` | the read-only `FileSource`s: a project's, from its catalog, and a filesystem's, a folder at a time; no listing when the launch does not browse |
 | `prompt.ts` | Add to prompt: the composer via `ui/update-model-context`, references as absolute paths; `reachesComposer`, whether the host has one |
-| `live.ts`, `events.ts` | the mounted view's live controller, and the `cad_events` long-poll that answers the agent (`show`, `capture`, `describe`) |
+| `live.ts`, `events.ts` | the mounted view's live controller (`@text-to-cad/ui/host`'s registry), and the `cad_events` long-poll that answers the agent (`show`, `capture`, `describe`) |
 | `presentation.ts` | how the host presents the page, and the election that retires older inline views |
 
-Pages: `Home.tsx` (Open Model, search, Pinned, Recent) and `ModelView.tsx`
-(the FileViewer for one launch); `App.tsx` switches between them and frames
-them (full page, or an inline card with its full-size button).
+Pages: `Home.tsx` (the model library the web Viewer shows too,
+`@text-to-cad/ui/library`, with this host's Open Model: the desktop's file
+chooser) and `ModelView.tsx` (the FileViewer for one launch); `App.tsx` switches
+between them and frames them (full page, or an inline card with its full-size
+button). In a tab, the viewer's bottom action sits on the line of Codex's
+composer, which floats over the page (`--cad-viewport-bottom-center`).
 
 ## Develop
 

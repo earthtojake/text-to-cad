@@ -58,6 +58,10 @@
       "types": "./dist/tab-store/index.d.ts",
       "import": "./dist/tab-store/index.js"
     },
+    "./library": {
+      "types": "./dist/library/index.d.ts",
+      "import": "./dist/library/index.js"
+    },
     "./drawing": {
       "types": "./dist/drawing/index.d.ts",
       "import": "./dist/drawing/index.js"

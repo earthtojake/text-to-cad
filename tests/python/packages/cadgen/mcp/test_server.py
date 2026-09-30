@@ -15,7 +15,7 @@ import unittest
 from pathlib import Path
 
 from cadgen.mcp.protocol import RequestContext
-from cadgen.mcp.recents import RecentStore
+from cadgen.viewer.recents import RecentStore
 from cadgen.mcp.server import Server
 from cadgen.mcp.ui import AppPage
 
@@ -101,23 +101,24 @@ class TabServerTest(_Session):
         read = self.server.handle("resources/read", {"uri": uri}, None)["contents"][0]
         self.assertEqual((read["mimeType"], read["text"]), ("text/html;profile=mcp-app", "<!doctype html><title>CAD</title>"))
 
-    def test_a_thread_browses_its_workspace_and_anything_else_browses_its_own_folder(self) -> None:
+    def test_a_thread_browses_its_workspace_and_a_model_with_no_project_its_filesystem(self) -> None:
         opened = self.launch("cad_open", {"path": "parts/bracket.stl"})
         self.assertEqual(opened["model"], str(self.workspace / "parts" / "bracket.stl"))
         self.assertEqual((opened["root"]["kind"], opened["root"]["path"], opened["explore"]), ("workspace", str(self.workspace), True))
         # The thread's tab reopens on what the thread last opened.
         self.assertEqual(self.launch("cad_tab")["model"], opened["model"])
         loose = str(self.tmp / "elsewhere" / "loose.stl")
+        anchor = os.path.splitdrive(loose)[0] + os.sep
         outside = self.launch("cad_open", {"path": loose})
-        self.assertEqual((outside["root"]["kind"], outside["root"]["path"]), ("folder", str(self.tmp / "elsewhere")))
-        # A model in a folder the workspace's catalog skips is browsed from its own folder.
+        self.assertEqual((outside["root"]["kind"], outside["root"]["path"], outside["explore"]), ("global", anchor, True))
+        # A model in a folder the workspace's catalog skips has no project around it either.
         (self.workspace / "build").mkdir()
         (self.workspace / "build" / "out.stl").write_bytes(STL)
         built = self.launch("cad_open", {"path": "build/out.stl"})
-        self.assertEqual((built["root"]["kind"], built["root"]["path"]), ("folder", str(self.workspace / "build")))
+        self.assertEqual((built["root"]["kind"], built["root"]["path"]), ("global", anchor))
         # A file the host hands over is shown on its own, with no explorer.
         handed = self.launch("cad_file", {"file": {"name": "loose.stl", "resourceUri": "x"}}, {"openai/resource": {"path": loose}})
-        self.assertEqual((handed["model"], handed["explore"], handed["root"]["kind"]), (loose, False, "folder"))
+        self.assertEqual((handed["model"], handed["explore"], handed["root"]["kind"]), (loose, False, "global"))
         self.assertEqual([entry.path for entry in self.server.recents.list()], [loose, built["model"], opened["model"]])
 
     def test_a_bad_path_is_the_tools_answer_not_a_protocol_error(self) -> None:
@@ -161,8 +162,33 @@ class TabServerTest(_Session):
         self.assertEqual((reply["status"], [entry["rootRelativeFile"] for entry in catalog["entries"]]), (200, ["parts/bracket.stl"]))
         refused = self.call("cad_http", {"root": {"kind": "workspace", "path": str(self.tmp / "elsewhere")}, "method": "GET", "url": "/__cad/catalog"})
         self.assertTrue(refused["isError"])
-        effect = self.call("cad_http", {"root": root, "method": "POST", "url": "/__cad/reveal", "body": ""})["structuredContent"]
-        self.assertEqual(effect["status"], 404)
+        for route in ("/__cad/reveal", "/__cad/recents"):  # the web app's effects; a view here has tools for them
+            effect = self.call("cad_http", {"root": root, "method": "POST", "url": route, "body": ""})["structuredContent"]
+            self.assertEqual(effect["status"], 404)
+
+    def test_a_global_root_reads_a_folder_at_a_time_and_catalogs_only_what_is_shown(self) -> None:
+        # A model under a hidden folder, as an agent's worktree is: shown, though no listing shows the folder.
+        hidden = self.tmp / "elsewhere" / ".worktree"
+        hidden.mkdir()
+        (hidden / "part.stl").write_bytes(STL)
+        (self.tmp / "elsewhere" / "notes.txt").write_text("x", encoding="utf-8")
+        loose = self.tmp / "elsewhere" / "loose.stl"
+        root = self.launch("cad_open", {"path": str(loose)})["root"]
+
+        def get(url: str) -> tuple[int, dict | bytes]:
+            reply = self.call("cad_http", {"root": {"kind": root["kind"], "path": root["path"]}, "method": "GET", "url": url})["structuredContent"]
+            body = base64.b64decode(reply["body"])
+            return reply["status"], json.loads(body) if reply["headers"].get("content-type", "").startswith("application/json") else body
+
+        relative = os.path.relpath(loose.parent, root["path"]).replace(os.sep, "/")
+        status, listing = get(f"/__cad/list?dir={relative}")
+        self.assertEqual((status, listing["entries"]), (200, [{"name": "loose.stl", "kind": "file", "path": f"{relative}/loose.stl"}]))
+        status, catalog = get(f"/__cad/catalog?file={relative}/.worktree/part.stl")
+        self.assertEqual((status, [entry["rootRelativeFile"] for entry in catalog["entries"]]), (200, [f"{relative}/.worktree/part.stl"]))
+        self.assertEqual(get(f"/__cad/asset?file={hidden / 'part.stl'}"), (200, STL))
+        # A global root is a filesystem's, never a folder a view names.
+        refused = self.call("cad_http", {"root": {"kind": "global", "path": str(self.tmp)}, "method": "GET", "url": "/__cad/catalog"})
+        self.assertTrue(refused["isError"])
 
 
 class InlineServerTest(_Session):
@@ -192,7 +218,7 @@ class InlineServerTest(_Session):
         self.assertNotEqual(first["view"], second["view"])
         self.assertLess((first["order"]["createdAt"], first["order"]["seq"]), (second["order"]["createdAt"], second["order"]["seq"]))
         self.assertEqual((first["surface"], first["explore"], first["root"]["kind"]), ("inline", False, "workspace"))
-        self.assertEqual((second["root"]["kind"], second["model"]), ("folder", str(self.tmp / "elsewhere" / "loose.stl")))
+        self.assertEqual((second["root"]["kind"], second["model"]), ("global", str(self.tmp / "elsewhere" / "loose.stl")))
         shown = self.call("cad_show", {"path": "parts/bracket.stl"})
         self.assertIn(shown["structuredContent"]["launch"]["view"], shown["content"][0]["text"])
         self.assertEqual(self.launch("cad_home")["page"], "home")
@@ -288,7 +314,7 @@ class ImportBudgetTest(unittest.TestCase):
             "server = Server(launch_cwd='/')\n"
             "server.handle('initialize', {'protocolVersion': '2025-06-18'}, None)\n"
             "server.handle('tools/list', {}, None)\n"
-            "print(','.join(name for name in ('OCP', 'build123d', 'ezdxf', 'cadgen.mcp.tunnel', 'cadgen.mcp.recents') if name in sys.modules))\n"
+            "print(','.join(name for name in ('OCP', 'build123d', 'ezdxf', 'cadgen.mcp.tunnel', 'cadgen.viewer.recents') if name in sys.modules))\n"
         )
         done = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=120, env={**os.environ})
         self.assertEqual(done.returncode, 0, done.stderr)

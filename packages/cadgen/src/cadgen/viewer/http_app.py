@@ -32,10 +32,11 @@ from hashlib import sha256
 from pathlib import Path
 
 from . import reload as dev_reload
-from .backend import ForbiddenAssetError, LocalAssetBackend
+from .backend import ForbiddenAssetError, LocalAssetBackend, normalized_file_ref, relative_file_ref
 from .cadgen_ops import create_cadgen_ops
 from .content_types import content_type_for_static_asset
 from .encoding import UriError, strict_decode_uri_component
+from .scanner import catalog_lists, path_is_inside
 from .store_paths import virtual_store_asset
 from .tess_cache import (
     TESS_CACHE_METADATA_MAX_BYTES, parse_tess_cache_admission,
@@ -57,6 +58,8 @@ __all__ = [
 
 POST_GUARD_HEADER = "x-cadgen-viewer"
 LOCAL_SERVER_FEATURES = ["path-directory", "reveal-path"]
+# A thumbnail travels as base64 in the change's JSON: 512 KiB of PNG, and room for the rest.
+_LIBRARY_BODY_LIMIT = 768 * 1024
 _LOOPBACK_NAMES = frozenset({"127.0.0.1", "localhost", "::1"})
 
 TESS_CACHE_ROUTE_PREFIX = "/__tess_cache/"
@@ -223,11 +226,11 @@ class CadApp:
     prefixes, so nothing else can be waiting behind this.
     """
 
-    def __init__(self, *, root: str, host: str, port: int, dist_dir: str = "", scan_depth: int | None = None):
+    def __init__(self, *, root: str, host: str, port: int, dist_dir: str = "", lazy: bool = False):
         from .surfaces import SurfaceSubscribers
 
         self.surface_subscribers = SurfaceSubscribers()
-        self.backend = LocalAssetBackend(root) if scan_depth is None else LocalAssetBackend(root, scan_depth=scan_depth)
+        self.backend = LocalAssetBackend(root, lazy=lazy)
         root_path = self.backend.root_path
         self.root_path = root_path
         self.root_name = self.backend.root_name
@@ -255,6 +258,7 @@ class CadApp:
         self.started_at = time.time()
         self.lock = threading.Lock()
         self.ops = create_cadgen_ops(root_path)
+        self._recents = None
 
     # --- development auto-reload accounting -------------------------------
 
@@ -433,13 +437,19 @@ class CadApp:
                     response.send_json(200, self.server_info())
                 elif pathname == "/__cad/catalog":
                     self._handle_catalog(request, response)
+                elif pathname == "/__cad/list" and self.backend.lazy:
+                    self._handle_list(request, response, query)
+                elif pathname == "/__cad/recents":
+                    response.send_json(200, self._library())
+                elif pathname == "/__cad/recents/thumbnail":
+                    self._handle_library_thumbnail(response, query)
                 elif pathname == "/__cad/artifact":
                     self._handle_artifact_status(request, response, query)
                 elif pathname == "/__cad/preview":
                     from .preview import preview_update
 
                     response.send_json(200, preview_update(
-                        self.backend.root_path, query.get("file") or "", after=query.get("after")
+                        self.backend.root_path, query.get("file") or "", after=query.get("after"), lazy=self.backend.lazy
                     ))
                 elif pathname == "/__cad/drawing":
                     self._handle_drawing(request, response, query)
@@ -469,6 +479,11 @@ class CadApp:
             try:
                 if pathname == "/__cad/artifact":
                     self._handle_artifact_build(request, response, query)
+                elif pathname == "/__cad/recents":
+                    if int(request.headers.get("content-length") or 0) > _LIBRARY_BODY_LIMIT:
+                        response.send_empty(413, [("connection", "close")])
+                        return
+                    self._handle_library_change(request, response)
                 elif pathname == "/__cad/reveal":
                     from .reveal import reveal_path
                     if int(request.headers.get("content-length") or 0) > 8192:
@@ -522,10 +537,85 @@ class CadApp:
         # dispatch ever runs.
         response.send_empty(405, [("allow", "GET, HEAD, POST")])
 
+    # --- the model library -------------------------------------------------
+
+    @property
+    def recents(self):
+        """The one library every CAD view writes (``recents.py``), read lazily."""
+        if self._recents is None:
+            from .recents import RecentStore
+
+            self._recents = RecentStore()
+        return self._recents
+
+    def _library(self) -> dict:
+        """The library as this Viewer shows it: the models its catalog lists, by ``file``."""
+        root = self.backend.root_path
+        models = []
+        for entry in self.recents.list():
+            if not catalog_lists(root, entry.path):
+                continue
+            file = relative_file_ref(root, entry.path)
+            folder = file.rpartition("/")[0]
+            models.append({**entry.public(), "file": file, "folder": f"{self.root_name}/{folder}" if folder else self.root_name})
+        return {"recents": models}
+
+    def _library_path(self, ref) -> str:
+        """The absolute path of a model in this Viewer's catalog, from the ``file`` a page sends."""
+        normalized = normalized_file_ref(ref)
+        if not normalized:
+            raise ValueError("name the model by its file")
+        root = self.backend.root_path
+        path = os.path.abspath(normalized if os.path.isabs(normalized) else os.path.join(root, normalized))
+        if not (path == root or path_is_inside(path, root)):
+            raise ForbiddenAssetError()
+        if not catalog_lists(root, path):
+            raise ValueError("that is not a model this viewer lists")
+        return path
+
+    def _handle_library_change(self, request, response):
+        """Record an open, pin, unpin or remove, or keep a thumbnail; answer the library as it is after."""
+        from .recents import thumbnail_png
+
+        payload = json.loads(request.body())
+        if type(payload) is not dict:
+            raise ValueError("a library change is {action, file}")
+        action, path = payload.get("action"), self._library_path(payload.get("file"))
+        if action == "open":
+            if not os.path.isfile(path):
+                raise ValueError("no such model")
+            self.recents.opened(path)
+        elif action in ("pin", "unpin"):
+            self.recents.pin(path, action == "pin")
+        elif action == "remove":
+            self.recents.remove(path)
+        elif action == "thumbnail":
+            self.recents.thumbnail(path, thumbnail_png(payload.get("png")))
+        else:
+            raise ValueError(f"unknown library action {action!r}")
+        response.send_json(200, self._library())
+
+    def _handle_library_thumbnail(self, response, query):
+        """A thumbnail of a model this Viewer lists; nothing else in the store is its to hand out."""
+        name = str(query.get("name") or "")
+        png = self.recents.read_thumbnail(name) if any(model["thumbnail"] == name for model in self._library()["recents"]) else None
+        if png is None:
+            response.send_json(404, {"error": "Not found"})
+            return
+        response.send_bytes(200, png, "image/png")
+
     # --- placeholders filled by later steps of the port -------------------
 
     def _handle_catalog(self, request, response):
         response.send_json(200, self.read_catalog(request.query.get("file")))
+
+    def _handle_list(self, request, response, query):
+        """One folder of a lazy root, whose catalog holds only the files a view shows."""
+        entries = self.backend.list_directory(query.get("dir") or "")
+        if entries is None:
+            response.send_json(404, {"error": "Not found"})
+            return
+        response.send_json(200, {"entries": entries})
 
     def _entry_ref_for_status(self, file_ref, catalog=None) -> str:
         """The catalog URL for this ref, or ``""``.
@@ -631,7 +721,7 @@ class CadApp:
         """
         from .drawings import drawing_payload_response
 
-        status, body = drawing_payload_response(self.backend.root_path, query.get("file") or "")
+        status, body = drawing_payload_response(self.backend.root_path, query.get("file") or "", lazy=self.backend.lazy)
         if isinstance(body, bytes):
             response.send_bytes(status, body, "application/json; charset=utf-8")
             return
@@ -700,5 +790,5 @@ class CadApp:
         response.send_bytes(200, container, "application/octet-stream")
 
 
-def create_cad_app(*, root: str, host: str, port: int, dist_dir: str = "", scan_depth: int | None = None) -> CadApp:
-    return CadApp(root=root, host=host, port=port, dist_dir=dist_dir, scan_depth=scan_depth)
+def create_cad_app(*, root: str, host: str, port: int, dist_dir: str = "", lazy: bool = False) -> CadApp:
+    return CadApp(root=root, host=host, port=port, dist_dir=dist_dir, lazy=lazy)

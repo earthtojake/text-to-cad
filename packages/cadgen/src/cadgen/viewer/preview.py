@@ -24,34 +24,35 @@ from .build_progress import _daemon_jobs
 from .store_paths import result_snapshot
 
 
-def _preview_target(root_path: str, file_ref: str) -> str:
+def _preview_target(root_path: str, file_ref: str, *, lazy: bool = False) -> str:
     ref = normalized_file_ref(file_ref)
     if not ref or Path(ref).suffix.lower() not in {".step", ".stp"}:
         raise ValueError("An editing preview requires a STEP output path")
     target = os.path.abspath(ref if os.path.isabs(ref) else os.path.join(root_path, ref))
     require_contained(root_path, target)
-    if any(part.startswith(".") for part in Path(os.path.relpath(target, root_path)).parts):
+    # A lazy root (a whole filesystem) serves what it is asked for, as the asset route does.
+    if not lazy and any(part.startswith(".") for part in Path(os.path.relpath(target, root_path)).parts):
         raise ValueError("Hidden output paths are not served")
     return target
 
 
-def preview_update(root_path: str, file_ref: str, *, after: str | None = None) -> dict:
+def preview_update(root_path: str, file_ref: str, *, after: str | None = None, lazy: bool = False) -> dict:
     """Wake for ledger changes; each response still verifies artifact identity."""
-    target = _preview_target(root_path, file_ref)  # refuse invalid paths before waiting
+    target = _preview_target(root_path, file_ref, lazy=lazy)  # refuse invalid paths before waiting
     from cadgen.daemon.client import watch_jobs
 
     update = watch_jobs(after, output=os.path.realpath(target), store_root=os.path.realpath(store_root()))
     if update is None:
-        return preview_status(root_path, file_ref)
-    result = preview_status(root_path, file_ref, jobs=update["jobs"])
+        return preview_status(root_path, file_ref, lazy=lazy)
+    result = preview_status(root_path, file_ref, jobs=update["jobs"], lazy=lazy)
     result["feedCursor"] = update["jobsCursor"]
     if update.get("jobsWatchLimited"):
         result["feedLimited"] = True
     return result
 
 
-def preview_status(root_path: str, file_ref: str, *, jobs: list[dict] | None = None) -> dict:
-    file_path = _preview_target(root_path, file_ref)
+def preview_status(root_path: str, file_ref: str, *, jobs: list[dict] | None = None, lazy: bool = False) -> dict:
+    file_path = _preview_target(root_path, file_ref, lazy=lazy)
     # Match the catalog's root-relative file identity. An absolute path in a
     # provisional entry would be written into ?file= by the selection effect,
     # whose URL normalizer removes its leading slash.

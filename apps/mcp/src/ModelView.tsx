@@ -6,6 +6,7 @@ import { FileViewer } from '@text-to-cad/ui/file-viewer';
 import { EmptyCadBackdrop } from '@text-to-cad/ui/file-viewer/empty';
 import { MissingFileAlert, ViewerLoadingOverlay } from '@text-to-cad/ui/file-viewer/presentation';
 import type { ViewerHost } from '@text-to-cad/ui/host';
+import { useModelThumbnail } from '@text-to-cad/ui/library';
 import { EmptyState } from '@text-to-cad/ui/navigation';
 import { Button } from '@text-to-cad/ui/primitives/button';
 import { createDxfRenderer } from '@text-to-cad/ui/renderers/dxf';
@@ -16,8 +17,8 @@ import { createStepRenderer } from '@text-to-cad/ui/renderers/step';
 import { useTabViewerState, type TabStore } from '@text-to-cad/ui/tab-store';
 import type { Bridge } from './host/bridge';
 import { frameClipboard } from './host/clipboard';
-import { absolutePath, catalogPath, createCatalogSource, createFileActions, relativePath } from './host/files';
-import { scaledPng, type LiveRegistry } from './host/live';
+import { absolutePath, catalogPath, createCatalogSource, createFileActions, createFilesystemSource, relativePath } from './host/files';
+import type { LiveRegistry } from './host/live';
 import { createComposerPromptContext } from './host/prompt';
 import type { Launch, Root, Server } from './host/server';
 import { createTunnelFetch, encodeBase64, TUNNEL_ORIGIN } from './host/tunnel';
@@ -42,13 +43,21 @@ export default function ModelView({ launch, root: launchedRoot, sequence, bridge
 }) {
   // Every launch carries its own root object; the same folder must keep its client and catalog.
   const root = useMemo(() => launchedRoot, [launchedRoot.kind, launchedRoot.path]);
+  const tunnel = useMemo(() => createTunnelFetch(server, root), [server, root]);
   const client = useMemo(() => createCadClient({
-    origin: TUNNEL_ORIGIN, fetch: createTunnelFetch(server, root),
+    origin: TUNNEL_ORIGIN, fetch: tunnel,
     shouldPoll: () => document.visibilityState !== 'hidden',
-  }), [server, root]);
+  }), [tunnel]);
   useEffect(() => () => client.dispose(), [client]);
   const sourceId = `local-fs:${root.path}`;
-  const source = useMemo(() => createCatalogSource(client, root, { id: sourceId, explore: launch.explore }), [client, root, sourceId, launch.explore]);
+  // The file on screen, as the root names it.
+  const [file, setFile] = useState(() => (launch.model && relativePath(root, launch.model)) || '');
+  const showing = useRef(file);
+  showing.current = file;
+  // A project browses its catalog; a filesystem is read a folder at a time.
+  const source = useMemo(() => root.kind === 'global'
+    ? createFilesystemSource(client, root, tunnel, { id: sourceId, explore: launch.explore, showing: () => showing.current || null })
+    : createCatalogSource(client, root, { id: sourceId, explore: launch.explore }), [client, root, tunnel, sourceId, launch.explore]);
   const resolvePath = useCallback((resource: ResourceRef) => {
     if (resource.kind === 'url') return resource.url;
     if (resource.workspaceId !== sourceId) throw new Error('This reference belongs to another folder.');
@@ -69,8 +78,6 @@ export default function ModelView({ launch, root: launchedRoot, sequence, bridge
   const catalog = useSyncExternalStore(client.subscribe, client.getSnapshot, client.getSnapshot);
   const { state, onStateChange, setPanel } = useTabViewerState(tabStore, source.id);
 
-  // The file on screen, as the catalog names it (relative to the root).
-  const [file, setFile] = useState(() => (launch.model && relativePath(root, launch.model)) || '');
   useEffect(() => { setFile((launch.model && relativePath(root, launch.model)) || ''); }, [launch, root, sequence]);
   const model = file ? absolutePath(root, file) : null;
   useEffect(() => { reporter.showing(model, resolvePath); }, [reporter, model, resolvePath]);
@@ -79,14 +86,14 @@ export default function ModelView({ launch, root: launchedRoot, sequence, bridge
     document.addEventListener('visibilitychange', refresh);
     return () => document.removeEventListener('visibilitychange', refresh);
   }, [client]);
-  useThumbnail(server, live, model);
+  useModelThumbnail(live, model, async (png, shown) => server.recents({ action: 'thumbnail', path: shown, png: encodeBase64(new Uint8Array(await png.arrayBuffer())) }));
 
   const open = useCallback((path: string, options?: { panel?: string }) => {
-    const entry = client.getSnapshot().entries.find(candidate => catalogPath(candidate) === path);
-    if (!entry) return;
-    setFile(catalogPath(entry));
+    // A project's files are its catalog's; a filesystem's catalog is only the file on screen.
+    if (root.kind !== 'global' && !client.getSnapshot().entries.some(candidate => catalogPath(candidate) === path)) return;
+    setFile(path);
     setPanel(options?.panel ?? null);
-  }, [client, setPanel]);
+  }, [client, root.kind, setPanel]);
   const host = useMemo<ViewerHost>(() => ({
     files: source, fileActions, clipboard: frameClipboard, promptContext,
     navigation: { openFile: open }, environment: compact ? { colorScheme, platform, compact } : { colorScheme, platform },
@@ -106,29 +113,3 @@ export default function ModelView({ launch, root: launchedRoot, sequence, bridge
       error: () => <div className="relative h-full">{catalog.error ? empty : <EmptyCadBackdrop colorScheme={colorScheme}><MissingFileAlert missingFileRef={file} rootPath={root.path} /></EmptyCadBackdrop>}</div>,
     }} />;
 }
-
-/** Keep a small picture of each model this view shows, for the home page's recents. */
-function useThumbnail(server: Server, live: LiveRegistry, model: string | null) {
-  const taken = useRef(new Set<string>());
-  const controller = useSyncExternalStore(live.subscribe, live.current, live.current);
-  useEffect(() => {
-    if (!controller || !model || taken.current.has(model)) return;
-    let cancelled = false;
-    const attempt = async (tries: number) => {
-      if (cancelled) return;
-      const state = controller.readState();
-      if (state.loading || state.active === false) {
-        if (tries > 0) setTimeout(() => void attempt(tries - 1), 750);
-        return;
-      }
-      taken.current.add(model);
-      try {
-        const png = await scaledPng(await controller.capture(), 360);
-        if (!cancelled) await server.recents({ action: 'thumbnail', path: model, png: encodeBase64(new Uint8Array(await png.arrayBuffer())) });
-      } catch { /* a thumbnail is a nicety */ }
-    };
-    const timer = setTimeout(() => void attempt(40), 1500);
-    return () => { cancelled = true; clearTimeout(timer); };
-  }, [controller, model, server]);
-}
-

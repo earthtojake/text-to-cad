@@ -104,6 +104,13 @@ class EditingPreviewTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 preview_update(str(self.root), ".hidden/new.step", after="epoch:7")
 
+    def test_a_filesystem_root_previews_an_output_under_a_hidden_folder(self):
+        # A lazy root (a whole filesystem, for a model with no project around it) serves what it is
+        # asked for: an agent's worktree under a dot-folder still gets its edits live.
+        hidden = str(self.root / ".worktree" / "new.step")
+        job = {**self.job(previews={hidden: self.preview()[self.output]}), "outputs": [hidden]}
+        self.assertEqual(preview_status(str(self.root), hidden, jobs=[job], lazy=True)["preview"]["tree"], self.tree)
+
     def test_newest_request_wins_even_when_old_one_finishes_later(self):
         jobs = [self.job(1, state="done", updatedAt=1000, previews=self.preview()),
                 self.job(2, updatedAt=999)]

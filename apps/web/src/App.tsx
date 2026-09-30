@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { FileViewer } from '@text-to-cad/ui/file-viewer';
-import type { ViewerHost } from '@text-to-cad/ui/host';
+import { createLiveRegistry, type ViewerHost } from '@text-to-cad/ui/host';
+import { ModelLibrary, useModelThumbnail } from '@text-to-cad/ui/library';
 import { EmptyState } from '@text-to-cad/ui/navigation';
 import { FileText } from 'lucide-react';
 import { createStepRenderer } from '@text-to-cad/ui/renderers/step';
@@ -15,6 +16,7 @@ import { EmptyCadBackdrop } from '@text-to-cad/ui/file-viewer/empty';
 import type { CadServerInfo } from '@text-to-cad/core/client';
 import type { CadClient } from './adapters/fileSource';
 import { createWebFileSource, createWebFileActions } from './adapters/fileSource';
+import { createWebLibrary, recordOpened, recordThumbnail } from './adapters/library';
 import { browserClipboard, browserClipboardSupportsImages } from './host/clipboard';
 import { createWebPromptContext } from './host/promptContext';
 import ViewerAppearance from './client/components/workbench/ViewerAppearance.jsx';
@@ -52,8 +54,10 @@ function RootView({ client, server, tabStore }: { client: CadClient; server: Cad
   const fileActions = useMemo(() => createWebFileActions(client, server, { clipboard: browserClipboard }), [client, server]);
   // Every renderer reads its preferences from the tab's settings.
   const preferences = tabStore.settings;
+  // The view on screen, for the library's pictures of what was opened.
+  const live = useMemo(() => createLiveRegistry(), []);
   // One renderer per file family; each lazy-loads only its own code.
-  const renderers = useMemo(() => [createStepRenderer({ client, preferences }), createDxfRenderer({ client, preferences }), createGlbRenderer({ client, preferences }), createMeshRenderer({ client, preferences }), createRobotRenderer({ client, preferences })], [client, preferences]);
+  const renderers = useMemo(() => [createStepRenderer({ client, preferences, live: live.binding }), createDxfRenderer({ client, preferences, live: live.binding }), createGlbRenderer({ client, preferences, live: live.binding }), createMeshRenderer({ client, preferences, live: live.binding }), createRobotRenderer({ client, preferences, live: live.binding })], [client, preferences, live]);
   const catalog = useSyncExternalStore(client.subscribe, client.getSnapshot, client.getSnapshot);
   const [file, setFile] = useState(() => readCadParam() || readDefaultCadParam() || '');
   const selectedEntry = useMemo(() => findEntryByUrlPath(catalog.entries, file), [catalog.entries, file]);
@@ -84,8 +88,19 @@ function RootView({ client, server, tabStore }: { client: CadClient; server: Cad
     document.title = selectedEntry ? `CAD | ${selectedEntry.file.split(/[\\/]/).pop()}` : 'CAD';
     if (selectedEntry && !readCadParam()) writeCadParam(file, { history: 'replace' });
   }, [file, selectedEntry]);
+  // What is open joins the library every CAD view shares, with a picture once it has drawn.
+  const shownModel = selectedEntry ? normalizeCadFileQueryParam(cadFileParamForEntry(selectedEntry)) : null;
+  useEffect(() => { if (shownModel) void recordOpened(shownModel).catch(() => {}); }, [shownModel]);
+  useModelThumbnail(live, shownModel, (png, shown) => recordThumbnail(shown, png));
   const shownFile = useRef(file);
   shownFile.current = file;
+  /** Show a file by its path, whether or not the catalog has read it yet: the viewer resolves it. */
+  const show = useCallback((next: string) => {
+    if (next === shownFile.current) return;
+    writeCadParam(next, { history: 'push' });
+    setFile(next);
+  }, []);
+  const library = useMemo(() => createWebLibrary({ open: show }), [show]);
   const open = useCallback((path: string, options?: { panel?: string }) => {
     const entry = findEntryByUrlPath(client.getSnapshot().entries, path);
     if (!entry) return;
@@ -108,11 +123,11 @@ function RootView({ client, server, tabStore }: { client: CadClient; server: Cad
   return <div className="flex h-svh flex-col overflow-hidden"><div className="min-h-0 flex-1">
     <FileViewer file={file || null} host={host} renderers={renderers} state={state} onStateChange={onStateChange}
       // The app names itself wherever no crumbs do: no file, or one still resolving.
-      leading={<ViewerBrand />} navigationActions={<ViewerLinks />}
+      leading={<ViewerBrand onHome={file ? () => show('') : undefined} />} navigationActions={<ViewerLinks />}
       displayActions={<ViewerAppearance colorSchemePreference={appearance.preference} resolvedColorSchemeMode={appearance.colorScheme} onColorSchemePreferenceChange={changeColorScheme} />}
       navigationPath={navigationPath}
       onError={error => console.error(error)} presentation={{
-        empty: <div className="relative h-full">{empty}</div>,
+        home: <div className="relative h-full"><ModelLibrary library={library} /></div>,
         loading: <div className="relative h-full"><ViewerLoadingOverlay viewerLoading /></div>,
         error: () => <div className="relative h-full">{catalog.error ? empty : <EmptyCadBackdrop colorScheme={appearance.colorScheme}><MissingFileAlert missingFileRef={file} rootPath={server.rootPath} /></EmptyCadBackdrop>}</div>,
       }} />

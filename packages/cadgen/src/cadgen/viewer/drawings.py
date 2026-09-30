@@ -37,7 +37,7 @@ DRAWING_ROUTE_PATH = "/__cad/drawing"
 DRAWING_SUFFIX = ".dxf"
 
 
-def resolve_drawing_path(root_path: str, file_ref) -> str | None:
+def resolve_drawing_path(root_path: str, file_ref, *, lazy: bool = False) -> str | None:
     """The absolute ``.dxf`` this ref names, or ``None`` for a 404.
 
     Raises ``ValueError`` for a ref this route will not take and
@@ -61,16 +61,17 @@ def resolve_drawing_path(root_path: str, file_ref) -> str | None:
     )
     require_contained(root, candidate)
     relative = path_relative(root, candidate)
-    if any(part and part != ".." and part.startswith(".") for part in relative.split(os.sep)):
+    # A lazy root (a whole filesystem) serves what it is asked for, as the asset route does.
+    if not lazy and any(part and part != ".." and part.startswith(".") for part in relative.split(os.sep)):
         # A hidden root-relative component is not served, and says so as a
         # miss rather than as a refusal — the same shape the asset route uses.
         return None
     return candidate if os.path.isfile(candidate) else None
 
 
-def drawing_payload_response(root_path: str, file_ref) -> tuple[int, bytes | dict]:
+def drawing_payload_response(root_path: str, file_ref, *, lazy: bool = False) -> tuple[int, bytes | dict]:
     """``(status, body)``: the payload's bytes at 200, or a JSON error dict."""
-    candidate = resolve_drawing_path(root_path, file_ref)
+    candidate = resolve_drawing_path(root_path, file_ref, lazy=lazy)
     if candidate is None:
         return 404, {"error": "Not found"}
     from cadgen.drawing_payload import drawing_payload_bytes

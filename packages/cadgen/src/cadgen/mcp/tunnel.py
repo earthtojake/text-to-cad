@@ -19,13 +19,14 @@ from typing import Any
 from cadgen.viewer import url_norm
 from cadgen.viewer.response import Request, Response
 
-from .roots import Root
+from .roots import GLOBAL, Root
 
 MAX_REQUEST_BODY_BYTES = 256 * 1024 * 1024
 _ALLOWED_METHODS = frozenset({"GET", "HEAD", "POST"})
 _API_PREFIXES = ("/__cad/", "/__tess_cache")
-# Routes whose effects belong to a host (the web app's reveal and clipboard).
-_HOST_EFFECT_ROUTES = frozenset({"/__cad/reveal", "/__cad/clipboard"})
+# Routes whose effects belong to a host: the web app's reveal and clipboard, and its model library
+# (a view here reaches the library through cad_recents).
+_HOST_EFFECT_ROUTES = frozenset({"/__cad/reveal", "/__cad/clipboard", "/__cad/recents", "/__cad/recents/thumbnail"})
 
 
 class _CapturedHandler:
@@ -74,7 +75,7 @@ class ViewerTunnel:
                 return app
         from cadgen.viewer.http_app import create_cad_app
 
-        created = create_cad_app(root=root.path, host="127.0.0.1", port=0, scan_depth=root.depth)
+        created = create_cad_app(root=root.path, host="127.0.0.1", port=0, lazy=root.kind == GLOBAL)
         with self._lock:
             app = self._apps.setdefault(root.key, created)
             self._apps.move_to_end(root.key)

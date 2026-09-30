@@ -1,15 +1,19 @@
-"""Recently opened models, shared by every server process of every version.
+"""Recently opened models: one library for everywhere a person opens models.
+
+Every CAD view writes here -- the MCP app's views and every CAD Viewer -- and
+each shows what it can open: the MCP app all of it, a Viewer the models under
+the folder it serves.
 
 The store is an append-only log of events -- ``open``, ``pin``, ``unpin``,
 ``remove``, ``thumb`` -- folded into a list on read. It is user state, not a
 derived artifact, so it lives in the state directory and never in the cadgen
 cache (the cache holds only what file bytes imply).
 
-Several processes append at once: one per thread, and after an update, old and
-new versions side by side. So each write appends one line under an exclusive
-lock, readers skip lines they cannot parse and events they do not know, and
-compaction writes a new file and renames it into place under the same lock.
-Nothing is ever migrated in place.
+Several processes append at once: an MCP server per thread, a Viewer per folder,
+and after an update, old and new versions side by side. So each write appends
+one line under an exclusive lock, readers skip lines they cannot parse and events
+they do not know, and compaction writes a new file and renames it into place
+under the same lock. Nothing is ever migrated in place.
 """
 
 from __future__ import annotations
@@ -29,6 +33,21 @@ from cadgen._internal.atomic_replace import write_bytes_atomic
 SCHEMA = 1
 LIMIT = 200
 COMPACT_AFTER = 2000
+MAX_THUMBNAIL_BYTES = 512 * 1024
+
+
+def thumbnail_png(encoded) -> bytes:
+    """A thumbnail as a view sends it, base64; ``ValueError`` for anything but a small PNG."""
+    import base64
+    import binascii
+
+    try:
+        png = base64.b64decode(encoded or "", validate=True)
+    except (ValueError, binascii.Error) as error:
+        raise ValueError("the thumbnail is not base64") from error
+    if not png.startswith(b"\x89PNG") or len(png) > MAX_THUMBNAIL_BYTES:
+        raise ValueError("a thumbnail is a PNG of at most 512 KiB")
+    return png
 
 
 def state_dir() -> Path:
@@ -65,7 +84,7 @@ class Recent:
 
 class RecentStore:
     def __init__(self, root: Path | None = None) -> None:
-        self.root = (root or state_dir()) / "mcp"
+        self.root = (root or state_dir()) / "recents"
         self.log = self.root / "recents.jsonl"
         self.thumbnails = self.root / "thumbnails"
 
@@ -123,7 +142,7 @@ class RecentStore:
 
     def _events(self) -> Iterator[dict[str, Any]]:
         try:
-            lines = self.log.read_text(encoding="utf-8").splitlines()
+            lines = self.log.read_text(encoding="utf-8", errors="replace").splitlines()
         except OSError:
             return
         for line in lines:
@@ -146,7 +165,7 @@ class RecentStore:
 
     def _compact_if_long(self) -> None:
         try:
-            with open(self.log, encoding="utf-8") as handle:
+            with open(self.log, encoding="utf-8", errors="replace") as handle:
                 count = sum(1 for _ in handle)
         except OSError:
             return

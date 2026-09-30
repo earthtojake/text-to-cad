@@ -51,6 +51,13 @@ test('web host preserves compact navigation, history, root state and focus refre
   window.innerWidth = 480;
   const calls = [];
   const serverCalls = [];
+  // The library every CAD view shares, reached over this Viewer's routes.
+  const libraryCalls = [];
+  const fetchBefore = globalThis.fetch;
+  globalThis.fetch = async (url, init = {}) => {
+    libraryCalls.push([url, init.body ? JSON.parse(init.body) : null]);
+    return new Response(JSON.stringify({ recents: [] }), { headers: { 'content-type': 'application/json' } });
+  };
   const listeners = new Set();
   let catalog = { entries: [], hydrated: false, refreshing: true, error: '', revision: 0, rootId: 'a' };
   const client = { serverInfo: async options => { serverCalls.push(options); return { identityToken: "restarted" }; }, getSnapshot: () => catalog, subscribe: listener => { listeners.add(listener); return () => listeners.delete(listener); }, refresh: async options => { calls.push(options); return { entries: catalog.entries }; } };
@@ -89,6 +96,8 @@ test('web host preserves compact navigation, history, root state and focus refre
     });
     assert.equal(snapshot().navigationPath, 'one.step');
     assert.equal(snapshot().leading.props.title, undefined);
+    // The file on screen joins the library, once the catalog has it.
+    assert.deepEqual(libraryCalls, [['/__cad/recents', { action: 'open', file: 'one.step' }]]);
     // A page load is a file opened directly, so it opens on that file's own default panel
     // (`null`) — a narrow window included — and never on one a previous page left open.
     assert.equal(snapshot().state.panel, null);
@@ -132,11 +141,24 @@ test('web host preserves compact navigation, history, root state and focus refre
     assert.equal(snapshot().file, 'folder/missing.step');
     assert.equal(snapshot().navigationPath, 'folder/missing.step', 'a missing file, nested or not, keeps its crumbs once the catalog has answered');
     assert.equal(snapshot().leading.props.title, undefined);
-    // With no file open, the brand mark remains without placeholder text.
+    // With a file open, the brand mark is the way home: the library, where no file is.
+    const beforeHome = window.history.length;
+    await act(() => snapshot().leading.props.onHome());
+    assert.ok(!snapshot().file);
+    assert.equal(new URL(window.location.href).searchParams.get('file'), null);
+    assert.equal(window.history.length, beforeHome + 1);
+    // With no file open, the brand mark remains without placeholder text, and leads nowhere.
     await act(() => { window.history.replaceState({}, '', '/'); window.dispatchEvent(new window.PopStateEvent('popstate')); });
     assert.ok(!snapshot().file);
     assert.equal(snapshot().leading.props.title, undefined);
+    assert.equal(snapshot().leading.props.onHome, undefined);
     assert.equal(window.document.title, 'CAD');
+    // Its models open in place, beside the files: there is no chooser to pick one from disk.
+    const library = snapshot().presentation.home.props.children.props.library;
+    assert.equal(library.pick, undefined);
+    await act(() => library.open({ file: 'folder/two.step' }));
+    assert.equal(snapshot().file, 'folder/two.step');
+    assert.equal(new URL(window.location.href).searchParams.get('file'), 'folder/two.step');
     await act(() => { window.history.replaceState({}, '', '?file=one.step'); window.dispatchEvent(new window.PopStateEvent('popstate')); });
     await act(() => window.dispatchEvent(new window.Event('focus')));
     assert.equal(calls.length, 1);
@@ -162,6 +184,7 @@ test('web host preserves compact navigation, history, root state and focus refre
     assert.deepEqual([snapshot().state.panelWidth, snapshot().state.expandedDirectories, snapshot().state.renderers], [300, [], {}]);
     assert.equal(calls[0].signal.aborted, true);
   } finally {
+    globalThis.fetch = fetchBefore;
     await act(() => root.unmount());
     window.dispatchEvent(new window.Event('focus'));
     assert.equal(calls.length, 2);

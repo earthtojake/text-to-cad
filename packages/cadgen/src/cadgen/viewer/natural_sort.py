@@ -54,6 +54,7 @@ surfaces; record it here rather than loosening the assertion.
 from __future__ import annotations
 
 import bisect
+import functools
 import json
 import threading
 import unicodedata
@@ -150,10 +151,18 @@ def collation_key(value: str) -> list[tuple[int, int]]:
     Equal-comparing strings produce EQUAL keys, which matters as much as the
     order: the catalog sort is stable and ``sensitivity: "base"`` produces a lot
     of ties, so tied entries must keep their directory-walk order.
+
+    Remembered per string: the catalog is re-sorted on every poll, and the table
+    walk was the largest part of an unchanged poll.
     """
+    return list(_collation_key(str(value or "")))
+
+
+@functools.lru_cache(maxsize=65536)
+def _collation_key(value: str) -> tuple[tuple[int, int], ...]:
     table = _table()
     atoms: list[str] = []
-    for char in unicodedata.normalize("NFD", str(value or "")):
+    for char in unicodedata.normalize("NFD", value):
         expansion = table.expansions.get(char)
         if expansion is None:
             atoms.append(char)
@@ -206,7 +215,7 @@ def collation_key(value: str) -> list[tuple[int, int]]:
         else:
             tokens.append((bucket, -1))
             index += 1
-    return tokens
+    return tuple(tokens)
 
 
 def sort_catalog_entries(entries):

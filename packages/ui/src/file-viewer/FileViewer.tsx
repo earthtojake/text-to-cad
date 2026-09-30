@@ -63,7 +63,9 @@ export function FileViewer({ file, host, renderers, state, onStateChange, leadin
   const onReady = useCallback((ready: boolean) => { if (currentKey.current === key) setReadiness((previous) => previous?.key === key && previous.ready === ready ? previous : { key, ready }); }, [key]);
   const ready = loaded.status === "ready" && (readiness?.key === key ? readiness.ready : true);
   const declared = (open: string) => loaded.status === "ready" ? loaded.prepared.panels?.({ open, ready, file: loaded.file }) ?? [] : [];
-  const panelsAt = (open: string) => [...declared(open), ...(source.list ? [treePanel(open, { empty: loaded.status === "empty" })] : [])];
+  // The tree is what an empty tab opens on, unless a phone's sheet of it would cover the host's home.
+  const treeFirst = loaded.status === "empty" && !(mobile && presentation?.home);
+  const panelsAt = (open: string) => [...declared(open), ...(source.list ? [treePanel(open, { empty: treeFirst })] : [])];
   const requestedPanel = mobile ? mobilePanel ?? (loaded.status === "empty" ? null : "") : state.panel;
   const openId = resolveOpenPanel(panelsAt(requestedPanel ?? ""), requestedPanel)?.id ?? "";
   const panels = panelsAt(openId);
@@ -102,7 +104,7 @@ export function FileViewer({ file, host, renderers, state, onStateChange, leadin
     onNavigationActionsChange, openFromRenderer, appearance, rendererState, setRendererState, reload]);
 
   let body: ReactNode;
-  if (loaded.status === "empty") body = presentation?.empty ?? <EmptyState icon={FileText} title="No file open" description={source.list ? "Pick one from the tree on the right, or filter by name." : "Choose a file to open."} />;
+  if (loaded.status === "empty") body = presentation?.home ?? presentation?.empty ?? <EmptyState icon={FileText} title="No file open" description={source.list ? "Pick one from the tree on the right, or filter by name." : "Choose a file to open."} />;
   else if (loaded.status === "loading") body = presentation?.loading ?? <div className="flex h-full items-center justify-center gap-2 text-xs text-muted-foreground" role="status"><Spinner className="size-3.5" />Opening…</div>;
   else if (loaded.status === "error") body = presentation?.error?.(loaded.message) ?? <EmptyState icon={FileText} title="Could not open that file" description={loaded.message} tone="warn" />;
   else body = rendererBody;

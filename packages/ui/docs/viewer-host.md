@@ -45,6 +45,8 @@ are for reading and maintaining the contracts.
 | `MeshRendererOptions` (STL, 3MF), `LiveViewBinding`, `LiveViewController` | [Mesh registration](../src/renderers/mesh/index.ts) | `@text-to-cad/ui/renderers/mesh` |
 | `RobotRendererOptions` (URDF, SRDF, SDF), `RobotLiveController`, `RobotLiveState` (`selectedLinks`, `selectedPartIds`) | [Robot registration](../src/renderers/robot/index.ts) | `@text-to-cad/ui/renderers/robot` |
 | `ViewerCommands`, `ViewerCommandSource` (the host requests every viewer renderer takes) | [Viewer commands](../src/renderers/workspace/commands.ts) | `@text-to-cad/ui/renderers/workspace` |
+| `createLiveRegistry`, `LiveRegistry` (the host's handle on the mounted view: its renderers' `live`) | [Live registry](../src/host/liveRegistry.ts) | `@text-to-cad/ui/host` |
+| `ModelLibrary`, `ModelLibrarySource`, `useModelThumbnail` (a host's home: the models opened before; `pick` only where the host has a file chooser) | [Model library](../src/library/ModelLibrary.tsx), [thumbnails](../src/library/thumbnails.ts) | `@text-to-cad/ui/library` |
 
 Start with the actual composition in [web App](../../../apps/web/src/App.tsx).
 Its imports lead to the app-owned `host/`, `adapters/` and persistence
@@ -324,6 +326,12 @@ copy follow the same path. Double-clicking a component or subassembly isolates
 it instead; only non-isolatable topology references use double-click copying. Camera snapshots retain the host's existing prompt
 routing. The host supplies `environment.platform` for the ⌘C / Ctrl+C hint;
 the web host derives that field from its browser environment.
+
+The bottom action and the playback bars centre on one line, `3.5rem` above the
+viewport's bottom edge. A host whose own control floats over that edge (a chat's
+composer) sets `--cad-viewport-bottom-center` on an ancestor to put the line on
+its control's; it is a length, like any design token, and says nothing about
+which host it is.
 
 A renderer's update status is its own: the CAD renderers show it centred at the
 top of the viewport, level with the tool strip. The host's nav row carries none,

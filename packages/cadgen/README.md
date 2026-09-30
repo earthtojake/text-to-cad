@@ -358,14 +358,15 @@ src/cadgen/
                          #   cli_from_function, doors (documents by bytes),
                          #   source_sidecar, step_assemble/step_reemit
   viewer/                # the CAD Viewer's server: launcher (main),
-                         #   routes (http_app), catalog (scanner), status
+                         #   routes (http_app), catalog (scanner), the model
+                         #   library every CAD view shares (recents), status
                          #   (artifact_status: not compiled / compiling /
                          #   compiled / failed), build_progress (the daemon's
                          #   job ledger, read over its socket)
   mcp/                   # CAD for agent hosts: stdio JSON-RPC (protocol), the
                          #   tools and launches (server), open views (views),
                          #   the viewer routes in-process (tunnel), roots,
-                         #   recents, the page (ui), and the CAD Viewer link for
+                         #   the page (ui), and the CAD Viewer link for
                          #   a host that renders no MCP Apps (browser)
   _runtime/              # BUILT JS (browser snapshot renderer, node
                          #   builders, the viewer client, the MCP app page)

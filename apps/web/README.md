@@ -33,7 +33,7 @@ this app. The Python wheel consumes only the production build.
 src/
   App.tsx               FileViewer browser host and renderer registration
   main.tsx              host/client bootstrap and cleanup
-  adapters/             read-only catalog file source and capabilities
+  adapters/             read-only catalog file source and capabilities, the model library
   host/                 browser clipboard, prompt delivery and development auto-reload
   persistence/          root-scoped view state and the orbit preference store
   client/               navigation branding, release menu, appearance and styling
@@ -287,6 +287,17 @@ writes. Clipboard operations, prompt delivery and development reload live
 under `src/host`; shared UI receives their explicit ports. The browser file source
 exposes no general write operations.
 
+### Home
+
+With no file open, the Viewer shows its Home: the model library every CAD view
+shares (`@text-to-cad/ui/library`, the page the MCP app shows too), limited to
+the models under the folder this Viewer serves: pinned and recent, with
+pictures, searchable. Opening one shows it in place. There is no Open Model:
+the files are in the tree beside it. The file on screen joins the library, with
+a picture once it has drawn, through `GET|POST /__cad/recents` and
+`GET /__cad/recents/thumbnail`; `cadgen.viewer.recents` keeps it in the user's
+state directory, shared with every other Viewer and the MCP app.
+
 ### File storage and host actions
 
 The web `FileSource` is a read-only CAD catalog. It exposes stat, directory
@@ -313,7 +324,8 @@ and web stay consistent without host-specific copies of those controls.
 ### Compact navigation
 
 The web viewer has one navigation row. The shaded blue C mark (20px) sits before
-breadcrumbs, including while loading or with no file open. Browser titles use
+breadcrumbs, including while loading or with no file open; with a file open, it
+leads Home. Browser titles use
 "CAD | <filename>", or "CAD" when no file is selected. At the right
 end, the version/update dropdown comes first, then the renderer's snapshot action,
 and Show files. The dropdown contains release

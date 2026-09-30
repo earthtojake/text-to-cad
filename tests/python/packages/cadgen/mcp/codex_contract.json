@@ -43,9 +43,9 @@
      "page": "viewer",
      "protocol": 1,
      "root": {
-      "kind": "folder",
-      "name": "parts",
-      "path": "<tmp>/project/parts"
+      "kind": "global",
+      "name": "/",
+      "path": "/"
      },
      "surface": "file"
     }
@@ -81,6 +81,22 @@
       "kind": "workspace",
       "name": "project",
       "path": "<tmp>/project"
+     }
+    }
+   }
+  },
+  "cad_launch_elsewhere": {
+   "content": [],
+   "structuredContent": {
+    "launch": {
+     "explore": true,
+     "model": "<tmp>/downloads/loose.stl",
+     "page": "viewer",
+     "protocol": 1,
+     "root": {
+      "kind": "global",
+      "name": "/",
+      "path": "/"
      }
     }
    }
@@ -722,7 +738,7 @@
        "kind": {
         "enum": [
          "workspace",
-         "folder"
+         "global"
         ],
         "type": "string"
        },

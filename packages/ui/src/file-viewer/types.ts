@@ -169,5 +169,15 @@ export interface FileViewerProps {
   navigationPath?: string | null;
   reveal?: { path: string; directory: boolean; nonce?: number } | null;
   onError?: (error: Error) => void;
-  presentation?: { empty?: ReactNode; loading?: ReactNode; error?: (message: string) => ReactNode };
+  presentation?: {
+    empty?: ReactNode;
+    /**
+     * A host's home, shown for a tab with no file in place of `empty`: a page of its own, not a
+     * pointer to the files. So on a phone, where the file tree is a sheet over the body, the tab
+     * opens on the home rather than under the tree.
+     */
+    home?: ReactNode;
+    loading?: ReactNode;
+    error?: (message: string) => ReactNode;
+  };
 }

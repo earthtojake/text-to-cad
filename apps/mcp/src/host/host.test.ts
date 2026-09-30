@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createPromptContext, referencePart } from '@text-to-cad/core/prompt';
 import { createBridge, type ToolResult } from './bridge';
 import { watchViewEvents } from './events';
+import { createFilesystemSource } from './files';
 import { createComposerPromptContext } from './prompt';
 import { createServer, type ViewEvent } from './server';
 import { createTunnelFetch, decodeBase64, encodeBase64, TUNNEL_ORIGIN } from './tunnel';
@@ -126,6 +127,34 @@ describe('the fetch tunnel', () => {
   it('turns a failed call into the TypeError fetch throws', async () => {
     const tunnel = createTunnelFetch(createServer({ callTool: async () => ({ isError: true, content: [{ type: 'text', text: 'not this thread' }] }) }), { kind: 'workspace', path: '/p' });
     await expect(tunnel(`${TUNNEL_ORIGIN}/__cad/catalog`)).rejects.toThrow(TypeError);
+  });
+});
+
+describe('a filesystem, a folder at a time', () => {
+  it('reads a folder through the tunnel, keeps the way to the open file, and ignores the file on screen changing', async () => {
+    const asked: string[] = [];
+    const fetchFolder = (async (input: RequestInfo | URL) => {
+      asked.push(String(input));
+      return new Response(JSON.stringify({ entries: [{ name: 'b.stl', kind: 'file', path: 'Users/me/b.stl' }, { name: 'parts', kind: 'directory', path: 'Users/me/parts' }] }), { headers: { 'content-type': 'application/json' } });
+    }) as typeof fetch;
+    let entries: any[] = [{ file: '/Users/me/.work/a.step', rootRelativeFile: 'Users/me/.work/a.step', hash: '1' }];
+    const listeners = new Set<() => void>();
+    const changed = () => { for (const listener of [...listeners]) listener(); };
+    const client = { getSnapshot: () => ({ entries, hydrated: true }), subscribe: (listener: () => void) => { listeners.add(listener); return () => listeners.delete(listener); } } as any;
+    const source = createFilesystemSource(client, { kind: 'global', path: '/', name: '/' }, fetchFolder, { id: 'fs', explore: true, showing: () => 'Users/me/.work/a.step' });
+    const signal = new AbortController().signal;
+    const listed = await source.list!('Users/me', { signal });
+    expect(asked).toEqual([`${TUNNEL_ORIGIN}/__cad/list?dir=Users%2Fme`]);
+    // The hidden folder the open file is in, which no listing shows, is on the way to it.
+    expect(listed.map(entry => [entry.path, entry.kind])).toEqual([['Users/me/.work', 'directory'], ['Users/me/parts', 'directory'], ['Users/me/b.stl', 'file']]);
+    expect(await source.paths!({ signal })).toEqual(['Users/me/b.stl']);
+    const seen: unknown[] = [];
+    source.subscribe!(change => seen.push(change.changes));
+    entries = [{ ...entries[0], hash: '2' }];
+    changed();
+    entries = [{ file: '/Users/me/b.stl', rootRelativeFile: 'Users/me/b.stl', hash: '1' }];
+    changed();
+    expect(seen).toEqual([[{ kind: 'content', path: 'Users/me/.work/a.step', revision: expect.any(String) }]]);
   });
 });
 

@@ -33,3 +33,17 @@ it('draws the nav row only when it has something to hold', async () => {
   await screen.findByText('shown');
   expect(screen.getByRole('button', { name: 'Browse a.step' })).toBeTruthy();
 });
+
+it('opens a phone-sized tab with no file on the host\'s home, not under the sheet of its tree', async () => {
+  vi.spyOn(Element.prototype, 'getBoundingClientRect').mockReturnValue({ width: 400, height: 600 } as DOMRect);
+  const browsing = { ...host, files: { ...host.files, list: async () => [] } };
+  const empty = (presentation: object) =>
+    render(<FileViewer file={null} host={browsing as any} renderers={[renderer]} state={{ panel: null }} onStateChange={() => {}} presentation={presentation} />);
+  empty({ home: <p>home</p> });
+  expect(await screen.findByText('home')).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Show files' })).toBeTruthy();
+  cleanup();
+  // With nothing of its own there, the tree is all there is to reach for.
+  empty({ empty: <p>nothing open</p> });
+  expect(await screen.findByRole('button', { name: 'Hide files' })).toBeTruthy();
+});

@@ -16,7 +16,7 @@ import unittest
 from pathlib import Path
 
 from cadgen.mcp.protocol import RequestContext
-from cadgen.mcp.recents import RecentStore
+from cadgen.viewer.recents import RecentStore
 from cadgen.mcp.server import Server
 from cadgen.mcp.ui import AppPage
 
@@ -40,6 +40,8 @@ def converse(tmp: Path) -> dict:
     workspace = tmp / "project"
     (workspace / "parts").mkdir(parents=True)
     (workspace / "parts" / "bracket.stl").write_bytes(STL)
+    (tmp / "downloads").mkdir()
+    (tmp / "downloads" / "loose.stl").write_bytes(STL)
     page = tmp / "app"
     page.mkdir()
     (page / "index.html").write_text("<!doctype html><head><title>CAD</title></head>", encoding="utf-8")
@@ -65,6 +67,8 @@ def converse(tmp: Path) -> dict:
             "cad_file": call("cad_file", {"file": {"name": "bracket.stl", "resourceUri": "x"}},
                              {"openai/resource": {"path": str(workspace / "parts" / "bracket.stl")}}),
             "cad_launch": call("cad_launch", {"model": "parts/bracket.stl"}),
+            # A model with no project around it (the sidebar's Open Model): its filesystem's explorer.
+            "cad_launch_elsewhere": call("cad_launch", {"model": str(tmp / "downloads" / "loose.stl")}),
             "cad_show": call("cad_show", {"path": "parts/bracket.stl"}),
             "cad_view": call("cad_view"),
             "cad_screenshot": call("cad_screenshot"),

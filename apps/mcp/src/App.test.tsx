@@ -43,9 +43,11 @@ it('a tab host gets the page it always had, down to its bottom: no card to size,
   await screen.findByRole('button', { name: /Open Model/ });
   expect(screen.queryByRole('button', { name: 'Full size' })).toBeNull();
   expect(sized(bridge.notify)).toEqual([]);
-  // The host's composer floats clear of the viewer's centred bottom action: no strip is kept for it.
+  // The host's composer floats over the page's bottom: no strip is kept for it, and the viewer's
+  // bottom action sits on the composer's line.
   const frame = container.firstElementChild as HTMLElement;
   expect([frame.style.paddingTop, frame.style.paddingBottom]).toEqual(['4px', '0px']);
+  expect(frame.style.getPropertyValue('--cad-viewport-bottom-center')).toBe('42px');
 });
 
 it('an inline host gets a card of a height it is told, which goes full size in place', async () => {
@@ -58,14 +60,16 @@ it('an inline host gets a card of a height it is told, which goes full size in p
   expect(bridge.request).toHaveBeenCalledWith('ui/request-display-mode', { mode: 'fullscreen' });
   act(() => bridge.change({ displayMode: 'fullscreen', safeAreaInsets: { bottom: 72 } }));
   expect(screen.queryByRole('button', { name: 'Full size' })).toBeNull();
-  // Full size, the host's composer lies across the bottom: the view keeps clear of it.
+  // Full size, the host's composer lies across the bottom: the view keeps clear of it, and its
+  // bottom action keeps its own line.
   expect((container.firstElementChild as HTMLElement).style.paddingBottom).toBe('72px');
+  expect((container.firstElementChild as HTMLElement).style.getPropertyValue('--cad-viewport-bottom-center')).toBe('');
   // Full size keeps what was on the card: the same page, not a new one.
   expect(screen.getByRole('button', { name: /Open Model/ })).toBe(openModel);
 });
 
 it('Add To Prompt reaches a tab host\'s composer always, and an inline host\'s only when it takes model context', () => {
-  const model: Launch = { protocol: 1, page: 'viewer', model: '/work/part.stl', root: { kind: 'folder', path: '/work', name: 'work' }, explore: false };
+  const model: Launch = { protocol: 1, page: 'viewer', model: '/work/part.stl', root: { kind: 'global', path: '/', name: '/' }, explore: false };
   const destination = (presentation: 'tabs' | 'inline', capabilities: Record<string, unknown>) => {
     const { bridge, server } = host({ displayMode: presentation === 'tabs' ? 'fullscreen' : 'inline' }, capabilities);
     render(<App bridge={bridge as any} server={server as any} presentation={presentation} session={session} launch={model} />);

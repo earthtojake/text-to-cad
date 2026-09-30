@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react';
 import { FolderX, Maximize2 } from 'lucide-react';
 import type { ResourceRef } from '@text-to-cad/core/prompt';
 import { EmptyState } from '@text-to-cad/ui/navigation';
@@ -24,6 +24,10 @@ export function useHostContext(bridge: Pick<Bridge, 'hostContext' | 'onHostConte
   return useSyncExternalStore(listener => bridge.onHostContext(listener), () => bridge.hostContext, () => bridge.hostContext);
 }
 
+// A tab host's composer floats over the bottom of the page, its middle this far above the edge: the
+// viewer's bottom action and playback bars sit on that same line (Codex: a 47px box, 19px up).
+const TAB_BOTTOM_CENTER = '42px';
+
 // Inline, a view is a card in the chat: as tall as its width suits, within what the host allows.
 const INLINE_ASPECT = 0.62, INLINE_MIN_HEIGHT = 320, INLINE_MAX_HEIGHT = 560;
 export function inlineHeight(width: number, maxHeight?: number): number {
@@ -36,7 +40,7 @@ export function inlineHeight(width: number, maxHeight?: number): number {
  * told, with a way to full size. The one element either way, so going full size keeps the view (and
  * its model) as it is.
  */
-function Frame({ bridge, context, insets, inline = false, expandable = true, children }: { bridge: Bridge; context: HostContext; insets: NonNullable<HostContext['safeAreaInsets']>; inline?: boolean; expandable?: boolean; children: ReactNode }) {
+function Frame({ bridge, context, insets, inline = false, expandable = true, bottomCenter, children }: { bridge: Bridge; context: HostContext; insets: NonNullable<HostContext['safeAreaInsets']>; inline?: boolean; expandable?: boolean; bottomCenter?: string; children: ReactNode }) {
   const [width, setWidth] = useState(() => window.innerWidth);
   useEffect(() => {
     if (!inline) return;
@@ -47,7 +51,7 @@ function Frame({ bridge, context, insets, inline = false, expandable = true, chi
   const height = inlineHeight(width, context.containerDimensions?.maxHeight);
   useEffect(() => { if (inline) bridge.notify('ui/notifications/size-changed', { height }); }, [bridge, inline, height]);
   if (!inline) {
-    return <div className="flex h-svh flex-col overflow-hidden" style={{ paddingTop: insets.top || 0, paddingRight: insets.right || 0, paddingBottom: insets.bottom || 0, paddingLeft: insets.left || 0 }}>
+    return <div className="flex h-svh flex-col overflow-hidden" style={{ paddingTop: insets.top || 0, paddingRight: insets.right || 0, paddingBottom: insets.bottom || 0, paddingLeft: insets.left || 0, ...(bottomCenter ? { '--cad-viewport-bottom-center': bottomCenter } as CSSProperties : {}) }}>
       <div className="relative min-h-0 flex-1">{children}</div>
     </div>;
   }
@@ -89,6 +93,7 @@ export default function App({ bridge, server, launch: initial, session, presenta
   // across the bottom of a full-size view, so that view keeps clear of it.
   const insets = presentation === 'inline' ? context.safeAreaInsets || {} : { ...context.safeAreaInsets, bottom: 0 };
   const composer = reachesComposer(bridge.hostCapabilities, presentation);
+  const bottomCenter = presentation === 'tabs' ? TAB_BOTTOM_CENTER : undefined;
   // Once a newer view of this chat is up: this one's last frame (or null), and nothing else.
   const [still, setStill] = useState<string | null | undefined>(undefined);
   const superseded = still !== undefined;
@@ -143,20 +148,20 @@ export default function App({ bridge, server, launch: initial, session, presenta
   const home = initial.page === 'home' ? initial : null;
   const { launch } = showing;
   if (superseded) {
-    return <Frame bridge={bridge} context={context} insets={insets} inline={inline} expandable={false}><Superseded still={still} /></Frame>;
+    return <Frame bridge={bridge} context={context} insets={insets} inline={inline} bottomCenter={bottomCenter} expandable={false}><Superseded still={still} /></Frame>;
   }
   if (launch.page === 'home') {
-    return <Frame bridge={bridge} context={context} insets={insets} inline={inline}>
+    return <Frame bridge={bridge} context={context} insets={insets} inline={inline} bottomCenter={bottomCenter}>
       <Home server={server} onOpen={next => setShowing(previous => ({ launch: next, sequence: previous.sequence + 1, fromHome: true }))}
         onOpenLink={url => bridge.request('ui/open-link', { url }).then(() => {})} />
     </Frame>;
   }
   if (!launch.root) {
-    return <Frame bridge={bridge} context={context} insets={insets} inline={inline}>
+    return <Frame bridge={bridge} context={context} insets={insets} inline={inline} bottomCenter={bottomCenter}>
       <EmptyState icon={FolderX} title="No model open" description="This chat has no project folder. Ask the agent to show a model by its path." />
     </Frame>;
   }
-  return <Frame bridge={bridge} context={context} insets={insets} inline={inline}>
+  return <Frame bridge={bridge} context={context} insets={insets} inline={inline} bottomCenter={bottomCenter}>
     <ModelView key={rootKey(launch.root)} launch={launch} root={launch.root} sequence={showing.sequence} bridge={bridge} server={server}
       tabStore={tabStore} live={live} colorScheme={colorScheme} platform={session.platform} reporter={reporter} compact={inline} composer={composer}
       onHome={home && showing.fromHome ? () => setShowing(previous => ({ launch: home, sequence: previous.sequence + 1, fromHome: false })) : undefined} />

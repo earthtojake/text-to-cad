@@ -93,7 +93,10 @@ its nav-row actions (`FileNavigationAction`, with an optional shorter `hint`);
 Its loading and update status are its own to show: a CAD renderer shows them in
 its viewport. Host-specific empty,
 loading, and error artwork can be supplied through `presentation`, without
-duplicating the tab's placement. Per-file renderer state is also accepted during
+duplicating the tab's placement. `presentation.home` is a host's own page for a
+tab with no file (the web Viewer's model library) in place of `empty`: an empty
+tab opens on its file tree because the tree is all there is to reach for, but not
+over a home on a phone, where the tree is a sheet that would cover it. Per-file renderer state is also accepted during
 a departing renderer's cleanup, while it still belongs to the same root.
 `navigationPath` can keep navigation unselected while a requested file is still
 being resolved by a host catalog. It does not change the requested document.

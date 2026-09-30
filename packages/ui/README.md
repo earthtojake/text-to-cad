@@ -77,6 +77,7 @@ src/
   drawing/           reusable Excalidraw editor; desktop scratch drawing host
   file-viewer/       FileViewer, typed source/renderer contracts, lifecycle hooks
     navigation/     breadcrumbs, file tree, entry menus and panel frame
+  library/           a host's home: the models opened before, to open again
   renderers/
     kit/            the frame every viewer file shares: viewport, tools, panels, Display settings, status
     step/           STEP: Features tree, Position, routines, feature recognition

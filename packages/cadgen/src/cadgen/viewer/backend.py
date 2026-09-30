@@ -14,7 +14,8 @@ DIFFERENT statuses: a path outside the root RAISES (403 Forbidden), while a
 path inside it with a hidden root-relative component returns ``True`` and the
 caller answers ``None`` (404 Not found). Only ROOT-RELATIVE components are
 dot-checked, so a served root that itself lives under a hidden absolute path
-still serves.
+still serves. A lazy backend -- a whole filesystem, which serves the files it
+is asked for rather than a directory's contents -- checks no components.
 
 The ordering of those checks decides the status code and is part of the
 contract: the served-extension filter runs BEFORE the containment raise, so
@@ -42,13 +43,14 @@ from .content_types import content_type_for_path
 from .encoding import UriError, local_asset_url_for_path, strict_decode_uri_component
 from .scanner import (
     CAD_CATALOG_SCHEMA_VERSION,
-    SCAN_MAX_DEPTH,
     catalog_input_fingerprint,
     is_served_cad_asset,
+    list_cad_directory,
     node_basename,
     path_is_inside,
     path_relative,
     scan_cad_directory,
+    scan_cad_files,
     to_posix_path,
 )
 from .store_paths import result_snapshot
@@ -215,7 +217,7 @@ def _absolutize_entry(entry: dict, *, root_path: str, scan_repo_root: str) -> di
 class LocalAssetBackend:
     kind = "local-fs"
 
-    def __init__(self, root: str = "", *, scan_depth: int = SCAN_MAX_DEPTH):
+    def __init__(self, root: str = "", *, lazy: bool = False):
         root_path = os.path.abspath(str(root or "").strip() or os.getcwd())
         if "\0" in root_path:
             raise ValueError("CAD Viewer directory contains an invalid null byte")
@@ -225,9 +227,11 @@ class LocalAssetBackend:
         # both report the spelling the operator gave.
         self.root_path = root_path
         self.root_name = node_basename(root_path)
-        # How many directory levels below the root the catalog walks: the whole
-        # tree by default, 0 for the root's own files only.
-        self.scan_depth = scan_depth
+        # A lazy backend serves a root too big to walk -- a whole filesystem, from
+        # "/" or a drive -- and never walks it: its catalog is the files it is
+        # asked about, and its folders are listed one at a time. It hides hidden
+        # files, not files under hidden folders: those were opened, not found.
+        self.lazy = lazy
         self._catalog_guard = threading.Lock()
         self._catalog_snapshot = None
         self._catalog_refreshing = False
@@ -245,12 +249,12 @@ class LocalAssetBackend:
         }
 
     def _full_catalog_snapshot(self) -> tuple[dict, dict] | None:
-        discovery = scan_cad_directory(self.root_path, defer_unpreferred=True, max_depth=self.scan_depth)
+        discovery = scan_cad_directory(self.root_path, defer_unpreferred=True)
         before = {
             entry["file"]: catalog_input_fingerprint(os.path.join(self.root_path, entry["file"]))
             for entry in discovery["entries"]
         }
-        raw = scan_cad_directory(self.root_path, max_depth=self.scan_depth)
+        raw = scan_cad_directory(self.root_path)
         if {entry["file"] for entry in raw["entries"]} != set(before):
             return None
         after = {
@@ -313,7 +317,7 @@ class LocalAssetBackend:
                 return None
         # Bind the result lookups to a stable filesystem interval. A sidecar or
         # non-STEP asset may change while the document indexes are being read.
-        after_discovery = scan_cad_directory(self.root_path, defer_unpreferred=True, max_depth=self.scan_depth)
+        after_discovery = scan_cad_directory(self.root_path, defer_unpreferred=True)
         after_inputs = {
             entry["file"]: catalog_input_fingerprint(
                 os.path.join(self.root_path, entry["file"])
@@ -337,7 +341,10 @@ class LocalAssetBackend:
             pass
 
     def read_catalog(self, preferred_file=None) -> dict:
-        discovery = scan_cad_directory(self.root_path, defer_unpreferred=True, max_depth=self.scan_depth)
+        if self.lazy:
+            ref = normalized_file_ref(preferred_file)
+            return self._absolutize_catalog(scan_cad_files(self.root_path, [ref] if ref else []))
+        discovery = scan_cad_directory(self.root_path, defer_unpreferred=True)
         current = self._current_catalog_snapshot(discovery)
         if current is not None:
             return current
@@ -347,7 +354,6 @@ class LocalAssetBackend:
             self.root_path,
             preferred_file=preferred_file,
             defer_unpreferred=True,
-            max_depth=self.scan_depth,
         ))
         self._start_catalog_hydration()
         return partial
@@ -364,6 +370,8 @@ class LocalAssetBackend:
         legitimately compile.
         """
         require_contained(self.root_path, candidate)
+        if self.lazy:
+            return False
         relative = path_relative(self.root_path, candidate)
         return any(
             part and part != ".." and part.startswith(".") for part in relative.split(os.sep)
@@ -381,6 +389,25 @@ class LocalAssetBackend:
         if self._reject_outside_root(candidate):
             return None
         return candidate
+
+    def list_directory(self, directory) -> list[dict] | None:
+        """A lazy root's folder, as its explorer shows it: ``{path, name, kind}`` for
+        each folder and CAD file directly in it, ``path`` root-relative POSIX.
+
+        ``None`` for a folder that is not there; ``ForbiddenAssetError`` for one
+        outside the root, or that this process may not read.
+        """
+        normalized = normalized_file_ref(directory)
+        candidate = os.path.abspath(normalized if os.path.isabs(normalized) else os.path.join(self.root_path, normalized))
+        require_contained(self.root_path, candidate)
+        try:
+            listed = list_cad_directory(candidate)
+        except PermissionError as error:
+            raise ForbiddenAssetError() from error
+        except (NotADirectoryError, FileNotFoundError):
+            return None
+        prefix = relative_file_ref(self.root_path, candidate)
+        return [{**entry, "path": f"{prefix}/{entry['name']}" if prefix else entry["name"]} for entry in listed]
 
     # --- helpers ----------------------------------------------------------
 

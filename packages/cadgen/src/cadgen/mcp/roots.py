@@ -1,11 +1,11 @@
 """Where a view browses from. The server decides; the view never guesses.
 
-A root is a directory and how deep its catalog walks. A thread's views root at
+A root follows context, as a host's own file tree does. A thread's views root at
 the thread's workspace -- the folder the host started this process in, confirmed
-by the working directory the host reports on the agent's calls -- and walk the
-whole tree. A model opened from anywhere else roots at its own folder and walks
-only that folder, so opening a file in a home directory never scans the home
-directory.
+by the working directory the host reports on the agent's calls, or the roots it
+lists -- whose catalog is the project's CAD files. A model with no project around
+it roots at its filesystem (``/``, or its drive): nothing walks that, its
+explorer reads a folder at a time from wherever the model is, up or down.
 
 What is open is always an absolute path; the root only says where browsing
 starts, so references never depend on it.
@@ -18,21 +18,14 @@ from dataclasses import dataclass
 from typing import Any
 from urllib.parse import unquote, urlparse
 
-from cadgen.viewer.scanner import SCAN_MAX_DEPTH, VIEWER_SKIPPED_DIRECTORIES, is_hidden_name
-
 WORKSPACE = "workspace"
-FOLDER = "folder"
-_DEPTH = {WORKSPACE: SCAN_MAX_DEPTH, FOLDER: 0}
+GLOBAL = "global"
 
 
 @dataclass(frozen=True)
 class Root:
     kind: str
     path: str
-
-    @property
-    def depth(self) -> int:
-        return _DEPTH[self.kind]
 
     @property
     def key(self) -> tuple[str, str]:
@@ -42,21 +35,14 @@ class Root:
         return {"kind": self.kind, "path": self.path, "name": os.path.basename(self.path.rstrip(os.sep)) or self.path}
 
 
-def folder_of(model: str) -> Root:
-    return Root(FOLDER, os.path.dirname(model))
+def filesystem_of(model: str) -> Root:
+    """The global root a model with no project around it is browsed from."""
+    return Root(GLOBAL, _anchor(model))
 
 
-def listed_under(root: str, model: str) -> bool:
-    """Whether a catalog of ``root`` lists ``model``: no folder between them is one the scan skips.
-
-    A model the agent writes under ``build/`` or a hidden folder is still the thread's,
-    but the workspace's catalog never shows it, so it is browsed from its own folder.
-    """
-    relative = os.path.relpath(os.path.dirname(os.path.realpath(model)), os.path.realpath(root))
-    if relative == os.curdir:
-        return True
-    parts = relative.split(os.sep)
-    return len(parts) <= SCAN_MAX_DEPTH and not any(part in VIEWER_SKIPPED_DIRECTORIES or is_hidden_name(part) for part in parts)
+def _anchor(path: str) -> str:
+    drive, _ = os.path.splitdrive(os.path.abspath(path))
+    return drive + os.sep if drive else os.sep
 
 
 def _usable_directory(path: str | None, *, excluded: tuple[str, ...]) -> str | None:
@@ -139,12 +125,14 @@ class ThreadWorkspace:
         return None
 
     def accept(self, root: dict[str, Any]) -> Root:
-        """Validate a root a view asks for: workspaces must be this thread's."""
+        """Validate a root a view asks for: a workspace must be this thread's, a global root a filesystem's."""
         kind, path = root.get("kind"), root.get("path")
-        if kind not in _DEPTH or not isinstance(path, str) or not os.path.isabs(path):
-            raise ValueError("a root is {kind: 'workspace'|'folder', path: <absolute directory>}")
+        if kind not in (WORKSPACE, GLOBAL) or not isinstance(path, str) or not os.path.isabs(path):
+            raise ValueError("a root is {kind: 'workspace'|'global', path: <absolute directory>}")
         if not os.path.isdir(path):
             raise ValueError(f"not a folder: {path}")
         if kind == WORKSPACE and path not in self._paths:
             raise ValueError("that folder is not this thread's workspace")
+        if kind == GLOBAL and path != _anchor(path):
+            raise ValueError("a global root is a filesystem's: / or a drive")
         return Root(kind, path)
