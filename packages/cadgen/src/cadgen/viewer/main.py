@@ -116,7 +116,6 @@ if _UNSUPPORTED_PYTHON:
     raise SystemExit(1)
 
 from cadgen import assets  # noqa: E402
-from cadgen._internal.atomic_replace import replace_atomic  # noqa: E402
 
 from . import registry  # noqa: E402
 from . import reload as dev_reload  # noqa: E402
@@ -400,6 +399,7 @@ def _format_entry(entry: dict) -> str:
         f"    {url}\n"
         f"    serving  {entry.get('root') or '?'}\n"
         f"    code     {entry.get('packageDir') or '?'}"
+        + (f"\n    log      {entry['log']}" if entry.get("log") else "")
     )
 
 
@@ -469,8 +469,11 @@ def stop_command(argv: list[str], *, prog: str = f"{DEFAULT_PROG} stop") -> int:
         if not registry.probe(target, 0.25):
             # Unregister from the CALLER side. On Windows os.kill(SIGTERM) maps
             # to TerminateProcess: no signal handler runs and no atexit fires,
-            # so this is the only thing that removes the entry.
+            # so this is the only thing that removes the entry. A stop that
+            # worked leaves nothing to diagnose, so the log goes with it; every
+            # other way out keeps it (registry.prune_logs).
             registry.unregister(target["pid"])
+            registry.remove_log(target)
             _out(f"Stopped CAD Viewer on port {target['port']} (pid {target['pid']}).\n")
             return 0
         time.sleep(0.1)
@@ -593,6 +596,23 @@ def _remove(path: str) -> None:
         pass  # best-effort
 
 
+def _detached_log() -> str:
+    """The log a ``--detach`` launcher handed this server, or ``""``.
+
+    Taken from ``CADGEN_VIEWER_LOG`` only when this process's stdout really IS
+    that file: a variable inherited by accident must not let a foreground
+    server claim a log — which a clean ``stop`` then deletes — that is not its
+    own. A development restart keeps both, so it still names the same log.
+    """
+    path = os.environ.get(registry.LOG_ENV, "")
+    if not path:
+        return ""
+    try:
+        return path if os.path.samestat(os.fstat(1), os.stat(path)) else ""
+    except (OSError, ValueError):
+        return ""
+
+
 def launch_detached(argv: list[str], *, as_json: bool, prog: str = DEFAULT_PROG) -> int:
     """``--detach``: start the same launch as a background process, relay its
     announcement, and RETURN.
@@ -609,81 +629,85 @@ def launch_detached(argv: list[str], *, as_json: bool, prog: str = DEFAULT_PROG)
     on Windows), so closing the terminal or the agent's shell does not take it
     down. Its stdout and stderr go to a log file beside its registry entry,
     never to a pipe: this process exits, and a server writing into a pipe
-    nobody reads would fail on its next line. Readiness is the child's own
-    announcement, which it writes only once it is bound, attached and
-    registered, so the URL printed here answers its first request and
-    ``list``/``stop``/reuse already see the instance.
+    nobody reads would fail on its next line. The log is created here, under a
+    name that never changes (``registry.create_log``), and handed to the child
+    in ``CADGEN_VIEWER_LOG`` so its registry entry names it — whether or not
+    this launcher is still alive when the server comes up. It outlives the
+    server: a clean ``stop`` removes it, and a crash leaves it to read.
+    Readiness is the child's own announcement, which it writes only once it is
+    bound, attached and registered, so the URL printed here answers its first
+    request and ``list``/``stop``/reuse already see the instance. A launch that
+    does not end in a started server removes the log: its lines are relayed.
     """
     child_argv = [item for item in argv if item != "--detach"]
     if "--json" not in child_argv:
         child_argv.append("--json")
-    launch_log = registry.launch_log_path()
     popen_options: dict = {}
     if sys.platform.startswith("win"):
         popen_options["creationflags"] = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
     else:
         popen_options["start_new_session"] = True
     try:
-        with open(launch_log, "wb") as log:
+        descriptor, log_file = registry.create_log()
+    except OSError as error:
+        _err(f"CAD Viewer could not start in the background: {error}\n")
+        return 1
+    try:
+        with open(descriptor, "wb") as log:
             child = subprocess.Popen(  # noqa: S603 - our own interpreter, our own module
                 [sys.executable, "-m", "cadgen.viewer", *child_argv],
                 stdin=subprocess.DEVNULL,
                 stdout=log,
                 stderr=subprocess.STDOUT,
                 close_fds=True,
+                env={**os.environ, registry.LOG_ENV: log_file},
                 **popen_options,
             )
     except OSError as error:
-        _remove(launch_log)
+        _remove(log_file)
         _err(f"CAD Viewer could not start in the background: {error}\n")
         return 1
 
     deadline = time.monotonic() + DETACH_READY_TIMEOUT_SECONDS
     announced = None
+    timed_out = False
     while True:
         exited = child.poll() is not None
-        lines = _read_lines(launch_log)
+        lines = _read_lines(log_file)
         announced = next((payload for payload in map(_announcement, lines) if payload), None)
         if announced is not None or exited:
             break
         if time.monotonic() >= deadline:
             child.kill()
             child.wait()
-            lines = _read_lines(launch_log)
+            timed_out = True
+            lines = _read_lines(log_file)
             lines.append(f"(no announcement within {int(DETACH_READY_TIMEOUT_SECONDS)}s; stopped it)")
             break
         time.sleep(_DETACH_POLL_SECONDS)
 
     if announced is None:
-        _remove(launch_log)
+        _remove(log_file)
         for line in lines:
             _err(f"{line}\n")
-        return child.returncode or 1
+        # The child's own refusal code (1, or 2 for its argument grammar) is
+        # the answer. A child this launcher killed, or one a signal took, has a
+        # negative status that would wrap to a meaningless exit (-9 -> 247).
+        code = child.returncode
+        return code if not timed_out and code is not None and code > 0 else 1
 
     say = _err if as_json else _out
     for line in lines:
         if _announcement(line) is None:
             say(f"{line}\n")
     if announced.get("action") == "started":
-        log_file = launch_log
-        # The running server holds this file open as its stdout. POSIX renames
-        # an open file freely; Windows refuses (the child's handle lacks
-        # FILE_SHARE_DELETE), and a copy-then-rename would hand the user a
-        # frozen snapshot while the server kept writing the original — so on
-        # Windows the log stays where the child is writing it.
-        if not sys.platform.startswith("win"):
-            try:
-                replace_atomic(launch_log, registry.log_path(child.pid))
-                log_file = registry.log_path(child.pid)
-            except OSError:
-                pass  # e.g. the launch log fell back to a temp dir on another volume
         say(
             f"Running in the background (pid {child.pid}); its output goes to {log_file}. "
             f"Stop it with `{prog} stop --port {announced['port']}`.\n"
         )
     else:
         child.wait()
-        _remove(launch_log)
+        _remove(log_file)
     if as_json:
         _out(f"{_compact_json({key: announced[key] for key in ('url', 'port', 'action')})}\n")
     return 0
@@ -800,6 +824,7 @@ def serve(argv: list[str], *, prog: str = DEFAULT_PROG) -> int:
             root=directory,
             viewer_version=app.viewer_version,
             token=app.identity_token,
+            log=_detached_log(),
         )
 
         import atexit  # noqa: PLC0415

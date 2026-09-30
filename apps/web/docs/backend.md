@@ -47,9 +47,12 @@ code; an explicit `--port` is strict and fails if occupied. Always use the
 printed URL, including its port. The JSON response reports `url`, `port`, and
 `action` only after the socket is bound and the app is attached.
 
-`cadgen viewer list` reports running instances and their roots.
+`cadgen viewer list` reports running instances, their roots and, for a
+`--detach` launch, the log its output goes to.
 `cadgen viewer stop --port <port>` stops an instance after verifying its identity.
-Do not stop an instance you did not start.
+Do not stop an instance you did not start. A detached instance's log outlives
+it: a clean `stop` removes it, and one that crashed or was killed keeps it for
+a day (the newest ten), so the reason can still be read.
 
 ## Development
 
@@ -94,17 +97,32 @@ served tree as it is when the request arrives: a model file created before the
 request is in it, one deleted before the request is not. The walk under that
 promise remembers each directory's relevant rows (subdirectories, links, CAD
 files) against the directory's own identity — device, inode, mtime, ctime —
-and re-lists a directory only when that identity changes, which adding,
-removing or renaming an entry always does. Link targets are re-stated on every
-request. A listing is remembered only once its directory has been quiet for
-2 s before it was read, so a change landing in the same timestamp tick as the
-listing (1 s HFS+, 2 s FAT) cannot hide; a directory being written right now is
-re-listed every time. A file's content is not a listing fact: catalog rows
-fingerprint their own files. Reading a file to hash it never holds up its
-deletion: the catalog opens models with delete sharing on Windows, and a model
-that vanishes mid-read gets an empty hash on that request and is gone on the
-next. The one filesystem this cannot vouch for is one
-whose directory mtimes lie, such as an NFS mount with attribute caching.
+and re-lists a directory when that identity changes, which adding, removing or
+renaming an entry does. Link targets are re-stated on every request. Three
+rules cover the stamps that fail to move:
+
+- **Same tick.** A listing is served again only if the newer of its
+  directory's mtime and ctime was already 2 s old when it was read, so a change
+  landing in the same timestamp tick (1 s HFS+, 2 s FAT) cannot hide; a
+  directory being written right now is re-listed every time.
+- **Not a time.** A directory whose mtime or ctime is 0 or before 1980 — a
+  macOS exFAT volume root reports 0 and never moves it — is re-listed every
+  time.
+- **Put back.** No listing is served for more than 10 s. tar, unzip, `rsync -a`
+  and `cp -p` restore a directory's mtime after filling it; APFS, HFS+ and ext4
+  still move its ctime, but FAT and exFAT have no ctime of their own and Windows
+  reports creation time in its place, so there the identity can repeat exactly
+  and the change shows within 10 s. The client polls every 2 s, so four polls in
+  five stay warm.
+
+The memo holds at most 65,536 directories, least recently walked dropped first,
+and forgets a directory — with everything under it — once it is gone. A file's
+content is not a listing fact: catalog rows fingerprint their own files.
+Reading a file to hash it never holds up its deletion: the catalog opens models
+with delete sharing on Windows, and a model that vanishes mid-read gets an empty
+hash on that request and is gone on the next. A filesystem whose directory
+listings are themselves cached, such as an NFS mount with attribute caching, is
+only as fresh as that cache.
 
 Both `/__cad/server` and `/__cad/catalog` expose `rootId`, a stable identity for
 the normalized filesystem root. The host uses it for source and session-state

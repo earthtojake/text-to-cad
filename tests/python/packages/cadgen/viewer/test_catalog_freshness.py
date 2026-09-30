@@ -6,17 +6,22 @@ of renders, BREPs and logs under ``tmp/`` — used to cost one full walk per
 request (two, on the steady path). The scanner now memoises each directory's
 relevant rows on that directory's own identity. These pin both halves of that
 bargain: nothing a walk can observe goes stale (a new model appears on the next
-request, a deleted or renamed one leaves, a retargeted link is followed), and a
-warm walk re-lists nothing that has not changed.
+request, a deleted or renamed one leaves, a retargeted link is followed), a
+directory whose stamps cannot vouch for it is never trusted for long, and a warm
+walk re-lists nothing that has not changed.
+
+The scanner's two clocks are held by the fixture — wall time decides whether a
+directory has settled, monotonic time how old a remembered listing is — so no
+assertion here depends on how fast the machine runs.
 """
 
 from __future__ import annotations
 
+import contextlib
 import os
 import shutil
 import tempfile
 import threading
-import time
 import unittest
 from pathlib import Path
 from unittest import mock
@@ -29,6 +34,30 @@ from cadgen.viewer.scanner import scan_cad_directory
 
 JUNK_DIRECTORIES = 10
 JUNK_PER_DIRECTORY = 50
+SECOND_NS = 1_000_000_000
+
+
+def stamp(path: str) -> int:
+    """A directory's newer stamp: what the settle rule measures from."""
+    result = os.stat(path)
+    return max(result.st_mtime_ns, result.st_ctime_ns)
+
+
+def with_stamps(result: os.stat_result, *, mtime_ns: int, ctime_ns: int) -> os.stat_result:
+    """``result`` reporting other modification and change times."""
+    values = list(result)
+    values[8], values[9] = mtime_ns // SECOND_NS, ctime_ns // SECOND_NS
+    named = {
+        name: getattr(result, name)
+        for name in dir(result)
+        if name.startswith("st_")
+        and name not in ("st_mode", "st_ino", "st_dev", "st_nlink", "st_uid", "st_gid", "st_size")
+    }
+    named.update(
+        st_mtime=mtime_ns / SECOND_NS, st_mtime_ns=mtime_ns,
+        st_ctime=ctime_ns / SECOND_NS, st_ctime_ns=ctime_ns,
+    )
+    return os.stat_result(values, named)
 
 
 class FreshnessFixture(unittest.TestCase):
@@ -47,6 +76,14 @@ class FreshnessFixture(unittest.TestCase):
         for directory in range(JUNK_DIRECTORIES):
             for index in range(JUNK_PER_DIRECTORY):
                 self.write(f"gripper/tmp/renders/r{directory}/frame{index}.png", "x")
+        # The scanner's clocks, held still: `self.wall` is the time a listing is
+        # read at, `self.age` the monotonic clock a remembered listing ages by.
+        self.wall = stamp(self.root)
+        self.age = 0
+        for name, clock in (("_wall_ns", lambda: self.wall), ("_monotonic_ns", lambda: self.age)):
+            patcher = mock.patch.object(scanner, name, clock)
+            patcher.start()
+            self.addCleanup(patcher.stop)
 
     @staticmethod
     def _restore(previous) -> None:
@@ -61,16 +98,17 @@ class FreshnessFixture(unittest.TestCase):
         Path(path).write_text(text, encoding="utf-8")
         return path
 
-    def settle(self, top: str | None = None) -> None:
-        """Age every directory under ``top`` past the listing settle window.
+    def settle(self, *tops: str) -> None:
+        """Move the wall clock past the settle window of every directory under ``tops``.
 
         A listing is trusted only once its directory has been quiet for a while
         (timestamp granularity), so a fixture built a millisecond ago would never
-        be cached at all. Backdating stands in for the wait.
+        be remembered at all. ctime cannot be backdated, so time moves instead.
         """
-        past = time.time_ns() - 60 * 1_000_000_000
-        for directory, _, _ in os.walk(top or self.root):
-            os.utime(directory, ns=(past, past))
+        newest = max(
+            stamp(directory) for top in (tops or (self.root,)) for directory, _, _ in os.walk(top)
+        )
+        self.wall = max(self.wall, newest + scanner._LISTING_SETTLE_NS)
 
     def files(self) -> list[str]:
         return [entry["file"] for entry in scan_cad_directory(self.root, defer_unpreferred=True)["entries"]]
@@ -80,6 +118,23 @@ class FreshnessFixture(unittest.TestCase):
         with mock.patch.object(scanner.os, "scandir", wraps=os.scandir) as scandir:
             self.files()
         return [os.path.relpath(str(call.args[0]), self.root) for call in scandir.call_args_list]
+
+    @contextlib.contextmanager
+    def reported_stamps(self, directory: str, stamps):
+        """Make ``os.stat`` report ``stamps(real_result) -> (mtime_ns, ctime_ns)``
+        for ``directory``, the way another filesystem would."""
+        real_stat = os.stat
+        target = os.path.abspath(directory)
+
+        def fake_stat(path, *args, **kwargs):
+            result = real_stat(path, *args, **kwargs)
+            if isinstance(path, (str, os.PathLike)) and os.path.abspath(os.fspath(path)) == target:
+                mtime_ns, ctime_ns = stamps(result)
+                return with_stamps(result, mtime_ns=mtime_ns, ctime_ns=ctime_ns)
+            return result
+
+        with mock.patch.object(scanner.os, "stat", fake_stat):
+            yield
 
 
 class WarmWalks(FreshnessFixture):
@@ -97,14 +152,100 @@ class WarmWalks(FreshnessFixture):
         self.assertEqual(self.listed(), [os.path.join("gripper", "tmp", "renders", "r3")])
 
     def test_a_directory_written_within_the_settle_window_is_never_trusted(self) -> None:
-        # Its mtime may not move again for a change landing in the same clock
+        # Its stamps may not move again for a change landing in the same clock
         # tick, so a listing taken while it is this fresh must not be reused.
         self.settle()
         self.listed()
         self.write("gripper/tmp/renders/r5/frame_new.png", "x")
         fresh = os.path.join("gripper", "tmp", "renders", "r5")
+        self.wall = stamp(os.path.join(self.root, fresh))  # the walks run as the write lands
         self.assertIn(fresh, self.listed())
         self.assertEqual(self.listed(), [fresh], "a still-settling directory must be re-listed every walk")
+
+    def test_an_mtime_put_back_does_not_make_a_fresh_directory_look_settled(self) -> None:
+        # An extractor that restores the directory's recorded mtime leaves only
+        # ctime saying the directory just changed; settling is measured from it.
+        self.settle()
+        self.listed()
+        self.write("gripper/tmp/renders/r5/frame_new.png", "x")
+        fresh = os.path.join("gripper", "tmp", "renders", "r5")
+        an_hour_ago = self.wall - 3600 * SECOND_NS
+        os.utime(os.path.join(self.root, fresh), ns=(an_hour_ago, an_hour_ago))
+        self.wall = stamp(os.path.join(self.root, fresh))
+        self.assertIn(fresh, self.listed())
+        self.assertEqual(self.listed(), [fresh])
+
+
+class StampsThatCannotVouch(FreshnessFixture):
+    """Where the directory's identity can fail to move, the memo must not trust it."""
+
+    def test_a_directory_whose_stamps_are_not_times_is_listed_on_every_walk(self) -> None:
+        # A macOS exFAT volume root reports mtime and ctime 0 forever, FAT
+        # cannot store a time before 1980, and an archive can zero an mtime:
+        # an identity built on those never changes, so it is never remembered.
+        fat_epoch = 315_532_800 * SECOND_NS  # 1980-01-01T00:00:00Z
+        cases = {
+            "exFAT volume root": lambda real: (0, 0),
+            "FAT epoch": lambda real: (fat_epoch, fat_epoch),
+            "mtime zeroed by an archive": lambda real: (0, real.st_ctime_ns),
+        }
+        for label, stamps in cases.items():
+            with self.subTest(label), self.reported_stamps(self.root, stamps):
+                self.settle()
+                self.listed()
+                self.assertEqual(self.listed(), ["."], "the untrustworthy root must be re-listed every walk")
+                added = self.write(f"{label.split()[0]}.stl", "solid x\nendsolid x\n")
+                self.assertIn(os.path.basename(added), self.files())
+                os.unlink(added)
+                self.assertNotIn(os.path.basename(added), self.files())
+
+    def test_a_directory_whose_stamps_come_back_is_listed_again_after_the_ttl(self) -> None:
+        # tar, unzip, rsync -a and cp -p put a directory's mtime back after
+        # filling it. FAT and exFAT keep no ctime of their own (modelled here
+        # by reporting mtime in its place), so the whole identity then repeats
+        # and only the listing's age can catch the change.
+        gripper = os.path.join(self.root, "gripper")
+        recorded = os.stat(gripper).st_mtime_ns
+        with self.reported_stamps(gripper, lambda real: (real.st_mtime_ns, real.st_mtime_ns)):
+            self.settle()
+            self.assertEqual(self.files(), ["gripper/base.stl", "gripper/finger.stl"])
+            self.write("gripper/extracted.stl", "solid x\nendsolid x\n")
+            os.utime(gripper, ns=(recorded, recorded))
+            self.assertEqual(
+                self.listed(), [], "premise: the identity came back, so nothing on disk shows the change"
+            )
+            self.age += scanner._LISTING_TTL_NS - 1
+            self.assertEqual(self.listed(), [], "a listing younger than the TTL is still served")
+            self.age += 1
+            self.assertIn("gripper", self.listed())
+            self.assertIn("gripper/extracted.stl", self.files())
+
+
+class MemoHygiene(FreshnessFixture):
+    def remembered(self) -> list[str]:
+        inside = self.root + os.sep
+        return [
+            os.path.relpath(key, self.root)
+            for key in scanner._LISTING_CACHE
+            if key == self.root or key.startswith(inside)
+        ]
+
+    def test_a_deleted_subtree_is_forgotten_with_it(self) -> None:
+        self.settle()
+        self.files()
+        scratch = os.path.join("gripper", "tmp")
+        self.assertIn(os.path.join(scratch, "renders", "r3"), self.remembered())
+        shutil.rmtree(os.path.join(self.root, scratch))
+        self.assertEqual(self.files(), ["gripper/base.stl", "gripper/finger.stl"])
+        self.assertEqual([key for key in self.remembered() if key.startswith(scratch)], [])
+
+    def test_the_memo_is_bounded_and_keeps_the_most_recently_walked(self) -> None:
+        self.settle()
+        with mock.patch.object(scanner, "_LISTING_CACHE_LIMIT", 5):
+            walked = self.listed()
+            self.assertEqual(len(scanner._LISTING_CACHE), 5)
+        # Least recently walked out first, rather than everything at once.
+        self.assertEqual(self.remembered(), walked[-5:])
 
 
 def join_catalog_refreshes() -> None:
@@ -166,9 +307,7 @@ class CatalogFreshness(FreshnessFixture):
             Path(directory, name).write_text("solid x\nendsolid x\n", encoding="utf-8")
         link = os.path.join(self.root, "library")
         os.symlink(first, link)
-        self.settle()
-        self.settle(first)
-        self.settle(second)
+        self.settle(self.root, first, second)
         self.assertIn("library/bolt.stl", self.files())
 
         # A file added to the link's target, whose parent listing did not change.

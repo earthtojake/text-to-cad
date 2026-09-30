@@ -44,6 +44,7 @@ import re
 import stat as stat_module
 import threading
 import time
+from collections import OrderedDict
 
 from cadgen._internal.shared_read import open_shared_for_read
 
@@ -380,24 +381,75 @@ def _node_decoded_name(name: str) -> str:
 # identity, and a warm walk costs one stat per directory rather than one entry
 # per file.
 #
-# This changes nothing a walk can observe. Adding, removing or renaming an
-# entry updates its directory's mtime, and a changed identity is a miss; a
-# file's CONTENT is not a listing fact (catalog rows fingerprint their own
-# files). Symlinks are cached as links and their targets are re-stated on every
-# walk, because a target can change without its link's directory changing.
-# The one hole is timestamp granularity — a change landing in the same clock
-# tick as the listing leaves the mtime unchanged — so a listing is trusted only
-# once its directory has been quiet for ``_LISTING_SETTLE_NS`` before it was
-# read (the "racy git" rule), covering 1s HFS+ and 2s FAT stamps. A directory
-# being written right now is therefore simply re-listed on every walk.
-_LISTING_CACHE: dict[str, tuple] = {}
+# Adding, removing or renaming an entry moves its directory's mtime and ctime,
+# and a changed identity is a miss; a file's CONTENT is not a listing fact
+# (catalog rows fingerprint their own files). Symlinks are cached as links and
+# their targets are re-stated on every walk, because a target can change
+# without its link's directory changing. Where the stamps can fail to move,
+# three rules keep that from hiding a change for long:
+#
+# * Timestamp granularity. A change landing in the same clock tick as the
+#   listing leaves both stamps where they were, so a listing is trusted only
+#   once its directory's NEWER stamp is ``_LISTING_SETTLE_NS`` old when it is
+#   read (the "racy git" rule), covering 1s HFS+ and 2s FAT stamps. A directory
+#   being written right now is simply re-listed on every walk.
+# * Stamps that are not times. A macOS exFAT volume root reports mtime and
+#   ctime 0 and never moves either, and FAT cannot store a time before 1980. A
+#   directory with either stamp at or before ``_PLAUSIBLE_STAMP_NS`` is
+#   re-listed on every walk.
+# * Stamps put back. tar, unzip, rsync -a and cp -p restore a directory's mtime
+#   after filling it. Where ctime is real (APFS, HFS+, ext4) the kernel moves
+#   it anyway, but FAT and exFAT keep none (they report mtime as ctime) and
+#   Windows reports creation time in its place, so the identity can repeat
+#   exactly. Nothing on disk can catch that, so no listing is trusted for more
+#   than ``_LISTING_TTL_NS``: past that age a walk re-lists the directory
+#   whatever its stamps say. At the client's 2 s poll, 10 s keeps four polls in
+#   five warm (the fifth costs what every poll used to) and bounds how long such
+#   a change can stay out of the catalog.
+#
+# An untrusted listing is still recorded, never served: it is what tells the
+# next listing of that directory which subdirectories have since gone, and a
+# directory that has gone takes everything remembered beneath it along. The
+# memo is least-recently-walked-out-first beyond ``_LISTING_CACHE_LIMIT``.
+_LISTING_CACHE: OrderedDict[str, tuple] = OrderedDict()
 _LISTING_CACHE_LIMIT = 65536
 _LISTING_CACHE_LOCK = threading.Lock()
 _LISTING_SETTLE_NS = 2_000_000_000
+_LISTING_TTL_NS = 10_000_000_000
+# 1980-01-02T00:00:00Z: FAT's epoch is 1980-01-01 in LOCAL time, so a day's
+# margin covers it in every zone.
+_PLAUSIBLE_STAMP_NS = 315_619_200_000_000_000
+
+# The two clocks a listing is judged by, module attributes so a test can hold
+# them still: WALL time is compared with directory stamps (settling), MONOTONIC
+# time ages a remembered listing, so a wall-clock step can neither expire every
+# listing at once nor keep one forever.
+_wall_ns = time.time_ns
+_monotonic_ns = time.monotonic_ns
 
 _ROW_DIRECTORY = "d"
 _ROW_FILE = "f"
 _ROW_LINK = "l"
+
+
+def _listing_is_trustworthy(dir_stat, read_at_ns: int) -> bool:
+    """Whether a listing taken at wall time ``read_at_ns`` may be served again."""
+    stamps = (dir_stat.st_mtime_ns, dir_stat.st_ctime_ns)
+    return min(stamps) > _PLAUSIBLE_STAMP_NS and read_at_ns - max(stamps) >= _LISTING_SETTLE_NS
+
+
+def _forget_listings_locked(paths) -> None:
+    """Drop the listings of ``paths`` and of everything recorded beneath them.
+
+    One pass over the memo, so it runs only when a directory has gone. The
+    caller holds ``_LISTING_CACHE_LOCK``.
+    """
+    exact = set(paths)
+    if not exact:
+        return
+    prefixes = tuple(path + os.sep for path in exact)
+    for key in [key for key in _LISTING_CACHE if key in exact or key.startswith(prefixes)]:
+        del _LISTING_CACHE[key]
 
 
 def _listing_rows(dir_path: str) -> list | None:
@@ -405,13 +457,19 @@ def _listing_rows(dir_path: str) -> list | None:
     try:
         dir_stat = os.stat(dir_path)
     except (OSError, ValueError):
+        with _LISTING_CACHE_LOCK:
+            _forget_listings_locked((dir_path,))
         return None
     identity = (dir_stat.st_dev, dir_stat.st_ino, dir_stat.st_mtime_ns, dir_stat.st_ctime_ns)
+    now = _monotonic_ns()
     with _LISTING_CACHE_LOCK:
         cached = _LISTING_CACHE.get(dir_path)
-    if cached is not None and cached[0] == identity:
-        return cached[1]
-    listed_at = time.time_ns()
+        if cached is not None:
+            recorded_identity, rows, listed_at, trusted = cached
+            if trusted and recorded_identity == identity and 0 <= now - listed_at < _LISTING_TTL_NS:
+                _LISTING_CACHE.move_to_end(dir_path)
+                return rows
+    read_at = _wall_ns()
     try:
         with os.scandir(dir_path) as scan:
             # Node sorts the DECODED names, so decode first and sort on that.
@@ -420,6 +478,8 @@ def _listing_rows(dir_path: str) -> list | None:
                 key=lambda pair: _walk_sort_key(pair[0]),
             )
     except (OSError, ValueError):
+        with _LISTING_CACHE_LOCK:
+            _LISTING_CACHE.pop(dir_path, None)
         return None
     rows = []
     for name, entry in entries:
@@ -437,11 +497,21 @@ def _listing_rows(dir_path: str) -> list | None:
                 rows.append((name, _ROW_DIRECTORY))
         elif is_file and not is_hidden_name(name) and extension_of(name) in SOURCE_EXTENSIONS:
             rows.append((name, _ROW_FILE))
-    if listed_at - dir_stat.st_mtime_ns >= _LISTING_SETTLE_NS:
-        with _LISTING_CACHE_LOCK:
-            if len(_LISTING_CACHE) >= _LISTING_CACHE_LIMIT:
-                _LISTING_CACHE.clear()
-            _LISTING_CACHE[dir_path] = (identity, rows)
+    trusted = _listing_is_trustworthy(dir_stat, read_at)
+    with _LISTING_CACHE_LOCK:
+        previous = _LISTING_CACHE.pop(dir_path, None)
+        if previous is not None:
+            # Every walk descends through what a listing names, so a
+            # subdirectory or link it no longer names is gone for good.
+            still_named = {name for name, kind in rows if kind != _ROW_FILE}
+            _forget_listings_locked(
+                os.path.join(dir_path, name)
+                for name, kind in previous[1]
+                if kind != _ROW_FILE and name not in still_named
+            )
+        _LISTING_CACHE[dir_path] = (identity, rows, now, trusted)
+        while len(_LISTING_CACHE) > _LISTING_CACHE_LIMIT:
+            _LISTING_CACHE.popitem(last=False)
     return rows
 
 

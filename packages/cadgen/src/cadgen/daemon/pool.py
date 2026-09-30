@@ -42,6 +42,7 @@ import itertools
 import json
 import os
 import queue
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -187,6 +188,20 @@ def _windows_cpu_seconds(pid: int) -> float | None:
         kernel32.CloseHandle(handle)
 
 
+# Where ``ps`` lives on macOS, the BSDs and Linux. The daemon runs with whatever
+# PATH started it (a launchd job, an IDE, a stripped CI environment), and a CPU
+# clock it cannot read turns a busy worker into a killed one.
+_PS_PATHS = ("/bin/ps", "/usr/bin/ps")
+
+
+def _ps_executable() -> str:
+    """``ps`` by absolute path, ``PATH`` only when it is in neither usual place."""
+    for candidate in _PS_PATHS:
+        if os.access(candidate, os.X_OK):
+            return candidate
+    return shutil.which("ps") or "ps"
+
+
 def process_cpu_seconds(pid: int) -> float | None:
     """User + system CPU seconds process ``pid`` has used, read from outside it.
 
@@ -201,7 +216,8 @@ def process_cpu_seconds(pid: int) -> float | None:
         if os.name == "nt":
             return _windows_cpu_seconds(pid)
         output = subprocess.check_output(
-            ["ps", "-o", "time=", "-p", str(pid)], text=True, timeout=5, stderr=subprocess.DEVNULL,
+            [_ps_executable(), "-o", "time=", "-p", str(pid)],
+            text=True, timeout=5, stderr=subprocess.DEVNULL,
         )
         return _parse_cpu_time(output) if output.strip() else None
     except (OSError, ValueError, IndexError, subprocess.SubprocessError):

@@ -10,6 +10,12 @@ do.
 
 Failing closed here always means "no registry entry", never "no viewer": a
 shared ``/tmp`` we do not own must not stop a viewer from starting.
+
+A DETACHED viewer's output goes to a log in the same directory, and the log
+outlives the server: a server that crashes, or is killed, leaves the only
+account of why. A clean ``stop`` removes its instance's log; the logs of
+instances that ended any other way are pruned (``prune_logs``) once a day old,
+or beyond the newest ``LOG_KEEP_COUNT``.
 """
 
 from __future__ import annotations
@@ -17,6 +23,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+import time
 import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
@@ -27,10 +34,14 @@ from cadgen._internal.atomic_replace import replace_atomic
 __all__ = [
     "REGISTRY_DIR_NAME",
     "PROBE_TIMEOUT_SECONDS",
+    "LOG_ENV",
+    "LOG_KEEP_SECONDS",
+    "LOG_KEEP_COUNT",
     "registry_dir",
     "entry_path",
-    "log_path",
-    "launch_log_path",
+    "create_log",
+    "remove_log",
+    "prune_logs",
     "register",
     "unregister",
     "read_entries",
@@ -41,6 +52,11 @@ __all__ = [
 
 REGISTRY_DIR_NAME = "cadgen-viewer-info"
 PROBE_TIMEOUT_SECONDS = 0.5
+# How a --detach launcher tells its server which log its output goes to.
+LOG_ENV = "CADGEN_VIEWER_LOG"
+# A gone instance's log is kept this long, and only the newest this many.
+LOG_KEEP_SECONDS = 24 * 60 * 60
+LOG_KEEP_COUNT = 10
 
 # The server source directory. Node computed this as the pathname of an
 # import.meta.url, which percent-encodes spaces and yields a leading-slash
@@ -75,38 +91,87 @@ def entry_path(pid) -> str:
     return os.path.join(registry_dir(), f"viewer-{int(pid)}.json")
 
 
-def log_path(pid) -> str:
-    """Where a DETACHED viewer's stdout and stderr end up, beside its entry.
-
-    It lives exactly as long as the entry: ``unregister`` removes both, so a
-    stale entry reaped by ``live_entries`` takes its log with it.
-    """
-    return os.path.join(registry_dir(), f"viewer-{int(pid)}.log")
+def _is_log_name(name: str) -> bool:
+    return name.startswith("viewer-") and name.endswith(".log")
 
 
-def launch_log_path() -> str:
-    """The log a ``--detach`` launch hands its child before the child's pid exists.
+def create_log() -> tuple[int, str]:
+    """A new log for a DETACHED viewer's stdout and stderr: ``(descriptor, path)``.
 
-    Renamed to ``log_path(<pid>)`` once the child announces a started server.
+    Named for the moment the launch began, never for a pid, and never renamed:
+    the launcher creates it before the server's pid exists, a pid is reused
+    once its process is gone (a later launch must not truncate a log another
+    server still writes), and Windows refuses to rename a file its server holds
+    open. Created exclusively (``mkstemp``, 0600). The server records the path
+    in its registry entry, which is how ``list``, ``stop`` and ``prune_logs``
+    tell a live instance's log from a gone one's.
+
     Falls back to the plain temp dir when the registry directory is unusable,
     for the same reason registration fails soft: a shared ``/tmp`` we do not own
-    must not stop a viewer from starting.
+    must not stop a viewer from starting. Nothing prunes that fallback.
     """
     directory = _ensure_registry_dir() or tempfile.gettempdir()
-    return os.path.join(directory, f"viewer-launch-{os.getpid()}.log")
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    return tempfile.mkstemp(prefix=f"viewer-{stamp}-", suffix=".log", dir=directory)
 
 
-def register(*, host, port, root: str = "", viewer_version: str = "", token: str = "", started_at=None) -> str:
+def remove_log(entry: dict) -> None:
+    """Delete the log a registry entry names (a clean ``stop``). Best-effort."""
+    path = str(entry.get("log") or "")
+    if path and _is_log_name(os.path.basename(path)):
+        try:
+            os.unlink(path)
+        except OSError:
+            pass  # Windows may hold a terminated process's handle a moment longer
+
+
+def prune_logs(live: list[dict], *, now: float | None = None) -> None:
+    """Delete the logs of instances that are gone, once they are a day old or
+    beyond the newest ``LOG_KEEP_COUNT``.
+
+    A log that a live entry names is never touched, whatever its age: a quiet
+    server writes nothing for days. Everything else in the registry directory
+    that is a viewer log belongs to an instance that crashed, was killed, or
+    stopped without ``stop`` — or to a launch still starting, which is the
+    newest file there and so the last one pruned.
+    """
+    directory = registry_dir()
+    try:
+        names = os.listdir(directory)
+    except OSError:
+        return
+    held = {os.path.basename(str(entry.get("log") or "")) for entry in live}
+    gone = []
+    for name in names:
+        if not _is_log_name(name) or name in held:
+            continue
+        path = os.path.join(directory, name)
+        try:
+            gone.append((os.stat(path).st_mtime, path))
+        except OSError:
+            continue
+    gone.sort(reverse=True)
+    now = time.time() if now is None else now
+    for rank, (modified, path) in enumerate(gone):
+        if rank >= LOG_KEEP_COUNT or now - modified > LOG_KEEP_SECONDS:
+            try:
+                os.unlink(path)
+            except OSError:
+                pass  # best-effort, like every registry write
+
+
+def register(
+    *, host, port, root: str = "", viewer_version: str = "", token: str = "", log: str = "", started_at=None
+) -> str:
     """Announce this process. Returns the entry path, or ``""`` on any failure.
 
     ``token`` is the launcher's reuse identity (version plus the Python runtime
     and selected client digest — ``identity_token`` in http_app.py), recorded
     at START time so a later reuse probe compares against the code this
     instance is actually running. ``version`` stays alongside it for the human
-    `list` printout.
+    `list` printout. ``log`` is where a detached instance's output goes (``""``
+    for one in the foreground).
     """
-    import time
-
     directory = _ensure_registry_dir()
     if not directory:
         return ""
@@ -119,6 +184,7 @@ def register(*, host, port, root: str = "", viewer_version: str = "", token: str
         "token": str(token or ""),
         "root": str(root or ""),
         "packageDir": _PACKAGE_DIR,
+        "log": str(log or ""),
         "startedAt": float(time.time() if started_at is None else started_at),
     }
     target = entry_path(pid)
@@ -137,12 +203,13 @@ def register(*, host, port, root: str = "", viewer_version: str = "", token: str
 
 
 def unregister(pid=None) -> None:
+    """Remove the entry. Never its log: an instance that exits by any path but a
+    clean ``stop`` keeps it for diagnosis (see ``prune_logs``)."""
     pid = os.getpid() if pid is None else pid
-    for path in (entry_path(pid), log_path(pid)):
-        try:
-            os.unlink(path)
-        except OSError:
-            pass  # best-effort; an open log on Windows stays until reaped by hand
+    try:
+        os.unlink(entry_path(pid))
+    except OSError:
+        pass  # best-effort
 
 
 def _is_int(value) -> bool:
@@ -199,7 +266,8 @@ def probe(entry, timeout_seconds: float = PROBE_TIMEOUT_SECONDS) -> bool:
 
 
 def live_entries(*, reap: bool = True) -> list[dict]:
-    """Every entry whose identity probe succeeds, oldest first. Stale files are deleted.
+    """Every entry whose identity probe succeeds, oldest first. Stale entries are
+    deleted and gone instances' logs pruned (``prune_logs``).
 
     Probing runs in parallel. Node probed serially, which cost N x 500ms on
     every ``list`` AND on every default launch's reuse lookup; the output is
@@ -207,15 +275,16 @@ def live_entries(*, reap: bool = True) -> list[dict]:
     probe completion order.
     """
     entries = read_entries()
-    if not entries:
-        return []
-    with ThreadPoolExecutor(max_workers=min(8, len(entries))) as pool:
-        alive = list(pool.map(probe, entries))
     live = []
-    for entry, is_alive in zip(entries, alive):
-        if is_alive:
-            live.append(entry)
-        elif reap:
-            unregister(entry.get("pid"))
+    if entries:
+        with ThreadPoolExecutor(max_workers=min(8, len(entries))) as pool:
+            alive = list(pool.map(probe, entries))
+        for entry, is_alive in zip(entries, alive):
+            if is_alive:
+                live.append(entry)
+            elif reap:
+                unregister(entry.get("pid"))
+    if reap:
+        prune_logs(live)
     live.sort(key=lambda entry: entry.get("startedAt") or 0)
     return live

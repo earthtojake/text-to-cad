@@ -118,11 +118,15 @@ A launch that STARTS a server is that server: it stays in the foreground until
 it is stopped (Ctrl-C, `stop`), which is what a terminal and `npm run dev`
 want. A launch that REUSES one prints and exits. `--detach` makes both return:
 the server runs as a background process in its own session, its output goes
-to a log beside its registry entry (`<tmp>/cadgen-viewer-info/viewer-<pid>.log`,
-removed with the entry), and the launcher exits 0 once the server has
-announced itself — or relays the server's refusal and exits non-zero. Agents
-and scripts use `--detach`; never pipe a foreground launch into `tail` or
-`head`, which wait for an EOF a running server never sends.
+to a log beside its registry entry
+(`<tmp>/cadgen-viewer-info/viewer-<launch-time>-<random>.log`, named by the
+launcher's message and by `list`), and the launcher exits 0 once the server
+has announced itself — or relays the server's refusal and exits non-zero. The
+log outlives the server so a crash can be read afterwards: a clean `stop`
+removes it; an instance that crashed or was killed keeps it for a day, the
+newest ten at most. Agents and scripts use `--detach`; never pipe a foreground
+launch into `tail` or `head`, which wait for an EOF a running server never
+sends.
 `--detach` refuses `--no-registry`, since `list`/`stop` are the only way to
 find a detached server again. `cadgen viewer list` shows every running
 instance; `cadgen viewer stop --port <n>` ends one. Do not stop instances you
@@ -146,11 +150,13 @@ the build — detection only; it keeps serving.
   else is walked — a project's `tmp/` included.
 - **Every catalog request is fresh, and a warm one is cheap.** A new model
   appears on the next request and a deleted one is gone from it. The server
-  remembers each directory's listing against that directory's own mtime, so a
-  root with a few hundred thousand scratch files costs one stat per directory
-  per request, not one entry per file; only the first walk after launch (done
-  in the background) pays for every file. [docs/backend.md](docs/backend.md)
-  has the rule.
+  remembers each directory's listing against that directory's own stamps, for
+  at most 10 s, so a root with a few hundred thousand scratch files costs one
+  stat per directory on most requests, not one entry per file; the first walk
+  after launch (done in the background) and one poll in five pay for every
+  file. Where a directory's stamps can be put back (an extract that restores
+  times onto FAT, exFAT or a Windows disk) a change can take those 10 s to show.
+  [docs/backend.md](docs/backend.md) has the rule.
 - **Verify a link by loading the page**, never by curling `/__cad/asset` —
   that route serves raw files; generated entries render through a
   different route, so probing it 404s whether or not anything is wrong.

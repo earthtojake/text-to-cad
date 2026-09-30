@@ -15,6 +15,7 @@ import signal
 import subprocess
 import sys
 import textwrap
+import threading
 import time
 import unittest
 from pathlib import Path
@@ -130,13 +131,13 @@ class SilenceIsNotBusy(_WorkerCase):
 
 class WedgedIsStillKilled(_WorkerCase):
     def test_a_blocked_heartbeat_with_no_cpu_progress_is_killed(self):
-        started = time.monotonic()
+        # Left alone, the body would finish and exit 0: WorkerGone with this
+        # message is the supervisor killing the wedge rather than waiting it out.
         with self.assertRaises(pool_mod.WorkerGone) as caught:
             self.run_job("phase", "fillets", str(HEARTBEAT * 3), str(SILENCE * 8))
         self.assertIn("no CPU progress", str(caught.exception))
         self.assertIn("last phase: fillets", str(caught.exception))
         self.assertFalse(self.worker.alive())
-        self.assertLess(time.monotonic() - started, SILENCE * 8, "waited out the wedge instead of killing it")
 
     @unittest.skipIf(os.name == "nt", "SIGSTOP is POSIX")
     def test_a_stopped_process_is_killed(self):
@@ -151,7 +152,13 @@ class WedgedIsStillKilled(_WorkerCase):
             "kind": "run", "tool": "fixture", "argv": ["sleep", "30"], "cwd": str(self.root),
             "store_root": str(self.root / "store"), "job_id": "test:job-1", "env": {},
         })
-        time.sleep(HEARTBEAT * 3)
+        # The job's first beat is written as its body starts: from then on it is
+        # mid-sleep. Left queued, the beat is the supervisor's CPU baseline.
+        deadline = time.monotonic() + 60
+        while self.worker._frames.empty():
+            if time.monotonic() >= deadline:
+                self.fail("the job never started")
+            time.sleep(0.01)
         os.kill(self.worker.proc.pid, signal.SIGSTOP)
         with self.assertRaises(pool_mod.WorkerGone):
             list(self.worker.frames(silence_timeout=SILENCE))
@@ -165,12 +172,38 @@ class NormalFramesAreUnchanged(_WorkerCase):
         self.assertEqual({tuple(frame) for frame in frames[:-1]}, {("stream", "data")})
         self.assertEqual("".join(frame["data"] for frame in frames[:-1]), "one\ntwo\n")
         self.assertEqual(frames[-1], {"exit": 0, "pid": self.worker.pid})
-        # The heartbeat stops with the job: nothing follows the exit frame, so the
-        # next request on this worker starts from a clean channel.
-        time.sleep(HEARTBEAT * 4)
-        self.assertTrue(self.worker._frames.empty())
+        # The heartbeat stops with the job (HeartbeatLifetime pins the thread):
+        # the next request's first frame on this channel is its own answer.
         self.worker.send({"kind": "ping"})
-        self.assertEqual(list(self.worker.frames(silence_timeout=SILENCE)), [{"pong": self.worker.pid}])
+        self.assertEqual(self.worker._frames.get(timeout=60), {"pong": self.worker.pid})
+
+
+class HeartbeatLifetime(unittest.TestCase):
+    """The beat starts with a job and its thread is gone when the job is, in process."""
+
+    def test_the_first_beat_is_synchronous_and_the_thread_is_joined_on_exit(self):
+        from cadgen.daemon import worker
+
+        beats: list[dict] = []
+        second_beat = threading.Event()
+
+        def emit(frame: dict) -> None:
+            beats.append(frame)
+            if len(beats) >= 2:
+                second_beat.set()
+
+        with mock.patch.object(worker, "_emit", emit), \
+                mock.patch.object(worker, "HEARTBEAT_INTERVAL_SECONDS", 0.01):
+            with worker._heartbeat():
+                # The supervisor's CPU baseline exists from the job's first instant.
+                self.assertEqual(len(beats), 1)
+                self.assertIn("cpu", beats[0]["heartbeat"])
+                self.assertTrue(second_beat.wait(60), "the heartbeat thread never beat")
+            # Joined before the job's exit frame could be written: nothing can
+            # beat after it, into the next request's channel.
+            self.assertEqual(
+                [thread for thread in threading.enumerate() if thread.name == "cadgen-worker-heartbeat"], []
+            )
 
 
 class CpuClock(unittest.TestCase):
@@ -186,6 +219,15 @@ class CpuClock(unittest.TestCase):
         self.assertEqual(pool_mod._parse_cpu_time("123:04.25"), 123 * 60 + 4.25)
         self.assertEqual(pool_mod._parse_cpu_time("01:02:03"), 3723.0)
         self.assertEqual(pool_mod._parse_cpu_time("2-01:02:03"), 2 * 86400 + 3723.0)
+
+    @unittest.skipIf(os.name == "nt", "Windows reads the clock through GetProcessTimes")
+    def test_the_clock_needs_no_ps_on_path(self):
+        # A daemon inherits whatever PATH launched it; with no ps on it, a
+        # starved-but-busy worker read as hung and was killed.
+        with mock.patch.dict(os.environ, {"PATH": ""}):
+            ps = pool_mod._ps_executable()
+            self.assertTrue(os.path.isabs(ps), ps)
+            self.assertIsNotNone(pool_mod.process_cpu_seconds(os.getpid()))
 
     def test_a_gone_process_has_no_clock(self):
         process = subprocess.Popen([sys.executable, "-c", "pass"])
