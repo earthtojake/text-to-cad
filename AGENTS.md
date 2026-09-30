@@ -58,7 +58,7 @@ for the full flow, the resume path, the rehearsal, and local/manual fallbacks.
   root is the plugin package; its skills are `skills/` directly.
 - `models/`: sample and durable CAD/robot-description fixtures.
 - `apps/web/`: the CAD Viewer's React client (its backend is `cadgen.viewer`).
-- `apps/codex/`: the CAD app agent hosts render in Codex (its server is `cadgen mcp`).
+- `apps/mcp/`: the CAD app agent hosts render in Codex (its server is `cadgen mcp`).
 - `packages/core`: `@text-to-cad/core`, shared CAD/runtime/client code without React.
 - `packages/ui`: `@text-to-cad/ui`, the shared FileViewer, renderers, controls and styles.
 - `packages/cadgen`: the published distribution — STEP/GLB/topology generation,

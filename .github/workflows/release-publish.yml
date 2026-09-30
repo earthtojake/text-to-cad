@@ -185,7 +185,7 @@ jobs:
             cadgen/_runtime/browser/render.html \
             cadgen/_runtime/node/mesh-export.mjs \
             cadgen/_runtime/viewer/index.html \
-            cadgen/_runtime/codex/index.html \
+            cadgen/_runtime/mcp/index.html \
             cadgen/_runtime/native/filetrace-macos-aarch64.dylib \
             cadgen/_runtime/native/filetrace-macos-x86_64.dylib \
             cadgen/_runtime/native/filetrace-linux-x86_64.so \

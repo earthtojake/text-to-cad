@@ -13,7 +13,7 @@ inputs:
     default: "false"
   npm:
     description: Space-separated root workspace paths, or "none". Include shared dependencies used by the job.
-    default: "packages/core packages/ui apps/web apps/codex apps/docs"
+    default: "packages/core packages/ui apps/web apps/mcp apps/docs"
 
 runs:
   using: composite

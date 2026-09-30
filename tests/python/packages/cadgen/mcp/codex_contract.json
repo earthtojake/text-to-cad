@@ -1,0 +1,800 @@
+{
+ "initialize": {
+  "capabilities": {
+   "experimental": {
+    "codex/sandbox-state-meta": {}
+   },
+   "resources": {
+    "listChanged": false
+   },
+   "tools": {
+    "listChanged": false
+   }
+  },
+  "instructions": "CAD shows local CAD models (STEP, STL, GLB, 3MF, DXF, URDF, SDF) in a viewer tab beside the chat. To show a model, call cad_show: it switches an open viewer and never opens a tab. Only when cad_show reports no open viewer, call cad_open, once. Viewers refresh when files change, so never reopen after a rebuild. cad_view reports what the user is looking at and has selected; cad_screenshot returns what they see.",
+  "protocolVersion": "2025-06-18",
+  "serverInfo": {
+   "icons": [
+    {
+     "mimeType": "image/svg+xml",
+     "sizes": [
+      "any"
+     ],
+     "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9Ii0wLjg2IC0xLjIgNS41NiA1LjU2IiBmaWxsPSJjdXJyZW50Q29sb3IiPjxwYXRoIGQ9Ik0wIDBIM1YxLjVIMS41VjIuNUgzVjRIMFoiLz48cGF0aCBvcGFjaXR5PSIuNTUiIGQ9Ik0wIDBMLjg0LS44NEgzLjg0TDMgMFpNMS41IDIuNUwyLjM0IDEuNjZIMy44NEwzIDIuNVoiLz48cGF0aCBvcGFjaXR5PSIuMyIgZD0iTTMgMEwzLjg0LS44NFYuNjZMMyAxLjVaTTMgMi41TDMuODQgMS42NlYzLjE2TDMgNFpNMS41IDEuNUwyLjM0LjY2VjEuNjZMMS41IDIuNVoiLz48L3N2Zz4="
+    }
+   ],
+   "name": "text_to_cad",
+   "title": "CAD",
+   "version": "<version>"
+  }
+ },
+ "launches": {
+  "cad_file": {
+   "content": [
+    {
+     "text": "bracket.stl is open in CAD.",
+     "type": "text"
+    }
+   ],
+   "structuredContent": {
+    "launch": {
+     "explore": false,
+     "model": "<tmp>/project/parts/bracket.stl",
+     "page": "viewer",
+     "protocol": 1,
+     "root": {
+      "kind": "folder",
+      "name": "parts",
+      "path": "<tmp>/project/parts"
+     },
+     "surface": "file"
+    }
+   }
+  },
+  "cad_home": {
+   "content": [
+    {
+     "text": "CAD is open.",
+     "type": "text"
+    }
+   ],
+   "structuredContent": {
+    "launch": {
+     "explore": false,
+     "model": null,
+     "page": "home",
+     "protocol": 1,
+     "root": null,
+     "surface": "sidebar"
+    }
+   }
+  },
+  "cad_launch": {
+   "content": [],
+   "structuredContent": {
+    "launch": {
+     "explore": true,
+     "model": "<tmp>/project/parts/bracket.stl",
+     "page": "viewer",
+     "protocol": 1,
+     "root": {
+      "kind": "workspace",
+      "name": "project",
+      "path": "<tmp>/project"
+     }
+    }
+   }
+  },
+  "cad_open": {
+   "content": [
+    {
+     "text": "<tmp>/project/parts/bracket.stl is open in a new CAD tab. From now on, use cad_show to show models in it.",
+     "type": "text"
+    }
+   ],
+   "structuredContent": {
+    "launch": {
+     "explore": true,
+     "model": "<tmp>/project/parts/bracket.stl",
+     "page": "viewer",
+     "protocol": 1,
+     "root": {
+      "kind": "workspace",
+      "name": "project",
+      "path": "<tmp>/project"
+     },
+     "surface": "agent"
+    }
+   }
+  },
+  "cad_screenshot": {
+   "content": [
+    {
+     "text": "No CAD viewer with a model is open in this thread. Open one with cad_open, or render headless with `cadgen snapshot`.",
+     "type": "text"
+    }
+   ],
+   "isError": true
+  },
+  "cad_show": {
+   "content": [
+    {
+     "text": "No CAD viewer is open in this thread. Call cad_open to open one.",
+     "type": "text"
+    }
+   ],
+   "structuredContent": {
+    "delivered": 0
+   }
+  },
+  "cad_tab": {
+   "content": [
+    {
+     "text": "CAD is open.",
+     "type": "text"
+    }
+   ],
+   "structuredContent": {
+    "launch": {
+     "explore": true,
+     "model": "<tmp>/project/parts/bracket.stl",
+     "page": "viewer",
+     "protocol": 1,
+     "root": {
+      "kind": "workspace",
+      "name": "project",
+      "path": "<tmp>/project"
+     },
+     "surface": "tab"
+    }
+   }
+  },
+  "cad_view": {
+   "content": [
+    {
+     "text": "No CAD viewer is open in this thread.",
+     "type": "text"
+    }
+   ],
+   "structuredContent": {
+    "views": []
+   }
+  }
+ },
+ "read": {
+  "_meta": {
+   "ui": {
+    "csp": {
+     "connectDomains": [
+      "data:",
+      "blob:"
+     ],
+     "resourceDomains": [
+      "data:",
+      "blob:"
+     ]
+    },
+    "permissions": {
+     "clipboardWrite": {}
+    },
+    "prefersBorder": false
+   }
+  },
+  "mimeType": "text/html;profile=mcp-app",
+  "text": "<!doctype html><head><title>CAD</title></head>",
+  "uri": "ui://cad/<build>/app.html"
+ },
+ "resources": [
+  {
+   "_meta": {
+    "ui": {
+     "csp": {
+      "connectDomains": [
+       "data:",
+       "blob:"
+      ],
+      "resourceDomains": [
+       "data:",
+       "blob:"
+      ]
+     },
+     "permissions": {
+      "clipboardWrite": {}
+     },
+     "prefersBorder": false
+    }
+   },
+   "mimeType": "text/html;profile=mcp-app",
+   "name": "CAD",
+   "title": "CAD",
+   "uri": "ui://cad/<build>/app.html"
+  }
+ ],
+ "tools": [
+  {
+   "_meta": {
+    "openai/iconStyle": "monochrome",
+    "openai/ui": {
+     "entrypoints": [
+      {
+       "type": "global"
+      }
+     ],
+     "preferredModelDisplayMode": "fullscreen"
+    },
+    "ui": {
+     "resourceUri": "ui://cad/<build>/app.html",
+     "visibility": [
+      "app"
+     ]
+    }
+   },
+   "annotations": {
+    "destructiveHint": false,
+    "openWorldHint": false,
+    "readOnlyHint": true
+   },
+   "description": "Open CAD: recent models, and open one from disk.",
+   "icons": [
+    {
+     "mimeType": "image/svg+xml",
+     "sizes": [
+      "any"
+     ],
+     "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9Ii0wLjg2IC0xLjIgNS41NiA1LjU2IiBmaWxsPSJjdXJyZW50Q29sb3IiPjxwYXRoIGQ9Ik0wIDBIM1YxLjVIMS41VjIuNUgzVjRIMFoiLz48cGF0aCBvcGFjaXR5PSIuNTUiIGQ9Ik0wIDBMLjg0LS44NEgzLjg0TDMgMFpNMS41IDIuNUwyLjM0IDEuNjZIMy44NEwzIDIuNVoiLz48cGF0aCBvcGFjaXR5PSIuMyIgZD0iTTMgMEwzLjg0LS44NFYuNjZMMyAxLjVaTTMgMi41TDMuODQgMS42NlYzLjE2TDMgNFpNMS41IDEuNUwyLjM0LjY2VjEuNjZMMS41IDIuNVoiLz48L3N2Zz4="
+    }
+   ],
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+   },
+   "name": "cad_home",
+   "title": "CAD"
+  },
+  {
+   "_meta": {
+    "openai/iconStyle": "monochrome",
+    "openai/ui": {
+     "entrypoints": [
+      {
+       "type": "thread"
+      }
+     ]
+    },
+    "ui": {
+     "resourceUri": "ui://cad/<build>/app.html",
+     "visibility": [
+      "app"
+     ]
+    }
+   },
+   "annotations": {
+    "destructiveHint": false,
+    "openWorldHint": false,
+    "readOnlyHint": true
+   },
+   "description": "Open this thread's CAD viewer.",
+   "icons": [
+    {
+     "mimeType": "image/svg+xml",
+     "sizes": [
+      "any"
+     ],
+     "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9Ii0wLjg2IC0xLjIgNS41NiA1LjU2IiBmaWxsPSJjdXJyZW50Q29sb3IiPjxwYXRoIGQ9Ik0wIDBIM1YxLjVIMS41VjIuNUgzVjRIMFoiLz48cGF0aCBvcGFjaXR5PSIuNTUiIGQ9Ik0wIDBMLjg0LS44NEgzLjg0TDMgMFpNMS41IDIuNUwyLjM0IDEuNjZIMy44NEwzIDIuNVoiLz48cGF0aCBvcGFjaXR5PSIuMyIgZD0iTTMgMEwzLjg0LS44NFYuNjZMMyAxLjVaTTMgMi41TDMuODQgMS42NlYzLjE2TDMgNFpNMS41IDEuNUwyLjM0LjY2VjEuNjZMMS41IDIuNVoiLz48L3N2Zz4="
+    }
+   ],
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+   },
+   "name": "cad_tab",
+   "title": "CAD"
+  },
+  {
+   "_meta": {
+    "openai/iconStyle": "monochrome",
+    "openai/ui": {
+     "entrypoints": [
+      {
+       "extensions": [
+        ".3mf",
+        ".dxf",
+        ".glb",
+        ".sdf",
+        ".srdf",
+        ".step",
+        ".stl",
+        ".stp",
+        ".urdf"
+       ],
+       "type": "file"
+      }
+     ]
+    },
+    "ui": {
+     "resourceUri": "ui://cad/<build>/app.html",
+     "visibility": [
+      "app"
+     ]
+    }
+   },
+   "annotations": {
+    "destructiveHint": false,
+    "openWorldHint": false,
+    "readOnlyHint": true
+   },
+   "description": "Open a CAD file in CAD.",
+   "icons": [
+    {
+     "mimeType": "image/svg+xml",
+     "sizes": [
+      "any"
+     ],
+     "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9Ii0wLjg2IC0xLjIgNS41NiA1LjU2IiBmaWxsPSJjdXJyZW50Q29sb3IiPjxwYXRoIGQ9Ik0wIDBIM1YxLjVIMS41VjIuNUgzVjRIMFoiLz48cGF0aCBvcGFjaXR5PSIuNTUiIGQ9Ik0wIDBMLjg0LS44NEgzLjg0TDMgMFpNMS41IDIuNUwyLjM0IDEuNjZIMy44NEwzIDIuNVoiLz48cGF0aCBvcGFjaXR5PSIuMyIgZD0iTTMgMEwzLjg0LS44NFYuNjZMMyAxLjVaTTMgMi41TDMuODQgMS42NlYzLjE2TDMgNFpNMS41IDEuNUwyLjM0LjY2VjEuNjZMMS41IDIuNVoiLz48L3N2Zz4="
+    }
+   ],
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "file": {
+      "additionalProperties": false,
+      "properties": {
+       "name": {
+        "type": "string"
+       },
+       "resourceUri": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "resourceUri"
+      ],
+      "type": "object"
+     }
+    },
+    "required": [
+     "file"
+    ],
+    "type": "object"
+   },
+   "name": "cad_file",
+   "title": "CAD"
+  },
+  {
+   "_meta": {
+    "openai/iconStyle": "monochrome",
+    "openai/ui": {
+     "preferredModelDisplayMode": "fullscreen"
+    },
+    "ui": {
+     "resourceUri": "ui://cad/<build>/app.html"
+    }
+   },
+   "annotations": {
+    "destructiveHint": false,
+    "openWorldHint": false,
+    "readOnlyHint": true
+   },
+   "description": "Open a NEW CAD viewer tab beside the chat showing a local model (STEP, STL, GLB, 3MF, DXF, URDF, SDF). Every call opens another tab, so call it only when cad_show reports that no viewer is open, and never again after a rebuild: open viewers refresh by themselves.",
+   "icons": [
+    {
+     "mimeType": "image/svg+xml",
+     "sizes": [
+      "any"
+     ],
+     "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9Ii0wLjg2IC0xLjIgNS41NiA1LjU2IiBmaWxsPSJjdXJyZW50Q29sb3IiPjxwYXRoIGQ9Ik0wIDBIM1YxLjVIMS41VjIuNUgzVjRIMFoiLz48cGF0aCBvcGFjaXR5PSIuNTUiIGQ9Ik0wIDBMLjg0LS44NEgzLjg0TDMgMFpNMS41IDIuNUwyLjM0IDEuNjZIMy44NEwzIDIuNVoiLz48cGF0aCBvcGFjaXR5PSIuMyIgZD0iTTMgMEwzLjg0LS44NFYuNjZMMyAxLjVaTTMgMi41TDMuODQgMS42NlYzLjE2TDMgNFpNMS41IDEuNUwyLjM0LjY2VjEuNjZMMS41IDIuNVoiLz48L3N2Zz4="
+    }
+   ],
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "path": {
+      "description": "A CAD file: an absolute path, or relative to the thread's workspace.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "path"
+    ],
+    "type": "object"
+   },
+   "name": "cad_open",
+   "title": "CAD"
+  },
+  {
+   "annotations": {
+    "destructiveHint": false,
+    "openWorldHint": false,
+    "readOnlyHint": true
+   },
+   "description": "Show a model in the CAD viewer already open in this thread, switching it if another model is showing. Never opens a tab. Reports whether a viewer took it; if none is open, call cad_open.",
+   "icons": [
+    {
+     "mimeType": "image/svg+xml",
+     "sizes": [
+      "any"
+     ],
+     "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9Ii0wLjg2IC0xLjIgNS41NiA1LjU2IiBmaWxsPSJjdXJyZW50Q29sb3IiPjxwYXRoIGQ9Ik0wIDBIM1YxLjVIMS41VjIuNUgzVjRIMFoiLz48cGF0aCBvcGFjaXR5PSIuNTUiIGQ9Ik0wIDBMLjg0LS44NEgzLjg0TDMgMFpNMS41IDIuNUwyLjM0IDEuNjZIMy44NEwzIDIuNVoiLz48cGF0aCBvcGFjaXR5PSIuMyIgZD0iTTMgMEwzLjg0LS44NFYuNjZMMyAxLjVaTTMgMi41TDMuODQgMS42NlYzLjE2TDMgNFpNMS41IDEuNUwyLjM0LjY2VjEuNjZMMS41IDIuNVoiLz48L3N2Zz4="
+    }
+   ],
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "path": {
+      "description": "A CAD file: an absolute path, or relative to the thread's workspace.",
+      "type": "string"
+     },
+     "view": {
+      "description": "A view id from cad_view; defaults to the most recently used viewer.",
+      "type": "string"
+     }
+    },
+    "required": [
+     "path"
+    ],
+    "type": "object"
+   },
+   "name": "cad_show",
+   "title": "Show in CAD"
+  },
+  {
+   "annotations": {
+    "destructiveHint": false,
+    "openWorldHint": false,
+    "readOnlyHint": true
+   },
+   "description": "Describe the CAD viewers open in this thread: each one's model and revision, what the user has selected (as references you can quote back), and the camera.",
+   "icons": [
+    {
+     "mimeType": "image/svg+xml",
+     "sizes": [
+      "any"
+     ],
+     "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9Ii0wLjg2IC0xLjIgNS41NiA1LjU2IiBmaWxsPSJjdXJyZW50Q29sb3IiPjxwYXRoIGQ9Ik0wIDBIM1YxLjVIMS41VjIuNUgzVjRIMFoiLz48cGF0aCBvcGFjaXR5PSIuNTUiIGQ9Ik0wIDBMLjg0LS44NEgzLjg0TDMgMFpNMS41IDIuNUwyLjM0IDEuNjZIMy44NEwzIDIuNVoiLz48cGF0aCBvcGFjaXR5PSIuMyIgZD0iTTMgMEwzLjg0LS44NFYuNjZMMyAxLjVaTTMgMi41TDMuODQgMS42NlYzLjE2TDMgNFpNMS41IDEuNUwyLjM0LjY2VjEuNjZMMS41IDIuNVoiLz48L3N2Zz4="
+    }
+   ],
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+   },
+   "name": "cad_view",
+   "title": "Read CAD view"
+  },
+  {
+   "annotations": {
+    "destructiveHint": false,
+    "openWorldHint": false,
+    "readOnlyHint": true
+   },
+   "description": "Capture a PNG of exactly what an open CAD viewer in this thread shows right now.",
+   "icons": [
+    {
+     "mimeType": "image/svg+xml",
+     "sizes": [
+      "any"
+     ],
+     "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9Ii0wLjg2IC0xLjIgNS41NiA1LjU2IiBmaWxsPSJjdXJyZW50Q29sb3IiPjxwYXRoIGQ9Ik0wIDBIM1YxLjVIMS41VjIuNUgzVjRIMFoiLz48cGF0aCBvcGFjaXR5PSIuNTUiIGQ9Ik0wIDBMLjg0LS44NEgzLjg0TDMgMFpNMS41IDIuNUwyLjM0IDEuNjZIMy44NEwzIDIuNVoiLz48cGF0aCBvcGFjaXR5PSIuMyIgZD0iTTMgMEwzLjg0LS44NFYuNjZMMyAxLjVaTTMgMi41TDMuODQgMS42NlYzLjE2TDMgNFpNMS41IDEuNUwyLjM0LjY2VjEuNjZMMS41IDIuNVoiLz48L3N2Zz4="
+    }
+   ],
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "view": {
+      "description": "A view id from cad_view; defaults to the most recently used viewer.",
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "name": "cad_screenshot",
+   "title": "Capture CAD view"
+  },
+  {
+   "_meta": {
+    "ui": {
+     "visibility": [
+      "app"
+     ]
+    }
+   },
+   "annotations": {
+    "destructiveHint": false,
+    "openWorldHint": false,
+    "readOnlyHint": true
+   },
+   "description": "The server's build, protocol and this thread's workspace.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+   },
+   "name": "cad_session",
+   "title": "CAD session"
+  },
+  {
+   "_meta": {
+    "ui": {
+     "visibility": [
+      "app"
+     ]
+    }
+   },
+   "annotations": {
+    "destructiveHint": false,
+    "openWorldHint": false,
+    "readOnlyHint": true
+   },
+   "description": "The launch for opening a model in this view.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "model": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "model"
+    ],
+    "type": "object"
+   },
+   "name": "cad_launch",
+   "title": "Open model"
+  },
+  {
+   "_meta": {
+    "ui": {
+     "visibility": [
+      "app"
+     ]
+    }
+   },
+   "annotations": {
+    "destructiveHint": false,
+    "openWorldHint": false,
+    "readOnlyHint": true
+   },
+   "description": "Choose a model with the desktop's file chooser. Only for an explicit Open Model action.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+   },
+   "name": "cad_pick_model",
+   "title": "Open Model"
+  },
+  {
+   "_meta": {
+    "ui": {
+     "visibility": [
+      "app"
+     ]
+    }
+   },
+   "annotations": {
+    "destructiveHint": false,
+    "openWorldHint": false,
+    "readOnlyHint": true
+   },
+   "description": "Long-poll for this view's events.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "model": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "surface": {
+      "type": "string"
+     },
+     "view": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "view",
+     "surface"
+    ],
+    "type": "object"
+   },
+   "name": "cad_events",
+   "title": "CAD events"
+  },
+  {
+   "_meta": {
+    "ui": {
+     "visibility": [
+      "app"
+     ]
+    }
+   },
+   "annotations": {
+    "destructiveHint": false,
+    "openWorldHint": false,
+    "readOnlyHint": true
+   },
+   "description": "Tell the server what this view shows.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "focused": {
+      "type": "boolean"
+     },
+     "model": {
+      "type": [
+       "string",
+       "null"
+      ]
+     },
+     "state": {
+      "type": "object"
+     },
+     "surface": {
+      "type": "string"
+     },
+     "view": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "view",
+     "surface"
+    ],
+    "type": "object"
+   },
+   "name": "cad_view_report",
+   "title": "Report CAD view"
+  },
+  {
+   "_meta": {
+    "ui": {
+     "visibility": [
+      "app"
+     ]
+    }
+   },
+   "annotations": {
+    "destructiveHint": false,
+    "openWorldHint": false,
+    "readOnlyHint": true
+   },
+   "description": "Answer the server's question: a capture or a description.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "error": {
+      "type": "string"
+     },
+     "png": {
+      "type": "string"
+     },
+     "requestId": {
+      "type": "string"
+     },
+     "state": {
+      "type": "object"
+     }
+    },
+    "required": [
+     "requestId"
+    ],
+    "type": "object"
+   },
+   "name": "cad_capture_reply",
+   "title": "Answer CAD"
+  },
+  {
+   "_meta": {
+    "ui": {
+     "visibility": [
+      "app"
+     ]
+    }
+   },
+   "annotations": {
+    "destructiveHint": false,
+    "openWorldHint": false,
+    "readOnlyHint": true
+   },
+   "description": "One request to the CAD viewer's routes, bodies base64.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "body": {
+      "type": "string"
+     },
+     "headers": {
+      "additionalProperties": {
+       "type": "string"
+      },
+      "type": "object"
+     },
+     "method": {
+      "type": "string"
+     },
+     "root": {
+      "additionalProperties": false,
+      "properties": {
+       "kind": {
+        "enum": [
+         "workspace",
+         "folder"
+        ],
+        "type": "string"
+       },
+       "path": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "kind",
+       "path"
+      ],
+      "type": "object"
+     },
+     "url": {
+      "type": "string"
+     }
+    },
+    "required": [
+     "root",
+     "method",
+     "url"
+    ],
+    "type": "object"
+   },
+   "name": "cad_http",
+   "title": "CAD viewer request"
+  },
+  {
+   "_meta": {
+    "ui": {
+     "visibility": [
+      "app"
+     ]
+    }
+   },
+   "annotations": {
+    "destructiveHint": false,
+    "openWorldHint": false,
+    "readOnlyHint": true
+   },
+   "description": "Read or change recently opened models.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "action": {
+      "enum": [
+       "list",
+       "pin",
+       "unpin",
+       "remove",
+       "thumbnail",
+       "thumbnails"
+      ],
+      "type": "string"
+     },
+     "names": {
+      "items": {
+       "type": "string"
+      },
+      "type": "array"
+     },
+     "path": {
+      "type": "string"
+     },
+     "png": {
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "name": "cad_recents",
+   "title": "CAD recents"
+  }
+ ]
+}

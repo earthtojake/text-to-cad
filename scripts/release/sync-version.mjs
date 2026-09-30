@@ -10,8 +10,8 @@ const canonicalVersionPath = "VERSION";
 const semverPattern = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/;
 
 export const jsonTargets = [
-  ...["package.json", "apps/docs/package.json", "packages/core/package.json", "packages/ui/package.json", "apps/web/package.json", "apps/codex/package.json"].map(path => ({ path, fields: [["version"]] })),
-  { path: "package-lock.json", fields: [["version"], ["packages", "", "version"], ...["apps/docs", "apps/web", "apps/codex", "packages/core", "packages/ui"].map(name => ["packages", name, "version"])] },
+  ...["package.json", "apps/docs/package.json", "packages/core/package.json", "packages/ui/package.json", "apps/web/package.json", "apps/mcp/package.json"].map(path => ({ path, fields: [["version"]] })),
+  { path: "package-lock.json", fields: [["version"], ["packages", "", "version"], ...["apps/docs", "apps/web", "apps/mcp", "packages/core", "packages/ui"].map(name => ["packages", name, "version"])] },
   { path: ".claude-plugin/plugin.json", fields: [["version"]] },
   { path: ".codex-plugin/plugin.json", fields: [["version"]] },
   { path: ".claude-plugin/marketplace.json", fields: [["version"]], pluginEntries: ["cad"] },

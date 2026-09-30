@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Install this checkout into the Codex app as the development CAD plugin,
 # cad@earthtojake-dev: its skills, and a `cadgen mcp` server run by this
-# checkout's .venv, serving a copy of this checkout's apps/codex build.
+# checkout's .venv, serving a copy of this checkout's apps/mcp build.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -21,13 +21,13 @@ Usage:
   scripts/install/codex-dev-plugin.sh [--restart] [--no-build]
   scripts/install/codex-dev-plugin.sh --uninstall
 
-Builds apps/codex, assembles a plugin under tmp/codex-dev from this checkout
+Builds apps/mcp, assembles a plugin under tmp/codex-dev from this checkout
 (skills copied, server = this checkout's .venv running `cadgen mcp`), and
 installs it as cad@earthtojake-dev. Refuses while another CAD plugin is
 installed: two copies means every skill twice.
 
 The plugin serves a copy of the built page, taken now, as an installed wheel
-serves its own: rebuilding apps/codex changes nothing until you install again.
+serves its own: rebuilding apps/mcp changes nothing until you install again.
 A page that changed under a running Codex would change its URI, and Codex
 drops the frames already showing it. A running server keeps the code it
 started with; --restart quits and reopens the Codex app so every thread gets
@@ -92,16 +92,16 @@ if root not in pathlib.Path(cadgen.__file__).resolve().parents:
 EOF
 
 if [[ "$BUILD" == 1 ]]; then
-  (cd "$REPO_ROOT" && npm run build:codex)
+  (cd "$REPO_ROOT" && npm run build:mcp)
 fi
-[[ -f "$REPO_ROOT/apps/codex/dist/index.html" ]] || { echo "apps/codex is not built; run without --no-build." >&2; exit 1; }
+[[ -f "$REPO_ROOT/apps/mcp/dist/index.html" ]] || { echo "apps/mcp is not built; run without --no-build." >&2; exit 1; }
 
 # A version per install, so Codex caches this build rather than reusing the last one.
 VERSION="$(tr -d '[:space:]' <"$REPO_ROOT/VERSION")-dev.$(date +%Y%m%d%H%M%S)"
 # This install's page. Servers still running an earlier install read their own copy.
 APP_DIR="$DEV_ROOT/app/$VERSION"
 mkdir -p "$APP_DIR"
-cp "$REPO_ROOT/apps/codex/dist/index.html" "$APP_DIR/index.html"
+cp "$REPO_ROOT/apps/mcp/dist/index.html" "$APP_DIR/index.html"
 
 rm -rf "$PLUGIN_DIR"
 mkdir -p "$PLUGIN_DIR/.codex-plugin" "$DEV_ROOT/.agents/plugins"
@@ -115,7 +115,7 @@ manifest["version"] = version
 manifest["mcpServers"] = "./codex.mcp.json"
 (plugin / ".codex-plugin" / "plugin.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
 server = {"mcpServers": {"text_to_cad": {"command": python, "args": ["-m", "cadgen.cli", "mcp"],
-                                         "env": {"CADGEN_CODEX_APP_DIR": app}, "startup_timeout_sec": 30}}}
+                                         "env": {"CADGEN_MCP_APP_DIR": app}, "startup_timeout_sec": 30}}}
 (plugin / "codex.mcp.json").write_text(json.dumps(server, indent=2) + "\n", encoding="utf-8")
 catalog = {"name": marketplace, "interface": {"displayName": "CAD (this checkout)"}, "plugins": [{
     "name": "cad", "source": {"source": "local", "path": "./plugins/cad"},

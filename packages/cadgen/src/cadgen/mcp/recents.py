@@ -65,7 +65,7 @@ class Recent:
 
 class RecentStore:
     def __init__(self, root: Path | None = None) -> None:
-        self.root = (root or state_dir()) / "codex"
+        self.root = (root or state_dir()) / "mcp"
         self.log = self.root / "recents.jsonl"
         self.thumbnails = self.root / "thumbnails"
 

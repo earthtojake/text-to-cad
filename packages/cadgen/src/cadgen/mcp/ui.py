@@ -9,7 +9,7 @@ current app, which checks the protocol of the launch it was restored with.
 The page must not change while the host runs. Each thread's server reports the
 URI, and a host that sees it change drops the frames showing the old one. An
 installed wheel's page never changes; a build directory's changes with every
-rebuild, so serve a copy of it (``CADGEN_CODEX_APP_DIR``) to a running host.
+rebuild, so serve a copy of it (``CADGEN_MCP_APP_DIR``) to a running host.
 """
 
 from __future__ import annotations
@@ -37,17 +37,17 @@ RESOURCE_META = {
 
 
 def app_dir() -> Path:
-    """Where the built page lives: ``CADGEN_CODEX_APP_DIR``, a checkout's build, or the wheel's."""
-    override = str(os.environ.get("CADGEN_CODEX_APP_DIR") or "").strip()
+    """Where the built page lives: ``CADGEN_MCP_APP_DIR``, a checkout's build, or the wheel's."""
+    override = str(os.environ.get("CADGEN_MCP_APP_DIR") or "").strip()
     if override:
         return Path(override).expanduser().resolve()
     for parent in Path(__file__).resolve().parents:
-        app = parent / "apps" / "codex"
+        app = parent / "apps" / "mcp"
         if (app / "package.json").is_file():
             if (app / "dist" / "index.html").is_file():
                 return app / "dist"
             break
-    return runtime_root() / "codex"
+    return runtime_root() / "mcp"
 
 
 def _missing_page(reason: str) -> str:

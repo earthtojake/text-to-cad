@@ -36,7 +36,7 @@ class RecentStoreTest(unittest.TestCase):
         writers = [subprocess.Popen([sys.executable, "-c", code, str(self.tmp), name], env={**os.environ}) for name in ("x", "y")]
         for writer in writers:
             self.assertEqual(writer.wait(120), 0)
-        log = self.tmp / "codex" / "recents.jsonl"
+        log = self.tmp / "mcp" / "recents.jsonl"
         with open(log, "a", encoding="utf-8") as handle:
             handle.write('{"v":99,"op":"open","path":"/future.stl"}\n{"v":1,"op":"rename","path":"/x/0.stl"}\nnot json\n')
         paths = {entry.path for entry in RecentStore(self.tmp).list()}

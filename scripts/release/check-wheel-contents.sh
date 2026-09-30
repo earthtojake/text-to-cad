@@ -85,7 +85,7 @@ REQUIRED=(
   "cadgen/cli/mcp.py"
   "cadgen/mcp/server.py"
   "cadgen/mcp/tunnel.py"
-  "cadgen/_runtime/codex/index.html"
+  "cadgen/_runtime/mcp/index.html"
   # The file tracer every build loads, one per platform: a wheel missing one builds
   # nothing on that platform.
   "cadgen/_runtime/native/filetrace-macos-aarch64.dylib"

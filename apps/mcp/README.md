@@ -45,12 +45,12 @@ Pages: `Home.tsx` (Open Model, search, Pinned, Recent) and `ModelView.tsx`
 ## Develop
 
 ```bash
-npm run build:codex                          # packages, then this app
-npm --prefix apps/codex run test             # jsdom units
+npm run build:mcp                          # packages, then this app
+npm --prefix apps/mcp run test             # jsdom units
 scripts/install/codex-dev-plugin.sh --restart   # run it in the Codex app
 ```
 
 `scripts/test/test-js.sh --select codex` is what CI runs: the tests, then the
-build. A checkout's `cadgen mcp` serves `apps/codex/dist` when it exists
-(`CADGEN_CODEX_APP_DIR` overrides it); a wheel serves `cadgen/_runtime/codex`,
+build. A checkout's `cadgen mcp` serves `apps/mcp/dist` when it exists
+(`CADGEN_MCP_APP_DIR` overrides it); a wheel serves `cadgen/_runtime/mcp`,
 built by `scripts/bundle/bundle.sh`.

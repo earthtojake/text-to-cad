@@ -9,7 +9,7 @@ from tests.python.support.paths import REPO_ROOT
 
 WORKFLOW = (REPO_ROOT / ".github/workflows/test.yml").read_text(encoding="utf-8")
 JOBS = dict(re.findall(r"^  ([a-z][\w-]*):\n(.*?)(?=^  [a-z][\w-]*:\n|\Z)", WORKFLOW.split("\njobs:\n", 1)[1], re.M | re.S))
-CLASSES = {"cadgen", "core", "ui", "web", "codex", "skills", "docs", "infra"}
+CLASSES = {"cadgen", "core", "ui", "web", "mcp", "skills", "docs", "infra"}
 
 
 def selected_jobs(*changed: str) -> set[str]:
@@ -46,7 +46,7 @@ class WorkspaceWorkflowSelection(unittest.TestCase):
             r"^packages/(core|ui)/(src|scripts)/.*\.test\.[cm]?js$",  # packages/*/scripts/run-tests.mjs
             r"^packages/ui/src/.*\.test\.tsx?$",                        # packages/ui vitest.config.ts
             r"^apps/web/(src|scripts)/.*\.test\.[cm]?js$",              # apps/web/scripts/run-tests.mjs
-            r"^apps/codex/src/.*\.test\.tsx?$",                          # apps/codex vitest.config.mjs
+            r"^apps/mcp/src/.*\.test\.tsx?$",                          # apps/mcp vitest.config.mjs
             r"^scripts/bench/viewer-memory/[^/]*\.test\.mjs$",          # test-js.sh --select core
             r"^scripts/test/check-(dependencies|kit-boundaries)\.test\.mjs$",  # test-js.sh
             r"^tests/python/packages/cadgen/(.*/)?test_[^/]*\.py$",      # test-python.sh cadgen
@@ -61,13 +61,13 @@ class WorkspaceWorkflowSelection(unittest.TestCase):
         self.assertEqual([path for path in tests if not any(re.search(pattern, path) for pattern in collected)], [])
 
     def test_ui_change_reaches_both_hosts_without_engine_or_docs_suites(self):
-        self.assertEqual(selected_jobs("ui"), {"web", "codex", "skills", "packaging"})
+        self.assertEqual(selected_jobs("ui"), {"web", "mcp", "skills", "packaging"})
 
     def test_web_change_runs_only_web_policy_and_packaging(self):
         self.assertEqual(selected_jobs("web"), {"web", "skills", "packaging"})
 
-    def test_codex_app_change_runs_only_its_own_suite_policy_and_packaging(self):
-        self.assertEqual(selected_jobs("codex"), {"codex", "skills", "packaging"})
+    def test_mcp_app_change_runs_only_its_own_suite_policy_and_packaging(self):
+        self.assertEqual(selected_jobs("mcp"), {"mcp", "skills", "packaging"})
 
     def test_docs_change_stays_in_docs(self):
         self.assertEqual(selected_jobs("docs"), {"docs"})
@@ -96,7 +96,7 @@ class WorkspaceWorkflowSelection(unittest.TestCase):
         self.assertIn("'packages/core/**'", JOBS["changes"])
         self.assertIn("'packages/ui/**'", JOBS["changes"])
         self.assertIn("'apps/web/**'", JOBS["changes"])
-        self.assertIn("'apps/codex/**'", JOBS["changes"])
+        self.assertIn("'apps/mcp/**'", JOBS["changes"])
 
     def test_required_check_names_are_the_jobs(self):
         # main's branch protection requires exactly these names (CONTRIBUTING.md, Repository settings).

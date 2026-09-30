@@ -328,9 +328,9 @@ Canonical source directories are:
   `cadgen.viewer` (in `packages/cadgen`), and its built `dist/` ships inside the
   cadgen wheel as `cadgen/_runtime/viewer` — built at release time, never
   committed.
-- `apps/codex/` for the CAD app agent hosts render (MCP Apps, in Codex). Its
+- `apps/mcp/` for the CAD app agent hosts render (MCP Apps, in Codex). Its
   server is `cadgen mcp` (`cadgen/mcp` in `packages/cadgen`), and its one-file
-  build ships inside the cadgen wheel as `cadgen/_runtime/codex` — built at
+  build ships inside the cadgen wheel as `cadgen/_runtime/mcp` — built at
   release time, never committed.
 - `apps/docs/` for the site.
 - `packages/cadgen/` for the Python distribution and bundled runtime assets.
@@ -459,19 +459,19 @@ normal iteration goes through `bundle.sh`.
 
 ## CAD In Codex (the plugin's viewer)
 
-The plugin's viewer is `apps/codex` served by `cadgen mcp`; what it does and the
-rules it keeps are in [apps/codex/README.md](apps/codex/README.md). To run this
+The plugin's viewer is `apps/mcp` served by `cadgen mcp`; what it does and the
+rules it keeps are in [apps/mcp/README.md](apps/mcp/README.md). To run this
 checkout's build in the Codex app:
 
 ```bash
 scripts/install/codex-dev-plugin.sh --restart
 ```
 
-It builds `apps/codex`, assembles a plugin under `tmp/codex-dev` (this
+It builds `apps/mcp`, assembles a plugin under `tmp/codex-dev` (this
 checkout's skills, and a server run by this checkout's `.venv`), installs it as
 `cad@earthtojake-dev` and restarts the app. It refuses while another CAD plugin
 is installed; `--uninstall` removes it. The plugin serves a copy of the page
-taken at install, never `apps/codex/dist` itself: a rebuild would change the
+taken at install, never `apps/mcp/dist` itself: a rebuild would change the
 page's URI under the running app, and Codex drops the frames showing the old
 one. So reinstall to see a page edit. A running server keeps the Python it
 started with, so restart the app after a Python-only change. The server's
