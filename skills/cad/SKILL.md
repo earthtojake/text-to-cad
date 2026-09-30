@@ -120,21 +120,24 @@ for decorator examples, mesh tolerances and animated GLB.
 
 ## Prompt references and inspection
 
-A reference such as `assembly.step#o1.2.f7` identifies geometry in a particular
-saved document. Use the prompt's file context to select that document:
+A reference such as `STEP/assembly.step#o1.2.f7` identifies geometry in a
+particular saved document. Its file part is the document as CAD Viewer copied it:
+the path relative to the viewer's root (the folder it serves; for `cad_show`, the
+thread's project folder), or the full path when the model has no project around
+it, always with the file's real name and extension. A relative path resolves from
+the working directory, so from the viewer's root pass it to `read_scene` as is:
 
 ```python
 from cadgen import read_scene
 
 scene = read_scene("STEP/assembly.step")
-selection = scene.resolve("assembly.step#o1.2.f7")
+selection = scene.resolve("STEP/assembly.step#o1.2.f7")
 face = selection.shape()  # owned native geometry, in document world coordinates
 print(selection.ref, face.area)
 ```
 
-For a bare `#o1.2.f7`, use the identified target file. For a model-script prefix,
-find its declared STEP output and resolve the `#...` portion there. Do not guess
-between ambiguous files or labels. Numeric refs belong to that saved revision;
+For a bare `#o1.2.f7`, use the identified target file. Do not guess between
+ambiguous files or labels. Numeric refs belong to that saved revision;
 reopen and reselect after rebuilding. The [inspection reference](references/inspection-and-validation.md)
 covers label aliases, enumeration, measurements and small reusable operations.
 

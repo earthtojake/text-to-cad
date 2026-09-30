@@ -352,8 +352,8 @@ export function parseCadRefToken(copyText) {
   if (!match) {
     return null;
   }
-  // The prefix is kept RAW: the agent that resolves it back to a file does a literal suffix
-  // match against project paths, so normalizing (which would strip `.step.py`) breaks it.
+  // The prefix is kept RAW: a resolver matches it as a segment-aligned suffix of the document's
+  // own path, so normalizing it (dropping its extension, say) breaks that.
   let cadPath = String(match[1] || "").trim();
   if (cadPath.startsWith('"')) {
     try { cadPath = JSON.parse(cadPath); } catch { return null; }

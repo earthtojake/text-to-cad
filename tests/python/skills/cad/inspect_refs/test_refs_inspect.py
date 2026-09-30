@@ -58,7 +58,8 @@ class StepSceneTests(unittest.TestCase):
             scene.resolve("#pin")
         self.assertNotEqual(scene.resolve("#pin_1").ref, scene.resolve("#pin_2").ref)
         self.assertEqual(scene.resolve("#pin_1").prototype_id, scene.resolve("#pin_2").prototype_id)
-        for ref in ("#no_such_part", "#f1", "#housing.f1", "wrong.step#o1", "#o9", "#pin_1.f0", "#pin_1.f9000", "#pin_1.f1,f2"):
+        # `assembly#o1`: a bare stem names no file; a prefix is the file's path, extension included.
+        for ref in ("#no_such_part", "#f1", "#housing.f1", "wrong.step#o1", "assembly#o1", "#o9", "#pin_1.f0", "#pin_1.f9000", "#pin_1.f1,f2"):
             with self.subTest(ref=ref), self.assertRaises(ValueError):
                 scene.resolve(ref)
 

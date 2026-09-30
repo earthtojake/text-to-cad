@@ -21,6 +21,7 @@ from cadgen.cad_ref_syntax import (
     parse_cad_tokens,
     parse_selector,
     path_has_suffix,
+    split_cad_ref,
 )
 
 
@@ -173,37 +174,49 @@ class RefFileGuardTest(unittest.TestCase):
     user did not ask about.
     """
 
-    TARGET = "projects/STEP/shock_absorber/shock_absorber"
+    DOCUMENT = "/work/projects/STEP/shock_absorber.step"
 
-    def test_matching_prefixes_pass_in_every_spelling(self) -> None:
+    def test_a_root_relative_or_absolute_prefix_names_the_document(self) -> None:
+        # The viewer names a file by its path under whichever root it serves, or absolutely when
+        # it has none: each is a segment-aligned suffix of the document's own path.
         for prefix in (
-            "shock_absorber",
-            "shock_absorber.py",
             "shock_absorber.step",
-            "shock_absorber/shock_absorber",
-            "STEP/shock_absorber/shock_absorber",
-            "projects/STEP/shock_absorber/shock_absorber",
+            "STEP/shock_absorber.step",
+            "projects/STEP/shock_absorber.step",
+            "/work/projects/STEP/shock_absorber.step",
         ):
             with self.subTest(prefix=prefix):
-                ensure_ref_file_matches(prefix, self.TARGET)
+                ensure_ref_file_matches(prefix, self.DOCUMENT)
 
     def test_an_empty_prefix_is_always_fine(self) -> None:
-        ensure_ref_file_matches("", self.TARGET)
+        ensure_ref_file_matches("", self.DOCUMENT)
 
     def test_a_foreign_file_is_refused_and_the_message_names_both(self) -> None:
         with self.assertRaises(ValueError) as raised:
-            ensure_ref_file_matches("other_part", self.TARGET)
+            ensure_ref_file_matches("STEP/other_part.step", self.DOCUMENT)
         message = str(raised.exception)
         self.assertIn("other_part", message)
         self.assertIn("shock_absorber", message)
 
-    def test_matching_is_segment_aligned_not_substring(self) -> None:
-        # `absorber.py` is a substring of the target's filename but not a path segment;
-        # accepting it would resolve a ref to a file the user never named.
-        with self.assertRaises(ValueError):
-            ensure_ref_file_matches("absorber", self.TARGET)
-        with self.assertRaises(ValueError):
-            ensure_ref_file_matches("other/shock_absorber", self.TARGET)
+    def test_only_the_file_itself_names_it(self) -> None:
+        # A bare stem, a script, a substring of the name or another folder's file of the same
+        # name would each resolve a ref to a file the user never named.
+        for prefix in (
+            "shock_absorber",
+            "shock_absorber.py",
+            "absorber.step",
+            "other/STEP/shock_absorber.step",
+            "/elsewhere/projects/STEP/shock_absorber.step",
+        ):
+            with self.subTest(prefix=prefix), self.assertRaises(ValueError):
+                ensure_ref_file_matches(prefix, self.DOCUMENT)
+
+    def test_a_quoted_prefix_is_decoded_rather_than_cut_at_a_hash(self) -> None:
+        for path in ("/work/CAD models/part #2.step", "C:\\work\\part.step", "STEP/part.step"):
+            with self.subTest(path=path):
+                self.assertEqual((path, "o1.f2"), split_cad_ref(build_cad_token(path, "o1.f2")))
+        self.assertEqual(("", "o1.f2"), split_cad_ref("#o1.f2"))
+        self.assertEqual(("", "o1.f2"), split_cad_ref("o1.f2"))
 
     def test_path_has_suffix_is_segment_aligned(self) -> None:
         self.assertTrue(path_has_suffix("a/b/plate.stl", "plate.stl"))

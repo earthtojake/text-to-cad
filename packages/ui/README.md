@@ -148,10 +148,11 @@ raw transport, clipboard discovery, host storage or page-navigation effects.
 ## Lifetimes and state
 
 `FileSource` describes storage only: stat/list/search, optional reads and optional
-write/create/rename/duplicate/trash operations. Menus derive storage capabilities
-from these methods and native/copy capabilities from the separate `FileActions`
-port. Missing methods remain unavailable. A web catalog source stays read-only;
-listing never filters entries by renderer support.
+write/create/rename/duplicate/trash operations, and the optional name a copied
+reference gives a file (`referencePath`, else its path under the root). Menus
+derive storage capabilities from these methods and native/copy capabilities from
+the separate `FileActions` port. Missing methods remain unavailable. A web catalog
+source stays read-only; listing never filters entries by renderer support.
 
 Writes return saved, conflict, cancelled or error outcomes; mutations return
 committed receipts, cancellation or typed failures. The desktop validates the

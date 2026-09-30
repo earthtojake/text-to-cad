@@ -61,6 +61,7 @@ import {
   buildReferenceCacheKey,
   copyTextLines,
   computeNextSelectionIds,
+  fileReferencePath,
   orderedStringListEqual,
   parseAssemblyPartReferenceSelectionId,
   topologyCompositionKeyMatches,
@@ -86,7 +87,6 @@ import { cadFileParamForEntry, fileKey } from "./workbench/entryPaths.js";
 import {
   stepModuleTopologyOccurrenceIds
 } from "./workbench/topologyCapabilities.js";
-import { shortestUniquePathSuffixes } from "@text-to-cad/core/lib/filePathSuffix.js";
 import { stepJointHandles, stepPosableDofs } from "./workbench/jointHandles.js";
 import {
   buildFileStatusItems,
@@ -366,15 +366,11 @@ function StepSurfaceBody({ view, data }) {
     () => (selectedArtifactGenerating && liveEntry ? [fileKey(liveEntry)] : []),
     [selectedArtifactGenerating, liveEntry]
   );
+  // The name copied refs give this file, so they still say which file they belong to when
+  // pasted into a prompt spanning several: the host's, which knows its root (FileSource.referencePath).
+  const referencePath = fileReferencePath(view.source, view.file.path);
   // While the artifact is missing/stale/building/broken, hide the (possibly stale) render assets so
   // the viewer shows a loading or error state and renders only the fresh artifact once ready.
-  // The shortest path suffix that names each catalog entry uniquely -- almost always just the
-  // filename. Copied refs carry it so they still say which file they belong to when pasted
-  // into a prompt spanning several files, without the length of a full relative path.
-  const fileRefPrefixByPath = useMemo(
-    () => shortestUniquePathSuffixes(storeSnapshot.entries.map((entry) => cadFileParamForEntry(entry))),
-    [storeSnapshot.entries]
-  );
   const selectedEntry = useMemo(
     () => {
       const base = editingPreview.entry || (!liveEntry || selectedArtifact.status === "compiled" ||
@@ -384,10 +380,9 @@ function StepSurfaceBody({ view, data }) {
       if (!base) {
         return base;
       }
-      const fileRefPrefix = fileRefPrefixByPath.get(cadFileParamForEntry(base)) || "";
-      return fileRefPrefix ? { ...base, fileRefPrefix } : base;
+      return referencePath ? { ...base, fileRefPrefix: referencePath } : base;
     },
-    [liveEntry, selectedArtifact.status, fileRefPrefixByPath, editingPreview.entry]
+    [liveEntry, selectedArtifact.status, referencePath, editingPreview.entry]
   );
   const previousPreviewTree = useRef(null);
   useEffect(() => {

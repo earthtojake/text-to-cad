@@ -44,6 +44,12 @@ export interface FileSource {
   /** Stable workspace/root identity. Connection ports must never be used here. */
   id: string;
   rootName: string;
+  /**
+   * The name a copied reference gives `path`, one of this source's paths. Without it a
+   * reference names the file by `path` itself, relative to this source's root; a root whose
+   * relative paths mean nothing outside the viewer (a whole filesystem) gives the absolute path.
+   */
+  referencePath?: (path: string) => string;
   stat: (path: string, options: { signal: AbortSignal }) => Promise<FileMetadata>;
   list?: (directory: string, options: { signal: AbortSignal }) => Promise<readonly FileEntry[]>;
   paths?: (options: { signal: AbortSignal }) => Promise<readonly string[]>;

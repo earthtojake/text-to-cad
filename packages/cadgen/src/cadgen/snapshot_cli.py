@@ -583,23 +583,22 @@ def normalize_selection_selector(
     *,
     selector_index: lookup.SelectorIndex | None,
     source_label: str,
-    expected_cad_path: str = "",
+    document_path: str = "",
 ) -> list[str]:
     text = str(raw_value or "").strip()
     if not text:
         return []
-    # A copied ref may carry a file prefix (`plate.step.py#o1.2`). Accept it when it names the
-    # model being rendered, refuse it when it names another -- rendering a different file's ref
-    # against this model would focus the wrong geometry and look like it worked.
+    # A copied ref may carry a file prefix (`STEP/plate.step#o1.2`). Accept it when it names the
+    # document being rendered, refuse it when it names another -- rendering a different file's
+    # ref against this model would focus the wrong geometry and look like it worked.
     if "#" in text:
-        prefix, _, remainder = text.partition("#")
-        if prefix.strip():
-            try:
-                cad_ref_syntax.ensure_ref_file_matches(
-                    prefix, expected_cad_path, source_label=f"{source_label} ref {text!r}"
-                )
-            except ValueError as error:
-                raise SnapshotError(str(error)) from error
+        prefix, remainder = cad_ref_syntax.split_cad_ref(text)
+        try:
+            cad_ref_syntax.ensure_ref_file_matches(
+                prefix, document_path, source_label=f"{source_label} ref {text!r}"
+            )
+        except ValueError as error:
+            raise SnapshotError(str(error)) from error
         text = remainder.strip()
         if not text:
             return []
@@ -637,7 +636,7 @@ def normalize_selection_selector(
 def normalize_selection_filter_values(
     value: object,
     *,
-    expected_cad_path: str,
+    document_path: str,
     selector_index: lookup.SelectorIndex | None,
     source_label: str,
 ) -> list[str]:
@@ -650,7 +649,7 @@ def normalize_selection_filter_values(
             raw_value,
             selector_index=selector_index,
             source_label=source_label,
-            expected_cad_path=expected_cad_path,
+            document_path=document_path,
         ):
             selectors.setdefault(selector, None)
     return list(selectors)
@@ -659,7 +658,7 @@ def normalize_selection_filter_values(
 def normalize_render_job_selection(
     job: Mapping[str, object],
     *,
-    expected_cad_path: str,
+    document_path: str,
     selector_index: lookup.SelectorIndex | None,
 ) -> dict[str, object] | None:
     selection = job.get("selection") if is_plain_object(job.get("selection")) else None
@@ -671,7 +670,7 @@ def normalize_render_job_selection(
             continue
         normalized[key] = normalize_selection_filter_values(
             selection.get(key),
-            expected_cad_path=expected_cad_path,
+            document_path=document_path,
             selector_index=selector_index,
             source_label=f"selection.{key}",
         )
@@ -1226,7 +1225,7 @@ def resolve_step_render_job(
     )
     normalized_selection = normalize_render_job_selection(
         job,
-        expected_cad_path=cad_ref_for_step_path(reference_root, input_path),
+        document_path=str(input_path),
         selector_index=artifact_selector_index(artifact),
     )
 

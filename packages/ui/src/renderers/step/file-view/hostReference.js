@@ -29,9 +29,9 @@ function selectorFromStepTreeInternalId(value) {
  * A copied line as the host sees it: the file it belongs to (served-root
  * relative, as `cadFileParamForEntry` gives it), the selector half without its
  * `#` (`""` for a whole file), and the text exactly as copied. The prefix on
- * the copied line is the viewer's shortest-unique suffix, which is right for a
- * prompt and wrong for a host that wants to open the file, so `file` is
- * always the full path.
+ * the copied line is the name the host gives the file for a prompt
+ * (`FileSource.referencePath`), which need not be the path it opens the file
+ * by, so `file` is always the served-root path.
  */
 export function referenceFromCopyText(text, file) {
   const copied = String(text || "").trim();

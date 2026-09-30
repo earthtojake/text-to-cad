@@ -327,6 +327,11 @@ it instead; only non-isolatable topology references use double-click copying. Ca
 routing. The host supplies `environment.platform` for the ⌘C / Ctrl+C hint;
 the web host derives that field from its browser environment.
 
+A copied reference names its file as the host's `FileSource.referencePath(path)`
+spells it; a source without one leaves the file's path under its root. A root
+whose relative paths mean nothing outside the viewer (a whole filesystem) gives
+the absolute path. The host decides because only it knows its root.
+
 The bottom action and the playback bars centre on one line, `3.5rem` above the
 viewport's bottom edge. A host whose own control floats over that edge (a chat's
 composer) sets `--cad-viewport-bottom-center` on an ancestor to put the line on

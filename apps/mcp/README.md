@@ -80,7 +80,7 @@ reference host `basic-host` does.
 | `bridge.ts` | JSON-RPC 2.0 over `postMessage`: requests, the opening tool's result, host context, teardown |
 | `server.ts` | typed calls to the server's tools |
 | `tunnel.ts` | the `fetch` over `cad_http` |
-| `files.ts` | the read-only `FileSource`s: a project's, from its catalog, and a filesystem's, a folder at a time; no listing when the launch does not browse |
+| `files.ts` | the read-only `FileSource`s: a project's, from its catalog, and a filesystem's, a folder at a time, whose copied references name files by absolute path; no listing when the launch does not browse |
 | `prompt.ts` | Add to prompt: the composer via `ui/update-model-context`, references as absolute paths; `reachesComposer`, whether the host has one |
 | `live.ts`, `events.ts` | the mounted view's live controller (`@text-to-cad/ui/host`'s registry), and the `cad_events` long-poll that answers the agent (`show`, `capture`, `describe`) |
 | `presentation.ts` | how the host presents the page, and the election that retires older inline views |

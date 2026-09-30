@@ -1088,7 +1088,8 @@ test('mobile touch: a tap selects, and a two-finger pinch zooms without selectin
 });
 
 test('a click selects at once, and a double-click ends where it did when a click waited: the part isolated, isolation left, or the face copied and kept, on the selection its first click found', async () => {
-  const view = await open({ init: () => { window.__cadPromptDestination = 'clipboard'; } });
+  // The host names its files absolutely, and every copy says so.
+  const view = await open({ init: () => { window.__cadPromptDestination = 'clipboard'; window.__cadReferenceRoot = '/work/models'; } });
   const { page, box, at, errors } = view;
   const selection = () => page.evaluate(() => { const state = window.cadHarness.a.controller.readState();
     return { parts: state.selectedPartIds, refs: state.selectedReferenceIds, isolated: state.isolatedPartIds }; });
@@ -1116,7 +1117,7 @@ test('a click selects at once, and a double-click ends where it did when a click
   assert.equal(await view.pane.getByRole('button', { name: 'Add To Prompt', exact: true }).count(), 0);
   await view.pane.getByRole('button', { name: /^Copy Reference(?:\s|$)/ }).click();
   await page.waitForFunction(() => window.__clipboardWrites.length === 1);
-  assert.equal(await page.evaluate(() => window.__clipboardWrites[0]), 'hinge_block.step#o1.2');
+  assert.equal(await page.evaluate(() => window.__clipboardWrites[0]), '/work/models/hinge_block.step#o1.2');
   await page.evaluate(() => { window.__clipboardWrites = []; });
 
   // A double-click on the base isolates it. Its first click picked the base; the double-click
@@ -1165,7 +1166,7 @@ test('a click selects at once, and a double-click ends where it did when a click
   const armFace = (await selection()).refs;
   assert.equal(armFace.length, 1, `the double-clicked face is the selection: ${JSON.stringify(armFace)}`);
   assert.match(armFace[0], /\|o1\.2\.f\d+$/);
-  assert.match(await page.evaluate(() => window.__clipboardWrites[0]), /^hinge_block\.step#o1\.2\.f\d+$/);
+  assert.match(await page.evaluate(() => window.__clipboardWrites[0]), /^\/work\/models\/hinge_block\.step#o1\.2\.f\d+$/);
   // ...also when it was selected already: the two clicks it is made of do not toggle it off.
   await page.mouse.dblclick(...at([15, 0, 4]));
   await page.waitForFunction(() => window.__clipboardWrites.length === 2);
@@ -1199,6 +1200,7 @@ test('a click selects at once, and a double-click ends where it did when a click
   await view.pane.getByRole('button', { name: /^Copy References(?:\s|$)/ }).click();
   await page.waitForFunction(() => window.__clipboardWrites.length === 5);
   const copiedSelection = parseCadRefToken(await page.evaluate(() => window.__clipboardWrites[4]));
+  assert.equal(copiedSelection.cadPath, '/work/models/hinge_block.step');
   assert.deepEqual([...copiedSelection.selectors].sort(), both.map(reference => reference.split('|').at(-1)).sort());
 
   // Hover is untouched: under Faces the face under the pointer lights, under Edges the edge does.

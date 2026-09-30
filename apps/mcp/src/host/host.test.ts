@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { createPromptContext, referencePart } from '@text-to-cad/core/prompt';
 import { createBridge, type ToolResult } from './bridge';
 import { watchViewEvents } from './events';
-import { createFilesystemSource } from './files';
+import { createCatalogSource, createFilesystemSource } from './files';
 import { createComposerPromptContext } from './prompt';
 import { createServer, type ViewEvent } from './server';
 import { createTunnelFetch, decodeBase64, encodeBase64, TUNNEL_ORIGIN } from './tunnel';
@@ -155,6 +155,16 @@ describe('a filesystem, a folder at a time', () => {
     entries = [{ file: '/Users/me/b.stl', rootRelativeFile: 'Users/me/b.stl', hash: '1' }];
     changed();
     expect(seen).toEqual([[{ kind: 'content', path: 'Users/me/.work/a.step', revision: expect.any(String) }]]);
+  });
+
+  it('names its files absolutely in copied references, where a project names them by its own paths', () => {
+    const client = { getSnapshot: () => ({ entries: [], hydrated: true }), subscribe: () => () => {} } as any;
+    const fetchFolder = (async () => new Response('{}')) as typeof fetch;
+    const filesystem = (path: string) => createFilesystemSource(client, { kind: 'global', path, name: path }, fetchFolder, { id: path, explore: true, showing: () => null });
+    expect(filesystem('/').referencePath?.('Users/me/a.step')).toBe('/Users/me/a.step');
+    expect(filesystem('C:\\').referencePath?.('work/a.step')).toBe('C:\\work\\a.step');
+    // A project's catalog keeps the default: the path under its root.
+    expect(createCatalogSource(client, { kind: 'workspace', path: '/project', name: 'project' }, { id: 'w', explore: true }).referencePath).toBeUndefined();
   });
 });
 

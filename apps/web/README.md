@@ -275,9 +275,8 @@ uses compiled workspace exports and honors an explicit `PORT` while retaining
 strict port binding. React 19 is deduplicated with the shared packages.
 
 Prompt actions prepare clipboard content for an external composer. References
-use the complete served-root path and canonical selector grammar, rather than a
-display filename suffix. Image writes begin during the user gesture with a
-pending PNG Blob. A mixed text/image copy is written as separate clipboard
+use the complete served-root path and canonical selector grammar. Image writes
+begin during the user gesture with a pending PNG Blob. A mixed text/image copy is written as separate clipboard
 representations, and its result says some receivers paste only one; unsupported combinations fail without
 silently copying a subset. No receipt claims that another app pasted or sent the
 content. Bundles accept at most 128 parts and one PNG up to 20 MiB; image support

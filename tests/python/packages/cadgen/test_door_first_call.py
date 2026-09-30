@@ -137,11 +137,16 @@ print(json.dumps({
         self.assertEqual(json.loads(result.stdout)["leaves"], 1)
 
     def test_part_resolves_bare_and_file_prefixed_entity_refs(self) -> None:
-        result = self._read("src/pin.step", "#f1", "src/pin.step#e1", "pin.step#o1")
+        # The document path is relative, resolved from the working directory; a prefix is the
+        # path under the viewer's root there, or the absolute path (JSON-quoted when it needs it).
+        absolute = str(self.root / "src" / "pin.step")
+        result = self._read(
+            "src/pin.step", "#f1", "src/pin.step#e1", "pin.step#o1", f"{absolute}#f1", f"{json.dumps(absolute)}#e1"
+        )
         self.assertEqual(0, result.returncode, result.stdout + result.stderr)
         payload = json.loads(result.stdout)
         leaf = payload["leaf_refs"][0]
-        self.assertEqual(payload["refs"], [leaf + ".f1", leaf + ".e1", "#o1"])
+        self.assertEqual(payload["refs"], [leaf + ".f1", leaf + ".e1", "#o1", leaf + ".f1", leaf + ".e1"])
 
     def test_kernel_diagnostics_do_not_corrupt_script_stdout(self) -> None:
         bad = self.root / "src" / "bad.step"

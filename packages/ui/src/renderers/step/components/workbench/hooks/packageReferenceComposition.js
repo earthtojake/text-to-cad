@@ -26,7 +26,7 @@ import {
 function occurrenceRuntimeOptions(entry, occurrence, { singleComponentPart } = {}) {
   const occurrenceId = String(occurrence?.id || "").trim();
   return {
-    // The SUFP, not the full path: a copied ref should be compact.
+    // The name the host gives the file, which every copied ref carries.
     copyCadPath: String(entry?.fileRefPrefix || ""),
     partId: singleComponentPart ? "" : occurrenceId,
     transform: occurrence?.transform || null,

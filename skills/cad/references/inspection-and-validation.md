@@ -90,10 +90,14 @@ numeric IDs. Duplicate labels receive numbered aliases in occurrence order;
 resolving the ambiguous bare label raises and lists candidates. No fuzzy
 matching or choosing the first match.
 
-A copied reference's file prefix is a segment-aligned suffix of its path.
-`read_scene` rejects a prefix naming a different document. If a copied prefix
-names a model script (a bare stem), identify its saved STEP output first and
-pass the `#...` portion to that scene. Do not guess between ambiguous files.
+A copied reference's file prefix is the file's path relative to the root of the
+viewer it came from (the folder it serves; for `cad_show`, the thread's project
+folder), or its full path when the model has no project around it, always with
+the file's real name and extension. A relative path resolves from the working
+directory, so from the viewer's root pass the prefix to `read_scene` as is.
+`resolve()` accepts the prefix as a segment-aligned suffix of the opened
+document's path and rejects one naming a different document. Do not guess
+between ambiguous files.
 
 ## Measurements
 

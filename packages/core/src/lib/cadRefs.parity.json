@@ -446,7 +446,7 @@
     },
     {
       "phase": 2,
-      "why": "file prefix, the viewer's copy format (a mesh keeps its extension)",
+      "why": "file prefix, the viewer's copy format: the file's path, extension included",
       "text": "mounting_plate.stl#o1.2.f3",
       "cadPath": "mounting_plate.stl",
       "selectors": [
@@ -455,9 +455,9 @@
     },
     {
       "phase": 2,
-      "why": "directory-qualified prefix; `.step` is dropped so a generator shows as .py",
-      "text": "starship/super_heavy#o1.3",
-      "cadPath": "starship/super_heavy",
+      "why": "directory-qualified prefix: the file's path under the viewer's root",
+      "text": "starship/super_heavy.step#o1.3",
+      "cadPath": "starship/super_heavy.step",
       "selectors": [
         "o1.3"
       ]
@@ -465,8 +465,8 @@
     {
       "phase": 2,
       "why": "prefix + comma list; inheritance still applies inside the token",
-      "text": "plate#o1.2,f3,f4",
-      "cadPath": "plate",
+      "text": "plate.step#o1.2,f3,f4",
+      "cadPath": "plate.step",
       "selectors": [
         "o1.2",
         "o1.2.f3",
@@ -483,17 +483,17 @@
     {
       "phase": 2,
       "why": "a label selector behind a prefix \u2014 the two features compose",
-      "text": "shock#eye_shank.f45",
-      "cadPath": "shock",
+      "text": "shock.step#eye_shank.f45",
+      "cadPath": "shock.step",
       "selectors": [
         "eye_shank.f45"
       ]
     },
     {
       "phase": 2,
-      "why": "the prefix is kept RAW by the parser; expanding a bare stem to .step.py is resolution's job",
-      "text": "a/b/c#o1",
-      "cadPath": "a/b/c",
+      "why": "an absolute prefix, as a viewer with no project root copies it; the parser keeps every prefix RAW",
+      "text": "/work/models/STEP/c.step#o1",
+      "cadPath": "/work/models/STEP/c.step",
       "selectors": [
         "o1"
       ]

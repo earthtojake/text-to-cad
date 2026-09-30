@@ -3,6 +3,7 @@ import { test } from "node:test";
 
 import {
   buildAssemblyPartCopyText,
+  fileReferencePath,
   fileRefPrefixForEntry,
   buildNormalizedReferenceState,
   buildReferenceCacheKey,
@@ -220,14 +221,20 @@ test("a composition serves a request that holds every part it loaded", () => {
   assert.equal(topologyCompositionServes(null, "", []), false);
 });
 
-test("copy text carries the entry's shortest unique path suffix", () => {
-  const entry = { ...STEP_ENTRY, fileRefPrefix: "assy.step" };
+test("copy text carries the entry's file prefix", () => {
+  const entry = { ...STEP_ENTRY, fileRefPrefix: "models/assy.step" };
   assert.equal(
     buildAssemblyPartCopyText({ occurrenceId: "o1.6", name: "prism" }, entry),
-    "assy.step#o1.6"
+    "models/assy.step#o1.6"
   );
-  assert.equal(buildWholeStepEntryCopyReference(entry).copyText, "assy.step#");
-  assert.equal(fileRefPrefixForEntry(entry), "assy.step");
+  assert.equal(buildWholeStepEntryCopyReference(entry).copyText, "models/assy.step#");
+  assert.equal(fileRefPrefixForEntry(entry), "models/assy.step");
+});
+
+test("a file's refs name it as its host spells it, else by its path under the host's root", () => {
+  assert.equal(fileReferencePath({ id: "root" }, "models/assy.step"), "models/assy.step");
+  assert.equal(fileReferencePath({ id: "root", referencePath: (path) => `/work/${path}` }, "models/assy.step"),
+    "/work/models/assy.step");
 });
 
 test("an entry with no prefix emits the bare refs it always did", () => {
