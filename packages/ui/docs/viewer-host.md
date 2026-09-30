@@ -230,7 +230,8 @@ resets framing, applies grouped View settings, selects presets and captures a PN
 `thumbnail({ width, height })` is a library card's picture: it waits for the view
 to settle — the renderer's own live state saying the whole file is loaded and
 drawn, never a timer — then draws the model framed whole from the default
-direction at the card's aspect, on transparency, off to the side of the view, so
+direction at the card's aspect, on its own (no floor, grid or axes, whatever the
+person turned on) and on transparency, so it suits either scheme, off to the side of the view, so
 the person's camera, panels and window never show in it and nothing on screen
 changes (`kit/viewport/thumbnail.js`; a DXF paints its fitted drawing on a canvas
 of its own). A view that goes before it settles rejects it. `useModelThumbnail`

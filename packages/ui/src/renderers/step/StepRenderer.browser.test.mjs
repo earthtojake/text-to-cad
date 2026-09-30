@@ -626,6 +626,21 @@ test('hiding a part takes it off the screen, and the viewport menus offer what t
   assert.deepEqual(errors, []);
 });
 
+test('a library picture is the model on its own, on transparency: the grid and axes a person turned on are not in it', async () => {
+  const view = await open();
+  const { page, errors } = view;
+  const picture = () => page.evaluate(async () => {
+    const png = await window.cadHarness.a.controller.thumbnail({ width: 240, height: 180 });
+    return Array.from(new Uint8Array(await png.arrayBuffer()));
+  });
+  const bare = await picture();
+  assert.equal(PNG.sync.read(Buffer.from(bare)).data[3], 0, 'its corner is transparent');
+  await view.display({ grid: { enabled: true }, axes: { enabled: true } });
+  await page.waitForFunction(() => { const { display } = window.cadHarness.a.controller.readState(); return display.grid?.enabled === true && display.axes?.enabled === true; });
+  assert.deepEqual(await picture(), bare, 'the same picture with the grid and the axes up');
+  assert.deepEqual(errors, []);
+});
+
 test('the context menu\'s Zoom to selection frames the selection', async () => {
   const view = await open();
   const { page, pane, at, errors } = view;

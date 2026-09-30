@@ -13,8 +13,10 @@ export const THUMBNAIL_FIT_PADDING = 1.08;
  * A picture of the model for a library card: the scene as the view draws it — its look and its
  * Display settings — but framed whole, from the default direction, at the card's own aspect,
  * whatever camera the person holds and however large the view is or what covers it. The model is
- * drawn with no backdrop, on transparency: a card shows it on the viewport's own colour for the
- * home's colour scheme, whichever scheme it was pictured in.
+ * drawn on its own, on transparency — no backdrop, and none of the stage a person may have turned
+ * on (the floor with its glow and shadow, the grid, the origin axes), which take the scheme's
+ * colours: a card shows it on the viewport's own colour for the home's colour scheme, whichever
+ * scheme it was pictured in.
  *
  * It is drawn into the corner of the view's own drawing buffer and copied out in the same task,
  * and then the view's own frame is drawn again over it: the browser composites only once the task
@@ -75,11 +77,13 @@ export async function renderThumbnail(runtime, { bounds, modelOffset = null, sce
   const target = renderer.getRenderTarget();
   const background = scene.background;
   const clearAlpha = renderer.getClearAlpha();
+  const stage = [runtime.stageGroup, runtime.gridHelper, runtime.originAxis].filter(Boolean).map(object => [object, object.visible]);
   try {
     renderer.setRenderTarget(null);
     renderer.setScissorTest(false);
     scene.background = null;
     renderer.setClearAlpha(0);
+    for (const [object] of stage) object.visible = false;
     // Screen-space lines keep their width in pixels of the picture, as they do on screen.
     runtime.setScreenSpaceLineResolution?.(pixelWidth, pixelHeight);
     renderer.setViewport(0, 0, pixelWidth / pixelRatio, pixelHeight / pixelRatio);
@@ -88,6 +92,7 @@ export async function renderThumbnail(runtime, { bounds, modelOffset = null, sce
     context.drawImage(renderer.domElement, 0, buffer.y - pixelHeight, pixelWidth, pixelHeight, 0, 0, pixelWidth, pixelHeight);
   } finally {
     scene.background = background;
+    for (const [object, visible] of stage) object.visible = visible;
     renderer.setClearAlpha(clearAlpha);
     renderer.setViewport(viewport);
     renderer.setScissorTest(scissorTest);
