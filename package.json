@@ -7,6 +7,7 @@
     "packages/core",
     "packages/ui",
     "apps/web",
+    "apps/codex",
     "apps/docs"
   ],
   "scripts": {
@@ -16,7 +17,8 @@
     "dev:web": "npm run build:packages && npm run dev -w @text-to-cad/web",
     "dev:docs": "npm run build -w @text-to-cad/core && npm run dev -w cad-skills-docs",
     "test": "scripts/test/test-js.sh",
-    "check:boundaries": "node scripts/test/check-dependencies.mjs && node scripts/test/check-kit-boundaries.mjs"
+    "check:boundaries": "node scripts/test/check-dependencies.mjs && node scripts/test/check-kit-boundaries.mjs",
+    "build:codex": "npm run build:packages && npm run build -w @text-to-cad/codex"
   },
   "overrides": {
     "postcss": "^8.5.14"

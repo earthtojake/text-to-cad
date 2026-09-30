@@ -80,7 +80,7 @@ function walk(dir) {
     else if (/\.[cm]?[jt]sx?$/.test(item.name) && !/\.(test|spec)\./.test(item.name)) files.push(file);
   }
 }
-for (const root of ['apps/docs/src', 'apps/web/src', 'apps/desktop/src', 'packages/core/src', 'packages/ui/src']) walk(path.join(repo, root));
+for (const root of ['apps/docs/src', 'apps/web/src', 'apps/codex/src', 'apps/desktop/src', 'packages/core/src', 'packages/ui/src']) walk(path.join(repo, root));
 const errors = [];
 const edges = new Map();
 const nodeModules = new Set();
@@ -122,7 +122,7 @@ function inspect(file) {
 inspect(start);
 // Any Node-only helper reachable from UI or an app's browser renderer is a leak,
 // even through a re-export or an otherwise framework-independent core module.
-for (const root of files.filter(file => ['packages/ui/', 'apps/web/', 'apps/docs/', 'apps/desktop/src/renderer/'].some(prefix => repoPath(file).startsWith(prefix)))) {
+for (const root of files.filter(file => ['packages/ui/', 'apps/web/', 'apps/codex/', 'apps/docs/', 'apps/desktop/src/renderer/'].some(prefix => repoPath(file).startsWith(prefix)))) {
   const seen = new Set();
   function checkBrowser(file) {
     if (seen.has(file)) return; seen.add(file);
