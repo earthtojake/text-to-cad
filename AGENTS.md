@@ -58,6 +58,7 @@ for the full flow, the resume path, the rehearsal, and local/manual fallbacks.
   root is the plugin package; its skills are `skills/` directly.
 - `models/`: sample and durable CAD/robot-description fixtures.
 - `apps/web/`: the CAD Viewer's React client (its backend is `cadgen.viewer`).
+- `apps/codex/`: the CAD app agent hosts render in Codex (its server is `cadgen mcp`).
 - `packages/core`: `@text-to-cad/core`, shared CAD/runtime/client code without React.
 - `packages/ui`: `@text-to-cad/ui`, the shared FileViewer, renderers, controls and styles.
 - `packages/cadgen`: the published distribution — STEP/GLB/topology generation,
@@ -206,7 +207,7 @@ when touching shared surfaces or before handoff:
 - Focused runners: `scripts/test/test-js.sh`, `scripts/test/test-docs.sh`,
   `scripts/test/test-python.sh`, `scripts/test/test-global.sh`.
   `test-python.sh` takes `--select cadgen|viewer|skills|all` and
-  `--print-weights`; `test-js.sh` takes `--select core|ui|web|all`. See
+  `--print-weights`; `test-js.sh` takes `--select core|ui|web|codex|all`. See
   `scripts/README.md`.
 - In GitHub Actions, `test.yml` runs one conditional job per concern. The graph,
   stable required check names and workspace install recipes are in

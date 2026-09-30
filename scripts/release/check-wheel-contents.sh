@@ -81,6 +81,11 @@ REQUIRED=(
   "cadgen/_runtime/browser/snapshot-render.js"
   "cadgen/_runtime/browser/render.html"
   "cadgen/_runtime/viewer/index.html"
+  # CAD in an agent host: the server `cadgen mcp` runs and the one page it serves.
+  "cadgen/cli/mcp.py"
+  "cadgen/mcp/server.py"
+  "cadgen/mcp/tunnel.py"
+  "cadgen/_runtime/codex/index.html"
   # The file tracer every build loads, one per platform: a wheel missing one builds
   # nothing on that platform.
   "cadgen/_runtime/native/filetrace-macos-aarch64.dylib"

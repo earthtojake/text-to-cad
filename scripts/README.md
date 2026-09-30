@@ -15,6 +15,7 @@ step; nothing else belongs here (one-off helpers go in `tmp/`).
 | Check the shipping contract | `scripts/github-workflows/check-builds.sh` |
 | Install local skills into agents | `scripts/install/install-skills.sh --agent codex` |
 | Uninstall local skill links | `scripts/install/uninstall-skills.sh --agent codex` |
+| Run this checkout as the CAD plugin in the Codex app | `scripts/install/codex-dev-plugin.sh --restart` |
 
 ## Index
 
@@ -28,14 +29,15 @@ where those files ship, so these scripts are what produces them.
   metadata (which IS committed) rather than writing it. `--clean` removes the
   `_runtime` tree first. Called by `test.yml`, `release-publish.yml`,
   `check-builds.sh`, the pre-commit hook.
-- `cadgen-runtime.sh` — builds the four runtime stages: `--node` (esbuilt Node
+- `cadgen-runtime.sh` — builds the five runtime stages: `--node` (esbuilt Node
   builders), `--browser` (snapshot browser bundle), `--viewer` (vite build of
-  `apps/web`), `--native` (the file tracer, zig-compiled for every platform;
-  `--native-host` builds this machine's only). `--print-outputs` lists the three
-  directories a bundle always produces; `--check` skips the viewer stage, which
-  needs the client's `node_modules` and which nothing in a checkout reads. Called
-  by `bundle.sh`, `check-builds.sh`, `test/test-installed.sh`, and
-  `test/common.sh` when a test runner finds a stage it needs missing; pinned by
+  `apps/web`), `--codex` (vite build of `apps/codex`, one `index.html`), `--native`
+  (the file tracer, zig-compiled for every platform; `--native-host` builds this
+  machine's only). `--print-outputs` lists the three directories a bundle always
+  produces; `--check` skips the viewer and codex stages, which need the apps'
+  `node_modules` and which nothing in a checkout reads. Called by `bundle.sh`,
+  `check-builds.sh`, `test/test-installed.sh`, and `test/common.sh` when a test
+  runner finds a stage it needs missing; pinned by
   `tests/python/global/test_node_builder_bundles.py` and
   `test_js_runtime_reproducibility.py`. Call it directly only to debug one stage.
 - `lib/node_builders.sh`, `lib/snapshot_runtime.sh` — sourced by
@@ -47,9 +49,10 @@ where those files ship, so these scripts are what produces them.
 - `test.sh` — `test-js.sh`, then `test-python.sh`, then `test-global.sh`: the
   whole tree on one machine. Called by `release-publish.yml`; `test.yml` calls
   the focused runners per job instead.
-- `test-js.sh [--select core|ui|web|all]` — builds the required shared exports,
+- `test-js.sh [--select core|ui|web|codex|all]` — builds the required shared exports,
   checks dependency boundaries and runs the selected shared JS/UI/web suites.
-  Core includes the pure `bench/viewer-memory/` helper units.
+  Core includes the pure `bench/viewer-memory/` helper units; `codex` also builds
+  the CAD app, whose one-file build is half its contract.
 - `test-python.sh [--keep-going] [--select GROUP] [--print-weights]`
   — the cadgen package suite, then every skill's suite. Each test FILE runs in
   its own interpreter against its own temporary store, `CADGEN_TEST_JOBS` at a
@@ -138,6 +141,10 @@ where those files ship, so these scripts are what produces them.
 - `install-skills.sh`, `uninstall-skills.sh` — symlink `skills/*` into an agent's
   skill directory (`--agent codex|claude|...`, `--all`, `--dry-run`). Developer
   step in `CONTRIBUTING.md`.
+- `codex-dev-plugin.sh` — builds `apps/codex` and installs this checkout into the
+  Codex app as `cad@earthtojake-dev` (skills copied, server run by `.venv`);
+  `--restart` reopens the app, `--uninstall` removes it. Developer step in
+  `CONTRIBUTING.md` ("CAD In Codex").
 
 `git-hooks/pre-commit` — the body `.githooks/pre-commit` runs: `bundle.sh --check`
 when staged paths touch `packages`, `apps`, `skills` or `scripts/bundle`. It is

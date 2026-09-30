@@ -10,12 +10,12 @@ const pluginInstallCommands = [
   {
     agent: "Codex",
     command:
-      "codex plugin marketplace add earthtojake/text-to-cad\ncodex plugin add cad@text-to-cad",
+      "codex plugin marketplace add earthtojake/text-to-cad\ncodex plugin add cad@earthtojake",
   },
   {
     agent: "Claude Code",
     command:
-      "claude plugin marketplace add earthtojake/text-to-cad\nclaude plugin install cad@text-to-cad",
+      "claude plugin marketplace add earthtojake/text-to-cad\nclaude plugin install cad@earthtojake",
   },
   // Grok Build reads the same .claude-plugin/marketplace.json as Claude Code -- there is no
   // separate Grok manifest -- and installs straight from the repo rather than adding a

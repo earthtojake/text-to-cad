@@ -115,17 +115,26 @@ Grok Build:
 ```bash
 # Codex (requires Codex 0.142.0 or newer)
 codex plugin marketplace add earthtojake/text-to-cad
-codex plugin add cad@text-to-cad
+codex plugin add cad@earthtojake
 ```
 
 Codex resolves this repository-root plugin only from 0.142.0 onward. On older
 versions the plugin is skipped silently and never appears in `codex plugin list`;
 upgrade with `npm install -g @openai/codex@latest`.
 
+In the Codex app the plugin also brings the CAD viewer: **CAD** in the sidebar
+(recent models, and Open Model), a **CAD** tab beside each thread that the agent
+drives, and *Open with CAD* for model files. It runs locally through
+[uv](https://docs.astral.sh/uv/): after installing, ask Codex to run the
+plugin's `$setup` skill (it installs uv if you approve and prepares the pinned
+runtime), then restart the app. The marketplace was renamed from `text-to-cad`
+to `earthtojake`; if you added it before, remove the old one first
+(`codex plugin marketplace remove text-to-cad`).
+
 ```bash
 # Claude Code
 claude plugin marketplace add earthtojake/text-to-cad
-claude plugin install cad@text-to-cad
+claude plugin install cad@earthtojake
 ```
 
 Grok Build uses the existing `.claude-plugin/marketplace.json`; there is no

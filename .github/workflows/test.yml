@@ -4,8 +4,8 @@
 # every skill suite. Runtime outputs are built only where needed.
 #
 # Check names are the jobs' concerns: `core-js` tests packages/core, `web` tests
-# packages/ui and apps/web and drives the bundled viewer. main's required checks
-# name all eight jobs.
+# packages/ui and apps/web and drives the bundled viewer, `codex` tests apps/codex.
+# main's required checks name the eight jobs before `codex`.
 # Prose-only root changes run Version Check only; skill/package Markdown remains
 # test input.
 name: Test
@@ -41,6 +41,7 @@ jobs:
       core: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.core == 'true' }}
       ui: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.ui == 'true' }}
       web: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.web == 'true' }}
+      codex: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.codex == 'true' }}
       skills: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.skills == 'true' }}
       docs: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.docs == 'true' }}
       infra: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.infra == 'true' }}
@@ -64,6 +65,8 @@ jobs:
             web:
               - 'apps/web/**'
               - 'tests/browser/**'
+            codex:
+              - 'apps/codex/**'
             skills:
               - 'skills/**'
               - 'tests/python/skills/**'
@@ -76,6 +79,7 @@ jobs:
               - 'VERSION'
               - '.claude-plugin/**'
               - '.codex-plugin/**'
+              - 'codex.mcp.json'
               - 'package.json'
               - 'package-lock.json'
               - '.gitattributes'
@@ -207,7 +211,7 @@ jobs:
       - name: Set up dependencies
         uses: ./.github/actions/setup-deps
         with:
-          npm: packages/core packages/ui apps/web
+          npm: packages/core packages/ui apps/web apps/codex
           ui-browser: "true"
 
       - name: Run shared UI tests
@@ -242,12 +246,33 @@ jobs:
           if-no-files-found: ignore
           retention-days: 3
 
+  # The CAD app an agent host renders: its host adapter's units in jsdom, and the one-file
+  # build it ships as (a build that would leave anything outside index.html fails).
+  codex:
+    name: codex
+    needs: changes
+    if: needs.changes.outputs.codex == 'true' || needs.changes.outputs.ui == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.infra == 'true'
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up dependencies
+        uses: ./.github/actions/setup-deps
+        with:
+          python: "false"
+          npm: packages/core packages/ui apps/codex
+
+      - name: Run the CAD app tests and build it
+        run: scripts/test/test-js.sh --select codex
+
   # The policy gates read the repo's markdown and manifests; the skill suites run the
   # cadgen CLIs. Repository properties, so Linux only.
   skills:
     name: skills
     needs: changes
-    if: needs.changes.outputs.skills == 'true' || needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.infra == 'true' || needs.changes.outputs.ui == 'true' || needs.changes.outputs.web == 'true'
+    if: needs.changes.outputs.skills == 'true' || needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.infra == 'true' || needs.changes.outputs.ui == 'true' || needs.changes.outputs.web == 'true' || needs.changes.outputs.codex == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -298,7 +323,7 @@ jobs:
   packaging:
     name: packaging
     needs: changes
-    if: needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.web == 'true' || needs.changes.outputs.ui == 'true' || needs.changes.outputs.infra == 'true'
+    if: needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.web == 'true' || needs.changes.outputs.ui == 'true' || needs.changes.outputs.codex == 'true' || needs.changes.outputs.infra == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
 
@@ -309,7 +334,7 @@ jobs:
       - name: Set up dependencies
         uses: ./.github/actions/setup-deps
         with:
-          npm: packages/core packages/ui apps/web
+          npm: packages/core packages/ui apps/web apps/codex
 
       - name: Bundle production outputs from clean
         run: scripts/bundle/bundle.sh --clean

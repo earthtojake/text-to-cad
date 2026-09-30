@@ -3,18 +3,20 @@ set -euo pipefail
 
 # Build cadgen's non-Python runtime INTO THE PACKAGE (packages/cadgen/src/cadgen/_runtime).
 #
-# cadgen executes four things it does not write in Python: Node builders (the mesh
+# cadgen executes five things it does not write in Python: Node builders (the mesh
 # exports are baked by a JS child), a headless browser bundle (the snapshot
 # CLI drives it in a page), the CAD Viewer's built client (`cadgen viewer` serves
-# it), and the native file tracer every build loads to see what it reads. cadgen.assets
-# resolves them inside the distribution, so there is one copy and one builder of that
-# copy: this script. scripts/bundle/bundle.sh is the entry point that calls it (after
-# stamping derived version metadata); call this directly only when debugging one stage.
+# it), the one-file CAD app an agent host renders (`cadgen mcp` serves it), and the
+# native file tracer every build loads to see what it reads. cadgen resolves them
+# inside the distribution, so there is one copy and one builder of that copy: this
+# script. scripts/bundle/bundle.sh is the entry point that calls it (after stamping
+# derived version metadata); call this directly only when debugging one stage.
 #
 # Stages (default: all of them):
 #   --node      esbuilt builders          -> _runtime/node
 #   --browser   snapshot browser bundle   -> _runtime/browser
 #   --viewer    CAD Viewer client (vite)  -> _runtime/viewer
+#   --codex     CAD app page (vite)       -> _runtime/codex
 #   --native    file tracer, every OS     -> _runtime/native
 #               (--native-host: this machine's only, which is all a test run loads)
 #
@@ -26,10 +28,11 @@ set -euo pipefail
 # asserts the files each stage owes. scripts/release/check-wheel-contents.sh is the gate
 # that proves the wheel got them.
 #
-# `--check` skips the viewer stage because it is the expensive one (a vite build of
-# apps/web, which needs that app's node_modules) and because a checkout serves
-# apps/web/dist directly -- cadgen.assets prefers it, so nothing in a checkout reads
-# _runtime/viewer. `--print-outputs` lists the three directories a bundle always produces.
+# `--check` skips the viewer and codex stages because they are the expensive ones (vite
+# builds of apps/web and apps/codex, which need those apps' node_modules) and because a
+# checkout serves their dist directories directly -- cadgen prefers them, so nothing in a
+# checkout reads _runtime/viewer or _runtime/codex. `--print-outputs` lists the three
+# directories a bundle always produces.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
@@ -46,6 +49,8 @@ VIEWER_DIR="$RUNTIME_DIR/viewer"
 NATIVE_DIR="$RUNTIME_DIR/native"
 NATIVE_SOURCE="$REPO_ROOT/packages/cadgen/native/filetrace.c"
 VIEWER_APP_DIR="$REPO_ROOT/apps/web"
+CODEX_DIR="$RUNTIME_DIR/codex"
+CODEX_APP_DIR="$REPO_ROOT/apps/codex"
 VIEWER_PACKAGE_MANAGER="${CAD_VIEWER_PACKAGE_MANAGER:-}"
 
 SNAPSHOT_BUILD_DEPS_DIR="${CADGEN_SNAPSHOT_BUILD_DEPS_DIR:-$REPO_ROOT/tmp/cadgen-snapshot-build}"
@@ -78,6 +83,7 @@ PRINT_OUTPUTS=0
 STAGE_NODE=0
 STAGE_BROWSER=0
 STAGE_VIEWER=0
+STAGE_CODEX=0
 STAGE_NATIVE=0
 NATIVE_HOST_ONLY=0
 ANY_STAGE=0
@@ -94,12 +100,13 @@ Stages (default: all):
   --node      esbuilt Node builders     -> _runtime/node
   --browser   snapshot browser bundle   -> _runtime/browser
   --viewer    CAD Viewer client (vite)  -> _runtime/viewer
+  --codex     CAD app page (vite)       -> _runtime/codex
   --native    file tracer, every OS     -> _runtime/native
   --native-host  the file tracer for this machine only
 
 Options:
   --check          Build, then assert every required output exists. Skips the
-                   viewer stage (a vite build nothing in a checkout reads).
+                   viewer and codex stages (vite builds nothing in a checkout reads).
   --clean          Remove the _runtime tree first, so the build starts from nothing.
   --print-outputs  Print the generated output paths (repo-relative), then exit.
   -h, --help       Show this help.
@@ -114,6 +121,7 @@ while [ "$#" -gt 0 ]; do
     --node) STAGE_NODE=1; ANY_STAGE=1 ;;
     --browser) STAGE_BROWSER=1; ANY_STAGE=1 ;;
     --viewer) STAGE_VIEWER=1; ANY_STAGE=1 ;;
+    --codex) STAGE_CODEX=1; ANY_STAGE=1 ;;
     --native) STAGE_NATIVE=1; ANY_STAGE=1 ;;
     --native-host) STAGE_NATIVE=1; NATIVE_HOST_ONLY=1; ANY_STAGE=1 ;;
     -h|--help) usage; exit 0 ;;
@@ -123,7 +131,7 @@ while [ "$#" -gt 0 ]; do
 done
 
 if [ "$ANY_STAGE" -eq 0 ]; then
-  STAGE_NODE=1; STAGE_BROWSER=1; STAGE_VIEWER=1; STAGE_NATIVE=1
+  STAGE_NODE=1; STAGE_BROWSER=1; STAGE_VIEWER=1; STAGE_CODEX=1; STAGE_NATIVE=1
 fi
 
 if [ "$PRINT_OUTPUTS" -eq 1 ]; then
@@ -206,6 +214,32 @@ build_viewer_client() {
   rsync -a --delete --exclude "*.map" "$VIEWER_APP_DIR/dist/" "$target/"
 }
 
+# --- the CAD app an agent host renders ------------------------------------------------
+# One self-contained index.html (its vite build inlines scripts, styles, workers and
+# fonts), so the stage owes exactly that file.
+build_codex_app() {
+  local target="$1" package_manager
+  require_command node
+  [ -f "$CODEX_APP_DIR/package.json" ] || { echo "Missing CAD app: $CODEX_APP_DIR" >&2; exit 1; }
+  package_manager="$(resolve_viewer_package_manager)"
+  require_command "$package_manager"
+  case "$package_manager" in
+    pnpm) CI=true pnpm --dir "$CODEX_APP_DIR" run build ;;
+    npm)  npm --prefix "$CODEX_APP_DIR" run build ;;
+    *)
+      echo "Unsupported package manager: $package_manager" >&2
+      exit 1
+      ;;
+  esac
+  if [ ! -f "$CODEX_APP_DIR/dist/index.html" ]; then
+    echo "Missing CAD app build: $CODEX_APP_DIR/dist/index.html" >&2
+    exit 1
+  fi
+  rm -rf "$target"
+  mkdir -p "$target"
+  cp "$CODEX_APP_DIR/dist/index.html" "$target/index.html"
+}
+
 # --- the native file tracer ------------------------------------------------------------
 # One C file, cross-compiled for every platform by zig (the `ziglang` wheel in
 # requirements-dev.txt), so any machine builds the whole set. Each target compiles into
@@ -278,8 +312,8 @@ build_native_tracer() {
 build_stage_packages() {
   # Node and browser runtime stages consume only @text-to-cad/core and must remain
   # runnable in Python/core CI jobs that install that workspace alone. The
-  # Viewer is the only stage that also needs @text-to-cad/ui.
-  if [ "$STAGE_VIEWER" -eq 1 ] && [ "$MODE" != "check" ]; then
+  # Viewer and the CAD app are the stages that also need @text-to-cad/ui.
+  if { [ "$STAGE_VIEWER" -eq 1 ] || [ "$STAGE_CODEX" -eq 1 ]; } && [ "$MODE" != "check" ]; then
     npm --prefix "$REPO_ROOT" run build:packages
   elif [ "$STAGE_NODE" -eq 1 ] || [ "$STAGE_BROWSER" -eq 1 ]; then
     npm --prefix "$REPO_ROOT" run build -w @text-to-cad/core
@@ -351,6 +385,10 @@ build_all() {
   if [ "$STAGE_VIEWER" -eq 1 ] && [ "$MODE" != "check" ]; then
     build_viewer_client "$root/viewer"
     echo "Bundled ${root#"$REPO_ROOT"/}/viewer"
+  fi
+  if [ "$STAGE_CODEX" -eq 1 ] && [ "$MODE" != "check" ]; then
+    build_codex_app "$root/codex"
+    echo "Bundled ${root#"$REPO_ROOT"/}/codex"
   fi
   if [ "$STAGE_NATIVE" -eq 1 ]; then
     build_native_tracer "$root/native"

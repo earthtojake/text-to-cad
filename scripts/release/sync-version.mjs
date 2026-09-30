@@ -21,6 +21,12 @@ const tomlTargets = [
   "packages/cadgen/pyproject.toml",
 ];
 
+// Files that pin the cadgen runtime by a requirement string rather than a version field:
+// the command the agent app runs to start CAD's MCP server.
+export const pinTargets = [
+  "codex.mcp.json",
+];
+
 function usage() {
   console.log(`Usage:
   scripts/release/sync-version.mjs [--check]
@@ -169,6 +175,23 @@ function syncTomlTarget(relativePath, version) {
   };
 }
 
+function syncPinTarget(relativePath, version) {
+  const text = readRequiredText(relativePath);
+  const pin = /(cadgen(?:\[[a-z0-9_,.-]+\])?==)([^"\s]+)/g;
+  const matches = [...text.matchAll(pin)];
+  if (matches.length === 0) {
+    throw new Error(`${relativePath} must pin cadgen==<version>`);
+  }
+  if (matches.every((match) => match[2] === version)) {
+    return null;
+  }
+  return {
+    path: relativePath,
+    labels: ["cadgen pin"],
+    text: text.replace(pin, (_, prefix) => `${prefix}${version}`),
+  };
+}
+
 /** Merge targets that are the SAME FILE into one, unioning their fields.
  *
  * The mirrored viewer/skill paths are symlinks to the canonical package in the development
@@ -227,6 +250,12 @@ function main() {
   }
   for (const target of tomlTargets) {
     const change = syncTomlTarget(target, version);
+    if (change) {
+      changes.push(change);
+    }
+  }
+  for (const target of pinTargets) {
+    const change = syncPinTarget(target, version);
     if (change) {
       changes.push(change);
     }

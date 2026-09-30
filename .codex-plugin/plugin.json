@@ -20,6 +20,7 @@
     "gcode"
   ],
   "skills": "./skills/",
+  "mcpServers": "./codex.mcp.json",
   "interface": {
     "displayName": "CAD",
     "shortDescription": "Give your agent CAD superpowers.",
@@ -37,5 +38,10 @@
       "Slice a mesh into printer-ready G-code."
     ],
     "brandColor": "#249DDD"
+  },
+  "extensions": {
+    "com.openai": {
+      "onboardingSkill": "setup"
+    }
   }
 }

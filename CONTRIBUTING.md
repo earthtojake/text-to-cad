@@ -239,11 +239,12 @@ requested separately. A manual dispatch runs every job.
 | core-js | core, infrastructure | `@text-to-cad/core` and benchmark helper units |
 | web | web, UI, core, cadgen, infrastructure | UI and web units, the UI browser specs, bundled launch, format/camera browser checks through the backend |
 | skills | skills or runtime/host contracts | repo policy; skill CLI suites only for skills, cadgen, core or infrastructure |
+| codex | codex, UI, core, cadgen, infrastructure | the CAD app's host-adapter units (jsdom) and its one-file build |
 | docs | docs, skills, cadgen, core, infrastructure | static asset contract, lint, Next build, icon verification |
-| packaging | cadgen, core, UI, web, infrastructure | clean bundle, wheel contents, installed CLI behavior |
+| packaging | cadgen, core, UI, web, codex, infrastructure | clean bundle, wheel contents, installed CLI behavior |
 
 Here `cadgen`, `core` and `UI` mean their package directories and tests;
-`web` and `docs` mean their app directories. Infrastructure includes
+`web`, `codex` and `docs` mean their app directories. Infrastructure includes
 `scripts/`, `.github/`, the root lockfile/manifests and version/plugin metadata.
 Root prose, manual model changes and `LICENSE` run only Version Check. Skill
 and package Markdown is test input and follows its owning component.
@@ -327,6 +328,10 @@ Canonical source directories are:
   `cadgen.viewer` (in `packages/cadgen`), and its built `dist/` ships inside the
   cadgen wheel as `cadgen/_runtime/viewer` — built at release time, never
   committed.
+- `apps/codex/` for the CAD app agent hosts render (MCP Apps, in Codex). Its
+  server is `cadgen mcp` (`cadgen/mcp` in `packages/cadgen`), and its one-file
+  build ships inside the cadgen wheel as `cadgen/_runtime/codex` — built at
+  release time, never committed.
 - `apps/docs/` for the site.
 - `packages/cadgen/` for the Python distribution and bundled runtime assets.
 - `packages/core/` for non-React CAD/client code.
@@ -359,7 +364,7 @@ imports remain inside its directory.
 
 ## Viewer Development In This Repo
 
-The apps are `docs` and `web`. Framework-independent CAD code lives
+The apps are `docs`, `web` and `codex`. Framework-independent CAD code lives
 in `@text-to-cad/core`; `@text-to-cad/ui` owns the complete FileViewer and injectable
 renderers. Apps consume compiled public exports. Apps never import another app,
 and packages never import apps. `npm run check:boundaries` checks the graph,
@@ -451,6 +456,24 @@ scripts/bundle/bundle.sh --check
 asserts required Node/browser outputs; wheel validation checks the complete
 packaged viewer too. Per-stage `cadgen-runtime.sh` flags are for debugging;
 normal iteration goes through `bundle.sh`.
+
+## CAD In Codex (the plugin's viewer)
+
+The plugin's viewer is `apps/codex` served by `cadgen mcp`; what it does and the
+rules it keeps are in [apps/codex/README.md](apps/codex/README.md). To run this
+checkout's build in the Codex app:
+
+```bash
+scripts/install/codex-dev-plugin.sh --restart
+```
+
+It builds `apps/codex`, assembles a plugin under `tmp/codex-dev` (this
+checkout's skills, and a server run by this checkout's `.venv`), installs it as
+`cad@earthtojake-dev` and restarts the app. It refuses while another CAD plugin
+is installed; `--uninstall` removes it. A running server keeps the code it started
+with, so reinstall (or just restart the app after a Python-only change) to see
+edits. The server's stderr lands in Codex's log database (`~/.codex/logs_2.sqlite`,
+lines starting `MCP server stderr`).
 
 ## Branch Layout
 

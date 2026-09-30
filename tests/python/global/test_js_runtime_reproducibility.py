@@ -32,6 +32,7 @@ CADJS_RUNNER = REPO_ROOT / "packages" / "core" / "scripts" / "run-tests.mjs"
 TEST_RUNNERS = (
     CADJS_RUNNER,
     VIEWER_DIR / "scripts" / "run-tests.mjs",
+    REPO_ROOT / "apps" / "codex" / "scripts" / "run-tests.mjs",
 )
 
 
