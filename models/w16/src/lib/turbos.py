@@ -40,16 +40,15 @@ from __future__ import annotations
 import math
 import sys
 
-from cadgen import build123d as bd, srgb
+from cadgen import build123d as bd
 
 from lib import fasteners as F, geo, palette as P, spec as S
 from lib.castings import edges_at, fuse_all, machined_skin, safe_fillet
 
 # Mid-way zone of the turbine housing's heat gradient: hot-side cast iron runs
-# HEAT_TINT (brown) in the cool zone, through this bronze, to HEAT_TINT_BLUE
-# where the gas enters at the inlet flange.  Local to this module — the rest of
-# the engine has no bronze in it.
-BRONZE = srgb("#8a6a4a")
+# HEAT_TINT (brown) in the cool zone, through HEAT_TINT_BRONZE, to HEAT_TINT_BLUE
+# where the gas enters at the inlet flange.
+BRONZE = P.HEAT_TINT_BRONZE
 
 # ---------------------------------------------------------------------------
 # Local-frame sizes (mm).  x is along the turbo axis, +X toward the turbine.

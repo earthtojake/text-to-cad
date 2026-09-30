@@ -25,6 +25,7 @@ STEEL_DARK = srgb("#4b4f55")     # black-oxide steel: studs, chain, cams
 STEEL_BLUE = srgb("#5b6a80")     # heat-treated blue steel (springs, retainers)
 HEAT_TINT = srgb("#6a4e3f")      # turbine housings: bronze/brown heat tint
 HEAT_TINT_BLUE = srgb("#4a5470") # hotter blue tint band
+HEAT_TINT_BRONZE = srgb("#8a6a4a")  # mid-way tint band on the turbine inlet duct
 INCONEL = srgb("#8b8f96")        # exhaust primaries, turbine wheels
 BRASS = srgb("#b8975a")
 COPPER = srgb("#a86a45")
@@ -66,6 +67,11 @@ MATERIAL_DEFINITIONS = {'aluminium_tube': {'metalness': 0.85, 'name': 'Aluminium
                     'metalness': 0.8,
                     'name': 'Heat Tint Blue',
                     'roughness': 0.36},
+ 'heat_tint_bronze': {'clearcoat': 0.6,
+                      'clearcoatRoughness': 0.28,
+                      'metalness': 0.8,
+                      'name': 'Heat Tint Bronze',
+                      'roughness': 0.38},
  'hose': {'metalness': 0.0, 'name': 'Hose', 'roughness': 0.85},
  'inconel': {'metalness': 0.88, 'name': 'Inconel', 'roughness': 0.36},
  'intercooler_core': {'metalness': 0.6, 'name': 'Intercooler Core', 'roughness': 0.62},
@@ -94,6 +100,7 @@ MATERIAL_COLORS = {
     "gold_heat_wrap": GOLD_HEAT_WRAP,
     "heat_tint": HEAT_TINT,
     "heat_tint_blue": HEAT_TINT_BLUE,
+    "heat_tint_bronze": HEAT_TINT_BRONZE,
     "hose": HOSE,
     "inconel": INCONEL,
     "intercooler_core": INTERCOOLER_CORE,
@@ -132,6 +139,7 @@ SYSTEM_MATERIALS = {'block': ('cast', 'machined', 'titanium'),
             'cast_dark',
             'heat_tint',
             'heat_tint_blue',
+            'heat_tint_bronze',
             'inconel',
             'machined',
             'machined_steel',
