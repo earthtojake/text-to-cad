@@ -10,9 +10,10 @@ platform.
 
 **PURPOSE** — the engine and its command surface: model execution, the
 store, document assembly, kinematics, exports, validation, inspection,
-snapshots, the warm daemon and its build pool, and the CAD Viewer
+snapshots, the warm daemon and its build pool, the CAD Viewer
 (`cadgen viewer`: a local HTTP server over the built client, one directory per
-instance).
+instance), and CAD beside an agent's chat (`cadgen mcp`: an MCP App server that
+an agent host starts per thread, over the viewer's own routes).
 
 **MAY DEPEND ON** — the Python ecosystem it declares (OCP/build123d lazily,
 never at namespace-import time) and the bundled runtime.
@@ -360,18 +361,23 @@ src/cadgen/
                          #   (artifact_status: not compiled / compiling /
                          #   compiled / failed), build_progress (the daemon's
                          #   job ledger, read over its socket)
+  mcp/                   # CAD for agent hosts that render MCP Apps: stdio
+                         #   JSON-RPC (protocol), the tools and launches
+                         #   (server), open views (views), the viewer routes
+                         #   in-process (tunnel), roots, recents, the page (ui)
   _runtime/              # BUILT JS (browser snapshot renderer, node
-                         #   builders, the viewer client) and the native file
-                         #   tracer, one library per platform — produced when
-                         #   the wheel is packaged, never committed, never edited
+                         #   builders, the viewer client, the MCP app page)
+                         #   and the native file tracer, one library per
+                         #   platform — produced when the wheel is packaged,
+                         #   never committed, never edited
 ```
 
 Verbs by format: `step` compile · build · snapshot;
 `stl`/`3mf`/`glb` build · snapshot; `dxf` snapshot; `urdf`/`sdf`
 validate · snapshot; `srdf` validate. `cadgen snapshot` routes any suffix.
-`cadgen store|daemon|doctor` are status commands, and `cadgen viewer
-[list|stop]` the CAD Viewer's launcher and instance manager — all deliberately
-outside the mirror pattern. `cadgen step compile` is internal tooling: skills never
+`cadgen store|daemon|doctor` are status commands, `cadgen viewer
+[list|stop]` the CAD Viewer's launcher and instance manager, and `cadgen mcp`
+the server an agent host starts — all deliberately outside the mirror pattern. `cadgen step compile` is internal tooling: skills never
 teach it — doors compile a document's missing tree on demand.
 
 Developed in [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-cad);

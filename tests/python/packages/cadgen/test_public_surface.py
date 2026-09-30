@@ -91,7 +91,8 @@ ADAPTERS: dict[str, frozenset[str]] = {
     # The one validator that cannot be a mirror: `--packages NAME=PATH` is
     # repeatable, and a repeatable key/value map is outside the derivable set.
     "urdf validate": frozenset({"path", "strict", "packages", "verbose"}),
-
+    # A host starts it and speaks MCP on its standard streams; it takes no options.
+    "mcp": frozenset(),
 }
 
 # Commands not yet re-homed under the schema. This set only shrinks.
