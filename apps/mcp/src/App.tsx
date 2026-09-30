@@ -8,6 +8,7 @@ import type { Bridge, HostContext } from './host/bridge';
 import { watchViewEvents } from './host/events';
 import { createLiveRegistry, describeView } from './host/live';
 import { watchSupersession, type Presentation } from './host/presentation';
+import { reachesComposer } from './host/prompt';
 import type { Launch, Root, Server, Session } from './host/server';
 import Home from './Home';
 import ModelView, { type ViewReporter } from './ModelView';
@@ -87,6 +88,7 @@ export default function App({ bridge, server, launch: initial, session, presenta
   // clear of the viewer's centred bottom action. A host that mounts views inline draws its composer
   // across the bottom of a full-size view, so that view keeps clear of it.
   const insets = presentation === 'inline' ? context.safeAreaInsets || {} : { ...context.safeAreaInsets, bottom: 0 };
+  const composer = reachesComposer(bridge.hostCapabilities, presentation);
   // Once a newer view of this chat is up: this one's last frame (or null), and nothing else.
   const [still, setStill] = useState<string | null | undefined>(undefined);
   const superseded = still !== undefined;
@@ -156,7 +158,7 @@ export default function App({ bridge, server, launch: initial, session, presenta
   }
   return <Frame bridge={bridge} context={context} insets={insets} inline={inline}>
     <ModelView key={rootKey(launch.root)} launch={launch} root={launch.root} sequence={showing.sequence} bridge={bridge} server={server}
-      tabStore={tabStore} live={live} colorScheme={colorScheme} platform={session.platform} reporter={reporter} compact={inline}
+      tabStore={tabStore} live={live} colorScheme={colorScheme} platform={session.platform} reporter={reporter} compact={inline} composer={composer}
       onHome={home && showing.fromHome ? () => setShowing(previous => ({ launch: home, sequence: previous.sequence + 1, fromHome: false })) : undefined} />
   </Frame>;
 }

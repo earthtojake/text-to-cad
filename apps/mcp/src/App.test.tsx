@@ -1,18 +1,27 @@
 import { act, cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import type { ViewerHost } from '@text-to-cad/ui/host';
 import App from './App';
 import type { HostContext } from './host/bridge';
 import type { Launch, Session } from './host/server';
 
+// The shared viewer, reduced to the host it is handed: what it draws for each prompt destination is
+// its own suite's (packages/ui); which destination this page hands it is this one's.
+const viewer = vi.hoisted(() => ({ host: null as ViewerHost | null }));
+vi.mock('@text-to-cad/ui/file-viewer', async original => ({
+  ...await original<object>(),
+  FileViewer: ({ host }: { host: ViewerHost }) => { viewer.host = host; return null; },
+}));
+
 beforeEach(() => vi.stubGlobal('IntersectionObserver', class { observe() {} unobserve() {} disconnect() {} }));
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); viewer.host = null; });
 
 /** A host frame and CAD's server, as the page reaches them. */
-function host(initial: HostContext) {
+function host(initial: HostContext, hostCapabilities: Record<string, unknown> = {}) {
   const listeners = new Set<(context: HostContext) => void>();
   let context = initial;
   const bridge = {
-    get hostContext() { return context; }, hostCapabilities: {},
+    get hostContext() { return context; }, hostCapabilities,
     notify: vi.fn(), request: vi.fn(async () => ({})), callTool: vi.fn(),
     onToolResult: () => () => {}, onTeardown: () => () => {},
     onHostContext(listener: (next: HostContext) => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
@@ -20,7 +29,7 @@ function host(initial: HostContext) {
   };
   const server = {
     events: () => new Promise(() => {}), report: vi.fn(async () => ({})), reply: vi.fn(async () => ({})),
-    recents: vi.fn(async () => []), thumbnails: vi.fn(async () => ({})),
+    recents: vi.fn(async () => []), thumbnails: vi.fn(async () => ({})), http: () => new Promise(() => {}),
   };
   return { bridge, server };
 }
@@ -53,4 +62,20 @@ it('an inline host gets a card of a height it is told, which goes full size in p
   expect((container.firstElementChild as HTMLElement).style.paddingBottom).toBe('72px');
   // Full size keeps what was on the card: the same page, not a new one.
   expect(screen.getByRole('button', { name: /Open Model/ })).toBe(openModel);
+});
+
+it('Add To Prompt reaches a tab host\'s composer always, and an inline host\'s only when it takes model context', () => {
+  const model: Launch = { protocol: 1, page: 'viewer', model: '/work/part.stl', root: { kind: 'folder', path: '/work', name: 'work' }, explore: false };
+  const destination = (presentation: 'tabs' | 'inline', capabilities: Record<string, unknown>) => {
+    const { bridge, server } = host({ displayMode: presentation === 'tabs' ? 'fullscreen' : 'inline' }, capabilities);
+    render(<App bridge={bridge as any} server={server as any} presentation={presentation} session={session} launch={model} />);
+    const kind = viewer.host!.promptContext.getSnapshot().kind;
+    cleanup();
+    return kind;
+  };
+  // An inline host that never declared updateModelContext has nowhere to add to: no Add To Prompt at all.
+  expect(destination('inline', {})).toBe('unavailable');
+  expect(destination('inline', { updateModelContext: { text: {} } })).toBe('composer');
+  // Codex declares it only sometimes and always forwards it: a tab is never asked.
+  expect(destination('tabs', {})).toBe('composer');
 });

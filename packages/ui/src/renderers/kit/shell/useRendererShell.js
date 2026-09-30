@@ -403,15 +403,17 @@ export function useRendererShell({
   }, [captureKey, viewerLoading, promptAvailable, services.acknowledgeCommand, capture]);
 
   // Clipboard destinations retain their explicit snapshot control. Composer
-  // destinations use the combined bottom action, without a duplicate camera.
+  // destinations use the combined bottom action, without a duplicate camera,
+  // and a host with no prompt workflow (`unavailable`) has neither.
+  const snapshotAction = destination.kind === "clipboard";
   const captureRef = useRef(capture);
   captureRef.current = capture;
   useEffect(() => {
-    const actions = !composer && modelKey ? [{ id: "snapshot", label: "Take snapshot", hint: "Snapshot", icon: Camera,
+    const actions = snapshotAction && modelKey ? [{ id: "snapshot", label: "Take snapshot", hint: "Snapshot", icon: Camera,
       disabled: viewerLoading || !scene || !promptAvailable, onInvoke: () => captureRef.current() }] : [];
     onNavigationActionsChange?.(actions);
     return () => onNavigationActionsChange?.([]);
-  }, [onNavigationActionsChange, composer, modelKey, viewerLoading, Boolean(scene), promptAvailable]);
+  }, [onNavigationActionsChange, snapshotAction, modelKey, viewerLoading, Boolean(scene), promptAvailable]);
 
   // ---- shortcuts ------------------------------------------------------------
   const escapeRef = useRef(escape.handle);

@@ -133,16 +133,18 @@ function DxfSurface({ view, data }) {
   // wheel or pinch about the pointer, drag to pan, double-click to fit — so there are
   // no zoom buttons to press, here or anywhere else in the viewer. A composer
   // destination has no snapshot here: its Add To Prompt at the bottom is the one action.
+  // A host with no prompt workflow (`unavailable`) has neither.
+  const snapshotAction = destination.kind === "clipboard";
   const actionsRef = useRef({ snapshot });
   actionsRef.current = { snapshot };
   useEffect(() => {
-    const actions = composer ? [] : [
+    const actions = snapshotAction ? [
       { id: "snapshot", label: "Take snapshot", hint: "Snapshot", icon: Camera, disabled: !ready || !promptAvailable,
         onInvoke: () => actionsRef.current.snapshot() }
-    ];
+    ] : [];
     onNavigationActionsChange?.(actions);
     return () => onNavigationActionsChange?.([]);
-  }, [onNavigationActionsChange, composer, ready, promptAvailable]);
+  }, [onNavigationActionsChange, snapshotAction, ready, promptAvailable]);
 
   // ---- the live command surface ----------------------------------------------
   const runtimeRef = useRef(null);

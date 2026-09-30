@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { ArrowLeft, FileText } from 'lucide-react';
 import { createCadClient } from '@text-to-cad/core/client';
-import type { ResourceRef } from '@text-to-cad/core/prompt';
+import { unavailablePromptContext, type ResourceRef } from '@text-to-cad/core/prompt';
 import { FileViewer } from '@text-to-cad/ui/file-viewer';
 import { EmptyCadBackdrop } from '@text-to-cad/ui/file-viewer/empty';
 import { MissingFileAlert, ViewerLoadingOverlay } from '@text-to-cad/ui/file-viewer/presentation';
@@ -32,11 +32,13 @@ export interface ViewReporter {
  * the root it browses, whether it browses at all, where Add to prompt goes -- never by where
  * the view is.
  */
-export default function ModelView({ launch, root: launchedRoot, sequence, bridge, server, tabStore, live, colorScheme, platform, reporter, onHome, compact = false }: {
+export default function ModelView({ launch, root: launchedRoot, sequence, bridge, server, tabStore, live, colorScheme, platform, reporter, onHome, compact = false, composer = true }: {
   launch: Launch; root: Root; sequence: number; bridge: Bridge; server: Server; tabStore: TabStore; live: LiveRegistry;
   colorScheme: 'light' | 'dark'; platform: string; reporter: ViewReporter; onHome?: () => void;
   /** Shown small, inline in the chat: the renderer draws the model, not its tools. */
   compact?: boolean;
+  /** Add to prompt reaches the host's composer; without one, the viewer offers no prompt action. */
+  composer?: boolean;
 }) {
   // Every launch carries its own root object; the same folder must keep its client and catalog.
   const root = useMemo(() => launchedRoot, [launchedRoot.kind, launchedRoot.path]);
@@ -52,8 +54,9 @@ export default function ModelView({ launch, root: launchedRoot, sequence, bridge
     if (resource.workspaceId !== sourceId) throw new Error('This reference belongs to another folder.');
     return absolutePath(root, resource.path);
   }, [root, sourceId]);
-  const promptContext = useMemo(() => createComposerPromptContext(bridge, { resolvePath }), [bridge, resolvePath]);
-  useEffect(() => () => promptContext.dispose(), [promptContext]);
+  const composerContext = useMemo(() => composer ? createComposerPromptContext(bridge, { resolvePath }) : null, [composer, bridge, resolvePath]);
+  useEffect(() => () => composerContext?.dispose(), [composerContext]);
+  const promptContext = composerContext ?? unavailablePromptContext;
   const fileActions = useMemo(() => createFileActions(root, frameClipboard, platform), [root, platform]);
   const preferences = tabStore.settings;
   const renderers = useMemo(() => [

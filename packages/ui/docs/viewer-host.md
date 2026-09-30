@@ -88,8 +88,9 @@ commands should read the current viewport through a ref, avoiding parent/child
 render loops. These actions use existing host capabilities for effects. For
 example, CAD's snapshot delivers through `host.promptContext`, which binds the
 destination before waiting for the image. A composer destination has no snapshot
-action: its Add To Prompt lives at the bottom of the viewport instead. Neither
-route detects the platform.
+action: its Add To Prompt lives at the bottom of the viewport instead. A host with
+no prompt workflow (`unavailablePromptContext`, kind `unavailable`) has neither:
+both are left out, not disabled. Neither route detects the platform.
 
 `navigation.openFile(path, { target, panel })` shows a file in this view
 (`"current"`) or in a new one, where the host has more than one (`"new"`). `panel`
@@ -312,9 +313,10 @@ image encode cannot redirect it. The action is absent in Preview, and it takes t
 place of both the snapshot action and the selection's Copy Reference(s). Clipboard
 destinations keep both: the snapshot action receives the viewport PNG directly
 through `ClipboardPort.writeImage`, and the bottom action is Copy Reference(s), or
-Copy Drawing while Draw has ink. The choice follows the subscribed destination
-capability, never an app name. Native clipboard effects remain in the host
-implementation.
+Copy Drawing while Draw has ink. An `unavailable` destination has no snapshot
+action and no Add To Prompt; its bottom action is a clipboard destination's. The
+choice follows the subscribed destination capability, never an app name. Native
+clipboard effects remain in the host implementation.
 
 The viewport's Copy Reference(s) and Copy Drawing actions use `ClipboardPort`
 directly, including on desktop. Their copy shortcut and double-click topology

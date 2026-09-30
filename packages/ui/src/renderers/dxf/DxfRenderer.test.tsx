@@ -76,7 +76,7 @@ async function openDrawing(destinationKind = 'composer') {
   const live = { bind(next: unknown) { controller = next; return () => { controller = null; }; } };
   const renderers = [createDxfRenderer({ client, commands, live })];
 
-  const destination = { kind: destinationKind, available: true };
+  const destination = { kind: destinationKind, available: destinationKind !== 'unavailable' };
   const delivered: Array<{ type: string; parts: string[] }> = [];
   const host = {
     files: {
@@ -167,6 +167,13 @@ it('a clipboard DXF retains the snapshot action instead of a composer CTA', asyn
   fireEvent.click(within(pane).getByRole('button', { name: 'Take snapshot' }));
   await waitFor(() => expect(delivered).toHaveLength(1));
   expect(delivered[0].type).toBe('image/png');
+  dispose();
+});
+
+it('a DXF in a host with no prompt workflow has neither the snapshot nor Add To Prompt', async () => {
+  const { pane, dispose } = await openDrawing('unavailable');
+  expect(within(pane).queryByRole('button', { name: 'Take snapshot' })).toBeNull();
+  expect(pane.querySelector('[data-viewport-bottom-actions]')).toBeNull();
   dispose();
 });
 

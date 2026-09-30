@@ -179,6 +179,15 @@ it('clipboard destinations retain the snapshot action and Copy Drawing with ink,
   expect(container.querySelector('[data-viewport-bottom-actions]')).toBeNull();
 });
 
+it('a host with no prompt workflow gets neither Add To Prompt nor a snapshot: left out, not disabled', () => {
+  // The test host composes `unavailablePromptContext`.
+  const { container, navigation } = mount();
+  expect(screen.queryByRole('button', { name: 'Add To Prompt' })).toBeNull();
+  expect(navigation.mock.calls.flatMap(([actions]) => actions)).toEqual([]);
+  // The bottom row is the renderer's own action, as for a clipboard destination.
+  expect(container.querySelector('[data-viewport-bottom-actions] [data-harness-bottom-action]')).not.toBeNull();
+});
+
 it('the renderer is told the camera settled, through what the viewport reports: a recorded move and its own settle', () => {
   const { overlay } = mount();
   expect(overlay('camera-settles')).toBe('0');

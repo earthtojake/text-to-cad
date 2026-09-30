@@ -1,6 +1,7 @@
 import { createPromptDeliveryLedger, formatPromptReference, validatePromptContext } from '@text-to-cad/core/prompt';
 import type { PromptContext, PromptContextPort, PromptDeliveryResult, PromptDestinationState, ResourceRef } from '@text-to-cad/core/prompt';
 import type { Bridge } from './bridge';
+import type { Presentation } from './presentation';
 import { encodeBase64 } from './tunnel';
 
 const MAX_ITEMS = 24;
@@ -12,6 +13,16 @@ type ContextBlock =
   | { type: 'image'; data: string; mimeType: string; _meta: { 'openai/title': string } };
 
 const baseName = (path: string) => path.split(/[\\/]/).pop() || path;
+
+/**
+ * Whether Add to prompt has a composer to reach. A host that mounts views inline says so by
+ * declaring `updateModelContext` when it greets the page; one that does not gets a viewer with no
+ * Add to prompt at all. A tab host (Codex) is not asked: its frames forward the method whether or
+ * not they declare it.
+ */
+export function reachesComposer(hostCapabilities: Bridge['hostCapabilities'], presentation: Presentation): boolean {
+  return presentation === 'tabs' || Boolean(hostCapabilities.updateModelContext);
+}
 
 /**
  * Add to prompt, into the composer of the chat this view belongs to. The host's model context

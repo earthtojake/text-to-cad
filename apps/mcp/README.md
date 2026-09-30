@@ -13,8 +13,9 @@ Hosts present it in one of two ways, which the server tells apart at
   and drives it (`cad_show`).
 - **Inline (Claude Desktop, and every other MCP Apps host).** Each `cad_show`
   mounts a viewer card in the chat, and the host keeps the old cards. A card
-  shows the model and Add To Prompt (a compact viewer), goes full size on
-  request, and a newer card retires the older ones.
+  shows the model and, where the host takes model context, Add To Prompt (a
+  compact viewer), goes full size on request, and a newer card retires the
+  older ones.
 
 ## The rules
 
@@ -35,6 +36,12 @@ Hosts present it in one of two ways, which the server tells apart at
   (`{createdAt, seq}`). The views of a chat elect the newest over a
   `BroadcastChannel`. The others keep a still of their last frame, stop polling,
   stop sending context, and tell the server they are closed.
+- **Add To Prompt only where it lands.** It sends `ui/update-model-context`. An
+  inline host that does not declare `updateModelContext` in the
+  `hostCapabilities` it answers `ui/initialize` with gets a viewer with no
+  prompt action at all (`unavailablePromptContext`), not a disabled one. A tab
+  host is not asked: Codex forwards the method whether or not its frame
+  declares it.
 - **Host-neutral shared code.** Host specifics live here and in `cadgen/mcp`,
   never in `packages/core` or `packages/ui`, which choose by capability (the
   prompt destination's `kind`, a port's presence, `environment.compact`). A policy
@@ -58,7 +65,7 @@ Hosts present it in one of two ways, which the server tells apart at
 | `server.ts` | typed calls to the server's tools |
 | `tunnel.ts` | the `fetch` over `cad_http` |
 | `files.ts` | the read-only `FileSource` over the catalog; no listing when the launch does not browse |
-| `prompt.ts` | Add to prompt: the composer via `ui/update-model-context`, references as absolute paths |
+| `prompt.ts` | Add to prompt: the composer via `ui/update-model-context`, references as absolute paths; `reachesComposer`, whether the host has one |
 | `live.ts`, `events.ts` | the mounted view's live controller, and the `cad_events` long-poll that answers the agent (`show`, `capture`, `describe`) |
 | `presentation.ts` | how the host presents the page, and the election that retires older inline views |
 
