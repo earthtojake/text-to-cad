@@ -124,12 +124,12 @@ import {
   shouldRetainCompleteSameFileMesh
 } from "./components/workbench/hooks/packageProgressiveLoad.js";
 import { meshLoadErrorForViewer, shouldStartMeshLoad } from "./components/workbench/hooks/meshLoadTarget.js";
-import { useViewerHost, usePromptDestination } from "../../host/context.js";
+import { useViewerHost } from "../../host/context.js";
 import { useWorkspaceDocument } from "../workspace/useWorkspaceDocument.js";
 import { createCadPromptContext } from "./file-view/promptContext.js";
 import { modelMenuDescriptor, partMenuDescriptor, topologyMenuDescriptor } from "./file-view/stepMenus.js";
 import { nodeCopyText, selectionCopyPayload } from "./file-view/stepCopy.js";
-import { HostReferenceContext, referenceLabel, referencesFromCopyText, resolveSelectorSelection } from "./file-view/hostReference.js";
+import { referenceLabel, referencesFromCopyText, resolveSelectorSelection } from "./file-view/hostReference.js";
 import { applySourceAppearanceToMeshData, sourceAppearanceGeometry } from "@text-to-cad/core/common/sourceSidecar.js";
 // The selection filters that pick faces or edges, never the part.
 const TOPOLOGY_FILTERS = new Set(["faces", "edges"]);
@@ -228,16 +228,12 @@ export default function StepSurface({ view, data }) {
 // renderer on the shell.
 function StepSurfaceBody({ view, data }) {
   const { client, entry, serverInfo, renderSession: cadRenderSession } = data;
-  const slots = data.services.slots;
   const workspace = useWorkspaceDocument({ view, data });
   const { resource: documentResource, services, acknowledgeCommand } = workspace;
   const selectReference = workspace.commands.selectReference;
   const state = view.state;
   const colorScheme = view.appearance?.colorScheme;
   const host = useViewerHost();
-  const destination = usePromptDestination();
-  const promptAvailable = destination.available;
-  const composerDestination = destination.kind === "composer";
   const resolvedColorSchemeMode = colorScheme === "dark" ? "dark" : "light";
   const storeSnapshot = useSyncExternalStore(client.subscribe, client.getSnapshot, client.getSnapshot);
   const selectedKey = fileKey(entry);
@@ -1722,7 +1718,8 @@ function StepSurfaceBody({ view, data }) {
     () => copyTextLines(copySelectionPayload.lines, fileRefPrefix),
     [copySelectionPayload.lines, fileRefPrefix]
   );
-  const copyButtonLabel = (copySelectionPayload.copiedCount || canonicalCopySelectionLines.length) > 1 ? "Copy References" : "Copy Reference";
+  // The Reference panel's foot: Copy, or Copy All with more than one reference selected.
+  const copyButtonLabel = (copySelectionPayload.copiedCount || canonicalCopySelectionLines.length) > 1 ? "Copy All" : "Copy";
   const copySelectedReferences = useCallback(async () => {
     const text = canonicalCopySelectionLines.join("\n");
     if (!text || stepInteractionBlocked) return false;
@@ -1820,19 +1817,19 @@ function StepSurfaceBody({ view, data }) {
     setSelectedReferenceIds([]);
   }, []);
 
-  // Copy is clipboard-only. Adding context is an explicit host action.
+  // Copy is clipboard-only; what goes to the agent goes through Quick Edit.
   const deliverReferenceText = useCallback((text) => host.clipboard.writeText(text), [host.clipboard]);
-  const deliverPrompt = shell.deliverPrompt;
   const referencesForHost = useCallback((text) =>
     referencesFromCopyText(text, cadFileParamForEntry(selectedEntry)).map((reference) => {
       const label = referenceLabel(reference.selector, displayStepTreeRoot || stepTreeRoot);
       return { ...reference, ...(label ? { label } : {}) };
     }), [selectedEntry, displayStepTreeRoot, stepTreeRoot]);
-  const addReferenceText = useCallback((text) => {
-    if (stepInteractionBlocked || !promptAvailable) return;
-    const references = referencesForHost(text);
-    if (references.length) return deliverPrompt(createCadPromptContext({ resource: promptResource, references }));
-  }, [promptResource, deliverPrompt, promptAvailable, referencesForHost, stepInteractionBlocked]);
+  // What is selected, in the prompt grammar: the references a Quick Edit attaches.
+  const promptSelection = useMemo(() => referencesForHost(canonicalCopySelectionLines.join("\n")).map(reference => ({
+    resource: { ...promptResource },
+    target: reference.selector ? { kind: 'cad-selector', selectors: reference.selector.split(',') } : { kind: 'whole-resource' },
+    ...(reference.label ? { label: reference.label } : {})
+  })), [referencesForHost, canonicalCopySelectionLines, promptResource]);
   // Every request for a part's topology ends here, `onLoadTopology` included: the tree asks for
   // the parts on screen, as often as every scroll frame. A part already expanded and requested
   // costs a lookup; new parts are expanded (which is what requests them) together, at most every
@@ -1913,26 +1910,6 @@ function StepSurfaceBody({ view, data }) {
     setSelectedReferenceIds(next);
     setActiveTreeNodeScrollKey("");
   }, [stepUpdateInProgress, effectiveActiveReferenceMap]);
-  const hostReference = useMemo(
-    () => ({ deliverReference: deliverReferenceText, addReference: addReferenceText, canAddToPrompt: composerDestination && promptAvailable }),
-    [composerDestination, promptAvailable, deliverReferenceText, addReferenceText]
-  );
-  const selectionKey = JSON.stringify([promptResource, canonicalCopySelectionLines]);
-  const liveSelectionKey = useRef(selectionKey);
-  liveSelectionKey.current = selectionKey;
-  useLayoutEffect(() => { liveSelectionKey.current = selectionKey; return () => { liveSelectionKey.current = null; }; }, [selectionKey]);
-  const createSelectionPromptContext = useCallback(({ text: instruction = '', capture: includeCapture = false } = {}) => {
-    if (liveSelectionKey.current !== selectionKey) throw new Error('This selection has changed. Open the action again.');
-    if (viewerLoading || stepInteractionBlocked) throw new Error('Wait for the model before using this selection.');
-    const references = referencesForHost(canonicalCopySelectionLines.join("\n"));
-    let capture;
-    if (includeCapture) {
-      if (!viewerRef.current?.captureScreenshotBlob) throw new Error('CAD Viewer not ready');
-      capture = viewerRef.current.captureScreenshotBlob();
-      void capture.catch(() => {});
-    }
-    return createCadPromptContext({ resource: promptResource, references, text: instruction, capture });
-  }, [selectionKey, promptResource, viewerLoading, stepInteractionBlocked, canonicalCopySelectionLines, referencesForHost]);
 
   const toggleStepTreeNode = useCallback((nodeId) => {
     const normalizedNodeId = String(nodeId || "").trim();
@@ -2787,7 +2764,7 @@ function StepSurfaceBody({ view, data }) {
     }
   }, [deliverReferenceText, fileRefPrefix, retainedPreviousStepMeshError, stepInteractionBlocked]);
 
-  const copyStepTreeContextMenuReference = useCallback(async (id, { topology = false, toPrompt = false } = {}) => {
+  const copyStepTreeContextMenuReference = useCallback(async (id, { topology = false } = {}) => {
     if (stepInteractionBlocked) {
       reportActionError(retainedPreviousStepMeshError
         ? "Selection unavailable because the STEP update failed."
@@ -2805,16 +2782,12 @@ function StepSurfaceBody({ view, data }) {
       return;
     }
     try {
-      if (toPrompt) addReferenceText(copyText);
-      else {
-        await deliverReferenceText(copyText);
-      }
+      await deliverReferenceText(copyText);
     } catch (error) {
       reportActionError(error instanceof Error ? error.message : "Failed to copy reference");
     }
   }, [
     deliverReferenceText,
-    addReferenceText,
     copyContext,
     retainedPreviousStepMeshError,
     stepInteractionBlocked
@@ -2994,14 +2967,6 @@ function StepSurfaceBody({ view, data }) {
     }
   }, [toggleStepTreeNode]);
 
-  const addPartMenuReferenceToPrompt = useCallback((menu) => {
-    const copyText = copyTextLines(menu?.copyText, fileRefPrefix).join("\n");
-    if (!copyText) {
-      reportActionError("No selector ref is available for this node");
-      return;
-    }
-    addReferenceText(copyText);
-  }, [addReferenceText, fileRefPrefix]);
 
   /**
    * The actions behind the one part menu, wherever it was opened: the viewport
@@ -3010,7 +2975,6 @@ function StepSurfaceBody({ view, data }) {
    * lands in Select first — exactly what clicking a tree row already does.
    */
   const partMenuActions = useMemo(() => Object.fromEntries(Object.entries({
-    onAddToPrompt: addPartMenuReferenceToPrompt,
     onCopyReference: copyViewerContextMenuReference,
     onSelect: selectViewerContextMenuNode,
     onIsolate: focusViewerContextMenuNode,
@@ -3026,7 +2990,6 @@ function StepSurfaceBody({ view, data }) {
     onZoomFit: zoomToFitModel,
     onZoomSelection: zoomToSelection
   }).map(([name, action]) => [name, (menu) => { ensureSelectTool(); return action(menu); }])), [
-    addPartMenuReferenceToPrompt,
     copyViewerContextMenuReference,
     selectViewerContextMenuNode,
     focusViewerContextMenuNode,
@@ -3051,12 +3014,8 @@ function StepSurfaceBody({ view, data }) {
   const viewportContextMenuItems = useCallback((press, referenceId) => {
     handleModelReferenceContext(referenceId, press);
     const menu = viewerContextMenuRef.current;
-    return menu ? viewportMenuEntries(menu, { actions: {
-      ...partMenuActions,
-      // Offered only where the host has somewhere to put it.
-      onAddToPrompt: hostReference?.canAddToPrompt ? partMenuActions.onAddToPrompt : undefined
-    } }) : null;
-  }, [handleModelReferenceContext, hostReference, partMenuActions]);
+    return menu ? viewportMenuEntries(menu, { actions: partMenuActions }) : null;
+  }, [handleModelReferenceContext, partMenuActions]);
 
   const handleSelectTabToolMode = useCallback((mode) => {
     // Measure activation is idempotent; clearing retained results is an explicit toolbar action.
@@ -3306,21 +3265,14 @@ function StepSurfaceBody({ view, data }) {
     ...modelEffects.tools,
   ].filter(Boolean);
 
-  // ---- the bottom action ----------------------------------------------------------------------
-  const selectionActionVisible = selectionCount > 0 && !stepUpdateInProgress && !referenceSelectionPending
+  // ---- copying the selection ----------------------------------------------------------------
+  // The Reference panel's Copy (Copy All) and the copy key, under Select, while the selection's
+  // references can be read; Quick Edit attaches them only then, too.
+  const selectionActionVisible = selectionToolActive && selectionCount > 0 && !stepUpdateInProgress && !referenceSelectionPending
     && !referenceSelectionUnavailable && !topologySelectionDeferred;
-  const bottomAction = drawModeActive
-    ? (stepUpdateInProgress || referenceSelectionPending || referenceSelectionUnavailable || topologySelectionDeferred ? null : undefined)
-    : selectionActionVisible ? {
-      label: copyButtonLabel,
-      onInvoke: copySelectedReferences,
-      children: slots?.selectionExtras && selectionCount > 0 && !viewerLoading && !stepInteractionBlocked ? <slots.selectionExtras
-        selection={Object.freeze(createSelectionPromptContext().parts.filter(part => part.kind === 'reference').map(part => part.reference))}
-        selectionKey={selectionKey}
-        disabled={viewerLoading || stepInteractionBlocked || !promptAvailable}
-        createContext={createSelectionPromptContext}
-      /> : null
-    } : null;
+  const copySelection = selectionActionVisible ? copySelectedReferences : null;
+  const selectionCopy = useMemo(() => copySelection ? { label: copyButtonLabel, shortcut: shell.frame.copyShortcut, onCopy: copySelection } : null,
+    [copySelection, copyButtonLabel, shell.frame.copyShortcut]);
 
   // ---- the tool stack ---------------------------------------------------------------------------
   // Under the strip: Select's Features and Reference, Position's joints, then the kept effects.
@@ -3362,6 +3314,7 @@ function StepSurfaceBody({ view, data }) {
     onSelectTreeNode: selectStepTreeNode,
     onSelectReferenceGroup: selectReferenceGroup,
     onCopySelection: copySelectedReferences,
+    selectionCopy,
     onFocusTreeNode: focusStepTreeNode,
     onUnfocusTreeNode: handleExitSingleIsolate,
     onExitAllIsolate: handleExitIsolate,
@@ -3379,13 +3332,10 @@ function StepSurfaceBody({ view, data }) {
   });
 
   return <RendererShell shell={shell} tools={tools} playback={viewportAnimation} toolPanels={<>{stepPanels}{modelEffects.panels}</>}
-    bottomAction={bottomAction}
+    references={selectionActionVisible ? promptSelection : EMPTY_LIST} copySelection={copySelection}
     contextMenuItems={selectionToolActive
       ? press => viewportContextMenuItems(press, pickAtRef.current?.(press.clientX, press.clientY) || "") : null}
     onContextMenuOpenChange={handleViewportContextMenuOpenChange}
-    // Both halves read it: the viewport's menu resolves references through it, and so do the
-    // Features rows in the tool stack.
-    frameProvider={frame => <HostReferenceContext.Provider value={hostReference}>{frame}</HostReferenceContext.Provider>}
     viewportOverlay={viewport => {
       runtimeRefRef.current = viewport.runtimeRef;
       return <StepSceneLayers viewport={viewport} stepScene={stepScene} policy={viewPolicyResolved} props={layerProps} api={layersApiRef} />;

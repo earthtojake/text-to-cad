@@ -5,8 +5,8 @@ import { FLOATING_SURFACE_CLASS } from "./floatingSurface.js";
 
 /**
  * A settings popover under its own button: an ordinary dropdown, start-aligned unless `align`
- * says otherwise — preview mode's Playback settings (`PlaybackMenu.jsx`, end-aligned under the
- * viewport's top-right bar). It is always temporary. No tool on the strip has one: a tool's
+ * says otherwise — preview mode's Playback settings (`PlaybackMenu.jsx`, end-aligned at the
+ * playbar's right end). It is always temporary. No tool on the strip has one: a tool's
  * settings are its panel in the tool stack.
  *
  * It closes with no exit animation. A menu on its way out is still mounted, and its outside-

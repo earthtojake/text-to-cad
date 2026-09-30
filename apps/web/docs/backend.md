@@ -184,6 +184,7 @@ cache reads and writes.
 | `GET /__cad/drawing?file=...` | A `.dxf` flattened to 2D render primitives; the DXF pane's only source. |
 | `GET /__cad/artifact?file=...` | Artifact status and advisory progress. |
 | `POST /__cad/artifact?file=...` | Import a foreign STEP; `&force=1` requests a rebuild. |
+| `POST /__cad/sketches?name=...` | Save a PNG a copied prompt names by path (a Quick Edit's sketch) as scratch in the system's temporary directory; answers its absolute path. |
 | `GET /__tess_cache/<key>.tess` | Read a tessellation-cache entry. |
 | `POST /__tess_cache/<key>.tess` | Best-effort tessellation-cache write-back. |
 | `POST /__tess_cache/batch` | Read a batch of entries in a TESB container. |

@@ -5,7 +5,7 @@ import { ViewerMobileContext } from '../../../../dist/file-viewer/responsive.js'
 import PreviewChrome, { PREVIEW_CHROME_IDLE_MS } from '../../../../dist/renderers/kit/tools/PreviewChrome.js';
 
 afterEach(() => { cleanup(); vi.useRealTimers(); });
-it('keeps editor controls hidden throughout Preview and restores them on exit, with one top-right bar in both', () => {
+it('keeps editor controls hidden throughout Preview and restores them on exit, with one bar on top of the cube in both', () => {
   const actions = vi.fn(() => <button>Display settings</button>);
   const { container, rerender } = render(<PreviewChrome active actions={actions}><button>Tool</button></PreviewChrome>);
   const chrome = container.querySelector('[data-preview-chrome]')!;
@@ -23,9 +23,9 @@ it('keeps editor controls hidden throughout Preview and restores them on exit, w
   // The same bar, in the same place, in either mode.
   expect(container.querySelector('[data-viewport-actions]')).toBe(bar);
   expect(screen.getByRole('button', { name: 'Display settings' })).toBeTruthy();
-  expect((bar as HTMLElement).style.top).toBe('calc(4px + 6rem)');
+  expect([(bar as HTMLElement).style.bottom, (bar as HTMLElement).style.left]).toEqual(['calc(4px + 6rem)', '2px']);
   rerender(<ViewerMobileContext.Provider value={true}><PreviewChrome active={false} actions={actions} /></ViewerMobileContext.Provider>);
-  expect((container.querySelector('[data-viewport-actions]') as HTMLElement).style.top).toBe('calc(4px + 6rem)');
+  expect((container.querySelector('[data-viewport-actions]') as HTMLElement).style.bottom).toBe('calc(4px + 6rem)');
 });
 
 it('fades preview controls together, keeps their hover area awake, and never reveals editing tools', () => {

@@ -1,5 +1,5 @@
 import type { FileEntry, FileSource } from '@text-to-cad/ui/file-viewer';
-import { createCatalogFileSource } from '@text-to-cad/ui/catalog';
+import { createCatalogFileSource, rootPath } from '@text-to-cad/ui/catalog';
 import type { createCadClient } from '@text-to-cad/core/client';
 import type { Root } from './server';
 import { TUNNEL_ORIGIN } from './tunnel';
@@ -30,7 +30,7 @@ export function createFilesystemSource(client: CadClient, root: Root, fetchFolde
   const source: FileSource = {
     ...catalog,
     // References name the file absolutely: a path relative to a whole filesystem means nothing outside it.
-    referencePath: path => absolutePath(root, path),
+    referencePath: path => rootPath(root.path, path),
     // A file coming or going in a catalog of the file on screen is another file shown, not the
     // disk changing: only a change to the file that stayed is one.
     subscribe: listener => catalog.subscribe!(change => {

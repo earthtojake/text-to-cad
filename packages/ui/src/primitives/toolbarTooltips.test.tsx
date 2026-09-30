@@ -7,7 +7,7 @@ import { PanelToggle } from '../../dist/file-viewer/navigation/ViewerNavbar.js';
 import FloatingToolBar from '../../dist/renderers/kit/tools/FloatingToolBar.js';
 import PreviewChrome from '../../dist/renderers/kit/tools/PreviewChrome.js';
 
-// The viewer's hints: the strip's tools, the nav row's panel toggles and the top-right bar all
+// The viewer's hints: the strip's tools, the nav row's panel toggles and the view's actions all
 // hint through one primitive (`tooltip.jsx`), after a deliberate hover, never sticking after a press.
 beforeEach(() => { vi.useFakeTimers(); vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} }); });
 afterEach(() => { cleanup(); vi.useRealTimers(); vi.unstubAllGlobals(); });
@@ -48,7 +48,7 @@ it('a tool is hinted only after a deliberate hover, with the same delay from one
   expect(tip()).toBeNull();
 });
 
-it('the nav row, the strip and the top-right bar share one hint with no native title; a click that focuses a trigger pins nothing, a Tab onto it names it', () => {
+it('the nav row, the strip and the view\'s actions share one hint with no native title; a click that focuses a trigger pins nothing, a Tab onto it names it', () => {
   render(<>
     <PanelToggle icon={Files} label="Show files" active={false} onClick={() => {}} id="tree" />
     {strip()}

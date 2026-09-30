@@ -6,8 +6,16 @@ import type { ClipboardPort } from '@text-to-cad/ui/host';
  */
 export const frameClipboard: ClipboardPort = {
   async writeText(text) {
-    if (!navigator.clipboard?.writeText) throw new Error('Copying is not available here.');
-    await navigator.clipboard.writeText(text);
+    if (typeof text === 'string') {
+      if (!navigator.clipboard?.writeText) throw new Error('Copying is not available here.');
+      await navigator.clipboard.writeText(text);
+      return;
+    }
+    // Still on its way: the write starts now, in the gesture, and takes the text when it arrives.
+    if (!navigator.clipboard?.write || typeof ClipboardItem !== 'function') throw new Error('Copying is not available here.');
+    const blob = text.then(value => new Blob([value], { type: 'text/plain' }));
+    try { await navigator.clipboard.write([new ClipboardItem({ 'text/plain': blob })]); }
+    catch (error) { await blob; throw error; }
   },
   async readText() {
     if (!navigator.clipboard?.readText) throw new Error('Pasting is not available here.');

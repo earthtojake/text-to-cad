@@ -1,4 +1,5 @@
 export { createCadClient, cadApiUrl } from "./client.js";
+export { createHttpAttachmentStore } from "./attachments.js";
 export * from "./origin.js";
 export type * from "./types.js";
 export { resolvePackageAssetUrl } from "./assetUrl.js";

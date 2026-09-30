@@ -136,6 +136,11 @@ face = selection.shape()  # owned native geometry, in document world coordinates
 print(selection.ref, face.area)
 ```
 
+A note from the viewer's Quick Edit reads: what the person wants, then
+`File:` (the document it is about), `References:` (one per line, as above) and,
+when they sketched on the view, `Sketch: <path>`: a PNG of the view with their
+markup (or the image itself, attached). Look at the sketch before changing the model.
+
 For a bare `#o1.2.f7`, use the identified target file. Do not guess between
 ambiguous files or labels. Numeric refs belong to that saved revision;
 reopen and reselect after rebuilding. The [inspection reference](references/inspection-and-validation.md)

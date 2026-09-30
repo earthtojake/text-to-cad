@@ -14,9 +14,9 @@ the `io.modelcontextprotocol/ui` extension):
   and drives it (`cad_show`).
 - **Inline (Claude Desktop, and every other MCP Apps host).** Each `cad_show`
   mounts a viewer card in the chat, and the host keeps the old cards. A card
-  shows the model and, where the host takes model context, Add To Prompt (a
-  compact viewer), goes full size on request, and a newer card retires the
-  older ones.
+  shows the model alone (a compact viewer: no tools, view actions, cube or Quick
+  Edit), goes full size on request, and a newer card retires the older ones.
+  Full size is the whole viewer, Quick Edit included.
 
 A client that renders no MCP Apps never loads this page: its `cad_show` answers
 with the model's link in the CAD Viewer, started or reused for its folder
@@ -56,12 +56,18 @@ reference host `basic-host` does.
   (`{createdAt, seq}`). The views of a chat elect the newest over a
   `BroadcastChannel`. The others keep a still of their last frame, stop polling,
   stop sending context, and tell the server they are closed.
-- **Add To Prompt only where it lands.** It sends `ui/update-model-context`. An
-  inline host that does not declare `updateModelContext` in the
-  `hostCapabilities` it answers `ui/initialize` with gets a viewer with no
-  prompt action at all (`unavailablePromptContext`), not a disabled one. A tab
-  host is not asked: Codex forwards the method whether or not its frame
-  declares it.
+- **Quick Edit offers only what the chat takes.** `chatReach` reads the
+  `hostCapabilities` the host answers `ui/initialize` with. **Queue** (the
+  context for the person's next message, `ui/update-model-context`) needs
+  `updateModelContext`; a tab host is not asked: Codex forwards the method
+  whether or not its frame declares it. **Send** (the person's message now,
+  `ui/message`) needs `message`, and carries a sketch as an image block only
+  where the host declares `message.image`; a host that declares it and still
+  refuses one (JSON-RPC -32602) gets the sketch saved and named by path
+  instead. A host that takes neither gets Copy Prompt alone
+  (`unavailablePromptContext`): Queue and Send are left out, not disabled. In
+  Codex, Send from a thread's CAD tab posts into that thread; from the
+  sidebar page it goes to the page's own chat tab.
 - **Host-neutral shared code.** Host specifics live here and in `cadgen/mcp`,
   never in `packages/core` or `packages/ui`, which choose by capability (the
   prompt destination's `kind`, a port's presence, `environment.compact`). A policy
@@ -85,18 +91,19 @@ reference host `basic-host` does.
 | `server.ts` | typed calls to the server's tools, `cad_reveal` among them: the file menu's Reveal, in the desktop's file manager (the server is on the person's machine) |
 | `tunnel.ts` | the `fetch` over `cad_http` |
 | `files.ts` | a filesystem's read-only `FileSource`, a folder at a time, whose copied references name files by absolute path (a project's is `@text-to-cad/ui/catalog`'s, as the web Viewer's is); no listing when the launch does not browse |
-| `prompt.ts` | Add to prompt: the composer via `ui/update-model-context`, references as absolute paths; `reachesComposer`, whether the host has one |
+| `prompt.ts` | Quick Edit's chat: `chatReach`, what the host's chat takes, and the prompt port over it — Queue through `ui/update-model-context` (a text block titled `Quick edit · <file>` and the sketch's image block, kept until the host clears its model context), Send through `ui/message` — with references as absolute paths (Copy Prompt spells them as copied references are) |
 | `live.ts`, `events.ts` | the mounted view's live controller (`@text-to-cad/ui/host`'s registry), and the `cad_events` long-poll that answers the agent (`show`, `capture`, `describe`) |
 | `presentation.ts` | how the host presents the page, and the election that retires older inline views |
 
 `ModelView.tsx` is the page: the shared `CadViewer` (`@text-to-cad/ui/cad-viewer`,
 the one the web Viewer shows) over one launch's root, with this host's ports — its
-tunnel, its composer, its file menu (copy path, copy relative path under a project,
+tunnel (which also carries a copied prompt's sketch to the server: `attachments`), its
+chat, its file menu (copy path, copy relative path under a project,
 Reveal through `cad_reveal`), the navbar's links, followed through `ui/open-link`,
 and its library, with Open Model: the desktop's file chooser. With no model it is
 the home; the navbar's C mark goes back to it (the launch a view opened on, when it
 opened on the home). `App.tsx` frames it (full page, or an inline card with its
-full-size button). In a tab, the viewer's bottom action sits on the line of Codex's
+full-size button). In a tab, preview's playbar sits on the line of Codex's
 composer, which floats over the page (`--cad-viewport-bottom-center`), and the
 home's and the explorer's lists scroll clear of it (`--cad-host-bottom-inset`).
 

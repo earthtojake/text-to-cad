@@ -634,7 +634,7 @@ test('an SDF is the same robot with a section of its own; a snapshot depicts the
   assert.deepEqual(await robot.toolNames(), ['Select:false', 'Position:true']);
   await robot.openPosition();
 
-  await pane.getByRole('button', { name: 'Add To Prompt', exact: true }).click();
+  await page.evaluate(() => window.cadHarness.capture());
   await page.waitForFunction(() => window.cadHarness.captures.length === 1);
   const captured = await page.evaluate(() => window.cadHarness.captures[0]);
   assert.deepEqual([captured.file, captured.type, captured.references.length], ['swing.sdf', 'image/png', 1], 'one context, of the file');

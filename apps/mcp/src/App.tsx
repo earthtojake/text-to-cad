@@ -9,7 +9,7 @@ import type { Bridge, HostContext } from './host/bridge';
 import { watchViewEvents } from './host/events';
 import { createLiveRegistry, describeView } from './host/live';
 import { watchSupersession, type Presentation } from './host/presentation';
-import { reachesComposer } from './host/prompt';
+import { chatReach } from './host/prompt';
 import type { Launch, Root, Server, Session } from './host/server';
 import ModelView, { type ViewReporter } from './ModelView';
 
@@ -25,7 +25,7 @@ export function useHostContext(bridge: Pick<Bridge, 'hostContext' | 'onHostConte
 }
 
 // A tab host's composer floats over the bottom of the page, its middle this far above the edge: the
-// viewer's bottom action and playback bars sit on that same line (Codex: a 45px box, 17px up).
+// viewer's playback bars sit on that same line (Codex: a 45px box, 17px up).
 const TAB_BOTTOM_CENTER = '40px';
 
 // Inline, a view is a card in the chat: as tall as its width suits, within what the host allows.
@@ -42,7 +42,7 @@ export function inlineHeight(width: number, maxHeight?: number): number {
  */
 function Frame({ bridge, context, insets, inline = false, expandable = true, bottomCenter, children }: { bridge: Bridge; context: HostContext; insets: NonNullable<HostContext['safeAreaInsets']>; inline?: boolean; expandable?: boolean; bottomCenter?: string; children: ReactNode }) {
   // Where the host's composer floats over the page instead of taking room from it: the line the
-  // viewer's bottom action sits on, and the strip lists scroll clear of.
+  // viewer's playback bars sit on, and the strip lists scroll clear of.
   const floating = bottomCenter ? { '--cad-viewport-bottom-center': bottomCenter, '--cad-host-bottom-inset': `${context.safeAreaInsets?.bottom || 0}px` } as CSSProperties : {};
   const [width, setWidth] = useState(() => window.innerWidth);
   useEffect(() => {
@@ -92,10 +92,10 @@ export default function App({ bridge, server, launch: initial, session, presenta
   const colorScheme = context.theme === 'dark' ? 'dark' : 'light';
   const inline = presentation === 'inline' && context.displayMode !== 'fullscreen';
   // A tab runs the page's full height: what a tab host draws over its bottom (its composer) sits
-  // clear of the viewer's centred bottom action. A host that mounts views inline draws its composer
+  // clear of the viewer's centred playbar. A host that mounts views inline draws its composer
   // across the bottom of a full-size view, so that view keeps clear of it.
   const insets = presentation === 'inline' ? context.safeAreaInsets || {} : { ...context.safeAreaInsets, bottom: 0 };
-  const composer = reachesComposer(bridge.hostCapabilities, presentation);
+  const chat = useMemo(() => chatReach(bridge.hostCapabilities, presentation), [bridge, presentation]);
   const bottomCenter = presentation === 'tabs' ? TAB_BOTTOM_CENTER : undefined;
   // Once a newer view of this chat is up: this one's last frame (or null), and nothing else.
   const [still, setStill] = useState<string | null | undefined>(undefined);
@@ -160,7 +160,7 @@ export default function App({ bridge, server, launch: initial, session, presenta
   }
   return <Frame bridge={bridge} context={context} insets={insets} inline={inline} bottomCenter={bottomCenter}>
     <ModelView key={rootKey(launch.root)} launch={launch} root={launch.root} sequence={showing.sequence} bridge={bridge} server={server}
-      tabStore={tabStore} live={live} links={links} colorScheme={colorScheme} platform={session.platform} reporter={reporter} compact={inline} composer={composer}
+      tabStore={tabStore} live={live} links={links} colorScheme={colorScheme} platform={session.platform} reporter={reporter} compact={inline} chat={chat}
       onLaunch={show} onHome={goHome} />
   </Frame>;
 }

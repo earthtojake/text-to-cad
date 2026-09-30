@@ -11,11 +11,13 @@ import { useWorkspaceDocument } from "../workspace/useWorkspaceDocument.js";
 import { drawingLoadAlert, useDrawingPayload } from "./useDrawingPayload.js";
 import { useDrawingView } from "./useDrawingView.js";
 import { readFileView, writeFileView } from "../kit/shell/fileView.js";
-import ViewportBottomAction, { promptCaptureAction } from "../kit/shell/ViewportBottomAction.jsx";
+import QuickEdit from "../kit/tools/quick-edit/QuickEdit.jsx";
+import { VIEWPORT_INSET_PX } from "../kit/shell/viewportLayout.js";
 import { drawingTransformCamera, readDrawingTransform } from "./drawingTransform.js";
 
 /**
- * A `.dxf` is a straight render: the drawing, on a canvas, and nothing else.
+ * A `.dxf` is a straight render: the drawing, on a canvas, and nothing else but Quick Edit,
+ * the note to the agent about the file that every view offers.
  *
  * No 3D, no fold preview, no thickness or material, no tools, no toolbar and no
  * panel — not a file panel, not Display settings, not a layer list. A DXF is a
@@ -41,7 +43,6 @@ const SAVE_DELAY_MS = 180;
 function DxfSurface({ view, data }) {
   const host = useViewerHost();
   const destination = usePromptDestination();
-  const composer = destination.kind === "composer";
   const workspace = useWorkspaceDocument({ view, data });
   const file = workspace.entry?.file || view.file.path;
   const payload = useDrawingPayload({ client: workspace.client, file, revision: workspace.resource.revision });
@@ -132,9 +133,8 @@ function DxfSurface({ view, data }) {
   // ---- the navbar ------------------------------------------------------------
   // One action, and it is not the camera's. Zooming a drawing is the pointer's job —
   // wheel or pinch about the pointer, drag to pan, double-click to fit — so there are
-  // no zoom buttons to press, here or anywhere else in the viewer. A composer
-  // destination has no snapshot here: its Add To Prompt at the bottom is the one action.
-  // A host with no prompt workflow (`unavailable`) has neither.
+  // no zoom buttons to press, here or anywhere else in the viewer. A clipboard
+  // destination's snapshot is the one action; any other host's note to the agent is Quick Edit's.
   const snapshotAction = destination.kind === "clipboard";
   const actionsRef = useRef({ snapshot });
   actionsRef.current = { snapshot };
@@ -184,8 +184,9 @@ function DxfSurface({ view, data }) {
         <ViewerLoadingOverlay loading={{ opening: payload.loading && !alert, progress: { label: "Reading drawing" } }}
           operationKey={file} />
         <ViewerAlertCard alert={alert || (actionError ? { severity: "error", kind: "status", blocking: false, title: "Couldn’t capture the drawing", message: actionError } : null)} hasContent={Boolean(payload.drawing)} onReload={view.reload} />
-        {composer && ready ? <ViewportBottomAction {...promptCaptureAction({ disabled: !promptAvailable,
-          reason: destination.reason, onInvoke: snapshot })} /> : null}
+        {ready && !view.appearance?.compact ? <QuickEdit className="absolute z-30"
+          style={{ top: VIEWPORT_INSET_PX, right: VIEWPORT_INSET_PX, left: VIEWPORT_INSET_PX }}
+          resource={workspace.resource} referencePath={path => (view.source?.referencePath ? view.source.referencePath(path) : path)} /> : null}
       </div>
     </div>
   );

@@ -1,9 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createPromptContext, referencePart } from '@text-to-cad/core/prompt';
-import { createBridge, type ToolResult } from './bridge';
+import { createBridge, HostError, type ToolResult } from './bridge';
 import { watchViewEvents } from './events';
-import { createCatalogSource, createFilesystemSource } from './files';
-import { createComposerPromptContext } from './prompt';
+import { createCatalogFileSource } from '@text-to-cad/ui/catalog';
+import { frameClipboard } from './clipboard';
+import { createFilesystemSource } from './files';
+import { chatReach, createChatPromptContext } from './prompt';
 import { createServer, type ViewEvent } from './server';
 import { createTunnelFetch, decodeBase64, encodeBase64, TUNNEL_ORIGIN } from './tunnel';
 
@@ -164,33 +166,85 @@ describe('a filesystem, a folder at a time', () => {
     expect(filesystem('/').referencePath?.('Users/me/a.step')).toBe('/Users/me/a.step');
     expect(filesystem('C:\\').referencePath?.('work/a.step')).toBe('C:\\work\\a.step');
     // A project's catalog keeps the default: the path under its root.
-    expect(createCatalogSource(client, { kind: 'workspace', path: '/project', name: 'project' }, { id: 'w', explore: true }).referencePath).toBeUndefined();
+    expect(createCatalogFileSource(client, { id: 'w', rootName: 'project' }).referencePath).toBeUndefined();
   });
 });
 
-describe('Add to prompt', () => {
-  it('fills the composer with titled absolute references and the view, keeping earlier additions', async () => {
+describe('a Quick Edit in the chat', () => {
+  const resolvePath = (resource: any) => `/project/${resource.kind === 'workspace-file' ? resource.path : ''}`;
+  const file = referencePart({ resource: { kind: 'workspace-file', workspaceId: 'w', path: 'parts/a.step' }, target: { kind: 'whole-resource' } }, 'file');
+  const face = referencePart({ resource: { kind: 'workspace-file', workspaceId: 'w', path: 'parts/a.step' }, target: { kind: 'cad-selector', selectors: ['o1.f2'] } }, 'face');
+  const sketch = () => ({ id: 'sketch', kind: 'attachment' as const, name: 'a-sketch.png', label: 'Sketch', mimeType: 'image/png', about: ['file'],
+    content: new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], { type: 'image/png' }) });
+  const edit = (...parts: any[]) => createPromptContext([{ id: 'text', kind: 'text', text: 'Round it.' }, file, ...parts]);
+
+  it('reaches what the host declared: a tab host queues whatever it declares, and a picture rides in a message only where it takes images', () => {
+    expect(chatReach({}, 'tabs')).toEqual({ queue: true, send: false, sendImages: false });
+    expect(chatReach({ message: { text: {} } }, 'inline')).toEqual({ queue: false, send: true, sendImages: false });
+    expect(chatReach({ updateModelContext: {}, message: { text: {}, image: {} } }, 'inline')).toEqual({ queue: true, send: true, sendImages: true });
+  });
+
+  it('queues into the composer as one titled message and its sketch, keeping what it queued until the host clears it', async () => {
     const updates: any[] = [];
     let context: (value: any) => void = () => {};
-    const port = createComposerPromptContext({
+    const port = createChatPromptContext({
       hostContext: {},
       onHostContext: listener => { context = listener; return () => {}; },
       request: async (method: string, params: any) => { updates.push({ method, params }); return {}; },
-    } as any, { resolvePath: resource => `/project/${resource.kind === 'workspace-file' ? resource.path : ''}` });
-    expect(port.getSnapshot().kind).toBe('composer');
-    const face = referencePart({ resource: { kind: 'workspace-file', workspaceId: 'w', path: 'parts/a.step' }, target: { kind: 'cad-selector', selectors: ['o1.f2'] } }, 'face');
-    const png = new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], { type: 'image/png' });
-    const first = await port.deliver(createPromptContext([face, { id: 'shot', kind: 'attachment', name: 'a-view.png', mimeType: 'image/png', content: png, about: ['face'] }]));
-    expect(first.status).toBe('added');
+    } as any, { resolvePath, reach: { queue: true, send: false, sendImages: false } });
+    expect([port.getSnapshot().kind, port.send]).toEqual(['composer', undefined]);
+    expect((await port.deliver(edit(face, sketch()))).status).toBe('added');
     const [text, image] = updates[0].params.content;
     expect(updates[0].method).toBe('ui/update-model-context');
-    expect(text).toEqual({ type: 'text', text: '/project/parts/a.step#o1.f2', _meta: { 'openai/title': 'o1.f2 · a.step' } });
-    expect([image.type, image.mimeType, image._meta['openai/title']]).toEqual(['image', 'image/png', 'CAD view · a.step']);
-    await port.deliver(createPromptContext([referencePart({ resource: { kind: 'workspace-file', workspaceId: 'w', path: 'b.stl' }, target: { kind: 'whole-resource' } })]));
-    expect(updates[1].params.content.map((block: any) => block._meta['openai/title'])).toEqual(['o1.f2 · a.step', 'CAD view · a.step', 'b.stl']);
-    // The host cleared the context (the message went out): the next addition starts afresh.
+    expect(text).toEqual({ type: 'text', text: 'Round it.\n\nFile: /project/parts/a.step\nReferences:\n/project/parts/a.step#o1.f2', _meta: { 'openai/title': 'Quick edit · a.step' } });
+    expect([image.type, image.mimeType, image._meta['openai/title']]).toEqual(['image', 'image/png', 'Sketch · a.step']);
+    await port.deliver(edit());
+    expect(updates[1].params.content).toHaveLength(3);
+    // The host cleared the context (the message went out): the next one starts afresh.
     context({ 'openai/modelContext': null });
-    await port.deliver(createPromptContext([referencePart({ resource: { kind: 'workspace-file', workspaceId: 'w', path: 'c.stl' }, target: { kind: 'whole-resource' } })]));
+    await port.deliver(edit());
     expect(updates[2].params.content).toHaveLength(1);
+  });
+
+  it('sends a message into the chat, its sketch as an image, or saved and named where the host refuses the image', async () => {
+    const sent: any[] = [];
+    let refuse = false;
+    const bridge = {
+      hostContext: {}, onHostContext: () => () => {},
+      request: async (method: string, params: any) => {
+        sent.push({ method, params });
+        if (refuse && params.content.some((block: any) => block.type === 'image')) throw new HostError('Invalid MCP message params', -32602);
+        return {};
+      },
+    } as any;
+    const saved: string[] = [];
+    const attachments = { save: async (_png: Blob, name: string) => { saved.push(name); return `/tmp/cadgen-sketches/${name}`; } };
+    const port = createChatPromptContext(bridge, { resolvePath, reach: { queue: false, send: true, sendImages: true }, attachments });
+    expect(port.getSnapshot().kind).toBe('unavailable');
+    expect((await port.send!(edit(sketch()))).status).toBe('sent');
+    expect(sent[0].method).toBe('ui/message');
+    expect(sent[0].params.role).toBe('user');
+    expect(sent[0].params.content.map((block: any) => block.type)).toEqual(['text', 'image']);
+    expect(sent[0].params.content[0].text).toBe('Round it.\n\nFile: /project/parts/a.step');
+    refuse = true;
+    expect((await port.send!(edit(sketch()))).status).toBe('sent');
+    expect(sent.at(-1).params.content).toEqual([{ type: 'text', text: 'Round it.\n\nFile: /project/parts/a.step\nSketch: /tmp/cadgen-sketches/a-sketch.png' }]);
+    expect(saved).toEqual(['a-sketch.png']);
+  });
+});
+
+describe('the frame\'s clipboard', () => {
+  it('starts a write of text still on its way inside the gesture, and takes the text when it arrives', async () => {
+    const events: string[] = [];
+    vi.stubGlobal('ClipboardItem', class { constructor(readonly items: Record<string, Promise<Blob>>) { events.push('item'); } });
+    vi.stubGlobal('navigator', { clipboard: { write: async (items: any[]) => { events.push('write'); events.push(await (await items[0].items['text/plain']).text()); } } });
+    try {
+      let arrive!: (text: string) => void;
+      const copied = frameClipboard.writeText(new Promise<string>(resolve => { arrive = resolve; }));
+      expect(events).toEqual(['item', 'write']);
+      arrive('File: /work/a.step');
+      await copied;
+      expect(events).toEqual(['item', 'write', 'File: /work/a.step']);
+    } finally { vi.unstubAllGlobals(); }
   });
 });

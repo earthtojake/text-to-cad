@@ -66,11 +66,11 @@ export function useDrawingViewLock({ active: drawingOverlayActive, drawing, runt
   }, [drawingOverlayActive, followDrawingViewport, viewerReadyTick]);
   // A new sketch starts from the editor's own origin; only a runtime swap inherits a viewport.
   useEffect(() => { if (!drawingOverlayActive) { drawingViewportRef.current = { scrollX: 0, scrollY: 0, zoom: 1 }; drawingHasInkRef.current = false; } }, [drawingOverlayActive]);
-  const handleDrawingContent = useCallback((hasContent) => {
+  const handleDrawingContent = useCallback((hasContent, revision) => {
     const hadInk = drawingHasInkRef.current;
     drawingHasInkRef.current = hasContent;
     if (hasContent && !hadInk) followDrawingViewport(null, { lock: true });
-    drawing?.onContentChange(hasContent);
+    drawing?.onContentChange(hasContent, revision);
   }, [drawing?.onContentChange, followDrawingViewport]);
   const handleDrawingReady = useCallback((controller) => {
     drawingControllerRef.current = controller;

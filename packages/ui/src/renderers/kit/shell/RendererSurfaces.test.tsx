@@ -2,7 +2,7 @@ import React, { forwardRef, useImperativeHandle, useRef } from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
-// The shell's surfaces a RENDERER fills — the viewport menu, the bottom action, the camera-settled
+// The shell's surfaces a RENDERER fills — the viewport menu, Quick Edit, the camera-settled
 // report — driven end to end through the real RendererShell and useRendererShell under the shell
 // harness (a renderer that uses all three), with only the WebGL viewport replaced. The stand-in
 // hands the overlay the same viewport context the real one does (a host the pointer events arrive
@@ -101,91 +101,69 @@ it('a press the renderer has nothing to say about, a secondary drag, or a press 
   expect(screen.getByRole('menu')).toBeTruthy();
 });
 
-it('the renderer\'s bottom action shows its count when the reference does not fit, the whole reference when it does, and no native tooltip', () => {
-  // jsdom has no layout: the button's width is 280px and a label is 7px a character, so the
-  // decision is the measured one (`ViewportBottomAction.jsx`'s ruler), not a string length rule.
-  const scrollWidth = vi.spyOn(HTMLElement.prototype, 'scrollWidth', 'get').mockImplementation(function (this: HTMLElement) { return (this.textContent || '').length * 7; });
-  const clientWidth = vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockImplementation(() => 280);
-  try {
-    const { container } = mount();
-    const action = () => container.querySelector('[data-harness-bottom-action]') as HTMLElement;
-    // The renderer's `render` drew the control; what it says is the count, not a cut-off reference.
-    expect(action().getAttribute('title')).toBeNull();
-    expect(action().querySelector('span')!.textContent).toBe('Copy 1 reference');
-    act(() => { fireEvent.click(action()); });
-    // The short reference fits (36 characters): shown whole, still with no tooltip.
-    expect(action().querySelector('span')!.textContent).toBe('#harness_document/triangle_face_0001');
-    expect(action().getAttribute('title')).toBeNull();
-  } finally { scrollWidth.mockRestore(); clientWidth.mockRestore(); }
-});
-
-it('one shared Add To Prompt action is the only bottom control, independent of the active tool and absent in Preview', () => {
+it('Quick Edit sits at the top right with what the host can do, is put away in Preview, and nothing sits at the bottom', () => {
   const destination = { kind: 'composer', available: true } as const;
-  const { container } = mount(testHost({ promptContext: { getSnapshot: () => destination, subscribe: () => () => {}, deliver: async () => ({ status: 'added', partIds: [] }) } }));
-  const action = () => container.querySelector('[data-viewport-bottom-actions]') as HTMLElement | null;
-  expect(action()).not.toBeNull();
-  expect(within(action()!).getAllByRole('button')).toHaveLength(1);
-  expect(within(action()!).getByRole('button', { name: 'Add To Prompt' }).className).toContain('bg-white');
-  act(() => { fireEvent.click(screen.getByRole('button', { name: 'Draw' })); });
-  expect(within(action()!).getAllByRole('button')).toHaveLength(1);
+  const send = vi.fn(async () => ({ status: 'sent' as const, partIds: [] }));
+  const { container } = mount(testHost({ promptContext: { getSnapshot: () => destination, subscribe: () => () => {}, deliver: async () => ({ status: 'added', partIds: [] }), send } }));
+  expect(container.querySelector('[data-viewport-bottom-actions]')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Quick Edit' }));
+  const box = screen.getByRole('region', { name: 'Quick Edit' });
+  expect(document.activeElement).toBe(within(box).getByRole('textbox', { name: 'Describe your changes' }));
+  expect(within(box).getAllByRole('button').map(button => button.getAttribute('aria-label') || button.textContent)).toEqual(['Clear Quick Edit', 'Copy Prompt', 'Queue', 'Send']);
   act(() => { fireEvent.click(screen.getByRole('button', { name: 'Preview' })); });
-  expect(action()).toBeNull();
-  expect(container.querySelector('[data-file-navigation-overlay]')).toBeNull();
+  expect(container.querySelector('[data-preview-chrome]')!.contains(container.querySelector('[data-quick-edit]'))).toBe(true);
+  expect(container.querySelector('[data-preview-chrome]')!.hasAttribute('inert')).toBe(true);
 });
 
-it('Add To Prompt sends a screenshot and tool context through the composer port', async () => {
-  const deliver = vi.fn(async (_context: unknown) => ({ status: 'added' as const }));
-  const writeImage = vi.fn(async () => {});
+it('a sketch opens Quick Edit, which sends the file, the note and the view with its ink through the port', async () => {
   const destination = { kind: 'composer', available: true } as const;
-  const host = testHost({
-    promptContext: { getSnapshot: () => destination, subscribe: () => () => {}, deliver } as any,
-    clipboard: { writeText: async () => {}, readText: async () => '', writeImage },
-  });
-  const { container } = mount(host);
-  const button = within(container.querySelector('[data-viewport-bottom-actions]') as HTMLElement).getByRole('button', { name: 'Add To Prompt' });
-  expect((button as HTMLButtonElement).disabled).toBe(false);
-  fireEvent.click(button);
-  await waitFor(() => expect(deliver).toHaveBeenCalledTimes(1));
-  const context = deliver.mock.calls[0][0] as any;
-  expect(context.parts.map((part: any) => part.kind)).toEqual(['reference', 'text', 'attachment']);
+  const send = vi.fn(async (_context: unknown) => ({ status: 'sent' as const, partIds: [] }));
+  const host = testHost({ promptContext: { getSnapshot: () => destination, subscribe: () => () => {}, deliver: async () => ({ status: 'added', partIds: [] }), send } as any });
+  mount(host);
+  fireEvent.click(screen.getByRole('button', { name: 'Draw' }));
+  act(() => viewport.props.drawing.onContentChange(true, 1));
+  const box = screen.getByRole('region', { name: 'Quick Edit' });
+  expect(box.querySelector('[data-quick-edit-chip="sketch"]')).not.toBeNull();
+  const note = within(box).getByRole('textbox', { name: 'Describe your changes' });
+  expect(document.activeElement).toBe(note);
+  fireEvent.change(note, { target: { value: 'Add a boss here.' } });
+  fireEvent.keyDown(note, { key: 'Enter' });
+  await waitFor(() => expect(send).toHaveBeenCalledTimes(1));
+  const context = send.mock.calls[0][0] as any;
+  expect(context.parts.map((part: any) => part.kind)).toEqual(['text', 'reference', 'attachment']);
   expect((await context.parts[2].content).type).toBe('image/png');
-  expect(writeImage).not.toHaveBeenCalled();
+  await waitFor(() => expect(screen.queryByRole('region', { name: 'Quick Edit' })).toBeNull());
 });
 
-it('clipboard destinations retain the snapshot action and Copy Drawing with ink, without Add To Prompt', async () => {
+it('clipboard destinations keep the snapshot action, and Draw copies its ink from the foot of its controls', async () => {
   const destination = { kind: 'clipboard', available: true } as const;
   const writeImage = vi.fn(async () => {}), deliver = vi.fn();
-  const { container, navigation } = mount(testHost({
+  const { navigation } = mount(testHost({
     promptContext: { getSnapshot: () => destination, subscribe: () => () => {}, deliver } as any,
     clipboard: { writeText: async () => {}, readText: async () => '', writeImage },
   }));
-  expect(screen.queryByRole('button', { name: 'Add To Prompt' })).toBeNull();
-  // The bottom row is the renderer's own action (the harness's reference), not a prompt one.
-  expect(container.querySelector('[data-viewport-bottom-actions] [data-harness-bottom-action]')).not.toBeNull();
   const snapshot = navigation.mock.calls.at(-1)![0];
   expect(snapshot.map((action: any) => action.label)).toEqual(['Take snapshot']);
   act(() => snapshot[0].onInvoke());
   await waitFor(() => expect(writeImage).toHaveBeenCalledTimes(1));
   fireEvent.click(screen.getByRole('button', { name: 'Draw' }));
-  expect(container.querySelector('[data-viewport-bottom-actions]')).toBeNull();
-  act(() => viewport.props.drawing.onContentChange(true));
-  const copy = screen.getByRole('button', { name: /Copy Drawing/ });
-  expect(copy.className).toContain('bg-primary/85');
-  expect(copy.className).not.toContain('bg-white');
-  fireEvent.click(copy);
+  const controls = () => screen.getByRole('region', { name: 'Drawing controls' });
+  expect(within(controls()).queryByRole('button', { name: /^Copy/ })).toBeNull();
+  act(() => viewport.props.drawing.onContentChange(true, 1));
+  fireEvent.click(within(controls()).getByRole('button', { name: 'Copy' }));
   await waitFor(() => expect(writeImage).toHaveBeenCalledTimes(2));
+  // A clipboard destination's Quick Edit copies its prompt, and nothing else.
+  expect(within(screen.getByRole('region', { name: 'Quick Edit' })).queryByRole('button', { name: 'Queue' })).toBeNull();
   expect(deliver).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
-  expect(container.querySelector('[data-viewport-bottom-actions]')).toBeNull();
 });
 
-it('a host with no prompt workflow gets neither Add To Prompt nor a snapshot: left out, not disabled', () => {
+it('a host with no prompt workflow gets no snapshot, and Quick Edit copies a prompt: left out, not disabled', () => {
   // The test host composes `unavailablePromptContext`.
-  const { container, navigation } = mount();
-  expect(screen.queryByRole('button', { name: 'Add To Prompt' })).toBeNull();
+  const { navigation } = mount();
   expect(navigation.mock.calls.flatMap(([actions]) => actions)).toEqual([]);
-  // The bottom row is the renderer's own action, as for a clipboard destination.
-  expect(container.querySelector('[data-viewport-bottom-actions] [data-harness-bottom-action]')).not.toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: 'Quick Edit' }));
+  expect(within(screen.getByRole('region', { name: 'Quick Edit' })).getAllByRole('button').map(button => button.getAttribute('aria-label') || button.textContent))
+    .toEqual(['Clear Quick Edit', 'Copy Prompt']);
 });
 
 it('the renderer is told the camera settled, through what the viewport reports: a recorded move and its own settle', () => {

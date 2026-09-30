@@ -8,7 +8,7 @@ import { cn } from '@text-to-cad/ui/utils';
 import ModelPartMenu, { FeatureReferencesContext } from './ModelPartMenu.jsx';
 import ModelPartActions, { ROW_NAME_UNDER_ACTIONS, rowActionsLayout } from './ModelPartActions.jsx';
 import { modelingSelectionPaths } from '../../workbench/modelingSelection.js';
-import ToolPanel, { ToolPanelCollapse } from '../../../kit/tools/ToolPanel.jsx';
+import ToolPanel, { ToolPanelCollapse, ToolPanelFooterButton } from '../../../kit/tools/ToolPanel.jsx';
 import { TOOL_PANEL_REFERENCE_HEIGHT } from '../../../kit/tools/toolStackLayout.js';
 import { useViewerMobile } from '../../../../file-viewer/responsive.js';
 import { modelingReferenceIds } from '../../workbench/modelingTree.js';
@@ -159,7 +159,7 @@ const MemoModelingSearchRow = memo(ModelingSearchRow);
  * edges are picked. Outside All the disclosure is locked. A part's topology is asked for as its
  * row comes on screen, never for a whole large assembly at once.
  */
-function ModelingTree({ modeling, active, disabled, mode='all', modeMenu=null, loading=false, references=EMPTY, selectedReferenceIds=EMPTY, selectedPartIds=EMPTY, onLoadTopology, onRequestRecognition, onSelect, onClearSelection, stepRoot, selectedReferences, selectionDetails, activeTreeNodeScrollKey, partControls=NO_CONTROLS, hoverStore=null }) {
+function ModelingTree({ modeling, active, disabled, mode='all', modeMenu=null, loading=false, references=EMPTY, selectedReferenceIds=EMPTY, selectedPartIds=EMPTY, onLoadTopology, onRequestRecognition, onSelect, onClearSelection, stepRoot, selectedReferences, selectionDetails, selectionCopy=null, activeTreeNodeScrollKey, partControls=NO_CONTROLS, hoverStore=null }) {
   const mobile = useViewerMobile();
   const {descriptor,results,error,retryFailed}=modeling;
   const [selected,setSelected]=useState(null),[pending,setPending]=useState(null),[localExpanded,setLocalExpanded]=useState(new Set());
@@ -537,9 +537,12 @@ function ModelingTree({ modeling, active, disabled, mode='all', modeMenu=null, l
       </div></FeatureReferencesContext.Provider>
     </ToolPanel>
     {/* What is picked, as its own panel under the tree: it comes with a selection and goes with it. */}
-    {/* Not folded away: its X clears the selection, and its Copy (the heading's action) copies the reference on show. */}
+    {/* Not folded away: its X clears the selection, its heading's Copy copies the reference on show,
+        and the Copy at its foot the whole selection (Copy All, with several references). */}
     {hasDetails ? <ToolPanel id="reference" title={referenceTitle || 'Reference'} label="Reference details" closeLabel="Clear selection" fit="details" widthFrom="tree" maxHeight={TOOL_PANEL_REFERENCE_HEIGHT}
-      collapsible={false} actions={selectionDetails?.actions} hidden={!active} onClose={clearSelection}>
+      collapsible={false} actions={selectionDetails?.actions} hidden={!active} onClose={clearSelection}
+      footer={selectionCopy ? <ToolPanelFooterButton label={selectionCopy.label} shortcut={mobile ? '' : selectionCopy.shortcut}
+        disabled={disabled} onClick={selectionCopy.onCopy}/> : null}>
       <div className="px-2 pb-1.5">{details}</div>
     </ToolPanel> : null}
   </>;

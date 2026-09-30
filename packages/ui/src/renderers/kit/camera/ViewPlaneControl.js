@@ -112,6 +112,7 @@ function ViewPlaneControl({
   isLoading,
   meshData,
   viewPlaneOffsetRight,
+  viewPlaneOffsetLeft,
   viewPlaneOffsetBottom = 16,
   viewPlaneOffsetTop,
   activeViewPlaneFace,
@@ -250,7 +251,8 @@ function ViewPlaneControl({
   return (
     <div
       className="pointer-events-none absolute z-30 flex flex-col items-center gap-0"
-      style={{ right: `${viewPlaneOffsetRight}px`, ...(viewPlaneOffsetTop != null ? { top: viewPlaneOffsetTop } : { bottom }) }}
+      style={{ ...(viewPlaneOffsetLeft != null ? { left: `${viewPlaneOffsetLeft}px` } : { right: `${viewPlaneOffsetRight}px` }),
+        ...(viewPlaneOffsetTop != null ? { top: viewPlaneOffsetTop } : { bottom }) }}
     >
       {viewPlaneHeader ? (
         <div className="pointer-events-auto" onPointerDown={(event) => event.stopPropagation()}>

@@ -47,6 +47,7 @@ The record is `{ version, settings, files }`:
 | The selection (a STEP's tree and topology, a robot's links), measurements, Draw's ink | Empty |
 | Preview and its camera | Off; its Playback settings are the file's, above |
 | The routine, its time and whether it is playing | At rest |
+| Quick Edit's note | Empty, its box closed |
 | The Select mode filter, hover, menus, the open panel, popovers | The page's own |
 | The open panel of the host's column | `panel: null`: a page load opens a file on its own default |
 

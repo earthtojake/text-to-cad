@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
-// The shell's chrome — the strip, the tool stack, the top-right bar, Display's popover and preview —
+// The shell's chrome — the strip, the tool stack, the view's actions, Display's popover and preview —
 // under the smallest renderer that mounts it (`renderers/shell-harness`), with the WebGL viewport
 // replaced by an empty box: nothing asserted here is drawn by it. What the viewport is handed is
 // recorded, so a test can read what the shell asked of it.
@@ -78,8 +78,9 @@ function drag(handle: Element, [dx, dy]: [number, number], { release = true } = 
 
 it('the chrome is inset from the viewer, every panel opens one width, the tree at half the stack and the Reference at its cap, and nothing is stored until a person sizes one', () => {
   const { preferences } = frame();
-  // The strip and the stack under it, 8px in from the viewer's top, left and bottom.
-  expect(document.querySelector<HTMLElement>('[data-cad-tool-groups]')!.style).toMatchObject({ top: '8px', left: '8px', bottom: '8px' });
+  // The strip and the stack under it, 8px in from the viewer's top and left, stopping 8px above
+  // the cube and its actions in the bottom-left corner.
+  expect(document.querySelector<HTMLElement>('[data-cad-tool-groups]')!.style).toMatchObject({ top: '8px', left: '8px', bottom: 'calc(36px + 6rem)' });
   expect(shown()).toEqual(['Harness tree', 'Harness reference']);
   expect(TOOL_PANEL_WIDTH).toBe(164);
   expect([width('Harness tree'), width('Harness reference')]).toEqual([TOOL_PANEL_WIDTH, TOOL_PANEL_WIDTH]);
@@ -197,25 +198,25 @@ it('while the model loads the viewer shows none of its own chrome, and all of it
   const stage = (name: string) => act(() => { fireEvent.click(document.querySelector(`[data-harness-stage="${name}"]`)!); });
   expect(screen.getByRole('group', { name: 'Interaction tools' })).toBeTruthy();
   expect(barButtons()).toEqual(['Display settings', 'Reset view', 'Preview']);
-  expect(document.querySelector('[data-viewport-bottom-actions]')).not.toBeNull();
+  expect(screen.getByRole('toolbar', { name: 'Quick Edit' })).toBeTruthy();
   stage('finding');
   expect(screen.queryByRole('group', { name: 'Interaction tools' })).toBeNull();
   expect(document.querySelector('[data-cad-tool-stack]')).toBeNull();
   expect(barButtons()).toEqual([]);
-  expect(document.querySelector('[data-viewport-bottom-actions]')).toBeNull();
+  expect(screen.queryByRole('toolbar', { name: 'Quick Edit' })).toBeNull();
   expect(viewportProps.current.isLoading).toBe(true);
   stage('idle');
   expect(screen.getByRole('group', { name: 'Interaction tools' })).toBeTruthy();
   expect(barButtons()).toEqual(['Display settings', 'Reset view', 'Preview']);
-  expect(document.querySelector('[data-viewport-bottom-actions]')).not.toBeNull();
+  expect(screen.getByRole('toolbar', { name: 'Quick Edit' })).toBeTruthy();
 });
 
-it('a host showing the view small gets the model and its bottom action: no tools, no top-right bar, no cube', () => {
+it('a host showing the view small gets the model alone: no tools, no view actions, no Quick Edit, no cube', () => {
   frame({ appearance: { colorScheme: 'light', compact: true } });
   expect(screen.queryByRole('group', { name: 'Interaction tools' })).toBeNull();
   expect(document.querySelector('[data-cad-tool-stack]')).toBeNull();
   expect(barButtons()).toEqual([]);
-  expect(document.querySelector('[data-viewport-bottom-actions]')).not.toBeNull();
+  expect(screen.queryByRole('toolbar', { name: 'Quick Edit' })).toBeNull();
   expect(viewportProps.current.viewCube).toBe(false);
 });
 

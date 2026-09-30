@@ -61,16 +61,14 @@ it('a disabled menu disables its framing group too', () => {
   expect(find(entries, 'Zoom to selection').disabled).toBe(true);
 });
 
-it("opens a lone part's model menu with the part menu's reference group, Add to prompt only where the host offers it", () => {
-  const onAddToPrompt = vi.fn();
+it("opens a lone part's model menu with the part menu's reference group", () => {
+  const onCopyReference = vi.fn();
   const menu = { global: true, copyText: 'hinge.step#', showShowAll: true, zoomSelectionAvailable: false };
-  const entries = modelMenuEntries(menu, { actions: { onAddToPrompt } });
-  expect(labels(entries)).toEqual(['Add to prompt', 'Copy Reference', 'Show all', 'Zoom to fit', 'Zoom to selection']);
+  const entries = modelMenuEntries(menu, { actions: { onCopyReference } });
+  expect(labels(entries)).toEqual(['Copy Reference', 'Show all', 'Zoom to fit', 'Zoom to selection']);
   expect(find(entries, 'Show all').separatorBefore).toBe(true);
-  find(entries, 'Add to prompt').onSelect();
-  expect(onAddToPrompt).toHaveBeenCalledWith(menu);
-  // The same host condition as the part menu: no composer, no Add to prompt.
-  expect(labels(modelMenuEntries(menu, { actions: {} })).slice(0, 2)).toEqual(['Copy Reference', 'Show all']);
+  find(entries, 'Copy Reference').onSelect();
+  expect(onCopyReference).toHaveBeenCalledWith(menu);
   // An assembly's empty space names no part, so it has no reference group.
-  expect(labels(modelMenuEntries({ ...menu, copyText: '' }, { actions: { onAddToPrompt } }))[0]).toBe('Show all');
+  expect(labels(modelMenuEntries({ ...menu, copyText: '' }, { actions: { onCopyReference } }))[0]).toBe('Show all');
 });

@@ -127,6 +127,41 @@ test("copyTextToClipboard uses async clipboard when available", async () => {
   assert.deepEqual(fakeDocument.commands, []);
 });
 
+test("copyTextToClipboard starts the write before pending text arrives, and writes the text itself where a pending item is refused", async () => {
+  const events = [];
+  let arrive;
+  class FakeClipboardItem {
+    constructor(items) { events.push("item"); this.items = items; }
+  }
+  let refuse = false;
+  const restoreClipboardItem = replaceGlobal("ClipboardItem", FakeClipboardItem);
+  const restoreNavigator = replaceGlobal("navigator", {
+    clipboard: {
+      async write(items) {
+        events.push("write");
+        if (refuse) throw new DOMException("Pending items are not supported", "NotAllowedError");
+        events.push(`wrote:${await items[0].items["text/plain"].then(blob => blob.text())}`);
+      },
+      async writeText(text) { events.push(`writeText:${text}`); }
+    }
+  });
+  try {
+    const copied = copyTextToClipboard(new Promise(resolve => { arrive = resolve; }));
+    // Inside the gesture: the item is written before the text exists.
+    assert.deepEqual(events, ["item", "write"]);
+    arrive("Round this edge.");
+    await copied;
+    assert.deepEqual(events, ["item", "write", "wrote:Round this edge."]);
+    events.length = 0;
+    refuse = true;
+    await copyTextToClipboard(Promise.resolve("File: a.step"));
+    assert.deepEqual(events, ["item", "write", "writeText:File: a.step"]);
+  } finally {
+    restoreNavigator();
+    restoreClipboardItem();
+  }
+});
+
 test("copyTextToClipboard falls back to execCommand when async clipboard rejects", async () => {
   const restoreNavigator = replaceGlobal("navigator", {
     clipboard: {

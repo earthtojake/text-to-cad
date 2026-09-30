@@ -170,7 +170,7 @@ test('an STL opens as one mesh with no tools: display settings, orbit, host comm
   // Nothing of a mesh picks, measures, poses, plays or is drawn on: the viewport
   // simply orbits, pans and zooms, with no strip over it.
   await noTools(pane);
-  assert.equal(await pane.getByRole('button', { name: 'Add To Prompt', exact: true }).count(), 1, 'a model without selection can attach its view');
+  assert.equal(await pane.getByRole('button', { name: 'Quick Edit', exact: true }).count(), 1, 'a model without selection still takes a note to the agent');
 
   // A mesh has no panel of its own: its only settings are Display's, and Display is never
   // where a file opens. So it opens with the column shut and the model given the room.
@@ -284,14 +284,12 @@ test('an STL opens as one mesh with no tools: display settings, orbit, host comm
   await page.waitForFunction(() => !window.cadHarness.a.commands.getSnapshot().selectReference);
   assert.equal(await page.evaluate(() => window.cadHarness.a.commands.getSnapshot().selectReference ?? null), null, 'the declined request is acknowledged');
 
-  // The navbar snapshot and a host's capture request go through the same prompt port.
-  await pane.getByRole('button', { name: 'Add To Prompt', exact: true }).click();
+  // A host's capture request goes through the prompt port: the view, of the whole file.
+  await page.evaluate(() => window.cadHarness.capture());
   await page.waitForFunction(() => window.cadHarness.captures.length === 1);
   const captured = await page.evaluate(() => window.cadHarness.captures[0]);
   assert.deepEqual([captured.file, captured.type, captured.references.length], ['part.stl', 'image/png', 1]);
   assert.deepEqual(captured.references[0].target, { kind: 'whole-resource' });
-  await page.evaluate(() => window.cadHarness.capture());
-  await page.waitForFunction(() => window.cadHarness.captures.length === 2);
 
   // Camera and Display settings belong to this file under this renderer's id, and survive a remount.
   await display(page, { surfaces: { colorMode: 'single', color: '#00c040' }, grid: { enabled: true }, floor: { enabled: true } });

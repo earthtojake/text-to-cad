@@ -51,8 +51,8 @@ it('a tab host gets the page it always had, down to its bottom: the home, with i
   expect(viewer.props!.host.files.list).toBeDefined();
   expect(container.querySelector('[aria-label="Full size"]')).toBeNull();
   expect(sized(bridge.notify)).toEqual([]);
-  // The host's composer floats over the page's bottom: no strip is kept for it, the viewer's bottom
-  // action sits on the composer's line, and lists scroll clear of it.
+  // The host's composer floats over the page's bottom: no strip is kept for it, preview's playbar
+  // sits on the composer's line, and lists scroll clear of it.
   const frame = container.firstElementChild as HTMLElement;
   expect([frame.style.paddingTop, frame.style.paddingBottom]).toEqual(['4px', '0px']);
   expect(frame.style.getPropertyValue('--cad-viewport-bottom-center')).toBe('40px');
@@ -88,25 +88,27 @@ it('an inline host gets a card of a height it is told, which goes full size in p
   expect(container.querySelector('[aria-label="Full size"]')).toBeNull();
   expect(viewer.props!.host.environment.compact).toBeUndefined();
   // Full size, the host's composer lies across the bottom: the view keeps clear of it, and its
-  // bottom action keeps its own line.
+  // playbar keeps its own line.
   expect((container.firstElementChild as HTMLElement).style.paddingBottom).toBe('72px');
   expect((container.firstElementChild as HTMLElement).style.getPropertyValue('--cad-viewport-bottom-center')).toBe('');
   // Full size keeps what was on the card: the same view, not a new one.
   expect(viewer.mounts).toBe(1);
 });
 
-it('Add To Prompt reaches a tab host\'s composer always, and an inline host\'s only when it takes model context', () => {
+it('a Quick Edit queues into a tab host\'s composer always, into an inline host\'s when it takes model context, and sends where the host takes messages', () => {
   const model: Launch = { protocol: 2, page: 'viewer', model: '/work/part.stl', root: { kind: 'global', path: '/', name: '/' }, explore: false };
-  const destination = (presentation: 'tabs' | 'inline', capabilities: Record<string, unknown>) => {
+  const reach = (presentation: 'tabs' | 'inline', capabilities: Record<string, unknown>) => {
     const { bridge, server } = host({ displayMode: presentation === 'tabs' ? 'fullscreen' : 'inline' }, capabilities);
     render(<App bridge={bridge as any} server={server as any} presentation={presentation} session={session} launch={model} />);
-    const kind = viewer.props!.host.promptContext.getSnapshot().kind;
+    const { promptContext, attachments } = viewer.props!.host;
+    const reached = [promptContext.getSnapshot().kind, typeof promptContext.send === 'function' ? 'send' : '', Boolean(attachments)];
     cleanup();
-    return kind;
+    return reached;
   };
-  // An inline host that never declared updateModelContext has nowhere to add to: no Add To Prompt at all.
-  expect(destination('inline', {})).toBe('unavailable');
-  expect(destination('inline', { updateModelContext: { text: {} } })).toBe('composer');
-  // Codex declares it only sometimes and always forwards it: a tab is never asked.
-  expect(destination('tabs', {})).toBe('composer');
+  // An inline host that declared neither has nowhere to add to or post in: Copy Prompt alone.
+  expect(reach('inline', {})).toEqual(['unavailable', '', true]);
+  expect(reach('inline', { updateModelContext: { text: {} } })).toEqual(['composer', '', true]);
+  expect(reach('inline', { message: { text: {} } })).toEqual(['unavailable', 'send', true]);
+  // Codex declares model context only sometimes and always forwards it: a tab is never asked.
+  expect(reach('tabs', { message: { text: {}, image: {} } })).toEqual(['composer', 'send', true]);
 });

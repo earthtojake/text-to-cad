@@ -38,21 +38,17 @@ function zoomEntries(menu, { disabled = false, actions = {} } = {}) {
  * The entries of the part menu for the descriptor the workspace builds for a node
  * (`assemblyNodeMenu` in `CadFileView`): `{ id, label, disabled, separatorBefore, onSelect }`.
  *
- * `actions` holds the handlers, each called with the descriptor; `onAddToPrompt` is
- * offered only where the host has somewhere to put it, so a caller leaves it out
- * otherwise. `disabled` disables every item at once, for a tree whose selection is blocked.
+ * `actions` holds the handlers, each called with the descriptor. `disabled` disables every
+ * item at once, for a tree whose selection is blocked.
  */
 /**
- * The reference group that opens a menu about something with a reference: Add to prompt (only
- * where the host offers it) and Copy Reference, both off when there is nothing to copy.
+ * The reference group that opens a menu about something with a reference: Copy Reference, off
+ * when there is nothing to copy. What goes to the agent goes through Quick Edit, which a pick opens.
  */
 function referenceEntries(menu, { disabled = false, actions = {} } = {}) {
   const run = (action) => () => action?.(menu);
   const copyDisabled = disabled || !String(menu.copyText || "").trim();
-  const entries = [];
-  if (actions.onAddToPrompt) entries.push(entry("add-to-prompt", "Add to prompt", copyDisabled, run(actions.onAddToPrompt)));
-  entries.push(entry("copy-reference", "Copy Reference", copyDisabled, run(actions.onCopyReference)));
-  return entries;
+  return [entry("copy-reference", "Copy Reference", copyDisabled, run(actions.onCopyReference))];
 }
 
 export function assemblyPartMenuEntries(menu, { disabled = false, actions = {} } = {}) {

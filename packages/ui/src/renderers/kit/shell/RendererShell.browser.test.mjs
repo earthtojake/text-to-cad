@@ -452,17 +452,22 @@ test('a renderer says more about its load than a download: finding the file, edi
   assert.equal(await overlay.count(), 0, 'a plain load covers nothing');
   assert.equal(await card.count(), 0, 'and raises nothing');
 
-  // THE CUBE IS THE TOP-RIGHT CORNER'S, below the Display and Preview buttons: the bottom
-  // row is left to the host (a composer, on some) and to the bottom action.
+  // THE CUBE IS THE BOTTOM-LEFT CORNER'S, under the Display and Preview buttons, and the tool
+  // stack stops above them: the right of the view is Quick Edit's, and the bottom middle the
+  // host's (a composer, on some) and preview's playbar.
   const frameBox = await canvasElement.boundingBox();
   const actionsBox = await pane.locator('[data-viewport-actions]').boundingBox();
   const cubeBox = await pane.getByLabel('View cube', { exact: true }).boundingBox();
-  assert.ok(cubeBox.y < frameBox.y + 16 && actionsBox.y >= cubeBox.y + cubeBox.height,
-    'the view cube occupies the top-right corner above the action buttons');
+  const stackBox = await pane.locator('[data-cad-tool-groups]').boundingBox();
+  const quickEditBox = await pane.getByRole('toolbar', { name: 'Quick Edit', exact: true }).boundingBox();
+  assert.ok(cubeBox.y + cubeBox.height > frameBox.y + frameBox.height - 16 && actionsBox.y + actionsBox.height <= cubeBox.y,
+    'the view cube occupies the bottom-left corner under the action buttons');
   assert.ok(Math.abs(cubeBox.x + cubeBox.width / 2 - actionsBox.x - actionsBox.width / 2) < 1,
-    'the buttons are centred underneath the cube');
-  assert.ok(cubeBox.x + cubeBox.width > frameBox.x + frameBox.width - 20,
-    'the view cube stays against the right edge');
+    'the buttons are centred on top of the cube');
+  assert.ok(cubeBox.x < frameBox.x + 20, 'the view cube stays against the left edge');
+  assert.ok(stackBox.y + stackBox.height <= actionsBox.y, 'the tool stack stops above the buttons');
+  assert.ok(quickEditBox.x + quickEditBox.width > frameBox.x + frameBox.width - 20 && quickEditBox.y < frameBox.y + 20,
+    'Quick Edit takes the top-right corner');
 
   // FINDING: the wait before the file is even located covers the viewport, and says
   // so as such rather than as a phase of reading it.
@@ -538,7 +543,7 @@ test('a renderer says more about its load than a download: finding the file, edi
   // THE SNAPSHOT IS THE RENDERER'S TO ASSEMBLE. Its own reference vocabulary goes
   // through its own builder — and the resource it names is the one on screen.
   const before = await page.evaluate(() => window.cadHarness.captures.length);
-  await pane.getByRole('button', { name: 'Add To Prompt', exact: true }).click();
+  await page.evaluate(() => window.cadHarness.capture());
   await page.waitForFunction(count => window.cadHarness.captures.length > count, before);
   assert.deepEqual(await page.evaluate(() => {
     const context = window.cadHarness.captures.at(-1);

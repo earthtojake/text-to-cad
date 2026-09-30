@@ -245,14 +245,15 @@ toolbar with the rest of the tool stack; Position's panel replaces it while Posi
 is the tool. The navbar has no panel of the file's: the explorer's is its one toggle.
 STEP and robot files have a
 top-left toolbar; GLB, STL and 3MF have none. Every 3D file has Display settings
-and Preview in the top-right bar. DXF is a 2D canvas with pan, zoom and
-snapshot, without a 3D toolbar or tool stack.
+and Preview among the view actions on top of the view cube at the bottom-left,
+and Quick Edit at the top-right. DXF is a 2D canvas with pan, zoom, snapshot and
+Quick Edit, without a 3D toolbar or tool stack.
 
 The file explorer floats over the view's left and never resizes it. Below 720px of
-FileViewer width it is a floating sheet over the viewer, the view cube is hidden and
-the tree panel of the tool stack starts folded. Preview is the shared shell's
-top-right button: it keeps the navbar and the explorer, hides the toolbar
-and tool stack, orbits by default, plays routines (on entry only with Autoplay on)
+FileViewer width it is a floating sheet over the viewer and the tree panel of the
+tool stack starts folded. Preview is the shared shell's button among the view
+actions: it keeps the navbar and the explorer, hides the toolbar, tool stack and
+Quick Edit, orbits by default, plays routines (on entry only with Autoplay on)
 and offers Playback and Display settings; the host passes no preview props.
 The camera is never stored, so a refresh frames the file anew; Display settings,
 pose and explode are kept per file through the shared state contract (see
@@ -287,6 +288,13 @@ operations can be retried, while recent successful operation IDs prevent repeate
 writes. Clipboard operations, prompt delivery and development reload live
 under `src/host`; shared UI receives their explicit ports. The browser file source
 exposes no general write operations.
+
+The prompt destination is the clipboard, so Quick Edit offers Copy Prompt alone. Its
+text goes through the clipboard port's `writeText`, which takes pending text: a
+`ClipboardItem` holding the promise, so the write starts inside the gesture, or the
+text itself once it arrives where the browser takes no pending item. A sketch is
+saved through the host's `attachments` (`createHttpAttachmentStore`, over
+`POST /__cad/sketches`) and named in the text by its absolute path.
 
 ### Home
 
@@ -351,5 +359,5 @@ The web camera action copies only the viewport PNG through guarded
 `POST /__cad/clipboard`, avoiding browser clipboard permission prompts. The local
 backend writes the server machine's native clipboard on macOS or Linux (wl-copy/xclip);
 this is not the remote phone's clipboard when accessing a shared server. Failures
-use the viewer's error presentation; successful actions are silent. Desktop
-attaches the snapshot to its composer instead.
+use the viewer's error presentation; successful actions are silent. A host with a
+composer has no camera action: its note to the agent is Quick Edit.

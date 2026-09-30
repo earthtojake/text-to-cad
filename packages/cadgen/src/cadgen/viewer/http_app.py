@@ -501,6 +501,13 @@ class CadApp:
                         return
                     copy_png(request.body())
                     response.send_empty(204)
+                elif pathname == "/__cad/sketches":
+                    # A Quick Edit's sketch, saved for a copied prompt to name (`sketches.py`).
+                    from .sketches import MAX_PNG_BYTES as MAX_SKETCH_BYTES, save_sketch
+                    if int(request.headers.get("content-length") or 0) > MAX_SKETCH_BYTES:
+                        response.send_empty(413, [("connection", "close")])
+                        return
+                    response.send_json(200, {"ok": True, "path": save_sketch(request.body(), str(query.get("name") or ""))})
                 elif pathname == "/__cad/surfaces":
                     if int(request.headers.get("content-length") or 0) > 128 * 1024:
                         response.send_empty(413, [("connection", "close")])

@@ -163,9 +163,32 @@ export async function copyImageBlobToClipboard(blobOrPromise, { type = "image/pn
   return await blobPromise;
 }
 
+// Text that is still on its way goes out as a clipboard item holding the promise, so the write
+// starts inside the gesture that asked for it (Safari refuses one that starts after an await).
+// A browser that will not take a pending item gets the text itself, once it has arrived.
+async function copyPendingText(clipboard, pending) {
+  const ClipboardItemCtor = globalThis.ClipboardItem;
+  if (typeof clipboard?.write === "function" && typeof ClipboardItemCtor === "function") {
+    const blob = pending.then((value) => new Blob([String(value ?? "")], { type: "text/plain" }));
+    void blob.catch(() => {});
+    try {
+      await clipboard.write([new ClipboardItemCtor({ "text/plain": blob })]);
+      return null;
+    } catch (error) {
+      // The text's own failure is the one to report.
+      await blob;
+    }
+  }
+  return String((await pending) ?? "");
+}
+
 export async function copyTextToClipboard(text) {
-  const clipboardText = String(text ?? "");
   const clipboard = globalThis.navigator?.clipboard;
+  let clipboardText;
+  if (text && typeof text.then === "function") {
+    clipboardText = await copyPendingText(clipboard, text);
+    if (clipboardText === null) return;
+  } else clipboardText = String(text ?? "");
   let clipboardError = null;
 
   if (typeof clipboard?.writeText === "function") {

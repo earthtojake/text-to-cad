@@ -129,7 +129,7 @@ async function open() {
       }
       assert.fail('the surface never stopped rendering');
     },
-    away: () => page.mouse.move(box.x + 20, box.y + box.height - 20),
+    away: () => page.mouse.move(box.x + box.width - 20, box.y + box.height - 20),
   };
 }
 

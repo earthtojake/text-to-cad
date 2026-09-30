@@ -1,25 +1,14 @@
 // Viewer preferences are the workspace module's, shared by every renderer:
 // a host reads them from `@text-to-cad/ui/renderers/workspace`, not through a slice.
 import { createCadPreferences, prepareWorkspaceEntry, type CadPreferenceSource, type PreparedWorkspaceEntry, type ViewerCommandSource, type WorkspaceClientOption } from "../workspace/index.js";
-import type { PromptContext, PromptReference } from '@text-to-cad/core/prompt';
-import type { ComponentType } from 'react';
 import { isCadFile } from '@text-to-cad/core/lib/fileFormats.js';
 import { defineFileRenderer } from '../../file-viewer/registry.js';
 
 export type { CadLiveBinding, CadLiveController, CadLiveState, CadCameraSnapshot } from './live.js';
 import type { CadLiveBinding } from './live.js';
 
-export interface StepSelectionSlotProps {
-  selection: readonly PromptReference[];
-  selectionKey: string;
-  disabled: boolean;
-  /** Capture belongs to this source/selection. Host delivery still binds its own destination. */
-  createContext(options?: { text?: string; capture?: boolean }): PromptContext;
-}
-export interface StepRendererSlots { selectionExtras?: ComponentType<StepSelectionSlotProps> }
 export interface StepRendererOptions {
   client: WorkspaceClientOption;
-  slots?: StepRendererSlots;
   /** The host's requests every viewer answers (`@text-to-cad/ui/renderers/workspace`). */
   commands?: ViewerCommandSource;
   live?: CadLiveBinding;

@@ -19,7 +19,7 @@ const idList = (values) => uniqueStringList((Array.isArray(values) ? values : []
  * tree, and frame it again. The framing is always worth offering (a press on the backdrop is
  * how somebody who zoomed off the model gets it back); the rest comes and goes with what it
  * could do. A lone part has no part menu (the model IS the part), so its model menu carries
- * the whole part's reference (`copyText`, the file's `#`) for Add to prompt and Copy Reference;
+ * the whole part's reference (`copyText`, the file's `#`) for Copy Reference;
  * an assembly's names no part and carries none.
  */
 export function modelMenuDescriptor({ root, isAssemblyView, expandedIds, loadableIds, hiddenCount, zoomSelectionAvailable, entry = null }) {

@@ -66,7 +66,7 @@ dismissible floating sheet. The sheets have no extra visible title row and never
 scroll or translate the host page. A CAD file's controls are not a panel of the
 explorer but of the viewer's own tool stack under the toolbar: one width for every
 panel, bounded by the viewer's height.
-The view cube is hidden on mobile. Progress indicators use this same breakpoint. Panels never
+Progress indicators use this same breakpoint. Panels never
 scroll sideways: a Position panel's labels truncate to preserve its sliders and
 inputs.
 
@@ -160,8 +160,8 @@ same editor as an overlay in both apps.
 Read [drawing](docs/drawing.md) before extending this editor or reusing it for
 viewer annotations.
 
-The required host contract, typed prompt bundles, delivery receipts and named
-renderer slots are documented in [viewer host](docs/viewer-host.md). Clipboard
+The required host contract, typed prompt bundles, delivery receipts and host
+chrome slots are documented in [viewer host](docs/viewer-host.md). Clipboard
 and page reload implementations live in the apps. Shared UI performs no
 raw transport, clipboard discovery, host storage or page-navigation effects.
 
@@ -275,8 +275,9 @@ tree asks for the tree, so the tree stays up while a person walks it; any other 
 gets nothing. No panel is saved in a file's record.
 The binding [viewer design system](docs/settings-ui.md) defines tool lifecycle,
 the tool stack, mobile layout, section density, keyboard scope, tooltips
-and preview. RendererShell owns the top-left toolbar, the top-right cube and
-the bar below it: Display settings, Reset view, then Preview. Preview is the shell's own
+and preview. RendererShell owns the top-left toolbar, Quick Edit at the top-right,
+and the bottom-left cube with the view actions on top of it: Display settings,
+Reset view, then Preview. Preview is the shell's own
 mode, where routines play and the model orbits, and preserves the parent
 navbar. Keep app-specific effects in the
 [host contract](docs/viewer-host.md), not in renderer components.

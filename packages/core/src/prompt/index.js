@@ -49,6 +49,7 @@ export function validatePromptContext(context) {
       requireValue(typeof part.name === 'string' && part.name.length > 0 && typeof part.mimeType === 'string' && /^[\w.+-]+\/[\w.+-]+$/.test(part.mimeType), 'attachment needs a name and MIME type');
       requireValue(part.content && (typeof part.content.arrayBuffer === 'function' || typeof part.content.then === 'function'), 'attachment must provide binary content');
       requireValue(part.about === undefined || (Array.isArray(part.about) && part.about.every(id => typeof id === 'string')), 'attachment relationships must name reference parts');
+      requireValue(part.label === undefined || typeof part.label === 'string', 'attachment label must be text');
     }
   }
   for (const part of context.parts) if (part.kind === 'attachment') {
@@ -90,6 +91,27 @@ export function formatPromptReference(reference, { resolvePath } = {}) {
 export function formatPromptContextText(context, options = {}) {
   validatePromptContext(context);
   return context.parts.flatMap(part => part.kind === 'text' ? [part.text] : part.kind === 'reference' ? [formatPromptReference(part.reference, options)] : []).join('\n');
+}
+
+/**
+ * A context as one message, the way a person would write it: what they said, then what it is
+ * about — each whole file on a `File:` line, the selections in it under `References:`, one per
+ * line — then each attachment that travels as a file, by its label and path (`attachmentPath`;
+ * one sent beside the text is left out). One spelling, whether the message is sent, queued or copied.
+ */
+export function formatPromptMessage(context, { attachmentPath, ...options } = {}) {
+  validatePromptContext(context);
+  const said = context.parts.filter(part => part.kind === 'text').map(part => part.text.trim()).filter(Boolean);
+  const files = [], references = [], attachments = [];
+  for (const part of context.parts) {
+    if (part.kind === 'reference') (part.reference.target.kind === 'whole-resource' ? files : references).push(formatPromptReference(part.reference, options));
+    else if (part.kind === 'attachment') {
+      const path = attachmentPath?.(part);
+      if (path) attachments.push(`${part.label || 'Attachment'}: ${path}`);
+    }
+  }
+  const about = [...files.map(file => `File: ${file}`), ...(references.length ? ['References:', ...references] : []), ...attachments];
+  return [said.join('\n\n'), about.join('\n')].filter(Boolean).join('\n\n');
 }
 
 const failureMessage = error => error instanceof Error ? error.message : String(error);

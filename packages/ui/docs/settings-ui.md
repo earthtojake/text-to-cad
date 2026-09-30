@@ -16,8 +16,8 @@ belong to apps through the [host contract](viewer-host.md).
 
 FileViewer owns the navbar, the file explorer (the host's file tree), the column a
 file's declared panels open in, and which panel is open. RendererShell owns the scene's chrome: the toolbar, the
-tool stack under it, the view cube, the bottom action, the playbar and
-preview mode. Renderers supply their tools, their document state and their tool
+tool stack under it, Quick Edit, the view cube with the view actions on top of it,
+the playbar and preview mode. Renderers supply their tools, their document state and their tool
 panels; the shell never inspects a format's parts, joints or topology. A CAD
 file's controls are never a panel of the host's: no pick or tool opens, closes or
 turns the explorer.
@@ -26,7 +26,7 @@ turns the explorer.
 | --- | --- |
 | Where the tab record lives (`TabRecordStorage`: the web's sessionStorage, the desktop's per-tab store) | The record: its settings (the tree, the tool stack's layout, the appearance) and each file's view (its camera, Display settings, Playback settings and renderer slices), what is written when, and what is never stored (`@text-to-cad/ui/tab-store`, `kit/shell/fileView.js`) |
 | `navigation.home`, `links` (its version, GitHub, Discord, how a link opens) and `displayActions` (an appearance control) | The navbar's order and look, the version's menu, the snapshot action and the panel toggles |
-| `host.files`, `fileActions`, `navigation`, `clipboard`, `promptContext` | When a copy, capture or open happens and what it carries |
+| `host.files`, `fileActions`, `navigation`, `clipboard`, `promptContext`, `attachments` | When a copy, capture or open happens and what it carries |
 | `host.environment`: color scheme, keyboard `platform`, `reducedMotion` | How the chrome honours them |
 | `onError`, for errors the viewer hands up | Preview, tooltips, keyboard scope, the tool stack, the camera |
 
@@ -39,30 +39,31 @@ none.
   for that file; the name has no right-click menu and there are no crumbs. Right:
   the renderer's actions (the snapshot camera), a declared panel's toggle, then the
   version, GitHub and Discord as icons. A CAD file declares no panel. The home
-  page has the same row; a view shown small in a conversation (`compact`) has none.
+  page has the same row; a view shown small in a conversation (`compact`) has none,
+  and draws the model alone: no tools, view actions, cube or Quick Edit.
 - **File explorer** floats over the view's left, inset 8px like the toolbar, on a
   solid background above the tools. Opening it never resizes the view or moves its
   tools; it stays up while a person walks the tree.
 - **Toolbar** at top-left, 8px in — the gap between it and the stack under it.
-  At top-right, 2px in, the view cube sits above a centred bar of 20px
-  transparent buttons with 12px icons: **Display settings** (cog),
-  **Reset view**, then **Preview** (a play icon). Mobile uses the same cube and bar layout. In preview the same bar, in the same place, keeps Display and Reset, then an
-  X where Preview was; **Playback settings** is the cog at the playbar's right
-  end, and its menu opens upward.
 - **Tool stack** beneath the toolbar: the panels of the tool in hand and of the
-  effects a person keeps (see [The tool stack](#the-tool-stack)).
-- **View cube** at top-right, 2px in, with a 2px gap before the 24px action bar below
-  its 6rem area: enlarged face/edge/corner hit areas and neutral hover and XYZ
-  guides. Preview omits it.
-- **Bottom action** and **playbar** sit near bottom-centre, independent of the
-  cube. For a composer destination, one white **Add To Prompt** button captures the current view and adds
-  the file, selected references when present, and the screenshot through the
-  host's prompt destination. It stays visible across tools and without a
-  selection. Clipboard destinations retain the tool's **Copy Reference(s)**
-  action for a selection and **Copy Drawing** while Draw has ink, with the
-  normal primary styling and copy shortcut. With neither there is no bottom
-  action; their snapshot action remains in file navigation. Preview hides
-  bottom actions completely. The destination capability decides this behavior.
+  effects a person keeps (see [The tool stack](#the-tool-stack)). The column is
+  exactly the height the stack may take: it stops 8px above the view actions, so
+  it never runs under the cube, and while the panels fit only a panel's inner
+  body scrolls.
+- **Quick Edit** at top-right, 8px in: a standalone toolbar on the strip's
+  surface with one button, the note a person writes to their agent (see
+  [Quick Edit](#quick-edit)). The rest of the right side of the view is clear.
+- **View cube** at bottom-left, 2px in, in a 6rem area: enlarged
+  face/edge/corner hit areas and neutral hover and XYZ guides. Preview omits it.
+- **View actions** directly on top of the cube, centred on it, a 2px gap between
+  them: a bar the cube's width (6rem) and 24px tall, of 20px transparent buttons
+  with 12px icons — **Display settings** (cog), **Reset view**, then **Preview**
+  (a play icon). Mobile uses the same cube and bar layout. In preview the same
+  bar, in the same place, keeps Display and Reset, then an X where Preview was.
+  Display settings' popover opens upward from its button, and the bar's hints
+  show above its buttons.
+- **Playbar** (preview's) sits at bottom-centre, and nothing else does;
+  **Playback settings** is the cog at its right end, and its menu opens upward.
 - **Model update status** sits at top-centre of the viewport, vertically centred
   in the same 34px row as the top-left toolbar in every host.
   It is renderer chrome, independent of the host's navigation status slot.
@@ -82,12 +83,12 @@ to the shared shell; no host or file-format branch belongs in the button.
 | STEP | Select, Position (movable joints only), Draw, Measure, Explode (two or more parts), Clip |
 | URDF / SRDF / SDF | Select, Position (posable joints only) |
 | GLB / STL / 3MF | none |
-| DXF | none: a 2D canvas; composer Add To Prompt or clipboard navigation snapshot |
+| DXF | none: a 2D canvas, with Quick Edit; a clipboard destination's navigation snapshot |
 
 There is no separator or activity dot. There is no Animate tool: routines play in
 [preview](#camera-animation-and-preview). Display is not a tool: every 3D
-renderer has its **Display settings** button in the viewport's top-right bar,
-beside Preview (see
+renderer has its **Display settings** button in the view actions on top of the
+cube, beside Preview (see
 [Display settings](#display-settings-and-section-primitives)). A file with no
 tools has no strip at all.
 
@@ -175,9 +176,10 @@ Leaving Draw forgets the sketch, but not the tool, colour and weight in hand,
 which the next time opens with. Choosing a drawing tool changes the toolbar
 icon. Undo and Redo are disabled when their history is empty. The select tool uses lucide's
 SquareMousePointer. The pencil and the shapes share one default stroke width.
-While Draw has ink, a clipboard destination shows Copy Drawing; a composer
-destination keeps Add To Prompt and captures the ink with the view. The copy
-shortcut copies that drawing as a PNG. Draw disables the cube without hiding it.
+Once there is ink, the Drawing panel ends in a full-row **Copy**, which writes the
+view with its ink to the clipboard as a PNG; the copy shortcut does the same. A
+sketch begun opens [Quick Edit](#quick-edit), whose **Sketch** chip carries that
+view. Draw disables the cube without hiding it.
 
 **Measure.** Its **Measure** panel is up as soon as it is the tool, empty: a
 heading whose mode menu, beside the chevron and the X, holds the four snapping
@@ -257,7 +259,9 @@ stack.
   per pointer move. A folded panel keeps its width handle and has no height
   handle or corner: there is no height to set.
 - **Never past the viewer.** The column is the viewer's height less the 8px
-  insets and the strip. When the panels need more, the tree gives way first and
+  inset above the strip, the strip, and at its foot the cube with its view
+  actions and an 8px gap above them (`VIEWPORT_STACK_BOTTOM`, `calc(6rem +
+  36px)`): it never runs under the cube. When the panels need more, the tree gives way first and
   scrolls inside itself, down to 128px or its content, whichever is less; then a
   details panel (Reference, Position, Measurements, Issues)
   gives way, down to 96px or its content; a small panel (Explode, Clip, Drawing)
@@ -287,6 +291,12 @@ stack.
   reference on show — the one browsed to, with several selected — as Copy
   Reference copies it) and an X that clears the selection; a kept panel's X
   removes the effect.
+- **Footers.** A panel can end in one full-row button under its body, which
+  never scrolls (`footer`, `ToolPanelFooterButton`): the Reference's **Copy** —
+  **Copy All** with several references, every one selected, where its heading's
+  Copy takes the one on show — and, once there is ink, Drawing's **Copy**. The
+  button shows the copy shortcut in the platform's form (a phone shows none) and
+  a tick for a moment after the copy.
 - **The layout is the person's.** The sizes and the folded panels are one of the
   tab's settings, across its files (`CadPreferences.toolStack`:
   `{ panels: { [panel id]: { width?, height? } }, collapsed: { [panel id]: boolean } }`,
@@ -330,7 +340,7 @@ has the screen until the person opens it. The host's panels (the explorer at the
 left, a declared panel at the right) become non-modal floating sheets over the
 viewer (280px, inset 8px) that never resize or move the scene or shift the page; a
 sheet has a compact X, outside dismissal and Escape, and a pick in the explorer
-closes it. The navbar is the same row; the cube and the shortcut hint are hidden. Touch works for every tool: one finger orbits, two pan and
+closes it. The navbar is the same row; the shortcut hint is hidden. Touch works for every tool: one finger orbits, two pan and
 zoom, a tap picks; a pinch, a cancelled pointer or a camera drag is never a
 pick.
 
@@ -342,10 +352,10 @@ minimum closes the panel, and the keyboard never does. The next open starts at
 
 ## Display settings and section primitives
 
-Display is not a tool. Its button — the cog icon, "Display settings" — sits in the viewport's
-top-right bar beside Preview, in the same place in the tools view and in
-preview, and opens an ordinary popover end-aligned under it (`kit/shell/DisplayPopover.jsx`), 256px wide and
-never taller than the viewer. Opening it leaves the tool in hand as it is: a
+Display is not a tool. Its button — the cog icon, "Display settings" — sits in the
+view actions on top of the cube, beside Preview, in the same place in the tools view and in
+preview, and opens an ordinary popover upward from it, start-aligned (`kit/shell/DisplayPopover.jsx`), 256px wide and
+never taller than the viewer below the tool strip. Opening it leaves the tool in hand as it is: a
 selection, a Draw session or Position stay. It goes with Escape, its button, or
 a press anywhere but the model; a press on the model (to orbit and judge a
 setting) and setting changes leave it up. It is the same popover, the same
@@ -437,11 +447,11 @@ picker over them with a muted "i/N" beside the name — quiet on hover in either
 theme (no fill; only its chevron comes up), and nothing about it moves; that picker is all a
 multi-selection adds, and the rows are always the browsed reference's alone (no
 totals, no count line). An X at the heading's end clears the selection. Copy
-stays in row menus, the Reference heading and the copy shortcut. Clipboard
-destinations also show Copy Reference or Copy References below the viewport;
-composer destinations show Add To Prompt, which includes the selected
-references with the screenshot. Every copied reference
-carries its file prefix.
+stays in row menus, the Reference heading and the copy shortcut, and the panel
+ends in a full-row **Copy** (**Copy All** with several references) that shows the
+shortcut. What goes to an agent goes through [Quick Edit](#quick-edit), which a
+pick opens and which carries the selected references with the file. Every copied
+reference carries its file prefix.
 
 Viewport picks reach individual faces and edges even where the tree groups them
 into a feature. In an assembly, faces and edges load per part, when first
@@ -455,6 +465,53 @@ isolates a component or subassembly; double-click on empty space leaves
 isolation, as do the isolation bar's Exit and the lit Isolate. Only topology that
 cannot be isolated copies on double-click, and it stays selected.
 Clearing the selection or leaving isolation never leaves a stale Copy Reference.
+
+## Quick Edit
+
+Quick Edit is a person's note to their agent about the file on screen, and the one
+way the viewer hands it over. It is a standalone toolbar at the viewport's
+top-right, 8px in, on the tool strip's surface, with one button: a speech bubble,
+named and hinted "Quick Edit". Every 3D file has it, and so has a DXF; a compact
+host gets none, and preview puts it away with the tools.
+
+Pressed, the box opens under the button: a heading ("Quick Edit") with an X, a row
+of chips, a textarea ("Describe your changes") and the buttons at its bottom-right. Opening takes the keyboard: focus
+goes to the textarea. The X clears the note and closes the box. The toolbar button
+hides the box and keeps the note, and the box then stays hidden, opening itself no
+more, until that button opens it again.
+
+It opens itself, and takes the keyboard, when a **selection begins** — something
+picked where nothing was — right after the person's primary press in this view, and when a
+**sketch begins** — the first ink of a Draw session; an undo and a redo of it is not
+another — once the pen lifts. A selection an agent or host makes through the live
+controller (`select`) never opens it: it must not take the person's keyboard. A box
+closed any other way (its X, an Escape in it empty, a button that went) stays closed
+while the person goes on picking or drawing; the next selection or sketch opens it again.
+
+The chips follow the live view until a button is pressed: the **file**, always
+attached; **N references**, the selection counted one by one (under Select only; a
+whole-file reference is not counted, the file always goes); and **Sketch**, with a
+small picture of the view with its ink, while Draw has ink (redrawn once the ink has
+been still for about 350ms).
+
+The buttons, left to right, are only those the host can carry out, and the
+rightmost is the primary one, which Enter presses (Shift+Enter is a new line):
+
+- **Copy Prompt**, always. Its hint says to paste the prompt into the agent's
+  prompt box. It copies the note as text: its references spelled as copied
+  references are, and a sketch by the path it was saved at, since text cannot
+  carry a picture.
+- **Queue**, where the destination is a composer: the note goes into the context
+  of the person's next message.
+- **Send**, where the host can post a message: the note goes now, as the person's
+  message. A round button with an up arrow.
+
+Each clears the note and closes the box once it has gone, and the toolbar button
+shows a tick for a moment; a failure keeps the note and says why in the box. The
+message is one format, sent, queued or copied: what the person wrote; then
+`File: <path>`; then `References:` and one reference per line; then
+`Sketch: <path>` when the picture travels as a file (a picture sent beside the
+text is not named).
 
 ## Camera, animation and preview
 
@@ -471,11 +528,11 @@ STEP context-menu items; the live `resetCamera` command takes the same fit path.
 
 **Preview** is available for every 3D file, animated or not, and is the shell's
 own state (`previewing`); hosts neither start nor observe it. Its button is the
-play icon in the top-right bar ("Preview"). It fills the viewer below the
+play icon in the view actions ("Preview"). It fills the viewer below the
 host's navbar, which stays, and under the host's explorer, which stays as it was
 and can still be opened and shut; the toolbar, the tool stack and its resize
-handles, joint handles, cube, bottom action and context menu are gone. It starts
-orbiting, unless the file's Playback settings turned its orbit off. Its top-right bar is the tools view's bar in the same place:
+handles, Quick Edit, joint handles, cube and context menu are gone. It starts
+orbiting, unless the file's Playback settings turned its orbit off. Its view actions are the tools view's bar in the same place:
 **Display settings**, **Reset view** and an X ("Exit preview") where Preview was. **Playback
 settings** (a cog; `PlaybackMenu`) ends the playbar under the model and opens
 upward. It holds, for a file with routines, **Animation** — the Routine (with more than one), Speed, Loop and
@@ -529,9 +586,14 @@ pressed in while focus is on the page. Editable targets keep their own keys.
   tab order: arrows nudge by 16px, Home and End go to the bounds, and a folded
   panel's handle opens it on ArrowDown or End.
 - **Copy** (⌘C or Ctrl+C, and Ctrl+Insert) copies the drawing while Draw has
-  ink, otherwise the bottom action's references — unless a text field has focus
-  or text is selected. The bottom action shows the shortcut in the platform's
-  form (`⌘C` on macOS, `Ctrl+C` elsewhere).
+  ink, otherwise the selection's references — unless a text field has focus or
+  text is selected. The Reference's and Drawing's Copy buttons show the shortcut
+  in the platform's form (`⌘C` on macOS, `Ctrl+C` elsewhere).
+- **Quick Edit's box** keeps its own keys: Enter presses the primary button and
+  Shift+Enter is a new line. Escape hands the keyboard back to the view and keeps
+  a note; in an empty box it closes the box and is also the viewer's own Escape
+  (it clears the selection). ⌘C or Ctrl+C with none of its text selected is the
+  viewer's copy.
 - **Arrow keys and WASD** orbit the viewer that has focus or the pointer over
   it, never every mounted viewport; they do nothing in preview or with a
   modifier held.
@@ -540,15 +602,17 @@ pressed in while focus is on the page. Editable targets keep their own keys.
 
 Every hint is a `TooltipHint`: compact text, one surface and arrow, a 400ms
 delay. No native `title` anywhere in chrome. Prefer one or two words; show a
-full technical name only when it is truncated (`overflowOnly`). The top-right
-bar's buttons are hinted by name (Reset view, Display settings, Preview, Playback settings);
-there is no hint on Exit, X, the transport, drawing tools or labelled text buttons. A
-disabled, selected or expanded control has none; pressing or leaving cancels a
+full technical name only when it is truncated (`overflowOnly`). Quick Edit's button,
+Playback settings and the view actions (Reset view, Display settings, Preview) are
+hinted by name, the view actions' above their buttons; there is no hint on Exit, X,
+the transport, drawing tools or labelled text buttons (Quick Edit's alone say what
+they do). A disabled, selected or expanded control has none; pressing or leaving cancels a
 pending one. A hint appears on focus only for keyboard navigation (a Tab), never
 when a closing menu hands focus back.
 
 The viewer shows no toasts or notifications: copy, snapshot and prompt actions
-complete silently. Progress stays in the viewport; a failed action is the
+complete silently, the Copy and Quick Edit buttons showing a tick for a moment.
+Progress stays in the viewport; a failed action is the
 viewport's alert card; errors handed to the host's `onError` are the host's to
 show.
 

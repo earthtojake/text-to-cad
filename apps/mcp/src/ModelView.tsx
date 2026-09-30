@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { createCadClient } from '@text-to-cad/core/client';
+import { createCadClient, createHttpAttachmentStore } from '@text-to-cad/core/client';
 import { unavailablePromptContext, type ResourceRef } from '@text-to-cad/core/prompt';
 import { CadViewer, createCadFileActions, createCatalogFileSource, normalizeCatalogPath, pathUnderRoot, referencePath, rootPath } from '@text-to-cad/ui/cad-viewer';
 import type { ViewerHost, ViewerLinks } from '@text-to-cad/ui/host';
@@ -9,7 +9,7 @@ import type { Bridge } from './host/bridge';
 import { frameClipboard } from './host/clipboard';
 import { createFilesystemSource } from './host/files';
 import type { LiveRegistry } from './host/live';
-import { createComposerPromptContext } from './host/prompt';
+import { createChatPromptContext, type ChatReach } from './host/prompt';
 import type { Launch, Root, Server } from './host/server';
 import { createTunnelFetch, encodeBase64, TUNNEL_ORIGIN } from './host/tunnel';
 
@@ -21,10 +21,10 @@ export interface ViewReporter {
 /**
  * One root's view: the shared CAD viewer over this host — the model a launch names, or with none,
  * the home (the library, and the root's explorer where the launch browses). Everything differs by
- * data — the root it browses, whether it browses at all, where Add to prompt goes — never by where
- * the view is.
+ * data — the root it browses, whether it browses at all, what a Quick Edit can do in the chat —
+ * never by where the view is.
  */
-export default function ModelView({ launch, root: launchedRoot, sequence, bridge, server, tabStore, live, links, colorScheme, platform, reporter, onLaunch, onHome, compact = false, composer = true }: {
+export default function ModelView({ launch, root: launchedRoot, sequence, bridge, server, tabStore, live, links, colorScheme, platform, reporter, onLaunch, onHome, compact = false, chat }: {
   launch: Launch; root: Root; sequence: number; bridge: Bridge; server: Server; tabStore: TabStore; live: LiveRegistry; links: ViewerLinks;
   colorScheme: 'light' | 'dark'; platform: string; reporter: ViewReporter;
   /** Show what the server launched: a model, possibly under another root. */
@@ -33,8 +33,8 @@ export default function ModelView({ launch, root: launchedRoot, sequence, bridge
   onHome(): void;
   /** Shown small, inline in the chat: the renderer draws the model, not its tools. */
   compact?: boolean;
-  /** Add to prompt reaches the host's composer; without one, the viewer offers no prompt action. */
-  composer?: boolean;
+  /** What the chat takes from a Quick Edit: context for the next message, a message now, or neither (Copy Prompt alone). */
+  chat: ChatReach;
 }) {
   // Every launch carries its own root object; the same folder must keep its client and catalog.
   const root = useMemo(() => launchedRoot, [launchedRoot.kind, launchedRoot.path]);
@@ -56,9 +56,12 @@ export default function ModelView({ launch, root: launchedRoot, sequence, bridge
     ? createFilesystemSource(client, root, tunnel, { id: sourceId, explore: launch.explore, showing: () => showing.current || null })
     : createCatalogFileSource(client, { id: sourceId, rootName: root.name, browse: launch.explore }), [client, root, tunnel, sourceId, launch.explore, global]);
   const resolvePath = useCallback((resource: ResourceRef) => referencePath(resource, { workspaceId: sourceId, root: root.path }), [root, sourceId]);
-  const composerContext = useMemo(() => composer ? createComposerPromptContext(bridge, { resolvePath }) : null, [composer, bridge, resolvePath]);
-  useEffect(() => () => composerContext?.dispose(), [composerContext]);
-  const promptContext = composerContext ?? unavailablePromptContext;
+  // A copied prompt's sketch is saved by the server, which is on this machine.
+  const attachments = useMemo(() => createHttpAttachmentStore({ origin: TUNNEL_ORIGIN, fetch: tunnel }), [tunnel]);
+  const chatContext = useMemo(() => chat.queue || chat.send ? createChatPromptContext(bridge, { resolvePath, reach: chat, attachments }) : null,
+    [chat.queue, chat.send, chat.sendImages, bridge, resolvePath, attachments]);
+  useEffect(() => () => chatContext?.dispose(), [chatContext]);
+  const promptContext = chatContext ?? unavailablePromptContext;
   // The file menu: its paths, and Reveal in the desktop's file manager (the server is on this machine).
   const fileActions = useMemo(() => createCadFileActions({
     root: root.path, platform, clipboard: frameClipboard,
@@ -92,9 +95,9 @@ export default function ModelView({ launch, root: launchedRoot, sequence, bridge
     setFile(next);
   }, [server, root]);
   const host = useMemo<Omit<ViewerHost, 'navigation'>>(() => ({
-    files: source, fileActions, clipboard: frameClipboard, promptContext, links,
+    files: source, fileActions, clipboard: frameClipboard, promptContext, attachments, links,
     environment: compact ? { colorScheme, platform, compact } : { colorScheme, platform },
-  }), [source, fileActions, promptContext, links, colorScheme, platform, compact]);
+  }), [source, fileActions, promptContext, attachments, links, colorScheme, platform, compact]);
 
   return <CadViewer client={client} host={host} tabStore={tabStore} live={live} file={file} onShow={show}
     // A filesystem's catalog holds only the file on screen: what its explorer lists is the filesystem's.

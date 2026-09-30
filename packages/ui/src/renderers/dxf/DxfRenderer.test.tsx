@@ -91,8 +91,8 @@ async function openDrawing(destinationKind = 'composer') {
       getSnapshot: () => destination, subscribe: () => noop,
       deliver: async (context: any) => {
         const attachment = context.parts.find((part: any) => part.kind === 'attachment');
-        const blob = await attachment.content;
-        delivered.push({ type: blob.type, parts: context.parts.map((part: any) => part.kind) });
+        const blob = attachment ? await attachment.content : null;
+        delivered.push({ type: blob?.type ?? '', parts: context.parts.map((part: any) => part.kind) });
         return { status: 'added', partIds: context.parts.map((part: any) => part.id) };
       }
     }
@@ -143,37 +143,33 @@ it('a DXF has no panels of its own, no tools and no preview', async () => {
     expect(inPane.queryByRole('button', { name }), name).toBeNull();
   }
   expect(inPane.queryAllByRole('tab')).toHaveLength(0);
-  // What a drawing offers a composer: one bottom Add To Prompt, and no snapshot above it.
+  // What a drawing offers a composer: Quick Edit, a note about the file, and no snapshot.
   expect(inPane.queryByRole('button', { name: 'Take snapshot' })).toBeNull();
-  const row = pane.querySelector('[data-viewport-bottom-actions]') as HTMLElement;
-  expect(row).not.toBeNull();
-  const snapshot = await waitFor(() => {
-    const button = within(row).getByRole('button', { name: 'Add To Prompt' }) as HTMLButtonElement;
-    expect(button.disabled).toBe(false);
-    return button;
-  });
-  // The snapshot is the drawing as a PNG, delivered through the host's prompt destination.
-  fireEvent.click(snapshot);
+  expect(pane.querySelector('[data-viewport-bottom-actions]')).toBeNull();
+  fireEvent.click(await waitFor(() => inPane.getByRole('button', { name: 'Quick Edit' })));
+  const note = inPane.getByRole('textbox', { name: 'Describe your changes' });
+  fireEvent.change(note, { target: { value: 'Widen the slot.' } });
+  fireEvent.click(inPane.getByRole('button', { name: 'Queue' }));
+  // The note and the file, through the host's prompt destination: a drawing's references are the file.
   await waitFor(() => expect(delivered).toHaveLength(1));
-  expect(delivered[0].type).toBe('image/png');
-  expect(delivered[0].parts).toContain('attachment');
+  expect(delivered[0].parts).toEqual(['text', 'reference']);
   dispose();
 });
 
-it('a clipboard DXF retains the snapshot action instead of a composer CTA', async () => {
+it('a clipboard DXF retains the snapshot action, and its Quick Edit copies a prompt', async () => {
   const { pane, delivered, dispose } = await openDrawing('clipboard');
-  expect(within(pane).queryByRole('button', { name: 'Add To Prompt' })).toBeNull();
-  expect(pane.querySelector('[data-viewport-bottom-actions]')).toBeNull();
+  fireEvent.click(await waitFor(() => within(pane).getByRole('button', { name: 'Quick Edit' })));
+  expect(within(pane).getByRole('button', { name: 'Copy Prompt' })).toBeTruthy();
+  expect(within(pane).queryByRole('button', { name: 'Queue' })).toBeNull();
   fireEvent.click(within(pane).getByRole('button', { name: 'Take snapshot' }));
   await waitFor(() => expect(delivered).toHaveLength(1));
   expect(delivered[0].type).toBe('image/png');
   dispose();
 });
 
-it('a DXF in a host with no prompt workflow has neither the snapshot nor Add To Prompt', async () => {
+it('a DXF in a host with no prompt workflow has no snapshot', async () => {
   const { pane, dispose } = await openDrawing('unavailable');
   expect(within(pane).queryByRole('button', { name: 'Take snapshot' })).toBeNull();
-  expect(pane.querySelector('[data-viewport-bottom-actions]')).toBeNull();
   dispose();
 });
 

@@ -7,14 +7,14 @@ persistent storage or page navigation. DOM, canvas, workers and layout remain
 shared. Missing optional methods mean an operation is unsupported.
 
 The host contains `files`, optional native `fileActions`, `clipboard`,
-`promptContext`, `navigation` (with an optional `home`), the optional navbar
-`links`, `environment` and the optional live-document bindings `documents` and
-`pdf`. `environment` carries the resolved `colorScheme`,
+`promptContext`, the optional `attachments`, `navigation` (with an optional
+`home`), the optional navbar `links`, `environment` and the optional
+live-document bindings `documents` and `pdf`. `environment` carries the resolved `colorScheme`,
 the keyboard `platform` (`darwin` shows ⌘, anything else Ctrl), the app's own
 `reducedMotion`, honoured beside the system's `prefers-reduced-motion`, and
 `compact`: a host showing the view small, inline in a conversation, where a CAD
-renderer draws the model and its bottom action but not its tools, its top-right
-bar or its view cube, and FileViewer draws no navbar (the host offers its own way
+renderer draws the model alone — no tools, view actions, view cube or Quick
+Edit — and FileViewer draws no navbar (the host offers its own way
 to full size, where it drops `compact`). CAD is a separate registration supplied with a
 `CadWorkspaceService`; the generic FileViewer does not import CAD. The HTTP CAD
 adapter can serve both apps, while desktop owns native runtime startup/recovery.
@@ -34,11 +34,12 @@ are for reading and maintaining the contracts.
 
 | Contract | Definition | Public entry point |
 | --- | --- | --- |
-| `ViewerHost`, `ClipboardPort` | [Host types](../src/host/types.ts) | `@text-to-cad/ui/host` |
+| `ViewerHost`, `ClipboardPort`, `AttachmentStore` (where a copied prompt's picture is saved) | [Host types](../src/host/types.ts) | `@text-to-cad/ui/host` |
 | `FileSource`, `FileActions`, mutation receipts, `FileViewerState` | [File viewer types](../src/file-viewer/types.ts) | `@text-to-cad/ui/file-viewer` |
-| `PromptContextPort`, bundles, references and delivery receipts | [Prompt types](../../core/src/prompt/types.ts) | `@text-to-cad/core/prompt` |
+| `PromptContextPort` (`deliver`, `send`), bundles, references, delivery receipts and `formatPromptMessage` (the one message a Quick Edit is) | [Prompt types](../../core/src/prompt/types.ts) | `@text-to-cad/core/prompt` |
 | `CadWorkspaceService`, `CadResourceProvider`, worker tickets | [CAD service types](../../core/src/client/types.ts) | `@text-to-cad/core/client` |
-| `StepRendererSlots`, selection props, `CadLiveBinding` | [STEP registration](../src/renderers/step/index.ts) | `@text-to-cad/ui/renderers/step` |
+| `createHttpAttachmentStore` (the viewer server's `AttachmentStore`: it saves a PNG through `POST /__cad/sketches`) | [Attachment store](../../core/src/client/attachments.js) | `@text-to-cad/core/client` |
+| `StepRendererOptions`, `CadLiveBinding` | [STEP registration](../src/renderers/step/index.ts) | `@text-to-cad/ui/renderers/step` |
 | `TabStore`, `TabRecordStorage`, `createTabStore`, `useTabViewerState` (the tab's one store: its settings, its file views, and `FileViewer`'s state from both) | [Tab store](../src/tab-store/tabStore.ts), [the record](../src/tab-store/tabRecord.ts) | `@text-to-cad/ui/tab-store` |
 | `CadPreferenceSource`, `createCadPreferences` (the tab's settings as renderers read them) | [Viewer preferences](../src/renderers/workspace/preferences.ts) | `@text-to-cad/ui/renderers/workspace` |
 | `DxfRendererOptions` (2D drawings; declares no panel, and declines every camera, display and selection command) | [DXF registration](../src/renderers/dxf/index.ts) | `@text-to-cad/ui/renderers/dxf` |
@@ -93,11 +94,14 @@ file generation: publish an empty list on cleanup; departing renderers cannot
 replace a new file's actions. Publish only when action metadata changes; stable
 commands should read the current viewport through a ref, avoiding parent/child
 render loops. These actions use existing host capabilities for effects. For
-example, CAD's snapshot delivers through `host.promptContext`, which binds the
-destination before waiting for the image. A composer destination has no snapshot
-action: its Add To Prompt lives at the bottom of the viewport instead. A host with
-no prompt workflow (`unavailablePromptContext`, kind `unavailable`) has neither:
-both are left out, not disabled. Neither route detects the platform.
+example, CAD's snapshot writes the view to the clipboard as a PNG
+(`ClipboardPort.writeImage`, started inside the gesture with the image still
+pending). Only a clipboard destination has that action. A composer destination,
+or a host with no prompt workflow (`unavailablePromptContext`, kind
+`unavailable`), has none: it is left out, not disabled, and what a person tells
+the agent there is [Quick Edit](#prompt-handoff). The host's `captureRequest`
+command is the same capture: to a composer destination it delivers the view and
+the selection through `promptContext.deliver`. Neither route detects the platform.
 
 `navigation.openFile(path, { target, panel })` shows a file in this view
 (`"current"`) or in a new one, where the host has more than one (`"new"`).
@@ -122,9 +126,10 @@ creates.
    extend its narrow consumer-owned interface and implement it in each app, or
    explicitly advertise that the host cannot perform it. Shared UI must not
    fall back to browser globals or branch on `isWeb`/`isDesktop`.
-3. Use subscribed capability/destination state for availability and labels.
-   Use a named additive slot for an extra app-enabled interface such as Quick
-   Edit; the shared renderer never imports the app's component or stores.
+3. Use subscribed capability/destination state for availability and labels:
+   Quick Edit offers only what the destination and the prompt port can do. Use
+   a named additive slot for an extra app-enabled interface; the shared
+   renderer never imports the app's component or stores.
 4. Define identity, lifetime, cancellation and result semantics with the
    contract. Publish serializable view state through the controlled binding;
    the app chooses its storage. Keep workspace services stable across tab mounts.
@@ -139,16 +144,19 @@ storage, page navigation and native process lifecycle remain host responsibiliti
 
 ## Prompt handoff
 
-All primary context actions use `PromptContextPort.deliver(context)`. Desktop
+Context actions use `PromptContextPort.deliver(context)`. Desktop
 inserts into a compatible draft; web prepares clipboard representations. Ordinary
 explicit copy/paste controls use the separate `ClipboardPort`. Delivery never
-submits a prompt.
+submits a prompt. `send(context)`, present only where the host has a chat to post
+to, posts the context as the person's message now (`sent`); absent, nothing can
+send one.
 
 The portable types and validators live at `@text-to-cad/core/prompt`. One versioned
 bundle contains ordered text, reference and attachment parts with unique IDs.
 An attachment has a MIME type, name and Blob or Promise of Blob. Its optional
 `about` array names reference-part IDs, so a screenshot and several selections
-can travel together. Producers freeze resource and selection identity before
+can travel together, and its optional `label` ("Sketch") says what it is for a
+message that names it by path. Producers freeze resource and selection identity before
 asynchronous capture. Blob URLs are delivery leases, never portable identity.
 
 A reference contains a workspace-file identity or HTTP(S) URL plus a tagged
@@ -158,11 +166,18 @@ cadgen grammar, not STEP entity numbers. Preserve a revision when available;
 references do not promise to survive edits. Shared serialization handles quoting.
 The web adapter maps workspace files to full served-root paths for external chats.
 
+`formatPromptMessage(context, { resolvePath, attachmentPath })` is the one
+message a Quick Edit is, whether sent, queued or copied: what the person wrote;
+then `File: <path>`; then `References:` and one reference per line; then
+`Sketch: <path>` (the attachment's label) when the picture travels as a file,
+where `attachmentPath` says where it was saved. A picture sent beside the text
+as an image block is not named.
+
 `PromptContextAction` (the PDF renderer's prompt action) reads the subscribed
 destination and labels the action Add to prompt or Copy for prompt. It calls delivery during the
 user gesture, before awaiting capture: browser activation and desktop destination
 binding depend on this. Availability and advertised attachment/combination limits
-belong to the host. Every result is acknowledged: added, copied, partial,
+belong to the host. Every result is acknowledged: added, copied, sent, partial,
 deferred, cancelled or failed. `partIds` describes accepted/written parts, not a
 claim that a different application pasted them.
 
@@ -179,20 +194,27 @@ paste only one. Unsupported attachment types or combinations fail explicitly.
 Hosts must resolve/validate accepted attachments and consume failed encoders;
 they do not transfer Promise or Blob values across native IPC.
 
+Quick Edit is the shared, host-neutral note to the agent
+([the design system](settings-ui.md#quick-edit)), and its buttons are what the
+host can carry out. **Copy Prompt** is always there: the message goes through
+`ClipboardPort.writeText`, which takes a `Promise<string>` so the write starts
+inside the gesture while a sketch is still being saved; its references are
+spelled as copied references are (below), and a sketch is saved through
+`host.attachments` and named by path, since text cannot carry a picture (without
+`attachments`, a copied prompt names none). **Queue** is there where the
+destination is a composer (`destination.kind === "composer"`): `deliver`, the
+context for the person's next message. **Send** is there where the prompt port
+has `send`. The context is built at the press, from what is live then; a changed
+document or revision never retargets it.
+
+`ViewerHost.attachments` is an `AttachmentStore`: `save(image, name)` answers the
+saved file's absolute path. `createHttpAttachmentStore({ origin, fetch })` from
+`@text-to-cad/core/client` is the viewer server's: it posts the PNG to
+`POST /__cad/sketches?name=<name>`, which keeps it as scratch in the system's
+temporary directory. Both apps pass one; the MCP app's reaches the server through
+its tunnel.
+
 ## App-specific interfaces
-
-CAD's `slots.selectionExtras` mounts an optional React component beside shared
-selection actions. It receives immutable typed selection, `selectionKey`,
-disabled state and `createContext({text, capture})`. It receives no scene, stores,
-IPC or arbitrary internal setters. Shared actions remain visible. Neither app
-mounts one today. The slot shares the bottom row with Copy Reference(s), so a
-composer destination, whose bottom row is the shell's Add To Prompt, does not show it.
-
-The renderer owns placement and visibility. A contributed popover owns its focus,
-Escape handling and cleanup, stops events it consumes, and closes or invalidates
-its draft when `selectionKey` changes. Freeze the context when starting the
-interaction; a changed document/revision must not silently retarget it. Submission
-uses the same host prompt port. Session-specific controls stay in apps.
 
 The optional CAD `live` binding receives a `CadLiveController` only while its
 viewport is mounted. `readState()` returns a detached serializable snapshot of
@@ -262,8 +284,8 @@ Clip and Explode, preview's Playback settings (orbit on or off and its speed, Au
 the routine's chosen speed and loop), and the renderer's own slices each behind the
 signature it was written against — a slice that no longer fits the file on screen is
 dropped, the camera, the display and the playback never. Not in it, and started afresh
-on every open: the tool in hand, the selection, measurements, ink, preview and a
-routine's time. Apps merge
+on every open: the tool in hand, the selection, measurements, ink, preview, a
+routine's time and Quick Edit's note. Apps merge
 what a view changed into the store (`files.merge`); a stale view must not overwrite
 another view's entries. Material appearance is source-owned and read-only. Live
 selection and scene ownership belong to the mounted view.
@@ -337,37 +359,38 @@ tool strip and above it, and never resizes the view; a file's declared panels op
 in the column at the body's right (`FilePanelColumn.jsx`). One panel is open at a
 time, the explorer included.
 
-For `destination.kind === "composer"`, the single bottom Add To Prompt action
-always includes a viewport PNG and adds selected references when present. It uses
-`PromptContextPort`; the host binds its destination during the gesture, so a later
-image encode cannot redirect it. The action is absent in Preview, and it takes the
-place of both the snapshot action and the selection's Copy Reference(s). Clipboard
-destinations keep both: the snapshot action receives the viewport PNG directly
-through `ClipboardPort.writeImage`, and the bottom action is Copy Reference(s), or
-Copy Drawing while Draw has ink. An `unavailable` destination has no snapshot
-action and no Add To Prompt; its bottom action is a clipboard destination's. The
-choice follows the subscribed destination capability, never an app name. Native
-clipboard effects remain in the host implementation.
+The viewport's corners are the shell's, never the host's: the tool strip and its
+stack at the top-left, Quick Edit at the top-right, and the view cube at the
+bottom-left with the view actions (Display settings, Reset view, Preview) on top
+of it. What Quick Edit offers follows the subscribed destination capability and
+the ports, never an app name: Copy Prompt always, Queue for a composer
+destination, Send where the prompt port has `send`. The navbar's snapshot is a
+clipboard destination's: the viewport PNG goes straight through
+`ClipboardPort.writeImage`, and a composer or `unavailable` destination has none.
+Native clipboard effects remain in the host implementation.
 
-The viewport's Copy Reference(s) and Copy Drawing actions use `ClipboardPort`
-directly, including on desktop. Their copy shortcut and double-click topology
-copy follow the same path. Double-clicking a component or subassembly isolates
-it instead; only non-isolatable topology references use double-click copying. Camera snapshots retain the host's existing prompt
-routing. The host supplies `environment.platform` for the ⌘C / Ctrl+C hint;
-the web host derives that field from its browser environment.
+STEP's Reference panel (Copy, or Copy All with several references) and Draw's
+panel (Copy, once there is ink) use `ClipboardPort` directly, including on
+desktop: the references as text, the view with its ink as a PNG through
+`writeImage`. Their copy shortcut and double-click topology copy follow the same
+path. Double-clicking a component or subassembly isolates it instead; only
+non-isolatable topology references use double-click copying. The host supplies
+`environment.platform` for the ⌘C / Ctrl+C hint; the web host derives that field
+from its browser environment.
 
 A copied reference names its file as the host's `FileSource.referencePath(path)`
-spells it; a source without one leaves the file's path under its root. A root
-whose relative paths mean nothing outside the viewer (a whole filesystem) gives
-the absolute path. The host decides because only it knows its root.
+spells it, and so does a copied Quick Edit; a source without one leaves the
+file's path under its root. A root whose relative paths mean nothing outside the
+viewer (a whole filesystem) gives the absolute path. The host decides because
+only it knows its root.
 
-The bottom action and the playback bars centre on one line, `3.5rem` above the
-viewport's bottom edge. A host whose own control floats over that edge (a chat's
-composer) sets `--cad-viewport-bottom-center` on an ancestor to put the line on
-its control's, and `--cad-host-bottom-inset` to the height it covers: the file
-tree and the model library scroll their last rows clear of it, and a revealed
-row stops above it. Both are lengths, like any design token, and say nothing
-about which host it is.
+Preview's playback bars centre on one line, `3.5rem` above the viewport's bottom
+edge; nothing else sits at the bottom centre. A host whose own control floats over
+that edge (a chat's composer) sets `--cad-viewport-bottom-center` on an ancestor
+to put the line on its control's, and `--cad-host-bottom-inset` to the height it
+covers: the file tree and the model library scroll their last rows clear of it,
+and a revealed row stops above it. Both are lengths, like any design token, and
+say nothing about which host it is.
 
 A renderer's update status is its own: the CAD renderers show it centred at the
 top of the viewport, level with the tool strip. The navbar carries none, and a host

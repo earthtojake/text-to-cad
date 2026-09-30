@@ -4,9 +4,21 @@ import type { FileActions, FileSource } from '../file-viewer/types.js';
 
 /** Environmental effects are supplied by the app; shared UI never discovers a clipboard. */
 export interface ClipboardPort {
-  writeText(text: string): Promise<void>;
+  /**
+   * `text` may still be on its way (a copied Quick Edit whose sketch is being saved): the write
+   * starts inside the gesture that asked for it and takes the text when it arrives.
+   */
+  writeText(text: string | Promise<string>): Promise<void>;
   readText(): Promise<string>;
   writeImage(image: Blob | Promise<Blob>): Promise<void>;
+}
+/**
+ * Where a picture a prompt names by path is kept: a copied Quick Edit is text, so its sketch is
+ * saved as a file on this machine and the text names it. `save` answers the file's absolute path.
+ * `createHttpAttachmentStore` (`@text-to-cad/core/client`) is the viewer server's.
+ */
+export interface AttachmentStore {
+  save(image: Blob, name: string): Promise<string>;
 }
 /**
  * What the navbar's right end links to — the running version (its release notes, and how to
@@ -41,6 +53,8 @@ export interface ViewerHost {
   fileActions?: FileActions;
   clipboard: ClipboardPort;
   promptContext: PromptContextPort;
+  /** Saves a copied prompt's picture where the prompt can name it. Absent: a copied prompt names none. */
+  attachments?: AttachmentStore;
   /**
    * Show a file: in this view, or in a new one where the host has more than one (`target`).
    * `panel` is the panel the file opens with, by id: the tree's, for a file picked in the tree,
@@ -60,8 +74,8 @@ export interface ViewerHost {
   /**
    * `platform` names the keyboard's modifiers (⌘ on `darwin`, Ctrl elsewhere); `reducedMotion` is
    * the app's own motion setting, honoured beside the system's `prefers-reduced-motion`. `compact`
-   * is a host showing the view small, inline in a conversation: a renderer draws the model and its
-   * bottom action there, not its tools, its top-right bar or its view cube, and the view has no
+   * is a host showing the view small, inline in a conversation: a renderer draws the model there,
+   * not its tools, its corner controls, its view cube or its Quick Edit, and the view has no
    * navbar — its frame names what it shows.
    */
   environment: { colorScheme: 'light' | 'dark'; platform?: string; reducedMotion?: boolean; compact?: boolean };

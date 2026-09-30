@@ -314,10 +314,10 @@ export function withFileRefPrefix(line, prefix) {
 }
 
 /**
- * The ONE shape copied reference text takes, whoever asked for it — the Copy Reference
- * button and its shortcut, a viewport or tree menu's Copy Reference, a double-click on a
- * face or edge, Add to prompt: each line canonical, each carrying this file's prefix, so a
- * ref pasted into a prompt spanning several files still says which file it is from.
+ * The ONE shape copied reference text takes, whoever asked for it — the Reference panel's
+ * Copy and its shortcut, a viewport or tree menu's Copy Reference, a double-click on a face or
+ * edge: each line canonical, each carrying this file's prefix, so a ref pasted into a prompt
+ * spanning several files still says which file it is from.
  */
 export function copyTextLines(lines, fileRefPrefix = "") {
   return (Array.isArray(lines) ? lines : String(lines || "").split("\n"))

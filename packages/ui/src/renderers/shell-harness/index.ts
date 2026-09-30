@@ -1,7 +1,7 @@
 import type { ComponentType } from 'react';
 import { defineFileRenderer } from '../../file-viewer/registry.js';
 import type { FileRendererProps } from '../../file-viewer/types.js';
-import type { CadPreferenceSource } from '../workspace/index.js';
+import type { CadPreferenceSource, ViewerCommandSource } from '../workspace/index.js';
 import type { LiveViewBinding } from '../kit/shell/liveBinding.js';
 
 // TEST SCAFFOLDING, registered by the browser-test harness alone and by nothing
@@ -11,7 +11,7 @@ import type { LiveViewBinding } from '../kit/shell/liveBinding.js';
 // browser test must drive the COMPILED package — a second copy of the kit
 // bundled from source would carry its own React contexts and never see the
 // host's.
-export interface HarnessRendererOptions { preferences: CadPreferenceSource; live?: LiveViewBinding<any>; }
+export interface HarnessRendererOptions { preferences: CadPreferenceSource; live?: LiveViewBinding<any>; commands?: ViewerCommandSource; }
 
 export function createHarnessRenderer(services: HarnessRendererOptions) {
   return defineFileRenderer<{ services: HarnessRendererOptions }>({

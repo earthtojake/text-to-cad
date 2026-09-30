@@ -50,6 +50,8 @@ export function useStepPanels({
   activeTreeNodeScrollKey = '', onSelectTreeNode, onSelectReferenceGroup, onClearSelection,
   onFocusTreeNode, onUnfocusTreeNode, onExitAllIsolate, onTogglePartVisibility,
   onCopySelection, onHoverTreeNode, showAllHiddenParts,
+  // The Reference panel's Copy (Copy All): `{ label, shortcut, onCopy }`, or null with nothing to copy.
+  selectionCopy = null,
   // The menus a tree row carries: a part's descriptor per node, a feature's per set of faces
   // and edges (the viewport's menu over that topology), and the one set of actions behind both.
   menuForNode = null, menuForReferences = null, partMenuActions = null,
@@ -118,7 +120,7 @@ export function useStepPanels({
       disabled={treeSelectionDisabled || viewerLoading}
       references={modelReferences} selectedReferences={selectedReferences}
       selectedReferenceIds={selectedReferenceIds} selectedPartIds={selectedPartIds}
-      selectionDetails={selectionDetails} activeTreeNodeScrollKey={activeTreeNodeScrollKey}
+      selectionDetails={selectionDetails} selectionCopy={selectionCopy} activeTreeNodeScrollKey={activeTreeNodeScrollKey}
       onLoadTopology={loadTopology} onSelect={selectReferenceGroup} onClearSelection={clearSelection}
       partControls={partControls} hoverStore={hoverStore}
     />

@@ -1,11 +1,9 @@
 // What a host gets from the surface, and what it can ask of it, about
 // references (docs/cad-renderer.md, "Prompt references, captures and extensions").
 //
-// Copy actions write only to the clipboard. Explicit Add to prompt actions
-// send references to the host. In the other direction, selectReference asks
-// the surface to select geometry named by a reference from the host.
-import { createContext, useContext } from "react";
-
+// Copy actions write only to the clipboard; a Quick Edit carries the selection's
+// references to the agent. In the other direction, selectReference asks the
+// surface to select geometry named by a reference from the host.
 import { isNativeCadSelector, parseCadRefToken } from "@text-to-cad/core/lib/cadRefs.js";
 import { STEP_TREE_TOPOLOGY_NODE_PREFIX, stepTreeNodeChildren } from "@text-to-cad/core/lib/step/stepTree.js";
 
@@ -47,13 +45,6 @@ export function referencesFromCopyText(text, file) {
     .map((line) => line.trim())
     .filter(Boolean)
     .map((line) => referenceFromCopyText(line, file));
-}
-
-/** Clipboard delivery and explicit add-to-prompt, when a host is listening. */
-export const HostReferenceContext = createContext(null);
-
-export function useHostReference() {
-  return useContext(HostReferenceContext);
 }
 
 const ENTITY_RE = /^([sfev])(\d+)$/;

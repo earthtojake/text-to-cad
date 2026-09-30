@@ -1,6 +1,5 @@
 import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Camera, Pencil } from "lucide-react";
-import { promptCaptureAction } from "./ViewportBottomAction.jsx";
 import { clonePerspectiveSnapshot } from "@text-to-cad/core/lib/perspective.js";
 import { VIEWER_SCENE_SCALE } from "@text-to-cad/core/lib/viewer/sceneScale.js";
 import { ViewerElementContext, useViewerHost, usePromptDestination } from "../../../host/context.js";
@@ -388,12 +387,22 @@ export function useRendererShell({
     } catch (error) { reportActionError(error); }
   }, [modelKey, promptAvailable, viewerLoading, deliverPrompt, resource, composer, host.clipboard, reportActionError]);
   const copyActionRef = useRef(null);
+  // Draw's Copy: the view with its ink, to the clipboard; true once it is there.
   const copyDrawing = useCallback(async () => {
-    if (!drawing.hasContent || !viewerRef.current?.captureScreenshotBlob) return;
+    if (!drawing.hasContent || !viewerRef.current?.captureScreenshotBlob) return false;
     try {
       await host.clipboard.writeImage(viewerRef.current.captureScreenshotBlob());
-    } catch (error) { reportActionError(error); }
+      return true;
+    } catch (error) { reportActionError(error); return false; }
   }, [drawing.hasContent, host.clipboard, reportActionError]);
+  // The view as it is on screen, ink included: Quick Edit's sketch.
+  const captureView = useCallback(() => {
+    if (!viewerRef.current?.captureScreenshotBlob) return Promise.reject(new Error("The viewer is not ready"));
+    return viewerRef.current.captureScreenshotBlob();
+  }, []);
+  // How a copied reference names a file of this view's source (`FileSource.referencePath`).
+  const source = view.source;
+  const referencePath = useCallback(path => (source?.referencePath ? source.referencePath(path) : path), [source]);
   const captureKey = services.captureRequest?.key ?? null;
   const appliedCaptureKey = useRef(null);
   useEffect(() => {
@@ -403,9 +412,8 @@ export function useRendererShell({
     capture();
   }, [captureKey, viewerLoading, promptAvailable, services.acknowledgeCommand, capture]);
 
-  // Clipboard destinations retain their explicit snapshot control. Composer
-  // destinations use the combined bottom action, without a duplicate camera,
-  // and a host with no prompt workflow (`unavailable`) has neither.
+  // A clipboard destination keeps an explicit snapshot control. A composer destination, or a
+  // host with no prompt workflow (`unavailable`), has none: its note to the agent is Quick Edit's.
   const snapshotAction = destination.kind === "clipboard";
   const captureRef = useRef(capture);
   captureRef.current = capture;
@@ -419,6 +427,7 @@ export function useRendererShell({
   // ---- shortcuts ------------------------------------------------------------
   const escapeRef = useRef(escape.handle);
   escapeRef.current = escape.handle;
+  const escapeView = useCallback(() => escapeRef.current?.() || false, []);
   useViewerShortcuts({
     viewerElement,
     onCopy: () => copyActionRef.current?.() || false,
@@ -547,9 +556,9 @@ export function useRendererShell({
       previewOrbitSpeed, setPreviewOrbitSpeed, toolStack, changeToolStack, viewerLoading, loading, presentationState,
       handlePresentationChange, viewerAlert, setRuntimeAlert,
       copyActionRef, copyDrawing, copyShortcut: host.environment.platform === "darwin" ? "⌘C" : "Ctrl+C",
-      promptAction: composer ? promptCaptureAction({ disabled: viewerLoading || !scene || !promptAvailable,
-        reason: !promptAvailable ? destination.reason : viewerLoading || !scene ? "Wait for the model to load." : undefined,
-        onInvoke: capture }) : null,
+      // Quick Edit's: the file it is about, how a copied prompt spells its paths, its sketch, and
+      // the renderer's own Escape, which an empty Quick Edit passes on.
+      resource, referencePath, captureView, escape: escapeView,
       drawToolActive, drawing, animation, display
     }
   };

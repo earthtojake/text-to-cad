@@ -7,16 +7,18 @@ export const PREVIEW_CHROME_IDLE_MS = 1000;
 // so the chrome is not put away between two of its steps.
 const previewChromeIdleMs = () => Number(globalThis.window?.__cadPreviewChromeIdleMs) || PREVIEW_CHROME_IDLE_MS;
 
+// On top of the cube, in the bottom-left corner, as wide as it.
 const BAR_POSITION = Object.freeze({
-  top: `calc(${VIEWPORT_CUBE_SIZE} + ${VIEWPORT_CORNER_INSET_PX * 2}px)`,
-  right: VIEWPORT_CORNER_INSET_PX, width: VIEWPORT_CUBE_SIZE, height: VIEWPORT_ACTION_HEIGHT_PX,
+  bottom: `calc(${VIEWPORT_CUBE_SIZE} + ${VIEWPORT_CORNER_INSET_PX * 2}px)`,
+  left: VIEWPORT_CORNER_INSET_PX, width: VIEWPORT_CUBE_SIZE, height: VIEWPORT_ACTION_HEIGHT_PX,
 });
 
 /**
- * The viewer's chrome around preview mode. `children` — the tool strip and its stack, everything
- * a person edits with — is hidden and inert while `active`. The top-right bar (`actions`) is ONE
- * bar in one place in both modes, so a button that is in both (Display settings) never moves:
- * outside preview it is always shown; in preview it fades with the `playbar` under the model.
+ * The viewer's chrome around preview mode. `children` — the tool strip and its stack, Quick Edit,
+ * everything a person edits with — is hidden and inert while `active`. The view's actions
+ * (`actions`, on top of the cube in the bottom-left corner) are ONE bar in one place in both
+ * modes, so a button that is in both (Display settings) never moves: outside preview it is always
+ * shown; in preview it fades with the `playbar` under the model.
  *
  * In preview the controls share one idle deadline and a 150ms fade: movement over `surface`
  * wakes them, and hovering their area (`data-preview-hover-hold`), an open menu, or `hold`

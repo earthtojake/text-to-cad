@@ -1,6 +1,5 @@
 import { createContext, useContext, useEffect } from 'react';
 import { ContextMenu, ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator } from '@text-to-cad/ui/primitives/context-menu';
-import { useHostReference } from '../../file-view/hostReference.js';
 import { AssemblyPartMenuItems } from './AssemblyContextMenuItems.js';
 
 // A Features tree row's menu. It is the SAME menu the viewport offers over what the
@@ -21,11 +20,9 @@ export const FeatureReferencesContext = createContext(null);
 
 /** Built only once the menu is actually open, so a tree of rows never pays for it. */
 function TreeNodeMenuItems({ menu, actions, disabled }) {
-  const hostReference = useHostReference();
   if (!menu) return null;
   return <AssemblyPartMenuItems menu={menu} Item={ContextMenuItem} Separator={ContextMenuSeparator}
-    disabled={disabled}
-    actions={{ ...actions, onAddToPrompt: hostReference?.canAddToPrompt ? actions.onAddToPrompt : undefined }} />;
+    disabled={disabled} actions={actions} />;
 }
 
 function PartMenuItems({ id, controls, disabled }) {

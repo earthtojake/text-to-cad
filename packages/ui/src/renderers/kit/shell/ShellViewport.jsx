@@ -1008,9 +1008,10 @@ const ShellViewport = forwardRef(function ShellViewport({
         disabled={drawingOverlayActive}
         isLoading={isLoading}
         meshData={scene}
-        // Close into the corner: the cube's box is larger than the cube, whose labels overhang it.
-        viewPlaneOffsetRight={VIEWPORT_CORNER_INSET_PX}
-        viewPlaneOffsetTop={VIEWPORT_CORNER_INSET_PX}
+        // Close into the bottom-left corner, under its actions: the cube's box is larger than the
+        // cube, whose labels overhang it.
+        viewPlaneOffsetLeft={VIEWPORT_CORNER_INSET_PX}
+        viewPlaneOffsetBottom={VIEWPORT_CORNER_INSET_PX}
         viewPlaneSize={VIEWPORT_CUBE_SIZE}
         compact={false}
         activeViewPlaneFace={activeViewPlaneFace}

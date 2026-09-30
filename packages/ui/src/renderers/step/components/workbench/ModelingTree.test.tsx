@@ -4,7 +4,6 @@ let client: ReturnType<typeof createCadClient>;
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import ModelingTreeView from '../../../../../dist/renderers/step/components/workbench/ModelingTree.js';
-import { HostReferenceContext } from '../../../../../dist/renderers/step/file-view/hostReference.js';
 
 import { useStepModeling } from '../../../../../dist/renderers/step/workbench/useStepModeling.js';
 function ModelingTree(props:any) {
@@ -169,12 +168,15 @@ it('does not overwrite a newer viewport selection when a feature’s topology fi
  rerender(<ModelingTree {...props} selectedReferenceIds={['o1.e3']} references={refs()}/>);
  expect(onSelect).not.toHaveBeenCalled();
 });
-it('heads the Reference panel with the reference being read, not a title, and clears through the host',async()=>{
- setup();const onClearSelection=vi.fn();
- const props={active:true,entry,references:refs(),selectedReferences:refs(),selectedReferenceIds:refs().map(r=>r.id),selectionDetails:{title:'Face · o1.f2',content:<p>Face measurements</p>},onClearSelection};
+it('heads the Reference panel with the reference being read, copies the selection at its foot, and clears through the host',async()=>{
+ setup();const onClearSelection=vi.fn(),onCopy=vi.fn(async()=>true);
+ const props={active:true,entry,references:refs(),selectedReferences:refs(),selectedReferenceIds:refs().map(r=>r.id),selectionDetails:{title:'Face · o1.f2',content:<p>Face measurements</p>},
+  selectionCopy:{label:'Copy All',shortcut:'⌘C',onCopy},onClearSelection};
  const {rerender}=render(<ModelingTree {...props}/>);await respond({tree});expandIfCollapsed('Body 1');
  const reference=within(screen.getByRole('region',{name:'Reference details'}));
  expect(reference.getByRole('heading').textContent).toBe('Face · o1.f2');
+ const copyAll=reference.getByRole('button',{name:'Copy All'});expect(copyAll.getAttribute('aria-keyshortcuts')).toBe('Meta+C');
+ fireEvent.click(copyAll);expect(onCopy).toHaveBeenCalledTimes(1);
  expect(screen.queryByRole('heading',{name:'Reference'})).toBeNull();
  expect(screen.queryByRole('button',{name:'Hide selection details'})).toBeNull();
  fireEvent.click(screen.getByRole('button',{name:'Clear selection'}));expect(onClearSelection).toHaveBeenCalledTimes(1);
@@ -457,15 +459,13 @@ it('blank-area deselection cancels pending geometry selection',async()=>{
 // own click. The host's descriptor is stubbed here; what is under test is what the ROW asks for.
 function featureMenuSetup(references:any[]){
  vi.stubGlobal('ResizeObserver',class{observe(){}unobserve(){}disconnect(){}});
- const calls={onSelect:vi.fn(),onLoadTopology:vi.fn(),add:vi.fn(),select:vi.fn(),menuForNode:vi.fn()};
+ const calls={onSelect:vi.fn(),onLoadTopology:vi.fn(),copy:vi.fn(),select:vi.fn(),menuForNode:vi.fn()};
  const menuForReferences=vi.fn((ids:string[],label:string)=>({referenceId:ids[0]||'',referenceIds:ids,label,selected:false,
   copyText:ids.length?`case.step#${ids.join(',')}`:'',zoomSelectionAvailable:false,showIsolate:false,showHideOther:false,showVisibility:false}));
  const stepRoot={id:'__step_model__',nodeType:'part',name:'Case',leafPartIds:['__model__'],children:[]};
- const view=(refsNow:any[])=><HostReferenceContext.Provider value={{canAddToPrompt:true}}>
-  <ModelingTreeView active stepRoot={stepRoot} onLoadTopology={calls.onLoadTopology} onSelect={calls.onSelect} references={refsNow}
+ const view=(refsNow:any[])=><ModelingTreeView active stepRoot={stepRoot} onLoadTopology={calls.onLoadTopology} onSelect={calls.onSelect} references={refsNow}
    modeling={{descriptor,results:{c:{tree}},error:null}}
-   partControls={{menuForNode:calls.menuForNode,menuForReferences,partMenuActions:{onAddToPrompt:calls.add,onSelect:calls.select}}}/>
- </HostReferenceContext.Provider>;
+   partControls={{menuForNode:calls.menuForNode,menuForReferences,partMenuActions:{onCopyReference:calls.copy,onSelect:calls.select}}}/>;
  const {rerender}=render(view(references));
  return {...calls,menuForReferences,rerender:(refsNow:any[])=>rerender(view(refsNow))};
 }
@@ -475,11 +475,11 @@ const openRowMenu=async(label:string)=>{
 };
 it('gives a feature row the viewport’s menu over its faces, not its part’s, and its Select is the row’s own click',async()=>{
  const menu=featureMenuSetup(refs());
- expect(await openRowMenu('Cut extrude 1')).toEqual(['Add to prompt','Copy Reference','Select','Zoom to fit','Zoom to selection']);
+ expect(await openRowMenu('Cut extrude 1')).toEqual(['Copy Reference','Select','Zoom to fit','Zoom to selection']);
  expect(menu.menuForReferences).toHaveBeenLastCalledWith(['o1.f1','o1.f2'],'Cut extrude 1');
  expect(menu.menuForNode).not.toHaveBeenCalled();
- fireEvent.click(screen.getByRole('menuitem',{name:'Add to prompt'}));
- expect(menu.add).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({referenceIds:['o1.f1','o1.f2'],copyText:'case.step#o1.f1,o1.f2'}));
+ fireEvent.click(screen.getByRole('menuitem',{name:'Copy Reference'}));
+ expect(menu.copy).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({referenceIds:['o1.f1','o1.f2'],copyText:'case.step#o1.f1,o1.f2'}));
  await waitFor(()=>expect(screen.queryByRole('menu')).toBeNull());
  await openRowMenu('Cut extrude 1');
  fireEvent.click(screen.getByRole('menuitem',{name:'Select'}));
@@ -490,10 +490,10 @@ it('asks for a feature row’s faces when its menu opens, and fills the menu in 
  const menu=featureMenuSetup([]);
  menu.onLoadTopology.mockClear();
  await openRowMenu('Cut extrude 1');
- expect(screen.getByRole('menuitem',{name:'Add to prompt'}).getAttribute('aria-disabled')).toBe('true');
+ expect(screen.getByRole('menuitem',{name:'Copy Reference'}).getAttribute('aria-disabled')).toBe('true');
  expect(menu.onLoadTopology).toHaveBeenCalledWith(['o1']);
  menu.rerender(refs());
- await waitFor(()=>expect(screen.getByRole('menuitem',{name:'Add to prompt'}).getAttribute('aria-disabled')).toBeNull());
+ await waitFor(()=>expect(screen.getByRole('menuitem',{name:'Copy Reference'}).getAttribute('aria-disabled')).toBeNull());
  expect(menu.menuForReferences).toHaveBeenLastCalledWith(['o1.f1','o1.f2'],'Cut extrude 1');
 });
 

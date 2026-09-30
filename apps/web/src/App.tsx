@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { CadViewer, createCatalogFileSource } from '@text-to-cad/ui/cad-viewer';
 import { createLiveRegistry, type ViewerHost } from '@text-to-cad/ui/host';
 import type { TabStore, Appearance } from '@text-to-cad/ui/tab-store';
-import type { CadServerInfo } from '@text-to-cad/core/client';
+import { createHttpAttachmentStore, type CadServerInfo } from '@text-to-cad/core/client';
 import type { createCadClient } from '@text-to-cad/core/client';
 import { useViewerAutoReload } from './host/useViewerAutoReload.js';
 import { createWebFileActions } from './adapters/fileActions';
@@ -47,6 +47,8 @@ function RootView({ client, server, tabStore }: { client: CadClient; server: Cad
   const source = useMemo(() => createCatalogFileSource(client, { id: server.rootId, rootName: 'This directory' }), [client, server]);
   const promptContext = useMemo(() => createWebPromptContext(source.id, server.rootPath || '', browserClipboard, browserClipboardSupportsImages()), [source.id, server.rootPath]);
   const fileActions = useMemo(() => createWebFileActions(server, { clipboard: browserClipboard }), [server]);
+  // A copied Quick Edit's sketch, saved by the server beside it on this machine.
+  const attachments = useMemo(() => createHttpAttachmentStore({ origin: client.origin }), [client]);
   // The view on screen, for the library's pictures of what was opened.
   const live = useMemo(() => createLiveRegistry(), []);
   const links = useViewerLinks();
@@ -78,9 +80,9 @@ function RootView({ client, server, tabStore }: { client: CadClient; server: Cad
   }, []);
   const library = useMemo(() => createWebLibrary({ open: show }), [show]);
   const host = useMemo<Omit<ViewerHost, 'navigation'>>(() => ({
-    files: source, fileActions, clipboard: browserClipboard, promptContext, links,
+    files: source, fileActions, clipboard: browserClipboard, promptContext, attachments, links,
     environment: { colorScheme: appearance.colorScheme, platform: keyboardPlatform() },
-  }), [source, fileActions, promptContext, links, appearance.colorScheme]);
+  }), [source, fileActions, promptContext, attachments, links, appearance.colorScheme]);
   return <div className="flex h-svh flex-col overflow-hidden"><div className="min-h-0 flex-1">
     <CadViewer client={client} host={host} tabStore={tabStore} live={live} file={file} onShow={show} onShown={shown}
       rootPath={server.rootPath || ''} library={library} onThumbnail={recordThumbnail}

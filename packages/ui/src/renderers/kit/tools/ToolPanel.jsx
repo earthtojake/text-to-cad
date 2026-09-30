@@ -1,5 +1,5 @@
-import { createContext, useCallback, useContext, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ChevronDown, ChevronUp, X } from "lucide-react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Check, ChevronDown, ChevronUp, X } from "lucide-react";
 import { cn } from "@text-to-cad/ui/utils";
 import { ScrollArea } from "@text-to-cad/ui/primitives/scroll-area";
 import { FLOATING_CHROME_SURFACE_CLASS } from "./floatingSurface.js";
@@ -36,6 +36,29 @@ export const TOOL_PANEL_HEADING_TEXT_CLASS = "text-tiny font-normal leading-4 te
 export const TOOL_PANEL_BUTTON_CLASS = "flex size-5 shrink-0 items-center justify-center rounded-sm text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45";
 
 const ToolPanelContext = createContext(null);
+
+/**
+ * A panel's full-row action at its foot, under everything it holds: Copy under the Reference
+ * (Copy All with several references) and under the drawing controls. `shortcut` is the key that
+ * does the same from the viewer (⌘C). A press whose `onClick` answers true says so for a moment.
+ * @param {{ label: string, shortcut?: string, disabled?: boolean, onClick(): unknown }} props
+ */
+export function ToolPanelFooterButton({ label, shortcut = "", disabled = false, onClick }) {
+  const keys = shortcut ? shortcut.replace("⌘", "Meta+").replace("Ctrl+", "Control+") : undefined;
+  const [done, setDone] = useState(false);
+  useEffect(() => {
+    if (!done) return undefined;
+    const timer = setTimeout(() => setDone(false), 1200);
+    return () => clearTimeout(timer);
+  }, [done]);
+  return <button type="button" aria-label={label} aria-keyshortcuts={keys} disabled={disabled} data-tool-panel-footer-button=""
+    className="flex h-7 w-full shrink-0 items-center justify-center gap-2 rounded-b-md border-t border-border text-tiny text-foreground hover:bg-accent/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/45 disabled:opacity-50"
+    onClick={async () => { if (await onClick()) setDone(true); }}>
+    {done ? <Check className="size-3" aria-hidden="true" /> : null}
+    <span>{label}</span>
+    {shortcut && !done ? <kbd aria-hidden="true" className="font-sans text-micro text-muted-foreground">{shortcut}</kbd> : null}
+  </button>;
+}
 
 function CollapseButton({ panel, className }) {
   return <button type="button" aria-label={`${panel.collapsed ? "Expand" : "Collapse"} ${panel.label.toLowerCase()}`} aria-expanded={!panel.collapsed}
@@ -82,11 +105,12 @@ export function ToolPanelCollapse({ className }) {
  *
  * `hidden` keeps a panel mounted while its tool is not up, so a tree keeps its expansion,
  * filter and scroll across a trip to another tool. `header` never scrolls; the body under it
- * does, for a panel that gives way.
+ * does, for a panel that gives way; `footer` (a `ToolPanelFooterButton`) is under the body and
+ * never scrolls either.
  *
  * @param {{ id: string, title?: import("react").ReactNode, name?: string, label: string, summary?: import("react").ReactNode,
  *   actions?: import("react").ReactNode,
- *   header?: import("react").ReactNode, collapsible?: boolean, onClose?: (() => void) | null, closeLabel?: string,
+ *   header?: import("react").ReactNode, footer?: import("react").ReactNode, collapsible?: boolean, onClose?: (() => void) | null, closeLabel?: string,
  *   fit?: "fixed" | "tree" | "details", resizable?: boolean, widthFrom?: string | null, maxHeight?: number | null, hidden?: boolean, defaultCollapsed?: boolean,
  *   children?: import("react").ReactNode }} props
  *   `label` names the panel for assistive technology ("Clip controls"), with a heading or
@@ -95,7 +119,7 @@ export function ToolPanelCollapse({ className }) {
  *   the width of the resizable panel with that id, live while it is dragged ("tree": Reference
  *   sits under the tree at its width), keeping its own height rules.
  */
-export default function ToolPanel({ id, title = null, name = "", label, summary = null, actions = null, header = null, collapsible = true, onClose = null, closeLabel = "",
+export default function ToolPanel({ id, title = null, name = "", label, summary = null, actions = null, header = null, footer = null, collapsible = true, onClose = null, closeLabel = "",
   fit = "fixed", resizable = false, widthFrom = null, maxHeight = null, hidden = false, defaultCollapsed = false, children }) {
   const stack = useContext(ToolStackContext);
   const kept = Boolean(stack && id);
@@ -232,6 +256,7 @@ export default function ToolPanel({ id, title = null, name = "", label, summary 
       </div> : <ScrollArea hidden={collapsed} className="min-w-0 flex-1 rounded-b-md" viewportRef={body} viewportProps={{ "data-tool-panel-body": "" }}>
         <div ref={content} className="flow-root">{children}</div>
       </ScrollArea>}
+      {footer && !collapsed ? footer : null}
     </ToolPanelContext.Provider>
     {/* The person's to size: a handle ON each edge it grows along (centred on it, an 8px hit
         area) and one on the corner between them, 12px, reaching 5px past the panel: the stack's

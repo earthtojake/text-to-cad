@@ -391,3 +391,11 @@ The viewer exposes `POST /__cad/clipboard` for explicit viewport PNG copies. It
 uses the same host and custom-header POST gates as other mutation routes, limits
 images to 20 MiB, and delegates native delivery to `viewer/clipboard.py`. It never
 reads the clipboard. Unsupported desktop clipboard environments return an error.
+
+It exposes `POST /__cad/sketches?name=` for a picture a copied prompt names by path:
+the view with a person's sketch drawn over it. It takes a PNG of at most 20 MiB under
+the same gates and saves it in the system's temporary directory as
+`cadgen-sketches/<name-stem>-<sha256[:12]>.png` (the same picture saved twice is one
+file, and saving it again makes it the newest), keeps only the newest 64
+(`viewer/sketches.py`), and answers `{"ok": true, "path": "<absolute path>"}`. It is
+scratch, not state.

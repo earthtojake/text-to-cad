@@ -185,6 +185,14 @@ async function open(options = {}) {
     // The page again — the same tab, for a page whose tab record is in sessionStorage.
     reload: async () => { await page.reload(); Object.assign(opened, await ready()); },
     state: () => page.evaluate(() => window.cadHarness.a.controller.readState()),
+    // A pick opens Quick Edit at the viewer's top right, over whatever of the model is there. Put
+    // away, as a person reaching past it would, it stays away while the picking goes on.
+    putQuickEditAway: async () => {
+      const box = pane.getByRole('region', { name: 'Quick Edit', exact: true });
+      await box.waitFor();
+      await pane.getByRole('button', { name: 'Quick Edit', exact: true }).click();
+      await box.waitFor({ state: 'detached' });
+    },
     display: patch => page.evaluate(next => window.cadHarness.a.controller.setDisplaySettings(next), patch),
     // Preview: its button, the play icon beside Display settings; its X back. The file's view was
     // seeded with Orbit off: a still camera, so what moves in a frame is the model.
@@ -324,7 +332,7 @@ test('Select picks parts and faces, a selection lives only under Select, and the
   // Over a part the pointer says it can be picked; over the backdrop it does not.
   await view.waitCursor('pointer');
   await frameWhen(view, shot => differing(still, shot) > 2000, 'lit the hovered part');
-  await page.mouse.move(view.box.x + 20, view.box.y + view.box.height - 20);
+  await page.mouse.move(view.box.x + view.box.width - 20, view.box.y + view.box.height - 20);
   await view.waitCursor('auto');
   await frameWhen(view, shot => differing(still, shot) === 0, 'came back exactly as it was once the pointer left');
 
@@ -345,6 +353,11 @@ test('Select picks parts and faces, a selection lives only under Select, and the
   await page.mouse.click(...at([6, 6, 5]));
   await page.waitForFunction(() => { const ids = window.cadHarness.a.controller.readState().selectedReferenceIds;
     return ids.length === 1 && /\.f\d+$/.test(ids[0]); });
+  // The pick opened Quick Edit with the pick attached, and the keyboard is in its box.
+  const quickEdit = pane.getByRole('region', { name: 'Quick Edit', exact: true });
+  await quickEdit.locator('[data-quick-edit-chip="references"]').waitFor();
+  assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('aria-label')), 'Describe your changes');
+  await view.putQuickEditAway();
   await page.mouse.click(...at([10, 6, 5]));
   await page.waitForFunction(() => { const ids = window.cadHarness.a.controller.readState().selectedReferenceIds;
     return ids.length === 1 && /\.e\d+$/.test(ids[0]); });
@@ -356,6 +369,7 @@ test('Select picks parts and faces, a selection lives only under Select, and the
   assert.deepEqual(await view.stack(), ['Features']);
   await page.mouse.click(...at([6, 6, 5]));
   await page.waitForFunction(() => window.cadHarness.a.controller.readState().selectedPartIds.length === 1);
+  assert.equal(await quickEdit.count(), 0, 'put away by its button, Quick Edit stays away through a new selection');
   assert.deepEqual((await view.state()).selectedPartIds, ['o1.1']);
   // Headed by the part's name; the id is a row, what a copy carries.
   assert.match((await reference.innerText()).replace(/\s+/g, ' '), /^base .*Type Component.*ID o1\.1.*Size 20 × 20 × 10 mm.*Color #3A6EA5/);
@@ -413,11 +427,15 @@ test('Select picks parts and faces, a selection lives only under Select, and the
   }
   await page.evaluate(() => document.documentElement.classList.remove('dark'));
   assert.doesNotMatch(await reference.innerText(), /Selection ·|references|Total/);
-  // Selection changes the prompt context, not the count or label of its one action.
-  await pane.getByRole('button', { name: 'Add To Prompt', exact: true }).waitFor();
-  assert.equal(await pane.locator('[data-viewport-bottom-actions] button').count(), 1);
+  // Put away, Quick Edit still follows the selection: opened, it attaches both references, and
+  // Escape in its empty box puts it away and clears the selection, as it would from the model.
+  await pane.getByRole('button', { name: 'Quick Edit', exact: true }).click();
+  assert.equal(await quickEdit.locator('[data-quick-edit-chip="references"]').innerText(), '2 references');
+  assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('aria-label')), 'Describe your changes');
+  assert.equal(await pane.locator('[data-viewport-bottom-actions]').count(), 0, 'nothing sits at the bottom of the view');
   await page.keyboard.press('Escape');
   await page.waitForFunction(() => window.cadHarness.a.controller.readState().selectedPartIds.length === 0);
+  await quickEdit.waitFor({ state: 'detached' });
 
   // A selection exists only under Select, and so do its panels: another tool takes both away,
   // and Select brings the tree back as it was.
@@ -446,10 +464,10 @@ test('Select picks parts and faces, a selection lives only under Select, and the
   assert.deepEqual(live.selection, [{ resource: live.resource, target: { kind: 'cad-selector', selectors: ['o1.2'] }, label: 'arm' }]);
   await page.evaluate(() => window.cadHarness.a.controller.clearSelection());
   await page.waitForFunction(() => window.cadHarness.a.controller.readState().selectedPartIds.length === 0);
-  // And what it delivers: the snapshot carries the file, the references carry the selection.
+  // And what a host's capture delivers: the snapshot carries the file, the references the selection.
   await page.evaluate(() => window.cadHarness.a.controller.select({ selectors: ['o1.1'] }));
   await page.waitForFunction(() => window.cadHarness.a.controller.readState().selectedPartIds.length === 1);
-  await pane.getByRole('button', { name: 'Add To Prompt', exact: true }).click();
+  await page.evaluate(() => window.cadHarness.capture());
   await page.waitForFunction(() => window.cadHarness.captures.length === 1);
   const captured = await page.evaluate(() => window.cadHarness.captures[0]);
   assert.equal(captured.type, 'image/png');
@@ -509,7 +527,7 @@ test('under Faces or Edges, one press on a part whose faces are not loaded loads
 // gone — so it is here, on every tree row, and on the empty-space menu below. It cannot
 // contradict the tool in hand: every item returns to Select before it acts.
 const ZOOM_SECTION = ['Zoom to fit', 'Zoom to selection'];
-const PART_MENU = ['Add to prompt', 'Copy Reference', 'Select', 'Isolate', 'Hide others', 'Hide',
+const PART_MENU = ['Copy Reference', 'Select', 'Isolate', 'Hide others', 'Hide',
   'Expand', 'Collapse', 'Expand all', 'Collapse all', ...ZOOM_SECTION];
 
 test('hiding a part takes it off the screen, and the viewport menus offer what they can do', async () => {
@@ -523,7 +541,7 @@ test('hiding a part takes it off the screen, and the viewport menus offer what t
   assert.ok(partBoxes(hidden).base.count > partBoxes(opened).base.count * 0.9, 'and the rest of the model is still drawn');
   await pane.getByRole('button', { name: 'Reveal arm', exact: true }).click();
   await page.waitForFunction(() => window.cadHarness.a.controller.readState().hiddenPartIds.length === 0);
-  const away = () => page.mouse.move(view.box.x + 20, view.box.y + view.box.height - 20);
+  const away = () => page.mouse.move(view.box.x + view.box.width - 20, view.box.y + view.box.height - 20);
   await away();
   await frameWhen(view, shot => differing(opened, shot) === 0, 'came back to what hiding the arm took away');
   // Hover runs the other way too: resting on a tree row lights its part. These frames keep the
@@ -552,7 +570,7 @@ test('hiding a part takes it off the screen, and the viewport menus offer what t
   await page.getByRole('menu').waitFor({ state: 'detached' });
   // Empty space asks about the model as a whole. Nothing is hidden here, so besides
   // the framing group all it can offer is the tree.
-  await page.mouse.click(box.x + 30, box.y + box.height - 30, { button: 'right' });
+  await page.mouse.click(box.x + box.width - 30, box.y + box.height - 30, { button: 'right' });
   await page.getByRole('menu').waitFor();
   assert.deepEqual(await page.getByRole('menuitem').allTextContents(), ['Expand all', 'Collapse all', ...ZOOM_SECTION]);
   await page.keyboard.press('Escape');
@@ -571,7 +589,7 @@ test('hiding a part takes it off the screen, and the viewport menus offer what t
     await page.mouse.click(...at([6, 6, 5]), { button: 'right' });
     await settle(page);
     assert.equal(await page.getByRole('menu').count(), 0, `${tool} opens no viewport menu over a part`);
-    await page.mouse.click(box.x + 30, box.y + box.height - 30, { button: 'right' });
+    await page.mouse.click(box.x + box.width - 30, box.y + box.height - 30, { button: 'right' });
     await settle(page);
     assert.equal(await page.getByRole('menu').count(), 0, `${tool} opens no viewport menu over empty space`);
     // The browser's own menu is still kept off the canvas, and a secondary drag still pans.
@@ -618,6 +636,7 @@ test('the context menu\'s Zoom to selection frames the selection', async () => {
   const fitted = armWidth(await frameWhen(view, shot => armWidth(shot) > 0, 'drew the arm'));
   await pane.getByRole('button', { name: 'Select arm', exact: true }).click();
   await page.waitForFunction(() => window.cadHarness.a.controller.readState().selectedPartIds.join() === 'o1.2');
+  await view.putQuickEditAway();
   await page.mouse.click(...at([6, 6, 5]), { button: 'right' });
   await page.getByRole('menu').waitFor();
   assert.equal(await menuItem('Zoom to selection').getAttribute('aria-disabled'), null, 'a selection enables it');
@@ -640,7 +659,7 @@ const MIN_REDRAWN = { render: 30_000, xray: 30_000, 'hidden-line': 30_000, wiref
 test('every Display preset reaches the drawn frame, on the live canvas', async () => {
   const view = await open();
   const { page, errors } = view;
-  // Display is a popover from its button in the viewport's top-right bar.
+  // Display is a popover from its button among the view's actions, on top of the cube.
   await view.toggle('cad-display').click();
   const panel = view.displayPanel();
   await panel.waitFor();
@@ -704,7 +723,7 @@ test('Position drives the mate and repaints, a named pose jumps, the Position kn
   assert.equal((await preset.innerText()).trim(), 'Default');
   assert.equal(await slider.inputValue(), '0.00°');
 
-  await page.mouse.move(view.box.x + 20, view.box.y + view.box.height - 20);
+  await page.mouse.move(view.box.x + view.box.width - 20, view.box.y + view.box.height - 20);
   const rest = await restingFrame(view);
   const restArm = (await translations(page))['o1.2'];
   await slider.fill('60');
@@ -732,7 +751,7 @@ test('Position drives the mate and repaints, a named pose jumps, the Position kn
   await page.waitForFunction(rest => JSON.stringify(Array.from(window.__cadDisplayRecords().find(record => record.partId === 'o1.2').matrix.slice(12, 15))) === JSON.stringify(rest), restArm)
     .catch(() => {});
   assert.deepEqual((await translations(page))['o1.2'], restArm, 'Reset puts the mate back where it started');
-  await page.mouse.move(view.box.x + 20, view.box.y + view.box.height - 20);
+  await page.mouse.move(view.box.x + view.box.width - 20, view.box.y + view.box.height - 20);
   await frameWhen(view, shot => differing(rest, shot) === 0, 'came back to the rest pose after Reset');
 
   // The Position tool: one knob, on the mate's axis, and dragging it is never the camera.
@@ -819,7 +838,7 @@ test('preview opens paused, its playbar plays and pauses the routine without mov
   // Preview puts away prompt actions, leaving only playback controls.
   assert.deepEqual(await bar.getByRole('button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))), ['Play animation', 'Playback settings']);
   assert.equal(await bar.getByRole('slider', { name: 'Animation time', exact: true }).count(), 1);
-  assert.equal(await pane.getByRole('button', { name: 'Add To Prompt' }).count(), 0);
+  assert.equal(await pane.getByRole('button', { name: 'Quick Edit' }).count(), 0);
 
   await bar.getByRole('button', { name: 'Play animation' }).click();
   await page.waitForFunction(() => window.__cadDisplayRecords().find(record => record.partId === 'o1.2').matrix[1] > 0.2);
@@ -1105,7 +1124,8 @@ test('a click selects at once, and a double-click ends where it did when a click
   const cleared = () => page.waitForFunction(() => { const state = window.cadHarness.a.controller.readState();
     return state.selectedPartIds.length + state.selectedReferenceIds.length === 0; });
   const copies = () => page.evaluate(() => window.__clipboardWrites.length);
-  const empty = [box.x + 30, box.y + box.height - 30];
+  // Empty space: the bottom-right, the one corner with nothing of the viewer's own in it.
+  const empty = [box.x + box.width - 30, box.y + box.height - 30];
   const opening = (await view.state()).camera;
   await page.evaluate(() => {
     window.__clipboardWrites = [];
@@ -1123,8 +1143,9 @@ test('a click selects at once, and a double-click ends where it did when a click
   await page.waitForFunction(() => window.__selectedByProbe !== null);
   assert.equal(await page.evaluate(() => window.__selectedByProbe), true, 'the arm is selected before any double-click window could close');
   assert.deepEqual(await selection(), { parts: ['o1.2'], refs: [], isolated: [] });
-  assert.equal(await view.pane.getByRole('button', { name: 'Add To Prompt', exact: true }).count(), 0);
-  await view.pane.getByRole('button', { name: /^Copy Reference(?:\s|$)/ }).click();
+  await view.putQuickEditAway();
+  // The Reference panel's Copy, at its foot: the selection's reference.
+  await view.pane.getByRole('region', { name: 'Reference details', exact: true }).getByRole('button', { name: 'Copy', exact: true }).click();
   await page.waitForFunction(() => window.__clipboardWrites.length === 1);
   assert.equal(await page.evaluate(() => window.__clipboardWrites[0]), '/work/models/hinge_block.step#o1.2');
   await page.evaluate(() => { window.__clipboardWrites = []; });
@@ -1206,7 +1227,7 @@ test('a click selects at once, and a double-click ends where it did when a click
   await settle(page);
   assert.deepEqual((await selection()).refs, both, 'an empty-space double-click keeps the selection its first click found');
   assert.equal(await copies(), 4, 'and copies nothing');
-  await view.pane.getByRole('button', { name: /^Copy References(?:\s|$)/ }).click();
+  await view.pane.getByRole('region', { name: 'Reference details', exact: true }).getByRole('button', { name: 'Copy All', exact: true }).click();
   await page.waitForFunction(() => window.__clipboardWrites.length === 5);
   const copiedSelection = parseCadRefToken(await page.evaluate(() => window.__clipboardWrites[4]));
   assert.equal(copiedSelection.cadPath, '/work/models/hinge_block.step');
