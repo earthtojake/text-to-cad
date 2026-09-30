@@ -362,10 +362,11 @@ src/cadgen/
                          #   (artifact_status: not compiled / compiling /
                          #   compiled / failed), build_progress (the daemon's
                          #   job ledger, read over its socket)
-  mcp/                   # CAD for agent hosts that render MCP Apps: stdio
-                         #   JSON-RPC (protocol), the tools and launches
-                         #   (server), open views (views), the viewer routes
-                         #   in-process (tunnel), roots, recents, the page (ui)
+  mcp/                   # CAD for agent hosts: stdio JSON-RPC (protocol), the
+                         #   tools and launches (server), open views (views),
+                         #   the viewer routes in-process (tunnel), roots,
+                         #   recents, the page (ui), and the CAD Viewer link for
+                         #   a host that renders no MCP Apps (browser)
   _runtime/              # BUILT JS (browser snapshot renderer, node
                          #   builders, the viewer client, the MCP app page)
                          #   and the native file tracer, one library per

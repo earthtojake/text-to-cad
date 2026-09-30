@@ -10,7 +10,7 @@ it; nothing in the page guesses where it is. Once open, a view long-polls
 ``cad_events`` so the agent's questions reach it, and reaches the viewer's own
 HTTP routes through ``cad_http``.
 
-Hosts present views in one of two ways, told apart at initialize:
+Hosts present views in one of three ways, told apart at initialize:
 
 - *Tabs* (Codex). The host starts a process per thread and presents CAD as a
   sidebar page, a tab per thread and a file handler. The agent opens a tab once
@@ -20,6 +20,13 @@ Hosts present views in one of two ways, told apart at initialize:
   is that tool, each launch is stamped with an order for the views to retire
   their elders by, and a view the agent reads is named by the token its
   ``cad_show`` returned: one process may serve many chats, and no host says which.
+- *Text* (a client that renders no MCP Apps, so does not advertise the
+  ``io.modelcontextprotocol/ui`` extension: Grok, Zed, Gemini CLI, Claude Code, ...).
+  ``cad_show`` is the only tool, and it answers with a link to the model in the CAD
+  Viewer (``browser.py``), started or reused for its folder; nothing opens a browser.
+
+``CADGEN_MCP_PRESENTATION=inline|text`` settles a non-Codex client that renders MCP
+Apps without advertising them (the reference host, ``basic-host``, is one).
 """
 
 from __future__ import annotations
@@ -57,8 +64,10 @@ EXTENSIONS = sorted(SOURCE_EXTENSIONS)
 _MAX_THUMBNAIL_BYTES = 512 * 1024
 _DESCRIBE_SECONDS = 2.0
 
-# Clients that present CAD as tabs (see the module docstring); every other client is shown views inline.
+# Clients that present CAD as tabs (see the module docstring); every other client is shown views inline,
+# or told where the Viewer has them when it renders no MCP Apps.
 _TAB_HOSTS = frozenset({"codex-mcp-client"})
+_UI_EXTENSION = "io.modelcontextprotocol/ui"
 
 INSTRUCTIONS = (
     "CAD shows local CAD models (STEP, STL, GLB, 3MF, DXF, URDF, SDF) in a viewer tab beside the chat. "
@@ -74,6 +83,12 @@ INLINE_INSTRUCTIONS = (
     "Viewers refresh when their files change, so never show a model again after a rebuild. "
     "cad_view reports what the user is looking at and has selected in a viewer, and cad_screenshot returns "
     "what they see; both take the view that cad_show returned."
+)
+
+TEXT_INSTRUCTIONS = (
+    "CAD opens local CAD models (STEP, STL, GLB, 3MF, DXF, URDF, SDF) in the CAD Viewer in the user's browser: "
+    "this app cannot show CAD views itself. Call cad_show with a model to get its link and share it. "
+    "The Viewer refreshes when the file changes, so share a model's link once, not after every rebuild."
 )
 
 _ICON_SVG = (
@@ -109,6 +124,18 @@ _SHOWN_VIEW = {"type": "string", "description": "The view that cad_show returned
 _READ_ONLY = {"readOnlyHint": True, "destructiveHint": False, "openWorldHint": False}
 
 
+def _presentation(client: dict[str, Any], offered: dict[str, Any]) -> str:
+    """``tabs``, ``inline`` or ``text``: how this client shows views (see the module docstring)."""
+    if client.get("name") in _TAB_HOSTS:
+        return "tabs"
+    forced = str(os.environ.get("CADGEN_MCP_PRESENTATION") or "").strip()
+    if forced in ("inline", "text"):
+        return forced
+    extensions = offered.get("extensions") if isinstance(offered.get("extensions"), dict) else {}
+    ui = extensions.get(_UI_EXTENSION)
+    return "inline" if isinstance(ui, dict) and MIME in (ui.get("mimeTypes") or []) else "text"
+
+
 def _file_uri_path(value: Any) -> str | None:
     if not isinstance(value, str) or not value.startswith("file:"):
         return None
@@ -133,7 +160,7 @@ def _data(structured: dict[str, Any]) -> dict[str, Any]:
 
 
 class Server:
-    def __init__(self, *, launch_cwd: str | None, page: AppPage | None = None, recents=None, tunnel=None) -> None:
+    def __init__(self, *, launch_cwd: str | None, page: AppPage | None = None, recents=None, tunnel=None, viewer_url=None) -> None:
         excluded = tuple(path for path in (os.environ.get("PLUGIN_ROOT"), os.path.expanduser("~")) if path)
         self.workspace = ThreadWorkspace(launch_cwd, excluded=excluded)
         self.page = page or AppPage()
@@ -144,6 +171,8 @@ class Server:
         self._model: str | None = None  # what this thread last opened or showed
         self._tools: list[dict[str, Any]] | None = None
         self.tabs = False  # decided at initialize: see the module docstring
+        self.text = False
+        self._viewer_url = viewer_url
         self._client_roots = False
         self._connection: Connection | None = None
         self._order = itertools.count(1)
@@ -222,12 +251,15 @@ class Server:
 
         client = params.get("clientInfo") if isinstance(params.get("clientInfo"), dict) else {}
         offered = params.get("capabilities") if isinstance(params.get("capabilities"), dict) else {}
-        self.tabs = client.get("name") in _TAB_HOSTS
+        presentation = _presentation(client, offered)
+        self.tabs, self.text = presentation == "tabs", presentation == "text"
         self._client_roots = isinstance(offered.get("roots"), dict)
-        if not self.tabs:
+        if presentation == "inline":
             self.page = self.page.presenting("inline")
         self._tools = None
-        LOG.info("client %s %s: %s views", client.get("name"), client.get("version"), "tab" if self.tabs else "inline")
+        extensions = sorted(offered["extensions"]) if isinstance(offered.get("extensions"), dict) else []
+        LOG.info("client %s %s: %s views (extensions: %s)", client.get("name"), client.get("version"), presentation,
+                 ", ".join(extensions) or "none")
         capabilities: dict[str, Any] = {"tools": {"listChanged": False}, "resources": {"listChanged": False}}
         if self.tabs:
             # Ask the host to say, on each agent call, which folder the thread works in.
@@ -237,14 +269,14 @@ class Server:
             "protocolVersion": requested if requested in _PROTOCOL_VERSIONS else _PROTOCOL_VERSIONS[1],
             "capabilities": capabilities,
             "serverInfo": {"name": NAME, "title": TITLE, "version": __version__, "icons": [ICON]},
-            "instructions": INSTRUCTIONS if self.tabs else INLINE_INSTRUCTIONS,
+            "instructions": INSTRUCTIONS if self.tabs else TEXT_INSTRUCTIONS if self.text else INLINE_INSTRUCTIONS,
         }
 
     # -- the catalog -----------------------------------------------------------
 
     def tools(self) -> list[dict[str, Any]]:
         if self._tools is None:
-            self._tools = self._tab_catalog() if self.tabs else self._inline_catalog()
+            self._tools = self._tab_catalog() if self.tabs else self._text_catalog() if self.text else self._inline_catalog()
         return self._tools
 
     def _tab_catalog(self) -> list[dict[str, Any]]:
@@ -308,6 +340,16 @@ class Server:
              "description": "Capture a PNG of exactly what a CAD viewer in this chat shows right now.",
              "inputSchema": _object({"view": _SHOWN_VIEW}, ["view"])},
             *self._page_tools(),
+        ]
+
+    def _text_catalog(self) -> list[dict[str, Any]]:
+        """No page to open or read: cad_show hands over a link to the model in the CAD Viewer."""
+        return [
+            {"name": "cad_show", "title": "Show in CAD", "icons": [ICON], "annotations": _READ_ONLY,
+             "description": ("Get a link that opens a local CAD model (STEP, STL, GLB, 3MF, DXF, URDF, SDF) in the CAD "
+                             "Viewer in the user's browser; this app cannot show CAD views itself. The Viewer refreshes "
+                             "when the file changes, so share a model's link once, not after every rebuild."),
+             "inputSchema": _object({"path": _SHOWN_PATH}, ["path"])},
         ]
 
     def _page_tools(self) -> list[dict[str, Any]]:
@@ -474,6 +516,8 @@ class Server:
         return views[0] if views else None
 
     def _tool_cad_show(self, arguments, context):
+        if self.text:
+            return self._show_in_browser(self._model_path(arguments.get("path")))
         if not self.tabs:
             launch = self._mounted(self._launch(self._model_path(arguments.get("path")), surface="inline"))
             return _text(f"Showing {launch['model']} in CAD (view {launch['view']}).", {"launch": launch})
@@ -485,6 +529,27 @@ class Server:
         launch = self._launch(model)
         self.views.post([view.id], {"type": "show", "launch": launch})
         return _text(f"Showing {model} in CAD.", {"delivered": 1, "view": view.id})
+
+    def _show_in_browser(self, model: str) -> dict[str, Any]:
+        """The model's link in the CAD Viewer serving its folder, started if none is."""
+        from urllib.parse import quote
+
+        from .browser import ViewerUnavailable, model_link, viewer_url
+
+        folder = self._root_for(model).path
+        self._model = model
+        self._remember(model)
+        try:
+            url = (self._viewer_url or viewer_url)(folder)
+        except ViewerUnavailable as failure:
+            relative = quote(os.path.relpath(model, folder).replace(os.sep, "/"), safe="/")
+            raise ToolFailed(f"This app cannot show CAD views, and the CAD Viewer did not start ({failure}). Run "
+                             f"`cd \"{folder}\" && cadgen viewer --host 127.0.0.1 --json` and open the url it prints "
+                             f"with ?file={relative} added.") from failure
+        link = model_link(url, folder, model)
+        return _text(f"This app cannot show CAD views, so {os.path.basename(model)} is in the CAD Viewer: {link}\n"
+                     "The Viewer refreshes when the file changes: share this link once, not after every rebuild.",
+                     {"url": link, "model": model})
 
     def _shown(self, view_id: Any) -> Any:
         """The inline view the agent names by the token its cad_show returned."""

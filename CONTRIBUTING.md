@@ -496,7 +496,9 @@ CAD. `--uninstall` removes the entry. The server's stderr lands in
 
 Neither app can be driven by a test, so the standard path is also checked in
 the MCP Apps reference host (`basic-host` from `modelcontextprotocol/ext-apps`):
-it speaks Streamable HTTP, so a local bridge to the stdio server is needed.
+it speaks Streamable HTTP, so a local bridge to the stdio server is needed, and it
+does not advertise the UI extension, so start the server with
+`CADGEN_MCP_PRESENTATION=inline`.
 
 ## Branch Layout
 

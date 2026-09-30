@@ -6,7 +6,8 @@ instead of an HTTP origin. Its server is `cadgen mcp`
 (`packages/cadgen/src/cadgen/mcp`).
 
 Hosts present it in one of two ways, which the server tells apart at
-`initialize` (Codex names itself `codex-mcp-client`):
+`initialize` (Codex names itself `codex-mcp-client`; an MCP Apps host advertises
+the `io.modelcontextprotocol/ui` extension):
 
 - **Tabs (Codex).** **CAD** in the sidebar, a **CAD** tab beside each thread,
   and *Open with CAD* for a model file. The agent opens a tab once (`cad_open`)
@@ -16,6 +17,12 @@ Hosts present it in one of two ways, which the server tells apart at
   shows the model and, where the host takes model context, Add To Prompt (a
   compact viewer), goes full size on request, and a newer card retires the
   older ones.
+
+A client that renders no MCP Apps never loads this page: its `cad_show` answers
+with the model's link in the CAD Viewer, started or reused for its folder
+(`cadgen/mcp/browser.py`), and opens no browser. `CADGEN_MCP_PRESENTATION=inline`
+tells the server that a client renders apps without advertising them, as the
+reference host `basic-host` does.
 
 ## The rules
 

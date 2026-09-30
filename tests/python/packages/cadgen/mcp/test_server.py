@@ -21,6 +21,7 @@ from cadgen.mcp.ui import AppPage
 
 CODEX = {"name": "codex-mcp-client", "title": "Codex", "version": "0.159.0"}
 CLAUDE = {"name": "claude-ai", "version": "0.1.0"}
+RENDERS_APPS = {"extensions": {"io.modelcontextprotocol/ui": {"mimeTypes": ["text/html;profile=mcp-app"]}}}
 STL = b"solid t\nfacet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex 1 0 0\nvertex 0 1 0\nendloop\nendfacet\nendsolid t\n"
 
 
@@ -36,6 +37,7 @@ class _Session(unittest.TestCase):
 
     client = CODEX
     offered: dict = {}
+    viewer_url = None
 
     def setUp(self) -> None:
         self.tmp = Path(tempfile.mkdtemp())
@@ -48,7 +50,8 @@ class _Session(unittest.TestCase):
         page = self.tmp / "app"
         page.mkdir()
         (page / "index.html").write_text("<!doctype html><title>CAD</title>", encoding="utf-8")
-        self.server = Server(launch_cwd=str(self.workspace), page=AppPage(page), recents=RecentStore(self.tmp / "state"))
+        self.server = Server(launch_cwd=str(self.workspace), page=AppPage(page), recents=RecentStore(self.tmp / "state"),
+                             viewer_url=self.viewer_url)
         self.connection = _Connection()
         self.initialized = self.server.handle("initialize", {"protocolVersion": "2025-06-18", "capabilities": self.offered,
                                                              "clientInfo": self.client}, None)
@@ -166,6 +169,7 @@ class InlineServerTest(_Session):
     """Claude and every other MCP Apps host: each cad_show mounts a new view in the chat."""
 
     client = CLAUDE
+    offered = RENDERS_APPS
 
     def test_an_inline_host_shows_models_with_one_tool_and_is_told_so(self) -> None:
         tools = {tool["name"]: tool for tool in self.server.handle("tools/list", {}, None)["tools"]}
@@ -213,7 +217,7 @@ class RootsTest(_Session):
     """A client that offers roots says which folders the chat works in."""
 
     client = CLAUDE
-    offered = {"roots": {"listChanged": True}}
+    offered = {"roots": {"listChanged": True}, **RENDERS_APPS}
 
     def test_a_host_that_offers_roots_sets_the_workspace(self) -> None:
         other = self.tmp / "other"
@@ -232,6 +236,48 @@ class RootsTest(_Session):
             self.assertLess(time.monotonic(), deadline)
             time.sleep(0.001)
         self.assertEqual(self.launch("cad_show", {"path": "parts/bracket.stl"})["model"], str(other / "parts" / "bracket.stl"))
+
+
+class TextServerTest(_Session):
+    """A client that renders no MCP Apps: cad_show answers with the model's link in the CAD Viewer."""
+
+    client = {"name": "some-cli", "version": "1"}
+    served: list = []
+
+    @staticmethod
+    def viewer_url(folder: str) -> str:
+        TextServerTest.served.append(folder)
+        return "http://127.0.0.1:3999/"
+
+    def test_cad_show_links_the_model_in_the_viewer_serving_its_folder(self) -> None:
+        tools = self.server.handle("tools/list", {}, None)["tools"]
+        self.assertEqual([(tool["name"], "_meta" in tool) for tool in tools], [("cad_show", False)])
+        self.assertIn("cannot show CAD views", self.initialized["instructions"])
+        shown = self.call("cad_show", {"path": "parts/bracket.stl"})
+        self.assertEqual(shown["structuredContent"]["url"], "http://127.0.0.1:3999/?file=parts/bracket.stl")
+        self.assertIn("http://127.0.0.1:3999/?file=parts/bracket.stl", shown["content"][0]["text"])
+        self.assertNotIn("Showing", shown["content"][0]["text"])
+        self.assertEqual(TextServerTest.served[-1], str(self.workspace))
+        self.assertEqual(self.server.recents.list()[0].path, str(self.workspace / "parts" / "bracket.stl"))
+
+    def test_a_viewer_that_will_not_start_leaves_the_command_to_run(self) -> None:
+        from cadgen.mcp.browser import ViewerUnavailable
+
+        def refuse(folder: str) -> str:
+            raise ViewerUnavailable("no port")
+
+        self.server._viewer_url = refuse
+        failed = self.call("cad_show", {"path": "parts/bracket.stl"})
+        self.assertTrue(failed["isError"])
+        self.assertIn(f'cd "{self.workspace}" && cadgen viewer --host 127.0.0.1 --json', failed["content"][0]["text"])
+
+    def test_an_app_that_renders_without_advertising_it_can_be_told(self) -> None:
+        from unittest import mock
+
+        with mock.patch.dict(os.environ, {"CADGEN_MCP_PRESENTATION": "inline"}):
+            server = Server(launch_cwd=str(self.workspace), page=AppPage(self.tmp / "app"), recents=RecentStore(self.tmp / "other"))
+            server.handle("initialize", {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": self.client}, None)
+        self.assertIn("ui", {tool["name"]: tool for tool in server.handle("tools/list", {}, None)["tools"]}["cad_show"]["_meta"])
 
 
 class ImportBudgetTest(unittest.TestCase):

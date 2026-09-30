@@ -80,6 +80,15 @@ class CodexContractTest(unittest.TestCase):
         self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
         self.assertEqual(converse(tmp), json.loads(CONTRACT.read_text(encoding="utf-8")))
 
+    def test_the_processes_codex_starts_only_to_list_tools_are_served_the_same_catalog(self) -> None:
+        # They advertise no UI extension; being Codex, they still get Codex's catalog, not the text one.
+        tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        server = Server(launch_cwd=str(tmp), page=AppPage(tmp), recents=RecentStore(tmp / "state"))
+        server.handle("initialize", {**CODEX_INITIALIZE, "capabilities": {"elicitation": {"form": {}, "url": {}}}}, None)
+        names = [tool["name"] for tool in json.loads(CONTRACT.read_text(encoding="utf-8"))["tools"]]
+        self.assertEqual([tool["name"] for tool in server.handle("tools/list", {}, None)["tools"]], names)
+
 
 if __name__ == "__main__":
     unittest.main()

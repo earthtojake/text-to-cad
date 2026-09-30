@@ -170,7 +170,9 @@ def call(request_id, method, params):
     sys.exit(f"FAIL: cadgen mcp exited during {method}")
 
 
-call(1, "initialize", {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "test-installed", "version": "0"}})
+# As an MCP Apps host: one that advertises the UI extension is served the page.
+ui = {"extensions": {"io.modelcontextprotocol/ui": {"mimeTypes": ["text/html;profile=mcp-app"]}}}
+call(1, "initialize", {"protocolVersion": "2025-06-18", "capabilities": ui, "clientInfo": {"name": "test-installed", "version": "0"}})
 send({"method": "notifications/initialized"})
 tools = {tool["name"]: tool for tool in call(2, "tools/list", {})["tools"]}
 uri = tools["cad_home"]["_meta"]["ui"]["resourceUri"]
