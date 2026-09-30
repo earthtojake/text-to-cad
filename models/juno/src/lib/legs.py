@@ -46,10 +46,20 @@ def _solids_over(shape, min_volume=800.0):
 
 
 def _try_fillet(shape, edges, radius):
+    """Fillet ``edges``, or return ``shape`` unchanged when OCCT cannot.
+
+    OCCT can also "succeed" with garbage: on the knee fork's yoke it returned
+    a valid solid 24% FATTER than its input. A round of radius r along a
+    length L moves at most (1 - pi/4) r^2 L of material, so a result that
+    moved more than r^2 per unit of filleted length is rejected too.
+    """
     try:
         edges = list(edges)
         if edges:
-            return _solo(bd.fillet(edges, radius))
+            result = _solo(bd.fillet(edges, radius))
+            moved = abs(result.volume - shape.volume)
+            if result.is_valid and moved <= radius * radius * sum(e.length for e in edges):
+                return result
     except Exception:
         pass
     return shape
