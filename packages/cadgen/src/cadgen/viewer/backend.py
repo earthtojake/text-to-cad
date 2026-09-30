@@ -42,6 +42,7 @@ from .content_types import content_type_for_path
 from .encoding import UriError, local_asset_url_for_path, strict_decode_uri_component
 from .scanner import (
     CAD_CATALOG_SCHEMA_VERSION,
+    SCAN_MAX_DEPTH,
     catalog_input_fingerprint,
     is_served_cad_asset,
     node_basename,
@@ -214,7 +215,7 @@ def _absolutize_entry(entry: dict, *, root_path: str, scan_repo_root: str) -> di
 class LocalAssetBackend:
     kind = "local-fs"
 
-    def __init__(self, root: str = ""):
+    def __init__(self, root: str = "", *, scan_depth: int = SCAN_MAX_DEPTH):
         root_path = os.path.abspath(str(root or "").strip() or os.getcwd())
         if "\0" in root_path:
             raise ValueError("CAD Viewer directory contains an invalid null byte")
@@ -224,6 +225,9 @@ class LocalAssetBackend:
         # both report the spelling the operator gave.
         self.root_path = root_path
         self.root_name = node_basename(root_path)
+        # How many directory levels below the root the catalog walks: the whole
+        # tree by default, 0 for the root's own files only.
+        self.scan_depth = scan_depth
         self._catalog_guard = threading.Lock()
         self._catalog_snapshot = None
         self._catalog_refreshing = False
@@ -241,12 +245,12 @@ class LocalAssetBackend:
         }
 
     def _full_catalog_snapshot(self) -> tuple[dict, dict] | None:
-        discovery = scan_cad_directory(self.root_path, defer_unpreferred=True)
+        discovery = scan_cad_directory(self.root_path, defer_unpreferred=True, max_depth=self.scan_depth)
         before = {
             entry["file"]: catalog_input_fingerprint(os.path.join(self.root_path, entry["file"]))
             for entry in discovery["entries"]
         }
-        raw = scan_cad_directory(self.root_path)
+        raw = scan_cad_directory(self.root_path, max_depth=self.scan_depth)
         if {entry["file"] for entry in raw["entries"]} != set(before):
             return None
         after = {
@@ -309,7 +313,7 @@ class LocalAssetBackend:
                 return None
         # Bind the result lookups to a stable filesystem interval. A sidecar or
         # non-STEP asset may change while the document indexes are being read.
-        after_discovery = scan_cad_directory(self.root_path, defer_unpreferred=True)
+        after_discovery = scan_cad_directory(self.root_path, defer_unpreferred=True, max_depth=self.scan_depth)
         after_inputs = {
             entry["file"]: catalog_input_fingerprint(
                 os.path.join(self.root_path, entry["file"])
@@ -333,7 +337,7 @@ class LocalAssetBackend:
             pass
 
     def read_catalog(self, preferred_file=None) -> dict:
-        discovery = scan_cad_directory(self.root_path, defer_unpreferred=True)
+        discovery = scan_cad_directory(self.root_path, defer_unpreferred=True, max_depth=self.scan_depth)
         current = self._current_catalog_snapshot(discovery)
         if current is not None:
             return current
@@ -343,6 +347,7 @@ class LocalAssetBackend:
             self.root_path,
             preferred_file=preferred_file,
             defer_unpreferred=True,
+            max_depth=self.scan_depth,
         ))
         self._start_catalog_hydration()
         return partial

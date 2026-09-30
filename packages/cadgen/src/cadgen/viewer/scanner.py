@@ -516,7 +516,8 @@ def _listing_rows(dir_path: str) -> list | None:
 
 
 def _collect_cad_source_files(
-    root_path: str, result: list, visited=None, depth: int = 0, real_root: str | None = None
+    root_path: str, result: list, visited=None, depth: int = 0, real_root: str | None = None,
+    max_depth: int = SCAN_MAX_DEPTH,
 ) -> list:
     """Every CAD file under ``root_path``, in walk order.
 
@@ -525,7 +526,7 @@ def _collect_cad_source_files(
     exactly ``realpath(parent)/name``; everywhere else (the root, a symlink,
     Windows with its junctions) the path is resolved here.
     """
-    if depth > SCAN_MAX_DEPTH:
+    if depth > max_depth:
         return result
     if real_root is None:
         try:
@@ -548,6 +549,7 @@ def _collect_cad_source_files(
             _collect_cad_source_files(
                 entry_path, result, visited, depth + 1,
                 real_root=os.path.join(real_root, name) if os.name != "nt" else None,
+                max_depth=max_depth,
             )
             continue
         if kind == _ROW_FILE:
@@ -559,7 +561,7 @@ def _collect_cad_source_files(
             continue  # broken link
         if stat_module.S_ISDIR(target.st_mode):
             if not _should_skip_directory(name):
-                _collect_cad_source_files(entry_path, result, visited, depth + 1)
+                _collect_cad_source_files(entry_path, result, visited, depth + 1, max_depth=max_depth)
             continue
         if stat_module.S_ISREG(target.st_mode) and extension_of(name) in SOURCE_EXTENSIONS:
             result.append(entry_path)
@@ -896,12 +898,18 @@ def is_served_cad_asset(file_path) -> bool:
 # --- public scan API ------------------------------------------------------
 
 
-def scan_cad_directory(repo_root, *, preferred_file=None, defer_unpreferred=False) -> dict:
-    """Scan one directory. It is its own root — a viewer serves exactly one."""
+def scan_cad_directory(
+    repo_root, *, preferred_file=None, defer_unpreferred=False, max_depth: int = SCAN_MAX_DEPTH
+) -> dict:
+    """Scan one directory. It is its own root — a viewer serves exactly one.
+
+    ``max_depth`` bounds how many directory levels below the root are walked
+    (0: the root's own files only).
+    """
     if not repo_root:
         raise ValueError("repoRoot is required")
     root_path = os.path.abspath(repo_root)
-    source_files = _collect_cad_source_files(root_path, [])
+    source_files = _collect_cad_source_files(root_path, [], max_depth=max_depth)
     preferred_path = None
     if preferred_file:
         preferred_text = str(preferred_file).replace("\\", os.sep)

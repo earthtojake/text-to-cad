@@ -108,6 +108,13 @@ class ArtifactsOnly(ScannerTestCase):
         self.assertEqual(scan_cad_directory(self.root)["schemaVersion"], 4)
         self.assertEqual(CAD_CATALOG_SCHEMA_VERSION, 4)
 
+    def test_a_depth_bound_scan_lists_only_that_many_levels(self):
+        # A viewer rooted at a model's own folder must not walk what is below it.
+        self.write("top.dxf", "0\nSECTION\n")
+        self.write("nested/deeper.dxf", "0\nSECTION\n")
+        self.assertEqual(sorted(entry["file"] for entry in scan_cad_directory(self.root)["entries"]), ["nested/deeper.dxf", "top.dxf"])
+        self.assertEqual([entry["file"] for entry in scan_cad_directory(self.root, max_depth=0)["entries"]], ["top.dxf"])
+
     def test_a_falsy_root_raises_and_a_missing_one_scans_empty(self):
         with self.assertRaises(ValueError):
             scan_cad_directory("")

@@ -223,11 +223,11 @@ class CadApp:
     prefixes, so nothing else can be waiting behind this.
     """
 
-    def __init__(self, *, root: str, host: str, port: int, dist_dir: str = ""):
+    def __init__(self, *, root: str, host: str, port: int, dist_dir: str = "", scan_depth: int | None = None):
         from .surfaces import SurfaceSubscribers
 
         self.surface_subscribers = SurfaceSubscribers()
-        self.backend = LocalAssetBackend(root)
+        self.backend = LocalAssetBackend(root) if scan_depth is None else LocalAssetBackend(root, scan_depth=scan_depth)
         root_path = self.backend.root_path
         self.root_path = root_path
         self.root_name = self.backend.root_name
@@ -700,5 +700,5 @@ class CadApp:
         response.send_bytes(200, container, "application/octet-stream")
 
 
-def create_cad_app(*, root: str, host: str, port: int, dist_dir: str = "") -> CadApp:
-    return CadApp(root=root, host=host, port=port, dist_dir=dist_dir)
+def create_cad_app(*, root: str, host: str, port: int, dist_dir: str = "", scan_depth: int | None = None) -> CadApp:
+    return CadApp(root=root, host=host, port=port, dist_dir=dist_dir, scan_depth=scan_depth)
