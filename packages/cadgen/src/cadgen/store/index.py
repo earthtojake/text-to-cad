@@ -1,7 +1,7 @@
-"""Input-addressed index entries: records, op-memo entries, mesh entries.
+"""Input-addressed index entries: records, bounds, mesh entries.
 
 Every entry is a small JSON file written temp + rename. The key is what
-PRODUCED the entry (a model's script, an op's inputs, a surface × tolerance),
+PRODUCED the entry (a model's script, measured bytes, a surface × tolerance),
 never the content — that is the one distinction between ``index/`` and
 ``objects/``.
 """

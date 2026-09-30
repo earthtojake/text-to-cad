@@ -7,8 +7,8 @@ constructors the same shapes in a different sequence. Most of the time that is
 invisible, but where the order picks a direction (``Edge.make_line(*two_vertices)``)
 or seeds an intersection chain, it lands in the BREP bytes — and those bytes are
 cadgen's content-addressed component ids. A model that re-keys its components on
-every build defeats the whole component cache, and no amount of memoization above
-it can help.
+every build re-renders them on every build, and makes every parent that links it
+stale.
 
 The fix keeps set SEMANTICS (dedup by ``is_same``, which is what ``Shape.__eq__``
 does) and drops only the address-derived ORDER, by keeping first occurrence.
@@ -21,11 +21,11 @@ differently:
   no unrelated set in those modules changes behaviour.
 * ``{ve for e in edges for ve in e.vertices() if ve != vertex}`` in
   ``FilletPolyline`` — a set COMPREHENSION compiles to inline bytecode with no
-  ``set`` call to shadow. Instead ``Vertex.__hash__`` uses the same live native
-  coordinates and rounding as the op memo's geometric identity. With the memo
-  disabled, pointer-distinct vertices may share a bucket; pointer equality
-  still separates them. Reading OCCT again also observes native point and
-  location edits that leave build123d's cached ``X``/``Y``/``Z`` unchanged.
+  ``set`` call to shadow. Instead ``Vertex.__hash__`` hashes the live native
+  point rounded to 1e-6. Pointer-distinct vertices at one point share a
+  bucket; pointer equality still separates them. Reading OCCT again also
+  observes native point and location edits that leave build123d's cached
+  ``X``/``Y``/``Z`` unchanged.
 
 ``CADGEN_DETERMINISM=0`` disables both. ``install()`` is idempotent and never
 raises: build123d is an external dependency, so a version whose shape does not
@@ -142,17 +142,19 @@ def _make_ordered_set(shape_list_cls: type) -> Any:
 
 
 def _vertex_hash(self: Any) -> int:
-    """Hash the current native point at geometric equality's precision.
+    """Hash the current native world point, rounded to 1e-6.
 
-    With the op memo enabled, a Vertex and another Shape wrapper of that native
-    vertex agree too. No point or signature is retained between calls.
+    Read from OCCT on every call; no point is retained between calls.
     """
     if self._wrapped is None:
         return 0
-    from cadgen._internal.op_memo import _signature_hash
-
     try:
-        return _signature_hash(self.wrapped)
+        from OCP.BRep import BRep_Tool
+        from OCP.TopAbs import TopAbs_ShapeEnum
+        from OCP.TopoDS import TopoDS
+
+        x, y, z = BRep_Tool.Pnt_s(TopoDS.Vertex_s(self.wrapped)).Coord()
+        return hash((int(TopAbs_ShapeEnum.TopAbs_VERTEX), ((round(x, 6), round(y, 6), round(z, 6)),)))
     except Exception:
         return hash(self.wrapped)
 
@@ -160,7 +162,7 @@ def _vertex_hash(self: Any) -> int:
 def install() -> bool:
     """Install the shims. Idempotent; returns True when they are active.
 
-    Called from the generator runner beside ``op_memo.install()`` so every
+    Called from the generator runner before a model runs, so every
     model execution -- cold CLI or warm daemon worker -- builds against the
     same ordering rules. Import failures and unexpected module shapes leave
     build123d untouched."""

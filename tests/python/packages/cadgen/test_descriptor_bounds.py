@@ -19,7 +19,8 @@ add_repo_path("packages/cadgen/src")
 
 from cadgen.store import build
 from cadgen.store import _descriptor_bounds as bounds
-from cadgen._internal import component_package as cp, op_memo
+from cadgen.store import bounds as stored_bounds
+from cadgen._internal import component_package as cp
 from cadgen.store.objects import object_path
 from cadgen.store.trees import get_tree
 
@@ -40,14 +41,12 @@ class DescriptorFixture:
         self.env = mock.patch.dict(os.environ, {
             "CADGEN_CACHE_DIR": str(self.root / "store"),
             "CADGEN_COMPONENT_WORKERS": "1", "CADGEN_DAEMON": "0",
-            "CADGEN_OP_MEMO": "1",
         })
         self.env.start()
         self.addCleanup(self.env.stop)
-        op_memo.install()
-        op_memo.clear()
+        stored_bounds.clear()
         mat.reset_memo()
-        self.addCleanup(op_memo.clear)
+        self.addCleanup(stored_bounds.clear)
         self.addCleanup(mat.reset_memo)
 
     def child_tree(self, kind="box"):
@@ -94,6 +93,13 @@ class DescriptorFixture:
         walk = build._walk_compound(shape, root_name="root", progress=resolve(None))
         return bounds.capture_links(walk.draft_tree(root_name="root"))
 
+    @staticmethod
+    def bounds_keys(snapshot):
+        """The ``index/bounds`` entry names ``snapshot.bounds()`` reads and writes."""
+        breps = dict(snapshot.component_breps)
+        return [stored_bounds.bounds_key(bounds.OP, (breps[cid], struct.pack("<16d", *transform)))
+                for cid, transform in snapshot.occurrences]
+
 
 
 class ProviderTests(DescriptorFixture, unittest.TestCase):
@@ -102,10 +108,9 @@ class ProviderTests(DescriptorFixture, unittest.TestCase):
             with self.subTest(kind=kind):
                 shape = self.parent(kind)
                 expected = self.result(ordinary_build, shape)
-                for state in ("cold-key", "ram", "disk", "disabled", "force"):
-                    if state == "disk": op_memo.clear(); mat.reset_memo()
-                    with mock.patch.dict(os.environ, {"CADGEN_OP_MEMO": "0" if state == "disabled" else "1"}):
-                        actual = self.result(build.build_tree_through_step, shape, force=state == "force")
+                for state in ("cold-key", "ram", "disk", "force"):
+                    if state == "disk": stored_bounds.clear(); mat.reset_memo()
+                    actual = self.result(build.build_tree_through_step, shape, force=state == "force")
                     self.assertEqual(expected, actual)
 
     def test_provider_is_used_only_for_complete_links_and_not_force(self):
@@ -180,9 +185,9 @@ class ProviderTests(DescriptorFixture, unittest.TestCase):
         desc = snapshot.descriptor(); desc["occurrences"][0]["transform"][3] += 1e-10
         self.assertNotEqual(desc, snapshot.descriptor())
         recorded = []
-        def capture(op, args, compute): recorded.append(args); return compute()
-        with mock.patch.object(op_memo, "memoized_value", side_effect=capture): snapshot.bounds()
-        self.assertTrue(any(type(args[1]) is bytes and len(args[1]) == 128 for args in recorded))
+        def capture(algorithm, parts, measure): recorded.append(parts); return measure()
+        with mock.patch.object(stored_bounds, "cached_box", side_effect=capture): snapshot.bounds()
+        self.assertTrue(any(type(parts[1]) is bytes and len(parts[1]) == 128 for parts in recorded))
 
     def test_size_thresholds_reject_synthetic_objects_without_native_work(self):
         data = b"0123456789"; digest = hashlib.sha256(data).hexdigest(); path = object_path(digest)
@@ -202,32 +207,48 @@ class ProviderTests(DescriptorFixture, unittest.TestCase):
             with mock.patch.object(bounds, limit, 1), mock.patch.object(bounds.Snapshot, "bounds", side_effect=AssertionError("native work after admission denial")):
                 self.assertIsNone(bounds.try_bounds(draft))
 
-    def test_actual_overflowing_numeric_op_entry_falls_back(self):
-        from cadgen.store.index import write_entry
-        shape = self.parent(); snapshot = self.snapshot(shape)
-        expected = self.result(ordinary_build, shape)
-        cid, transform = snapshot.occurrences[0]
-        args = (dict(snapshot.component_breps)[cid], struct.pack("<16d", *transform), bounds._native_identity())
-        key = op_memo._op_index_key(op_memo._build_key(bounds.OP, args, {}))
-        write_entry("op", key, {"value": [10 ** 400] * 6})
-        op_memo.clear()
-        self.assertEqual(expected, self.result(build.build_tree_through_step, shape))
+    def test_stored_values_that_are_not_boxes_are_measured_again(self):
+        from cadgen.store.index import entry_path, read_entry
+        snapshot = self.snapshot(self.parent())
+        expected = snapshot.bounds()
+        keys = self.bounds_keys(snapshot)
+        measured = {key: read_entry("bounds", key) for key in keys}
+        self.assertTrue(all(entry and len(entry["value"]) == 6 for entry in measured.values()))
+        corrupt = {name: json.dumps(payload) for name, payload in {
+            "nan": {"value": [float("nan")] * 6},
+            "infinite": {"value": [float("inf")] * 6},
+            "overflowing": {"value": [10 ** 400] * 6},
+            "inverted": {"value": [1., 1., 1., 0., 0., 0.]},
+            "short": {"value": [0.] * 5},
+            "not a list": {"value": "box"},
+            "no value": {},
+        }.items()}
+        corrupt["not json"] = "{not json"
+        for name, text in corrupt.items():
+            with self.subTest(name):
+                for key in keys:
+                    entry_path("bounds", key).write_text(text, encoding="utf-8")
+                stored_bounds.clear()
+                self.assertEqual(snapshot.bounds(), expected)
+                self.assertEqual({key: read_entry("bounds", key) for key in keys}, measured)
 
     def test_native_binding_identity_changes_the_actual_measurement_key(self):
+        from cadgen.store.index import entry_path, iter_entries
         snapshot = self.snapshot(self.parent())
-        recorded = []
-        original = op_memo.memoized_value
-        def capture(op, args, compute):
-            if op == bounds.OP: recorded.append(args)
-            return original(op, args, compute)
-        with mock.patch.object(op_memo, "memoized_value", side_effect=capture):
-            with mock.patch.object(bounds, "_native_identity", return_value="native=A;binding=A"):
-                first = snapshot.bounds()
-            with mock.patch.object(bounds, "_native_identity", return_value="native=B;binding=B"):
-                second = snapshot.bounds()
-        self.assertEqual(first, second)
-        self.assertEqual({args[-1] for args in recorded}, {"native=A;binding=A", "native=B;binding=B"})
-        self.assertTrue(bounds._native_identity().startswith("native="))
+        results, keys = [], []
+        for identity in ("native=A;binding=A", "native=B;binding=B"):
+            with mock.patch.object(stored_bounds, "native_identity", return_value=identity):
+                results.append(snapshot.bounds())
+                keys.append(set(self.bounds_keys(snapshot)))
+        self.assertEqual(results[0], results[1])
+        self.assertFalse(keys[0] & keys[1])
+        self.assertTrue(all(entry_path("bounds", key).is_file() for key in keys[0] | keys[1]))
+        self.assertTrue(stored_bounds.native_identity().startswith("native="))
+        # An unknown build keys nothing: it measures and stores nothing.
+        stored = sorted(iter_entries("bounds"))
+        with mock.patch.object(stored_bounds, "native_identity", side_effect=ValueError("unknown build")):
+            self.assertEqual(snapshot.bounds(), results[0])
+        self.assertEqual(sorted(iter_entries("bounds")), stored)
 
 
 class LifecycleTests(DescriptorFixture, unittest.TestCase):
@@ -238,10 +259,9 @@ class LifecycleTests(DescriptorFixture, unittest.TestCase):
         for kind in ("box", "hole", "nurbs", "nested"):
             shape = self.parent(kind)
             expected = self.result(ordinary_build, shape)
-            for state in ("cold-key", "ram", "disk", "disabled", "force"):
-                if state == "disk": op_memo.clear(); mat.reset_memo()
-                with mock.patch.dict(os.environ, {"CADGEN_OP_MEMO": "0" if state == "disabled" else "1"}):
-                    actual = self.result(self.deferred, shape, force=state == "force")
+            for state in ("cold-key", "ram", "disk", "force"):
+                if state == "disk": stored_bounds.clear(); mat.reset_memo()
+                actual = self.result(self.deferred, shape, force=state == "force")
                 self.assertEqual(expected, actual, (kind, state))
 
     def test_only_internal_eligible_path_publishes_before_document_preparation(self):
@@ -391,18 +411,15 @@ class LifecycleTests(DescriptorFixture, unittest.TestCase):
                             occurrence["transform"] = [0.] * 15 + [1.]
                     link["tree"] = put_tree(tree)
                 snapshot = bounds.capture_links(walk.draft_tree(root_name="root")).capture_appearance()
-                keys = []
-                for cid, transform in snapshot.occurrences:
-                    args = (dict(snapshot.component_breps)[cid], struct.pack("<16d", *transform), bounds._native_identity())
-                    keys.append(op_memo._op_index_key(op_memo._build_key(bounds.OP, args, {})))
+                keys = self.bounds_keys(snapshot)
                 for state in ("cold", "warm"):
                     with self.subTest(state=state):
                         for key in keys:
                             if state == "cold":
-                                entry_path("op", key).unlink(missing_ok=True)
+                                entry_path("bounds", key).unlink(missing_ok=True)
                             else:
-                                write_entry("op", key, {"value": [-1., -1., -1., 1., 1., 1.]})
-                        op_memo.clear(); mat.reset_memo()
+                                write_entry("bounds", key, {"value": [-1., -1., -1., 1., 1., 1.]})
+                        stored_bounds.clear(); mat.reset_memo()
                         if state == "warm":
                             # Verify actual disk entries skip native work; this is
                             # precisely the scalar-hit state that must not certify
@@ -450,10 +467,9 @@ class LifecycleTests(DescriptorFixture, unittest.TestCase):
         snapshot = self.snapshot(shape).capture_appearance()
         prepared = snapshot.prepare_document()
         from cadgen.store.index import entry_path
-        for cid, transform in snapshot.occurrences:
-            args = (dict(snapshot.component_breps)[cid], struct.pack("<16d", *transform), bounds._native_identity())
-            entry_path("op", op_memo._op_index_key(op_memo._build_key(bounds.OP, args, {}))).unlink(missing_ok=True)
-        op_memo.clear()
+        for key in self.bounds_keys(snapshot):
+            entry_path("bounds", key).unlink(missing_ok=True)
+        stored_bounds.clear()
         with mock.patch.object(cp, "_build123d_shape_from_brep_bytes", side_effect=AssertionError("second decode")):
             actual = snapshot.bounds(shapes=prepared._shapes)
         self.assertEqual(actual, cp._bbox_from_shape(prepared.materialize("root")))

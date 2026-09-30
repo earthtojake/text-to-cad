@@ -642,7 +642,7 @@ class ReadyChildren(unittest.TestCase):
     def test_prepared_cache_paths_preserve_bytes_appearance_and_private_ownership(self):
         from OCP.BRep import BRep_Builder, BRep_Tool
         from OCP.gp import gp_Vec
-        from cadgen._internal.op_memo import _write_brep
+        from cadgen._internal.component_package import _shape_brep_bytes
         from cadgen.step_export import export_build123d_step_file
         from cadgen.store.build import _tagged_intact
         from cadgen.store.materialize import _native_children, reset_memo
@@ -683,7 +683,7 @@ class ReadyChildren(unittest.TestCase):
                         bd.Compound(obj=[first, ready])
                 self.assertEqual(self.stats['consumed'], count + prepared)
                 self.assertEqual(_tagged_intact(ready), tree)
-                prepared_brep = _write_brep(ready.wrapped)
+                prepared_brep = _shape_brep_bytes(ready.wrapped)
                 path = Path(self.temp.name) / f'{mode}.step'
                 export_build123d_step_file(ready, path)
                 authored = (prepared_brep, path.read_bytes(),
@@ -698,7 +698,7 @@ class ReadyChildren(unittest.TestCase):
             for right in consumers[index + 1:]:
                 self.assertFalse(left.wrapped.IsPartner(right.wrapped))
                 self.assertFalse(left.solids()[0].wrapped.IsPartner(right.solids()[0].wrapped))
-        unchanged = [_write_brep(child.wrapped) for child in consumers[1:]]
+        unchanged = [_shape_brep_bytes(child.wrapped) for child in consumers[1:]]
         first = consumers[0]
         curve = next(curve for edge in first.edges()
                      if (curve := BRep_Tool.Curve_s(edge.wrapped, 0., 0.)) is not None)
@@ -708,7 +708,7 @@ class ReadyChildren(unittest.TestCase):
         BRep_Builder().Remove(first.wrapped, _native_children(first.wrapped)[0])
         first.children[0].children[0].cad_face_ordinal_colors[1] = (0., 0., 0., 1.)
         self.assertIsNone(_tagged_intact(first))
-        self.assertEqual([_write_brep(child.wrapped) for child in consumers[1:]], unchanged)
+        self.assertEqual([_shape_brep_bytes(child.wrapped) for child in consumers[1:]], unchanged)
         self.assertTrue(all(
             child.children[0].children[0].cad_face_ordinal_colors[1] == (0., 1., 0., 1.)
             for child in consumers[1:]

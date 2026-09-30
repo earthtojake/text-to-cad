@@ -153,8 +153,8 @@ class TreeReflectsWrittenStep(unittest.TestCase):
         with mock.patch.dict(os.environ, {"CADGEN_CACHE_DIR": str(self.store)}):
             source_tree = read_record(self.project / "rot_cap.py")["tree"]
             self.assertGreater(_volumes(materialize(source_tree))[0], 40.0)
-        # A fresh worker exercising disk op-memo hits must preserve that same
-        # source geometry and identity, regardless of the lossy saved geometry.
+        # A forced rebuild in a fresh process must reproduce that same source
+        # geometry and identity, regardless of the lossy saved geometry.
         self._run("rot_cap.py")
         with mock.patch.dict(os.environ, {"CADGEN_CACHE_DIR": str(self.store)}):
             self.assertEqual(read_record(self.project / "rot_cap.py")["tree"], source_tree)

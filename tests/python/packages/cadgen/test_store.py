@@ -537,10 +537,11 @@ class TreeBounds(StoreCase):
     def test_translations_reuse_the_same_tight_box_in_memory_and_on_disk(self) -> None:
         from build123d import Compound, Location
 
-        from cadgen._internal import component_package, op_memo
+        from cadgen._internal import component_package
+        from cadgen.store import bounds
         from cadgen.store.build import build_tree_from_compound
 
-        op_memo.clear()
+        bounds.clear()
 
         def bank(offset: float) -> Compound:
             left = Location((-20, 0, 0)) * self.nurbs_cylinder()
@@ -562,13 +563,13 @@ class TreeBounds(StoreCase):
 
             # Cleared memory: the second build reads the disk tier, so an
             # unchanged assembly measures nothing at all.
-            op_memo.clear()
+            bounds.clear()
             calls.clear()
             _h, warm, _s = build_tree_from_compound(bank(0), root_name="bank")
             self.assertEqual(len(calls), 0, "an unchanged occurrence is not measured again")
             self.assertEqual(warm["bbox"], cold["bbox"])
 
-            op_memo.clear()
+            bounds.clear()
             calls.clear()
             _h, moved, _s = build_tree_from_compound(bank(5), root_name="bank")
             self.assertEqual(len(calls), 0, "translation does not repeat surface extrema")
@@ -576,9 +577,10 @@ class TreeBounds(StoreCase):
 
     def test_rotation_changes_the_measured_box_without_changing_caller_placement(self) -> None:
         from build123d import Location
-        from cadgen._internal import component_package, op_memo
+        from cadgen._internal import component_package
+        from cadgen.store import bounds
 
-        op_memo.clear()
+        bounds.clear()
         part = self.nurbs_cylinder()
         real = component_package.optimal_box
         with mock.patch.object(component_package, "optimal_box", wraps=real) as measure:
@@ -593,7 +595,7 @@ class TreeBounds(StoreCase):
                 self.assertEqual(before, tuple(after.Value(row, column) for row in (1, 2, 3) for column in (1, 2, 3, 4)))
                 self.assert_bounds(actual, {"min": expected[:3], "max": expected[3:]})
             self.assertEqual(measure.call_count, 2)
-            op_memo.clear()
+            bounds.clear()
             again = Location((-123, 321, -20), (90, 0, 0)) * part
             component_package._bbox_from_shape(again)
             self.assertEqual(measure.call_count, 2, "rotation-specific bounds survive RAM eviction")

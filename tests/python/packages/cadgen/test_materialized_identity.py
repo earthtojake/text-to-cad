@@ -279,16 +279,16 @@ class MaterializedIdentityTest(unittest.TestCase):
 
     def test_mesh_and_measurement_leave_geometry_intact_and_caller_flags_untouched(self):
         from OCP.BRepMesh import BRepMesh_IncrementalMesh
-        from cadgen._internal.op_memo import _write_brep
+        from cadgen._internal.component_package import _shape_brep_bytes
         from cadgen.store.build import _tagged_intact
         from cadgen.store.materialize import materialize
 
         tree, child = self.child(curved=True)
         _ = child.bounding_box()
         BRepMesh_IncrementalMesh(child.wrapped, 0.1, False, 0.5, False)
-        before = _write_brep(child.wrapped)
+        before = _shape_brep_bytes(child.wrapped)
         self.assertEqual(_tagged_intact(child), tree)
-        self.assertEqual(_write_brep(child.wrapped), before)
+        self.assertEqual(_shape_brep_bytes(child.wrapped), before)
         fresh = materialize(tree)
         self.assertFalse(child.wrapped.IsPartner(fresh.wrapped))
         self.assertEqual(_tagged_intact(fresh), tree)

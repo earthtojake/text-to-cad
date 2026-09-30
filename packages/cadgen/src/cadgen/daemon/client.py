@@ -62,19 +62,12 @@ _TIMED_OUT = object()
 # CADGEN_FFMPEG is the same kind of per-client choice: `snapshot --video` encodes
 # with the ffmpeg the CALLER has, and a warm worker's ambient PATH is whatever
 # shell happened to start the daemon.
-# CADGEN_OP_MEMO / CADGEN_OP_MEMO_DISK too: `CADGEN_OP_MEMO=0` is how a client
-# recomputes every kernel op, and a warm worker otherwise kept the daemon's
-# setting. The op memo reads both at call time, and with the memo off its RAM
-# tier is bypassed as well, so the job sees exactly the client's choice.
 FORWARDED_ENV_VARS = (
     "CADGEN_CACHE_DIR",
     "XDG_CACHE_HOME",
     "LOCALAPPDATA",
     "PYTHONPATH",
     "CADGEN_FFMPEG",
-    "CADGEN_MEMO_CACHE",
-    "CADGEN_OP_MEMO",
-    "CADGEN_OP_MEMO_DISK",
 )
 
 # The client's own ffmpeg, looked up once per process. Resolved HERE rather than

@@ -640,7 +640,7 @@ def _bbox_from_prepared_occurrences(walk: _Walk) -> dict[str, list[float]] | Non
     ``_document_walk`` already owns one privately decoded shape per canonical
     component and the exact native location of each parsed STEP occurrence.
     Use the component's verified BREP identity, native-leaf ordinal and exact
-    leaf rotation as the memo input, measure that leaf tightly on a miss, and
+    leaf rotation as the ``cadgen.store.bounds`` key, measure that leaf tightly on a miss, and
     apply only its removed final translation. No transformed local AABB is used.
 
     Any incomplete private input falls back to the ordinary composed-shape
@@ -651,8 +651,8 @@ def _bbox_from_prepared_occurrences(walk: _Walk) -> dict[str, list[float]] | Non
         from OCP.TopLoc import TopLoc_Location
         from OCP.gp import gp_Vec
 
-        from cadgen._internal import op_memo
         from cadgen._internal.component_package import _world_leaves, optimal_box
+        from cadgen.store.bounds import cached_box
 
         boxes: list[list[float]] = []
         for occurrence in walk.occurrences:
@@ -674,7 +674,7 @@ def _bbox_from_prepared_occurrences(walk: _Walk) -> dict[str, list[float]] | Non
                                for row in range(1, 4) for column in range(1, 5))
                 untranslated = leaf.Located(TopLoc_Location(transform))
 
-                box = op_memo.memoized_value(
+                box = cached_box(
                     _PREPARED_OCCURRENCE_BOUNDS_OP,
                     (str(entry["codec"]), str(entry["brep"]), leaf_ordinal,
                      struct.pack("<12d", *linear)),

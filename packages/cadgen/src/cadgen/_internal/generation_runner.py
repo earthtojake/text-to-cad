@@ -505,29 +505,13 @@ def _run_script_generator_body(
     progress: object | None = None,
     _defer_reference_scene: bool = False,
 ) -> LoadedStepScene | None:
-    # Kernel-op memoization (design/incremental-generation.md): installed here so
-    # every generator run — cold CLI or warm daemon worker — re-executes the model
-    # script against memoized build123d choke points. The cache lives in
-    # cadgen._internal.op_memo, which module eviction never touches, so a warm
-    # worker keeps it across requests. CADGEN_OP_MEMO=0 disables.
-    from cadgen._internal import op_memo
-
-    op_memo.install()
-    # Order-stable shape de-duplication (see determinism.py). Installed in the
-    # same breath as the op memo and for the same reason: both exist so that a
-    # re-executed model script produces the SAME geometry it produced last time.
-    # An op-memo entry that hands back identical shapes is worthless if the code consuming
-    # them re-keys the components anyway, so this has to be in force before the
-    # generator's first kernel call, not merely before the tree write.
+    # Order-stable shape de-duplication (see determinism.py): a re-executed model
+    # script should produce the SAME geometry it produced last time, and component
+    # identity is its bytes. This has to be in force before the generator's first
+    # kernel call, not merely before the tree write.
     from cadgen._internal import determinism
 
     determinism.install()
-    # Establish the canonical memo interface. Only the earlier worker
-    # bootstrap can enable reuse; a generic embedding may already have run
-    # authored initialization and cannot upgrade that untrusted snapshot.
-    from cadgen import memoization
-
-    memoization.install()
     generated_scene: LoadedStepScene | None = None
     # Deterministic closure capture (see run_script_generator's docstring): start from a
     # clean first-party module space, then record every first-party file executed while

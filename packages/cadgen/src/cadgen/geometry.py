@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "GeometryError", "GeometryIssue", "ClosestPoints", "MassProperties",
-    "closest_points", "overlap_volume", "is_valid", "is_sound", "topology_errors",
+    "closest_points", "overlap_volume", "is_sound", "topology_errors",
     "boundary_edges", "self_intersections", "mass_properties",
 ]
 
@@ -218,74 +218,11 @@ def overlap_volume(a: Solid, b: Solid) -> float:
         raise GeometryError(f"intersection computation failed: {exc}") from exc
 
 
-# --- Reused verdicts ------------------------------------------------------------
-#
-# The checks below are pure functions of the shape they are handed: its
-# geometry, placement and orientation. The op memo's value tier already keys
-# exactly that identity -- the location-stripped BREP digest and the location
-# matrix, bound to the loaded build123d/OCP runtime -- in its RAM and disk
-# tiers, so an identical shape gets the stored verdict instead of a rerun.
-# ``is_valid`` and ``is_sound`` store a bare boolean (``op_memo.memoized_check``);
-# build123d's own ``Shape.is_valid`` property is plain and stores nothing. The
-# diagnostics store more: a
-# verdict holds only issue codes and, per affected entity, its index in the
-# checked copy's ``TopExp.MapShapes`` order and its orientation; never native
-# geometry. A hit decodes it against a fresh private copy of the caller's
-# shape: the same owned entities, placements and orientations the kernel named
-# on the miss (``MapShapes`` order is a function of the BREP the key digests).
-# A check that raises stores nothing. An entity the index cannot address
-# stores None, which reruns the check on every call. The op name names the
-# check: change what one computes and change its name with it.
-#
-# A verdict is stored only for a shape worth its key (``_stored``): the key
-# digests the whole BREP and a miss writes an index entry, which for a small
-# shape costs more than the check. Median ms, direct / stored miss / disk hit
-# (macOS arm64, OCP 7.9.3):
-#
-#                        is_valid          is_sound
-#   edge                 0.009/0.37/0.08   0.022/0.40/0.09
-#   plane face           0.08/0.44/0.10    0.12/0.47/0.10
-#   cylinder solid       0.10/0.48/0.11    0.89/1.30/0.11
-#   box solid            0.30/0.78/0.18    0.62/1.21/0.20
-#   face with 16 holes   0.70/1.21/0.26    0.78/1.41/0.26
-#   plate with 64 holes  14.2/18.7/2.9     84.7/92.3/3.2
-#
-# A wire's digest outgrows its check at every size (512 edges: 2.0 direct,
-# 2.6 per disk hit), so a shape without faces is checked directly, as is one
-# with fewer than ``_STORED_EDGE_USES`` edge uses: a tiny gate never pays a
-# miss, at the price of the odd small solid's ``is_sound`` hit (the cylinder).
-# The diagnostics run the same kernel checks and follow the same rule.
-
-# Edge uses: each face's boundary edges as ``TopExp_Explorer`` visits them.
-# A box has 24, a cylinder 6, a plane face 4.
-_STORED_EDGE_USES = 16
-
-
-def _stored(wrapped) -> bool:
-    """Whether a verdict on ``wrapped`` is worth its key: faces and at least
-    ``_STORED_EDGE_USES`` edge uses. Counting stops at the threshold."""
-    from OCP.TopAbs import TopAbs_EDGE, TopAbs_FACE, TopAbs_ShapeEnum
-    from OCP.TopExp import TopExp_Explorer
-
-    if wrapped.ShapeType() in (TopAbs_ShapeEnum.TopAbs_VERTEX, TopAbs_ShapeEnum.TopAbs_EDGE,
-                               TopAbs_ShapeEnum.TopAbs_WIRE):
-        return False
-    if not TopExp_Explorer(wrapped, TopAbs_FACE).More():
-        return False
-    uses = TopExp_Explorer(wrapped, TopAbs_EDGE)
-    for _ in range(_STORED_EDGE_USES):
-        if not uses.More():
-            return False
-        uses.Next()
-    return True
-
-
 def _verdict_input(shape):
     """The native shape a pass/fail verdict is about, or None for a null shape.
 
-    Unlike the measurements, ``is_valid`` and ``is_sound`` accept null and
-    empty geometry: build123d's ``is_valid`` answers for it, and a gate in a
-    model body must not crash on an empty intermediate.
+    Unlike the measurements, ``is_sound`` accepts null and empty geometry: a
+    gate in a model body must not crash on an empty intermediate.
     """
     from build123d import Shape
 
@@ -295,114 +232,16 @@ def _verdict_input(shape):
     return None if wrapped is None or wrapped.IsNull() else wrapped
 
 
-def _entity_map(private):
-    from OCP.TopExp import TopExp
-    from OCP.TopTools import TopTools_IndexedMapOfShape
-
-    entities = TopTools_IndexedMapOfShape()
-    TopExp.MapShapes_s(private, entities)
-    return entities
-
-
-def _encode(entities, shapes) -> list | None:
-    codes = []
-    for shape in shapes:
-        index = entities.FindIndex(shape)
-        if not index:
-            return None
-        codes.append([index, int(shape.Orientation())])
-    return codes
-
-
-def _decode(entities, codes) -> tuple:
-    from OCP.TopAbs import TopAbs_Orientation
-
-    return tuple(_cast(entities.FindKey(index).Oriented(TopAbs_Orientation(orientation)))
-                 for index, orientation in codes)
-
-
-def _reused(op_name: str, wrapped, run, decode):
-    """``run(private)`` returns ``(answer, encoded)``; memoize ``encoded``.
-
-    ``private`` is a fresh owned copy of ``wrapped``. A miss returns the
-    kernel's own answer; a hit decodes the stored one against a fresh copy.
-    A shape the op memo cannot key is checked directly, as is a stored None
-    and a shape too small to be worth a key (``_stored``).
-    """
-    from cadgen._internal import op_memo
-
-    live = []
-
-    def compute():
-        private = _copy(wrapped)
-        answer, encoded = run(private)
-        live.append((private, answer))
-        return encoded
-
-    try:
-        # CADGEN_OP_MEMO=0 skips the key: its digest serializes the whole shape.
-        key = op_memo.oriented_shape_key(wrapped) if op_memo._enabled() and _stored(wrapped) else None
-    except Exception:  # noqa: BLE001 - an unkeyable shape is still checkable
-        key = None
-    if key is None:
-        compute()
-        return live[0][1]
-    encoded = op_memo.memoized_value(op_name, key, compute)
-    if live:
-        return live[0][1]
-    if encoded is None:
-        compute()
-        return live[0][1]
-    return decode(_copy(wrapped), encoded) if encoded else ()
-
-
-def is_valid(shape: Shape) -> bool:
-    """``BRepCheck_Analyzer``'s verdict on the shape: the same answer as
-    build123d's ``Shape.is_valid`` property, including for null and empty
-    shapes (a null shape is valid; an empty one gets BRepCheck's verdict:
-    an empty compound or solid passes, an empty shell or wire fails). A
-    shape with faces and enough edges stores its verdict and an identical
-    one (geometry, placement, orientation) reuses it; a smaller shape is
-    checked directly, which is cheaper than the key. A kernel failure raises
-    ``GeometryError`` and stores nothing. What is invalid, and where, is
-    ``topology_errors``'s question.
-    """
-    from cadgen._internal import op_memo
-    from OCP.BRepCheck import BRepCheck_Analyzer
-
-    wrapped = _verdict_input(shape)
-    if wrapped is None:
-        return True
-
-    def check() -> bool:
-        analyzer = BRepCheck_Analyzer(wrapped)
-        analyzer.SetParallel(True)
-        return bool(analyzer.IsValid())
-
-    try:
-        if not _stored(wrapped):
-            return check()
-        return op_memo.memoized_check("geometry.is_valid.v1", wrapped, check)
-    except GeometryError:
-        raise
-    except Exception as exc:
-        raise GeometryError(f"validity check failed: {exc}") from exc
-
-
 def is_sound(shape: Shape) -> bool:
     """The boolean kernel's argument check (``BRepAlgoAPI_Check``) passes the
     shape: BRepCheck-valid, no self-intersections, no too-small edges, and an
     argument type a boolean accepts. This is what a fuse or cut demands of an
     operand, and it can be expensive. A null or empty shape is not sound: the
     kernel rejects it as an argument type (``BOPAlgo_BadType``), a verdict,
-    not an error. A shape with faces and enough edges stores its verdict and
-    an identical one (geometry, placement, orientation) reuses it; a smaller
-    shape is checked directly. A check the kernel could not complete raises
-    ``GeometryError`` and stores nothing. Closure, solid count and signed
-    volume are separate questions; the faulty entities are
-    ``self_intersections``'s.
+    not an error. A check the kernel could not complete raises
+    ``GeometryError``. Closure, solid count and signed volume are separate
+    questions; the faulty entities are ``self_intersections``'s.
     """
-    from cadgen._internal import op_memo
     from OCP.BOPAlgo import BOPAlgo_CheckStatus
     from OCP.BRepAlgoAPI import BRepAlgoAPI_Check
 
@@ -410,8 +249,7 @@ def is_sound(shape: Shape) -> bool:
     if wrapped is None:
         return False  # BRepAlgoAPI_Check on a null shape: BOPAlgo_BadType
     inconclusive = (BOPAlgo_CheckStatus.BOPAlgo_CheckUnknown, BOPAlgo_CheckStatus.BOPAlgo_OperationAborted)
-
-    def check() -> bool:
+    try:
         # The constructor performs the check (self-intersections and small
         # edges both on, the kernel's defaults); Perform() would run it again.
         checker = BRepAlgoAPI_Check(wrapped)
@@ -421,11 +259,6 @@ def is_sound(shape: Shape) -> bool:
             if result.GetCheckStatus() in inconclusive:
                 raise GeometryError(f"boolean argument check was inconclusive: {result.GetCheckStatus().name}")
         return bool(checker.IsValid())
-
-    try:
-        if not _stored(wrapped):
-            return check()
-        return op_memo.memoized_check("geometry.is_sound.v1", wrapped, check)
     except GeometryError:
         raise
     except Exception as exc:
@@ -437,18 +270,21 @@ def topology_errors(shape: Shape) -> tuple[GeometryIssue, ...]:
 
     Codes are OCCT's ``BRepCheck_*`` status names. Open shells and reversed
     solids can have valid topology. Closure, signed volume and expensive
-    boolean self-intersection testing are separate questions. A shape with
-    faces and enough edges stores its verdict and an identical one
-    (geometry, placement, orientation) reuses it.
+    boolean self-intersection testing are separate questions.
     """
     from OCP.BRepCheck import BRepCheck_Analyzer, BRepCheck_NoError
+    from OCP.TopExp import TopExp
+    from OCP.TopTools import TopTools_IndexedMapOfShape
 
-    def run(private):
+    wrapped = _wrapped(shape)
+    try:
+        private = _copy(wrapped)
         analyzer = BRepCheck_Analyzer(private)
         if analyzer.IsValid():
-            return (), []
-        entities = _entity_map(private)
-        found = []
+            return ()
+        entities = TopTools_IndexedMapOfShape()
+        TopExp.MapShapes_s(private, entities)
+        issues = []
         for i in range(1, entities.Extent() + 1):
             entity = entities.FindKey(i)
             result = analyzer.Result(entity)
@@ -460,26 +296,17 @@ def topology_errors(shape: Shape) -> tuple[GeometryIssue, ...]:
                     key = (int(status), entities.FindIndex(context) if context is not None else 0)
                     if status != BRepCheck_NoError and key not in seen:
                         seen.add(key)
-                        found.append((status.name, (entity,) if context is None else (entity, context)))
+                        affected = (entity,) if context is None else (entity, context)
+                        issues.append(GeometryIssue(status.name, tuple(_cast(s) for s in affected)))
             collect(result.Status())
             result.InitContextIterator()
             while result.MoreShapeInContext():
                 context = result.ContextualShape()
                 collect(result.StatusOnShape(context), context)
                 result.NextShapeInContext()
-        if not found:
+        if not issues:
             raise GeometryError("topology is invalid but the kernel provided no diagnostic")
-        answer = tuple(GeometryIssue(code, tuple(_cast(s) for s in affected)) for code, affected in found)
-        encoded = [[code, _encode(entities, affected)] for code, affected in found]
-        return answer, None if any(codes is None for _, codes in encoded) else encoded
-
-    def decode(private, encoded):
-        entities = _entity_map(private)
-        return tuple(GeometryIssue(code, _decode(entities, codes)) for code, codes in encoded)
-
-    wrapped = _wrapped(shape)
-    try:
-        return _reused("geometry.topology_errors.v1", wrapped, run, decode)
+        return tuple(issues)
     except Exception as exc:
         raise GeometryError(f"topology check failed: {exc}") from exc
 
@@ -514,41 +341,27 @@ def self_intersections(shape: Shape) -> tuple[GeometryIssue, ...]:
 
     This can be expensive. Codes are OCCT's ``BOPAlgo_SelfIntersect``; affected
     entities are owned copies. Inconclusive/failed checks raise an exception.
-    A shape with faces and enough edges stores its verdict and an identical
-    one (geometry, placement, orientation) reuses it.
     """
     from OCP.BOPAlgo import BOPAlgo_CheckStatus
     from OCP.BRepAlgoAPI import BRepAlgoAPI_Check
 
-    def run(private):
+    wrapped = _wrapped(shape)
+    try:
+        private = _copy(wrapped)
         # This constructor performs the check; Perform() would run it again.
         checker = BRepAlgoAPI_Check(private, False, True)
         if checker.HasErrors():
             raise GeometryError("self-intersection checker failed")
-        found = []
+        issues = []
         for result in _items(checker.Result()):
             status = result.GetCheckStatus()
             if status != BOPAlgo_CheckStatus.BOPAlgo_SelfIntersect:
                 raise GeometryError(f"self-intersection check was inconclusive: {status.name}")
-            found.append((status.name, _items(result.GetFaultyShapes1()) + _items(result.GetFaultyShapes2())))
-        if not checker.IsValid() and not found:
+            entities = _items(result.GetFaultyShapes1()) + _items(result.GetFaultyShapes2())
+            issues.append(GeometryIssue(status.name, tuple(_cast(s) for s in entities or [private])))
+        if not checker.IsValid() and not issues:
             raise GeometryError("self-intersection check failed without diagnostics")
-        answer = tuple(GeometryIssue(code, tuple(_cast(s) for s in entities or [private]))
-                       for code, entities in found)
-        if not found:
-            return answer, []
-        entity_map = _entity_map(private)
-        encoded = [[code, _encode(entity_map, entities)] for code, entities in found]
-        return answer, None if any(codes is None for _, codes in encoded) else encoded
-
-    def decode(private, encoded):
-        entities = _entity_map(private)
-        return tuple(GeometryIssue(code, _decode(entities, codes) or (_cast(private),))
-                     for code, codes in encoded)
-
-    wrapped = _wrapped(shape)
-    try:
-        return _reused("geometry.self_intersections.v1", wrapped, run, decode)
+        return tuple(issues)
     except Exception as exc:
         raise GeometryError(f"self-intersection check failed: {exc}") from exc
 

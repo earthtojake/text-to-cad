@@ -1,12 +1,12 @@
 """Exact bounds and private preparation for bounded pinned-link descriptors.
 
-Only immutable numeric bounds enter the existing op index. Captured bytes,
-appearance recipes and native prototypes belong to one build invocation.
+Only immutable numeric bounds enter the store (``cadgen.store.bounds``).
+Captured bytes, appearance recipes and native prototypes belong to one build
+invocation.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
-from functools import lru_cache
 import hashlib
 import json
 import math
@@ -30,23 +30,6 @@ MAX_APPEARANCE_BYTES = 256 * 1024
 
 class Ineligible(ValueError):
     """The ordinary whole-document path must handle this descriptor."""
-
-
-@lru_cache(maxsize=1)
-def _native_identity() -> str:
-    # OCP.__version__ is exported by the loaded native extension, not inferred
-    # from build123d. Include the required no-VTK provider identity too; an
-    # installation using a different provider must not share this disk key.
-    import OCP
-    from importlib.metadata import PackageNotFoundError, version
-    native = getattr(OCP, "__version__", None)
-    try:
-        binding = version("cadquery-ocp-novtk")
-    except PackageNotFoundError as error:
-        raise Ineligible("missing native binding identity") from error
-    if type(native) is not str or not native or native == "unknown" or not binding:
-        raise Ineligible("unsupported native identity")
-    return f"native={native};provider=cadquery-ocp-novtk;binding={binding}"
 
 
 def _box_values(value: Any) -> tuple[float, ...]:
@@ -231,7 +214,8 @@ class Snapshot:
         return self.prepare_document().materialize(label)
 
     def bounds(self, *, shapes: dict[str, Any] | None = None) -> dict[str, list[float]]:
-        from cadgen._internal import component_package as cp, op_memo
+        from cadgen._internal import component_package as cp
+        from cadgen.store.bounds import cached_box
         from cadgen.store.materialize import _location_from_matrix, _placed_copy
         payloads, breps = dict(self.objects), dict(self.component_breps)
         entries = self.descriptor()["components"]
@@ -250,9 +234,7 @@ class Snapshot:
                     raise Ineligible("native bounds unavailable")
                 return _box_values([*box["min"], *box["max"]])
 
-            values = op_memo.memoized_value(
-                OP, (brep, struct.pack("<16d", *transform), _native_identity()), compute
-            )
+            values = cached_box(OP, (brep, struct.pack("<16d", *transform)), compute)
             boxes.append(_box_values(values))
         return {"min": [min(box[a] for box in boxes) for a in range(3)],
                 "max": [max(box[a] for box in boxes) for a in range(3, 6)]}

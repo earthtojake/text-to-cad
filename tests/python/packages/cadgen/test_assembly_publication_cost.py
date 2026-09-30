@@ -16,8 +16,8 @@ from tests.python.support.tmp_root import generated_cad_directory
 
 add_repo_path("packages/cadgen/src")
 
-from cadgen.store import build
-from cadgen._internal import component_package as cp, op_memo
+from cadgen.store import bounds, build
+from cadgen._internal import component_package as cp
 from cadgen.store.trees import get_tree
 
 mat = importlib.import_module("cadgen.store.materialize")
@@ -30,14 +30,13 @@ class Fixture(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.env = mock.patch.dict(os.environ, {
             "CADGEN_CACHE_DIR": str(self.root / "store"),
-            "CADGEN_COMPONENT_WORKERS": "1", "CADGEN_DAEMON": "0", "CADGEN_OP_MEMO": "1",
+            "CADGEN_COMPONENT_WORKERS": "1", "CADGEN_DAEMON": "0",
         })
         self.env.start()
         self.addCleanup(self.env.stop)
-        op_memo.install()
-        op_memo.clear()
+        bounds.clear()
         mat.reset_memo()
-        self.addCleanup(op_memo.clear)
+        self.addCleanup(bounds.clear)
         self.addCleanup(mat.reset_memo)
 
     @staticmethod
@@ -139,7 +138,7 @@ class PlacementTests(Fixture):
             expected = self.result(shape, name="old")
         for state in ("warm", "disk", "force"):
             if state == "disk":
-                op_memo.clear()
+                bounds.clear()
                 mat.reset_memo()
             actual = self.result(self.parent(), force=state == "force", name=state)
             self.assertEqual(expected, actual, state)
@@ -170,13 +169,12 @@ class BoundsTests(Fixture):
             expected_boxes.append([v + translation[i % 3] for i, v in enumerate(box)])
         expected = {"min": [min(b[a] for b in expected_boxes) for a in range(3)],
                     "max": [max(b[a] for b in expected_boxes) for a in range(3, 6)]}
-        for memo in ("1", "0"):
-            with mock.patch.dict(os.environ, {"CADGEN_OP_MEMO": memo}), \
-                    mock.patch.object(op_memo, "_tshape_digest", wraps=op_memo._tshape_digest) as digest:
-                op_memo.clear()
-                self.assertEqual(cp._bbox_from_shape(compound), expected)
-                self.assertEqual(cp._bbox_from_shape(compound), expected)
-            self.assertEqual(digest.call_count, 6 * 2 if memo == "1" else 0)
+        # Eight leaves of six prototypes: each call serializes each TShape once
+        # for its key, whether the boxes come from a measurement or from RAM.
+        with mock.patch.object(cp, "_shape_brep_bytes", wraps=cp._shape_brep_bytes) as serialized:
+            self.assertEqual(cp._bbox_from_shape(compound), expected)
+            self.assertEqual(cp._bbox_from_shape(compound), expected)
+        self.assertEqual(serialized.call_count, 6 * 2)
 
 
 class ReadbackTests(Fixture):

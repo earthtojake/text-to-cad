@@ -128,7 +128,7 @@ def worker_baseline(samples: Iterable[int], *, seed: int, previous: int = 0) -> 
 
     The minimum of the samples, never below ``seed``. Only workers that are idle
     and have served no job are offered: a worker that has run a body retains its
-    geometry and op-memo caches, so its RSS answers what a build cost, and
+    geometry and caches, so its RSS answers what a build cost, and
     admitting it would let a fat idle worker inflate the very reservation that
     keeps it resident. Among never-used workers the only spread is a partial
     import, which reads low and the seed absorbs, so the minimum is both the

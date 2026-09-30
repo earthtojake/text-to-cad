@@ -15,7 +15,6 @@ address-derived order. These tests pin both halves of it.
 from __future__ import annotations
 
 import unittest
-from unittest import mock
 
 from tests.python.support.paths import add_repo_path
 
@@ -150,18 +149,13 @@ class ShapeDedupOrderTest(unittest.TestCase):
 
 
 class LiveVertexHashTest(unittest.TestCase):
-    """Set membership follows live geometric equality, including native edits."""
+    """``Vertex.__hash__`` follows the live native point, rounded to 1e-6, while
+    equality stays build123d's own: pointer identity."""
 
     def setUp(self) -> None:
-        import os
+        from cadgen._internal import determinism
 
-        from cadgen._internal import determinism, op_memo
-
-        op_memo.install()
         determinism.install()
-        self.env = mock.patch.dict(os.environ, {"CADGEN_OP_MEMO": "1"})
-        self.env.start()
-        self.addCleanup(self.env.stop)
 
     def assert_same_bucket(self, first, second) -> None:
         self.assertEqual(first, second)
@@ -169,11 +163,16 @@ class LiveVertexHashTest(unittest.TestCase):
         self.assertEqual(len({first, second}), 1)
         self.assertEqual({first: "found"}[second], "found")
 
-    def test_nearly_coincident_vertices_hash_at_equality_precision(self) -> None:
+    def test_pointer_distinct_vertices_share_a_bucket_but_stay_separate(self) -> None:
         from build123d import Vertex
 
-        self.assert_same_bucket(Vertex(0.0000004, 0, 0), Vertex(0.00000045, 0, 0))
-        self.assertNotEqual(Vertex(0.0000004, 0, 0), Vertex(0.0000006, 0, 0))
+        first, second = Vertex(1, 2, 3), Vertex(1, 2, 3)
+        self.assertNotEqual(first, second)
+        self.assertEqual(hash(first), hash(second))
+        self.assertEqual(len({first, second}), 2)
+        self.assert_same_bucket(first, Vertex(first.wrapped))
+        self.assertEqual(hash(Vertex(0.0000004, 0, 0)), hash(Vertex(0.00000045, 0, 0)))
+        self.assertNotEqual(hash(Vertex(0.0000004, 0, 0)), hash(Vertex(0.0000006, 0, 0)))
 
     def test_native_point_edit_ignores_stale_python_coordinates(self) -> None:
         from build123d import Vertex
@@ -181,11 +180,13 @@ class LiveVertexHashTest(unittest.TestCase):
         from OCP.gp import gp_Pnt
 
         vertex = Vertex(1, 2, 3)
+        alias = Vertex(vertex.wrapped)
         before = hash(vertex)
         BRep_Builder().UpdateVertex(vertex.wrapped, gp_Pnt(4, 2, 3), 1e-7)
         self.assertEqual(vertex.X, 1, "the fixture must retain stale Python coordinates")
         self.assertNotEqual(hash(vertex), before)
-        self.assert_same_bucket(vertex, Vertex(4, 2, 3))
+        self.assertEqual(hash(vertex), hash(Vertex(4, 2, 3)))
+        self.assert_same_bucket(vertex, alias)
 
     def test_native_location_edit_uses_current_world_coordinates(self) -> None:
         from build123d import Location, Vertex
@@ -193,51 +194,7 @@ class LiveVertexHashTest(unittest.TestCase):
         vertex = Vertex(1, 2, 3)
         vertex.wrapped.Location(Location((3, 4, 5)).wrapped)
         self.assertEqual((vertex.X, vertex.Y, vertex.Z), (1, 2, 3))
-        self.assert_same_bucket(vertex, Vertex(4, 6, 8))
-
-    def test_vertex_and_generic_shape_wrappers_agree(self) -> None:
-        from build123d import Shape, Vertex
-
-        vertex = Vertex(1, 2, 3)
-        self.assert_same_bucket(vertex, Shape(vertex.wrapped))
-        self.assert_same_bucket(vertex, Shape(Vertex(1, 2, 3).wrapped))
-
-    def test_disabled_memo_keeps_pointer_distinct_vertices_separate(self) -> None:
-        import os
-
-        from build123d import Vertex
-        from OCP.BRep import BRep_Builder
-        from OCP.gp import gp_Pnt
-
-        with mock.patch.dict(os.environ, {"CADGEN_OP_MEMO": "0"}):
-            first, second = Vertex(1, 2, 3), Vertex(1, 2, 3)
-            self.assertNotEqual(first, second)
-            self.assertEqual(hash(first), hash(second))
-            self.assertEqual(len({first, second}), 2)
-            alias = Vertex(first.wrapped)
-            BRep_Builder().UpdateVertex(first.wrapped, gp_Pnt(4, 2, 3), 1e-7)
-            self.assert_same_bucket(first, alias)
-
-    def test_install_order_keeps_equal_vertices_in_one_bucket(self) -> None:
-        from build123d import Shape, Vertex
-        from cadgen._internal import determinism, op_memo
-
-        original_vertex_hash = Vertex.__hash__
-        try:
-            for memo_first in (True, False):
-                with self.subTest(memo_first=memo_first):
-                    op_memo.uninstall()
-                    Vertex.__hash__ = Shape.__hash__
-                    with mock.patch.object(determinism, "_installed", False):
-                        installers = (op_memo.install, determinism.install)
-                        if not memo_first:
-                            installers = installers[::-1]
-                        for install in installers:
-                            install()
-                        self.assert_same_bucket(Vertex(0.0000004, 0, 0), Vertex(0.00000045, 0, 0))
-        finally:
-            op_memo.install()
-            Vertex.__hash__ = original_vertex_hash
+        self.assertEqual(hash(vertex), hash(Vertex(4, 6, 8)))
 
 
 if __name__ == "__main__":

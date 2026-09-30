@@ -672,7 +672,7 @@ class Pool:
     def unbind_idle(self) -> None:
         """A bound worker idle for ``idle_unbind_seconds()`` returns to the spare set
         (spares beyond K exit). Its model's next build rebinds a spare -- no import
-        repaid, a cold RAM op-memo tier. This only releases process state;
+        repaid. This only releases process state;
         persistent cache objects remain available to the replacement worker.
 
         Subject-less burst workers get a much shorter grace so the next browser

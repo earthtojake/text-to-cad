@@ -14,8 +14,8 @@
 5. any declared output does not match ``outputs``.
 
 Evaluated once in the requesting process (fast, no kernel import) and again on
-the worker immediately before building. Recursion in (3) is memoized per request
-through op-memo entries. Mesh tolerances and argv flags are not inputs.
+the worker immediately before building. Recursion in (3) is memoized per request.
+Mesh tolerances and argv flags are not inputs.
 """
 
 from __future__ import annotations

@@ -2,7 +2,7 @@
 documents has to be a real command.
 
 Skills are the product, and an agent runs what they say verbatim; the package's
-markdown (README, STORE, SNAPSHOTS, MEMO) is what ships in the wheel beside them. A renamed or
+markdown (README, STORE, SNAPSHOTS) is what ships in the wheel beside them. A renamed or
 retired command leaves the docs still confidently teaching it — that is how
 `scripts/test/test-installed.sh` came to check four commands that no longer
 existed, and how `cadgen step export` would have outlived its deletion.

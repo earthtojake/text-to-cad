@@ -7,7 +7,7 @@ Layout (``STORE.md`` is the full account; read it before changing anything here)
       index/document/<sha>    ARTIFACT side: sha256(file bytes) -> tree (+ mesh ledger)
       index/model/<key>       records — one per model, keyed by its script path
       index/output/<key>      which model wrote the file at this path (badge only)
-      index/op/<key>          op-memo entries -> object hash
+      index/bounds/<key>      bounding boxes of stored geometry (store/bounds.py)
       index/mesh/<key>        tessellation entries -> object hash
 
 The two sides never point at each other from the artifact side: no object names

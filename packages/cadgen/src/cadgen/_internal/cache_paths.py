@@ -1,7 +1,7 @@
 """The store root, spelled for the modules that predate ``cadgen.store``.
 
 ONE resolution rule lives in :mod:`cadgen.store.paths`; this module re-exports
-it so the op memo and the viewer's tessellation cache keep one spelling of
+it so the viewer's tessellation cache keeps one spelling of
 where the store is. Everything under
 the root is best-effort: deleting any entry — or the whole root — costs a
 rebuild, never correctness.

@@ -166,34 +166,6 @@ deliberately:
   decouple (export it once, then treat the export like any other document).
   Read it with `cadgen.read_step`, below.
 
-### Memoizing expensive geometry helpers
-
-`from cadgen import memo` adds an optional `@memo` to a parameterized
-geometry helper. The model still takes no arguments and declares all files;
-the helper returns a shape and creates no files. Use it for expensive repeated
-booleans or builders, returning an ordinary `Solid` or a builder's `.part`.
-Place reusable factories in a helper module so changing the parent's placement
-or configuration leaves their source unchanged. Keys include each helper's
-whole captured source file, so editing another function in that file also
-invalidates it.
-
-The decorator declares a **pure function under an unmodified CAD/math runtime**:
-geometry depends only on immutable arguments, defaults, globals and deterministic
-helpers. No I/O, random/time/environment inputs, progress reporting, child model
-calls, callbacks, identity-dependent logic or dependency monkeypatches. This is
-an author precondition, not an automatically proven Python sandbox. Supported
-finite scalars/tuples and a bounded CAD/math vocabulary can reuse results;
-unsupported code, mutable inputs and calls within an already-open builder keep
-ordinary execution. Cheap primitives often cost less to execute than to verify
-and reconstruct, so do not decorate every function.
-
-Normal warm workers and transient child workers support reuse. Generic embedded
-calls execute the body. Eligible misses, hits and `CADGEN_MEMO_CACHE=0` use
-the same private canonical return codec; native handle identity is not an input
-or an output contract. Missing objects recover by running the factory. No
-additional caching, ownership or invalidation helpers belong in authored code.
-`MEMO.md` in the installed cadgen package specifies the complete contract.
-
 ### Children
 
 A child is just an import: model scripts are real modules, and
@@ -281,6 +253,26 @@ source text. The values feeding them are tracked like any other input (a
 constant behind an `out=` makes the model stale. The module top must still stay
 kernel-free so checking the model's declarations stays cheap.
 
+### Splitting for rebuild speed
+
+cadgen never caches work inside a model: a model whose inputs changed runs
+from scratch, and one whose inputs did not is skipped whole. Rebuild speed
+therefore comes from how the project is split:
+
+- Give a part its own model when it takes more than about 15 s to build, or
+  when it is edited independently of its neighbours: a thin entry file whose
+  `@step` function calls a factory in `lib/`, placed by its parent like any
+  child. An edit then rebuilds that part and relinks the parent; its siblings
+  stay current, and stale children build in parallel.
+- Keep geometry in `lib/` factories. A model reruns only when code it reaches
+  changes, so an edit to one factory leaves the models that never call it
+  current.
+- One entry file per expensive model: every `@step` function in a file is
+  stale when any line of that file changes.
+
+A part that builds in a second or two gains nothing from its own file; check
+timings with `--verbose` before splitting further.
+
 ### Annotation caching
 
 Annotation-only edits may reuse cached geometry; computed or imported
@@ -309,8 +301,9 @@ still cached, and an unchanged parent remains a no-op.
 
 Use a separate model when the mirrored part needs independent outputs or reuse
 across assemblies or parent rebuilds. Its result can then be linked and placed
-like any other child. Eligible factory/operation caches may also reuse inline
-work; separate models add a model-level cache boundary, not basic cache safety.
+like any other child. A separate model is also the unit of reuse: cadgen
+never caches work inside a model, so an unchanged model is skipped whole and
+a changed one runs whole (see [Splitting for rebuild speed](#splitting-for-rebuild-speed)).
 
 For independently exported left/right variants, a shared factory is one option:
 

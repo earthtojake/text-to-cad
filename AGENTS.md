@@ -78,8 +78,7 @@ for the full flow, the resume path, the rehearsal, and local/manual fallbacks.
   away, and the README names the link. Read the README, then follow the one
   link — not the tree. What exists:
   - `packages/cadgen/`: `STORE.md` (the store contract — sectioned, with a
-    table of contents), `MEMO.md` (`@memo`, and the process-wide geometric
-    `Shape` identity it installs), `SNAPSHOTS.md` (snapshot `--debug` timings).
+    table of contents), `SNAPSHOTS.md` (snapshot `--debug` timings).
   - `packages/core/docs/`: `render-pipeline.md`, `resource-ownership.md`,
     `tube-deformation.md`.
   - `packages/ui/docs/`: `settings-ui.md` (BINDING for any settings control),

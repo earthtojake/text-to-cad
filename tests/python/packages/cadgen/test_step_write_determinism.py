@@ -27,14 +27,12 @@ The same contract, one layer down in the numbers themselves: IEEE-754 has two
 zeros, OCCT prints both, and which one a coordinate lands on follows the
 operation path that produced the shape rather than the shape. The writer's last
 canonicalization normalizes the sign of zero, and the tests at the bottom of
-this file cover the pass on raw text and end to end over two operation paths.
+this file cover the pass on raw text and end to end.
 """
 
 from __future__ import annotations
 
-import contextlib
 import hashlib
-import io
 import os
 import tempfile
 import unittest
@@ -42,7 +40,6 @@ from pathlib import Path
 from unittest import mock
 
 from tests.python.support.paths import add_repo_path
-from tests.python.support.tmp_root import generated_cad_directory
 
 add_repo_path("packages/cadgen/src")
 
@@ -395,28 +392,6 @@ class StepWriteDeterminismTest(unittest.TestCase):
             self.assertEqual(len(set(colours)), 6, "all six authored colors survive")
 
 
-# A fused pair of boxes with every edge filleted. The fuse leaves coincident
-# duplicate edges, which the op memo's geometric identity collapses and a
-# memo-less run does not -- so `fillet` sees a different edge list for the same
-# solid, and the fillet faces' axes land on the other IEEE zero.
-# Before the negative-zero pass this pair wrote byte-different STEPs whose
-# ENTIRE diff was `DIRECTION('',(0.,1.,0.))` vs `DIRECTION('',(-0.,1.,0.))`.
-FILLETED_FUSE = """\
-from build123d import Box, Pos, fillet
-from cadgen import step
-
-
-@step(out='fused.step')
-def fused():
-    a = Box(20, 12, 6)
-    b = Pos(20, 0, 0) * Box(20, 12, 6)
-    return fillet((a + b).edges(), radius=1.0)
-
-
-if __name__ == '__main__':
-    fused()
-"""
-
 # Every real spelling OCCT's writer can put in a numeric field, paired with
 # what the canonical file must carry.
 NEGATIVE_ZERO_CASES = [
@@ -508,51 +483,6 @@ class WrittenStepCarriesNoNegativeZeroTest(unittest.TestCase):
                 written,
                 step_export._normalize_negative_zero_reals(raw.read_bytes()),
             )
-
-
-class MemoPathWritesIdenticalBytesTest(unittest.TestCase):
-    def test_op_memo_on_and_off_write_the_same_step(self) -> None:
-        """Same source, same geometry, two operation paths: the op memo
-        collapses coincident duplicate edges after a fuse, so `fillet` runs
-        against a different edge list with ``CADGEN_OP_MEMO=1`` than with
-        ``=0``. Law 5 says the document's bytes -- and the content hash every
-        door keys it by -- must not know the difference.
-
-        Component BREP bytes are a separate question: memoized canonicalization
-        is allowed to change those (MEMO.md), so this pins the written document,
-        not the tree hash."""
-        from cadgen._internal.step_hash import step_file_hash
-        from cadgen.cli._run_model import run_model_argv
-
-        with generated_cad_directory(prefix="cadgen-negative-zero-") as folder:
-            root = Path(folder)
-            written = {}
-            hashes = {}
-            for memo in ("1", "0"):
-                script = root / f"memo{memo}" / "fused.py"
-                script.parent.mkdir(parents=True, exist_ok=True)
-                script.write_text(FILLETED_FUSE, encoding="utf-8")
-                env = {
-                    "CADGEN_CACHE_DIR": str(root / f"store{memo}"),
-                    "CADGEN_DAEMON": "0",
-                    "CADGEN_OP_MEMO": memo,
-                }
-                capture = io.StringIO()
-                with mock.patch.dict(os.environ, env), contextlib.redirect_stdout(
-                    capture
-                ), contextlib.redirect_stderr(capture):
-                    result = run_model_argv([str(script)])
-                    self.assertEqual(0, result, capture.getvalue())
-                document = script.parent / "fused.step"
-                written[memo] = document.read_bytes()
-                hashes[memo] = step_file_hash(document)
-
-            self.assertEqual(written["1"], written["0"], "memo path changed the STEP bytes")
-            self.assertNotIn(b"-0.,", written["1"])
-            # The hash every door and `index/document` key the saved document
-            # by, which is what the divergence was orphaning.
-            self.assertEqual(hashes["1"], hashes["0"])
-            self.assertEqual(hashlib.sha256(written["1"]).hexdigest(), hashes["1"])
 
 
 if __name__ == "__main__":

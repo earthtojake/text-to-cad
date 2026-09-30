@@ -183,51 +183,47 @@ def _bbox_from_shape(shape: Any) -> dict[str, list[float]] | None:
     Measured PER LEAF and merged, not once over the whole compound, because a
     leaf's box is a pure function of its geometry and rotation. Translation
     shifts the six bounds without repeating the surface-extrema calculation.
-    ``op_memo.memoized_value`` keeps the untranslated box in the warm worker
-    and on disk, so translated instances share that calculation. Tight bounds
+    ``cadgen.store.bounds`` keeps the untranslated box in the warm worker and
+    in the store, so translated instances share that calculation. Tight bounds
     cost ~0.08 ms per face, which a whole
     150k-face assembly could not absorb on every finalize but an unchanged
     occurrence never pays twice.
 
-    The memo key's content digest serializes the leaf's geometry. Occurrences
+    The key's content digest serializes the leaf's geometry. Occurrences
     of one prototype share its TShape, and nothing runs between two leaves of
     this read-only traversal that could edit it, so the digest is computed once
     per TShape encountered here and never kept past the call: a 2400-occurrence
     assembly of 470 prototypes serializes 470 shapes, not 2400.
     """
     try:
-        from cadgen._internal import op_memo
         from OCP.TopLoc import TopLoc_Location
         from OCP.gp import gp_Vec
 
+        from cadgen.store.bounds import cached_box
+
         boxes = []
         digests: dict[Any, str] = {}
-        memoized = op_memo._enabled()
         for leaf in _world_leaves(shape.wrapped):
             transform = leaf.Location().Transformation()
             translation = tuple(transform.TranslationPart().Coord())
             transform.SetTranslationPart(gp_Vec(0.0, 0.0, 0.0))
             untranslated = leaf.Located(TopLoc_Location(transform))
-            if not memoized:
-                # A disabled memo keys nothing: measure without serializing.
-                box = optimal_box(untranslated)
-                if box is not None:
-                    boxes.append([value + translation[index % 3] for index, value in enumerate(box)])
-                continue
             try:
                 tshape = leaf.TShape()
                 digest = digests.get(tshape)
             except TypeError:  # an unhashable native handle: digest this leaf alone
                 tshape, digest = None, None
             if digest is None:
-                digest = op_memo._tshape_digest(untranslated)
+                digest = hashlib.sha256(_shape_brep_bytes(untranslated)).hexdigest()
                 if tshape is not None:
                     digests[tshape] = digest
-            box = op_memo.memoized_value(
-                # The op_name names the FUNCTION: change what this computes and
-                # change the name (or _OP_MEMO_VERSION) with it.
-                "occurrence_bbox.optimal.untranslated.v1",
-                (digest, op_memo._location_key(untranslated)),
+            rotation = struct.pack("<12d", *(transform.Value(row, column)
+                                             for row in range(1, 4) for column in range(1, 5)))
+            box = cached_box(
+                # The name names the FUNCTION: change what this computes and
+                # change the name with it.
+                "occurrence_bbox.optimal.untranslated.v2",
+                (digest, rotation),
                 lambda untranslated=untranslated: optimal_box(untranslated),
             )
             if box is not None:

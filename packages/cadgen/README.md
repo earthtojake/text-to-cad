@@ -24,14 +24,13 @@ submits a document's compile as a job to the same build pool every door uses.
 
 ## The rest of the package's documentation
 
-This file holds the LAWS. Three documents beside it hold the mechanisms the
+This file holds the LAWS. Two documents beside it hold the mechanisms the
 laws constrain; a law that governs one links to it, and where a mechanism
 document and this one disagree, the mechanism document is right.
 
 | Document | What it is for | Go there when |
 |---|---|---|
 | [`STORE.md`](STORE.md) | The store's contract: layout, the two-sides law, tree/record shapes, the gate, invariants, link-vs-component, concurrency, GC, the daemon, lazy children, editing previews, debugging. Sectioned, with a table of contents | changing anything that writes to or reads from `~/.cache/cadgen`, or any build, door or reader that depends on it |
-| [`MEMO.md`](MEMO.md) | `@memo`: the author's purity contract, what declines reuse, and the three statements about process-wide geometric `Shape` identity while the decorator is installed | adding, using or diagnosing a memoized geometry factory — and before relying on `is_same`, `==` or `hash()` of a shape |
 | [`SNAPSHOTS.md`](SNAPSHOTS.md) | Snapshots: display presets, what a mesh, robot or drawing snapshot draws (the CAD Viewer's own scene for it), requests and OUT, sizes, and `--debug --json` — every measured browser stage, what each one covers, and which durations must not be added together | changing what a snapshot draws or accepts, or reading snapshot timings |
 
 ## The design laws
@@ -77,7 +76,7 @@ this one:
 
 `~/.cache/cadgen` is the store: content-addressed objects (a model's result
 tree and the components it is made of) and input-addressed index entries
-(the per-model record, the document → tree map, op-memo and tessellation
+(the per-model record, the document → tree map, bounds and tessellation
 entries) — data derivable from sources and documents, and nothing else. Its
 layout, formats, gate, two-sides law and invariants are the contract in
 [`STORE.md`](STORE.md); read it before touching anything that writes to or
@@ -124,12 +123,21 @@ A STEP or DXF is pure geometry. Provenance, kinematics, and context ride
 the sidecar; the artifact separated from everything else is a plain
 importable file.
 
-### 5. Byte determinism
+### 5. Byte determinism is the writers' promise, not the kernel's
 
-Same inputs, same bytes, every format — STEP (canonicalized NAUO ids and
-presentation-style ordering), meshes (one deterministic tessellator), DXF
-(geometry-ordered emitter). Content-addressing and every freshness ledger
-depend on it.
+cadgen's writers are pure: the same shapes give the same bytes, in every
+format — STEP (canonicalized NAUO ids and presentation-style ordering), meshes
+(one deterministic tessellator), DXF (geometry-ordered emitter). The geometry
+kernel makes no such promise. Two runs of one model can differ in a last digit
+or in the order of the pieces a boolean returns, and cadgen neither hides that
+nor depends on it. Equal bytes mean reuse; different bytes cost a
+recomputation (a re-mesh, a parent recompose) and never a wrong answer.
+Content addresses stay byte hashes; whether a model runs is decided by its
+sources (`STORE.md` §4), never by its outputs being reproducible. Compare two
+builds by geometry within a tolerance, never by file hash.
+*Pressure-test*: build one model twice, each from an empty store. If the bytes
+differ, nothing fails, and the second build's outputs are as correct as the
+first's.
 
 ### 6. One surface, three faces
 
@@ -150,14 +158,11 @@ tessellated as stored. One name, one validator, no synonyms.
 Geometry queries are a Python library surface, separate from document-format
 verbs. `read_step(path)` returns build123d geometry; `read_scene(path)` returns
 revision-scoped occurrence/selector views with caller-owned world geometry.
-`cadgen.geometry` provides `closest_points`, `overlap_volume`, `is_valid`,
-`is_sound`, `topology_errors`, `boundary_edges`, `self_intersections` and
+`cadgen.geometry` provides `closest_points`, `overlap_volume`, `is_sound`,
+`topology_errors`, `boundary_edges`, `self_intersections` and
 `mass_properties`. These operations accept native geometry and return facts;
 selection, units, thresholds, exclusions and verdicts belong to the caller's
-script. The kernel checks (`is_valid`, `is_sound`, `topology_errors`,
-`self_intersections`) are pure functions of the shape, so their verdicts are
-stored and reused for an identical shape through the op memo's value tier
-([`STORE.md`](STORE.md) §2, [`MEMO.md`](MEMO.md)). The inspect
+script. Every call runs the kernel (law 18). The inspect
 CLI and `step.inspect` are removed, with an immediate migration error.
 The contracts live in [`step_scene.py`](src/cadgen/step_scene.py) and
 [`geometry.py`](src/cadgen/geometry.py). They import no kernel at namespace
@@ -297,6 +302,23 @@ file it was asked for.
 *Pressure-test*: build a part that declares meshes but no kinematics,
 materials, or animation; no
 `.step.json` may appear beside it.
+
+### 18. Caches sit around a model run, never inside it
+
+The gate decides whether a model runs at all (`STORE.md` §4), and the store
+derives everything render-side from the bytes the run wrote (law 2). Inside a
+run, every modeling operation executes: cadgen never replays a stored result,
+never substitutes a copy for what an operation returned, and never changes how
+build123d compares shapes — `==`, `hash()` and `is_same` are build123d's. A
+script therefore behaves the same inside cadgen as under plain Python. Two
+hooks remain, and neither changes a result: `determinism.py` fixes the
+iteration order of build123d's de-duplications, and lazy children defer a
+child's geometry until it is read (`STORE.md` §9a). An expensive or
+independently edited part gets its speed by being its own model, never from a
+cache inside one.
+*Pressure-test*: call a model's function under plain Python and inside a
+cadgen build; the geometry it returns, and the answer to every `==` and
+`is_same` along the way, are the same.
 
 ## The shape of the package
 

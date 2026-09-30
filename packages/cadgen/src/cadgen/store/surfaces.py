@@ -4,6 +4,7 @@ from __future__ import annotations
 import hashlib
 import json
 import struct
+from functools import lru_cache
 from typing import Any
 
 from cadgen.store.index import read_entry, write_entry
@@ -63,8 +64,29 @@ def producer_fields(value: dict) -> dict:
     return {key: item for key, item in value.items() if key != "producerKey"}
 
 
+@lru_cache(maxsize=1)
+def _runtime_versions() -> tuple[str, str, str]:
+    """The loaded build123d, OCP and cadquery-ocp-novtk versions.
+
+    An unknown version is a ValueError: extraction output must never share a
+    producer identity with an unrelated kernel build.
+    """
+    from importlib.metadata import PackageNotFoundError, version
+
+    import OCP
+    import build123d
+
+    try:
+        distribution = version("cadquery-ocp-novtk")
+    except PackageNotFoundError as error:
+        raise ValueError("surface extraction requires the cadquery-ocp-novtk distribution") from error
+    versions = (getattr(build123d, "__version__", None), getattr(OCP, "__version__", None), distribution)
+    if any(not isinstance(value, str) or not value.strip() or "unknown" in value.lower() for value in versions):
+        raise ValueError("surface extraction requires known build123d and OCP versions")
+    return versions
+
+
 def producer_identity() -> dict:
-    from cadgen._internal.op_memo import _runtime_versions
     build123d, ocp, distribution = _runtime_versions()
     identity = {"scheme": EXTRACTION_SCHEME, "surfFormat": SURF_FORMAT,
                 "build123d": build123d, "ocp": ocp, "cadqueryOcp": distribution}

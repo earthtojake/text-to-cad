@@ -85,7 +85,6 @@ def main() -> int:
         os.environ.update(CADGEN_DAEMON="1", CADGEN_DAEMON_SOCKET=str(Path(args.child_daemon_socket).expanduser().resolve()))
     from cadgen.cli._run_model import run_model_argv
     from cadgen.daemon import executors
-    from cadgen._internal import op_memo
     from cadgen.store.records import read_record
     from cadgen.store.trees import flatten
     from cadgen.step_scene import read_step
@@ -113,7 +112,6 @@ def main() -> int:
         for path, payload in variants[variant].items():
             path.write_bytes(payload)
         events = []
-        before_ops = op_memo.stats()
         started = time.perf_counter()
 
         def event_sink(event):
@@ -124,7 +122,6 @@ def main() -> int:
         with log_path.open("w", encoding="utf-8") as log, contextlib.redirect_stdout(log), contextlib.redirect_stderr(log):
             code = run_model_argv([str(model), "--verbose"])
         elapsed = (time.perf_counter() - started) * 1000
-        after_ops = op_memo.stats()
         record = read_record(model) or {}
         tree = flatten(record["tree"]) if record.get("tree") else {}
         stage_pattern = r"^\[cadgen\] (.+?) completed in ([0-9.]+)(ms|s)$"
@@ -179,7 +176,6 @@ def main() -> int:
         row = {"run": label, "variant": variant, "variantKind": variant_kind,
                "novelEdit": variant in novel_variants, "firstOutputDigestInStudy": first_output_digest,
                "measured": measured, "milliseconds": elapsed, "exit": code,
-               "ops": {key: value - before_ops.get(key, 0) for key, value in after_ops.items()},
                "events": events, "stages": stages, "tree": record.get("tree"), "documentHash": record.get("stepHash"),
                "actualOutputSha256": actual_outputs,
                "documentTree": record.get("documentTree"), "children": children,

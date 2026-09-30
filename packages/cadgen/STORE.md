@@ -22,7 +22,6 @@ right.
 | [9](#9-the-daemon) | The build pool, job ledger and slots | daemon, workers, jobs |
 | [9a](#9a-lazy-children) | Lazy children: pins at the call, forcing, exact-`Compound` reference preservation | a decorated call's return, parallel child builds |
 | [9b](#9b-editing-previews-and-explicit-saves) | Announced preview trees, the feed, explicit saves | the viewer's live-edit path |
-| [9c](#9c-pure-parameterized-features) | `@memo`'s store side (author contract: [`MEMO.md`](MEMO.md)) | operation reuse |
 | [10](#10-debugging) | `store why`, resolving a tree, resets smallest first | diagnosing staleness |
 | [11](#11-never) | The explicit prohibitions | before proposing any of them |
 
@@ -42,8 +41,7 @@ One word per concept; the code uses these words and no others.
 | **link** | a tree entry pointing at a child's tree hash, with placement and name |
 | **pin** | the child tree hash a parent resolved during a build (noun and verb) |
 | **record** | the mutable per-model entry in `index/`: current tree hash, closure, children pins, outputs |
-| **index** | the input-addressed side of the store: records, op-memo entries, mesh entries |
-| **op memo** | the per-kernel-operation cache (always two words) |
+| **index** | the input-addressed side of the store: records, bounds, mesh entries |
 | **closure** | the source files a model's build read |
 | **stale / current**, **gate** | the freshness state and the check that decides it |
 | **worker / spare / extra**, **job** | daemon vocabulary (the daemon's own documentation) |
@@ -51,12 +49,8 @@ One word per concept; the code uses these words and no others.
 Retired words: node, package, manifest, ref (as a store concept), scope, blob.
 They name nothing in the store, in its code or in its documentation.
 
-Two words are NOT retired, and each has exactly one meaning:
+One word is NOT retired, and it has exactly one meaning:
 
-- **op memo** — the per-operation cache above, always two words. `@memo` is
-  its one author-facing surface: the decorator's contract is
-  [`MEMO.md`](MEMO.md) and its store side is [§9c](#9c-pure-parameterized-features).
-  A bare "memo" for any other cache is still wrong.
 - **descriptor** — a render/export-side word: the owned descriptor an
   appearance is applied to (README law 17), and the bounded pinned-link
   descriptors of [§9a](#9a-lazy-children). It is never a synonym for a tree,
@@ -72,7 +66,7 @@ Two words are NOT retired, and each has exactly one meaning:
   index/output/<sha256(output path)>  {model}: which script wrote the file at this path
   index/component/<cid>               geometry-input entries → encoded BREP and intrinsic recipe
   index/surface/<surfaceInput>        attested extraction inputs → SURF object hash
-  index/op/<sha256(op key)>           op-memo entries → object hash, an inline value, or a recorded ValueError
+  index/bounds/<sha256(bounds key)>   bounding boxes of stored geometry, inline
   index/mesh/<key>                    tessellation entries → object hash
   index/drawing/<sha256(scheme + document hash)>  a 2D drawing's render payload → object hash
 ```
@@ -82,45 +76,20 @@ content: the daemon's job ledger, read over its socket (§7, §9). Editing
 previews use the same immutable objects, with ephemeral request handles in
 that ledger (§9b); there is no preview directory or persistent session index.
 
-Operation-index keys include the operation scheme, build123d version, loaded
-OCP binding version and cadquery-ocp-novtk provider distribution version.
-Unknown runtime versions disable persistent op reuse; normal computation remains available.
-These are input-index compatibility fields, never tree/component content or
-salts on document-byte keys. Computed results and disk hits share the same
-process LRU limit; dropping a RAM entry does not delete its persistent entry or
-invalidate a consumer's private geometry.
-
-An op that raises a plain `ValueError` is recorded inline, and a hit re-raises
-it without the kernel. A selector op (fillet, chamfer, shell, offset_3d,
-hollow) is reused, its result or its recorded `ValueError`, only when every
-vertex, edge, wire, face or shell argument (the edges a fillet rounds, the
-faces an offset opens) is a native sub-shape of `self`; any other call runs
-and writes no entry. OCCT finds those arguments by TShape and location and
-skips one that is not `self`'s own, while the key sees content: a fillet on
-edges held across a memoized op and the fillet on the solid's own
-content-identical edges share a key but not an answer. Booleans and factories
-run on copies of their operands, so their outcome is a function of the key
-and is reused whatever their arguments.
-
-`cadgen.geometry`'s checks (`is_valid`, `is_sound`, `topology_errors`,
-`self_intersections`) store their verdicts as inline `index/op` values, keyed
-by the check's name and version, the checked shape's location-stripped BREP
-digest, its location matrix and its orientation. Only a shape with faces and
-at least 16 edge uses is stored; for a smaller one the key and the write cost
-more than the check, so it is checked directly. `is_valid` and `is_sound`
-store a boolean. A diagnostic's verdict holds
-issue codes and each affected entity's `TopExp.MapShapes` index and
-orientation, never native geometry; a hit rebuilds the owned entities from a
-private copy of the caller's shape. A failed or inconclusive check stores
-nothing, and `CADGEN_OP_MEMO=0` runs every check. build123d's own
-`shape.is_valid` property stores nothing. These are answers to a caller's
-question, and no build or publication step consults them.
+`index/bounds` holds bounding boxes of stored geometry (`store/bounds.py`).
+A key names what was measured and how: a component's BREP object hash or a
+leaf's BinTools digest, the placement it is measured in, the measuring
+algorithm, and the loaded OCP build; the value is six numbers, inline. A box
+is a pure function of that key, so a hit can never differ from a measurement,
+and an unknown OCP build just measures. Nothing in the index holds a value
+computed while a model runs (README law 18): a model's own checks and
+operations always execute.
 
 ### The two sides of the store — a law
 
 `objects/` is the **artifact side**: what geometry exists. `index/model`,
 `index/output` are the **code side**: what source produced a result and
-what it depended on. `index/op`, `index/component`, `index/surface`,
+what it depended on. `index/bounds`, `index/component`, `index/surface`,
 `index/mesh` and `index/drawing` remember reusable derivations; surface, mesh
 and drawing jobs consume only immutable artifact inputs. `index/drawing` is a
 2D document's flattened render payload: its key hashes the extraction scheme
@@ -180,7 +149,7 @@ the store makes:
   the entire verified required closure before publication. Display readiness
   is separate and disposable. A repair may restore bytes at their exact hash.
 - **Input-addressed** (`index/`): the name is derived from what PRODUCED the
-  entry (a script path, a kernel operation's inputs, a surface × tolerance),
+  entry (a script path, measured bytes and their placement, a surface × tolerance),
   and the entry is a small JSON file pointing at objects or recording facts.
   Entries are mutable and written temp + rename.
 
@@ -814,30 +783,19 @@ Decided mechanically from the returned geometry and occurrence metadata.
   BREP bytes are limited to 768 KiB, required eager-only SURF bytes to 4 MiB, and retained appearance
   recipes to 256 KiB. This bounds additional encoded payload/recipe retention to
   5.125 MiB, plus bounded Python structures and invocation-owned native shapes;
-  it is not a native allocator RSS guarantee. No native shape enters an op
+  it is not a native allocator RSS guarantee. No native shape enters a
   cache. A failed optional preparation releases its private owners before
   falling back. Larger, new-own-component and unsupported results keep the
   ordinary preparation/publication order. STEP correspondence checks and the
   separate canonical readback of newly emitted saved bytes are unchanged.
 
-Operation keys serialize current geometry from private topology, normalizing
-only non-geometric `Free`/`Checked` flags. Native mutations must change the key.
-Each input is read again: Python properties can mutate geometry even during key
-construction. No TShape-to-content mapping replaces those reads. The one
-exception is scoped to a single read-only traversal: a tree's bounds
-(`_bbox_from_shape`) walk the native leaves of one composed document with no
-Python callback between leaves, so within that call a prototype's content digest
-is computed once per TShape encountered and discarded when the call returns —
-never retained, never shared with an op patch, never a substitute for the next
-call's read. Shape hashes
-use a cheaper subset of the full equality signature, so collisions still require
-the complete equality check. Vertex hashes read their current native point at
-that same precision, including native point or location edits that leave Python
-coordinate attributes unchanged. The bounded rounding memo stores numeric inputs
-and outputs, never shapes or geometric signatures.
-Input protection and shape-attribute recipes accept actual topology shapes,
-including subclasses; geometry values such as vectors remain value arguments
-even when they also contain a private native wrapper.
+A tree's bounds (`_bbox_from_shape`) walk the native leaves of one composed
+document with no Python callback between leaves, so within that call a
+prototype's content digest is computed once per TShape encountered and
+discarded when the call returns — never retained, never a substitute for the
+next call's read. Vertex hashes (`determinism.py`) read their current native
+point, including native point or location edits that leave Python coordinate
+attributes unchanged.
 
 ## 7. Concurrency
 
@@ -1028,7 +986,7 @@ CPU scheduling and reuse remain independent of memory admission:
    stale child build it once.
 3. **Idle unbind — 10 minutes** (`CADGEN_DAEMON_IDLE_UNBIND`). A bound worker
    idle that long returns to the spare set (spares beyond K exit); its model's
-   next build rebinds a spare — no import repaid — with a cold RAM op-memo tier.
+   next build rebinds a spare — no import repaid.
    Purely RAM: idle workers hold no slot and never block a new model.
 
 **Memory admission.** The daemon sums worker RSS including extraction
@@ -1275,28 +1233,6 @@ or source of geometry identity. Superseded or failed staging does not release
 the last complete view's ownership. No automatic-save producer exists in this
 runtime: all decorated runs have explicit completion obligations, so display
 supersession does not cancel their exports.
-
-## 9c. Pure parameterized features
-
-The optional `@memo` decorator declares a pure intermediate geometry
-factory, with the author preconditions and execution limits in
-[`MEMO.md`](MEMO.md). It declares no output, model record or job. The
-existing `index/op` maps its scheme/runtime/code/source/helper/global/default/
-closure/argument key to a canonical BREP object and attribute recipe. Objects
-contain no source paths. Hits verify disk content and reconstruct a private
-shape; misses, disabled reuse and hits apply the same eligible return codec.
-No native shape is retained between calls. Missing or corrupt objects re-miss
-and repair through the ordinary atomic object/index writes.
-
-Only a worker bootstrap preceding authored module loading can establish reuse
-trust. Generic embedded execution runs the body, and cannot upgrade an earlier
-untrusted snapshot. Guards are defensive checks within the declared pure-factory,
-unmodified-dependency contract, not a complete proof about arbitrary Python
-monkeypatches. Unsupported code or inputs execute normally. Code recipes are
-bounded to 256 entries and 1 MiB; no persistent trace or hidden dependency graph
-is added. Captured helper files stay in the model's closure on a hit, and full
-source-file digests conservatively invalidate other features in that file.
-Explicit model saves still obey every child/output/publication requirement.
 
 ## 10. Debugging
 
