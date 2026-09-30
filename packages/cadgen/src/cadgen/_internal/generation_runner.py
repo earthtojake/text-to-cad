@@ -155,21 +155,19 @@ class _SourceOnlyLoader(importlib.machinery.SourceFileLoader):
 
 
 class _FirstPartyFromSource(importlib.abc.MetaPathFinder):
-    """Loads every first-party module through :class:`_SourceOnlyLoader`."""
+    """Loads every first-party module through :class:`_SourceOnlyLoader`.
+
+    It asks the path finder itself, never the rest of ``sys.meta_path``: two
+    finders that each delegate to the other would hand one lookup back and
+    forth forever. Anything that is not first-party source is not answered
+    here, so every other finder sees it as if this one were absent."""
 
     def find_spec(self, fullname, path, target=None):  # noqa: ANN001, ANN201 - importlib protocol
-        spec = None
-        for finder in sys.meta_path:
-            # Every instance, not only this one: nested windows (a metadata load
-            # inside a build) must not hand the lookup back and forth forever.
-            if isinstance(finder, _FirstPartyFromSource) or not hasattr(finder, "find_spec"):
-                continue
-            spec = finder.find_spec(fullname, path, target)
-            if spec is not None:
-                break
-        if (spec is not None and type(spec.loader) is importlib.machinery.SourceFileLoader and spec.origin
-                and is_first_party_source_file(Path(spec.origin).resolve())):
-            spec.loader = _SourceOnlyLoader(spec.loader.name, spec.loader.path)
+        spec = importlib.machinery.PathFinder.find_spec(fullname, path, target)
+        if (spec is None or type(spec.loader) is not importlib.machinery.SourceFileLoader or not spec.origin
+                or not is_first_party_source_file(Path(spec.origin).resolve())):
+            return None
+        spec.loader = _SourceOnlyLoader(spec.loader.name, spec.loader.path)
         return spec
 
 

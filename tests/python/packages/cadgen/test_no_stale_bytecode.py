@@ -118,5 +118,32 @@ class NoStaleBytecodeTest(unittest.TestCase):
                 self.assertEqual(size(), 7)
 
 
+    def test_a_delegating_import_hook_beside_the_window_does_not_recurse(self) -> None:
+        """An import hook that asks the rest of ``sys.meta_path`` (a user's, a
+        tool's) and the window's finder must not hand a lookup back and forth."""
+        import importlib
+        import importlib.abc
+
+        from cadgen._internal.generation_runner import _first_party_from_source
+
+        class Delegating(importlib.abc.MetaPathFinder):
+            def find_spec(self, fullname, path, target=None):
+                for finder in sys.meta_path:
+                    if finder is not self and hasattr(finder, "find_spec"):
+                        spec = finder.find_spec(fullname, path, target)
+                        if spec is not None:
+                            return spec
+                return None
+
+        hook = Delegating()
+        sys.meta_path.insert(0, hook)
+        self.addCleanup(sys.meta_path.remove, hook)
+        sys.path.insert(0, str(self.project))
+        self.addCleanup(sys.path.remove, str(self.project))
+        for name in ("lib.dims", "lib"):
+            sys.modules.pop(name, None)
+        with _first_party_from_source():
+            self.assertEqual(importlib.import_module("lib.dims").SIZE, 6)
+
 if __name__ == "__main__":
     unittest.main()
