@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Install this checkout into the Codex app as the development CAD plugin,
 # cad@earthtojake-dev: its skills, and a `cadgen mcp` server run by this
-# checkout's .venv, so the CAD app it serves is this checkout's apps/codex build.
+# checkout's .venv, serving a copy of this checkout's apps/codex build.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -26,8 +26,12 @@ Builds apps/codex, assembles a plugin under tmp/codex-dev from this checkout
 installs it as cad@earthtojake-dev. Refuses while another CAD plugin is
 installed: two copies means every skill twice.
 
-A running server keeps the code it started with; --restart quits and reopens
-the Codex app so new threads get this build.
+The plugin serves a copy of the built page, taken now, as an installed wheel
+serves its own: rebuilding apps/codex changes nothing until you install again.
+A page that changed under a running Codex would change its URI, and Codex
+drops the frames already showing it. A running server keeps the code it
+started with; --restart quits and reopens the Codex app so every thread gets
+this build.
 
 Environment:
   CODEX_CLI      the codex CLI (default: `codex` on PATH, else the one in ChatGPT.app)
@@ -92,18 +96,26 @@ if [[ "$BUILD" == 1 ]]; then
 fi
 [[ -f "$REPO_ROOT/apps/codex/dist/index.html" ]] || { echo "apps/codex is not built; run without --no-build." >&2; exit 1; }
 
+# A version per install, so Codex caches this build rather than reusing the last one.
+VERSION="$(tr -d '[:space:]' <"$REPO_ROOT/VERSION")-dev.$(date +%Y%m%d%H%M%S)"
+# This install's page. Servers still running an earlier install read their own copy.
+APP_DIR="$DEV_ROOT/app/$VERSION"
+mkdir -p "$APP_DIR"
+cp "$REPO_ROOT/apps/codex/dist/index.html" "$APP_DIR/index.html"
+
 rm -rf "$PLUGIN_DIR"
 mkdir -p "$PLUGIN_DIR/.codex-plugin" "$DEV_ROOT/.agents/plugins"
 rsync -a --delete --exclude '__pycache__' --exclude '*.pyc' "$REPO_ROOT/skills/" "$PLUGIN_DIR/skills/"
-python3 - "$REPO_ROOT" "$DEV_ROOT" "$PLUGIN_DIR" "$MARKETPLACE" "$PYTHON" <<'EOF'
-import json, pathlib, sys, time
-repo, dev, plugin, marketplace, python = (pathlib.Path(sys.argv[1]), pathlib.Path(sys.argv[2]), pathlib.Path(sys.argv[3]), sys.argv[4], sys.argv[5])
+python3 - "$REPO_ROOT" "$DEV_ROOT" "$PLUGIN_DIR" "$MARKETPLACE" "$PYTHON" "$VERSION" "$APP_DIR" <<'EOF'
+import json, pathlib, sys
+repo, dev, plugin = (pathlib.Path(value) for value in sys.argv[1:4])
+marketplace, python, version, app = sys.argv[4:8]
 manifest = json.loads((repo / ".codex-plugin" / "plugin.json").read_text(encoding="utf-8"))
-# A version per install, so Codex caches this build rather than reusing the last one.
-manifest["version"] = f"{(repo / 'VERSION').read_text(encoding='utf-8').strip()}-dev.{time.strftime('%Y%m%d%H%M%S')}"
+manifest["version"] = version
 manifest["mcpServers"] = "./codex.mcp.json"
 (plugin / ".codex-plugin" / "plugin.json").write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
-server = {"mcpServers": {"text_to_cad": {"command": python, "args": ["-m", "cadgen.cli", "mcp"], "startup_timeout_sec": 30}}}
+server = {"mcpServers": {"text_to_cad": {"command": python, "args": ["-m", "cadgen.cli", "mcp"],
+                                         "env": {"CADGEN_CODEX_APP_DIR": app}, "startup_timeout_sec": 30}}}
 (plugin / "codex.mcp.json").write_text(json.dumps(server, indent=2) + "\n", encoding="utf-8")
 catalog = {"name": marketplace, "interface": {"displayName": "CAD (this checkout)"}, "plugins": [{
     "name": "cad", "source": {"source": "local", "path": "./plugins/cad"},
@@ -120,6 +132,8 @@ fi
 if [[ "$RESTART" == 1 ]]; then
   osascript -e 'quit app "ChatGPT"' >/dev/null 2>&1 || true
   for _ in $(seq 1 50); do pgrep -xq ChatGPT || break; sleep 0.2; done
+  # No server of an earlier install survives the restart, so neither need its page.
+  find "$DEV_ROOT/app" -mindepth 1 -maxdepth 1 ! -name "$VERSION" -exec rm -rf {} +
   open -a ChatGPT
 fi
 echo "Installed $PLUGIN_ID. New threads run this build$([[ "$RESTART" == 1 ]] || echo " after Codex restarts")."

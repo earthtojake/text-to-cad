@@ -107,6 +107,32 @@ class ServerTest(unittest.TestCase):
         (event,) = polled[0]["structuredContent"]["events"]
         self.assertEqual((event["type"], event["launch"]["model"]), ("show", str(self.workspace / "parts" / "bracket.stl")))
 
+    def test_the_agent_reads_and_captures_what_the_open_view_shows(self) -> None:
+        self.assertTrue(self.call("cad_screenshot")["isError"])
+        model = str(self.workspace / "parts" / "bracket.stl")
+        state = {"model": model, "selection": [f"{model}#o1.f1"]}
+
+        def page() -> None:  # the open view, answering one describe and one capture
+            asked: set[str] = set()
+            while len(asked) < 2:
+                for event in self.call("cad_events", {"view": "v1", "surface": "tab", "model": model})["structuredContent"]["events"]:
+                    asked.add(event["type"])
+                    answer = {"png": "iVBORw0KGgo="} if event["type"] == "capture" else {"state": state}
+                    self.call("cad_capture_reply", {"requestId": event["requestId"], **answer})
+
+        viewer = threading.Thread(target=page, daemon=True)
+        viewer.start()
+        deadline = time.monotonic() + 10
+        while "v1" not in {view.id for view in self.server.views.live("t")}:
+            self.assertLess(time.monotonic(), deadline)
+            time.sleep(0.001)
+        self.assertEqual(self.call("cad_view")["structuredContent"], {"views": [{"view": "v1", "surface": "tab", **state}]})
+        shot = self.call("cad_screenshot")
+        viewer.join(10)
+        self.assertFalse(viewer.is_alive())
+        self.assertEqual(shot["content"][0], {"type": "image", "data": "iVBORw0KGgo=", "mimeType": "image/png"})
+        self.assertEqual(shot["structuredContent"], {"view": "v1", "model": model})
+
     def test_the_tunnel_serves_the_viewer_routes_only_for_roots_this_thread_owns(self) -> None:
         root = {"kind": "workspace", "path": str(self.workspace)}
         reply = self.call("cad_http", {"root": root, "method": "GET", "url": "http://cad.invalid/__cad/catalog"})["structuredContent"]

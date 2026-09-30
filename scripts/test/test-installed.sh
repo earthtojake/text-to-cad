@@ -143,6 +143,51 @@ while read -r command; do
   echo "   cadgen $command"
 done <"$WORK/commands.txt"
 
+step "Serve the CAD app over MCP, as an agent host starts it"
+"$VENV/bin/python" - "$VENV/bin/cadgen" <<'PY' || exit 1
+import json, subprocess, sys, threading
+import cadgen
+
+server = subprocess.Popen([sys.argv[1], "mcp"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, text=True)
+watchdog = threading.Timer(60, server.kill)
+watchdog.daemon = True
+watchdog.start()
+
+
+def send(message):
+    server.stdin.write(json.dumps({"jsonrpc": "2.0", **message}) + "\n")
+    server.stdin.flush()
+
+
+def call(request_id, method, params):
+    send({"id": request_id, "method": method, "params": params})
+    for line in server.stdout:
+        message = json.loads(line)
+        if message.get("id") == request_id:
+            if "error" in message:
+                sys.exit(f"FAIL: {method}: {message['error']}")
+            return message["result"]
+    sys.exit(f"FAIL: cadgen mcp exited during {method}")
+
+
+call(1, "initialize", {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "test-installed", "version": "0"}})
+send({"method": "notifications/initialized"})
+tools = {tool["name"]: tool for tool in call(2, "tools/list", {})["tools"]}
+uri = tools["cad_home"]["_meta"]["ui"]["resourceUri"]
+page = call(3, "resources/read", {"uri": uri})["contents"][0]["text"]
+# The page is package data: a wheel without it serves a placeholder that says so.
+if "missing from this install" in page or "<script" not in page:
+    sys.exit(f"FAIL: {uri} is not the packaged CAD app")
+session = call(4, "tools/call", {"name": "cad_session", "arguments": {}})["structuredContent"]
+if session.get("version") != cadgen.__version__:
+    sys.exit(f"FAIL: cad_session answered {session}")
+server.stdin.close()
+if server.wait(30) != 0:
+    sys.exit(f"FAIL: cadgen mcp exited {server.returncode} when the host closed its input")
+watchdog.cancel()
+print(f"   {len(tools)} tools; the app is {len(page) // 1024} KiB at {uri}")
+PY
+
 step "Build a real STEP with no repo in sight"
 mkdir -p "$EMPTY/models"
 cat >"$EMPTY/models/probe.py" <<'PY'

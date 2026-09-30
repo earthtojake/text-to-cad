@@ -1,8 +1,9 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { createPromptContext, referencePart } from '@text-to-cad/core/prompt';
 import { createBridge, type ToolResult } from './bridge';
+import { watchViewEvents } from './events';
 import { createComposerPromptContext } from './prompt';
-import { createServer } from './server';
+import { createServer, type ViewEvent } from './server';
 import { createTunnelFetch, decodeBase64, encodeBase64, TUNNEL_ORIGIN } from './tunnel';
 
 /** A host frame: records what the page posts and answers with `respond`. */
@@ -49,6 +50,56 @@ describe('the MCP Apps bridge', () => {
     await expect(pending).rejects.toThrow();
     const call = frame.posted.find(message => message.method === 'tools/call');
     expect(frame.posted).toContainEqual({ jsonrpc: '2.0', method: 'notifications/cancelled', params: { requestId: call.id } });
+  });
+
+  it('acknowledges teardown before the page cleans up, even when a cleanup throws', () => {
+    const frame = fakeHost(() => undefined);
+    const bridge = createBridge(frame.host, frame.self as any);
+    const acknowledged = () => frame.posted.some(message => message.id === 7 && message.result);
+    const seen: boolean[] = [];
+    bridge.onTeardown(() => { seen.push(acknowledged()); throw new Error('cleanup failed'); });
+    bridge.onTeardown(() => seen.push(acknowledged()));
+    frame.deliver({ jsonrpc: '2.0', id: 7, method: 'ui/resource-teardown', params: {} });
+    expect(frame.posted).toContainEqual({ jsonrpc: '2.0', id: 7, result: {} });
+    expect(seen).toEqual([true, true]);
+  });
+});
+
+describe('the agent driving a view', () => {
+  it('shows what the agent sends and answers its questions over the long-poll', async () => {
+    const launch = { protocol: 1, page: 'viewer' as const, model: '/p/b.step', root: null, explore: true };
+    const batches: ViewEvent[][] = [
+      [{ seq: 1, type: 'show', launch }, { seq: 2, type: 'capture', requestId: 'c1' }, { seq: 3, type: 'describe', requestId: 'd1' }],
+      [{ seq: 4, type: 'capture', requestId: 'c2' }],
+    ];
+    const polls: unknown[][] = [];
+    const replies: unknown[] = [];
+    const server = {
+      events: (...args: any[]) => {
+        polls.push(args.slice(0, 3));
+        const batch = batches.shift();
+        // Past the scripted events, the poll waits, as the server's does, until the view goes.
+        return batch ? Promise.resolve(batch) : new Promise<ViewEvent[]>((_, reject) => args[3].signal.addEventListener('abort', () => reject(new Error('aborted'))));
+      },
+      reply: async (requestId: string, reply: object) => { replies.push({ requestId, ...reply }); },
+    };
+    const shown: unknown[] = [];
+    const captures = [new Blob([new Uint8Array([1, 2, 3])], { type: 'image/png' })];
+    const stop = new AbortController();
+    watchViewEvents(server as any, { id: 'v1', surface: 'tab', model: () => '/p/a.step' }, {
+      show: next => shown.push(next.model),
+      capture: async () => { const png = captures.shift(); if (!png) throw new Error('nothing to capture'); return png; },
+      describe: () => ({ model: '/p/a.step', selection: ['/p/a.step#o1.f2'] }),
+    }, stop.signal);
+    await vi.waitFor(() => expect(replies).toHaveLength(3));
+    stop.abort();
+    expect(shown).toEqual(['/p/b.step']);
+    expect(polls[0]).toEqual(['v1', 'tab', '/p/a.step']);
+    expect(replies).toEqual(expect.arrayContaining([
+      { requestId: 'c1', png: encodeBase64(new Uint8Array([1, 2, 3])) },
+      { requestId: 'd1', state: { model: '/p/a.step', selection: ['/p/a.step#o1.f2'] } },
+      { requestId: 'c2', error: 'nothing to capture' },
+    ]));
   });
 });
 

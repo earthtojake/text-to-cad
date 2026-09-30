@@ -470,10 +470,13 @@ scripts/install/codex-dev-plugin.sh --restart
 It builds `apps/codex`, assembles a plugin under `tmp/codex-dev` (this
 checkout's skills, and a server run by this checkout's `.venv`), installs it as
 `cad@earthtojake-dev` and restarts the app. It refuses while another CAD plugin
-is installed; `--uninstall` removes it. A running server keeps the code it started
-with, so reinstall (or just restart the app after a Python-only change) to see
-edits. The server's stderr lands in Codex's log database (`~/.codex/logs_2.sqlite`,
-lines starting `MCP server stderr`).
+is installed; `--uninstall` removes it. The plugin serves a copy of the page
+taken at install, never `apps/codex/dist` itself: a rebuild would change the
+page's URI under the running app, and Codex drops the frames showing the old
+one. So reinstall to see a page edit. A running server keeps the Python it
+started with, so restart the app after a Python-only change. The server's
+stderr lands in Codex's log database (`~/.codex/logs_2.sqlite`, lines starting
+`MCP server stderr`).
 
 ## Branch Layout
 

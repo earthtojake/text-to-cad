@@ -80,8 +80,8 @@ where those files ship, so these scripts are what produces them.
   first. Called by `test.yml` and `release-publish.yml`.
 - `test-installed.sh` — builds the wheel (or accepts `--wheel PATH` to test
   the exact artifact already built), installs it into a scratch venv and
-  exercises cadgen from outside the repo. Called by `test.yml` and
-  `release-publish.yml`.
+  exercises cadgen from outside the repo, including `cadgen mcp` serving the
+  packaged CAD app over stdio. Called by `test.yml` and `release-publish.yml`.
 - `test-viewer-launch.sh` — launches `cadgen viewer` against the built client and
   verifies reuse, cold STEP import, display derivation and browser drawing using
   a tiny test-owned STEP. Called by `test.yml`.
@@ -142,9 +142,9 @@ where those files ship, so these scripts are what produces them.
   skill directory (`--agent codex|claude|...`, `--all`, `--dry-run`). Developer
   step in `CONTRIBUTING.md`.
 - `codex-dev-plugin.sh` — builds `apps/codex` and installs this checkout into the
-  Codex app as `cad@earthtojake-dev` (skills copied, server run by `.venv`);
-  `--restart` reopens the app, `--uninstall` removes it. Developer step in
-  `CONTRIBUTING.md` ("CAD In Codex").
+  Codex app as `cad@earthtojake-dev` (skills copied, server run by `.venv`,
+  serving a copy of the page taken at install); `--restart` reopens the app,
+  `--uninstall` removes it. Developer step in `CONTRIBUTING.md` ("CAD In Codex").
 
 `git-hooks/pre-commit` — the body `.githooks/pre-commit` runs: `bundle.sh --check`
 when staged paths touch `packages`, `apps`, `skills` or `scripts/bundle`. It is
