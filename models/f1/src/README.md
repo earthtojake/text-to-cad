@@ -10,7 +10,8 @@
 | cockpit.py | STEP/cockpit.step | `#o1.5` cockpit furniture |
 | sidepod_left.py | STEP/sidepod_left.step | `#o1.6` left sidepod |
 | sidepod_right.py | STEP/sidepod_right.step | `#o1.7` right sidepod (the left one's mirror image, from the same factory) |
-| engine_cover.py | STEP/engine_cover.step | `#o1.8` engine cover |
+| engine_cover.py | STEP/engine_cover.step | `#o1.8` engine cover: the parts around the shell, linking the model below |
+| cover_panel.py | STEP/cover_panel.step | carbon cover shell (linked by `engine_cover.py`; its own model because it is nine tenths of the cover's build time) |
 | airbox.py | STEP/airbox.step | `#o1.9` airbox |
 | floor.py | STEP/floor.step | `#o1.10` floor |
 | diffuser.py | STEP/diffuser.step | `#o1.11` diffuser |

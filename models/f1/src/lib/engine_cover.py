@@ -818,11 +818,18 @@ def _cover_shell():
     return fused if surfaces.is_valid_shape(fused) else shell
 
 
-def build_engine_cover():
+def build_cover_panel():
+    """The carbon cover shell: nine tenths of the engine cover's build time, so
+    it is its own model and an edit to the parts around it never rebuilds it."""
+    return surfaces.styled(_cover_shell(), "cover_panel", spec.CARBON_GLOSS)
+
+
+def build_engine_cover_parts():
+    """Everything on the engine cover but its shell: aerial fin, exit duct liner,
+    airbox aperture flange, cover flanges, Dzus fasteners and louvres."""
     slats = _louvres()[0]
     rail_l, rail_r = _flange_rail()
     kids = [
-        surfaces.styled(_cover_shell(), "cover_panel", spec.CARBON_GLOSS),
         surfaces.styled(_aerial_fin(), "aerial_fin", spec.CARBON_GLOSS),
         surfaces.styled(_exit_liner(), "exit_duct_liner", spec.CARBON_MATTE),
         surfaces.styled(_aperture_flange(), "airbox_aperture_flange", spec.CARBON_WEAVE),
@@ -835,7 +842,7 @@ def build_engine_cover():
         kids.append(
             surfaces.styled(s, f"cover_louvre:{side}:{i // 2 + 1}", spec.CARBON_MATTE)
         )
-    return surfaces.group("engine_cover", kids)
+    return kids
 
 
 # ==========================================================================
