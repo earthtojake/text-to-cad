@@ -384,7 +384,18 @@ A real one (`link_robot`: a base, two placements of `link_arm`, one of
   first-party, absolute and relative imports alike — a `lib/` package's
   `from .chain import X` counts, and importing `lib.x` executes
   `lib/__init__.py`, so the package is in it) **stopping at model files**, plus files executed in its own
-  frame and discovered inputs (`read_step` documents). The animation module
+  frame, what importing its children ran in its process (below), and
+  discovered inputs: every data file the model's own code read through
+  Python's `open` (seen by an audit hook; not a file the build wrote, not one
+  of the model's own outputs, not the interpreter's, cadgen's or the store's),
+  and every file a native reader was told about (`read_step`,
+  `declare_input`). Two kinds of entry are not files: `!<path>`, a file that
+  must stay absent — one the imports were resolved past (a package beside a
+  module, an `__init__.py` a namespace package lacks, a module an earlier
+  search root lacks) and would resolve to if it appeared — hashed `absent`;
+  and `<import roots N>`, the digest of the first N search roots when an
+  import was found past the script's own folder (a root added before those
+  could shadow it). The animation module
   declared by `@step(animation=...)` is source annotation;
   it is embedded in the unified sidecar and never enters geometry identity. The
   boundary is decided statically by what the importer TAKES from a model
@@ -449,10 +460,27 @@ A real one (`link_robot`: a base, two placements of `link_arm`, one of
     first-party file the build executed that static reach never saw and no
     child owns — a plugin imported for its side effect, a module found through
     a `sys.path` insert — so what IT calls in a sliced file is in that slice.
-    A child's own files stay out of the closure (models by result), but
-    importing a child runs its import-time code in this process: what that
-    code reaches (its model functions' bodies excepted) in a file this
-    closure shares is reached too.
+  - **What importing a child runs is this model's input.** A child's model
+    BODY never runs in this process — it runs in the child's own build, or not
+    at all — so it is tracked by the pin (models by result). But importing the
+    child runs its module body, the module bodies of the helpers it imports,
+    and its model definitions' **headers** (decorators, defaults, annotations)
+    here, and any of them can change what this body computes (a registry
+    filled, a shared table patched). Each such file is in the closure by what
+    its import runs: a child model file as an `islice1:` import slice (its
+    preamble, each model definition counted by its header, never its body; a
+    cadgen model decorator's literal arguments read as one placeholder, since
+    evaluating a literal runs nothing), a helper only children import as a
+    slice of what import-time code reaches, and whole when that is dynamic or
+    the closure reflective. An import-time walk follows what import-time code
+    reads; binding a name by `from x import y` runs none of `y`. What that
+    code reaches in a file this closure shares is reached too.
+  - **A pin is only a call.** A model function taken from a model file is a
+    result edge only while the importer calls it: an attribute of it
+    (`arm.__wrapped__`, `arm.__cadgen_model__`) can reach its body, so the file
+    is taken as source; and a model's wrapper carries no `__wrapped__`. A
+    `@dxf` function is not a pin at all: called inside another build it runs
+    its body inline, so taking one is taking source.
   - **Anything dynamic falls back to whole files.** Per module, and the walk
     then descends into all of it: a star import (importer and target whole);
     `globals()`, `locals()` or a bare `vars()` (the module, and every module
@@ -505,7 +533,13 @@ A real one (`link_robot`: a base, two placements of `link_arm`, one of
     followed whatever scope binds it, so reach never rests on scoping alone;
     the only cost is reaching a definition whose name a local shares. Import
     aliases retain all candidate bindings across those scopes, so two nested
-    imports named `dims` cannot hide one another. Slice hashes use `slice4:`:
+    imports named `dims` cannot hide one another. A submodule name taken
+    through its package (`from lib import geo`) is part of the package
+    `__init__.py`'s slice even while the `__init__.py` does not bind it,
+    marked unbound, because a binding added there later wins over the
+    submodule. Which files declare models is read from their bytes, never
+    cached by path, so a warm process sees a decorator added or removed.
+    Slice hashes use `slice4:`:
     records made by the earlier `slice1:`–`slice3:` analyses rebuild once to
     recover cross-module edges those analyses missed. Released whole-file
     `ast1:` records remain compatible.
@@ -600,12 +634,17 @@ Each with the failure it prevents.
   hash of the exact buffer it compiled before executing it, so a replacement
   during module loading cannot substitute a later file's identity. Prevents: a file
   edited during a long build being recorded with the bytes that did NOT run,
-  which would make a stale result read as current forever.
+  which would make a stale result read as current forever. A first-party
+  module is compiled from the bytes on disk, never from a `__pycache__` `.pyc`
+  (CPython accepts one by whole-second mtime and size, so two same-length edits
+  inside a second would run stale bytecode), and its loader records exactly
+  those bytes; a build writes no bytecode for anything it imports.
   Declared data inputs retain their first declaration-time hash for both STEP
   and DXF builds; an edit later in the body therefore leaves the result stale.
   Since `declare_input` returns a path for the author's own reader, the author
   must keep the file stable between declaration and that read. CAD readers
-  that own their input bytes record the exact consumed digest instead.
+  that own their input bytes record the exact consumed digest instead. A data
+  file found through the `open` audit event is hashed after the body returns.
 - **Publish order.** Objects first (components, then the complete tree), the
   document-byte mapping, the outputs (`.step` moved into place atomically;
   digest-bound sidecar), output mappings, then the record. STEP export and
@@ -634,11 +673,14 @@ Each with the failure it prevents.
   (file in the closure). A non-model file is in the closure by the names the
   model reaches in it from the script and from every file the build
   executed (§3, functions by reach), whole when anything dynamic is in the
-  way. Constants by value, functions by reach, models by
-  result. Prevents both false-current (a constant imported from a model file
-  changing unnoticed; a helper edit hidden behind a `getattr` on its module)
-  and false-stale (a child's internal edit, a comment beside a shared
-  constant, or a helper no reached code calls — rebuilding every parent).
+  way; a file that ran here because a child was imported, by what its import
+  runs; a file the imports rely on not existing, as `!<path>`. Constants by
+  value, functions by reach, models by result. Prevents both false-current (a
+  constant imported from a model file changing unnoticed; a helper edit hidden
+  behind a `getattr` on its module; a child's module body patching what this
+  body reads; a new `__init__.py` or module changing what an import finds) and
+  false-stale (a child's internal edit, a comment beside a shared constant, or
+  a helper no reached code calls — rebuilding every parent).
   One process-wide memo of immutable module-syntax recipes keyed by exact
   source bytes, bounded by 32 MiB of accounted inputs/recipes and 2048
   entries, serves the exec hook, every closure walk and every gate: each file

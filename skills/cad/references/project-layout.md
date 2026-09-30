@@ -99,10 +99,10 @@ package. Subsystems may import shared models or each other where the dependency
 makes sense; avoid circular imports. Alias a module when importing a same-named
 model function would otherwise shadow it.
 
-Dependencies are tracked as **models by result, constants by value, functions by file**:
+Dependencies are tracked as **models by result, constants by value, functions by reach**:
 
 ```python
-from lib import fasteners  # helper module: tracked by file
+from lib import fasteners  # helper module: tracked by what the model can run in it
 from plate import WIDTH    # literal from a model module: tracked by value
 from plate import plate    # model: calling it pins its result
 ```

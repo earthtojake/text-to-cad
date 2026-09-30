@@ -54,7 +54,8 @@ class ClosureSyntaxRecipes(unittest.TestCase):
                              "a new revision is analysed once, an old one never again")
         self.assertEqual(first, expected)
         self.assertEqual(second, expected)
-        self.assertEqual(first.files, ("root.py",))
+        self.assertEqual(first.files, ("!left/__init__.py", "!right/__init__.py", "!shared/__init__.py",
+                                       "left.py", "right.py", "root.py", "shared.py"))
 
     def test_hit_rereads_same_size_source_even_with_restored_mtime(self):
         first = self.write("first.py", "value = 1\n")

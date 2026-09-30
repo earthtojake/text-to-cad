@@ -595,6 +595,10 @@ def _decorator(
             return _built_geometry(current, tree=tree)
 
         model.__cadgen_model__ = defn  # type: ignore[attr-defined]
+        # A model's body runs in its own build, reached through a pin -- never
+        # inline behind a caller's closure. functools.wraps would hand it out as
+        # __wrapped__ (``arm.__wrapped__()``, ``inspect.unwrap``).
+        del model.__wrapped__
         return model
 
     return apply

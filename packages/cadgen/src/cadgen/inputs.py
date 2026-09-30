@@ -1,21 +1,21 @@
-"""Declaring a data file a model reads as a freshness input.
+"""Declaring a data file a native reader opens as a freshness input.
 
 :mod:`cadgen.step_scene` covers the files cadgen itself knows how to read: a
 STEP goes through ``read_step`` or ``read_scene``, and those record what
-they read without being asked. Everything else a model reads is the model's own
-business -- a JSON routing atlas, a CSV of tap sizes, a solved-offsets table --
-and cadgen has no reader for it, so there is nothing for it to record.
+they read without being asked. A file the model's own Python code opens -- a
+JSON routing atlas through ``json.load``, a CSV of tap sizes, an ``np.load``
+table -- is recorded too: Python's ``open`` audit event reports it, and the
+build puts it in the closure (``cadgen._internal.source_hash``).
 
-That leaves the exact hole ``read_step`` was built to close, one format over.
-Freshness follows a model's Python import reach and its declared inputs; a file
-read as data announces neither. A model that computes its geometry from
-``atlas.json`` and reads it with ``json.load`` goes on reporting itself current
-after the atlas changes, and the only way to get the truth back is ``--force``
--- the flag whose whole job is to say the gate is lying.
+What no audit event sees is a file opened in native code: ``build123d``'s
+``import_step`` or ``import_brep``, a font a text shape loads. A model that
+computes its geometry from one of those would go on reporting itself current
+after the file changes, and the only way to get the truth back would be
+``--force`` -- the flag whose whole job is to say the gate is lying.
 
 :func:`declare_input` is the declaration. The model still does its own reading;
 this only puts the file in the closure, so the next run's gate byte-hashes it
-like any other non-Python input.
+like any other non-Python input. Declaring a file Python also opens is harmless.
 
 Deliberately ONE function rather than a family of readers. ``read_json`` would
 be the first of an open-ended set (``read_csv``, ``read_yaml``, ``read_toml``,

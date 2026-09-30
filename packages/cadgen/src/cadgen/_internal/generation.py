@@ -247,7 +247,9 @@ def _source_sidecar_payload(scene: LoadedStepScene) -> dict[str, object] | None:
         closure_files = getattr(scene, "source_closure_files", ()) or ()
         if closure_hash and closure_files:
             payload["sourceClosureHash"] = closure_hash
-            payload["sourceClosureFiles"] = list(closure_files)
+            from cadgen.store.closure import source_files
+
+            payload["sourceClosureFiles"] = source_files(closure_files, getattr(scene, "source_closure_file_hashes", None))
     payload["generatedAt"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
     return payload
 

@@ -45,6 +45,7 @@ from __future__ import annotations
 
 import ast
 import builtins
+import copy
 import hashlib
 import sys
 from dataclasses import dataclass
@@ -93,6 +94,24 @@ class Alias:
 
 
 @dataclass(frozen=True)
+class Header:
+    """What executing a top-level ``def`` runs: its decorators, defaults,
+    annotations and type parameters -- never its body. Importing a child model
+    file runs its model definitions' headers in the importer's process."""
+
+    reads: tuple[str, ...]
+    chains: tuple[tuple[str, tuple[str, ...]], ...]
+    stores: tuple[str, ...]
+    loads: tuple[tuple[str, tuple[str, ...]], ...]
+    # sha256 of ast.dump(the def with its body emptied), a cadgen model
+    # decorator's literal arguments read as one placeholder: evaluating a literal
+    # runs nothing, and cadgen's decorators keep what they are given to the child.
+    digest: bytes
+    aliases: tuple[tuple[str, Alias], ...] = ()
+    stars: tuple[Alias, ...] = ()
+
+
+@dataclass(frozen=True)
 class Statement:
     index: int
     definition: bool
@@ -106,6 +125,7 @@ class Statement:
     # scope binds it: followed as edges too, so reach never rests on scoping alone.
     loads: tuple[tuple[str, tuple[str, ...]], ...]
     digest: bytes                                               # sha256 of ast.dump(statement)
+    header: Header | None = None                                # a top-level def's import-time part
 
 
 @dataclass(frozen=True)
@@ -481,6 +501,72 @@ def _is_main_guard(node: ast.stmt) -> bool:
             and not node.orelse)
 
 
+# cadgen's model decorators, as ``cadgen.metadata`` recognises them.
+_MODEL_DECORATORS = frozenset({"step", "dxf", "stl", "glb", "threemf"})
+_PLACEHOLDER = "<literal>"
+
+
+def _cadgen_decorators(tree: ast.Module) -> tuple[frozenset[str], frozenset[str]]:
+    """Top-level names bound to cadgen's model decorators, and to the cadgen
+    module itself -- the same reading as ``cadgen.metadata``."""
+    names: set[str] = set()
+    modules: set[str] = set()
+    for node in tree.body:
+        if isinstance(node, ast.ImportFrom) and node.module in {"cadgen", "cadgen.authoring"}:
+            names.update(alias.asname or alias.name for alias in node.names if alias.name in _MODEL_DECORATORS)
+        elif isinstance(node, ast.Import):
+            modules.update(alias.asname or "cadgen" for alias in node.names if alias.name == "cadgen")
+    return frozenset(names), frozenset(modules)
+
+
+def _placeholder_literals(decorator: ast.expr, names: frozenset[str], modules: frozenset[str]) -> ast.expr:
+    """A cadgen model decorator call with each literal argument read as one
+    placeholder. Anything else -- another decorator, a call or a name among the
+    arguments -- stays as written: evaluating it runs code at import."""
+    if not isinstance(decorator, ast.Call):
+        return decorator
+    target = decorator.func
+    ours = (isinstance(target, ast.Name) and target.id in names) or (
+        isinstance(target, ast.Attribute) and isinstance(target.value, ast.Name)
+        and target.value.id in modules and target.attr in _MODEL_DECORATORS)
+    if not ours:
+        return decorator
+
+    def value(node: ast.expr) -> ast.expr:
+        return ast.Constant(value=_PLACEHOLDER) if _literal(node) else node
+
+    return ast.Call(func=target, args=[value(arg) for arg in decorator.args],
+                    keywords=[ast.keyword(arg=keyword.arg, value=value(keyword.value)) for keyword in decorator.keywords])
+
+
+def _categorized(facts: _Facts) -> tuple[set[str], set[tuple[str, tuple[str, ...]]], set[str], set[tuple[str, tuple[str, ...]]]]:
+    """(reads, chains, stores, loads) of one scan, scope-resolved as a statement's are."""
+    reads: set[str] = set(facts.globals)
+    chains: set[tuple[str, tuple[str, ...]]] = set()
+    loads: set[tuple[str, tuple[str, ...]]] = set()
+    for name_node, scope, chain in facts.loads:
+        where = _resolve(name_node.id, scope)
+        if where == _LOCAL:
+            loads.add((name_node.id, chain))
+        elif chain:
+            chains.add((name_node.id, chain))
+        else:
+            reads.add(name_node.id)
+    stores = {name for name, scope in facts.stores if _resolve(name, scope) != _LOCAL}
+    loads -= chains
+    loads.difference_update((name, ()) for name in reads)
+    return reads, chains, stores, loads
+
+
+def _header(node: ast.FunctionDef | ast.AsyncFunctionDef, names: frozenset[str], modules: frozenset[str]) -> Header:
+    stripped = copy.copy(node)
+    stripped.body = [ast.Pass()]
+    stripped.decorator_list = [_placeholder_literals(d, names, modules) for d in node.decorator_list]
+    reads, chains, stores, loads = _categorized(_scan(stripped))
+    return Header(reads=tuple(sorted(reads)), chains=tuple(sorted(chains)), stores=tuple(sorted(stores)),
+                  loads=tuple(sorted(loads)), digest=hashlib.sha256(ast.dump(stripped).encode("utf-8")).digest())
+
+
 def _future_annotations(tree: ast.Module) -> bool:
     for node in tree.body:
         if isinstance(node, ast.Expr) and isinstance(node.value, ast.Constant) and isinstance(node.value.value, str):
@@ -559,6 +645,7 @@ def analyze(source: bytes, filename: str = "<module>") -> ModuleSyntax:
                 module_aliases.setdefault(name, []).append(alias)
     frozen_aliases = {name: tuple(bound) for name, bound in module_aliases.items()}
     sys_names = {name for f in facts for name in f.sys_names}
+    decorator_names, decorator_modules = _cadgen_decorators(tree)
 
     statements: list[Statement] = []
     definitions: dict[str, list[int]] = {}
@@ -617,11 +704,14 @@ def analyze(source: bytes, filename: str = "<module>") -> ModuleSyntax:
             must_bind.append(free)
         loads -= chains
         loads.difference_update((name, ()) for name in reads)
+        header = None
+        if not guard and isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+            header = _header(node, decorator_names, decorator_modules)
         statements.append(Statement(
             index=index, definition=definition, binds=binds, reads=tuple(sorted(reads)),
             chains=tuple(sorted(chains)), stores=tuple(sorted(stores)), aliases=tuple(f.aliases),
             stars=tuple(f.stars), loads=tuple(sorted(loads)),
-            digest=hashlib.sha256(dumps[index].encode("utf-8")).digest(),
+            digest=hashlib.sha256(dumps[index].encode("utf-8")).digest(), header=header,
         ))
         if definition:
             for name in binds:
@@ -655,13 +745,19 @@ def analyze(source: bytes, filename: str = "<module>") -> ModuleSyntax:
     )
 
 
-def close_names(syntax: ModuleSyntax, names: Iterable[str]) -> frozenset[str]:
+def close_names(syntax: ModuleSyntax, names: Iterable[str], headers: Iterable[str] = ()) -> frozenset[str]:
     """The reached names closed within the module: every definition a reached
-    definition reads, transitively. Preamble reads are roots of every slice."""
+    definition reads, transitively. Preamble reads are roots of every slice; a
+    preamble ``def`` binding a name in ``headers`` roots only its header."""
+    headers = frozenset(headers)
     reached: set[str] = set()
     pending: list[str] = list(names)
     for index in syntax.preamble:
-        pending.extend(_definition_reads(syntax.statements[index]))
+        statement = syntax.statements[index]
+        if headers and statement.header is not None and headers.intersection(statement.binds):
+            pending.extend(_definition_reads(statement.header))
+        else:
+            pending.extend(_definition_reads(statement))
     while pending:
         name = pending.pop()
         if name in reached:
@@ -702,3 +798,27 @@ def slice_hash(syntax: ModuleSyntax, names: Iterable[str]) -> str:
         if not statement.definition or any(name in closed for name in statement.binds):
             digest.update(b"\0\0" + statement.digest)
     return SLICE_PREFIX + digest.hexdigest()
+
+
+IMPORT_SLICE_PREFIX = "islice1:"
+
+
+def import_slice_hash(syntax: ModuleSyntax, names: Iterable[str], models: Iterable[str]) -> str:
+    """The hash of what importing a child model file runs in the importer's
+    process: its preamble -- with each definition of a model in ``models``
+    counted by its header, since a model's body never runs at import -- and every
+    definition a name in the closed set binds. The whole-file hash when the
+    module is dynamic."""
+    if syntax.dynamic is not None:
+        return syntax.whole_hash
+    models = frozenset(models)
+    closed = close_names(syntax, names, headers=models)
+    digest = hashlib.sha256(b"islice1")
+    for name in sorted(closed):
+        digest.update(b"\0" + name.encode("utf-8") + (b"=" if name in syntax.definitions else b"!"))
+    for statement in syntax.statements:
+        if statement.header is not None and models.intersection(statement.binds):
+            digest.update(b"\0\1" + statement.header.digest)
+        elif not statement.definition or any(name in closed for name in statement.binds):
+            digest.update(b"\0\0" + statement.digest)
+    return IMPORT_SLICE_PREFIX + digest.hexdigest()

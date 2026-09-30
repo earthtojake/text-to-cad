@@ -534,13 +534,15 @@ def read_source_provenance(step_path: Path | str) -> dict[str, Any] | None:
     record = record_for_document(document)
     if record is None:
         return None
+    from cadgen.store.closure import source_files
     from cadgen.store.index import split_model_ref
 
     source, _function = split_model_ref(source_for_document(document))
     payload: dict[str, Any] = {
         "sourceKind": str(record.get("sourceKind") or "python"),
         "sourceClosureHash": str((record.get("closure") or {}).get("hash") or ""),
-        "sourceClosureFiles": list((record.get("closure") or {}).get("files") or []),
+        "sourceClosureFiles": source_files((record.get("closure") or {}).get("files") or [],
+                                           (record.get("closure") or {}).get("shas")),
         "tree": str(record.get("tree") or ""),
     }
     for key in ("sourceHash", "annotationHash", "kinematics", "stepHash"):

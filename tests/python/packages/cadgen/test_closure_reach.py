@@ -270,10 +270,12 @@ class ReachClosure(unittest.TestCase):
 
     def test_the_record_names_what_the_model_reaches_in_each_helper(self):
         reference, closure = self.record()
-        self.assertEqual(closure.files, ("lib/__init__.py", "lib/geo.py", "lib/spec.py", "part.py"))
+        self.assertEqual(closure.files, ("!lib/geo/__init__.py", "!lib/spec/__init__.py",
+                                         "lib/__init__.py", "lib/geo.py", "lib/spec.py", "part.py"))
+        self.assertEqual(closure.shas["!lib/geo/__init__.py"], "absent", "a package beside the module would win")
         self.assertEqual(closure.names["lib/geo.py"], ("SCALE", "_unit", "plane"))
         self.assertEqual(closure.names["lib/spec.py"], ("BORE",))
-        self.assertEqual(closure.names["lib/__init__.py"], ())
+        self.assertEqual(closure.names["lib/__init__.py"], ("geo", "spec"), "submodule names it could bind")
         self.assertNotIn("part.py", closure.names, "the script is always whole")
         self.assertTrue(closure.shas["lib/geo.py"].startswith("slice4:"))
         self.assertTrue(closure.shas["part.py"].startswith("ast1:"))
@@ -519,7 +521,8 @@ class ReachClosure(unittest.TestCase):
         _reference, closure = self.record()
         self.assertEqual(closure.names, {}, "importlib can reach any module by string")
         self.assertEqual(closure.wholes, {})
-        self.assertTrue(all(sha.startswith("ast1:") for sha in closure.shas.values()), closure.shas)
+        self.assertTrue(all(sha.startswith("ast1:") for rel, sha in closure.shas.items() if not rel.startswith("!")),
+                        closure.shas)
         # What counts as reflection: string execution and imports, every alias of
         # sys.modules and frames, function globals, introspection modules.
         for source in ("exec(code)", "eval(code)", "__import__(code)", "import importlib.util",
@@ -660,21 +663,135 @@ class ReachClosure(unittest.TestCase):
         self.edit(self.root / "lib/__init__.py", "return 30.0", "return 35.0")
         self.assert_clause_two(reference, True, "lib/__init__.py")
 
-    def test_a_childs_import_time_effects_on_shared_helpers_are_reached(self):
-        """A child module runs in the parent's process when imported: what its
-        import-time code calls in a helper the parent also reads is the parent's
-        dependency, although the child's own files are not in the closure."""
-        self.write("lib/shapes.py", "CONFIG = [10.0]\n\n\ndef setup():\n    CONFIG[0] = 20.0\n\n\ndef size():\n    return CONFIG[0]\n\n\ndef unused():\n    return 1\n")
-        self.write("lib/boot.py", "from lib import shapes\n\nshapes.setup()\n")
-        self.write("arm.py", "from cadgen import step\nimport lib.boot\n\n\n@step\ndef arm():\n    return 1\n")
+    def test_what_importing_a_child_runs_is_the_parents_input(self):
+        """A child module runs in the parent's process when imported. Its module
+        body, the helpers only it imports and its model definitions' headers can
+        change what the parent computes, so each is in the parent's closure by
+        what its import runs -- never by a model's body, which runs in the
+        child's own build, and never by what nothing at import time calls."""
+        self.write("lib/shapes.py", "CONFIG = [10.0]\n\n\ndef setup(value=20.0):\n    CONFIG[0] = value\n    return None\n\n\n"
+                                    "def size():\n    return CONFIG[0]\n\n\ndef unused():\n    return 1\n")
+        self.write("lib/boot.py", "from lib import shapes\n\nshapes.setup()\n\n\ndef later():\n    return 1\n")
+        self.write("arm.py", "from cadgen import step\nimport lib.boot\nfrom lib import shapes\n\nshapes.CONFIG.append(1.0)\n\n\n"
+                             "def helper():\n    return 3\n\n\n"
+                             "@step(out=\"../STEP/arm.step\", kinematics=shapes.setup())\ndef arm():\n    return helper()\n")
         self.write_model("from arm import arm\nfrom lib import shapes", "(arm(), shapes.size())")
         reference, closure = self.record()
-        self.assertNotIn("lib/boot.py", closure.files, "the child's own helper stays the child's")
+        self.assertTrue(closure.shas["arm.py"].startswith("islice1:"), "the child file, by what its import runs")
+        self.assertIn("lib/boot.py", closure.files, "a helper only the child imports ran here too")
         self.assertIn("setup", closure.names["lib/shapes.py"])
-        self.edit(self.root / "lib/shapes.py", "return 1", "return 2")
+        for path, old, new, is_stale in (
+            ("lib/shapes.py", "return 1", "return 2", False),                     # nothing runs unused()
+            ("arm.py", "return helper()", "return helper() + 1", False),           # a model's body
+            ("arm.py", "return 3", "return 4", False),                            # what only that body calls
+            ("lib/boot.py", "return 1", "return 2", False),                       # what no import runs
+            ("arm.py", "../STEP/arm.step", "../STEP/other.step", False),          # a literal decorator argument
+            ("lib/shapes.py", "CONFIG[0] = value", "CONFIG[0] = value * 2", True),
+            ("lib/boot.py", "shapes.setup()", "shapes.setup(30.0)", True),        # a child-only helper's module body
+            ("arm.py", "CONFIG.append(1.0)", "CONFIG.append(2.0)", True),         # the child's module body
+            ("arm.py", "kinematics=shapes.setup()", "kinematics=shapes.setup(5.0)", True),  # a model's header
+        ):
+            with self.subTest(path=path, new=new):
+                original = (self.root / path).read_text(encoding="utf-8")
+                self.edit(self.root / path, old, new)
+                try:
+                    self.assert_clause_two(reference, is_stale, path if is_stale else None)
+                finally:
+                    (self.root / path).write_text(original, encoding="utf-8")
+
+    def test_a_package_init_is_walked_even_when_first_seen_through_a_submodule(self):
+        """The model body (followed first) meets ``lib`` through ``geo.size``
+        before the import statement executes the package: its __init__ must still
+        run through the walk, or what its preamble calls goes unseen."""
+        self.write("lib/__init__.py", "from lib.geo import _setup\n\n_setup()\n")
+        self.write("lib/geo.py", "TABLE = [1.0]\n\n\ndef _setup():\n    TABLE[0] = 2.0\n\n\ndef size():\n    return TABLE[0]\n")
+        self.write_model("from lib import geo", "geo.size()")
+        reference, closure = self.record(executed=self.executed(self.root / "lib/__init__.py", self.geo))
+        self.assertIn("_setup", closure.names["lib/geo.py"])
+        self.edit(self.geo, "TABLE[0] = 2.0", "TABLE[0] = 3.0")
+        self.assert_clause_two(reference, True, "lib/geo.py")
+
+    def test_a_binding_added_later_that_shadows_a_submodule_is_stale(self):
+        reference, closure = self.record()
+        self.assertIn("geo", closure.names["lib/__init__.py"], "recorded unbound")
+        self.write("lib/__init__.py", "def geo():\n    return 1\n")
+        self.assert_clause_two(reference, True, "lib/__init__.py")
+
+    def test_a_file_appearing_where_an_import_would_find_it_first_is_stale(self):
+        reference, closure = self.record()
+        self.assertEqual(closure.shas["!lib/geo/__init__.py"], "absent")
+        (self.root / "lib/geo").mkdir()
+        self.write("lib/geo/__init__.py", "SCALE = 9.0\n")
+        self.assert_clause_two(reference, True, "!lib/geo/__init__.py")
+        (self.root / "lib/geo/__init__.py").unlink()
+        (self.root / "lib/geo").rmdir()
         self.assert_clause_two(reference, False)
-        self.edit(self.root / "lib/shapes.py", "CONFIG[0] = 20.0", "CONFIG[0] = 25.0")
+        # A namespace package that gains an __init__.py runs it on every import.
+        (self.root / "lib/__init__.py").unlink()
+        reference, closure = self.record()
+        self.assertEqual(closure.shas["!lib/__init__.py"], "absent")
+        self.write("lib/__init__.py", "")
+        self.assert_clause_two(reference, True, "!lib/__init__.py")
+
+    def test_an_import_found_past_the_script_folder_tracks_the_roots_before_it(self):
+        shared = self.root / "shared"
+        other = self.root / "other"
+        shared.mkdir()
+        other.mkdir()
+        self.write("shared/extra.py", "def width():\n    return 2.0\n")
+        self.write_model("import extra", "extra.width()")
+        with mock.patch.dict(os.environ, {"PYTHONPATH": str(shared)}):
+            reference, closure = self.record()
+            self.assertIn("<import roots 2>", closure.files)
+            self.assertEqual(closure.shas["!extra.py"], "absent", "the script's own folder would win")
+            self.assert_clause_two(reference, False)
+            self.write("extra.py", "def width():\n    return 3.0\n")
+            self.assert_clause_two(reference, True, "!extra.py")
+            (self.root / "extra.py").unlink()
+        with mock.patch.dict(os.environ, {"PYTHONPATH": os.pathsep.join([str(other), str(shared)])}):
+            self.assert_clause_two(reference, True, "<import roots 2>")
+        with mock.patch.dict(os.environ, {"PYTHONPATH": os.pathsep.join([str(shared), str(other)])}):
+            self.assert_clause_two(reference, False)  # a root after the one used cannot shadow it
+
+    def test_reflection_keeps_the_childs_files_that_ran_here_whole(self):
+        """A helper that imports by string can hand the parent a module a child
+        also uses: it ran in this process, so it is whole in this closure."""
+        self.write("lib/shapes.py", self.SHAPES)
+        self.write("lib/loader.py", "import importlib\n\n\ndef get(module, name):\n    return getattr(importlib.import_module(module), name)\n")
+        self.write("arm.py", "from cadgen import step\nfrom lib.shapes import make_a\n\n\n@step\ndef arm():\n    return make_a()\n")
+        self.write_model("from arm import arm\nfrom lib import loader", "(arm(), loader.get('lib.shapes', 'make_b')())")
+        reference, closure = self.record(executed=self.executed(self.root / "lib/shapes.py", self.root / "arm.py"))
+        self.assertIn("lib/shapes.py", closure.files)
+        self.assertNotIn("lib/shapes.py", closure.names)
+        self.edit(self.root / "lib/shapes.py", "return 20.0", "return 25.0")
         self.assert_clause_two(reference, True, "lib/shapes.py")
+
+    def test_an_attribute_of_a_model_function_takes_its_file_as_source(self):
+        self.write("arm.py", "from cadgen import step\n\n\n@step\ndef arm():\n    return 1\n")
+        for expression in ("arm.__wrapped__()", "arm.__cadgen_model__.func()"):
+            with self.subTest(expression=expression):
+                self.write_model("from arm import arm", expression)
+                _reference, closure = self.record()
+                self.assertTrue(closure.shas["arm.py"].startswith("ast1:"), "whole: its body is reachable")
+
+    def test_a_drawing_called_in_a_body_is_source_not_a_pin(self):
+        sketch = self.write("sketch.py", "from cadgen import dxf\n\n\n@dxf\ndef sketch():\n    return 1\n")
+        self.write_model("from sketch import sketch", "sketch()")
+        reference, closure = self.record()
+        self.assertIn("sketch.py", closure.names, "a helper like any other: nothing pins it")
+        self.edit(sketch, "return 1", "return 2")
+        self.assert_clause_two(reference, True, "sketch.py")
+
+    def test_a_file_that_stops_declaring_a_model_reads_as_what_it_is_now(self):
+        from cadgen.store.closure import static_closure
+
+        arm = self.write("arm.py", "from cadgen import step\n\n\n@step\ndef arm():\n    return 1\n")
+        self.write_model("from arm import arm", "arm()")
+        self.assertEqual(static_closure(self.root / "part.py").child_models, (arm,))
+        self.write("arm.py", "def arm():\n    return 1\n")
+        statics = static_closure(self.root / "part.py")
+        self.assertEqual(statics.child_models, ())
+        self.assertIn(arm, statics.source_files)
 
     # --- what a helper may carry without losing its reach -------------------------
 
@@ -855,7 +972,7 @@ class ReachEndToEnd(unittest.TestCase):
 
         self.assertEqual(self.run_model(), "built")
         record = read_record(self.model)
-        self.assertEqual(record["closure"]["names"], {"lib/__init__.py": [], "lib/geo.py": ["SIZE", "size"]})
+        self.assertEqual(record["closure"]["names"], {"lib/__init__.py": ["geo"], "lib/geo.py": ["SIZE", "size"]})
         self.assertTrue(record["closure"]["shas"]["lib/geo.py"].startswith("slice4:"))
         self.assertEqual(set(record["closure"]["wholes"]), {"lib/__init__.py", "lib/geo.py"})
         self.assertEqual(self.run_model(), "current")

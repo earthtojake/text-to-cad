@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import ast
 import math
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -222,7 +223,28 @@ def _match_model_decorator(
     return None
 
 
+def model_function_formats(source: bytes | str, filename: str = "<model>") -> dict[str, str]:
+    """``{function: "step" | "dxf"}`` for every model a module's source declares,
+    in file order; a mesh-only model reads as "step". A pure function of the
+    bytes: ``{}`` for source that declares none or does not parse."""
+    try:
+        tree = ast.parse(source, filename=filename)
+    except (SyntaxError, ValueError, MemoryError, RecursionError):
+        return {}
+    decorator_names, module_aliases = _cadgen_decorator_aliases(tree)
+    formats: dict[str, str] = {}
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef):
+            match = _match_model_decorator(node, decorator_names, module_aliases)
+            if match is not None:
+                formats[node.name] = match[0]
+    return formats
+
+
 _FUNCTION_NAMES_CACHE: dict[str, tuple[tuple[int, int], tuple[str, ...]]] = {}
+# A cached answer is kept only for a file whose mtime is older than this: a
+# same-size rewrite inside one mtime tick is otherwise invisible to the stat key.
+_FUNCTION_NAMES_SETTLE_NS = 2_000_000_000
 
 
 def model_function_names(script_path: Path | str) -> tuple[str, ...]:
@@ -249,7 +271,8 @@ def model_function_names(script_path: Path | str) -> tuple[str, ...]:
         if isinstance(node, ast.FunctionDef)
         and _match_model_decorator(node, decorator_names, module_aliases) is not None
     )
-    _FUNCTION_NAMES_CACHE[key] = (stamp, names)
+    if time.time_ns() - stat.st_mtime_ns > _FUNCTION_NAMES_SETTLE_NS:
+        _FUNCTION_NAMES_CACHE[key] = (stamp, names)
     return names
 
 
@@ -379,14 +402,14 @@ def imported_model(script_path: Path, function: str):
     stamp = _script_stamp(resolved)
     defn = registered_model(resolved, function)
     if defn is None or getattr(defn, "stamp", None) != stamp or not import_closure_current(resolved):
-        from cadgen._internal.generation_runner import _load_generator_module, _without_bytecode_writes
+        from cadgen._internal.generation_runner import _load_generator_module, _first_party_from_source
         from cadgen._internal.source_hash import evict_first_party_modules
 
         # Like the build's own load: from a clean first-party module space (a helper a
         # warm worker still holds would feed the reload its OLD values) and with no
         # .pyc for the model or its helpers.
         evict_first_party_modules()
-        with _without_bytecode_writes():
+        with _first_party_from_source():
             _load_generator_module(resolved)
         defn = registered_model(resolved, function)
     if defn is None:

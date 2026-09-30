@@ -53,9 +53,11 @@ from cadgen.store.index import (
 RECORD_KIND = "record"
 # Payload cutovers, not directory/name salts. Legacy mappings are misses.
 # Schema 6 requires declaration/execution-time input hashes, including DXF.
-# Older records may claim current input bytes for geometry built before an edit.
-# Their next source run rebuilds; saved-document mappings and objects stay valid.
-RECORD_SCHEMA_VERSION = 7
+# Older records may claim current input bytes for geometry built before an edit,
+# or lack the import-time, absent-file and search-root entries a closure now
+# carries. Their next source run rebuilds; saved-document mappings and objects
+# stay valid.
+RECORD_SCHEMA_VERSION = 8
 DOCUMENT_SCHEMA_VERSION = 4
 
 

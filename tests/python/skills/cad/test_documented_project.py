@@ -114,4 +114,4 @@ class TheSkillTeachesTheContract(unittest.TestCase):
         text = SKILL.read_text(encoding="utf-8")
         self.assertIn("running the root is the\nwhole build", text)
         self.assertIn("does NOT rebuild the assemblies", text)
-        self.assertIn("models by result, constants by value, functions by file", text)
+        self.assertIn("models by result, constants by value, functions by reach", text)

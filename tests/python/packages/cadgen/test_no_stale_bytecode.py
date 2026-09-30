@@ -1,12 +1,12 @@
-"""A build writes no bytecode for model code, so none can go stale.
+"""Model code runs from the source on disk: a build neither reads nor writes
+its bytecode.
 
-`_purge_stale_bytecode` deletes `__pycache__` at the job boundary, but on
-Windows a `.pyc` held open by a scanner or another interpreter refuses deletion
-and the purge swallows it (`ignore_errors=True`). CPython then ACCEPTS that
-stale file, because it validates by (whole-second mtime, size) -- two
-same-length edits inside one second, which is an agent's edit loop -- and the
-build silently uses code that is not on disk. Correctness therefore rests on
-writing no bytecode at all, not on a delete succeeding.
+CPython accepts a ``.pyc`` by (whole-second mtime, size), so two same-length
+edits inside one second -- an agent's edit loop -- run STALE bytecode while the
+closure hashes the new source, and a wrong result is recorded as current. A
+build compiles every first-party module from the bytes on disk and writes no
+``.pyc`` for anything it imports, so whatever another tool left in
+``__pycache__`` never runs.
 """
 
 from __future__ import annotations
@@ -78,7 +78,7 @@ class NoStaleBytecodeTest(unittest.TestCase):
     def test_the_window_is_what_suppresses_it(self) -> None:
         """Mutation check: with the window neutralised, bytecode reappears.
 
-        Pins that the absence above is caused by `_without_bytecode_writes` and
+        Pins that the absence above is caused by `_first_party_from_source` and
         not by some incidental property of the loader.
         """
         import contextlib
@@ -86,10 +86,36 @@ class NoStaleBytecodeTest(unittest.TestCase):
 
         from cadgen._internal import generation_runner
 
-        with mock.patch.object(generation_runner, "_without_bytecode_writes", contextlib.nullcontext):
+        with mock.patch.object(generation_runner, "_first_party_from_source", contextlib.nullcontext):
             self._build()
         leftovers = sorted(str(p.relative_to(self.project)) for p in self.project.rglob("__pycache__"))
         self.assertNotEqual([], leftovers, "the window is not what suppresses bytecode writes")
+
+
+    def test_a_stale_pyc_left_by_another_tool_never_runs(self) -> None:
+        import importlib
+        import py_compile
+
+        from cadgen._internal.generation_runner import _first_party_from_source
+
+        dims = self.project / "lib" / "dims.py"
+        stat = dims.stat()
+        py_compile.compile(str(dims), doraise=True)  # another tool compiles SIZE = 6
+        dims.write_text("SIZE = 7\n", encoding="utf-8")  # the same length...
+        os.utime(dims, ns=(stat.st_atime_ns, stat.st_mtime_ns))  # ...inside the same second
+        sys.path.insert(0, str(self.project))
+        self.addCleanup(sys.path.remove, str(self.project))
+
+        def size() -> int:
+            for name in ("lib.dims", "lib"):
+                sys.modules.pop(name, None)
+            return importlib.import_module("lib.dims").SIZE
+
+        self.assertEqual(size(), 6, "control: CPython runs the stale bytecode")
+        with _first_party_from_source():
+            self.assertEqual(size(), 7)
+            with _first_party_from_source():  # nested, as a metadata load inside a build
+                self.assertEqual(size(), 7)
 
 
 if __name__ == "__main__":

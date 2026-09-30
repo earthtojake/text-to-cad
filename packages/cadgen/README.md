@@ -225,11 +225,15 @@ read source, a record, or trigger source builds (12). An explicit editing
 session may consume runtime-announced preview trees as specified in STORE §9b.
 Correctness never depends on a
 store hit (13). Composition: importing binds, calling links — a parent
-depends on a child by its RESULT (the pinned tree), on a constant by its
-VALUE, on a helper by its REACH (the part of the helper the script and every
-file the build executed can run, closed statically; the whole file — or the
-whole closure — wherever the analysis cannot see — [`STORE.md`](STORE.md) §3)
-— and a model must never `read_step` its own output (14). The bundled runtime
+depends on a child by its RESULT (the pinned tree) and on what importing it
+runs in the parent's process (its module body and model headers, never a
+model body), on a constant by its VALUE, on a helper by its REACH (the part of
+the helper the script and every file the build executed can run, closed
+statically; the whole file — or the whole closure — wherever the analysis
+cannot see), on a data file by its BYTES (whatever the model's code opened),
+and on every file whose appearance would change what an import finds
+([`STORE.md`](STORE.md) §3) — and a model must never `read_step` its own
+output (14). The bundled runtime
 under `_runtime/` is the JS half of these; the laws' JS statements live in that
 runtime. It is built
 when the wheel is packaged and travels only inside it: the source tree never
@@ -334,9 +338,9 @@ src/cadgen/
   kinematics.py          # typed mates vocabulary (revolute/slider/
                          #   cylindrical/fastened, couple, normalize)
   step_scene.py          # read_step and scene loading (recorded inputs)
-  inputs.py              # declare_input: a data file the model reads and
-                         #   cadgen has no reader for (a JSON atlas, a CSV
-                         #   table) is a freshness input once it says so
+  inputs.py              # declare_input: a data file a native reader opens
+                         #   (Python-level reads are discovered on their own)
+                         #   is a freshness input once the model says so
   assembly.py            # label utilities and softly deprecated AssemblyHelper
   results.py             # the typed Results every verb returns (stdlib-only)
   store/                 # the store (STORE.md): objects, index, records, trees,

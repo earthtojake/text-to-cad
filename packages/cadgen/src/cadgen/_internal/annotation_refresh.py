@@ -176,7 +176,7 @@ def refresh_annotations(spec) -> str | None:
     from cadgen.store.index import resolve_model_ref
     from cadgen.store.records import read_record, write_record, note_output, forget_output
     from cadgen.store.gate import stale
-    from cadgen.store.closure import current_closure_hash, closure_hash, changed_constant, file_hash_now
+    from cadgen.store.closure import current_closure_hash, closure_hash, changed_constant, entry_hash_now
     from cadgen._internal.source_hash import _semantic_source_bytes
     from cadgen.store.trees import get_tree, put_tree, flatten, tree_complete
     from cadgen.catalog import artifact_file_hash
@@ -209,11 +209,11 @@ def refresh_annotations(spec) -> str | None:
         # helper by its recorded names (its recorded slice while unchanged),
         # any other helper whole.
         shas = {name: (_semantic_source_bytes(source) if name == script.name else
-                       file_hash_now((script.parent / name).resolve(), name, sliced, recorded_shas, wholes))
+                       entry_hash_now(script.parent, name, sliced, recorded_shas, wholes))
                 for name in closure['files']}
     except (OSError, KeyError, SyntaxError, ValueError):
         return None
-    if parts is None or script.name not in shas:
+    if parts is None or script.name not in shas or None in shas.values():
         return None
     full_hash = closure_hash(shas.items())
     geometry_shas = {**shas, script.name: parts[0]}

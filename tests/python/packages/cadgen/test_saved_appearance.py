@@ -198,11 +198,11 @@ class SavedAppearanceTest(unittest.TestCase):
             write_source_sidecar(invalid, {"appearance": {"materials": {"m": {"name": "M", "opacity": False}}, "assignments": {"o1": "m"}}})
         self.assertFalse(source_sidecar_path(invalid).exists())
 
-    def test_model_records_cut_over_to_six_while_documents_remain_four(self) -> None:
+    def test_model_records_cut_over_while_documents_remain_four(self) -> None:
         current_tree = "c" * 64
         model = self.root / "model.step"
         model.write_bytes(b"model")
-        for schema in (4, 5, 6):
+        for schema in (4, 5, 6, 7):
             with self.subTest(retired_schema=schema):
                 write_entry(
                     "model",
@@ -214,7 +214,7 @@ class SavedAppearanceTest(unittest.TestCase):
         write_record(model, {"tree": current_tree, "outputs": {}})
         current_record = read_record(model)
         self.assertEqual(RECORD_SCHEMA_VERSION, current_record["schemaVersion"])
-        self.assertEqual(7, current_record["schemaVersion"])
+        self.assertEqual(8, current_record["schemaVersion"])
         self.assertEqual(current_tree, current_record["tree"])
 
         document_hash = "d" * 64

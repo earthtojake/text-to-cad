@@ -206,6 +206,48 @@ class DiscoveredFileInputTests(unittest.TestCase):
         self.assertNotEqual(completed.returncode, 0, "a missing input must not pass silently")
         self.assertIn("read_step", completed.stdout + completed.stderr)
 
+    def _run_json(self, model: str) -> str:
+        completed = subprocess.run(
+            [sys.executable, str(self.project / model), "--json"], cwd=str(self.project),
+            env=self.environment, capture_output=True, text=True, timeout=600,
+        )
+        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
+        return json.loads(completed.stdout.strip().splitlines()[-1])["outcome"]
+
+    def test_a_file_the_model_reads_without_declaring_it_is_an_input(self) -> None:
+        """A plain ``read_text`` is seen through Python's open audit event: the
+        file joins the closure. Reading the model's own previous output is not an
+        input, or the model could never be current."""
+        model = self._write_model("plate.py", '''import json
+from pathlib import Path
+
+from cadgen import build123d as bd
+from cadgen import step
+
+HERE = Path(__file__).resolve().parent
+
+
+@step
+def plate():
+    width = json.loads((HERE / "atlas.json").read_text(encoding="utf-8"))["width"]
+    own = HERE / "plate.step"
+    if own.exists():
+        own.read_bytes()
+    return bd.Box(width, 20, 4)
+
+
+if __name__ == "__main__":
+    plate()
+''')
+        atlas = self.project / "atlas.json"
+        atlas.write_text('{"width": 10}', encoding="utf-8")
+        self.assertEqual(self._run_json(model), "built")
+        first = (self.project / "plate.step").read_bytes()
+        self.assertEqual(self._run_json(model), "current", "its own last output is no input")
+        atlas.write_text('{"width": 30}', encoding="utf-8")
+        self.assertEqual(self._run_json(model), "built", "a replaced data file makes the model stale")
+        self.assertNotEqual(first, (self.project / "plate.step").read_bytes())
+
     def test_the_same_mechanism_serves_step_models(self) -> None:
         """`read_step` is not a drawing feature: composing a vendor part into a
         @step model records it the same way."""
@@ -448,6 +490,24 @@ class DiscoveredInputRecordingTests(unittest.TestCase):
                     note_discovered_input(inner_file)
                 self.assertEqual(inner, {inner_file.resolve()})
                 self.assertEqual(outer, {outer_file.resolve(), inner_file.resolve()})
+
+    def test_what_model_code_reads_is_recorded_and_what_cadgen_or_the_build_writes_is_not(self) -> None:
+        from cadgen._internal.source_hash import _sha256_file, record_discovered_inputs
+
+        with tempfile.TemporaryDirectory(prefix="discovered-reads-") as tmp:
+            root = Path(tmp)
+            data, table, engine, scratch = (root / name for name in ("dims.json", "table.csv", "engine.bin", "scratch.txt"))
+            data.write_text('{"w": 2}', encoding="utf-8")
+            table.write_text("1,2\n", encoding="utf-8")
+            engine.write_bytes(b"x")
+            with record_discovered_inputs() as recorded:
+                json.loads(data.read_text(encoding="utf-8"))
+                with open(table, newline="", encoding="utf-8") as handle:
+                    handle.read()
+                _sha256_file(engine)  # cadgen reading for itself
+                scratch.write_text("x", encoding="utf-8")  # the build's own file
+                scratch.read_text(encoding="utf-8")
+            self.assertEqual(recorded, {data.resolve(), table.resolve()})
 
     def test_a_recorded_input_joins_the_closure_and_is_byte_hashed(self) -> None:
         from cadgen._internal.source_hash import closure_for_files, closure_hash_matches

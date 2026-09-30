@@ -223,25 +223,36 @@ the assemblies that use it** — run the parent to pick up the change
 rest). A parent finished against a child that changed during its build says so
 (`already stale: … rerun`).
 
-### What a rebuild tracks — models by result, constants by value, functions by file
+### What a rebuild tracks — models by result, constants by value, functions by reach
 
 What an importer TAKES from a model file decides how that file counts:
 
-- **`from widget import widget`** (the model function) → tracked by RESULT:
-  the parent pins the child's tree; `widget.py` is not in the parent's source.
+- **`from widget import widget`** (the model function), called → tracked by
+  RESULT: the parent pins the child's tree, so an edit inside `widget()`'s body
+  rebuilds the parent only when the child's geometry changes. Importing
+  `widget.py` still runs its top level in the parent's process — its imports,
+  module-level code and decorator arguments — so an edit there rebuilds the
+  parent too. Keep a model file's top level to imports, constants and
+  definitions.
 - **`from widget import WIDTH`** (a module-level literal: a number, string,
   bool, `None`, or tuples/lists/dicts of those) → tracked by VALUE: a
   comment or body edit in `widget.py` leaves the importer current; only a
-  changed value rebuilds it.
+  changed value rebuilds it. A value computed by module-level code is
+  import-time code: editing that expression rebuilds the importer too.
 - **Anything else** from a model file (a helper function, a `bd.` object, an
   expression) → tracked by FILE: the whole file joins the importer's source
   closure, and any edit to it rebuilds the importer. Shared helpers therefore
   belong in `lib/` (a plain module, in the closure of every model that
-  reaches it), and shared constants may live in a model file or in `lib/`.
+  reaches it — by the functions and constants the model can actually run, so
+  editing a helper no model calls rebuilds nothing), and shared constants may
+  live in a model file or in `lib/`.
 
 Inputs join the closure too: a `read_step` document is hashed as a build
-input, and so is any other data file the model declares with
-`cadgen.declare_input` (below). Embedded `animation=` source and named
+input, and so is every data file the model's Python code opens; a file only a
+native reader opens is declared with `cadgen.declare_input` (below). A new
+file that changes what an import finds — an `__init__.py` added to a folder, a
+package beside a module, a same-named module earlier on the path — also makes
+the model stale. Embedded `animation=` source and named
 `materials=` are decorator annotations. Imported values and helper calls
 remain ordinary source dependencies.
 
@@ -411,14 +422,19 @@ already builds, call that model instead of reading the artifact.
 
 ### Inputs: a data file the model reads
 
-`read_step` records the STEP it reads because cadgen reads it for you. For any
-other file a model reads — a JSON routing atlas, a CSV of tap sizes, a table of
-solved offsets — cadgen has no reader, so declare it with
-`cadgen.declare_input`. It returns the resolved path and puts the file's content
-hash in the model's closure; the model does its own parsing.
+`read_step` records the STEP it reads because cadgen reads it for you. Any
+other file the model's Python code opens — a JSON routing atlas, a CSV of tap
+sizes, a table of solved offsets through `json.load`, `csv` or `np.load` — is
+recorded as the build reads it: edit `atlas.json` and the model is stale on its
+own; rewrite it with identical bytes and it stays current, because the input is
+the content and not the mtime.
+
+A file opened in native code never passes through Python's `open`, so nothing
+sees it: `bd.import_step`, `bd.import_brep`, a font file. Declare such a file
+with `cadgen.declare_input`. It returns the resolved path and puts the file's
+content hash in the model's closure; the reader does its own parsing.
 
 ```python
-import json
 from pathlib import Path
 
 from cadgen import build123d as bd
@@ -428,16 +444,13 @@ _HERE = Path(__file__).resolve().parent
 
 
 @step
-def plate():
-    atlas = json.loads(declare_input(_HERE / "atlas.json").read_text(encoding="utf-8"))
-    return bd.Box(atlas["width"], 20, 4)
+def bracket():
+    return bd.import_brep(declare_input(_HERE / "imported" / "bracket.brep"))
 ```
 
 Wrap the path, not the read, so there is no way to declare one file and read
-another. Edit `atlas.json` and the model is stale on its own; rewrite it with
-identical bytes and it stays current, because the input is the content and not
-the mtime. Without the declaration the model reports itself current forever
-after the data changes, and only `--force` gets the truth back. A missing file
+another. Without the declaration the model reports itself current forever after
+the file changes, and only `--force` gets the truth back. A missing file
 raises before the model's parser sees it. The rule about a model's own output
 applies here too: never declare a file the model writes.
 

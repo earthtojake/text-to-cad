@@ -276,14 +276,15 @@ class ClosureBoundaryRule(StoreCase):
                 "entryKind": "part",
                 "sourceKind": "python",
                 "tree": self.tree_for("mirror"),
-                "closure": {"hash": closure.hash, "files": list(closure.files), "static": False},
+                "closure": closure.as_json(),
                 "constants": closure.constants,
                 "children": [],
                 "outputs": {},
             },
         )
         self.assertEqual({"handlebar.py": {"MIRROR_MOUNT_LEFT"}}, {k: set(v) for k, v in closure.constants.items()})
-        self.assertNotIn("handlebar.py", closure.files)
+        # Importing handlebar runs its module body here: it is in by what that runs.
+        self.assertTrue(closure.shas["handlebar.py"].startswith("islice1:"))
 
     def test_a_comment_edit_to_the_constants_module_leaves_the_importer_current(self) -> None:
         mirror = self._mirror_over(self.HANDLEBAR)
@@ -297,11 +298,18 @@ class ClosureBoundaryRule(StoreCase):
     def test_changing_the_constant_value_makes_the_importer_stale(self) -> None:
         from cadgen.store.gate import stale
 
+        # Computed at import: the module-level code computing it is import-time code.
         mirror = self._mirror_over(self.HANDLEBAR)
         self._record_with_constants(mirror)
         handlebar = self.root / "handlebar.py"
         handlebar.write_text(handlebar.read_text(encoding="utf-8").replace("_TOP[0] - 16.0", "_TOP[0] - 21.0"), encoding="utf-8")
         self.assertEqual(2, self.stale_clause(mirror))
+        self.assertIn("handlebar.py", stale(mirror).reason())
+        # A literal is a value the importer took: compared by value.
+        literal = self.HANDLEBAR.replace("(_TOP[0] - 16.0, 40.0, _TOP[2] + 6.0)", "(-120.0, 40.0, 15.0)")
+        mirror = self._mirror_over(literal)
+        self._record_with_constants(mirror)
+        handlebar.write_text(textwrap.dedent(literal.replace("-120.0", "-125.0")), encoding="utf-8")
         self.assertIn("constant changed: MIRROR_MOUNT_LEFT in handlebar.py", stale(mirror).reason())
 
     def test_an_unhashable_constant_is_a_source_edge(self) -> None:

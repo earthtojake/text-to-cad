@@ -59,7 +59,6 @@ edit is not a change.
 from __future__ import annotations
 
 import dataclasses
-import functools
 import hashlib
 import sys
 import threading
@@ -73,7 +72,15 @@ from cadgen._internal.source_hash import (
     _semantic_source_hash,
     is_first_party_source_file,
 )
-from cadgen.store.reach import SLICE_PREFIX, Alias, ModuleSyntax, analyze, slice_hash
+from cadgen.store.reach import (
+    IMPORT_SLICE_PREFIX,
+    SLICE_PREFIX,
+    Alias,
+    ModuleSyntax,
+    analyze,
+    import_slice_hash,
+    slice_hash,
+)
 
 # What analysing a file can raise besides a bug: invalid source, or source too
 # deep for the parser/``ast.dump``. Such a file is hashed whole.
@@ -215,16 +222,51 @@ def changed_constant(script: Path, constants: Mapping[str, Mapping[str, str]]) -
 # --- model-file detection -------------------------------------------------------
 
 
-@functools.lru_cache(maxsize=4096)
+# sha256(source bytes) -> {model function: format}. Keyed by content, never by
+# path: a warm process outlives edits, and a file that gains or loses a model
+# decorator must be read as what it is now.
+_MODEL_FORMATS: OrderedDict[bytes, dict[str, str]] = OrderedDict()
+_MODEL_FORMATS_MAX = 4096
+_MODEL_FORMATS_LOCK = threading.Lock()
+
+
+def _model_formats_of(payload: bytes, filename: str) -> dict[str, str]:
+    key = hashlib.sha256(payload).digest()
+    with _MODEL_FORMATS_LOCK:
+        cached = _MODEL_FORMATS.get(key)
+        if cached is not None:
+            _MODEL_FORMATS.move_to_end(key)
+            return cached
+    from cadgen.metadata import model_function_formats
+
+    formats = model_function_formats(payload, filename)
+    with _MODEL_FORMATS_LOCK:
+        _MODEL_FORMATS[key] = formats
+        while len(_MODEL_FORMATS) > _MODEL_FORMATS_MAX:
+            _MODEL_FORMATS.popitem(last=False)
+    return formats
+
+
+def _model_formats(path_str: str) -> dict[str, str]:
+    try:
+        payload = Path(path_str).read_bytes()
+    except OSError:
+        return {}
+    return _model_formats_of(payload, path_str)
+
+
+def _pinned(formats: Mapping[str, str]) -> frozenset[str]:
+    """The models a call PINS. A drawing is not one: called inside another
+    build, a ``@dxf`` function runs its body inline, so taking it is taking
+    source."""
+    return frozenset(name for name, fmt in formats.items() if fmt != "dxf")
+
+
 def _model_function_names(path_str: str) -> frozenset[str]:
-    """All declared model names, without importing or choosing one model.
-
-    A multi-model file still forms a result boundary when the importer takes
-    only decorated functions. Each model keeps that file's whole closure.
-    """
-    from cadgen.metadata import model_function_names
-
-    return frozenset(model_function_names(Path(path_str)))
+    """The models a file declares that a call pins, without importing it or
+    choosing one. A multi-model file still forms a result boundary when the
+    importer takes only those; each model keeps that file's whole closure."""
+    return _pinned(_model_formats(path_str))
 
 
 def is_model_file(path: Path) -> bool:
@@ -232,7 +274,8 @@ def is_model_file(path: Path) -> bool:
 
 
 def forget_model_files() -> None:
-    _model_function_names.cache_clear()
+    with _MODEL_FORMATS_LOCK:
+        _MODEL_FORMATS.clear()
 
 
 # --- static reach: import resolution and the walk ------------------------------
@@ -267,15 +310,21 @@ def _resolve_module(name: str, roots: Iterable[Path]) -> Path | None:
 class _Resolved:
     """A first-party import target: the files importing it executes (package
     ``__init__``s, then the module), the module's own file, and the directory
-    its submodules live in when it is a package."""
+    its submodules live in when it is a package. ``absent`` lists the files
+    whose appearance would make the import resolve differently -- each was
+    checked and missing -- and ``root`` is the index of the search root the
+    target was found in."""
 
     executed: tuple[Path, ...]
     module: Path | None
     package_dir: Path | None
+    absent: tuple[Path, ...] = ()
+    root: int = 0
 
 
 def _resolve_dotted(parts: list[str], roots: Iterable[Path]) -> _Resolved | None:
-    for root in roots:
+    absent: list[Path] = []
+    for position, root in enumerate(roots):
         executed: list[Path] = []
         current = root
         ok = True
@@ -288,22 +337,29 @@ def _resolve_dotted(parts: list[str], roots: Iterable[Path]) -> _Resolved | None
                 current = current / part
             elif last and module_file.is_file():
                 executed.append(module_file.resolve())
-                return _Resolved(tuple(executed), module_file.resolve(), None)
+                absent.append(package_init)  # a package beside it would win
+                return _Resolved(tuple(executed), module_file.resolve(), None, tuple(absent), position)
             elif (current / part).is_dir():
-                current = current / part  # namespace package: nothing executes
+                # A namespace portion: nothing executes, and a regular package
+                # or module of the same name would win over it.
+                absent.extend((package_init, module_file))
+                current = current / part
             else:
+                absent.extend((package_init, module_file))  # either would resolve in this root
                 ok = False
                 break
         if ok:
             module = executed[-1] if executed else None
-            return _Resolved(tuple(executed), module, current)
+            return _Resolved(tuple(executed), module, current, tuple(absent), position)
     return None
 
 
-def _resolve_sub(resolved: _Resolved, name: str) -> _Resolved | None:
-    if resolved.package_dir is None:
-        return None
-    return _resolve_dotted([name], [resolved.package_dir])
+def _first_party_target(resolved: _Resolved) -> bool:
+    """Whether an import resolved to model-side code (not the runtime or an
+    installed package that happens to sit on a search root)."""
+    if resolved.module is not None:
+        return is_first_party_source_file(resolved.module)
+    return resolved.package_dir is not None and is_first_party_source_file(resolved.package_dir / "__init__.py")
 
 
 def _parse_import_syntax(payload: bytes, filename: str) -> ModuleSyntax:
@@ -393,6 +449,7 @@ class StaticImports:
 class _FileState:
     syntax: ModuleSyntax | None
     reached: set[int] = field(default_factory=set)
+    headers: set[int] = field(default_factory=set)  # model definitions reached for their header only
     names: set[str] = field(default_factory=set)
     whole: bool = False
     why: str | None = None  # why the file is tracked whole (diagnostics only)
@@ -434,8 +491,55 @@ class _Walk:
         self.constants: dict[str, dict[str, str]] = {}
         self.zones: set[Path] = set()
         self.escaped: set[Path] = set()
-        self.queue: list[tuple[Path, int]] = []   # reached statements not yet followed
+        self.queue: list[tuple[Path, int, bool]] = []   # (file, statement, header only) not yet followed
         self.escapes: list[Path] = []             # escaped modules whose bound modules escape next
+        # Resolution facts the walk relied on: files whose appearance would make
+        # a first-party import resolve differently, and the last search root one
+        # resolved in (an earlier root gaining a module could shadow it).
+        self.absent: set[Path] = set()
+        self.root_used = -1
+        self._formats: dict[Path, dict[str, str]] = {}
+        # Files whose import the walk has run. Not the same as loaded: a package
+        # __init__ can be read for a submodule's name before its own import
+        # statement is followed, and its preamble must still be walked then.
+        self.touched: set[Path] = set()
+
+    # -- models ------------------------------------------------------------------
+
+    def _formats_of(self, path: Path) -> dict[str, str]:
+        """The models a file declares, read from the bytes that ran when the
+        exec hook captured them, else from the file."""
+        formats = self._formats.get(path)
+        if formats is None:
+            payload = self.sources.get(str(path))
+            if payload is None:
+                try:
+                    payload = path.read_bytes()
+                except OSError:
+                    payload = b""
+            formats = self._formats[path] = _model_formats_of(payload, str(path)) if payload else {}
+        return formats
+
+    def _pinned_models(self, path: Path) -> frozenset[str]:
+        return _pinned(self._formats_of(path))
+
+    def _declared_models(self, path: Path) -> frozenset[str]:
+        return frozenset(self._formats_of(path))
+
+    # -- resolution --------------------------------------------------------------
+
+    def _dotted(self, parts: list[str], roots: list[Path]) -> _Resolved | None:
+        resolved = _resolve_dotted(parts, roots)
+        if resolved is not None and _first_party_target(resolved):
+            self.absent.update(resolved.absent)
+            if roots is self.roots:
+                self.root_used = max(self.root_used, resolved.root)
+        return resolved
+
+    def _sub(self, resolved: _Resolved, name: str) -> _Resolved | None:
+        if resolved.package_dir is None:
+            return None
+        return self._dotted([name], [resolved.package_dir])
 
     # -- files -------------------------------------------------------------------
 
@@ -464,12 +568,13 @@ class _Walk:
         """A module that executes (its preamble), by import."""
         if path == self.root or not is_first_party_source_file(path):
             return
-        if self.model_boundaries and _model_function_names(str(path)):
+        if self.model_boundaries and self._pinned_models(path):
             self.model_taken.setdefault(path, set())
             self._reclassify(path)
             return
-        if path in self.files:
+        if path in self.touched:
             return
+        self.touched.add(path)
         state = self._load(path)
         if not self.descend:
             return
@@ -480,9 +585,13 @@ class _Walk:
         elif self._in_zone(path):
             self.make_whole(path, "package escaped")
         else:
-            models = _model_function_names(str(path)) if self.import_time else frozenset()
+            models = self._declared_models(path) if self.import_time else frozenset()
             for index in state.syntax.preamble:
-                if not models or not models.intersection(state.syntax.statements[index].binds):
+                if models and models.intersection(state.syntax.statements[index].binds):
+                    # Importing runs a model definition's header -- its decorators
+                    # and defaults -- but never its body.
+                    self.reach_header(path, index)
+                else:
                     self.reach_statement(path, index)
 
     def make_whole(self, path: Path, why: str) -> None:
@@ -524,7 +633,7 @@ class _Walk:
         syntax = state.syntax
         if syntax is None:
             return
-        if self.import_time and name in _model_function_names(str(path)):
+        if self.import_time and name in self._declared_models(path):
             return  # a model function's body runs when it is called, never on import
         bound = name in syntax.definitions or name in syntax.aliases or name in syntax.preamble_bound
         if not bound and name.startswith("__") and name.endswith("__"):
@@ -548,27 +657,39 @@ class _Walk:
         if index in state.reached or state.syntax is None:
             return
         state.reached.add(index)
-        self.queue.append((path, index))
+        self.queue.append((path, index, False))
 
-    def _follow(self, path: Path, index: int) -> None:
+    def reach_header(self, path: Path, index: int) -> None:
+        """What executing a model definition runs without calling it."""
+        state = self._load(path)
+        if index in state.reached or index in state.headers or state.syntax is None:
+            return
+        if state.syntax.statements[index].header is None:
+            self.reach_statement(path, index)
+            return
+        state.headers.add(index)
+        self.queue.append((path, index, True))
+
+    def _follow(self, path: Path, index: int, header: bool) -> None:
         syntax = self.files[path].syntax
         statement = syntax.statements[index]
+        part = statement.header if header else statement
         # One statement can contain several lexical scopes. Keep every
         # candidate binding: a later nested import must not hide an earlier
         # scope's dependency just because both use the same alias.
         local: dict[str, list[Alias]] = {}
-        for name, alias in statement.aliases:
+        for name, alias in part.aliases:
             local.setdefault(name, []).append(alias)
-        for _name, alias in statement.aliases:
+        for _name, alias in part.aliases:
             self.import_edge(path, alias)
-        for alias in statement.stars:
+        for alias in part.stars:
             self.import_edge(path, alias, whole=True)
-        for name in statement.reads:
+        for name in part.reads:
             self.name_use(path, syntax, local, name, ())
-        for group in (statement.chains, statement.loads):
+        for group in (part.chains, part.loads):
             for name, chain in group:
                 self.name_use(path, syntax, local, name, chain)
-        for name in statement.stores:
+        for name in part.stores:
             aliases = local.get(name, []) + list(syntax.aliases.get(name, ()))
             for alias in aliases:
                 target = self._alias_module(path, alias)
@@ -596,12 +717,12 @@ class _Walk:
 
     def _resolve(self, importer: Path, alias: Alias) -> _Resolved | None:
         if alias.level == 0:
-            return _resolve_dotted(alias.module.split("."), self.roots) if alias.module else None
+            return self._dotted(alias.module.split("."), self.roots) if alias.module else None
         base = importer.parent
         for _ in range(alias.level - 1):
             base = base.parent
         if alias.module:
-            return _resolve_dotted(alias.module.split("."), [base])
+            return self._dotted(alias.module.split("."), [base])
         init = base / "__init__.py"
         return _Resolved((init.resolve(),) if init.is_file() else (), init.resolve() if init.is_file() else None, base)
 
@@ -613,7 +734,7 @@ class _Walk:
             return None
         if alias.attr is None:
             return resolved
-        return _resolve_sub(resolved, alias.attr)
+        return self._sub(resolved, alias.attr)
 
     def _alias_source(self, importer: Path, alias: Alias) -> Path | None:
         """The first-party module file an alias takes its binding from: the
@@ -622,7 +743,7 @@ class _Walk:
         if resolved is None:
             return None
         if alias.attr is not None:
-            sub = _resolve_sub(resolved, alias.attr)
+            sub = self._sub(resolved, alias.attr)
             if sub is not None:
                 return sub.module
         return resolved.module
@@ -630,20 +751,33 @@ class _Walk:
     def _shadowing(self, package: _Resolved, name: str) -> None:
         """``from pkg import name`` or ``pkg.name`` where ``name`` is a submodule:
         a binding of ``name`` in ``pkg/__init__.py`` wins unless the submodule
-        was imported first, so that binding is reached too."""
+        was imported first, so that binding is reached too -- and when there is
+        none, the name is still part of the slice, marked unbound, so adding one
+        later is an edit the gate sees."""
         init = package.module
         if init is None or package.package_dir is None or init.parent != package.package_dir.resolve():
             return
         if init == self.root or not self.descend or not is_first_party_source_file(init):
             return
-        syntax = self._load(init).syntax
-        if syntax is not None and (name in syntax.definitions or name in syntax.preamble_bound or name in syntax.aliases):
+        state = self._load(init)
+        syntax = state.syntax
+        if syntax is None:
+            return
+        if name in syntax.definitions or name in syntax.preamble_bound or name in syntax.aliases:
             self.name_edge(init, name)
+        elif not state.whole:
+            state.names.add(name)
+
+    def _beyond_call(self, module: Path, name: str) -> None:
+        """``arm.__wrapped__``: an attribute of a pinned model function can reach
+        what the pin stands for -- its body -- so the file is taken as source."""
+        if self.model_boundaries and name in self._pinned_models(module):
+            self.escape(module, f"{name} used beyond a call")
 
     def import_edge(self, importer: Path, alias: Alias, *, whole: bool = False) -> None:
         if alias.executes:
             # ``import a.b.c`` binds ``a`` but executes every package on the way.
-            executes = _resolve_dotted(alias.executes.split("."), self.roots)
+            executes = self._dotted(alias.executes.split("."), self.roots)
             for executed in (executes.executed if executes is not None else ()):
                 self.touch(executed)
         resolved = self._resolve(importer, alias)
@@ -653,9 +787,12 @@ class _Walk:
             self.touch(executed)
         target = resolved
         if alias.attr is not None:
-            sub = _resolve_sub(resolved, alias.attr)
+            sub = self._sub(resolved, alias.attr)
             if sub is None:
-                if resolved.module is not None:
+                # A from-import reaches the name it binds -- the importer's body
+                # may call it. Importing alone runs none of it: an import-time walk
+                # follows only what import-time code reads.
+                if resolved.module is not None and not self.import_time:
                     self.name_edge(resolved.module, alias.attr)
                 return
             self._shadowing(resolved, alias.attr)
@@ -679,18 +816,22 @@ class _Walk:
             return
         target = resolved
         if alias.attr is not None:
-            sub = _resolve_sub(resolved, alias.attr)
+            sub = self._sub(resolved, alias.attr)
             if sub is None:
                 if resolved.module is not None:
                     self.name_edge(resolved.module, alias.attr)
+                    if chain:
+                        self._beyond_call(resolved.module, alias.attr)
                 return
             self._shadowing(resolved, alias.attr)
             target = sub
-        for element in chain:
-            sub = _resolve_sub(target, element)
+        for position, element in enumerate(chain):
+            sub = self._sub(target, element)
             if sub is None:
                 if target.module is not None:
                     self.name_edge(target.module, element)
+                    if position + 1 < len(chain):
+                        self._beyond_call(target.module, element)
                 return
             self._shadowing(target, element)
             for executed in sub.executed:
@@ -702,7 +843,7 @@ class _Walk:
     def name_edge(self, target: Path, name: str) -> None:
         if target == self.root or not is_first_party_source_file(target):
             return
-        if self.model_boundaries and _model_function_names(str(target)):
+        if self.model_boundaries and self._pinned_models(target):
             taken = self.model_taken.setdefault(target, set())
             if taken is not None and name not in taken:
                 taken.add(name)
@@ -717,7 +858,7 @@ class _Walk:
         module bound in it (it is reachable by any name too)."""
         if target == self.root or not is_first_party_source_file(target):
             return
-        if self.model_boundaries and _model_function_names(str(target)):
+        if self.model_boundaries and self._pinned_models(target):
             if self.model_taken.get(target, set()) is not None:
                 self.model_taken[target] = None
                 self._reclassify(target)
@@ -745,7 +886,7 @@ class _Walk:
         if taken is None:
             source = True
         else:
-            beyond = taken - _model_function_names(str(target))
+            beyond = taken - self._pinned_models(target)
             literals = (module_constant_hashes(target, beyond) or {}) if beyond else {}
             source = set(literals) != beyond
             if not source and literals:
@@ -765,7 +906,7 @@ class _Walk:
     def walk_root(self, path: Path) -> None:
         """Another root, walked whole like the script: a first-party file the
         build executed that this walk never reached."""
-        if path == self.root or path in self.files or path in self.model_taken:
+        if path == self.root or path in self.touched or path in self.model_taken:
             return
         self.make_whole(path, "executed, not reached")
         self._drain()
@@ -1046,6 +1187,16 @@ def build_closure(
         path = Path(key)
         if path not in child_owned:
             files.add(path)
+    # Everything else that ran in this process ran because a child was
+    # imported: a child file's module body, the helpers only it imports, its
+    # model definitions' headers. That is this model's input too -- it can
+    # change what this body computes -- but a model's BODY never is: it runs in
+    # the child's own build, or not at all. Such a file is hashed by what its
+    # import runs.
+    in_process = {path for path in imports.files if path != script and is_first_party_source_file(path)}
+    in_process.update(path for path in map(Path, executed) if path.suffix == ".py" and is_first_party_source_file(path))
+    import_time = in_process - files
+    files |= import_time
     for path in discovered_inputs:
         try:
             files.add(Path(path).resolve())
@@ -1059,6 +1210,16 @@ def build_closure(
     wholes: dict[str, str] = {}
     for path in files:
         rel = _relative(path, base)
+        if path in import_time:
+            ran = imports.files.get(path)
+            if not reflective and ran is not None and not ran.whole and ran.syntax is not None:
+                reached = tuple(sorted(ran.names))
+                models = imports._declared_models(path)
+                pairs.append((rel, import_slice_hash(ran.syntax, reached, models) if models
+                               else slice_hash(ran.syntax, reached)))
+                names[rel] = reached
+                wholes[rel] = ran.syntax.whole_hash
+                continue
         state = walk.files.get(path)
         syntax = state.syntax if state is not None else None
         reached = None if reflective else statics.names.get(path)
@@ -1081,6 +1242,17 @@ def build_closure(
             except OSError:
                 continue
         pairs.append((rel, file_hash))
+    # What the imports resolved to depends on files that do NOT exist too: each
+    # stays in the closure, recorded absent, so one appearing -- an __init__.py
+    # in a namespace package, a package beside a module, a module in an earlier
+    # root -- is a change like any edit. And past the script's own folder, on the
+    # search roots themselves.
+    for rel in sorted({ABSENT_MARK + _relative(path, base) for path in walk.absent | imports.absent}):
+        pairs.append((rel, ABSENT))
+    root_used = max(walk.root_used, imports.root_used)
+    if root_used > 0:
+        count = root_used + 1
+        pairs.append((ROOTS_KEY.format(count=count), _roots_digest(walk.roots[:count], base)))
     constants = {_relative(Path(module), base): dict(values) for module, values in statics.constants.items()}
     return Closure(
         hash=closure_hash(pairs),
@@ -1102,33 +1274,104 @@ def sliced_source_hash(path: Path, names: Iterable[str]) -> str:
         return _semantic_source_bytes(payload)  # unanalysable: the whole-file hash
 
 
+def import_sliced_source_hash(path: Path, names: Iterable[str]) -> str:
+    """The import-time slice of a child model file as it is on disk now: its
+    models, and so which definitions count by their header, are read from the
+    same bytes."""
+    payload = path.read_bytes()
+    try:
+        syntax = _SYNTAX.get(payload, str(path))
+    except _UNANALYSABLE:
+        return _semantic_source_bytes(payload)
+    models = frozenset(_model_formats_of(payload, str(path)))
+    return import_slice_hash(syntax, tuple(names), models) if models else slice_hash(syntax, tuple(names))
+
+
+# A closure entry for a file the imports relied on NOT existing is its path
+# behind ABSENT_MARK, hashed ABSENT while it still does not exist; ROOTS_KEY is
+# the entry for the search roots past the script's own folder that an import
+# resolved in. Both describe themselves, so any re-hash reads them without the
+# recorded hashes.
+ABSENT_MARK = "!"
+ABSENT = "absent"
+ROOTS_KEY = "<import roots {count}>"
+_ROOTS_PREFIX = "<import roots "
+
+
+def _roots_count(rel: str) -> int | None:
+    if not (rel.startswith(_ROOTS_PREFIX) and rel.endswith(">")):
+        return None
+    try:
+        return int(rel[len(_ROOTS_PREFIX):-1])
+    except ValueError:
+        return None
+
+
+def source_files(files: Iterable[str], shas: Mapping[str, str] | None = None) -> list[str]:
+    """The files a closure names that exist -- without its absent and roots entries."""
+    return [rel for rel in files if _roots_count(rel) is None and not rel.startswith(ABSENT_MARK)]
+
+
+def _roots_digest(roots: Iterable[Path | str], base: Path) -> str:
+    """``roots:<sha>`` over the search roots, each relative to the model's
+    folder where it can be."""
+    listed = [_relative(Path(root), base) for root in roots]
+    return "roots:" + hashlib.sha256("\0".join(listed).encode("utf-8")).hexdigest()
+
+
+def _roots_now(base: Path, count: int) -> str:
+    """The digest over the first ``count`` search roots a build would use now:
+    a root appended after them cannot shadow anything they resolved."""
+    return _roots_digest(_search_roots(base / "_")[:count], base)
+
+
 def file_hash_now(path: Path, rel: str, names: Mapping[str, Iterable[str]] | None,
                   shas: Mapping[str, str] | None = None, wholes: Mapping[str, str] | None = None) -> str:
     """One recorded closure file hashed as the gate compares it now: whole, or
     by its recorded names when sliced. A sliced file whose whole-file hash is
     still the recorded one keeps its recorded slice without re-analysis."""
+    recorded = (shas or {}).get(rel)
     reached = (names or {}).get(rel)
     if reached is None:
         return _semantic_source_hash(path)
-    recorded = (shas or {}).get(rel)
     whole = (wholes or {}).get(rel)
-    if recorded and whole and recorded.startswith(SLICE_PREFIX) and _semantic_source_hash(path) == whole:
+    if (recorded and whole and recorded.startswith((SLICE_PREFIX, IMPORT_SLICE_PREFIX))
+            and _semantic_source_hash(path) == whole):
         return recorded
+    if recorded and recorded.startswith(IMPORT_SLICE_PREFIX):
+        return import_sliced_source_hash(path, reached)
     return sliced_source_hash(path, reached)
+
+
+def entry_hash_now(base: Path, rel: str, names: Mapping[str, Iterable[str]] | None,
+                   shas: Mapping[str, str] | None = None, wholes: Mapping[str, str] | None = None) -> str | None:
+    """One recorded closure entry as it hashes now, relative to the model's
+    folder ``base``: a file (``file_hash_now``), or None when it is gone; a file
+    recorded absent, ABSENT while it still is; the search roots, their digest."""
+    if rel.startswith(ABSENT_MARK):
+        candidate = Path(rel[len(ABSENT_MARK):])
+        return ABSENT if not (candidate if candidate.is_absolute() else base / candidate).exists() else "present"
+    count = _roots_count(rel)
+    if count is not None:
+        return _roots_now(base, count)
+    resolved = _resolve_relative(rel, base)
+    if resolved is None:
+        return None
+    return file_hash_now(resolved, rel, names, shas, wholes)
 
 
 def changed_closure_files(script: Path, shas: Mapping[str, str], names: Mapping[str, Iterable[str]] | None = None,
                           wholes: Mapping[str, str] | None = None) -> list[str]:
     """The recorded closure files whose content hash differs now (a missing file
-    counts), in recorded order. Empty when nothing moved -- or when the record
-    carries no per-file hashes, in which case the caller can only say "changed".
-    A file in ``names`` is compared by its slice; any other is hashed whole."""
+    counts, and so does one recorded absent that exists), in recorded order.
+    Empty when nothing moved -- or when the record carries no per-file hashes,
+    in which case the caller can only say "changed". A file in ``names`` is
+    compared by its slice; any other is hashed whole."""
     base = Path(script).resolve().parent
     changed: list[str] = []
     for rel, recorded in shas.items():
-        resolved = _resolve_relative(str(rel), base)
         try:
-            now = file_hash_now(resolved, str(rel), names, shas, wholes) if resolved is not None else None
+            now = entry_hash_now(base, str(rel), names, shas, wholes)
         except OSError:
             now = None
         if now != recorded:
@@ -1145,11 +1388,11 @@ def current_closure_hash(script: Path, files: Iterable[str], names: Mapping[str,
     base = Path(script).resolve().parent
     pairs: list[tuple[str, str]] = []
     for rel in files:
-        resolved = _resolve_relative(str(rel), base)
-        if resolved is None:
-            return None
         try:
-            pairs.append((str(rel), file_hash_now(resolved, str(rel), names, shas, wholes)))
+            now = entry_hash_now(base, str(rel), names, shas, wholes)
         except OSError:
             return None
+        if now is None:
+            return None
+        pairs.append((str(rel), now))
     return closure_hash(pairs) if pairs else None

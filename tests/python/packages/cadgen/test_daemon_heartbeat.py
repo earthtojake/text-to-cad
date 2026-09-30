@@ -184,20 +184,21 @@ class HeartbeatLifetime(unittest.TestCase):
     def test_the_first_beat_is_synchronous_and_the_thread_is_joined_on_exit(self):
         from cadgen.daemon import worker
 
-        beats: list[dict] = []
+        beats: list[tuple[threading.Thread, dict]] = []
         second_beat = threading.Event()
 
         def emit(frame: dict) -> None:
-            beats.append(frame)
+            beats.append((threading.current_thread(), frame))
             if len(beats) >= 2:
                 second_beat.set()
 
         with mock.patch.object(worker, "_emit", emit), \
                 mock.patch.object(worker, "HEARTBEAT_INTERVAL_SECONDS", 0.01):
             with worker._heartbeat():
-                # The supervisor's CPU baseline exists from the job's first instant.
-                self.assertEqual(len(beats), 1)
-                self.assertIn("cpu", beats[0]["heartbeat"])
+                # The supervisor's CPU baseline exists from the job's first instant:
+                # the job's own thread emitted it, before the heartbeat thread could.
+                self.assertIs(beats[0][0], threading.current_thread())
+                self.assertIn("cpu", beats[0][1]["heartbeat"])
                 self.assertTrue(second_beat.wait(60), "the heartbeat thread never beat")
             # Joined before the job's exit frame could be written: nothing can
             # beat after it, into the next request's channel.

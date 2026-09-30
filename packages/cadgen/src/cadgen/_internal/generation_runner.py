@@ -4,6 +4,8 @@ from collections.abc import Callable
 import copy
 import contextlib
 from dataclasses import dataclass
+import importlib.abc
+import importlib.machinery
 import importlib.util
 from pathlib import Path
 import sys
@@ -14,6 +16,7 @@ from cadgen._internal.source_hash import PythonSourceClosure
 from cadgen._internal.source_hash import PythonSourceHash
 from cadgen._internal.source_hash import capture_runtime_closure
 from cadgen._internal.source_hash import evict_first_party_modules
+from cadgen._internal.source_hash import is_first_party_source_file
 from cadgen._internal.source_hash import python_source_hash
 from cadgen._internal.source_hash import record_discovered_inputs
 from cadgen._internal.source_hash import record_first_party_execution
@@ -137,63 +140,61 @@ def _load_generator_module(script_path: Path) -> object:
     return module
 
 
+class _SourceOnlyLoader(importlib.machinery.SourceFileLoader):
+    """Compiles the bytes on disk, never a ``__pycache__`` ``.pyc``, and hands
+    those exact bytes to the build's execution hashes."""
+
+    def get_code(self, fullname: str):  # noqa: ANN201 - importlib protocol
+        path = self.get_filename(fullname)
+        data = self.get_data(path)
+        from cadgen.store.closure import execution_digest, note_consumed_file_hash
+
+        resolved = str(Path(path).resolve())
+        note_consumed_file_hash(resolved, execution_digest(data, resolved), source=data)
+        return compile(data, path, "exec", dont_inherit=True)
+
+
+class _FirstPartyFromSource(importlib.abc.MetaPathFinder):
+    """Loads every first-party module through :class:`_SourceOnlyLoader`."""
+
+    def find_spec(self, fullname, path, target=None):  # noqa: ANN001, ANN201 - importlib protocol
+        spec = None
+        for finder in sys.meta_path:
+            # Every instance, not only this one: nested windows (a metadata load
+            # inside a build) must not hand the lookup back and forth forever.
+            if isinstance(finder, _FirstPartyFromSource) or not hasattr(finder, "find_spec"):
+                continue
+            spec = finder.find_spec(fullname, path, target)
+            if spec is not None:
+                break
+        if (spec is not None and type(spec.loader) is importlib.machinery.SourceFileLoader and spec.origin
+                and is_first_party_source_file(Path(spec.origin).resolve())):
+            spec.loader = _SourceOnlyLoader(spec.loader.name, spec.loader.path)
+        return spec
+
+
 @contextlib.contextmanager
-def _without_bytecode_writes():
-    """Write no ``.pyc`` for anything imported inside this window.
+def _first_party_from_source():
+    """Run model code from the source bytes on disk: no ``.pyc`` read for a
+    first-party module, and none written for anything imported here.
 
-    The purge below can only delete what it is allowed to delete. On POSIX an
-    unlink succeeds whatever holds the file, so the purge always lands; on
-    Windows a ``__pycache__`` entry held open by a scanner, an editor, or a
-    sibling interpreter refuses deletion, and the purge swallows it
-    (``ignore_errors=True``). What survives is a stale ``.pyc`` that CPython
-    will then accept, because it validates by (whole-second mtime, size) -- two
-    same-length edits inside one second is exactly an agent's edit loop. The
-    result is a build against code that is not on disk: silently wrong output,
-    which is worse than any crash.
-
-    So the guarantee stops resting on a delete succeeding. Nothing cadgen
-    imports for a model writes bytecode at all, which means there is nothing to
-    go stale and nothing to validate wrongly. Model libraries are small and this
-    window runs once per job, so recompiling from source costs the milliseconds
-    the entry script already pays (it is compiled from bytes at :58-63 for this
-    same reason).
-    """
+    CPython accepts a ``.pyc`` by (whole-second mtime, size), so two same-length
+    edits inside one second -- an agent's edit loop -- run STALE bytecode left
+    by any tool, while the closure hashes the new source: silently wrong output
+    recorded as current. Model code never reads bytecode here, so nothing can
+    go stale; model libraries are small, and recompiling them costs the
+    milliseconds the entry script already pays (it is compiled from bytes for
+    the same reason)."""
     previous = sys.dont_write_bytecode
     sys.dont_write_bytecode = True
+    finder = _FirstPartyFromSource()
+    sys.meta_path.insert(0, finder)
     try:
         yield
     finally:
         sys.dont_write_bytecode = previous
-
-
-def _purge_stale_bytecode(script_path: Path) -> None:
-    """Drop ``__pycache__`` beside the generator and its static import closure, once per job.
-
-    CPython validates a ``.pyc`` by (whole-second mtime, size): two same-length
-    edits inside one second load STALE BYTECODE on re-import -- exactly the
-    cadence of an agent-driven edit loop. The job boundary is the one place the
-    first-party module space is rebuilt, so it is the one place this belongs
-    (the old scope layer used to do it on every miss, mid-job, alongside an eviction
-    that broke lazy imports).
-
-    Best-effort by design, and no longer the guarantee: ``ignore_errors=True``
-    hides a Windows refusal to delete an open ``.pyc``, so correctness rests on
-    :func:`_without_bytecode_writes` instead -- cadgen writes no bytecode for
-    model code, so after this sweep there is nothing left to go stale. This
-    clears what OTHER tools left behind."""
-    import shutil
-
-    from cadgen._internal import scope_capture
-
-    resolved = script_path.resolve()
-    parents = {resolved.parent}
-    for root in import_roots(resolved):
-        try:
-            parents |= {f.parent for f in scope_capture.static_import_closure(resolved, root)}
-        except Exception:  # noqa: BLE001 - a closure that cannot be traced still gets the script's own folder purged
-            continue
-    for parent in parents:
-        shutil.rmtree(parent / "__pycache__", ignore_errors=True)
+        with contextlib.suppress(ValueError):
+            sys.meta_path.remove(finder)
 
 
 @dataclass(frozen=True)
@@ -521,12 +522,11 @@ def _run_script_generator_body(
     # itself, but a data file it reads does not, so `cadgen.read_step` declares one
     # here and it joins the closure like any other input.
     evict_first_party_modules()
-    _purge_stale_bytecode(spec.script_path)
     modules_before_load = set(sys.modules)
     from cadgen.store.closure import ExecutionHashes
 
     with (
-        _without_bytecode_writes(),
+        _first_party_from_source(),
         record_first_party_execution() as executed_files,
         record_discovered_inputs() as read_files,
         ExecutionHashes() as executed_hashes,
@@ -563,6 +563,11 @@ def _run_script_generator_body(
         ):
             raw_payload = generator()
 
+    # A model's own outputs are never its inputs: reading one back reads the
+    # previous run, so a read the open hook saw is dropped here.
+    from cadgen.metadata import declared_output_paths
+
+    read_files.difference_update(declared_output_paths(spec.script_path, function=entry_name))
     source_closure: PythonSourceClosure | None = None
     if model_format == "step":
         payload = _normalize_step_payload(raw_payload, script_path=spec.script_path)

@@ -562,34 +562,139 @@ def record_first_party_execution():
 
 
 _ACTIVE_DISCOVERED_INPUTS: set[Path] | None = None
+_ACTIVE_OPENS: "_Opens | None" = None
+_OPEN_HOOK_INSTALLED = False
+_WRITE_FLAGS = os.O_WRONLY | os.O_RDWR | os.O_APPEND | os.O_CREAT | os.O_TRUNC
+_CODE_SUFFIXES = frozenset({".py", ".pyc", ".pyi", ".pth", ".so", ".pyd", ".dylib"})
+
+
+@functools.lru_cache(maxsize=8192)
+def _frame_kind(filename: str) -> str:
+    """"cadgen", "model" or "other" for a frame's source file."""
+    if not filename or filename.startswith("<"):
+        return "other"
+    try:
+        path = Path(filename).resolve()
+    except (OSError, ValueError):
+        return "other"
+    if _is_within(path, _PACKAGE_ROOT):
+        return "cadgen"
+    return "model" if is_first_party_source_file(path) else "other"
+
+
+def _read_by_model_code() -> bool:
+    """Whether the innermost caller that is not the standard library or an
+    installed package is the model's own code. A read cadgen makes for itself
+    (a record, a child's output, a ``read_step`` that declares on its own) is
+    not the model's input; a model's ``json.load`` or ``np.load`` is, even
+    though the library does the opening."""
+    try:
+        frame = sys._getframe(3)
+    except ValueError:  # opened with (almost) no Python caller
+        return False
+    while frame is not None:
+        kind = _frame_kind(frame.f_code.co_filename)
+        if kind != "other":
+            return kind == "model"
+        frame = frame.f_back
+    return False
+
+
+class _Opens:
+    """The files a build opened, split into read and written."""
+
+    def __init__(self) -> None:
+        self.read: dict[Path, None] = {}
+        self.written: set[Path] = set()
+
+    def note(self, target: object, mode: object, flags: object) -> None:
+        if isinstance(target, int) or target is None:
+            return  # a file descriptor: its path was noted when it was opened
+        try:
+            path = Path(os.path.abspath(os.fsdecode(target)))
+        except (TypeError, ValueError):
+            return
+        writes = (isinstance(mode, str) and any(c in mode for c in "wax+")) or (
+            isinstance(flags, int) and bool(flags & _WRITE_FLAGS))
+        if writes:
+            self.written.add(path)
+        elif path.suffix.lower() not in _CODE_SUFFIXES and _read_by_model_code():
+            self.read.setdefault(path, None)
+
+    def inputs(self) -> set[Path]:
+        """What the model read and the build did not write: regular files outside
+        the interpreter, the runtime and the store."""
+        from cadgen.store.paths import store_root
+
+        excluded = list(_excluded_roots())
+        try:
+            excluded.append(store_root().resolve())
+        except Exception:  # noqa: BLE001 - no store root: nothing of it can be read
+            pass
+        written = {path.resolve() for path in self.written}
+        found: set[Path] = set()
+        for path in self.read:
+            try:
+                resolved = path.resolve()
+            except (OSError, ValueError):
+                continue
+            if resolved in written or not resolved.is_file():
+                continue  # written by this build (its outputs, a scratch file), or gone
+            if any(_is_within(resolved, root) for root in excluded):
+                continue
+            found.add(resolved)
+        return found
+
+
+def _open_audit(event: str, args: tuple) -> None:
+    opens = _ACTIVE_OPENS
+    if opens is None or event not in ("open", "os.rename"):
+        return
+    try:
+        if event == "open" and args:
+            opens.note(args[0], args[1] if len(args) > 1 else None, args[2] if len(args) > 2 else None)
+        elif len(args) > 1:  # os.rename and os.replace: the target is written
+            opens.note(args[1], "w", None)
+    except Exception:  # noqa: BLE001 - an audit hook must never fail the open it observes
+        pass
 
 
 @contextlib.contextmanager
 def record_discovered_inputs():
     """Record every NON-Python file a model read while the context is active.
 
-    Import reach is observed (the audit hook above); data reach has to be
-    declared, because reading a file is an ordinary function call with nothing
-    to hook. ``cadgen.read_step`` declares its file here, so a model that builds
-    from a vendor STEP records that STEP's bytes in its closure and rebuilds when
-    they change — the hole that used to need ``--force`` to work around.
+    Import reach is observed (the exec audit hook); so is data reach: the
+    ``open`` audit event fires for every Python-level open -- ``open``,
+    ``pathlib``, ``json.load`` on an opened file, ``np.load`` -- and a file the
+    model's own code read (not cadgen's machinery), and the build did not write,
+    joins the closure. A reader that opens files in native code never reaches
+    Python's open: ``cadgen.read_step`` declares its document here itself, and
+    ``cadgen.declare_input`` does the same for any other native reader.
 
     "Discovered" rather than declared-up-front on purpose, in the build-system
     sense: the inputs are whatever THIS run actually read, recorded as it runs
     and re-hashed by the next run's gate. A model that reads a different file
     depending on its parameters records what it read.
     """
-    global _ACTIVE_DISCOVERED_INPUTS
+    global _ACTIVE_DISCOVERED_INPUTS, _ACTIVE_OPENS, _OPEN_HOOK_INSTALLED
 
+    if not _OPEN_HOOK_INSTALLED:
+        sys.addaudithook(_open_audit)
+        _OPEN_HOOK_INSTALLED = True
     recorded: set[Path] = set()
-    previous = _ACTIVE_DISCOVERED_INPUTS
-    _ACTIVE_DISCOVERED_INPUTS = recorded
+    opens = _Opens()
+    previous = _ACTIVE_DISCOVERED_INPUTS, _ACTIVE_OPENS
+    _ACTIVE_DISCOVERED_INPUTS, _ACTIVE_OPENS = recorded, opens
     try:
         yield recorded
     finally:
-        _ACTIVE_DISCOVERED_INPUTS = previous
-        if previous is not None:
-            previous |= recorded
+        _ACTIVE_DISCOVERED_INPUTS, _ACTIVE_OPENS = previous
+        recorded |= opens.inputs()
+        if previous[0] is not None:
+            previous[0].update(recorded)
+        if previous[1] is not None:
+            previous[1].read.update(opens.read)
+            previous[1].written.update(opens.written)
 
 
 def note_discovered_input(path: Path) -> None:

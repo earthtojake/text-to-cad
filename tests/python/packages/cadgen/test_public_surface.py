@@ -192,6 +192,24 @@ class Manifest(unittest.TestCase):
         declared = authoring.registered_model(this_file)
         self.assertEqual({d.fmt for d in declared.mesh_exports}, {"stl"})
 
+    def test_a_model_hands_out_no_raw_body(self):
+        # A model's body runs in its own build, reached through a pin. The
+        # wrapper does not hand it out, so nothing (``inspect.unwrap``,
+        # ``arm.__wrapped__()``) can run it inline behind a caller's closure.
+        import inspect
+
+        import cadgen
+        from cadgen import authoring
+        from cadgen.store.index import model_ref
+
+        def shape():
+            return None
+
+        self.addCleanup(authoring._REGISTRY.pop, model_ref(Path(__file__).resolve(), "shape"), None)
+        wrapped = cadgen.step(shape)
+        self.assertFalse(hasattr(wrapped, "__wrapped__"))
+        self.assertIs(inspect.unwrap(wrapped), wrapped)
+
     def test_the_retired_commands_are_gone(self):
         # No backwards compatibility: `cadgen import` folded into the STEP
         # door, `cadgen step export` into the three per-format doors, and
