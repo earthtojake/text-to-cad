@@ -301,6 +301,15 @@ test('a STEP opens in Select with the tools its sidecar earns and Display last, 
   assert.deepEqual(await featuresPanel.getByRole('separator').evaluateAll(handles => handles.map(handle => handle.getAttribute('aria-label'))),
     ['Resize features width', 'Resize features height', 'Resize features'], 'open: all three handles');
   assert.deepEqual(await page.evaluate(() => window.cadHarness.preferences.getSnapshot().toolStack), { panels: {}, collapsed: {} }, 'nothing sized, nothing folded: nothing stored');
+  // The stack itself never scrolls while its panels fit — nothing reaches past its column, not
+  // even the handles past a panel's edges — so a wheel over it moves no border. Held shorter than
+  // its rows, the tree scrolls inside its own border instead.
+  const stackOverflow = () => pane.locator('[data-tool-stack-scroller]').evaluate(node => [node.scrollWidth - node.clientWidth, node.scrollHeight - node.clientHeight]);
+  assert.deepEqual(await stackOverflow(), [0, 0], 'the stack has nothing to scroll');
+  await pane.getByRole('separator', { name: 'Resize features height', exact: true }).press('Home');
+  await pane.locator('section[aria-label="Features"][style*="max-height: 64px"]').waitFor();
+  assert.equal(await featuresPanel.locator('[data-tool-panel-body]').evaluate(node => node.scrollHeight > node.clientHeight), true, 'the tree scrolls its rows');
+  assert.deepEqual(await stackOverflow(), [0, 0], 'and the stack still has nothing to scroll');
   assert.deepEqual(errors, []);
 });
 

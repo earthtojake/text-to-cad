@@ -234,7 +234,8 @@ export default function ToolPanel({ id, title = null, name = "", label, summary 
       </ScrollArea>}
     </ToolPanelContext.Provider>
     {/* The person's to size: a handle ON each edge it grows along (centred on it, an 8px hit
-        area) and one on the corner between them. A folded panel keeps only its width's. */}
+        area) and one on the corner between them, 12px, reaching 5px past the panel: the stack's
+        column leaves that much room (`ToolStack.jsx`). A folded panel keeps only its width's. */}
     {sized ? handle({ x: true }, { "aria-label": `Resize ${lower} width`, "aria-orientation": "vertical", "data-tool-panel-width-handle": "",
       "data-dragging": draft?.width === undefined ? undefined : "", "aria-valuemin": TOOL_PANEL_WIDTH, "aria-valuemax": clampWidth(Infinity), "aria-valuenow": width,
       className: cn(HANDLE_CLASS, "inset-y-0 left-full w-2 -translate-x-1/2 cursor-col-resize before:inset-y-1 before:left-1/2 before:w-0.5 before:-translate-x-1/2") }) : null}
