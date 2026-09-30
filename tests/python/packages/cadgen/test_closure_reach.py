@@ -275,8 +275,12 @@ class ReachClosure(unittest.TestCase):
         self.assertEqual(closure.names["lib/spec.py"], ("BORE",))
         self.assertEqual(closure.names["lib/__init__.py"], ())
         self.assertNotIn("part.py", closure.names, "the script is always whole")
-        self.assertTrue(closure.shas["lib/geo.py"].startswith("slice3:"))
+        self.assertTrue(closure.shas["lib/geo.py"].startswith("slice4:"))
         self.assertTrue(closure.shas["part.py"].startswith("ast1:"))
+        from cadgen._internal.source_hash import _semantic_source_hash
+
+        self.assertEqual(closure.wholes["lib/geo.py"], _semantic_source_hash(self.geo), "the bytes the slice was taken from")
+        self.assertEqual(set(closure.wholes), set(closure.names))
         self.assertFalse(self.verdict(reference).stale)
 
     # --- the gate ----------------------------------------------------------------
@@ -353,11 +357,19 @@ class ReachClosure(unittest.TestCase):
                 self.edit(self.geo, "WIDTH = 2", "WIDTH = 3")
                 self.assert_clause_two(reference, True, "lib/geo.py")
 
-    def test_a_genuinely_local_binding_does_not_reach_the_module_constant(self):
+    def test_a_local_binding_is_no_module_read_but_every_load_is_an_edge(self):
+        """Scopes decide what must be bound (the unresolved-name check); every
+        name a statement loads is still followed, so reach never rests on
+        scope analysis alone."""
+        from cadgen.store.reach import analyze
+
         self.write("lib/geo.py", "WIDTH = 2\ndef plane(WIDTH):\n    return [WIDTH for WIDTH in range(WIDTH)]\n")
+        plane = analyze(self.geo.read_bytes()).statements[1]
+        self.assertNotIn("WIDTH", plane.reads)
+        self.assertIn(("WIDTH", ()), plane.loads)
         reference, _closure = self.record()
         self.edit(self.geo, "WIDTH = 2", "WIDTH = 3")
-        self.assert_clause_two(reference, False)
+        self.assert_clause_two(reference, True, "lib/geo.py")
 
     def test_nested_imports_with_the_same_alias_keep_both_dependencies(self):
         self.write("lib/geo.py", """
@@ -389,7 +401,7 @@ class ReachClosure(unittest.TestCase):
         import ast
         import hashlib
 
-        for version in ("slice1", "slice2"):
+        for version in ("slice1", "slice2", "slice3"):
             with self.subTest(version=version):
                 digest = hashlib.sha256(version.encode())
                 digest.update(b"\0plane=")
@@ -488,11 +500,39 @@ class ReachClosure(unittest.TestCase):
         _reference, closure = self.record()
         self.assertNotIn("lib/geo.py", closure.names)
 
-    def test_an_unbounded_module_makes_every_module_it_imports_whole(self):
+    def test_a_namespace_read_makes_the_module_and_every_module_it_imports_whole(self):
+        for expression in ("globals()[name]", "vars()[name]", "locals()[name]"):
+            with self.subTest(expression=expression):
+                self.write("lib/geo.py", GEO + f"\n\ndef lookup(name):\n    return {expression}\n")
+                _reference, closure = self.record()
+                self.assertNotIn("lib/geo.py", closure.names)
+                self.assertNotIn("lib/spec.py", closure.names, "its module objects expose every name")
+                self.assertIn("lib/__init__.py", closure.names, "the rest of the closure stays sliced")
+        self.write("lib/geo.py", GEO + "\n\ndef measure(obj):\n    return vars(obj)\n")
+        _reference, closure = self.record()
+        self.assertIn("lib/geo.py", closure.names, "vars(obj) reads an object, not this module")
+
+    def test_reflection_anywhere_hashes_the_whole_closure_whole(self):
+        from cadgen.store.reach import analyze
+
         self.write("part.py", MODEL.replace("from lib import geo", "import importlib\nfrom lib import geo"))
         _reference, closure = self.record()
-        self.assertNotIn("lib/geo.py", closure.names)
-        self.assertIn("lib/spec.py", closure.names, "reach continues past the dynamic module by name")
+        self.assertEqual(closure.names, {}, "importlib can reach any module by string")
+        self.assertEqual(closure.wholes, {})
+        self.assertTrue(all(sha.startswith("ast1:") for sha in closure.shas.values()), closure.shas)
+        # What counts as reflection: string execution and imports, every alias of
+        # sys.modules and frames, function globals, introspection modules.
+        for source in ("exec(code)", "eval(code)", "__import__(code)", "import importlib.util",
+                       "from importlib import import_module", "import sys as s\ns.modules[code]",
+                       "from sys import modules", "import sys\nsys._getframe().f_globals", "f.__globals__",
+                       "import os\nos.sys.modules", "import inspect", "import pydoc", "import gc",
+                       "import pickle", "__builtins__", "import sys\ngetattr(sys, code)"):
+            with self.subTest(source=source):
+                self.assertIsNotNone(analyze(source.encode()).reflective)
+        for source in ("import sys\nsys.path.insert(0, code)", "def f(exec):\n    return exec(1)",
+                       "def eval(x):\n    return x\ny = eval(1)", "if __name__ == '__main__':\n    import importlib"):
+            with self.subTest(source=source):
+                self.assertIsNone(analyze(source.encode()).reflective)
 
     def test_a_file_reached_only_by_execution_is_whole(self):
         loaded = self.write("lib/loaded.py", "VALUE = 1\n")
@@ -504,6 +544,193 @@ class ReachClosure(unittest.TestCase):
         reference, _closure = self.record()
         self.geo.write_text(self.geo.read_text(encoding="utf-8") + "\n\ndef lookup(name):\n    return globals()[name]\n", encoding="utf-8")
         self.assert_clause_two(reference, True, "lib/geo.py")
+
+    # --- what executes, and what reaches a namespace ------------------------------
+
+    SHAPES = "def make_a():\n    return 10.0\n\n\ndef make_b():\n    return 20.0\n"
+
+    def write_model(self, imports, expression):
+        return self.write("part.py", f"from cadgen import step\n{imports}\n\n\n@step\ndef part():\n    return {expression}\n")
+
+    def assert_make_b_edit_is_stale(self, *, executed=(), sources=False):
+        """Record (with ``executed`` as the files the build ran), edit the
+        unreached-looking ``make_b``, and require the gate to see it."""
+        from cadgen.store.closure import build_closure
+        from cadgen.store.index import model_ref
+        from cadgen.store.records import write_record
+
+        script = self.root / "part.py"
+        ran = self.executed(script, *executed)
+        closure = build_closure(script, executed=ran,
+                                sources={key: Path(key).read_bytes() for key in ran} if sources else None)
+        reference = model_ref(script, "part")
+        write_record(reference, {"entryKind": "part", "sourceKind": "python", "tree": None,
+                                 "closure": closure.as_json(), "constants": closure.constants,
+                                 "children": [], "outputs": {}})
+        self.assert_clause_two(reference, False)
+        self.edit(self.root / "lib/shapes.py", "return 20.0", "return 25.0")
+        self.assert_clause_two(reference, True, "lib/shapes.py")
+        return closure
+
+    def test_a_dotted_import_executes_every_module_on_the_way(self):
+        self.write("lib/shapes.py", self.SHAPES)
+        self.write("lib/registry.py", "REGISTRY = []\n")
+        (self.root / "lib/plugins").mkdir()
+        self.write("lib/plugins/__init__.py", "")
+        self.write("lib/plugins/gear.py", "from lib.registry import REGISTRY\nfrom lib.shapes import make_b\n\nREGISTRY.append(make_b)\n")
+        self.write_model("import lib.plugins.gear\nfrom lib.registry import REGISTRY\nfrom lib import shapes",
+                   "shapes.make_a() + REGISTRY[0]()")
+        closure = self.assert_make_b_edit_is_stale()
+        self.assertIn("lib/plugins/gear.py", closure.files)
+        self.assertIn("make_b", closure.names["lib/shapes.py"])
+
+    def test_a_file_the_build_executed_but_never_reached_is_walked_whole(self):
+        self.write("lib/shapes.py", self.SHAPES)
+        self.write("lib/registry.py", "REGISTRY = []\n")
+        (self.root / "vendor").mkdir()
+        plugin = self.write("vendor/vplug.py", "from lib.registry import REGISTRY\nfrom lib.shapes import make_b\n\nREGISTRY.append(make_b)\n")
+        self.write_model("import sys\nsys.path.insert(0, 'vendor')\nimport vplug\nfrom lib.registry import REGISTRY\nfrom lib import shapes",
+                   "shapes.make_a() + REGISTRY[0]()")
+        closure = self.assert_make_b_edit_is_stale(executed=[plugin, self.root / "lib/shapes.py"], sources=True)
+        self.assertIn("vendor/vplug.py", closure.files)
+        self.assertNotIn("vendor/vplug.py", closure.names, "an executed root is hashed whole")
+
+    def test_reaching_a_namespace_by_string_or_introspection_is_stale_on_any_edit(self):
+        """Each bypass of name-level reach, with the lookup in the sliced module
+        itself or in a helper that takes a name at run time."""
+        build = "\n\ndef build(kind):\n    return {}\n"
+        variants = {
+            "vars() at module scope": ("", "_NS = vars()\n" + build.format("_NS['make_' + kind]()")),
+            "aliased sys.modules": ("", "import sys as _sys\n" + build.format("getattr(_sys.modules[__name__], 'make_' + kind)()")),
+            "from sys import modules": ("", "from sys import modules\n" + build.format("getattr(modules[__name__], 'make_' + kind)()")),
+            "function globals": ("", build.format("build.__globals__['make_' + kind]()")),
+            "frame globals": ("", "import sys\n" + build.format("sys._getframe().f_globals['make_' + kind]()")),
+            "inspect": ("", "import inspect\n" + build.format("getattr(inspect.getmodule(build), 'make_' + kind)()")),
+            "pydoc": ("", "import pydoc\n" + build.format("pydoc.locate('lib.shapes.make_' + kind)()")),
+            "importlib in a loader": ("lib/loader.py", "import importlib\n\n\ndef get(module, name):\n    return getattr(importlib.import_module(module), name)\n"),
+            "sys.modules in a registry": ("lib/loader.py", "import sys\n\n\ndef get(module, name):\n    return getattr(sys.modules[module], name)\n"),
+            "globals() in a menu": ("lib/loader.py", "from lib import shapes\n\n\ndef get(module, name):\n    return getattr(globals()[module.rpartition('.')[2]], name)\n"),
+        }
+        for label, (helper, source) in variants.items():
+            with self.subTest(variant=label):
+                if helper:
+                    self.write("lib/shapes.py", self.SHAPES)
+                    self.write(helper, source)
+                    self.write_model("from lib import loader, shapes", "shapes.make_a() + loader.get('lib.shapes', 'make_b')()")
+                else:
+                    self.write("lib/shapes.py", source + self.SHAPES)
+                    self.write_model("from lib import shapes", "shapes.build('b')")
+                self.assert_make_b_edit_is_stale()
+
+    def test_an_escaped_module_exposes_every_module_bound_in_it(self):
+        self.write("lib/shapes.py", "from lib import parts\n\n\ndef make_a():\n    return 10.0\n")
+        self.write("lib/parts.py", self.SHAPES)
+        for expression in ("getattr(getattr(shapes, 'parts'), 'make_b')()", "shapes.__dict__['parts'].make_b()"):
+            with self.subTest(expression=expression):
+                self.write_model("from lib import shapes", expression)
+                _reference, closure = self.record()
+                self.assertNotIn("lib/shapes.py", closure.names)
+                self.assertNotIn("lib/parts.py", closure.names, "reachable by name through shapes")
+
+    def test_a_class_body_comprehension_reads_the_module_name(self):
+        self.write("lib/geo.py", """
+            WIDTH = 2.0
+
+
+            class Dims:
+                WIDTH = 9.0
+                sizes = [WIDTH * 5 for _ in range(2)]
+
+
+            def size():
+                return Dims.sizes[0]
+        """)
+        self.write_model("from lib import geo", "geo.size()")
+        reference, closure = self.record()
+        self.assertIn("WIDTH", closure.names["lib/geo.py"])
+        self.edit(self.geo, "WIDTH = 2.0", "WIDTH = 3.0")
+        self.assert_clause_two(reference, True, "lib/geo.py")
+
+    def test_an_init_binding_that_shadows_a_submodule_is_reached(self):
+        self.write("lib/__init__.py", "def geo():\n    return 30.0\n")
+        self.write("lib/geo.py", "X = 1\n")
+        self.write_model("from lib import geo", "geo()")
+        reference, closure = self.record()
+        self.assertIn("geo", closure.names["lib/__init__.py"])
+        self.edit(self.root / "lib/__init__.py", "return 30.0", "return 35.0")
+        self.assert_clause_two(reference, True, "lib/__init__.py")
+
+    def test_a_childs_import_time_effects_on_shared_helpers_are_reached(self):
+        """A child module runs in the parent's process when imported: what its
+        import-time code calls in a helper the parent also reads is the parent's
+        dependency, although the child's own files are not in the closure."""
+        self.write("lib/shapes.py", "CONFIG = [10.0]\n\n\ndef setup():\n    CONFIG[0] = 20.0\n\n\ndef size():\n    return CONFIG[0]\n\n\ndef unused():\n    return 1\n")
+        self.write("lib/boot.py", "from lib import shapes\n\nshapes.setup()\n")
+        self.write("arm.py", "from cadgen import step\nimport lib.boot\n\n\n@step\ndef arm():\n    return 1\n")
+        self.write_model("from arm import arm\nfrom lib import shapes", "(arm(), shapes.size())")
+        reference, closure = self.record()
+        self.assertNotIn("lib/boot.py", closure.files, "the child's own helper stays the child's")
+        self.assertIn("setup", closure.names["lib/shapes.py"])
+        self.edit(self.root / "lib/shapes.py", "return 1", "return 2")
+        self.assert_clause_two(reference, False)
+        self.edit(self.root / "lib/shapes.py", "CONFIG[0] = 20.0", "CONFIG[0] = 25.0")
+        self.assert_clause_two(reference, True, "lib/shapes.py")
+
+    # --- what a helper may carry without losing its reach -------------------------
+
+    def test_a_main_guard_leaves_its_helper_sliced(self):
+        self.write("lib/geo.py", GEO + "\n\nif __name__ == '__main__':\n    import time\n    t0 = time.time()\n    shown = plane((0, 0, 0), (0, 0, 1))\n    print(shown, time.time() - t0, also_unrelated())\n")
+        reference, closure = self.record()
+        self.assertEqual(closure.names["lib/geo.py"], ("SCALE", "_unit", "plane"))
+        self.edit(self.geo, "return x + 1", "return x + 2")
+        self.assert_clause_two(reference, False)
+
+    def test_lazy_annotations_leave_typed_helpers_optional(self):
+        typed = "from __future__ import annotations\n\nimport math\nfrom lib import spec\n\nSCALE: float = 2.0\n\n\ndef plane(origin: tuple, z_dir: tuple) -> tuple:\n    return (origin, z_dir, SCALE * spec.BORE * math.pi)\n\n\ndef unrelated(x: float) -> float:\n    return x + 1\n"
+        self.write("lib/geo.py", typed)
+        reference, closure = self.record()
+        self.assertEqual(closure.names["lib/geo.py"], ("SCALE", "plane"))
+        self.edit(self.geo, "return x + 1", "return x + 2")
+        self.geo.write_text(self.geo.read_text(encoding="utf-8") + "\n\ndef added(width: float = 3.0) -> float:\n    return width\n", encoding="utf-8")
+        self.assert_clause_two(reference, False)
+        self.edit(self.geo, "SCALE: float = 2.0", "SCALE: float = 3.0")
+        self.assert_clause_two(reference, True, "lib/geo.py")
+
+    def test_an_unanalysable_helper_is_hashed_whole_and_kept(self):
+        from cadgen.store.closure import execution_digest
+        from cadgen._internal.source_hash import _semantic_source_bytes
+
+        deep = "def deep():\n    return " + " + ".join(["1"] * 1000) + "\n"
+        path = self.write("lib/deep.py", deep)
+        self.assertEqual(execution_digest(path.read_bytes()), _semantic_source_bytes(path.read_bytes()))
+        self.write_model("from lib.deep import deep", "deep()")
+        reference, closure = self.record(executed=self.executed(path))
+        self.assertIn("lib/deep.py", closure.files)
+        self.assertNotIn("lib/deep.py", closure.names)
+        self.assert_clause_two(reference, False)
+        self.edit(path, "return 1 + 1", "return 2 + 1")
+        self.assert_clause_two(reference, True, "lib/deep.py")
+
+    # --- the gate's cost ------------------------------------------------------------
+
+    def test_the_gate_reuses_recorded_slices_of_unchanged_files(self):
+        from cadgen.store import closure as module
+        from cadgen.store.records import read_record, write_record
+
+        reference, _closure = self.record()
+        with mock.patch.object(module, "_SYNTAX", module._ImportSyntaxMemo()), \
+                mock.patch.object(module, "_parse_import_syntax", wraps=module._parse_import_syntax) as parse:
+            self.assert_clause_two(reference, False)
+            self.assertEqual(parse.call_count, 0, "an unchanged file keeps its recorded slice")
+            self.edit(self.geo, "return x + 1", "return x + 2")  # outside the slice
+            self.assert_clause_two(reference, False)
+            self.assertEqual([Path(call.args[1]).name for call in parse.call_args_list], ["geo.py"])
+            record = read_record(reference)
+            record["closure"].pop("wholes")  # a record without whole-file hashes re-slices
+            write_record(reference, record)
+            self.assert_clause_two(reference, False)
+            self.assertEqual(sorted(Path(call.args[1]).name for call in parse.call_args_list[1:]),
+                             ["__init__.py", "spec.py"])
 
     # --- determinism -------------------------------------------------------------------
 
@@ -629,7 +856,8 @@ class ReachEndToEnd(unittest.TestCase):
         self.assertEqual(self.run_model(), "built")
         record = read_record(self.model)
         self.assertEqual(record["closure"]["names"], {"lib/__init__.py": [], "lib/geo.py": ["SIZE", "size"]})
-        self.assertTrue(record["closure"]["shas"]["lib/geo.py"].startswith("slice3:"))
+        self.assertTrue(record["closure"]["shas"]["lib/geo.py"].startswith("slice4:"))
+        self.assertEqual(set(record["closure"]["wholes"]), {"lib/__init__.py", "lib/geo.py"})
         self.assertEqual(self.run_model(), "current")
 
         self.edit("return 1", "return 2")
@@ -787,7 +1015,7 @@ class ReachAnalysis(unittest.TestCase):
         self.assertNotEqual(before, slice_hash(self.analyze(base.replace("return K", "return K + 1")), ["a"]))
         self.assertNotEqual(before, slice_hash(self.analyze(base.replace("import math", "import math, os")), ["a"]))
         self.assertNotEqual(before, slice_hash(self.analyze(base), ["a", "b"]))
-        self.assertTrue(before.startswith("slice3:"))
+        self.assertTrue(before.startswith("slice4:"))
         self.assertTrue(slice_hash(self.analyze(base + "\nfrom os import *\n"), ["a"]).startswith("ast1:"))
 
 

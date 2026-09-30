@@ -176,8 +176,8 @@ def refresh_annotations(spec) -> str | None:
     from cadgen.store.index import resolve_model_ref
     from cadgen.store.records import read_record, write_record, note_output, forget_output
     from cadgen.store.gate import stale
-    from cadgen.store.closure import current_closure_hash, closure_hash, changed_constant, sliced_source_hash
-    from cadgen._internal.source_hash import _semantic_source_hash, _semantic_source_bytes
+    from cadgen.store.closure import current_closure_hash, closure_hash, changed_constant, file_hash_now
+    from cadgen._internal.source_hash import _semantic_source_bytes
     from cadgen.store.trees import get_tree, put_tree, flatten, tree_complete
     from cadgen.catalog import artifact_file_hash
     from cadgen._internal.source_sidecar import (
@@ -200,14 +200,16 @@ def refresh_annotations(spec) -> str | None:
         return None
     closure = record.get('closure') or {}
     sliced = dict(closure.get('names') or {})
+    recorded_shas = dict(closure.get('shas') or {})
+    wholes = dict(closure.get('wholes') or {})
     try:
         source = script.read_bytes()
         parts = _source_parts(source, entry_name)
         # Each closure file as the gate hashes it: the script whole, a sliced
-        # helper by its recorded names, any other helper whole.
+        # helper by its recorded names (its recorded slice while unchanged),
+        # any other helper whole.
         shas = {name: (_semantic_source_bytes(source) if name == script.name else
-                       sliced_source_hash((script.parent / name).resolve(), sliced[name]) if name in sliced else
-                       _semantic_source_hash((script.parent / name).resolve()))
+                       file_hash_now((script.parent / name).resolve(), name, sliced, recorded_shas, wholes))
                 for name in closure['files']}
     except (OSError, KeyError, SyntaxError, ValueError):
         return None
@@ -260,7 +262,8 @@ def refresh_annotations(spec) -> str | None:
     pair = _document_pair_state(spec.step_path)
     if pair[0] != record.get('stepHash'):
         return None
-    if current_closure_hash(script, closure['files'], sliced) != full_hash or read_record(model) != record:
+    if (current_closure_hash(script, closure['files'], sliced, shas=recorded_shas, wholes=wholes) != full_hash
+            or read_record(model) != record):
         return None
     if _document_pair_state(spec.step_path) != pair:
         return None

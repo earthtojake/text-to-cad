@@ -34,10 +34,12 @@ class PublishDecision:
 def decide(
     model: Path | str, *, ran_closure_hash: str, ran_files: Iterable[str],
     ran_names: Mapping[str, Iterable[str]] | None = None,
+    ran_shas: Mapping[str, str] | None = None, ran_wholes: Mapping[str, str] | None = None,
 ) -> PublishDecision:
     """Whether this build may publish its record + named outputs. ``ran_names``
-    is the closure's sliced-file name map: those files are compared by slice."""
-    now = current_closure_hash(Path(model), list(ran_files), ran_names)
+    is the closure's sliced-file name map: those files are compared by slice,
+    and ``ran_shas``/``ran_wholes`` let an unchanged one keep its slice unanalysed."""
+    now = current_closure_hash(Path(model), list(ran_files), ran_names, shas=ran_shas, wholes=ran_wholes)
     if now == ran_closure_hash:
         return PublishDecision(True, "source unchanged since this build ran")
     # This build ran source that has moved on. Only defer to the disk if what is

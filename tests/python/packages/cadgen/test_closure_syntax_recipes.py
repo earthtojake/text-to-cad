@@ -1,4 +1,9 @@
-"""Shared syntax never substitutes old bytes or a resolved dependency graph."""
+"""Shared syntax never substitutes old bytes or a resolved dependency graph.
+
+One process-wide memo keyed by exact source bytes serves the exec hook, every
+build's walk and every gate: each file revision is analysed once, and every
+lookup still reads the file and resolves imports, model classification and
+constant values afresh."""
 
 from __future__ import annotations
 
@@ -28,7 +33,7 @@ class ClosureSyntaxRecipes(unittest.TestCase):
         path.write_text(source, encoding="utf-8")
         return path.resolve()
 
-    def test_one_build_shares_syntax_but_another_build_starts_fresh(self):
+    def test_builds_and_gates_share_one_analysis_per_file_revision(self):
         shared = self.write("shared.py", "def helper():\n    return 3\n")
         children = [self.write(f"{name}.py", "from cadgen import step\nfrom shared import helper\n"
                                f"@step\ndef {name}():\n    return helper()\n") for name in ("left", "right")]
@@ -37,11 +42,16 @@ class ClosureSyntaxRecipes(unittest.TestCase):
         with mock.patch.object(self.closure, "_IMPORT_SYNTAX_MAX_ENTRIES", 0):
             expected = self.closure.build_closure(root, executed=executed, children=children)
         payload = shared.read_bytes()
-        with mock.patch.object(self.closure, "_parse_import_syntax", wraps=self.closure._parse_import_syntax) as parse:
+        with mock.patch.object(self.closure, "_SYNTAX", self.closure._ImportSyntaxMemo()), \
+                mock.patch.object(self.closure, "_parse_import_syntax", wraps=self.closure._parse_import_syntax) as parse:
             first = self.closure.build_closure(root, executed=executed, children=children)
-            self.assertEqual(sum(call.args[0] == payload for call in parse.call_args_list), 1)
             second = self.closure.build_closure(root, executed=executed, children=children)
-            self.assertEqual(sum(call.args[0] == payload for call in parse.call_args_list), 2)
+            self.assertEqual(self.closure.sliced_source_hash(shared, ["helper"])[:7], "slice4:")
+            self.assertEqual(sum(call.args[0] == payload for call in parse.call_args_list), 1)
+            shared.write_text("def helper():\n    return 4\n", encoding="utf-8")
+            self.closure.sliced_source_hash(shared, ["helper"])
+            self.assertEqual(parse.call_count, len({call.args[0] for call in parse.call_args_list}),
+                             "a new revision is analysed once, an old one never again")
         self.assertEqual(first, expected)
         self.assertEqual(second, expected)
         self.assertEqual(first.files, ("root.py",))
@@ -148,8 +158,8 @@ class ClosureSyntaxRecipes(unittest.TestCase):
 
         retained = (sys.getsizeof(memo.entries) - empty_bytes + size(payload)
                     + size(memo.entries[payload]) + size(recipe.statements)
-                    + sum(size(statement.dump) + size(statement.reads) + size(statement.chains)
-                          for statement in recipe.statements))
+                    + sum(size(statement.digest) + size(statement.reads) + size(statement.chains)
+                          + size(statement.loads) for statement in recipe.statements))
         self.assertGreaterEqual(memo.size, retained)
 
 

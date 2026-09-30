@@ -65,12 +65,17 @@ _SEMANTIC_HASH_SETTLE_NS = 2_000_000_000
 
 
 def _semantic_source_bytes(source: bytes) -> str:
-    """Hash the source buffer a loader actually compiled, without rereading it."""
+    """Hash the source buffer a loader actually compiled, without rereading it.
+
+    ``ast1:`` + sha256 of ``ast.dump`` of the module, assembled from its
+    statements' dumps exactly as the reach analysis assembles it
+    (``cadgen.store.reach.semantic_hash``), so the two always agree."""
+    from cadgen.store.reach import semantic_hash
+
     try:
-        dumped = ast.dump(ast.parse(source))
+        return semantic_hash(ast.parse(source))
     except (SyntaxError, ValueError, MemoryError, RecursionError):
         return hashlib.sha256(source).hexdigest()
-    return "ast1:" + hashlib.sha256(dumped.encode("utf-8")).hexdigest()
 
 
 def _semantic_source_hash(path: Path) -> str:
@@ -133,6 +138,9 @@ class PythonSourceClosure:
     # relative path -> the names reached in a sliced helper (``cadgen.store.closure``);
     # a file absent here is hashed whole.
     names: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    # relative path -> a sliced helper's whole-file hash, of the bytes its slice
+    # was taken from (the gate's no-re-analysis fast path).
+    wholes: dict[str, str] = field(default_factory=dict)
 
 
 def _is_within(path: Path, root: Path) -> bool:

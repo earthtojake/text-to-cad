@@ -18,22 +18,30 @@ statically by what the importer TAKES from a model file:
 Constants by value, functions by reach, models by result.
 
 **Non-model files are sliced by reach.** A helper module (``lib/frame.py``) is
-in the closure of every model whose static reach enters it, but what the
-record hashes is the part of it the model can execute: the module's preamble
-(imports, module-level calls and conditionals, decorated definitions — anything
-that runs at import) plus every definition a reached name binds, closed within
-the module and across modules (a reached function's reads, its decorators,
-defaults and annotations reach what they name). Editing a definition the model
-never reaches leaves it current; the analysis is ``cadgen.store.reach``, the
-walk is :class:`_Walk`. Anything the analysis cannot see falls back to the
-whole file, per module: a star import, ``exec``/``eval``/``globals()``,
-``importlib``/``sys.modules``, a module-level ``__getattr__``, an unresolved
-name, a module alias used bare (``getattr(geo, name)``) or written to
-(``geo.X = 1``) — the target of an escape is whole too, and a package alias
-escaping makes the whole package whole. A file reached only by execution (a
-dynamic load static analysis never saw) is whole. The record keeps each sliced
-file's reached names (``closure.names``); the gate re-slices the file on disk by
-those names and compares.
+in the closure of every model whose reach enters it, but what the record hashes
+is the part of it the model can execute: the module's preamble (imports,
+module-level calls and conditionals, decorated definitions — anything that runs
+at import) plus every definition a reached name binds, closed within the module
+and across modules (a reached function's loads, its decorators, defaults and
+annotations reach what they name). Editing a definition the model never reaches
+leaves it current; the analysis is ``cadgen.store.reach``, the walk is
+:class:`_Walk`. The walk starts at the script and, after it, at every
+first-party file the build executed that it did not reach and no child owns (a
+plugin imported for its side effect, a ``sys.path`` insert): each such file is
+walked whole, so what IT reaches in other files is sliced in too.
+
+Anything the analysis cannot see falls back to whole files. Per module: a star
+import, ``globals()``/``locals()``/``vars()`` (and every module it imports), a
+module-level ``__getattr__``, an unresolved name, a module alias used bare
+(``getattr(geo, name)``) or written to (``geo.X = 1``) — the target of an
+escape is whole too, with every module bound in it, and a package alias
+escaping makes the whole package whole. Per closure: when any walked file can
+reach an arbitrary module's namespace by string or introspection (``exec``,
+``importlib``, ``sys.modules``, frames, ``__globals__``, ``inspect`` …), every
+file is hashed whole. The record keeps each sliced file's reached names
+(``closure.names``) and whole-file hash (``closure.wholes``); the gate reuses
+the recorded slice while the whole-file hash is unchanged and re-slices the
+file on disk by those names only when it moved.
 
 **Hash at execution.** The closure hash a record carries is over the bytes that
 RAN: files are hashed when they are loaded/executed (the loader has the script's
@@ -43,7 +51,7 @@ geometry the pre-edit source produced. The reach analysis runs over those same
 captured bytes, so a slice and its hash describe one revision.
 
 Hashes are the semantic (AST) digest for ``.py`` (``ast1:``), the slice digest
-for a sliced file (``slice3:``), and the byte digest otherwise, via
+for a sliced file (``slice4:``), and the byte digest otherwise, via
 ``cadgen._internal.source_hash`` and ``cadgen.store.reach`` — a comment-only
 edit is not a change.
 """
@@ -54,19 +62,22 @@ import dataclasses
 import functools
 import hashlib
 import sys
-import time
+import threading
 from collections import OrderedDict
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Iterable, Mapping
 
 from cadgen._internal.source_hash import (
-    _SEMANTIC_HASH_SETTLE_NS,
     _semantic_source_bytes,
     _semantic_source_hash,
     is_first_party_source_file,
 )
-from cadgen.store.reach import Alias, ModuleSyntax, analyze, slice_hash
+from cadgen.store.reach import SLICE_PREFIX, Alias, ModuleSyntax, analyze, slice_hash
+
+# What analysing a file can raise besides a bug: invalid source, or source too
+# deep for the parser/``ast.dump``. Such a file is hashed whole.
+_UNANALYSABLE = (SyntaxError, ValueError, RecursionError, MemoryError)
 
 
 @dataclass(frozen=True)
@@ -81,6 +92,10 @@ class Closure:
     # relative path -> the names reached in a SLICED file (sorted). A file
     # absent here is tracked whole.
     names: dict[str, tuple[str, ...]] = field(default_factory=dict)
+    # relative path -> a SLICED file's whole-file semantic hash, of the same
+    # bytes its slice was taken from: while the file still hashes to it, the
+    # recorded slice stands without re-analysing the file.
+    wholes: dict[str, str] = field(default_factory=dict)
 
     def as_json(self) -> dict:
         return {
@@ -88,6 +103,7 @@ class Closure:
             "files": list(self.files),
             "shas": dict(self.shas),
             "names": {rel: list(names) for rel, names in self.names.items()},
+            "wholes": dict(self.wholes),
         }
 
 
@@ -295,34 +311,45 @@ def _parse_import_syntax(payload: bytes, filename: str) -> ModuleSyntax:
     return analyze(payload, filename)
 
 
-_IMPORT_SYNTAX_MAX_BYTES = 8 * 1024 * 1024
-_IMPORT_SYNTAX_MAX_ENTRIES = 256
+_IMPORT_SYNTAX_MAX_BYTES = 32 * 1024 * 1024
+_IMPORT_SYNTAX_MAX_ENTRIES = 2048
 
 
 class _ImportSyntaxMemo:
-    """One closure calculation's bounded byte-to-syntax recipes; never global."""
+    """Bounded byte-to-syntax recipes: an LRU by accounted bytes and entries.
+
+    A recipe is a pure function of the exact source bytes (for this
+    interpreter), so one process-wide memo (``_SYNTAX``) serves the exec hook,
+    every build's walk and every gate: each distinct file revision is analysed
+    once. A recipe holds no resolved path, model classification or verdict."""
 
     def __init__(self) -> None:
         self.entries: OrderedDict[bytes, tuple[int, ModuleSyntax]] = OrderedDict()
         self.size = 0
+        self.lock = threading.Lock()
 
     def get(self, payload: bytes, filename: str) -> ModuleSyntax:
-        cached = self.entries.get(payload)
-        if cached is not None:
-            self.entries.move_to_end(payload)
-            return cached[1]
+        with self.lock:
+            cached = self.entries.get(payload)
+            if cached is not None:
+                self.entries.move_to_end(payload)
+                return cached[1]
         syntax = _parse_import_syntax(payload, filename)
         charge = 512 + sys.getsizeof(payload) + sys.getsizeof(syntax) + retained_syntax_size(syntax)
-        if charge <= _IMPORT_SYNTAX_MAX_BYTES:
-            self.entries[payload] = (charge, syntax)
-            self.size += charge
-            while self.size > _IMPORT_SYNTAX_MAX_BYTES or len(self.entries) > _IMPORT_SYNTAX_MAX_ENTRIES:
-                self.size -= self.entries.popitem(last=False)[1][0]
+        with self.lock:
+            if payload not in self.entries and charge <= _IMPORT_SYNTAX_MAX_BYTES:
+                self.entries[payload] = (charge, syntax)
+                self.size += charge
+                while self.size > _IMPORT_SYNTAX_MAX_BYTES or len(self.entries) > _IMPORT_SYNTAX_MAX_ENTRIES:
+                    self.size -= self.entries.popitem(last=False)[1][0]
         return syntax
 
 
+_SYNTAX = _ImportSyntaxMemo()
+
+
 def retained_syntax_size(syntax: ModuleSyntax) -> int:
-    """A conservative byte charge for one module's analysis: every dump, name
+    """A conservative byte charge for one module's analysis: every digest, name
     and alias it retains, each counted as its own object."""
 
     def size(value: object) -> int:
@@ -336,7 +363,18 @@ def retained_syntax_size(syntax: ModuleSyntax) -> int:
         return total
 
     return (size(syntax.statements) + size(syntax.definitions) + size(syntax.preamble)
-            + size(syntax.preamble_bound) + size(syntax.aliases) + size(syntax.whole_hash))
+            + size(syntax.preamble_bound) + size(syntax.aliases) + size(syntax.guards)
+            + size(syntax.whole_hash))
+
+
+def execution_digest(payload: bytes, filename: str = "<module>") -> str:
+    """The semantic hash of bytes that ran (``_semantic_source_bytes``' value),
+    taken through the shared analysis memo, so the closure's reach analysis of
+    the same bytes is a hit rather than a second parse."""
+    try:
+        return _SYNTAX.get(payload, filename).whole_hash
+    except Exception:  # noqa: BLE001 - an audit hook must never fail the exec it observes
+        return _semantic_source_bytes(payload)
 
 
 @dataclass(frozen=True)
@@ -347,7 +385,7 @@ class StaticImports:
     child_models: tuple[Path, ...]  # model files taken only through their model function or literals
     constants: dict[str, dict[str, str]] = field(default_factory=dict)  # model path -> name -> hash
     # non-model source file -> the names reached in it (sorted), or None when the
-    # whole file is tracked (dynamic, escaped, or reached only by execution).
+    # whole file is tracked (dynamic, escaped, or walked whole).
     names: dict[Path, tuple[str, ...] | None] = field(default_factory=dict)
 
 
@@ -360,29 +398,44 @@ class _FileState:
     why: str | None = None  # why the file is tracked whole (diagnostics only)
 
 
+# Module attributes the import system sets: reading one reaches no definition.
+_IMPORT_SYSTEM_ATTRS = frozenset({
+    "__name__", "__file__", "__doc__", "__package__", "__path__", "__cached__", "__annotations__",
+})
+
+
 class _Walk:
     """The static reach walk from one root script (``STORE.md`` §3).
 
     Every statement of the root is reached. A reached statement's imports
-    execute their modules (preamble), its reads reach definitions in this
+    execute their modules (preamble), its loads reach definitions in this
     module or, through an import alias, names in another module; a module alias
     used bare or written to makes its target whole. Model files are node
     boundaries classified by what the walk TAKES from them (result, value or
-    source edge), exactly as before; only non-model files are sliced."""
+    source edge); only non-model files are sliced. :meth:`walk_root` adds
+    another root walked whole — a file the build executed that static reach
+    never saw. Statements are processed from a worklist, so reach depth never
+    becomes interpreter recursion."""
 
     def __init__(self, root: Path, *, syntax: _ImportSyntaxMemo, sources: Mapping[str, bytes] | None,
-                 descend: bool, model_boundaries: bool = True) -> None:
+                 descend: bool, model_boundaries: bool = True, import_time: bool = False) -> None:
         self.root = root
         self.roots = _search_roots(root)
         self.syntax = syntax
         self.sources = sources or {}
         self.descend = descend
         self.model_boundaries = model_boundaries
+        # Only what importing runs: a model file is followed like a helper, but
+        # the bodies of the model functions it declares are never reached.
+        self.import_time = import_time
         self.files: dict[Path, _FileState] = {}
         self.model_taken: dict[Path, set[str] | None] = {}
         self.model_source: set[Path] = set()
         self.constants: dict[str, dict[str, str]] = {}
         self.zones: set[Path] = set()
+        self.escaped: set[Path] = set()
+        self.queue: list[tuple[Path, int]] = []   # reached statements not yet followed
+        self.escapes: list[Path] = []             # escaped modules whose bound modules escape next
 
     # -- files -------------------------------------------------------------------
 
@@ -399,7 +452,7 @@ class _Walk:
             if payload is None:
                 payload = path.read_bytes()
             syntax = self.syntax.get(payload, str(path))
-        except (OSError, SyntaxError, ValueError):
+        except (OSError, *_UNANALYSABLE):
             syntax = None
         state = self.files[path] = _FileState(syntax=syntax)
         return state
@@ -427,8 +480,10 @@ class _Walk:
         elif self._in_zone(path):
             self.make_whole(path, "package escaped")
         else:
+            models = _model_function_names(str(path)) if self.import_time else frozenset()
             for index in state.syntax.preamble:
-                self.reach_statement(path, index)
+                if not models or not models.intersection(state.syntax.statements[index].binds):
+                    self.reach_statement(path, index)
 
     def make_whole(self, path: Path, why: str) -> None:
         state = self._load(path)
@@ -438,12 +493,17 @@ class _Walk:
         state.why = why
         if state.syntax is None or (not self.descend and path != self.root):
             return
-        for index in range(len(state.syntax.statements)):
-            self.reach_statement(path, index)
+        # A main guard runs only when its file is the script itself.
+        guards = frozenset() if path == self.root else state.syntax.guards
+        for statement in state.syntax.statements:
+            if statement.index not in guards:
+                self.reach_statement(path, statement.index)
         if state.syntax.unbounded:
-            # exec/eval/importlib/sys.modules: this module can reach any name of
-            # any module it imports, so those are whole too.
+            # globals()/vars()/exec…: this module can reach any name of any
+            # module it imports, so those are whole too.
             for statement in state.syntax.statements:
+                if statement.index in guards:
+                    continue
                 for _name, alias in statement.aliases:
                     target = self._alias_source(path, alias)
                     if target is not None:
@@ -461,16 +521,26 @@ class _Walk:
 
     def reach_name(self, path: Path, name: str) -> None:
         state = self._load(path)
-        if state.whole or name in state.names or state.syntax is None:
+        syntax = state.syntax
+        if syntax is None:
+            return
+        if self.import_time and name in _model_function_names(str(path)):
+            return  # a model function's body runs when it is called, never on import
+        bound = name in syntax.definitions or name in syntax.aliases or name in syntax.preamble_bound
+        if not bound and name.startswith("__") and name.endswith("__"):
+            if name not in _IMPORT_SYSTEM_ATTRS:
+                # ``geo.__dict__`` and the like: every name of the module.
+                self.escape(path, f"namespace attribute {name}")
+            return
+        if state.whole or name in state.names:
             return
         state.names.add(name)
-        syntax = state.syntax
         indices = syntax.definitions.get(name, ())
         for index in indices:
             self.reach_statement(path, index)
         for alias in syntax.aliases.get(name, ()):
             self.alias_use(path, alias, ())  # a re-export: follow it
-        if not indices and name not in syntax.aliases and name not in syntax.preamble_bound:
+        if not bound:
             self.make_whole(path, f"unknown name {name}")  # nothing binds it statically
 
     def reach_statement(self, path: Path, index: int) -> None:
@@ -478,7 +548,11 @@ class _Walk:
         if index in state.reached or state.syntax is None:
             return
         state.reached.add(index)
-        statement = state.syntax.statements[index]
+        self.queue.append((path, index))
+
+    def _follow(self, path: Path, index: int) -> None:
+        syntax = self.files[path].syntax
+        statement = syntax.statements[index]
         # One statement can contain several lexical scopes. Keep every
         # candidate binding: a later nested import must not hide an earlier
         # scope's dependency just because both use the same alias.
@@ -490,18 +564,33 @@ class _Walk:
         for alias in statement.stars:
             self.import_edge(path, alias, whole=True)
         for name in statement.reads:
-            self.name_use(path, state.syntax, local, name, ())
-        for name, chain in statement.chains:
-            self.name_use(path, state.syntax, local, name, chain)
+            self.name_use(path, syntax, local, name, ())
+        for group in (statement.chains, statement.loads):
+            for name, chain in group:
+                self.name_use(path, syntax, local, name, chain)
         for name in statement.stores:
-            aliases = local.get(name, []) + list(state.syntax.aliases.get(name, ()))
+            aliases = local.get(name, []) + list(syntax.aliases.get(name, ()))
             for alias in aliases:
                 target = self._alias_module(path, alias)
                 if target is not None and target.module is not None:
                     self.escape(target.module, f"written to by {path.name}")
                     self.make_whole(path, f"writes to module {name}")  # a monkeypatch: this module is dynamic too
-            if name in state.syntax.definitions:
+            if name in syntax.definitions:
                 self.reach_name(path, name)
+
+    def _drain(self) -> None:
+        while self.queue or self.escapes:
+            if self.queue:
+                self._follow(*self.queue.pop())
+                continue
+            # A module whose namespace escaped exposes every module bound in it.
+            target = self.escapes.pop()
+            syntax = self.files[target].syntax if target in self.files else None
+            for aliases in (syntax.aliases.values() if syntax is not None else ()):
+                for alias in aliases:
+                    bound = self._alias_module(target, alias)
+                    if bound is not None and bound.module is not None:
+                        self.escape(bound.module, f"bound in escaped {target.name}")
 
     # -- edges -------------------------------------------------------------------
 
@@ -538,7 +627,25 @@ class _Walk:
                 return sub.module
         return resolved.module
 
+    def _shadowing(self, package: _Resolved, name: str) -> None:
+        """``from pkg import name`` or ``pkg.name`` where ``name`` is a submodule:
+        a binding of ``name`` in ``pkg/__init__.py`` wins unless the submodule
+        was imported first, so that binding is reached too."""
+        init = package.module
+        if init is None or package.package_dir is None or init.parent != package.package_dir.resolve():
+            return
+        if init == self.root or not self.descend or not is_first_party_source_file(init):
+            return
+        syntax = self._load(init).syntax
+        if syntax is not None and (name in syntax.definitions or name in syntax.preamble_bound or name in syntax.aliases):
+            self.name_edge(init, name)
+
     def import_edge(self, importer: Path, alias: Alias, *, whole: bool = False) -> None:
+        if alias.executes:
+            # ``import a.b.c`` binds ``a`` but executes every package on the way.
+            executes = _resolve_dotted(alias.executes.split("."), self.roots)
+            for executed in (executes.executed if executes is not None else ()):
+                self.touch(executed)
         resolved = self._resolve(importer, alias)
         if resolved is None:
             return
@@ -551,6 +658,7 @@ class _Walk:
                 if resolved.module is not None:
                     self.name_edge(resolved.module, alias.attr)
                 return
+            self._shadowing(resolved, alias.attr)
             for executed in sub.executed:
                 self.touch(executed)
             target = sub
@@ -576,6 +684,7 @@ class _Walk:
                 if resolved.module is not None:
                     self.name_edge(resolved.module, alias.attr)
                 return
+            self._shadowing(resolved, alias.attr)
             target = sub
         for element in chain:
             sub = _resolve_sub(target, element)
@@ -583,6 +692,7 @@ class _Walk:
                 if target.module is not None:
                     self.name_edge(target.module, element)
                 return
+            self._shadowing(target, element)
             for executed in sub.executed:
                 self.touch(executed)
             target = sub
@@ -603,18 +713,27 @@ class _Walk:
             self.reach_name(target, name)
 
     def escape(self, target: Path, why: str) -> None:
-        """A module reachable by any name: tracked whole."""
+        """A module reachable by any name: tracked whole, and so is every
+        module bound in it (it is reachable by any name too)."""
         if target == self.root or not is_first_party_source_file(target):
             return
         if self.model_boundaries and _model_function_names(str(target)):
             if self.model_taken.get(target, set()) is not None:
                 self.model_taken[target] = None
                 self._reclassify(target)
+            if target in self.model_source and target not in self.escaped:
+                self.escaped.add(target)
+                self.escapes.append(target)
             return
+        if target in self.escaped:
+            return
+        self.escaped.add(target)
         self.touch(target)
         self.make_whole(target, why)
         if target.name == "__init__.py":
             self.zone(target.parent)
+        if self.descend:
+            self.escapes.append(target)
 
     def _reclassify(self, target: Path) -> None:
         """Constants by value, functions by file, every decorated model by
@@ -640,6 +759,18 @@ class _Walk:
 
     def run(self) -> StaticImports:
         self.make_whole(self.root, "the script itself")
+        self._drain()
+        return self.result()
+
+    def walk_root(self, path: Path) -> None:
+        """Another root, walked whole like the script: a first-party file the
+        build executed that this walk never reached."""
+        if path == self.root or path in self.files or path in self.model_taken:
+            return
+        self.make_whole(path, "executed, not reached")
+        self._drain()
+
+    def result(self) -> StaticImports:
         sources: list[Path] = []
         names: dict[Path, tuple[str, ...] | None] = {}
         for path, file_state in self.files.items():
@@ -652,11 +783,18 @@ class _Walk:
         children = [path for path in self.model_taken if path not in self.model_source]
         return StaticImports(tuple(sorted(sources)), tuple(sorted(children)), dict(self.constants), names)
 
+    def reflective(self) -> str | None:
+        """Why some walked file can reach any module's namespace, or None."""
+        for path, state in sorted(self.files.items()):
+            if state.syntax is not None and state.syntax.reflective is not None:
+                return f"{path.name}: {state.syntax.reflective}"
+        return None
+
 
 def static_imports(script: Path, *, _syntax: _ImportSyntaxMemo | None = None) -> StaticImports:
     """Direct first-party imports of ``script``, classified by the boundary rule."""
     script = Path(script).resolve()
-    walk = _Walk(script, syntax=_syntax if _syntax is not None else _ImportSyntaxMemo(), sources=None, descend=False)
+    walk = _Walk(script, syntax=_syntax if _syntax is not None else _SYNTAX, sources=None, descend=False)
     return walk.run()
 
 
@@ -666,7 +804,7 @@ def static_closure(script: Path, *, _syntax: _ImportSyntaxMemo | None = None, _s
     model files are descended into whole; every non-model file is descended into
     by the names reached in it, or whole when it is dynamic."""
     script = Path(script).resolve()
-    walk = _Walk(script, syntax=_syntax if _syntax is not None else _ImportSyntaxMemo(), sources=_sources, descend=True)
+    walk = _Walk(script, syntax=_syntax if _syntax is not None else _SYNTAX, sources=_sources, descend=True)
     return walk.run()
 
 
@@ -697,8 +835,9 @@ def _exec_hash_hook(event: str, args: tuple) -> None:
     except OSError:
         return
     # One read: the hash AND the bytes the reach analysis will slice, taken at
-    # the moment the module body executes.
-    hashes[key] = _semantic_source_bytes(payload)
+    # the moment the module body executes. Analysed once, here: the walk over
+    # the same bytes is a memo hit.
+    hashes[key] = execution_digest(payload, key)
     sources = _ACTIVE_SOURCES
     if sources is not None:
         sources[key] = payload
@@ -820,6 +959,37 @@ def closure_hash(pairs: Iterable[tuple[str, str]]) -> str:
     return digest.hexdigest()
 
 
+def _child_ownership(script: Path, statics: StaticImports, called_files: set[Path]) -> tuple[set[Path], set[Path]]:
+    """(files this script owns, files exclusively owned by its children).
+
+    Children's own static closures, minus anything this script also reaches
+    through a source edge. Ownership is TRANSITIVE -- a grandchild's script and
+    sources belong to the child that calls it, and the whole subtree runs in
+    this process when the body imports its child. Stopping one level down put
+    every grandchild model file in the parent's closure, so an edit two levels
+    away rebuilt the root even when the pinned trees were unchanged.
+    """
+    child_owned: set[Path] = set()
+    ours: set[Path] = {script, *statics.source_files}
+    pending = list(called_files | set(statics.child_models))
+    seen: set[Path] = set()
+    while pending:
+        child = pending.pop()
+        if child in seen:
+            continue
+        seen.add(child)
+        descendant = static_closure(child)
+        child_owned.update((child, *descendant.source_files))
+        pending.extend(descendant.child_models)
+        if child in called_files and child not in statics.child_models:
+            # A dynamic module can supply a decorated call AND a helper/value
+            # used directly by this body. The call alone does not prove that
+            # its file is exclusively child-owned. Keep that source and its
+            # source closure unless static imports prove a result/value edge.
+            ours.update((child, *descendant.source_files))
+    return ours, child_owned - ours
+
+
 def build_closure(
     script: Path,
     *,
@@ -832,49 +1002,44 @@ def build_closure(
 
     ``executed`` maps resolved paths to the hashes taken at execution
     (:class:`ExecutionHashes`), ``sources`` to the bytes captured then. The
-    file set is: the script, its static reach's source files, every executed
+    file set is: the script, its reach's source files, every executed
     first-party file, and discovered inputs — minus files that belong to a
     child model (its script and files reached only through it), which the
-    boundary rule excludes. A non-model file the reach sliced is hashed by its
-    reached names; every other file whole.
+    boundary rule excludes. The reach walk starts at the script, then at every
+    executed first-party ``.py`` file it did not reach and no child owns, each
+    walked whole; what the children's import-time code reaches in shared files
+    is reached too. A non-model file the walk sliced is hashed by its reached
+    names — unless a walked file is reflective, and then every file is whole.
     """
     script = Path(script).resolve()
     base = script.parent
-    syntax = _ImportSyntaxMemo()
-    statics = static_closure(script, _syntax=syntax, _sources=sources)
+    captured = sources or {}
+    walk = _Walk(script, syntax=_SYNTAX, sources=captured, descend=True)
+    statics = walk.run()
     from cadgen.store.index import split_model_ref
 
     # Runtime calls carry exact script::function identities. Ownership of
     # executed source remains file-based, while the record keeps those exact
     # function pins independently in its children list.
     called_files = {split_model_ref(child)[0] for child in children}
-    child_files = called_files | set(statics.child_models)
-    # Files exclusively owned by children: their own static closures, minus
-    # anything this script also reaches through a source edge. Ownership is
-    # TRANSITIVE -- a grandchild's script and sources belong to the child that
-    # calls it, and the whole subtree runs in this process when the body imports
-    # its child. Stopping one level down put every grandchild model file in the
-    # parent's closure, so an edit two levels away rebuilt the root even when
-    # the pinned trees were unchanged.
-    child_owned: set[Path] = set()
-    ours: set[Path] = {script, *statics.source_files}
-    pending = list(child_files)
-    seen: set[Path] = set()
-    while pending:
-        child = pending.pop()
-        if child in seen:
-            continue
-        seen.add(child)
-        descendant = static_closure(child, _syntax=syntax)
-        child_owned.update((child, *descendant.source_files))
-        pending.extend(descendant.child_models)
-        if child in called_files and child not in statics.child_models:
-            # A dynamic module can supply a decorated call AND a helper/value
-            # used directly by this body. The call alone does not prove that
-            # its file is exclusively child-owned. Keep that source and its
-            # source closure unless static imports prove a result/value edge.
-            ours.update((child, *descendant.source_files))
+    ours, child_owned = _child_ownership(script, statics, called_files)
+    # What executed but static reach never saw — a plugin imported for its side
+    # effect, a module found through a sys.path insert — reaches names in the
+    # files it calls into: walk it as a root, from the bytes that ran.
+    runtime = sorted(path for path in map(Path, executed)
+                     if path.suffix == ".py" and path not in child_owned and is_first_party_source_file(path))
+    for path in runtime:
+        walk.walk_root(path)
+    statics = walk.result()
+    ours.update(statics.source_files)
     child_owned -= ours
+    # A child's files stay out of this closure (models by result), but
+    # importing a child runs its import-time code in this process: what that
+    # reaches in a file this closure shares with it is this model's too.
+    imports = _Walk(script, syntax=_SYNTAX, sources=captured, descend=True, model_boundaries=False, import_time=True)
+    for child in statics.child_models:
+        imports.touch(child)
+    imports._drain()
 
     files: set[Path] = set(ours)
     for key in executed:
@@ -886,87 +1051,84 @@ def build_closure(
             files.add(Path(path).resolve())
         except (OSError, ValueError):
             continue
+    # Something walked can reach any module's namespace by string or by
+    # introspection: no slice is safe, every file is hashed whole.
+    reflective = walk.reflective() or imports.reflective()
     pairs: list[tuple[str, str]] = []
     names: dict[str, tuple[str, ...]] = {}
-    captured = sources or {}
+    wholes: dict[str, str] = {}
     for path in files:
-        reached = statics.names.get(path)
-        if reached is not None:
-            # Sliced: hashed over the bytes that ran when the hook saw them, else
-            # the file as it is now (a statically reached import that never fired).
+        rel = _relative(path, base)
+        state = walk.files.get(path)
+        syntax = state.syntax if state is not None else None
+        reached = None if reflective else statics.names.get(path)
+        shared = imports.files.get(path)
+        if reached is not None and shared is not None:
+            reached = None if shared.whole else tuple(sorted(set(reached) | shared.names))
+        if reached is not None and syntax is not None:
+            # Sliced, over the very bytes the walk analysed: those the exec
+            # hook captured when the module ran, else the file as it was read.
+            pairs.append((rel, slice_hash(syntax, reached)))
+            names[rel] = reached
+            wholes[rel] = syntax.whole_hash
+            continue
+        file_hash = executed.get(str(path))
+        if file_hash is None and syntax is not None:
+            file_hash = syntax.whole_hash
+        if file_hash is None:
             try:
-                payload = captured.get(str(path))
-                if payload is None:
-                    payload = path.read_bytes()
-                file_hash = slice_hash(syntax.get(payload, str(path)), reached)
-            except (OSError, SyntaxError, ValueError):
+                file_hash = _semantic_source_hash(path)
+            except OSError:
                 continue
-            names[_relative(path, base)] = reached
-        else:
-            file_hash = executed.get(str(path))
-            if file_hash is None:
-                try:
-                    file_hash = _semantic_source_hash(path)
-                except OSError:
-                    continue
-        pairs.append((_relative(path, base), file_hash))
-    constants = {_relative(Path(module), base): dict(names) for module, names in statics.constants.items()}
+        pairs.append((rel, file_hash))
+    constants = {_relative(Path(module), base): dict(values) for module, values in statics.constants.items()}
     return Closure(
         hash=closure_hash(pairs),
         files=tuple(sorted(rel for rel, _ in pairs)),
         constants=constants,
         shas={rel: file_hash for rel, file_hash in sorted(pairs)},
         names=dict(sorted(names.items())),
+        wholes=dict(sorted(wholes.items())),
     )
-
-
-# (path, names) -> (st_mtime_ns, st_size, hash): the slice twin of the whole-file
-# semantic hash cache in source_hash, with the same settle rule (a fresh edit is
-# re-sliced until its mtime is old enough that a same-size rewrite must move it).
-_SLICE_HASH_CACHE: dict[tuple[str, tuple[str, ...]], tuple[int, int, str]] = {}
 
 
 def sliced_source_hash(path: Path, names: Iterable[str]) -> str:
     """The slice hash of ``path`` as it is on disk now, by the recorded names —
-    what the gate compares for a sliced closure file."""
-    reached = tuple(names)
-    key = (str(path), reached)
-    try:
-        stat = path.stat()
-    except OSError:
-        stat = None
-    if stat is not None:
-        cached = _SLICE_HASH_CACHE.get(key)
-        if cached is not None and cached[0] == stat.st_mtime_ns and cached[1] == stat.st_size:
-            return cached[2]
+    what the gate compares for a sliced closure file that changed."""
     payload = path.read_bytes()
     try:
-        result = slice_hash(analyze(payload, str(path)), reached)
-    except (SyntaxError, ValueError, MemoryError, RecursionError):
-        result = _semantic_source_bytes(payload)  # unparseable: the byte digest, whole
-    if stat is not None and time.time_ns() - stat.st_mtime_ns > _SEMANTIC_HASH_SETTLE_NS:
-        _SLICE_HASH_CACHE[key] = (stat.st_mtime_ns, stat.st_size, result)
-    return result
+        return slice_hash(_SYNTAX.get(payload, str(path)), tuple(names))
+    except _UNANALYSABLE:
+        return _semantic_source_bytes(payload)  # unanalysable: the whole-file hash
 
 
-def _hash_now(resolved: Path, rel: str, names: Mapping[str, Iterable[str]] | None) -> str:
+def file_hash_now(path: Path, rel: str, names: Mapping[str, Iterable[str]] | None,
+                  shas: Mapping[str, str] | None = None, wholes: Mapping[str, str] | None = None) -> str:
+    """One recorded closure file hashed as the gate compares it now: whole, or
+    by its recorded names when sliced. A sliced file whose whole-file hash is
+    still the recorded one keeps its recorded slice without re-analysis."""
     reached = (names or {}).get(rel)
-    if reached is not None:
-        return sliced_source_hash(resolved, reached)
-    return _semantic_source_hash(resolved)
+    if reached is None:
+        return _semantic_source_hash(path)
+    recorded = (shas or {}).get(rel)
+    whole = (wholes or {}).get(rel)
+    if recorded and whole and recorded.startswith(SLICE_PREFIX) and _semantic_source_hash(path) == whole:
+        return recorded
+    return sliced_source_hash(path, reached)
 
 
-def changed_closure_files(script: Path, shas: Mapping[str, str], names: Mapping[str, Iterable[str]] | None = None) -> list[str]:
+def changed_closure_files(script: Path, shas: Mapping[str, str], names: Mapping[str, Iterable[str]] | None = None,
+                          wholes: Mapping[str, str] | None = None) -> list[str]:
     """The recorded closure files whose content hash differs now (a missing file
     counts), in recorded order. Empty when nothing moved -- or when the record
     carries no per-file hashes, in which case the caller can only say "changed".
-    A file in ``names`` is re-sliced by those names; any other is hashed whole."""
+    A file in ``names`` is compared by its slice; any other is hashed whole."""
     base = Path(script).resolve().parent
     changed: list[str] = []
     for rel, recorded in shas.items():
         resolved = _resolve_relative(str(rel), base)
         try:
-            now = _hash_now(resolved, str(rel), names) if resolved is not None else None
+            now = file_hash_now(resolved, str(rel), names, shas, wholes) if resolved is not None else None
         except OSError:
             now = None
         if now != recorded:
@@ -974,9 +1136,12 @@ def changed_closure_files(script: Path, shas: Mapping[str, str], names: Mapping[
     return changed
 
 
-def current_closure_hash(script: Path, files: Iterable[str], names: Mapping[str, Iterable[str]] | None = None) -> str | None:
+def current_closure_hash(script: Path, files: Iterable[str], names: Mapping[str, Iterable[str]] | None = None, *,
+                         shas: Mapping[str, str] | None = None, wholes: Mapping[str, str] | None = None) -> str | None:
     """Re-hash a recorded file list as it is on disk now; None if a file is gone.
-    A file in ``names`` is re-sliced by those names; any other is hashed whole."""
+    A file in ``names`` is compared by its slice (``shas``/``wholes``: the
+    recorded slice stands while the file's whole-file hash is unchanged); any
+    other is hashed whole."""
     base = Path(script).resolve().parent
     pairs: list[tuple[str, str]] = []
     for rel in files:
@@ -984,7 +1149,7 @@ def current_closure_hash(script: Path, files: Iterable[str], names: Mapping[str,
         if resolved is None:
             return None
         try:
-            pairs.append((str(rel), _hash_now(resolved, str(rel), names)))
+            pairs.append((str(rel), file_hash_now(resolved, str(rel), names, shas, wholes)))
         except OSError:
             return None
     return closure_hash(pairs) if pairs else None

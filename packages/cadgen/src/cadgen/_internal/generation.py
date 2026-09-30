@@ -521,6 +521,7 @@ def _generate_part_outputs(
         closure_files = list(getattr(scene, "source_closure_files", ()) or ())
         closure_shas = dict(getattr(scene, "source_closure_file_hashes", None) or {})
         closure_names = {rel: list(names) for rel, names in (getattr(scene, "source_closure_names", None) or {}).items()}
+        closure_wholes = dict(getattr(scene, "source_closure_wholes", None) or {})
         closure_static = False
         reemit_source_hash = getattr(scene, "reemit_source_hash", None)
         if not generated:
@@ -530,7 +531,7 @@ def _generate_part_outputs(
             step_hash = str(getattr(scene, "step_hash", "") or "") or step_file_hash(spec.step_path)
             closure_files = [spec.step_path.name]
             closure_shas = {spec.step_path.name: step_hash}
-            closure_names = {}
+            closure_names, closure_wholes = {}, {}
             closure_hash = _closure_hash([(spec.step_path.name, step_hash)])
         elif reemit_source_hash and not closure_hash:
             # A re-emitted document (`cadgen step build IN OUT`): its source is
@@ -539,7 +540,7 @@ def _generate_part_outputs(
             from cadgen.store.closure import closure_hash as _closure_hash
 
             closure_files = []
-            closure_names = {}
+            closure_names, closure_wholes = {}, {}
             closure_hash = _closure_hash(
                 [("reemit", str(reemit_source_hash)), ("annotation", str(getattr(scene, "reemit_annotation_hash", "") or ""))]
             )
@@ -569,7 +570,8 @@ def _generate_part_outputs(
             "tree": tree_hash,
             "unannotatedTree": str(stats.get("unannotatedTree") or tree_hash),
             "documentTree": document_tree_hash if spec.step_output else None,
-            "closure": {"hash": closure_hash, "files": closure_files, "shas": closure_shas, "names": closure_names, "static": closure_static},
+            "closure": {"hash": closure_hash, "files": closure_files, "shas": closure_shas, "names": closure_names,
+                        "wholes": closure_wholes, "static": closure_static},
             # Literals imported from model files, tracked by VALUE (gate clause 2).
             "constants": dict(getattr(scene, "source_closure_constants", None) or {}) if generated else {},
             "children": list(getattr(scene, "store_children", None) or []),
@@ -633,7 +635,8 @@ def _generate_part_outputs(
             # A re-emitted STEP has an immutable byte/annotation input closure,
             # not a Python source closure that current_closure_hash can read.
             if not closure_static:
-                decision = decide(model_path, ran_closure_hash=closure_hash, ran_files=closure_files, ran_names=closure_names)
+                decision = decide(model_path, ran_closure_hash=closure_hash, ran_files=closure_files, ran_names=closure_names,
+                                  ran_shas=closure_shas, ran_wholes=closure_wholes)
                 if not decision.publish_outputs:
                     raise RuntimeError(f"{spec.cad_ref}: result was not saved: {decision.reason}")
             if staged_step is not None and expected_document_pair is not None:
