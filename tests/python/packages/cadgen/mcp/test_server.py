@@ -75,10 +75,15 @@ class ServerTest(unittest.TestCase):
         loose = str(self.tmp / "elsewhere" / "loose.stl")
         outside = self.launch("cad_open", {"path": loose})
         self.assertEqual((outside["root"]["kind"], outside["root"]["path"]), ("folder", str(self.tmp / "elsewhere")))
+        # A model in a folder the workspace's catalog skips is browsed from its own folder.
+        (self.workspace / "build").mkdir()
+        (self.workspace / "build" / "out.stl").write_bytes(STL)
+        built = self.launch("cad_open", {"path": "build/out.stl"})
+        self.assertEqual((built["root"]["kind"], built["root"]["path"]), ("folder", str(self.workspace / "build")))
         # A file the host hands over is shown on its own, with no explorer.
         handed = self.launch("cad_file", {"file": {"name": "loose.stl", "resourceUri": "x"}}, {"openai/resource": {"path": loose}})
         self.assertEqual((handed["model"], handed["explore"], handed["root"]["kind"]), (loose, False, "folder"))
-        self.assertEqual([entry.path for entry in self.server.recents.list()], [loose, opened["model"]])
+        self.assertEqual([entry.path for entry in self.server.recents.list()], [loose, built["model"], opened["model"]])
 
     def test_a_bad_path_is_the_tools_answer_not_a_protocol_error(self) -> None:
         missing = self.call("cad_open", {"path": "parts/nope.step"})

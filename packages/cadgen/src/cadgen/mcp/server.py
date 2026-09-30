@@ -30,7 +30,7 @@ from urllib.parse import unquote, urlparse
 from cadgen.viewer.scanner import SOURCE_EXTENSIONS
 
 from .protocol import INVALID_PARAMS, METHOD_NOT_FOUND, Connection, RequestContext, RpcError, claim_stdout
-from .roots import Root, ThreadWorkspace, folder_of
+from .roots import Root, ThreadWorkspace, folder_of, listed_under
 from .ui import MIME, RESOURCE_META, AppPage
 from .views import POLL_SECONDS, NoAnswer, ViewRegistry
 
@@ -281,7 +281,7 @@ class Server:
 
     def _root_for(self, model: str) -> Root:
         folder = self.workspace.contains(model)
-        return Root("workspace", folder) if folder else folder_of(model)
+        return Root("workspace", folder) if folder and listed_under(folder, model) else folder_of(model)
 
     def _launch(self, model: str | None, *, surface: str | None = None, explore: bool = True) -> dict[str, Any]:
         launch: dict[str, Any] = {"protocol": PROTOCOL, "page": "viewer", "model": model, "explore": explore}

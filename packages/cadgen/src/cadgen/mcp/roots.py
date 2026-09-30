@@ -18,7 +18,7 @@ from dataclasses import dataclass
 from typing import Any
 from urllib.parse import unquote, urlparse
 
-from cadgen.viewer.scanner import SCAN_MAX_DEPTH
+from cadgen.viewer.scanner import SCAN_MAX_DEPTH, VIEWER_SKIPPED_DIRECTORIES, is_hidden_name
 
 WORKSPACE = "workspace"
 FOLDER = "folder"
@@ -44,6 +44,19 @@ class Root:
 
 def folder_of(model: str) -> Root:
     return Root(FOLDER, os.path.dirname(model))
+
+
+def listed_under(root: str, model: str) -> bool:
+    """Whether a catalog of ``root`` lists ``model``: no folder between them is one the scan skips.
+
+    A model the agent writes under ``build/`` or a hidden folder is still the thread's,
+    but the workspace's catalog never shows it, so it is browsed from its own folder.
+    """
+    relative = os.path.relpath(os.path.dirname(os.path.realpath(model)), os.path.realpath(root))
+    if relative == os.curdir:
+        return True
+    parts = relative.split(os.sep)
+    return len(parts) <= SCAN_MAX_DEPTH and not any(part in VIEWER_SKIPPED_DIRECTORIES or is_hidden_name(part) for part in parts)
 
 
 def _usable_directory(path: str | None, *, excluded: tuple[str, ...]) -> str | None:
