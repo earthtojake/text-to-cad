@@ -389,7 +389,9 @@ A real one (`link_robot`: a base, two placements of `link_arm`, one of
   Python's `open` (seen by an audit hook; not a file the build wrote, not one
   of the model's own outputs, not the interpreter's, cadgen's or the store's),
   and every file a native reader was told about (`read_step`,
-  `declare_input`). Two kinds of entry are not files: `!<path>`, a file that
+  `declare_input`). Three kinds of entry are not files: `<folder>/`, a folder
+  the model's code listed (a glob of profiles), hashed by its sorted entry
+  names; `!<path>`, a file that
   must stay absent — one the imports were resolved past (a package beside a
   module, an `__init__.py` a namespace package lacks, a module an earlier
   search root lacks) and would resolve to if it appeared — hashed `absent`;

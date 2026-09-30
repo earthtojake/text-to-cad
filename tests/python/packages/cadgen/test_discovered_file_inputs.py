@@ -509,6 +509,26 @@ class DiscoveredInputRecordingTests(unittest.TestCase):
                 scratch.read_text(encoding="utf-8")
             self.assertEqual(recorded, {data.resolve(), table.resolve()})
 
+    def test_a_folder_the_model_code_lists_is_recorded_and_an_import_listing_is_not(self) -> None:
+        import importlib
+
+        from cadgen._internal.source_hash import record_discovered_inputs
+
+        with tempfile.TemporaryDirectory(prefix="discovered-listing-") as tmp:
+            root = Path(tmp)
+            profiles, package = root / "profiles", root / "pkg"
+            profiles.mkdir()
+            package.mkdir()
+            (profiles / "a.json").write_text("{}", encoding="utf-8")
+            (package / "helper_for_listing_test.py").write_text("X = 1\n", encoding="utf-8")
+            sys.path.insert(0, str(package))
+            self.addCleanup(sys.path.remove, str(package))
+            self.addCleanup(sys.modules.pop, "helper_for_listing_test", None)
+            with record_discovered_inputs() as recorded:
+                sorted(profiles.glob("*.json"))
+                importlib.import_module("helper_for_listing_test")  # the import system lists pkg/
+            self.assertEqual(recorded, {profiles.resolve()})
+
     def test_a_recorded_input_joins_the_closure_and_is_byte_hashed(self) -> None:
         from cadgen._internal.source_hash import closure_for_files, closure_hash_matches
 

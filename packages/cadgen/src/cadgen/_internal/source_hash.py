@@ -570,7 +570,9 @@ _CODE_SUFFIXES = frozenset({".py", ".pyc", ".pyi", ".pth", ".so", ".pyd", ".dyli
 
 @functools.lru_cache(maxsize=8192)
 def _frame_kind(filename: str) -> str:
-    """"cadgen", "model" or "other" for a frame's source file."""
+    """"cadgen", "model", "import" (the import system) or "other" for a frame's source file."""
+    if filename.startswith("<frozen importlib"):
+        return "import"
     if not filename or filename.startswith("<"):
         return "other"
     try:
@@ -587,7 +589,8 @@ def _read_by_model_code() -> bool:
     installed package is the model's own code. A read cadgen makes for itself
     (a record, a child's output, a ``read_step`` that declares on its own) is
     not the model's input; a model's ``json.load`` or ``np.load`` is, even
-    though the library does the opening."""
+    though the library does the opening. The import system reading or listing
+    for an import is not either: imports are tracked by their own reach."""
     try:
         frame = sys._getframe(3)
     except ValueError:  # opened with (almost) no Python caller
@@ -595,17 +598,29 @@ def _read_by_model_code() -> bool:
     while frame is not None:
         kind = _frame_kind(frame.f_code.co_filename)
         if kind != "other":
-            return kind == "model"
+            return kind == "model"  # "cadgen" and "import" are not the model's reads
         frame = frame.f_back
     return False
 
 
 class _Opens:
-    """The files a build opened, split into read and written."""
+    """The files a build opened, split into read and written, and the folders
+    its code listed."""
 
     def __init__(self) -> None:
         self.read: dict[Path, None] = {}
         self.written: set[Path] = set()
+        self.listed: dict[Path, None] = {}
+
+    def note_listing(self, target: object) -> None:
+        if isinstance(target, int):
+            return  # a directory descriptor: its path was noted when it was opened
+        try:
+            path = Path(os.path.abspath(os.fsdecode(target if target is not None else ".")))
+        except (TypeError, ValueError):
+            return
+        if _read_by_model_code():
+            self.listed.setdefault(path, None)
 
     def note(self, target: object, mode: object, flags: object) -> None:
         if isinstance(target, int) or target is None:
@@ -633,6 +648,13 @@ class _Opens:
             pass
         written = {path.resolve() for path in self.written}
         found: set[Path] = set()
+        for path in self.listed:
+            try:
+                resolved = path.resolve()
+            except (OSError, ValueError):
+                continue
+            if resolved.is_dir() and not any(_is_within(resolved, root) for root in excluded):
+                found.add(resolved)  # a folder: what the model saw is its listing
         for path in self.read:
             try:
                 resolved = path.resolve()
@@ -648,13 +670,15 @@ class _Opens:
 
 def _open_audit(event: str, args: tuple) -> None:
     opens = _ACTIVE_OPENS
-    if opens is None or event not in ("open", "os.rename"):
+    if opens is None or event not in ("open", "os.rename", "os.listdir", "os.scandir"):
         return
     try:
         if event == "open" and args:
             opens.note(args[0], args[1] if len(args) > 1 else None, args[2] if len(args) > 2 else None)
-        elif len(args) > 1:  # os.rename and os.replace: the target is written
+        elif event == "os.rename" and len(args) > 1:  # os.rename and os.replace: the target is written
             opens.note(args[1], "w", None)
+        elif event in ("os.listdir", "os.scandir"):
+            opens.note_listing(args[0] if args else None)
     except Exception:  # noqa: BLE001 - an audit hook must never fail the open it observes
         pass
 
@@ -666,8 +690,10 @@ def record_discovered_inputs():
     Import reach is observed (the exec audit hook); so is data reach: the
     ``open`` audit event fires for every Python-level open -- ``open``,
     ``pathlib``, ``json.load`` on an opened file, ``np.load`` -- and a file the
-    model's own code read (not cadgen's machinery), and the build did not write,
-    joins the closure. A reader that opens files in native code never reaches
+    model's own code read (not cadgen's machinery, not the import system), and
+    the build did not write, joins the closure; so does a folder its code
+    listed (``os.listdir``, ``glob``, ``iterdir``), by what it held. A reader
+    that opens files in native code never reaches
     Python's open: ``cadgen.read_step`` declares its document here itself, and
     ``cadgen.declare_input`` does the same for any other native reader.
 
@@ -695,6 +721,7 @@ def record_discovered_inputs():
         if previous[1] is not None:
             previous[1].read.update(opens.read)
             previous[1].written.update(opens.written)
+            previous[1].listed.update(opens.listed)
 
 
 def note_discovered_input(path: Path) -> None:

@@ -427,7 +427,8 @@ other file the model's Python code opens — a JSON routing atlas, a CSV of tap
 sizes, a table of solved offsets through `json.load`, `csv` or `np.load` — is
 recorded as the build reads it: edit `atlas.json` and the model is stale on its
 own; rewrite it with identical bytes and it stays current, because the input is
-the content and not the mtime.
+the content and not the mtime. A folder the model globs is recorded too, so
+adding or removing a profile there rebuilds it.
 
 A file opened in native code never passes through Python's `open`, so nothing
 sees it: `bd.import_step`, `bd.import_brep`, a font file. Declare such a file

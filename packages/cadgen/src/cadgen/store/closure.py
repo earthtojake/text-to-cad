@@ -60,6 +60,7 @@ from __future__ import annotations
 
 import dataclasses
 import hashlib
+import os
 import sys
 import threading
 from collections import OrderedDict
@@ -1197,11 +1198,13 @@ def build_closure(
     in_process.update(path for path in map(Path, executed) if path.suffix == ".py" and is_first_party_source_file(path))
     import_time = in_process - files
     files |= import_time
+    listings: set[Path] = set()
     for path in discovered_inputs:
         try:
-            files.add(Path(path).resolve())
+            resolved = Path(path).resolve()
         except (OSError, ValueError):
             continue
+        (listings if resolved.is_dir() else files).add(resolved)
     # Something walked can reach any module's namespace by string or by
     # introspection: no slice is safe, every file is hashed whole.
     reflective = walk.reflective() or imports.reflective()
@@ -1249,6 +1252,10 @@ def build_closure(
     # search roots themselves.
     for rel in sorted({ABSENT_MARK + _relative(path, base) for path in walk.absent | imports.absent}):
         pairs.append((rel, ABSENT))
+    # A folder the model's code listed (a glob of profiles, one part each): a file
+    # added or removed there changes what the body saw.
+    for directory in sorted(listings):
+        pairs.append((_relative(directory, base).rstrip("/") + "/", _listing_digest(directory)))
     root_used = max(walk.root_used, imports.root_used)
     if root_used > 0:
         count = root_used + 1
@@ -1308,8 +1315,18 @@ def _roots_count(rel: str) -> int | None:
 
 
 def source_files(files: Iterable[str], shas: Mapping[str, str] | None = None) -> list[str]:
-    """The files a closure names that exist -- without its absent and roots entries."""
-    return [rel for rel in files if _roots_count(rel) is None and not rel.startswith(ABSENT_MARK)]
+    """The files a closure names that exist -- without its absent, roots and listing entries."""
+    return [rel for rel in files
+            if _roots_count(rel) is None and not rel.startswith(ABSENT_MARK) and not rel.endswith("/")]
+
+
+def _listing_digest(directory: Path) -> str:
+    """A folder the model's code listed, as what it saw: its sorted entry names."""
+    try:
+        names = sorted(os.listdir(directory))
+    except OSError:
+        return "missing"
+    return "listing:" + hashlib.sha256("\0".join(names).encode("utf-8")).hexdigest()
 
 
 def _roots_digest(roots: Iterable[Path | str], base: Path) -> str:
@@ -1351,6 +1368,9 @@ def entry_hash_now(base: Path, rel: str, names: Mapping[str, Iterable[str]] | No
     if rel.startswith(ABSENT_MARK):
         candidate = Path(rel[len(ABSENT_MARK):])
         return ABSENT if not (candidate if candidate.is_absolute() else base / candidate).exists() else "present"
+    if rel.endswith("/"):
+        candidate = Path(rel)
+        return _listing_digest(candidate if candidate.is_absolute() else base / candidate)
     count = _roots_count(rel)
     if count is not None:
         return _roots_now(base, count)

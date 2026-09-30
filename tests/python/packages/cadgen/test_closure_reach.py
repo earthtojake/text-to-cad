@@ -711,6 +711,25 @@ class ReachClosure(unittest.TestCase):
         self.edit(self.geo, "TABLE[0] = 2.0", "TABLE[0] = 3.0")
         self.assert_clause_two(reference, True, "lib/geo.py")
 
+    def test_a_folder_the_model_listed_is_stale_when_a_file_is_added(self):
+        from cadgen.store.closure import build_closure
+        from cadgen.store.index import model_ref
+        from cadgen.store.records import write_record
+
+        profiles = self.root / "profiles"
+        profiles.mkdir()
+        (profiles / "a.json").write_text("{}", encoding="utf-8")
+        script = self.root / "part.py"
+        closure = build_closure(script, executed={}, discovered_inputs=[profiles])
+        self.assertIn("profiles/", closure.files)
+        reference = model_ref(script, "part")
+        write_record(reference, {"entryKind": "part", "sourceKind": "python", "tree": None,
+                                 "closure": closure.as_json(), "constants": closure.constants,
+                                 "children": [], "outputs": {}})
+        self.assert_clause_two(reference, False)
+        (profiles / "b.json").write_text("{}", encoding="utf-8")
+        self.assert_clause_two(reference, True, "profiles/")
+
     def test_a_binding_added_later_that_shadows_a_submodule_is_stale(self):
         reference, closure = self.record()
         self.assertIn("geo", closure.names["lib/__init__.py"], "recorded unbound")
