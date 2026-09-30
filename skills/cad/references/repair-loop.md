@@ -36,10 +36,10 @@ Version-specific pitfalls and construction alternatives are in
 
 ## Viewer and snapshots
 
-Follow [CAD Viewer](../SKILL.md#cad-viewer) for the launch command and review
-links. Check the served workspace with `cadgen viewer list` and inspect
-`cadgen viewer --help` for launcher options. If startup fails, report the failure
-and use Python geometry checks plus snapshots.
+Show the result as in [Show the model](../SKILL.md#show-the-model). With the CLI viewer,
+`cadgen viewer list` shows what each instance serves and `cadgen viewer --help` its
+options. If showing fails, report the failure and use Python geometry checks plus
+snapshots.
 
 Snapshot commands take saved documents, not model scripts. Run the model first
 when its output is missing; otherwise verify the input format/path, Chromium

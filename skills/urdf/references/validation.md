@@ -8,7 +8,7 @@ Run in order; stop and fix at the first failing step:
 
 1. **Bundled validator** (always): `cadgen urdf validate path/to/robot.urdf`. It collects *all* findings in one pass (severity, code, XML path); fix them and re-run until clean. Use `--strict` to fail on warnings, `--json` for machine-readable output, and `--packages NAME=PATH` (repeatable) to resolve `package://` mesh URIs.
 2. **External URDF tools** (when installed): `check_urdf robot.urdf` (ros liburdfdom) parses with the reference parser and prints the link tree. Report as skipped when unavailable.
-3. **Viewer sweep** (launch using [CAD Viewer](../SKILL.md#cad-viewer)): load the file, confirm meshes appear at sane scale and pose, then sweep **every** movable joint through its limits and compare the motion against the ledger's positive-motion statement, joint by joint. This is the only step that catches a wrong axis sign.
+3. **Viewer sweep** (open it as in [Show the model](../SKILL.md#show-the-model)): load the file, confirm meshes appear at sane scale and pose, then sweep **every** movable joint through its limits and compare the motion against the ledger's positive-motion statement, joint by joint. This is the only step that catches a wrong axis sign.
 4. **Consumer smoke test** (when the target runtime is available): RViz display, robot_state_publisher TF tree, Gazebo/Ignition load, or MoveIt model load.
 
 Report which steps ran and which were skipped.

@@ -5,7 +5,7 @@ Every created or modified `.srdf` runs this recipe before the task is reported c
 ## Recipe
 
 1. **Bundled validator** (always): `cadgen srdf validate path/to/robot.srdf`. It runs in two phases — the SRDF's own structure, then everything cross-checked against the paired URDF — and collects all findings of a phase in one pass (severity, code, XML path). A structural error stops the cross-file phase, so a short first report is not a short list of problems: fix and re-run until clean. Use `--strict` to fail on warnings and `--json` for machine-readable output.
-2. **Viewer review** (launch using [CAD Viewer](../SKILL.md#cad-viewer)): load the SRDF, confirm the paired URDF resolves and renders, and exercise named group states.
+2. **Viewer review** (open it as in [Show the model](../SKILL.md#show-the-model)): load the SRDF, confirm the paired URDF resolves and renders, and exercise named group states.
 3. **MoveIt smoke test** (when a MoveIt environment is available): load the URDF+SRDF pair in MoveIt Setup Assistant or a project launch; solve IK for the primary group; plan to a named state. Report as skipped when unavailable.
 
 ## What the Bundled Validator Checks

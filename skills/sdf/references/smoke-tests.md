@@ -50,7 +50,7 @@ For each non-fixed joint:
 
 ### CAD Viewer static review
 
-After generating or modifying an `.sdf`, run the [CAD Viewer launch command](../SKILL.md#cad-viewer) and return a live link. Report any launch failure explicitly.
+After generating or modifying an `.sdf`, show it ([Show the model](../SKILL.md#show-the-model)). Report any failure explicitly.
 
 - confirm direct model links, joints, frames, visuals, and collisions are placed correctly;
 - confirm includes, plugins, sensors, lights, nested models, and unsupported geometry are listed as static metadata;

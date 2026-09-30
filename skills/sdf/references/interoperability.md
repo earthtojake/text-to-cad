@@ -49,7 +49,7 @@ SDF should not define planning groups, end-effectors, group states, or disabled-
 
 CAD Viewer can review `.sdf` files visually and help catch gross placement or resource issues. It cannot prove simulator dynamics, inertial validity, plugin loading, sensor topics, or joint-axis semantics.
 
-After creating or modifying `.sdf` files, run the [CAD Viewer launch command](../SKILL.md#cad-viewer) and return live links to the artifacts. Report any launch failure explicitly.
+After creating or modifying `.sdf` files, show them ([Show the model](../SKILL.md#show-the-model)). Report any failure explicitly.
 
 CAD Viewer renders SDF as static structure plus direct inspection controls. It lists plugins, sensors, lights, includes, and nested models as metadata, but does not execute plugins or consume file-authored motion contracts.
 

@@ -126,7 +126,7 @@ Plugin filenames and parameters can pass bundled validation and still fail in th
 
 CAD Viewer treats SDF plugins, sensors, lights, includes, and nested models as static metadata, and says so per kind in the file's warning list. A plugin named `cad-viewer-input-motion` (or `cad_viewer_input_motion`) is recognized and then ignored: SDF rendering is static unless joints are posed manually. The bundled validator checks generic structure only and never executes a plugin of any kind.
 
-After `.sdf` files are created or modified, run the [CAD Viewer launch command](../SKILL.md#cad-viewer) and return live links. Report any launch failure explicitly.
+After `.sdf` files are created or modified, show them ([Show the model](../SKILL.md#show-the-model)). Report any failure explicitly.
 
 ## External checks
 
