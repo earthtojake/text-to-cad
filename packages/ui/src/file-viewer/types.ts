@@ -116,8 +116,6 @@ export interface RendererViewProps {
    * `onPanelOpen`: their controls are tool-stack panels, never the host's column.
    */
   openPanel: string;
-  /** Renderer status beside the filename. */
-  navigationStatusSlot?: HTMLElement | null;
   /** The column's box for a declared `"slot"` panel to draw into. */
   panelSlot: HTMLElement | null;
   onPanelOpen: (id: string) => void;

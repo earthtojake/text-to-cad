@@ -87,16 +87,22 @@ drag or a resize within one layout does not re-render the renderer. The column i
 220px by default, 140px at least and 480px at most (`FilePanelColumn.jsx`); a drag
 past the minimum stops at it, and only one below half the minimum closes the column.
 
-A renderer is handed, besides its document: `navigationStatusSlot`, the nav-row
-element after the filename where it portals its loading and update status (the
-row itself adds only the unsaved-changes dot); `onNavigationActionsChange`, for
+A renderer is handed, besides its document: `onNavigationActionsChange`, for
 its nav-row actions (`FileNavigationAction`, with an optional shorter `hint`);
-`displayActions`, the host's controls for the Display settings; and `appearance`. Host-specific empty,
+`displayActions`, the host's controls for the Display settings; and `appearance`.
+Its loading and update status are its own to show: a CAD renderer shows them in
+its viewport. Host-specific empty,
 loading, and error artwork can be supplied through `presentation`, without
 duplicating the tab's placement. Per-file renderer state is also accepted during
 a departing renderer's cleanup, while it still belongs to the same root.
 `navigationPath` can keep navigation unselected while a requested file is still
 being resolved by a host catalog. It does not change the requested document.
+
+The nav row is drawn only when it holds something: crumbs, `leading`,
+`navigationActions`, a renderer's actions, a panel toggle, or the unsaved-changes
+dot. A host that shows one file without browsing it (`navigationPath: null`, a
+source with no `list`) and puts nothing at either end gets the file with no row
+above it: its own frame already names the file.
 
 The browser harness beside FileViewer exercises injected renderers, dirty and
 revision state, delayed writes, changes, root isolation, navigation actions,

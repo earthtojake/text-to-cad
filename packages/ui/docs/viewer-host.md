@@ -319,5 +319,6 @@ it instead; only non-isolatable topology references use double-click copying. Ca
 routing. The host supplies `environment.platform` for the ⌘C / Ctrl+C hint;
 the web host derives that field from its browser environment.
 
-Renderer status uses `RendererViewProps.navigationStatusSlot`, a named portal
-slot immediately after the filename. 
+A renderer's update status is its own: the CAD renderers show it centred at the
+top of the viewport, level with the tool strip. The host's nav row carries none,
+and a host that browses nothing and puts nothing at either end of it gets no row.

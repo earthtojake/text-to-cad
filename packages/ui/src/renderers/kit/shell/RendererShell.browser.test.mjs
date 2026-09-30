@@ -484,8 +484,6 @@ test('a renderer says more about its load than a download: finding the file, edi
   const middleY = box => box.y + box.height / 2;
   assert.ok(Math.abs(middleY(updateBox) - middleY(toolsBox)) < 1,
     `model update status is vertically centred with the tool strip: ${JSON.stringify({ updateBox, toolsBox, actionsBox })}`);
-  assert.equal(await pane.locator('[data-file-navigation-status] [data-view-update-status]').count(), 0,
-    'the filename row does not carry model update status');
 
   // THE PREVIEW ENDS IT: the result is on screen, so the wait is over even though the
   // write is not.
