@@ -259,11 +259,13 @@ cadgen never caches work inside a model: a model whose inputs changed runs
 from scratch, and one whose inputs did not is skipped whole. Rebuild speed
 therefore comes from how the project is split:
 
-- Give a part its own model when it takes more than about 15 s to build, or
-  when it is edited independently of its neighbours: a thin entry file whose
-  `@step` function calls a factory in `lib/`, placed by its parent like any
-  child. An edit then rebuilds that part and relinks the parent; its siblings
-  stay current, and stale children build in parallel.
+- Give a part its own model when it dominates its model's build time, takes
+  more than about 15 s, or is edited independently of its neighbours: a thin
+  entry file whose `@step` function calls a factory in `lib/`, placed by its
+  parent like any child. An edit then rebuilds that part and relinks the
+  parent; its siblings stay current, and stale children build in parallel. One
+  heavy casing or shell inside a model of many light parts is the case that
+  pays most: edits to the light parts stop paying for it.
 - Keep geometry in `lib/` factories. A model reruns only when code it reaches
   changes, so an edit to one factory leaves the models that never call it
   current.
