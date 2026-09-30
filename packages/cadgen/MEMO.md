@@ -79,10 +79,12 @@ installation therefore makes shape identity GEOMETRIC process-wide, for
 
 Identity stops at the kernel. A fillet, chamfer or offset looks its edges and
 faces up in the solid by native handle, so ones held from before an operation
-are not the solid's own there, however equal they compare: a fillet or chamfer
-fails on them. Select them from the current shape. A failed operation is
-recorded and replayed only when every such argument is the solid's own, so a
-corrected selection is never answered by the held one's failure.
+are not the solid's own there, however equal they compare: a fillet skips
+them and fails when none is left, a chamfer fails on them, and an offset does
+not open a held face. Select them from the current shape. Such an operation's
+result or failure is reused only when every edge and face it is given is the
+solid's own. A call given a held one runs every time and stores nothing, so
+it never answers, and is never answered by, the same call on the solid's own.
 
 `CADGEN_OP_MEMO=0` turns reuse and these identity semantics off together: with
 nothing reconstructed, build123d's pointer identity is correct on its own.

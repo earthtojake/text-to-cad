@@ -34,7 +34,8 @@ normal, axis, plane, position or curve type. Re-evaluate selections after an
 operation that changes the relevant topology. Select a fillet's or chamfer's
 edges from the solid it rounds, after that solid's last operation: during a
 cadgen build an operation returns new native topology, so edges held from
-before it are not the solid's own, and a fillet or chamfer fails on them.
+before it are not the solid's own. A fillet silently skips such an edge, and
+fails when none is left; a chamfer fails on it.
 
 During a cadgen build, geometric equality and hashing can recognize equivalent
 reconstructed subshapes rather than requiring the same native handle. Coincident
@@ -206,10 +207,10 @@ stage check on a casting — uses `cadgen.geometry.is_valid` and `is_sound`
 (the `BRepAlgoAPI_Check` verdict, which also identifies Boolean-suitability
 issues such as tiny edges), never a raw kernel checker: their verdicts on
 anything the size of a box or larger are stored, so a stale re-execution that
-replays its ops from the op memo does not repay every gate. A rejected fillet
-or chamfer rung is replayed from the op memo too, but only when its edges are
-the solid's own. There is no need to run an expensive diagnostic after every
-simple operation. Any repair must preserve the dimensions being checked. See
+replays its ops from the op memo does not repay every gate. A fillet or
+chamfer rung, accepted or rejected, is replayed from the op memo too, but only
+when its edges are the solid's own. There is no need to run an expensive
+diagnostic after every simple operation. Any repair must preserve the dimensions being checked. See
 [inspection](inspection-and-validation.md).
 
 A periodic cylinder or revolved face has a seam edge that may appear in CAD

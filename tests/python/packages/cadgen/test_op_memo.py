@@ -831,7 +831,7 @@ class CurrentInputKeyTest(unittest.TestCase):
         self.assertNotEqual(key[2][0], key[2][2])
 
 
-class OpMemoFailureTest(unittest.TestCase):
+class _FreshStoreTest(unittest.TestCase):
     def setUp(self):
         op_memo.install()
         op_memo.clear()
@@ -848,6 +848,8 @@ class OpMemoFailureTest(unittest.TestCase):
         self.addCleanup(env.stop)
         op_memo.clear()
 
+
+class OpMemoFailureTest(_FreshStoreTest):
     def _recorded_failures(self) -> list:
         import json
         from pathlib import Path
@@ -927,46 +929,84 @@ class OpMemoFailureTest(unittest.TestCase):
             part.fillet(30.0, part.edges())
         self.assertEqual(op_memo.stats()["failure_hits"], hits)
 
-    def test_a_failure_on_held_edges_is_not_recorded(self):
-        """Edges selected before a memoized boolean are foreign to its result,
-        a fresh reconstruction, and build123d's fillet fails on them whatever
-        their geometry. The key sees content, so the recorded failure answered
-        the corrected call that re-selects the same edges from the current
-        part, and the fillet vanished behind ``except ValueError`` -- in the
-        same process and, from the disk tier, in every later one, ``--force``
-        or not. A failure is recorded only when every selector is native."""
-        from build123d import Axis, Box, Cylinder, GeomType, Pos
 
-        def top(part):
-            return part.edges().group_by(Axis.Z)[-1].filter_by(GeomType.LINE)
+def _top_lines(part):
+    """The straight edges round a part's top face, in a fixed order."""
+    from build123d import Axis, GeomType
 
-        def bored():
-            part = Box(20, 20, 10) - Cylinder(3, 10)
-            held = top(part)
-            return part - Pos(6, 6, -5) * Cylinder(1, 6), held
+    edges = part.edges().group_by(Axis.Z)[-1].filter_by(GeomType.LINE)
+    return sorted(edges, key=lambda edge: tuple(round(v, 6) for v in edge.center()))
 
-        os.environ["CADGEN_OP_MEMO"] = "0"
-        part, _held = bored()
-        expected = part.fillet(1.0, top(part)).volume
-        os.environ["CADGEN_OP_MEMO"] = "1"
-        for fresh_process in (False, True):
-            with self.subTest(fresh_process=fresh_process):
-                self._fresh_store()
-                part, held = bored()
-                with self.assertRaises(ValueError):
-                    part.fillet(1.0, held)  # the author's bug: foreign edges
-                self.assertEqual(self._recorded_failures(), [])
-                if fresh_process:
-                    op_memo.clear()
-                fixed = part.fillet(1.0, top(part))  # the fix: the same edges, native
-                self.assertAlmostEqual(fixed.volume, expected, places=6)
-                self.assertLess(fixed.volume, part.volume - 1.0)
 
-    def test_a_recorded_failure_answers_only_native_selectors(self):
-        """The recorded key can come back with foreign selectors, which build123d
-        skips: filleting a box's vertical edge plus a twin's top edge rounds the
-        vertical one and succeeds, where the all-native call failed on the top
-        edge. The recorded failure answers the native call, never that one."""
+def _held_across_a_boolean():
+    """A part that is a memoized boolean's result, and the top edges and top
+    face of its operand, held from before that boolean. The boolean (a blind
+    hole from below) leaves the top untouched, so each held sub-shape has the
+    content key of one of the part's own; the part is a fresh reconstruction,
+    so none of them is the part's own."""
+    from build123d import Axis, Box, Cylinder, Pos
+
+    blank = Box(20, 20, 10) - Cylinder(3, 10)
+    held_edges, held_top = _top_lines(blank), blank.faces().sort_by(Axis.Z)[-1]
+    return blank - Pos(6, 6, -5) * Cylinder(1, 6), held_edges, held_top
+
+
+class OpMemoSelectorTest(_FreshStoreTest):
+    """A selector op's call is reused -- its result or its failure -- only when
+    every selector is ``self``'s own (op_memo module docstring). The key sees
+    content, while OCCT looks edges and faces up in ``self`` by native handle
+    and skips any that is not its own. A fillet on edges held across a
+    memoized boolean and the fillet on the part's own content-identical edges
+    share a key but not an answer, and whichever ran first answered both: a
+    partly rounded fillet for the fully rounded call, a closed offset for the
+    open one, a held-edge failure that dropped the corrected fillet."""
+
+    def _assert_each_call_gets_its_own_answer(self, op, native, held):
+        """``native`` and ``held`` are one selector op's arguments, ``self``
+        first; ``held`` passes a held sub-shape where ``native`` passes the
+        part's own. In either order, from RAM and then from disk, each call
+        gets what it gets with nothing to reuse, and only ``native`` is
+        reused."""
+        self.assertEqual(op_memo._build_key(op, native, {}), op_memo._build_key(op, held, {}),
+                         "the calls must share a key, or nothing here is tested")
+        calls = {"native": native, "held": held}
+
+        def outcome(name):
+            args = calls[name]
+            return _memo_outcome(lambda: getattr(args[0], op)(*args[1:]))
+
+        alone = {}
+        for name in calls:
+            self._fresh_store()
+            alone[name] = outcome(name)
+        self.assertNotEqual(alone["native"], alone["held"])
+        errors = op_memo.stats()["errors"]
+        for order in (("held", "native"), ("native", "held")):
+            self._fresh_store()
+            for tier in ("RAM", "disk"):
+                if tier == "disk":
+                    op_memo.clear()  # a fresh process: memory gone, disk kept
+                for name in order:
+                    with self.subTest(first=order[0], tier=tier, call=name):
+                        before = op_memo.stats()
+                        self.assertEqual(outcome(name), alone[name])
+                        served = sum(op_memo.stats()[k] - before[k] for k in ("hits", "failure_hits"))
+                        self.assertEqual(served, int(name == "native" and tier == "disk"))
+        self.assertEqual(op_memo.stats()["errors"], errors, "a held selector runs protected, not as a fallback")
+
+    def test_a_fillet_with_a_held_edge_is_not_the_fillet_on_the_parts_own(self):
+        part, held, _top = _held_across_a_boolean()
+        own = _top_lines(part)
+        self._assert_each_call_gets_its_own_answer(
+            "fillet", (part, 1.0, [own[0], own[1]]), (part, 1.0, [own[0], held[1]]))
+
+    def test_a_fillet_on_held_edges_fails_without_failing_the_parts_own(self):
+        part, held, _top = _held_across_a_boolean()
+        self._assert_each_call_gets_its_own_answer("fillet", (part, 1.0, _top_lines(part)), (part, 1.0, held))
+
+    def test_a_failure_on_the_parts_own_edges_is_not_the_answer_with_a_held_one(self):
+        """The radius is above the thickness, so rounding the top edge fails;
+        the held top edge is skipped and the vertical one alone is rounded."""
         import copy
 
         from build123d import Axis
@@ -977,17 +1017,50 @@ class OpMemoFailureTest(unittest.TestCase):
         vertical = box.edges().filter_by(Axis.Z).sort_by(Axis.X)[0]
         own_top = box.edges().group_by(Axis.Z)[-1].sort_by(Axis.X)[-1]
         twin_top = twin.edges().group_by(Axis.Z)[-1].sort_by(Axis.X)[-1]
-        with self.assertRaises(ValueError):
-            box.fillet(5.0, [vertical, own_top])  # radius above the thickness
-        self.assertEqual(len(self._recorded_failures()), 1)
-        mixed = box.fillet(5.0, [vertical, twin_top])  # the same key
-        self.assertLess(mixed.volume, box.volume)
-        hits = op_memo.stats()["failure_hits"]
-        with mock.patch("build123d.topology.three_d.BRepFilletAPI_MakeFillet",
-                        side_effect=AssertionError("the kernel ran on a recorded failure")):
+        self._assert_each_call_gets_its_own_answer(
+            "fillet", (box, 5.0, [vertical, own_top]), (box, 5.0, [vertical, twin_top]))
+
+    def test_an_offset_with_a_held_opening_is_not_the_offset_with_the_parts_own(self):
+        from build123d import Axis
+
+        part, _edges, held_top = _held_across_a_boolean()
+        own_top = part.faces().sort_by(Axis.Z)[-1]
+        self._assert_each_call_gets_its_own_answer("offset_3d", (part, [own_top], -1.0), (part, [held_top], -1.0))
+
+    def test_a_boolean_is_reused_whatever_its_tools(self):
+        """A boolean runs on copies of its operands and tools, so its outcome
+        is a function of the key alone. ``faces[0] + faces[1:]``, a hot path in
+        real models, passes faces that are not ``self``'s own, and is stored
+        and reused -- as is a boolean's failure with such tools."""
+        from OCP.BRepAlgoAPI import BRepAlgoAPI_Fuse
+        from build123d import Pos
+        from build123d.topology import Face
+
+        def faces(size):
+            return [Pos(8 * i, 0, 0) * Face.make_rect(size, size) for i in range(3)]
+
+        first = faces(10)
+        fused = first[0] + first[1:]
+        for tier in ("RAM", "disk"):
+            if tier == "disk":
+                op_memo.clear()
+            hits = op_memo.stats()["hits"]
+            again = faces(10)
+            self.assertEqual(_digest(again[0] + again[1:]), _digest(fused))
+            self.assertEqual(op_memo.stats()["hits"], hits + 1, tier)
+
+        runs = []
+
+        def failing(self_, args, tools, operation):
+            runs.append(operation)
+            raise ValueError("the boolean failed")
+
+        bool_op = op_memo._memoized("bool_op", failing, is_classmethod=False)
+        for _call in range(2):
+            tiles = faces(6)
             with self.assertRaises(ValueError):
-                box.fillet(5.0, [vertical, own_top])
-        self.assertEqual(op_memo.stats()["failure_hits"], hits + 1)
+                bool_op(tiles[0], (tiles[0],), tuple(tiles[1:]), BRepAlgoAPI_Fuse())
+        self.assertEqual(len(runs), 1, "the recorded failure was not replayed")
 
 
 class OpMemoDaemonEnvTest(unittest.TestCase):

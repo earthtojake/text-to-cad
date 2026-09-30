@@ -82,10 +82,17 @@ A keyed op that RAISES is recorded too, when the exception is a plain
 ``ValueError`` (build123d's wrapper for a failed OCCT fillet, chamfer,
 shell...): a hit re-raises it without re-running the kernel. Models probe with
 failing ops (radius ladders), and a memo-hit re-execution otherwise paid for
-every failure again. Only a call whose selectors are NATIVE sub-shapes of
-``self`` is recorded or replayed: keys see content, and a fillet fails on
-content-identical edges held from before a memoized op. See
-``_StoredFailure``.
+every failure again. See ``_StoredFailure``.
+
+A key sees its shape arguments' content. A SELECTOR op (fillet, chamfer,
+shell, offset_3d, hollow) sees more: OCCT looks its edge and face arguments
+up in ``self`` by TShape and location and skips one that is not ``self``'s
+own, so a fillet on edges held from before a memoized op shares its key with
+the fillet on the solid's own content-identical edges, but not its answer. A
+selector op's call is reused -- its result or its failure -- only when every
+selector is native (``_native_selectors``); any other call runs and stores
+nothing. Booleans and factories run on copies of their operands
+(``_protect_inputs``), so their outcome is a function of the key alone.
 """
 
 from __future__ import annotations
@@ -100,7 +107,7 @@ from functools import lru_cache
 
 
 # Salt: bump _OP_MEMO_VERSION whenever keying or hit semantics change.
-_OP_MEMO_VERSION = 7
+_OP_MEMO_VERSION = 8
 
 _lock = threading.RLock()
 _cache: OrderedDict[tuple, object] = OrderedDict()
@@ -387,9 +394,7 @@ def _op_index_key(key: tuple) -> str:
 def _disk_put(key: tuple, stored) -> None:
     """The result bytes become an OBJECT (content-addressed); the entry under
     ``index/op/<key>`` maps the op key to it plus the class/recipe header.
-    A recorded failure is inline: ``{"failed": {"cls": ..., "args": [...]}}``.
-    (``"raised"`` entries, written before selectors were checked, may hold a
-    foreign-selector failure; they read as misses and are overwritten.)"""
+    A recorded failure is inline: ``{"failed": {"cls": ..., "args": [...]}}``."""
     if not _disk_enabled() or not isinstance(stored, (_StoredShape, _StoredFailure)):
         return
     try:
@@ -634,23 +639,15 @@ class _StoredFailure:
     the original's traceback and ``__cause__`` (the native OCCT exception) are
     not replayed. Only :data:`_REPLAYABLE_FAILURES` with plain string arguments
     are recorded; any other exception (memory, interrupts, native exception
-    types, anything with rich arguments) propagates uncached, as before.
+    types, anything with rich arguments) propagates uncached.
     The inputs a failure leaves behind are the caller's untouched originals on
     both paths: a miss runs on protected copies (:func:`_protect_inputs`).
 
-    The key identifies a shape argument by CONTENT, but build123d's instance
-    ops look their selectors up in ``self`` by TShape and location: OCCT's
-    fillet builder skips an edge that is not ``self``'s own, whatever its
-    geometry, and raises ``ValueError`` when none is left. Every memoized
-    result is a fresh reconstruction, so edges held from before a memoized
-    boolean are foreign to its result. Recording that failure replayed it
-    for the corrected call that re-selects the same edges from the current
-    part -- same content key -- and the fillet silently vanished behind the
-    usual ``except ValueError``, ``--force`` or not. So an instance op's
-    failure is recorded, and a recorded one replayed, only when every
-    selector is native (:func:`_foreign_selector`); a call with a foreign one
-    runs the kernel and stores nothing. Factory classmethods have no ``self``
-    and record as before.
+    A failure is recorded and replayed under the same rule as a result: a
+    selector op's call only when every selector is ``self``'s own
+    (:func:`_native_selectors`). OCCT's fillet builder skips an edge that is
+    not, whatever its geometry, and raises ``ValueError`` when none is left,
+    so the failure on held edges is not the answer for the solid's own.
     """
 
     __slots__ = ("cls_path", "args")
@@ -677,48 +674,56 @@ def _freeze_failure(exc: BaseException) -> _StoredFailure | None:
 
 
 @lru_cache(maxsize=1)
-def _selector_kinds() -> frozenset:
-    from OCP.TopAbs import TopAbs_ShapeEnum
+def _selector_codes() -> tuple[frozenset, int]:
+    """``TopAbs_ShapeEnum`` values of the selector kinds, and of a compound.
+    Integers, because hashing or comparing the bound enum costs more than the
+    membership test it guards."""
+    from OCP.TopAbs import TopAbs_ShapeEnum as kind
 
-    return frozenset({TopAbs_ShapeEnum.TopAbs_VERTEX, TopAbs_ShapeEnum.TopAbs_EDGE,
-                      TopAbs_ShapeEnum.TopAbs_WIRE, TopAbs_ShapeEnum.TopAbs_FACE,
-                      TopAbs_ShapeEnum.TopAbs_SHELL})
+    selectors = (kind.TopAbs_VERTEX, kind.TopAbs_EDGE, kind.TopAbs_WIRE, kind.TopAbs_FACE, kind.TopAbs_SHELL)
+    return frozenset(each.value for each in selectors), kind.TopAbs_COMPOUND.value
 
 
-def _foreign_selector(args: tuple, kwargs: dict) -> bool:
-    """Whether an instance op's call passes a SELECTOR that is not ``self``'s own.
+# The instance ops that look their edge and face arguments up in ``self``.
+_SELECTOR_OPS = frozenset({"fillet", "chamfer", "shell", "offset_3d", "hollow"})
+
+
+def _native_selectors(args: tuple, kwargs: dict) -> bool:
+    """Whether every SELECTOR a selector op's call passes is ``self``'s own:
+    the one predicate for reusing such a call, result or failure.
 
     A selector is a vertex, edge, wire, face or shell argument -- the edges a
-    fillet rounds, the faces an offset opens -- found through lists, tuples,
-    ``ShapeList``s, dict values, keywords and compounds. It is native when it
-    is a sub-shape of ``self`` (``args[0]``) by TShape and location, the
-    ``TopTools_ShapeMapHasher`` membership OCCT's fillet and chamfer builders
-    look it up by. Solid and compsolid arguments (a boolean's tools) are not
-    selectors. Asked only on the failure path: a failure is recorded, and a
-    recorded one replayed, only for a call without a foreign selector
-    (:class:`_StoredFailure`)."""
-    from OCP.TopAbs import TopAbs_ShapeEnum
+    fillet rounds, the faces an offset opens, a chamfer's reference face --
+    found through lists, tuples, ``ShapeList``s, dict values, keywords and
+    compounds. It is native when it is a sub-shape of ``self`` (``args[0]``)
+    by TShape and location: the ``TopTools_ShapeMapHasher`` membership OCCT's
+    builders look it up by, skipping one that is not ``self``'s own whatever
+    its geometry. A call without selectors is native, and maps nothing; a call
+    with them maps ``self`` once per selector kind. A check that cannot answer
+    says no: the call then runs and stores nothing, which is always correct."""
+    from build123d.topology import Shape
     from OCP.TopExp import TopExp
     from OCP.TopoDS import TopoDS_Iterator
     from OCP.TopTools import TopTools_IndexedMapOfShape
 
-    kinds = _selector_kinds()
-    compound = TopAbs_ShapeEnum.TopAbs_COMPOUND
-    selectors: list = []
+    selector_codes, compound = _selector_codes()
+    selectors: list = []  # (kind code, kind, TopoDS)
 
     def collect(wrapped) -> None:
         kind = wrapped.ShapeType()
-        if kind in kinds:
-            selectors.append(wrapped)
-        elif kind == compound:
+        code = kind.value
+        if code in selector_codes:
+            selectors.append((code, kind, wrapped))
+        elif code == compound:
             children = TopoDS_Iterator(wrapped)
             while children.More():
                 collect(children.Value())
                 children.Next()
 
     def walk(value) -> None:
-        if _is_shape(value):
-            collect(value.wrapped)
+        if isinstance(value, Shape):
+            if value._wrapped is not None:
+                collect(value._wrapped)
         elif isinstance(value, (list, tuple)):
             for item in value:
                 walk(item)
@@ -726,33 +731,24 @@ def _foreign_selector(args: tuple, kwargs: dict) -> bool:
             for item in value.values():
                 walk(item)
 
-    for value in (*args[1:], *kwargs.values()):
-        walk(value)
-    if not selectors:
-        return False
-    owner = args[0] if args else None
-    if not _is_shape(owner):
-        return True
-    native: dict = {}
-    for wrapped in selectors:
-        kind = wrapped.ShapeType()
-        members = native.get(kind)
-        if members is None:
-            members = native[kind] = TopTools_IndexedMapOfShape()
-            TopExp.MapShapes_s(owner.wrapped, kind, members)
-        if not members.Contains(wrapped):
-            return True
-    return False
-
-
-def _replayable_selectors(args: tuple, kwargs: dict, *, is_classmethod: bool) -> bool:
-    """Whether this call's failure may be recorded or replayed. A check that
-    cannot answer says no: the op then runs uncached, which is always correct."""
-    if is_classmethod:
-        return True
     try:
-        return not _foreign_selector(args, kwargs)
-    except Exception:  # noqa: BLE001 - an unanswerable check never records
+        for value in (*args[1:], *kwargs.values()):
+            walk(value)
+        if not selectors:
+            return True
+        owner = args[0]
+        if not _is_shape(owner):
+            return False
+        native: dict = {}
+        for code, kind, wrapped in selectors:
+            members = native.get(code)
+            if members is None:
+                members = native[code] = TopTools_IndexedMapOfShape()
+                TopExp.MapShapes_s(owner._wrapped, kind, members)
+            if not members.Contains(wrapped):
+                return False
+        return True
+    except Exception:  # noqa: BLE001 - an unanswerable check never reuses
         return False
 
 
@@ -1037,9 +1033,10 @@ def _protect_inputs(op_name: str, args: tuple, kwargs: dict, *, is_classmethod: 
       instance op's other shape arguments are sub-shapes of ``self`` (the
       edges to fillet, the faces to hollow), so they are mapped THROUGH the
       copier onto the copy — a standalone copy would orphan them. A shape the
-      copier does not know is foreign to ``self`` and is passed as given, so
-      the op fails exactly as it would un-memoized. Factory classmethods take
-      standalone profiles, copied one by one.
+      copier does not know (OCCT raises for it) is foreign to ``self`` and is
+      passed as given, so the op skips or fails on it exactly as it would
+      un-memoized. Factory classmethods take standalone profiles, copied one
+      by one.
 
     Uniform rather than probe-based (fillet and chamfer happened not to modify
     their inputs on OCCT 7.8) so the guarantee does not rot with a kernel
@@ -1071,6 +1068,8 @@ def _protect_inputs(op_name: str, args: tuple, kwargs: dict, *, is_classmethod: 
 
         return (args[0], *(protect(arg) for arg in args[1:])), {k: protect(v) for k, v in kwargs.items()}
 
+    from OCP.Standard import Standard_Failure, Standard_NoSuchObject
+
     owner = args[0]
     if not _is_shape(owner):
         return args, kwargs
@@ -1078,7 +1077,10 @@ def _protect_inputs(op_name: str, args: tuple, kwargs: dict, *, is_classmethod: 
 
     def protect(value):
         if _is_shape(value):
-            mapped = copier.ModifiedShape(value.wrapped)
+            try:
+                mapped = copier.ModifiedShape(value.wrapped)
+            except (Standard_Failure, Standard_NoSuchObject):  # not self's: foreign to the copy too
+                return value
             return value if mapped.IsNull() else _rewrapped(value, mapped)
         if isinstance(value, (list, tuple)):
             return type(value)(protect(item) for item in value)
@@ -1092,6 +1094,8 @@ def _protect_inputs(op_name: str, args: tuple, kwargs: dict, *, is_classmethod: 
 
 def _memoized(op_name: str, fn, *, is_classmethod: bool):
     import functools
+
+    selects = op_name in _SELECTOR_OPS
 
     @functools.wraps(fn)
     def wrapper(*args, **kwargs):
@@ -1110,45 +1114,42 @@ def _memoized(op_name: str, fn, *, is_classmethod: bool):
             _stats["errors"] += 1
             return fn(*args, **kwargs)
 
-        cached = _lookup(key)
-        store = True
-        if isinstance(cached, _StoredFailure):
-            if _replayable_selectors(args, kwargs, is_classmethod=is_classmethod):
+        # The key sees content; a selector op also sees which selectors are
+        # self's own. Only an all-native call is looked up or stored, so a
+        # call on held sub-shapes neither answers nor is answered by it.
+        reusable = not selects or _native_selectors(args, kwargs)
+        if not reusable:
+            _stats["foreign"] += 1
+        else:
+            cached = _lookup(key)
+            if isinstance(cached, _StoredFailure):
                 _stats["failure_hits"] += 1
                 raise cached.exception()
-            # Recorded for native selectors; this call's are foreign, which
-            # build123d looks up by pointer. Run it as a miss that stores
-            # nothing, so its outcome never answers the native call.
-            _stats["foreign"] += 1
-            store = False
-        elif cached is not None:
-            try:
-                value = _thaw_result(cached, shape_args)
-            except Exception:
-                # An entry this process cannot replay (foreign class, shape
-                # count drift) is treated as a miss and overwritten below.
-                _stats["errors"] += 1
-            else:
-                _stats["hits"] += 1
-                return value
+            if cached is not None:
+                try:
+                    value = _thaw_result(cached, shape_args)
+                except Exception:
+                    # An entry this process cannot replay (foreign class, shape
+                    # count drift) is treated as a miss and overwritten below.
+                    _stats["errors"] += 1
+                else:
+                    _stats["hits"] += 1
+                    return value
 
         try:
             run_args, run_kwargs = _protect_inputs(op_name, args, kwargs, is_classmethod=is_classmethod)
         except Exception:
+            # Unprotected, the outcome may depend on more than the key.
             _stats["errors"] += 1
             run_args, run_kwargs = args, kwargs
+            reusable = False
         try:
             result = fn(*run_args, **run_kwargs)
         except Exception as exc:
             _stats["failures"] += 1
             failure = _freeze_failure(exc)
-            if failure is not None and store:
-                # Checked against the caller's own arguments, not the protected
-                # copies: a foreign selector is foreign to either.
-                if _replayable_selectors(args, kwargs, is_classmethod=is_classmethod):
-                    _store(key, failure)
-                else:
-                    _stats["foreign"] += 1
+            if failure is not None and reusable:
+                _store(key, failure)
             raise
         _stats["misses"] += 1
         try:
@@ -1159,7 +1160,7 @@ def _memoized(op_name: str, fn, *, is_classmethod: bool):
         except Exception:
             _stats["errors"] += 1
             return result
-        if store:
+        if reusable:
             _store(key, stored)
         # The caller gets the same canonical reconstruction a future hit
         # would. It is the ephemeral BREP read already verified while freezing;
