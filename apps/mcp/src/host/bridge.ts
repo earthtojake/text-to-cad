@@ -8,6 +8,9 @@
 
 export interface HostContext {
   theme?: 'light' | 'dark';
+  displayMode?: 'inline' | 'fullscreen' | 'pip';
+  availableDisplayModes?: string[];
+  containerDimensions?: { width?: number; maxWidth?: number; height?: number; maxHeight?: number };
   safeAreaInsets?: { top?: number; right?: number; bottom?: number; left?: number };
   locale?: string;
   platform?: string;
@@ -43,7 +46,11 @@ interface Pending { resolve(value: unknown): void; reject(error: Error): void; c
 
 const PROTOCOL_VERSION = '2026-01-26';
 
-export function createBridge(host: Pick<Window, 'postMessage'>, self: Pick<Window, 'addEventListener' | 'removeEventListener'> = window): Bridge & { initialize(appInfo: { name: string; version: string }): Promise<void>; dispose(): void } {
+export function createBridge(host: Pick<Window, 'postMessage'>, self: Pick<Window, 'addEventListener' | 'removeEventListener'> = window): Bridge & {
+  /** Greet the host. `displayModes` are the ones this page offers: a host that shows tabs is offered only fullscreen. */
+  initialize(appInfo: { name: string; version: string }, options?: { displayModes?: string[] }): Promise<void>;
+  dispose(): void;
+} {
   let nextId = 1;
   const pending = new Map<string | number, Pending>();
   const results = new Set<(result: ToolResult) => void>();
@@ -118,9 +125,9 @@ export function createBridge(host: Pick<Window, 'postMessage'>, self: Pick<Windo
     },
     onHostContext(listener) { contexts.add(listener); return () => contexts.delete(listener); },
     onTeardown(listener) { teardowns.add(listener); return () => teardowns.delete(listener); },
-    async initialize(appInfo) {
+    async initialize(appInfo, { displayModes = ['fullscreen'] } = {}) {
       const result = await request<{ hostContext?: HostContext; hostCapabilities?: Record<string, unknown> }>('ui/initialize', {
-        protocolVersion: PROTOCOL_VERSION, appInfo, appCapabilities: { availableDisplayModes: ['fullscreen'] },
+        protocolVersion: PROTOCOL_VERSION, appInfo, appCapabilities: { availableDisplayModes: displayModes },
       }, { timeoutMs: 15_000 });
       hostContext = { ...(result?.hostContext || {}) };
       hostCapabilities = result?.hostCapabilities || {};

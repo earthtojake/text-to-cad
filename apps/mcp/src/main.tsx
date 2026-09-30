@@ -4,6 +4,7 @@ import { version } from '../package.json';
 import App from './App';
 import Notice from './Notice';
 import { createBridge, type HostContext, type ToolResult } from './host/bridge';
+import { readPresentation } from './host/presentation';
 import { createServer, PROTOCOL, readLaunch, type Launch } from './host/server';
 import './styles.css';
 
@@ -22,6 +23,7 @@ function applyTheme(context: HostContext) {
 const textOf = (result: ToolResult) => result.content?.find(part => part.type === 'text')?.text || 'CAD could not open.';
 
 async function start() {
+  const presentation = readPresentation();
   const bridge = createBridge(window.parent);
   bridge.onHostContext(applyTheme);
   const server = createServer(bridge);
@@ -37,13 +39,13 @@ async function start() {
     });
   });
   try {
-    await bridge.initialize({ name: 'CAD', version });
+    await bridge.initialize({ name: 'CAD', version }, presentation === 'inline' ? { displayModes: ['inline', 'fullscreen'] } : undefined);
     const [launch, session] = await Promise.all([launched, server.session()]);
     if (launch.protocol !== PROTOCOL || session.protocol !== PROTOCOL) {
       root.render(<Notice title="CAD was updated" message="Close this tab and open CAD again to use the new version." details={`view ${PROTOCOL} · launch ${launch.protocol} · server ${session.protocol} (${session.version})`} />);
       return;
     }
-    root.render(<StrictMode><App bridge={bridge} server={server} launch={launch} session={session} /></StrictMode>);
+    root.render(<StrictMode><App bridge={bridge} server={server} launch={launch} session={session} presentation={presentation} /></StrictMode>);
   } catch (error) {
     root.render(<Notice title="CAD could not open" message={error instanceof Error ? error.message : String(error)} details={`CAD ${version}`} />);
   }

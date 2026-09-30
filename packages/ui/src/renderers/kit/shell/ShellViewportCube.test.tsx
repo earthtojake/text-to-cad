@@ -29,4 +29,6 @@ it('the view cube is drawn in the tools view, on a phone as on desktop, and neve
   expect(extras()).toEqual([0, 0]);
   rerender(viewport(false, false, true));
   expect(screen.queryByLabelText('View cube')).toBeNull();
+  rerender(<ShellViewport modelKey="part" scene={scene} viewCube={false} />);
+  expect(screen.queryByLabelText('View cube')).toBeNull();
 });

@@ -16,6 +16,7 @@ step; nothing else belongs here (one-off helpers go in `tmp/`).
 | Install local skills into agents | `scripts/install/install-skills.sh --agent codex` |
 | Uninstall local skill links | `scripts/install/uninstall-skills.sh --agent codex` |
 | Run this checkout as the CAD plugin in the Codex app | `scripts/install/codex-dev-plugin.sh --restart` |
+| Run this checkout's CAD server in Claude Desktop | `scripts/install/claude-dev-server.sh` |
 
 ## Index
 
@@ -144,7 +145,11 @@ where those files ship, so these scripts are what produces them.
 - `codex-dev-plugin.sh` — builds `apps/mcp` and installs this checkout into the
   Codex app as `cad@earthtojake-dev` (skills copied, server run by `.venv`,
   serving a copy of the page taken at install); `--restart` reopens the app,
-  `--uninstall` removes it. Developer step in `CONTRIBUTING.md` ("CAD In Codex").
+  `--uninstall` removes it. Developer step in `CONTRIBUTING.md` ("CAD In Agent Hosts").
+- `claude-dev-server.sh` — builds `apps/mcp` and adds this checkout's `cadgen mcp`
+  to Claude Desktop's config as `cad-dev` (serving a copy of the page);
+  `--uninstall` removes it. Developer step in `CONTRIBUTING.md` ("CAD In Agent
+  Hosts").
 
 `git-hooks/pre-commit` — the body `.githooks/pre-commit` runs: `bundle.sh --check`
 when staged paths touch `packages`, `apps`, `skills` or `scripts/bundle`. It is

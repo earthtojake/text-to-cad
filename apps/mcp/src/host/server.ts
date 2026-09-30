@@ -12,6 +12,9 @@ export interface Launch {
   model: string | null;
   root: Root | null;
   explore: boolean;
+  /** A view mounted inline: its token (the agent names it by that) and its place among the chat's views. */
+  view?: string;
+  order?: { createdAt: number; seq: number };
 }
 export interface Session { protocol: number; build: string; version: string; platform: string; workspace: Root[] }
 export interface Recent { path: string; name: string; folder: string; opened: number; pinned: boolean; missing: boolean; thumbnail: string | null }

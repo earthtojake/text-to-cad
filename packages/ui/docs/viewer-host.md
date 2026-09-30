@@ -9,8 +9,12 @@ shared. Missing optional methods mean an operation is unsupported.
 The host contains `files`, optional native `fileActions`, `clipboard`,
 `promptContext`, `navigation`, `environment` and the optional live-document
 bindings `documents` and `pdf`. `environment` carries the resolved `colorScheme`,
-the keyboard `platform` (`darwin` shows ⌘, anything else Ctrl) and the app's own
-`reducedMotion`, honoured beside the system's `prefers-reduced-motion`. CAD is a separate registration supplied with a
+the keyboard `platform` (`darwin` shows ⌘, anything else Ctrl), the app's own
+`reducedMotion`, honoured beside the system's `prefers-reduced-motion`, and
+`compact`: a host showing the view small, inline in a conversation, where a CAD
+renderer draws the model and its bottom action but not its tools, its top-right
+bar or its view cube (the host offers its own way to full size, where it drops
+`compact`). CAD is a separate registration supplied with a
 `CadWorkspaceService`; the generic FileViewer does not import CAD. The HTTP CAD
 adapter can serve both apps, while desktop owns native runtime startup/recovery.
 See [workspace resources](../../core/docs/workspace-resources.md) for resource

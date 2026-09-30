@@ -1,16 +1,25 @@
 """``cadgen mcp``: CAD beside an agent's chat, as an MCP App.
 
-The host starts one of these processes per thread (and briefly, many more that
-only list tools), so everything a thread's views share -- its workspace, its
-open views, what it last showed -- is plain process memory, and nothing heavy
-happens until a tool needs it: initialize and tools/list read no store, start no
-daemon and import no CAD kernel.
+Nothing heavy happens until a tool needs it: initialize and tools/list read no
+store, start no daemon and import no CAD kernel. Everything the views share --
+the workspace, the open views, what was last shown -- is plain process memory.
 
 One page serves every surface. The tool that opens a surface returns a
 *launch* -- which page, which model, which root to browse -- and the page renders
 it; nothing in the page guesses where it is. Once open, a view long-polls
-``cad_events`` so the agent can drive it (``cad_show``) without opening tabs,
-and reaches the viewer's own HTTP routes through ``cad_http``.
+``cad_events`` so the agent's questions reach it, and reaches the viewer's own
+HTTP routes through ``cad_http``.
+
+Hosts present views in one of two ways, told apart at initialize:
+
+- *Tabs* (Codex). The host starts a process per thread and presents CAD as a
+  sidebar page, a tab per thread and a file handler. The agent opens a tab once
+  (``cad_open``) and then drives it (``cad_show``).
+- *Inline* (every other MCP Apps host: Claude, VS Code, ...). Each call to a tool
+  with a UI mounts a new view in the chat, and the old ones stay. So ``cad_show``
+  is that tool, each launch is stamped with an order for the views to retire
+  their elders by, and a view the agent reads is named by the token its
+  ``cad_show`` returned: one process may serve many chats, and no host says which.
 """
 
 from __future__ import annotations
@@ -22,8 +31,10 @@ import json
 import logging
 import os
 import sys
+import itertools
 import threading
 import time
+import uuid
 from typing import Any
 from urllib.parse import unquote, urlparse
 
@@ -46,12 +57,23 @@ EXTENSIONS = sorted(SOURCE_EXTENSIONS)
 _MAX_THUMBNAIL_BYTES = 512 * 1024
 _DESCRIBE_SECONDS = 2.0
 
+# Clients that present CAD as tabs (see the module docstring); every other client is shown views inline.
+_TAB_HOSTS = frozenset({"codex-mcp-client"})
+
 INSTRUCTIONS = (
     "CAD shows local CAD models (STEP, STL, GLB, 3MF, DXF, URDF, SDF) in a viewer tab beside the chat. "
     "To show a model, call cad_show: it switches an open viewer and never opens a tab. "
     "Only when cad_show reports no open viewer, call cad_open, once. "
     "Viewers refresh when files change, so never reopen after a rebuild. "
     "cad_view reports what the user is looking at and has selected; cad_screenshot returns what they see."
+)
+
+INLINE_INSTRUCTIONS = (
+    "CAD shows local CAD models (STEP, STL, GLB, 3MF, DXF, URDF, SDF) in interactive viewers in the chat. "
+    "Call cad_show to show one: each call adds a viewer and pauses the earlier ones. "
+    "Viewers refresh when their files change, so never show a model again after a rebuild. "
+    "cad_view reports what the user is looking at and has selected in a viewer, and cad_screenshot returns "
+    "what they see; both take the view that cad_show returned."
 )
 
 _ICON_SVG = (
@@ -82,6 +104,8 @@ def _object(properties: dict[str, Any] | None = None, required: list[str] | None
 _PATH = {"type": "string", "description": "A CAD file: an absolute path, or relative to the thread's workspace."}
 _VIEW = {"type": "string", "description": "A view id from cad_view; defaults to the most recently used viewer."}
 _ROOT = _object({"kind": {"type": "string", "enum": ["workspace", "folder"]}, "path": {"type": "string"}}, ["kind", "path"])
+_SHOWN_PATH = {"type": "string", "description": "A CAD file: an absolute path, or relative to the project folder the chat works in."}
+_SHOWN_VIEW = {"type": "string", "description": "The view that cad_show returned."}
 _READ_ONLY = {"readOnlyHint": True, "destructiveHint": False, "openWorldHint": False}
 
 
@@ -119,6 +143,10 @@ class Server:
         self._picker = None
         self._model: str | None = None  # what this thread last opened or showed
         self._tools: list[dict[str, Any]] | None = None
+        self.tabs = False  # decided at initialize: see the module docstring
+        self._client_roots = False
+        self._connection: Connection | None = None
+        self._order = itertools.count(1)
 
     # -- lazily built parts ----------------------------------------------------
 
@@ -148,6 +176,27 @@ class Server:
 
     # -- the protocol ----------------------------------------------------------
 
+    def attach(self, connection: Connection) -> None:
+        """The connection this server answers on, for the requests it makes of the host."""
+        self._connection = connection
+
+    def notified(self, method: str, params: dict[str, Any]) -> None:
+        if method in ("notifications/initialized", "notifications/roots/list_changed") and self._client_roots:
+            threading.Thread(target=self._refresh_roots, name="cadgen-mcp-roots", daemon=True).start()
+
+    def _refresh_roots(self) -> None:
+        """Adopt the folders a client that offers roots says the chat works in."""
+        if self._connection is None:
+            return
+        try:
+            result = self._connection.request("roots/list", {}, timeout=10)
+        except Exception:  # a host that offers roots and then fails to list them leaves the launch folder
+            LOG.info("the host did not list its roots")
+            return
+        roots = result.get("roots") if isinstance(result, dict) else None
+        if isinstance(roots, list):
+            self.workspace.adopt([root.get("uri") for root in roots if isinstance(root, dict)])
+
     def handle(self, method: str, params: dict[str, Any], context: RequestContext) -> Any:
         if method == "initialize":
             return self._initialize(params)
@@ -171,27 +220,34 @@ class Server:
     def _initialize(self, params: dict[str, Any]) -> dict[str, Any]:
         from cadgen import __version__
 
+        client = params.get("clientInfo") if isinstance(params.get("clientInfo"), dict) else {}
+        offered = params.get("capabilities") if isinstance(params.get("capabilities"), dict) else {}
+        self.tabs = client.get("name") in _TAB_HOSTS
+        self._client_roots = isinstance(offered.get("roots"), dict)
+        if not self.tabs:
+            self.page = self.page.presenting("inline")
+        self._tools = None
+        LOG.info("client %s %s: %s views", client.get("name"), client.get("version"), "tab" if self.tabs else "inline")
+        capabilities: dict[str, Any] = {"tools": {"listChanged": False}, "resources": {"listChanged": False}}
+        if self.tabs:
+            # Ask the host to say, on each agent call, which folder the thread works in.
+            capabilities["experimental"] = {"codex/sandbox-state-meta": {}}
         requested = params.get("protocolVersion")
         return {
             "protocolVersion": requested if requested in _PROTOCOL_VERSIONS else _PROTOCOL_VERSIONS[1],
-            "capabilities": {
-                "tools": {"listChanged": False},
-                "resources": {"listChanged": False},
-                # Ask the host to say, on each agent call, which folder the thread works in.
-                "experimental": {"codex/sandbox-state-meta": {}},
-            },
+            "capabilities": capabilities,
             "serverInfo": {"name": NAME, "title": TITLE, "version": __version__, "icons": [ICON]},
-            "instructions": INSTRUCTIONS,
+            "instructions": INSTRUCTIONS if self.tabs else INLINE_INSTRUCTIONS,
         }
 
     # -- the catalog -----------------------------------------------------------
 
     def tools(self) -> list[dict[str, Any]]:
         if self._tools is None:
-            self._tools = self._catalog()
+            self._tools = self._tab_catalog() if self.tabs else self._inline_catalog()
         return self._tools
 
-    def _catalog(self) -> list[dict[str, Any]]:
+    def _tab_catalog(self) -> list[dict[str, Any]]:
         uri = self.page.uri
 
         def surface(entrypoint: dict[str, Any] | None = None, **ui: Any) -> dict[str, Any]:
@@ -199,10 +255,6 @@ class Server:
             if entrypoint is not None:
                 meta["openai/ui"] = {"entrypoints": [entrypoint], **ui}
             return meta
-
-        def app(name: str, title: str, description: str, schema: dict[str, Any]) -> dict[str, Any]:
-            return {"name": name, "title": title, "description": description, "inputSchema": schema,
-                    "annotations": _READ_ONLY, "_meta": {"ui": {"visibility": ["app"]}}}
 
         agent_open = {"ui": {"resourceUri": uri}, "openai/iconStyle": "monochrome",
                       "openai/ui": {"preferredModelDisplayMode": "fullscreen"}}
@@ -233,6 +285,39 @@ class Server:
             {"name": "cad_screenshot", "title": "Capture CAD view", "icons": [ICON], "annotations": _READ_ONLY,
              "description": "Capture a PNG of exactly what an open CAD viewer in this thread shows right now.",
              "inputSchema": _object({"view": _VIEW})},
+            *self._page_tools(),
+        ]
+
+    def _inline_catalog(self) -> list[dict[str, Any]]:
+        shows = {"ui": {"resourceUri": self.page.uri}}
+        return [
+            {"name": "cad_show", "title": "Show in CAD", "icons": [ICON], "annotations": _READ_ONLY, "_meta": shows,
+             "description": ("Show a local CAD model (STEP, STL, GLB, 3MF, DXF, URDF, SDF) in an interactive viewer in the "
+                             "chat. Each call adds a viewer and pauses the earlier ones. A viewer refreshes by itself when "
+                             "its file changes, so show a model once, not after every rebuild. The result names the view: "
+                             "pass it to cad_view or cad_screenshot."),
+             "inputSchema": _object({"path": _SHOWN_PATH}, ["path"])},
+            {"name": "cad_home", "title": TITLE, "icons": [ICON], "annotations": _READ_ONLY, "_meta": shows,
+             "description": "Show CAD in the chat: the user's recent and pinned models, and Open Model to pick one from disk.",
+             "inputSchema": _object()},
+            {"name": "cad_view", "title": "Read CAD view", "icons": [ICON], "annotations": _READ_ONLY,
+             "description": ("Describe a CAD viewer in this chat: its model and revision, what the user has selected (as "
+                             "references you can quote back), and the camera."),
+             "inputSchema": _object({"view": _SHOWN_VIEW}, ["view"])},
+            {"name": "cad_screenshot", "title": "Capture CAD view", "icons": [ICON], "annotations": _READ_ONLY,
+             "description": "Capture a PNG of exactly what a CAD viewer in this chat shows right now.",
+             "inputSchema": _object({"view": _SHOWN_VIEW}, ["view"])},
+            *self._page_tools(),
+        ]
+
+    def _page_tools(self) -> list[dict[str, Any]]:
+        """The tools only the page calls."""
+
+        def app(name: str, title: str, description: str, schema: dict[str, Any]) -> dict[str, Any]:
+            return {"name": name, "title": title, "description": description, "inputSchema": schema,
+                    "annotations": _READ_ONLY, "_meta": {"ui": {"visibility": ["app"]}}}
+
+        return [
             app("cad_session", "CAD session", "The server's build, protocol and this thread's workspace.", _object()),
             app("cad_launch", "Open model", "The launch for opening a model in this view.",
                 _object({"model": {"type": "string"}}, ["model"])),
@@ -284,6 +369,8 @@ class Server:
         return Root("workspace", folder) if folder and listed_under(folder, model) else folder_of(model)
 
     def _launch(self, model: str | None, *, surface: str | None = None, explore: bool = True) -> dict[str, Any]:
+        # An inline view is a card in the chat: it shows the model, not a file browser.
+        explore = explore and self.tabs
         launch: dict[str, Any] = {"protocol": PROTOCOL, "page": "viewer", "model": model, "explore": explore}
         if surface:
             launch["surface"] = surface
@@ -294,6 +381,14 @@ class Server:
         else:
             root = self.workspace.root()
             launch["root"] = root.public() if root else None
+        return launch
+
+    def _mounted(self, launch: dict[str, Any]) -> dict[str, Any]:
+        """Stamp a launch that mounts a new inline view: its token, and its place among the views."""
+        seq = next(self._order)
+        launch["view"] = f"cad-{seq}-{uuid.uuid4().hex[:10]}"
+        # Wall-clock time orders views across restarts of this process; seq breaks a tie.
+        launch["order"] = {"createdAt": int(time.time() * 1000), "seq": seq}
         return launch
 
     def _remember(self, model: str) -> None:
@@ -320,6 +415,9 @@ class Server:
         return path
 
     def _tool_cad_home(self, arguments, context):
+        if not self.tabs:
+            launch = self._mounted({"protocol": PROTOCOL, "page": "home", "surface": "inline", "model": None, "root": None, "explore": False})
+            return _text(f"CAD is showing in the chat (view {launch['view']}).", {"launch": launch})
         return _text("CAD is open.", {"launch": {"protocol": PROTOCOL, "page": "home", "surface": "sidebar",
                                                   "model": None, "root": None, "explore": False}})
 
@@ -376,6 +474,9 @@ class Server:
         return views[0] if views else None
 
     def _tool_cad_show(self, arguments, context):
+        if not self.tabs:
+            launch = self._mounted(self._launch(self._model_path(arguments.get("path")), surface="inline"))
+            return _text(f"Showing {launch['model']} in CAD (view {launch['view']}).", {"launch": launch})
         model = self._model_path(arguments.get("path"))
         view = self._target(context, arguments.get("view"), needs_model=False)
         if view is None:
@@ -385,8 +486,17 @@ class Server:
         self.views.post([view.id], {"type": "show", "launch": launch})
         return _text(f"Showing {model} in CAD.", {"delivered": 1, "view": view.id})
 
+    def _shown(self, view_id: Any) -> Any:
+        """The inline view the agent names by the token its cad_show returned."""
+        if not isinstance(view_id, str) or not view_id:
+            raise ToolFailed("Name the viewer: pass the view that cad_show returned.")
+        view = next((view for view in self.views.live() if view.id == view_id), None)
+        if view is None:
+            raise ToolFailed("That viewer is not open: it was closed, or a newer one took its place. Show the model again with cad_show.")
+        return view
+
     def _tool_cad_view(self, arguments, context):
-        live = self.views.live(context.meta.get("threadId"))
+        live = [self._shown(arguments.get("view"))] if not self.tabs else self.views.live(context.meta.get("threadId"))
         if not live:
             return _text("No CAD viewer is open in this thread.", {"views": []})
         answers: dict[str, dict[str, Any]] = {}
@@ -407,7 +517,9 @@ class Server:
         return _text(json.dumps({"views": views}, indent=1), {"views": views})
 
     def _tool_cad_screenshot(self, arguments, context):
-        view = self._target(context, arguments.get("view"), needs_model=True)
+        view = self._target(context, arguments.get("view"), needs_model=True) if self.tabs else self._shown(arguments.get("view"))
+        if view is not None and not view.model:
+            raise ToolFailed("That viewer shows no model yet.")
         if view is None:
             raise ToolFailed("No CAD viewer with a model is open in this thread. Open one with cad_open, "
                              "or render headless with `cadgen snapshot`.")
@@ -439,6 +551,9 @@ class Server:
     def _tool_cad_view_report(self, arguments, context):
         view_id = self._register(arguments, context)
         state = arguments.get("state") if isinstance(arguments.get("state"), dict) else {}
+        if state.get("closed") is True:  # a view a newer one replaced: the agent can no longer reach it
+            self.views.forget(view_id)
+            return _data({})
         focused = bool(arguments.get("focused"))
         self.views.report(view_id, model=arguments.get("model"), state=state, focused=focused)
         if focused and isinstance(arguments.get("model"), str):
@@ -501,5 +616,7 @@ def serve(argv: list[str] | None = None) -> int:
     except OSError:
         launch_cwd = None
     server = Server(launch_cwd=launch_cwd)
-    Connection(sys.stdin.buffer, protocol_out, server.handle, workers=64).serve()
+    connection = Connection(sys.stdin.buffer, protocol_out, server.handle, on_notification=server.notified, workers=64)
+    server.attach(connection)
+    connection.serve()
     return 0

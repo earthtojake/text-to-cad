@@ -13,7 +13,8 @@ store, document assembly, kinematics, exports, validation, inspection,
 snapshots, the warm daemon and its build pool, the CAD Viewer
 (`cadgen viewer`: a local HTTP server over the built client, one directory per
 instance), and CAD beside an agent's chat (`cadgen mcp`: an MCP App server that
-an agent host starts per thread, over the viewer's own routes).
+an agent host starts, over the viewer's own routes: tabs in Codex, viewer cards
+in the chat for every other MCP Apps host).
 
 **MAY DEPEND ON** — the Python ecosystem it declares (OCP/build123d lazily,
 never at namespace-import time) and the bundled runtime.

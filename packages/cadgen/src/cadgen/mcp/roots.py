@@ -116,6 +116,16 @@ class ThreadWorkspace:
         if found:
             self._paths = found + [path for path in self._paths if path not in found]
 
+    def adopt(self, uris: list[Any]) -> None:
+        """Adopt the folders a host lists as its roots (``roots/list``), first."""
+        found: list[str] = []
+        for uri in uris:
+            path = _usable_directory(_path_from_file_uri(uri), excluded=self._excluded)
+            if path and path not in found:
+                found.append(path)
+        if found:
+            self._paths = found + [path for path in self._paths if path not in found]
+
     def root(self) -> Root | None:
         return Root(WORKSPACE, self.primary) if self.primary else None
 

@@ -26,7 +26,9 @@ export interface ViewerHost {
   navigation: { openFile(path: string, options?: { target: 'current' | 'new'; panel?: string }): void };
   /**
    * `platform` names the keyboard's modifiers (⌘ on `darwin`, Ctrl elsewhere); `reducedMotion` is
-   * the app's own motion setting, honoured beside the system's `prefers-reduced-motion`.
+   * the app's own motion setting, honoured beside the system's `prefers-reduced-motion`. `compact`
+   * is a host showing the view small, inline in a conversation: a renderer draws the model and its
+   * bottom action there, not its tools, its top-right bar or its view cube.
    */
-  environment: { colorScheme: 'light' | 'dark'; platform?: string; reducedMotion?: boolean };
+  environment: { colorScheme: 'light' | 'dark'; platform?: string; reducedMotion?: boolean; compact?: boolean };
 }

@@ -56,9 +56,9 @@ function tabSettings(initial: object = {}) {
   return store;
 }
 type Settings = ReturnType<typeof tabSettings>;
-function frame({ path = 'panel.harness', preferences = tabSettings(), state = undefined as unknown, mobile = false, onStateChange = (_: unknown) => {}, onPanelOpen = vi.fn() } = {}) {
+function frame({ path = 'panel.harness', preferences = tabSettings(), state = undefined as unknown, mobile = false, onStateChange = (_: unknown) => {}, onPanelOpen = vi.fn(), appearance = { colorScheme: 'light' } as object } = {}) {
   const props = { source: { id: 'one', rootName: 'one' }, file: { path, name: path, kind: 'file' }, document: null, openPanel: '', panelSlot: null,
-    onPanelOpen, onReady() {}, onOpenFile() {}, appearance: { colorScheme: 'light' }, state, onStateChange, reload() {}, data: { services: { preferences } } };
+    onPanelOpen, onReady() {}, onOpenFile() {}, appearance, state, onStateChange, reload() {}, data: { services: { preferences } } };
   const element = () => <ViewerHostContext.Provider value={testHost()}><ViewerMobileContext.Provider value={mobile}>
     <HarnessRenderer {...(props as any)} /></ViewerMobileContext.Provider></ViewerHostContext.Provider>;
   const view = render(element());
@@ -208,6 +208,15 @@ it('while the model loads the viewer shows none of its own chrome, and all of it
   expect(screen.getByRole('group', { name: 'Interaction tools' })).toBeTruthy();
   expect(barButtons()).toEqual(['Display settings', 'Reset view', 'Preview']);
   expect(document.querySelector('[data-viewport-bottom-actions]')).not.toBeNull();
+});
+
+it('a host showing the view small gets the model and its bottom action: no tools, no top-right bar, no cube', () => {
+  frame({ appearance: { colorScheme: 'light', compact: true } });
+  expect(screen.queryByRole('group', { name: 'Interaction tools' })).toBeNull();
+  expect(document.querySelector('[data-cad-tool-stack]')).toBeNull();
+  expect(barButtons()).toEqual([]);
+  expect(document.querySelector('[data-viewport-bottom-actions]')).not.toBeNull();
+  expect(viewportProps.current.viewCube).toBe(false);
 });
 
 it('Display is a popover beside Preview, never a tool: opened over Draw it leaves Draw in hand with its panel, and the stack as it was', async () => {

@@ -137,6 +137,21 @@ claude plugin marketplace add earthtojake/text-to-cad
 claude plugin install cad@earthtojake
 ```
 
+In Claude Desktop, CAD shows models in the chat: ask Claude to show one and it
+appears as a viewer card you can orbit, add to your prompt, and open full size;
+Claude can read what you selected and see what you see. It runs locally through
+[uv](https://docs.astral.sh/uv/): add the server to Claude Desktop's config
+(Settings > Developer > Edit Config), then restart the app. If Claude Desktop
+cannot find `uvx`, give its full path (`which uvx`).
+
+```json
+{
+  "mcpServers": {
+    "cad": { "command": "uvx", "args": ["--from", "cadgen", "cadgen", "mcp"] }
+  }
+}
+```
+
 Grok Build uses the existing `.claude-plugin/marketplace.json`; there is no
 separate Grok plugin manifest.
 

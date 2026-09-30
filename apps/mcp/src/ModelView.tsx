@@ -32,9 +32,11 @@ export interface ViewReporter {
  * the root it browses, whether it browses at all, where Add to prompt goes -- never by where
  * the view is.
  */
-export default function ModelView({ launch, root: launchedRoot, sequence, bridge, server, tabStore, live, colorScheme, platform, reporter, onHome }: {
+export default function ModelView({ launch, root: launchedRoot, sequence, bridge, server, tabStore, live, colorScheme, platform, reporter, onHome, compact = false }: {
   launch: Launch; root: Root; sequence: number; bridge: Bridge; server: Server; tabStore: TabStore; live: LiveRegistry;
   colorScheme: 'light' | 'dark'; platform: string; reporter: ViewReporter; onHome?: () => void;
+  /** Shown small, inline in the chat: the renderer draws the model, not its tools. */
+  compact?: boolean;
 }) {
   // Every launch carries its own root object; the same folder must keep its client and catalog.
   const root = useMemo(() => launchedRoot, [launchedRoot.kind, launchedRoot.path]);
@@ -84,8 +86,8 @@ export default function ModelView({ launch, root: launchedRoot, sequence, bridge
   }, [client, setPanel]);
   const host = useMemo<ViewerHost>(() => ({
     files: source, fileActions, clipboard: frameClipboard, promptContext,
-    navigation: { openFile: open }, environment: { colorScheme, platform },
-  }), [source, fileActions, promptContext, open, colorScheme, platform]);
+    navigation: { openFile: open }, environment: compact ? { colorScheme, platform, compact } : { colorScheme, platform },
+  }), [source, fileActions, promptContext, open, colorScheme, platform, compact]);
 
   const selected = catalog.entries.find(entry => catalogPath(entry) === file);
   const navigationPath = !launch.explore ? null : selected ? catalogPath(selected) : catalog.hydrated ? file || null : null;

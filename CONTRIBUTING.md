@@ -328,7 +328,7 @@ Canonical source directories are:
   `cadgen.viewer` (in `packages/cadgen`), and its built `dist/` ships inside the
   cadgen wheel as `cadgen/_runtime/viewer` — built at release time, never
   committed.
-- `apps/mcp/` for the CAD app agent hosts render (MCP Apps, in Codex). Its
+- `apps/mcp/` for the CAD app agent hosts render (MCP Apps: Codex, Claude Desktop). Its
   server is `cadgen mcp` (`cadgen/mcp` in `packages/cadgen`), and its one-file
   build ships inside the cadgen wheel as `cadgen/_runtime/mcp` — built at
   release time, never committed.
@@ -457,11 +457,12 @@ asserts required Node/browser outputs; wheel validation checks the complete
 packaged viewer too. Per-stage `cadgen-runtime.sh` flags are for debugging;
 normal iteration goes through `bundle.sh`.
 
-## CAD In Codex (the plugin's viewer)
+## CAD In Agent Hosts (Codex, Claude Desktop)
 
-The plugin's viewer is `apps/mcp` served by `cadgen mcp`; what it does and the
-rules it keeps are in [apps/mcp/README.md](apps/mcp/README.md). To run this
-checkout's build in the Codex app:
+The viewer agent hosts render is `apps/mcp` served by `cadgen mcp`; what it
+does, the two ways hosts present it, and the rules it keeps are in
+[apps/mcp/README.md](apps/mcp/README.md). To run this checkout's build in the
+Codex app:
 
 ```bash
 scripts/install/codex-dev-plugin.sh --restart
@@ -477,6 +478,25 @@ one. So reinstall to see a page edit. A running server keeps the Python it
 started with, so restart the app after a Python-only change. The server's
 stderr lands in Codex's log database (`~/.codex/logs_2.sqlite`, lines starting
 `MCP server stderr`).
+
+To run it in Claude Desktop:
+
+```bash
+scripts/install/claude-dev-server.sh
+```
+
+It builds `apps/mcp` and adds a `cad-dev` server to Claude Desktop's
+`claude_desktop_config.json` (every other entry is kept): this checkout's
+`.venv` running `cadgen mcp` over a copy of the page, for the same reason as
+above. Claude Desktop reads the file when it starts, so quit and reopen it (or
+use Developer > Reload MCP Configuration), then ask Claude to show a model with
+CAD. `--uninstall` removes the entry. The server's stderr lands in
+`~/Library/Logs/Claude/mcp-server-cad-dev.log`; the app's developer tools
+(Developer Mode, then Cmd+Option+I) inspect the card's frame.
+
+Neither app can be driven by a test, so the standard path is also checked in
+the MCP Apps reference host (`basic-host` from `modelcontextprotocol/ext-apps`):
+it speaks Streamable HTTP, so a local bridge to the stdio server is needed.
 
 ## Branch Layout
 

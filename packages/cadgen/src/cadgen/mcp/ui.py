@@ -50,6 +50,18 @@ def app_dir() -> Path:
     return runtime_root() / "mcp"
 
 
+def _told(data: bytes, presentation: str) -> bytes:
+    """The page with its presentation stated first thing in its head (or after its doctype)."""
+    meta = f'<meta name="cad-presentation" content="{html.escape(presentation)}">'.encode("utf-8")
+    lowered = data.lower()
+    for opening in (b"<head", b"<!doctype"):
+        start = lowered.find(opening)
+        if start >= 0:
+            end = data.find(b">", start) + 1
+            return data[:end] + meta + data[end:]
+    return meta + data
+
+
 def _missing_page(reason: str) -> str:
     return (
         "<!doctype html><meta charset=utf-8><title>CAD</title>"
@@ -59,12 +71,22 @@ def _missing_page(reason: str) -> str:
 
 
 class AppPage:
-    """The page, read and hashed once, on first use -- never at import or initialize."""
+    """The page, read and hashed once, on first use -- never at import or initialize.
 
-    def __init__(self, directory: Path | None = None) -> None:
+    A host that mounts views inline gets the same app with ``<meta name="cad-presentation"
+    content="inline">`` in its head: the page reads it before it greets the host, to offer the
+    display modes that host has. A host that shows tabs gets the file's bytes, untouched.
+    """
+
+    def __init__(self, directory: Path | None = None, *, presentation: str | None = None) -> None:
         self._directory = directory
+        self._presentation = presentation
         self._lock = threading.Lock()
         self._loaded: tuple[str, str] | None = None
+
+    def presenting(self, presentation: str) -> "AppPage":
+        """This page as served to a host that presents it ``presentation`` (``"inline"``)."""
+        return AppPage(self._directory, presentation=presentation)
 
     def _load(self) -> tuple[str, str]:
         with self._lock:
@@ -75,6 +97,8 @@ class AppPage:
                 except OSError:
                     self._loaded = ("missing", _missing_page(runtime_build_hint(path)))
                 else:
+                    if self._presentation:
+                        data = _told(data, self._presentation)
                     self._loaded = (hashlib.sha256(data).hexdigest()[:16], data.decode("utf-8"))
             return self._loaded
 
