@@ -287,10 +287,10 @@ async function formatGate() {
       if (!fixture.tools.includes("Measure") && strip.includes("Measure")) {
         failures.push(`${fixture.format}: Measure is offered on a view that cannot measure (must be hidden, not disabled)`);
       }
-      // A 3D view's top-right bar: Display settings, then Preview.
+      // A 3D view's top-right bar, under the view cube: Display settings, Reset view, then Preview.
       const topRight = await page.locator("[data-viewport-actions] button").evaluateAll((buttons) =>
         buttons.map((button) => button.getAttribute("aria-label")));
-      if (fixture.threeD && JSON.stringify(topRight) !== JSON.stringify(["Display settings", "Preview"])) {
+      if (fixture.threeD && JSON.stringify(topRight) !== JSON.stringify(["Display settings", "Reset view", "Preview"])) {
         failures.push(`${fixture.format}: top-right bar is ${JSON.stringify(topRight)}`);
       }
       // Every file can be captured from the navigation row.
