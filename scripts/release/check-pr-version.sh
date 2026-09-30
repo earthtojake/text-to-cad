@@ -7,6 +7,16 @@ set -euo pipefail
 base_ref="${1:?Usage: check-pr-version.sh <base-ref> <head-ref> <head-sha>}"
 head_ref="${2:?Missing head ref}"
 head_sha="${3:?Missing head SHA}"
+
+# The release/* rule keeps Prepare Release the only VERSION writer. A fork never
+# dispatches Prepare Release -- its main moves by syncing upstream, and sync PRs
+# legitimately carry the release bumps those commits contain. Only the upstream
+# repository enforces the rule; unset (local checkouts) keeps enforcing.
+if [ -n "${GITHUB_REPOSITORY:-}" ] && [ "$GITHUB_REPOSITORY" != "earthtojake/text-to-cad" ]; then
+  echo "Repository $GITHUB_REPOSITORY does not run releases; VERSION changes arrive via upstream syncs."
+  exit 0
+fi
+
 base_sha="$(git merge-base "refs/remotes/origin/$base_ref" "$head_sha")"
 
 if git diff --quiet "$base_sha" "$head_sha" -- VERSION; then

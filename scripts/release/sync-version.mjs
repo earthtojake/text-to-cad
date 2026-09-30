@@ -14,7 +14,11 @@ export const jsonTargets = [
   { path: "package-lock.json", fields: [["version"], ["packages", "", "version"], ...["apps/docs", "apps/web", "packages/core", "packages/ui"].map(name => ["packages", name, "version"])] },
   { path: ".claude-plugin/plugin.json", fields: [["version"]] },
   { path: ".codex-plugin/plugin.json", fields: [["version"]] },
+  { path: ".cursor-plugin/plugin.json", fields: [["version"]] },
+  { path: ".qwenpaw-plugin/plugin.json", fields: [["version"]] },
+  { path: ".zcode-plugin/plugin.json", fields: [["version"]] },
   { path: ".claude-plugin/marketplace.json", fields: [["version"]], pluginEntries: ["cad"] },
+  { path: ".zcode-plugin/marketplace.json", fields: [["version"]], pluginEntries: ["cad"] },
 ];
 
 const tomlTargets = [

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 import subprocess
 import tempfile
 import unittest
@@ -44,10 +45,14 @@ class PrVersionGuardTests(unittest.TestCase):
         self.git("commit", "-m", message)
 
     def check(self, branch: str = "feature", base: str = "main") -> subprocess.CompletedProcess[str]:
+        # Pin the upstream identity: the guard exempts fork repositories (their
+        # VERSION changes come from upstream syncs), and these tests exercise the
+        # enforcement path wherever they run.
+        env = dict(os.environ, GITHUB_REPOSITORY="earthtojake/text-to-cad")
         return subprocess.run(
             ["bash", str(repo_path("scripts/release/check-pr-version.sh")),
              base, branch, self.git("rev-parse", "HEAD").strip()],
-            cwd=self.root, text=True, capture_output=True, check=False,
+            cwd=self.root, text=True, capture_output=True, check=False, env=env,
         )
 
     def test_inherited_main_release_is_not_a_pr_version_bump(self) -> None:

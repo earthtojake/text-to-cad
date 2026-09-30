@@ -13,6 +13,7 @@ done < <("$LIST_SKILLS_SCRIPT")
 ALL_AGENTS=(
   codex
   claude
+  zcode
   gemini
   universal
   project
@@ -34,6 +35,7 @@ non-symlink skills and symlinks to other locations are left untouched.
 Agents:
   codex             ${CODEX_HOME:-$HOME/.codex}/skills
   claude            ${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills
+  zcode             ${ZCODE_CONFIG_DIR:-$HOME/.zcode}/skills
   gemini            $HOME/.gemini/skills
   universal         ${XDG_CONFIG_HOME:-$HOME/.config}/agents/skills
   project           .agents/skills in this repository
@@ -64,6 +66,9 @@ agent_destination() {
     claude)
       printf '%s\n' "${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills"
       ;;
+    zcode)
+      printf '%s\n' "${ZCODE_CONFIG_DIR:-$HOME/.zcode}/skills"
+      ;;
     gemini)
       printf '%s\n' "$HOME/.gemini/skills"
       ;;
@@ -83,6 +88,7 @@ canonical_agent() {
   case "$1" in
     codex) printf 'codex\n' ;;
     claude|claude-code) printf 'claude\n' ;;
+    zcode) printf 'zcode\n' ;;
     gemini|gemini-cli) printf 'gemini\n' ;;
     universal|agents) printf 'universal\n' ;;
     project|repo) printf 'project\n' ;;
