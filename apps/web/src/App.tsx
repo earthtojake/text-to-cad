@@ -78,7 +78,7 @@ function RootView({ client, server, tabStore }: { client: CadClient; server: Cad
     if (!readCadParam()) writeCadParam(path, { history: 'replace' });
     void recordOpened(path).catch(() => {});
   }, []);
-  const library = useMemo(() => createWebLibrary({ open: show }), [show]);
+  const library = useMemo(() => createWebLibrary({ open: show, client }), [show, client]);
   const host = useMemo<Omit<ViewerHost, 'navigation'>>(() => ({
     files: source, fileActions, clipboard: browserClipboard, promptContext, attachments, links,
     environment: { colorScheme: appearance.colorScheme, platform: keyboardPlatform() },

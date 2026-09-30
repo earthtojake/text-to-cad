@@ -76,6 +76,13 @@ export default function ModelView({ launch, root: launchedRoot, sequence, bridge
 
   const opened = useRef(onLaunch);
   opened.current = onLaunch;
+  // A card without a picture has its model drawn from its whole filesystem, whose lazy root reads
+  // only that file, since the library spans every root: one client per filesystem, polling nothing.
+  const pictureClients = useRef(new Map<string, ReturnType<typeof createCadClient>>());
+  useEffect(() => () => {
+    for (const pictureClient of pictureClients.current.values()) pictureClient.dispose();
+    pictureClients.current.clear();
+  }, []);
   // The models opened before, from every view and the web viewer; Open Model picks one from disk
   // with the desktop's chooser. Opening switches this same view to the model.
   const library = useMemo<ModelLibrarySource>(() => ({
@@ -84,6 +91,17 @@ export default function ModelView({ launch, root: launchedRoot, sequence, bridge
     thumbnail: name => server.thumbnails([name]).then(found => found[name] ? `data:image/png;base64,${found[name]}` : null),
     open: entry => server.launch(entry.path).then(next => opened.current(next)),
     pick: () => server.pickModel().then(result => { if (result.launch) opened.current(result.launch); }),
+    pictureFrom: entry => {
+      const anchor = /^[A-Za-z]:[\\/]/.test(entry.path) ? `${entry.path.slice(0, 2)}\\` : entry.path.startsWith('/') ? '/' : null;
+      const file = anchor && pathUnderRoot(anchor, entry.path);
+      if (!anchor || !file) return null;
+      let pictureClient = pictureClients.current.get(anchor);
+      if (!pictureClient) {
+        pictureClient = createCadClient({ origin: TUNNEL_ORIGIN, fetch: createTunnelFetch(server, { kind: 'global', path: anchor }), pollIntervalMs: 0, shouldPoll: () => false });
+        pictureClients.current.set(anchor, pictureClient);
+      }
+      return { client: pictureClient, file, keep: png => png.arrayBuffer().then(bytes => server.recents({ action: 'thumbnail', path: entry.path, png: encodeBase64(new Uint8Array(bytes)) })) };
+    },
   }), [server]);
   const home = useRef(onHome);
   home.current = onHome;

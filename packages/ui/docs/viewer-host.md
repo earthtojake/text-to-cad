@@ -48,7 +48,7 @@ are for reading and maintaining the contracts.
 | `RobotRendererOptions` (URDF, SRDF, SDF), `RobotLiveController`, `RobotLiveState` (`selectedLinks`, `selectedPartIds`) | [Robot registration](../src/renderers/robot/index.ts) | `@text-to-cad/ui/renderers/robot` |
 | `ViewerCommands`, `ViewerCommandSource` (the host requests every viewer renderer takes) | [Viewer commands](../src/renderers/workspace/commands.ts) | `@text-to-cad/ui/renderers/workspace` |
 | `createLiveRegistry`, `LiveRegistry` (the host's handle on the mounted view: its renderers' `live`) | [Live registry](../src/host/liveRegistry.ts) | `@text-to-cad/ui/host` |
-| `ModelLibrary`, `ModelLibrarySource`, `useModelThumbnail` (a host's home: the models opened before, pinned first, as cards or rows; `pick` only where the host has a file chooser) | [Model library](../src/library/ModelLibrary.tsx), [thumbnails](../src/library/thumbnails.ts) | `@text-to-cad/ui/library` |
+| `ModelLibrary`, `ModelLibrarySource`, `ModelPictureSource`, `useModelThumbnail` (a host's home: the models opened before, pinned first, as cards or rows; `pick` only where the host has a file chooser; `pictureFrom` where it can reach a model to picture it) | [Model library](../src/library/ModelLibrary.tsx), [thumbnails](../src/library/thumbnails.ts) | `@text-to-cad/ui/library` |
 | `CadViewer` (FileViewer over one root's CAD catalog: the five CAD renderers, catalog following, the home, the loading and missing-file pages, the library's pictures) | [CAD viewer](../src/cad-viewer/CadViewer.tsx) | `@text-to-cad/ui/cad-viewer` |
 | `createCatalogFileSource`, `createCadFileActions`, `rootPath`, `pathUnderRoot`, `referencePath` (a CAD catalog as a read-only `FileSource`, the file menu's copies and reveal, the paths a root names a file by) | [Catalog](../src/cad-viewer/catalog.ts) | `@text-to-cad/ui/catalog` |
 | `ViewerLinks`, `viewerLinks` (the navbar's version, GitHub and Discord, and how a link is followed) | [Host types](../src/host/types.ts), [links](../src/file-viewer/navigation/links.js) | `@text-to-cad/ui/links` |
@@ -235,6 +235,15 @@ the person's camera, panels and window never show in it and nothing on screen
 changes (`kit/viewport/thumbnail.js`; a DXF paints its fitted drawing on a canvas
 of its own). A view that goes before it settles rejects it. `useModelThumbnail`
 keeps one per file per mounted view, and only for the file the view still shows.
+On the home, a card on screen with no picture, or one taken before its file last
+changed (`pictured` against `modified`), is pictured out of sight where the host's
+library says how (`pictureFrom(model)`: the CAD client that reads it, its path
+there, and where the picture is kept): `CadViewer` mounts a viewer of its own for
+it — its own renderers and live binding, compact, behind the page at the picture's
+size — one model at a time, each once per visit, and only a model whose artifact
+status is already `compiled`. The home never builds anything: an unbuilt model keeps
+its placeholder until a view shows it. The web library draws from its own catalog;
+the MCP app's from the model's whole filesystem, whose lazy root reads only that file.
 `readState().display` and `setDisplaySettings(patch)` use the same sparse grouped
 schema as snapshots: `mode` selects `solid`, `render`, `xray`, `hidden-line`, or
 `wireframe`; camera, surfaces, edges, lighting, background, floor, grid and axes

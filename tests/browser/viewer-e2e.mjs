@@ -287,7 +287,7 @@ async function formatGate() {
       if (!fixture.tools.includes("Measure") && strip.includes("Measure")) {
         failures.push(`${fixture.format}: Measure is offered on a view that cannot measure (must be hidden, not disabled)`);
       }
-      // A 3D view's top-right bar, under the view cube: Display settings, Reset view, then Preview.
+      // A 3D view's actions, on top of the view cube: Display settings, Reset view, then Preview.
       const topRight = await page.locator("[data-viewport-actions] button").evaluateAll((buttons) =>
         buttons.map((button) => button.getAttribute("aria-label")));
       if (fixture.threeD && JSON.stringify(topRight) !== JSON.stringify(["Display settings", "Reset view", "Preview"])) {
@@ -599,6 +599,32 @@ async function modeCameraGate() {
   }
 }
 
+// The home pictures a card that has none, out of sight, from what is already built: a mesh the
+// library lists (recorded as opened, never shown) gets its picture with the home up, and its card
+// shows it.
+async function libraryGate() {
+  const origin = args.url.replace(/\/$/, "");
+  const copy = path.join(root, "unpictured.stl");
+  fs.copyFileSync(path.join(root, "smoke.stl"), copy);
+  const { context, page, errors } = await newPage();
+  try {
+    const recorded = await fetch(`${origin}/__cad/recents`, {
+      method: "POST", headers: { "x-cadgen-viewer": "1", "content-type": "application/json" },
+      body: JSON.stringify({ action: "open", file: "unpictured.stl" }),
+    }).then((response) => response.json());
+    const listed = recorded.recents?.find((model) => model.file === "unpictured.stl");
+    if (!listed || listed.thumbnail) fail(`the library did not list unpictured.stl without a picture: ${JSON.stringify(recorded)}`);
+    await page.goto(`${origin}/`, { waitUntil: "domcontentloaded", timeout: 60_000 });
+    await page.waitForFunction(() => fetch("/__cad/recents", { cache: "no-store" }).then((response) => response.json())
+      .then((body) => body.recents.some((model) => model.file === "unpictured.stl" && model.thumbnail)), null, { timeout: 120_000, polling: 500 });
+    await page.locator(".cad-library-card", { hasText: "unpictured.stl" }).locator("img").waitFor({ timeout: 60_000 });
+    if (errors.length) failures.push(`library: ${errors.join(" | ")}`);
+  } finally {
+    await context.close();
+    fs.rmSync(copy, { force: true });
+  }
+}
+
 // Every gate here runs in CI; there is no local-only set. Each assertion settles
 // on published state rather than a frame rate or a sleep toward a conclusion, so a
 // slow software-GL runner is slower, not redder. Picking parts, faces and robot
@@ -607,6 +633,7 @@ async function modeCameraGate() {
 const gates = [
   ["format", formatGate],
   ["camera", modeCameraGate],
+  ["library", libraryGate],
 ];
 
 const selected = args.only ? gates.filter(([name]) => name === args.only) : gates;

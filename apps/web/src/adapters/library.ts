@@ -1,3 +1,4 @@
+import type { CadWorkspaceService } from '@text-to-cad/core/client';
 import type { LibraryModel, ModelLibrarySource } from '@text-to-cad/ui/library';
 
 /** A model in this Viewer's library, with the `file` its catalog and `?file=` name it by. */
@@ -17,14 +18,16 @@ function change(body: { action: string; file: string; png?: string }): Promise<r
 
 /**
  * The library every CAD view shares, as this Viewer shows it: the models under the folder it
- * serves. They open in place, beside the files; there is no chooser to pick one from disk.
+ * serves. They open in place, beside the files; there is no chooser to pick one from disk. A card
+ * without a picture has its model drawn from this Viewer's own catalog (`client`), where it lives.
  */
-export function createWebLibrary({ open }: { open(file: string): void }): ModelLibrarySource<WebModel> {
+export function createWebLibrary({ open, client }: { open(file: string): void; client: CadWorkspaceService }): ModelLibrarySource<WebModel> {
   return {
     list: () => fetch('/__cad/recents', { cache: 'no-store' }).then(library),
     change: (action, model) => change({ action, file: model.file }),
     thumbnail: async name => `/__cad/recents/thumbnail?name=${encodeURIComponent(name)}`,
     open: async model => open(model.file),
+    pictureFrom: model => ({ client, file: model.file, keep: png => recordThumbnail(png, model.file) }),
   };
 }
 

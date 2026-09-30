@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+import unittest.mock
 from pathlib import Path
 
 from cadgen.viewer.recents import RecentStore
@@ -29,6 +30,13 @@ class RecentStoreTest(unittest.TestCase):
         self.assertEqual([(entry.path, entry.pinned) for entry in entries], [("/a.step", True), ("/c.step", False)])
         self.assertEqual(store.read_thumbnail(entries[1].thumbnail), b"\x89PNG fake")
         self.assertIsNone(store.read_thumbnail("../escape.png"))
+        # A picture says when it was taken, as compacting the log keeps it: a file changed since has an old one.
+        pictured = entries[1].pictured
+        self.assertIsNotNone(pictured)
+        self.assertIsNone(entries[0].public()["pictured"])
+        with unittest.mock.patch("cadgen.viewer.recents.COMPACT_AFTER", 0):
+            store.opened("/d.step")
+        self.assertEqual(next(entry for entry in store.list() if entry.path == "/c.step").pictured, pictured)
 
     def test_a_model_says_when_its_file_last_changed_and_a_gone_one_says_nothing(self) -> None:
         store = RecentStore(self.tmp / "state")

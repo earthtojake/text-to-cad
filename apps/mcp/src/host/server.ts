@@ -22,7 +22,7 @@ export interface Launch {
   order?: { createdAt: number; seq: number };
 }
 export interface Session { protocol: number; build: string; version: string; platform: string; workspace: Root[] }
-export interface Recent { path: string; name: string; folder: string; opened: number; modified: number | null; pinned: boolean; missing: boolean; thumbnail: string | null }
+export interface Recent { path: string; name: string; folder: string; opened: number; modified: number | null; pinned: boolean; missing: boolean; thumbnail: string | null; pictured: number | null }
 export type ViewEvent =
   | { seq: number; type: 'show'; launch: Launch }
   | { seq: number; type: 'capture' | 'describe'; requestId: string };

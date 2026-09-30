@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type ComponentType, type CSSProperties, type ReactNode } from "react";
 import { Box, FolderOpen, LayoutGrid, List, Pin, Search, X } from "lucide-react";
+import type { CadWorkspaceService } from "@text-to-cad/core/client";
 import { Button } from "../primitives/button.jsx";
 import { Input } from "../primitives/input.jsx";
 import { ScrollArea as ScrollRegion } from "../primitives/scroll-area.jsx";
@@ -24,6 +25,18 @@ export interface LibraryModel {
   missing: boolean;
   /** A picture's name, for `thumbnail()`. */
   thumbnail: string | null;
+  /** When the picture was taken, in seconds; null without one. A file changed since has an old one. */
+  pictured: number | null;
+}
+
+/**
+ * Where a model is drawn off screen for its card's picture: the CAD client that reads it, its path
+ * under that client's root, and where the picture is kept once it is drawn.
+ */
+export interface ModelPictureSource {
+  client: CadWorkspaceService;
+  file: string;
+  keep(png: Blob): Promise<unknown>;
 }
 
 /** A host's library of models: read, changed and opened through the host. */
@@ -39,7 +52,17 @@ export interface ModelLibrarySource<Model extends LibraryModel = LibraryModel> {
    * beside this page, has none: its files are already there to open.
    */
   pick?(): Promise<void>;
+  /**
+   * Where a model can be drawn for a picture, for a card with none or an old one (`CadViewer` draws
+   * it); null for a model the host cannot reach. Absent, a card keeps what it has until a view of
+   * the model pictures it.
+   */
+  pictureFrom?(model: Model): ModelPictureSource | null;
 }
+
+/** A card wants a picture: it has none, or its file changed since it was taken. */
+export const wantsPicture = (model: LibraryModel) => !model.missing && (!model.thumbnail
+  || (model.modified !== null && model.pictured !== null && model.modified > model.pictured));
 
 export function filterModels<Model extends LibraryModel>(items: readonly Model[], query: string): Model[] {
   const words = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
@@ -64,15 +87,22 @@ const message = (failure: unknown) => failure instanceof Error ? failure.message
 // The chrome's one scroll region (`primitives/scroll-area.jsx`), as this page uses it.
 const ScrollArea = ScrollRegion as unknown as ComponentType<{ className?: string; style?: CSSProperties; viewportClassName?: string; children: ReactNode; [data: `data-${string}`]: string }>;
 
-function Thumbnail({ item, load }: { item: LibraryModel; load(name: string): Promise<string | null> }) {
+// A card's picture, read once the card is on screen; and a card on screen that wants one (`seen`).
+function Thumbnail<Model extends LibraryModel>({ item, load, seen }: { item: Model; load(name: string): Promise<string | null>; seen(item: Model): void }) {
   const element = useRef<HTMLSpanElement>(null);
   const [image, setImage] = useState<string | null>(null);
+  const latest = useRef({ item, seen });
+  latest.current = { item, seen };
   useEffect(() => {
     let active = true;
-    setImage(null);
-    if (!item.thumbnail || item.missing || !element.current) return;
+    // A new picture replaces the old one once it has loaded, never through the placeholder.
+    if (!item.thumbnail || item.missing) setImage(null);
+    if (item.missing || !element.current) return;
     const name = item.thumbnail;
-    const show = () => void load(name).then(value => { if (active) setImage(value); }).catch(() => {});
+    const show = () => {
+      if (name) void load(name).then(value => { if (active) setImage(value); }).catch(() => {});
+      latest.current.seen(latest.current.item);
+    };
     if (typeof IntersectionObserver === "undefined") { show(); return () => { active = false; }; }
     const observer = new IntersectionObserver(entries => {
       if (!entries.some(entry => entry.isIntersecting)) return;
@@ -81,7 +111,7 @@ function Thumbnail({ item, load }: { item: LibraryModel; load(name: string): Pro
     });
     observer.observe(element.current);
     return () => { active = false; observer.disconnect(); };
-  }, [item.thumbnail, item.missing, load]);
+  }, [item.path, item.thumbnail, item.missing, load]);
   return <span className="cad-library-thumbnail" ref={element}>{image ? <img src={image} alt="" /> : <Box strokeWidth={1} aria-hidden="true" />}</span>;
 }
 
@@ -92,9 +122,11 @@ function Thumbnail({ item, load }: { item: LibraryModel; load(name: string): Pro
  * cards (a picture over the name and when the file was edited) or as rows. It is drawn on the
  * viewport's own colour, so the page and the model it opens into are one surface.
  *
- * Opening is the host's; nothing here waits visibly.
+ * Opening is the host's; nothing here waits visibly. A card on screen that wants a picture
+ * (`wantsPicture`) is handed to `picture`, where the viewer draws one out of sight — one card at a
+ * time, each once while the page is up — and the list is read again once one is kept.
  */
-export function ModelLibrary<Model extends LibraryModel>({ library, colorScheme = "light", layout = "grid", onLayoutChange, failure = "" }: {
+export function ModelLibrary<Model extends LibraryModel>({ library, colorScheme = "light", layout = "grid", onLayoutChange, failure = "", picture }: {
   library: ModelLibrarySource<Model>;
   colorScheme?: "light" | "dark";
   /** Grid or list; the host keeps the choice (the tab's settings). */
@@ -102,6 +134,8 @@ export function ModelLibrary<Model extends LibraryModel>({ library, colorScheme 
   onLayoutChange?(layout: LibraryLayout): void;
   /** What the host's own controls failed at, shown where the library's failures are. */
   failure?: string;
+  /** Draw and keep a model's picture; true once it is kept. */
+  picture?(model: Model): Promise<boolean>;
 }) {
   const [items, setItems] = useState<readonly Model[] | null>(null);
   const [query, setQuery] = useState("");
@@ -111,13 +145,35 @@ export function ModelLibrary<Model extends LibraryModel>({ library, colorScheme 
   const current = useRef(library);
   current.current = library;
   const images = useRef(new Map<string, Promise<string | null>>());
+  const refresh = useCallback(() => current.current.list().then(setItems), []);
   useEffect(() => {
-    const refresh = () => current.current.list().then(setItems);
     void refresh().catch(failure => { setItems([]); setError(message(failure)); });
     const again = () => { if (document.visibilityState !== "hidden") void refresh().catch(() => {}); };
     document.addEventListener("visibilitychange", again);
     return () => document.removeEventListener("visibilitychange", again);
+  }, [refresh]);
+  // The cards on screen that want a picture, in the order they came into view, drawn one at a time.
+  const draw = useRef(picture);
+  draw.current = picture;
+  const asked = useRef(new Set<string>());
+  const [queue, setQueue] = useState<readonly Model[]>([]);
+  const seen = useCallback((item: Model) => {
+    if (!draw.current || asked.current.has(item.path) || !wantsPicture(item)) return;
+    asked.current.add(item.path);
+    setQueue(waiting => [...waiting, item]);
   }, []);
+  const drawing = useRef(false);
+  useEffect(() => {
+    const next = queue[0];
+    if (!next || drawing.current || !draw.current) return;
+    drawing.current = true;
+    const done = (kept: boolean) => {
+      drawing.current = false;
+      setQueue(waiting => waiting.slice(1));
+      if (kept) void refresh().catch(() => {});
+    };
+    draw.current(next).then(done, () => done(false));
+  }, [queue, refresh]);
   const load = useCallback((name: string) => {
     let image = images.current.get(name);
     if (!image) {
@@ -143,7 +199,7 @@ export function ModelLibrary<Model extends LibraryModel>({ library, colorScheme 
   const models = layout === "list"
     ? <ul className="cad-library-list" aria-label="Files">{shown.map(item => <li key={item.path} className="cad-library-row" data-missing={item.missing || undefined}>
       <TooltipHint content={item.path}><button type="button" className="cad-library-open" disabled={item.missing} aria-label={`Open ${item.name}`} onClick={() => open(item)}>
-        <Thumbnail item={item} load={load} />
+        <Thumbnail item={item} load={load} seen={seen} />
         <span className="cad-library-name">{item.name}</span>
         <span className="cad-library-status">{status(item)}</span>
       </button></TooltipHint>
@@ -151,7 +207,7 @@ export function ModelLibrary<Model extends LibraryModel>({ library, colorScheme 
     </li>)}</ul>
     : <ul className="cad-library-grid" aria-label="Files">{shown.map(item => <li key={item.path} className="cad-library-card" data-missing={item.missing || undefined}>
       <TooltipHint content={item.path}><button type="button" className="cad-library-open" disabled={item.missing} aria-label={`Open ${item.name}`} onClick={() => open(item)}>
-        <Thumbnail item={item} load={load} />
+        <Thumbnail item={item} load={load} seen={seen} />
         <span className="cad-library-body">
           <span className="cad-library-name">{item.name}</span>
           <span className="cad-library-status">{status(item)}</span>

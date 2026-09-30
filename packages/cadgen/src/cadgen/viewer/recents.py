@@ -16,7 +16,8 @@ they do not know, and compaction writes a new file and renames it into place
 under the same lock. Nothing is ever migrated in place.
 
 A model's picture is a ``picture`` event: the model framed whole from the default
-direction at a card's size, on transparency, taken once its view has settled. The
+direction at a card's size, on transparency, taken once its view has settled; its
+time is when it was taken (``pictured``), so a file changed since has an old one. The
 screenshots of whatever the view showed that came before it were ``thumb`` events,
 which this reader does not know, so a model shows no picture until a view shows it
 again -- then its canonical one.
@@ -75,6 +76,8 @@ class Recent:
     opened: float
     pinned: bool = False
     thumbnail: str | None = None
+    # When the picture was taken, in seconds: a file changed since has an old one.
+    pictured: float | None = None
 
     def public(self) -> dict[str, Any]:
         try:
@@ -92,6 +95,7 @@ class Recent:
             "pinned": self.pinned,
             "missing": not exists,
             "thumbnail": self.thumbnail,
+            "pictured": self.pictured,
         }
 
 
@@ -150,6 +154,7 @@ class RecentStore:
                 entries.pop(path, None)
             elif op == "picture" and path in entries and isinstance(event.get("thumbnail"), str):
                 entries[path].thumbnail = event["thumbnail"]
+                entries[path].pictured = float(event.get("t", 0)) or None
         ordered = sorted(entries.values(), key=lambda entry: (not entry.pinned, -entry.opened))
         return ordered[:LIMIT]
 
@@ -190,7 +195,7 @@ class RecentStore:
             if entry.pinned:
                 folded.append({"v": SCHEMA, "t": entry.opened, "op": "pin", "path": entry.path})
             if entry.thumbnail:
-                folded.append({"v": SCHEMA, "t": entry.opened, "op": "picture", "path": entry.path, "thumbnail": entry.thumbnail})
+                folded.append({"v": SCHEMA, "t": entry.pictured or entry.opened, "op": "picture", "path": entry.path, "thumbnail": entry.thumbnail})
         write_bytes_atomic(self.log, "".join(json.dumps(event, separators=(",", ":")) + "\n" for event in folded).encode("utf-8"))
 
     @contextlib.contextmanager

@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { ModelLibrary, editedLabel, type LibraryModel, type ModelLibrarySource } from './ModelLibrary.js';
 
@@ -6,7 +6,7 @@ afterEach(cleanup);
 
 const NOW = Date.UTC(2026, 8, 30, 12);
 const model = (name: string, extra: Partial<LibraryModel> = {}): LibraryModel =>
-  ({ path: `/work/parts/${name}`, name, folder: '/work/parts', opened: 1, modified: Date.now() / 1000 - 16 * 3600, pinned: false, missing: false, thumbnail: null, ...extra });
+  ({ path: `/work/parts/${name}`, name, folder: '/work/parts', opened: 1, modified: Date.now() / 1000 - 16 * 3600, pinned: false, missing: false, thumbnail: null, pictured: null, ...extra });
 
 function library(models: LibraryModel[], extra: Partial<ModelLibrarySource> = {}): ModelLibrarySource {
   return {
@@ -69,4 +69,29 @@ it('shows why an open failed where the library shows it', async () => {
   const open = await screen.findByRole('button', { name: 'Open a.step' });
   await act(async () => { fireEvent.click(open); });
   expect((await screen.findByRole('alert')).textContent).toBe('That model is gone.');
+});
+
+it('asks for a picture of each card on screen that has none or an old one, one at a time, and reads the list again once one is kept', async () => {
+  const edited = Date.now() / 1000 - 60;
+  let models = [
+    model('new.step'),
+    model('current.step', { thumbnail: 'current.png', pictured: edited + 30, modified: edited }),
+    model('old.step', { thumbnail: 'old.png', pictured: edited - 3600, modified: edited }),
+    model('gone.step', { missing: true }),
+  ];
+  const list = vi.fn(async () => models);
+  let finish!: (kept: boolean) => void;
+  const picture = vi.fn(() => new Promise<boolean>(resolve => { finish = resolve; }));
+  render(<ModelLibrary library={library(models, { list })} picture={picture} />);
+  await screen.findByRole('button', { name: 'Open new.step' });
+  // The first, alone: the next waits for it.
+  expect(picture.mock.calls.map(([item]) => item.name)).toEqual(['new.step']);
+  models = models.map(item => item.name === 'new.step' ? { ...item, thumbnail: 'new.png', pictured: Date.now() / 1000 } : item);
+  await act(async () => finish(true));
+  expect(list).toHaveBeenCalledTimes(2);
+  await waitFor(() => expect(picture.mock.calls.map(([item]) => item.name)).toEqual(['new.step', 'old.step']));
+  // One not drawn is not asked for again while the page is up; the current and the missing never are.
+  await act(async () => finish(false));
+  expect(picture).toHaveBeenCalledTimes(2);
+  expect(list).toHaveBeenCalledTimes(2);
 });

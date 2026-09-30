@@ -7,10 +7,19 @@ import { CadViewer, createCatalogFileSource } from '../../dist/cad-viewer/index.
 import { createLiveRegistry } from '../../dist/host/liveRegistry.js';
 import { createTabStore, memoryTabRecord } from '../../dist/tab-store/tabStore.js';
 
-// The shared FileViewer, reduced to what this composition hands it.
-const viewer = vi.hoisted(() => ({ props: null as FileViewerProps | null }));
-vi.mock('../../dist/file-viewer/FileViewer.js', () => ({ FileViewer: (props: FileViewerProps) => { viewer.props = props; return null; } }));
-afterEach(() => { cleanup(); viewer.props = null; });
+// The shared FileViewer, reduced to what this composition hands it: the view on screen, and the
+// one a card's picture is drawn in out of sight (a compact one), while it is mounted.
+const viewer = vi.hoisted(() => ({ props: null as FileViewerProps | null, hidden: null as FileViewerProps | null }));
+vi.mock('../../dist/file-viewer/FileViewer.js', async () => {
+  const { useEffect } = await import('react');
+  return { FileViewer: (props: FileViewerProps) => {
+    const hidden = Boolean(props.host.environment.compact);
+    if (hidden) viewer.hidden = props; else viewer.props = props;
+    useEffect(() => () => { if (hidden) viewer.hidden = null; }, [hidden]);
+    return null;
+  } };
+});
+afterEach(() => { cleanup(); viewer.props = null; viewer.hidden = null; });
 
 function catalogClient() {
   let snapshot = { hydrated: false, entries: [] as Record<string, unknown>[], error: '', revision: 0, refreshing: true, rootId: 'a' };
@@ -86,4 +95,36 @@ test('a root read a folder at a time shows what its explorer lists, which its ca
     library={library} onShow={next => shows.push(next)} accept={path => path} />);
   act(() => viewer.props!.host.navigation.openFile('Users/me/part.stl', { target: 'new', panel: 'tree' }));
   expect(shows).toEqual(['Users/me/part.stl']);
+});
+
+test('the home pictures a card out of sight, in a viewer of its own, from what is already built, and never builds one', async () => {
+  const client = catalogClient();
+  const pictureClient = { ...catalogClient(), requestArtifactStatus: vi.fn(async (file: string) => ({ state: file === 'a.stl' ? 'compiled' : 'not-compiled' })) };
+  const pictured = { ...library, pictureFrom: (model: { path: string }) => ({ client: pictureClient as never, file: model.path.slice(1), keep: async () => {} }) };
+  const host = { files: createCatalogFileSource(client as never, { id: 'a', rootName: 'root' }), clipboard: { writeText: async () => {}, readText: async () => '', writeImage: async () => {} },
+    promptContext: unavailablePromptContext, environment: { colorScheme: 'light' as const } };
+  const view = (file: string) => <CadViewer client={client as never} host={host} tabStore={createTabStore(memoryTabRecord())} live={createLiveRegistry()} file={file}
+    rootPath="/models" library={pictured} onShow={() => {}} />;
+  const { rerender } = render(view(''));
+  const picture = (viewer.props!.presentation!.home as { props: { picture(model: { path: string }): Promise<boolean> } }).props.picture;
+  // A model whose display is not built keeps its placeholder: its status is read, and that is all.
+  await expect(picture({ path: '/b.step' })).resolves.toBe(false);
+  expect(viewer.hidden).toBeNull();
+  // One that is built is drawn in a view of its own: compact, with renderers of its own, reaching no prompt.
+  let drawn!: Promise<boolean>;
+  await act(async () => { drawn = picture({ path: '/a.stl' }); });
+  const hidden = viewer.hidden!;
+  expect([hidden.file, hidden.host.promptContext.getSnapshot().kind]).toEqual(['a.stl', 'unavailable']);
+  expect(hidden.renderers).not.toBe(viewer.props!.renderers);
+  // A view that fails gives the card up, and goes.
+  act(() => hidden.onError!(new Error('unreadable')));
+  await expect(drawn).resolves.toBe(false);
+  expect(viewer.hidden).toBeNull();
+  // A file opened while one is drawn has the screen to itself.
+  let again!: Promise<boolean>;
+  await act(async () => { again = picture({ path: '/a.stl' }); });
+  expect(viewer.hidden).not.toBeNull();
+  rerender(view('parts/a.step'));
+  await expect(again).resolves.toBe(false);
+  expect(viewer.hidden).toBeNull();
 });

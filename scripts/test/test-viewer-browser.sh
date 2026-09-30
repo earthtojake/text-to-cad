@@ -39,7 +39,7 @@ while [ "$#" -ne 0 ]; do
       fi
       if [ "$1" = "--out" ]; then out_dir="$2"; else only_gate="$2"; fi
       shift 2 ;;
-    # --only: one gate while working on it: format, camera.
+    # --only: one gate while working on it: format, camera, library.
     *) echo "usage: $0 [--out SCREENSHOT_DIR] [--only GATE]" >&2; exit 2 ;;
   esac
 done
@@ -58,6 +58,8 @@ viewer_pidfile="$project/viewer.pid"
 export CADGEN_CACHE_DIR="$project/cache"
 export CADGEN_DAEMON=0
 export CADGEN_DAEMON_STATE_DIR="$project/daemon-state"
+# The model library every Viewer writes: the test's own, never the user's.
+export CADGEN_STATE_DIR="$project/state"
 export CADGEN_VIEWER_DIST="$RUNTIME"
 unset CADGEN_BROKER CADGEN_BROKER_KEY CADGEN_BROKER_STATS CADGEN_DAEMON_CHILD CADGEN_ROOT_ID
 server_pid=""
