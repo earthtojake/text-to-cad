@@ -24,6 +24,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Iterator
 
+from cadgen._internal.atomic_replace import write_bytes_atomic
+
 SCHEMA = 1
 LIMIT = 200
 COMPACT_AFTER = 2000
@@ -81,12 +83,9 @@ class RecentStore:
     def thumbnail(self, path: str, png: bytes) -> str:
         """Keep a PNG for ``path``; return its content name."""
         name = hashlib.sha256(png).hexdigest()[:32] + ".png"
-        self.thumbnails.mkdir(parents=True, exist_ok=True)
         target = self.thumbnails / name
         if not target.exists():
-            partial = target.with_suffix(f".{os.getpid()}.tmp")
-            partial.write_bytes(png)
-            os.replace(partial, target)
+            write_bytes_atomic(target, png)
         self._append({"op": "thumb", "path": path, "thumbnail": name})
         return name
 
@@ -160,9 +159,7 @@ class RecentStore:
                 folded.append({"v": SCHEMA, "t": entry.opened, "op": "pin", "path": entry.path})
             if entry.thumbnail:
                 folded.append({"v": SCHEMA, "t": entry.opened, "op": "thumb", "path": entry.path, "thumbnail": entry.thumbnail})
-        partial = self.log.with_suffix(f".{os.getpid()}.tmp")
-        partial.write_text("".join(json.dumps(event, separators=(",", ":")) + "\n" for event in folded), encoding="utf-8")
-        os.replace(partial, self.log)
+        write_bytes_atomic(self.log, "".join(json.dumps(event, separators=(",", ":")) + "\n" for event in folded).encode("utf-8"))
 
     @contextlib.contextmanager
     def _locked(self):

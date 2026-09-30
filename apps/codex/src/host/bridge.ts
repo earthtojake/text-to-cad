@@ -73,8 +73,12 @@ export function createBridge(host: Pick<Window, 'postMessage'>, self: Pick<Windo
   function answer(message: Message) {
     const method = message.method!;
     if (method === 'ui/resource-teardown') {
-      for (const listener of [...teardowns]) listener();
+      // Acknowledge first: the host is waiting to dispose the frame, and our cleanup
+      // (cancelling the long-poll) is no reason to keep it waiting.
       post({ id: message.id, result: {} });
+      for (const listener of [...teardowns]) {
+        try { listener(); } catch { /* a listener's failure must not reach the host */ }
+      }
     } else if (method === 'ping') post({ id: message.id, result: {} });
     else if (method === 'tools/list') post({ id: message.id, result: { tools: [] } });
     else post({ id: message.id, error: { code: -32601, message: `${method} is not supported` } });
