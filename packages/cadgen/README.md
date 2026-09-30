@@ -308,14 +308,14 @@ materials, or animation; no
 The gate decides whether a model runs at all (`STORE.md` §4), and the store
 derives everything render-side from the bytes the run wrote (law 2). Inside a
 run, every modeling operation executes: cadgen never replays a stored result,
-never substitutes a copy for what an operation returned, and never changes how
-build123d compares shapes — `==`, `hash()` and `is_same` are build123d's. A
-script therefore behaves the same inside cadgen as under plain Python. Two
-hooks remain, and neither changes a result: `determinism.py` fixes the
-iteration order of build123d's de-duplications, and lazy children defer a
-child's geometry until it is read (`STORE.md` §9a). An expensive or
-independently edited part gets its speed by being its own model, never from a
-cache inside one.
+never substitutes a copy for what an operation returned, and never changes
+what build123d's `==` and `is_same` answer. A script therefore behaves the
+same inside cadgen as under plain Python. Two hooks remain, and neither
+changes a result: `determinism.py` fixes the iteration order of build123d's
+de-duplications (an order-keeping set, and a `Vertex` hash by point that
+leaves equality alone), and lazy children defer a child's geometry until it
+is read (`STORE.md` §9a). An expensive or independently edited part gets its
+speed by being its own model, never from a cache inside one.
 *Pressure-test*: call a model's function under plain Python and inside a
 cadgen build; the geometry it returns, and the answer to every `==` and
 `is_same` along the way, are the same.
