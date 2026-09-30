@@ -60,28 +60,6 @@ class SourceClosureTests(unittest.TestCase):
                 cad_source_hash.closure_hash_matches(closure.closure_hash, closure.files, base=base)
             )
 
-    def test_capture_runtime_closure_includes_imported_repo_local_modules(self) -> None:
-        with temporary_directory(prefix="closure-capture-") as raw_dir:
-            base = Path(raw_dir)
-            script = base / "widget.py"
-            dep = base / "shared_helper.py"
-            script.write_text("import shared_helper\n", encoding="utf-8")
-            dep.write_text("X = 1\n", encoding="utf-8")
-
-            # Ensure a clean import so the sys.modules delta actually captures it.
-            sys.modules.pop("shared_helper", None)
-            before = set(sys.modules)
-            sys.path.insert(0, str(base))
-            try:
-                import shared_helper  # noqa: F401  (exercise a real import)
-                closure = cad_source_hash.capture_runtime_closure(before, script, base=base)
-            finally:
-                sys.path.remove(str(base))
-                sys.modules.pop("shared_helper", None)
-
-            self.assertIn("shared_helper.py", " ".join(closure.files))
-            self.assertTrue(any(f.endswith("widget.py") for f in closure.files))
-
     def test_repo_local_modules_key_on_interpreter_not_cwd(self) -> None:
         """First-party detection keys on the interpreter's stdlib/site-packages layout, NOT a
         repo-root global or the process working directory. So the dependency closure a generator

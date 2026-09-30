@@ -766,49 +766,6 @@ def closure_for_files(
     )
 
 
-def capture_runtime_closure(
-    before_module_names: object,
-    script_path: Path,
-    *,
-    base: Path,
-    executed_files: object = (),
-    discovered_inputs: object = (),
-    executed_hashes: dict[str, str] | None = None,
-) -> PythonSourceClosure:
-    """Capture a generator's dependency closure after running it.
-
-    Three observation channels are unioned. Two cover the generator's PYTHON
-    import reach: ``executed_files`` — the first-party files recorded by
-    :func:`record_first_party_execution` while the generator ran (complete even
-    when the generator unloads modules mid-run) — and the ``sys.modules`` delta
-    against ``before_module_names`` (a belt-and-braces catch for modules
-    registered without a fresh body execution). The third is
-    ``discovered_inputs``: the data files the run declared through
-    :func:`note_discovered_input`, which is how ``cadgen.read_step`` puts a
-    vendor STEP into the closure. Every recorded path is relative to ``base``
-    (the model folder), and a non-``.py`` input is hashed by its bytes. Captured
-    execution/declaration hashes take precedence over the files' current bytes.
-
-    A file read WITHOUT going through a declaring reader is still not a
-    freshness input — nothing observes it — which is exactly why reading one is
-    spelled ``read_step`` rather than left to ``open()``. A composed child is
-    captured the documented way, by importing its generator; generated children
-    are kept current by ``generation._rebuild_stale_assembly_children``, not by
-    this closure.
-    """
-    import sys
-
-    new_names = set(sys.modules) - set(before_module_names)
-    dependency_files = [
-        *repo_local_loaded_modules(new_names).values(),
-        *executed_files,
-        *discovered_inputs,
-    ]
-    return closure_for_files(
-        script_path, dependency_files, base=base, executed_hashes=executed_hashes,
-    )
-
-
 def _recompute_closure_hash(relative_files: object, *, base: Path, hasher) -> str | None:
     base_dir = base.expanduser().resolve()
     pairs: list[tuple[str, str]] = []

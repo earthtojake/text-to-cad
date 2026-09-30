@@ -618,11 +618,13 @@ class DeclaredDataInputTests(unittest.TestCase):
             declare_input(self.atlas)
         self.assertEqual(recorded, {self.atlas.resolve()})
 
-    def test_edit_after_declared_read_keeps_step_and_drawing_closures_stale(self) -> None:
+    def test_edit_after_declared_read_keeps_the_closure_stale(self) -> None:
+        """@step and @dxf record one closure (``build_closure``): the first read's
+        hash stands, so an edit later in the body leaves the result stale."""
         from unittest import mock
 
         from cadgen import declare_input
-        from cadgen._internal.source_hash import capture_runtime_closure, record_discovered_inputs
+        from cadgen._internal.source_hash import record_discovered_inputs
         from cadgen.store.closure import ExecutionHashes, build_closure, current_closure_hash
         from cadgen.store.gate import stale
         from cadgen.store.publish import decide
@@ -639,28 +641,19 @@ class DeclaredDataInputTests(unittest.TestCase):
         for path in inputs:
             hashes.note(path)  # The runner's post-body fallback must not overwrite it.
 
-        step_closure = build_closure(script, executed=hashes.hashes, discovered_inputs=inputs)
-        drawing_closure = capture_runtime_closure(
-            set(sys.modules), script, base=self.project, discovered_inputs=inputs,
-            executed_hashes=hashes.hashes,
-        )
-        for label, digest, files, shas in (
-            ("step", step_closure.hash, step_closure.files, step_closure.shas),
-            ("drawing", drawing_closure.closure_hash, drawing_closure.files, drawing_closure.file_hashes),
-        ):
-            with self.subTest(format=label):
-                self.assertEqual(shas["atlas.json"], first_hash)
-                self.assertNotEqual(digest, current_closure_hash(script, files))
-                record = {"tree": None, "closure": {"hash": digest, "files": files, "shas": shas}}
-                with mock.patch("cadgen.store.gate.read_record", return_value=record):
-                    verdict = stale(script)
-                self.assertTrue(verdict.stale)
-                self.assertIn("atlas.json", verdict.clauses[1]["why"])
-                # An older build cannot replace a current record that a newer
-                # build published while this body was still running.
-                with mock.patch("cadgen.store.publish.stale", return_value=mock.Mock(stale=False)):
-                    decision = decide(script, ran_closure_hash=digest, ran_files=files)
-                self.assertFalse(decision.publish_outputs)
+        closure = build_closure(script, executed=hashes.hashes, discovered_inputs=inputs)
+        self.assertEqual(closure.shas["atlas.json"], first_hash)
+        self.assertNotEqual(closure.hash, current_closure_hash(script, closure.files))
+        record = {"tree": None, "closure": {"hash": closure.hash, "files": closure.files, "shas": closure.shas}}
+        with mock.patch("cadgen.store.gate.read_record", return_value=record):
+            verdict = stale(script)
+        self.assertTrue(verdict.stale)
+        self.assertIn("atlas.json", verdict.clauses[1]["why"])
+        # An older build cannot replace a current record that a newer
+        # build published while this body was still running.
+        with mock.patch("cadgen.store.publish.stale", return_value=mock.Mock(stale=False)):
+            decision = decide(script, ran_closure_hash=closure.hash, ran_files=closure.files)
+        self.assertFalse(decision.publish_outputs)
 
     def test_pre_declaration_hash_records_miss_without_invalidating_saved_artifacts(self) -> None:
         import hashlib

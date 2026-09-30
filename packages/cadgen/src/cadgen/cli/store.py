@@ -105,7 +105,10 @@ def _cmd_why(target: str, as_json: bool) -> int:
 
 def _closure_file_label(rel: str, names: dict) -> str:
     """``lib/geo.py[plane, cyl_along]`` for a sliced file (its reached names,
-    the first six), the bare path for a file tracked whole."""
+    the first six), the bare path for a file tracked whole, and ``lib/__init__.py
+    (must stay absent)`` for a file the imports rely on not existing."""
+    if rel.startswith("!"):
+        return f"{rel[1:]} (must stay absent)"
     if rel not in names:
         return rel
     reached = list(names[rel])

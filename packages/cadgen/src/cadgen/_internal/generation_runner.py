@@ -14,12 +14,10 @@ from typing import Sequence
 
 from cadgen._internal.source_hash import PythonSourceClosure
 from cadgen._internal.source_hash import PythonSourceHash
-from cadgen._internal.source_hash import capture_runtime_closure
 from cadgen._internal.source_hash import evict_first_party_modules
 from cadgen._internal.source_hash import is_first_party_source_file
 from cadgen._internal.source_hash import python_source_hash
 from cadgen._internal.source_hash import record_discovered_inputs
-from cadgen._internal.source_hash import record_first_party_execution
 from cadgen._internal.step_scene import LoadedStepScene
 from cadgen.catalog import build_scope
 from cadgen.cli_logging import CliLogger
@@ -512,20 +510,20 @@ def _run_script_generator_body(
 
     determinism.install()
     generated_scene: LoadedStepScene | None = None
-    # Deterministic closure capture (see run_script_generator's docstring): start from a
-    # clean first-party module space, then record every first-party file executed while
-    # the generator loads and runs. The recorded set is complete even if the generator
-    # unloads modules mid-run; the sys.modules delta stays as a belt-and-braces union.
-    # Alongside it, the DISCOVERED-input window: a model's Python reach announces
-    # itself, but a data file it reads does not, so `cadgen.read_step` declares one
-    # here and it joins the closure like any other input.
+    # Deterministic closure capture: start from a clean first-party module space, so
+    # every first-party file the generator loads and runs executes inside the window
+    # and is hashed as it runs (ExecutionHashes), from the source it was compiled from
+    # (_first_party_from_source). Alongside it, the DISCOVERED-input window: the data
+    # files the model's code opened, and the ones a native reader was told about.
     evict_first_party_modules()
-    modules_before_load = set(sys.modules)
+    from cadgen._internal.source_hash import _excluded_roots
     from cadgen.store.closure import ExecutionHashes
 
+    # Classify before any hook is live: computing the roots imports sysconfig
+    # data, which would otherwise fire the hooks into a half-built classifier.
+    _excluded_roots()
     with (
         _first_party_from_source(),
-        record_first_party_execution() as executed_files,
         record_discovered_inputs() as read_files,
         ExecutionHashes() as executed_hashes,
     ):
@@ -627,15 +625,27 @@ def _run_script_generator_body(
     elif model_format == "dxf":
         if spec.dxf_path is None:
             raise RuntimeError(f"{spec.source_ref} has no configured DXF output")
-        # The same closure a @step model records (relative to the model folder).
-        # Code and declared data inputs keep the hashes captured during the body.
-        source_closure = capture_runtime_closure(
-            modules_before_load,
+        # The same closure a @step model records (relative to the model folder):
+        # reach, import-time code, the files its imports rely on not existing,
+        # and the data it read, hashed as they were when the body ran.
+        from cadgen.store.closure import build_closure
+
+        for read_path in read_files:
+            executed_hashes.note(read_path)
+        store_closure = build_closure(
             spec.script_path,
-            base=spec.script_path.parent,
-            executed_files=executed_files,
+            executed=executed_hashes.hashes,
             discovered_inputs=read_files,
-            executed_hashes=executed_hashes.hashes,
+            children=[child for child, _tree in frame.child_trees()],
+            sources=executed_hashes.sources,
+        )
+        source_closure = PythonSourceClosure(
+            closure_hash=store_closure.hash,
+            files=store_closure.files,
+            constants=store_closure.constants,
+            file_hashes=store_closure.shas,
+            names=store_closure.names,
+            wholes=store_closure.wholes,
         )
         # The product IS the .dxf: the run always writes it — the sibling by
         # default, `-o` renames — and the viewer parses that file directly.
