@@ -95,9 +95,11 @@ viewer it came from (the folder it serves; for `cad_show`, the thread's project
 folder), or its full path when the model has no project around it, always with
 the file's real name and extension. A relative path resolves from the working
 directory, so from the viewer's root pass the prefix to `read_scene` as is.
-`resolve()` accepts the prefix as a segment-aligned suffix of the opened
-document's path and rejects one naming a different document. Do not guess
-between ambiguous files.
+`resolve()` reads the prefix as a path, with `~` expanded, links followed and a
+relative one read from the working directory, and it must name the opened document.
+A relative prefix that names no file from where you run still matches the end of
+the document's path. A prefix naming a different document is rejected. Do not
+guess between ambiguous files.
 
 ## Measurements
 

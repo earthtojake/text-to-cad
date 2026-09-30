@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import re
 from dataclasses import dataclass
 
@@ -104,6 +105,30 @@ def path_has_suffix(path: str, suffix: str) -> bool:
     return path_segments[len(path_segments) - len(suffix_segments) :] == suffix_segments
 
 
+def ref_prefix_names(prefix: str, document_path: str) -> bool:
+    """Whether a ref's file prefix names ``document_path``, read as a path.
+
+    ``~`` expands and links resolve, so any spelling of the same file names it. An absolute
+    prefix names the document only if it is that file. A relative one is read from the working
+    directory: if it names a file from there, that file has to be the document. If it names
+    nothing from there, it can still be the end of the document's path, segment by segment, so a
+    path under the viewer's root names its file wherever the command runs.
+    """
+    prefix = str(prefix or "").strip()
+    document = str(document_path or "").strip()
+    if not prefix or not document:
+        return False
+    candidate = os.path.expanduser(prefix)
+    try:
+        return os.path.samefile(candidate, document)
+    except (OSError, ValueError):
+        pass
+    if os.path.isabs(candidate):
+        # Neither path is a file here (a document named but not on disk): compare them as paths.
+        return os.path.normcase(os.path.realpath(candidate)) == os.path.normcase(os.path.realpath(document))
+    return path_has_suffix(document, prefix)
+
+
 def split_cad_ref(text: str) -> tuple[str, str]:
     """One ref as ``(file prefix, selector text)``; the prefix is ``""`` when it has none.
 
@@ -127,17 +152,17 @@ def ensure_ref_file_matches(file_prefix: str, document_path: str, *, source_labe
 
     Copied refs may carry a file prefix (``STEP/plate.step#o1.2``) so they stay meaningful in a
     prompt spanning several files: the file's path relative to the viewer's root, or its absolute
-    path. Either is a segment-aligned suffix of ``document_path``, the absolute path of the file
-    the command was given. A CLI only ever inspects that file, so a prefix naming a DIFFERENT file
-    has to be an error: silently ignoring it would inspect the wrong file and report a confident
-    answer about geometry the user never asked about.
+    path. It has to name ``document_path``, the file the command was given, as a path does
+    (:func:`ref_prefix_names`). A CLI only ever inspects that file, so a prefix naming a DIFFERENT
+    file has to be an error: silently ignoring it would inspect the wrong file and report a
+    confident answer about geometry the user never asked about.
 
     CLIs do not resolve prefixes to paths -- the agent does that, then passes the file and the
     ref separately. See ``skills/cad/references/inspection-and-validation.md``.
     """
     prefix = str(file_prefix or "").strip()
     document = str(document_path or "").strip()
-    if not prefix or not document or path_has_suffix(document, prefix):
+    if not prefix or not document or ref_prefix_names(prefix, document):
         return
     raise ValueError(
         f"{source_label} names file {prefix!r} but this command targets {document!r}; "

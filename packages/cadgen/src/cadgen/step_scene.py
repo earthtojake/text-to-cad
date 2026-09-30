@@ -164,15 +164,17 @@ class StepScene:
         """Resolve one numeric ref, exact label alias, or file-prefixed ref.
 
         A file prefix -- the path under the viewer's root, or an absolute path --
-        must be a segment-aligned suffix of this scene's document path.
+        must name this scene's document as a path does (links resolved, a relative
+        one read from the working directory, else matched against the end of the
+        document's path).
         Ambiguous labels raise with numbered candidates. A bare entity ID
         (e.g. #f1) requires exactly one leaf. No fuzzy matching or first match.
         """
-        from cadgen.cad_ref_syntax import parse_selector, path_has_suffix, split_cad_ref
+        from cadgen.cad_ref_syntax import parse_selector, ref_prefix_names, split_cad_ref
         from cadgen.label_refs import resolve_label_selectors
 
         prefix, text = split_cad_ref(ref)
-        if prefix and not path_has_suffix(str(self._loaded.step_path), prefix):
+        if prefix and not ref_prefix_names(prefix, str(self._loaded.step_path)):
             raise ValueError(f"reference names {prefix!r}, but this scene is {str(self._loaded.step_path)!r}")
         parsed = parse_selector(text)
         if parsed is None or parsed.selector_type == "opaque":

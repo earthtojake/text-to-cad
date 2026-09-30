@@ -8,8 +8,14 @@ forgotten in the other fails here rather than in a user's pasted ref.
 
 from __future__ import annotations
 
+import contextlib
 import json
+import os
+import shutil
+import tempfile
 import unittest
+from pathlib import Path
+from unittest import mock
 
 from tests.python.support.paths import repo_path
 
@@ -207,9 +213,31 @@ class RefFileGuardTest(unittest.TestCase):
             "absorber.step",
             "other/STEP/shock_absorber.step",
             "/elsewhere/projects/STEP/shock_absorber.step",
+            # An absolute path is a path, not the end of one: this names /projects/..., not the document.
+            "/projects/STEP/shock_absorber.step",
         ):
             with self.subTest(prefix=prefix), self.assertRaises(ValueError):
                 ensure_ref_file_matches(prefix, self.DOCUMENT)
+
+    def test_a_prefix_is_read_as_a_path(self) -> None:
+        # Real files: links resolve, `~` expands, and a relative prefix is read from the working directory.
+        tmp = Path(tempfile.mkdtemp())
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        document = tmp / "real" / "STEP" / "part.step"
+        document.parent.mkdir(parents=True)
+        document.write_text("ISO-10303-21;", encoding="utf-8")
+        (tmp / "link").symlink_to(tmp / "real", target_is_directory=True)
+        ensure_ref_file_matches(str(tmp / "link" / "STEP" / "part.step"), str(document))
+        with mock.patch.dict(os.environ, {"HOME": str(tmp), "USERPROFILE": str(tmp)}):
+            ensure_ref_file_matches("~/link/STEP/part.step", str(document))
+        with contextlib.chdir(tmp / "real"):
+            ensure_ref_file_matches("STEP/part.step", str(document))
+        # From a folder with its own STEP/part.step, the same relative prefix names that other file.
+        other = tmp / "other" / "STEP" / "part.step"
+        other.parent.mkdir(parents=True)
+        other.write_text("ISO-10303-21;", encoding="utf-8")
+        with contextlib.chdir(tmp / "other"), self.assertRaises(ValueError):
+            ensure_ref_file_matches("STEP/part.step", str(document))
 
     def test_a_quoted_prefix_is_decoded_rather_than_cut_at_a_hash(self) -> None:
         for path in ("/work/CAD models/part #2.step", "C:\\work\\part.step", "STEP/part.step"):
