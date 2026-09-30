@@ -13,9 +13,9 @@
     prop:barrel_bolt_<k>_<i>, prop:barrel_nut_<k>_<i>, prop:barrel_wire_<k>
         two through-bolts in each lug between the sockets, heads forward, heads
         wired in pairs.
-    prop:blade_<k>                  polished aluminium, R 1300 (D 2.6 m): Clark-Y
-        family sections lofted through 28 stations, pitch 57 deg at the shank
-        transition to 17 deg at the tip (constant geometric pitch ~2.45 m),
+    prop:blade_<k>                  polished aluminium, doubled root-to-tip span: Clark-Y
+        family sections with the original chord, thickness and twist retained.
+        Root-to-tip span 2435 mm, with the root fixed at radius 82 mm;
         paddle planform with an elliptical tip, 0.7 mm trailing edge. Shown
         FEATHERED: the whole twisted blade is turned in its socket so the chord
         at 0.75 R stands at 89 deg (root sections past 90), leading edge forward;
@@ -79,7 +79,8 @@ BOLT_D = 9.5                          # 3/8 in
 SPLIT_GAP = 0.2                       # each half stops 0.2 short of y = HUB_Y
 
 # ---- blade --------------------------------------------------------------------
-R_TIP = 1300.0
+R_TIP = 1300.0                       # reference radius for the original section profiles
+BLADE_SPAN_SCALE = 2.0               # stretch along each blade axis, anchored at its root
 PITCH = 2450.0                        # geometric pitch (mm/rev)
 X_REF = 0.33                          # pitch axis, fraction of chord from the LE
 BLEND = (190.0, 470.0)                # round shank -> airfoil
@@ -198,12 +199,18 @@ def _section_pts(s):
     fwd = np.array([0.0, -1.0, 0.0])
     a = math.cos(beta) * d_rot + math.sin(beta) * fwd     # toward the leading edge
     n = -math.sin(beta) * d_rot + math.cos(beta) * fwd    # suction-face normal
-    o = np.array([0.0, HUB_Y, s])
+    o = np.array([0.0, HUB_Y, span_station(s)])
     return [o - xi * a + eta * n for xi, eta in section_2d(s)]
 
 
 STATIONS = [82, 110, 140, 165, 190, 210, 230, 250, 270, 290, 310, 332, 356, 382, 410, 440, 470, 510, 560, 620,
             710, 800, 890, 980, 1060, 1120, 1170, 1210, 1242, 1266, 1283, 1293, 1298, 1299.5]
+
+
+def span_station(s):
+    """Stretch only blade length; keep its root and all section profiles fixed."""
+    root = STATIONS[0]
+    return root + BLADE_SPAN_SCALE * (s - root)
 
 
 def _interp(points, params):
@@ -287,7 +294,7 @@ def blade_proto():
         e = BRepBuilderAPI_MakeEdge(c).Edge()
         l = BRepBuilderAPI_MakeEdge(c.Value(c.LastParameter()), c.Value(c.FirstParameter())).Edge()
         w = BRepBuilderAPI_MakeWire(e, l).Wire()
-        mf = BRepBuilderAPI_MakeFace(gp_Pln(gp_Pnt(0.0, HUB_Y, float(st)), gp_Dir(0.0, 0.0, 1.0)), w, True)
+        mf = BRepBuilderAPI_MakeFace(gp_Pln(gp_Pnt(0.0, HUB_Y, span_station(st)), gp_Dir(0.0, 0.0, 1.0)), w, True)
         if not mf.IsDone():
             raise RuntimeError(f"blade cap at s={st} failed")
         faces.append(mf.Face())
