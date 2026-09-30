@@ -744,22 +744,23 @@ Decided mechanically from the returned geometry and occurrence metadata.
   two links to one object, and a child shared by many parents is stored once.
   Materialization requires the complete transitive object graph. A missing pin
   is an error, never an empty subtree or a request for the child's newer record.
-- Tight occurrence bounds use the existing `op` index, keyed by current native
-  geometry and its full linear transform. Translation shifts those six bounds
-  directly, so translated instances share the expensive surface calculation.
-  Rotation still requires its own tight box; control-polygon bounds are not
-  substituted. Disabled, memory-hit and disk-hit paths evaluate the same
-  origin-normalized function, and cached numeric arrays are never mutated.
+- Tight occurrence bounds live in `index/bounds`, keyed by each leaf's BinTools
+  digest and its transform with the translation removed. Translation shifts
+  those six bounds directly, so translated instances share the expensive
+  surface calculation. Rotation still requires its own tight box;
+  control-polygon bounds are not substituted. Measured, memory-hit and disk-hit
+  boxes come from the same origin-normalized function, and cached numeric
+  arrays are never mutated.
 - Canonical saved-document publication already owns each verified component's
   encoded BREP and each parsed occurrence's exact native placement. Its tight
-  bounds key uses that BREP identity, codec and rotation in the runtime-scoped
-  `op` index, then shifts the six native bounds by translation. A miss measures
+  bounds key uses that BREP identity, codec and rotation in `index/bounds`,
+  then shifts the six native bounds by translation. A miss measures
   every native leaf with the same optimal extrema operation; it never transforms
   a component AABB. Incomplete private inputs fall back to the ordinary composed
   native document, after the same component validation and closure checks.
 - A bounded descriptor composed entirely of pinned links may instead measure
-  exact component bounds from verified canonical BREP objects. The existing
-  `op` index stores only six finite numbers, keyed by BREP digest, all 16
+  exact component bounds from verified canonical BREP objects. `index/bounds`
+  stores only six finite numbers, keyed by BREP digest, all 16
   placement doubles without rounding, the bounds algorithm and the actual
   native/binding identity. It uses the same private reconstruction, placement,
   native leaf traversal and final numeric extrema merge as the whole document;

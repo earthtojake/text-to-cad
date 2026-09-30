@@ -123,8 +123,7 @@ def package_files(root: Path) -> list[Path]:
     """Every persisted build output: the objects every record's tree reaches
     (components and trees — a moved project is a set of new records over the
     same objects, so those objects are what a move must leave untouched), plus
-    the model-side sidecars under ``root``. Op-memo objects are deliberately
-    not compared: they are a kernel cache, not a result."""
+    the model-side sidecars under ``root``."""
     import json
 
     from cadgen.store.index import iter_entries

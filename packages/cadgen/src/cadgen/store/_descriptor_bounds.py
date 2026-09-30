@@ -242,7 +242,7 @@ class Snapshot:
 
 @dataclass(frozen=True)
 class PreparedDocument:
-    """Invocation-owned, validated native prototypes; never an op-cache value."""
+    """Invocation-owned, validated native prototypes; never a cached value."""
     descriptor_json: bytes
     _shapes: dict[str, Any]
 
