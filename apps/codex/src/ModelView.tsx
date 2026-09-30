@@ -32,10 +32,12 @@ export interface ViewReporter {
  * the root it browses, whether it browses at all, where Add to prompt goes -- never by where
  * the view is.
  */
-export default function ModelView({ launch, root, sequence, bridge, server, tabStore, live, colorScheme, platform, reporter, onHome }: {
+export default function ModelView({ launch, root: launchedRoot, sequence, bridge, server, tabStore, live, colorScheme, platform, reporter, onHome }: {
   launch: Launch; root: Root; sequence: number; bridge: Bridge; server: Server; tabStore: TabStore; live: LiveRegistry;
   colorScheme: 'light' | 'dark'; platform: string; reporter: ViewReporter; onHome?: () => void;
 }) {
+  // Every launch carries its own root object; the same folder must keep its client and catalog.
+  const root = useMemo(() => launchedRoot, [launchedRoot.kind, launchedRoot.path]);
   const client = useMemo(() => createCadClient({
     origin: TUNNEL_ORIGIN, fetch: createTunnelFetch(server, root),
     shouldPoll: () => document.visibilityState !== 'hidden',
