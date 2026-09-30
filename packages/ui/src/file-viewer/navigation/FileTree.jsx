@@ -530,7 +530,9 @@ export function FileTree({ source, activePath, reveal = null, edit = null, onOpe
           <ScrollArea
             className="min-h-0 flex-1"
             onContextMenu={aim}
-            viewportClassName="px-1 py-1"
+            // A host control floating over the page's bottom (a chat's composer) covers the last
+            // rows: they scroll clear of it, and a revealed row stops above it.
+            viewportClassName="px-1 pt-1 pb-[calc(0.25rem+var(--cad-host-bottom-inset,0px))] scroll-pb-[var(--cad-host-bottom-inset,0px)]"
             viewportProps={{ onKeyDown, role: "tree", tabIndex: 0 }}
             viewportRef={listRef}
           >

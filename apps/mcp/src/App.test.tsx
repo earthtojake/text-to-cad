@@ -43,11 +43,13 @@ it('a tab host gets the page it always had, down to its bottom: no card to size,
   await screen.findByRole('button', { name: /Open Model/ });
   expect(screen.queryByRole('button', { name: 'Full size' })).toBeNull();
   expect(sized(bridge.notify)).toEqual([]);
-  // The host's composer floats over the page's bottom: no strip is kept for it, and the viewer's
-  // bottom action sits on the composer's line.
+  // The host's composer floats over the page's bottom: no strip is kept for it, the viewer's bottom
+  // action sits on the composer's line, and lists scroll clear of it.
   const frame = container.firstElementChild as HTMLElement;
   expect([frame.style.paddingTop, frame.style.paddingBottom]).toEqual(['4px', '0px']);
-  expect(frame.style.getPropertyValue('--cad-viewport-bottom-center')).toBe('42px');
+  expect(frame.style.getPropertyValue('--cad-viewport-bottom-center')).toBe('40px');
+  // What the composer covers, lists scroll clear of.
+  expect(frame.style.getPropertyValue('--cad-host-bottom-inset')).toBe('72px');
 });
 
 it('an inline host gets a card of a height it is told, which goes full size in place', async () => {

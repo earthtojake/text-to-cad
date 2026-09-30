@@ -50,7 +50,7 @@
 }
 
 /* The model library (`library/`): recent and pinned models to open again. */
-.cad-library { width: 100%; height: 100%; overflow: auto; box-sizing: border-box; padding: 24px clamp(16px, 3vw, 32px); }
+.cad-library { width: 100%; height: 100%; overflow: auto; box-sizing: border-box; padding: 24px clamp(16px, 3vw, 32px) calc(24px + var(--cad-host-bottom-inset, 0px)); }
 .cad-library-content { max-width: 1040px; }
 .cad-library-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; margin-bottom: 28px; }
 .cad-library-search { position: relative; flex: 1 1 180px; max-width: 320px; }

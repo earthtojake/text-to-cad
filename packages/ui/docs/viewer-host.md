@@ -330,8 +330,10 @@ the web host derives that field from its browser environment.
 The bottom action and the playback bars centre on one line, `3.5rem` above the
 viewport's bottom edge. A host whose own control floats over that edge (a chat's
 composer) sets `--cad-viewport-bottom-center` on an ancestor to put the line on
-its control's; it is a length, like any design token, and says nothing about
-which host it is.
+its control's, and `--cad-host-bottom-inset` to the height it covers: the file
+tree and the model library scroll their last rows clear of it, and a revealed
+row stops above it. Both are lengths, like any design token, and say nothing
+about which host it is.
 
 A renderer's update status is its own: the CAD renderers show it centred at the
 top of the viewport, level with the tool strip. The host's nav row carries none,

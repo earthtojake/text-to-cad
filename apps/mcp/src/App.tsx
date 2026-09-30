@@ -25,8 +25,8 @@ export function useHostContext(bridge: Pick<Bridge, 'hostContext' | 'onHostConte
 }
 
 // A tab host's composer floats over the bottom of the page, its middle this far above the edge: the
-// viewer's bottom action and playback bars sit on that same line (Codex: a 47px box, 19px up).
-const TAB_BOTTOM_CENTER = '42px';
+// viewer's bottom action and playback bars sit on that same line (Codex: a 45px box, 17px up).
+const TAB_BOTTOM_CENTER = '40px';
 
 // Inline, a view is a card in the chat: as tall as its width suits, within what the host allows.
 const INLINE_ASPECT = 0.62, INLINE_MIN_HEIGHT = 320, INLINE_MAX_HEIGHT = 560;
@@ -41,6 +41,9 @@ export function inlineHeight(width: number, maxHeight?: number): number {
  * its model) as it is.
  */
 function Frame({ bridge, context, insets, inline = false, expandable = true, bottomCenter, children }: { bridge: Bridge; context: HostContext; insets: NonNullable<HostContext['safeAreaInsets']>; inline?: boolean; expandable?: boolean; bottomCenter?: string; children: ReactNode }) {
+  // Where the host's composer floats over the page instead of taking room from it: the line the
+  // viewer's bottom action sits on, and the strip lists scroll clear of.
+  const floating = bottomCenter ? { '--cad-viewport-bottom-center': bottomCenter, '--cad-host-bottom-inset': `${context.safeAreaInsets?.bottom || 0}px` } as CSSProperties : {};
   const [width, setWidth] = useState(() => window.innerWidth);
   useEffect(() => {
     if (!inline) return;
@@ -51,7 +54,7 @@ function Frame({ bridge, context, insets, inline = false, expandable = true, bot
   const height = inlineHeight(width, context.containerDimensions?.maxHeight);
   useEffect(() => { if (inline) bridge.notify('ui/notifications/size-changed', { height }); }, [bridge, inline, height]);
   if (!inline) {
-    return <div className="flex h-svh flex-col overflow-hidden" style={{ paddingTop: insets.top || 0, paddingRight: insets.right || 0, paddingBottom: insets.bottom || 0, paddingLeft: insets.left || 0, ...(bottomCenter ? { '--cad-viewport-bottom-center': bottomCenter } as CSSProperties : {}) }}>
+    return <div className="flex h-svh flex-col overflow-hidden" style={{ paddingTop: insets.top || 0, paddingRight: insets.right || 0, paddingBottom: insets.bottom || 0, paddingLeft: insets.left || 0, ...floating }}>
       <div className="relative min-h-0 flex-1">{children}</div>
     </div>;
   }
