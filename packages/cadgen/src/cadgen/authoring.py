@@ -801,7 +801,7 @@ def _compose_child(defn: ModelDef) -> Any:
     pinned (snapshot isolation); the same stale child called twice shares one
     job; children are recorded from the CALLS, never from the geometry.
     """
-    from cadgen.store.gate import closure_hash, stale
+    from cadgen.store.gate import stale
     from cadgen.store.lazy import LazyCompound
 
     frame = current_frame()
@@ -823,7 +823,7 @@ def _compose_child(defn: ModelDef) -> Any:
         if verdict.stale:
             job = submit(
                 child, force=False, root_id=getattr(frame, "root_id", None), parent=parent,
-                closure=closure_hash(child),
+                closure=verdict.closure,
             )
             if frame is not None:
                 frame.jobs[child] = job

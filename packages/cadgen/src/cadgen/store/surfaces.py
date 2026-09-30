@@ -6,7 +6,7 @@ import json
 import struct
 from typing import Any
 
-from cadgen.store.index import read_entry, strip_last_used, touch_entry, write_entry
+from cadgen.store.index import read_entry, write_entry
 from cadgen.store.objects import put_object, read_verified_object
 
 EXTRACTION_SCHEME = 19
@@ -143,8 +143,7 @@ def _view_from_geometry(tree_hash: str, descriptor: dict, *, producer: dict | No
 def lookup(entry: dict, producer: dict) -> dict | None:
     from cadgen._internal.component_package import canonical_json_bytes as canonical_bytes
     expected = _expected(entry, producer)
-    stamped = read_entry("surface", expected["surfaceInput"])
-    actual = strip_last_used(stamped) if stamped else None
+    actual = read_entry("surface", expected["surfaceInput"])
     if not actual or set(actual) != {*expected, "object"}:
         return None
     try:
@@ -153,7 +152,6 @@ def lookup(entry: dict, producer: dict) -> dict | None:
         validate_surface_bytes(read_verified_object(actual["object"]))
     except (OSError, ValueError, TypeError, KeyError, struct.error):
         return None
-    touch_entry("surface", expected["surfaceInput"], stamped)
     return actual
 
 
@@ -217,8 +215,6 @@ def validate_surface_record(value: Any, *, surface_input_key: str | None = None)
     from cadgen.store.objects import is_object_hash
 
     fields = {"schemaVersion", "surfaceInput", "component", "brep", "codec", "faceColors", "producer", "object"}
-    if type(value) is dict:
-        value = strip_last_used(value)
     if type(value) is not dict or set(value) != fields or value["schemaVersion"] != SURFACE_SCHEMA:
         raise ValueError("invalid surface index")
     if any(not is_object_hash(value[field]) for field in ("surfaceInput", "component", "brep", "object")):

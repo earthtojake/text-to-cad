@@ -821,7 +821,7 @@ def prepare_published_component(shape: Any, *, face_colors: object = None) -> di
     prototype, an eager-only or alternate-codec entry, a missing object) takes
     the ordinary path, and a forced build never calls this.
     """
-    from cadgen.store.index import LAST_USED, read_entry, touch_entry
+    from cadgen.store.index import read_entry
     from cadgen.store.objects import has_object
 
     wrapped = getattr(shape, "wrapped", shape)
@@ -834,12 +834,9 @@ def prepare_published_component(shape: Any, *, face_colors: object = None) -> di
         content = geometry_component_hash("bintools-v4", payload, colors)
         entry = {"kind": "native", "codec": "bintools-v4", "brep": digest,
                  "faceColors": colors, "contentHash": content}
-        cid = _component_id(content)
-        indexed = read_entry("component", cid) or {}
-        published = {key: value for key, value in indexed.items() if key not in ("schemaVersion", "color", LAST_USED)}
+        indexed = read_entry("component", _component_id(content)) or {}
+        published = {key: value for key, value in indexed.items() if key not in ("schemaVersion", "color")}
         if published and canonical_json_bytes(published) == canonical_json_bytes(entry):
-            # A component-entry hit: the entry stays warm for eviction's LRU order.
-            touch_entry("component", cid, indexed)
             prototype = _build123d_shape_from_topods(wrapped)
             prototype.cad_face_ordinal_colors = dict(colors)
             return {"entry": entry, "payload": payload, "shape": prototype, "surface": None}

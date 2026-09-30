@@ -670,61 +670,6 @@ def static_closure(script: Path, *, _syntax: _ImportSyntaxMemo | None = None, _s
     return walk.run()
 
 
-def _uses_data_reader(syntax: ModuleSyntax) -> bool:
-    """Whether this module can use cadgen's runtime-discovered input readers.
-
-    Neither a cold build nor an earlier record tells us every data path the
-    next execution will choose. Follow renamed imports and module attributes;
-    passing a containing module around also makes those readers reachable.
-    This only limits coalescing, not freshness tracking or model execution.
-    """
-    readers = {
-        ("cadgen", "declare_input"), ("cadgen", "inputs", "declare_input"),
-        ("cadgen", "read_step"), ("cadgen", "step_scene", "read_step"),
-        ("cadgen", "read_scene"), ("cadgen", "step_scene", "read_scene"),
-    }
-    for statement in syntax.statements:
-        for name, alias in statement.aliases:
-            if alias.level:
-                continue  # first-party relative imports are walked separately
-            prefix = tuple(alias.module.split(".")) + ((alias.attr,) if alias.attr else ())
-            if prefix in readers:
-                return True
-            if not any(reader[:len(prefix)] == prefix for reader in readers):
-                continue
-            for use in syntax.statements:
-                if name in use.reads or name in use.stores:
-                    return True  # the containing module escapes
-                for base, chain in use.chains:
-                    qualified = prefix + chain
-                    if base == name and any(
-                        qualified[:len(reader)] == reader or reader[:len(qualified)] == qualified
-                        for reader in readers
-                    ):
-                        return True
-    return False
-
-
-def coalescing_sources(script: Path) -> dict[str, str] | None:
-    """Fresh static source identity, including model/result and constant edges.
-
-    An in-flight build has no result yet: unlike stored freshness, its key
-    cannot stop at model boundaries or rely on a previous record's file list.
-    Dynamic/unreadable modules and data readers decline coalescing rather than
-    guessing which files they will read. Whole-file hashes deliberately over-approximate
-    reach here; a missed join is cheaper than returning an older build.
-    """
-    walk = _Walk(Path(script).resolve(), syntax=_ImportSyntaxMemo(), sources=None,
-                 descend=True, model_boundaries=False)
-    walk.run()
-    sources = {}
-    for path, state in walk.files.items():
-        if state.syntax is None or state.syntax.dynamic is not None or _uses_data_reader(state.syntax):
-            return None
-        sources[str(path)] = state.syntax.whole_hash
-    return sources
-
-
 # --- hash at execution ----------------------------------------------------------
 
 

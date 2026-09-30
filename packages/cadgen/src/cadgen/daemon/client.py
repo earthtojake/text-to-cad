@@ -9,7 +9,6 @@ report transport failures without replaying the work.
 from __future__ import annotations
 
 import contextlib
-import hashlib
 import json
 import os
 import subprocess
@@ -70,8 +69,6 @@ FORWARDED_ENV_VARS = (
     "PYTHONPATH",
     "CADGEN_FFMPEG",
     "CADGEN_MEMO_CACHE",
-    # The store cap the daemon evicts this client's store to when idle.
-    "CADGEN_STORE_MAX",
 )
 
 # The client's own ffmpeg, looked up once per process. Resolved HERE rather than
@@ -186,7 +183,6 @@ def _request_payload(
     closure: str | None = None,
     coalesce: bool = False,
     dependency: bool = False,
-    relay_output: bool = False,
 ) -> dict:
     from cadgen.store.paths import store_root as default_store_root
 
@@ -206,61 +202,16 @@ def _request_payload(
         # The top-level request this job belongs to; child-build events carry it
         # so the root's build tree can place them.
         "root_id": str(root_id) if root_id else None,
-        # In-flight coalescing (cadgen.daemon.broker): a request carries its source's
-        # closure hash and may join a job already building the same thing -- a child
-        # submit and a top-level `python model.py` alike. The daemon decides joining
-        # (a forced request never joins) and folds the run's flags into the key.
+        # In-flight coalescing (cadgen.daemon.broker): a child submit carries its source's
+        # closure hash and may join a job already building the same thing. A top-level
+        # request never does -- the model the user asked for runs.
         "closure": str(closure) if closure else None,
         "coalesce": bool(coalesce and closure),
-        # A top-level joiner wants the producer's output streamed as its own (the
-        # tree, the chatter, the result line); a child submit wants only the
-        # source result.
-        "relay_output": bool(relay_output and coalesce and closure),
         # A nested request may consume the reserved dependency-progress
         # headroom. This is independent of whether it can coalesce.
         "dependency": bool(dependency),
         "token": compute_version_token(),
     }
-
-
-def source_closure(tool: str, argv: list[str], cwd: str | None) -> str | None:
-    """What a top-level request's in-flight coalescing keys on, or None.
-
-    A ``run`` (``python model.py``) keys on the model's closure hash as it is
-    now -- ``cadgen.store.gate.closure_hash``, the value a parent's child call
-    submits, so a terminal and a parent needing one stale model are one job. A
-    ``step-compile`` keys on the document's bytes, as the pool's own compile
-    submit does. Anything else, or a subject that cannot be read, is None:
-    coalescing is an optimization, and a build never fails for its sake.
-    """
-    items = [str(arg) for arg in argv]
-    base = str(cwd) if cwd else os.getcwd()
-    try:
-        if tool == "run":
-            for text in items:
-                if text.startswith("-") or not text.endswith(".py"):
-                    continue
-                script = os.path.realpath(os.path.join(base, text))
-                function = None
-                if "--model" in items:
-                    at = items.index("--model")
-                    if at + 1 < len(items):
-                        function = items[at + 1]
-                from cadgen.store.gate import closure_hash
-
-                return closure_hash(f"{script}::{function}" if function else script)
-        elif tool == "step-compile":
-            for text in items:
-                if text.startswith("-") or not text.lower().endswith((".step", ".stp")):
-                    continue
-                digest = hashlib.sha256()
-                with open(os.path.join(base, text), "rb") as handle:
-                    for chunk in iter(lambda: handle.read(1 << 20), b""):
-                        digest.update(chunk)
-                return digest.hexdigest()
-    except (OSError, ValueError):
-        return None
-    return None
 
 
 def run_via_daemon(
@@ -283,13 +234,7 @@ def run_via_daemon(
         return None
     from cadgen.daemon.executors import emit_event
 
-    # The model's closure, so an identical build already in flight -- another
-    # terminal's, another agent's, a parent's child submit -- is joined rather
-    # than run again, with its output streamed here as this run's own.
-    payload = _request_payload(
-        tool, argv, cwd, prog, root_id=os.environ.get("CADGEN_ROOT_ID"),
-        closure=source_closure(tool, argv, cwd), coalesce=True, relay_output=True,
-    )
+    payload = _request_payload(tool, argv, cwd, prog, root_id=os.environ.get("CADGEN_ROOT_ID"))
     return _run_with_retry(payload, on_event=emit_event)
 
 

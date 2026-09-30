@@ -278,49 +278,6 @@ class Coalescing(PrivateBrokerFixture):
         mine[1].close()  # the claimer vanished without reporting
         self.assertEqual(broker.wait_attached(theirs[1]), 1)
 
-    def test_a_forced_claim_never_joins_but_registers_when_alone(self):
-        registry = self.private.broker
-        owned, entry = registry.claim_entry("/m/leaf.py", "sha-f", join=False)
-        self.assertTrue(owned)
-        self.assertIsNotNone(entry, "a forced build with nothing in flight registers")
-        joined, same = registry.claim_entry("/m/leaf.py", "sha-f")
-        self.assertFalse(joined)
-        self.assertIs(same, entry, "an unforced request joins the forced build")
-        forced_again, none = registry.claim_entry("/m/leaf.py", "sha-f", join=False)
-        self.assertTrue(forced_again)
-        self.assertIsNone(none, "a forced request joined work in flight")
-        registry.detach(same)
-        registry.finish_entry(entry, 0)
-
-    def test_a_joiner_replays_the_producers_frames_then_follows_live(self):
-        registry = self.private.broker
-        _owned, entry = registry.claim_entry("/m/leaf.py", "sha-r")
-        registry.publish_frame(entry, {"stream": "stderr", "data": "one\n"})
-        registry.publish_frame(entry, {"event": {"model": "/m/leaf.py", "state": "building"}})
-        frames, cursor, done, _code = registry.wait_frames(entry, 0)
-        self.assertEqual([f.get("data", "event") for f in frames], ["one\n", "event"])
-        self.assertEqual((cursor, done), (2, False))
-        frames, cursor, done, _code = registry.wait_frames(entry, cursor, timeout=0.01)
-        self.assertEqual((frames, cursor, done), ([], 2, False))
-        registry.publish_frame(entry, {"stream": "stdout", "data": "two\n"})
-        frames, cursor, done, _code = registry.wait_frames(entry, cursor)
-        self.assertEqual([f["data"] for f in frames], ["two\n"])
-        registry.finish_entry(entry, 3)
-        frames, cursor, done, code = registry.wait_frames(entry, cursor)
-        self.assertEqual((frames, done, code), ([], True, 3))
-
-    def test_the_frame_log_is_bounded_and_a_late_cursor_skips_to_its_head(self):
-        registry = self.private.broker
-        _owned, entry = registry.claim_entry("/m/leaf.py", "sha-b")
-        with mock.patch.object(broker, "FRAME_REPLAY_LIMIT", 3):
-            _owned, entry = registry.claim_entry("/m/leaf.py", "sha-b2")
-        for i in range(5):
-            registry.publish_frame(entry, {"stream": "stderr", "data": f"{i}\n"})
-        frames, cursor, _done, _code = registry.wait_frames(entry, 0)
-        self.assertEqual([f["data"] for f in frames], ["2\n", "3\n", "4\n"], "the newest frames survive")
-        self.assertEqual(cursor, 5)
-        registry.finish_entry(entry, 0)
-
 
 if __name__ == "__main__":
     unittest.main()

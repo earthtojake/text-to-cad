@@ -104,13 +104,9 @@ identity, captured source digests, globals/defaults/closures, scheme and runtime
 versions. The result contains canonical BREP and its attribute recipe, with no
 source path in the object. Hits verify the required disk object and reconstruct
 private geometry; missing/corrupt data runs the factory and repairs the entry.
-There is no native RAM cache or second storage framework. Process eviction,
-store deletion and size-capped store eviction all remain recoverable: the disk
-tier is dropped least recently used first when the store is over
-`CADGEN_STORE_MAX` (a hit stamps its entry's last use, at most once an hour),
-and whatever went is a miss that runs the factory — a hit verifies its object
-and is never wrong. Source dependencies remain in the owning model's closure
-even when a memoized body is skipped.
+There is no native RAM cache or second storage framework. Process eviction and
+store deletion remain recoverable. Source dependencies remain in the owning
+model's closure even when a memoized body is skipped.
 
 `CADGEN_MEMO_CACHE=0` disables result reuse for diagnosis. It does not force
 a current model to rebuild; use the model's normal `--force` flag as needed.

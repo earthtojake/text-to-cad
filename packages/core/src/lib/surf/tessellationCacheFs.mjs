@@ -88,43 +88,13 @@ function readBoundedJson(target) {
   }
 }
 
-// Every evictable entry carries a `lastUsed` stamp (seconds since the epoch)
-// that size-capped eviction orders by. It is bookkeeping on the entry, never
-// part of the validated row, and a hit refreshes it at most once an hour.
-export const LAST_USED_FIELD = "lastUsed";
-export const TOUCH_INTERVAL_SECONDS = 3600;
-
-function splitLastUsed(value) {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return { raw: value, lastUsed: 0 };
-  const { [LAST_USED_FIELD]: stamp, ...raw } = value;
-  return { raw, lastUsed: Number.isFinite(stamp) && stamp > 0 ? Number(stamp) : 0 };
-}
-
-function touchEntry(target, row, lastUsed, now = Date.now() / 1000) {
-  let used = lastUsed;
-  try {
-    used = Math.max(used, fs.statSync(target).mtimeMs / 1000);
-  } catch { /* the stamp alone decides */ }
-  if (now - used < TOUCH_INTERVAL_SECONDS) return false;
-  try {
-    writeAtomic(target, JSON.stringify({ ...row, [LAST_USED_FIELD]: now }));
-    return true;
-  } catch {
-    return false; // a store that cannot be written still serves the hit
-  }
-}
-
 export function probeCachedTessellation(key, env = process.env) {
   if (!tessellationCacheEnabled(env)) return null;
   try {
-    const target = indexPath(key, env);
-    const { raw, lastUsed } = splitLastUsed(readBoundedJson(target));
-    const row = validateTessellationProbeRow(raw, { tessellationInput: key });
+    const row = validateTessellationProbeRow(readBoundedJson(indexPath(key, env)), { tessellationInput: key });
     if (!row) return null;
     const stat = fs.statSync(objectPath(row.object, env));
-    if (!stat.isFile() || stat.size !== row.byteLength) return null;
-    touchEntry(target, row, lastUsed);
-    return row;
+    return stat.isFile() && stat.size === row.byteLength ? row : null;
   } catch {
     return null;
   }
@@ -207,7 +177,7 @@ export function writeCachedTessellationBytes(key, bytes, env = process.env) {
     throw new TessellationMeshConflictError();
   }
   putObject(row, payload, env);
-  writeAtomic(indexPath(key, env), JSON.stringify({ ...row, [LAST_USED_FIELD]: Date.now() / 1000 }));
+  writeAtomic(indexPath(key, env), JSON.stringify(row));
   return row;
 }
 

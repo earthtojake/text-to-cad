@@ -94,8 +94,7 @@ invalidate a consumer's private geometry.
 `self_intersections`) store their verdicts as inline `index/op` values, keyed
 by the check's name and version, the checked shape's location-stripped BREP
 digest, its location matrix and its orientation. `is_valid` and `is_sound`
-store a boolean; build123d's `Shape.is_valid`, which the op memo patches,
-reads and writes the same `is_valid` entry. A diagnostic's verdict holds
+store a boolean. A diagnostic's verdict holds
 issue codes and each affected entity's `TopExp.MapShapes` index and
 orientation, never native geometry; a hit rebuilds the owned entities from a
 private copy of the caller's shape. A failed or inconclusive check stores
@@ -112,11 +111,7 @@ and drawing jobs consume only immutable artifact inputs. `index/drawing` is a
 2D document's flattened render payload: its key hashes the extraction scheme
 (payload shape × the drawing library's release) together with the document's
 content hash, so the same bytes are never flattened twice and an upgrade lands
-on a new key instead of invalidating an old one in place. Of these, `index/op`,
-`index/component`, `index/surface` and `index/mesh` are the four **evictable
-tiers** (§8): each entry carries a `lastUsed` stamp that size-capped eviction
-orders by, and a reader that validates an entry's field set strips the stamp
-first; `index/drawing` carries no stamp and the cap never drops it. `index/document` is the document lookup: `sha256(file bytes)` → the
+on a new key instead of invalidating an old one in place. `index/document` is the document lookup: `sha256(file bytes)` → the
 tree describing those bytes (plus a mesh ledger keyed by format × tolerances
 × pose × appearance — the bare mesh doors read and write it, and a script run notes its
 declared meshes there too, so the two front doors never redo each other's work).
@@ -249,9 +244,7 @@ identity. A real one (`link_arm`: a bar plus two placements of a pin model):
   RAM/disk reuse, a top-level return, and a child call, independent of STEP
   declarations or an attached UI. OCCT's STEP translation can change geometry,
   so a saved document always has a separate tree read back from its bytes
-  (`cadgen.store.build.build_tree_through_step`) — and that read-back is
-  verified against the result, never trusted (§5, read-back verification):
-  a component that comes back as different geometry fails the build. `occurrences`
+  (`cadgen.store.build.build_tree_through_step`). `occurrences`
   place components; `links` place children's
   trees. Two placements of one child are two links to one tree. Transforms
   are 16 numbers, row-major, translation in the fourth column, in the
@@ -604,34 +597,6 @@ Each with the failure it prevents.
   read-back use a private sibling staging directory outside the store.
   Prevents: a record pointing at a tree that does not exist yet, or a `.step`
   whose sha the record has not seen.
-- **Read-back verification.** A written STEP is verified, never trusted.
-  Before anything is published under the document's digest, every distinct
-  component the re-read carries back (`build_tree_through_step`, one check
-  per cid, including pinned children with no saved STEP of their own) is
-  compared with the shape the model returned: solid count, volume
-  (within 1e-3 relative) and the control-hull bounds (within 0.1 mm + 2 % of
-  the extent, a coarse backstop for volume-neutral displacement), plus
-  BRepCheck validity — asked of the read-back first, and of the source only
-  when the read-back fails, so a solid the model itself left invalid is never
-  blamed on the writer. The limits come from a survey of 473 real components:
-  an honest round trip reproduces volume to a worst 1.0e-4 relative and hull
-  bounds to 4e-3 of the extent, while real damage starts at 7 % of the volume.
-  Any discrepancy is a build failure naming the file, occurrence, label,
-  component and the numbers; the staged document is discarded and no record,
-  output mapping or document index entry is written. The check reuses the
-  parsed read-back. Linked components retain their exact pinned BREP bytes
-  before publication callbacks and decode one distinct component at a time
-  for comparison, without retaining another native assembly. Verification
-  costs a small fraction of the re-read itself (under a
-  second per heavy casting: the volume integral dominates, BRepCheck runs in
-  parallel). Prevents: OCCT's translation silently replacing a solid with
-  something else — a sphere-boolean cap read back as its 0.35 mm³ complement,
-  a ring read back as a 988 mm spike, balls fused into a race read back
-  BRepCheck-valid with 22 % of their volume gone, a swept bore leaving a face
-  with `BadOrientationOfSubshape` — and that garbage being stored, served by
-  every door, and composed into every parent at exit 0 (law 10). Model
-  authors no longer need to round-trip their own solids through STEP to find
-  out.
 - **Canonical STEP bytes.** Before a written STEP is published, the writer
   canonicalizes what OCCT emitted: NAUO instance ids, presentation-style
   order, and the sign of zero — `-0.` is rewritten `0.`, because which IEEE
@@ -827,23 +792,15 @@ even when they also contain a private native wrapper.
 
 ## 7. Concurrency
 
-No persistent build locks. CPU admission and identical-build coalescing may
+No persistent build locks. CPU admission and identical child coalescing may
 wait; memory admission waits on builds in flight and fails only when nothing
 running could make room (§9). Explicit builds
 are not cancelled merely because a newer editing request exists.
 
-- **Same model twice, same source.** One build runs. A request for a model
-  whose identical build — same store, same closure hash, same run flags — is
-  already in flight joins it (§9, in-flight coalescing) and receives its
-  output, result and exit; two terminals running `python heads.py` at once
-  are one 25-minute job, not two. The join is process state in the daemon,
-  never a lock on disk. A forced request does not join (below).
-- **Same model twice, different source.** Both builds run. Each publishes
-  objects (idempotent) and then consults the publish rule: the one whose
-  closure matches the sources as they are now wins the record; the other's
-  result is left as unreferenced objects for GC. A rejected explicit save
-  reports failure. The same holds for two identical requests that could not
-  be brokered together (no daemon, or a `--force` on either side).
+- **Same model twice.** Both builds run. Each publishes objects (idempotent)
+  and then consults the publish rule: the one whose closure matches the
+  sources as they are now wins the record; the other's result is left as
+  unreferenced objects for GC. A rejected explicit save reports failure.
 - **Edit a child while its parent builds.** The parent already pinned the
   child's tree when it called it; it materializes that pin and publishes a
   record whose pin no longer matches the child's current tree. The parent is
@@ -868,10 +825,8 @@ are not cancelled merely because a newer editing request exists.
   status`; the CAD Viewer matches jobs to the documents it shows by output
   path — a CLI build, a parent's child build and its own compile read alike —
   and nothing reads any of it to decide freshness. With `CADGEN_DAEMON=0`
-  there is no ledger and no shared broker: a transient build's private broker
-  coalesces the children of that one build, and top-level builds in separate
-  processes are unbrokered — both run, safe by the two invariants above,
-  wasteful, and a debugging mode.
+  there is no ledger, and concurrent builds are unbrokered
+  — safe by the two invariants above, wasteful, and a debugging mode.
 
 Before a generated body runs, the build captures its target STEP and sidecar
 digests (absence counts too). It prepares the result once, exports and reads
@@ -897,61 +852,17 @@ or source to recover an artifact.
 
 ## 8. GC
 
-`cadgen store gc [--dry-run] [--grace-hours H] [--max-size [SIZE]]` — two
-phases. The second is the only thing that deletes an object.
-
-**Phase 1, eviction (only with a cap).** The store has a size cap:
-`CADGEN_STORE_MAX`, default 20 GB (`0` disables it); `cadgen store info` shows
-the size against it. Over the cap, eviction drops entries of the four
-**evictable tiers** — `index/op` (shapes, cached values, cached failures),
-`index/mesh`, `index/surface` and `index/component` — least recently used
-first, until the projected size fits under the low watermark (80% of the
-cap). Every evictable entry carries `lastUsed`, the wall-clock second it was
-written or last hit; a hit refreshes it at most once an hour per entry, so a
-warm build that hits an entry ten thousand times rewrites it once, and
-filesystem atime is never consulted. An entry without a stamp is ordered by
-its file's mtime, the moment it was written. Sizing is by the deduplicated
-reachable set, never by summed entry sizes: objects are shared between tiers
-(an op result can be the very component a current document pins), so dropping
-an entry frees an object only when nothing protected or leased still reaches
-it.
-
-Never evicted, the **protected tiers**: records and their result and document
-trees, current-schema document indexes, output entries, and every object they
-reach. A record has exactly one tree — there is no revision history in the
-record model, so a model's earlier results are already the unreferenced
-objects phase 2 sweeps. **Leased**: an entry used within the grace window plus
-the touch throttle (by default, anything hit in the last hour, however
-throttled its stamp), and, when a daemon answers, anything used since the
-oldest job it is running against this store started. The daemon knows every
-job (§9); the grace window is the backstop when none answers.
-
-**Phase 2, mark and sweep.** Reachable = every object referenced
-(transitively, through links) from a record's result and document trees or a
-current-schema document index, plus the objects the remaining
-component/surface/op/mesh entries and every drawing entry point at, plus
-anything modified within the
+`cadgen store gc [--dry-run] [--grace-hours H]` — mark and sweep. Reachable =
+every object referenced (transitively, through links) from a record's result
+and document trees or a current-schema document index, plus the
+objects component/op/mesh entries point at, plus anything modified within the
 grace period (default 1 h — the window in which a build may still hold a pin
 to a child's previous tree). A saved document retains its geometry even after
 model/output records are forgotten. Its mesh ledger records hashes of external
-output files; those hashes do not root store objects. No age sweeps; the one
-per-tier rule is which tiers phase 1 may touch.
-
-**Safety.** An entry goes before its objects, and objects go only in phase 2,
-only when nothing reaches them — single unlinks, no protocol. Every reader
-treats a missing entry or object as a miss: the op runs, the mesh is cut, the
-surface is derived, the component is re-extracted — never an error, never a
-different answer — so an interruption at any point leaves at worst orphaned
-objects for the next sweep.
-
-**When it runs.** By hand: `cadgen store gc --max-size [SIZE]` (a bare
-`--max-size` takes the configured cap; `--dry-run` reports what would go and
-deletes nothing). By the daemon: after 30 s idle, at most every 10 min per
-store it has served, only while that store is over the cap the requesting
-client had in force (forwarded with its environment), and never mid-build —
-it starts only with no job in flight and stops between entries the moment one
-arrives (§9). Do not sweep by hand with `--grace-hours 0` while anything is
-building. Without a daemon (`CADGEN_DAEMON=0`) nothing runs GC automatically.
+output files; those hashes do not root store objects. No age sweeps, no per-tier rules. GC does not
+consult the daemon: the grace period is the whole protection for a build in
+flight, so do not sweep with `--grace-hours 0` while anything is building.
+Nothing runs GC automatically.
 
 ## 9. The daemon
 
@@ -994,8 +905,10 @@ client, never enter the job ledger and never count as progress. A worker that
 sends no frame for 120 s is killed as hung, unless its CPU clock, read from
 outside the process, advanced meanwhile: a native call that holds the GIL (a
 long OCCT boolean) starves the heartbeat thread but is computing. A stopped
-process or a deadlock sends nothing and accrues no CPU. A body's length is
-therefore unbounded; the heartbeat stops before the job's exit frame, so none
+process, or a deadlock that holds the GIL, sends nothing and accrues no CPU. A
+hang that releases the GIL (a network read with no timeout, a Python-level
+deadlock) keeps beating and is not killed. A body's length is therefore
+unbounded; the heartbeat stops before the job's exit frame, so none
 reaches the next job.
 
 **One daemon per address, by lock.** The daemon takes a process-lifetime
@@ -1058,58 +971,16 @@ CPU scheduling and reuse remain independent of memory admission:
    a job: it runs on a spare, holds a slot through its read and emit, coalesces
    on the document's bytes and shows in the tree. The tree shows `queued` when a
    slot did not come at once.
-2. **In-flight coalescing.** Every source request carries a current-input hash
-   (`cadgen.store.gate.closure_hash`), computed identically for child submits
-   and top-level `python model.py`. It scans current static imports even before
-   the first record, crossing child-model and constant boundaries and hashing
-   whole semantic source files. Existing records add declared data inputs,
-   runtime children and current child pins. This intentionally covers more
-   than the sliced freshness hash: an edited helper, child, constant or newly
-   imported file must not join a producer that consumed its old revision.
-   Dynamic or unreadable source declines coalescing. Source that can use
-   `declare_input`, `read_step` or `read_scene` also runs independently: its
-   data paths are discovered during execution, and an earlier record cannot
-   certify which paths the next run will choose. Renamed imports, reader
-   modules and first-party helper wrappers follow the same rule, even with
-   a prior record. Static geometry-only models can still join cold builds.
-   Compile doors, including
-   the CAD Viewer's, use the document's bytes. A request for
-   `(store, model, closure)` matching a job already in flight attaches to that
-   job instead of starting another. In flight only, identical source only,
-   never a lookup into the past. Two parents needing one stale child build it
-   once; two terminals, two agents, or a terminal and a parent needing one
-   stale model build it once. The run's own flags are part of the key
-   (`--json`, `--verbose`, a tolerance override): only requests that would print
-   and write the same things are one job, and a bare `python model.py` keys
-   exactly as a child submit does.
-   A joined top-level request receives the producer's output as its own — the
-   frames it missed are replayed from a bounded log (the newest 4096), then it
-   follows live, its build tree drawn from the producer's events — and exits
-   with the producer's exit, so a failure reaches every joiner. The producer's
-   worker outlives the requester that started it while any joiner still waits
-   (the last disconnect retires it, as for a child), so an agent whose terminal
-   died does not take the other agent's build with it.
-   **`--force` never joins** — the closure is the only thing coalescing can
-   compare, and `--force` exists for what the closure cannot see (an input a
-   model reads without `declare_input`, an environment it depends on); a forced
-   request that joined a build started before the user's change would return
-   that build's result at exit 0 — but it registers when nothing identical is
-   in flight, so unforced requests may join a forced build and wait for its
-   rewrite rather than answer "current" from outputs about to be replaced.
+2. **In-flight coalescing.** A child submit carries its source's closure hash;
+   a submit for `(store, model, closure)` matching a job already in flight attaches to
+   that job instead of starting another. In flight only, identical source only,
+   never a lookup into the past — and never the model a top-level request named
+   (a second `python a.py` still runs, on an extra). Two parents needing one
+   stale child build it once.
 3. **Idle unbind — 10 minutes** (`CADGEN_DAEMON_IDLE_UNBIND`). A bound worker
    idle that long returns to the spare set (spares beyond K exit); its model's
    next build rebinds a spare — no import repaid — with a cold RAM op-memo tier.
    Purely RAM: idle workers hold no slot and never block a new model.
-4. **Idle eviction** (`cadgen.daemon.housekeeping`). The supervisor's one
-   housekeeping job: with no request thread alive and no slot held for 30 s,
-   at most every 10 min per store it has served, it sizes that store and, over
-   the cap the requesting client had in force (`CADGEN_STORE_MAX` travels with
-   the forwarded environment), runs §8 against that root by name — a
-   thread-local root, never the process environment its workers inherit. It
-   polls for a job between entries and between objects and stops at the first
-   one. Stdlib and the store modules only; the supervisor still never imports
-   the kernel. The daemon holds no store state for this: which roots it has
-   seen and when it last looked.
 
 **Memory admission.** The daemon sums worker RSS including extraction
 descendants, pending spawn reservations, and retiring workers until they exit.
@@ -1407,10 +1278,8 @@ Explicit model saves still obey every child/output/publication requirement.
   isolated and returns a newly parsed flattened view to every caller.
   Components carry `brep`, `codec` and `faceColors`; display SURF resolves
   separately through `store.surfaces` and `index/surface`.
-- `cadgen store info` sizes the store against its cap and names directories
-  under the root that are not the store (an older layout's leftovers, safe to
-  delete). `cadgen store gc --dry-run` lists what a sweep would remove; with
-  `--max-size`, what eviction would drop first (§8).
+- `cadgen store info` sizes the store. `cadgen store gc --dry-run` lists what
+  a sweep would remove.
 - **Resets, smallest first.** `python model.py --force` rebuilds one model
   now. `cadgen store forget <model.py>` drops that model's record (the next
   run rebuilds it; children untouched, parents see the moved pin then);
@@ -1440,11 +1309,9 @@ Explicit model saves still obey every child/output/publication requirement.
   `index/document` → objects.
 - Make a reader refuse, or a door rebuild from source: a missing tree is a
   compile job from the file's bytes; "behind its script" is `store why`'s.
-- Evict a protected tier, run store eviction mid-build, or use process/display
-  eviction as a reason to mutate exact geometry. The daemon's idle sweep (§8)
-  drops recomputable entries only, when nothing is in flight; disposable
-  memory budgets and worker reclamation follow §9 and never determine
-  saved-artifact freshness.
+- Run automatic persistent-store GC or use process/display eviction as a
+  reason to mutate exact geometry. Disposable memory budgets and worker
+  reclamation follow §9 and never determine saved-artifact freshness.
 - Let a decorator argument change the geometry a model produces: arguments
   place files, tune how they are written, and declare kinematics; the tree
   is the return value as returned (README law 16).

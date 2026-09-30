@@ -91,14 +91,11 @@ that information is in the wrong place.
 
 **The store is what the sources imply; the sidecar is what the author meant.**
 
-The store is size-capped (`CADGEN_STORE_MAX`, default 20 GB): over the cap,
-the daemon evicts least recently used recomputable entries — op-memo, mesh,
-surface, component — when idle, never mid-build, and never a record or a
-document index (`STORE.md` §8). `cadgen store gc` is the only sweeper of
-objects, and every object is immutable and idempotently written, so deletion
-never needs coordination — a racing reader re-misses and rebuilds. Store
-correctness needs no lock protocol: atomic writes, pins and the publish rule
-(`STORE.md` §5, §7) decide concurrent outcomes. Saved-file readers never wait for a source model
+There is no automatic GC: `cadgen store gc` is the only sweeper, and every
+object is immutable and idempotently written, so deletion never needs
+coordination — a racing reader re-misses and rebuilds. Store correctness needs
+no lock protocol: atomic writes, pins and the publish rule (`STORE.md` §5, §7)
+decide concurrent outcomes. Saved-file readers never wait for a source model
 to finish; missing derived artifacts are resolved through the build pool.
 
 ### 3. One sidecar per artifact, and it belongs to that artifact alone
@@ -159,9 +156,8 @@ revision-scoped occurrence/selector views with caller-owned world geometry.
 selection, units, thresholds, exclusions and verdicts belong to the caller's
 script. The kernel checks (`is_valid`, `is_sound`, `topology_errors`,
 `self_intersections`) are pure functions of the shape, so their verdicts are
-stored and reused for an identical shape — through the op memo's value tier,
-which build123d's own `Shape.is_valid` answers from too ([`STORE.md`](STORE.md)
-§2, [`MEMO.md`](MEMO.md)). The inspect
+stored and reused for an identical shape through the op memo's value tier
+([`STORE.md`](STORE.md) §2, [`MEMO.md`](MEMO.md)). The inspect
 CLI and `step.inspect` are removed, with an immediate migration error.
 The contracts live in [`step_scene.py`](src/cadgen/step_scene.py) and
 [`geometry.py`](src/cadgen/geometry.py). They import no kernel at namespace
@@ -215,13 +211,6 @@ teaching errors, never silently ignored.
 The cardinal sin is plausible-wrong output at exit 0. No silent fallbacks,
 no globs, no guessing; a failed render leaves NO file at the requested
 path.
-
-A written artifact is verified, never trusted: the STEP a build writes is
-read back and each component compared with the shape the model returned
-(solid count, volume, bounds, BRepCheck validity where the source was valid),
-and a discrepancy fails the build with the label and the numbers
-([`STORE.md`](STORE.md) §5, read-back verification). OCCT's translator can
-turn a valid solid into its complement or a spike; that is never stored.
 
 ### 11–14. Runtime laws (shared with the bundled JavaScript runtime)
 

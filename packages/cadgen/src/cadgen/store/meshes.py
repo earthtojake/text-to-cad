@@ -17,7 +17,7 @@ import re
 import struct
 from typing import Any
 
-from cadgen.store.index import entry_path, strip_last_used, touch_entry, write_entry
+from cadgen.store.index import entry_path, write_entry
 from cadgen.store.objects import object_path, put_object
 
 TESS_VERSION = 4
@@ -257,15 +257,11 @@ def probe(key: str) -> dict | None:
             raw = stream.read(MAX_INDEX_BYTES + 1)
         if len(raw) > MAX_INDEX_BYTES:
             return None
-        stamped = _read_json(raw)
-        record = strip_last_used(stamped) if type(stamped) is dict else stamped
+        record = _read_json(raw)
         if not _valid_record(key, record):
             return None
         if object_path(record["object"]).stat().st_size != record["byteLength"]:
             return None
-        # A hit. The stamp rides the entry, never the row a consumer validates:
-        # the browser client checks the exact field set of every probe row.
-        touch_entry("mesh", key, stamped)
         return record
     except (OSError, ValueError, TypeError, KeyError):
         return None

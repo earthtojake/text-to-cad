@@ -630,7 +630,6 @@ class OpMemoSubShapeIdentityTest(unittest.TestCase):
             self.assertFalse(getattr(getattr(Shape, attr), "__op_memo__", False), attr)
         self.assertFalse(getattr(Mixin3D.fillet, "__op_memo__", False))
         self.assertFalse(getattr(Solid.extrude.__func__, "__op_memo__", False))
-        self.assertIs(type(Shape.__dict__["is_valid"]), property)
         # Pointer identity again: a byte-identical twin on a new TShape is a
         # different edge to build123d, and the same one to the shims.
         from build123d.topology import Edge
@@ -641,7 +640,6 @@ class OpMemoSubShapeIdentityTest(unittest.TestCase):
         self.assertNotEqual(held, twin)
         self.assertTrue(op_memo.install())
         self.assertTrue(getattr(Shape.is_same, "__op_memo__", False))
-        self.assertTrue(getattr(Shape.__dict__["is_valid"], "__op_memo__", False))
         self.assertTrue(held.is_same(twin))
         self.assertEqual(held, twin)
         self.assertEqual(hash(held), hash(twin))

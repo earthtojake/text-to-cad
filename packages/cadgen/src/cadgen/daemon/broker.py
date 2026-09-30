@@ -7,15 +7,9 @@
    retains its geometry and memory reservation in the worker pool) and reacquires
    — queuing again if it must — when they are done. That yield is the deadlock
    avoidance: a 1-slot pool still builds a 3-level tree.
-2. **In-flight coalescing** — a submit for ``(store, model, closure hash)`` that
-   matches a job already in flight attaches to that job instead of starting another.
-   In-flight only, identical source only. A child submit and a top-level request
-   (``python model.py``, a compile door) key alike, so two terminals building one
-   stale model, or a terminal and a parent needing it, are one job. A forced
-   request never joins (``join=False``: it asked for its body to run) but does
-   register, so unforced requests may join it. Every frame the producer streams is
-   kept in the entry's bounded log (:data:`FRAME_REPLAY_LIMIT`), so a joiner that
-   asks for the producer's output replays what it missed and follows the rest.
+2. **In-flight coalescing** — a submit for ``(model, closure hash)`` that matches a
+   job already in flight attaches to that job instead of starting another. In-flight
+   only, identical source only; never the requested model of a top-level request.
 
 One broker per executor. The daemon IS the broker for its workers (daemon-wide
 slots); a transient build's root process runs a private one for the workers it
@@ -40,7 +34,6 @@ from __future__ import annotations
 import collections
 import contextlib
 import copy
-import itertools
 import json
 import os
 import secrets
@@ -50,11 +43,6 @@ from typing import Any, Callable, Iterator
 from cadgen.daemon import transport
 
 DEFAULT_IDLE_UNBIND_SECONDS = 600.0
-
-#: How many of a producer's frames an in-flight entry keeps for late joiners. A
-#: joiner attaching after that many frames replays the newest ones and follows
-#: the rest live; the exit and the source result are never dropped.
-FRAME_REPLAY_LIMIT = 4096
 
 
 def job_limit() -> int:
@@ -122,39 +110,27 @@ class Broker:
 
     # in flight ------------------------------------------------------------------------
 
-    def claim_entry(self, model: str, closure: str, *, store_root: str = "",
-                    join: bool = True) -> tuple[bool, dict[str, Any] | None]:
+    def claim_entry(self, model: str, closure: str, *, store_root: str = "") -> tuple[bool, dict[str, Any]]:
         """Claim a unique in-flight entry.
 
         Returns ``(True, entry)`` for its producer and ``(False, entry)`` for
         an attached consumer. The entry token, rather than its reusable key,
         makes late completion unable to finish a replacement producer.
-
-        ``join=False`` is a forced request: it never attaches to work in flight,
-        and when identical work IS in flight it gets ``(True, None)`` — its own
-        build, registered nowhere, so its completion cannot finish the entry
-        that was there first. With nothing in flight it registers as any
-        producer does, and unforced requests may join it.
         """
         key = (os.path.realpath(store_root) if store_root else "", model, closure)
-        return self._claim_key(key, join=join)
+        return self._claim_key(key)
 
     def claim_artifact_entry(self, request: dict, *, store_root: str) -> tuple[bool, dict[str, Any]]:
         from cadgen.daemon.artifacts import normalize_request, request_key, store_path
 
         request = normalize_request(request)
-        owned, entry = self._claim_key(("artifact", store_path(store_root), request_key(request), ""), artifact=True)
-        assert entry is not None
-        return owned, entry
+        return self._claim_key(("artifact", store_path(store_root), request_key(request), ""), artifact=True)
 
-    def _claim_key(self, key: tuple[str, ...], *, artifact: bool = False,
-                   join: bool = True) -> tuple[bool, dict[str, Any] | None]:
+    def _claim_key(self, key: tuple[str, ...], *, artifact: bool = False) -> tuple[bool, dict[str, Any]]:
         with self._cv:
             entry = self._inflight.get(key)
             if entry is not None and not entry["done"].is_set():
                 if entry["ownerActive"] or entry["consumers"]:
-                    if not join:
-                        return True, None
                     entry["consumers"] += 1
                     self._coalesced += 1
                     return False, entry
@@ -167,38 +143,9 @@ class Broker:
                 "ownerActive": True,
                 "consumers": 0,
                 "orphaned": threading.Event(),
-                # The producer's output so far, for joiners that replay it: a
-                # bounded log plus the count of every frame ever published, so a
-                # consumer's cursor is an absolute position and a dropped head is
-                # visible as a gap rather than a repeat.
-                "frames": collections.deque(maxlen=FRAME_REPLAY_LIMIT),
-                "framesTotal": 0,
             }
             self._inflight[key] = entry
             return True, entry
-
-    def publish_frame(self, entry: dict[str, Any], frame: dict) -> None:
-        """Log one relayed frame of the producer's output for present and late joiners."""
-        if entry.get("artifact"):
-            return
-        with self._cv:
-            if entry["done"].is_set():
-                return
-            entry["frames"].append(copy.deepcopy(frame))
-            entry["framesTotal"] += 1
-            self._cv.notify_all()
-
-    def wait_frames(self, entry: dict[str, Any], cursor: int, *, timeout: float = .1) -> tuple[list[dict], int, bool, int]:
-        """Frames published at or after ``cursor`` (an absolute position), the new
-        cursor, whether the job is done, and its exit. Blocks up to ``timeout``
-        for something new. A cursor older than the log's head skips to the head."""
-        with self._cv:
-            self._cv.wait_for(lambda: entry["done"].is_set() or entry["framesTotal"] > cursor, timeout)
-            total = entry["framesTotal"]
-            head = total - len(entry["frames"])
-            start = max(cursor, head)
-            frames = [copy.deepcopy(frame) for frame in itertools.islice(entry["frames"], start - head, None)] if total > start else []
-            return frames, total, entry["done"].is_set(), int(entry["exit"] if entry["exit"] is not None else 1)
 
     def publish_result(self, entry: dict[str, Any], event: dict) -> None:
         """Retain this producer's source result for present and late consumers."""

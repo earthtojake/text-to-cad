@@ -13,17 +13,9 @@ point inside the tree's solid was outside the file's (PR #370 bug records 028-03
 The build writes the STEP, re-reads it, and publishes those DOCUMENT prototypes
 (``cadgen.store.build.build_tree_through_step``). This suite pins the
 consequence from the outside: warm ``read_step`` == cold ``read_step`` ==
-``import_step`` on the written bytes, for an assembly whose members are
-compounds and links, and for a composed vendor part whose face colours must
-survive the round trip.
-
-The lossy solid above used to build successfully and publish the
-complementary cap as its document — garbage stored at exit 0. The re-read is
-now verified against the returned shape (STORE.md §5, read-back
-verification), so that model FAILS with both volumes and leaves no document;
-``test_readback_verification`` owns that case, and the first test here pins
-that a model result stays the authored geometry even when its saved document
-is refused.
+``import_step`` on the written bytes, for the lossy solid above, for an
+assembly whose members are compounds and links, and for a composed vendor part
+whose face colours must survive the round trip.
 """
 
 from __future__ import annotations
@@ -152,11 +144,8 @@ class TreeReflectsWrittenStep(unittest.TestCase):
                 cold = read_step(step_path)
         return warm, cold, bd.import_step(str(step_path))
 
-    def test_a_lossy_solid_without_a_step_keeps_its_authored_geometry(self) -> None:
-        # No STEP declared: nothing is written through OCCT's translator, so
-        # there is no read-back to verify and the authored upper cap (42.3 mm³)
-        # is the result — the mesh a door tessellates comes from that tree.
-        self._write("rot_cap.py", _ROT_CAP.replace("import build123d as bd, step", "import build123d as bd, stl").replace("@step", "@stl"))
+    def test_a_lossy_solid_reads_the_same_warm_cold_and_through_build123d(self) -> None:
+        self._write("rot_cap.py", _ROT_CAP)
         self._run("rot_cap.py")
         from cadgen.store.materialize import materialize
         from cadgen.store.records import read_record
@@ -165,12 +154,23 @@ class TreeReflectsWrittenStep(unittest.TestCase):
             source_tree = read_record(self.project / "rot_cap.py")["tree"]
             self.assertGreater(_volumes(materialize(source_tree))[0], 40.0)
         # A fresh worker exercising disk op-memo hits must preserve that same
-        # source geometry and identity.
+        # source geometry and identity, regardless of the lossy saved geometry.
         self._run("rot_cap.py")
         with mock.patch.dict(os.environ, {"CADGEN_CACHE_DIR": str(self.store)}):
             self.assertEqual(read_record(self.project / "rot_cap.py")["tree"], source_tree)
-        self.assertTrue((self.project / "rot_cap.stl").is_file())
-        self.assertFalse((self.project / "rot_cap.step").exists())
+        warm, cold, imported = self._read_three_ways(self.project / "rot_cap.step")
+
+        self.assertEqual(_volumes(warm), _volumes(cold))
+        self.assertEqual(_volumes(warm), _volumes(imported))
+        # The document holds the LOWER cap (the OCCT round trip picks the
+        # complementary trim); the in-memory upper cap was ~42.3 mm³. Should a
+        # kernel upgrade fix the translation, the three still agree — that is
+        # the invariant; the number just pins today's loss.
+        self.assertLess(_volumes(warm)[0], 1.0)
+        probe = (0.0, 0.0, 5.0)
+        self.assertEqual(
+            warm.solids()[0].is_inside(probe), imported.solids()[0].is_inside(probe)
+        )
 
     def test_compound_members_links_and_face_colours_round_trip(self) -> None:
         import build123d as bd

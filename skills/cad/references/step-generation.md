@@ -579,8 +579,4 @@ Use one cache store for normal project work. A separate `CADGEN_CACHE_DIR`
 is useful for isolated tests, but two stores writing the same project outputs
 can cause repeated freshness misses. The store holds derived results only.
 Prefer a targeted `--force` or `cadgen store forget <model>.py` when diagnosing
-one stale result; `cadgen store gc` removes unreachable cache data. The store
-is capped at 20 GB by default (`CADGEN_STORE_MAX`): over the cap, the daemon
-drops the least recently used op-memo, mesh, surface and component entries
-when idle, and `cadgen store gc --max-size` does the same by hand; `cadgen
-store info` shows the size against the cap.
+one stale result; `cadgen store gc` removes unreachable cache data.

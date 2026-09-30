@@ -236,11 +236,11 @@ class _Results(list):
 
 
 class CheckVerdictTests(_FreshStore):
-    """``is_valid``/``is_sound`` and the patched ``Shape.is_valid``: the same
-    answer as the kernel, stored once, answered from RAM and disk."""
+    """``is_valid``/``is_sound``: the same answer as the kernel, stored once,
+    answered from RAM and disk. build123d's own ``Shape.is_valid`` is not
+    interposed on: a caller that wants a stored verdict asks for one."""
 
     ANALYZER = "OCP.BRepCheck.BRepCheck_Analyzer"
-    PROPERTY_ANALYZER = "build123d.topology.shape_core.BRepCheck_Analyzer"
     CHECKER = "OCP.BRepAlgoAPI.BRepAlgoAPI_Check"
 
     def setUp(self):
@@ -256,7 +256,7 @@ class CheckVerdictTests(_FreshStore):
                  (_overlapping_boxes(), True, False),
                  (_open_solid(), False, False))
         for shape, valid, sound in cases:
-            for check, expected in ((is_valid, valid), (is_sound, sound), (lambda s: s.is_valid, valid)):
+            for check, expected in ((is_valid, valid), (is_sound, sound)):
                 self.assertIs(self._uncached(check, shape), expected)
                 self.assertIs(check(shape), expected)   # a miss
                 self.assertIs(check(shape), expected)   # a RAM hit
@@ -283,34 +283,9 @@ class CheckVerdictTests(_FreshStore):
         self._assert_stored_once(is_sound, _overlapping_boxes, self.CHECKER)
         self._assert_stored_once(is_sound, lambda: Solid.make_box(10, 10, 10), self.CHECKER)
 
-    def test_shape_is_valid_answers_from_the_same_stored_verdict(self):
+    def test_shape_is_valid_is_build123d_own(self):
         from build123d.topology import Shape
-        self.assertTrue(getattr(Shape.__dict__["is_valid"], "__op_memo__", False))
-        import importlib
-        real = importlib.import_module("OCP.BRepCheck").BRepCheck_Analyzer
-        counter = _Counting(real)
-        with mock.patch(self.ANALYZER, counter), mock.patch(self.PROPERTY_ANALYZER, counter):
-            self.assertFalse(_open_solid().is_valid)    # the property misses and stores
-            self.assertFalse(is_valid(_open_solid()))   # the function hits that entry
-            op_memo.clear()
-            self.assertFalse(_open_solid().is_valid)    # the disk entry answers the property
-        self.assertEqual(counter.calls, 1)
-        counter = _Counting(real)
-        with mock.patch(self.ANALYZER, counter), mock.patch(self.PROPERTY_ANALYZER, counter):
-            self.assertTrue(is_valid(Solid.make_box(10, 10, 10)))
-            self.assertTrue(Solid.make_box(10, 10, 10).is_valid)
-        self.assertEqual(counter.calls, 1)
-
-    def test_empty_shape_property_is_build123d_own(self):
-        from build123d.topology import Shape
-        counter = _Counting(mock.Mock())
-        empty = Shape.__new__(Shape)
-        empty._wrapped = None
-        with mock.patch(self.PROPERTY_ANALYZER, counter):
-            self.assertTrue(empty.is_valid)
-        self.assertEqual(counter.calls, 0)
-        with self.assertRaises(ValueError):
-            is_valid(empty)
+        self.assertFalse(getattr(Shape.__dict__["is_valid"], "__op_memo__", False))
 
     def test_placement_and_orientation_are_part_of_the_verdict_key(self):
         import importlib
@@ -343,9 +318,6 @@ class CheckVerdictTests(_FreshStore):
         with mock.patch(self.ANALYZER, return_value=analyzer):
             with self.assertRaisesRegex(GeometryError, "kernel"):
                 is_valid(box)
-        with mock.patch(self.PROPERTY_ANALYZER, return_value=analyzer):
-            with self.assertRaisesRegex(RuntimeError, "kernel"):
-                box.is_valid
         # Nothing was stored: the real kernel answers now.
         import importlib
         counter = _Counting(importlib.import_module("OCP.BRepAlgoAPI").BRepAlgoAPI_Check)
@@ -363,14 +335,13 @@ class CheckVerdictTests(_FreshStore):
         checker = _Counting(importlib.import_module("OCP.BRepAlgoAPI").BRepAlgoAPI_Check)
         digests = _Counting(op_memo._tshape_digest)
         with mock.patch.dict(os.environ, {"CADGEN_OP_MEMO": "0"}), \
-                mock.patch(self.ANALYZER, analyzer), mock.patch(self.PROPERTY_ANALYZER, analyzer), \
+                mock.patch(self.ANALYZER, analyzer), \
                 mock.patch(self.CHECKER, checker), mock.patch("cadgen._internal.op_memo._tshape_digest", digests):
             for _ in range(2):
                 box = Solid.make_box(10, 10, 10)
-                self.assertTrue(box.is_valid)
                 self.assertTrue(is_valid(box))
                 self.assertTrue(is_sound(box))
-        self.assertEqual((analyzer.calls, checker.calls, digests.calls), (4, 2, 0))
+        self.assertEqual((analyzer.calls, checker.calls, digests.calls), (2, 2, 0))
 
 
 class OcctListIterationTests(unittest.TestCase):

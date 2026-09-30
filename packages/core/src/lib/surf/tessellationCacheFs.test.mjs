@@ -6,8 +6,6 @@ import test from "node:test";
 
 import { encodeComponentTessellation, tessellationCacheKey } from "./tessellationCache.js";
 import {
-  LAST_USED_FIELD,
-  TOUCH_INTERVAL_SECONDS,
   TessellationMeshConflictError,
   createFsTessellationCacheProvider,
   probeCachedTessellation,
@@ -141,34 +139,4 @@ test("filesystem writes bound inspection and verification of CAS objects", (t) =
   }
   assert.equal(fs.statSync(object).size, row.byteLength);
   assert.deepEqual([...fs.readFileSync(object)], [...bytes]);
-});
-
-test("entries carry a lastUsed stamp that eviction orders by; probes tolerate and refresh it hourly", (t) => {
-  const root = fs.mkdtempSync(path.join(os.tmpdir(), "cadgen-tess-fs-"));
-  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
-  const env = { CADGEN_CACHE_DIR: root };
-  const key = tessellationCacheKey(D, Q);
-  const row = writeCachedTessellationBytes(key, payload(), env);
-  const entry = path.join(root, "index", "mesh", key);
-  const written = JSON.parse(fs.readFileSync(entry, "utf8"));
-  assert.ok(Math.abs(written[LAST_USED_FIELD] - Date.now() / 1000) < 5, "a write stamps now");
-  assert.equal(LAST_USED_FIELD in row, false, "the validated row never carries the stamp");
-
-  // A stamp two hours old (and an entry file that old): the next hit refreshes it once.
-  const then = Date.now() / 1000 - 2 * TOUCH_INTERVAL_SECONDS;
-  fs.writeFileSync(entry, JSON.stringify({ ...written, [LAST_USED_FIELD]: then }));
-  fs.utimesSync(entry, then, then);
-  assert.equal(probeCachedTessellation(key, env)?.object, row.object);
-  const touched = JSON.parse(fs.readFileSync(entry, "utf8"));
-  assert.ok(Math.abs(touched[LAST_USED_FIELD] - Date.now() / 1000) < 5, "a hit outside the throttle rewrites the stamp");
-  const stat = fs.statSync(entry);
-  assert.equal(probeCachedTessellation(key, env)?.object, row.object);
-  assert.equal(fs.statSync(entry).mtimeMs, stat.mtimeMs, "a hit inside the throttle leaves the entry alone");
-
-  // An entry another writer left unstamped is still a hit.
-  fs.writeFileSync(entry, JSON.stringify(row));
-  assert.equal(probeCachedTessellation(key, env)?.object, row.object);
-  // An evicted entry is a miss, never an error.
-  fs.rmSync(entry);
-  assert.equal(probeCachedTessellation(key, env), null);
 });

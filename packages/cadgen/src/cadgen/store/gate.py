@@ -20,7 +20,6 @@ through op-memo entries. Mesh tolerances and argv flags are not inputs.
 from __future__ import annotations
 
 import hashlib
-import json
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping
@@ -37,7 +36,7 @@ class Verdict:
     stale: bool
     clauses: list[dict[str, Any]] = field(default_factory=list)
     #: The source's closure hash as it is NOW (the script's own sha when there is no
-    #: record to name a closure). Coalescing uses closure_hash's wider identity.
+    #: record to name a closure): what in-flight coalescing keys on.
     closure: str | None = None
     #: Exact result from the record this verdict checked, never a later lookup.
     tree: str | None = None
@@ -91,56 +90,6 @@ def _closure_now(script: Path, record: Mapping[str, Any] | None) -> str | None:
         return recorded_hash
     # Sliced files are re-sliced by their recorded names; the rest whole.
     return current_closure_hash(script, files, names) if files else None
-
-
-def closure_hash(model: Path | str) -> str | None:
-    """Current inputs for in-flight coalescing, or None when not knowable.
-
-    Scan current static imports even without a record, crossing model and
-    constant boundaries. Records additionally supply discovered data inputs,
-    runtime children and their current pins. This is intentionally broader
-    than clause 2's freshness hash: source that moved behind a child boundary
-    must not join a producer that already consumed its previous revision.
-    Sources using runtime data readers decline coalescing even with a record:
-    earlier inputs cannot certify the paths the next execution will choose.
-    """
-    from cadgen.metadata import model_function_names
-    from cadgen.store.closure import coalescing_sources
-    from cadgen.store.index import model_ref
-
-    pending = [resolve_model_ref(model)]
-    seen: set[str] = set()
-    scanned: set[Path] = set()
-    sources: dict[str, str] = {}
-    trees: dict[str, str | None] = {}
-    while pending:
-        key = pending.pop()
-        if key in seen:
-            continue
-        seen.add(key)
-        script, _function = split_model_ref(key)
-        if script not in scanned:
-            current = coalescing_sources(script)
-            if current is None:
-                return None
-            sources.update(current)
-            for path in current:
-                source = Path(path)
-                scanned.add(source)
-                pending.extend(model_ref(source, name) for name in model_function_names(source))
-        record = read_record(key)
-        if record is None:
-            continue
-        trees[key] = record.get("tree")
-        for rel in (record.get("closure") or {}).get("files") or []:
-            path = (script.parent / rel).resolve()
-            if str(path) not in sources:
-                digest = _sha256_file(path)
-                if digest is None:
-                    return None
-                sources[str(path)] = digest
-        pending.extend(str(child["model"]) for child in record.get("children") or [] if child.get("model"))
-    return hashlib.sha256(json.dumps([sources, trees], sort_keys=True).encode()).hexdigest()
 
 
 def stale(model: Path | str, *, memo: dict[str, Verdict] | None = None) -> Verdict:

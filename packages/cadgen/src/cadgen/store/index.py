@@ -11,12 +11,11 @@ from __future__ import annotations
 import hashlib
 import json
 import os
-import time
 from pathlib import Path
 from typing import Any, Iterator
 
 from cadgen._internal.atomic_replace import replace_atomic, temp_suffix
-from cadgen.store.paths import EVICTABLE_KINDS as _EVICTABLE, index_dir
+from cadgen.store.paths import index_dir
 
 
 MODEL_REF_SEP = "::"
@@ -108,75 +107,7 @@ def read_entry(kind: str, key: str) -> dict[str, Any] | None:
     return data if isinstance(data, dict) else None
 
 
-# --- last use ------------------------------------------------------------------
-#
-# Every evictable entry (``paths.EVICTABLE_KINDS``) carries ``lastUsed``: the
-# wall-clock second it was written or last hit. Eviction (STORE.md §8) drops
-# entries least recently used first, so a hit refreshes the stamp -- at most
-# once per ``TOUCH_INTERVAL_SECONDS`` per entry, so a warm build that hits an
-# entry ten thousand times rewrites it once. Filesystem atime is never
-# consulted: it is unreliable (noatime, relatime) and not ours to define.
-#
-# The stamp is bookkeeping on the entry, not part of what the entry says: a
-# reader that validates an entry's field set strips it first (``strip_last_used``).
-
-LAST_USED = "lastUsed"
-TOUCH_INTERVAL_SECONDS = 3600.0
-
-
-def strip_last_used(entry: dict[str, Any]) -> dict[str, Any]:
-    """The entry without its use stamp -- what a field-set validator sees."""
-    if LAST_USED not in entry:
-        return entry
-    return {field: value for field, value in entry.items() if field != LAST_USED}
-
-
-def last_used(entry: dict[str, Any] | None, path: Path | None = None) -> float:
-    """When an entry was last used, as a wall-clock timestamp.
-
-    The ``lastUsed`` stamp when present; else the entry file's mtime, which is
-    the moment it was written -- a genuine use event (never atime). An entry
-    with neither is the least recently used of all (0.0).
-    """
-    stamp = 0.0
-    if entry:
-        raw = entry.get(LAST_USED)
-        if isinstance(raw, (int, float)) and raw > 0:
-            stamp = float(raw)
-    if path is not None:
-        try:
-            stamp = max(stamp, path.stat().st_mtime)
-        except OSError:
-            pass
-    return stamp
-
-
-def touch_entry(kind: str, key: str, entry: dict[str, Any], *, now: float | None = None) -> bool:
-    """Refresh ``lastUsed`` on a hit, throttled. True when the entry was rewritten.
-
-    Best-effort: a store that cannot be written still serves the hit, and a
-    concurrent rewrite of the same key carries identical content (an entry is a
-    pure function of its key), so the rename race is harmless.
-    """
-    if kind not in _EVICTABLE:
-        return False
-    clock = time.time() if now is None else float(now)
-    if clock - last_used(entry, entry_path(kind, key)) < TOUCH_INTERVAL_SECONDS:
-        return False
-    try:
-        _write_entry_raw(kind, key, {**entry, LAST_USED: clock})
-    except OSError:
-        return False
-    return True
-
-
 def write_entry(kind: str, key: str, payload: dict[str, Any]) -> None:
-    if kind in _EVICTABLE:
-        payload = {**payload, LAST_USED: time.time()}
-    _write_entry_raw(kind, key, payload)
-
-
-def _write_entry_raw(kind: str, key: str, payload: dict[str, Any]) -> None:
     target = entry_path(kind, key)
     try:
         target.parent.mkdir(parents=True, exist_ok=True)

@@ -416,7 +416,7 @@ def _function_key(fn, seen, files):
 
 def _read(key):
     from cadgen._internal import op_memo
-    from cadgen.store.index import read_entry, touch_entry
+    from cadgen.store.index import read_entry
     from cadgen.store.objects import read_verified_object
 
     entry = read_entry("op", key)
@@ -424,12 +424,9 @@ def _read(key):
         return None
     try:
         data = read_verified_object(entry["object"])
-        stored = op_memo._StoredShape(entry["cls"], data, entry["recipe"])
+        return op_memo._StoredShape(entry["cls"], data, entry["recipe"])
     except (KeyError, OSError, ValueError, TypeError):
-        # Evicted objects are a miss; the factory runs and repairs the entry.
         return None
-    touch_entry("op", key, entry)
-    return stored
 
 
 def _write(key, stored):

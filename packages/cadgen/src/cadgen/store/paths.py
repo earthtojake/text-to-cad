@@ -11,11 +11,8 @@ The JS mirror is ``cadgenCacheRootDir`` in
 
 from __future__ import annotations
 
-import contextlib
 import os
-import threading
 from pathlib import Path
-from typing import Iterator
 
 # Mirror of TESSELLATION_VERSION in packages/core/src/lib/surf/tessellate.js
 # (sync-tested). It is part of the MESH index key, not a store salt.
@@ -25,37 +22,8 @@ MESH_TESSELLATION_VERSION = 5
 # other kind is the code/dependency side. STORE.md §2, the law.
 INDEX_KINDS = ("model", "document", "output", "component", "surface", "op", "mesh", "drawing")
 
-# The tiers eviction may drop (STORE.md §8): every entry is a recomputable
-# derivation and a missing one is a miss. Records, document maps and output
-# maps are never evicted.
-EVICTABLE_KINDS = ("op", "mesh", "surface", "component")
-
-_THREAD_ROOT = threading.local()
-
-
-@contextlib.contextmanager
-def store_root_override(root: Path | str) -> Iterator[Path]:
-    """Resolve the store to ``root`` on THIS thread only, for the duration.
-
-    The daemon supervisor serves any number of stores and holds no store state
-    of its own; when it sweeps one when idle it names the root explicitly
-    rather than mutating the process environment its spawned workers inherit.
-    """
-    resolved = Path(root).expanduser()
-    if not resolved.is_absolute():
-        resolved = (Path.cwd() / resolved).resolve()
-    previous = getattr(_THREAD_ROOT, "root", None)
-    _THREAD_ROOT.root = resolved
-    try:
-        yield resolved
-    finally:
-        _THREAD_ROOT.root = previous
-
 
 def store_root() -> Path:
-    thread_root = getattr(_THREAD_ROOT, "root", None)
-    if thread_root is not None:
-        return thread_root
     override = os.environ.get("CADGEN_CACHE_DIR", "").strip()
     if override:
         # Absolutized ONCE, against the cwd of the process that first reads it,

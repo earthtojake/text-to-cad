@@ -40,7 +40,6 @@ import time
 import traceback
 
 from cadgen.daemon import transport
-from cadgen.daemon.housekeeping import Housekeeper
 from cadgen.daemon.jobs import JobLedger, failure_message
 from cadgen.daemon.client import (
     compute_version_token,
@@ -182,23 +181,16 @@ def _wait_for_inflight_consumer(conn: transport.Channel, entry: dict) -> int | N
     """Wait for canonical work, or return None when only this consumer left.
 
     A request client sends no more messages, so a nonblocking receive is purely
-    an EOF probe. A source consumer (a parent's child submit) gets the same
-    liveness probe a producer's client gets -- an empty stdout chunk, a no-op
-    for every client -- because a client that hears nothing for the request
-    timeout runs the job cold, and a coalesced wait on a long build is silent by
-    nature. Artifact consumers keep their typed protocol: no probes.
+    an EOF probe. It emits no heartbeat frames and cannot disturb other users of
+    the same in-flight entry.
     """
     result_seen = False
-    last_probe = time.monotonic()
     while True:
         event, done, code = _BROKER.wait_update(entry, result_seen=result_seen)
         try:
             if event is not None:
                 _send(conn, event if entry.get("artifact") else {"event": event})
                 result_seen = True
-            elif not done and not entry.get("artifact") and time.monotonic() - last_probe >= CLIENT_LIVENESS_INTERVAL_SECONDS:
-                _send(conn, {"stream": "stdout", "data": ""})
-                last_probe = time.monotonic()
         except OSError:
             return None
         if done:
@@ -210,70 +202,6 @@ def _wait_for_inflight_consumer(conn: transport.Channel, entry: dict) -> int | N
             # Simple in-process test channels have no receive side. A real
             # transport.Channel normalizes peer loss to b"".
             pass
-
-
-def _rerooted(frame: dict, root_id: str | None) -> dict:
-    """The producer's frame as the joiner's own: its build-tree events carry the
-    joiner's root id, so the joiner's renderer draws them instead of dropping a
-    stranger's tree."""
-    event = frame.get("event")
-    if root_id and isinstance(event, dict):
-        return {**frame, "event": {**event, "root": root_id}}
-    return frame
-
-
-def _relay_inflight_output(conn: transport.Channel, entry: dict, root_id: str | None) -> int | None:
-    """Stream the producer's output to a joiner as if it had run the job itself.
-
-    Every frame the producer has streamed so far (the entry's bounded log), then
-    each new one as it arrives, then the exit. A silent stretch gets the
-    liveness probe a producer's client would get. A failed send is the joiner
-    gone: None, and the caller detaches it.
-    """
-    cursor = 0
-    while True:
-        frames, cursor, done, code = _BROKER.wait_frames(entry, cursor, timeout=CLIENT_LIVENESS_INTERVAL_SECONDS)
-        try:
-            for frame in frames:
-                _send(conn, _rerooted(frame, root_id))
-            if done:
-                return code
-            if not frames:
-                _send(conn, {"stream": "stdout", "data": ""})
-        except OSError:
-            return None
-
-
-def _request_variant(argv) -> str:
-    """The flags a request runs its subject with, beyond the subject itself.
-
-    Part of the coalescing key: ``--json``, ``--verbose`` and a tolerance
-    override change what a run prints or writes, so only requests that agree on
-    them are one job. ``--force`` is not a variant (it decides joining, not
-    output) and ``--model fn`` is the subject. A bare ``python model.py`` has
-    the empty variant -- the key a parent's child submit uses -- so a terminal
-    and a parent needing the same stale model are one job.
-    """
-    items = [str(arg) for arg in (argv or ())]
-    variant: list[str] = []
-    subject_seen = False
-    skip = False
-    for text in items:
-        if skip:
-            skip = False
-            continue
-        if text == "--force":
-            continue
-        if text == "--model":
-            skip = True
-            continue
-        if not subject_seen and not text.startswith("-") and (
-            text.endswith(".py") or text.lower().endswith((".step", ".stp"))
-        ):
-            subject_seen = True
-            continue
-        variant.append(text)
-    return " ".join(variant)
 
 
 def _status_payload(startup_token: str) -> dict:
@@ -414,7 +342,6 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
             return
         request = {**request, "artifact": artifact, "store_root": root}
 
-    _HOUSEKEEPER.note_request(request.get("store_root"), request.get("env"))
     cwd = str(request.get("cwd") or "")
     model = "" if is_artifact else _script_path(argv, cwd)
     # What in-flight coalescing keys on: the model, or for a compile job the imported
@@ -435,25 +362,12 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
         if is_artifact:
             owns_work, inflight = _BROKER.claim_artifact_entry(artifact, store_root=root)
         else:
-            # The key: store, subject, the source's closure hash, and the flags the
-            # run prints or writes with. A forced request never joins (it asked for
-            # its body to run; the closure cannot see what --force is for) but
-            # registers when nothing identical is in flight.
-            variant = _request_variant(argv)
-            owns_work, inflight = _BROKER.claim_entry(
-                subject, f"{closure}|{variant}" if variant else closure,
-                store_root=str(request.get("store_root") or ""), join="--force" not in argv,
-            )
+            owns_work, inflight = _BROKER.claim_entry(subject, closure, store_root=str(request.get("store_root") or ""))
         if not owns_work:
             # Identical source is already building: attach, relay its exit, run nothing.
-            # A top-level joiner asked for the producer's output as its own; a
-            # parent's child submit wants only the source result.
             _log(f"{tool} {model}: coalesced onto the job in flight")
             try:
-                if request.get("relay_output") and not is_artifact:
-                    code = _relay_inflight_output(conn, inflight, request.get("root_id"))
-                else:
-                    code = _wait_for_inflight_consumer(conn, inflight)
+                code = _wait_for_inflight_consumer(conn, inflight)
             finally:
                 _BROKER.detach(inflight)
             if code is None:
@@ -534,8 +448,6 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
             event = frame.get("event")
             if inflight is not None and isinstance(event, dict) and event.get("job") == job["id"]:
                 _BROKER.publish_result(inflight, event)
-            if inflight is not None and not is_artifact:
-                _BROKER.publish_frame(inflight, frame)
             if relay_connected:
                 try:
                     with send_lock:
@@ -586,12 +498,6 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
 
 _INFLIGHT: set[threading.Thread] = set()
 _JOBS = JobLedger()
-# Idle-time store eviction (STORE.md §8). "Active" is any request thread alive
-# or any broker slot held; eviction never starts or continues past that.
-_HOUSEKEEPER = Housekeeper(
-    active=lambda: bool(_active_requests()) or _BROKER.snapshot()["running"] > 0,
-    log=lambda message: _log(message),
-)
 _STARTED_AT = time.time()
 _REQUESTS_SERVED = [0]
 
@@ -603,7 +509,6 @@ def _serve_connection(conn, request) -> None:
         _log("unhandled error serving a job:\n" + traceback.format_exc())
     finally:
         _INFLIGHT.discard(threading.current_thread())
-        _HOUSEKEEPER.note_activity()
         with contextlib.suppress(OSError):
             conn.close()
 
@@ -690,9 +595,7 @@ def serve() -> int:
             active = _active_requests()
             if active:
                 state["last_activity"] = time.monotonic()  # a long build is not idleness
-                _HOUSEKEEPER.note_activity()
                 continue
-            _HOUSEKEEPER.tick()
             if state["draining"]:
                 server.close()
                 return
