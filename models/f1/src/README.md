@@ -16,7 +16,10 @@
 | diffuser.py | STEP/diffuser.step | `#o1.11` diffuser |
 | cooling.py | STEP/cooling.step | `#o1.12` cooling (radiators, ducts) |
 | power_unit.py | STEP/power_unit.step | `#o1.13` power unit |
-| drivetrain.py | STEP/drivetrain.step | `#o1.14` drivetrain |
+| drivetrain.py | STEP/drivetrain.step | `#o1.14` drivetrain: the running gear, linking the three models below |
+| gearbox_casing.py | STEP/gearbox_casing.step | ribbed gearbox casing (linked by `drivetrain.py`; its own model because it is two thirds of the drivetrain's build time) |
+| drivetrain_ancillaries.py | STEP/drivetrain_ancillaries.step | hardware bolted to the casing (linked by `drivetrain.py`) |
+| rear_structure.py | STEP/rear_structure.step | rear impact structure, pickup carriers, pylon pad, rear light (linked by `drivetrain.py`) |
 | rear_wing.py | STEP/rear_wing.step | `#o1.15` rear wing mainplane + endplates |
 | drs_flap.py | STEP/drs_flap.step | `#o1.16` DRS flap (rotates through `ANIMATION_JS` in `f1.py`) |
 | drs_actuator.py | STEP/drs_actuator.step | `#o1.17` DRS actuator four-bar |

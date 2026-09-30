@@ -1242,29 +1242,55 @@ def _flank_pad(side, outer):
 # ==========================================================================
 
 
-def build_drivetrain():
-    kids = []
+def build_gearbox_casing():
+    """The ribbed magnesium casing: two thirds of the drivetrain's build time,
+    so it is its own model and an edit elsewhere never rebuilds it."""
+    return surfaces.styled(_gearbox_casing(_casing_outer_ribbed()), "gearbox_casing", spec.MAGNESIUM)
 
+
+def build_drivetrain_ancillaries():
+    """Everything bolted to the casing. Each piece is trimmed against the outer
+    skin, so the hardware sits exactly on the casting and never shares volume
+    with it."""
     outer_ref = _casing_outer_ribbed()
-
-    # Everything bolted to the casing is trimmed against the outer skin, so
-    # the bolt-on hardware sits exactly on the casting and never shares
-    # volume with it.
-    oil_pump = _oil_pump(outer_ref)
-    hyd_pack = _hydraulic_pack(outer_ref)
-    hyd_lines = _hydraulic_lines()
-    arb_l = _arb_platform(1, outer_ref)
-    arb_r = _arb_platform(-1, outer_ref)
-    pad_l = _flank_pad(1, outer_ref)
-    pad_r = _flank_pad(-1, outer_ref)
-    flange = _front_flange(outer_ref)
     bolts, dowels = _engine_mount_hardware()
+    return surfaces.group("drivetrain_ancillaries", [
+        surfaces.styled(_front_flange(outer_ref), "bellhousing_flange", spec.ANODIZED),
+        surfaces.styled(bolts, "engine_mount_bolts", spec.STEEL),
+        surfaces.styled(dowels, "engine_mount_dowels", spec.ALLOY),
+        surfaces.styled(_oil_pump(outer_ref), "gearbox_oil_pump", spec.ALLOY),
+        surfaces.styled(_hydraulic_pack(outer_ref), "hydraulic_power_pack", spec.ANODIZED),
+        surfaces.styled(_hydraulic_lines(), "hydraulic_lines", spec.TITANIUM),
+        surfaces.styled(_arb_platform(1, outer_ref), "arb_mount_platform:left", spec.ANODIZED),
+        surfaces.styled(_arb_platform(-1, outer_ref), "arb_mount_platform:right", spec.ANODIZED),
+        surfaces.styled(_flank_pad(1, outer_ref), "casing_machined_pad:left", spec.ANODIZED),
+        surfaces.styled(_flank_pad(-1, outer_ref), "casing_machined_pad:right", spec.ANODIZED),
+    ])
 
-    casing = _gearbox_casing(outer_ref)
-    kids.append(surfaces.styled(casing, "gearbox_casing", spec.MAGNESIUM))
-    kids.append(surfaces.styled(flange, "bellhousing_flange", spec.ANODIZED))
-    kids.append(surfaces.styled(bolts, "engine_mount_bolts", spec.STEEL))
-    kids.append(surfaces.styled(dowels, "engine_mount_dowels", spec.ALLOY))
+
+def build_rear_structure():
+    """The rear impact structure and what it is cut around: the pickup
+    carriers, the rear wing pylon pad and the rear light."""
+    carrier_l = _rear_pickup_carrier(1)
+    carrier_r = _rear_pickup_carrier(-1)
+    pad = _pylon_pad()
+    bezel, lens = _rear_light()
+    tail_cut = _fuse([carrier_l, carrier_r, pad, bezel, lens])
+    return surfaces.group("rear_structure", [
+        surfaces.styled(_crash_structure(tail_cut), "crash_structure", spec.CARBON),
+        surfaces.styled(pad, "rear_wing_pylon_pad", spec.ANODIZED),
+        surfaces.styled(bezel, "rear_light_bezel", spec.ANODIZED),
+        surfaces.styled(lens, "rear_light", spec.ACCENT),
+        surfaces.styled(carrier_l, "rear_pickup_carrier:left", spec.MAGNESIUM),
+        surfaces.styled(carrier_r, "rear_pickup_carrier:right", spec.MAGNESIUM),
+    ])
+
+
+def build_drivetrain_parts():
+    """The running gear inside the casing: clutch, gear cluster, selectors,
+    differential and driveshafts. Cheap enough to rebuild with the drivetrain
+    model itself."""
+    kids = []
 
     # --- clutch ---------------------------------------------------------
     hub, plates, pressure = _clutch()
@@ -1287,27 +1313,4 @@ def build_drivetrain():
     kids += surfaces.pair(inner, "cv_inner", spec.ANODIZED)
     kids += surfaces.pair(shaft, "driveshaft", spec.ALLOY)
     kids += surfaces.pair(outer_cv, "cv_outer", spec.ALLOY)
-
-    # --- rear structure --------------------------------------------------
-    carrier_l = _rear_pickup_carrier(1)
-    carrier_r = _rear_pickup_carrier(-1)
-    pad = _pylon_pad()
-    bezel, lens = _rear_light()
-    tail_cut = _fuse([carrier_l, carrier_r, pad, bezel, lens])
-    kids.append(surfaces.styled(_crash_structure(tail_cut), "crash_structure", spec.CARBON))
-    kids.append(surfaces.styled(pad, "rear_wing_pylon_pad", spec.ANODIZED))
-    kids.append(surfaces.styled(bezel, "rear_light_bezel", spec.ANODIZED))
-    kids.append(surfaces.styled(lens, "rear_light", spec.ACCENT))
-    kids.append(surfaces.styled(carrier_l, "rear_pickup_carrier:left", spec.MAGNESIUM))
-    kids.append(surfaces.styled(carrier_r, "rear_pickup_carrier:right", spec.MAGNESIUM))
-
-    # --- ancillaries ------------------------------------------------------
-    kids.append(surfaces.styled(oil_pump, "gearbox_oil_pump", spec.ALLOY))
-    kids.append(surfaces.styled(hyd_pack, "hydraulic_power_pack", spec.ANODIZED))
-    kids.append(surfaces.styled(hyd_lines, "hydraulic_lines", spec.TITANIUM))
-    kids.append(surfaces.styled(arb_l, "arb_mount_platform:left", spec.ANODIZED))
-    kids.append(surfaces.styled(arb_r, "arb_mount_platform:right", spec.ANODIZED))
-    kids.append(surfaces.styled(pad_l, "casing_machined_pad:left", spec.ANODIZED))
-    kids.append(surfaces.styled(pad_r, "casing_machined_pad:right", spec.ANODIZED))
-
-    return surfaces.group("drivetrain", kids)
+    return kids
