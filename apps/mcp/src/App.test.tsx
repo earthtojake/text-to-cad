@@ -28,24 +28,29 @@ const session: Session = { protocol: 1, build: 'b', version: 'test', platform: '
 const home: Launch = { protocol: 1, page: 'home', model: null, root: null, explore: false };
 const sized = (notify: ReturnType<typeof vi.fn>) => notify.mock.calls.filter(([method]) => method === 'ui/notifications/size-changed');
 
-it('a tab host gets the page it always had: full height, no card to size, no full-size button', async () => {
-  const { bridge, server } = host({ displayMode: 'fullscreen' });
-  render(<App bridge={bridge as any} server={server as any} launch={{ ...home, surface: 'sidebar' }} session={session} />);
+it('a tab host gets the page it always had, down to its bottom: no card to size, no full-size button', async () => {
+  const { bridge, server } = host({ displayMode: 'fullscreen', safeAreaInsets: { top: 4, bottom: 72 } });
+  const { container } = render(<App bridge={bridge as any} server={server as any} launch={{ ...home, surface: 'sidebar' }} session={session} />);
   await screen.findByRole('button', { name: /Open Model/ });
   expect(screen.queryByRole('button', { name: 'Full size' })).toBeNull();
   expect(sized(bridge.notify)).toEqual([]);
+  // The host's composer floats clear of the viewer's centred bottom action: no strip is kept for it.
+  const frame = container.firstElementChild as HTMLElement;
+  expect([frame.style.paddingTop, frame.style.paddingBottom]).toEqual(['4px', '0px']);
 });
 
 it('an inline host gets a card of a height it is told, which goes full size in place', async () => {
   const { bridge, server } = host({ displayMode: 'inline', availableDisplayModes: ['inline', 'fullscreen'] });
-  render(<App bridge={bridge as any} server={server as any} presentation="inline" session={session}
+  const { container } = render(<App bridge={bridge as any} server={server as any} presentation="inline" session={session}
     launch={{ ...home, surface: 'inline', view: 'cad-1-a', order: { createdAt: 1, seq: 1 } }} />);
   const openModel = await screen.findByRole('button', { name: /Open Model/ });
   expect(sized(bridge.notify)).toEqual([['ui/notifications/size-changed', { height: expect.any(Number) }]]);
   act(() => screen.getByRole('button', { name: 'Full size' }).click());
   expect(bridge.request).toHaveBeenCalledWith('ui/request-display-mode', { mode: 'fullscreen' });
-  act(() => bridge.change({ displayMode: 'fullscreen' }));
+  act(() => bridge.change({ displayMode: 'fullscreen', safeAreaInsets: { bottom: 72 } }));
   expect(screen.queryByRole('button', { name: 'Full size' })).toBeNull();
+  // Full size, the host's composer lies across the bottom: the view keeps clear of it.
+  expect((container.firstElementChild as HTMLElement).style.paddingBottom).toBe('72px');
   // Full size keeps what was on the card: the same page, not a new one.
   expect(screen.getByRole('button', { name: /Open Model/ })).toBe(openModel);
 });

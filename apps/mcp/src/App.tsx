@@ -31,12 +31,11 @@ export function inlineHeight(width: number, maxHeight?: number): number {
 }
 
 /**
- * Room for what the host draws over the page (the composer, on a full page). Inline, a card whose
- * height the host is told, with a way to full size. The one element either way, so going full size
- * keeps the view (and its model) as it is.
+ * Room for what the host draws over the page (`insets`). Inline, a card whose height the host is
+ * told, with a way to full size. The one element either way, so going full size keeps the view (and
+ * its model) as it is.
  */
-function Frame({ bridge, context, inline = false, expandable = true, children }: { bridge: Bridge; context: HostContext; inline?: boolean; expandable?: boolean; children: ReactNode }) {
-  const insets = context.safeAreaInsets || {};
+function Frame({ bridge, context, insets, inline = false, expandable = true, children }: { bridge: Bridge; context: HostContext; insets: NonNullable<HostContext['safeAreaInsets']>; inline?: boolean; expandable?: boolean; children: ReactNode }) {
   const [width, setWidth] = useState(() => window.innerWidth);
   useEffect(() => {
     if (!inline) return;
@@ -84,6 +83,10 @@ export default function App({ bridge, server, launch: initial, session, presenta
   const context = useHostContext(bridge);
   const colorScheme = context.theme === 'dark' ? 'dark' : 'light';
   const inline = presentation === 'inline' && context.displayMode !== 'fullscreen';
+  // A tab runs the page's full height: what a tab host draws over its bottom (its composer) sits
+  // clear of the viewer's centred bottom action. A host that mounts views inline draws its composer
+  // across the bottom of a full-size view, so that view keeps clear of it.
+  const insets = presentation === 'inline' ? context.safeAreaInsets || {} : { ...context.safeAreaInsets, bottom: 0 };
   // Once a newer view of this chat is up: this one's last frame (or null), and nothing else.
   const [still, setStill] = useState<string | null | undefined>(undefined);
   const superseded = still !== undefined;
@@ -138,20 +141,20 @@ export default function App({ bridge, server, launch: initial, session, presenta
   const home = initial.page === 'home' ? initial : null;
   const { launch } = showing;
   if (superseded) {
-    return <Frame bridge={bridge} context={context} inline={inline} expandable={false}><Superseded still={still} /></Frame>;
+    return <Frame bridge={bridge} context={context} insets={insets} inline={inline} expandable={false}><Superseded still={still} /></Frame>;
   }
   if (launch.page === 'home') {
-    return <Frame bridge={bridge} context={context} inline={inline}>
+    return <Frame bridge={bridge} context={context} insets={insets} inline={inline}>
       <Home server={server} onOpen={next => setShowing(previous => ({ launch: next, sequence: previous.sequence + 1, fromHome: true }))}
         onOpenLink={url => bridge.request('ui/open-link', { url }).then(() => {})} />
     </Frame>;
   }
   if (!launch.root) {
-    return <Frame bridge={bridge} context={context} inline={inline}>
+    return <Frame bridge={bridge} context={context} insets={insets} inline={inline}>
       <EmptyState icon={FolderX} title="No model open" description="This chat has no project folder. Ask the agent to show a model by its path." />
     </Frame>;
   }
-  return <Frame bridge={bridge} context={context} inline={inline}>
+  return <Frame bridge={bridge} context={context} insets={insets} inline={inline}>
     <ModelView key={rootKey(launch.root)} launch={launch} root={launch.root} sequence={showing.sequence} bridge={bridge} server={server}
       tabStore={tabStore} live={live} colorScheme={colorScheme} platform={session.platform} reporter={reporter} compact={inline}
       onHome={home && showing.fromHome ? () => setShowing(previous => ({ launch: home, sequence: previous.sequence + 1, fromHome: false })) : undefined} />
