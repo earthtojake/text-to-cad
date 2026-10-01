@@ -968,5 +968,3 @@ def scan_cad_files(repo_root, files) -> dict:
         "schemaVersion": CAD_CATALOG_SCHEMA_VERSION,
         "entries": sort_catalog_entries(entries),
     }
-
-

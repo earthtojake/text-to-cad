@@ -2,7 +2,7 @@
   "mcpServers": {
     "text_to_cad": {
       "command": "uvx",
-      "args": ["--no-config", "--offline", "--from", "cadgen==0.7.4", "cadgen", "mcp"],
+      "args": ["--no-config", "--offline", "--from", "cadgen==0.7.5", "cadgen", "mcp"],
       "startup_timeout_sec": 30
     }
   }
