@@ -263,6 +263,8 @@ export const NavbarLinks: ComponentType<{
   links: import("../../host/types.js").ViewerLinks;
   clipboard: import("../../host/types.js").ClipboardPort;
   onError?: (error: Error) => void;
+  /** How the menu lines up with the version: `end` in the navbar, `center` under the home's wordmark. */
+  align?: "start" | "center" | "end";
 }>;
 
 /** One panel's toggle in the navbar; `active` is its panel being open. */

@@ -79,6 +79,33 @@ it('says how its host updates: a command and a message for an agent, or a line w
   expect(within(menu).queryByText('Or ask your agent')).toBeNull();
 });
 
+it('marks a newer release with a dot on the version, and says where the person stands: up to date, or the step to the new one', async () => {
+  const user = userEvent.setup();
+  const versionFor = async (latest: object | null) => {
+    open({ navigationPath: null, host: { ...host, links: viewerLinks({ version: '0.7.4', latest }) } });
+    await screen.findByText('shown');
+    return screen.getByRole('button', { name: /^Version 0\.7\.4/ });
+  };
+  // A newer release: a dot on the version; open, the step to it, how to update, and what is new.
+  const notes = 'https://github.com/earthtojake/text-to-cad/releases/tag/v0.7.5';
+  let version = await versionFor({ version: '0.7.5', url: notes, newer: true });
+  expect([version.getAttribute('aria-label'), version.hasAttribute('data-update')]).toEqual(['Version 0.7.4, update available', true]);
+  await user.click(version);
+  let menu = await screen.findByRole('menu');
+  expect(menu.querySelector('[data-version-update]')?.textContent).toBe('Update availablev0.7.4 → v0.7.5');
+  expect(within(menu).getByText('In your terminal')).toBeTruthy();
+  expect(within(menu).getByRole('menuitem', { name: 'What’s new in v0.7.5' }).getAttribute('href')).toBe(notes);
+  cleanup();
+  // Up to date: no dot, and nothing to do.
+  version = await versionFor({ version: '0.7.4', url: notes, newer: false });
+  expect([version.getAttribute('aria-label'), version.hasAttribute('data-update')]).toEqual(['Version 0.7.4', false]);
+  await user.click(version);
+  menu = await screen.findByRole('menu');
+  expect(within(menu).getByText('Up to date')).toBeTruthy();
+  expect(within(menu).queryByText('In your terminal')).toBeNull();
+  expect(within(menu).getByRole('menuitem', { name: 'Release notes' })).toBeTruthy();
+});
+
 it('leads back to the host\'s home from a file, and draws no navbar over the home itself', async () => {
   const home = vi.fn();
   const homed = { ...host, links: viewerLinks({ version: '0.7.4' }), navigation: { openFile() {}, home } };

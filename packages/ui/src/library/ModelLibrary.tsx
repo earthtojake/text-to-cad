@@ -223,7 +223,7 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   return <ScrollArea className="cad-library h-full text-ui" viewportClassName="cad-library-viewport" data-library-layout={layout}>
     <main className="cad-library-content" aria-label="CAD models">
       <img className="cad-library-wordmark" src={wordmark} alt="CAD" />
-      {links && clipboard ? <nav className="cad-library-links" aria-label="CAD links"><NavbarLinks links={links} clipboard={clipboard} onError={onError} /></nav> : null}
+      {links && clipboard ? <nav className="cad-library-links" aria-label="CAD links"><NavbarLinks links={links} clipboard={clipboard} onError={onError} align="center" /></nav> : null}
       <div className="cad-library-toolbar">
         <h1 className="cad-library-heading">Files</h1>
         <div className="cad-library-controls">
