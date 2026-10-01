@@ -2,11 +2,15 @@
 
 The host starts one server process per thread, so the registry holds that
 thread's views: its tab, the tabs the agent opened, a file view. A view is live
-while it keeps polling; one that misses two polls is forgotten.
+while it keeps polling; one that has not polled for :data:`LIVE_SECONDS` is
+forgotten.
 
-Nothing here reaches into a view. A view long-polls :meth:`ViewRegistry.poll`;
-the server queues events for it -- show this model, capture a PNG, describe what
-you show -- and the next poll carries them. A question is a request with a reply:
+Nothing here reaches into a view. A view polls :meth:`ViewRegistry.poll` about
+once a second; the server queues events for it -- show this model, capture a
+PNG, describe what you show -- and the next poll carries them. A poll never
+waits: a host relays every call its views make through a few slots they all
+share (Codex holds a call until one frees), so a request held open is a slot
+taken from every view's model loads. A question is a request with a reply:
 :meth:`ViewRegistry.ask` waits until the view answers through
 :meth:`ViewRegistry.reply`.
 """
@@ -20,9 +24,11 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
-POLL_SECONDS = 20.0
-# A view that has not polled for this long is gone (two missed polls).
-LIVE_SECONDS = 2 * POLL_SECONDS + 5.0
+# How often a view polls (the page's own pace, written here once for its docs and tests).
+POLL_SECONDS = 1.0
+# A view that has not polled for this long is gone. A browser wakes a page hidden for minutes about
+# once a minute, so a tab in the background still polls well inside it.
+LIVE_SECONDS = 75.0
 
 
 @dataclass
@@ -57,8 +63,10 @@ class ViewRegistry:
             if view is None:
                 view = View(id=view_id, surface=surface, thread_id=thread_id)
                 self._views[view_id] = view
+                # New, it is the one the person just opened; after that, focus is what the view reports.
+                view.focused = self._clock()
             view.model = model if model is not None else view.model
-            view.seen = view.focused = self._clock()
+            view.seen = self._clock()
             return view
 
     def report(self, view_id: str, *, model: str | None, state: dict[str, Any], focused: bool) -> None:
@@ -103,23 +111,15 @@ class ViewRegistry:
             self._cond.notify_all()
         return delivered
 
-    def poll(self, view_id: str, *, timeout: float = POLL_SECONDS, cancelled=lambda: False) -> list[dict[str, Any]]:
-        """Wait up to ``timeout`` for events for ``view_id``, then hand them over."""
-        deadline = self._clock() + timeout
+    def poll(self, view_id: str) -> list[dict[str, Any]]:
+        """Hand over the events waiting for ``view_id``, at once: a poll never waits (see above)."""
         with self._cond:
-            while True:
-                view = self._views.get(view_id)
-                if view is None:
-                    return [{"type": "unknown-view"}]
-                view.seen = self._clock()
-                if view.events or cancelled():
-                    events, view.events = view.events, []
-                    return events
-                remaining = deadline - self._clock()
-                if remaining <= 0:
-                    return []
-                # Wake at least every second so a cancelled poll releases its worker.
-                self._cond.wait(min(remaining, 1.0))
+            view = self._views.get(view_id)
+            if view is None:
+                return [{"type": "unknown-view"}]
+            view.seen = self._clock()
+            events, view.events = view.events, []
+            return events
 
     # -- questions -------------------------------------------------------------
 

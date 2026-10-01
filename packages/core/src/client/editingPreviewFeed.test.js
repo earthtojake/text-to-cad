@@ -8,7 +8,9 @@ const settled = () => new Promise(resolve => setImmediate(resolve));
 
 function harness(file = "part.step") {
   const requests = [], timers = [], updates = [], errors = [];
+  const clock = { now: 0 };
   const stop = observeEditingPreview(file, value => updates.push(value), error => errors.push(error), {
+    now: () => clock.now,
     client: createCadClient({ fetch(url, options) {
       return new Promise(resolve => requests.push({ url, options, resolve }));
     } }),
@@ -19,7 +21,7 @@ function harness(file = "part.step") {
     },
     cancel(timer) { if (timer) timer.cancelled = true; },
   });
-  return { requests, timers, updates, errors, stop };
+  return { requests, timers, updates, errors, stop, clock };
 }
 
 function answer(request, value, ok = true) {
@@ -32,14 +34,35 @@ test("holds one request, carries the returned cursor and coalesces progress", as
     assert.equal(h.requests.length, 1);
     assert.equal(new URL(h.requests[0].url, "http://localhost").searchParams.get("file"), "parts/a b.step");
     assert.equal(h.timers.length, 0, "an unresolved request cannot schedule another");
+    h.clock.now = 30;
     answer(h.requests[0], { state: "building", feedCursor: "epoch:1" });
     await settled();
     assert.equal(h.updates.length, 1);
-    assert.equal(h.timers[0].delay, 16);
+    assert.equal(h.timers[0].delay, 70, "news is asked after again within a tenth of a second");
     h.timers[0].callback();
     assert.equal(h.requests.length, 2);
     assert.equal(new URL(h.requests[1].url, "http://localhost").searchParams.get("after"), "epoch:1");
     assert.equal(h.timers.length, 1);
+  } finally { h.stop(); }
+});
+
+test("nothing new waits out the second a holding server did not: the feed never spins", async () => {
+  const h = harness();
+  try {
+    answer(h.requests[0], { feedCursor: "epoch:1" });
+    await settled();
+    h.timers[0].callback();
+    // A server that answers at once (a host relaying through shared slots): the feed waits out the second itself.
+    h.clock.now = 10;
+    answer(h.requests[1], { feedCursor: "epoch:1" });
+    await settled();
+    assert.equal(h.timers[1].delay, 990);
+    h.timers[1].callback();
+    // A server that held the request for its second: asked again at once.
+    h.clock.now = 1010;
+    answer(h.requests[2], { feedCursor: "epoch:1" });
+    await settled();
+    assert.equal(h.timers[2].delay, 16);
   } finally { h.stop(); }
 });
 

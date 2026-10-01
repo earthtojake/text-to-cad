@@ -1279,6 +1279,9 @@ still rechecks actual saved bytes and object completeness even with no build
 event. Each heartbeat verifies each unique tree once without retaining its
 BREP payloads. Closing or switching the tab aborts its request; a disconnected feed
 retries without starting a daemon or a model. This adds no persistent state.
+The CAD app's tunnel (`cadgen.mcp.tunnel`) never holds the request: it drops the
+cursor, so the daemon answers with a snapshot at once, and the client paces
+itself (a host relays every call through a few slots all its views share).
 
 The preview is the model's final immutable source result. Parents may pin and
 materialize that result before the child's STEP save finishes. It becomes

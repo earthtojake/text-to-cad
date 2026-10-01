@@ -65,22 +65,22 @@ class _Session(unittest.TestCase):
         return self.call(name, arguments, meta)["structuredContent"]["launch"]
 
     def poll_as(self, view: str, surface: str, answers: int, model: str | None = None) -> threading.Thread:
-        """A view long-polling as the page does, answering ``answers`` questions (describe or capture)."""
+        """A view polling as the page does (every few milliseconds here), answering ``answers`` questions."""
+        self.call("cad_events", {"view": view, "surface": surface, "model": model})  # the first poll registers it
 
         def page() -> None:
             asked = 0
             while asked < answers:
-                for event in self.call("cad_events", {"view": view, "surface": surface, "model": model})["structuredContent"]["events"]:
+                events = self.call("cad_events", {"view": view, "surface": surface, "model": model})["structuredContent"]["events"]
+                if not events:
+                    time.sleep(0.002)
+                for event in events:
                     asked += 1
                     answer = {"png": "iVBORw0KGgo="} if event["type"] == "capture" else {"state": {"model": model, "selection": [f"{model}#o1.f1"]}}
                     self.call("cad_capture_reply", {"requestId": event["requestId"], **answer})
 
         viewer = threading.Thread(target=page, daemon=True)
         viewer.start()
-        deadline = time.monotonic() + 10
-        while view not in {live.id for live in self.server.views.live()}:  # the poll registers, then waits
-            self.assertLess(time.monotonic(), deadline)
-            time.sleep(0.001)
         return viewer
 
 
@@ -131,17 +131,11 @@ class TabServerTest(_Session):
 
     def test_cad_show_reaches_the_polling_view_without_opening_one(self) -> None:
         self.assertEqual(self.call("cad_show", {"path": "parts/bracket.stl"})["structuredContent"], {"delivered": 0})
-        polled: list = []
-        poller = threading.Thread(target=lambda: polled.append(self.call("cad_events", {"view": "v1", "surface": "tab"})))
-        poller.start()
-        deadline = time.monotonic() + 10
-        while "v1" not in {view.id for view in self.server.views.live("t")}:  # the poll registers, then waits
-            self.assertLess(time.monotonic(), deadline)
-            time.sleep(0.001)
+        # A poll answers at once: the first registers the view, the next carries what was sent since.
+        self.assertEqual(self.call("cad_events", {"view": "v1", "surface": "tab"})["structuredContent"], {"events": []})
         shown = self.call("cad_show", {"path": "parts/bracket.stl"})
-        poller.join(10)
         self.assertEqual(shown["structuredContent"], {"delivered": 1, "view": "v1"})
-        (event,) = polled[0]["structuredContent"]["events"]
+        (event,) = self.call("cad_events", {"view": "v1", "surface": "tab"})["structuredContent"]["events"]
         self.assertEqual((event["type"], event["launch"]["model"]), ("show", str(self.workspace / "parts" / "bracket.stl")))
 
     def test_the_agent_reads_and_captures_what_the_open_view_shows(self) -> None:
@@ -166,6 +160,16 @@ class TabServerTest(_Session):
         for route in ("/__cad/reveal", "/__cad/recents"):  # the web app's effects; a view here has tools for them
             effect = self.call("cad_http", {"root": root, "method": "POST", "url": route, "body": ""})["structuredContent"]
             self.assertEqual(effect["status"], 404)
+
+    def test_the_tunnel_never_holds_a_call_open(self) -> None:
+        # The preview feed's ``after`` holds a request until the build ledger moves. The host relays every
+        # call through a few slots all its views share, so here it is answered at once; the feed paces itself.
+        root = {"kind": "workspace", "path": str(self.workspace)}
+        url = "http://cad.invalid/__cad/preview?file=parts%2Fbracket.stl&after=epoch%3A1"
+        with mock.patch("cadgen.viewer.preview.preview_update", return_value={"state": "disconnected"}) as update:
+            reply = self.call("cad_http", {"root": root, "method": "GET", "url": url})["structuredContent"]
+        self.assertEqual(reply["status"], 200)
+        self.assertEqual((update.call_args.args[1], update.call_args.kwargs["after"]), ("parts/bracket.stl", None))
 
     def test_only_the_sidebar_has_a_home_and_a_tab_with_nothing_shown_browses_the_project_if_any(self) -> None:
         user_filesystem = ("global", os.path.splitdrive(os.path.expanduser("~"))[0] + os.sep)

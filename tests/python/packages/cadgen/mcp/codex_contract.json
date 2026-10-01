@@ -620,7 +620,7 @@
     "openWorldHint": false,
     "readOnlyHint": true
    },
-   "description": "Long-poll for this view's events.",
+   "description": "The events waiting for this view, at once (it polls every second).",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {

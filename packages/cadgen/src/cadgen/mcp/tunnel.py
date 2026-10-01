@@ -98,7 +98,14 @@ class ViewerTunnel:
         lowered.pop("host", None)  # a loopback name the router accepts; absent is accepted too
         if body:
             lowered["content-length"] = str(len(body))
-        request = Request(raw_method=method, path=path, query=url_norm.request_query(url), headers=lowered, read_body=lambda: body)
+        query = url_norm.request_query(url)
+        if path == "/__cad/preview":
+            # The preview feed's ``after`` holds the request until the build ledger moves (up to a
+            # second). Here it answers at once: the host relays every call through a few slots all of
+            # its views share, and a held one keeps another view's model load waiting. The feed paces
+            # an answer that brings nothing new itself.
+            query = url_norm.Query([pair for pair in query if pair[0] != "after"])
+        request = Request(raw_method=method, path=path, query=query, headers=lowered, read_body=lambda: body)
         handler = _CapturedHandler()
         response = Response(handler, head_only=request.is_head)
         try:

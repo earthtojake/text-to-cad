@@ -195,7 +195,10 @@ the daemon must be running for live updates.
 **The feed.** Updates arrive through a held request that wakes when this
 output's build ledger changes. Unrelated jobs do not wake the tab. The server
 admits 32 waiters independently of kernel workers; excess tabs retry every
-500 ms. An idle heartbeat revalidates saved bytes and missing geometry; closing
+500 ms. A server that answers at once instead (a host relaying requests through a
+few slots all its views share, where a held request would take one) is paced by the feed: an answer
+with nothing new waits out the rest of a second, and news is asked after again
+within a tenth of one. An idle heartbeat revalidates saved bytes and missing geometry; closing
 or switching the tab cancels the request. Older status responses cannot
 overwrite newer cached progress, and saved revisions are verified from one
 coherent file snapshot. Restarting the daemon expires the ephemeral session,

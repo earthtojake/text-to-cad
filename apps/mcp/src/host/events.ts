@@ -16,9 +16,14 @@ const pause = (ms: number, signal: AbortSignal) => new Promise<void>(resolve => 
   signal.addEventListener('abort', done, { once: true });
 });
 
+/** How often a view asks for its events (the server's `views.POLL_SECONDS`). */
+export const EVENTS_POLL_MS = 1_000;
+
 /**
- * Keep one `cad_events` long-poll outstanding for this view until `signal` aborts. Each poll
- * also registers the view, so a server that restarted learns it again on the next one.
+ * Poll `cad_events` for this view every second until `signal` aborts; a poll that brought events
+ * asks again at once, for the next may already be waiting. The server answers at once: the host
+ * relays every call through a few slots all its views share, so none is held open. Each poll also
+ * registers the view, so a server that restarted learns it again on the next one.
  */
 export function watchViewEvents(server: Pick<Server, 'events' | 'reply'>, view: { id: string; surface: string; model(): string | null }, handlers: ViewEventHandlers, signal: AbortSignal): void {
   async function answer(event: ViewEvent) {
@@ -41,6 +46,7 @@ export function watchViewEvents(server: Pick<Server, 'events' | 'reply'>, view: 
         const events = await server.events(view.id, view.surface, view.model(), { signal });
         failures = 0;
         for (const event of events) void answer(event);
+        if (!events.length) await pause(EVENTS_POLL_MS, signal);
       } catch {
         if (signal.aborted) return;
         failures += 1;

@@ -6,9 +6,9 @@ the workspace, the open views, what was last shown -- is plain process memory.
 
 One page serves every surface. The tool that opens a surface returns a
 *launch* -- which page, which model, which root to browse -- and the page renders
-it; nothing in the page guesses where it is. Once open, a view long-polls
-``cad_events`` so the agent's questions reach it, and reaches the viewer's own
-HTTP routes through ``cad_http``.
+it; nothing in the page guesses where it is. Once open, a view polls
+``cad_events`` every second so the agent's questions reach it, and reaches the
+viewer's own HTTP routes through ``cad_http``. No call is held open (``views.py``).
 
 Hosts present views in one of three ways, told apart at initialize:
 
@@ -50,7 +50,7 @@ from cadgen.viewer.scanner import SOURCE_EXTENSIONS, catalog_lists
 from .protocol import INVALID_PARAMS, METHOD_NOT_FOUND, Connection, RequestContext, RpcError, claim_stdout
 from .roots import WORKSPACE, Root, ThreadWorkspace, filesystem_of, home_filesystem
 from .ui import MIME, RESOURCE_META, AppPage
-from .views import POLL_SECONDS, NoAnswer, ViewRegistry
+from .views import NoAnswer, ViewRegistry
 
 LOG = logging.getLogger("cadgen.mcp")
 
@@ -364,7 +364,7 @@ class Server:
                 _object({"model": {"type": "string"}}, ["model"])),
             app("cad_pick_model", "Open Model", "Choose a model with the desktop's file chooser. Only for an explicit Open Model action.",
                 _object()),
-            app("cad_events", "CAD events", "Long-poll for this view's events.",
+            app("cad_events", "CAD events", "The events waiting for this view, at once (it polls every second).",
                 _object({"view": {"type": "string"}, "surface": {"type": "string"}, "model": {"type": ["string", "null"]}},
                         ["view", "surface"])),
             app("cad_view_report", "Report CAD view", "Tell the server what this view shows.",
@@ -634,8 +634,7 @@ class Server:
 
     def _tool_cad_events(self, arguments, context):
         view_id = self._register(arguments, context)
-        events = self.views.poll(view_id, timeout=POLL_SECONDS, cancelled=lambda: context.cancelled or context.connection.closed)
-        return _data({"events": events})
+        return _data({"events": self.views.poll(view_id)})
 
     def _tool_cad_view_report(self, arguments, context):
         view_id = self._register(arguments, context)

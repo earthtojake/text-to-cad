@@ -86,8 +86,17 @@ reference host `basic-host` does.
   drawing editor's fonts (as data URIs) into `dist/index.html`, and fails if
   anything would be left outside it: the host serves one resource and nothing
   beside it.
-- **No loading states of our own.** Opening a model switches straight to the
-  viewer; the viewer's own progress is the only progress UI.
+- **Nothing waits unseen.** While the home's list is read, placeholder cards (or
+  rows) stand where the models will be; a model being opened shows a spinner over
+  its picture, and takes no second press, until the launch switches to the
+  viewer, whose own progress takes over.
+- **Nothing is held open.** A host relays every call its views make through a few
+  slots they all share, and holds a call until one frees: with three views each
+  holding two calls open (the old 20-second `cad_events` long-poll and the
+  editing preview's one-second wait), every model load, picture and pick queued
+  behind them. `cad_events` answers at once and is polled every second
+  (`views.POLL_SECONDS`); the tunnel answers the editing preview at once, and the
+  feed paces itself (`@text-to-cad/core`'s `editingPreviewFeed.js`).
 
 ## Host adapter (`src/host`)
 
@@ -98,7 +107,7 @@ reference host `basic-host` does.
 | `tunnel.ts` | the `fetch` over `cad_http` |
 | `files.ts` | a filesystem's read-only `FileSource`: the file on screen, never listed, whose copied references name files by absolute path (a project's is `@text-to-cad/ui/catalog`'s, as the web Viewer's is) |
 | `prompt.ts` | Quick Edit's chat: `chatReach`, what the host's chat takes, and the prompt port over it — Queue through `ui/update-model-context` (a text block titled `Quick edit · <file>` and the sketch's image block, kept until the host clears its model context), Send through `ui/message` — with references as absolute paths (Copy Prompt spells them as copied references are) |
-| `live.ts`, `events.ts` | the mounted view's live controller (`@text-to-cad/ui/host`'s registry), and the `cad_events` long-poll that answers the agent (`show`, `capture`, `describe`) |
+| `live.ts`, `events.ts` | the mounted view's live controller (`@text-to-cad/ui/host`'s registry), and the `cad_events` poll, every second, that answers the agent (`show`, `capture`, `describe`) |
 | `presentation.ts` | how the host presents the page, and the election that retires older inline views |
 
 `ModelView.tsx` is the page: the shared `CadViewer` (`@text-to-cad/ui/cad-viewer`,

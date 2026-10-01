@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createPromptContext, referencePart } from '@text-to-cad/core/prompt';
 import { createBridge, HostError, type ToolResult } from './bridge';
-import { watchViewEvents } from './events';
+import { EVENTS_POLL_MS, watchViewEvents } from './events';
 import { createCatalogFileSource } from '@text-to-cad/ui/catalog';
 import { frameClipboard } from './clipboard';
 import { createFilesystemSource } from './files';
@@ -70,40 +70,45 @@ describe('the MCP Apps bridge', () => {
 });
 
 describe('the agent driving a view', () => {
-  it('shows what the agent sends and answers its questions over the long-poll', async () => {
-    const launch = { protocol: 1, page: 'viewer' as const, model: '/p/b.step', root: null, explore: true };
-    const batches: ViewEvent[][] = [
-      [{ seq: 1, type: 'show', launch }, { seq: 2, type: 'capture', requestId: 'c1' }, { seq: 3, type: 'describe', requestId: 'd1' }],
-      [{ seq: 4, type: 'capture', requestId: 'c2' }],
-    ];
-    const polls: unknown[][] = [];
-    const replies: unknown[] = [];
-    const server = {
-      events: (...args: any[]) => {
-        polls.push(args.slice(0, 3));
-        const batch = batches.shift();
-        // Past the scripted events, the poll waits, as the server's does, until the view goes.
-        return batch ? Promise.resolve(batch) : new Promise<ViewEvent[]>((_, reject) => args[3].signal.addEventListener('abort', () => reject(new Error('aborted'))));
-      },
-      reply: async (requestId: string, reply: object) => { replies.push({ requestId, ...reply }); },
-    };
-    const shown: unknown[] = [];
-    const captures = [new Blob([new Uint8Array([1, 2, 3])], { type: 'image/png' })];
-    const stop = new AbortController();
-    watchViewEvents(server as any, { id: 'v1', surface: 'tab', model: () => '/p/a.step' }, {
-      show: next => shown.push(next.model),
-      capture: async () => { const png = captures.shift(); if (!png) throw new Error('nothing to capture'); return png; },
-      describe: () => ({ model: '/p/a.step', selection: ['/p/a.step#o1.f2'] }),
-    }, stop.signal);
-    await vi.waitFor(() => expect(replies).toHaveLength(3));
-    stop.abort();
-    expect(shown).toEqual(['/p/b.step']);
-    expect(polls[0]).toEqual(['v1', 'tab', '/p/a.step']);
-    expect(replies).toEqual(expect.arrayContaining([
-      { requestId: 'c1', png: encodeBase64(new Uint8Array([1, 2, 3])) },
-      { requestId: 'd1', state: { model: '/p/a.step', selection: ['/p/a.step#o1.f2'] } },
-      { requestId: 'c2', error: 'nothing to capture' },
-    ]));
+  it('shows what the agent sends and answers its questions, asking every second and never holding a call', async () => {
+    vi.useFakeTimers();
+    try {
+      const launch = { protocol: 1, page: 'viewer' as const, model: '/p/b.step', root: null, explore: true };
+      const batches: ViewEvent[][] = [
+        [{ seq: 1, type: 'show', launch }, { seq: 2, type: 'capture', requestId: 'c1' }, { seq: 3, type: 'describe', requestId: 'd1' }],
+        [{ seq: 4, type: 'capture', requestId: 'c2' }],
+      ];
+      const polls: unknown[][] = [];
+      const replies: unknown[] = [];
+      // The server answers at once, with nothing once the scripted events are out.
+      const server = {
+        events: async (...args: any[]) => { polls.push(args.slice(0, 3)); return batches.shift() || []; },
+        reply: async (requestId: string, reply: object) => { replies.push({ requestId, ...reply }); },
+      };
+      const shown: unknown[] = [];
+      const captures = [new Blob([new Uint8Array([1, 2, 3])], { type: 'image/png' })];
+      const stop = new AbortController();
+      watchViewEvents(server as any, { id: 'v1', surface: 'tab', model: () => '/p/a.step' }, {
+        show: next => shown.push(next.model),
+        capture: async () => { const png = captures.shift(); if (!png) throw new Error('nothing to capture'); return png; },
+        describe: () => ({ model: '/p/a.step', selection: ['/p/a.step#o1.f2'] }),
+      }, stop.signal);
+      // Events are asked after again at once; an empty answer waits a second, so the loop never spins.
+      await vi.advanceTimersByTimeAsync(0);
+      expect(polls).toHaveLength(3);
+      await vi.advanceTimersByTimeAsync(EVENTS_POLL_MS - 1);
+      expect(polls).toHaveLength(3);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(polls).toHaveLength(4);
+      stop.abort();
+      expect(shown).toEqual(['/p/b.step']);
+      expect(polls[0]).toEqual(['v1', 'tab', '/p/a.step']);
+      expect(replies).toEqual(expect.arrayContaining([
+        { requestId: 'c1', png: encodeBase64(new Uint8Array([1, 2, 3])) },
+        { requestId: 'd1', state: { model: '/p/a.step', selection: ['/p/a.step#o1.f2'] } },
+        { requestId: 'c2', error: 'nothing to capture' },
+      ]));
+    } finally { vi.useRealTimers(); }
   });
 });
 
