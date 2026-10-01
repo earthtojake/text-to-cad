@@ -87,19 +87,22 @@ file's routine plays on entry only when its Autoplay is on. The rules are in
 [settings-ui.md](settings-ui.md#camera-animation-and-preview).
 
 A renderer can publish `FileNavigationAction[]` through
-`RendererViewProps.onNavigationActionsChange`. The shared navbar shows these at
-its right, before any declared panel's toggle and the host's links. Each action declares its icon, accessible label, an
+`RendererViewProps.onNavigationActionsChange`; the CAD renderers publish none. The
+shared navbar shows these at its right, before any declared panel's toggle and the
+host's links. Each action declares its icon, accessible label, an
 optional shorter hover `hint`, disabled state and invocation callback. Registration belongs to the mounted
 file generation: publish an empty list on cleanup; departing renderers cannot
 replace a new file's actions. Publish only when action metadata changes; stable
 commands should read the current viewport through a ref, avoiding parent/child
-render loops. These actions use existing host capabilities for effects. For
-example, CAD's snapshot writes the view to the clipboard as a PNG
-(`ClipboardPort.writeImage`, started inside the gesture with the image still
-pending). Only a clipboard destination has that action. A composer destination,
-or a host with no prompt workflow (`unavailablePromptContext`, kind
-`unavailable`), has none: it is left out, not disabled, and what a person tells
-the agent there is [Quick Edit](#prompt-handoff). The host's `captureRequest`
+render loops. These actions use existing host capabilities for effects. What a
+person tells the agent about a CAD file is [Quick Edit](#prompt-handoff)'s.
+
+A renderer with controls of its own for the view draws them into
+`RendererViewProps.navbarSlot`, at the navbar's right end after the version (the CAD
+viewer's Display settings and Preview); it is null where no navbar is drawn. A
+renderer that shows its file fullscreen (the CAD viewer's Preview) says so through
+`onFullscreenChange(true)`, and `false` when it stops: the navbar, the explorer
+and any declared panel step aside while it lasts. The host's `captureRequest`
 command is the same capture: to a composer destination it delivers the view and
 the selection through `promptContext.deliver`. Neither route detects the platform.
 
@@ -375,12 +378,10 @@ time, the explorer included.
 The viewport's corners are the shell's, never the host's: the tool strip and its
 stack at the top-left, Quick Edit at the top-right, and the view cube at the
 bottom-left. The view's own controls (Display settings, Preview) are the
-renderer's, drawn into the navbar's right end before the version (`navbarSlot`). What Quick Edit offers follows the subscribed destination capability and
+renderer's, drawn into the navbar's right end after the version (`navbarSlot`). What Quick Edit offers follows the subscribed destination capability and
 the ports, never an app name: Copy Prompt always, Queue for a composer
-destination, Send where the prompt port has `send`. The navbar's snapshot is a
-clipboard destination's: the viewport PNG goes straight through
-`ClipboardPort.writeImage`, and a composer or `unavailable` destination has none.
-Native clipboard effects remain in the host implementation.
+destination, Send where the prompt port has `send`. Native clipboard effects
+remain in the host implementation.
 
 STEP's Reference panel (Copy, or Copy All with several references) and Draw's
 panel (Copy, once there is ink) use `ClipboardPort` directly, including on

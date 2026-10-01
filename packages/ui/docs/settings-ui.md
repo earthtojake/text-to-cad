@@ -25,7 +25,7 @@ turns the explorer.
 | The host (web, desktop) supplies | The shared UI decides |
 | --- | --- |
 | Where the tab record lives (`TabRecordStorage`: the web's sessionStorage, the desktop's per-tab store) | The record: its settings (the tree, the tool stack's layout, the appearance) and each file's view (its camera, Display settings, Playback settings and renderer slices), what is written when, and what is never stored (`@text-to-cad/ui/tab-store`, `kit/shell/fileView.js`) |
-| `navigation.home`, `links` (its version, GitHub, Discord, how a link opens) and `displayActions` (an appearance control) | The navbar's order and look, the version's menu, the snapshot action and the panel toggles |
+| `navigation.home`, `links` (its version, GitHub, Discord, how a link opens) and `displayActions` (an appearance control) | The navbar's order and look, the version's menu and the panel toggles |
 | `host.files`, `fileActions`, `navigation`, `clipboard`, `promptContext`, `attachments` | When a copy, capture or open happens and what it carries |
 | `host.environment`: color scheme, keyboard `platform`, `reducedMotion` | How the chrome honours them |
 | `onError`, for errors the viewer hands up | Preview, tooltips, keyboard scope, the tool stack, the camera |
@@ -38,16 +38,19 @@ none.
   explorer's toggle where there are files to browse, then the open file's name and
   its ⋯ — the explorer's own menu for that file; the name has no right-click menu
   and there are no crumbs. With no file open, the words "Select file" (not a
-  control) stand in the name's place beside the explorer's toggle. Right: the renderer's actions (the snapshot camera),
-  a declared panel's toggle, then the version (`v0.7.4`), whose menu holds the
-  release notes, GitHub and Discord. A CAD file declares no panel. A host's home has
+  control) stand in the name's place beside the explorer's toggle. Right: a
+  declared panel's toggle, the version (`v0.7.4`), whose menu holds the release
+  notes, GitHub and Discord, then the view's controls (Display settings,
+  Preview). A CAD file declares no panel and publishes no navbar action. A host's home has
   no navbar: the version stands under its CAD wordmark. A view shown small in a
   conversation (`compact`) has none either, and draws the model alone: no tools,
   view actions, cube or Quick Edit.
 - **File explorer** floats over the view's left, inset 8px like the toolbar, on a
-  solid background above the tools. Opening it never resizes the view or moves its
-  tools; it stays up while a person walks the tree, and a press outside it (the
-  navbar aside) closes it.
+  solid background above the tools, as tall as its rows up to the view's height
+  less the inset at either end: past that its list scrolls. While it is open the
+  tool strip and the stack are out of sight under it, kept as they are. Opening it
+  never resizes the view; it stays up while a person walks the tree, and a press
+  outside it (the navbar aside) closes it.
 - **Toolbar** at top-left, 8px in — the gap between it and the stack under it.
 - **Tool stack** beneath the toolbar: the panels of the tool in hand and of the
   effects a person keeps (see [The tool stack](#the-tool-stack)). The column is
@@ -60,14 +63,15 @@ none.
 - **View cube** at bottom-left, 2px from the left and 8px off the bottom so the
   axes drawn in its lower corner never touch the edge, in a 6rem area: enlarged
   face/edge/corner hit areas and neutral hover and XYZ guides. Preview omits it.
-- **View controls** in the navbar's right end, before the version: **Display
-  settings** (cog), then **Preview** (a play icon), the navbar's 24px icon
-  buttons with 14px icons and hints below them. In preview the navbar keeps
-  them, with an X ("Exit preview") where Preview was. Display settings' popover
-  opens down from its button, end-aligned. A view shown small has no navbar, and
-  so none of them.
-- **Playbar** (preview's) sits at bottom-centre, and nothing else does;
-  **Playback settings** is the cog at its right end, and its menu opens upward.
+- **View controls** at the navbar's right end, after the version: **Display
+  settings** (cog), then **Preview** (a fullscreen icon, two diagonal arrows),
+  the navbar's 24px icon buttons with 14px icons and hints below them. Display
+  settings' popover opens down from its button, end-aligned. A view shown small
+  has no navbar, and so none of them.
+- **Playbar** (preview's) sits at bottom-centre, on a line 1.75rem up (a host
+  whose control floats over the view's bottom moves it with
+  `--cad-viewport-bottom-center`), and nothing else does; **Playback settings**
+  is the cog at its right end, and its menu opens upward.
 - **Model update status** sits at top-centre of the viewport, vertically centred
   in the same 34px row as the top-left toolbar in every host.
   It is renderer chrome, independent of the host's navigation status slot.
@@ -80,7 +84,7 @@ none.
 | STEP | Select, Position (movable joints only), Draw, Measure, Explode (two or more parts), Clip |
 | URDF / SRDF / SDF | Select, Position (posable joints only) |
 | GLB / STL / 3MF | none |
-| DXF | none: a 2D canvas; a clipboard destination's navigation snapshot |
+| DXF | none: a 2D canvas |
 
 There is no separator or activity dot. There is no Animate tool: routines play in
 [preview](#camera-animation-and-preview). Display is not a tool: every 3D
@@ -512,8 +516,9 @@ but still drawn:
 - **Send** (up arrow), where the host can post a message: the note goes now, as the
   person's message.
 
-Each clears the note and closes the box once it has gone; a failure keeps the note
-and says why in the box. The message is
+Queue and Send clear the note and what it carries, and so close the box, once the
+note has gone. Copy Prompt keeps it all, since nothing has gone yet: its button
+shows a tick for a moment. A failure keeps the note and says why in the box. The message is
 one format, sent, queued or copied: what the person wrote; then `File: <path>`; then
 `References:` and one reference per line; then `Sketch: <path>` when the picture
 travels as a file (a picture sent beside the text is not named).
@@ -532,13 +537,15 @@ Zoom to Selection frames the selection and is unavailable without one. Both are
 STEP context-menu items; the live `resetCamera` command takes the same fit path.
 
 **Preview** is available for every 3D file, animated or not, and is the shell's
-own state (`previewing`); hosts neither start nor observe it. Its button is the
-play icon among the view's controls in the navbar ("Preview"). It fills the viewer below the
-host's navbar, which stays, and under the host's explorer, which stays as it was
-and can still be opened and shut; the toolbar, the tool stack and its resize
-handles, Quick Edit, joint handles, cube and context menu are gone. It starts
-orbiting, unless the file's Playback settings turned its orbit off. The navbar keeps the
-view's controls: **Display settings**, and an X ("Exit preview") where Preview was. **Playback
+own state (`previewing`); hosts neither start nor observe it, beyond giving the
+page over to it. Its button is the fullscreen icon, the last of the view's controls
+in the navbar ("Preview"). It is fullscreen: the renderer says so
+(`onFullscreenChange`), and the navbar, the explorer and any declared panel step
+aside while it lasts, Display settings with them; the toolbar, the tool stack and
+its resize handles, Quick Edit, joint handles, cube and context menu are gone. Its
+way out is the view's own: a minimize icon ("Exit preview") at the view's top-right,
+on the floating surface, which fades with the playbar; Escape leaves it too. It
+starts orbiting, unless the file's Playback settings turned its orbit off. **Playback
 settings** (a cog; `PlaybackMenu`) ends the playbar under the model and opens
 upward. It holds, for a file with routines, **Animation** — the Routine (with more than one), Speed, Loop and
 Autoplay — then **Orbit**: on or off, and its speed. Under the model, an

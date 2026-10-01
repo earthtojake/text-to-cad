@@ -343,8 +343,8 @@ and web stay consistent without host-specific copies of those controls.
 The Viewer has the one navbar every app shares (see
 [the host contract](../../packages/ui/docs/viewer-host.md#host-chrome-slots)): at the
 left the explorer's toggle and the open file's name with its ⋯ ("Select file" with
-none open); at the right the renderer's snapshot action,
-then the version, whose menu holds GitHub and Discord. This host supplies the links
+none open); at the right the version, whose menu holds GitHub and Discord, then the
+view's controls (Display settings, Preview). This host supplies the links
 (`src/host/viewerLinks.js`): its version, the GitHub and Discord its build names
 (`VIEWER_GITHUB_URL`, `VIEWER_DISCORD_URL`), and what GitHub's latest-release API
 says, so the version reads "Update" when a newer release is out; links open in a new
