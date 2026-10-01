@@ -221,20 +221,31 @@ if ! printf '%s' "$status_json" | grep -q '"compile":true'; then
   echo "FAIL: raw STEP status did not offer the compile: $status_json" >&2
   exit 1
 fi
-# The compile pays one cold interpreter + OCP start; give it a real timeout.
-build_json="$(curl -s -m 120 -X POST -H 'x-cadgen-viewer: 1' "$step_url")"
+# The POST starts the compile and answers at once; the status route says when it
+# has landed. The compile pays one cold interpreter + OCP start, so the wait for
+# that is bounded generously.
+build_json="$(curl -s -m 30 -X POST -H 'x-cadgen-viewer: 1' "$step_url")"
 if ! printf '%s' "$build_json" | grep -q '"ok":true'; then
-  echo "FAIL: the compile did not succeed: $build_json" >&2
+  echo "FAIL: the compile did not start: $build_json" >&2
   exit 1
 fi
+compile_deadline=$((SECONDS + 120))
+status_json="$(curl -s -m 10 "$step_url")"
+until printf '%s' "$status_json" | grep -q '"state":"compiled"'; do
+  if printf '%s' "$status_json" | grep -q '"state":"failed"'; then
+    echo "FAIL: the compile failed: $status_json" >&2
+    exit 1
+  fi
+  if [ "$SECONDS" -ge "$compile_deadline" ]; then
+    echo "FAIL: compiled STEP did not settle compiled: $status_json" >&2
+    exit 1
+  fi
+  sleep 0.5
+  status_json="$(curl -s -m 10 "$step_url")"
+done
 # The tree lands in the (isolated) store, keyed by the document's bytes.
 if ! ls "$CADGEN_CACHE_DIR"/index/document/* > /dev/null 2>&1; then
-  echo "FAIL: compile reported ok but the store indexes no document" >&2
-  exit 1
-fi
-status_json="$(curl -s -m 10 "$step_url")"
-if ! printf '%s' "$status_json" | grep -q '"state":"compiled"'; then
-  echo "FAIL: compiled STEP did not settle compiled: $status_json" >&2
+  echo "FAIL: compile reported compiled but the store indexes no document" >&2
   exit 1
 fi
 if ! printf '%s' "$status_json" | grep -q '"ref":"/__cad/store?'; then
