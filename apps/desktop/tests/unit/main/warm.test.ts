@@ -14,7 +14,10 @@ class FakeAdapter implements WarmAdapter {
   closed = 0;
   alive = true;
 
-  constructor(readonly cwd: string) {}
+  constructor(
+    readonly cwd: string,
+    readonly optionsKey = "k1",
+  ) {}
 
   close(): void {
     this.closed += 1;
@@ -22,7 +25,7 @@ class FakeAdapter implements WarmAdapter {
   }
 }
 
-function pool(options: { fail?: boolean } = {}) {
+function pool(options: { fail?: boolean; key?: () => string } = {}) {
   const spawned: FakeAdapter[] = [];
   const logs: string[] = [];
   const instance = new WarmAdapterPool<FakeAdapter>({
@@ -30,7 +33,7 @@ function pool(options: { fail?: boolean } = {}) {
       if (options.fail) {
         throw new Error("not signed in");
       }
-      const adapter = new FakeAdapter(cwd);
+      const adapter = new FakeAdapter(cwd, options.key?.());
       spawned.push(adapter);
       return adapter;
     },
@@ -46,16 +49,16 @@ describe("WarmAdapterPool", () => {
     expect(spawned).toHaveLength(1);
     expect(warm.has("codex")).toBe(true);
 
-    const taken = warm.take("codex", "/p");
+    const taken = warm.take("codex", "/p", "k1");
     expect(taken).toBe(spawned[0]);
     // The same agent asked again gets a fresh spawn, not the one in use.
-    expect(warm.take("codex", "/p")).toBeNull();
+    expect(warm.take("codex", "/p", "k1")).toBeNull();
   });
 
   it("replaces the one it handed out", async () => {
     const { pool: warm, spawned } = pool();
     await warm.warm("codex", "/p");
-    warm.take("codex", "/p");
+    warm.take("codex", "/p", "k1");
     // The replacement is started by `take` and settles on the microtask queue.
     await Promise.resolve();
     await Promise.resolve();
@@ -96,16 +99,46 @@ describe("WarmAdapterPool", () => {
   it("refuses to hand an adapter to a session in another directory, and keeps it", async () => {
     const { pool: warm, spawned } = pool();
     await warm.warm("codex", "/project");
-    expect(warm.take("codex", "/worktrees/thing")).toBeNull();
+    expect(warm.take("codex", "/worktrees/thing", "k1")).toBeNull();
     expect(warm.has("codex")).toBe(true);
-    expect(warm.take("codex", "/project")).toBe(spawned[0]);
+    expect(warm.take("codex", "/project", "k1")).toBe(spawned[0]);
+  });
+
+  /**
+   * Warming for another directory while one waits is a spawn the pool would
+   * kill the moment it finished booting: the slot is taken. It is not made.
+   */
+  it("spawns nothing for another directory while an adapter waits", async () => {
+    const { pool: warm, spawned } = pool();
+    await warm.warm("codex", "/project");
+    await warm.warm("codex", "/worktrees/thing");
+    expect(spawned).toHaveLength(1);
+    expect(spawned[0]!.closed).toBe(0);
+  });
+
+  /**
+   * Spawned with other options — a PATH, a skills root, a launch that have
+   * changed since — an adapter is never handed out: it is closed, and its
+   * replacement is spawned with the options of now.
+   */
+  it("closes an adapter spawned with other options instead of handing it out", async () => {
+    let key = "k1";
+    const { pool: warm, spawned } = pool({ key: () => key });
+    await warm.warm("codex", "/p");
+    key = "k2";
+    expect(warm.take("codex", "/p", "k2")).toBeNull();
+    expect(spawned[0]!.closed).toBe(1);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(spawned).toHaveLength(2);
+    expect(warm.take("codex", "/p", "k2")).toBe(spawned[1]);
   });
 
   it("throws away an adapter that died while it waited, and starts another", async () => {
     const { pool: warm, spawned } = pool();
     await warm.warm("codex", "/p");
     spawned[0]!.alive = false;
-    expect(warm.take("codex", "/p")).toBeNull();
+    expect(warm.take("codex", "/p", "k1")).toBeNull();
     expect(warm.has("codex")).toBe(false);
     await Promise.resolve();
     await Promise.resolve();

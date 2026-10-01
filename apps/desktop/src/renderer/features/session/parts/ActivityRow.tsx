@@ -1,13 +1,18 @@
-import { Suspense, lazy, useState } from "react";
-import { CircleAlert, ChevronRight, Loader2 } from "lucide-react";
+import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
+import { Suspense, lazy, useContext, useId, useState } from "react";
+import { Ban, Box, CircleAlert, ChevronRight, Loader2 } from "lucide-react";
 import { cn } from "cn";
 
 import { Terminal } from "@renderer/components/ai-elements/terminal";
-import { ToolInput, ToolOutput } from "@renderer/components/ai-elements/tool";
+import { capToolBody, ToolInput, ToolOutput, TrimmedBody } from "@renderer/components/ai-elements/tool";
 import { useAcp } from "@renderer/state/acp";
+import { useExplorer } from "@renderer/state/explorer";
+import { useSessions } from "@renderer/state/sessions";
+import { isCadFile } from "@shared/cad-refs";
 import type { ToolCallPart } from "@shared/acp/types";
 
 import { GlyphIcon } from "../glyphs";
+import { TranscriptScopeContext } from "../links/PathLink";
 import { activityRow, commandLine, type ActivityRow, type ViewItem } from "../view";
 import { PartsList } from "./PartsList";
 
@@ -24,17 +29,39 @@ type ActivityItem = Extract<ViewItem, { kind: "activity" }>;
  */
 export function ActivityGroup({ item, sessionId }: { item: ActivityItem; sessionId: string }) {
   const [open, setOpen] = useState(false);
+  // Which rows are open is the group's, not each row's: a lone call is drawn
+  // bare and a second one folds both under the summary, and a row's own
+  // state would not survive that move. Opening the lone row opens the group
+  // too, so the fold that follows shows the row where the person left it.
+  const [openRows, setOpenRows] = useState<ReadonlySet<string>>(() => new Set());
   const active = item.rows.some((row) => row.status === "pending" || row.status === "in_progress");
   const failureCount = item.rows.filter((row) => row.status === "failed").length;
+  const toggleRow = (id: string) => {
+    const opening = !openRows.has(id);
+    setOpenRows((current) => {
+      const next = new Set(current);
+      if (opening) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+    if (opening && item.summary === null) {
+      setOpen(true);
+    }
+  };
+  const groupId = useId();
+  const rowView = (row: ActivityRow) => (
+    <ActivityRowView key={row.id} onToggle={() => toggleRow(row.id)} open={openRows.has(row.id)} row={row} sessionId={sessionId} />
+  );
 
   if (item.summary === null) {
-    return <ActivityRowView row={item.rows[0]!} sessionId={sessionId} />;
+    return rowView(item.rows[0]!);
   }
 
   return (
     <div className="not-prose min-w-0" data-activity-group data-open={open}>
       <RowButton
         active={active}
+        controls={groupId}
         onClick={() => setOpen((value) => !value)}
         open={open}
       >
@@ -49,30 +76,42 @@ export function ActivityGroup({ item, sessionId }: { item: ActivityItem; session
         {failureCount > 0 ? <FailureIndicator count={failureCount} /> : null}
       </RowButton>
       {open ? (
-        <div className="ui-reveal ml-2 border-l pl-2">
-          {item.rows.map((row) => (
-            <ActivityRowView key={row.id} row={row} sessionId={sessionId} />
-          ))}
+        <div className="ui-reveal ml-2 border-l pl-2" id={groupId}>
+          {item.rows.map(rowView)}
         </div>
       ) : null}
     </div>
   );
 }
 
-export function ActivityRowView({ row, sessionId }: { row: ActivityRow; sessionId: string }) {
-  const [open, setOpen] = useState(false);
+export function ActivityRowView({
+  row,
+  sessionId,
+  open,
+  onToggle,
+}: {
+  row: ActivityRow;
+  sessionId: string;
+  /** Held by the group (`ActivityGroup`), so it outlives the fold. */
+  open: boolean;
+  onToggle: () => void;
+}) {
   const active = row.status === "pending" || row.status === "in_progress";
   const failed = row.status === "failed";
+  const cancelled = row.status === "cancelled";
   const label = row.label;
   const command = row.command ? commandLine(row.command) : null;
+  const detailId = useId();
 
   return (
     <div className="not-prose min-w-0" data-activity-row={row.id} data-status={row.status}>
       <RowButton
         active={active}
-        onClick={() => setOpen((value) => !value)}
+        controls={detailId}
+        onClick={onToggle}
         open={open}
         title={row.path ?? row.command ?? row.part.title}
+        trailing={row.path ? <OpenCadFile path={row.path} sessionId={sessionId} /> : null}
       >
         <span className="flex size-4 shrink-0 items-center justify-center text-muted-foreground">
           {active ? <Loader2 className="size-3.5 animate-spin" /> : <GlyphIcon glyph={row.glyph} />}
@@ -86,15 +125,63 @@ export function ActivityRowView({ row, sessionId }: { row: ActivityRow; sessionI
           ) : null}
         </span>
         {failed ? <FailureIndicator /> : null}
+        {cancelled ? <CancelledIndicator /> : null}
         {row.insertions + row.deletions > 0 ? (
           <span className="shrink-0 font-mono text-[11px] text-muted-foreground tabular-nums">
             +{row.insertions} −{row.deletions}
           </span>
         ) : null}
       </RowButton>
-      {open ? <ToolDetail part={row.part} sessionId={sessionId} /> : null}
+      {open ? <ToolDetail id={detailId} part={row.part} sessionId={sessionId} /> : null}
     </div>
   );
+}
+
+/**
+ * "Open" beside a row whose path is a CAD file under this session's folder:
+ * the file opens in this session's explorer, in the root the transcript's
+ * links use (the worktree for a worktree thread). A path outside the folder,
+ * or a transcript not bound to the explorer showing, gets no button.
+ */
+function OpenCadFile({ path, sessionId }: { path: string; sessionId: string }) {
+  const scope = useContext(TranscriptScopeContext);
+  const cwd = useSessions((state) => state.sessions.find((session) => session.id === sessionId)?.cwd ?? null);
+  const owned = useExplorer((state) => state.sessionId === sessionId);
+  const relative = relativeTo(path, cwd);
+  if (!scope || !owned || !relative || !isCadFile(relative)) {
+    return null;
+  }
+  const open = () => {
+    const explorer = useExplorer.getState();
+    // The strip may have moved to another session since this rendered.
+    if (explorer.sessionId !== sessionId) return;
+    explorer.openFile(relative, scope.root);
+  };
+  return (
+    <TooltipHint content={`Open ${relative}`}>
+      <button
+        className="inline-flex h-5 shrink-0 items-center gap-1 rounded-sm px-1.5 text-[11px] font-medium text-primary hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+        data-activity-open={relative}
+        onClick={open}
+        type="button"
+      >
+        <Box aria-hidden className="size-3" />
+        Open
+      </button>
+    </TooltipHint>
+  );
+}
+
+/** A path the agent reported, relative to the session's folder; null when it is outside it. */
+function relativeTo(path: string, cwd: string | null): string | null {
+  const posix = path.replace(/\\/g, "/");
+  if (!posix.startsWith("/") && !/^[a-z]:\//i.test(posix)) {
+    const relative = posix.replace(/^(\.\/)+/, "");
+    return relative && !relative.split("/").includes("..") ? relative : null;
+  }
+  if (!cwd) return null;
+  const base = cwd.replace(/\\/g, "/").replace(/\/+$/, "");
+  return posix.startsWith(`${base}/`) ? posix.slice(base.length + 1) : null;
 }
 
 /** A failure belongs to the affected call, not to every word in the group. */
@@ -107,33 +194,61 @@ function FailureIndicator({ count }: { count?: number }) {
   );
 }
 
+/** A call whose turn was cancelled while it was still pending or running. */
+function CancelledIndicator() {
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1 text-[11px] font-medium text-muted-foreground" data-activity-cancelled>
+      <Ban aria-hidden className="size-3" />
+      Cancelled
+    </span>
+  );
+}
+
 function RowButton({
   children,
   open,
   active,
+  controls,
   onClick,
   title,
+  trailing,
 }: {
   children: React.ReactNode;
   open: boolean;
+  /** The id of what the row opens, named while it is open (`aria-controls`). */
+  controls: string;
   active: boolean;
   onClick: () => void;
   title?: string;
+  /** A second control beside the row — a sibling, never nested in the toggle. */
+  trailing?: React.ReactNode;
 }) {
+  if (trailing) {
+    return (
+      <div className="flex min-w-0 items-center gap-1">
+        <RowButton active={active} controls={controls} onClick={onClick} open={open} title={title}>
+          {children}
+        </RowButton>
+        {trailing}
+      </div>
+    );
+  }
   return (
-    <button
-      aria-expanded={open}
-      className={cn(
-        "flex min-w-0 w-full items-center gap-2 rounded-md px-1.5 py-0.5 text-left text-[13px] leading-5 transition-colors hover:bg-accent/60",
-        "text-muted-foreground",
-        active && "text-foreground/80",
-      )}
-      onClick={onClick}
-      title={title}
-      type="button"
-    >
-      {children}
-    </button>
+    <TooltipHint content={title} overflowOnly>
+      <button
+        aria-controls={open ? controls : undefined}
+        aria-expanded={open}
+        className={cn(
+          "flex min-w-0 w-full items-center gap-2 rounded-md px-1.5 py-0.5 text-left text-[13px] leading-5 transition-colors hover:bg-accent/60",
+          "text-muted-foreground",
+          active && "text-foreground/80",
+        )}
+        onClick={onClick}
+        type="button"
+      >
+        {children}
+      </button>
+    </TooltipHint>
   );
 }
 
@@ -142,24 +257,31 @@ function RowButton({
  * (the live stream from the client's own terminal, or what the adapter
  * streamed, or its final output); everything else shows input and result.
  */
-export function ToolDetail({ part, sessionId }: { part: ToolCallPart; sessionId: string }) {
+export function ToolDetail({ part, sessionId, id }: { part: ToolCallPart; sessionId: string; id?: string }) {
   const diffs = part.content.filter((content) => content.type === "diff");
   const terminalRef = part.content.find((content) => content.type === "terminal");
   const terminalKey = terminalRef?.type === "terminal" ? `${sessionId}/${terminalRef.terminalId}` : null;
   const liveOutput = useAcp((state) => (terminalKey ? (state.terminalOutput[terminalKey] ?? null) : null));
+  // A finished command with nothing to draw: silent, or its output was never held here (a
+  // reload, a background session, a session let go of) — the two are not the same sentence.
+  const notKept = useAcp((state) => (terminalKey ? state.coldTerminals[terminalKey] === true : false));
   const texts = part.content.filter((content) => content.type === "text");
   const images = part.content.filter((content) => content.type === "image");
   const links = part.content.filter((content) => content.type === "resource_link");
   const running = part.status === "pending" || part.status === "in_progress";
   const command = part.kind === "execute" ? activityRow(part).command : null;
 
-  const terminalText =
+  // The terminal keeps its last 64 KB (the newest output is what matters);
+  // `capToolBody` is also what the text, input and result below are held to.
+  const terminalBody =
     part.kind === "execute" || terminalRef
-      ? (liveOutput ?? (part.stream || outputText(part.output)))
+      ? capToolBody(liveOutput ?? (part.stream || outputText(part.output)), { keep: "tail" })
       : null;
+  const terminalText = terminalBody?.text ?? null;
+  const silence = notKept ? "Output not kept after reload" : "(no output)";
 
   return (
-    <div className="ui-reveal mt-1 mb-2 ml-6 flex min-w-0 flex-col gap-2 text-[13px]" data-tool-detail>
+    <div className="ui-reveal mt-1 mb-2 ml-6 flex min-w-0 flex-col gap-2 text-[13px]" data-tool-detail id={id}>
       {command !== null ? (
         <pre className="overflow-x-auto rounded-md bg-muted/60 px-3 py-2 font-mono text-[12px] leading-5 whitespace-pre-wrap">
           {command}
@@ -183,23 +305,32 @@ export function ToolDetail({ part, sessionId }: { part: ToolCallPart; sessionId:
         <Terminal
           className="min-w-0 border bg-muted/40 text-foreground dark:bg-black/30"
           isStreaming={running}
-          output={terminalText || (running ? "" : "(no output)")}
+          output={terminalText || (running ? "" : silence)}
         >
           <div className="max-h-72 overflow-auto px-3 py-2 font-mono text-[12px] leading-5">
-            <TerminalBody isStreaming={running} output={terminalText} />
+            {(part.streamTruncated && liveOutput === null && part.stream) || (terminalBody?.hidden ?? 0) > 0 ? (
+              // Only the stream's last 64 KB was kept (the reducer's cap), or
+              // only its last 64 KB is drawn.
+              <p className="mb-1 font-sans text-[11px] text-muted-foreground italic" data-stream-truncated>
+                Earlier output trimmed
+              </p>
+            ) : null}
+            <TerminalBody isStreaming={running} output={terminalText || (running ? "" : silence)} />
           </div>
         </Terminal>
       ) : null}
-      {texts.map((text, index) =>
-        text.type === "text" ? (
-          <pre
-            className="max-h-72 overflow-auto rounded-md bg-muted/40 px-3 py-2 font-mono text-[12px] leading-5 whitespace-pre-wrap"
-            key={index}
-          >
-            {text.text}
-          </pre>
-        ) : null,
-      )}
+      {texts.map((text, index) => {
+        if (text.type !== "text") return null;
+        const body = capToolBody(text.text);
+        return (
+          <div className="rounded-md bg-muted/40" key={index}>
+            <pre className="max-h-72 overflow-auto px-3 py-2 font-mono text-[12px] leading-5 whitespace-pre-wrap">
+              {body.text}
+            </pre>
+            <TrimmedBody hidden={body.hidden} />
+          </div>
+        );
+      })}
       {images.map((image, index) =>
         image.type === "image" ? (
           <img
@@ -242,8 +373,8 @@ export function ToolDetail({ part, sessionId }: { part: ToolCallPart; sessionId:
 
 function TerminalBody({ output, isStreaming }: { output: string; isStreaming: boolean }) {
   // The AI Elements Terminal renders ANSI through its own content; this
-  // body keeps its context (copy button, streaming cursor) but sizes to the
-  // transcript.
+  // body keeps its context (the streaming cursor; the transcript's Terminal
+  // draws no copy button) but sizes to the transcript.
   return (
     <pre className="break-words whitespace-pre-wrap">
       {output}

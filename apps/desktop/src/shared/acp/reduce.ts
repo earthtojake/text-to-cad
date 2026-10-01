@@ -20,8 +20,53 @@
  *     `_meta.claudeCode.parentToolUseId` instead; those land in the parent
  *     tool call's `children`.
  *   - Session-level facts (mode, config options, commands, usage, title)
- *     always update the state; they only become parts when a turn is open,
- *     because the adapters send most of them right after `session/new`.
+ *     always update the state; a mode change also becomes a part when a
+ *     turn is open (the adapters send most of these right after
+ *     `session/new`). The commands list never does: it is the composer's,
+ *     `SessionState.availableCommands`. The `available_commands` part a turn
+ *     used to carry is still in `PartSchema` (a turn's `parts`), only so
+ *     snapshots written before the change parse; nothing produces it.
+ *     Only the root session's count: a subagent's plan lands in its own
+ *     part, the rest of what it reports about itself is dropped.
+ *   - An update under a session id that is neither the root nor a known
+ *     subagent is parked (bounded) until that subagent's spawn arrives,
+ *     rather than glued onto the root's reply. `parked` is not in the
+ *     schema, so no wire copy carries it: a renderer that takes a
+ *     `session.state` while a child has updates parked lacks them, and when
+ *     main later unparks them into the subagent's part the renderer's copy
+ *     of that part is short. Accepted: it needs a spawn to trail its first
+ *     updates across a `session.state` (sent on connect and load only), the
+ *     loss is those early updates' rows, and the next `session.state` heals
+ *     it. Carrying raw parked diffs on every snapshot is the worse trade.
+ *   - A tool call id is looked up across every turn: a late update (after a
+ *     cancel, a background command) updates the row where it is, and an
+ *     update for an unknown id never opens a turn when none is open.
+ *   - Content after its turn ended (a chunk or a call behind `prompt/end`)
+ *     rides on the last agent turn, or a closed one of its own; it never
+ *     opens a turn nothing would end. A replay, which has no `prompt/start`,
+ *     still opens its own. Late text is a part of its own, never glued onto
+ *     the answer the turn ended with; the chunks behind its first join it.
+ *   - A cancelled or failed turn settles what was still pending or running
+ *     in it; an ordinary end does not (a background command can outlive it).
+ *   - `status: closed` and `status: error` end the open turn and settle it: a
+ *     closed connection stops it (`cancelled`, calls and subagents
+ *     `cancelled`), an errored one ends it with no stop reason (calls and
+ *     subagents `failed`). The adapter is gone and will send neither
+ *     `prompt/end` nor `prompt/error`, and `retire` files that closed state
+ *     as the stored snapshot. A call that is settled, or completed, is never
+ *     revived by a later `pending` or `in_progress` for it.
+ *   - Every turn end cancels the permission cards still pending, in any turn:
+ *     `prompt/end` whatever its stop reason, `prompt/error`, and the two
+ *     statuses above. Main cancels the client's pending permissions before it
+ *     dispatches `prompt/end`, so the cards and the requests agree.
+ *   - `prompt/error` on a last turn that has already ended (a crash reports
+ *     `status: error` first) adds the error part to that turn rather than
+ *     opening a new one.
+ *   - `lateChunk` marks that the first chunk behind `prompt/end` has opened a
+ *     part, so the chunks after it join that part. `prompt/start` clears it;
+ *     it is not in the schema, so neither a stored snapshot (`withoutParked`,
+ *     which `retire`'s closed state goes through) nor a `session.state` from a
+ *     load carries it, and a loaded session starts without it.
  */
 import {
   type AvailableCommand,
@@ -68,13 +113,39 @@ export function reduce(state: SessionState, event: SessionEvent): SessionState {
         currentModeId: event.modes?.currentModeId ?? state.currentModeId,
         modes: event.modes?.availableModes ?? state.modes,
         configOptions: event.configOptions ?? state.configOptions,
+        title: event.title ?? state.title,
       };
 
     case "session/loaded":
-      return { ...closeOpenTurn(state, event.at, null), status: "idle" };
+      return { ...closeOpenTurn(state, event.at, replayedEnd(state)), status: "idle" };
+
+    case "turns/restored": {
+      const turns = state.turns.map((turn, index) => {
+        const fact = event.facts.find((candidate) => candidate.turn === index);
+        if (!fact || turn.role !== "agent") return turn;
+        const cut = fact.split ? turn.parts[fact.split.part] : undefined;
+        const parts =
+          fact.split && cut?.type === "text"
+            ? [
+                ...turn.parts.slice(0, fact.split.part),
+                { ...cut, text: cut.text.slice(0, fact.split.at) },
+                { ...cut, text: cut.text.slice(fact.split.at) },
+                ...turn.parts.slice(fact.split.part + 1),
+              ]
+            : turn.parts;
+        return {
+          ...turn,
+          parts,
+          ...(fact.stopReason !== undefined ? { stopReason: fact.stopReason } : {}),
+          ...(fact.lateFrom !== undefined ? { lateFrom: fact.lateFrom } : {}),
+        };
+      });
+      return { ...state, turns };
+    }
 
     case "prompt/start": {
-      const closed = closeOpenTurn(state, event.at, null);
+      const { lateChunk: _late, ...settled } = state;
+      const closed = closeOpenTurn(settled, event.at, null);
       const userTurn: Turn = {
         id: event.turnId,
         role: "user",
@@ -100,24 +171,39 @@ export function reduce(state: SessionState, event: SessionEvent): SessionState {
     }
 
     case "prompt/end": {
-      const next = closeOpenTurn(state, event.at, event.stopReason);
+      const next = closeOpenTurn(
+        state,
+        event.at,
+        event.stopReason,
+        event.stopReason === "cancelled" ? { tool: "cancelled", subagent: "cancelled" } : undefined,
+      );
       return {
         ...next,
+        // A turn that ends takes its unanswered permission requests with it, whatever the stop
+        // reason: main resolves them on a cancel, but an `end_turn` or a `refusal` with a request
+        // still open sends no resolve, and the card would stay clickable (and the transcript
+        // pulled down to it) with nobody to take the answer.
+        turns: cancelPendingCards(next.turns),
         status: "idle",
         lastTurnUsage: event.usage ?? next.lastTurnUsage,
         sessionUsage: event.usage ? addTurnUsage(next.sessionUsage, event.usage) : next.sessionUsage,
-        // A cancelled turn takes its unanswered permission requests with it.
         pendingPermissions: [],
       };
     }
 
     case "prompt/error": {
-      const withError = withRootParts(state, event.at, (parts) => [
-        ...parts,
-        { type: "error", message: event.message },
-      ]);
+      const addError = (parts: Part[]) => [...parts, { type: "error", message: event.message } as Part];
+      // A turn already ended (a crash reports `status: error` before the SDK's rejection arrives,
+      // and that ends it) keeps its error: a new turn for it would leave the real one without.
+      const last = state.turns.at(-1);
+      const withError =
+        last && last.endedAt !== null
+          ? withClosedParts(state, event.at, addError)
+          : withRootParts(state, event.at, addError);
+      const closed = closeOpenTurn(withError, event.at, null, { tool: "failed", subagent: "failed" });
       return {
-        ...closeOpenTurn(withError, event.at, null),
+        ...closed,
+        turns: cancelPendingCards(closed.turns),
         status: "error",
         error: event.message,
         pendingPermissions: [],
@@ -135,10 +221,19 @@ export function reduce(state: SessionState, event: SessionEvent): SessionState {
         options: request.options,
         outcome: { state: "pending" },
       };
-      const next = withSessionParts(state, request.acpSessionId, event.at, (parts) => [
-        ...parts,
-        part,
-      ]);
+      // Not `create`: a request that arrives with no turn open (the prompt has
+      // ended, or was cancelled, and the adapter asked late) must not open one
+      // — nothing would ever end it, and the resolve below would call the
+      // session running. It rides on the last turn, or on a closed one.
+      const add = (parts: Part[]) => [...parts, part];
+      const next = withSessionParts(state, request.acpSessionId, event.at, add, false);
+      if (next === state) {
+        return {
+          ...withClosedParts(state, event.at, add, true),
+          status: "waiting",
+          pendingPermissions: [...state.pendingPermissions, request],
+        };
+      }
       return {
         ...next,
         status: "waiting",
@@ -150,20 +245,26 @@ export function reduce(state: SessionState, event: SessionEvent): SessionState {
       const pendingPermissions = state.pendingPermissions.filter(
         (pending) => pending.requestId !== event.requestId,
       );
-      const turns = state.turns.map((turn) => ({
-        ...turn,
-        parts: mapPartsDeep(turn.parts, (part) =>
+      // A turn without the request keeps its identity, so answering one does not re-render every
+      // turn of a long transcript (`mapPartsDeep` returns the same array where nothing changed).
+      const turns = state.turns.map((turn) => {
+        const parts = mapPartsDeep(turn.parts, (part) =>
           part.type === "permission_request" && part.requestId === event.requestId
             ? { ...part, outcome: event.outcome }
             : part,
-        ),
-      }));
+        );
+        return parts === turn.parts ? turn : { ...turn, parts };
+      });
       return {
         ...state,
         turns,
         pendingPermissions,
         status:
-          state.status === "waiting" && pendingPermissions.length === 0 ? "running" : state.status,
+          state.status === "waiting" && pendingPermissions.length === 0
+            ? hasOpenAgentTurn(state)
+              ? "running"
+              : "idle"
+            : state.status,
       };
     }
 
@@ -171,6 +272,28 @@ export function reduce(state: SessionState, event: SessionEvent): SessionState {
       return { ...state, configOptions: event.configOptions };
 
     case "status":
+      if (event.status === "closed" || event.status === "error") {
+        // The adapter is gone, and with it whoever would take an answer or end a turn: `retire`
+        // drops the connection's own resolve before it can be dispatched, and a Disconnect
+        // mid-turn gets neither a `prompt/end` (the adapter is dead) nor a `prompt/error`
+        // (`prompt()` skips it while `closing`). So the open turn ends here, its unfinished work
+        // settled, and a card left pending would stay answerable.
+        const closed = closeOpenTurn(
+          state,
+          event.at,
+          event.status === "closed" && hasOpenAgentTurn(state) ? "cancelled" : null,
+          event.status === "closed"
+            ? { tool: "cancelled", subagent: "cancelled" }
+            : { tool: "failed", subagent: "failed" },
+        );
+        return {
+          ...closed,
+          turns: cancelPendingCards(closed.turns),
+          pendingPermissions: [],
+          status: event.status,
+          error: event.error,
+        };
+      }
       return { ...state, status: event.status, error: event.error };
   }
 }
@@ -186,10 +309,15 @@ function applyUpdate(
   at: number,
 ): SessionState {
   const u = update as Record<string, unknown>;
+  // Before `session/connected` names the root, every update is the root's.
+  const isRoot = state.acpSessionId === null || acpSessionId === state.acpSessionId;
+  if (!isRoot && !state.subagentSessionIds.includes(acpSessionId)) {
+    return park(state, acpSessionId, update, at);
+  }
   switch (update.sessionUpdate) {
     case "user_message_chunk": {
-      const part = contentBlockToPart(u.content);
-      return part ? appendUserChunk(state, at, part) : state;
+      const part = contentBlockToPart(u.content, false, true);
+      return part ? appendUserChunk(state, at, part, asString(u.messageId)) : state;
     }
 
     case "agent_message_chunk":
@@ -198,7 +326,17 @@ function applyUpdate(
       if (!part) {
         return state;
       }
-      return withUpdateTarget(state, acpSessionId, u, at, (parts) => appendChunk(parts, part));
+      // Behind `prompt/end` the first chunk is a part of its own, not the tail of the answer the
+      // turn ended with ("First answer.Background task finished."); the chunks that follow it join.
+      const join = state.lateChunk === true;
+      return withUpdateOrLate(
+        state,
+        acpSessionId,
+        u,
+        at,
+        (parts) => appendChunk(parts, part),
+        (parts) => (join ? appendChunk(parts, part) : [...parts, part]),
+      );
     }
 
     case "tool_call":
@@ -207,11 +345,31 @@ function applyUpdate(
       if (!id) {
         return state;
       }
-      return withUpdateTarget(state, acpSessionId, u, at, (parts) => upsertToolCall(parts, id, u));
+      const turnOpen = state.turns.at(-1)?.endedAt === null;
+      // While a turn is open an announcement is a new row in it, even if an
+      // earlier turn used the same id (the fake agent does). An update — or
+      // an announcement with no turn open (a background call re-announced
+      // after its turn ended) — is news about a call that already has a row
+      // somewhere in its own session.
+      if (update.sessionUpdate === "tool_call_update" || !turnOpen) {
+        const inPlace = updateToolCallInSession(state, acpSessionId, id, u);
+        if (inPlace) {
+          return inPlace;
+        }
+        if (!turnOpen && update.sessionUpdate === "tool_call_update") {
+          // A late update for a call nobody announced, with no turn open:
+          // opening one would put a blank row in a turn nobody started.
+          return state;
+        }
+      }
+      return withUpdateOrLate(state, acpSessionId, u, at, (parts) => upsertToolCall(parts, id, u));
     }
 
     case "plan": {
       const entries = planEntries(u.entries);
+      if (!isRoot) {
+        return withSessionParts(state, acpSessionId, at, (parts) => setPlan(parts, entries), false);
+      }
       const next = { ...state, plan: entries };
       return hasOpenAgentTurn(next)
         ? withSessionParts(next, acpSessionId, at, (parts) => setPlan(parts, entries), false)
@@ -224,6 +382,9 @@ function applyUpdate(
         return state;
       }
       const entries = planEntries(plan.entries);
+      if (!isRoot) {
+        return withSessionParts(state, acpSessionId, at, (parts) => setPlan(parts, entries), false);
+      }
       const next = { ...state, plan: entries };
       return hasOpenAgentTurn(next)
         ? withSessionParts(next, acpSessionId, at, (parts) => setPlan(parts, entries), false)
@@ -231,23 +392,19 @@ function applyUpdate(
     }
 
     case "plan_removed":
-      return { ...state, plan: null };
+      return isRoot ? { ...state, plan: null } : state;
 
-    case "available_commands_update": {
-      const commands = availableCommands(u.availableCommands);
-      const next = { ...state, availableCommands: commands };
-      return hasOpenAgentTurn(next)
-        ? withSessionParts(
-            next,
-            acpSessionId,
-            at,
-            (parts) => [...parts, { type: "available_commands", commands }],
-            false,
-          )
-        : next;
-    }
+    case "available_commands_update":
+      // The session's, never a turn's: the Claude adapter sends the whole
+      // list (129 commands) mid-turn as well as after session/new, and a
+      // copy in the open turn rode in every turn's parts and snapshot — and
+      // was gone after a session/load, whose replay sends none.
+      return isRoot ? { ...state, availableCommands: availableCommands(u.availableCommands) } : state;
 
     case "current_mode_update": {
+      if (!isRoot) {
+        return state;
+      }
       const modeId = asString(u.currentModeId);
       if (!modeId) {
         return state;
@@ -265,14 +422,20 @@ function applyUpdate(
     }
 
     case "config_option_update":
-      return { ...state, configOptions: configOptions(u.configOptions) };
+      return isRoot ? { ...state, configOptions: configOptions(u.configOptions) } : state;
 
     case "session_info_update": {
+      if (!isRoot) {
+        return state;
+      }
       const title = asString(u.title);
       return title === null ? state : { ...state, title };
     }
 
     case "usage_update": {
+      if (!isRoot) {
+        return state;
+      }
       // A `usage_update` carries two independent things: the window, and —
       // when the Claude adapter is forwarding a `rate_limit_event` — one of
       // the account's plan limits. Either can be there without the other, so
@@ -314,15 +477,19 @@ function applyUpdate(
         state: "running",
       parts: [],
       };
-      const next = withSessionParts(state, acpSessionId, at, (parts) =>
+      // Not `create`: a spawn behind `prompt/end` must not open a turn nothing would end.
+      const next = withUpdateOrLate(state, acpSessionId, u, at, (parts) =>
         findSubagent(parts, childId) ? parts : [...parts, part],
       );
-      return {
-        ...next,
-        subagentSessionIds: next.subagentSessionIds.includes(childId)
-          ? next.subagentSessionIds
-          : [...next.subagentSessionIds, childId],
-      };
+      return unpark(
+        {
+          ...next,
+          subagentSessionIds: next.subagentSessionIds.includes(childId)
+            ? next.subagentSessionIds
+            : [...next.subagentSessionIds, childId],
+        },
+        childId,
+      );
     }
 
     case "subagent_state_update": {
@@ -360,13 +527,113 @@ function hasOpenAgentTurn(state: SessionState): boolean {
   return last?.role === "agent" && last.endedAt === null;
 }
 
-function closeOpenTurn(state: SessionState, at: number, stopReason: Turn["stopReason"]) {
+/**
+ * The stop reason of a turn a `session/load` replay closes. The replay says
+ * nothing about how a turn ended — no `session/prompt` answer comes with it —
+ * only that it did, being history; `end_turn` is that, where null would read
+ * as a turn still open and leave a replayed turn unlike the live one it was.
+ * A user turn never has a stop reason, live or replayed.
+ */
+function replayedEnd(state: SessionState): Turn["stopReason"] {
+  return state.turns.at(-1)?.role === "agent" ? "end_turn" : null;
+}
+
+/** What a turn that was cancelled or failed leaves its unfinished work as. */
+type Settle = { tool: ToolCallStatus; subagent: SubagentState };
+
+function closeOpenTurn(
+  state: SessionState,
+  at: number,
+  stopReason: Turn["stopReason"],
+  settle?: Settle,
+) {
   const last = state.turns.at(-1);
   if (!last || last.endedAt !== null) {
     return state;
   }
-  const closed: Turn = { ...last, endedAt: at, stopReason };
+  const parts = settle ? settleParts(last.parts, settle) : last.parts;
+  const closed: Turn = { ...last, parts, endedAt: at, stopReason };
   return { ...state, turns: [...state.turns.slice(0, -1), closed] };
+}
+
+/** Every pending or running call, and every running subagent, in `parts` — however deep. */
+function settleParts(parts: Part[], settle: Settle): Part[] {
+  return mapPartsDeep(parts, (part) => {
+    if (part.type === "tool_call" && (part.status === "pending" || part.status === "in_progress")) {
+      return { ...part, status: settle.tool };
+    }
+    if (part.type === "subagent" && part.state === "running") {
+      return { ...part, state: settle.subagent };
+    }
+    return part;
+  });
+}
+
+/** Every permission card still pending, in any turn, marked cancelled; the same array back where none was. */
+function cancelPendingCards(turns: Turn[]): Turn[] {
+  const next = turns.map((turn) => {
+    const parts = mapPartsDeep(turn.parts, (part) =>
+      part.type === "permission_request" && part.outcome.state === "pending"
+        ? { ...part, outcome: { state: "cancelled" } }
+        : part,
+    );
+    return parts === turn.parts ? turn : { ...turn, parts };
+  });
+  return next.every((turn, index) => turn === turns[index]) ? turns : next;
+}
+
+/** How many updates, and how many bytes of them, are held for not-yet-spawned subagents; the oldest go first. */
+const PARKED_LIMIT = 200;
+/** In UTF-8 bytes, what the entries weigh on the wire. */
+const PARKED_BYTES = 256 * 1024;
+const UTF8 = new TextEncoder();
+
+function park(state: SessionState, acpSessionId: string, update: RawSessionUpdate, at: number): SessionState {
+  const bytes = UTF8.encode(JSON.stringify(update)).length;
+  const parked = [...(state.parked ?? []), { acpSessionId, update, at, bytes }];
+  let total = parked.reduce((sum, entry) => sum + entry.bytes, 0);
+  let drop = 0;
+  // The newest always stays: a spawn is usually right behind its first
+  // update, and dropping that update on arrival would lose it for nothing.
+  while (drop < parked.length - 1 && (parked.length - drop > PARKED_LIMIT || total > PARKED_BYTES)) {
+    total -= parked[drop]!.bytes;
+    drop += 1;
+  }
+  if (drop === 0) {
+    return { ...state, parked };
+  }
+  if (!state.parkedDropWarned) {
+    // The one impurity here: a dropped update is data lost, and saying so
+    // once per session is worth more than a silent cap.
+    console.warn(
+      `[acp] dropped ${drop} update(s) parked for a subagent that has not been spawned (cap ${PARKED_LIMIT} / ${PARKED_BYTES} bytes)`,
+    );
+  }
+  const kept = parked.slice(drop);
+  const { parked: _old, ...rest } = state;
+  return kept.length > 0 ? { ...rest, parked: kept, parkedDropWarned: true } : { ...rest, parkedDropWarned: true };
+}
+
+/** The state without what the reducer holds for itself: what a snapshot should store. */
+export function withoutParked(state: SessionState): SessionState {
+  const { parked: _parked, parkedDropWarned: _warned, lateChunk: _late, ...rest } = state;
+  return rest;
+}
+
+/** Fold what was parked for `childId`, in arrival order, now that it has somewhere to go. */
+function unpark(state: SessionState, childId: string): SessionState {
+  const all = state.parked ?? [];
+  const mine = all.filter((entry) => entry.acpSessionId === childId);
+  if (mine.length === 0) {
+    return state;
+  }
+  const rest = all.filter((entry) => entry.acpSessionId !== childId);
+  const { parked: _dropped, ...cleared } = state;
+  let next: SessionState = rest.length > 0 ? { ...cleared, parked: rest } : cleared;
+  for (const entry of mine) {
+    next = applyUpdate(next, entry.acpSessionId, entry.update, entry.at);
+  }
+  return next;
 }
 
 /**
@@ -398,6 +665,27 @@ function withRootParts(
     stopReason: null,
   };
   return { ...closed, turns: [...closed.turns, turn] };
+}
+
+/** Parts for a moment when no turn is open: the last agent turn takes them, or a closed one of their own. */
+function withClosedParts(state: SessionState, at: number, fn: (parts: Part[]) => Part[], markLate = false): SessionState {
+  const last = state.turns.at(-1);
+  if (last?.role === "agent") {
+    const parts = fn(last.parts);
+    // What this added sits behind the turn's end: `lateFrom` is where the first such part begins.
+    const lateFrom = markLate && parts.length > last.parts.length ? { lateFrom: last.lateFrom ?? last.parts.length } : {};
+    return { ...state, turns: [...state.turns.slice(0, -1), { ...last, parts, ...lateFrom }] };
+  }
+  const turn: Turn = {
+    id: `t${state.turns.length + 1}`,
+    role: "agent",
+    parts: fn([]),
+    startedAt: at,
+    endedAt: at,
+    stopReason: null,
+    ...(markLate ? { lateFrom: 0 } : {}),
+  };
+  return { ...state, turns: [...state.turns, turn] };
 }
 
 /** Route by ACP session id: the root's open turn, or a subagent's parts. */
@@ -434,10 +722,11 @@ function withUpdateTarget(
   update: Record<string, unknown>,
   at: number,
   fn: (parts: Part[]) => Part[],
+  create = true,
 ): SessionState {
   const parentId = claudeParentToolUseId(update);
   if (!parentId) {
-    return withSessionParts(state, acpSessionId, at, fn);
+    return withSessionParts(state, acpSessionId, at, fn, create);
   }
   let found = false;
   const turns = state.turns.map((turn) => {
@@ -450,7 +739,35 @@ function withUpdateTarget(
     });
     return parts === turn.parts ? turn : { ...turn, parts };
   });
-  return found ? { ...state, turns } : withSessionParts(state, acpSessionId, at, fn);
+  return found ? { ...state, turns } : withSessionParts(state, acpSessionId, at, fn, create);
+}
+
+/**
+ * `withUpdateTarget`, except that content arriving after its turn ended (a chunk or a call the
+ * adapter sent behind `prompt/end`) does not open a turn: nothing would ever end it, and the
+ * last turn would keep its streaming cursor with the session idle. It rides on the last agent
+ * turn, or on a closed one of its own. A replay (`connecting`) has no `prompt/start` and opens
+ * its own turns, and a session that has had no turn yet opens one as before.
+ */
+function withUpdateOrLate(
+  state: SessionState,
+  acpSessionId: string,
+  update: Record<string, unknown>,
+  at: number,
+  fn: (parts: Part[]) => Part[],
+  late?: (parts: Part[]) => Part[],
+): SessionState {
+  const last = state.turns.at(-1);
+  if (!last || last.endedAt === null || state.status === "connecting") {
+    return withUpdateTarget(state, acpSessionId, update, at, fn);
+  }
+  const placed = withUpdateTarget(state, acpSessionId, update, at, fn, false);
+  if (placed !== state) {
+    return placed;
+  }
+  // `late` is how content that lands on a closed turn is added, where that differs from `fn`.
+  const closed = withClosedParts(state, at, late ?? fn, true);
+  return late ? { ...closed, lateChunk: true } : closed;
 }
 
 function claudeParentToolUseId(update: Record<string, unknown>): string | null {
@@ -459,13 +776,30 @@ function claudeParentToolUseId(update: Record<string, unknown>): string | null {
   return claude ? asString(claude.parentToolUseId) : null;
 }
 
-function appendUserChunk(state: SessionState, at: number, part: Part): SessionState {
+/**
+ * A replayed user message. Chunks carrying the same ACP `messageId` are one
+ * message and concatenate; a different id is the next message and starts its
+ * own turn. Without ids there is no telling one streamed block from the next
+ * prompt, so each chunk stays its own part (the bubble joins them with a
+ * line break) rather than running two prompts together.
+ */
+function appendUserChunk(
+  state: SessionState,
+  at: number,
+  part: Part,
+  messageId: string | null,
+): SessionState {
   const last = state.turns.at(-1);
-  if (last?.role === "user" && last.endedAt === null) {
-    const updated: Turn = { ...last, parts: appendChunk(last.parts, part) };
+  const sameMessage =
+    last?.role === "user" &&
+    last.endedAt === null &&
+    (messageId === null || last.messageId === undefined || last.messageId === messageId);
+  if (last && sameMessage) {
+    const parts = messageId !== null && last.messageId === messageId ? appendChunk(last.parts, part) : [...last.parts, part];
+    const updated: Turn = { ...last, parts };
     return { ...state, turns: [...state.turns.slice(0, -1), updated] };
   }
-  const closed = closeOpenTurn(state, at, null);
+  const closed = closeOpenTurn(state, at, replayedEnd(state));
   const turn: Turn = {
     id: `t${closed.turns.length + 1}`,
     role: "user",
@@ -473,6 +807,7 @@ function appendUserChunk(state: SessionState, at: number, part: Part): SessionSt
     startedAt: at,
     endedAt: null,
     stopReason: null,
+    ...(messageId !== null ? { messageId } : {}),
   };
   return { ...closed, turns: [...closed.turns, turn] };
 }
@@ -514,6 +849,65 @@ function upsertToolCall(parts: Part[], id: string, update: Record<string, unknow
   return found ? next : [...parts, mergeToolCall(blankToolCall(id), update)];
 }
 
+/**
+ * Merge `update` into the call with this id in the session that sent it —
+ * the root's parts (Claude's flattened children included), or that
+ * subagent's — taking the newest turn that has one, since an id can come
+ * back in a later turn. Another session's call with the same id is never
+ * touched. Null when the session has no such call.
+ */
+function updateToolCallInSession(
+  state: SessionState,
+  acpSessionId: string,
+  id: string,
+  update: Record<string, unknown>,
+): SessionState | null {
+  const isRoot = state.acpSessionId === null || acpSessionId === state.acpSessionId;
+  for (let index = state.turns.length - 1; index >= 0; index -= 1) {
+    const turn = state.turns[index]!;
+    let parts: Part[] | null;
+    if (isRoot) {
+      parts = mergeInScope(turn.parts, id, update);
+    } else {
+      let merged: Part[] | null = null;
+      const mapped = mapPartsDeep(turn.parts, (part) => {
+        if (merged === null && part.type === "subagent" && part.sessionId === acpSessionId) {
+          merged = mergeInScope(part.parts, id, update);
+          return merged ? { ...part, parts: merged } : part;
+        }
+        return part;
+      });
+      parts = merged ? mapped : null;
+    }
+    if (parts) {
+      const updated = { ...turn, parts };
+      return { ...state, turns: state.turns.map((candidate, i) => (i === index ? updated : candidate)) };
+    }
+  }
+  return null;
+}
+
+/** The first call with this id in `parts` and its tool calls' children — never inside a subagent, which is another session. */
+function mergeInScope(parts: Part[], id: string, update: Record<string, unknown>): Part[] | null {
+  for (let i = 0; i < parts.length; i += 1) {
+    const part = parts[i]!;
+    if (part.type !== "tool_call") {
+      continue;
+    }
+    const next =
+      part.id === id
+        ? mergeToolCall(part, update)
+        : (() => {
+            const children = mergeInScope(part.children, id, update);
+            return children ? { ...part, children } : null;
+          })();
+    if (next) {
+      return parts.map((candidate, j) => (j === i ? next : candidate));
+    }
+  }
+  return null;
+}
+
 function blankToolCall(id: string): ToolCallPart {
   return {
     type: "tool_call",
@@ -540,19 +934,30 @@ function mergeToolCall(part: ToolCallPart, update: Record<string, unknown>): Too
   const content = Array.isArray(update.content) ? toolContents(update.content) : null;
   const locations = Array.isArray(update.locations) ? toolLocations(update.locations) : null;
   const delta = streamedOutput(update);
+  const joined = delta === null ? part.stream : part.stream + delta;
+  const truncated = joined.length > STREAM_TAIL;
+  // A call its turn settled (cancelled or failed), or that finished, stays so unless the agent
+  // says how it ended: a late `in_progress` must not bring it back to life.
+  const settled =
+    (part.status === "cancelled" || part.status === "failed" || part.status === "completed") &&
+    (status === "pending" || status === "in_progress");
   return {
     ...part,
     kind: kind ?? part.kind,
-    status: status ?? part.status,
+    status: settled ? part.status : (status ?? part.status),
     title: title ?? part.title ?? name ?? part.name ?? "",
     name: name ?? part.name,
     input: update.rawInput !== undefined ? update.rawInput : part.input,
     output: update.rawOutput !== undefined ? update.rawOutput : part.output,
     content: content ?? part.content,
     locations: locations ?? part.locations,
-    stream: delta === null ? part.stream : part.stream + delta,
+    stream: truncated ? joined.slice(-STREAM_TAIL) : joined,
+    ...(truncated ? { streamTruncated: true } : {}),
   };
 }
+
+/** How much of a call's streamed output is kept: the tail, like the terminal's. */
+const STREAM_TAIL = 64 * 1024;
 
 /** Codex streams a command's output as `_meta.terminal_output_delta.data` on each update. */
 function streamedOutput(update: Record<string, unknown>): string | null {
@@ -607,11 +1012,22 @@ function promptBlockToPart(block: PromptBlock): Part {
     case "resource_link":
       return { type: "resource_link", uri: block.uri, name: block.name };
     case "resource":
-      return { type: "resource_link", uri: block.uri, name: block.uri.split(/[\\/]/).pop() || block.uri };
+      return { type: "resource", uri: block.uri, name: nameOfUri(block.uri), text: block.text, mimeType: block.mimeType };
   }
 }
 
-function contentBlockToPart(raw: unknown, thought = false): Part | null {
+/** `attachment:///notes%20v2.md` → `notes v2.md`. */
+function nameOfUri(uri: string): string {
+  const last = uri.split(/[\\/]/).pop() || uri;
+  try {
+    return decodeURIComponent(last);
+  } catch {
+    return last;
+  }
+}
+
+/** `user`: an embedded resource is the person's attachment, kept whole; an agent's reads as text. */
+function contentBlockToPart(raw: unknown, thought = false, user = false): Part | null {
   const block = asRecord(raw);
   if (!block) {
     return null;
@@ -633,7 +1049,14 @@ function contentBlockToPart(raw: unknown, thought = false): Part | null {
     case "resource": {
       const resource = asRecord(block.resource);
       const text = resource ? asString(resource.text) : null;
-      return text === null ? null : { type: thought ? "thought" : "text", text };
+      if (text === null) {
+        return null;
+      }
+      const uri = resource ? asString(resource.uri) : null;
+      if (user && uri !== null) {
+        return { type: "resource", uri, name: nameOfUri(uri), text, mimeType: asString(resource?.mimeType) };
+      }
+      return { type: thought ? "thought" : "text", text };
     }
     default:
       return null;
@@ -1115,4 +1538,73 @@ export function lastAgentText(state: SessionState): string {
     .filter((part): part is Extract<Part, { type: "text" }> => part.type === "text")
     .map((part) => part.text)
     .join("");
+}
+
+/**
+ * What a stored transcript knows about its turns that `session/load` cannot
+ * say again: how an agent turn was stopped (the replay closes every turn
+ * `end_turn`) and where its late parts begin (the replay has no `prompt/end`,
+ * so late text merges into the answer). Turns are matched by position, for as
+ * long as each user turn says the same thing; an agent turn takes the stored
+ * stop reason and `lateFrom`. When the replay has the same number of parts,
+ * `lateFrom` carries over as it was. When the replay merged text chunks into
+ * fewer parts, the merged text part is split where the stored text before
+ * `lateFrom` ends (`split`), which restores both facts; if the stored text is
+ * not a prefix of the replayed text (or ends where no text part can be cut)
+ * neither fact is restored, so the turn reads `end_turn` with no label rather
+ * than showing late text under a stop it did not belong to.
+ */
+export function turnFactsFrom(replayed: readonly Turn[], stored: readonly Turn[]) {
+  const facts: {
+    turn: number;
+    stopReason?: NonNullable<Turn["stopReason"]>;
+    lateFrom?: number;
+    split?: { part: number; at: number };
+  }[] = [];
+  const textOf = (turn: Turn) =>
+    turn.parts.map((part) => (part.type === "text" ? part.text : "")).join("");
+  for (let index = 0; index < replayed.length && index < stored.length; index++) {
+    const now = replayed[index]!;
+    const before = stored[index]!;
+    if (now.role !== before.role) break;
+    if (now.role === "user") {
+      if (textOf(now) !== textOf(before)) break;
+      continue;
+    }
+    let stopReason = before.stopReason && before.stopReason !== now.stopReason ? before.stopReason : undefined;
+    let lateFrom: number | undefined;
+    let split: { part: number; at: number } | undefined;
+    if (before.lateFrom !== undefined) {
+      if (before.parts.length === now.parts.length || before.lateFrom === 0) {
+        lateFrom = before.lateFrom;
+      } else {
+        const head = textOf({ ...before, parts: before.parts.slice(0, before.lateFrom) });
+        let seen = 0;
+        for (let part = 0; part < now.parts.length; part++) {
+          const piece = now.parts[part]!;
+          const length = piece.type === "text" ? piece.text.length : 0;
+          if (length > 0 && seen < head.length && head.length < seen + length) {
+            if (textOf(now).startsWith(head)) {
+              split = { part, at: head.length - seen };
+              lateFrom = part + 1;
+            }
+            break;
+          }
+          seen += length;
+        }
+        if (lateFrom === undefined) {
+          stopReason = undefined;
+        }
+      }
+    }
+    if (stopReason !== undefined || lateFrom !== undefined) {
+      facts.push({
+        turn: index,
+        ...(stopReason ? { stopReason } : {}),
+        ...(lateFrom !== undefined ? { lateFrom } : {}),
+        ...(split ? { split } : {}),
+      });
+    }
+  }
+  return facts;
 }

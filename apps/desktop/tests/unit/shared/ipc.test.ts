@@ -43,7 +43,6 @@ describe("the contract", () => {
       "app.installUpdate",
       "projects.list",
       "projects.add",
-      "projects.addPath",
       "sessions.list",
       "sessions.get",
       "sessions.create",
@@ -54,6 +53,7 @@ describe("the contract", () => {
       "sessions.setMode",
       "sessions.setConfigOption",
       "sessions.respondPermission",
+      "sessions.retrySetup",
       "sessions.rename",
       "sessions.archive",
       "sessions.setPinned",
@@ -72,13 +72,16 @@ describe("the contract", () => {
       "skills.info",
       "runtime.status",
       "runtime.repair",
+      "runtime.revealLog",
       "onboarding.status",
       "onboarding.createSample",
       "dialogs.chooseDirectory",
       "dialogs.chooseFile",
       "settings.get",
       "settings.set",
+      "settings.fallbacks",
       "window.state",
+      "ui.ready",
       "shell.openExternal",
       "shell.showItemInFolder",
       "clipboard.writeText",
@@ -156,9 +159,19 @@ describe("the contract", () => {
     expect(rename?.request.safeParse({ id: "s1", title: "Robot" }).success).toBe(true);
     expect(rename?.request.safeParse({ id: "s1", title: "" }).success).toBe(false);
     expect(rename?.request.safeParse({ id: "s1" }).success).toBe(false);
-    const directory = channels["projects.addPath"];
-    expect(directory?.request.safeParse({ path: "/robot" }).success).toBe(true);
-    expect(directory?.request.safeParse({ path: "" }).success).toBe(false);
+  });
+
+  it("has no channel that takes a directory by name", () => {
+    // A bare path the renderer names is a directory main would make a project
+    // of — `/` included — and then read from on the renderer's word.
+    const channels = Object.fromEntries(ipcChannels(ipcContract));
+    expect(Object.keys(channels)).not.toContain("projects.addPath");
+    // The sample answers with the project it selected, never a path to hand back.
+    const sample = channels["onboarding.createSample"]!;
+    expect(sample.response.safeParse({ path: "/Users/me/Documents/text-to-cad Sample" }).success).toBe(false);
+    expect(
+      sample.response.safeParse({ id: "/s", name: "text-to-cad Sample", path: "/s", createdAt: 0 }).success,
+    ).toBe(true);
   });
 
   it("keeps non-URLs out of openExternal before main even sees them", () => {

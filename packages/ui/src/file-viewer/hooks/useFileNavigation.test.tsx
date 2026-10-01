@@ -40,3 +40,20 @@ test('typed directory moves preserve expansion and navigate the current file; de
   expect([...result.current.tree.expanded]).toEqual(['']);
   expect(result.current.tree.listings['new/deep']).toBeUndefined();
 });
+
+test('a directory whose listing fails is reported as a failure, and asking again clears it', async () => {
+  let fail = true;
+  const list = vi.fn(async (_directory: string): Promise<FileEntry[]> => { if (fail) throw new Error('that folder is gone'); return [entry('a.txt')]; });
+  const onError = vi.fn();
+  const stable = { ...source('s'), list };
+  const { result } = renderHook(() => {
+    const [state, setState] = useState<FileViewerState>(initialState);
+    return useFileNavigation({ source: stable, state, onStateChange: setState, onOpenFile: vi.fn(), path: null, onError });
+  });
+  await waitFor(() => expect(result.current.tree.failures).toEqual({ '': 'that folder is gone' }));
+  expect(onError).not.toHaveBeenCalled();
+  fail = false;
+  act(() => result.current.tree.load(''));
+  await waitFor(() => expect(result.current.tree.listings['']).toEqual([entry('a.txt')]));
+  expect(result.current.tree.failures).toEqual({});
+});

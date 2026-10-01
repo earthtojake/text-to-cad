@@ -6,14 +6,17 @@
  * would be re-registered on every render of the sidebar — and it means a
  * change made from the app menu updates the same state a click would.
  */
+import { toast } from "sonner";
+
 import type { IpcEventPayload } from "@shared/ipc";
+import { errorMessage } from "@shared/ipc/errors";
 
 import { useAcp } from "./acp";
 import { useAgentOptions } from "./agent-options";
 import { useAgents } from "./agents";
 import { useComposer } from "./composer";
 import { performIntegrationCommand } from "./integration-commands";
-import { useExplorer } from "./explorer";
+import { reportWatchFailure, useExplorer } from "./explorer";
 import { attachHistory, useHistory } from "./history";
 import { useOnboarding } from "./onboarding";
 import { usePathLinks } from "./path-links";
@@ -46,17 +49,46 @@ export function subscribeToMain(): () => void {
       useUpdates.getState().receive(status);
     }),
     window.textToCad.on("session.state", ({ sessionId, state }) => {
+      // Sent before main heard the session was archived or deleted: taking it would bring back
+      // state the index already let go of, and nothing would forget it again (`state/acp.ts`).
+      // Main broadcasts a new session's row before its first state, so a missing row is a gone one
+      // once the index has loaded. An archived session that is open on screen (the sidebar's
+      // archived filter) still takes it: a prompt into it reconnects on main's side, and this is
+      // the state that replaces the replayed transcript and drains its queue.
+      const index = useSessions.getState();
+      const row = index.sessions.find((session) => session.id === sessionId);
+      const held = sessionId in useAcp.getState().sessions;
+      if ((row?.archived || (!row && index.ready)) && !held) return;
       useAcp.getState().receiveState(sessionId, state);
+      // Dropped by the store (a load a Disconnect has since overtaken): nothing came back to drain into.
+      if (useAcp.getState().sessions[sessionId] !== state) return;
+      // A reconnect lands here rather than as a turn event: an agent that came back idle with
+      // prompts queued behind its disconnect sends the next one (`state/composer.ts`).
+      if (state.status === "idle") void useComposer.getState().drain(sessionId);
+    }),
+    // The index row's status: the renderer reads the row from `sessions.changed`, so the only thing
+    // here is the note a create that failed after `session/new` leaves (`settleAfterFailedCreate`).
+    // `error: null` is every ordinary status change and says nothing about a note already held.
+    // An `error` status carries its message too, but that is the load failure `loadErrors` shows.
+    window.textToCad.on("session.status", ({ sessionId, status, error }) => {
+      if (error && status !== "error" && status !== "closed") useAcp.getState().receiveSetupNote(sessionId, error);
     }),
     window.textToCad.on("session.update", ({ sessionId, event }) => {
+      const before = useAcp.getState().sessions[sessionId]?.status;
       useAcp.getState().receiveEvent(sessionId, event);
-      // A turn that just ended frees the session for the next queued prompt.
-      if (event.type === "prompt/end") {
+      // A turn's lifecycle drives the prompt queue: a turn that ends sends
+      // the next queued prompt (`state/composer.ts`).
+      if (event.type === "prompt/start" || event.type === "prompt/end" || event.type === "prompt/error") {
+        useComposer.getState().turnEvent(sessionId, event.type, event.type === "prompt/end" ? event.stopReason : undefined);
+      } else if (before !== "idle" && useAcp.getState().sessions[sessionId]?.status === "idle") {
+        // The other way to idle: a permission asked outside a turn and answered leaves the
+        // session waiting, then idle, with no `prompt/end` to say so (`drain` is a no-op when
+        // there is nothing queued or a prompt is in flight).
         void useComposer.getState().drain(sessionId);
       }
     }),
-    window.textToCad.on("terminal.output", ({ sessionId, terminalId, data }) => {
-      useAcp.getState().receiveTerminalOutput(sessionId, terminalId, data);
+    window.textToCad.on("terminal.output", ({ sessionId, terminalId, data, silent }) => {
+      useAcp.getState().receiveTerminalOutput(sessionId, terminalId, data, silent);
     }),
     window.textToCad.on("agents.status", (agents) => {
       useAgents.getState().receive(agents);
@@ -77,6 +109,7 @@ export function subscribeToMain(): () => void {
       // may be gone: the next render asks again.
       usePathLinks.getState().invalidate({ projectId, root }, paths);
     }),
+    window.textToCad.on("files.watch-error", ({ projectId, root, message }) => reportWatchFailure(projectId, root, message)),
     // An agent's tool call, relayed by main; answered whatever happens, so
     // the bridge's wait ends with the reason rather than a timeout.
     window.textToCad.on("integrations.cancel", ({ requestId }) => commands.get(requestId)?.abort(new Error("Tool request cancelled"))),
@@ -96,6 +129,13 @@ export function subscribeToMain(): () => void {
     }),
     window.textToCad.on("ui.command", (payload) => runUiCommand(payload)),
   ];
+  // Listening now: take what main held for this page before it was — the
+  // menu's New Session or Settings… that opened this window. Run even after
+  // a detach: main hands them out once, and a StrictMode remount's second
+  // ask gets nothing.
+  void window.textToCad.ui.ready().then((held) => {
+    for (const payload of held) runUiCommand(payload);
+  }).catch((error: unknown) => console.error("[ui] held commands", error));
 
   // Session selection is the only authority for which explorer is displayed.
   // A directory may group several sessions, but it never owns their tabs.
@@ -127,7 +167,7 @@ export function subscribeToMain(): () => void {
  * One `ui.command`, whether it came from the app menu or from a button in the
  * renderer.
  *
- * Exported because Settings › Git & Worktrees' `New chat in this worktree` is
+ * Exported because Settings › Git and worktrees' `New session in this worktree` is
  * the same command as the menu's New Session, only with a directory attached —
  * and a second implementation of "start a thread and show it" would be a
  * second place for the two to disagree about what happens to Settings, the
@@ -165,7 +205,7 @@ export function runUiCommand(payload: IpcEventPayload<"ui.command">): void {
       }
       // Without a directory this is the menu item, which lands on the empty
       // new-session state the session pane shows and lets the composer decide
-      // the mode. With one it is Settings' `New chat in this worktree`, and
+      // the mode. With one it is Settings' `New session in this worktree`, and
       // the thread starts in that worktree straight away.
       if (!projectId || !payload.cwd) {
         useSessions.getState().setActive(null);
@@ -175,21 +215,10 @@ export function runUiCommand(payload: IpcEventPayload<"ui.command">): void {
         .getState()
         .start({ projectId, cwd: payload.cwd, gitMode: "worktree" })
         .catch((error: unknown) => {
+          // Settings closed to make room for the session, so say why there is none.
           console.error("[ui] could not start a session", error);
+          toast.error(`Could not start a session in this worktree: ${errorMessage(error)}`);
         });
-      break;
-    }
-    case "open-review": {
-      // The files-changed pill: open (or focus) the Review tab, and the
-      // explorer if it was closed. P3 gives the tab its body.
-      const explorer = useExplorer.getState();
-      const existing = explorer.tabs.find((tab) => tab.kind === "review");
-      if (existing) {
-        explorer.show();
-        explorer.setActive(existing.id);
-      } else {
-        explorer.open("review");
-      }
       break;
     }
   }
@@ -205,11 +234,14 @@ function toggleLayout(key: "sidebarCollapsed") {
 
 /** First read of everything the shell needs. */
 export async function hydrate(): Promise<void> {
+  // Not in the wait below: a cold `agents.list` waits for main's first probe
+  // (a second or so of login shell), and restoring the explorer needs none of
+  // it.
+  const agents = useAgents.getState().load();
   await Promise.all([
     useSettings.getState().load(),
     useSessions.getState().load(),
     useUpdates.getState().load(),
-    useAgents.getState().load(),
     useAgentOptions.getState().load(),
     useOnboarding.getState().load(),
   ]);
@@ -217,4 +249,5 @@ export async function hydrate(): Promise<void> {
   const session = state.sessions.find(session => session.id === state.activeId && !session.archived);
   await useExplorer.getState().bindSession(session?.id ?? null, session?.projectId ?? null,
     session ? explorerRootFor(session.projectId) : null);
+  await agents;
 }

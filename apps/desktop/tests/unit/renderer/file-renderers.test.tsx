@@ -88,7 +88,7 @@ describe("CodeRenderer", () => {
     expect(document.setValue).toHaveBeenCalledWith("changed");
     let saveCommand: (() => void) | undefined;
     (editorProps?.onMount as (instance: unknown, monaco: unknown) => void)(
-      { addAction: vi.fn(), addCommand: (_key: number, command: () => void) => { saveCommand = command; }, dispose: vi.fn() },
+      { addAction: vi.fn(), addCommand: (_key: number, command: () => void) => { saveCommand = command; }, getModel: () => null, dispose: vi.fn() },
       { KeyMod: { CtrlCmd: 1 }, KeyCode: { KeyS: 2 } },
     );
     saveCommand?.();

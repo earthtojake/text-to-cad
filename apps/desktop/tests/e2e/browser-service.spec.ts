@@ -3,10 +3,11 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { _electron as electron, expect, test, type ElectronApplication } from "@playwright/test";
+import { _electron as electron, expect, type ElectronApplication } from "@playwright/test";
 import { build } from "esbuild";
 import type { BrowserService } from "../../src/main/browser/service";
 import type { BrowserTarget } from "../../src/shared/browser";
+import { test, traceApp } from "./launch";
 
 declare const browserFixture: { service: BrowserService; window: Electron.BrowserWindow };
 type PageState = BrowserTarget & { document: { text: string; width: number; height: number; scrollY: number }; nodes: { backendNodeId: number; role: string; name: string; value?: string }[] };
@@ -31,6 +32,7 @@ test.beforeAll(async () => {
   const entry = path.join(scratch, "service-app.cjs");
   await build({ entryPoints: [path.join(appRoot, "tests/fixtures/browser/service-app.ts")], outfile: entry, bundle: true, platform: "node", format: "cjs", external: ["electron"], target: "node22" });
   application = await electron.launch({ args: [entry, `--user-data-dir=${path.join(scratch, "profile")}`], env: { ...process.env, TEXT_TO_CAD_E2E_HIDDEN: "1" } });
+  await traceApp(application);
   await application.firstWindow();
 });
 test.afterAll(async () => {

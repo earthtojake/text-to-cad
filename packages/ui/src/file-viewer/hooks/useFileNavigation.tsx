@@ -9,6 +9,7 @@ import { movedFilePath, reconcileFileTree } from "../fileChanges.js";
 import { errorMessage } from "./useFileDocument.js";
 import type { ViewerHost } from "../../host/types.js";
 
+const NO_FAILURES: Record<string, string> = {};
 type MenuAction = (action: EntryAction, entry: MenuEntryTarget) => void;
 function CrumbActions({ entry, capabilities, platform, onAction }: {
   entry: MenuEntryTarget; capabilities: ReadonlySet<EntryAction>; platform: "darwin" | "win32" | "linux"; onAction: MenuAction;
@@ -33,6 +34,9 @@ export function useFileNavigation({ source, actions, state, onStateChange, onOpe
   const [cache, setCache] = useState<{ id: string; listings: Record<string, readonly FileEntry[]>; revision: number }>({ id: source.id, listings: {}, revision: 0 });
   const listings = cache.id === source.id ? cache.listings : {};
   const revision = cache.id === source.id ? cache.revision : 0;
+  // The sentence for each directory whose last listing failed, per source. Cleared when it is asked for again.
+  const [failed, setFailed] = useState<{ id: string; sentences: Record<string, string> }>({ id: source.id, sentences: {} });
+  const failures = failed.id === source.id ? failed.sentences : NO_FAILURES;
   const [renaming, setRenaming] = useState<{ sourceId: string; path: string } | null>(null);
   const [editing, setEditing] = useState<{ sourceId: string; edit: TreeEdit } | null>(null);
   const requests = useRef(new Map<string, AbortController>());
@@ -45,12 +49,21 @@ export function useFileNavigation({ source, actions, state, onStateChange, onOpe
     if (!source.list || requests.current.has(directory)) return;
     const controller = new AbortController();
     requests.current.set(directory, controller);
+    setFailed((previous) => {
+      if (previous.id !== source.id || !(directory in previous.sentences)) return previous;
+      const { [directory]: _asked, ...rest } = previous.sentences;
+      return { id: source.id, sentences: rest };
+    });
     void source.list(directory, { signal: controller.signal }).then((entries) => {
       if (!controller.signal.aborted && current.current.source === source) {
         setCache((previous) => ({ id: source.id, listings: { ...(previous.id === source.id ? previous.listings : {}), [directory]: entries }, revision: previous.id === source.id ? previous.revision : 0 }));
       }
     }).catch((error: unknown) => {
-      if (!controller.signal.aborted) report(error);
+      if (controller.signal.aborted || current.current.source !== source) return;
+      // A directory with no listing says so in its own place, with a Retry. One that is
+      // already drawn keeps its rows (a refresh failed): that is the toast's.
+      if (current.current.listings[directory] !== undefined) { report(error); return; }
+      setFailed((previous) => ({ id: source.id, sentences: { ...(previous.id === source.id ? previous.sentences : {}), [directory]: errorMessage(error) } }));
     }).finally(() => { if (requests.current.get(directory) === controller) requests.current.delete(directory); });
   }, [source, report]);
   useEffect(() => () => {
@@ -154,11 +167,12 @@ export function useFileNavigation({ source, actions, state, onStateChange, onOpe
   const paths = useCallback(async () => {
     const controller = new AbortController();
     searches.current.add(controller);
-    try { const paths = await source.paths?.({ signal: controller.signal }) ?? []; return !controller.signal.aborted && current.current.source === source ? paths : []; }
-    catch (error) { if (!controller.signal.aborted) report(error); return []; }
+    try { const listing = await source.paths?.({ signal: controller.signal }) ?? []; return !controller.signal.aborted && current.current.source === source ? listing : []; }
+    // Not a toast: the filter says why it found nothing, where the person is looking.
+    catch (error) { if (!controller.signal.aborted) throw new Error(errorMessage(error)); return []; }
     finally { searches.current.delete(controller); }
-  }, [source, report]);
-  const tree: FileTreeSource = { rootName: source.rootName, expanded, setExpanded, listings, load, revision, paths, platform, capabilities, onAction,
+  }, [source]);
+  const tree: FileTreeSource = { rootName: source.rootName, expanded, setExpanded, listings, failures, load, revision, paths, platform, capabilities, onAction,
     rename: source.rename ? rename : undefined, create: source.create ? create : undefined, trash: source.trash ? trash : undefined };
   const crumbs: CrumbSource = {
     useListing(directory) {

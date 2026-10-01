@@ -14,8 +14,14 @@
  * singleton lock, and stands down at once if one is already bound, so
  * starting it here when a project opens is the same daemon the CLI and the
  * viewer would have started later, only earlier and off the critical path.
- * Detached and never tracked: it is the person's daemon, shared with every
+ * Detached and never held as one of the app's children (only its pid is remembered, while it
+ * runs, so a quit's deadline spares it): it is the person's daemon, shared with every
  * terminal, and it retires on its own idle timeout the way the CLI's does.
+ * It starts in the app's data directory, not in the project that opened it:
+ * a process's cwd locks that folder on Windows (the worktree could not be
+ * removed while the daemon lives on) and pins a deleted inode elsewhere. It
+ * needs no project cwd — every request carries its own, and its workers run
+ * in a tempdir between jobs.
  *
  * Once per app run per interpreter. The daemon's stderr — its lifecycle
  * lines and the kernel's noise — goes to the runtime log beside the probe's
@@ -28,17 +34,35 @@ import type { ResolvedPython } from "./runtime";
 
 export const DAEMON_ARGS = ["-m", "cadgen.daemon"];
 
+const spawnedPids = new Set<number>();
+
+/**
+ * Pids of the daemons this app run started AND that are still running; the quit watchdog spares
+ * them (src/main/quit-deadline.ts). A daemon's pid leaves the set when it exits, so a pid the
+ * kernel hands to a later direct child of the app is never spared by mistake.
+ */
+export function daemonPids(): number[] {
+  return [...spawnedPids];
+}
+
 export type DaemonSpawn = (
   python: string,
   args: string[],
   options: { cwd: string; env: Record<string, string>; logFile: string },
-) => { pid?: number | undefined; unref(): void } | null;
+) => {
+  pid?: number | undefined;
+  unref(): void;
+  /** A real child process has it; the exit is what takes its pid back out of `daemonPids()`. */
+  once?(event: "exit", listener: () => void): unknown;
+} | null;
 
 export type DaemonWarmerDeps = {
   /** The environment cadgen children get (PYTHONPATH in a checkout, CADGEN_NODE). */
   env: (resolved: ResolvedPython) => Record<string, string>;
   /** Where the daemon's stderr goes: the runtime log. */
   logFile: () => string;
+  /** The directory it starts in: one that no project owns, so none is held open. */
+  cwd: () => string;
   spawn?: DaemonSpawn;
   log?: (line: string) => void;
 };
@@ -94,19 +118,24 @@ export class DaemonWarmer {
    * none: the viewer and the CLI would run every job cold in that
    * environment, and warming one they will never use is not a favour.
    */
-  warm(resolved: ResolvedPython, cwd: string): boolean {
+  warm(resolved: ResolvedPython): boolean {
     const env = this.deps.env(resolved);
     if (env.CADGEN_DAEMON === "0" || this.warmed.has(resolved.python)) {
       return false;
     }
     this.warmed.add(resolved.python);
     try {
-      const child = this.spawn(resolved.python, DAEMON_ARGS, { cwd, env, logFile: this.deps.logFile() });
+      const child = this.spawn(resolved.python, DAEMON_ARGS, { cwd: this.deps.cwd(), env, logFile: this.deps.logFile() });
       if (!child) {
         this.warmed.delete(resolved.python);
         return false;
       }
       child.unref();
+      if (child.pid) {
+        const pid = child.pid;
+        spawnedPids.add(pid);
+        child.once?.("exit", () => spawnedPids.delete(pid));
+      }
       this.log(`warming ${resolved.source} ${resolved.python}${child.pid ? ` (pid ${child.pid})` : ""}`);
       return true;
     } catch (error) {

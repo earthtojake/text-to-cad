@@ -3,7 +3,9 @@
  *
  * Probes every provider's binaries along the login-shell PATH, reads a
  * version, and asks the CLI (or the environment, or a credential file)
- * whether the user is signed in. Results are cached; `refresh()` re-runs
+ * whether the user is signed in. The table is kept in memory and, through
+ * `./cache.ts`, between launches, where the next launch answers from it (rows
+ * flagged `probing`) until its own probe lands; `refresh()` re-runs
  * everything and `onChange` fans the new table out. Nothing here spawns an
  * agent — the Agents page must be able to show state without starting
  * anything.
@@ -12,20 +14,26 @@
  * fake filesystem and a fake `--version` without a real PATH.
  */
 import { execFile } from "node:child_process";
-import { access, constants } from "node:fs/promises";
+import { access, constants, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
 import type { AgentProvider, AgentStatus, AuthState } from "../../shared/agents";
 import { trackChild } from "../children";
 import { AGENT_PROVIDERS } from "./registry";
-import { loginEnv, type Env } from "./shell-env";
+import { loginEnvOutcome, type Env } from "./shell-env";
 
 export type ExecResult = { stdout: string; stderr: string; code: number | null };
 
 export type DetectorProbes = {
   /** Resolve the environment agents run in. */
   env: (force: boolean) => Promise<Env>;
+  /**
+   * Why the environment `env` just gave is only the process's own (the login shell failed or
+   * timed out), else null. Read right after `env` resolves: what was found on that PATH says
+   * nothing about what is installed, so it is no answer.
+   */
+  captureFailure?: () => string | null;
   /** Is this path an executable file? */
   isExecutable: (file: string) => Promise<boolean>;
   /** Does this path exist at all? */
@@ -39,10 +47,43 @@ export type DetectorProbes = {
 
 const EXEC_TIMEOUT_MS = 10_000;
 
+/**
+ * How long anything that must not act on the last launch's rows waits for this
+ * launch's probe: a cold `agents.list`, a session that would refuse an agent
+ * as "not installed". The probe starts with the window, so it is usually done
+ * or nearly; this bounds a login shell that never returns.
+ */
+export const PROBE_WAIT_MS = 3_000;
+
+/**
+ * Where the last table is kept between launches (`./cache.ts`). Read once, at
+ * the first question; written after every finished probe. A cache that cannot
+ * be read or written is no cache: neither may fail a probe.
+ */
+export type AgentsCache = {
+  read: () => AgentStatus[] | null;
+  write: (statuses: AgentStatus[]) => void;
+};
+
+/** What an auth probe prints when the person is signed out (`Not logged in`, `{"loggedIn":false}`). */
+const SIGNED_OUT = /not (logged|signed) in|logged out|signed out|"loggedIn"\s*:\s*false|not authenticated|unauthenticated|login required/i;
+
+let lastCaptureFailure: string | null = null;
+
 export const nodeProbes: DetectorProbes = {
-  env: (force) => loginEnv({ force }),
+  env: async (force) => {
+    const outcome = await loginEnvOutcome({ force });
+    lastCaptureFailure = outcome.failed;
+    return outcome.env;
+  },
+  captureFailure: () => lastCaptureFailure,
   isExecutable: async (file) => {
     try {
+      // `access(X_OK)` alone is true of a directory (search permission), so a
+      // folder named `claude` on PATH would read as the CLI.
+      if (!(await stat(file)).isFile()) {
+        return false;
+      }
       await access(file, constants.X_OK);
       return true;
     } catch {
@@ -108,18 +149,140 @@ export class AgentDetector {
   private inflight: Promise<AgentStatus[]> | null = null;
   private readonly listeners = new Set<(statuses: AgentStatus[]) => void>();
   private env: Env | null = null;
+  /** This run has finished a probe; until then any rows held are the last launch's. */
+  private probed = false;
+  /** The last probe could not read the login shell: a retry must capture it again, not reuse that. */
+  private captureFailed = false;
+  /** The probe in flight re-ran the login shell, so a forced refresh needs nothing more. */
+  private inflightForced = false;
+  /** The forced probe queued behind an unforced one. */
+  private forcedNext: Promise<AgentStatus[]> | null = null;
+  private seeded = false;
+  /** Providers `refreshOne` has checked in this run, before any whole table has: their rows are not the last launch's. */
+  private readonly freshIds = new Set<string>();
 
   constructor(
     private readonly providers: readonly AgentProvider[] = AGENT_PROVIDERS,
     private readonly probes: DetectorProbes = nodeProbes,
+    private readonly cache: AgentsCache | null = null,
   ) {}
 
-  /** The cached table; empty (not blocking) before the first probe finishes. */
+  /**
+   * The table: this run's once a probe has finished, the last launch's before
+   * that (a machine's agents rarely change between launches, and a wrong
+   * `installed` for a second is better than none — an empty table reads as "not
+   * installed" to the session manager); empty on a first launch.
+   */
   list(): AgentStatus[] {
-    if (this.statuses.length === 0 && !this.inflight) {
-      void this.refresh();
+    this.seed();
+    if (!this.probed && !this.inflight) {
+      // The environment already resolved is good enough for a read; a caller that asked for the
+      // table did not ask for a second login shell. The failure reaches listeners (`probeAll`) and
+      // the callers that wait on `settled()`: this one has nobody to tell.
+      this.refresh(false).catch((error: unknown) => console.info(`[agents] the probe failed: ${String(error)}`));
     }
     return this.statuses;
+  }
+
+  /** The last launch's table, once, unless a probe has answered first. */
+  private seed() {
+    if (this.seeded) {
+      return;
+    }
+    this.seeded = true;
+    try {
+      const cached = this.cache?.read();
+      if (cached && this.statuses.length === 0) {
+        this.statuses = cached;
+      }
+    } catch (error) {
+      console.info(`[agents] the cached table was not read: ${String(error)}`);
+    }
+  }
+
+  private persist() {
+    try {
+      // A placeholder for a probe that failed cold (`checkedAt` 0) is not something this machine said.
+      this.cache?.write(this.statuses.filter((status) => status.checkedAt > 0));
+    } catch (error) {
+      console.info(`[agents] the table was not cached: ${String(error)}`);
+    }
+  }
+
+  /**
+   * The table for `agents.list`: the cache when there is one, and otherwise
+   * the first probe's answer if it arrives within `waitMs`. An empty cache
+   * answered at once is a renderer that draws "no agents" and then redraws
+   * when `agents.status` lands — the model chip waited on that second answer
+   * on every cold launch. A probe that hangs past the bound (a login shell
+   * that never returns) still gets the old answer, empty, and the broadcast
+   * follows as before.
+   *
+   * A warm launch answers at once instead: the last launch's table, every row
+   * marked `probing`, while the probe runs. The fresh table replaces it on
+   * `agents.status` (a row from the probe never carries the mark), so what a
+   * screen draws from this answer is provisional and says so.
+   */
+  async listWithin(waitMs: number): Promise<AgentStatus[]> {
+    if (this.captureFailed && !this.inflight) {
+      // The renderer asking again after a failed shell capture is its Retry: capture afresh.
+      this.refresh(true).catch((error: unknown) => console.info(`[agents] the probe failed: ${String(error)}`));
+    }
+    const cached = this.list();
+    if (!this.probed && cached.length > 0) {
+      // A retry after a failed probe starts over: the failure's mark is not this run's.
+      return cached.map((status) =>
+        this.freshIds.has(status.id) ? status : { ...status, probing: true, probeFailed: undefined },
+      );
+    }
+    const inflight = this.inflight;
+    if (cached.length > 0 || !inflight) {
+      return cached;
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const bound = new Promise<AgentStatus[]>((resolve) => {
+      timer = setTimeout(() => resolve(this.statuses), waitMs);
+    });
+    try {
+      return await Promise.race([inflight.catch(() => this.statuses), bound]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  /**
+   * The first table: the probe in flight, the cache, or a new probe — never a
+   * second probe on top of one already running or finished. What launch
+   * starts, and what the adapter pre-warm waits on.
+   */
+  settled(): Promise<AgentStatus[]> {
+    if (this.inflight) {
+      return this.inflight;
+    }
+    this.seed();
+    return this.probed ? Promise.resolve(this.statuses) : this.refresh(false);
+  }
+
+  /**
+   * This launch's table, or null when no probe has finished within `waitMs`
+   * (a hung login shell, or a probe that failed). For a caller about to act on
+   * a row — refuse an agent as not installed, hand its binary to a login —
+   * where the last launch's rows are a guess: the CLI may have been installed
+   * since. Null means "unknown", never "absent".
+   */
+  async freshWithin(waitMs: number): Promise<AgentStatus[] | null> {
+    if (this.probed) {
+      return this.statuses;
+    }
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const bound = new Promise<null>((resolve) => {
+      timer = setTimeout(() => resolve(null), waitMs);
+    });
+    try {
+      return await Promise.race([this.settled().catch(() => null), bound]);
+    } finally {
+      clearTimeout(timer);
+    }
   }
 
   /** The environment the last probe used, for spawning agents. */
@@ -134,13 +297,29 @@ export class AgentDetector {
     };
   }
 
-  /** Re-resolve the shell environment and re-probe everything. */
+  /**
+   * Re-resolve the shell environment and re-probe everything. A forced refresh asked while an
+   * unforced probe is out (the Agents page's Refresh during the launch probe) is not answered by
+   * that probe, which reused the cached environment: it runs a forced one right after it.
+   */
   refresh(force = true): Promise<AgentStatus[]> {
-    if (!this.inflight) {
-      this.inflight = this.probeAll(force).finally(() => {
-        this.inflight = null;
-      });
+    if (this.inflight) {
+      if (!force || this.inflightForced) {
+        return this.inflight;
+      }
+      this.forcedNext ??= this.inflight
+        .catch(() => undefined)
+        .then(() => {
+          this.forcedNext = null;
+          return this.refresh(true);
+        });
+      return this.forcedNext;
     }
+    this.inflightForced = force;
+    this.inflight = this.probeAll(force).finally(() => {
+      this.inflight = null;
+      this.inflightForced = false;
+    });
     return this.inflight;
   }
 
@@ -150,25 +329,58 @@ export class AgentDetector {
     if (!provider) {
       return null;
     }
+    if (!this.probed) {
+      // A probe in flight would overwrite this row when it lands, and the rows held before it
+      // are the last launch's or none: fold this one into the fresh table, not into them.
+      await this.settled().catch(() => undefined);
+    }
     const env = await this.probes.env(true);
     this.env = env;
     const status = await this.probe(provider, env);
-    this.statuses = this.providers.map(
-      (candidate) =>
-        (candidate.id === agentId ? status : this.statuses.find((s) => s.id === candidate.id)) ??
-        missing(candidate),
-    );
+    this.freshIds.add(agentId);
+    // A provider with no row yet is left out rather than drawn as "not installed". The flagged
+    // placeholders for a probe that failed cold stay, so the failure and the other agents stay on
+    // screen as unknown; `persist` is where they are left out, and they are never cached as such.
+    this.statuses = this.providers.flatMap((candidate) => {
+      const row = candidate.id === agentId ? status : this.statuses.find((s) => s.id === candidate.id);
+      return row ? [row] : [];
+    });
+    this.persist();
     this.emit();
     return status;
   }
 
   private async probeAll(force: boolean): Promise<AgentStatus[]> {
-    const env = await this.probes.env(force);
-    this.env = env;
-    const statuses = await Promise.all(this.providers.map((provider) => this.probe(provider, env)));
-    this.statuses = statuses;
+    let captureFailure: string | null = null;
+    try {
+      const env = await this.probes.env(force);
+      this.env = env;
+      captureFailure = this.probes.captureFailure?.() ?? null;
+      this.captureFailed = captureFailure !== null;
+      if (captureFailure) {
+        // Every agent would read "not installed" on a PATH the shell never gave. Spawns keep the env.
+        throw new Error(`could not read the login shell's environment (${captureFailure})`);
+      }
+      const statuses = await Promise.all(this.providers.map((provider) => this.probe(provider, env)));
+      this.statuses = statuses;
+    } catch (error) {
+      if (!this.probed || captureFailure !== null) {
+        // No fresh table is coming: the last launch's rows would stay "probing" for good. They stay,
+        // unmarked but flagged: an empty table would read as "no agent ready — sign in", the wrong cause.
+        // With no last launch's either, the flagged rows are the registry's, so the failure reaches
+        // the renderer as one all the same and not as a list that is still on its way.
+        this.statuses = (this.statuses.length > 0 ? this.statuses : this.providers.map(missing)).map(
+          // Not a row `refreshOne` has since checked: that one is this run's, and says so.
+          (status) => (this.freshIds.has(status.id) ? status : { ...status, probing: undefined, probeFailed: true }),
+        );
+        this.emit();
+      }
+      throw error;
+    }
+    this.probed = true;
+    this.persist();
     this.emit();
-    return statuses;
+    return this.statuses;
   }
 
   private async probe(provider: AgentProvider, env: Env): Promise<AgentStatus> {
@@ -211,7 +423,10 @@ export class AgentDetector {
         if (result.code === 0) {
           return "authenticated";
         }
-        if (result.code !== null) {
+        // Only a failure that reads as "signed out" is one. Anything else — a
+        // CLI too old for `auth status`, a crash — says nothing about the
+        // login, and the credential file below still can.
+        if (result.code !== null && SIGNED_OUT.test(`${result.stdout}\n${result.stderr}`)) {
           return "unauthenticated";
         }
       } catch {

@@ -324,6 +324,15 @@ export function DrawingEditor({ initialScene, name = 'Drawing', mode = 'canvas',
         && ['q', 'k', 'f', 'd', '3', '9'].includes(key);
       if (!shortcut && !hiddenTool && !(key === '?' && !writable)) return;
       event.preventDefault(); event.stopPropagation();
+      // Off a Mac, Ctrl+Shift+E is the host's explorer chord. Stopping the event here keeps
+      // the SDK from opening its hidden export dialog (it ignores UIOptions), but it would also
+      // keep it from the host's window listener; hand the host its own copy of the keystroke.
+      if (platformRef.current !== 'darwin' && event.ctrlKey && !event.metaKey && event.shiftKey && key === 'e') {
+        const forwarded = new KeyboardEvent('keydown', { key: event.key, code: event.code, ctrlKey: true, shiftKey: true,
+          bubbles: true, cancelable: true });
+        window.dispatchEvent(forwarded);
+        if (forwarded.defaultPrevented) event.preventDefault();
+      }
     }}>
     <Excalidraw initialData={initialData} excalidrawAPI={setApi} theme="light" name={name}
       handleKeyboardGlobally={false} autoFocus={false} aiEnabled={false} validateEmbeddable={false}

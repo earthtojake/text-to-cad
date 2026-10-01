@@ -1,16 +1,20 @@
-import { createHash, randomUUID } from "node:crypto";
+import { randomUUID } from "node:crypto";
 import { EventEmitter } from "node:events";
 import { type BrowserWindow, WebContentsView } from "electron";
 import { browserMethodSchemas, type BrowserInput, type BrowserMethod, type BrowserTarget } from "../../shared/browser";
 import { browserHarness } from "./harness";
+import { browserPartition, browserScopeKey, type BrowserScope } from "./storage";
 
-export type BrowserScope = { sessionId: string; projectId: string; root: string };
+export { browserScopeKey, type BrowserScope };
 type Target = {
   scope: BrowserScope; id: string; view: WebContentsView; harness: ReturnType<typeof browserHarness>;
-  owner?: BrowserWindow; lease?: string; generation: number; visible: boolean; ready: Promise<void>; logs: BrowserTarget["logs"];
+  owner?: BrowserWindow; lease?: string; dropOwnerClosed?: () => void; generation: number; visible: boolean; ready: Promise<void>; logs: BrowserTarget["logs"];
+  /** Last key or mouse press that reached the page, and last one an agent sent over CDP (ms). */
+  userInputAt: number; automatedInputAt: number;
 };
+/** How recent a press must be for a download to count as the person's own. */
+const USER_GESTURE_MS = 2_000;
 export type BrowserBounds = { x: number; y: number; width: number; height: number };
-export function browserScopeKey(scope: BrowserScope) { return JSON.stringify([scope.sessionId, scope.projectId, scope.root]); }
 export function browserURL(value: string) {
   const url = new URL(value);
   if (url.protocol !== "http:" && url.protocol !== "https:" && value !== "about:blank") {
@@ -19,10 +23,22 @@ export function browserURL(value: string) {
   return url.href;
 }
 
+/** A load that reached the network and failed (DNS, refused, TLS), in words the tab can show. */
+export function navigationFailure(address: string, errorText: string) {
+  let host = address;
+  try { host = new URL(address).host || address; } catch { /* shown as typed */ }
+  return Object.assign(new Error(`${host} could not be reached: ${errorText}`), { name: "BrowserNavigationError" });
+}
+
 /** Owns live pages independently of whichever project or tab is painted. */
 export class BrowserService {
-  readonly events = new EventEmitter();
+  /** `opened` / `closed`, one listener pair per scoped CDP connection (they leave with it), so more than ten sessions' clients are ordinary. A finite cap, not 0: a listener leak past a hundred connections should still warn. */
+  readonly events = new EventEmitter().setMaxListeners(100);
   private targets = new Map<string, Target>();
+  /** App windows whose own reload/crash hides the pages they present. */
+  private readonly watchedOwners = new WeakSet<BrowserWindow>();
+  /** Storage partitions that already refuse downloads. */
+  private readonly guardedPartitions = new WeakSet<Electron.Session>();
   private get(scope: BrowserScope, id: string) {
     const target = this.targets.get(id);
     if (!target || browserScopeKey(target.scope) !== browserScopeKey(scope) || target.view.webContents.isDestroyed()) {
@@ -30,11 +46,15 @@ export class BrowserService {
     }
     return target;
   }
-  private info(target: Target): BrowserTarget {
+  private info(target: Target, logs = true): BrowserTarget {
     const wc = target.view.webContents;
     return { tabId: target.id, ...target.scope, url: wc.getURL(), generation: target.generation, title: wc.getTitle(), loading: wc.isLoading(),
       canGoBack: wc.navigationHistory.canGoBack(), canGoForward: wc.navigationHistory.canGoForward(),
-      visible: target.visible, logs: [...target.logs] };
+      visible: target.visible, logs: logs ? [...target.logs] : [], errors: target.logs.filter(line => line.level === "error").length };
+  }
+  private log(target: Target, level: BrowserTarget["logs"][number]["level"], message: string) {
+    target.logs.push({ level, message: message.slice(0, 1000) });
+    target.logs = target.logs.slice(-100);
   }
   list(scope: BrowserScope) {
     return [...this.targets.values()].filter(t => browserScopeKey(t.scope) === browserScopeKey(scope)).map(t => this.info(t));
@@ -45,33 +65,50 @@ export class BrowserService {
     const existing = this.targets.get(id);
     if (existing) { const target = this.get(scope, id); await target.ready; return this.info(this.get(scope, id)); }
     const url = browserURL(params.url || "about:blank");
-    const partition = `persist:browser-${createHash("sha256").update(browserScopeKey(scope)).digest("hex")}`;
+    const partition = browserPartition(scope);
     const view = new WebContentsView({ webPreferences: {
       partition, nodeIntegration: false, contextIsolation: true, sandbox: true,
       webSecurity: true, backgroundThrottling: false, spellcheck: false,
     } });
     view.setBounds({ x: 0, y: 0, width: 1000, height: 700 });
-    const target: Target = { id, scope: { ...scope }, view, harness: browserHarness(view.webContents), generation: 0, visible: false, ready: Promise.resolve(), logs: [] };
+    const target: Target = { id, scope: { ...scope }, view, harness: browserHarness(view.webContents), generation: 0, visible: false, ready: Promise.resolve(), logs: [], userInputAt: 0, automatedInputAt: 0 };
     this.targets.set(id, target);
     const wc = view.webContents;
     wc.session.setPermissionRequestHandler((_contents, _permission, callback) => callback(false));
     wc.session.setPermissionCheckHandler(() => false);
+    this.refuseDownloads(wc.session);
     // No unmanaged windows or privileged scheme navigations may escape the root.
     wc.setWindowOpenHandler(({ url: popupURL }) => {
-      try { void wc.loadURL(browserURL(popupURL)).catch(() => {}); } catch { /* blocked scheme */ }
+      try { void wc.loadURL(browserURL(popupURL)).catch(() => {}); }
+      catch { this.log(target, "error", `Only http and https addresses can be opened here: ${popupURL.slice(0, 200)} was not opened.`); }
       return { action: "deny" };
     });
     const guard = (event: Electron.Event, nextURL: string) => {
       try { browserURL(nextURL); } catch { event.preventDefault(); }
     };
-    wc.on("did-start-navigation", (_event, _url, _inPlace, isMainFrame) => { if (isMainFrame) target.generation += 1; });
+    // A new document, not a pushState or fragment change: a single-page app
+    // moving its own history keeps the generation "Add to prompt" captured.
+    wc.on("did-start-navigation", details => { if (details.isMainFrame && !details.isSameDocument) target.generation += 1; });
+    wc.on("before-input-event", (_event, input) => { if (input.type === "keyDown" || input.type === "rawKeyDown") target.userInputAt = Date.now(); });
+    wc.on("before-mouse-event", (_event, mouse) => { if (mouse.type === "mouseDown") target.userInputAt = Date.now(); });
     wc.on("will-navigate", guard);
     wc.on("will-redirect", guard);
-    wc.on("console-message", (_event, level, message) => {
-      target.logs.push({ level: level >= 3 ? "error" : level === 2 ? "warn" : "log", message: message.slice(0, 1000) });
-      target.logs = target.logs.slice(-100);
+    // The event carries `level` ("info" | "warning" | "error" | "debug") and
+    // `message`; the positional (numeric level, message) form is deprecated but
+    // read as a fallback.
+    wc.on("console-message", ((event: { level?: unknown; message?: unknown }, level?: number, message?: string) => {
+      const severity = typeof event.level === "string" ? (event.level === "error" ? "error" : event.level === "warning" ? "warn" : "log")
+        : (level ?? 0) >= 3 ? "error" : level === 2 ? "warn" : "log";
+      this.log(target, severity, typeof event.message === "string" ? event.message : message ?? "");
+    }) as never);
+    // `close()` has already dropped the target, and the id may be a newer page's
+    // by the time Chromium reports this one destroyed (archive, then a quick unarchive).
+    wc.on("destroyed", () => {
+      const current = this.targets.get(id);
+      if (current && current !== target) return;
+      this.targets.delete(id);
+      this.events.emit("closed", { ...scope, tabId: id });
     });
-    wc.on("destroyed", () => { this.targets.delete(id); this.events.emit("closed", { ...scope, tabId: id }); });
     this.events.emit("opened", { ...scope, tabId: id });
     target.ready = (async () => {
       let timer: ReturnType<typeof setTimeout> | undefined;
@@ -83,7 +120,7 @@ export class BrowserService {
       } catch (error) {
         // Keep Chromium's error page reachable and closeable after a failed navigation.
         if (wc.isDestroyed()) throw error;
-        target.logs.push({ level: "error", message: error instanceof Error ? error.message : String(error) });
+        this.log(target, "error", error instanceof Error ? error.message : String(error));
       } finally { clearTimeout(timer); }
     })();
     await target.ready;
@@ -98,9 +135,13 @@ export class BrowserService {
     for (const other of this.targets.values()) if (other.owner === owner && other !== target) this.hide(other);
     if (target.owner !== owner) {
       this.hide(target);
+      target.dropOwnerClosed?.();
       target.owner = owner;
       owner.contentView.addChildView(target.view);
-      owner.once("closed", () => { if (this.targets.get(id) === target && target.owner === owner) this.close(scope, id); });
+      const onClosed = () => { if (this.targets.get(id) === target && target.owner === owner) this.close(scope, id); };
+      owner.once("closed", onClosed);
+      target.dropOwnerClosed = () => { owner.off("closed", onClosed); };
+      this.watchOwner(owner);
     }
     const zoom = owner.webContents.getZoomFactor();
     target.view.setBounds({ x: Math.round(bounds.x * zoom), y: Math.round(bounds.y * zoom),
@@ -108,6 +149,81 @@ export class BrowserService {
     target.lease = lease;
     target.visible = true;
     target.view.setVisible(true);
+  }
+  /**
+   * A reloaded or crashed app renderer has no browser tab mounted to hide its
+   * pages, and a native view paints over whatever the new document shows. So
+   * the owner's own reload hides every page it presented; the remounted tab
+   * presents it again under a fresh lease. `did-navigate`, not
+   * `did-start-loading`: loading starts before `beforeunload`, and a reload
+   * the person cancels (unsaved drafts) must leave the pages where they are.
+   */
+  private watchOwner(owner: BrowserWindow) {
+    if (this.watchedOwners.has(owner)) return;
+    this.watchedOwners.add(owner);
+    const hideAll = () => {
+      for (const target of this.targets.values()) if (target.owner === owner) { target.lease = undefined; this.hide(target); }
+    };
+    owner.webContents.on("did-navigate", hideAll);
+    // A reload that failed (a dev server that is down) commits an error page
+    // without `did-navigate`. ERR_ABORTED (-3) is a superseded navigation, not a new page.
+    owner.webContents.on("did-fail-load", (_event, errorCode, _description, _url, isMainFrame) => { if (isMainFrame && errorCode !== -3) hideAll(); });
+    owner.webContents.on("render-process-gone", hideAll);
+  }
+  /**
+   * A download the person starts — in the page that is shown, focused, in the
+   * focused app window, within two seconds of a key or mouse press there that
+   * no agent input accompanied — keeps the native save dialog. Anything else (an
+   * agent's click in a background session, a page's own script while the
+   * person works elsewhere) would open that dialog over whatever they are
+   * doing, so it is cancelled and counted as an error in the page's console.
+   */
+  private refuseDownloads(partition: Electron.Session) {
+    if (this.guardedPartitions.has(partition)) return;
+    this.guardedPartitions.add(partition);
+    partition.on("will-download", (event, item, contents) => {
+      const target = [...this.targets.values()].find(candidate => candidate.view.webContents === contents);
+      if (target && this.inForeground(target)) return;
+      event.preventDefault();
+      if (target) this.log(target, "error", `Downloads are not supported in this browser tab. Blocked: ${item.getFilename() || item.getURL()}.`);
+    });
+  }
+  private inForeground(target: Target) {
+    const owner = target.owner;
+    const now = Date.now();
+    return target.visible && !!owner && !owner.isDestroyed() && owner.isFocused()
+      && !target.view.webContents.isDestroyed() && target.view.webContents.isFocused()
+      // CDP input may reach the same hooks as a real press, so a page an agent
+      // is driving never counts as the person's gesture.
+      && now - target.userInputAt <= USER_GESTURE_MS && now - target.automatedInputAt > USER_GESTURE_MS;
+  }
+  /** An agent sent input to this page (CDP `Input.*`, or the app's own input method). */
+  noteAutomatedInput(scope: BrowserScope, id: string) { this.get(scope, id).automatedInputAt = Date.now(); }
+  private focusedTarget(owner?: BrowserWindow | null) {
+    return [...this.targets.values()].find(candidate => candidate.visible && (!owner || candidate.owner === owner)
+      && !candidate.view.webContents.isDestroyed() && candidate.view.webContents.isFocused());
+  }
+  /** Reload the embedded page that has keyboard focus. False when none has: then the key does nothing. */
+  reloadFocused(owner?: BrowserWindow | null) {
+    const target = this.focusedTarget(owner);
+    if (!target) return false;
+    target.view.webContents.reload();
+    return true;
+  }
+  /**
+   * Hand an app shortcut pressed inside the focused embedded page to the app's
+   * own renderer, as the key it was: focus moves to the app, and its handlers
+   * answer it the way they would have with the app focused. A page never sees
+   * the app's keys, so without this the menu's accelerator is all that fires.
+   * False when no page in `owner` has focus.
+   */
+  forwardFromFocused(owner: BrowserWindow, key: { keyCode: string; modifiers: Electron.InputEvent["modifiers"] }) {
+    const target = this.focusedTarget(owner);
+    if (!target || owner.isDestroyed()) return false;
+    owner.webContents.focus();
+    owner.webContents.sendInputEvent({ type: "keyDown", ...key });
+    owner.webContents.sendInputEvent({ type: "keyUp", ...key });
+    return true;
   }
   private hide(target: Target) {
     target.visible = false;
@@ -117,11 +233,15 @@ export class BrowserService {
   close(scope: BrowserScope, id: string) {
     const target = this.get(scope, id);
     this.targets.delete(id);
+    target.dropOwnerClosed?.();
     if (target.owner && !target.owner.isDestroyed()) target.owner.contentView.removeChildView(target.view);
     target.view.webContents.close({ waitForBeforeUnload: false });
   }
-  disposeSession(sessionId: string) {
-    for (const target of [...this.targets.values()]) if (target.scope.sessionId === sessionId) this.close(target.scope, target.id);
+  /** Close a session's pages; `keep` is a scope whose pages stay (the one its workspace still names). */
+  disposeSession(sessionId: string, keep?: BrowserScope) {
+    for (const target of [...this.targets.values()]) {
+      if (target.scope.sessionId === sessionId && !(keep && browserScopeKey(target.scope) === browserScopeKey(keep))) this.close(target.scope, target.id);
+    }
   }
   dispose() { for (const target of [...this.targets.values()]) this.close(target.scope, target.id); }
   async invoke(method: BrowserMethod, scope: BrowserScope, raw: unknown): Promise<unknown> {
@@ -153,7 +273,7 @@ export class BrowserService {
       const navigation = browserMethodSchemas.navigate.parse(params);
       if (navigation.url) {
         const result = await harness.Page.navigate({ url: browserURL(navigation.url) });
-        if (result.errorText) throw new Error(result.errorText);
+        if (result.errorText) throw navigationFailure(navigation.url, result.errorText);
       } else if (navigation.direction === "back" && view.webContents.navigationHistory.canGoBack()) view.webContents.navigationHistory.goBack();
       else if (navigation.direction === "forward" && view.webContents.navigationHistory.canGoForward()) view.webContents.navigationHistory.goForward();
       else if (navigation.direction === "reload") await harness.Page.reload({});
@@ -183,8 +303,9 @@ export class BrowserService {
     return { base64, mimeType: expected.kind === "screenshot" ? "image/png" : "text/plain", url: expected.url, generation: expected.generation };
   }
   clearConsole(scope: BrowserScope, id: string) { this.get(scope, id).logs = []; }
-  metadata(scope: BrowserScope, id: string) { return this.info(this.get(scope, id)); }
+  metadata(scope: BrowserScope, id: string, logs = true) { return this.info(this.get(scope, id), logs); }
   private async input(target: Target, input: BrowserInput) {
+    target.automatedInputAt = Date.now();
     const h = target.harness;
     if (input.action === "click" || input.action === "point") {
       let x: number, y: number;

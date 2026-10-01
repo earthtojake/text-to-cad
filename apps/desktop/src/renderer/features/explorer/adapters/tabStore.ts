@@ -37,8 +37,47 @@ export function desktopTabStore(tabId: string): TabStore {
 /** A tab closed for good: its record goes, whichever roots it showed. */
 export function forgetTabStore(tabId: string) {
   stores.delete(tabId);
-  const entries = readAll();
-  if (!(tabId in entries)) return;
-  delete entries[tabId];
-  writeAll(entries);
+  forgetWhere((candidate) => candidate === tabId);
+}
+
+// Which session each stored tab belongs to. A session deleted in a run that never loaded its
+// strip has no tabs in memory to forget one by one, and without this its records stayed forever.
+const OWNERS = "text-to-cad.tabs.owners.v1";
+function readOwners(): Record<string, string> {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(OWNERS) ?? "null");
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed) ? parsed as Record<string, string> : {};
+  } catch { return {}; }
+}
+function writeOwners(owners: Record<string, string>) {
+  try { localStorage.setItem(OWNERS, JSON.stringify(owners)); }
+  catch { /* As writeAll: the index is housekeeping, not something a tab needs. */ }
+}
+function forgetWhere(doomed: (tabId: string, owner: string | undefined) => boolean) {
+  const owners = readOwners(), entries = readAll();
+  let changed = false;
+  for (const tabId of new Set([...Object.keys(owners), ...Object.keys(entries)])) {
+    if (!doomed(tabId, owners[tabId])) continue;
+    stores.delete(tabId);
+    delete owners[tabId]; delete entries[tabId];
+    changed = true;
+  }
+  if (changed) { writeAll(entries); writeOwners(owners); }
+}
+
+/** The session a strip's file tabs belong to, noted whenever the strip is loaded or saved. */
+export function rememberTabOwners(sessionId: string, tabIds: readonly string[]) {
+  const owners = readOwners();
+  const missing = tabIds.filter((tabId) => owners[tabId] !== sessionId);
+  if (missing.length === 0) return;
+  for (const tabId of missing) owners[tabId] = sessionId;
+  writeOwners(owners);
+}
+/** A session gone for good: every record its tabs left, loaded this run or not. */
+export function forgetSessionTabStores(sessionId: string) {
+  forgetWhere((_tabId, owner) => owner === sessionId);
+}
+/** Records of sessions that no longer exist (`sessions` is every session, archived ones too). */
+export function pruneTabStores(sessions: ReadonlySet<string>) {
+  forgetWhere((_tabId, owner) => owner !== undefined && !sessions.has(owner));
 }

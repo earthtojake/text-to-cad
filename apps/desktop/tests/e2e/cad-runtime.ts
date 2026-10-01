@@ -15,11 +15,17 @@ export function cadRegistryEnvironment(profile: string) {
   return { TMPDIR: profile, TEMP: profile, TMP: profile };
 }
 
-/** Local UI-only runs may omit Python; CAD qualification must never silently skip it. */
-export function cadRuntimeReady(status: { state: string; cadgenVersion: string | null }) {
+/**
+ * Local UI-only runs may omit Python; CAD qualification must never silently skip it.
+ * The CAD spec compiles a STEP, so a runtime that is ready with a CAD kernel
+ * warning (`missing`, `unsupported` — GLB/STL/DXF would open, a STEP may not
+ * build) is not ready for it.
+ */
+export function cadRuntimeReady(status: { state: string; cadgenVersion: string | null; kernel?: { state: string; message: string } }) {
   if (process.env.TEXT_TO_CAD_E2E_REQUIRE_CAD === "1") {
     expect(status.state, `CAD qualification requires a ready runtime: ${JSON.stringify(status)}`).toBe("ready");
+    expect(status.kernel, `CAD qualification requires a CAD kernel cadgen builds with: ${JSON.stringify(status)}`).toBeUndefined();
     expect(status.cadgenVersion, "CAD qualification must use this checkout's runtime version").toBe(version);
   }
-  return status.state === "ready";
+  return status.state === "ready" && !status.kernel;
 }

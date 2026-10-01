@@ -31,6 +31,10 @@ the last release disposes shared GPU/BVH state.
   transfers the still-owned scene with an explicit cleanup error for retry.
 - Disposable resource admission never changes exact geometry or persistent
   cache identity.
+- A WebGL renderer whose constructor throws has no `dispose()`: `createCadWebGlRenderer`
+  creates the canvas itself and, when an attempt fails (before the fallback or a rethrow),
+  loses whatever context that canvas obtained through `WEBGL_lose_context`; the fallback
+  gets a canvas of its own. The caller owns only the renderer it is returned.
 
 ## 2. The demand boundary
 

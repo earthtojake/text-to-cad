@@ -1,5 +1,8 @@
 import {
   BookOpen,
+  Bot,
+  CircleCheck,
+  CircleX,
   FileMinus,
   FileSymlink,
   Globe,
@@ -17,8 +20,9 @@ import type { SubagentState } from "@shared/acp/types";
 
 /**
  * The leading glyph of an activity row (plan §2): pencil for an edit, book
- * for a read, terminal for a command, globe for the web, ellipsis for a
- * thought. One map, so every row and every folded line agree.
+ * for a read, terminal for a command (a `delete` that is a shell line
+ * included), globe for the web, ellipsis for a thought, a bot for a call
+ * that hands work to a subagent. One map, so every row and every folded line agree.
  */
 export function GlyphIcon({ glyph, className }: { glyph: Glyph; className?: string }) {
   const props = { className: cn("size-3.5 shrink-0", className) };
@@ -34,6 +38,8 @@ export function GlyphIcon({ glyph, className }: { glyph: Glyph; className?: stri
       return <Globe {...props} />;
     case "think":
       return <Ellipsis {...props} />;
+    case "subagent":
+      return <Bot {...props} />;
     case "image":
       return <ImageIcon {...props} />;
     case "delete":
@@ -48,10 +54,12 @@ export function GlyphIcon({ glyph, className }: { glyph: Glyph; className?: stri
 }
 
 /**
- * A subagent's orb: coloured by a hash of its name so the same subagent
- * keeps its colour across rows, pulsing while it runs. Codex draws these
- * as small coloured circles; the hues are the chart tokens so they follow
- * the theme.
+ * A subagent's mark. While it works: an orb coloured by a hash of its name,
+ * so the same subagent keeps its colour across rows, pulsing — the colour is
+ * identity, never status. Once it stops, the mark says how: a green check
+ * for finished, a red cross for failed, a dimmed orb for cancelled or
+ * disconnected. (A finished subagent used to keep its hue, which came out
+ * amber in dark and navy in light and read as a warning.)
  */
 export function SubagentOrb({
   name,
@@ -62,6 +70,12 @@ export function SubagentOrb({
   state: SubagentState;
   className?: string;
 }) {
+  if (state === "completed") {
+    return <CircleCheck aria-hidden className={cn("size-3.5 shrink-0 text-success", className)} data-subagent-mark="completed" />;
+  }
+  if (state === "failed") {
+    return <CircleX aria-hidden className={cn("size-3.5 shrink-0 text-destructive", className)} data-subagent-mark="failed" />;
+  }
   let hash = 0;
   for (const char of name) {
     hash = (hash * 31 + char.charCodeAt(0)) >>> 0;
@@ -73,9 +87,10 @@ export function SubagentOrb({
       className={cn(
         "inline-block size-2.5 shrink-0 rounded-full",
         state === "running" && "animate-pulse",
-        (state === "failed" || state === "disconnected") && "opacity-40",
+        state === "disconnected" || state === "cancelled" ? "opacity-40" : null,
         className,
       )}
+      data-subagent-mark={state}
       style={{ backgroundColor: `var(--chart-${hue})` }}
     />
   );

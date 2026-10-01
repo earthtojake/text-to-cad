@@ -6,6 +6,9 @@ import PdfWorker from 'pdfjs-dist/legacy/build/pdf.worker.min.mjs?worker';
 import 'pdfjs-dist/web/pdf_viewer.css';
 import { PromptContextAction, useViewerHost, type LivePdfDocument } from '@text-to-cad/ui/host';
 import type { FileRendererProps } from '@text-to-cad/ui/file-viewer';
+import { EmptyState } from '@text-to-cad/ui/navigation';
+import { FileWarning } from 'lucide-react';
+import { OpenExternally } from '../unsupported/OpenExternally';
 
 export interface PdfRendererData { bytes: Uint8Array<ArrayBuffer> }
 function validPage(page: number, count: number) {
@@ -41,6 +44,12 @@ function fitView(page: { width: number; height: number }, pane: { width: number;
   return { scale, x: (pane.width - page.width * scale) / 2, y: (pane.height - page.height * scale) / 2 };
 }
 
+/** What PDF.js said, without its exception class name: "Invalid PDF structure." */
+export function shortReason(reason: unknown): string {
+  const message = reason instanceof Error ? reason.message : String(reason).replace(/^\w*Exception:\s*/, "");
+  return message.trim().replace(/[.\s]+$/, "") || "it may be damaged";
+}
+
 /** The visible page, text extraction and agent captures share one PDF.js document. */
 export default function PdfRenderer({ data, file, source, state, onStateChange, onReady }: FileRendererProps<PdfRendererData>) {
   const host = useViewerHost();
@@ -48,6 +57,10 @@ export default function PdfRenderer({ data, file, source, state, onStateChange, 
   const [page, updatePage] = useState(typeof saved === 'number' && Number.isInteger(saved) && saved > 0 ? saved : 1);
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
   const [error, setError] = useState<string | null>(null);
+  /** The document itself would not open: there is no page, so no toolbar either. */
+  const [failed, setFailed] = useState<{ data: PdfRendererData; message: string } | null>(null);
+  // Keyed on the data that failed, so reopening the file (new data) clears it without an effect.
+  const loadError = failed?.data === data ? failed.message : null;
   const [selection, setSelection] = useState('');
   const [feedback, setFeedback] = useState('');
   // The live binding reads these outside render; every writer of `page` and `selection`
@@ -77,7 +90,7 @@ export default function PdfRenderer({ data, file, source, state, onStateChange, 
       if (!active) return;
       setPdf(document);
       if (pageRef.current > document.numPages) setPage(document.numPages);
-    }).catch(reason => { if (active) setError(String(reason)); });
+    }).catch(reason => { if (active) setFailed({ data, message: shortReason(reason) }); });
     return () => { active = false; void loading.destroy().finally(() => { pdfWorker.destroy(); worker.terminate(); }); };
   }, [data, assetBaseUrl]);
   useEffect(() => {
@@ -248,6 +261,10 @@ export default function PdfRenderer({ data, file, source, state, onStateChange, 
       host.removeEventListener('dblclick', onDoubleClick);
     };
   }, [moveTo, fit]);
+  if (loadError) {
+    return <EmptyState action={<OpenExternally path={file.path} />} description={file.name} icon={FileWarning}
+      title={`This PDF could not be opened: ${loadError}.`} tone="warn" />;
+  }
   return <div className="flex h-full flex-col bg-muted/30" aria-label={`PDF ${file.name}`}>
     <div className="flex shrink-0 items-center gap-2 border-b px-3 py-2">
       <button disabled={!pdf || page <= 1} onClick={() => setPage(page - 1)} aria-label="Previous page">‹</button>

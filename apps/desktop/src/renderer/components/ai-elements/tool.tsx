@@ -112,20 +112,54 @@ export const ToolContent = ({ className, ...props }: ToolContentProps) => (
   />
 );
 
+/**
+ * How much of one tool body is drawn: a tool can hand back megabytes (a whole
+ * file, a log), and every character is DOM and, as JSON, highlighter work.
+ * The first 64 KB is drawn, and `TrimmedBody` says how much was not.
+ */
+export const TOOL_BODY_MAX = 64 * 1024;
+
+export function capToolBody(
+  text: string,
+  { max = TOOL_BODY_MAX, keep = "head" }: { max?: number; keep?: "head" | "tail" } = {}
+): { text: string; hidden: number } {
+  if (text.length <= max) {
+    return { text, hidden: 0 };
+  }
+  return {
+    text: keep === "head" ? text.slice(0, max) : text.slice(-max),
+    hidden: text.length - max,
+  };
+}
+
+export const TrimmedBody = ({ hidden }: { hidden: number }) =>
+  hidden > 0 ? (
+    <p
+      className="px-3 py-1 font-sans text-[11px] text-muted-foreground italic"
+      data-body-trimmed
+    >
+      Trimmed — {Math.ceil(hidden / 1024)} KB not shown
+    </p>
+  ) : null;
+
 export type ToolInputProps = ComponentProps<"div"> & {
   input: ToolPart["input"];
 };
 
-export const ToolInput = ({ className, input, ...props }: ToolInputProps) => (
-  <div className={cn("space-y-2 overflow-hidden", className)} {...props}>
-    <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
-      Parameters
-    </h4>
-    <div className="rounded-md bg-muted/50">
-      <CodeBlock code={JSON.stringify(input, null, 2)} language="json" />
+export const ToolInput = ({ className, input, ...props }: ToolInputProps) => {
+  const body = capToolBody(JSON.stringify(input, null, 2) ?? "");
+  return (
+    <div className={cn("space-y-2 overflow-hidden", className)} {...props}>
+      <h4 className="font-medium text-muted-foreground text-xs uppercase tracking-wide">
+        Parameters
+      </h4>
+      <div className="rounded-md bg-muted/50">
+        <CodeBlock code={body.text} language="json" />
+        <TrimmedBody hidden={body.hidden} />
+      </div>
     </div>
-  </div>
-);
+  );
+};
 
 export type ToolOutputProps = ComponentProps<"div"> & {
   output: ToolPart["output"];
@@ -144,12 +178,26 @@ export const ToolOutput = ({
 
   let Output = <div>{output as ReactNode}</div>;
 
+  // A string result is text: highlighting it as JSON is wrong for prose and
+  // a log, and slow for a large one.
   if (typeof output === "object" && !isValidElement(output)) {
+    const body = capToolBody(JSON.stringify(output, null, 2) ?? "");
     Output = (
-      <CodeBlock code={JSON.stringify(output, null, 2)} language="json" />
+      <>
+        <CodeBlock code={body.text} language="json" />
+        <TrimmedBody hidden={body.hidden} />
+      </>
     );
   } else if (typeof output === "string") {
-    Output = <CodeBlock code={output} language="json" />;
+    const body = capToolBody(output);
+    Output = (
+      <>
+        <pre className="whitespace-pre-wrap break-words p-4 font-mono">
+          {body.text}
+        </pre>
+        <TrimmedBody hidden={body.hidden} />
+      </>
+    );
   }
 
   return (

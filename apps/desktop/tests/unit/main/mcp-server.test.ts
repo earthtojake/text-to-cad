@@ -1,6 +1,8 @@
+import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { InMemoryTransport } from "@modelcontextprotocol/sdk/inMemory.js";
@@ -8,7 +10,9 @@ import { afterEach, describe, expect, it } from "vitest";
 
 // The server the agent talks to, from its source; the packaged app runs the
 // esbuild bundle of the same file (scripts/build-mcp.mjs).
-import { BRIDGE_ENV, createServer, httpBridge } from "../../../resources/text-to-cad-mcp/server.mjs";
+import { BRIDGE_ENV, createServer, httpBridge, isInside } from "../../../resources/text-to-cad-mcp/server.mjs";
+
+const SERVER = fileURLToPath(new URL("../../../resources/text-to-cad-mcp/server.mjs", import.meta.url));
 
 type Call = { method: string; params: unknown };
 
@@ -55,9 +59,9 @@ function skillsRoot(skills: Record<string, string>): string {
 
 async function connect(
   bridge: (method: string, params: unknown) => Promise<unknown>,
-  options: { skillsRoot?: string | null; integration?: string } = {},
+  options: { skillsRoot?: string | null; skillsError?: string; integration?: string } = {},
 ) {
-  const server = createServer(bridge, { version: "9.9.9", cwd: "/proj", skillsRoot: options.skillsRoot ?? null, integration: options.integration });
+  const server = createServer(bridge, { version: "9.9.9", cwd: "/proj", skillsRoot: options.skillsRoot ?? null, skillsError: options.skillsError, integration: options.integration });
   const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
   await server.connect(serverTransport);
   const client = new Client({ name: "test", version: "0" });
@@ -229,9 +233,122 @@ describe("the skills tools", () => {
     const traversal = await client.callTool({ name: "read_skill", arguments: { name: "../..", path: "SKILL.md" } });
     expect(traversal.isError).toBe(true);
 
+    const absolute = await client.callTool({
+      name: "read_skill",
+      arguments: { name: "cad", path: path.join(root, ".claude", "skills", "documents", "SKILL.md") },
+    });
+    expect(absolute.isError).toBe(true);
+
+    // The skills directory itself is not a skill, even with a SKILL.md in it:
+    // `path.relative` answers "" for it, which a `..` check lets through.
+    fs.writeFileSync(path.join(root, ".claude", "skills", "SKILL.md"), "---\nname: stray\n---\nnot a skill\n");
+    for (const name of [".", "cad/.."]) {
+      const itself = await client.callTool({ name: "read_skill", arguments: { name } });
+      expect(itself.isError).toBe(true);
+      expect((itself.content as Array<{ text: string }>)[0]!.text).toContain(`${name} is not a skill`);
+    }
+
     const bare = await connect(fakeBridge().bridge, { skillsRoot: null });
     const listed = await bare.callTool({ name: "list_skills", arguments: {} });
     expect(JSON.parse((listed.content as Array<{text:string}>)[0]!.text)).toEqual([]);
     expect((await bare.callTool({ name: "read_skill", arguments: { name: "cad" } })).isError).toBe(true);
+  });
+});
+
+describe("tool descriptions", () => {
+  const described = async (integration: string, name: string) => {
+    const client = await connect(fakeBridge().bridge, { integration });
+    return (await client.listTools()).tools.find((tool) => tool.name === name)?.description ?? "";
+  };
+
+  it("close_tab does not promise a discard no tool can do", async () => {
+    const description = await described("workspace", "close_tab");
+    expect(description).toContain("save it first");
+    expect(description).not.toMatch(/explicitly discarded/);
+  });
+
+  it("stop_terminal says what it returns", async () => {
+    expect(await described("terminals", "stop_terminal")).toContain("exited: true with the exitCode, or exited: false");
+  });
+
+  it("the doc quotes the relay's timeout sentence as actions.ts words it", () => {
+    const doc = fs.readFileSync(fileURLToPath(new URL("../../../docs/integrations.md", import.meta.url)), "utf8");
+    expect(doc.replace(/\s+/g, " ")).toContain('"the text-to-cad window did not answer within 12 s"');
+  });
+});
+
+describe("a malformed call", () => {
+  const said = async (name: string, args: Record<string, unknown>, integration = "workspace") => {
+    const { bridge, calls } = fakeBridge();
+    const client = await connect(bridge, { integration });
+    const result = await client.callTool({ name, arguments: args });
+    expect(result.isError).toBe(true);
+    expect(calls).toEqual([]);
+    return (result.content as Array<{ text: string }>)[0]!.text;
+  };
+
+  it("names the missing argument in one sentence, not the validator's dump", async () => {
+    expect(await said("open_file", {})).toBe("open_file needs path; path is missing.");
+  });
+
+  it("names an argument the tool does not take", async () => {
+    expect(await said("open_file", { path: "a.step", mode: "x" })).toBe('open_file takes path; it does not take "mode".');
+  });
+
+  it("refuses a camera that looks from its own target, or has a zero up vector, before the viewer waits ten seconds", async () => {
+    const camera = { position: [1, 2, 3], target: [1, 2, 3], up: [0, 0, 1] };
+    expect(await said("set_camera", { tabId: "t", camera }, "cad"))
+      .toBe("set_camera needs a position different from its target; the camera cannot look from a point at itself");
+    expect(await said("set_camera", { tabId: "t", camera: { ...camera, target: [0, 0, 0], up: [0, 0, 0] } }, "cad"))
+      .toBe("set_camera needs a non-zero up vector");
+  });
+
+  it("uses a tool's own usage sentence where it has one", async () => {
+    expect(await said("set_camera", { tabId: "t", camera: { position: [0, 0], target: [0, 0, 0], up: [0, 0, 1] } }, "cad"))
+      .toBe("set_camera needs position, target and up as three numbers each");
+  });
+});
+
+describe("a skills root the app could not make", () => {
+  it("tells list_skills and read_skill why, instead of an empty list or 'no skills root'", async () => {
+    const client = await connect(fakeBridge().bridge, { skillsRoot: null, skillsError: "EACCES: permission denied, mkdir '/ro/skills'" });
+    const listed = await client.callTool({ name: "list_skills", arguments: {} });
+    expect(listed.isError).toBe(true);
+    expect((listed.content as Array<{ text: string }>)[0]!.text).toBe("Skills could not be set up: EACCES: permission denied, mkdir '/ro/skills'");
+    const read = await client.callTool({ name: "read_skill", arguments: { name: "cad" } });
+    expect((read.content as Array<{ text: string }>)[0]!.text).toBe("Skills could not be set up: EACCES: permission denied, mkdir '/ro/skills'");
+  });
+});
+
+describe("readSkills", () => {
+  it.skipIf(process.platform === "win32")("skips a SKILL.md that is a FIFO instead of blocking on it", () => {
+    const root = skillsRoot({ cad: "Make CAD." });
+    const stray = path.join(root, ".claude", "skills", "stray");
+    fs.mkdirSync(stray);
+    execFileSync("mkfifo", [path.join(stray, "SKILL.md")]);
+    // A read of a FIFO with no writer blocks the thread for good, which no
+    // vitest timeout can interrupt, so it runs in a child with a deadline.
+    const script = `import { readSkills } from ${JSON.stringify(pathToFileURL(SERVER).href)};
+process.stdout.write(JSON.stringify(readSkills(${JSON.stringify(root)})));`;
+    const out = execFileSync(process.execPath, ["--input-type=module", "-e", script], { timeout: 5000 });
+    expect(JSON.parse(out.toString())).toEqual([{ name: "cad", description: "Make CAD." }]);
+  });
+});
+
+describe("containment", () => {
+  it("is a path strictly under the parent, on posix and on Windows", () => {
+    expect(isInside("/r/skills", "/r/skills/cad", path.posix)).toBe(true);
+    expect(isInside("/r/skills", "/r/skills/cad/references/a.md", path.posix)).toBe(true);
+    expect(isInside("/r/skills", "/r/skills", path.posix)).toBe(false);
+    expect(isInside("/r/skills", "/r/other", path.posix)).toBe(false);
+    expect(isInside("/r/skills", "/r/skills-evil/x", path.posix)).toBe(false);
+    expect(isInside("/r/skills", "/r/skills/..foo", path.posix)).toBe(true);
+
+    expect(isInside("C:\\r\\skills", "C:\\r\\skills\\cad", path.win32)).toBe(true);
+    // Another drive: path.relative answers an absolute path, not "..".
+    expect(path.win32.relative("C:\\r\\skills", "D:\\secret")).toBe("D:\\secret");
+    expect(isInside("C:\\r\\skills", "D:\\secret", path.win32)).toBe(false);
+    expect(isInside("C:\\r\\skills", "D:\\r\\skills\\cad", path.win32)).toBe(false);
+    expect(isInside("C:\\r\\skills", "C:\\r\\other", path.win32)).toBe(false);
   });
 });

@@ -156,12 +156,14 @@ export type FileTreeSource = {
   setExpanded: (update: (current: ReadonlySet<string>) => ReadonlySet<string>) => void;
   /** A directory absent from this map has not been read yet. */
   listings: Record<string, readonly TreeEntry[]>;
+  /** The sentence for each directory whose listing failed and is not drawn; the tree shows it with a Retry (`load`). */
+  failures?: Readonly<Record<string, string>>;
   /** Ask for one directory's entries; a host holding them already may no-op. */
   load: (directory: string) => void;
   /** Bumped when the filesystem moved on: re-reads what is open, retires the corpus. */
   revision: number;
   /** Every file path under the root, for the filter. Fetched on the first keystroke. */
-  paths: () => Promise<readonly string[]>;
+  paths: () => Promise<readonly string[] | { paths: readonly string[]; truncated: boolean }>;
   platform: Platform;
   capabilities?: ReadonlySet<EntryAction>;
   /** Everything except the three that start a field, which the tree keeps. */
@@ -286,6 +288,8 @@ export const FileNavRow: ComponentType<{
   leading?: ReactNode;
   status?: ReactNode;
   trailing?: ReactNode;
+  /** No file is open: with no `leading`, the left end reads a muted "Files" instead of nothing. */
+  empty?: boolean;
   className?: string;
 }>;
 

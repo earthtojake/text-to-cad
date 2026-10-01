@@ -20,7 +20,7 @@ import type { ExplorerRoot } from "@shared/types";
  * paths on every `files.changed` batch (`state/bridge.ts`): a file the
  * agent is about to write shows as text until it exists, then as a link.
  */
-export type PathAnswer = PathKind | "pending";
+export type PathAnswer = PathKind | "pending" | "error";
 
 type Scope = { projectId: string; root: ExplorerRoot };
 
@@ -100,7 +100,7 @@ export const usePathLinks = create<PathLinksState>((set, get) => ({
       batches.map(async ({ scope, paths }) => {
         const key = scopeKey(scope);
         const asked = [...paths];
-        let answers: Record<string, PathKind>;
+        let answers: Record<string, PathKind | "error">;
         try {
           answers = await window.textToCad.explorer.exists({
             projectId: scope.projectId,
@@ -108,8 +108,9 @@ export const usePathLinks = create<PathLinksState>((set, get) => ({
             paths: asked,
           });
         } catch {
-          // A project that is gone, or a root that is: nothing there links.
-          answers = Object.fromEntries(asked.map((path) => [path, null]));
+          // The question failed, which is not the answer "no such file": `error` is not a pin. The
+          // path is asked again on the next hover or click (`PathLink`), or at `files.changed`.
+          answers = Object.fromEntries(asked.map((path) => [path, "error" as const]));
         }
         set((state) => ({
           kinds: {

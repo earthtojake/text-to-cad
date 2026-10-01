@@ -40,13 +40,15 @@ export interface FileActions {
   platform?: Platform;
   perform?: Partial<Record<ExternalEntryAction, (entry: Pick<FileEntry, "path" | "kind">) => void | Promise<void>>>;
 }
+export type PathListing = readonly string[] | { paths: readonly string[]; truncated: boolean };
 export interface FileSource {
   /** Stable workspace/root identity. Connection ports must never be used here. */
   id: string;
   rootName: string;
   stat: (path: string, options: { signal: AbortSignal }) => Promise<FileMetadata>;
   list?: (directory: string, options: { signal: AbortSignal }) => Promise<readonly FileEntry[]>;
-  paths?: (options: { signal: AbortSignal }) => Promise<readonly string[]>;
+  /** Every file path, for the filter. A source that capped its index says so with `truncated`. */
+  paths?: (options: { signal: AbortSignal }) => Promise<PathListing>;
   readText?: (path: string, options: { signal: AbortSignal }) => Promise<TextDocument>;
   readAsset?: (path: string, options: { signal: AbortSignal }) => Promise<ManagedFileAsset>;
   /** Revision validation precedes an atomic replacement. Cancellation after dispatch cannot undo a commit. */
@@ -74,9 +76,17 @@ export interface DocumentSession {
   value: string;
   revision?: string;
   readOnly: boolean;
+  /**
+   * Why a document the source could save is read-only, when the file is
+   * the reason: its bytes are not UTF-8 (a save would write U+FFFD over
+   * them), or it was cut at the source's size cap. The viewer says so.
+   */
+  readOnlyReason?: "encoding" | "truncated";
   dirty: boolean;
   saving: boolean;
   stale: boolean;
+  /** With `stale`: the file is gone from disk, and a save creates it again. */
+  deleted?: boolean;
   error: string | null;
   setValue: (value: string) => void;
   save: () => Promise<DocumentSaveResult>;

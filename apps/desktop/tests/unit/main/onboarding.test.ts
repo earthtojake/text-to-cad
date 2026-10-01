@@ -45,6 +45,55 @@ describe("createSampleProject", () => {
     expect(fs.readFileSync(path.join(target, "part.py"), "utf8")).toBe("print('edited')\n");
   });
 
+  it("copies into a folder that holds only what Finder or Explorer leave behind", () => {
+    fs.mkdirSync(target, { recursive: true });
+    fs.writeFileSync(path.join(target, ".DS_Store"), "");
+    fs.writeFileSync(path.join(target, "Thumbs.db"), "");
+    expect(createSampleProject(target, source)).toBe(target);
+    expect(fs.readFileSync(path.join(target, "part.py"), "utf8")).toBe("print('bundled')\n");
+  });
+
+  it("does not take a copy that died midway for the person's own", () => {
+    fs.writeFileSync(path.join(source, "second.py"), "print('also bundled')\n");
+    const dying = vi.spyOn(fs, "cpSync").mockImplementationOnce((from, to) => {
+      fs.mkdirSync(to as string, { recursive: true });
+      fs.copyFileSync(path.join(from as string, "part.py"), path.join(to as string, "part.py"));
+      throw new Error("ENOSPC");
+    });
+    expect(() => createSampleProject(target, source)).toThrow(/ENOSPC/);
+    dying.mockRestore();
+    expect(createSampleProject(target, source)).toBe(target);
+    expect(fs.readFileSync(path.join(target, "second.py"), "utf8")).toBe("print('also bundled')\n");
+  });
+
+  const busy = () => Object.assign(new Error("EPERM: operation not permitted, rename"), { code: "EPERM" });
+
+  it("retries a rename that Windows refuses while something still holds the fresh copy", () => {
+    const rename = vi.spyOn(fs, "renameSync").mockImplementationOnce(() => {
+      throw busy();
+    });
+    try {
+      expect(createSampleProject(target, source, () => {})).toBe(target);
+    } finally {
+      rename.mockRestore();
+    }
+    expect(fs.readFileSync(path.join(target, "part.py"), "utf8")).toBe("print('bundled')\n");
+    expect(fs.existsSync(`${target}.copying`)).toBe(false);
+  });
+
+  it("copies the finished staging folder into place when the rename never goes through", () => {
+    const rename = vi.spyOn(fs, "renameSync").mockImplementation(() => {
+      throw busy();
+    });
+    try {
+      expect(createSampleProject(target, source, () => {})).toBe(target);
+    } finally {
+      rename.mockRestore();
+    }
+    expect(fs.readFileSync(path.join(target, "part.py"), "utf8")).toBe("print('bundled')\n");
+    expect(fs.existsSync(`${target}.copying`)).toBe(false);
+  });
+
   it("says so when the build has no sample", () => {
     expect(() => createSampleProject(target, path.join(directory, "missing"))).toThrow(/sample project is missing/);
   });

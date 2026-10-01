@@ -21,7 +21,10 @@ review. `save_document` is a separate explicit write with the latest live token.
 A revision conflict means the person or another operation changed the buffer.
 Read again and reconcile; never retry with a guessed revision. Disk conflicts
 preserve the draft and require reconciliation with the external changes. There
-is no force-write tool. Read-only or truncated files cannot be edited.
+is no force-write tool. Read-only or truncated files cannot be edited. A
+buffer over 2 MiB of characters is read cut at the cap, with `truncated` and
+`note` first in the result; such a buffer cannot be edited through the bridge,
+so tell the person to edit it in the editor.
 
 File resources are scoped to the session's project and worktree. A path in a
 different workspace is not the same document. A tab switch retains drafts and an inactive read snapshot (`active: false`).

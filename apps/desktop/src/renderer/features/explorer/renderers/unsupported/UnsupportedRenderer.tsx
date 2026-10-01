@@ -1,11 +1,10 @@
-import { ExternalLink, FileQuestion } from "lucide-react";
+import { FileQuestion } from "lucide-react";
 
 import type { FileRendererProps } from "@text-to-cad/ui/file-viewer";
 import { EmptyState } from "@text-to-cad/ui/navigation";
-import { Button } from "@text-to-cad/ui/primitives/button";
-import { useViewerHost } from "@text-to-cad/ui/host";
 
 import { formatBytes } from "../image/ImageRenderer";
+import { OpenExternally } from "./OpenExternally";
 
 /** A visible fallback for files without a renderer; no file contents are read. */
 export type UnsupportedRendererData = null;
@@ -13,22 +12,9 @@ export type UnsupportedRendererData = null;
 export default function UnsupportedRenderer({
   file,
 }: FileRendererProps<UnsupportedRendererData>) {
-  const openDefault = useViewerHost().fileActions?.perform?.["open-default"];
   return (
     <EmptyState
-      action={
-        openDefault ? (
-          <Button
-            className="h-7 gap-1.5 text-xs font-medium"
-            onClick={() => void openDefault({ path: file.path, kind: "file" })}
-            size="sm"
-            variant="secondary"
-          >
-            <ExternalLink className="size-3.5" />
-            Open externally
-          </Button>
-        ) : undefined
-      }
+      action={<OpenExternally path={file.path} />}
       description={`${file.name} is ${formatBytes(file.size)}${
         file.extension ? ` of ${file.extension.toUpperCase()}` : ""
       }. This file type does not have a preview.`}

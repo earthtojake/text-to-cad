@@ -6,9 +6,11 @@
  * page cannot invent its own row spacing, and search (`./search.tsx`) has one
  * place to hook into rather than seven.
  */
-import { useEffect, useId } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { ChevronRight, Folder } from "lucide-react";
+import { toast } from "sonner";
 import { cn } from "cn";
+import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 
 import { Button } from "@renderer/components/ui/button";
 import { Input } from "@renderer/components/ui/input";
@@ -42,12 +44,16 @@ export function SettingCard({
   const id = useId();
   const query = useSettingsQuery();
   const { report: reportSection } = useSectionReport();
-  const { anyMatched, report } = useMatchSet();
+  const { anyMatched, matchedCount, report } = useMatchSet();
   const hidden = query !== "" && !anyMatched;
 
   useEffect(() => {
-    reportSection(id, !hidden);
-  }, [reportSection, id, hidden]);
+    reportSection(id, hidden ? 0 : matchedCount);
+    // Withdrawn when the card goes: clearing the box unmounts every searched
+    // page, and the next search mounts its cards under new ids — a match left
+    // behind would keep a page in the nav that has nothing to show.
+    return () => reportSection(id, 0);
+  }, [reportSection, id, hidden, matchedCount]);
 
   return (
     <CardMatchProvider report={report}>
@@ -72,33 +78,51 @@ export function SettingCard({
 export function SettingRow({
   title,
   description,
+  live,
   keywords,
   control,
   children,
 }: {
   title: string;
   description?: string;
+  /** The description is a status that changes under the person's hands: announced when it does. */
+  live?: boolean;
   /** Words that should find this row without being printed on it. */
   keywords?: string;
-  /** Toggle, select, segmented control, field or button. */
-  control?: React.ReactNode;
+  /**
+   * Toggle, select, segmented control, field or button. A function gets the id of the
+   * description (or undefined when the row has none) to hang on the control as
+   * `aria-describedby`, so a screen reader reads the sentence with the control rather than
+   * beside it.
+   */
+  control?: React.ReactNode | ((describedBy: string | undefined) => React.ReactNode);
   /** Rendered under the row, full width — an editor, a log, a preview. */
   children?: React.ReactNode;
 }) {
   const matched = useRowMatch(title, description, keywords);
+  const descriptionId = useId();
   if (!matched) {
     return null;
   }
+  const describedBy = description ? descriptionId : undefined;
   return (
     <div className="px-4 py-3">
       <div className="flex items-center justify-between gap-6">
         <div className="min-w-0">
           <p className="text-[13px] leading-5">{title}</p>
           {description ? (
-            <p className="mt-0.5 text-xs leading-snug text-muted-foreground">{description}</p>
+            <p
+              className="mt-0.5 text-xs leading-snug text-muted-foreground"
+              id={descriptionId}
+              role={live ? "status" : undefined}
+            >
+              {description}
+            </p>
           ) : null}
         </div>
-        {control ? <div className="flex shrink-0 items-center gap-2">{control}</div> : null}
+        {control ? (
+          <div className="flex shrink-0 items-center gap-2">{typeof control === "function" ? control(describedBy) : control}</div>
+        ) : null}
       </div>
       {children ? <div className="mt-3">{children}</div> : null}
     </div>
@@ -114,6 +138,7 @@ export function useRowMatch(...fields: (string | undefined)[]): boolean {
 
   useEffect(() => {
     report(id, matched);
+    return () => report(id, false);
   }, [report, id, matched]);
 
   return matched;
@@ -143,14 +168,19 @@ export function SwitchRow({
 }) {
   return (
     <SettingRow
-      control={
+      control={(describedBy) => (
         <Switch
+          aria-describedby={describedBy}
           aria-label={title}
+          // The vendored switch's off track is `bg-input` with a transparent
+          // border, which on the light theme's white card is next to
+          // invisible. An off switch still has to read as a switch.
+          className="data-[state=unchecked]:border-foreground/25"
           checked={checked}
           disabled={disabled}
           onCheckedChange={onChange}
         />
-      }
+      )}
       description={description}
       keywords={keywords}
       title={title}
@@ -169,6 +199,7 @@ export function SelectRow<T extends string>({
   options,
   onChange,
   width = "w-[200px]",
+  disabled = false,
   children,
 }: {
   title: string;
@@ -178,13 +209,15 @@ export function SelectRow<T extends string>({
   options: readonly { value: T; label: string }[];
   onChange: (value: T) => void;
   width?: string;
+  /** Off while another setting makes this one mean nothing; the description says which. */
+  disabled?: boolean;
   children?: React.ReactNode;
 }) {
   return (
     <SettingRow
-      control={
-        <Select onValueChange={(next) => onChange(next as T)} value={value}>
-          <SelectTrigger aria-label={title} className={width} size="sm">
+      control={(describedBy) => (
+        <Select disabled={disabled} onValueChange={(next) => onChange(next as T)} value={value}>
+          <SelectTrigger aria-describedby={describedBy} aria-label={title} className={width} size="sm">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
@@ -195,7 +228,7 @@ export function SelectRow<T extends string>({
             ))}
           </SelectContent>
         </Select>
-      }
+      )}
       description={description}
       keywords={
         // The option labels are part of what the row is about: someone
@@ -209,7 +242,75 @@ export function SelectRow<T extends string>({
   );
 }
 
-/** A row whose control is a text field. */
+/**
+ * A text control's own copy of what is being typed, handed to the store on
+ * blur and Enter rather than on every keystroke.
+ *
+ * Per keystroke, each character was a `settings.set` and a `settings_changed`
+ * event, and the answers came back late: the one for "a" landed after "ab"
+ * had been typed and put "a" back, the caret jumped to the end, and the next
+ * key went in after it. While the field is being edited the store's value is
+ * not let in; once the edit is over, the store's value is the field's again.
+ * A draft still open when the row unmounts — Settings closed mid-sentence —
+ * is committed then.
+ *
+ * `same` says when the store's value is the draft, in the store's own terms:
+ * a field whose text normalises on the way in (comments and malformed lines
+ * dropped) would otherwise be rewritten to the normal form the moment its
+ * edit committed, erasing what the person typed.
+ */
+export function useDraft(
+  value: string,
+  commit: (value: string) => void,
+  same: (draft: string, value: string) => boolean = (draft, next) => draft === next,
+) {
+  const [draft, setDraft] = useState(value);
+  const editing = useRef(false);
+  const latest = useRef({ draft: value, committed: value, commit, same });
+  useEffect(() => {
+    latest.current.commit = commit;
+    latest.current.same = same;
+  }, [commit, same]);
+
+  useEffect(() => {
+    if (!editing.current && !latest.current.same(latest.current.draft, value)) {
+      latest.current.draft = value;
+      latest.current.committed = value;
+      setDraft(value);
+    }
+  }, [value]);
+
+  const flush = useCallback(() => {
+    const current = latest.current;
+    if (current.draft !== current.committed) {
+      current.committed = current.draft;
+      current.commit(current.draft);
+    }
+  }, []);
+  useEffect(() => flush, [flush]);
+
+  return {
+    value: draft,
+    onChange: (next: string) => {
+      editing.current = true;
+      latest.current.draft = next;
+      setDraft(next);
+    },
+    onFocus: () => {
+      editing.current = true;
+    },
+    onBlur: () => {
+      editing.current = false;
+      flush();
+    },
+    flush,
+  };
+}
+
+/**
+ * A row whose control is a text field. `onChange` hears a finished edit — on
+ * blur or Enter (`useDraft`) — not each keystroke.
+ */
 export function TextRow({
   title,
   description,
@@ -219,6 +320,9 @@ export function TextRow({
   onChange,
   width = "w-[240px]",
   type = "text",
+  problem,
+  note,
+  warning,
 }: {
   title: string;
   description?: string;
@@ -228,24 +332,84 @@ export function TextRow({
   onChange: (value: string) => void;
   width?: string;
   type?: "text" | "number";
+  /**
+   * Why a value would be refused, or null. A refused value is shown with its
+   * reason under the row and never written — main would refuse the patch, and
+   * the field would be left showing a value nothing stored.
+   */
+  problem?: (value: string) => string | null;
+  /** Said under the row while the field shows no problem of its own. */
+  note?: React.ReactNode;
+  /**
+   * Drawn under the row in place of `note`, as it is given — the caller's own
+   * alert — while the field shows no problem of its own: something wrong with
+   * what is stored rather than with what is typed.
+   */
+  warning?: React.ReactNode;
 }) {
+  const draft = useDraft(value, (next) => {
+    if (!problem?.(next)) {
+      onChange(next);
+    }
+  });
+  const problemId = useId();
+  const refused = problem?.(draft.value) ?? null;
+  // A refused value left in the field when the row goes (Settings closed, the
+  // page changed) was never written; the alert under the row goes with it, so
+  // a toast says so instead of the value vanishing without a word.
+  const left = useRef<{ value: string; reason: string } | null>(null);
+  useEffect(() => {
+    left.current = refused ? { value: draft.value, reason: refused } : null;
+  });
+  useEffect(
+    () => () => {
+      if (left.current) {
+        toast.error(`${title} “${left.current.value}” was not saved`, { description: left.current.reason });
+      }
+    },
+    [title],
+  );
   return (
     <SettingRow
-      control={
+      control={(describedBy) => (
         <Input
+          aria-describedby={[refused ? problemId : undefined, describedBy].filter(Boolean).join(" ") || undefined}
+          aria-invalid={refused ? true : undefined}
           aria-label={title}
           className={cn("h-8", width)}
-          onChange={(event) => onChange(event.target.value)}
+          onBlur={draft.onBlur}
+          onChange={(event) => draft.onChange(event.target.value)}
+          onFocus={draft.onFocus}
+          onKeyDown={(event) => {
+            if (event.key === "Enter") {
+              draft.flush();
+            }
+          }}
           placeholder={placeholder}
           type={type}
-          value={value}
+          value={draft.value}
         />
-      }
+      )}
       description={description}
       keywords={keywords}
       title={title}
-    />
+    >
+      {refused ? (
+        <p className="text-xs text-destructive" id={problemId} role="alert">
+          {refused}
+        </p>
+      ) : warning ? (
+        warning
+      ) : note ? (
+        <p className="text-xs text-muted-foreground">{note}</p>
+      ) : null}
+    </SettingRow>
   );
+}
+
+/** "Default project folder" → "default project folder", but "Git root" keeps its capital. */
+function lowerFirst(text: string): string {
+  return /^[A-Z][a-z]/.test(text) ? text.charAt(0).toLowerCase() + text.slice(1) : text;
 }
 
 /**
@@ -266,6 +430,7 @@ export function PathRow({
   onChoose,
   onClear,
   chooseLabel = "Choose…",
+  note,
 }: {
   title: string;
   description?: string;
@@ -276,36 +441,50 @@ export function PathRow({
   onChoose: () => void;
   onClear?: () => void;
   chooseLabel?: string;
+  /** A quiet line under the row — the stored folder is gone. */
+  note?: string;
 }) {
   return (
     <SettingRow
-      control={
+      control={(describedBy) => (
         <>
-          <span
-            className={cn(
-              "max-w-[260px] truncate text-xs",
-              value ? "text-foreground" : "text-muted-foreground",
-            )}
-            data-selectable
-            title={value ?? placeholder}
+          <TooltipHint content={value ?? placeholder} overflowOnly>
+            <span
+              className={cn(
+                "max-w-[260px] truncate text-xs",
+                value ? "text-foreground" : "text-muted-foreground",
+              )}
+              data-selectable
+            >
+              {value ?? placeholder}
+            </span>
+          </TooltipHint>
+          {/* Two rows of buttons named "Choose…" and "Reset" are a list a screen reader cannot
+              tell apart: the row's title finishes each name. */}
+          <Button
+            aria-describedby={describedBy}
+            aria-label={`${chooseLabel.replace(/…$/, "")} ${lowerFirst(title)}`}
+            className="h-8 gap-1.5"
+            onClick={onChoose}
+            size="sm"
+            variant="secondary"
           >
-            {value ?? placeholder}
-          </span>
-          <Button className="h-8 gap-1.5" onClick={onChoose} size="sm" variant="secondary">
             <Folder className="size-3.5" />
             {chooseLabel}
           </Button>
           {onClear && value ? (
-            <Button className="h-8" onClick={onClear} size="sm" variant="ghost">
+            <Button aria-describedby={describedBy} aria-label={`Reset ${lowerFirst(title)}`} className="h-8" onClick={onClear} size="sm" variant="ghost">
               Reset
             </Button>
           ) : null}
         </>
-      }
+      )}
       description={description}
       keywords={keywords}
       title={title}
-    />
+    >
+      {note ? <p className="text-xs text-muted-foreground">{note}</p> : null}
+    </SettingRow>
   );
 }
 
@@ -331,8 +510,9 @@ export function ActionRow({
 }) {
   return (
     <SettingRow
-      control={
+      control={(describedBy) => (
         <Button
+          aria-describedby={describedBy}
           className="h-8 gap-1"
           disabled={disabled}
           onClick={onClick}
@@ -342,7 +522,7 @@ export function ActionRow({
           {label}
           {chevron ? <ChevronRight className="size-3.5" /> : null}
         </Button>
-      }
+      )}
       description={description}
       keywords={keywords}
       title={title}

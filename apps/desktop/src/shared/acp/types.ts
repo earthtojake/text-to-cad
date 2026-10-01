@@ -35,7 +35,11 @@ export const ToolKindSchema = z.enum([
 ]);
 export type ToolKind = z.infer<typeof ToolKindSchema>;
 
-export const ToolCallStatusSchema = z.enum(["pending", "in_progress", "completed", "failed"]);
+/**
+ * `cancelled` is not on the wire: the reducer sets it on a call that was
+ * still pending or running when its turn was cancelled (plan §5).
+ */
+export const ToolCallStatusSchema = z.enum(["pending", "in_progress", "completed", "failed", "cancelled"]);
 export type ToolCallStatus = z.infer<typeof ToolCallStatusSchema>;
 
 /** What a tool call produced: prose, a diff, or a terminal it ran. */
@@ -305,6 +309,8 @@ export type Part =
        * the call completes. Empty for adapters that only report at the end.
        */
       stream: string;
+      /** Set once `stream` was cut to its tail; the head is gone. */
+      streamTruncated?: boolean;
       children: Part[];
     }
   | { type: "plan"; entries: PlanEntry[] }
@@ -326,10 +332,13 @@ export type Part =
       parts: Part[];
     }
   | { type: "mode_change"; modeId: string }
+  /** No longer produced (the list is `SessionState.availableCommands`); kept so older snapshots parse. */
   | { type: "available_commands"; commands: AvailableCommand[] }
   | { type: "error"; message: string }
   | { type: "image"; data: string; mimeType: string }
-  | { type: "resource_link"; uri: string; name: string };
+  | { type: "resource_link"; uri: string; name: string }
+  /** An embedded text file the person attached: kept whole so Retry can send it again. */
+  | { type: "resource"; uri: string; name: string; text: string; mimeType: string | null };
 
 const PermissionOutcomeSchema = z.discriminatedUnion("state", [
   z.object({ state: z.literal("pending") }),
@@ -353,6 +362,7 @@ export const PartSchema: z.ZodType<Part> = z.lazy(() =>
       content: z.array(ToolContentSchema),
       locations: z.array(ToolLocationSchema),
       stream: z.string(),
+      streamTruncated: z.boolean().optional(),
       children: z.array(PartSchema),
     }),
     z.object({ type: z.literal("plan"), entries: z.array(PlanEntrySchema) }),
@@ -378,6 +388,13 @@ export const PartSchema: z.ZodType<Part> = z.lazy(() =>
     z.object({ type: z.literal("error"), message: z.string() }),
     z.object({ type: z.literal("image"), data: z.string(), mimeType: z.string() }),
     z.object({ type: z.literal("resource_link"), uri: z.string(), name: z.string() }),
+    z.object({
+      type: z.literal("resource"),
+      uri: z.string(),
+      name: z.string(),
+      text: z.string(),
+      mimeType: z.string().nullable(),
+    }),
   ]),
 );
 
@@ -393,6 +410,14 @@ export const TurnSchema = z.object({
   /** Null while the turn is open — streaming, or being replayed by `session/load`. */
   endedAt: z.number().nullable(),
   stopReason: StopReasonSchema.nullable(),
+  /** The ACP `messageId` a replayed user message carried, so the next message starts its own turn. */
+  messageId: z.string().optional(),
+  /**
+   * Parts from this index on arrived after the turn ended (a chunk or a call the adapter sent
+   * behind `prompt/end`). The transcript draws them after the turn's stop footer, labelled, so
+   * they do not read as if they came before the stop.
+   */
+  lateFrom: z.number().optional(),
 });
 export type Turn = z.infer<typeof TurnSchema>;
 
@@ -452,7 +477,28 @@ export const SessionStateSchema = z.object({
   /** Every subagent session id seen, mapped to the root session's part path. */
   subagentSessionIds: z.array(z.string()),
 });
-export type SessionState = z.infer<typeof SessionStateSchema>;
+
+/** An update held for a subagent whose spawn has not arrived yet. */
+export type ParkedUpdate = { acpSessionId: string; update: RawSessionUpdate; at: number; bytes: number };
+
+/**
+ * `parked` is the reducer's working memory and deliberately not in the
+ * schema: parsing (a `session.state` event, a snapshot read) drops it, so raw
+ * diffs and outputs for a spawn that may never come are not sent or stored.
+ * After a restart there is nothing to rebuild — that spawn will not arrive.
+ */
+export type SessionState = z.infer<typeof SessionStateSchema> & {
+  /** Bounded by count and bytes in the reducer; absent when there are none. */
+  parked?: ParkedUpdate[];
+  /** Set once the reducer has said it dropped parked updates, so it says so once. */
+  parkedDropWarned?: boolean;
+  /**
+   * A chunk behind `prompt/end` opened the trailing part of the last turn, so the chunks after it
+   * are its continuation and join it; the first one starts a part of its own. Cleared by
+   * `prompt/start`.
+   */
+  lateChunk?: boolean;
+};
 
 export function initialSessionState(sessionId: string, agentId: string): SessionState {
   return {
@@ -511,10 +557,33 @@ export const SessionEventSchema = z.discriminatedUnion("type", [
     configOptions: z.array(ConfigOptionSchema).nullable(),
     /** True for `session/load`: replayed history until `session/loaded`. */
     loading: z.boolean(),
+    /**
+     * The title the app already knew, for a `session/load`: the replay sends
+     * no `session_info_update`, so without it a reloaded state has none.
+     */
+    title: z.string().nullable().optional(),
     at: z.number(),
   }),
   /** `session/load` finished replaying. */
   z.object({ type: z.literal("session/loaded"), at: z.number() }),
+  /**
+   * After a `session/load`: the per-turn facts the wire cannot replay and the
+   * stored snapshot still had — how a turn was stopped, and where its late
+   * parts begin (`restoreTurnFacts`, `src/shared/acp/reduce.ts`).
+   */
+  z.object({
+    type: z.literal("turns/restored"),
+    facts: z.array(
+      z.object({
+        turn: z.number(),
+        stopReason: StopReasonSchema.optional(),
+        lateFrom: z.number().optional(),
+        /** Cut text part `part` at character `at` first: the replay merged late text into it. */
+        split: z.object({ part: z.number(), at: z.number() }).optional(),
+      }),
+    ),
+    at: z.number(),
+  }),
   z.object({
     type: z.literal("prompt/start"),
     turnId: z.string(),

@@ -318,6 +318,17 @@ export const MIGRATIONS: readonly Migration[] = [
       CREATE INDEX explorer_tabs_by_session ON explorer_tabs(session_id, position);
     `,
   },
+  {
+    version: 12,
+    name: "session-worktree-owned",
+    // Whether the create that wrote a row cut its worktree, or was handed it
+    // (`New session in this worktree`). `boot` releases only the first kind
+    // when it purges a create the app quit in. Existing rows read as given: a
+    // worktree nobody can vouch for is left alone.
+    up: `
+      ALTER TABLE sessions ADD COLUMN worktree_owned INTEGER NOT NULL DEFAULT 0;
+    `,
+  },
 ];
 
 /**

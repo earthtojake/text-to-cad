@@ -110,3 +110,50 @@ test('external content refreshes clean documents and retains dirty drafts', asyn
   act(() => emit([{ kind: 'content', path: 'one.txt', revision: 'r4' }]));
   expect(result.current.document).toMatchObject({ value: 'my draft', stale: true });
 });
+
+test('keep mine adopts the disk revision, so the next save writes once with it', async () => {
+  const { result, write, source, emit } = editable();
+  await waitFor(() => expect(result.current.document?.value).toBe('one'));
+  act(() => result.current.document!.setValue('mine'));
+  act(() => emit([{ kind: 'content', path: 'one.txt', revision: 'r9' }]));
+  expect(result.current.document).toMatchObject({ stale: true, deleted: false });
+  vi.mocked(source.stat).mockResolvedValue({ path: 'one.txt', name: 'one.txt', kind: 'file', size: 3, extension: 'txt', revision: 'r9' });
+  write.mockResolvedValue({ status: 'saved', document: { content: 'mine', revision: 'r10' } });
+  act(() => result.current.document!.keepMine());
+  await waitFor(() => expect(result.current.document?.revision).toBe('r9'));
+  await act(() => result.current.document!.save());
+  expect(write).toHaveBeenCalledTimes(1);
+  expect(write.mock.calls[0][1]).toMatchObject({ content: 'mine', expectedRevision: 'r9' });
+  expect(result.current.document).toMatchObject({ stale: false, dirty: false, revision: 'r10' });
+});
+
+test('a save clicked before keep mine has read the disk revision waits for it, then writes once with it', async () => {
+  const { result, write, source, emit } = editable();
+  await waitFor(() => expect(result.current.document?.value).toBe('one'));
+  act(() => result.current.document!.setValue('mine'));
+  act(() => emit([{ kind: 'content', path: 'one.txt', revision: 'r9' }]));
+  let answer!: (metadata: Awaited<ReturnType<FileSource['stat']>>) => void;
+  vi.mocked(source.stat).mockImplementation(() => new Promise((resolve) => { answer = resolve; }));
+  write.mockResolvedValue({ status: 'saved', document: { content: 'mine', revision: 'r10' } });
+  act(() => result.current.document!.keepMine());
+  let saving!: Promise<unknown>;
+  act(() => { saving = result.current.document!.save(); });
+  expect(write, 'the save waits for the rebase').not.toHaveBeenCalled();
+  await act(async () => { answer({ path: 'one.txt', name: 'one.txt', kind: 'file', size: 3, extension: 'txt', revision: 'r9' }); await saving; });
+  expect(write).toHaveBeenCalledTimes(1);
+  expect(write.mock.calls[0][1]).toMatchObject({ content: 'mine', expectedRevision: 'r9' });
+});
+
+test('a file deleted while dirty is marked deleted, and keep mine then save creates it with no expected revision', async () => {
+  const { result, write, emit } = editable();
+  await waitFor(() => expect(result.current.document?.value).toBe('one'));
+  act(() => result.current.document!.setValue('mine'));
+  act(() => emit([{ kind: 'deleted', path: 'one.txt', entryKind: 'file' }]));
+  expect(result.current.document).toMatchObject({ stale: true, deleted: true });
+  write.mockResolvedValue({ status: 'saved', document: { content: 'mine', revision: 'r10' } });
+  act(() => result.current.document!.keepMine());
+  await act(() => result.current.document!.save());
+  expect(write).toHaveBeenCalledTimes(1);
+  expect(write.mock.calls[0][1].expectedRevision).toBeUndefined();
+  expect(result.current.document).toMatchObject({ stale: false, deleted: false, revision: 'r10' });
+});

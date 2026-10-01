@@ -21,14 +21,22 @@
  *     worktree therefore does not take the project's warm adapter — it
  *     spawns its own, and the pool keeps the one it has for the next session
  *     that does match.
+ *   - **Matched by the options it was spawned with.** Its environment (the
+ *     login shell's, the runtime in front of `PATH`), the skills root and the
+ *     launch were read when it was spawned; a Python override changed since,
+ *     a sign-in that refreshed the shell, a skills root that did not exist
+ *     yet, and adopting it would hand the session the old ones. One whose
+ *     `optionsKey` is not the caller's is closed and replaced.
  *   - **Killed on quit**, with the adapters of live sessions
  *     (`SessionManager.closeAll`); each is registered in the children
  *     registry by `SessionConnection` itself.
  */
 
-/** What the pool needs of an adapter: where it runs, whether it lives, how to end it. */
+/** What the pool needs of an adapter: where it runs, what it was spawned with, whether it lives, how to end it. */
 export interface WarmAdapter {
   readonly cwd: string;
+  /** Its spawn options but the directory, as one comparable string (`adapterOptionsKey`). */
+  readonly optionsKey: string;
   readonly alive: boolean;
   close(): void;
 }
@@ -55,8 +63,10 @@ export class WarmAdapterPool<A extends WarmAdapter> {
     if (this.stopped) {
       return Promise.resolve();
     }
-    const existing = this.idle.get(agentId);
-    if (existing?.alive && existing.cwd === cwd) {
+    // One per agent, whichever directory it is in: an idle adapter for
+    // another directory is kept for the next session there, so a spawn here
+    // would only be killed when it finished booting.
+    if (this.idle.get(agentId)?.alive) {
       return Promise.resolve();
     }
     const inflight = this.warming.get(agentId);
@@ -85,11 +95,12 @@ export class WarmAdapterPool<A extends WarmAdapter> {
   }
 
   /**
-   * The idle adapter for this agent, if it is alive and was spawned in this
-   * directory. Removed from the pool and replaced; null means the caller
-   * spawns its own.
+   * The idle adapter for this agent, if it is alive, was spawned in this
+   * directory and with these options. Removed from the pool and replaced;
+   * null means the caller spawns its own. One spawned with other options is
+   * closed on the way — it can never be handed out.
    */
-  take(agentId: string, cwd: string): A | null {
+  take(agentId: string, cwd: string, optionsKey: string): A | null {
     const adapter = this.idle.get(agentId);
     if (!adapter) {
       return null;
@@ -100,6 +111,13 @@ export class WarmAdapterPool<A extends WarmAdapter> {
       return null;
     }
     if (adapter.cwd !== cwd) {
+      return null;
+    }
+    if (adapter.optionsKey !== optionsKey) {
+      this.idle.delete(agentId);
+      adapter.close();
+      this.deps.log?.(`[acp] ${agentId}'s warm adapter was spawned with other options; closed`);
+      void this.warm(agentId, cwd);
       return null;
     }
     this.idle.delete(agentId);

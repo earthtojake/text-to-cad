@@ -13,7 +13,7 @@
 import type { IpcHandlers } from "../../shared/ipc";
 import type { cadIpc } from "../../shared/ipc/cad";
 import type { ViewerOrigin } from "../../shared";
-import { cadRuntime, viewers, warmCad } from "../cad";
+import { cadRuntime, viewerRoot, viewers, warmCad } from "../cad";
 import { projects } from "../db/repositories";
 import { rootOf } from "./explorer";
 import type { IpcContext } from "./register";
@@ -27,7 +27,7 @@ export const cadHandlers = {
       }
       // One viewer per root: a worktree is served by its own instance, so a
       // file the session wrote there is the file the viewer renders.
-      const answer = await viewers().originFor(rootOf(projectId, root));
+      const answer = await viewers().originFor(viewerRoot(rootOf(projectId, root)));
       if (answer.origin || answer.reason !== "runtime-not-ready") {
         return answer;
       }

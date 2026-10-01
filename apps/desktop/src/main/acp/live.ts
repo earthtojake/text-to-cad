@@ -8,10 +8,13 @@
  * closed.
  *
  * Two things are never evicted: the most recently used connection (the one
- * on screen) and one whose turn is still going. An agent halfway through a
- * turn killed to make room would lose the work and the reason both, so if
- * the only candidates are busy the limit is exceeded rather than enforced —
- * and it comes back down when they finish.
+ * on screen) and a busy one. Busy is a turn going (`running`, `waiting`), a
+ * connection still `connecting`, and anything the manager holds (`held`): a
+ * create from its spawn until it returns, a prompt from its refusal check until
+ * its turn ends. An agent halfway through a turn killed to make room would
+ * lose the work and the reason both, so if the only candidates are busy the
+ * limit is exceeded rather than enforced — and it comes back down when they
+ * finish.
  *
  * A `Map` iterates in insertion order, which is what makes this a few lines:
  * `touch` deletes and re-inserts, so the first key is always the oldest.
@@ -28,7 +31,7 @@ export interface Closable {
 
 export type LiveConnectionsOptions<C extends Closable> = {
   limit?: number;
-  /** True while a turn is running: never evicted. */
+  /** True while a turn is running, a connection is connecting or the manager holds it: never evicted. */
   busy?: (connection: C) => boolean;
   /** Called after an eviction closed one, so the index row can be marked. */
   onEvict?: (sessionId: string, connection: C) => void;

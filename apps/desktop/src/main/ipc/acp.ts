@@ -17,6 +17,7 @@ import { AgentOptionStore } from "../acp/agent-options";
 import { SessionManager } from "../acp/sessions";
 import { forgetSession, mcpServersFor, sessionPreamble, skillsRoot } from "../integrations";
 import { forgetCadSession, sessionRuntimePath } from "../cad";
+import { track } from "../telemetry";
 import {
   agentOptions as agentOptionsRepo,
   projects,
@@ -24,10 +25,11 @@ import {
   sessionStates,
   settings,
 } from "../db/repositories";
-import { head, isUnder, samePath } from "../projects/git";
-import { releaseWorkspace, resolveWorkspace } from "../projects/workspace";
-import { pruneProjectWorktrees } from "./git";
+import { dropMarks, emptyTreeIfUnborn, head, sessionsUsing, snapshotTree } from "../projects/git";
+import { releaseWorkspace } from "../projects/workspace";
+import { sessionWorkspace, sessionWorkspaceSettled } from "./git";
 import { browserService } from "../browser/service";
+import { clearBrowserSessionStorage } from "../browser/storage";
 import { explorerTerminals } from "./explorer";
 
 /**
@@ -61,6 +63,9 @@ export const agentOptions: AgentOptionStore = new AgentOptionStore({
     }
     return sessionManager.probeOptions({ agentId, cwd: project.path, projectId: project.id });
   },
+  // Only an agent whose CLI is here (or any, under the fake agent): the
+  // new-session screen asks for every agent that can launch.
+  probeable: (agentId) => sessionManager.canProbe(agentId),
   onChange: (all) => broadcast("agentOptions.changed", all),
   onProbeFailed: (agentId, error) => {
     // Not installed, not signed in, no adapter: the new-session screen shows
@@ -77,6 +82,7 @@ export const sessionManager: SessionManager = new SessionManager({
   // Every session gets the text-to-cad MCP server, with a token that names it.
   mcpServers: mcpServersFor,
   forgetProbe: (probeId) => forgetSession(probeId),
+  forgetSession: (sessionId) => forgetSession(sessionId),
   // …the app's skills as an additional directory, and the preamble for an
   // agent that will not read one (src/main/integrations/skills.ts)…
   skills: { root: skillsRoot, preamble: sessionPreamble },
@@ -92,6 +98,7 @@ export const sessionManager: SessionManager = new SessionManager({
   },
   clientVersion: app.isPackaged ? app.getVersion() : __APP_VERSION__,
   newId: () => randomUUID(),
+  track,
   // The transcript on this machine, so a row clicked paints before its agent
   // has said a word (migration 10, `src/main/acp/snapshots.ts`).
   snapshots: sessionStates,
@@ -105,35 +112,21 @@ export const sessionManager: SessionManager = new SessionManager({
     : undefined,
 
   /** P7: the git mode as a directory, and a worktree when the mode asks (plan §9). */
-  workspace: async ({ projectId, gitMode, name, cwd }) => {
-    const project = projects.get(projectId);
-    if (!project) {
-      throw new Error("that project is no longer open");
-    }
-    const workspace = await resolveWorkspace({
-      project,
-      gitMode,
-      settings: settings.get(),
-      name,
-      cwd,
-      knownWorktrees: sessions.list(project.id).flatMap(session => session.worktreePath ? [session.worktreePath] : []),
-    });
-    if (workspace.worktreePath) {
-      // One more worktree exists, so this is the moment the keep limit can be
-      // exceeded. The sweep never touches a worktree with an open session, and
-      // this one has just become one.
-      await pruneProjectWorktrees(project);
-    }
-    return workspace;
-  },
+  workspace: sessionWorkspace,
+  // The keep-limit sweep starts here, after the row, and is not awaited.
+  workspaceSettled: sessionWorkspaceSettled,
 
   head: (cwd) => head(cwd),
+  snapshot: (cwd, mark) => snapshotTree(cwd, mark),
+  dropMarks: (cwd, sessionId) => dropMarks(cwd, sessionId),
+  emptyTree: (cwd) => emptyTreeIfUnborn(cwd),
 
-  releaseWorkspace: async (session) => {
+  releaseWorkspace: async (session, options) => {
     const worktree = session.worktreePath;
-    if (worktree && sessions.list().some(other => other.id !== session.id &&
-        [other.cwd, other.worktreePath].some(root => root && (samePath(root, worktree) || isUnder(worktree, root))))) return;
-    await releaseWorkspace(session, settings.get());
+    if (worktree && sessionsUsing(sessions.list().filter(other => other.id !== session.id), worktree).length > 0) {
+      return { removed: false, reason: "another session still uses it" };
+    }
+    return releaseWorkspace(session, settings.get(), options);
   },
 });
 
@@ -152,7 +145,7 @@ export const acpHandlers = {
     get: ({ id }) => sessionManager.get(id),
     // The mode falls back to the setting here rather than in the composer:
     // Settings › Git & Worktrees' `Default git mode` has to hold for every
-    // caller, including the menu's New Session and Settings' `New chat in
+    // caller, including the menu's New Session and Settings' `New session in
     // this worktree`, not only the one chip that happens to read it.
     create: (input) =>
       surfacing(() =>
@@ -170,25 +163,40 @@ export const acpHandlers = {
       surfacing(() => sessionManager.setConfigOption(id, configId, value)),
     respondPermission: ({ id, requestId, optionId }) =>
       surfacing(() => sessionManager.respondPermission(id, requestId, optionId)),
+    retrySetup: ({ id }) => surfacing(() => sessionManager.retrySetup(id)),
     rename: ({ id, title }) => surfacing(() => sessionManager.rename(id, title)),
-    archive: ({ id, archived }) => surfacing(() => {
+    // The row first, as `delete` does: an archive that throws leaves the session
+    // active with its tokens, pages and shells, not half torn down.
+    archive: ({ id, archived }) => surfacing(async () => {
+      const session = await sessionManager.archive(id, archived);
       if (archived) {
         forgetSession(id);
         browserService.disposeSession(id);
         explorerTerminals().disposeSession(id);
+        // An archived thread is not open: its worktree's viewer stops with the last open one.
+        forgetCadSession(id, session.worktreePath ?? null);
       }
-      return sessionManager.archive(id, archived);
+      return session;
     }),
     setPinned: ({ id, pinned }) => surfacing(() => sessionManager.setPinned(id, pinned)),
     close: ({ id }) => surfacing(async () => { forgetSession(id); await sessionManager.close(id); }),
     delete: ({ id }) =>
       surfacing(async () => {
-        const row = sessions.get(id);
-        await sessionManager.delete(id);
-        forgetSession(id);
-        browserService.disposeSession(id);
-        explorerTerminals().disposeSession(id);
-        forgetCadSession(id, row?.worktreePath ?? null);
+        // The row goes first, so a delete that fails leaves the session whole
+        // with its tools; then everything running inside its directory, before
+        // `delete` may remove the worktree — a terminal, browser target or CAD
+        // viewer still holding it open would outlive its own directory.
+        await sessionManager.delete(id, {
+          beforeRelease: (row) => {
+            forgetSession(id);
+            browserService.disposeSession(id);
+            explorerTerminals().disposeSession(id);
+            forgetCadSession(id, row?.worktreePath ?? null);
+          },
+        });
+        // Delete, unlike archive, takes the session's logins, cookies, cache
+        // and browser artifacts with it — once the row is certainly gone.
+        void clearBrowserSessionStorage(id);
       }),
   },
 } satisfies IpcHandlers<typeof acpContract, IpcContext>;
@@ -214,12 +222,21 @@ const PREWARM_DELAY_MS = 1_500;
  * only `TEXT_TO_CAD_PREWARM=1` asks for it.
  */
 export function prewarmAgents(): void {
+  // Which agents are installed, probed now rather than when the renderer
+  // first asks: the login shell and the `--version` runs overlap the
+  // renderer's load, and a cold `agents.list` waits on this probe
+  // (`COLD_LIST_WAIT_MS`). Not gated: it starts no agent, and every launch's
+  // renderer asks for the table anyway.
+  void detector.settled().catch((error: unknown) => {
+    console.info(`[agents] the launch probe failed: ${String(error)}`);
+  });
   if (process.env.NODE_ENV === "test" && process.env.TEXT_TO_CAD_PREWARM !== "1") {
     return;
   }
   const timer = setTimeout(() => {
+    // The launch probe's table, above, not a second probe.
     void detector
-      .refresh(false)
+      .settled()
       .then(() => sessionManager.warmAgents())
       .catch((error: unknown) => {
         console.info(`[acp] the idle adapters were not warmed: ${String(error)}`);

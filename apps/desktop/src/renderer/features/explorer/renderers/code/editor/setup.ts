@@ -16,8 +16,12 @@
  *
  * The two themes are the app's tokens, hand-converted: Monaco takes hex, not
  * `var(--background)`, so this is the one place in the renderer where a colour
- * is written out. The values are the same neutral scale `globals.css` states
- * in oklch — `oklch(0.145 0 0)` is `#0a0a0a`, and so on down the list.
+ * is written out. The values are the surface tokens
+ * `@text-to-cad/ui/tokens.css` states in oklch — dark `--background` is
+ * `oklch(0.28 0 0)`, `#292929`, and so on down `SURFACE`. The editor sits on
+ * the shell's own background: an editor a shade off the pane around it reads
+ * as a slab with seams at every edge, which is what the stacked diffs in the
+ * review showed when it was `#0a0a0a`.
  *
  * The pure half — the language table, the shared editor options — is
  * `./monaco`, so nothing has to import all of this to ask what language a file
@@ -35,7 +39,9 @@ import htmlWorker from "monaco-editor/language/html/html.worker?worker";
 import jsonWorker from "monaco-editor/language/json/json.worker?worker";
 import tsWorker from "monaco-editor/language/typescript/ts.worker?worker";
 
-import { MONACO_DARK, MONACO_LIGHT } from "./monaco";
+import { isMac } from "@renderer/lib/platform";
+
+import { MONACO_DARK, MONACO_LIGHT, MONACO_TRANSCRIPT_DARK, MONACO_TRANSCRIPT_LIGHT } from "./monaco";
 
 /* -------------------------------------------------------------------------- */
 /* Themes                                                                      */
@@ -53,6 +59,20 @@ const NEUTRAL = {
   n800: "#262626",
   n900: "#171717",
   n950: "#0a0a0a",
+} as const;
+
+/**
+ * The shell's surface tokens in dark mode (`.dark` in tokens.css), as hex.
+ * Light mode's surfaces are the neutral scale above: `--background` and
+ * `--card` are white, `--muted` is n100.
+ */
+const SURFACE = {
+  background: "#292929", // --background  oklch(0.28 0 0)
+  card: "#303030", // --card / --popover  oklch(0.31 0 0)
+  muted: "#383838", // --muted / --secondary  oklch(0.34 0 0)
+  accent: "#424242", // --accent  oklch(0.38 0 0)
+  border: "#ffffff1a", // --border  oklch(1 0 0 / 10%)
+  mutedForeground: "#b4b4b4", // --muted-foreground  oklch(0.77 0 0)
 } as const;
 
 /**
@@ -99,6 +119,9 @@ const lightTheme: monaco.editor.IStandaloneThemeData = {
     "diffEditor.removedTextBackground": DIFF.removedTextLight,
     "diffEditor.insertedLineBackground": DIFF.insertedLineLight,
     "diffEditor.removedLineBackground": DIFF.removedLineLight,
+    "diffEditor.unchangedRegionBackground": NEUTRAL.n100,
+    "diffEditor.unchangedRegionForeground": NEUTRAL.n500,
+    "diffEditor.unchangedCodeBackground": "#00000000",
   },
 };
 
@@ -107,18 +130,18 @@ const darkTheme: monaco.editor.IStandaloneThemeData = {
   inherit: true,
   rules: [],
   colors: {
-    "editor.background": NEUTRAL.n950,
+    "editor.background": SURFACE.background,
     "editor.foreground": NEUTRAL.n50,
     "editorLineNumber.foreground": NEUTRAL.n500,
     "editorLineNumber.activeForeground": NEUTRAL.n200,
-    "editor.lineHighlightBackground": NEUTRAL.n900,
+    "editor.lineHighlightBackground": SURFACE.card,
     "editor.lineHighlightBorder": "#00000000",
-    "editor.selectionBackground": NEUTRAL.n700,
-    "editor.inactiveSelectionBackground": NEUTRAL.n800,
-    "editorIndentGuide.background1": NEUTRAL.n800,
-    "editorWidget.background": NEUTRAL.n900,
-    "editorWidget.border": NEUTRAL.n800,
-    "editorGutter.background": NEUTRAL.n950,
+    "editor.selectionBackground": "#525252",
+    "editor.inactiveSelectionBackground": SURFACE.accent,
+    "editorIndentGuide.background1": SURFACE.muted,
+    "editorWidget.background": SURFACE.card,
+    "editorWidget.border": SURFACE.border,
+    "editorGutter.background": SURFACE.background,
     "scrollbarSlider.background": "#fafafa1a",
     "scrollbarSlider.hoverBackground": "#fafafa2a",
     "scrollbarSlider.activeBackground": "#fafafa3a",
@@ -126,6 +149,9 @@ const darkTheme: monaco.editor.IStandaloneThemeData = {
     "diffEditor.removedTextBackground": DIFF.removedTextDark,
     "diffEditor.insertedLineBackground": DIFF.insertedLineDark,
     "diffEditor.removedLineBackground": DIFF.removedLineDark,
+    "diffEditor.unchangedRegionBackground": SURFACE.card,
+    "diffEditor.unchangedRegionForeground": SURFACE.mutedForeground,
+    "diffEditor.unchangedCodeBackground": "#00000000",
   },
 };
 
@@ -174,6 +200,29 @@ export function setupMonaco(): void {
   };
 
   loader.config({ monaco });
+  // Tab-focus mode (Tab leaves the editor rather than indenting) is Monaco's
+  // Ctrl+Shift+M on macOS and Ctrl+M elsewhere. The shortcut table and the
+  // terminal say Ctrl+Shift+M on every platform, so it is that here too; the
+  // native Ctrl+M still works.
+  if (!isMac) {
+    monaco.editor.addKeybindingRule({
+      keybinding: monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.KeyM,
+      command: "editor.action.toggleTabFocusMode",
+    });
+  }
+  // Every theme the renderer uses, registered here, once, in this order.
+  // Monaco themes cannot inherit from each other (`base` is only `vs` or
+  // `vs-dark`), so the transcript's are the shell's colours spread, with a
+  // transparent background.
   monaco.editor.defineTheme(MONACO_LIGHT, lightTheme);
   monaco.editor.defineTheme(MONACO_DARK, darkTheme);
+  monaco.editor.defineTheme(MONACO_TRANSCRIPT_LIGHT, transparent(lightTheme));
+  monaco.editor.defineTheme(MONACO_TRANSCRIPT_DARK, transparent(darkTheme));
+}
+
+function transparent(theme: monaco.editor.IStandaloneThemeData): monaco.editor.IStandaloneThemeData {
+  return {
+    ...theme,
+    colors: { ...theme.colors, "editor.background": "#00000000", "editorGutter.background": "#00000000" },
+  };
 }

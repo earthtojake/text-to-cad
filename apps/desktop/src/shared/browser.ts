@@ -5,6 +5,8 @@ export const BrowserTargetSchema = z.object({
   generation: z.number().int().nonnegative(), title: z.string(), loading: z.boolean(), canGoBack: z.boolean(), canGoForward: z.boolean(),
   visible: z.boolean(),
   logs: z.array(z.object({ level: z.enum(["log", "warn", "error"]), message: z.string() })),
+  /** Error lines in the bounded console, reported even when `logs` was not asked for. */
+  errors: z.number().int().nonnegative().optional(),
 });
 export type BrowserTarget = z.infer<typeof BrowserTargetSchema>;
 export const BrowserAtSchema = z.object({ tabId: z.string().min(1) });

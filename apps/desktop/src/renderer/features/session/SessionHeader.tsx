@@ -1,5 +1,7 @@
-import { useState } from "react";
-import { Archive, MoreHorizontal, Pencil, Trash2, Unplug } from "lucide-react";
+import { revealLabel } from "@text-to-cad/ui/navigation";
+import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
+import { useEffect, useRef, useState } from "react";
+import { Archive, Copy, FolderOpen, MoreHorizontal, Pencil, RotateCcw, Trash2, Unplug } from "lucide-react";
 
 import { ExplorerToggle, HistoryNav, SidebarToggle } from "@renderer/app/PaneToggles";
 import { Button } from "@renderer/components/ui/button";
@@ -10,6 +12,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@renderer/components/ui/dropdown-menu";
+import { platform } from "@renderer/lib/platform";
 import { useAcp } from "@renderer/state/acp";
 import { useSessions } from "@renderer/state/sessions";
 import { useExplorer } from "@renderer/state/explorer";
@@ -42,6 +45,15 @@ export function SessionHeader({
   const archive = useSessions((state) => state.archive);
   const remove = useSessions((state) => state.remove);
   const closeSession = useAcp((state) => state.close);
+  const reconnect = useAcp((state) => state.load);
+  // The same reading as SessionView's Reconnect bar: what is held says closed, or nothing is
+  // held for a closed row. A session already disconnected is offered the way back, not a
+  // second disconnect.
+  const disconnected = useAcp((state) => {
+    if (!session || state.loading[session.id]) return false;
+    const held = state.sessions[session.id];
+    return held ? held.status === "closed" : session.status === "closed";
+  });
   const sidebarCollapsed = useSettings((state) => state.settings?.layout.sidebarCollapsed ?? false);
   const explorerCollapsed = useExplorer((state) => state.collapsed);
   const projectName = useProjects(
@@ -50,14 +62,44 @@ export function SessionHeader({
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(title);
 
+  // Enter and Escape end the edit by unmounting the box that had focus, which left it on the page;
+  // the title button takes it back. A blur that ends the edit (a click elsewhere) must not.
+  const titleButton = useRef<HTMLButtonElement | null>(null);
+  const refocusTitle = useRef(false);
+  useEffect(() => {
+    if (!editing && refocusTitle.current) {
+      refocusTitle.current = false;
+      titleButton.current?.focus();
+    }
+  }, [editing]);
+
+  // Enter and Escape settle the edit themselves; a blur that follows (some browsers blur an input
+  // as it unmounts) must commit nothing: Escape never renames, and Enter must not rename twice.
+  const settled = useRef(false);
   const startEditing = () => {
     if (session) {
+      settled.current = false;
       setDraft(title);
       setEditing(true);
     }
   };
 
+  // The rename box must not open while the menu that chose it is still closing: Radix's focus scope
+  // steals the box's autoFocus back while the menu is trapped and, a tick after close, restores focus
+  // to the `…` trigger; either blurs the box and the blur commits the draft. Rename only raises this
+  // flag, and the box opens from the menu's own close-focus event.
+  const renameChosen = useRef(false);
+  const openRenameAfterMenu = (event: Event) => {
+    if (renameChosen.current) {
+      renameChosen.current = false;
+      event.preventDefault();
+      startEditing();
+    }
+  };
+
   const commit = () => {
+    if (settled.current) return;
+    settled.current = true;
     setEditing(false);
     if (session && draft.trim() && draft.trim() !== session.title) {
       void rename(session.id, draft);
@@ -89,24 +131,32 @@ export function SessionHeader({
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter") {
+                // Not let through: the keypress that follows would land on the title button, which has
+                // the focus by then, and click it straight back into the box.
+                event.preventDefault();
+                refocusTitle.current = true;
                 commit();
               } else if (event.key === "Escape") {
+                refocusTitle.current = true;
+                settled.current = true;
                 setEditing(false);
               }
             }}
             value={draft}
           />
         ) : (
-          <button
-            className="truncate text-[13px] font-medium"
-            data-session-title
-            disabled={!session}
-            onClick={startEditing}
-            title={session ? "Rename" : undefined}
-            type="button"
-          >
-            {title}
-          </button>
+          <TooltipHint content={session ? "Rename" : undefined}>
+            <button
+              className="truncate text-[13px] font-medium"
+              data-session-title
+              disabled={!session}
+              onClick={startEditing}
+              ref={titleButton}
+              type="button"
+            >
+              {title}
+            </button>
+          </TooltipHint>
         )}
         {/* Where the session lives, as a badge after its name — the way a
             thread is titled in Claude Code. The new-session screen's title is
@@ -126,24 +176,37 @@ export function SessionHeader({
                 <MoreHorizontal className="size-3.5" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="start" className="w-44">
-              <DropdownMenuItem onSelect={startEditing}>
+            <DropdownMenuContent align="start" className="w-44" onCloseAutoFocus={openRenameAfterMenu}>
+              <DropdownMenuItem
+                onSelect={() => {
+                  renameChosen.current = true;
+                }}
+              >
                 <Pencil />
                 Rename
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => void navigator.clipboard.writeText(session.cwd)}>
+                <Copy />
                 Copy path
               </DropdownMenuItem>
               <DropdownMenuItem
-                onSelect={() => void window.textToCad.shell.showItemInFolder({ path: session.cwd })}
+                onSelect={() => void window.textToCad.shell.showItemInFolder({ projectId: session.projectId, root: session.cwd })}
               >
-                Reveal in Finder
+                <FolderOpen />
+                {revealLabel(platform)}
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={() => void closeSession(session.id)}>
-                <Unplug />
-                Disconnect agent
-              </DropdownMenuItem>
+              {disconnected ? (
+                <DropdownMenuItem onSelect={() => void reconnect(session.id)}>
+                  <RotateCcw />
+                  Reconnect
+                </DropdownMenuItem>
+              ) : (
+                <DropdownMenuItem onSelect={() => void closeSession(session.id)}>
+                  <Unplug />
+                  Disconnect agent
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem onSelect={() => void archive(session.id, true)}>
                 <Archive />
                 Archive

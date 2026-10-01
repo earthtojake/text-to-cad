@@ -2,7 +2,7 @@
 
 import { cn } from "@renderer/lib/utils";
 import type { MotionProps } from "motion/react";
-import { motion } from "motion/react";
+import { motion, useReducedMotionConfig } from "motion/react";
 import type { CSSProperties, ElementType, JSX } from "react";
 import { memo, useMemo } from "react";
 
@@ -42,6 +42,13 @@ const ShimmerComponent = ({
     Component as keyof JSX.IntrinsicElements
   );
 
+  // Deliberate edit to the vendored component: motion's own reduced-motion
+  // setting only turns off transforms and layout, and this animates a
+  // background-position, so the sweep would run on under "Reduce motion".
+  // The window's MotionConfig (App) carries the setting, the OS is its
+  // fallback, and a reduced sweep is the still band.
+  const reduced = useReducedMotionConfig();
+
   const dynamicSpread = useMemo(
     () => (children?.length ?? 0) * spread,
     [children, spread]
@@ -49,7 +56,7 @@ const ShimmerComponent = ({
 
   return (
     <MotionComponent
-      animate={{ backgroundPosition: "0% center" }}
+      animate={reduced ? undefined : { backgroundPosition: "0% center" }}
       className={cn(
         "relative inline-block bg-[length:250%_100%,auto] bg-clip-text text-transparent",
         // Deliberate edit to the vendored component: the band is the
@@ -60,7 +67,7 @@ const ShimmerComponent = ({
         "[--bg:linear-gradient(90deg,#0000_calc(50%-var(--spread)),var(--color-foreground),#0000_calc(50%+var(--spread)))] [background-repeat:no-repeat,padding-box]",
         className
       )}
-      initial={{ backgroundPosition: "100% center" }}
+      initial={reduced ? false : { backgroundPosition: "100% center" }}
       style={
         {
           "--spread": `${dynamicSpread}px`,
@@ -68,11 +75,15 @@ const ShimmerComponent = ({
             "var(--bg), linear-gradient(var(--color-muted-foreground), var(--color-muted-foreground))",
         } as CSSProperties
       }
-      transition={{
-        duration,
-        ease: "linear",
-        repeat: Number.POSITIVE_INFINITY,
-      }}
+      transition={
+        reduced
+          ? undefined
+          : {
+              duration,
+              ease: "linear",
+              repeat: Number.POSITIVE_INFINITY,
+            }
+      }
     >
       {children}
     </MotionComponent>

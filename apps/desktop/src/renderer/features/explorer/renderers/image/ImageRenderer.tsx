@@ -1,9 +1,12 @@
-import { Maximize2, Minimize2 } from "lucide-react";
+import { ImageOff, Maximize2, Minimize2 } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import type { FileRendererProps } from "@text-to-cad/ui/file-viewer";
 import { cn } from "@text-to-cad/ui/utils";
 import { Button } from "@text-to-cad/ui/primitives/button";
+import { EmptyState } from "@text-to-cad/ui/navigation";
+
+import { OpenExternally } from "../unsupported/OpenExternally";
 
 /**
  * A shared image view on a checkerboard, so transparency is visible rather than being
@@ -23,7 +26,23 @@ export default function ImageRenderer({
 }: FileRendererProps<ImageRendererData>) {
   const [actual, setActual] = useState(false);
   const [dimensions, setDimensions] = useState<{ width: number; height: number } | null>(null);
+  // The url that failed to decode: a new file or a reload carries a new url, so it is a new
+  // chance to decode without any effect having to clear a flag.
+  const [brokenUrl, setBrokenUrl] = useState<string | null>(null);
+  const broken = brokenUrl === data.url;
   useEffect(() => onReady(true), [onReady]);
+
+  if (broken) {
+    return (
+      <EmptyState
+        action={<OpenExternally path={file.path} />}
+        description={`${file.name} is ${formatBytes(file.size)}.`}
+        icon={ImageOff}
+        title="This image could not be decoded."
+        tone="warn"
+      />
+    );
+  }
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -45,6 +64,7 @@ export default function ImageRenderer({
               "rounded-sm shadow-sm",
               actual ? "max-w-none" : "max-h-full max-w-full object-contain",
             )}
+            onError={() => setBrokenUrl(data.url)}
             onLoad={(event) =>
               setDimensions({
                 width: event.currentTarget.naturalWidth,

@@ -1,10 +1,10 @@
 import { useEffect } from 'react';
-import { fireEvent, render, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DrawingEditor, exportDrawingScenePng } from './index';
 import type { DrawingController } from './index';
 
-const sdk = vi.hoisted(() => ({ props: null as any, export: vi.fn(), api: null as any, actions: {} as Record<string, any>, scroll: null as any, pointerDown: null as any, canvas: vi.fn() }));
+const sdk = vi.hoisted(() => ({ keydown: vi.fn(), props: null as any, export: vi.fn(), api: null as any, actions: {} as Record<string, any>, scroll: null as any, pointerDown: null as any, canvas: vi.fn() }));
 vi.mock('@excalidraw/excalidraw', async () => {
   const React = await import('react');
   class Canvas extends React.Component<any> {
@@ -28,7 +28,8 @@ vi.mock('@excalidraw/excalidraw', async () => {
       sdk.api.getSceneElements = () => [];
       sdk.api.getFiles = () => ({});
     }
-    render() { return null; }
+    // As the SDK with `handleKeyboardGlobally={false}`: its own keydown handler on its container.
+    render() { return React.createElement('div', { 'data-testid': 'sdk-canvas', tabIndex: 0, onKeyDown: sdk.keydown }); }
   }
   return { Excalidraw: Canvas, exportToBlob: sdk.export, exportToCanvas: sdk.canvas,
     getCommonBounds: (elements: any[]) => [Math.min(...elements.map(e => e.x)), Math.min(...elements.map(e => e.y)),
@@ -95,6 +96,26 @@ describe('drawing editor', () => {
     expect(sdk.props.theme).toBe('light');
     expect(sdk.props.initialData.appState.viewBackgroundColor).toBe('#ffffff');
     expect(sdk.props.UIOptions.canvasActions.changeViewBackgroundColor).toBe(false);
+    view.unmount();
+  });
+  it('keeps Ctrl+Shift+E from the SDK (its export dialog) but still delivers it to the window off a Mac', async () => {
+    const hostKey = vi.fn((event: KeyboardEvent) => event.preventDefault());
+    window.addEventListener('keydown', hostKey);
+    sdk.keydown.mockClear();
+    const view = render(<DrawingEditor platform="win32" onReady={() => {}} />);
+    await waitFor(() => expect(sdk.props).not.toBeNull());
+    const canvas = screen.getByTestId('sdk-canvas');
+    expect(fireEvent.keyDown(canvas, { key: 'E', ctrlKey: true, shiftKey: true })).toBe(false);
+    expect(sdk.keydown).not.toHaveBeenCalled();
+    expect(hostKey).toHaveBeenCalledTimes(1);
+    expect(hostKey.mock.calls[0][0]).toMatchObject({ key: 'E', ctrlKey: true, shiftKey: true });
+    // Cmd+Shift+E on a Mac is nobody's chord but the SDK's: swallowed, not forwarded.
+    hostKey.mockClear();
+    view.rerender(<DrawingEditor platform="darwin" onReady={() => {}} />);
+    fireEvent.keyDown(canvas, { key: 'e', metaKey: true, shiftKey: true });
+    expect(sdk.keydown).not.toHaveBeenCalled();
+    expect(hostKey).not.toHaveBeenCalled();
+    window.removeEventListener('keydown', hostKey);
     view.unmount();
   });
   it('retains final ink after SDK teardown, without serializing each change', async () => {

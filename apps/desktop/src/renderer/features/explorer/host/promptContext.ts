@@ -46,8 +46,8 @@ export function createDesktopPromptContext(projectId: string, root: string | nul
   const getSnapshot = () => {
     const owner = useSessions.getState().sessions.find(session => session.id === sessionId);
     const available = Boolean(owner && !owner.archived && owner.projectId === projectId);
-    // The annotations this chat's draft still holds: the viewer keeps a dot only for those, and
-    // its card shows the note as the draft has it — an edit in the chat box's list reaches the
+    // The annotations this session's draft still holds: the viewer keeps a dot only for those, and
+    // its card shows the note as the draft has it — an edit in the composer's list reaches the
     // model this way rather than by a delivery back.
     const annotations = useComposer.getState().annotations[sessionId] ?? NO_ANNOTATIONS;
     if (snapshot.available !== available || heldFrom !== annotations) {
@@ -93,7 +93,7 @@ export function createDesktopPromptContext(projectId: string, root: string | nul
   };
   return {
     getSnapshot,
-    // An annotation deleted on the model leaves this chat's draft with it.
+    // An annotation deleted on the model leaves this session's draft with it.
     retract: partIds => useComposer.getState().removeAnnotations(sessionId, partIds),
     subscribe: listener => {
       const unsubscribes = [useSessions.subscribe(listener), useComposer.subscribe(listener)];

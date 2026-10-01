@@ -1,3 +1,4 @@
+import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 import { formatPromptAnnotation, type PromptReference } from "@text-to-cad/core/prompt";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Crosshair, MessageSquareDot, X } from "lucide-react";
@@ -26,7 +27,7 @@ export function openAnnotation(scope: ReferenceScope | null, annotation: DraftAn
   const explorer = useExplorer.getState();
   const file = annotation.references[0] ? referencePath(annotation.references[0]) : "";
   if (!scope || !file || explorer.projectId !== scope.projectId || !explorer.ready) {
-    throw new Error("Open this chat’s project to see where the annotation is.");
+    throw new Error("Open this session’s project to see where the annotation is.");
   }
   const tab = explorer.openFile(file, scope.root);
   if (tab) explorer.openCadAnnotation(tab.id, annotation.id);
@@ -187,39 +188,42 @@ function AnnotationRow({
             value={draft}
           />
         ) : (
-          <button
-            aria-label={`Edit annotation ${index + 1}`}
-            className={cn(
-              "rounded-sm text-left break-words whitespace-pre-wrap hover:underline hover:decoration-muted-foreground/50 hover:underline-offset-2 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
-              !annotation.text && "text-muted-foreground italic",
-            )}
-            onClick={start}
-            title="Edit"
-            type="button"
-          >
-            {annotation.text || "Add a note"}
-          </button>
+          <TooltipHint content="Edit">
+            <button
+              aria-label={`Edit annotation ${index + 1}`}
+              className={cn(
+                "rounded-sm text-left break-words whitespace-pre-wrap hover:underline hover:decoration-muted-foreground/50 hover:underline-offset-2 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+                !annotation.text && "text-muted-foreground italic",
+              )}
+              onClick={start}
+              type="button"
+            >
+              {annotation.text || "Add a note"}
+            </button>
+          </TooltipHint>
         )}
       </div>
       <span className="flex shrink-0 items-center gap-0.5 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100">
-        <button
-          aria-label={`Show annotation ${index + 1} on the model`}
-          className="flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-          onClick={onLocate}
-          title="Show on the model"
-          type="button"
-        >
-          <Crosshair className="size-3.5" />
-        </button>
-        <button
-          aria-label={`Remove annotation ${index + 1}`}
-          className="flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-          onClick={onRemove}
-          title="Remove"
-          type="button"
-        >
-          <X className="size-3.5" />
-        </button>
+        <TooltipHint content="Show on the model">
+          <button
+            aria-label={`Show annotation ${index + 1} on the model`}
+            className="flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            onClick={onLocate}
+            type="button"
+          >
+            <Crosshair className="size-3.5" />
+          </button>
+        </TooltipHint>
+        <TooltipHint content="Remove">
+          <button
+            aria-label={`Remove annotation ${index + 1}`}
+            className="flex size-6 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            onClick={onRemove}
+            type="button"
+          >
+            <X className="size-3.5" />
+          </button>
+        </TooltipHint>
       </span>
     </li>
   );
@@ -231,13 +235,14 @@ function SketchThumbnail({ image, index }: { image: File; index: number }) {
   const url = useMemo(() => URL.createObjectURL(image), [image]);
   useEffect(() => () => URL.revokeObjectURL(url), [url]);
   return url ? (
-    <img
-      alt={`Sketch for annotation ${index + 1}`}
-      className="mt-0.5 size-12 shrink-0 rounded-md border bg-muted/40 object-cover"
-      data-annotation-sketch
-      src={url}
-      title={image.name}
-    />
+    <TooltipHint content={image.name} side="top">
+      <img
+        alt={`Sketch for annotation ${index + 1}`}
+        className="mt-0.5 size-12 shrink-0 rounded-md border bg-muted/40 object-cover"
+        data-annotation-sketch
+        src={url}
+      />
+    </TooltipHint>
   ) : null;
 }
 

@@ -14,12 +14,12 @@ export function bindDraftDestination(projectId: string, root: string | null, ses
   return destination;
 }
 
-/** Revalidate after asynchronous capture/encoding; never redirect to another chat. */
+/** Revalidate after asynchronous capture/encoding; never redirect to another session. */
 export function validateDraftDestination(destination: DraftDestination): void {
   const session = useSessions.getState().sessions.find(item => item.id === destination.key);
-  if (!session || session.archived) throw new DraftDestinationGone("The destination chat was deleted or archived before this context was ready.");
+  if (!session || session.archived) throw new DraftDestinationGone("The destination session was deleted or archived before this context was ready.");
   if (session.projectId !== destination.projectId || session.cwd !== destination.workspace) {
-    throw new WorkspaceMismatch("This context does not belong to its owning chat's workspace.");
+    throw new WorkspaceMismatch("This context does not belong to its owning session's workspace.");
   }
 }
 

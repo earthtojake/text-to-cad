@@ -551,3 +551,19 @@ it('joins touching selected rows into one block, isolates from the row, and the 
   fireEvent.click(screen.getByRole('button',{name:'Exit isolate Base'}));
   expect(onUnfocusTreeNode).toHaveBeenCalledWith('base');
 });
+
+it('says a raw loader failure in one line and keeps the whole diagnostic behind Details',()=>{
+ const traceback='artifact request failed: Traceback (most recent call last):\n  File "/opt/python/metadata.py", line 563\nStopIteration';
+ render(<ModelingTreeView modeling={{...directModeling,descriptor:null,error:traceback}} stepRoot={assemblyRoot} active references={[]}/>);
+ const alert=screen.getByRole('alert');
+ expect(within(alert).getByText(/The model’s features couldn’t be read\./)).toBeTruthy();
+ const details=alert.querySelector('details')!;
+ expect(details.open).toBe(false);
+ expect(within(details).getByText('Details')).toBeTruthy();
+ expect(details.querySelector('pre')!.textContent).toBe(traceback);
+ cleanup();
+ // A short message is shown as it is, with nothing folded.
+ render(<ModelingTreeView modeling={{...directModeling,descriptor:null,error:'Geometry is unavailable.'}} stepRoot={assemblyRoot} active references={[]}/>);
+ expect(within(screen.getByRole('alert')).getByText(/Geometry is unavailable\./)).toBeTruthy();
+ expect(screen.getByRole('alert').querySelector('details')).toBeNull();
+});

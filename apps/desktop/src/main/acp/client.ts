@@ -14,7 +14,7 @@
  *     wire before the SDK parses it (`connection.ts`), so the reducer sees
  *     the raw payload and draft update kinds the SDK does not know yet.
  */
-import { mkdir, readFile, realpath, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 
 import { RequestError } from "@agentclientprotocol/sdk";
@@ -22,6 +22,8 @@ import type * as acp from "@agentclientprotocol/sdk";
 
 import { pendingPermissionFromRequest } from "../../shared/acp/reduce";
 import type { SessionEvent } from "../../shared/acp/types";
+import { climbsOut } from "../explorer/fs";
+import { realDirectory } from "../projects/workspace";
 import type { TerminalManager } from "./terminals";
 
 type PermissionOutcome = Extract<SessionEvent, { type: "permission/resolve" }>["outcome"];
@@ -199,46 +201,23 @@ function absolute(target: string): string {
 
 /**
  * The absolute, normalised path if it lies inside `cwd`; throws otherwise.
- * Symlinks are resolved on the deepest existing ancestor so a link out of
- * the tree does not count as inside it. Exported for the tests.
+ * Both sides are compared by real path — symlinks resolved on the deepest
+ * existing ancestor, the missing tail kept as spelled — so a cwd named
+ * through a link still contains its own files, and a link out of the tree
+ * does not count as inside it. Exported for the tests.
  */
 export async function confineToCwd(cwd: string, target: string): Promise<string> {
   const file = absolute(target);
-  const root = await realpathOrSelf(cwd);
-  const inside = (candidate: string) => {
-    const relative = path.relative(root, candidate);
-    return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative));
+  const root = realDirectory(cwd);
+  const inside = (base: string, candidate: string) => {
+    const relative = path.relative(base, candidate);
+    return relative === "" || !climbsOut(relative);
   };
-  if (!inside(file)) {
-    throw new Error(`refusing to write outside the session directory: ${target}`);
+  if (inside(root, realDirectory(file))) {
+    return file;
   }
-  const resolvedParent = await realpathOrSelf(await deepestExisting(path.dirname(file)));
-  if (!inside(resolvedParent)) {
+  if (inside(path.normalize(cwd), file) || inside(root, file)) {
     throw new Error(`refusing to write through a link that leaves the session directory: ${target}`);
   }
-  return file;
-}
-
-async function realpathOrSelf(target: string): Promise<string> {
-  try {
-    return await realpath(target);
-  } catch {
-    return path.normalize(target);
-  }
-}
-
-async function deepestExisting(dir: string): Promise<string> {
-  let current = dir;
-  for (;;) {
-    try {
-      await realpath(current);
-      return current;
-    } catch {
-      const parent = path.dirname(current);
-      if (parent === current) {
-        return current;
-      }
-      current = parent;
-    }
-  }
+  throw new Error(`refusing to write outside the session directory: ${target}`);
 }

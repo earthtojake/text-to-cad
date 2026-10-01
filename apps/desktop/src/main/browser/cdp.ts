@@ -33,7 +33,16 @@ export class ScopedBrowserCdp {
   async start() {
     this.lifetime.signal.throwIfAborted();
     if (this.endpoint) return this.endpoint;
-    await new Promise<void>((resolve, reject) => { this.server.once("error", reject); this.server.listen(0, "127.0.0.1", resolve); });
+    await new Promise<void>((resolve, reject) => {
+      this.server.once("error", reject);
+      this.server.listen(0, "127.0.0.1", () => {
+        this.server.off("error", reject);
+        // Kept for the endpoint's life: a later accept error (EMFILE) with no
+        // handler is an uncaught exception and the "JavaScript error" dialog.
+        this.server.on("error", error => console.warn(`[browser] the CDP listener reported: ${error.message}`));
+        resolve();
+      });
+    });
     this.endpoint = `ws://127.0.0.1:${(this.server.address() as AddressInfo).port}/${this.secret}`;
     return this.endpoint;
   }
@@ -53,21 +62,28 @@ export class ScopedBrowserCdp {
     const send = (value: unknown) => { if (socket.readyState === WebSocket.OPEN) socket.send(JSON.stringify(value)); };
     const event = (method: string, params: unknown, sessionId?: string) => send({ method, params, ...(sessionId ? { sessionId } : {}) });
     const targetIds = new Map<string, string>();
+    // The id of the page a tab shows now: a tab id re-opened over new contents
+    // (archive, then a quick unarchive) has the old contents' id in `targetIds`
+    // until that one's detach is heard.
+    const liveTargetIds = new Map<string, string>();
     const info = async (tabId: string) => {
       const target = this.service.metadata(this.scope, tabId);
       const contents = this.service.contents(this.scope, tabId);
       if (!contents.debugger.isAttached()) contents.debugger.attach("1.3");
       const { targetInfo } = await contents.debugger.sendCommand("Target.getTargetInfo");
       targetIds.set(targetInfo.targetId, tabId);
+      liveTargetIds.set(tabId, targetInfo.targetId);
       return { targetId: targetInfo.targetId, browserContextId: "text-to-cad-workspace", type: "page", title: target.title, url: target.url || "about:blank", attached: true, canAccessOpener: false };
     };
+    const targetIdOf = (tabId: string) => liveTargetIds.get(tabId);
     const attaching = new Map<string, Promise<string>>();
     const attachPage = async (tabId: string) => {
       const targetInfo = await info(tabId);
       if (socket.readyState !== WebSocket.OPEN) throw new Error("Browser connection closed");
-      const existing = [...sessions].find(([, page]) => page.tabId === tabId && page.root);
-      if (existing) return existing[0];
       const contents = this.service.contents(this.scope, tabId);
+      // The same contents too: a session bound to a destroyed page is not the re-opened tab's.
+      const existing = [...sessions].find(([, page]) => page.tabId === tabId && page.root && page.contents === contents);
+      if (existing) return existing[0];
       if (!contents.debugger.isAttached()) contents.debugger.attach("1.3");
       const { sessionId: nativeSession } = await contents.debugger.sendCommand("Target.attachToTarget", { targetId: targetInfo.targetId, flatten: true });
       if (socket.readyState !== WebSocket.OPEN) {
@@ -94,8 +110,23 @@ export class ScopedBrowserCdp {
       };
       const protocol = contents.debugger;
       protocol.on("message", onMessage);
+      // DevTools taking the page over, or its contents closing, ends the debugger
+      // and every native session with it; the client is told, not left waiting.
+      // (A crashed renderer does not: the agent host stays and reports
+      // `Inspector.targetCrashed`.)
+      const onDetach = () => {
+        const targetId = targetInfo.targetId;
+        targetIds.delete(targetId);
+        if (liveTargetIds.get(tabId) === targetId) liveTargetIds.delete(tabId);
+        for (const [id, page] of sessions) if (page.contents === contents) {
+          cleanups.get(id)?.(); cleanups.delete(id); sessions.delete(id);
+          event("Target.detachedFromTarget", { sessionId: id, targetId });
+        }
+      };
+      protocol.on("detach", onDetach);
       cleanups.set(sessionId, () => {
         protocol.off("message", onMessage);
+        protocol.off("detach", onDetach);
         if (!contents.isDestroyed() && contents.debugger.isAttached())
           void contents.debugger.sendCommand("Target.detachFromTarget", { sessionId: nativeSession }).catch(() => {});
       });
@@ -121,9 +152,12 @@ export class ScopedBrowserCdp {
       if (browserScopeKey(target) !== browserScopeKey(this.scope)) return;
       for (const [id, page] of sessions) if (page.tabId === target.tabId) {
         cleanups.get(id)?.(); cleanups.delete(id); sessions.delete(id);
-        event("Target.detachedFromTarget", { sessionId: id, targetId: [...targetIds].find(([, id]) => id === target.tabId)?.[0] });
+        event("Target.detachedFromTarget", { sessionId: id, targetId: targetIdOf(target.tabId) });
       }
-      event("Target.targetDestroyed", { targetId: [...targetIds].find(([, id]) => id === target.tabId)?.[0] });
+      const targetId = targetIdOf(target.tabId);
+      event("Target.targetDestroyed", { targetId });
+      if (targetId) targetIds.delete(targetId);
+      liveTargetIds.delete(target.tabId);
     };
     this.service.events.on("opened", opened);
     this.service.events.on("closed", closed);
@@ -206,12 +240,15 @@ export class ScopedBrowserCdp {
           if (!owned) throw new Error("Unknown browser session");
           cleanups.get(id)?.(); cleanups.delete(id); sessions.delete(id); return {};
         }
-        case "Browser.setDownloadBehavior": throw new Error("Download policy belongs to text-to-cad's browser host.");
+        // Both spellings: the deprecated Page one also takes an arbitrary downloadPath.
+        case "Browser.setDownloadBehavior":
+        case "Page.setDownloadBehavior": throw new Error("Download policy belongs to text-to-cad's browser host.");
         case "Browser.getWindowForTarget": targetId(); return { windowId: 1, bounds: { left: 0, top: 0, width: 1000, height: 700, windowState: "normal" } };
         case "Browser.setWindowBounds": throw new Error("text-to-cad owns the browser pane size; resize it in the app.");
         default:
           if (!page || /^(Browser|Target|Storage)\./.test(method)) throw new Error(`Unsupported scoped browser command: ${method}`);
           if (method === "Page.navigate") browserURL(String(params.url));
+          if (method.startsWith("Input.")) this.service.noteAutomatedInput(this.scope, page.tabId);
           return page.contents.debugger.sendCommand(method, params, page.nativeSession);
       }
     };

@@ -7,6 +7,7 @@
  *   node tests/fake-agent/index.mjs --fixture <file.jsonl> replay a recording
  *   node tests/fake-agent/index.mjs --mode-option           modes as a `mode`
  *                                                          config option
+ *   node tests/fake-agent/index.mjs --load-empty            session/load replays nothing
  *   node tests/fake-agent/index.mjs --load-delay 1200       hold session/load
  *                                                          for that long
  *   node tests/fake-agent/index.mjs --new-title <title>    title before session/new answers
@@ -32,7 +33,6 @@
  *   "open"        call the text-to-cad MCP server's `open_file` on the path
  *                 after "open " — the server `session/new` carried in
  *                 `mcpServers`, spawned the way an adapter spawns it
- *   "drawing-tool <JSON>"  call a drawing MCP tool with explicit name/args
  *   "session-title <JSON>" send a session_info_update ({title, sessionId?})
  *   "mention"     reply with prose naming files — real and missing paths,
  *                 a CAD reference, one in backticks — for the transcript's
@@ -49,7 +49,18 @@
  *                 units (`utilization` 0…1, `resetsAt` epoch seconds) — so
  *                 the panel's plan rows have something to draw
  *   "thought"     an agent_thought_chunk first
+ *   "late-frames" answer the turn (a call that failed, then "First answer."),
+ *                 and only then — behind the prompt response — send one more
+ *                 text chunk and an `in_progress` update for the failed call,
+ *                 the way a background task's report lands after `prompt/end`
+ *   "linger"      work for about 1.5 s, then end the turn on its own (`end_turn`) —
+ *                 long enough to queue a prompt behind it, unlike "slow", which
+ *                 waits to be cancelled
  *   "slow"        wait until cancelled
+ *   "reject-prompt" ask session/request_permission without waiting for the
+ *                 answer, then answer `session/prompt` with a JSON-RPC error
+ *                 while staying alive — a turn that fails with a request
+ *                 still open, unlike "crash", whose exit disposes the client
  *   "crash"       exit(3) mid-turn
  *   "showcase"    a Codex-shaped turn for the session UI's e2e: thoughts,
  *                 reads, edits with diffs, a streamed command, a plan, a
@@ -82,6 +93,24 @@
  *
  * `FAKE_AGENT_REFUSE=<configId>` makes `session/set_config_option` throw for
  * that option, the way an adapter refuses a model an account cannot use.
+ *
+ * `FAKE_AGENT_PROMPT_CAPABILITIES=<json>` is the `promptCapabilities` it
+ * answers `initialize` with (by default images and embedded context), so a
+ * test can be an agent that takes text and links only.
+ *
+ * `FAKE_AGENT_PROFILE=claude-code` answers in the Claude adapter's shape, as
+ * a real Claude Code smoke saw it on 2026-09-29 (no successful Claude
+ * recording exists: `tests/fixtures/acp/` has only the auth failure, and
+ * recording costs a real account's turns). `initialize` names
+ * `@agentclientprotocol/claude-agent-acp` 0.69.0 with `loadSession`, images,
+ * embedded context and the adapter's `sessionCapabilities`; `session/new`
+ * offers its six modes (auto, default, acceptEdits, plan, dontAsk,
+ * bypassPermissions) and four config options — `mode`, `model` (default,
+ * opus[1m], claude-fable-5[1m], sonnet, haiku; on opus[1m]), `effort` (on
+ * xhigh) and a boolean `fast`; an `available_commands_update` of 129
+ * commands follows `session/new` and `session/load` and arrives again
+ * mid-turn at the start of every prompt; and the first turn ends with a
+ * `session_info_update` carrying a title. The prompt script is the same.
  *
  * `FAKE_AGENT_RECORD=<file.jsonl>` appends one JSON line per session/new,
  * session/load and prompt — the params as they arrived, and the adapter's own
@@ -133,6 +162,11 @@ const modeAsOption = args.includes("--mode-option");
  * to look at.
  */
 const loadDelayMs = args.includes("--load-delay") ? Number(args[args.indexOf("--load-delay") + 1]) : 0;
+
+/** `session/load` answers with an error (an agent that lost the session), after `--load-delay` if any. */
+const loadError = args.includes("--load-error");
+/** How long `session/new` takes to answer: a real adapter spends one to three seconds on it. */
+const newDelayMs = args.includes("--new-delay") ? Number(args[args.indexOf("--new-delay") + 1]) : 0;
 
 const stream = ndJsonStream(Writable.toWeb(process.stdout), Readable.toWeb(process.stdin));
 
@@ -235,6 +269,103 @@ function configOptions() {
   ];
 }
 
+/* -------------------------------------------------------------------------- */
+/* FAKE_AGENT_PROFILE=claude-code                                              */
+/* -------------------------------------------------------------------------- */
+
+const claudeProfile = process.env.FAKE_AGENT_PROFILE === "claude-code";
+/** What the smoke's session started on: the person's own Opus 1M at xhigh. */
+const claudeChosen = { model: "opus[1m]", effort: "xhigh", fast: false };
+/** The title the first turn announces. */
+const CLAUDE_PROFILE_TITLE = "Reply with ok";
+let claudeTitled = false;
+
+function claudeModes() {
+  return [
+    { id: "auto", name: "Auto", description: "Claude handles permission decisions", _meta: { kind: "auto_review" } },
+    { id: "default", name: "Manual", description: "Always ask before making changes", _meta: { kind: "standard" } },
+    { id: "acceptEdits", name: "Accept edits", description: "Automatically accept all file edits", _meta: { kind: "standard" } },
+    { id: "plan", name: "Plan", description: "Create a plan before making changes", _meta: { kind: "plan" } },
+    { id: "dontAsk", name: "Don't ask", description: "Deny anything not already allowed", _meta: { kind: "standard" } },
+    { id: "bypassPermissions", name: "Bypass permissions", description: "Accepts all permissions", _meta: { kind: "full_access" } },
+  ];
+}
+
+function claudeConfigOptions() {
+  return [
+    {
+      id: "mode",
+      name: "Mode",
+      description: "Session permission mode",
+      category: "mode",
+      type: "select",
+      currentValue: currentModeId,
+      options: claudeModes().map((mode) => ({ value: mode.id, name: mode.name, description: mode.description, _meta: mode._meta })),
+    },
+    {
+      id: "model",
+      name: "Model",
+      description: "AI model to use",
+      category: "model",
+      type: "select",
+      currentValue: claudeChosen.model,
+      options: [
+        { value: "default", name: "Default (recommended)", description: "Opus (1M context)" },
+        { value: "opus[1m]", name: "Opus (1M context)", description: "Opus with 1M context" },
+        { value: "claude-fable-5[1m]", name: "Fable", description: "Fable with 1M context" },
+        { value: "sonnet", name: "Sonnet", description: "Efficient for routine tasks" },
+        { value: "haiku", name: "Haiku", description: "Fastest for quick answers" },
+      ],
+    },
+    {
+      id: "effort",
+      name: "Effort",
+      description: "Available effort levels for this model",
+      category: "thought_level",
+      type: "select",
+      currentValue: claudeChosen.effort,
+      options: [
+        { value: "default", name: "Default" },
+        { value: "low", name: "Low" },
+        { value: "medium", name: "Medium" },
+        { value: "high", name: "High" },
+        { value: "xhigh", name: "Xhigh" },
+        { value: "max", name: "Max" },
+      ],
+    },
+    { id: "fast", name: "Fast mode", description: "Faster output on the same model", type: "boolean", currentValue: claudeChosen.fast },
+  ];
+}
+
+/**
+ * The adapter's command list: its built-ins, the person's skills and every
+ * plugin's, 129 in the smoke. A handful carry an input hint, as some do.
+ */
+function claudeCommands() {
+  const named = [
+    { name: "cad", description: "Create, modify, inspect, and validate parametric CAD parts. (user)", input: null },
+    { name: "debug", description: "Enable debug logging for this session and help diagnose issues", input: { hint: "[issue description]" } },
+    { name: "review", description: "Review a pull request", input: { hint: "[pr]" } },
+    { name: "compact", description: "Clear conversation history but keep a summary in context", input: { hint: "<optional instructions>" } },
+  ];
+  const plugins = Array.from({ length: 129 - named.length }, (_, index) => ({
+    name: `plugin-${String(index + 1).padStart(3, "0")}`,
+    description: `A plugin's command, number ${index + 1}. (plugin)`,
+    input: null,
+  }));
+  return [...named, ...plugins];
+}
+
+/** After the answer, the way the adapter sends it (`setTimeout(…, 0)` after session/new and session/load). */
+function sendClaudeCommandsSoon(conn, sessionId) {
+  setTimeout(() => {
+    void conn.sessionUpdate({
+      sessionId,
+      update: { sessionUpdate: "available_commands_update", availableCommands: claudeCommands() },
+    });
+  }, 0);
+}
+
 let cancelled = false;
 let cancelWaiter = null;
 /** The MCP servers `session/new` named, so a prompt can call one (below). */
@@ -247,10 +378,36 @@ new AgentSideConnection((conn) => ({
     if (fixture?.initialize) {
       return { ...fixture.initialize, protocolVersion: PROTOCOL_VERSION };
     }
+    if (claudeProfile) {
+      return {
+        protocolVersion: PROTOCOL_VERSION,
+        agentInfo: { name: "@agentclientprotocol/claude-agent-acp", title: "Claude Agent", version: "0.69.0" },
+        agentCapabilities: {
+          loadSession: true,
+          promptCapabilities: { image: true, embeddedContext: true },
+          mcpCapabilities: { http: true, sse: true },
+          sessionCapabilities: {
+            additionalDirectories: {},
+            close: {},
+            delete: {},
+            fork: {},
+            list: {},
+            resume: {},
+            subagents: {},
+          },
+        },
+        authMethods: [],
+      };
+    }
     return {
       protocolVersion: PROTOCOL_VERSION,
       agentInfo: { name: "fake-agent", version: "0.0.0" },
-      agentCapabilities: { loadSession: true, promptCapabilities: { image: true, embeddedContext: true } },
+      agentCapabilities: {
+        loadSession: true,
+        promptCapabilities: process.env.FAKE_AGENT_PROMPT_CAPABILITIES
+          ? JSON.parse(process.env.FAKE_AGENT_PROMPT_CAPABILITIES)
+          : { image: true, embeddedContext: true },
+      },
       authMethods: [],
     };
   },
@@ -261,6 +418,9 @@ new AgentSideConnection((conn) => ({
 
   async newSession(params) {
     record("session/new", { ...params, PATH: process.env.PATH ?? null });
+    if (newDelayMs > 0) {
+      await new Promise((resolve) => setTimeout(resolve, newDelayMs));
+    }
     if (fixture?.newSession) {
       return fixture.newSession;
     }
@@ -276,6 +436,14 @@ new AgentSideConnection((conn) => ({
         update: { sessionUpdate: "session_info_update", title: args[args.indexOf("--new-title") + 1] },
       });
     }
+    if (claudeProfile) {
+      sendClaudeCommandsSoon(conn, SESSION_ID);
+      return {
+        sessionId: SESSION_ID,
+        modes: { currentModeId, availableModes: claudeModes() },
+        configOptions: claudeConfigOptions(),
+      };
+    }
     return {
       sessionId: SESSION_ID,
       ...(modeAsOption ? {} : { modes: { currentModeId, availableModes: modeList() } }),
@@ -289,6 +457,9 @@ new AgentSideConnection((conn) => ({
     if (loadDelayMs > 0) {
       await new Promise((resolve) => setTimeout(resolve, loadDelayMs));
     }
+    if (loadError) {
+      throw new Error("session not found");
+    }
     if (fixture?.load) {
       await replay(conn, fixture.load.frames, params.sessionId);
       return fixture.load.response ?? {};
@@ -299,6 +470,10 @@ new AgentSideConnection((conn) => ({
         update: { sessionUpdate: "session_info_update", title: args[args.indexOf("--load-title") + 1] },
       });
     }
+    if (args.includes("--load-empty")) {
+      // A session that was created and never prompted: nothing to replay.
+      return {};
+    }
     await conn.sessionUpdate({
       sessionId: params.sessionId,
       update: { sessionUpdate: "user_message_chunk", content: { type: "text", text: "earlier prompt" } },
@@ -307,6 +482,10 @@ new AgentSideConnection((conn) => ({
       sessionId: params.sessionId,
       update: { sessionUpdate: "agent_message_chunk", content: { type: "text", text: "earlier reply" } },
     });
+    if (claudeProfile) {
+      sendClaudeCommandsSoon(conn, params.sessionId);
+      return { modes: { currentModeId, availableModes: claudeModes() }, configOptions: claudeConfigOptions() };
+    }
     return modeAsOption
       ? { configOptions: configOptions() }
       : { modes: { currentModeId, availableModes: modeList() } };
@@ -327,6 +506,18 @@ new AgentSideConnection((conn) => ({
       throw RequestError.invalidParams(`${params.configId} is not available`);
     }
     applied.push(params.configId === "mode" ? `mode:${params.value}` : params.configId);
+    if (claudeProfile) {
+      if (params.configId === "mode") {
+        currentModeId = String(params.value);
+      } else if (params.configId in claudeChosen) {
+        claudeChosen[params.configId] = params.configId === "fast" ? Boolean(params.value) : String(params.value);
+      }
+      await conn.sessionUpdate({
+        sessionId: params.sessionId,
+        update: { sessionUpdate: "config_option_update", configOptions: claudeConfigOptions() },
+      });
+      return { configOptions: claudeConfigOptions() };
+    }
     if (params.configId in chosen) {
       chosen[params.configId] = String(params.value);
     }
@@ -359,6 +550,22 @@ new AgentSideConnection((conn) => ({
       }
       await replay(conn, turn.frames, params.sessionId);
       return turn.response ?? { stopReason: "end_turn" };
+    }
+    if (claudeProfile) {
+      // Mid-turn, before anything else the turn says: the whole list again.
+      await conn.sessionUpdate({
+        sessionId: params.sessionId,
+        update: { sessionUpdate: "available_commands_update", availableCommands: claudeCommands() },
+      });
+      const response = await script(conn, params);
+      if (!claudeTitled) {
+        claudeTitled = true;
+        await conn.sessionUpdate({
+          sessionId: params.sessionId,
+          update: { sessionUpdate: "session_info_update", title: CLAUDE_PROFILE_TITLE },
+        });
+      }
+      return response;
     }
     return script(conn, params);
   },
@@ -406,15 +613,18 @@ async function script(conn, params) {
     return { stopReason: "end_turn" };
   }
 
-  if (text.startsWith("drawing-tool ")) {
-    // Drawing E2E uses the same stdio MCP/token/root path as a real adapter.
-    const { name, args } = JSON.parse(text.slice("drawing-tool ".length));
-    if (!["open_drawing", "drawing_state", "capture_drawing", "list_open_tabs", "show_tab", "close_tab"].includes(name)) throw new Error("unsupported drawing test tool");
-    const toolCallId = `drawing-${Date.now()}`;
-    await send({ sessionUpdate: "tool_call", toolCallId, title: name, kind: "other", status: "in_progress", rawInput: args });
-    const result = await callTextToCadTool(name, args);
-    await send({ sessionUpdate: "tool_call_update", toolCallId, status: result.isError ? "failed" : "completed", rawOutput: result });
-    return { stopReason: "end_turn" };
+  if (text.includes("reject-prompt")) {
+    void conn
+      .requestPermission({
+        sessionId,
+        toolCall: { toolCallId: "rp-1", title: "Run ls", kind: "execute", status: "pending", rawInput: { command: "ls" } },
+        options: [{ optionId: "allow-once", name: "Yes", kind: "allow_once" }],
+        _meta: { permission: { version: 1, title: "Run ls?", description: "Lists the directory." } },
+      })
+      .catch(() => {});
+    // Same pipe, so the request reaches the client before the error does.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    throw RequestError.internalError(undefined, "the model refused the turn");
   }
 
   if (text.includes("crash")) {
@@ -483,12 +693,36 @@ async function script(conn, params) {
     }
   }
 
+  if (text.includes("late-frames")) {
+    await send({ sessionUpdate: "tool_call", toolCallId: "late-1", title: "Background task", kind: "execute", status: "in_progress" });
+    await send({ sessionUpdate: "tool_call_update", toolCallId: "late-1", status: "failed" });
+    await send({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "First answer." } });
+    // A timer, not an await: the response goes out when this returns, and these are the frames behind it.
+    setTimeout(() => {
+      void send({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "Background task finished." } });
+      void send({ sessionUpdate: "tool_call_update", toolCallId: "late-1", status: "in_progress" });
+    }, 20);
+    return { stopReason: "end_turn" };
+  }
+
+  if (text.includes("linger")) {
+    await send({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "working" } });
+    await new Promise((resolve) => setTimeout(resolve, 1500));
+    return { stopReason: "end_turn" };
+  }
+
   if (text.includes("slow")) {
     await send({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "working" } });
+    // The 30 s is a ceiling for a test that forgot to cancel. It is cleared the moment the wait
+    // ends and unref'd, so an agent whose parent is gone (stdin closed) does not linger for it.
+    let ceiling;
     await new Promise((resolve) => {
       cancelWaiter = resolve;
-      setTimeout(resolve, 30_000);
+      ceiling = setTimeout(resolve, 30_000);
+      ceiling.unref();
     });
+    clearTimeout(ceiling);
+    cancelWaiter = null;
     return { stopReason: cancelled ? "cancelled" : "end_turn" };
   }
 
@@ -622,10 +856,6 @@ async function script(conn, params) {
     await conn.sessionUpdate({ sessionId: childId, update: { sessionUpdate: "tool_call", toolCallId: "child-read-1", title: "Read README", kind: "read", status: "completed" } });
     await send({ sessionUpdate: "subagent_state_update", subagentSessionId: childId, state: "completed" });
     await send({ sessionUpdate: "tool_call_update", toolCallId: "task-1", status: "completed" });
-  }
-
-  if (text.includes("plan")) {
-    await send({ sessionUpdate: "plan", entries: [{ content: "first", priority: "high", status: "in_progress" }, { content: "second", priority: "low", status: "pending" }] });
   }
 
   await send({ sessionUpdate: "agent_message_chunk", content: { type: "text", text: "o" } });

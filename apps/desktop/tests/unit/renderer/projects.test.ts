@@ -35,7 +35,6 @@ const session = (projectId: string, updatedAt: number, overrides: Partial<Sessio
   pinned: false,
   sessionHead: null,
   turnHead: null,
-  turnStartedAt: null,
   ...overrides,
 });
 

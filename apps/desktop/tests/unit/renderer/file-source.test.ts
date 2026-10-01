@@ -1,9 +1,13 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { toast } from "sonner";
+import { desktopLiveDocuments } from "@renderer/state/live-documents";
 import type { PromptContextPort } from "@text-to-cad/core/prompt";
 import type { FileChanges } from "@text-to-cad/ui/file-viewer";
 import type { FileMutationResult } from "@shared/ipc/explorer";
 import { createDesktopFileActions, createDesktopFileSource } from "@renderer/features/explorer/adapters/fileSource";
 import { readSessionStrip, useExplorer, treeKey } from "@renderer/state/explorer";
+
+vi.mock("sonner", () => ({ toast: Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn(), dismiss: vi.fn() }) }));
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -62,6 +66,47 @@ test("write conflict semantics are typed and subscription leases stay balanced",
   expect(changes).toEqual([{ sourceId: files.id, changes: [{ kind: "content", path: "ignored.unknown", revision: "r2" }] }]);
   off1(); expect(unwatch).not.toHaveBeenCalled(); off2();
   expect(watch).toHaveBeenCalledTimes(1); expect(unwatch).toHaveBeenCalledTimes(1);
+});
+
+test("a tab gives back the files it opened when it leaves, follows their moves, and holds them again on a remount", async () => {
+  const files = source();
+  const stat = (path: string) => ({ path, name: path, kind: "file" as const, size: 1, modifiedAt: 0, symlink: false, fileKind: "text" as const, mime: "text/plain", extension: "txt" });
+  vi.mocked(window.textToCad.explorer.stat).mockResolvedValueOnce(stat("a.txt")).mockResolvedValueOnce(stat("b.txt"));
+  await files.stat("a.txt", { signal: signal() });
+  await files.stat("b.txt", { signal: signal() });
+  const watch = vi.mocked(window.textToCad.explorer.watch).mockClear();
+  const unwatch = vi.mocked(window.textToCad.explorer.unwatch).mockClear();
+  const off = files.subscribe!(() => {});
+  expect(watch).toHaveBeenLastCalledWith({ projectId: "p" });
+  useExplorer.getState().receiveChanges("p", null, [{ kind: "moved", previousPath: "b.txt", path: "c.txt", directory: false }]);
+  off();
+  expect(unwatch).toHaveBeenLastCalledWith({ projectId: "p", paths: ["a.txt", "c.txt"] });
+  const again = files.subscribe!(() => {});
+  expect(watch).toHaveBeenLastCalledWith({ projectId: "p", paths: ["a.txt", "c.txt"] });
+  again();
+  expect(unwatch).toHaveBeenLastCalledWith({ projectId: "p", paths: ["a.txt", "c.txt"] });
+});
+
+test("a file restatted on every reload is given back once, however many times it was opened", async () => {
+  const files = source();
+  const stat = { path: "a.txt", name: "a.txt", kind: "file" as const, size: 1, modifiedAt: 0, symlink: false, fileKind: "text" as const, mime: "text/plain", extension: "txt" };
+  vi.mocked(window.textToCad.explorer.stat).mockResolvedValue(stat);
+  for (let index = 0; index < 10_001; index += 1) await files.stat("a.txt", { signal: signal() });
+  const unwatch = vi.mocked(window.textToCad.explorer.unwatch).mockClear();
+  files.subscribe!(() => {})();
+  expect(unwatch.mock.calls[0]![0].paths!.length).toBeLessThanOrEqual(1);
+});
+
+test("only the first stat of a path is an open: main holds once, and one unwatch path gives it back", async () => {
+  const files = source();
+  const stat = { path: "a.txt", name: "a.txt", kind: "file" as const, size: 1, modifiedAt: 0, symlink: false, fileKind: "text" as const, mime: "text/plain", extension: "txt" };
+  const statCall = vi.mocked(window.textToCad.explorer.stat).mockClear().mockResolvedValue(stat);
+  for (let index = 0; index < 3; index += 1) await files.stat("a.txt", { signal: signal() });
+  expect(statCall.mock.calls.filter(([request]) => request.intent === "open")).toHaveLength(1);
+  const unwatch = vi.mocked(window.textToCad.explorer.unwatch).mockClear();
+  files.subscribe!(() => {})();
+  expect(unwatch).toHaveBeenCalledTimes(1);
+  expect(unwatch.mock.calls[0]![0].paths).toEqual(["a.txt"]);
 });
 
 test("Copy reference preserves clipboard text and uses the injected draft destination", async () => {
@@ -134,4 +179,20 @@ test("opening a terminal after async path resolution cannot target a different s
   expect((await readSessionStrip("file-source-owner")).tabs).toEqual(expect.arrayContaining([expect.objectContaining({ sessionId: "file-source-owner", kind: "terminal", cwd: "/workspace/src" })]));
   expect(useExplorer.getState().sessionId).toBe("terminal-other-session");
   expect(useExplorer.getState().tabs).toEqual([]);
+});
+
+test("trashing a folder closes every tab under it, and names the one with unsaved changes that stayed open", async () => {
+  const files = source();
+  const dirty = useExplorer.getState().openFile("a/dirty.txt", null)!;
+  const clean = useExplorer.getState().openFile("a/clean.txt", null)!;
+  const elsewhere = useExplorer.getState().openFile("b/other.txt", null)!;
+  desktopLiveDocuments(dirty.id, { projectId: "p", root: null }).documents!.drafts
+    .put(JSON.stringify(["desktop", "p", null]), "a/dirty.txt", { base: { content: "x", revision: "r1" }, value: "unsaved", stale: false });
+  vi.mocked(window.textToCad.explorer.trash).mockResolvedValueOnce({ status: "committed", path: "a", change: { kind: "removed", path: "a", directory: true, mutationId: "trash-1" } });
+  await files.trash!("a", { signal: signal() });
+  await vi.waitFor(() => expect(toast.error).toHaveBeenCalled());
+  const ids = useExplorer.getState().tabs.map(tab => tab.id);
+  expect(ids).not.toContain(clean.id);
+  expect(ids).toContain(elsewhere.id);
+  expect(vi.mocked(toast.error).mock.calls[0]![0]).toBe("Moved to Trash, but 1 open tab could not be closed: a/dirty.txt (Save or explicitly discard the document before closing its tab.)");
 });

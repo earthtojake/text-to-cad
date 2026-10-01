@@ -9,8 +9,8 @@ import {
 import { cn } from "@renderer/lib/utils";
 import { cjk } from "@streamdown/cjk";
 import { code } from "@streamdown/code";
-import { math } from "@streamdown/math";
-import { mermaid } from "@streamdown/mermaid";
+import { mermaid } from "@renderer/lib/mermaid";
+import { useMathPlugin } from "@renderer/lib/math";
 import { BrainIcon, ChevronDownIcon } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
 import {
@@ -23,7 +23,7 @@ import {
   useRef,
   useState,
 } from "react";
-import { Streamdown } from "streamdown";
+import { Streamdown, type StreamdownProps } from "streamdown";
 
 import { Shimmer } from "./shimmer";
 
@@ -82,6 +82,9 @@ export const Reasoning = memo(
 
     const hasEverStreamedRef = useRef(isStreaming);
     const [hasAutoClosed, setHasAutoClosed] = useState(false);
+    // Set once the person opens or closes it: from then on it is theirs, and
+    // the auto-close below — meant for an auto-open — leaves it alone.
+    const userToggledRef = useRef(false);
     const startTimeRef = useRef<number | null>(null);
 
     // Track when streaming starts and compute duration
@@ -110,7 +113,8 @@ export const Reasoning = memo(
         hasEverStreamedRef.current &&
         !isStreaming &&
         isOpen &&
-        !hasAutoClosed
+        !hasAutoClosed &&
+        !userToggledRef.current
       ) {
         const timer = setTimeout(() => {
           setIsOpen(false);
@@ -123,6 +127,7 @@ export const Reasoning = memo(
 
     const handleOpenChange = useCallback(
       (newOpen: boolean) => {
+        userToggledRef.current = true;
         setIsOpen(newOpen);
       },
       [setIsOpen]
@@ -202,12 +207,19 @@ export type ReasoningContentProps = ComponentProps<
   typeof CollapsibleContent
 > & {
   children: string;
+  /** Passed to Streamdown, so a thought draws links and images as the transcript does. */
+  components?: StreamdownProps["components"];
+  /** Passed to Streamdown too: the transcript's rehype plugins, so its images reach `components`. */
+  rehypePlugins?: StreamdownProps["rehypePlugins"];
 };
 
-const streamdownPlugins = { cjk, code, math, mermaid };
+const streamdownPlugins = { cjk, code, mermaid };
 
 export const ReasoningContent = memo(
-  ({ className, children, ...props }: ReasoningContentProps) => (
+  ({ className, children, components, rehypePlugins, ...props }: ReasoningContentProps) => {
+    const math = useMathPlugin(children);
+    const plugins = useMemo(() => (math ? { ...streamdownPlugins, math } : streamdownPlugins), [math]);
+    return (
     <CollapsibleContent
       className={cn(
         "mt-4 text-sm",
@@ -216,9 +228,12 @@ export const ReasoningContent = memo(
       )}
       {...props}
     >
-      <Streamdown plugins={streamdownPlugins}>{children}</Streamdown>
+      <Streamdown components={components} plugins={plugins} {...(rehypePlugins ? { rehypePlugins } : {})}>
+        {children}
+      </Streamdown>
     </CollapsibleContent>
-  )
+    );
+  }
 );
 
 Reasoning.displayName = "Reasoning";

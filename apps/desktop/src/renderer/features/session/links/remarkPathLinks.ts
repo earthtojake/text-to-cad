@@ -1,4 +1,4 @@
-import { findPathTokens, pathToken } from "./grammar";
+import { ABSOLUTE_MARK, findPathTokens, pathToken } from "./grammar";
 
 /**
  * A remark plugin that turns path-shaped tokens in prose into links.
@@ -30,26 +30,31 @@ type MdNode = {
 /** Where a path in prose should not become a link: it already is one, or it is code. */
 const OPAQUE = new Set(["link", "linkReference", "definition", "code", "html", "image", "imageReference"]);
 
-export function remarkPathLinks() {
+/**
+ * `rootPath` is the thread's root on disk: a root with a space or another
+ * character a path in prose is not made of is still recognised where an
+ * absolute path begins with it.
+ */
+export function remarkPathLinks({ rootPath }: { rootPath?: string | null } = {}) {
   return (tree: MdNode) => {
-    walk(tree);
+    walk(tree, rootPath ?? null);
   };
 }
 
-function walk(node: MdNode): void {
+function walk(node: MdNode, rootPath: string | null): void {
   if (!node.children) {
     return;
   }
   const next: MdNode[] = [];
   for (const child of node.children) {
     if (child.type === "text" && typeof child.value === "string") {
-      next.push(...splitText(child.value));
+      next.push(...splitText(child.value, rootPath));
     } else if (child.type === "inlineCode" && typeof child.value === "string") {
-      const token = pathToken(child.value);
+      const token = pathToken(child.value, rootPath);
       next.push(token ? linkFor(token.raw, [child]) : child);
     } else {
       if (!OPAQUE.has(child.type)) {
-        walk(child);
+        walk(child, rootPath);
       }
       next.push(child);
     }
@@ -57,8 +62,8 @@ function walk(node: MdNode): void {
   node.children = next;
 }
 
-function splitText(value: string): MdNode[] {
-  const tokens = findPathTokens(value);
+function splitText(value: string, rootPath: string | null): MdNode[] {
+  const tokens = findPathTokens(value, rootPath);
   if (tokens.length === 0) {
     return [{ type: "text", value }];
   }
@@ -79,7 +84,14 @@ function splitText(value: string): MdNode[] {
 
 /** The URL is the token, path-relative; `PathLink` decodes it back. */
 export function pathLinkUrl(raw: string): string {
-  return `./${raw}`;
+  // An absolute path stays root-relative as written (`./` in front would make it `.//Users/…`),
+  // and carries a mark, because harden spells a workspace path `/models/x` too: `PathLink` links
+  // a marked one only inside the scope's own root.
+  if (!raw.startsWith("/")) {
+    return `./${raw}`;
+  }
+  const hash = raw.indexOf("#");
+  return hash < 0 ? `${raw}${ABSOLUTE_MARK}` : `${raw.slice(0, hash)}${ABSOLUTE_MARK}${raw.slice(hash)}`;
 }
 
 function linkFor(raw: string, children: MdNode[]): MdNode {

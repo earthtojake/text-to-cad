@@ -1,5 +1,5 @@
 import { beforeEach, expect, it, vi } from 'vitest';
-import { SCROLLBACK_BYTES, Terminals, type TerminalEvent } from '@main/explorer/terminal';
+import { SCROLLBACK_BYTES, Terminals, terminalEnv, type TerminalEvent } from '@main/explorer/terminal';
 
 const spawn = vi.hoisted(() => vi.fn());
 vi.mock('node-pty', () => ({ spawn }));
@@ -63,4 +63,33 @@ it('stops a PTY while retaining output, then removes its identity only when the 
   f.terminals.kill(id); expect(f.process.kill).toHaveBeenCalledOnce();
   expect(f.terminals.owns(id, 'owner')).toBe(false); expect(f.terminals.attach(id)).toBeNull();
   expect(() => f.terminals.read(id)).toThrow('no longer exists');
+});
+it('lets the agent send its answer and then the newline as two guarded writes', async () => {
+  const f = fixture(); const { id } = await f.terminals.create({ cwd: '/project' });
+  f.data('Continue? [y/N] ');
+  const before = f.terminals.read(id);
+  f.terminals.writeGuarded(id, 'y', before.sequence, before.inputRevision);
+  const after = f.terminals.read(id);
+  expect(after.inputPending).toBe(false);
+  expect(() => f.terminals.writeGuarded(id, '\n', after.sequence, after.inputRevision)).not.toThrow();
+  expect(f.process.write).toHaveBeenLastCalledWith('\n');
+});
+it('passes the widget\'s replies to a program\'s queries through without counting them as typing', async () => {
+  const f = fixture(); const { id } = await f.terminals.create({ cwd: '/project' });
+  f.data('$ ');
+  const before = f.terminals.read(id);
+  // Device attributes, a cursor position report, focus in, a background colour answer.
+  for (const reply of ['\x1b[?1;2c', '\x1b[12;40R', '\x1b[I', '\x1b]11;rgb:0a0a/0a0a/0a0a\x1b\\']) f.terminals.write(id, reply);
+  expect(f.process.write).toHaveBeenLastCalledWith('\x1b]11;rgb:0a0a/0a0a/0a0a\x1b\\');
+  expect(f.terminals.read(id)).toMatchObject({ inputRevision: before.inputRevision, inputPending: false });
+  f.terminals.writeGuarded(id, 'ls\n', before.sequence, before.inputRevision);
+  // An arrow key is the person, and still counts.
+  f.terminals.write(id, '\x1b[A');
+  expect(f.terminals.read(id).inputPending).toBe(true);
+});
+it('gives a shell none of a host Claude Code session\'s variables, so a nested claude is not logged out', () => {
+  const env = terminalEnv({ PATH: '/bin', HOME: '/home/me', CLAUDECODE: '1', CLAUDE_CODE_ENTRYPOINT: 'cli',
+    CLAUDE_CODE_SSE_PORT: '1234', ANTHROPIC_BASE_URL: 'http://127.0.0.1:1', ELECTRON_RUN_AS_NODE: '1' });
+  expect(Object.keys(env).filter(key => /^(CLAUDE|ANTHROPIC_BASE_URL|ELECTRON_)/.test(key))).toEqual([]);
+  expect(env).toMatchObject({ PATH: '/bin', HOME: '/home/me' });
 });

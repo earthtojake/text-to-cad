@@ -100,7 +100,7 @@ export const AgentProviderSchema = z.object({
   versionArgs: z.array(z.string()),
   /**
    * False when the launch needs the binary on PATH (`gemini --acp`); true when
-   * an `npx` adapter can run without it (Claude, Codex bundle their runtime).
+   * an npm adapter can run without it (Claude, Codex bundle their runtime).
    */
   launchWithoutBinary: z.boolean(),
   install: z.object({
@@ -125,6 +125,12 @@ export const AgentProviderSchema = z.object({
     checkArgs: z.array(z.string()).nullable(),
   }),
   launch: LaunchSchema,
+  /**
+   * The ACP adapter package the launch runs, at the exact version the
+   * registry pins (`CLAUDE_ADAPTER`, `CODEX_ADAPTER`). Null for an agent that
+   * serves ACP itself or is launched unpinned.
+   */
+  adapter: z.object({ package: z.string(), version: z.string() }).nullable().default(null),
   capabilities: AgentCapabilitiesSchema,
   /** Whether the agent loads the skills root by itself, or needs to be told about it. */
   skillRoots: SkillRootsSchema,
@@ -142,6 +148,18 @@ export const AgentStatusSchema = AgentProviderSchema.extend({
   auth: AuthStateSchema,
   /** Unix ms of the probe that produced this row. */
   checkedAt: z.number(),
+  /**
+   * Set on a row that is the last launch's answer, given before this launch's
+   * probe has finished. Provisional: `agents.status` follows with rows that
+   * lack it, and a screen must not treat `auth` here as final.
+   */
+  probing: z.boolean().optional(),
+  /**
+   * Set on every row when this launch's probe failed and the rows are the last
+   * launch's, kept because an empty table would say "no agent ready" — the
+   * wrong cause. The renderer reads it as "could not check", not as a verdict.
+   */
+  probeFailed: z.boolean().optional(),
 });
 export type AgentStatus = z.infer<typeof AgentStatusSchema>;
 

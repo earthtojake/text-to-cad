@@ -21,11 +21,21 @@ import {
   type IpcEventPayload,
   type IpcNode,
 } from "../shared/ipc";
+import { errorMessage } from "../shared/ipc/errors";
 
 function buildClient(node: IpcNode, path: string[]): unknown {
   if (isInvokeDef(node)) {
     const channel = `${IPC_INVOKE_PREFIX}${path.join(".")}`;
-    return (request: unknown) => ipcRenderer.invoke(channel, request);
+    // Electron words a rejected handler as `Error invoking remote method '…':
+    // IpcError: <sentence>`. Unwrapped here, once, so every renderer caller
+    // receives the handler's own sentence and none has to remember to.
+    return async (request: unknown) => {
+      try {
+        return await ipcRenderer.invoke(channel, request);
+      } catch (error) {
+        throw new Error(errorMessage(error), { cause: error });
+      }
+    };
   }
   const branch: Record<string, unknown> = {};
   for (const [key, child] of Object.entries(node)) {

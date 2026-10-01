@@ -14,6 +14,15 @@ import { parseNameStatus, parseNumstat, parsePorcelainStatus } from "@main/proje
 const NUL = "\0";
 
 describe("porcelain status", () => {
+  it("reads a worktree-side rename (from `git add -N`) as one renamed file", () => {
+    // `mv f g && git add -N g` prints exactly this.
+    const parsed = parsePorcelainStatus(` R g${NUL}f${NUL}?? new.txt${NUL}`);
+    expect(parsed.files).toEqual([
+      { path: "g", status: "renamed", oldPath: "f" },
+      { path: "new.txt", status: "untracked" },
+    ]);
+  });
+
   it("reads the branch header and its ahead/behind counts", () => {
     const parsed = parsePorcelainStatus(`## main...origin/main [ahead 2, behind 1]${NUL}`);
     expect(parsed).toMatchObject({ branch: "main", ahead: 2, behind: 1, unborn: false });

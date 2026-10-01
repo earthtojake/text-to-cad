@@ -71,6 +71,25 @@ runs:
           *" packages/ui "*) npm run build --workspace @text-to-cad/ui ;;
         esac
 
+    # The browser download is the uncached part of this step (6.4 s for the headless
+    # shell, measured). macOS only: its cache directory is a fixed, known path, and the
+    # Linux jobs also install system packages the cache cannot hold. The install below
+    # still runs on a hit; with the revision present it downloads nothing, so a stale or
+    # partial restore is repaired rather than trusted.
+    - name: Read the npm Playwright version
+      id: playwright-version
+      if: runner.os == 'macOS' && (inputs.ui-browser == 'true' || inputs.ui-browser == 'shell')
+      shell: bash
+      run: |
+        echo "version=$(node -p "require('./package-lock.json').packages['node_modules/playwright'].version")" >> "$GITHUB_OUTPUT"
+
+    - name: Restore the npm Playwright browser
+      if: runner.os == 'macOS' && (inputs.ui-browser == 'true' || inputs.ui-browser == 'shell')
+      uses: actions/cache@v5
+      with:
+        path: ~/Library/Caches/ms-playwright
+        key: playwright-${{ runner.os }}-${{ runner.arch }}-${{ steps.playwright-version.outputs.version }}-${{ inputs.ui-browser }}
+
     # npm and Python Playwright can require different Chromium revisions.
     - name: Install shared UI and web test browser
       if: inputs.ui-browser == 'true' || inputs.ui-browser == 'shell'

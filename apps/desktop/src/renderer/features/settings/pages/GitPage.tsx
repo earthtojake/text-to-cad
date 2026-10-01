@@ -1,5 +1,5 @@
 /**
- * Git & Worktrees (plan §9): where a session's working directory comes from,
+ * Git and worktrees (plan §9): where a session's working directory comes from,
  * and what text-to-cad is allowed to create and remove around it.
  *
  * The rows above the fold are settings — read by `projects/workspace.ts` when
@@ -8,8 +8,10 @@
  * per project listing the worktrees that exist right now, with the two actions
  * that make sense on one.
  */
-import { useCallback, useEffect, useState } from "react";
-import { Folder, Loader2 } from "lucide-react";
+import { useEffect, useId, useState } from "react";
+import { Folder, Loader2, TriangleAlert } from "lucide-react";
+import { Alert, AlertDescription } from "@text-to-cad/ui/primitives/alert";
+import { toast } from "sonner";
 
 import { Button } from "@renderer/components/ui/button";
 import { Textarea } from "@renderer/components/ui/textarea";
@@ -20,15 +22,19 @@ import {
   SettingRow,
   SwitchRow,
   TextRow,
+  useDraft,
 } from "@renderer/features/settings/SettingCard";
 import {
+  useSettingsFallbacks,
   useSettingsPatch,
   useSettingsValue,
 } from "@renderer/features/settings/settings-value";
+import { ensureWorktrees, useWorktreeCache } from "@renderer/features/settings/worktree-cache";
 import { runUiCommand } from "@renderer/state/bridge";
 import { useProjects } from "@renderer/state/projects";
+import { errorMessage } from "@shared/ipc/errors";
 import type { Worktree } from "@shared/ipc/git";
-import type { GitMode, Project } from "@shared/types";
+import { branchPrefixProblem, defaultSettings, type GitMode, type Project } from "@shared/types";
 
 /**
  * The two choices the composer offers (`lib/git-mode.ts`). `none` is not one
@@ -40,14 +46,29 @@ const GIT_MODES: { value: GitMode; label: string }[] = [
   { value: "worktree", label: "New worktree" },
 ];
 
-const KEEP_LIMITS = [3, 5, 10, 20, 50].map((count) => ({
-  value: String(count),
-  label: `Keep ${count}`,
-}));
+const KEEP_PRESETS = [3, 5, 10, 20, 50];
+
+/** What a stored prefix git refuses is replaced with by "Use default": the schema's own. */
+const DEFAULT_BRANCH_PREFIX = defaultSettings().branchPrefix;
+
+/**
+ * The presets, plus the stored limit when it is none of them (the schema
+ * takes any count from 1): a select whose value matches no option draws
+ * blank, which reads as "no limit" when there is one.
+ */
+function keepLimits(stored: number) {
+  const counts = KEEP_PRESETS.includes(stored) ? KEEP_PRESETS : [...KEEP_PRESETS, stored].sort((a, b) => a - b);
+  return counts.map((count) => ({ value: String(count), label: `Keep ${count}` }));
+}
 
 export function GitPage() {
   const settings = useSettingsValue();
   const patch = useSettingsPatch();
+  // A prefix stored before git's rules were checked, which main reads as the
+  // default (`settings.fallbacks`): asked again whenever settings change, so
+  // the note goes once a prefix is set.
+  const fallbacks = useSettingsFallbacks();
+  const storedPrefix = fallbacks.refused.branchPrefix ?? null;
 
   return (
     <>
@@ -67,6 +88,32 @@ export function GitPage() {
           keywords="branch name namespace"
           onChange={(branchPrefix) => patch({ branchPrefix })}
           placeholder="text-to-cad/"
+          // Not the muted note a description is: the stored value is wrong,
+          // and it says so in the kit's warning tone (its Alert's `warning`
+          // variant), boxed, beside a value typed here and refused, which is
+          // a line of red text.
+          warning={
+            storedPrefix === null ? undefined : (
+              <Alert className="mt-1 px-3 py-2 text-xs" data-stored-prefix variant="warning">
+                <TriangleAlert />
+                <AlertDescription className="text-xs text-foreground">
+                  {`The stored prefix “${storedPrefix}” is not one git accepts, so “${settings.branchPrefix}” is used until another is set. ${branchPrefixProblem(storedPrefix) ?? ""}`.trim()}
+                  {/* The field already shows the default, so typing it again
+                      changes nothing the row would write: this is the one way
+                      to store it over the bad one. */}
+                  <Button
+                    className="h-6 px-2 text-[12px]"
+                    onClick={() => patch({ branchPrefix: DEFAULT_BRANCH_PREFIX })}
+                    size="sm"
+                    variant="outline"
+                  >
+                    Use default
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            )
+          }
+          problem={branchPrefixProblem}
           title="Branch prefix"
           value={settings.branchPrefix}
           width="w-[200px]"
@@ -83,8 +130,16 @@ export function GitPage() {
                 title: "Worktree root",
                 defaultPath: settings.worktreeRoot ?? undefined,
               })
-              .then((chosen) => chosen && patch({ worktreeRoot: chosen.path }));
+              .then((chosen) => chosen && patch({ worktreeRoot: chosen.path }))
+              .catch((error) => toast.error(`Could not open the folder chooser: ${errorMessage(error)}`));
           }}
+          note={
+            fallbacks.gone.worktreeRoot?.reason === "file"
+              ? "This is a file, not a folder, so worktrees cannot be made here."
+              : fallbacks.gone.worktreeRoot
+                ? "This folder no longer exists; it is created again with the next worktree."
+                : undefined
+          }
           onClear={() => patch({ worktreeRoot: null })}
           placeholder="~/.text-to-cad/worktrees"
           title="Worktree root"
@@ -92,23 +147,28 @@ export function GitPage() {
         />
         <SwitchRow
           checked={settings.fetchBeforeCreate}
-          description="Fetch the remote before branching, so a new worktree starts from what is on the server."
+          description="Fetch the remote before branching, and start a new worktree from the current branch's upstream (or the default branch when it has none). Without a connection it starts from where the checkout is."
           keywords="pull remote origin"
           onChange={(fetchBeforeCreate) => patch({ fetchBeforeCreate })}
           title="Fetch before creating"
         />
         <SwitchRow
           checked={settings.autoDeleteWorktrees}
-          description="Remove the oldest worktrees once there are more than the limit below. Only ones text-to-cad created."
+          description="After a new worktree is created, remove the oldest idle ones beyond the limit below. Only worktrees text-to-cad created, and never one that is in use, locked or holds uncommitted work."
           keywords="prune clean remove old"
           onChange={(autoDeleteWorktrees) => patch({ autoDeleteWorktrees })}
           title="Auto-delete old worktrees"
         />
         <SelectRow
-          description="How many worktrees per project survive the sweep."
+          description={
+            settings.autoDeleteWorktrees
+              ? "How many idle worktrees per project the sweep keeps. In-use and locked ones are not counted; one with unsaved work is counted, then kept."
+              : "How many idle worktrees per project the sweep keeps. Nothing is swept while Auto-delete old worktrees is off."
+          }
+          disabled={!settings.autoDeleteWorktrees}
           keywords="limit count retain"
           onChange={(value) => patch({ worktreeKeepLimit: Number(value) })}
-          options={KEEP_LIMITS}
+          options={keepLimits(settings.worktreeKeepLimit)}
           title="Keep limit"
           value={String(settings.worktreeKeepLimit)}
           width="w-[140px]"
@@ -176,27 +236,33 @@ function ProjectWorktrees() {
 }
 
 function ProjectWorktreeCard({ project }: { project: Project }) {
-  const [worktrees, setWorktrees] = useState<Worktree[] | null>(null);
+  const cardId = useId();
+  const worktrees = useWorktreeCache((state) => state.lists[project.id]) ?? null;
+  const epoch = useWorktreeCache((state) => state.epoch);
+  const readError = useWorktreeCache((state) => state.errors[project.id]) ?? null;
   const [busy, setBusy] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // A delete's failure is about the list it was made against: the next read that lands replaces the
+  // list and so retires the message (compared by identity, not cleared by an effect).
+  const [failure, setFailure] = useState<{ message: string; against: Worktree[] | null } | null>(null);
+  const error = failure && failure.against === worktrees ? failure.message : null;
 
-  const read = useCallback(() => {
-    void window.textToCad.git
-      .worktrees({ projectId: project.id })
-      .then(setWorktrees)
-      .catch(() => setWorktrees([]));
+  // A mount reads afresh over the list the visit already has (`worktree-cache.ts`);
+  // `epoch` reads again after an invalidation.
+  useEffect(() => {
+    void ensureWorktrees(project.id, { fresh: true });
   }, [project.id]);
-
-  useEffect(read, [read]);
+  useEffect(() => {
+    void ensureWorktrees(project.id);
+  }, [project.id, epoch]);
 
   const remove = async (worktree: Worktree) => {
     setBusy(worktree.path);
-    setError(null);
+    setFailure(null);
     try {
       await window.textToCad.git.removeWorktree({ projectId: project.id, path: worktree.path });
-      read();
+      useWorktreeCache.getState().invalidate();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : String(caught));
+      setFailure({ message: caught instanceof Error ? caught.message : String(caught), against: worktrees });
     } finally {
       setBusy(null);
     }
@@ -204,82 +270,116 @@ function ProjectWorktreeCard({ project }: { project: Project }) {
 
   // Nothing to say until the read comes back, and nothing to say afterwards
   // if the project has no worktrees of ours.
-  if (!worktrees || worktrees.length === 0) {
+  if ((!worktrees || worktrees.length === 0) && !readError) {
     return null;
   }
 
   return (
     <SettingCard title={`Worktrees · ${project.name}`}>
-      {worktrees.map((worktree) => (
-        <SettingRow
-          control={
-            <div className="flex items-center gap-1.5">
-              <Button
-                className="h-8"
-                onClick={() =>
-                  runUiCommand({
-                    command: "new-session",
-                    projectId: project.id,
-                    cwd: worktree.path,
-                  })
-                }
-                size="sm"
-                variant="secondary"
-              >
-                New chat in this worktree
-              </Button>
-              <Button
-                className="h-8"
-                // A worktree with uncommitted work, or with a thread still
-                // open on it, is not deleted from here: main refuses the
-                // first, and the second would pull the directory out from
-                // under a running agent.
-                disabled={busy === worktree.path || worktree.dirty || worktree.openSessions > 0}
-                onClick={() => void remove(worktree)}
-                size="sm"
-                title={
-                  worktree.dirty
-                    ? "This worktree has uncommitted changes"
-                    : worktree.openSessions > 0
-                      ? "A session is still open in this worktree"
-                      : undefined
-                }
-                variant="ghost"
-              >
-                {busy === worktree.path ? <Loader2 className="size-3.5 animate-spin" /> : null}
-                Delete
-              </Button>
-            </div>
-          }
-          description={describe(worktree)}
-          key={worktree.path}
-          keywords={`worktree branch ${project.name} ${worktree.branch ?? ""}`}
-          title={worktree.branch ?? (worktree.path.split("/").pop() ?? worktree.path)}
-        />
-      ))}
+      {readError ? (
+        <p className="px-4 py-2 text-[12px] text-destructive" role="alert">
+          Could not read the worktrees: {readError}
+        </p>
+      ) : null}
+      {(worktrees ?? []).map((worktree, index) => {
+        const kept = keptBecause(worktree);
+        const keptId = `${cardId}-kept-${index}`;
+        return (
+          <SettingRow
+            control={
+              <div className="flex items-center gap-1.5">
+                <Button
+                  className="h-8"
+                  onClick={() =>
+                    runUiCommand({
+                      command: "new-session",
+                      projectId: project.id,
+                      cwd: worktree.path,
+                    })
+                  }
+                  size="sm"
+                  variant="secondary"
+                >
+                  New session in this worktree
+                </Button>
+                <Button
+                  className="h-8"
+                  // A worktree with uncommitted work, a lock, or a thread still
+                  // open on it, is not deleted from here: main refuses the
+                  // first, git the second, and the third would pull the
+                  // directory out from under a running agent.
+                  //
+                  // A disabled button takes no hover and no hint, so the reason
+                  // is its accessible description rather than a native title
+                  // nobody with a keyboard or a screen reader would ever get.
+                  aria-describedby={kept ? keptId : undefined}
+                  disabled={busy === worktree.path || kept !== null}
+                  onClick={() => void remove(worktree)}
+                  size="sm"
+                  variant="ghost"
+                >
+                  {busy === worktree.path ? <Loader2 className="size-3.5 animate-spin" /> : null}
+                  Delete
+                </Button>
+                {kept ? (
+                  <span className="sr-only" id={keptId}>
+                    {kept}
+                  </span>
+                ) : null}
+              </div>
+            }
+            description={describe(worktree)}
+            key={worktree.path}
+            keywords={`worktree branch ${project.name} ${worktree.branch ?? ""}`}
+            title={worktree.branch ?? (worktree.path.split("/").pop() ?? worktree.path)}
+          />
+        );
+      })}
       {error ? (
         <p className="px-4 py-2 text-[12px] text-destructive">{error}</p>
       ) : null}
-      <SettingRow
-        control={
-          <Button
-            className="h-8 gap-1.5"
-            onClick={() => {
-              void window.textToCad.shell.showItemInFolder({ path: parentOf(worktrees) });
-            }}
-            size="sm"
-            variant="ghost"
-          >
-            <Folder className="size-3.5" />
-            Reveal
-          </Button>
-        }
-        description={parentOf(worktrees)}
-        keywords="reveal finder folder directory"
-        title="Where they live"
-      />
+      {worktrees && worktrees.length > 0 ? (
+        <SettingRow
+          control={
+            <Button
+              className="h-8 gap-1.5"
+              onClick={() => {
+                void window.textToCad.shell.showItemInFolder({ projectId: project.id, worktrees: true });
+              }}
+              size="sm"
+              variant="ghost"
+            >
+              <Folder className="size-3.5" />
+              Reveal
+            </Button>
+          }
+          description={parentOf(worktrees)}
+          keywords="reveal finder folder directory"
+          title="Where they live"
+        />
+      ) : null}
     </SettingCard>
   );
+}
+
+/** Why a worktree's Delete is off, or null when it is not. */
+function keptBecause(worktree: Worktree): string | null {
+  if (worktree.locked) {
+    return "This worktree is locked (git worktree lock), so it is kept until it is unlocked.";
+  }
+  if (worktree.dirty === null || worktree.stranded === null) {
+    return "Git could not check this worktree for uncommitted changes, ignored files, or commits only it holds, so it is kept.";
+  }
+  if (worktree.dirty) {
+    return "This worktree has uncommitted changes or ignored files (like .env) that deleting it would lose.";
+  }
+  if (worktree.stranded) {
+    return "This worktree holds commits on a detached HEAD no branch reaches, or an unfinished rebase or merge, that deleting it would lose.";
+  }
+  if (worktree.openSessions > 0) {
+    return "A session is still open in this worktree.";
+  }
+  return null;
 }
 
 /** The directory the project's worktrees sit in — `<worktree root>/<project>`. */
@@ -303,11 +403,18 @@ function describe(worktree: Worktree): string {
   }
   if (worktree.openSessions > 0) {
     parts.push(
-      `${worktree.openSessions} open session${worktree.openSessions === 1 ? "" : "s"}`,
+      `${worktree.openSessions} open session${worktree.openSessions === 1 ? "" : "s"} (in use)`,
     );
   }
-  if (worktree.dirty) {
-    parts.push("uncommitted changes");
+  if (worktree.locked) {
+    parts.push("locked");
+  }
+  if (worktree.dirty === null || worktree.stranded === null) {
+    parts.push("could not check for unsaved work");
+  } else if (worktree.dirty) {
+    parts.push("uncommitted or ignored files");
+  } else if (worktree.stranded) {
+    parts.push("commits on a detached HEAD, or an unfinished merge or rebase");
   }
   return parts.join(" · ");
 }
@@ -332,7 +439,11 @@ function relative(at: number): string {
   return "a while ago";
 }
 
-/** A row whose control is a paragraph, so it sits under the title rather than beside it. */
+/**
+ * A row whose control is a paragraph, so it sits under the title rather than
+ * beside it. Committed on blur, not per keystroke (`useDraft`): Enter is a
+ * newline here.
+ */
 function InstructionsRow({
   title,
   description,
@@ -348,14 +459,17 @@ function InstructionsRow({
   placeholder: string;
   onChange: (value: string) => void;
 }) {
+  const draft = useDraft(value, onChange);
   return (
     <SettingRow description={description} keywords={keywords} title={title}>
       <Textarea
         aria-label={title}
         className="min-h-20 text-sm"
-        onChange={(event) => onChange(event.target.value)}
+        onBlur={draft.onBlur}
+        onChange={(event) => draft.onChange(event.target.value)}
+        onFocus={draft.onFocus}
         placeholder={placeholder}
-        value={value}
+        value={draft.value}
       />
     </SettingRow>
   );

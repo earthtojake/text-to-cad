@@ -4,7 +4,8 @@
  *
  * Real repositories again: the question is what `resolveWorkspace` does with a
  * folder that is not a repository, a repository with no commits, and one that
- * is fine — and only git can answer the first two.
+ * is fine — and only git can answer the first two. The committed ones are
+ * copies of a template this file builds once (`./git-fixtures`).
  */
 import { execFile } from "node:child_process";
 import { mkdtemp, mkdir, realpath, rm, stat, symlink, writeFile } from "node:fs/promises";
@@ -12,9 +13,10 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterAll, afterEach, describe, expect, it } from "vitest";
 
 import {
+  legacyProjectWorktreeDir,
   projectWorktreeDir,
   releaseWorkspace,
   resolveProjectRoot,
@@ -24,17 +26,9 @@ import {
 } from "@main/projects/workspace";
 import { defaultSettings, type Project, type Settings } from "@shared/types";
 
-const run = promisify(execFile);
+import { cleanGitTemplates, committedRepository, GIT_ENV, pushedRepository } from "./git-fixtures";
 
-const GIT_ENV = {
-  ...process.env,
-  GIT_AUTHOR_NAME: "text-to-cad Tests",
-  GIT_AUTHOR_EMAIL: "tests@example.invalid",
-  GIT_COMMITTER_NAME: "text-to-cad Tests",
-  GIT_COMMITTER_EMAIL: "tests@example.invalid",
-  GIT_CONFIG_GLOBAL: "/dev/null",
-  GIT_CONFIG_SYSTEM: "/dev/null",
-};
+const run = promisify(execFile);
 
 const temporary: string[] = [];
 
@@ -43,20 +37,26 @@ afterEach(async () => {
     await rm(directory, { recursive: true, force: true });
   }
 });
+afterAll(cleanGitTemplates);
 
-/** A project directory, a worktree root beside it, and the settings pointing at both. */
-async function fixture(options: { repository?: boolean; commit?: boolean } = {}) {
+/**
+ * A project directory, a worktree root beside it, and the settings pointing at
+ * both. `remote`: the project has a bare `origin` at `<base>/remote.git` that
+ * is one commit ahead of it (see `pushedRepository`).
+ */
+async function fixture(options: { repository?: boolean; commit?: boolean; remote?: boolean } = {}) {
   const base = await realpath(await mkdtemp(path.join(os.tmpdir(), "text-to-cad-ws-")));
   temporary.push(base);
   const root = path.join(base, "text-to-cad");
-  await mkdir(root, { recursive: true });
 
-  if (options.repository !== false) {
-    await run("git", ["init", "--quiet", "--initial-branch=main"], { cwd: root, env: GIT_ENV });
-    if (options.commit !== false) {
-      await writeFile(path.join(root, "README.md"), "one\n");
-      await run("git", ["add", "-A"], { cwd: root, env: GIT_ENV });
-      await run("git", ["commit", "--quiet", "-m", "first"], { cwd: root, env: GIT_ENV });
+  if (options.remote) {
+    await pushedRepository(root, path.join(base, "remote.git"), { ahead: true });
+  } else if (options.repository !== false && options.commit !== false) {
+    await committedRepository(root);
+  } else {
+    await mkdir(root, { recursive: true });
+    if (options.repository !== false) {
+      await run("git", ["init", "--quiet", "--initial-branch=main"], { cwd: root, env: GIT_ENV });
     }
   }
 
@@ -81,15 +81,45 @@ describe("worktreeRoot", () => {
     expect(worktreeRoot({ worktreeRoot: "/tmp/wt" })).toBe("/tmp/wt");
   });
 
-  it("names the per-project folder by a slug, so a rename cannot move it far", () => {
+  it("names the per-project folder by a slug and a hash of the path", () => {
     const settings = { worktreeRoot: "/wt" };
     expect(
       projectWorktreeDir(settings, { name: "Robot arm (v2)", path: "/src/robot-arm" }),
-    ).toBe(path.join("/wt", "robot-arm-v2"));
+    ).toMatch(new RegExp(`^${path.join("/wt", "robot-arm-v2")}-[0-9a-f]{8}$`));
     // A name with nothing usable in it falls back to the directory's basename.
-    expect(projectWorktreeDir(settings, { name: "…", path: "/src/robot-arm" })).toBe(
-      path.join("/wt", "robot-arm"),
+    expect(projectWorktreeDir(settings, { name: "…", path: "/src/robot-arm" })).toMatch(
+      new RegExp(`^${path.join("/wt", "robot-arm")}-[0-9a-f]{8}$`),
     );
+    expect(legacyProjectWorktreeDir(settings, { name: "…", path: "/src/robot-arm" })).toBe(path.join("/wt", "robot-arm"));
+  });
+
+  it("gives two projects with the same name two folders", () => {
+    const settings = { worktreeRoot: "/wt" };
+    const work = projectWorktreeDir(settings, { name: "robot-arm", path: "/work/robot-arm" });
+    const forks = projectWorktreeDir(settings, { name: "robot-arm", path: "/forks/robot-arm" });
+    expect(work).not.toBe(forks);
+    expect(rootBelongsToProject(settings, { name: "robot-arm", path: "/forks/robot-arm" }, path.join(work, "slug"))).toBe(false);
+  });
+
+  it("accepts a pre-hash folder's worktree only for the repository it belongs to", async () => {
+    const base = await realpath(await mkdtemp(path.join(os.tmpdir(), "text-to-cad-legacy-")));
+    temporary.push(base);
+    const settings = { worktreeRoot: path.join(base, "worktrees") };
+    const projects = [path.join(base, "work", "robot-arm"), path.join(base, "forks", "robot-arm")].map((root) => ({
+      name: "robot-arm",
+      path: root,
+    }));
+    for (const project of projects) {
+      await committedRepository(project.path);
+    }
+    const [mine, theirs] = projects as [(typeof projects)[0], (typeof projects)[0]];
+    const legacy = path.join(legacyProjectWorktreeDir(settings, mine), "wrist");
+    await run("git", ["worktree", "add", "--quiet", "-b", "text-to-cad/wrist", legacy], { cwd: mine.path, env: GIT_ENV });
+
+    expect(rootBelongsToProject(settings, mine, legacy)).toBe(true);
+    expect(rootBelongsToProject(settings, mine, path.join(legacy, "sub"))).toBe(true);
+    expect(rootBelongsToProject(settings, theirs, legacy)).toBe(false);
+    expect(() => resolveProjectRoot(settings, theirs, legacy)).toThrow("does not belong to this project");
   });
 });
 
@@ -125,11 +155,9 @@ describe("resolveWorkspace", () => {
       name: "Model the wrist path",
     });
 
-    const expected = path.join(
-      settings.worktreeRoot!,
-      "text-to-cad",
-      "model-the-wrist-path",
-    );
+    // New worktrees go in the hashed folder, never the shared pre-hash one.
+    const expected = path.join(projectWorktreeDir(settings, project), "model-the-wrist-path");
+    expect(path.basename(path.dirname(expected))).toMatch(/^text-to-cad-[0-9a-f]{8}$/);
     expect(workspace).toEqual({
       cwd: expected,
       branch: "text-to-cad/model-the-wrist-path",
@@ -170,7 +198,7 @@ describe("resolveWorkspace", () => {
       name: "reuse",
     });
 
-    // Settings' `New chat in this worktree`.
+    // Settings' `New session in this worktree`.
     expect(
       await resolveWorkspace({ project, settings, gitMode: "worktree", cwd: made.cwd }),
     ).toEqual({ cwd: made.cwd, branch: "text-to-cad/reuse", worktreePath: made.cwd });
@@ -240,6 +268,68 @@ describe("releaseWorkspace", () => {
     expect(refused.removed).toBe(false);
     expect(refused.reason).toMatch(/uncommitted/);
     expect((await stat(dirty.cwd)).isDirectory()).toBe(true);
+  });
+});
+
+describe("releaseWorkspace for an abandoned create", () => {
+  it("removes the worktree and its unmoved branch even with auto-delete off", async () => {
+    const { project, settings } = await fixture();
+    const made = await resolveWorkspace({ project, settings, gitMode: "worktree", name: "never opened" });
+
+    expect(
+      await releaseWorkspace({ worktreePath: made.cwd, branch: made.branch }, { autoDeleteWorktrees: false }, { abandoned: true }),
+    ).toEqual({ removed: true });
+    await expect(stat(made.cwd)).rejects.toThrow();
+    const branches = await run("git", ["branch", "--list", made.branch!], { cwd: project.path, env: GIT_ENV });
+    expect(branches.stdout.trim()).toBe("");
+  });
+});
+
+describe("releaseWorkspace for an abandoned create whose folder is gone", () => {
+  it("still deletes the branch, asking the project's repository", async () => {
+    const { project, settings } = await fixture();
+    const made = await resolveWorkspace({ project, settings, gitMode: "worktree", name: "folder gone" });
+    const sessionHead = (await run("git", ["rev-parse", "HEAD"], { cwd: made.cwd, env: GIT_ENV })).stdout.trim();
+    await rm(made.cwd, { recursive: true, force: true });
+
+    await releaseWorkspace(
+      { worktreePath: made.cwd, branch: made.branch, projectId: project.path, sessionHead },
+      { autoDeleteWorktrees: false },
+      { abandoned: true },
+    );
+    const branches = await run("git", ["branch", "--list", made.branch!], { cwd: project.path, env: GIT_ENV });
+    expect(branches.stdout.trim()).toBe("");
+  });
+});
+
+describe("releaseWorkspace for an abandoned create cut from a fetched tip", () => {
+  it("deletes the branch this create made while it is still at its base, even when local HEAD is behind it", async () => {
+    // A remote one commit ahead of the checkout: the fetch before creating
+    // cuts the branch from there, and `git branch -d` measures against the
+    // checkout's HEAD, which does not contain it.
+    const { project, settings } = await fixture({ remote: true });
+    const git = (cwd: string, ...args: string[]) => run("git", args, { cwd, env: GIT_ENV });
+
+    const fetching = { ...settings, fetchBeforeCreate: true };
+    const made = await resolveWorkspace({ project, settings: fetching, gitMode: "worktree", name: "never opened" });
+    const sessionHead = (await git(made.cwd, "rev-parse", "HEAD")).stdout.trim();
+    expect(sessionHead).toBe((await git(project.path, "rev-parse", "origin/main")).stdout.trim());
+
+    expect(
+      await releaseWorkspace({ worktreePath: made.cwd, branch: made.branch, sessionHead }, { autoDeleteWorktrees: false }, { abandoned: true }),
+    ).toEqual({ removed: true });
+    expect((await git(project.path, "branch", "--list", made.branch!)).stdout.trim()).toBe("");
+
+    // A branch with a commit beyond where it was cut holds work: it stays.
+    const worked = await resolveWorkspace({ project, settings: fetching, gitMode: "worktree", name: "worked" });
+    const cut = (await git(worked.cwd, "rev-parse", "HEAD")).stdout.trim();
+    await writeFile(path.join(worked.cwd, "part.py"), "x = 1\n");
+    await git(worked.cwd, "add", "-A");
+    await git(worked.cwd, "commit", "--quiet", "-m", "work");
+    expect(
+      await releaseWorkspace({ worktreePath: worked.cwd, branch: worked.branch, sessionHead: cut }, { autoDeleteWorktrees: false }, { abandoned: true }),
+    ).toEqual({ removed: true });
+    expect((await git(project.path, "branch", "--list", worked.branch!)).stdout).toContain(worked.branch);
   });
 });
 

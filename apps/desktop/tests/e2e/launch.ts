@@ -3,7 +3,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
-import { _electron as electron, expect, type ElectronApplication, type Locator, type Page } from "@playwright/test";
+import { _electron as electron, expect, test as base, type ElectronApplication, type Locator, type Page } from "@playwright/test";
 
 /**
  * The one way the suite starts the built app.
@@ -25,6 +25,57 @@ export const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url))
 export const repoRoot = path.resolve(appRoot, "..", "..");
 export const fakeAgent = path.join(appRoot, "tests", "fake-agent", "index.mjs");
 export const mod = process.platform === "darwin" ? "Meta" : "Control";
+
+/**
+ * What a failed test leaves behind.
+ *
+ * The suite launches Electron itself (`_electron.launch` in a `beforeAll`), so
+ * Playwright's own `use: { trace }` has no page fixture to attach to and
+ * records nothing useful for these specs (its `trace.zip` has no DOM snapshots).
+ * Every app `launch()` starts is therefore traced here, in one chunk per test,
+ * and the chunk is written out (`trace-N.zip`, with DOM snapshots and
+ * screenshots) only when the test failed; a green test discards its chunk, so a
+ * passing run writes nothing. No separate PNG of the windows: Playwright's own
+ * `screenshot: "only-on-failure"` writes `test-failed-N.png`, and the trace holds the rest.
+ * Import `test` from this file, not from `@playwright/test`, to get it.
+ */
+const traced = new Set<ElectronApplication>();
+
+async function startChunks() {
+  for (const app of traced) await app.context().tracing.startChunk().catch(() => traced.delete(app));
+}
+
+export const test = base.extend<{ failureEvidence: void }>({
+  failureEvidence: [
+    // eslint-disable-next-line no-empty-pattern
+    async ({}, use, testInfo) => {
+      await startChunks();
+      await use();
+      const failed = testInfo.status !== testInfo.expectedStatus;
+      let n = 0;
+      for (const app of [...traced]) {
+        n += 1;
+        const context = app.context();
+        await context.tracing
+          .stopChunk(failed ? { path: testInfo.outputPath(`trace-${n}.zip`) } : undefined)
+          .catch(() => traced.delete(app));
+      }
+    },
+    { auto: true },
+  ],
+});
+
+/**
+ * Put an app this suite started itself (a spec that bundles its own main entry
+ * or must control the launch) under the same failure trace as `launch()`'s:
+ * call it right after `electron.launch`, and import `test` from this file.
+ */
+export async function traceApp(app: ElectronApplication): Promise<void> {
+  await app.context().tracing.start({ screenshots: true, snapshots: true, sources: false });
+  await app.context().tracing.startChunk().catch(() => undefined);
+  traced.add(app);
+  app.on("close", () => traced.delete(app));
+}
 
 export type Launched = { app: ElectronApplication; page: Page; lines: string[] };
 
@@ -55,10 +106,29 @@ export async function launch(options: {
   const lines: string[] = [];
   app.process().stdout?.on("data", (chunk: Buffer) => lines.push(...String(chunk).split("\n")));
   app.process().stderr?.on("data", (chunk: Buffer) => lines.push(...String(chunk).split("\n")));
+  await traceApp(app);
   const page = await app.firstWindow();
   page.on("pageerror", (error) => console.error(`[renderer] ${error.message}`));
   await page.waitForLoadState("domcontentloaded");
   return { app, page, lines };
+}
+
+/** What main's e2e door answers with: the chosen folder, as `projects.add` would. */
+export type ChosenDirectory = { id: string; name: string; path: string; createdAt: number };
+
+/**
+ * Choose a folder the way the native chooser does — main resolves it, selects
+ * it and broadcasts `ui.directorySelected` — without the chooser, which
+ * Playwright cannot drive. No renderer channel takes a path, so this goes in
+ * through main: the `NODE_ENV=test` door `installE2eDoor` puts on main's
+ * global (src/main/test-door.ts).
+ */
+export async function chooseDirectory(app: ElectronApplication, directory: string): Promise<ChosenDirectory> {
+  return app.evaluate(
+    (_electron, chosen) =>
+      (globalThis as unknown as { __textToCadE2E: { choose(directory: string): Promise<ChosenDirectory> } }).__textToCadE2E.choose(chosen),
+    directory,
+  );
 }
 
 /** A scratch directory, realpath'd: Electron resolves paths, and macOS's /var is a link. */
@@ -137,6 +207,19 @@ export async function settleTerminal(page: Page) {
       { intervals: [100, 250, 1_000], timeout: 30_000 },
     )
     .toBe(true);
+}
+
+/** `+` is a menu of the tab kinds; a closing Radix menu can swallow the next click, so wait it out. */
+export async function newTab(page: Page, label: string) {
+  await page.getByRole("button", { name: "New tab", exact: true }).click();
+  await page.getByRole("menuitem", { name: label }).click();
+  await expect(page.getByRole("menu")).toHaveCount(0);
+}
+
+/** Set the theme through the settings and wait for the document to wear it. */
+export async function setTheme(page: Page, theme: "dark" | "light") {
+  await page.evaluate((value) => (window as unknown as { textToCad: { settings: { set(patch: { theme: string }): Promise<unknown> } } }).textToCad.settings.set({ theme: value }), theme);
+  await expect(page.locator("html")).toHaveClass(theme === "dark" ? /\bdark\b/ : /^(?!.*\bdark\b).*$/);
 }
 
 /** Screenshot with transitions finished, into the test's output directory. */

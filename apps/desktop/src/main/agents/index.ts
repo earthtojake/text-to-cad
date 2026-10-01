@@ -8,7 +8,7 @@
  */
 export { AGENT_PROVIDERS, agentProvider } from "./registry";
 export { AgentDetector, nodeProbes, parseVersion, which, type DetectorProbes } from "./detect";
-export { loginEnv, parseEnv, processEnv, stripHostSession, type Env } from "./shell-env";
+export { loginEnv, loginEnvOutcome, parseEnv, processEnv, stripHostSession, type Env } from "./shell-env";
 export { JobRunner, type Job, type JobPty, type SpawnJobPty } from "./jobs";
 export { currentPlatform, installCommand, startInstall } from "./install";
 export { loginCommand, startLogin } from "./auth";

@@ -24,6 +24,9 @@ shortcuts and SDK actions are disabled, including the command palette that
 otherwise includes hardcoded export and library actions. Dropped scene/library
 files and pasted scene files are rejected. Dropped raster images are inserted
 directly as images so even PNG metadata cannot replace the current sketch.
+The SDK's Cmd/Ctrl+Shift+E (its image-export dialog, which ignores the menu flags) is swallowed. Off a Mac (`platform` not
+`darwin`) Ctrl+Shift+E is the desktop host's explorer chord, so the editor re-dispatches it to `window` for the host's
+listeners instead of letting the stopped event vanish with the SDK's.
 Ordinary copied elements and raster image insertion remain available; pasted
 elements pass bounded scene validation.
 
@@ -153,7 +156,7 @@ adaptations, notices, and offline Electron test when upgrading.
 
 Validation lives in core's `drawing.test.js`, desktop's drawing document/tab,
 prompt, tools and asset unit tests (`tests/unit/main/drawing-assets.test.ts`
-covers this plugin), and `tests/e2e/drawing.spec.ts`. The latter
+covers this plugin), and the drawing test in `tests/e2e/explorer.spec.ts`. That one
 draws real ink, checks PNG decoding and disabled persistence routes, and
 reloads the app profile while blocking external requests.
 

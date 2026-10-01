@@ -1,8 +1,11 @@
 #!/usr/bin/env node
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+
+import { chooseBrowserConcurrency } from "./browserConcurrency.mjs";
 
 const packageRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 // Pure helpers and browser integration tests run in Node; React/editor unit tests use Vitest.
@@ -40,7 +43,13 @@ if (!tests.length) {
 // `UI_BROWSER_TEST_CONCURRENCY` at a time (4 unless set; CI sets 1); everything else stays at 4.
 const browserTests = tests.filter((test) => /\.browser\.test\.[cm]?js$/u.test(test));
 const nodeTests = tests.filter((test) => !browserTests.includes(test));
-const browserConcurrency = Math.max(1, Number.parseInt(process.env.UI_BROWSER_TEST_CONCURRENCY || "4", 10) || 4);
+// A busy machine (load above its core count) drops them to one at a time; see browserConcurrency.mjs.
+const { concurrency: browserConcurrency, note: browserNote } = chooseBrowserConcurrency({
+  requested: process.env.UI_BROWSER_TEST_CONCURRENCY,
+  load: os.loadavg()[0] ?? 0,
+  cpus: os.cpus().length,
+});
+if (browserNote && browserTests.length) console.log(browserNote);
 const run = (files, concurrency) => files.length ? spawnSync(process.execPath, [
   "--test",
   `--test-concurrency=${concurrency}`,

@@ -13,9 +13,10 @@ import { createActions, RendererCommands } from "./actions";
 import { integrationServers } from "./manager";
 import { createTerminalActions } from "./terminals/actions";
 import { explorerTerminals } from "../ipc/explorer";
+import { sessionRuntimePath } from "../cad";
 import { BrowserConnections } from "../browser/connections";
 import { McpBridge, type BridgeSession } from "./mcp-bridge";
-import { EMPTY_SKILLS, materialiseSkillsRoot, skillsPreamble, SKILLS_ROOT_ENV, type SkillSummary, type SkillsRoot } from "./skills";
+import { EMPTY_SKILLS, materialiseSkillsRoot, skillsPreamble, SKILLS_ROOT_ENV, SKILLS_ERROR_ENV, type SkillSummary, type SkillsRoot } from "./skills";
 let bridgeInstance: McpBridge | null = null;
 let skillsInstance: SkillsRoot = EMPTY_SKILLS;
 let commandsInstance: RendererCommands | null = null;
@@ -36,6 +37,8 @@ export function mcpServerScript(): { command: string; args: string[]; env: Recor
   const env: Record<string, string> = { ELECTRON_RUN_AS_NODE: "1" };
   if (skillsInstance.root) {
     env[SKILLS_ROOT_ENV] = skillsInstance.root;
+  } else if (skillsInstance.error) {
+    env[SKILLS_ERROR_ENV] = skillsInstance.error;
   }
   return { command: process.execPath, args: [script], env };
 }
@@ -43,6 +46,11 @@ export function mcpServerScript(): { command: string; args: string[]; env: Recor
 /** The materialised skills root, or null when no skills were composed into the app. */
 export function skillsRoot(): string | null {
   return skillsInstance.root;
+}
+
+/** Why the root could not be made, or null (also null when the build simply composed none). */
+export function skillsError(): string | null {
+  return skillsInstance.error ?? null;
 }
 
 /** What that root holds — the Settings page's list, and the preamble's. */
@@ -65,7 +73,7 @@ export function rendererCommands(): RendererCommands {
   return commandsInstance;
 }
 
-export async function initIntegrations(deps: { sendCommand: (command: IntegrationCommand) => void; cancelCommand: (requestId: string) => void }): Promise<void> {
+export async function initIntegrations(deps: { sendCommand: (command: IntegrationCommand) => number | void; cancelCommand: (requestId: string) => void }): Promise<void> {
   skillsInstance = materialiseSkills(app.getPath("userData"));
   commandsInstance = new RendererCommands({
     sessionRoot,
@@ -77,7 +85,7 @@ export async function initIntegrations(deps: { sendCommand: (command: Integratio
   const actionDeps = { sessionRoot, send: deps.sendCommand, cancel: deps.cancelCommand, newId: () => randomUUID() };
   const browsers = new BrowserConnections(actionDeps, commandsInstance, path.join(app.getPath("userData"), "browser-artifacts"));
   const actions = { ...createActions(actionDeps, commandsInstance),
-    ...createTerminalActions(actionDeps, commandsInstance, explorerTerminals),
+    ...createTerminalActions(actionDeps, commandsInstance, explorerTerminals, sessionRuntimePath),
     browser_connection: (session: BridgeSession, _params: Record<string, unknown>, signal?: AbortSignal) => browsers.connect(session, signal) };
   bridgeInstance = new McpBridge(actions, mcpServerScript, browsers);
   await bridgeInstance.start();
@@ -107,7 +115,7 @@ function materialiseSkills(userData: string): SkillsRoot {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     console.error(`[skills] could not materialise the skills root: ${message}`);
-    return EMPTY_SKILLS;
+    return { root: null, skills: [], error: message };
   }
 }
 

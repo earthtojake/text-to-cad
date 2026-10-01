@@ -2,9 +2,9 @@ import fs from "node:fs";
 import http from "node:http";
 import path from "node:path";
 
-import { expect, test, type ElectronApplication, type Locator, type Page } from "@playwright/test";
+import { expect, type ElectronApplication, type Locator, type Page } from "@playwright/test";
 import type { TextToCadApi } from "../../src/shared/ipc";
-import { launch, mod, repoRoot, scratch, settleTerminal } from "./launch";
+import { chooseDirectory, launch, mod, newTab as newTabIn, repoRoot, scratch, settleTerminal, shoot as shootInto, test } from "./launch";
 import { selectFixtureSession } from "./session-fixture";
 
 /**
@@ -115,7 +115,8 @@ test("copies a relative and an absolute path from a row's context menu", async (
   await pick("Copy path");
   await expect.poll(() => app.evaluate(({ clipboard }) => clipboard.readText()))
     .toBe(fs.realpathSync(path.join(repoRoot, "apps/web/src/client/unboundIdentifiers.test.js")));
-  await page.getByRole("tab", { name: /unboundIdentifiers\.test\.js/ }).getByRole("button", { name: "Close unboundIdentifiers.test.js" }).click();
+  // The close button is the tab's sibling, out of the accessibility tree (Delete is its keyboard twin).
+  await page.locator('[data-tab-strip] button[aria-label="Close unboundIdentifiers.test.js"]').click();
 });
 
 test("opens an image with its dimensions, and reveals it in the tree", async () => {
@@ -131,6 +132,9 @@ test("opens an image with its dimensions, and reveals it in the tree", async () 
 test("runs a command in a terminal tab, and replays its scrollback exactly once on reattach", async () => {
   await newTab("Terminal");
   await expect(page.locator(".xterm-screen")).toBeVisible();
+  // The window's first terminal, asked for from the `+` menu, takes the keyboard even though
+  // its code (xterm) is a chunk of its own that may land after the focus request settled.
+  await expect(page.locator(".xterm-helper-textarea")).toBeFocused();
   // A login shell reads the person's profile before it prompts; typing before then is echoed
   // twice. And the command and its output differ, or the echo alone would pass.
   await settleTerminal(page);
@@ -210,9 +214,9 @@ test("makes a folder from the tree's menu, renames it, and moves it to the trash
   await page.keyboard.press("Enter");
   await expect(page.getByRole("tab", { name: /notes\.md/ })).toBeVisible();
   expect(fs.readFileSync(path.join(docsDir, "assemblies", "notes.md"), "utf8")).toBe("");
-  // F2 renames the cursor row, and Escape leaves it alone.
+  // F2 renames the focused row (a click focuses it), and Escape leaves it alone.
   await folder("assemblies/notes.md").click();
-  await tree.focus();
+  await expect(folder("assemblies/notes.md")).toBeFocused();
   await page.keyboard.press("F2");
   await expect(page.getByLabel("Rename notes.md")).toBeFocused();
   await page.keyboard.press("Escape");
@@ -291,7 +295,7 @@ test("a drawing attaches a PNG without sending, writes nothing, and is not resto
     await page.mouse.up();
     await expect(addToPrompt).toBeEnabled();
 
-    const composer = page.getByPlaceholder("Do anything");
+    const composer = page.getByPlaceholder("Do anything", { exact: true });
     await composer.fill("Keep this existing prompt text.");
     await addToPrompt.click();
     const png = page.locator('[data-composer] img[alt="Bracket_concept.png"]').first();
@@ -351,7 +355,7 @@ test("a browser tab's native page is shared by the explorer and the app tools, p
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   const origin = `http://127.0.0.1:${(server.address() as { port: number }).port}/`;
   try {
-    const project = await page.evaluate((directory) => window.textToCad.projects.addPath({ path: directory }), browserDir);
+    const project = await chooseDirectory(app, browserDir);
     const [sessionA, sessionB] = await page.evaluate(async (projectId) => [
       (await window.textToCad.sessions.create({ projectId, agentId: "claude-code", gitMode: "checkout" })).id,
       (await window.textToCad.sessions.create({ projectId, agentId: "claude-code", gitMode: "checkout" })).id,
@@ -390,7 +394,7 @@ test("a browser tab's native page is shared by the explorer and the app tools, p
     await expect.poll(fieldValue).toBe("Still here");
 
     // A screenshot and a selection of the page go to the prompt; nothing is sent.
-    const composer = page.getByPlaceholder("Do anything");
+    const composer = page.getByPlaceholder("Do anything", { exact: true });
     await composer.fill("Keep this draft");
     await page.getByRole("button", { name: "Add page screenshot to prompt" }).click();
     const image = page.locator('[data-composer] img[alt="browser-page.png"]').first();
@@ -404,7 +408,9 @@ test("a browser tab's native page is shared by the explorer and the app tools, p
     await expect(page.locator("[data-turn][data-role=user]")).toHaveCount(0);
     await shoot("browser-app-shell.png");
     // Closing the tab ends the native page.
-    await page.getByRole("tab", { name: /127\.0\.0\.1/ }).getByRole("button", { name: /Close/ }).click();
+    // Delete on the tab: its close button is a sibling out of the accessibility tree.
+    await page.getByRole("tab", { name: /127\.0\.0\.1/ }).focus();
+    await page.keyboard.press("Delete");
     await expect.poll(() => app.evaluate(({ webContents }, id) => !!webContents.fromId(id), nativeId)).toBe(false);
   } finally {
     await new Promise<void>((resolve) => server.close(() => resolve()));
@@ -417,7 +423,7 @@ test("a browser tab's native page is shared by the explorer and the app tools, p
 
 /** Select the fixture's session for `directory` (made on first use) and open its explorer. */
 async function switchProject(directory: string) {
-  const session = await selectFixtureSession(page, directory);
+  const session = await selectFixtureSession(app, page, directory);
   if (!(await page.getByTestId("explorer").isVisible())) {
     await page.getByRole("button", { name: "Toggle explorer" }).click();
   }
@@ -430,7 +436,7 @@ async function openFromTree(target: string) {
   const filter = page.getByLabel("Filter files");
   await filter.fill(target);
   await page.getByRole("option", { name: target, exact: false }).first().click();
-  await expect(page.getByRole("tablist", { name: "Explorer tabs" }).locator('[role="tab"][aria-selected="true"]')).toHaveAttribute("title", target);
+  await expect(page.getByRole("tablist", { name: "Explorer tabs" }).locator('[role="tab"][aria-selected="true"]')).toHaveAttribute("data-tab-path", target);
   if (await filter.isVisible()) await filter.fill("");
 }
 
@@ -467,7 +473,7 @@ async function pick(item: string) {
 
 /** The explorer pane, not the window: the rest of the window belongs to other specs. */
 async function shoot(name: string) {
-  await page.getByTestId("explorer").screenshot({ path: test.info().outputPath(name), animations: "disabled" });
+  await shootInto(page.getByTestId("explorer"), name, test.info());
 }
 
 function occurrences(haystack: string, needle: string): number {
@@ -476,8 +482,6 @@ function occurrences(haystack: string, needle: string): number {
 
 /** `+` is a menu of the tab kinds; a closing Radix menu can swallow the next click, so wait it out. */
 async function newTab(label: "File" | "Browser" | "Terminal" | "Drawing") {
-  await page.getByRole("button", { name: "New tab", exact: true }).click();
-  await page.getByRole("menuitem", { name: label }).click();
-  await expect(page.getByRole("menu")).toHaveCount(0);
+  await newTabIn(page, label);
   if (label === "File") await expect(page.getByText("No file open", { exact: true })).toBeVisible();
 }

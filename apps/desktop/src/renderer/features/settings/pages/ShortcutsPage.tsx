@@ -8,6 +8,7 @@
  */
 import {
   SHORTCUT_GROUPS,
+  bindingFor,
   shortcutKeys,
   shortcutsIn,
   type ShortcutGroup,
@@ -36,7 +37,7 @@ function Group({ group }: { group: ShortcutGroup }) {
         <SettingRow
           control={
             <kbd className="rounded-md border bg-muted px-2 py-1 font-mono text-xs whitespace-nowrap">
-              {shortcutKeys(shortcut.binding, isMac)}
+              {shortcutKeys(bindingFor(shortcut, isMac), isMac)}
               {shortcut.through ? ` – ${shortcutKeys(shortcut.through, isMac)}` : ""}
             </kbd>
           }

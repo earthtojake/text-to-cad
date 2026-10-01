@@ -66,6 +66,19 @@ const LOAD_STAGES = Object.freeze({
     load: { alert: { severity: "error", blocking: false, summary: "Update failed", title: "Harness update failed",
       message: "The harness could not load its latest revision. The existing model remains visible.",
       details: "harness detail", reload: true } }
+  },
+  // A build that failed with nothing to show: the card is all there is, and the tool stack
+  // is put away rather than floated over it.
+  broken: {
+    empty: true,
+    load: { alert: { severity: "error", kind: "compile", summary: "Compile failed", title: "Harness build failed",
+      message: "The harness could not be prepared for display.", details: "Traceback (most recent call last):\n  harness", reload: true } }
+  },
+  // An error raised beside the model (a lazy chunk that did not load, say), with no word on
+  // whether it blocks: the model is still there, and so is the tool stack.
+  beside: {
+    load: { alert: { severity: "error", summary: "Harness extra unavailable", title: "Couldn’t load the harness extra",
+      message: "The model is still here." } }
   }
 });
 
@@ -134,14 +147,14 @@ function HarnessSurface({ view, data }) {
   const [shownRevision, setShownRevision] = useState("");
   // What the frame put down when the person reached for the model.
   const [putDown, setPutDown] = useState("");
-  const { load: stageLoad } = LOAD_STAGES[stage] || LOAD_STAGES.idle;
+  const { load: stageLoad, empty: stageEmpty = false } = LOAD_STAGES[stage] || LOAD_STAGES.idle;
   const live = useMemo(() => (shownRevision
     ? { ...LIVE, resource: () => ({ ...resource, revision: shownRevision }) }
     : LIVE), [resource, shownRevision]);
 
   const shell = useRendererShell({
     view, services: shellServices, resource, modelKey: view.file.path, revisionKey: "harness",
-    features: EDGELESS_VIEW_FEATURES, toolModes: HARNESS_TOOL_MODES, scene,
+    features: EDGELESS_VIEW_FEATURES, toolModes: HARNESS_TOOL_MODES, scene: stageEmpty ? null : scene,
     load: { busy: false, ...stageLoad },
     live, onCameraSettled, runtimeLifecycle,
     // A renderer whose references are its own vocabulary assembles its own snapshot.

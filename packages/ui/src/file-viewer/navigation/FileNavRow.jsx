@@ -70,6 +70,10 @@ export function PanelToggle({ icon: Icon, label, active, onClick, id, testId }) 
  * @param {import("react").ReactNode} [props.status]
  *   Drawn after the last crumb: the unsaved-changes dot and the renderer's
  *   status slot (its loading and update status). Small, and about the open file.
+ * @param {boolean} [props.empty]
+ *   No file is open. With no `leading` either, the left end would be blank —
+ *   a row of nothing over "No file open" with a lone toggle at the far right —
+ *   so it says what the row is: a muted "Files", the name of the toggle beside it.
  * @param {import("react").ReactNode} [props.trailing]
  *   The right end: panel toggles, and whatever the host puts in front of
  *   them. Never shrinks.
@@ -83,6 +87,7 @@ export function FileNavRow({
   leading = null,
   status = null,
   trailing = null,
+  empty = false,
   className
 }) {
   return (
@@ -103,7 +108,7 @@ export function FileNavRow({
         aria-label="Breadcrumb"
         className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden text-sm"
       >
-        {leading}
+        {leading ?? (empty ? <span className="truncate px-0.5 text-muted-foreground" data-file-nav-empty="">Files</span> : null)}
         <Breadcrumbs activePath={activePath} crumbs={crumbs} onOpen={onOpen} source={source} />
         {status}
       </nav>

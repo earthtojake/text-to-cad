@@ -3,7 +3,9 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { findPathTokens, looksLikePath, pathToken } from "@renderer/features/session/links/grammar";
+import { PartsList } from "@renderer/features/session/parts/PartsList";
 import { PathLink, TranscriptScopeContext, pathTarget } from "@renderer/features/session/links/PathLink";
+import { TranscriptImage } from "@renderer/features/session/links/TranscriptImage";
 import { remarkPathLinks } from "@renderer/features/session/links/remarkPathLinks";
 import { useExplorer } from "@renderer/state/explorer";
 import { scopeKey, usePathLinks } from "@renderer/state/path-links";
@@ -18,12 +20,18 @@ import { scopeKey, usePathLinks } from "@renderer/state/path-links";
 
 describe("the path grammar", () => {
   it("recognises relative paths and file names, not versions, URLs or absolute paths", () => {
-    for (const yes of ["models/bracket.step", "README.md", "src/", "src/main", "apps/desktop/AGENTS.md", "Makefile.in", "a.b/c"]) {
+    for (const yes of ["models/bracket.step", "README.md", "src/", "src/main", "apps/desktop/AGENTS.md", "Makefile.in", "a.b/c", "/Users/me/p/a.step", "/etc/hosts", "v1..v2.txt", "..keep/a.txt"]) {
       expect(looksLikePath(yes), yes).toBe(true);
     }
-    for (const no of ["0.5.0", "3.14", "https://x.y/z", "/etc/hosts", "~/x", "C:\\x", "foo:", "a..b", "hello", "."]) {
+    for (const no of ["0.5.0", "3.14", "https://x.y/z", "/clear", "//x/y", "~/x", "C:\\x", "foo:", "../x", "a/../b", "hello", "."]) {
       expect(looksLikePath(no), no).toBe(false);
     }
+  });
+
+  it("finds an absolute path in prose and keeps its leading slash", () => {
+    expect(findPathTokens("Wrote /Users/me/proj/models/a.step#o1, done.").map((token) => [token.raw, token.path, token.selector])).toEqual([
+      ["/Users/me/proj/models/a.step#o1", "/Users/me/proj/models/a.step", "o1"],
+    ]);
   });
 
   it("finds tokens in prose, shedding the sentence's punctuation", () => {
@@ -86,6 +94,20 @@ describe("remarkPathLinks", () => {
 });
 
 describe("pathTarget", () => {
+  it("reads a marked absolute path only inside the root: outside it, or with no root known, it is words", () => {
+    expect(pathTarget("/Users/me/p/models/a.step?abs#o1", "/Users/me/p")).toEqual({ path: "models/a.step", selector: "o1" });
+    expect(pathTarget("/etc/hosts?abs", "/Users/me/p")).toBeNull();
+    expect(pathTarget("/Users/me/pp/a.step?abs", "/Users/me/p")).toBeNull();
+    expect(pathTarget("/etc/hosts?abs")).toBeNull();
+  });
+
+  it("reads an absolute path inside the root against it, and one outside as a workspace path that is not there", () => {
+    expect(pathTarget("/Users/me/p/models/a.step#o1", "/Users/me/p")).toEqual({ path: "models/a.step", selector: "o1" });
+    expect(pathTarget("/Users/me/p/", "/Users/me/p/")).toBeNull();
+    expect(pathTarget("/Users/me/other/a.step", "/Users/me/p")).toEqual({ path: "Users/me/other/a.step", selector: "" });
+    expect(pathTarget("/Users/me/pp/a.step", "/Users/me/p")).toEqual({ path: "Users/me/pp/a.step", selector: "" });
+  });
+
   it("reads the path and selector back from the hrefs the pipeline produces", () => {
     expect(pathTarget("./models/x.step#o1.2")).toEqual({ path: "models/x.step", selector: "o1.2" });
     expect(pathTarget("/models/x.step#label.f45")).toEqual({ path: "models/x.step", selector: "label.f45" });
@@ -94,6 +116,10 @@ describe("pathTarget", () => {
     expect(pathTarget("https://example.com/x.step")).toBeNull();
     expect(pathTarget("mailto:a@b.c")).toBeNull();
     expect(pathTarget("/../etc")).toBeNull();
+    expect(pathTarget("../x")).toBeNull();
+    expect(pathTarget("docs/..%2Fx")).toBeNull();
+    expect(pathTarget("v1..v2.txt")).toMatchObject({ path: "v1..v2.txt" });
+    expect(pathTarget("..keep/a.txt")).toMatchObject({ path: "..keep/a.txt" });
   });
 });
 
@@ -163,6 +189,36 @@ describe("PathLink", () => {
     expect(useExplorer.getState().tabs[0]).toMatchObject({ kind: "file", path: null });
   });
 
+  it("an absolute path inside the project renders a link to the file; one outside stays words", async () => {
+    const exists = vi.fn(async ({ paths }: { paths: string[] }) => Object.fromEntries(paths.map((path) => [path, path === "models/a.step" ? "file" : null])));
+    (window.textToCad.explorer as unknown as Record<string, unknown>).exists = exists;
+    const rooted = { projectId: "p1", root: null, rootPath: "/Users/me/p" };
+    render(
+      <TranscriptScopeContext.Provider value={rooted}>
+        <PathLink href="/Users/me/p/models/a.step">/Users/me/p/models/a.step</PathLink>
+        <PathLink href="/Users/me/elsewhere/b.step">/Users/me/elsewhere/b.step</PathLink>
+      </TranscriptScopeContext.Provider>,
+    );
+    await waitFor(() => expect(screen.getByRole("button", { name: /\/Users\/me\/p\/models\/a\.step/ })).toHaveAttribute("data-path-link", "models/a.step"));
+    expect(screen.getAllByRole("button")).toHaveLength(1);
+  });
+
+  it("an exists error is not pinned: the next hover asks again and the answer becomes a link", async () => {
+    const user = userEvent.setup();
+    const exists = vi
+      .fn<(request: { paths: string[] }) => Promise<Record<string, string | null>>>()
+      .mockRejectedValueOnce(new Error("ipc down"))
+      .mockResolvedValue({ "models/x.step": "file" });
+    (window.textToCad.explorer as unknown as Record<string, unknown>).exists = exists;
+    wrap("./models/x.step", "models/x.step");
+    await waitFor(() => expect(screen.getByText("models/x.step")).toHaveAttribute("data-path-retry"));
+    expect(screen.queryByRole("button")).toBeNull();
+    expect(exists).toHaveBeenCalledTimes(1);
+    await user.hover(screen.getByText("models/x.step"));
+    await waitFor(() => expect(screen.getByRole("button", { name: /models\/x\.step/ })).toBeInTheDocument());
+    expect(exists).toHaveBeenCalledTimes(2);
+  });
+
   it("leaves a missing path as text and a URL as an outside link", async () => {
     (window.textToCad.explorer as unknown as Record<string, unknown>).exists = vi.fn(async () => ({ "gone.md": null }));
     wrap("./gone.md", "gone.md");
@@ -173,5 +229,91 @@ describe("PathLink", () => {
 
     wrap("https://example.com/docs", "the docs");
     expect(screen.getByRole("link", { name: "the docs" })).toHaveAttribute("href", "https://example.com/docs");
+  });
+
+  /**
+   * An outside link opens in one click, and its label is the agent's words —
+   * `[docs.python.org](https://somewhere.else/…)` reads as one place and goes
+   * to another. The hint says where it really goes (the kit's, not a native
+   * `title`).
+   */
+  it("says where an outside link really goes on hover", async () => {
+    const user = userEvent.setup();
+    wrap("https://somewhere.example/collect?d=1", "docs.python.org");
+    const link = screen.getByRole("link", { name: "docs.python.org" });
+    expect(link).not.toHaveAttribute("title");
+    await user.hover(link);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("https://somewhere.example/collect?d=1");
+  });
+
+  it("breaks a long URL inside the hint rather than running out of its box", async () => {
+    const user = userEvent.setup();
+    const long = "https://example.org/very/long/path/that/goes/on/and/on/and/on/and/on/and/on/and/on/and/on?query=1&other=2";
+    wrap(long, long);
+    await user.hover(screen.getByRole("link"));
+    await screen.findByRole("tooltip");
+    const hint = document.querySelector("[data-slot=tooltip-content] [data-link-hint]");
+    expect(hint).toHaveClass("break-all");
+  });
+});
+
+describe("an absolute path in an agent's prose, through the markdown pipeline", () => {
+  it("becomes a link when it lies inside the project", async () => {
+    usePathLinks.setState({ kinds: {} });
+    (window.textToCad.explorer as unknown as Record<string, unknown>).exists = vi.fn(async ({ paths }: { paths: string[] }) =>
+      Object.fromEntries(paths.map((path) => [path, path === "models/a.step" ? "file" : null])),
+    );
+    render(
+      <TranscriptScopeContext.Provider value={{ projectId: "p1", root: null, rootPath: "/Users/me/p" }}>
+        <PartsList open={false} parts={[{ type: "text", text: "Wrote `/Users/me/p/models/a.step` and /usr/bin/env." }]} prefix="t" sessionId="s1" />
+      </TranscriptScopeContext.Provider>,
+    );
+    const link = await screen.findByRole("button", { name: /models\/a\.step/ });
+    expect(link).toHaveAttribute("data-path-link", "models/a.step");
+    expect(screen.getAllByRole("button")).toHaveLength(1);
+  });
+});
+
+describe("an absolute path outside the root, and a root the grammar cannot hold", () => {
+  const exists = (known: Record<string, "file">) =>
+    vi.fn(async ({ paths }: { paths: string[] }) => Object.fromEntries(paths.map((path) => [path, known[path] ?? null])));
+  const prose = (text: string, rootPath: string) =>
+    render(
+      <TranscriptScopeContext.Provider value={{ projectId: "p1", root: null, rootPath }}>
+        <PartsList open={false} parts={[{ type: "text", text }]} prefix="t" sessionId="s1" />
+      </TranscriptScopeContext.Provider>,
+    );
+
+  beforeEach(() => usePathLinks.setState({ kinds: {} }));
+
+  it("stays words in prose even when the same path exists under the root", async () => {
+    // `<root>/etc/hosts` exists; `/etc/hosts` is somewhere else entirely.
+    (window.textToCad.explorer as unknown as Record<string, unknown>).exists = exists({ "etc/hosts": "file", "models/a.step": "file" });
+    prose("See /etc/hosts and /Users/me/p/models/a.step.", "/Users/me/p");
+    const link = await screen.findByRole("button", { name: /models\/a\.step/ });
+    expect(link).toHaveAttribute("data-path-link", "models/a.step");
+    expect(screen.getAllByRole("button")).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: /hosts/ })).toBeNull();
+  });
+
+  it("links an absolute path under a root with a space in it", async () => {
+    (window.textToCad.explorer as unknown as Record<string, unknown>).exists = exists({ "models/a.step": "file", "b.md": "file" });
+    prose("Wrote /Users/me/My Project/models/a.step#o1 and `/Users/me/My Project/b.md`.", "/Users/me/My Project");
+    const link = await screen.findByRole("button", { name: /models\/a\.step/ });
+    expect(link).toHaveAttribute("data-path-link", "models/a.step");
+    expect(link).toHaveAttribute("data-path-selector", "o1");
+    expect(await screen.findByRole("button", { name: /b\.md/ })).toHaveAttribute("data-path-link", "b.md");
+  });
+
+  it("reads an image at an absolute path under the root through the project", async () => {
+    const readBinary = vi.mocked(window.textToCad.explorer.readBinary);
+    readBinary.mockResolvedValue({ path: "render.png", mime: "image/png", size: 4, dataUrl: "data:image/png;base64,AAAA" });
+    render(
+      <TranscriptScopeContext.Provider value={{ projectId: "p1", root: null, rootPath: "/Users/me/p" }}>
+        <TranscriptImage alt="r" src="/Users/me/p/render.png" />
+      </TranscriptScopeContext.Provider>,
+    );
+    expect(await screen.findByAltText("r")).toHaveAttribute("src", "data:image/png;base64,AAAA");
+    expect(readBinary).toHaveBeenCalledWith({ projectId: "p1", path: "render.png" });
   });
 });

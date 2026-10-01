@@ -1,6 +1,12 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createDesktopCadCommands } from "@renderer/features/explorer/host/cadCommands";
 import { useExplorer } from "@renderer/state/explorer";
+import { desktopCadLive, performCadViewerCommand } from "@renderer/state/live-cad";
+import { MAX_IMAGE_BYTES } from "@shared/image-cap";
+import type { CadLiveController } from "@text-to-cad/ui/renderers/step";
+
+const shrink = vi.hoisted(() => vi.fn());
+vi.mock("@renderer/lib/shrink-image", () => ({ shrinkImage: shrink }));
 
 beforeEach(() => {
   vi.useFakeTimers();
@@ -75,4 +81,34 @@ it("asks the active CAD tab to open an annotation, once, and forgets it when the
   useExplorer.getState().openCadAnnotation(tab.id, "a2");
   useExplorer.getState().update(tab.id, { path: "other.step" });
   expect(source.getSnapshot().openAnnotation).toBeNull();
+});
+
+async function captureWith(capture: () => Promise<Blob>, readState: () => object = () => ({ active: true, resource: { path: "a.step" } })) {
+  const scope = { projectId: "project", root: null };
+  desktopCadLive("cap-tab", scope).bind({ readState, capture } as unknown as CadLiveController);
+  return performCadViewerCommand("capture-view", { tabId: "cap-tab" }, { ...scope, path: "a.step" }) as Promise<{ base64: string; scaled?: boolean; camera?: unknown }>;
+}
+it("scales a viewer capture over the model image limit down, and says so", async () => {
+  const big = new Blob([new Uint8Array(4 * 1024 * 1024)], { type: "image/png" });
+  shrink.mockReset().mockResolvedValueOnce(new Blob([new Uint8Array([137, 80, 78, 71])], { type: "image/png" }));
+  const result = await captureWith(async () => big);
+  expect(big.size).toBeGreaterThan(MAX_IMAGE_BYTES);
+  expect(shrink).toHaveBeenCalled();
+  expect(result.scaled).toBe(true);
+  expect(result.base64.length * 3 / 4).toBeLessThan(MAX_IMAGE_BYTES);
+});
+it("passes a capture already under the limit through untouched", async () => {
+  shrink.mockReset();
+  const result = await captureWith(async () => new Blob([new Uint8Array([137, 80, 78, 71])], { type: "image/png" }));
+  expect(shrink).not.toHaveBeenCalled();
+  expect(result).not.toHaveProperty("scaled");
+});
+it("rejects a viewer capture that fails, so the agent gets an error and not an image", async () => {
+  await expect(captureWith(async () => { throw new Error("the viewer's WebGL context is lost; try again once it restores"); })).rejects.toThrow(/WebGL context is lost/);
+});
+it("reports the state AFTER the capture resolves, since the capture waits for the camera to rest", async () => {
+  let camera = "mid-flight";
+  const result = await captureWith(async () => { camera = "at rest"; return new Blob([new Uint8Array([137, 80, 78, 71])], { type: "image/png" }); },
+    () => ({ active: true, resource: { path: "a.step" }, camera }));
+  expect(result.camera).toBe("at rest");
 });

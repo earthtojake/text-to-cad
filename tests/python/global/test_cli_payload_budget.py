@@ -84,6 +84,8 @@ class CompactStdoutTests(unittest.TestCase):
         "packages/cadgen/src/cadgen/_internal/cli_from_function.py",
         "packages/cadgen/src/cadgen/cli/_run_model.py",
         "packages/cadgen/src/cadgen/cli/daemon_status.py",
+        # `cadgen doctor --json`: the one-line report the desktop reads.
+        "packages/cadgen/src/cadgen/cli/doctor.py",
         "packages/cadgen/src/cadgen/cli/store.py",
     )
 

@@ -9,6 +9,7 @@
  */
 import { useEffect } from "react";
 
+import { isPrimaryModifier } from "@renderer/lib/platform";
 import { useUi } from "@renderer/state/ui";
 
 export function useSettingsShortcuts(): void {
@@ -17,7 +18,7 @@ export function useSettingsShortcuts(): void {
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "," && (event.metaKey || event.ctrlKey)) {
+      if (event.key === "," && isPrimaryModifier(event)) {
         event.preventDefault();
         openSettings();
         return;

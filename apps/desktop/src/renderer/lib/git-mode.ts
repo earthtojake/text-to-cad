@@ -116,7 +116,7 @@ export function gitModeAvailability(
     return { available: true };
   }
   if (!info.isRepository) {
-    return { available: false, reason: "Project is not a git repository, worktree mode unavailable" };
+    return { available: false, reason: info.problem ?? "Project is not a git repository, worktree mode unavailable" };
   }
   if (info.unborn) {
     return { available: false, reason: "This repository has no commits yet to branch from" };

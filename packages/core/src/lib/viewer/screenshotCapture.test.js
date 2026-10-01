@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  buildCompositeScreenshotBlob,
   canvasToBlob,
   dataUrlToBlob,
   flipPixelsVertically,
@@ -257,4 +258,24 @@ test("resolveElementBackgroundColor walks to the first opaque computed backgroun
     restoreDocument();
     restoreWindow();
   }
+});
+
+test("buildCompositeScreenshotBlob refuses a lost WebGL context instead of returning a blank picture", async () => {
+  let rendered = false;
+  const runtime = {
+    scene: {},
+    camera: {},
+    renderer: {
+      domElement: { width: 40, height: 30 },
+      getContext: () => ({ isContextLost: () => true }),
+      getRenderTarget: () => null,
+      setRenderTarget() {},
+      render() { rendered = true; }
+    }
+  };
+  await assert.rejects(
+    buildCompositeScreenshotBlob(runtime, null),
+    /WebGL context is lost; try again once it restores/
+  );
+  assert.equal(rendered, false);
 });

@@ -8,7 +8,8 @@
  * `Create pull request` via `gh`.
  *
  * Watching lives in `src/main/explorer/fs.ts`, next to the tree it feeds,
- * rather than in a `watcher.ts` here: there is one watcher per project root
- * and its only consumer is the explorer.
+ * rather than in a `watcher.ts` here: one chokidar watcher per root, plus
+ * direct watches on the directories on screen, and its only consumer is the
+ * explorer.
  */
 export * from "./git";

@@ -1,6 +1,8 @@
 import { FolderOpen, MessageSquarePlus } from "lucide-react";
+import { revealLabel } from "@text-to-cad/ui/navigation";
 
 import { MenuItem } from "@renderer/features/sidebar/menu";
+import { platform } from "@renderer/lib/platform";
 import { useProjects } from "@renderer/state/projects";
 import { useSessions } from "@renderer/state/sessions";
 import type { Project } from "@shared/types";
@@ -28,7 +30,7 @@ export function ProjectMenuItems({
     <>
       <MenuItem
         icon={<MessageSquarePlus />}
-        label="New chat here"
+        label="New session here"
         onSelect={() => {
           setActiveProject(project.id);
           setActiveSession(null);
@@ -40,8 +42,8 @@ export function ProjectMenuItems({
       />
       <MenuItem
         icon={<FolderOpen />}
-        label="Reveal in Finder"
-        onSelect={() => void window.textToCad.shell.showItemInFolder({ path: project.path })}
+        label={revealLabel(platform)}
+        onSelect={() => void window.textToCad.shell.showItemInFolder({ projectId: project.id })}
       />
     </>
   );

@@ -1,6 +1,8 @@
+import { toast } from "sonner";
 import type { FileActions, FileSource, FileMutationResult, ManagedFileAsset } from "@text-to-cad/ui/file-viewer";
 import type { ExternalEntryAction } from "@text-to-cad/ui/file-viewer";
 import { closeSessionTab, readSessionStrip, revealSessionPath, useExplorer } from "@renderer/state/explorer";
+import { desktopSourceId } from "@renderer/state/live-documents";
 import type { FileMutationResult as NativeMutationResult } from "@shared/ipc/explorer";
 import type { ExplorerRoot } from "@shared/types";
 import { platform } from "@renderer/lib/platform";
@@ -12,9 +14,16 @@ import { viewerFileChange } from "../file-changes";
 export function createDesktopFileSource({ sessionId, projectId, projectName, root }: { sessionId: string; projectId: string; projectName: string | (() => string); root: ExplorerRoot }): FileSource {
   const context = { projectId, root };
   const at = requestAt(context);
-  const id = JSON.stringify(["desktop", projectId, root]);
+  const id = desktopSourceId(projectId, root);
   const listeners = new Set<Parameters<NonNullable<FileSource["subscribe"]>>[0]>();
   let unsubscribe: (() => void) | undefined;
+  // The files this tab has opened: main keeps what it needs to follow each
+  // through a move until the tab gives them back on its unwatch. Given back
+  // and subscribed again (a remount), they are held again. A set, not a count
+  // per stat: a file rewritten every few hundred ms restats on each reload,
+  // and a payload of one path per stat outgrows the channel's cap.
+  let opened = new Set<string>();
+  let released = new Set<string>();
   const checked = async <T>(signal: AbortSignal, operation: () => Promise<T>): Promise<T> => {
     signal.throwIfAborted();
     const result = await operation();
@@ -34,9 +43,14 @@ export function createDesktopFileSource({ sessionId, projectId, projectName, roo
       try {
         if (effect === "trash") {
           const strip = await readSessionStrip(sessionId);
+          // Each tab on its own: one with unsaved changes refuses to close, and the rest still do.
+          const left: string[] = [];
           for (const tab of strip.tabs) {
-            if (tab.kind === "file" && tab.root === root && tab.path !== null && (tab.path === result.path || tab.path.startsWith(`${result.path}/`))) await closeSessionTab(sessionId, tab.id);
+            if (tab.kind === "file" && tab.root === root && tab.path !== null && (tab.path === result.path || tab.path.startsWith(`${result.path}/`))) {
+              try { await closeSessionTab(sessionId, tab.id); } catch (error) { left.push(`${tab.path} (${messageOf(error)})`); }
+            }
           }
+          if (left.length > 0) toast.error(`Moved to Trash, but ${left.length === 1 ? "1 open tab" : `${left.length} open tabs`} could not be closed: ${left.join("; ")}`);
         }
         if (effect === "reveal") await revealSessionPath(sessionId, projectId, root, result.path, result.change.directory);
       } catch { /* A closed/archived session cannot revoke a committed file operation. */ }
@@ -47,11 +61,20 @@ export function createDesktopFileSource({ sessionId, projectId, projectName, roo
     id,
     get rootName() { return typeof projectName === "function" ? projectName() : projectName; },
     async stat(path, { signal }) {
-      const stat = await checked(signal, () => window.textToCad.explorer.stat({ ...at, path }));
+      // The viewer stats a file as it opens it: this is the one stat that counts as an open
+      // (file_opened) and watches the entry. Attachments and integrations stat without it.
+      // Only the first stat of a path says so: main takes one hold per open-stat and this
+      // record gives back one per path, so a reload's restat is a plain stat.
+      signal.throwIfAborted();
+      const stat = await window.textToCad.explorer.stat({ ...at, path, ...(opened.has(path) ? {} : { intent: "open" as const }) });
+      // Counted before the abort check: main counted it when it answered.
+      if (stat.kind === "file") opened.add(stat.path);
+      signal.throwIfAborted();
       return { ...stat, mediaType: stat.fileKind };
     },
     list: (path, { signal }) => checked(signal, () => window.textToCad.explorer.list({ ...at, path })),
-    paths: ({ signal }) => checked(signal, async () => (await window.textToCad.explorer.paths({ ...at, path: "" })).paths),
+    // `truncated` rides along: the filter says when the index stopped short of the project.
+    paths: ({ signal }) => checked(signal, () => window.textToCad.explorer.paths({ ...at, path: "" })),
     readText: (path, { signal }) => checked(signal, () => window.textToCad.explorer.readText({ ...at, path })),
     async readAsset(path, { signal }): Promise<ManagedFileAsset> {
       const binary = await checked(signal, () => window.textToCad.explorer.readBinary({ ...at, path }));
@@ -81,9 +104,17 @@ export function createDesktopFileSource({ sessionId, projectId, projectName, roo
     subscribe(listener) {
       listeners.add(listener);
       if (!unsubscribe) {
-        void window.textToCad.explorer.watch(at).catch(() => {});
+        const again = [...released];
+        for (const path of released) opened.add(path);
+        released = new Set();
+        void window.textToCad.explorer.watch({ ...at, ...(again.length ? { paths: again } : {}) }).catch(() => {});
         unsubscribe = useExplorer.subscribe((next, previous) => {
           if (next.projectId === projectId && next.fsRevision !== previous.fsRevision && next.changedRoot === root) {
+            // Main moves its holds with a moved file; so does this record.
+            for (const entry of next.changedEntries) {
+              if (entry.kind !== "moved" || !opened.delete(entry.previousPath)) continue;
+              opened.add(entry.path);
+            }
             const change = { sourceId: id, changes: next.changedEntries.map(viewerFileChange) };
             for (const subscriber of listeners) subscriber(change);
           }
@@ -93,7 +124,10 @@ export function createDesktopFileSource({ sessionId, projectId, projectName, roo
         listeners.delete(listener);
         if (listeners.size === 0) {
           unsubscribe?.(); unsubscribe = undefined;
-          void window.textToCad.explorer.unwatch(at).catch(() => {});
+          const paths = [...opened];
+          released = opened;
+          opened = new Set();
+          void window.textToCad.explorer.unwatch({ ...at, ...(paths.length ? { paths } : {}) }).catch(() => {});
         }
       };
     },

@@ -12,8 +12,21 @@ import type { editor } from "monaco-editor";
 export const MONACO_LIGHT = "text-to-cad-light";
 export const MONACO_DARK = "text-to-cad-dark";
 
+/**
+ * The transcript's variants: the same colours on a transparent background, so
+ * a diff in a reply sits on the transcript itself. Names of their own — a
+ * second `defineTheme` under the shell theme's name replaces it for every
+ * editor in the window, which is how the review once lost its colours.
+ */
+export const MONACO_TRANSCRIPT_LIGHT = "text-to-cad-transcript-light";
+export const MONACO_TRANSCRIPT_DARK = "text-to-cad-transcript-dark";
+
 export function monacoTheme(resolved: "light" | "dark"): string {
   return resolved === "dark" ? MONACO_DARK : MONACO_LIGHT;
+}
+
+export function transcriptMonacoTheme(resolved: "light" | "dark"): string {
+  return resolved === "dark" ? MONACO_TRANSCRIPT_DARK : MONACO_TRANSCRIPT_LIGHT;
 }
 
 /**
@@ -118,12 +131,31 @@ export function monacoModelUri(
   return `text-to-cad-file://model/${encoded.join("/")}`;
 }
 
-/** Editor options shared by the code view and the diff views. */
+/** Before Settings has written `--font-mono`, and in a test with no stylesheet. */
+const FALLBACK_CODE_FONT =
+  'ui-monospace, "SF Mono", SFMono-Regular, Menlo, Monaco, "Cascadia Mono", Consolas, monospace';
+
+/**
+ * Settings' Code font, which `use-appearance.ts` writes to `--font-mono` on
+ * <html>. Resolved to the family itself, not `var(--font-mono)`: Monaco
+ * measures glyphs on a canvas, and a canvas does not resolve variables.
+ */
+export function codeFontFamily(): string {
+  if (typeof document === "undefined") return FALLBACK_CODE_FONT;
+  return getComputedStyle(document.documentElement).getPropertyValue("--font-mono").trim() || FALLBACK_CODE_FONT;
+}
+
+/**
+ * Editor options shared by the code view and the diff views. `fontFamily` is
+ * read when the options are spread into an editor, so every editor and diff
+ * opens in the Code font Settings chose.
+ */
 export const SHARED_EDITOR_OPTIONS = {
   fontSize: 12.5,
   lineHeight: 20,
-  fontFamily:
-    'ui-monospace, "SF Mono", SFMono-Regular, Menlo, Monaco, "Cascadia Mono", Consolas, monospace',
+  get fontFamily(): string {
+    return codeFontFamily();
+  },
   fontLigatures: false,
   minimap: { enabled: false },
   // A desktop pane, not a document: an editor that scrolls a screen past the

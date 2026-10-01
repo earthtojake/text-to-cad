@@ -16,10 +16,10 @@ files:
   - package.json
   - "!**/*.map"
 
-# What ships beside the app rather than inside the asar. Every directory here
-# is committed empty (a .gitkeep and a README) and `scripts/package.mjs`
-# recreates them before every build, so a checkout that never ran a build
-# script still has a source for each entry.
+# What ships beside the app rather than inside the asar. Every directory a
+# build fills (runtime, cadgen, skills) is committed empty (a .gitkeep) and
+# `scripts/package.mjs` recreates them before every build, so a checkout that
+# never ran a build script still has a source for each entry.
 #
 # Measured against electron-builder 26.15.3, not assumed: a MISSING source here
 # is tolerated (the build succeeds and copies nothing) and an EMPTY one produces
@@ -110,9 +110,11 @@ mac:
   #     + APPLE_TEAM_ID                      -> and notarised (--config.mac.notarize=true)
   #   neither                                -> CSC_IDENTITY_AUTO_DISCOVERY=false
   #
-  # `hardenedRuntime` and the entitlements stay on either way: they cost
-  # nothing on an unsigned build, and leaving them off would mean the first
-  # signed build is the first time they are exercised. `notarize` is false here
+  # `hardenedRuntime` and the entitlements are configuration, not something an
+  # unsigned build exercises: codesign is what applies them, so only a signed
+  # build ever tests them, and a signed rehearsal (`CSC_LINK` on a laptop) is a
+  # manual step. Both plists carry every key electron-builder's own template
+  # does. `notarize` is false here
   # and turned on by the packaging script, because a notarize attempt without
   # credentials fails the whole run.
   hardenedRuntime: true

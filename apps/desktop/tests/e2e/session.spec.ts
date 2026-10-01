@@ -1,9 +1,9 @@
 import fs from "node:fs";
 import path from "node:path";
 
-import { expect, test, type ElectronApplication, type Page } from "@playwright/test";
+import { expect, type ElectronApplication, type Page } from "@playwright/test";
 import type { TextToCadApi } from "../../src/shared/ipc";
-import { launch, scratch, settledLayout } from "./launch";
+import { chooseDirectory, launch, scratch, setTheme as setThemeIn, settledLayout, shoot as shootInto, test } from "./launch";
 
 /**
  * The session UI against the fake agent (plan §12): new session → prompt →
@@ -58,7 +58,7 @@ test.beforeAll(async () => {
     }
   });
   await page.evaluate((value) => window.textToCad.settings.set({ theme: value }), "dark");
-  await page.evaluate((dir) => window.textToCad.projects.addPath({ path: dir }), project);
+  await chooseDirectory(app, project);
 });
 
 test.afterAll(async () => {
@@ -125,7 +125,7 @@ test("a new session runs a Codex-shaped turn through every state", async () => {
   await page.keyboard.press("Escape");
   await expect(menu).toBeHidden();
 
-  const composer = page.getByPlaceholder("Do anything");
+  const composer = page.getByPlaceholder("Describe a part to build…", { exact: true });
   await composer.fill("showcase: write a greeting script and tidy up");
   await composer.press("Enter");
 
@@ -200,7 +200,8 @@ test("a new session runs a Codex-shaped turn through every state", async () => {
   // line of text above the box.
   const ring = page.locator("[data-context-trigger]");
   await expect(ring).toHaveAttribute("aria-label", /^Context \d+% used$/);
-  await expect(ring).toHaveAttribute("title", /^[\d.]+k? \/ [\d.]+k? \(\d+%\)$/);
+  // Its token count is the kit's hover hint, never a native `title` (packages/ui/README.md).
+  await expect(ring).not.toHaveAttribute("title", /./);
 
   // Clicking it opens the breakdown, and it STAYS open — hover does nothing
   // and moving away does not take it back. The window as a bar with its
@@ -287,7 +288,7 @@ test("text in an agent's message can be selected", async () => {
   // Prepare that same turn when this test runs on its own as well.
   if ((await page.locator("[data-part=text]").count()) === 0) {
     await expect(page.locator("[data-new-session] [data-chip=model]")).toContainText("Fast");
-    const composer = page.getByPlaceholder("Do anything");
+    const composer = page.getByPlaceholder("Describe a part to build…", { exact: true });
     await composer.fill("showcase: write a greeting script and tidy up");
     await composer.press("Enter");
     await page.locator("[data-permission][data-outcome=pending]").getByRole("button", { name: "Yes", exact: true }).click();
@@ -434,7 +435,7 @@ test("the composer starts at one row, grows, and caps at eight", async () => {
 });
 
 test("stop cancels the running turn", async () => {
-  const composer = page.getByPlaceholder("Do anything");
+  const composer = page.getByPlaceholder("Do anything", { exact: true });
   await composer.fill("slow");
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: "Stop" })).toBeVisible();
@@ -446,7 +447,22 @@ test("stop cancels the running turn", async () => {
 });
 
 test("a queued prompt goes out when the turn ends", async () => {
-  const composer = page.getByPlaceholder("Do anything");
+  const composer = page.getByPlaceholder("Do anything", { exact: true });
+  await composer.fill("linger");
+  await composer.press("Enter");
+  await expect(page.getByRole("button", { name: "Stop" })).toBeVisible();
+  await page.getByPlaceholder("Send another message — it goes next").fill("thought and then ok");
+  await page.keyboard.press("Enter");
+  await expect(page.getByText("1 queued prompt")).toBeVisible();
+  // The turn ends by itself, nobody pressed Stop: the queue is not paused and the next prompt goes out.
+  await expect(page.getByText("1 queued prompt")).toBeHidden({ timeout: 20_000 });
+  await expect(page.getByText(/^Paused after/)).toBeHidden();
+  await expect(page.locator("[data-turn][data-role=user]").last()).toContainText("thought and then ok");
+  await expect(page.locator("[data-session-view]")).toHaveAttribute("data-session-status", "idle", { timeout: 20_000 });
+});
+
+test("a queued prompt holds behind a Stop and goes out on Resume", async () => {
+  const composer = page.getByPlaceholder("Do anything", { exact: true });
   await composer.fill("slow");
   await composer.press("Enter");
   await expect(page.getByRole("button", { name: "Stop" })).toBeVisible();
@@ -454,13 +470,17 @@ test("a queued prompt goes out when the turn ends", async () => {
   await page.keyboard.press("Enter");
   await expect(page.getByText("1 queued prompt")).toBeVisible();
   await page.getByRole("button", { name: "Stop" }).click();
+  // Stop pauses the queue rather than starting the next prompt behind it.
+  await expect(page.getByText("Paused after you stopped")).toBeVisible();
+  await expect(page.getByText("1 queued prompt")).toBeVisible();
+  await page.getByRole("button", { name: "Resume" }).click();
   await expect(page.getByText("1 queued prompt")).toBeHidden();
   await expect(page.locator("[data-turn][data-role=user]").last()).toContainText("thought and then ok");
   await expect(page.locator("[data-session-view]")).toHaveAttribute("data-session-status", "idle", { timeout: 20_000 });
 });
 
 test("a crashed agent is an inline error with retry, and reconnecting resumes the history", async () => {
-  const composer = page.getByPlaceholder("Do anything");
+  const composer = page.getByPlaceholder("Do anything", { exact: true });
   await composer.fill("crash");
   await composer.press("Enter");
   await expect(page.locator("[data-part=error]")).toBeVisible();
@@ -491,6 +511,15 @@ test("the sidebar renames and archives a session", async () => {
   await row.getByRole("button", { name: /actions$/ }).click();
   await page.getByRole("menuitem", { name: "Rename" }).click();
   const input = page.getByLabel("Session title");
+  // Escape leaves the old name, in real Chromium where a blur may follow the box's removal.
+  const before = (await page.locator("[data-session-title]").innerText()).trim();
+  await input.fill("Not saved");
+  await input.press("Escape");
+  await expect(input).toHaveCount(0);
+  await expect(row).not.toContainText("Not saved");
+  await expect(row).toContainText(before);
+  await row.getByRole("button", { name: /actions$/ }).click();
+  await page.getByRole("menuitem", { name: "Rename" }).click();
   await input.fill("Greeting script");
   await input.press("Enter");
   await expect(row).toContainText("Greeting script");
@@ -519,7 +548,7 @@ test("the sidebar renames and archives a session", async () => {
 test("the new session is created in the mode its chip is on, and Manual waits", async () => {
   // The archive before this left no session, and so no folder: choose this one again, which is
   // what selects its new-session draft (`docs/session-workspaces.md`).
-  await page.evaluate((dir) => window.textToCad.projects.addPath({ path: dir }), project);
+  await chooseDirectory(app, project);
   await expect(page.getByRole("heading", { name: `What should we build in ${path.basename(project)}?` })).toBeVisible();
   const actionRow = page.locator("[data-new-session] [data-composer-row]");
   const chip = actionRow.locator("[data-chip=mode]");
@@ -544,7 +573,7 @@ test("the new session is created in the mode its chip is on, and Manual waits", 
   await expect(chip).toContainText("Manual");
   await expectNoChevrons();
 
-  const composer = page.getByPlaceholder("Do anything");
+  const composer = page.getByPlaceholder("Describe a part to build…", { exact: true });
   await composer.fill("permission to run ls");
   await composer.press("Enter");
 
@@ -560,8 +589,9 @@ test("the new session is created in the mode its chip is on, and Manual waits", 
   // And it was created in Manual: the fake reports what the client set on it
   // and which mode it ended in, so no `mode:` at all is the assertion —
   // `default` is where it starts and where the chip said to leave it.
-  await composer.fill("applied");
-  await composer.press("Enter");
+  const live = page.getByPlaceholder("Do anything", { exact: true });
+  await live.fill("applied");
+  await live.press("Enter");
   await expect(page.locator("[data-turn][data-role=agent]").last()).toContainText("in default");
   await expect(page.locator("[data-turn][data-role=agent]").last()).not.toContainText("mode:");
 });
@@ -577,16 +607,20 @@ test("the full-access mode is never asked anything", async () => {
   await page.getByRole("menu").getByRole("menuitemradio", { name: /Full access/ }).click();
   await expect(chip).toContainText("Full access");
 
-  const composer = page.getByPlaceholder("Do anything");
+  const composer = page.getByPlaceholder("Describe a part to build…", { exact: true });
   await composer.fill("permission to run ls");
   await composer.press("Enter");
+  // The turn itself first: `idle` is also what the view says before `prompt/start` lands, and a
+  // count of 0 taken then proves nothing. The agent's "ok" is the end of the turn that ran.
+  await expect(page.locator("[data-turn][data-role=agent]").first()).toContainText("ok", { timeout: 20_000 });
   await expect(page.locator("[data-session-view]")).toHaveAttribute("data-session-status", "idle", { timeout: 20_000 });
   // The same prompt as the test above, and no card: the request was never
   // made. Nothing here auto-answered one.
   await expect(page.locator("[data-permission]")).toHaveCount(0);
   await expect(page.locator("[data-status-line]")).toHaveCount(0);
-  await composer.fill("applied");
-  await composer.press("Enter");
+  const live = page.getByPlaceholder("Do anything", { exact: true });
+  await live.fill("applied");
+  await live.press("Enter");
   await expect(page.locator("[data-turn][data-role=agent]").last()).toContainText("mode:full in full");
 
   // Left as the tests after this expect the sidebar: no rows under the
@@ -607,9 +641,9 @@ test("the full-access mode is never asked anything", async () => {
 test("a signed-out agent asks to sign in", async () => {
   // Choosing a folder selects its new-session draft. A folder no session has used yet is not a
   // saved project, so it is not in the project chip's Recent list (`docs/session-workspaces.md`).
-  await page.evaluate((dir) => window.textToCad.projects.addPath({ path: dir }), signedOutProject);
+  await chooseDirectory(app, signedOutProject);
   await expect(page.getByRole("heading", { name: `What should we build in ${path.basename(signedOutProject)}?` })).toBeVisible();
-  const composer = page.getByPlaceholder("Do anything");
+  const composer = page.getByPlaceholder("Describe a part to build…", { exact: true });
   await composer.fill("hello");
   await composer.press("Enter");
   const auth = page.locator("[data-auth-prompt]");
@@ -622,7 +656,7 @@ test("a signed-out agent asks to sign in", async () => {
 
 /**
  * A failed tool call is counted beside the group's summary, never by painting the summary red,
- * and a thought is a quiet glyph rather than a sparkle.
+ * and a thought leads with the same quiet disclosure chevron as the group, rather than a sparkle.
  */
 test("activity keeps failures separate from the summary and uses a quiet thinking icon", async () => {
   const base = scratch("activity");
@@ -630,7 +664,7 @@ test("activity keeps failures separate from the summary and uses a quiet thinkin
   fs.mkdirSync(path.join(base, "models"));
   fs.writeFileSync(path.join(base, "README.md"), "# Preview project\n");
   await setTheme("light");
-  const added = await page.evaluate((root) => window.textToCad.projects.addPath({ path: root }), base);
+  const added = await chooseDirectory(app, base);
   const session = await page.evaluate((projectId) => window.textToCad.sessions.create({ projectId, agentId: "claude-code", gitMode: "none" }), added.id);
   await page.locator(`[data-session-row="${session.id}"]`).getByRole("button").first().click();
   // The read succeeds; writing to an existing directory fails safely.
@@ -642,7 +676,8 @@ test("activity keeps failures separate from the summary and uses a quiet thinkin
   await expect(summary).not.toHaveClass(/text-destructive/);
   await expect(group.locator("[data-activity-failures]")).toHaveText("1 failed");
   const thought = page.getByRole("button", { name: /^Thought/ });
-  await expect(thought.locator("svg.lucide-ellipsis")).toBeVisible();
+  // The chevron leads, on the same side as the activity group's.
+  await expect(thought.locator("[data-thought-chevron] svg.lucide-chevron-right")).toBeVisible();
   await expect(thought.locator("svg.lucide-sparkles")).toHaveCount(0);
   await shoot("activity-collapsed-light.png");
   await summary.click();
@@ -668,7 +703,7 @@ test("paths an agent writes are links that open in the explorer, and a typed ref
     fs.mkdirSync(path.dirname(path.join(workspace, file)), { recursive: true });
     fs.writeFileSync(path.join(workspace, file), `# ${path.basename(file)}\n`);
   }
-  const added = await page.evaluate((root) => window.textToCad.projects.addPath({ path: root }), workspace);
+  const added = await chooseDirectory(app, workspace);
   const session = await page.evaluate((projectId) => window.textToCad.sessions.create({ projectId, agentId: "claude-code", gitMode: "none" }), added.id);
   await page.locator(`[data-session-row="${session.id}"]`).getByRole("button").first().click();
   await expect(page.locator("[data-explorer-ready=true]")).toBeVisible();
@@ -687,7 +722,7 @@ test("paths an agent writes are links that open in the explorer, and a typed ref
   await expect(page.getByRole("tab", { name: /README\.md/ })).toBeVisible();
   await shoot("transcript-links.png");
 
-  const composer = page.getByPlaceholder("Do anything");
+  const composer = page.getByPlaceholder("Do anything", { exact: true });
   await composer.click();
   await page.keyboard.type(`make ${STEP}#o1.2 thicker, and #f3 `);
   const chips = page.locator("[data-composer] [data-reference-chip]");
@@ -714,14 +749,15 @@ test("paths an agent writes are links that open in the explorer, and a typed ref
 
 /** Observe this prompt's completed reply, rather than the preceding turn's idle state. */
 async function completeContextTurn(prompt: "context" | "limits") {
-  if (await page.locator("[data-new-session]").count()) {
+  const onNewSession = (await page.locator("[data-new-session]").count()) > 0;
+  if (onNewSession) {
     // These cases also run alone against beforeAll's empty project. Enter
     // cannot submit until the detector has supplied a model to launch.
     await expect(page.locator("[data-new-session] [data-chip=model]")).toContainText("Fast", { timeout: 30_000 });
   }
   const turns = page.locator("[data-session-view] [data-turn][data-role=agent]");
   const previousTurns = await turns.count();
-  const composer = page.getByPlaceholder("Do anything");
+  const composer = page.getByPlaceholder(onNewSession ? "Describe a part to build…" : "Do anything", { exact: true });
   await composer.fill(prompt);
   await composer.press("Enter");
   await expect(turns).toHaveCount(previousTurns + 1);
@@ -732,7 +768,7 @@ async function completeContextTurn(prompt: "context" | "limits") {
 }
 
 async function shoot(name: string) {
-  await page.screenshot({ path: test.info().outputPath(name), animations: "disabled" });
+  await shootInto(page, name, test.info());
 }
 
 /**
@@ -780,8 +816,7 @@ async function settled() {
 }
 
 async function setTheme(theme: "dark" | "light") {
-  await page.evaluate((value) => window.textToCad.settings.set({ theme: value }), theme);
-  await expect(page.locator("html")).toHaveClass(theme === "dark" ? /\bdark\b/ : /^(?!.*\bdark\b).*$/);
+  await setThemeIn(page, theme);
 }
 
 async function resizeWindow(width: number, height: number) {

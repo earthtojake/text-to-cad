@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { FileTab } from "@renderer/features/explorer/FileTab";
+import { EXPLORER_TABPANEL_ID } from "@renderer/features/explorer/focus";
 import { openSessionTab, useExplorer } from "@renderer/state/explorer";
 import type { Project } from "@shared/types";
 
@@ -218,6 +219,27 @@ describe("the panel a file opens with", () => {
     expect(useExplorer.getState().activeId).toBe(tabOf(OTHER)!.id);
     // The tab it was picked from keeps its own file and its own choice.
     expect(panelOf(tabId)).toMatchObject({ path: MARKDOWN, panel: "tree" });
+  });
+
+  it("takes the keyboard to the new tab's tree when Enter opens a file from a tree, not to the page", async () => {
+    stub("list", async ({ path }: { path: string }) => (path === "" ? ROOT_ENTRIES : []));
+    const first = useExplorer.getState().open("file", { path: MARKDOWN, panel: "tree" });
+    // The pane as ExplorerPane draws it: the active tab's body, keyed on the tab, in the panel.
+    function Pane() {
+      const activeId = useExplorer((state) => state.activeId);
+      return <div id={EXPLORER_TABPANEL_ID}>{activeId ? <Host key={activeId} tabId={activeId} /> : null}</div>;
+    }
+    render(<Pane />);
+    const row = await waitFor(() => {
+      const found = document.querySelector<HTMLElement>(`[role="treeitem"][data-path="${OTHER}"]`);
+      expect(found).not.toBeNull();
+      return found!;
+    });
+    row.focus();
+    await userEvent.keyboard("{Enter}");
+    await waitFor(() => expect(useExplorer.getState().activeId).not.toBe(first!.id));
+    await waitFor(() => expect(document.activeElement).not.toBe(document.body));
+    expect(document.activeElement).toHaveAttribute("role", "treeitem");
   });
 
   it("moves this tab to a file a crumb opens, on that file's own default", async () => {

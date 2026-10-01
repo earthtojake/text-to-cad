@@ -44,6 +44,12 @@ export type AgentOptionsDeps = {
   writeEffort(agentId: string, model: string, effort: string | null): void;
   /** Spawn the agent far enough to read its `session/new` reply. */
   probe(agentId: string, projectId: string | null): Promise<AgentSnapshot>;
+  /**
+   * Whether `probe` would run for this agent at all (`SessionManager.canProbe`).
+   * One it would refuse is not asked: that refusal is the rule, not a failure
+   * worth a log line on every launch.
+   */
+  probeable?: (agentId: string) => boolean | Promise<boolean>;
   onChange(all: AgentOptions[]): void;
   /** Failures land here rather than anywhere a person can see them. */
   onProbeFailed?: (agentId: string, error: unknown) => void;
@@ -162,6 +168,9 @@ export class AgentOptionStore {
    */
   async ensure(agentId: string, projectId: string | null): Promise<void> {
     if (this.deps.get(agentId)?.options.length || this.failed.has(agentId)) {
+      return;
+    }
+    if (this.deps.probeable && !(await this.deps.probeable(agentId))) {
       return;
     }
     const running = this.probes.get(agentId);

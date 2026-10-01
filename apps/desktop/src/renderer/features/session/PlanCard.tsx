@@ -23,35 +23,55 @@ import { formatDuration } from "./view";
 export function PlanCard({
   entries,
   startedAt,
+  endedAt,
   running,
 }: {
   entries: PlanEntry[];
   /** When the turn that produced the plan started, for the elapsed clock. */
   startedAt: number | null;
+  /** When that turn ended; the clock then says how long it took. */
+  endedAt: number | null;
+  /** Whether that turn — not the session — is the one running (`planClock`). */
   running: boolean;
 }) {
   const done = entries.filter((entry) => entry.status === "completed").length;
   const current = entries.find((entry) => entry.status === "in_progress") ?? entries.find((entry) => entry.status === "pending");
-  const elapsed = useElapsed(startedAt, running);
-  const title = current?.content ?? (done === entries.length ? "Plan complete" : "Plan");
+  const elapsed = useElapsed(startedAt, endedAt, running);
+  const complete = entries.length > 0 && done === entries.length;
+  const title = current?.content ?? (complete ? "Plan complete" : "Plan");
+  const progress = `${done} of ${entries.length} done${elapsed !== null ? ` · ${elapsed}` : ""}`;
 
+  // One row, read left to right: the icon, the words beside it, the toggle at
+  // the end. A finished plan has nothing left to watch, so it shrinks to a
+  // single line — still a trigger, so the steps are one click away.
   return (
     <Plan
       className="mx-auto w-full max-w-[720px] gap-0 rounded-xl border bg-card py-0 text-[13px] shadow-xs"
       data-plan-card
+      data-plan-complete={complete ? "" : undefined}
       defaultOpen={false}
       isStreaming={false}
     >
-      <PlanHeader className="grid grid-cols-[auto_1fr_auto] items-center gap-x-2 px-3 py-2 text-left">
-        <span className="row-span-2 flex size-6 items-center justify-center rounded-md bg-muted text-muted-foreground">
-          <Target className="size-3.5" />
+      <PlanHeader
+        className={cn("flex items-center gap-2.5 text-left", complete ? "px-2.5 py-1" : "px-3 py-2")}
+        data-plan-header
+      >
+        <span
+          className={cn(
+            "flex shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground",
+            complete ? "size-5" : "size-6",
+          )}
+        >
+          {complete ? <Check className="size-3" /> : <Target className="size-3.5" />}
         </span>
-        <PlanTitle className="truncate text-[13px] leading-5 font-medium">{title}</PlanTitle>
-        <PlanDescription className="text-[12px] leading-4">
-          {`${done} of ${entries.length} done${elapsed !== null ? ` · ${elapsed}` : ""}`}
-        </PlanDescription>
-        <PlanAction className="row-span-2 self-center">
-          <PlanTrigger className="size-7" />
+        <div className={cn("min-w-0 flex-1", complete ? "flex items-baseline gap-2" : "flex flex-col")}>
+          <PlanTitle className={cn("truncate text-[13px] font-medium", complete ? "leading-6" : "leading-5")}>
+            {title}
+          </PlanTitle>
+          <PlanDescription className="shrink-0 truncate text-[12px] leading-4">{progress}</PlanDescription>
+        </div>
+        <PlanAction className="shrink-0 self-center">
+          <PlanTrigger className={complete ? "size-6" : "size-7"} />
         </PlanAction>
       </PlanHeader>
       <PlanContent className="border-t px-3 py-2">
@@ -85,17 +105,26 @@ export function PlanCard({
   );
 }
 
-function useElapsed(startedAt: number | null, running: boolean): string | null {
+/**
+ * The turn's length once it ended; while it runs, the time since it started,
+ * ticking. A turn that neither ended nor runs (the agent went away mid-turn)
+ * has no length to say.
+ */
+function useElapsed(startedAt: number | null, endedAt: number | null, running: boolean): string | null {
+  const ticking = running && endedAt === null && startedAt !== null;
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
-    if (!running || startedAt === null) {
+    if (!ticking) {
       return;
     }
     const timer = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(timer);
-  }, [running, startedAt]);
+  }, [ticking]);
   if (startedAt === null) {
     return null;
   }
-  return formatDuration((running ? now : Math.max(now, startedAt)) - startedAt);
+  if (endedAt !== null) {
+    return formatDuration(endedAt - startedAt);
+  }
+  return ticking ? formatDuration(Math.max(now, startedAt) - startedAt) : null;
 }

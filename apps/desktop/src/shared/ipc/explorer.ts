@@ -55,6 +55,8 @@ export const TextFileSchema = z.object({
   modifiedAt: z.number(),
   size: z.number(),
   truncated: z.boolean(),
+  /** Not UTF-8: shown, never saved back (`readTextFile`). */
+  readOnly: z.boolean().optional(),
 });
 
 export const BinaryFileSchema = z.object({
@@ -107,6 +109,8 @@ const InProject = z.object({ projectId: z.string().min(1) });
  */
 const InRoot = InProject.extend({ root: z.string().optional() });
 const AtPath = InRoot.extend({ path: z.string() });
+/** A pty, and the session asking for it — see `terminal.write`. */
+const OwnedPty = z.object({ id: z.string().min(1), sessionId: z.string().min(1) });
 
 /** What `explorer.exists` answers per path: what is there, or nothing. */
 export const PathKindSchema = z.enum(["file", "directory"]).nullable();
@@ -124,7 +128,13 @@ export const explorerIpc = {
       AtPath.extend({ limit: z.number().int().positive().max(100_000).optional() }),
       z.object({ paths: z.array(z.string()), truncated: z.boolean() }),
     ),
-    stat: invoke(AtPath, FileStatSchema),
+    /**
+     * One entry's metadata. `intent: "open"` is set by the file tab alone
+     * (`fileSource.ts`): only then does main count `file_opened` and watch
+     * the entry's directory. An attachment check or an integration lookup
+     * stats files nobody opened, and leaves it out.
+     */
+    stat: invoke(AtPath.extend({ intent: z.literal("open").optional() }), FileStatSchema),
     /**
      * Which of `paths` exist under the root, in one round trip. The
      * transcript asks this for every path-shaped token in a message before
@@ -171,9 +181,17 @@ export const explorerIpc = {
     /** The OS trash, never `rm`: the one destructive item is the reversible one. */
     trash: invoke(AtPath, FileMutationResultSchema),
 
-    /** Start (or join) the root's watcher. Refcounted in main. */
-    watch: invoke(InRoot, z.void()),
-    unwatch: invoke(InRoot, z.void()),
+    /**
+     * Start (or join) the root's watcher. Refcounted in main. `paths` are
+     * files a tab opened before, handed back on an earlier unwatch and held
+     * again now (`fileSource.ts`).
+     */
+    watch: invoke(InRoot.extend({ paths: z.array(z.string()).max(10_000).optional() }), z.void()),
+    /**
+     * Leave it. `paths` are the files the leaving tab opened, once per
+     * distinct path: main forgets what it kept to follow them (`FileWatchers.unwatch`).
+     */
+    unwatch: invoke(InRoot.extend({ paths: z.array(z.string()).max(10_000).optional() }), z.void()),
 
     /** The persisted tab strip for a session (the `explorer_tabs` table). */
     loadTabs: invoke(z.object({ sessionId: z.string().min(1) }), z.array(PersistedExplorerTabSchema)),
@@ -193,16 +211,16 @@ export const explorerIpc = {
         cwd: z.string().optional(),
         cols: z.number().int().positive().optional(),
         rows: z.number().int().positive().optional(),
-        /** Tests run one command instead of an interactive shell. */
-        shell: z.string().optional(),
-        args: z.array(z.string()).optional(),
+        /** The tab was opened by the agent: its shell gets the runtime launchers on PATH. */
+        agent: z.boolean().optional(),
       }),
       TerminalInfoSchema,
     ),
-    write: invoke(z.object({ id: z.string().min(1), data: z.string() }), z.void()),
+    // After `create` a pty is named by its id *and* the session that opened
+    // it; main refuses a request whose session does not own the pty.
+    write: invoke(OwnedPty.extend({ data: z.string() }), z.void()),
     resize: invoke(
-      z.object({
-        id: z.string().min(1),
+      OwnedPty.extend({
         cols: z.number().int().positive(),
         rows: z.number().int().positive(),
       }),
@@ -213,12 +231,12 @@ export const explorerIpc = {
      * the output sequence the snapshot ends at — see `terminal.data`.
      */
     attach: invoke(
-      z.object({ id: z.string().min(1) }),
+      OwnedPty,
       z
         .object({ info: TerminalInfoSchema, scrollback: z.string(), seq: z.number() })
         .nullable(),
     ),
-    kill: invoke(z.object({ id: z.string().min(1) }), z.void()),
+    kill: invoke(OwnedPty, z.void()),
   },
 
   // `git.*` used to live here. It is its own branch now (./git.ts): the
@@ -241,6 +259,16 @@ export const explorerEvents = {
     /** The watched root the paths are relative to; null is the project directory. */
     root: z.string().nullable(),
     changes: z.array(FileChangeSchema),
+  }),
+  /**
+   * A file watcher died or could not start (on Linux, usually the inotify
+   * limit): the tree, Review and the external-edit banner stop updating.
+   * `message` is the sentence to show.
+   */
+  "files.watch-error": z.object({
+    projectId: z.string(),
+    root: z.string().nullable(),
+    message: z.string(),
   }),
   /**
    * One pty's output, with its index in that pty's stream.

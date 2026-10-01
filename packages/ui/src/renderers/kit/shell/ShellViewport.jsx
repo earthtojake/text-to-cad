@@ -372,6 +372,10 @@ const ShellViewport = forwardRef(function ShellViewport({
     },
     activateViewPlaneFace,
     requestRender() { runtimeRef.current?.requestRender?.(); },
+    // An eased camera move (the fit, a view-cube face) is still under way.
+    isCameraTransitioning() { return Boolean(runtimeRef.current?.cameraTransition); },
+    // Preview's orbit is playing: every frame turns the camera about its up axis (a drag adds to it, and it goes on).
+    isOrbiting() { return Boolean(runtimeRef.current?.controls?.autoRotate); },
     getPerspective() {
       return readScopedPerspectiveSnapshot(runtimeRef.current, {
         modelKey, sceneScaleMode: normalizedSceneScaleMode, coordinateSystem: STORED_CAMERA_COORDINATES

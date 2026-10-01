@@ -1,6 +1,7 @@
 import { useShallow } from "zustand/react/shallow";
 import { ChevronRight, Plus } from "lucide-react";
 import { cn } from "cn";
+import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 
 import { Button } from "@renderer/components/ui/button";
 import {
@@ -10,7 +11,7 @@ import {
 } from "@renderer/components/ui/context-menu";
 import { MenuKind } from "@renderer/features/sidebar/menu";
 import { ProjectMenuItems } from "@renderer/features/sidebar/project-menu";
-import { SessionRow } from "@renderer/features/sidebar/SessionRow";
+import { SessionRow, StateGlyph } from "@renderer/features/sidebar/SessionRow";
 import type { SidebarSection } from "@renderer/lib/sidebar";
 import { useProjects } from "@renderer/state/projects";
 import { useSessions } from "@renderer/state/sessions";
@@ -49,6 +50,18 @@ export function SessionSection({ section }: { section: SidebarSection }) {
   const collapsed = collapsible && filters.collapsedProjects.includes(section.id);
   const active = project !== null && project.id === activeProjectId;
 
+  // A collapsed section hides its rows, and with them the one thing a sidebar exists to surface: a
+  // thread that needs the person. The header carries the strongest state among the hidden rows
+  // (waiting over running), in the rows' own glyph; an expanded section shows the rows themselves.
+  const hidden = collapsed
+    ? section.sessions.some((row) => row.status === "waiting")
+      ? ("waiting" as const)
+      : section.sessions.some((row) => row.status === "running")
+        ? ("running" as const)
+        : null
+    : null;
+  const hiddenCount = hidden ? section.sessions.filter((row) => row.status === hidden).length : 0;
+
   const toggle = () => {
     if (!project) {
       return;
@@ -72,20 +85,22 @@ export function SessionSection({ section }: { section: SidebarSection }) {
       className="flex h-7 items-center gap-0.5 rounded-md pr-0.5 pl-2"
       data-sidebar-section-header
     >
+      {/* Named for the section, always: the state is aria-expanded's to say, not the name's. */}
       <button
         aria-expanded={collapsible ? !collapsed : undefined}
-        aria-label={
-          collapsible ? (collapsed ? `Expand ${section.name}` : `Collapse ${section.name}`) : undefined
-        }
         className="flex min-w-0 flex-1 items-center gap-1 text-left"
         disabled={!collapsible}
         onClick={toggle}
-        title={project?.path ?? section.name}
         type="button"
       >
-        <span className="truncate text-[11px] font-medium text-muted-foreground">
-          {section.name}
-        </span>
+        {/* The project's folder, on the name rather than the button: the kit
+            holds a hint back from an expanded control, and an open section's
+            header is one. `Pinned` and the flat list have no folder to show. */}
+        <TooltipHint content={project?.path}>
+          <span className="truncate text-[11px] font-medium text-muted-foreground">
+            {section.name}
+          </span>
+        </TooltipHint>
         {collapsible ? (
           <ChevronRight
             className={cn(
@@ -96,6 +111,17 @@ export function SessionSection({ section }: { section: SidebarSection }) {
         ) : null}
       </button>
 
+      {hidden ? (
+        <span
+          aria-label={`${hiddenCount} ${hiddenCount === 1 ? "thread" : "threads"} ${hidden === "waiting" ? "waiting for you" : "working"}`}
+          className="flex shrink-0 items-center"
+          data-sidebar-section-state={hidden}
+          role="img"
+        >
+          <StateGlyph status={hidden} />
+        </span>
+      ) : null}
+
       {project ? (
         /* `+` is the header's one control, and it is always there. The search
            glyph and the sliders that used to join it on hover have moved to
@@ -103,7 +129,7 @@ export function SessionSection({ section }: { section: SidebarSection }) {
            palette searches every thread and the filters are global — and a
            control that appears on hover is one nobody finds. */
         <Button
-          aria-label={`New chat in ${project.name}`}
+          aria-label={`New session in ${project.name}`}
           className="size-5 shrink-0 text-muted-foreground"
           onClick={newHere}
           size="icon-xs"

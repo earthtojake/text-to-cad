@@ -40,6 +40,11 @@ describe("the git mode a session runs in", () => {
     expect(resolveGitMode("checkout", info({ isRepository: false }))).toBe("none");
   });
 
+  it("gives the project's own problem, not 'not a git repository', when git will not open the folder", () => {
+    const problem = "git will not open this folder because another user owns it";
+    expect(gitModeAvailability("worktree", info({ isRepository: false, problem }))).toEqual({ available: false, reason: problem });
+  });
+
   it("says why a worktree is not on offer", () => {
     expect(gitModeAvailability("worktree", info({ isRepository: false }))).toMatchObject({
       available: false,

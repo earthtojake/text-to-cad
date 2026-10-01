@@ -337,7 +337,11 @@ Verbs by format: `step` compile · build · snapshot;
 validate · snapshot; `srdf` validate. `cadgen snapshot` routes any suffix.
 `cadgen store|daemon|doctor` are status commands, and `cadgen viewer
 [list|stop]` the CAD Viewer's launcher and instance manager — all deliberately
-outside the mirror pattern. `cadgen step compile` is internal tooling: skills never
+outside the mirror pattern. `cadgen doctor --json` is the machine-readable
+report (cadgen, viewer, CAD kernel, pin); its kernel check runs in a fresh
+interpreter bounded by `CADGEN_DOCTOR_KERNEL_TIMEOUT` (seconds, default 300,
+at most 3600), and a check that runs out of time is state `timeout`, not a
+verdict on the kernel. `cadgen step compile` is internal tooling: skills never
 teach it — doors compile a document's missing tree on demand.
 
 Developed in [earthtojake/text-to-cad](https://github.com/earthtojake/text-to-cad);

@@ -5,7 +5,7 @@ import { Play, Pause, X } from "lucide-react";
 import { ToolbarButton } from "@text-to-cad/ui/primitives/toolbar-button";
 import PreviewChrome from "../tools/PreviewChrome.jsx";
 import { useViewerMobile } from "../../../file-viewer/responsive.js";
-import ViewerAlertCard from "../status/ViewerAlertCard.jsx";
+import ViewerAlertCard, { viewportAlert } from "../status/ViewerAlertCard.jsx";
 import { ViewUpdateStatus } from "../status/ViewUpdateStatus.jsx";
 import ViewerLoadingOverlay from "../status/ViewerLoadingOverlay.js";
 import { VIEWER_RENDER_PROFILE, renderProfileKeepsPixelRatio, sceneForRenderProfile } from "../viewport/renderProfile.js";
@@ -27,6 +27,7 @@ const INSET = `${VIEWPORT_INSET_PX}px`;
 // The strip and its stack stop short of the top-right bar (Display settings, Preview).
 const TOOLBAR_POSITION = Object.freeze({ top: INSET, left: INSET, bottom: INSET, maxWidth: "calc(100% - 76px)" });
 const MODEL_UPDATE_STATUS = Object.freeze({ pending: true, label: "Updating model…" });
+const NO_VIEW_UPDATE = Object.freeze({ pending: false, error: null, label: "" });
 // The top-right bar's buttons are transparent over the model.
 const BAR_BUTTON_CLASS = "size-6 bg-transparent hover:bg-transparent dark:hover:bg-transparent";
 
@@ -146,6 +147,12 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
   </>;
 
   const hasContent = Boolean(scene) && !viewerLoading;
+  // A failure that leaves no model to look at puts the tool stack away while its card is up: the
+  // panels would float over the card and its actions, and there is nothing for them to inspect.
+  // With a model on screen the stack stays — its panels (Draw's X among them) are still in use.
+  // They stay mounted, and come back as they were once the model loads.
+  const failureShown = viewportAlert(frame.viewerAlert, hasContent);
+  const failureCovers = failureShown?.severity === "error" && (failureShown.blocking === true || !hasContent);
   // Draw's action: the shell's Copy Drawing (the view with its ink, to the clipboard), unless the
   // renderer supplies a drawing action to take its place. Either way the copy stays on the
   // shortcut (`copyActionRef`, ⌘C).
@@ -263,16 +270,20 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
               <div className="group/tool-stack pointer-events-none absolute z-20 flex flex-col items-start gap-2" style={TOOLBAR_POSITION}
                 data-mobile={mobile ? "" : undefined} data-cad-tool-groups="">
                 <FloatingToolBar tools={tools} />
-                <ToolStack hidden={previewing} mobile={mobile} layout={frame.toolStack} onLayoutChange={frame.changeToolStack}>{shellPanels}{toolPanels}</ToolStack>
+                <ToolStack hidden={previewing || failureCovers} mobile={mobile} layout={frame.toolStack} onLayoutChange={frame.changeToolStack}>{shellPanels}{toolPanels}</ToolStack>
               </div>
 
               </PreviewChrome>
 
               {/* One place says the view is catching up: a newer revision of the file loading behind the
                   model on screen, or a Display change being prepared — the latter's failure first, since
-                  it is the one with something to retry. */}
-              {view.navigationStatusSlot ? createPortal(<ViewUpdateStatus status={frame.loading.updating && !frame.viewUpdate.status.error
-                ? MODEL_UPDATE_STATUS : frame.viewUpdate.status} onRetry={frame.viewUpdate.retry} />, view.navigationStatusSlot) : null}
+                  it is the one with something to retry. Under a failure card a Display change still in
+                  progress (a theme switch) says nothing: it waits on a frame that is never drawn, and a
+                  spinner beside "Couldn't prepare the model" says busy and failed at once. One that
+                  failed keeps its Retry. */}
+              {view.navigationStatusSlot ? createPortal(<ViewUpdateStatus status={frame.viewUpdate.status.error
+                ? frame.viewUpdate.status : frame.loading.updating ? MODEL_UPDATE_STATUS
+                  : failureCovers ? NO_VIEW_UPDATE : frame.viewUpdate.status} onRetry={frame.viewUpdate.retry} />, view.navigationStatusSlot) : null}
               <ViewerLoadingOverlay
                 loading={frame.presentationState?.file === frame.modelKey && frame.presentationState?.covering ? null : frame.loading}
                 operationKey={frame.modelKey}

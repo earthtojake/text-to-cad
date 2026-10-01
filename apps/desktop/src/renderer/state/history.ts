@@ -1,5 +1,7 @@
 import { create } from "zustand";
 
+import type { Session } from "@shared/types";
+
 import { useProjects } from "./projects";
 import { useSessions } from "./sessions";
 
@@ -15,7 +17,7 @@ import { useSessions } from "./sessions";
  * Entries are recorded by watching the selection rather than by every caller
  * remembering to push one. There are half a dozen doors into "show me this
  * thread" — the sidebar's rows, the palette, `Cmd+N`, the app menu, an agent
- * starting a session, Settings' `New chat in this worktree` — and a push at
+ * starting a session, Settings' `New session in this worktree` — and a push at
  * each is a push someone will forget. `sync` pushes only when the location
  * actually changed, which is also why back and forward push nothing: they
  * *set* the selection to the entry they moved to, so by the time `sync` runs
@@ -23,6 +25,8 @@ import { useSessions } from "./sessions";
  *
  * A deleted session's entry is skipped rather than removed, in both
  * directions, so the stack keeps its shape while the person walks past it.
+ * An archived one is skipped the same way — the person put it away, and the
+ * sidebar no longer shows it — unless it is the one on screen.
  */
 
 export type Location = {
@@ -80,6 +84,9 @@ export function findLive(
   return -1;
 }
 
+/** How many places back and forward remember. */
+export const HISTORY_LIMIT = 100;
+
 const same = (a: Location, b: Location) => a.projectId === b.projectId && a.sessionId === b.sessionId;
 
 /** The location the stores are showing, or null with no project bound. */
@@ -95,11 +102,17 @@ function locationNow(): Location | null {
   return { projectId, sessionId: session && session.projectId === projectId ? session.id : null };
 }
 
+/** The sessions back and forward may land on: every one not archived, and the one on screen. */
+function reachableSessionIds(sessions: readonly Session[], activeId: string | null): string[] {
+  return sessions.filter((session) => !session.archived || session.id === activeId).map((session) => session.id);
+}
+
 function liveNow(): Live {
   const { projects, draft } = useProjects.getState();
+  const { sessions, activeId } = useSessions.getState();
   return {
     projectIds: [...projects.map((project) => project.id), ...(draft ? [draft.id] : [])],
-    sessionIds: useSessions.getState().sessions.map((session) => session.id),
+    sessionIds: reachableSessionIds(sessions, activeId),
   };
 }
 
@@ -123,8 +136,9 @@ export const useHistory = create<HistoryState>((set, get) => ({
     if (at && same(at, location)) {
       return;
     }
-    const kept = entries.slice(0, index + 1);
-    kept.push(location);
+    // Capped, oldest first out: nobody walks back a hundred places, and the stack otherwise grows
+    // for as long as the window is open.
+    const kept = [...entries.slice(0, index + 1), location].slice(-HISTORY_LIMIT);
     set({ entries: kept, index: kept.length - 1 });
   },
 
@@ -188,10 +202,11 @@ export function useHistoryReach(): { back: boolean; forward: boolean } {
   // button has to mute itself when that was the last one.
   const projects = useProjects((state) => state.projects);
   const sessions = useSessions((state) => state.sessions);
+  const activeId = useSessions((state) => state.activeId);
   const draft = useProjects((state) => state.draft);
   const live: Live = {
     projectIds: [...projects.map((project) => project.id), ...(draft ? [draft.id] : [])],
-    sessionIds: sessions.map((session) => session.id),
+    sessionIds: reachableSessionIds(sessions, activeId),
   };
   return {
     back: findLive(entries, index, -1, live) >= 0,

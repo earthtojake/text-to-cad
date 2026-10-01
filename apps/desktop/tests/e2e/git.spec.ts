@@ -2,9 +2,10 @@ import { execFileSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
 
-import { expect, test, type ElectronApplication, type Page } from "@playwright/test";
+import { expect, type ElectronApplication, type Page } from "@playwright/test";
+import { projectWorktreeDir } from "../../src/main/projects/workspace";
 import type { TextToCadApi } from "../../src/shared/ipc";
-import { launch, mod, scratch, settleTerminal } from "./launch";
+import { chooseDirectory, launch, mod, newTab as newTabIn, scratch, settleTerminal, shoot as shootInto, test } from "./launch";
 
 /**
  * Projects, git modes, worktrees and the review (plan §9), on one app and one
@@ -69,19 +70,19 @@ test.afterAll(async () => {
 });
 
 test("a chosen folder is a draft: no project, no explorer, and its words kept per folder", async () => {
-  const added = await page.evaluate((root) => window.textToCad.projects.addPath({ path: root }), repo);
+  const added = await chooseDirectory(app, repo);
   projectId = added.id;
-  const draft = page.getByPlaceholder("Do anything");
+  const draft = page.getByPlaceholder("Describe a part to build…", { exact: true });
   await expect(draft).toBeVisible();
   await expect(page.getByTestId("explorer")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Toggle explorer" })).toHaveCount(0);
   expect(await page.evaluate(() => window.textToCad.projects.list())).toEqual([]);
   await draft.fill("Round the car body");
-  await page.evaluate((root) => window.textToCad.projects.addPath({ path: root }), other);
+  await chooseDirectory(app, other);
   await expect(page.getByRole("heading", { name: "What should we build in Other project?" })).toBeVisible();
   await expect(draft).toHaveText("");
   // Re-choosing a folder restores its in-memory draft, still without a saved project.
-  await page.evaluate((root) => window.textToCad.projects.addPath({ path: root }), repo);
+  await chooseDirectory(app, repo);
   await expect(draft).toHaveText("Round the car body");
   expect(await page.evaluate(() => window.textToCad.projects.list())).toEqual([]);
   await expect(page.getByTestId("sidebar").locator("[data-sidebar-section]")).toHaveCount(0);
@@ -116,7 +117,9 @@ test("a checkout session runs in the project, and the review shows the agent's a
 
   await newTab("Review");
   // All changes is the working tree against HEAD; This session and Last turn are measured from
-  // the recorded revisions, and nothing has been committed since, so they agree.
+  // snapshots of the working tree taken when the session and the turn began. The tree was clean
+  // then, and both edits came after, so all three scopes list both files. (That the scopes
+  // differ once earlier work is uncommitted is held by sessions.test.ts, without a launch.)
   await expect(page.getByRole("button", { name: /All changes/ })).toBeVisible();
   await expectReviewShowsBoth();
   await shoot("git-review-all.png");
@@ -127,9 +130,11 @@ test("a checkout session runs in the project, and the review shows the agent's a
 });
 
 test("commits every change from the popover, and Last turn still shows what the turn did", async () => {
-  await page.getByRole("button", { name: "Commit or push" }).click();
-  await page.getByLabel("Commit message").fill("agent and human, one commit");
+  // No remote in this fixture, so the header offers Commit alone, not a push.
   await page.getByRole("button", { name: "Commit", exact: true }).click();
+  await page.getByLabel("Commit message").fill("agent and human, one commit");
+  await shoot("git-commit-panel.png");
+  await page.getByRole("region", { name: "Commit changes" }).getByRole("button", { name: "Commit", exact: true }).click();
   await expect(page.getByLabel("Commit message")).toBeHidden({ timeout: 20_000 });
   await expect.poll(() => execFileSync("git", ["log", "-1", "--pretty=%s"], { cwd: repo, env: gitEnv }).toString().trim(), { timeout: 20_000 })
     .toBe("agent and human, one commit");
@@ -141,10 +146,18 @@ test("commits every change from the popover, and Last turn still shows what the 
   await shoot("git-review-committed.png");
 });
 
+/**
+ * `<worktreeRoot>/<name>-<hash of the project path>`, computed by main's own helper so the
+ * spec cannot drift from it. The project list stores the real path, so the hash is of that.
+ */
+function worktreeFolder(): string {
+  return projectWorktreeDir({ worktreeRoot }, { name: projectName, path: fs.realpathSync(repo) });
+}
+
 test("a worktree session gets its own branch, directory and glyph, and the explorer roots there", async () => {
   const session = await page.evaluate((id) => window.textToCad.sessions.create({ projectId: id, agentId: "claude-code", gitMode: "worktree", name: "Model the wrist" }), projectId);
   worktreeSessionId = session.id;
-  const worktree = path.join(worktreeRoot, projectName, "model-the-wrist");
+  const worktree = path.join(worktreeFolder(), "model-the-wrist");
   expect(session.cwd).toBe(worktree);
   expect(session.worktreePath).toBe(worktree);
   expect(session.branch).toBe("text-to-cad/model-the-wrist");
@@ -200,9 +213,9 @@ test("a worktree session gets its own branch, directory and glyph, and the explo
 });
 
 test("the worktree is listed in Settings, and Delete takes it away once no session is on it", async () => {
-  const worktree = path.join(worktreeRoot, projectName, "model-the-wrist");
+  const worktree = path.join(worktreeFolder(), "model-the-wrist");
   await page.keyboard.press(`${mod}+,`);
-  await page.getByRole("button", { name: "Git & Worktrees" }).click();
+  await page.getByRole("button", { name: "Git and worktrees" }).click();
   await expect(page.getByText(`Worktrees · ${projectName}`)).toBeVisible();
   const card = page.getByText("text-to-cad/model-the-wrist", { exact: true });
   await card.scrollIntoViewIfNeeded();
@@ -214,7 +227,7 @@ test("the worktree is listed in Settings, and Delete takes it away once no sessi
   fs.rmSync(path.join(worktree, "hello.txt"));
   // Settings re-reads on remount: leaving and coming back proves the list is not a snapshot.
   await page.getByRole("button", { name: "General" }).click();
-  await page.getByRole("button", { name: "Git & Worktrees" }).click();
+  await page.getByRole("button", { name: "Git and worktrees" }).click();
   await expect(page.getByRole("button", { name: "Delete" }).first()).toBeEnabled();
   await page.getByRole("button", { name: "Delete" }).first().click();
   await expect(page.getByText(`Worktrees · ${projectName}`)).toBeHidden({ timeout: 20_000 });
@@ -226,11 +239,11 @@ test("the worktree is listed in Settings, and Delete takes it away once no sessi
 });
 
 test("the new-session screen's New worktree makes the session in a worktree of its own", async () => {
-  await page.evaluate((root) => window.textToCad.projects.addPath({ path: root }), repo);
+  await chooseDirectory(app, repo);
   await page.locator("[data-context-strip]").getByRole("button", { name: "Local", exact: true }).click();
   await page.getByRole("menuitemradio", { name: /New worktree/ }).click();
   await expect(page.locator('[data-composer-row] [data-chip="model"]')).toBeVisible({ timeout: 30_000 });
-  const draft = page.getByPlaceholder("Do anything");
+  const draft = page.getByPlaceholder("Describe a part to build…", { exact: true });
   await draft.fill("write a file");
   await draft.press("Enter");
   await expect(page.locator("[data-session-view]")).toBeVisible({ timeout: 30_000 });
@@ -256,7 +269,22 @@ function git(...args: string[]) {
 async function expectReviewShowsBoth() {
   await expect(page.getByRole("button", { name: /tracked\.txt/ }).last()).toContainText("+1");
   await expect(page.getByRole("button", { name: /agent\.txt/ }).last()).toContainText("+1");
-  await expect(page.locator(".monaco-diff-editor")).toHaveCount(2, { timeout: 30_000 });
+  // Each file's block once it has drawn (`data-review-ready`, review-diff.tsx), and only then
+  // the count: the editor's DOM is the end of a chain — status, the file's own diff read, the
+  // loader, the widget, the worker's diff — and polling for the DOM alone could not say which
+  // link a slow run was still on. tracked.txt is modified, so a diff; agent.txt is new, so its
+  // one side rather than a diff against an empty file.
+  await expectDrawn("tracked.txt", "modified");
+  await expectDrawn("agent.txt", "added");
+  await expect(page.locator("[data-review-diff=modified] .monaco-diff-editor")).toHaveCount(1);
+  await expect(page.locator("[data-review-diff=added] .monaco-editor")).toHaveCount(1);
+}
+
+/** One file's section has its diff read, as `kind`, and drawn. */
+async function expectDrawn(file: string, kind: "modified" | "added") {
+  const block = page.locator(`[data-review-file="${file}"] [data-review-diff]`);
+  await expect(block).toHaveAttribute("data-review-diff", kind, { timeout: 30_000 });
+  await expect(block).toHaveAttribute("data-review-ready", "true", { timeout: 30_000 });
 }
 
 async function chooseScope(label: string) {
@@ -266,12 +294,9 @@ async function chooseScope(label: string) {
 }
 
 async function shoot(name: string, whole = false) {
-  const target = whole ? page : page.getByTestId("explorer");
-  await target.screenshot({ path: test.info().outputPath(name), animations: "disabled" });
+  await shootInto(whole ? page : page.getByTestId("explorer"), name, test.info());
 }
 
 async function newTab(label: "File" | "Review" | "Terminal") {
-  await page.getByRole("button", { name: "New tab", exact: true }).click();
-  await page.getByRole("menuitem", { name: label }).click();
-  await expect(page.getByRole("menu")).toHaveCount(0);
+  await newTabIn(page, label);
 }

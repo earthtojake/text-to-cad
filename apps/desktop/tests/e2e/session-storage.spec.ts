@@ -4,9 +4,10 @@ import { createRequire } from "node:module";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { _electron as electron, expect, test, type ElectronApplication } from "@playwright/test";
+import { expect, type ElectronApplication } from "@playwright/test";
 import { MIGRATIONS } from "../../src/main/db/migrations";
 import type { TextToCadApi } from "../../src/shared/ipc";
+import { launch as launchApp, test } from "./launch";
 
 declare const window: { textToCad: TextToCadApi };
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
@@ -54,13 +55,9 @@ test("upgrade preserves sessions, snapshots and owned tabs; restart and deletion
   `, { migrations: MIGRATIONS.slice(0, 10), directory, worktree });
   let app: ElectronApplication | null = null;
   const launch = async () => {
-    app = await electron.launch({
-      args: [path.join(appRoot, "out/main/index.js"), `--user-data-dir=${profile}`],
-      env: { ...process.env, NODE_ENV: "test", TEXT_TO_CAD_FAKE_AGENT: path.join(appRoot, "tests/fake-agent/index.mjs") },
-    });
-    const page = await app.firstWindow();
-    await page.waitForLoadState("domcontentloaded");
-    return page;
+    const launched = await launchApp({ userData: profile });
+    app = launched.app;
+    return launched.page;
   };
   try {
     let page = await launch();
@@ -87,7 +84,9 @@ test("upgrade preserves sessions, snapshots and owned tabs; restart and deletion
     expect(await page.evaluate(() => window.textToCad.explorer.loadTabs({ sessionId: "one" }))).toEqual(tabs.one);
     await app!.close(); app = null;
 
-    const backups = fs.readdirSync(profile).filter(name => name.includes(".before-v11-"));
+    // The backup is named for the version the upgrade lands on, so the next
+    // migration does not strand this spec.
+    const backups = fs.readdirSync(profile).filter(name => name.includes(`.before-v${MIGRATIONS.at(-1)!.version}-`));
     expect(backups).toHaveLength(1);
     expect(sqlScript(path.join(profile, backups[0]!), "console.log(JSON.stringify(db.prepare('SELECT count(*) AS count FROM sessions').get()))")).toEqual({ count: 3 });
     expect(sqlScript(database, `console.log(JSON.stringify({

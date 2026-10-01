@@ -153,9 +153,10 @@ claim that a different application pasted them.
 
 Desktop captures the compatible draft destination before awaiting attachments,
 validates the complete bundle and rechecks that destination before atomic draft
-acceptance. Switching chats cannot redirect an in-flight capture. Existing text
-and attachments survive; operation IDs prevent duplicate acceptance. Workspace
-mismatch uses the app's explicit Start chat here recovery. Invalid attachments
+acceptance. Switching sessions cannot redirect an in-flight capture. Existing text
+and attachments survive; operation IDs prevent duplicate acceptance. A reference
+or annotation from another workspace fails the delivery with a message ("This
+reference belongs to another workspace.", `host/promptContext.ts`). Invalid attachments
 leave the draft unchanged. Direct capture failure never shows success.
 
 Web supports text/reference serialization and one PNG. A combined clipboard
@@ -205,8 +206,12 @@ A file's view holds its camera: a mount restores it in place of the fit, and fit
 when there is none. Live
 commands reject retired field names rather than maintaining a second display
 authority. Unavailable selectors fail explicitly; topology is not silently
-loaded. Mutations return a view snapshot after the React frame; a mode switch
-waits for the requested settings to commit, with a ten-second bound.
+loaded. A mutating command returns a view snapshot only once its effect is on
+screen: a settled frame, then its committed predicate (the camera at rest and
+read back, with a request beyond the controls' clamp answered by the clamped
+camera; `resetCamera` easing to rest; the display settings or the render mode
+in the viewport), bounded at ten seconds, and `capture` waits for rest. The
+contract is stated once, in [Live commands](cad-renderer.md#live-commands).
 Loading views
 reject commands, and an operation whose resource/revision changes or viewport
 unmounts before completion rejects its late result. On unmount, the controller
@@ -265,6 +270,13 @@ its behalf ([settings-ui.md](settings-ui.md#keyboard)). The standalone
 `DrawingEditor` takes the host's keyboard `platform` as a prop for its undo and
 redo keys.
 
+The file tree is a roving single Tab stop (`FileTree.jsx`): the arrows move
+focus row to row, and the focused row is the cursor that F2 (rename) and
+⌘⌫/Ctrl+Delete (move to trash) act on — both only when the host provides
+those capabilities. While the filter has a query, focus stays in its box and
+the arrows move the cursor through the ranked list
+(`aria-activedescendant`).
+
 ## Live text and PDF capabilities
 
 An optional `host.documents` supplies a draft store with workspace/path identity
@@ -313,4 +325,25 @@ routing. The host supplies `environment.platform` for the ⌘C / Ctrl+C hint;
 the web host derives that field from its browser environment.
 
 Renderer status uses `RendererViewProps.navigationStatusSlot`, a named portal
-slot immediately after the filename. 
+slot immediately after the filename.
+
+## Load failure recovery
+
+The viewport's alert card offers Try again for a file that failed to load or build.
+Its default next step names the served viewer's terminal output and address, which
+only the web has. The optional `host.loadFailures.recover(failure)` receives the
+failure (`kind`, `file`, `title`, `message`, the interpreter's `reason`, the full
+`details`, and `blocking`) and may return its own `message` and `recovery` and extra
+`actions` shown beside Try again; returning nothing keeps the defaults. `kind` says
+what failed: building (`compile`, `artifact`, `service`, `http`, `response`),
+reaching the viewer (`network`), reading the file (`mesh`), a file with no geometry
+(`empty`) or a live edit (`edit`). An action's `run` is called during the click — a
+prompt delivery binds its destination there — and the card shows the string it
+resolves to, or the error it rejects with; every action is disabled until it settles.
+An action returned `disabled` stays focusable (`aria-disabled`, its click a no-op)
+and its `reason` is shown under the buttons as the button's `aria-describedby`; the card re-asks the host when its prompt destination changes, so a
+prompt action follows the destination's availability as `PromptContextAction` does.
+The web supplies none. The desktop says the CAD runtime reported a build error (or
+lost contact), keeps the card's words for the rest, and offers "Ask the agent to fix"
+(the diagnostic, with a request that fits its kind, as text through
+`host.promptContext`, like Add to prompt) and "Copy details" (`ClipboardPort`).

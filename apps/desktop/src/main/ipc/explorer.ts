@@ -14,7 +14,7 @@ import { execFile } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 
-import { BrowserWindow, dialog, shell } from "electron";
+import { BrowserWindow, dialog, shell, type WebContents } from "electron";
 
 import { explorerTabs, projects, sessions, settings } from "../db/repositories";
 import {
@@ -31,14 +31,17 @@ import {
   readTextFile,
   renameEntry,
   resolveInRoot,
+  statEntry,
   statFile,
   writeTextFile,
 } from "../explorer/fs";
+import { sessionRuntimePath } from "../cad";
 import { Terminals } from "../explorer/terminal";
 import * as git from "../projects/git";
-import { projectWorktreeDir, resolveProjectRoot } from "../projects/workspace";
+import { projectWorktreeDir, realDirectory, resolveProjectRoot, rootBelongsToProject } from "../projects/workspace";
 import type { ExplorerTab, IpcEventChannel, IpcEventPayload } from "../../shared";
 import type { FileChange, FileMutationResult } from "../../shared/ipc/explorer";
+import { fileExtension, track } from "../telemetry";
 import { IpcError, type IpcContext } from "./register";
 
 /* -------------------------------------------------------------------------- */
@@ -69,6 +72,15 @@ export function initExplorerServices(broadcast: Broadcast) {
     if (owner) {
       broadcast("files.changed", { projectId: owner.project.id, root: owner.root, changes });
     }
+  }, undefined, (root, reason) => {
+    const owner = projectOfRoot(root);
+    if (owner) {
+      broadcast("files.watch-error", {
+        projectId: owner.project.id,
+        root: owner.root,
+        message: `Live updates stopped: ${reason}. Reload the tab to re-arm them.`,
+      });
+    }
   });
   terminals ??= new Terminals((event) => {
     if (event.type === "data") {
@@ -90,6 +102,130 @@ export function disposeExplorerServices() {
   watchers = null;
 }
 
+/**
+ * The watches each page holds, by root, counted like the watchers' own refs.
+ * A reload (Cmd+R) or a renderer that dies never sends its unwatches: the
+ * new page watches again, and every root the old one watched kept a ref that
+ * nothing would release, and a chokidar watcher over the tree that never
+ * closed. A page's leases are returned for it when another page commits in
+ * its place or it goes.
+ *
+ * On `did-navigate`, not `did-start-navigation`: a navigation starts before
+ * `will-navigate` is asked, and the window cancels every one of those
+ * (`src/main/index.ts` — a stray `<a href>`, a file dropped on the page), so
+ * a page released at the start would keep living with its watches gone.
+ */
+const leases = new Map<number, Map<string, number>>();
+/**
+ * The root each of a page's watch requests resolved to when it took the
+ * lease, by the request's own (project, root). An unwatch returns the lease
+ * this names rather than resolving the request again: a project or session
+ * deleted since the watch has no row for `rootOf` to read, and the unwatch
+ * that follows a delete would throw before it gave anything back.
+ *
+ * A list per request, one entry per watch outstanding: the same request can
+ * resolve to another root between two watches (a worktree switched under a
+ * session), and a single slot would hand the second watch's root to the
+ * first unwatch. The oldest is returned first; an emptied list is deleted.
+ */
+const leased = new Map<number, Map<string, string[]>>();
+const requestKey = (projectId: string, root: string | undefined) => `${projectId}\0${root ?? ""}`;
+/** Per page, how many documents it has shown; a watch is credited to the one that asked. */
+const documents = new Map<number, number>();
+
+/**
+ * The document asking, taken before a watch's await: a navigation that
+ * commits meanwhile makes the watch the old document's, already released.
+ */
+function documentOf(sender: WebContents | undefined): number | undefined {
+  if (!sender) return undefined;
+  const known = documents.get(sender.id);
+  if (known !== undefined) return known;
+  documents.set(sender.id, 0);
+  const id = sender.id;
+  const release = () => {
+    const roots = leases.get(id);
+    leases.delete(id);
+    leased.delete(id);
+    documents.set(id, (documents.get(id) ?? 0) + 1);
+    for (const [directory, count] of roots ?? []) {
+      for (let index = 0; index < count; index += 1) void watchers?.unwatch(directory).catch(() => {});
+    }
+  };
+  // `did-navigate` is the main frame's, and a committed cross-document
+  // navigation only (an in-page one is `did-navigate-in-page`).
+  sender.on("did-navigate", release);
+  sender.on("render-process-gone", release);
+  sender.once("destroyed", () => {
+    release();
+    documents.delete(id);
+  });
+  return 0;
+}
+
+/** False when the document that asked is gone: the watch is its own to give back. */
+function lease(sender: WebContents | undefined, root: string, document: number | undefined, request: string): boolean {
+  if (!sender) return true;
+  if (documents.get(sender.id) !== document) return false;
+  let names = leased.get(sender.id);
+  if (!names) {
+    names = new Map();
+    leased.set(sender.id, names);
+  }
+  names.set(request, [...names.get(request) ?? [], root]);
+  let held = leases.get(sender.id);
+  if (!held) {
+    held = new Map();
+    leases.set(sender.id, held);
+  }
+  held.set(root, (held.get(root) ?? 0) + 1);
+  return true;
+}
+
+/**
+ * Each page's watches still setting up, by root. An unwatch is sent after
+ * its watch but can land first — the watch awaits the root before it takes
+ * its lease — and would find nothing to give back: the watch then holds a
+ * lease, and the watcher a ref, that nothing returns. An unwatch waits for
+ * the page's watches of that root to land first.
+ */
+const settingUp = new Map<string, Set<Promise<unknown>>>();
+const pageRoot = (sender: WebContents, root: string) => `${sender.id}\0${root}`;
+
+async function watchLanded(sender: WebContents | undefined, root: string, watch: Promise<void>): Promise<void> {
+  if (!sender) return watch;
+  const key = pageRoot(sender, root);
+  const pending = settingUp.get(key) ?? new Set();
+  settingUp.set(key, pending);
+  pending.add(watch);
+  try {
+    await watch;
+  } finally {
+    pending.delete(watch);
+    if (pending.size === 0 && settingUp.get(key) === pending) settingUp.delete(key);
+  }
+}
+
+/** One outstanding watch of `request` is being given back: forget the root it took. */
+function forgetLeased(sender: WebContents, request: string, root: string) {
+  const names = leased.get(sender.id);
+  const roots = names?.get(request);
+  if (!names || !roots) return;
+  const at = roots.indexOf(root);
+  if (at >= 0) roots.splice(at, 1);
+  if (roots.length === 0) names.delete(request);
+}
+
+/** False when this page holds no watch on the root to give back. */
+function returnLease(sender: WebContents, root: string): boolean {
+  const held = leases.get(sender.id);
+  const count = held?.get(root) ?? 0;
+  if (count === 0) return false;
+  if (count === 1) held!.delete(root);
+  else held!.set(root, count - 1);
+  return true;
+}
+
 function services() {
   if (!watchers || !terminals) {
     throw new IpcError("the explorer services are not running");
@@ -100,6 +236,27 @@ function services() {
 /* -------------------------------------------------------------------------- */
 /* Projects and paths                                                          */
 /* -------------------------------------------------------------------------- */
+
+/**
+ * Session roots' real paths, keyed by the spelling main recorded. rootOf runs
+ * for every stat, list, read and `exists` (the transcript asks one per path
+ * token), and realpathSync blocks main's thread, so a spelling is resolved
+ * once; the cache is dropped whenever the recorded spellings change.
+ */
+const recordedRealpaths = { signature: "", paths: new Map<string, string>() };
+
+function recordedRealpath(spelling: string, signature: string): string {
+  if (recordedRealpaths.signature !== signature) {
+    recordedRealpaths.signature = signature;
+    recordedRealpaths.paths.clear();
+  }
+  let real = recordedRealpaths.paths.get(spelling);
+  if (real === undefined) {
+    real = realDirectory(spelling);
+    recordedRealpaths.paths.set(spelling, real);
+  }
+  return real;
+}
 
 /**
  * The directory a request reads from: the project's, or — when the request
@@ -113,13 +270,45 @@ export function rootOf(projectId: string, root?: string | null): string {
   }
   try {
     // Persisted worktrees retain access even if an old project label changed.
-    const recorded = root && sessions.list().find(session => session.projectId === projectId
-      && (git.samePath(session.cwd, root) || (session.worktreePath && git.samePath(session.worktreePath, root))));
-    if (recorded && root) return root;
+    // Any spelling of the directory finds its session; what is handed on is
+    // the RECORDED spelling — never the caller's (that let a request key
+    // watchers and viewers by a string of its choosing), and not the realpath
+    // either: watchers, `files.changed` and the CAD viewer are keyed by this
+    // root, and the renderer and `forgetCadSession` know the session by the
+    // path main recorded.
+    if (root) {
+      const all = sessions.list();
+      const recorded = all
+        .filter((session) => session.projectId === projectId)
+        .flatMap((session) => [session.cwd, session.worktreePath].filter((candidate): candidate is string => Boolean(candidate)));
+      // The usual caller sends the recorded spelling back: no disk access.
+      const exact = recorded.find((candidate) => git.samePath(candidate, root));
+      if (exact) return exact;
+      if (recorded.length > 0) {
+        const requested = realDirectory(root);
+        const signature = all.map((session) => `${session.cwd}\0${session.worktreePath ?? ""}`).join("\0");
+        const linked = recorded.find((candidate) => git.samePath(recordedRealpath(candidate, signature), requested));
+        if (linked) return linked;
+      }
+    }
     return resolveProjectRoot(settings.get(), project, root);
   } catch (error) {
     throw new IpcError(error instanceof Error ? error.message : String(error));
   }
+}
+
+/**
+ * `shell.showItemInFolder`: the project, one of its worktrees, or the folder
+ * its worktrees live in — resolved here, never taken as a path.
+ */
+export function revealProjectDirectory(request: {
+  projectId: string;
+  root?: string | null | undefined;
+  worktrees?: true | undefined;
+}): void {
+  const target = rootOf(request.projectId, request.root);
+  const project = projects.get(request.projectId);
+  shell.showItemInFolder(request.worktrees && project ? projectWorktreeDir(settings.get(), project) : target);
 }
 
 /**
@@ -129,7 +318,7 @@ export function rootOf(projectId: string, root?: string | null): string {
  * `realpath`, and a project under `/tmp` on macOS is really under
  * `/private/tmp`.
  */
-function projectOfRoot(root: string): { project: { id: string }; root: string | null } | null {
+export function projectOfRoot(root: string): { project: { id: string }; root: string | null } | null {
   const current = settings.get();
   for (const project of projects.list()) {
     if (git.samePath(project.path, root)) {
@@ -142,8 +331,10 @@ function projectOfRoot(root: string): { project: { id: string }; root: string | 
       if (project) return { project, root: git.samePath(project.path, root) ? null : root };
     }
   }
+  // Either worktree folder: the hashed one, or the pre-hash one when git
+  // links the worktree to this project's repository (`rootBelongsToProject`).
   for (const project of projects.list()) {
-    if (git.isUnder(projectWorktreeDir(current, project), root)) {
+    if (!git.samePath(project.path, root) && rootBelongsToProject(current, project, root)) {
       return { project, root };
     }
   }
@@ -332,11 +523,25 @@ export const explorerHandlers = {
         listPaths(rootOf(projectId, root), directory, limit === undefined ? {} : { limit }),
       ),
 
-    stat: ({ projectId, root: rootPath, path: target }: AtPath) =>
+    stat: ({ projectId, root: rootPath, path: target, intent }: AtPath & { intent?: "open" | undefined }) =>
       fsCall(async () => {
         const root = rootOf(projectId, rootPath);
         const entry = await statFile(root, target);
+        // Only a file tab's stat says `intent: "open"` (`fileSource.ts`); the
+        // composer's attachment check and the integrations' renderer lookup
+        // stat files nobody opened, and must neither watch nor count them. An
+        // agent's open_file needs no watch of its own: the tab it opens stats
+        // again through `fileSource.ts`, and that stat watches.
+        if (intent !== "open") return entry;
         await watchers?.watchEntry(root, entry);
+        // `file_opened`: opening a file tab is renderer state, and its stat is
+        // the call main sees for an open. A tab's reload after an on-disk
+        // change stats again without the intent, so it is neither held nor
+        // counted twice. Only the extension leaves:
+        // never the path or the name (README, "Telemetry").
+        if (entry.kind === "file") {
+          track({ name: "file_opened", extension: fileExtension(entry.path) });
+        }
         return entry;
       }),
 
@@ -357,7 +562,11 @@ export const explorerHandlers = {
       expectedRevision?: string;
     }) => (async () => {
       try {
-        const document = await writeTextFile(rootOf(projectId, root), target, content, expectedRevision);
+        const base = rootOf(projectId, root);
+        const document = await writeTextFile(base, target, content, expectedRevision);
+        // The save renamed a new inode into place; a move right after it is
+        // still this file's (`FileWatchers.refreshEntry`).
+        await watchers?.refreshEntry(base, document.path).catch(() => {});
         publishChange({ projectId, root }, { kind: "changed", path: document.path, directory: false, revision: document.revision });
         return { status: "saved" as const, document };
       } catch (error) {
@@ -408,35 +617,63 @@ export const explorerHandlers = {
       return { kind: "added", path: result.path, directory: true };
     }),
 
+    // Rename, duplicate and trash act on the row: a symlink is the link, its
+    // path is the link's, and its target is left alone (`statEntry`).
     rename: (at: AtPath & { name: string }) => mutateFile(at, async base => {
-      const before = await statFile(base, at.path);
+      const before = await statEntry(base, at.path);
       const result = await renameEntry(base, at.path, at.name);
-      return { kind: "moved", previousPath: before.path, path: result.path, directory: before.kind === "directory" };
+      return { kind: "moved", previousPath: before.path, path: result.path, directory: before.directory };
     }),
 
     duplicate: (at: AtPath) => mutateFile(at, async base => {
-      const before = await statFile(base, at.path);
+      const before = await statEntry(base, at.path);
       const result = await duplicateEntry(base, at.path);
-      return { kind: "added", path: result.path, directory: before.kind === "directory" };
+      return { kind: "added", path: result.path, directory: before.directory };
     }),
 
     trash: (at: AtPath) => mutateFile(at, async base => {
-      const before = await statFile(base, at.path);
-      const absolute = await resolveInRoot(base, at.path);
-      if (absolute === (await fs.realpath(base).catch(() => path.resolve(base)))) {
+      const before = await statEntry(base, at.path);
+      if (before.absolute === (await fs.realpath(base).catch(() => path.resolve(base)))) {
         throw new FsError("the project itself cannot be trashed here", "denied");
       }
-      await shell.trashItem(absolute);
-      return { kind: "removed", path: before.path, directory: before.kind === "directory" };
+      await shell.trashItem(before.absolute);
+      return { kind: "removed", path: before.path, directory: before.directory };
     }),
 
-    watch: ({ projectId, root }: { projectId: string; root?: string }) =>
-      fsCall(() => services().watchers.watch(rootOf(projectId, root))),
+    watch: ({ projectId, root, paths }: { projectId: string; root?: string; paths?: string[] }, ctx?: IpcContext) =>
+      fsCall(async () => {
+        const directory = rootOf(projectId, root);
+        const document = documentOf(ctx?.sender);
+        const { watchers: service } = services();
+        await watchLanded(ctx?.sender, directory, (async () => {
+          await service.watch(directory, paths);
+          // The page moved on while the watch was set up: nothing will give it back.
+          if (!lease(ctx?.sender, directory, document, requestKey(projectId, root))) await service.unwatch(directory, paths);
+        })());
+      }),
 
-    unwatch: ({ projectId, root }: { projectId: string; root?: string }) =>
-      fsCall(() => services().watchers.unwatch(rootOf(projectId, root))),
+    unwatch: ({ projectId, root, paths }: { projectId: string; root?: string; paths?: string[] }, ctx?: IpcContext) =>
+      fsCall(async () => {
+        const request = requestKey(projectId, root);
+        const directory = (ctx && leased.get(ctx.sender.id)?.get(request)?.[0]) || rootOf(projectId, root);
+        // Behind the page's watches of this root still on their way (`settingUp`).
+        if (ctx) await Promise.allSettled([...settingUp.get(pageRoot(ctx.sender, directory)) ?? []]);
+        // After the wait: a watch that landed meanwhile has recorded its root by now.
+        if (ctx) forgetLeased(ctx.sender, request, directory);
+        // A page's unwatch after its leases went with a reload is already counted.
+        if (ctx && !returnLease(ctx.sender, directory)) return;
+        await services().watchers.unwatch(directory, paths);
+      }),
 
-    loadTabs: ({ sessionId }: { sessionId: string }) => explorerTabs.list(sessionId),
+    // A saved terminal tab names a pty of the run that saved it. Ptys die with
+    // the app, so an id no live pty of this session answers to is released here
+    // and the tab starts a fresh shell; left in, every restored terminal would
+    // say "no longer running" until Try again.
+    loadTabs: ({ sessionId }: { sessionId: string }) => {
+      const { terminals: live } = services();
+      return explorerTabs.list(sessionId).map(tab =>
+        tab.kind === "terminal" && tab.ptyId && !live.owns(tab.ptyId, sessionId) ? { ...tab, ptyId: null } : tab);
+    },
 
     saveTabs: ({ sessionId, tabs }: { sessionId: string; tabs: ExplorerTab[] }) => {
       explorerTabs.replace(sessionId, tabs);
@@ -450,16 +687,14 @@ export const explorerHandlers = {
       cwd,
       cols,
       rows,
-      shell: shellPath,
-      args,
+      agent,
     }: {
       sessionId: string;
       projectId: string;
       cwd?: string;
       cols?: number;
       rows?: number;
-      shell?: string;
-      args?: string[];
+      agent?: boolean;
     }) =>
       fsCall(async () => {
         // A worktree is outside the project directory by design (plan §9), so
@@ -477,8 +712,8 @@ export const explorerHandlers = {
           cwd: directory,
           ...(cols === undefined ? {} : { cols }),
           ...(rows === undefined ? {} : { rows }),
-          ...(shellPath === undefined ? {} : { shell: shellPath }),
-          ...(args === undefined ? {} : { args }),
+          // A respawned agent-opened tab gets what `create_terminal` gave it: `cadgen` on PATH.
+          ...(agent ? { pathPrefix: sessionRuntimePath() } : {}),
         });
         const current = sessions.get(sessionId);
         if (!current || current.archived || current.cwd !== session.cwd || current.projectId !== projectId) {
@@ -488,21 +723,37 @@ export const explorerHandlers = {
         return info;
       }),
 
-    write: ({ id, data }: { id: string; data: string }) => {
-      services().terminals.write(id, data);
+    write: ({ id, sessionId, data }: OwnedPty & { data: string }) => {
+      ownedTerminals(id, sessionId).write(id, data);
     },
 
-    resize: ({ id, cols, rows }: { id: string; cols: number; rows: number }) => {
-      services().terminals.resize(id, cols, rows);
+    resize: ({ id, sessionId, cols, rows }: OwnedPty & { cols: number; rows: number }) => {
+      ownedTerminals(id, sessionId).resize(id, cols, rows);
     },
 
-    attach: ({ id }: { id: string }) => services().terminals.attach(id),
+    attach: ({ id, sessionId }: OwnedPty) => ownedTerminals(id, sessionId).attach(id),
 
-    kill: ({ id }: { id: string }) => {
-      services().terminals.kill(id);
+    kill: ({ id, sessionId }: OwnedPty) => {
+      ownedTerminals(id, sessionId).kill(id);
     },
   },
 };
+
+type OwnedPty = { id: string; sessionId: string };
+
+/**
+ * The pty registry, once the pty is known to be the asking session's. A pty
+ * id is not a capability: sharing a directory grants no access to another
+ * session's shell. A pty that is already gone is left to the registry, whose
+ * answer for one is a no-op (or `null` for `attach`).
+ */
+function ownedTerminals(id: string, sessionId: string): Terminals {
+  const { terminals } = services();
+  if (terminals.has(id) && !terminals.owns(id, sessionId)) {
+    throw new IpcError("that terminal belongs to another session");
+  }
+  return terminals;
+}
 
 /** The app-owned PTY registry shared by UI and integration tools. */
 export function explorerTerminals(): Terminals { return services().terminals; }

@@ -22,7 +22,7 @@ it("opens the reference in its draft's worktree even when the explorer follows a
 
 it("does not resolve a bare selector against a same-named model in another workspace", () => {
   useExplorer.setState({ activeId: "main-car", tabs: [{ id: "main-car", kind: "file", path: "models/car.step", root: null }] as FileTab[] });
-  expect(() => openComposerReference(scope, { file: "", selector: "o1.3" })).toThrow("this chat’s workspace");
+  expect(() => openComposerReference(scope, { file: "", selector: "o1.3" })).toThrow("this session’s workspace");
   expect(openFile).not.toHaveBeenCalled();
   useExplorer.setState({ tabs: [{ id: "main-car", kind: "file", path: "models/car.step", root: scope.root }] as FileTab[] });
   openComposerReference(scope, { file: "", selector: "o1.3" });

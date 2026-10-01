@@ -8,6 +8,8 @@ import {
   isAuthError,
   isEffortOption,
   partsView,
+  planClock,
+  shellJoin,
   statusLine,
   turnView,
 } from "@renderer/features/session/view";
@@ -73,6 +75,70 @@ describe("activity rows", () => {
     expect(row.label).toBe("Viewed shot.png");
   });
 
+  it("draws a delete that is a shell line as a command, with the command on the row", () => {
+    const row = activityRow(call({ id: "rm", kind: "delete", title: "rm -rf build", input: { command: "rm -rf build" } }));
+    expect(row.glyph).toBe("execute");
+    expect(row.command).toBe("rm -rf build");
+    expect(row.label).toBe("");
+    // A delete with no command is still a file deletion, and an editor
+    // tool's `command` verb is not a shell line.
+    expect(activityRow(call({ id: "d", kind: "delete", title: "Delete a.py", locations: [{ path: "a.py", line: null }] })).glyph).toBe("delete");
+    expect(activityRow(call({ id: "v", kind: "other", title: "view", input: { command: "view" } })).glyph).toBe("other");
+  });
+
+  it("does not take any `other` with a `command` parameter for a shell, only a known shell tool", () => {
+    const mcp = activityRow(call({ id: "m", kind: "other", name: "cad_run", title: "cad_run", input: { command: "rebuild" } }));
+    expect(mcp.glyph).toBe("other");
+    expect(mcp.command).toBeNull();
+    expect(activityRow(call({ id: "u", kind: "other", title: "tool", input: { cmd: "ls" } })).glyph).toBe("other");
+    const bash = activityRow(call({ id: "b", kind: "other", name: "Bash", title: "ls -la", input: { command: "ls -la" } }));
+    expect(bash.glyph).toBe("execute");
+    expect(bash.command).toBe("ls -la");
+    // A known, non-shell name keeps its glyph even when its title is the argument.
+    expect(activityRow(call({ id: "k", kind: "other", name: "cad_run", title: "rebuild", input: { command: "rebuild" } })).glyph).toBe("other");
+  });
+
+  it("matches an argv command against its shell-quoted join, or the script of a `sh -c` wrapper", () => {
+    const argv = ["grep", "-n", "hello world", "README.md"];
+    const quoted = activityRow(call({ id: "q", kind: "other", name: null, title: "grep -n 'hello world' README.md", input: { command: argv } }));
+    expect(quoted.glyph).toBe("execute");
+    expect(quoted.command).toBe("grep -n 'hello world' README.md");
+    expect(activityRow(call({ id: "w", kind: "other", name: null, title: "ls -la", input: { command: ["bash", "-lc", "ls -la"] } })).glyph).toBe("execute");
+    expect(activityRow(call({ id: "x", kind: "other", name: null, title: "$ ls -la", input: { command: ["/bin/zsh", "-c", "ls -la"] } })).glyph).toBe("execute");
+    // An argv whose join is not the title is not a shell.
+    expect(activityRow(call({ id: "y", kind: "other", name: null, title: "run", input: { command: ["run", "--fast"] } })).glyph).toBe("other");
+    expect(shellJoin(["echo", "it's", ""])).toBe(`echo 'it'"'"'s' ''`);
+  });
+
+  it("takes a nameless `other` for a shell when its title is its command line (Codex's exec shape)", () => {
+    // The Codex fixture's exec call, reported as `other` by an adapter that sends no name.
+    const command = "printf '%s\\n' 'hello from codex' > hello.txt\nls -la";
+    const codex = activityRow(call({ id: "exec-1", kind: "other", name: null, title: command, input: { command } }));
+    expect(codex.glyph).toBe("execute");
+    expect(codex.command).toBe(command);
+    expect(codex.label).toBe("");
+    expect(activityRow(call({ id: "p", kind: "other", name: null, title: "$ make test", input: { command: "make test" } })).glyph).toBe("execute");
+    // A `$ ` prompt counts only in front of the command itself.
+    expect(activityRow(call({ id: "d", kind: "other", name: null, title: "$ make build", input: { command: "rebuild" } })).glyph).toBe("other");
+    // Nameless, titled with its tool name: not a shell.
+    expect(activityRow(call({ id: "m", kind: "other", name: null, title: "cad_run", input: { command: "rebuild" } })).glyph).toBe("other");
+  });
+
+  it("gives a call that starts a subagent its own glyph, apart from a thought", () => {
+    const task = activityRow(call({ id: "t", kind: "think", title: "Task: check the docs" }));
+    expect(task.glyph).toBe("subagent");
+    expect(task.label).toBe("Task: check the docs");
+    expect(activityRow(call({ id: "n", kind: "other", name: "Task", title: "Explore" })).glyph).toBe("subagent");
+    expect(activityRow(call({ id: "p", kind: "think", title: "Planning" })).glyph).toBe("think");
+  });
+
+  it("words a cancelled call as cancelled, and folds it like a failed one", () => {
+    expect(activityRow(edit("e1", "a.py", "cancelled")).label).toBe("Cancelled editing a.py");
+    expect(activityRow(call({ id: "s", kind: "search", title: "cad kernels", status: "cancelled" })).label).toBe("Cancelled searching cad kernels");
+    const rows = [edit("e1", "a.py", "cancelled"), edit("e2", "b.py")].map(activityRow);
+    expect(foldSummary(rows)).toBe("Edited 2 files");
+  });
+
   it("keeps the first line of a multi-line command and marks the rest", () => {
     expect(commandLine("printf 'x' > a.txt\nls -la")).toBe("printf 'x' > a.txt …");
     expect(commandLine("x".repeat(200)).length).toBe(120);
@@ -133,6 +199,11 @@ describe("the status line", () => {
   const withParts = (parts: Part[]): SessionState => ({
     ...base(),
     turns: [{ id: "t", role: "agent", parts, startedAt: 0, endedAt: null, stopReason: null }],
+  });
+
+  it("does not call a cancelled call's work current", () => {
+    expect(statusLine(withParts([edit("e1", "hand.py", "cancelled")]))).toBe("Working");
+    expect(statusLine(withParts([run("c1", "npm test", "cancelled")]))).toBe("Working");
   });
 
   it("names the running command, the running edit, or the thought", () => {
@@ -279,5 +350,40 @@ describe("the composer's model and effort dropdowns", () => {
     // The model itself, and an agent's own inventions, are not it.
     expect(isEffortOption({ id: "model", category: "model" })).toBe(false);
     expect(isEffortOption({ id: "web_search", category: null })).toBe(false);
+  });
+});
+
+describe("planClock", () => {
+  const plan: Part = { type: "plan", entries: [{ content: "Step", priority: "medium", status: "completed" }] };
+  const turn = (id: string, role: "user" | "agent", parts: Part[], startedAt: number, endedAt: number | null) => ({
+    id,
+    role,
+    parts,
+    startedAt,
+    endedAt,
+    stopReason: endedAt === null ? null : ("end_turn" as const),
+  });
+
+  it("is the plan turn's own: a later turn running does not start it again", () => {
+    const state: SessionState = {
+      ...initialSessionState("s1", "codex"),
+      status: "running",
+      turns: [
+        turn("t1", "user", [], 1_000, 1_000),
+        turn("t2", "agent", [plan], 1_000, 13_000),
+        turn("t3", "user", [], 50_000, 50_000),
+        turn("t4", "agent", [{ type: "text", text: "more" }], 50_000, null),
+      ],
+    };
+    expect(planClock(state)).toEqual({ startedAt: 1_000, endedAt: 13_000, running: false });
+  });
+
+  it("runs while the plan turn is the one running", () => {
+    const state: SessionState = {
+      ...initialSessionState("s1", "codex"),
+      status: "running",
+      turns: [turn("t1", "user", [], 1_000, 1_000), turn("t2", "agent", [plan], 1_000, null)],
+    };
+    expect(planClock(state)).toEqual({ startedAt: 1_000, endedAt: null, running: true });
   });
 });

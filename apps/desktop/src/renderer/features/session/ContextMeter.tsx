@@ -1,3 +1,4 @@
+import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 import { useState } from "react";
 import { ChevronRight } from "lucide-react";
 import { cn } from "cn";
@@ -18,7 +19,10 @@ import type { ContextUsage, RateLimit, TokenTotals, TurnUsage } from "@shared/ac
  * The panel opens on **click** and stays open — hover does nothing. It is
  * something to read and to compare rows in, not a thing to glance at: a
  * popover that closes when the pointer leaves cannot be read down its
- * length. Escape, a click outside, or the ring again dismisses it.
+ * length. Escape, a click outside, or the ring again dismisses it. Focus moves
+ * into the panel on open (Enter on the ring would otherwise leave it on the
+ * trigger, with the panel in a portal Tab cannot reach) and back to the ring
+ * on close; the ring shows the kit's focus ring meanwhile.
  *
  * Three things are in it, in the order somebody wants them: the window,
  * the account's plan limits when the agent reports any, and — behind
@@ -70,21 +74,21 @@ export function ContextMeter({
       open={open}
     >
       <PopoverTrigger asChild>
-        <button
-          aria-label={`Context ${percent}% used`}
-          className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-accent data-[state=open]:bg-accent"
-          data-context-trigger
-          title={`${formatTokens(usage.used)} / ${formatTokens(usage.size)} (${percent}%)`}
-          type="button"
-        >
-          <Ring fraction={fraction} />
-        </button>
+        <TooltipHint content={`${formatTokens(usage.used)} / ${formatTokens(usage.size)} (${percent}%)`} side="left">
+          <button
+            aria-label={`Context ${percent}% used`}
+            className="flex size-7 shrink-0 items-center justify-center rounded-md text-muted-foreground outline-none transition-colors hover:bg-accent focus-visible:ring-[3px] focus-visible:ring-ring/50 data-[state=open]:bg-accent"
+            data-context-trigger
+            type="button"
+          >
+            <Ring fraction={fraction} />
+          </button>
+        </TooltipHint>
       </PopoverTrigger>
       <PopoverContent
         align="end"
         className="w-80 p-3"
         data-context-popover
-        onOpenAutoFocus={(event) => event.preventDefault()}
         side="top"
         sideOffset={8}
       >
@@ -254,7 +258,7 @@ function ContextPanel({
         <div className="flex flex-col gap-2 border-t pt-2.5">
           <button
             aria-expanded={detailed}
-            className="-mx-1 flex items-center gap-1 rounded-sm px-1 py-0.5 text-left text-muted-foreground outline-none hover:text-foreground focus-visible:text-foreground"
+            className="-mx-1 flex items-center gap-1 rounded-sm px-1 py-0.5 text-left text-muted-foreground outline-none hover:text-foreground focus-visible:text-foreground focus-visible:ring-[3px] focus-visible:ring-ring/50"
             data-context-detail-toggle
             onClick={() => onDetailed(!detailed)}
             type="button"

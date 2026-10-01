@@ -2,12 +2,25 @@ import type { PromptReference, ResourceRef } from '@text-to-cad/core/prompt';
 import type { JsonValue } from '../../../file-viewer/types.js';
 import { normalizeViewSettings, resolveViewSettings } from '@text-to-cad/core/common/viewSettings.js';
 import { mergeViewerDisplaySettings } from '../view-settings/viewerDisplaySettings.js';
+import { cameraReadsBack } from './liveReadback.js';
 
 // The live command surface: what an app-owned tool (an agent, a test) may ask of
 // the viewport that is actually mounted. The base commands mean the same thing
 // for every renderer; a renderer ADDS commands of its own by name and DECLINES
 // the known host commands that make no sense for it, with the sentence the
 // caller is shown. Nothing is ever a silent no-op.
+//
+// A mutating command replies only once its effect is on screen, never on the call returning:
+// a settled frame at least, and where the command has a committed predicate, until that holds.
+// The predicate compares against what the runtime records, not the request. Each command's
+// predicate (setCamera's position-and-target readback, Preview's orbit, resetCamera's rest,
+// setRenderMode's projection, a renderer's own select) is stated once in packages/ui/docs/cad-renderer.md
+// under "Live commands". A renderer whose reset is instant (a flat drawing) returns no predicate
+// and a settled frame is its answer. The wait is bounded at ten seconds, then it throws "The
+// viewer did not finish applying this command." rather than answer with a state the command did
+// not produce (desktop main's relay waits longer, 12 s, so this sentence is what the agent
+// reads). Commands set from an IPC handler render on a macrotask, which is why one frame is not
+// the answer.
 
 export interface LiveCameraSnapshot {
   position: [number, number, number];
@@ -49,10 +62,18 @@ export interface LiveViewBinding<Controller = LiveViewController> {
 /** What the mounted renderer answers with. Extra commands are own properties, found by name. */
 export interface LiveViewRuntime<State extends LiveViewState = LiveViewState> {
   readState(): Omit<State, 'active'>;
-  setCamera(snapshot: LiveCameraSnapshot): void;
-  resetCamera(): void;
+  /**
+   * May hand back the predicate that says the camera it APPLIED is on screen: a shell derives
+   * the applied camera from the request (view settings, scene scale), so the request itself
+   * is not what reads back. Without one, the binding waits for the request to read back.
+   */
+  setCamera(snapshot: LiveCameraSnapshot): void | ((state: State) => boolean);
+  /** May hand back the predicate that says the camera has come to rest (an eased reset has not, a frame later). */
+  resetCamera(): void | ((state: State) => boolean);
   setDisplaySettings(patch: { [key: string]: JsonValue }): void;
   setRenderMode(enabled: boolean): void;
+  /** False while the camera is under way; a capture waits for it, so the image shows the camera the state names. */
+  atRest?(): boolean;
   capture(): Promise<Blob>;
 }
 export interface LiveBindingOptions {
@@ -67,6 +88,8 @@ export interface LiveBindingOptions {
 export const HOST_LIVE_COMMANDS = Object.freeze(['select', 'clearSelection'] as const);
 
 const settleFrame = () => new Promise<void>(resolve => requestAnimationFrame(() => resolve()));
+const LIVE_COMMAND_TIMEOUT_MS = 10_000;
+const UNFINISHED = 'The viewer did not finish applying this command.';
 const scopeKey = (state: { resource: ResourceRef; revision: string }) => JSON.stringify([state.resource, state.revision]);
 
 /** Mounted-view adapter. It never retains a scene after detach. */
@@ -92,24 +115,39 @@ export function attachLiveBinding<State extends LiveViewState, Controller extend
     if (!active) throw new Error('The model tab closed while its viewer command was running.');
     if (scopeKey(readRuntime().readState()) !== scope) throw new Error('The displayed model revision changed while its viewer command was running.');
   };
-  const mutate = async (apply: (runtime: LiveViewRuntime<State>) => void,
+  // The wait is bounded at ten seconds of wall clock, then it throws rather than returning a
+  // state the command did not produce. The bound is a timer raced against each frame, not a
+  // check after one: a frame that never comes (a hidden window, a paused rAF) must still end it.
+  const settleBefore = (deadline: number) => new Promise<void>((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error(UNFINISHED)), Math.max(0, deadline - Date.now()));
+    settle().then(() => { clearTimeout(timer); resolve(); }, error => { clearTimeout(timer); reject(error); });
+  });
+  const untilCommitted = async (scope: string, committed: () => boolean) => {
+    const deadline = Date.now() + LIVE_COMMAND_TIMEOUT_MS;
+    do {
+      await settleBefore(deadline);
+      checkScope(scope);
+      if (committed()) return;
+    } while (Date.now() < deadline);
+    throw new Error(UNFINISHED);
+  };
+  const mutate = async (apply: (runtime: LiveViewRuntime<State>) => void | ((state: State) => boolean),
     committed?: (state: State) => boolean): Promise<State> => {
     const { runtime, scope } = admit();
-    apply(runtime);
-    const deadline = Date.now() + 10_000;
+    // A command may hand back the predicate that says when ITS effect is on screen.
+    committed = apply(runtime) || committed;
     // A mode switch can suspend while the Render chunk loads. The first RAF
     // may precede its React commit, so observe the actual destination state.
-    do {
-      await settle();
-      checkScope(scope);
-      const state = readState();
-      if (!committed || committed(state)) return state;
-    } while (Date.now() < deadline);
-    throw new Error('The viewer did not finish applying this command.');
+    let state!: State;
+    await untilCommitted(scope, () => {
+      state = readState();
+      return !committed || committed(state);
+    });
+    return state;
   };
   const controller: LiveViewController<State> & Record<string, unknown> = {
     readState,
-    setCamera: snapshot => mutate(runtime => runtime.setCamera(snapshot)),
+    setCamera: snapshot => mutate(runtime => runtime.setCamera(snapshot), state => cameraReadsBack(state.camera, snapshot)),
     resetCamera: () => mutate(runtime => runtime.resetCamera()),
     setDisplaySettings: async patch => {
       const normalized = normalizeViewSettings(patch);
@@ -136,6 +174,8 @@ export function attachLiveBinding<State extends LiveViewState, Controller extend
         && (!state.camera?.projection || state.camera.projection === resolveViewSettings(state.display).camera.projection)),
     async capture() {
       const { runtime, scope } = admit();
+      // An image taken mid-move would show a camera the state (read right after) does not name.
+      if (runtime.atRest && !runtime.atRest()) await untilCommitted(scope, () => runtime.atRest!());
       const pending = runtime.capture();
       const blob = await pending;
       checkScope(scope);
@@ -144,10 +184,15 @@ export function attachLiveBinding<State extends LiveViewState, Controller extend
   };
   for (const name of commands) {
     if (name in controller) throw new Error(`The live command "${name}" is already part of every renderer's base set.`);
+    // Commands set from an IPC handler, outside a React event, render on a macrotask: one frame
+    // can precede the commit, so a reply must wait for its own effect. Clearing is committed
+    // once nothing is selected; `select` (and any renderer command) returns its own predicate.
     controller[name] = (...args: unknown[]) => mutate(runtime => {
       const command = (runtime as unknown as Record<string, unknown>)[name];
       if (typeof command !== 'function') throw new Error(`This renderer declared the live command "${name}" but its mounted view does not answer it.`);
-      command.apply(runtime, args);
+      const committed = command.apply(runtime, args);
+      if (typeof committed === 'function') return committed as (state: State) => boolean;
+      return name === 'clearSelection' ? (state: State) => state.selection.length === 0 : undefined;
     });
   }
   for (const [name, reason] of Object.entries(declined)) {

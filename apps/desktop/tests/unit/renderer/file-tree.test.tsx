@@ -94,18 +94,21 @@ const row = (path: string) => document.querySelector(`[data-path="${path}"]`) as
 const rowExists = (path: string) => document.querySelector(`[data-path="${path}"]`) !== null;
 
 describe("FileTree", () => {
-  it("shows hidden directories and unsupported files without consulting renderer support", async () => {
+  it("shows dotfolders, ignored directories and unsupported files without consulting renderer support, but not .git", async () => {
     const user = userEvent.setup();
     const onOpenFile = vi.fn();
     stub("list", async () => [
       { path: ".git", name: ".git", kind: "directory", size: 0, modifiedAt: 0, symlink: false },
+      { path: ".github", name: ".github", kind: "directory", size: 0, modifiedAt: 0, symlink: false },
       { path: "node_modules", name: "node_modules", kind: "directory", size: 0, modifiedAt: 0, symlink: false },
       { path: "output.unsupported", name: "output.unsupported", kind: "file", size: 3, modifiedAt: 0, symlink: false },
     ]);
     mount({ onOpenFile });
 
     await waitFor(() => expect(rowExists("output.unsupported")).toBe(true));
-    expect(rowExists(".git")).toBe(true);
+    // The repository's internals are the version control's, never the project's to open.
+    expect(rowExists(".git")).toBe(false);
+    expect(rowExists(".github")).toBe(true);
     expect(rowExists("node_modules")).toBe(true);
     await user.click(row("output.unsupported"));
     // A pick in the tree opens the file with the tree, so a person can go on walking it.
@@ -228,13 +231,13 @@ describe("FileTree", () => {
     await user.keyboard("{Escape}");
   });
 
-  it("renames the cursor row on F2 and puts the name back on Escape", async () => {
+  it("renames the focused row on F2 and puts the name back, and focus, on Escape", async () => {
     const user = userEvent.setup();
     mount();
     await waitFor(() => expect(rowExists("README.md")).toBe(true));
 
     await user.click(row("README.md"));
-    screen.getByRole("tree").focus();
+    expect(row("README.md")).toHaveFocus();
     await user.keyboard("{F2}");
     const field = await screen.findByLabelText("Rename README.md");
     expect(field).toHaveFocus();
@@ -243,6 +246,7 @@ describe("FileTree", () => {
     expect((field as HTMLInputElement).selectionEnd).toBe("README".length);
     await user.keyboard("{Escape}");
     await waitFor(() => expect(screen.queryByLabelText("Rename README.md")).toBeNull());
+    expect(row("README.md")).toHaveFocus();
     expect(window.textToCad.explorer.rename).not.toHaveBeenCalled();
 
     // Enter commits through main, and the row follows the answer.

@@ -32,6 +32,8 @@ export const SkillsInfoSchema = z.object({
    */
   root: z.string().nullable(),
   skills: z.array(SkillSummarySchema),
+  /** Why the root could not be made (a failed copy), when it could not; null otherwise. */
+  error: z.string().nullable().optional(),
 });
 export type SkillsInfo = z.infer<typeof SkillsInfoSchema>;
 

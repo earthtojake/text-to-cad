@@ -23,12 +23,20 @@ import type {
   Turn,
 } from "@shared/acp/types";
 
+import { diffCounts } from "./diff-counts";
+
+export { diffCounts };
+
 /* -------------------------------------------------------------------------- */
 /* Activity rows                                                               */
 /* -------------------------------------------------------------------------- */
 
-/** The leading glyph. ACP's tool kinds plus `image` for a viewed image. */
-export type Glyph = ToolKind | "image";
+/**
+ * The leading glyph. ACP's tool kinds plus `image` for a viewed image and
+ * `subagent` for the call that hands work to one (Claude's `Task`, which the
+ * adapter reports as a `think`).
+ */
+export type Glyph = ToolKind | "image" | "subagent";
 
 export type ActivityRow = {
   id: string;
@@ -139,7 +147,25 @@ export function partsView(parts: Part[], open: boolean, prefix: string): ViewIte
   return items;
 }
 
+/**
+ * One row per tool call part, remembered by the part itself. The reducer
+ * replaces a part when anything in it changes and keeps it otherwise, so a
+ * row computed once holds until then — and a row is not cheap: its badge
+ * counts the lines of every diff the call reported, and the transcript asks
+ * for every row on every streamed token.
+ */
+const ROWS = new WeakMap<ToolCallPart, ActivityRow>();
+
 export function activityRow(part: ToolCallPart): ActivityRow {
+  let row = ROWS.get(part);
+  if (!row) {
+    row = computeActivityRow(part);
+    ROWS.set(part, row);
+  }
+  return row;
+}
+
+function computeActivityRow(part: ToolCallPart): ActivityRow {
   const glyph = glyphOf(part);
   const path = pathOf(part);
   const command = glyph === "execute" ? commandOf(part) : null;
@@ -157,15 +183,122 @@ export function activityRow(part: ToolCallPart): ActivityRow {
   };
 }
 
-/** A viewed image is an ACP `read` whose content is an image; everything else is its kind. */
+/**
+ * A viewed image is an ACP `read` whose content is an image; a call that
+ * starts a subagent is `subagent`; a `delete` that carries a shell command
+ * (`rm -rf build`), or an `other` from a known shell tool, is a command,
+ * because the row draws the command and a file glyph beside a terminal line
+ * says the wrong thing. Everything else is its kind.
+ */
 function glyphOf(part: ToolCallPart): Glyph {
   if (part.content.some((content) => content.type === "image")) {
     return "image";
   }
-  if (part.kind === "other" && part.content.some((content) => content.type === "diff")) {
+  const hasDiff = part.content.some((content) => content.type === "diff");
+  if (part.kind === "other" && hasDiff) {
     return "edit";
   }
+  if (isSubagentCall(part)) {
+    return "subagent";
+  }
+  if (!hasDiff && isShellShaped(part) && shellCommandOf(part) !== null) {
+    return "execute";
+  }
   return part.kind;
+}
+
+/**
+ * Claude's `Task`/`Agent` tool: named so by the adapter, titled "Task: …",
+ * or already holding the child's calls (the adapter routes a subagent's
+ * updates into the tool call that started it).
+ */
+function isSubagentCall(part: ToolCallPart): boolean {
+  if (part.kind !== "think" && part.kind !== "other") {
+    return false;
+  }
+  return (
+    part.name === "Task" ||
+    part.name === "Agent" ||
+    /^Task\b/.test(part.title.trim()) ||
+    part.children.some((child) => child.type === "tool_call")
+  );
+}
+
+/**
+ * Shell tools by the names adapters give them. Claude's `Bash` and Codex's
+ * shell already arrive as `kind: "execute"`; this is for an adapter that
+ * reports one as `other`. Any other `other` with a `command` parameter —
+ * an MCP tool's, say — keeps its own glyph: a parameter name is not a shell.
+ */
+const SHELL_TOOL_NAMES = new Set(["bash", "shell", "local_shell", "exec_command", "run_shell_command", "terminal"]);
+
+function isShellShaped(part: ToolCallPart): boolean {
+  if (part.kind === "delete") {
+    return true;
+  }
+  if (part.kind !== "other") {
+    return false;
+  }
+  if (part.name !== null) {
+    return SHELL_TOOL_NAMES.has(part.name.toLowerCase());
+  }
+  // ACP's ToolCall has no name, so most adapters send none (the reducer only
+  // keeps a non-standard `name`, and no `_meta` tool name). Then the title
+  // decides: a shell call is titled with its own command line, as Codex
+  // titles its exec calls, bare or after a `$ ` prompt. The title has to BE
+  // the command — an MCP tool is titled with its tool name, and a `$ ` in
+  // front of anything else is not enough.
+  if (shellCommandOf(part) === null) {
+    return false;
+  }
+  const title = part.title.trim();
+  const bare = title.startsWith("$ ") ? title.slice(2).trim() : title;
+  return commandForms(part).includes(bare);
+}
+
+/**
+ * Every spelling of the call's command a title could be: the string itself,
+ * or for an argv array its shell-quoted join, its plain join, and the script
+ * of a `sh -c …` / `bash -lc …` wrapper.
+ */
+function commandForms(part: ToolCallPart): string[] {
+  const input = part.input as { command?: unknown; cmd?: unknown } | null | undefined;
+  if (typeof input?.command === "string") return [input.command.trim()];
+  if (typeof input?.cmd === "string") return [input.cmd.trim()];
+  if (!Array.isArray(input?.command)) return [];
+  const argv = input.command.map(String);
+  const forms = [shellJoin(argv), argv.join(" ")];
+  const script = argv.length === 3 && /^-[a-z]*c$/.test(argv[1]!) ? argv[2]! : null;
+  if (script !== null && /(^|\/)(ba|z|da|k)?sh$/.test(argv[0]!)) forms.push(script.trim());
+  return forms;
+}
+
+/** argv as a shell would need it typed: shlex.join's single-quote rule. */
+export function shellJoin(argv: readonly string[]): string {
+  return argv
+    .map((arg) => (arg !== "" && /^[\w@%+=:,./-]+$/.test(arg) ? arg : `'${arg.replace(/'/g, `'"'"'`)}'`))
+    .join(" ");
+}
+
+/**
+ * The editor tools also put a `command` in their input ("view",
+ * "str_replace"); those are verbs, not shell lines.
+ */
+const EDITOR_COMMANDS = new Set(["view", "create", "str_replace", "insert", "undo_edit"]);
+
+/** A shell command in the call's input, when there is one; the title is not consulted. */
+function shellCommandOf(part: ToolCallPart): string | null {
+  const input = part.input as { command?: unknown; cmd?: unknown } | null | undefined;
+  const raw =
+    typeof input?.command === "string"
+      ? input.command
+      : Array.isArray(input?.command)
+        ? shellJoin(input.command.map(String))
+        : typeof input?.cmd === "string"
+          ? input.cmd
+          : null;
+  const text = raw?.trim() ?? "";
+  return text === "" || EDITOR_COMMANDS.has(text) ? null : text;
 }
 
 function pathOf(part: ToolCallPart): string | null {
@@ -183,7 +316,7 @@ function commandOf(part: ToolCallPart): string | null {
     typeof input?.command === "string"
       ? input.command
       : Array.isArray(input?.command)
-        ? input.command.map(String).join(" ")
+        ? shellJoin(input.command.map(String))
         : typeof input?.cmd === "string"
           ? input.cmd
           : part.title;
@@ -202,12 +335,24 @@ const VERBS: Record<Glyph, [done: string, doing: string, failed: string]> = {
   fetch: ["Fetched", "Fetching", "Could not fetch"],
   switch_mode: ["Switched mode", "Switching mode", "Could not switch mode"],
   image: ["Viewed", "Viewing", "Could not view"],
+  subagent: ["Delegated", "Delegating", "Subagent failed"],
   other: ["Called", "Calling", "Failed"],
 };
 
 function verb(glyph: Glyph, status: ToolCallStatus): string {
   const [done, doing, failed] = VERBS[glyph];
-  return status === "failed" ? failed : status === "completed" ? done : doing;
+  switch (status) {
+    case "failed":
+      return failed;
+    case "completed":
+      return done;
+    case "cancelled":
+      // The turn stopped it mid-way: "Cancelled editing a.py".
+      return `Cancelled ${doing.charAt(0).toLowerCase()}${doing.slice(1)}`;
+    case "pending":
+    case "in_progress":
+      return doing;
+  }
 }
 
 function labelOf(part: ToolCallPart, glyph: Glyph, path: string | null, hasCommand: boolean): string {
@@ -231,6 +376,7 @@ function labelOf(part: ToolCallPart, glyph: Glyph, path: string | null, hasComma
           ? `${verb(glyph, part.status)} ${title}`
           : verb(glyph, part.status);
     case "think":
+    case "subagent":
     case "switch_mode":
     case "other":
       return title || part.name || verb(glyph, part.status);
@@ -258,7 +404,8 @@ type Bucket = { glyph: Glyph; paths: Set<string>; count: number; active: boolean
 /**
  * "Edited 3 files, ran 2 commands, read hand.py" — one segment per kind in
  * order of first appearance, a single file named, progressive tense while
- * any call of that kind is still running.
+ * any call of that kind is still running. A failed or cancelled call is not
+ * running: it folds in the past tense.
  */
 export function foldSummary(rows: ActivityRow[]): string {
   const buckets = new Map<Glyph, Bucket>();
@@ -286,6 +433,7 @@ const NOUNS: Record<Glyph, [singular: string, plural: string]> = {
   delete: ["file", "files"],
   move: ["file", "files"],
   image: ["image", "images"],
+  subagent: ["task", "tasks"],
   execute: ["command", "commands"],
   search: ["search", "searches"],
   fetch: ["page", "pages"],
@@ -313,31 +461,6 @@ function capitalize(text: string): string {
 /* -------------------------------------------------------------------------- */
 /* Diffs                                                                       */
 /* -------------------------------------------------------------------------- */
-
-/** Lines added and removed, as a multiset difference — a badge, not a diff viewer. */
-export function diffCounts(oldText: string, newText: string): { insertions: number; deletions: number } {
-  const count = (text: string) => {
-    const map = new Map<string, number>();
-    if (text === "") {
-      return map;
-    }
-    for (const line of text.replace(/\n$/, "").split("\n")) {
-      map.set(line, (map.get(line) ?? 0) + 1);
-    }
-    return map;
-  };
-  const before = count(oldText);
-  const after = count(newText);
-  let insertions = 0;
-  let deletions = 0;
-  for (const [line, n] of after) {
-    insertions += Math.max(0, n - (before.get(line) ?? 0));
-  }
-  for (const [line, n] of before) {
-    deletions += Math.max(0, n - (after.get(line) ?? 0));
-  }
-  return { insertions, deletions };
-}
 
 function diffTotals(part: ToolCallPart): { insertions: number; deletions: number } {
   let insertions = 0;
@@ -378,6 +501,10 @@ export function statusLine(state: SessionState): string | null {
   }
   switch (last.type) {
     case "tool_call": {
+      // A call the turn cancelled is nobody's current work.
+      if (last.status === "cancelled") {
+        return "Working";
+      }
       const row = activityRow(last);
       if (row.command) {
         return `${VERBS.execute[1]} ${commandLine(row.command, 60)}`;
@@ -402,13 +529,29 @@ function lastActive(parts: Part[]): Part | null {
   if (!last) {
     return null;
   }
-  if (last.type === "tool_call" && (last.status === "completed" || last.status === "failed")) {
+  if (last.type === "tool_call" && (last.status === "completed" || last.status === "failed" || last.status === "cancelled")) {
     return last.children.length > 0 ? (lastActive(last.children) ?? last) : last;
   }
   if (last.type === "subagent" && last.state === "running" && last.parts.length > 0) {
     return lastActive(last.parts) ?? last;
   }
   return last;
+}
+
+/**
+ * The plan card's clock: the turn that produced the plan, on its own terms.
+ * It runs only while that turn is the one running — not while any later turn
+ * does — and a turn that ended says how long it took, whenever it is drawn.
+ */
+export function planClock(state: SessionState): { startedAt: number; endedAt: number | null; running: boolean } | null {
+  const turn = state.turns.findLast(
+    (candidate) => candidate.role === "agent" && candidate.parts.some((part) => part.type === "plan"),
+  );
+  if (!turn) {
+    return null;
+  }
+  const running = turn.endedAt === null && (state.status === "running" || state.status === "waiting");
+  return { startedAt: turn.startedAt, endedAt: turn.endedAt, running };
 }
 
 /** "1m 12s" for the plan card and the reasoning trigger. */
@@ -449,4 +592,23 @@ export function isAuthError(message: string | null | undefined): boolean {
   return /auth(entication|orization)? required|not (logged|signed) in|sign in|unauthori[sz]ed|login required/i.test(
     message ?? "",
   );
+}
+
+/**
+ * What the composer says about the session, and whether Enter may send while it says `submitted`.
+ * `submitted` is two things: a session still connecting or loading (a first load or a create, which
+ * a second send must not race), and a prompt that is out without its `prompt/start` yet (`sending`),
+ * where a send queues behind it. Only the second lets Enter through. A reconnect behind a painted
+ * transcript is neither: its box stays live, and a prompt sent into it is held by main.
+ */
+export function composerFlags(input: {
+  running: boolean;
+  connecting: boolean;
+  loading: boolean;
+  reconnecting: boolean;
+  sending: boolean;
+}): { status: "ready" | "submitted" | "streaming"; queueWhileSubmitted: boolean } {
+  const starting = (input.connecting || input.loading) && !input.reconnecting;
+  const status = input.running ? "streaming" : starting || input.sending ? "submitted" : "ready";
+  return { status, queueWhileSubmitted: input.sending && !starting };
 }

@@ -1,5 +1,3 @@
-import { mkdtemp, realpath } from "node:fs/promises";
-import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -9,6 +7,7 @@ import { SessionConnection } from "@main/acp/connection";
 import { spawnProcessTerminal } from "@main/acp/process-backend";
 import { modeChoice } from "@shared/acp/options";
 import { allToolCalls, lastAgentText } from "@shared/acp/reduce";
+import { cleanTempDirs, tempDir } from "./temp-dirs";
 
 /**
  * The other shape ACP allows for the same decision. An agent can send its
@@ -31,6 +30,7 @@ afterEach(async () => {
     connection.close();
     await connection.exited;
   }
+  cleanTempDirs();
 });
 
 async function connect() {
@@ -39,7 +39,7 @@ async function connect() {
     agentId: "fake",
     launch: { command: process.execPath, args: [FAKE_AGENT, "--mode-option"], env: {} },
     env: { PATH: process.env.PATH ?? "" },
-    cwd: await realpath(await mkdtemp(path.join(os.tmpdir(), "text-to-cad-mode-option-"))),
+    cwd: await tempDir("text-to-cad-mode-option-"),
     skillsRoot: null,
     preamble: null,
     spawnTerminal: spawnProcessTerminal,

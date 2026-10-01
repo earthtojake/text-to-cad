@@ -10,8 +10,9 @@
  *
  * Local only: the listener is 127.0.0.1 on an OS-assigned port, and a request
  * without a live session's token is refused before its body is read. A token
- * is minted per session (`tokenFor`) and forgotten when the session is
- * deleted, so a server left running by a dead agent cannot act on a later one.
+ * is minted per session and integration (`tokenFor`) and forgotten when the
+ * session is archived, closed or deleted (`revoke`), so a server left running
+ * by a dead agent cannot act on a later one.
  */
 import { randomBytes } from "node:crypto";
 import http from "node:http";
@@ -25,6 +26,7 @@ export type BridgeSession = { sessionId: string; projectId: string; cwd: string 
 export type BridgeActions = Record<string, (session: BridgeSession, params: Record<string, unknown>, signal?: AbortSignal) => Promise<unknown>>;
 export type BridgeMethod = string;
 import { integrations, integrationById, toolByName } from "./registry.mjs";
+import { MAX_DOCUMENT_CHARS } from "./documents/module.mjs";
 export const BRIDGE_METHODS: readonly string[] = integrations.flatMap(entry => [...entry.tools, ...(entry.hostTools ?? [])].map(tool => tool.name));
 
 /** The environment the MCP server reads. One place, shared with server.mjs by name. */
@@ -35,7 +37,13 @@ export const BRIDGE_ENV = {
   session: "TEXT_TO_CAD_SESSION_ID",
 } as const;
 
-const MAX_BODY_BYTES = 3 * 1024 * 1024;
+/**
+ * The request body cap, from the largest thing a tool accepts: a document of
+ * `MAX_DOCUMENT_CHARS`. JSON can spend six bytes on one UTF-16 unit (a control
+ * character or a lone surrogate is `\u00XX`), so a buffer the schema accepts
+ * must not be refused here as too large; 64 KB covers the rest of the request.
+ */
+const MAX_BODY_BYTES = 6 * MAX_DOCUMENT_CHARS + 64 * 1024;
 
 export class McpBridge {
   private server: http.Server | null = null;
@@ -47,7 +55,12 @@ export class McpBridge {
   constructor(
     private readonly actions: BridgeActions,
     private readonly serverScript: () => { command: string; args: string[]; env: Record<string, string> },
-    private readonly resources?: { revoke(sessionId: string): void; dispose(): Promise<void> },
+    private readonly resources?: {
+      revoke(sessionId: string): void;
+      /** The session's open pages: what a workspace change strands, though the session lives on. */
+      disposePages?(session: BridgeSession): void | Promise<void>;
+      dispose(): Promise<void>;
+    },
   ) {}
 
   /** Listen. Idempotent. */
@@ -60,6 +73,10 @@ export class McpBridge {
       server.once("error", reject);
       server.listen(0, "127.0.0.1", () => {
         server.off("error", reject);
+        // Kept for the listener's life: an accept error later (EMFILE) with no
+        // handler is an uncaught exception, which is the app's "JavaScript
+        // error" dialog for a thing the next request will simply retry.
+        server.on("error", (error) => console.warn(`[mcp] the bridge listener reported: ${error.message}`));
         resolve();
       });
     });
@@ -80,9 +97,14 @@ export class McpBridge {
     for (const controller of this.inFlight.keys()) controller.abort(new Error("text-to-cad is shutting down"));
     this.tokens.clear();
     this.byToken.clear();
-    await this.resources?.dispose();
-    if (server) {
-      await new Promise<void>((resolve) => { server.close(() => resolve()); server.closeAllConnections(); });
+    try {
+      await this.resources?.dispose();
+    } finally {
+      // The listener closes whatever the disposal did: a rejection is surfaced to the caller, not
+      // a reason to leave a loopback port open.
+      if (server) {
+        await new Promise<void>((resolve) => { server.close(() => resolve()); server.closeAllConnections(); });
+      }
     }
   }
 
@@ -95,6 +117,10 @@ export class McpBridge {
       // The cwd or project can change across a resume; the token does not.
       if (existing.session.cwd !== session.cwd || existing.session.projectId !== session.projectId) {
         this.resources?.revoke(session.sessionId);
+        // Pages opened in a scope the new workspace does not name are out of
+        // reach of the person's tabs and the agent alike, and would outlive it
+        // until archive; the ones in a scope it still names stay.
+        void this.resources?.disposePages?.(session);
         for (const [controller, active] of this.inFlight) if (active.sessionId === session.sessionId) controller.abort(new Error("Session workspace changed"));
       }
       existing.session = session;
@@ -175,8 +201,12 @@ export class McpBridge {
       if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error("expected an object");
       parsed = value;
     } catch { send(400, { ok: false, error: "malformed JSON object" }); return; }
-    // Revocation can happen while a client is still sending its body.
-    if (this.byToken.get(token) !== authorization) { send(401, { ok: false, error: "session authorization changed" }); return; }
+    // Revocation can happen while a client is still sending its body. `tokenFor`
+    // re-records the entry on every `serverFor`, so the entry is not compared:
+    // the token must still be live and still name the workspace the request
+    // began in.
+    const current = this.byToken.get(token)?.session;
+    if (!current || current.cwd !== session.cwd || current.projectId !== session.projectId) { send(401, { ok: false, error: "session authorization changed" }); return; }
     const method = parsed.method;
     if (typeof method !== "string" || !(BRIDGE_METHODS as readonly string[]).includes(method)) {
       send(400, { ok: false, error: `unknown method ${String(method)}` });
@@ -196,7 +226,13 @@ export class McpBridge {
       const handler = this.actions[method];
       if (!handler) throw new Error(`Integration method is unavailable: ${method}`);
       const result = await handler(session, validated.data, controller.signal);
-      controller.signal.throwIfAborted();
+      // The handler has finished: a write_terminal or edit_document is done,
+      // and "revoked" alone would read as if it were not. Say which it is, in
+      // the abort's own words (a shutdown, a revoke and a move are not one thing).
+      if (controller.signal.aborted) {
+        const why = controller.signal.reason instanceof Error ? controller.signal.reason.message : "cancelled";
+        throw new Error(`${method} was applied, but the request was aborted before the reply (${why}); check the result before retrying`);
+      }
       if (!response.destroyed) send(200, { ok: true, result });
     } catch (error) {
       if (!response.destroyed) send(200, { ok: false, error: error instanceof Error ? error.message : String(error) });

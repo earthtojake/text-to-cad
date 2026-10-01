@@ -3,11 +3,13 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
-import { expect, test, type ElectronApplication, type Page } from "@playwright/test";
+import { expect, type ElectronApplication, type Page } from "@playwright/test";
 import type { TextToCadApi } from "../../src/shared/ipc";
 import type { IntegrationCommand, IntegrationReply } from "../../src/shared/ipc/integrations";
 import { cadRegistryEnvironment, cadRuntimeReady, cadTestProfile } from "./cad-runtime";
-import { launch, repoRoot, settleTerminal } from "./launch";
+import { launch, repoRoot, settleTerminal, test } from "./launch";
+import { QUIT_DEADLINE_MS } from "../../src/main/quit-deadline";
+import { QUIT_BUDGET_MS, QUIT_TEARDOWN_BUDGET_MS, teardownMs } from "./quit-budget";
 import { selectFixtureSession } from "./session-fixture";
 
 /**
@@ -107,7 +109,7 @@ test.afterAll(async () => {
 });
 
 test("selecting a session warms the viewer and the daemon before any file is opened", async () => {
-  session = await selectFixtureSession(page, project);
+  session = await selectFixtureSession(app, page, project);
   await expect.poll(() => lines.some((line) => /\[viewer\] (started|reused) http:\/\/127\.0\.0\.1:\d+ for /.test(line)), { timeout: 90_000 }).toBe(true);
   await expect.poll(() => lines.some((line) => /\[daemon\] warming .* \(pid \d+\)/.test(line)), { timeout: 30_000 }).toBe(true);
   daemonPid = Number(/\(pid (\d+)\)/.exec(lines.find((line) => /\[daemon\] warming .* \(pid \d+\)/.test(line))!)![1]);
@@ -153,7 +155,7 @@ test("a STEP renders in the desktop viewer, and its reference reaches the prompt
   test.setTimeout(120_000);
   const previousClipboard = await app.evaluate(({ clipboard }) => clipboard.readText());
   try {
-    const draft = page.getByPlaceholder("Do anything");
+    const draft = page.getByPlaceholder("Do anything", { exact: true });
     await draft.fill("Keep this draft.");
     // The Features list is recognised in the packaged worker, under the desktop CSP: a lone
     // part listed as its features is that worker having run.
@@ -258,6 +260,7 @@ test("live CAD commands observe and control the mounted viewport without prompt 
   expect(captured.selection).toEqual(selected.selection);
   expect(captured.mimeType).toBe("image/png");
   expect(Buffer.from(captured.base64, "base64").subarray(0, 8)).toEqual(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]));
+  // The reply waits on clearSelection's committed predicate (selection empty), so no poll belongs here.
   expect((await command("cad-clear-selection", tabId) as CadLiveState).selection).toEqual([]);
 
   const initial = state.camera!;
@@ -304,13 +307,36 @@ test("the app quits with everything running and leaves no child behind", async (
   const tree = descendants(pid).filter((entry) => entry.pid !== daemonPid && !descendants(daemonPid ?? -1).some((child) => child.pid === entry.pid));
   expect(tree.length, "the app should have children to end").toBeGreaterThan(3);
   const exited = new Promise<void>((resolve) => app.process().once("exit", () => resolve()));
+  const quitAt = Date.now();
   // The real thing: the menu's Quit, Cmd+Q, the dock — all `app.quit()`. The connection drops
   // before the evaluate resolves; the exit is what counts.
   await app.evaluate(({ app: electronApp }) => electronApp.quit()).catch(() => {});
   // Gone by the kernel's word (`kill -0`), not Playwright's `exit`, which trails it by seconds.
   await expect.poll(() => alive(pid), { timeout: 30_000, intervals: [25] }).toBe(false);
+  // README "Quitting": two seconds overall. Measured from before `app.quit()`, so the round trip
+  // into main and the 25 ms poll are inside it; the watchdog's part is QUIT_DEADLINE_MS plus the
+  // quarter second the kill takes to land (quit-deadline.ts), which leaves the rest of the budget as slack.
+  const quitMs = Date.now() - quitAt;
+  // `before-quit` ran its teardown and `will-quit` arrived (the lines land as the pipe drains).
+  await expect.poll(() => lines.filter((line) => /^\[quit\] (will-quit|teardown \d+ms)$/.test(line.trim())).length).toBeGreaterThanOrEqual(2);
+  // Everything is printed and annotated before anything is asserted (launch.ts has no CI marker), so a
+  // CI log of a failing run shows the split: main's own `[quit]` lines, the teardown against its
+  // budget, and what is left for Chromium's shutdown and the watchdog's kill.
+  const quitLines = lines.map((line) => line.trim()).filter((line) => line.startsWith("[quit]"));
+  for (const line of quitLines) console.info(line);
+  const teardown = teardownMs(quitLines);
+  console.info(`[quit-budget] app.quit() to pid gone: ${quitMs} ms of ${QUIT_BUDGET_MS} ms (deadline ${QUIT_DEADLINE_MS} ms)`);
+  console.info(`[quit-budget] before-quit teardown: ${teardown} ms of ${QUIT_TEARDOWN_BUDGET_MS} ms; the other ${teardown === null ? "?" : quitMs - teardown} ms is Chromium's shutdown, the watchdog and the polling`);
+  test.info().annotations.push({ type: "quit-ms", description: String(quitMs) }, { type: "quit-teardown-ms", description: String(teardown) });
+  expect(quitMs, `the app took ${quitMs} ms to quit (deadline ${QUIT_DEADLINE_MS} ms, budget ${QUIT_BUDGET_MS} ms; teardown ${teardown} ms)`).toBeLessThan(QUIT_BUDGET_MS);
+  // The teardown is synchronous (quit-budget.ts has the derivation): the total can pass on a fast
+  // machine while a step has started to wait, and fail on a slow one without saying which part.
+  expect(teardown, "main logged no `[quit] teardown Nms` line").not.toBeNull();
+  expect(teardown!, `before-quit's teardown took ${teardown} ms (budget ${QUIT_TEARDOWN_BUDGET_MS} ms); lines: ${quitLines.join(" | ")}`).toBeLessThanOrEqual(QUIT_TEARDOWN_BUDGET_MS);
   await expect.poll(() => tree.filter((entry) => alive(entry.pid)).map((entry) => ({ ...entry, current: processState(entry.pid) })), { timeout: 5_000 }).toEqual([]);
   await exited;
+  // What the watchdog and the teardown leave: the shared warm daemon is detached by design (README, "Quitting").
+  if (daemonPid !== null) expect(alive(daemonPid), "the warm daemon outlives the app").toBe(true);
 });
 
 function alive(pid: number): boolean {

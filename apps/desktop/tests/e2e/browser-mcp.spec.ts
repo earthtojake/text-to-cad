@@ -3,7 +3,7 @@ import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { _electron as electron, expect, test, type ElectronApplication } from "@playwright/test";
+import { _electron as electron, expect, type ElectronApplication } from "@playwright/test";
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { WebSocket } from "ws";
@@ -12,6 +12,7 @@ import { buildMcpServer } from "../../scripts/build-mcp.mjs";
 import type { BrowserService } from "../../src/main/browser/service";
 import type { BrowserConnections } from "../../src/main/browser/connections";
 import type { McpBridge, BridgeSession } from "../../src/main/integrations/mcp-bridge";
+import { test, traceApp } from "./launch";
 
 declare const browserMcpFixture: { service: BrowserService; scope: { sessionId: string; projectId: string; root: string }; other: { sessionId: string; projectId: string; root: string };
   window: Electron.BrowserWindow; calls: { kind: string; tabId?: string }[]; connections: BrowserConnections; session: BridgeSession; bridge: McpBridge;
@@ -56,6 +57,7 @@ test.beforeAll(async () => {
   await build({ entryPoints: [path.join(appRoot, "tests/fixtures/browser/mcp-app.ts")], outfile: entry, bundle: true, platform: "node", format: "cjs", external: ["electron"], target: "node22" });
   application = await electron.launch({ args: [entry, `--user-data-dir=${path.join(scratch, "profile")}`], env: { ...process.env,
     TEXT_TO_CAD_E2E_HIDDEN: "1", BROWSER_FIXTURE_ROOT: scratch, BROWSER_FIXTURE_ORIGIN: origin, BROWSER_FIXTURE_MCP: path.join(packed, "server.mjs") } });
+  await traceApp(application);
   application.process().stderr?.on("data", chunk => { void fs.appendFile(test.info().outputPath("electron.log"), chunk).catch(() => {}); });
   await application.firstWindow();
   // The test driver's separate CDP client must not auto-dismiss the MCP's dialog.
@@ -115,17 +117,24 @@ test("shipping Playwright tools operate native pages, preserve them on reconnect
   const socket = new WebSocket(target.endpoint);
   await new Promise<void>((resolve, reject) => { socket.once("open", resolve); socket.once("error", reject); });
   let id = 0;
-  async function cdp(method: string, params = {}) {
+  async function cdp(method: string, params = {}, sessionId?: string) {
     const key = ++id;
     const response = new Promise<{ result?: unknown; error?: { message: string } }>(resolve => {
       const receive = (data: Buffer) => { const message = JSON.parse(data.toString()); if (message.id === key) { socket.off("message", receive); resolve(message); } };
       socket.on("message", receive);
     });
-    socket.send(JSON.stringify({ id: key, method, params })); return response;
+    socket.send(JSON.stringify({ id: key, method, params, ...(sessionId ? { sessionId } : {}) })); return response;
   }
   expect((await cdp("Target.attachToTarget", { targetId: target.forbidden, flatten: true })).error?.message).toContain("Unknown browser target");
   expect((await cdp("Target.createTarget", { url: "file:///etc/passwd" })).error?.message).toContain("HTTP");
   expect((await cdp("Target.createBrowserContext")).error?.message).toContain("Unsupported");
+  // Download policy stays with the host in both spellings; the deprecated Page
+  // one takes an arbitrary downloadPath on an attached page.
+  const downloads = { behavior: "allow", downloadPath: path.join(scratch, "downloads") };
+  expect((await cdp("Browser.setDownloadBehavior", downloads)).error?.message).toContain("Download policy");
+  const owned = (await cdp("Target.getTargets")).result as { targetInfos: { targetId: string }[] };
+  const pageSession = ((await cdp("Target.attachToTarget", { targetId: owned.targetInfos[0]!.targetId, flatten: true })).result as { sessionId: string }).sessionId;
+  expect((await cdp("Page.setDownloadBehavior", downloads, pageSession)).error?.message).toContain("Download policy");
   const closed = new Promise<void>(resolve => socket.once("close", () => resolve()));
   await application.evaluate(() => browserMcpFixture.bridge.revoke(browserMcpFixture.session.sessionId)); await closed;
   expect(await application.evaluate(() => browserMcpFixture.service.list(browserMcpFixture.scope).length)).toBe(1);

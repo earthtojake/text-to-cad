@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, onTestFinished } from "vitest";
 
 describe("mainCheckoutOfWorktree", () => {
   it("follows a worktree's gitdir back to the main checkout", async () => {
@@ -8,6 +8,9 @@ describe("mainCheckoutOfWorktree", () => {
     const { mainCheckoutOfWorktree } = await import("@main/cad/runtime");
     const main = fs.mkdtempSync(path.join(os.tmpdir(), "text-to-cad-main-"));
     const worktree = fs.mkdtempSync(path.join(os.tmpdir(), "text-to-cad-wt-"));
+    onTestFinished(() => {
+      for (const dir of [main, worktree]) fs.rmSync(dir, { recursive: true, force: true });
+    });
     fs.mkdirSync(path.join(main, ".git", "worktrees", "wt"), { recursive: true });
     fs.writeFileSync(path.join(worktree, ".git"), `gitdir: ${path.join(main, ".git", "worktrees", "wt")}\n`);
     expect(mainCheckoutOfWorktree(worktree)).toBe(main);

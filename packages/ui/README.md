@@ -43,7 +43,9 @@ than inheriting the trigger or host body's size.
 Viewer hover hints use `TooltipHint` from the shared tooltip primitive, with
 11px text and a 400ms delay. Use short action names, omit redundant hints on
 obvious or already labeled controls, and show full tree/field names only when
-clipped. Native HTML `title` attributes are not used for interface tooltips.
+clipped. Native HTML `title` attributes are not used for interface tooltips in
+the viewer or in the desktop screens `apps/desktop/tests/unit/renderer/no-native-title.test.tsx`
+renders.
 
 The token uses rems so desktop UI scaling still works without changing the
 normal 16px root or shrinking layout spacing.

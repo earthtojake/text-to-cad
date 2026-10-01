@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -8,11 +9,15 @@ import {
   PYTHON_BUILD,
   CADGEN_RUNTIME_FILES,
   TARGETS,
+  EXTERNALLY_MANAGED,
   bundledRuntime,
   hostTarget,
+  markExternallyManaged,
+  prune,
   pythonBuildUrl,
   runtimeLayout,
   runtimePipInstallArgs,
+  tarCommand,
 } from "../../../scripts/bundle-runtime.mjs";
 import { bundledPaths, runtimeTarget } from "@main/cad/runtime";
 
@@ -77,24 +82,65 @@ describe("the layout", () => {
     );
   });
 
-  it("counts a bundle complete only with the marker for this version and target", () => {
+  it("counts a bundle complete only with the marker for this version, target and wheel", () => {
     const out = fs.mkdtempSync(path.join(os.tmpdir(), "text-to-cad-bundle-"));
     temps.push(out);
+    const wheels = path.join(out, "cadgen");
+    const wheelName = "cadgen-9.9.9-py3-none-any.whl";
+    fs.mkdirSync(wheels);
+    fs.writeFileSync(path.join(wheels, wheelName), "the wheel the runtime was built from");
+    const wheelSha256 = createHash("sha256").update("the wheel the runtime was built from").digest("hex");
+    const current = { target: "mac-arm64", cadgen: "9.9.9", python: PYTHON_BUILD.version, release: PYTHON_BUILD.release, wheel: wheelName, wheelSha256 };
+    const bundled = () => bundledRuntime(out, "mac-arm64", "9.9.9", wheels);
+
     const layout = runtimeLayout(path.join(out, "mac-arm64"), "mac-arm64");
-    expect(bundledRuntime(out, "mac-arm64", "9.9.9")).toBeNull();
+    expect(bundled()).toBeNull();
     fs.mkdirSync(path.dirname(layout.python), { recursive: true });
     fs.writeFileSync(layout.python, "");
-    expect(bundledRuntime(out, "mac-arm64", "9.9.9")).toBeNull();
-    fs.writeFileSync(layout.marker, JSON.stringify({ target: "mac-arm64", cadgen: "9.9.8", python: "3.13.15" }));
-    expect(bundledRuntime(out, "mac-arm64", "9.9.9")).toBeNull();
-    fs.writeFileSync(layout.marker, JSON.stringify({ target: "mac-arm64", cadgen: "9.9.9", python: "3.13.15" }));
-    expect(bundledRuntime(out, "mac-arm64", "9.9.9")).toBeNull();
+    expect(bundled()).toBeNull();
+    fs.writeFileSync(layout.marker, JSON.stringify({ ...current, cadgen: "9.9.8" }));
+    expect(bundled()).toBeNull();
+    fs.writeFileSync(layout.marker, JSON.stringify(current));
+    // Marker right, but the cadgen runtime files are not there.
+    expect(bundled()).toBeNull();
     for (const name of CADGEN_RUNTIME_FILES) {
       const file = path.join(layout.sitePackages, "cadgen", name);
       fs.mkdirSync(path.dirname(file), { recursive: true });
       fs.writeFileSync(file, "built");
     }
-    expect(bundledRuntime(out, "mac-arm64", "9.9.9")).toMatchObject({ cadgen: "9.9.9", target: "mac-arm64" });
+    expect(bundled()).toMatchObject({ cadgen: "9.9.9", target: "mac-arm64" });
+
+    // Built from an older interpreter pin: stale, whatever cadgen it carries.
+    fs.writeFileSync(layout.marker, JSON.stringify({ ...current, python: "3.13.1" }));
+    expect(bundled()).toBeNull();
+    fs.writeFileSync(layout.marker, JSON.stringify({ ...current, release: "20200101" }));
+    expect(bundled()).toBeNull();
+
+    // Built from a different wheel of the same version (the same file name,
+    // rebuilt by `npm run cad:resources` after a source change): stale too.
+    fs.writeFileSync(layout.marker, JSON.stringify(current));
+    fs.writeFileSync(path.join(wheels, wheelName), "a rebuilt wheel of the same version");
+    expect(bundled()).toBeNull();
+    // And a marker from before the hash was recorded cannot vouch for its wheel.
+    fs.writeFileSync(path.join(wheels, wheelName), "the wheel the runtime was built from");
+    fs.writeFileSync(layout.marker, JSON.stringify({ ...current, wheelSha256: undefined }));
+    expect(bundled()).toBeNull();
+    // Nor can any marker when there is no wheel to compare with.
+    fs.writeFileSync(layout.marker, JSON.stringify(current));
+    fs.rmSync(path.join(wheels, wheelName));
+    expect(bundled()).toBeNull();
+  });
+});
+
+describe("the interpreter's extraction", () => {
+  it("uses Windows' own bsdtar by full path, never whichever tar the shell finds first", () => {
+    // Git Bash (the release workflow's `shell: bash`) puts GNU tar first on
+    // PATH, and GNU tar takes the `C:` of the archive path for a remote host.
+    expect(tarCommand("win32", { SystemRoot: "C:\\Windows" })).toBe("C:\\Windows\\System32\\tar.exe");
+    expect(tarCommand("win32", { SystemRoot: "D:\\WINNT" })).toBe("D:\\WINNT\\System32\\tar.exe");
+    expect(tarCommand("win32", {})).toBe("C:\\Windows\\System32\\tar.exe");
+    expect(tarCommand("darwin", {})).toBe("tar");
+    expect(tarCommand("linux", {})).toBe("tar");
   });
 });
 
@@ -115,5 +161,58 @@ describe("the runtime install", () => {
     expect(args).toContain(constraints);
     expect(args).not.toContain("cadgen==9.9.9");
     expect(args).not.toContain("--find-links");
+  });
+});
+
+describe("what an agent cannot do to the bundle", () => {
+  function fakeRuntime(target: string) {
+    const out = fs.mkdtempSync(path.join(os.tmpdir(), "text-to-cad-bundle-"));
+    temps.push(out);
+    const layout = runtimeLayout(path.join(out, target), target);
+    const touch = (file: string) => {
+      fs.mkdirSync(path.dirname(file), { recursive: true });
+      fs.writeFileSync(file, "");
+    };
+    touch(layout.python);
+    touch(path.join(layout.stdlib, "os.py"));
+    touch(path.join(layout.sitePackages, "pip", "__init__.py"));
+    return { layout, touch };
+  }
+
+  it("removes pip, idle, *-config and wheel launchers, and keeps the interpreter", () => {
+    const { layout, touch } = fakeRuntime("mac-arm64");
+    const bin = path.dirname(layout.python);
+    for (const name of ["pip", "pip3", "pip3.13", "idle3", "idle3.13", "python3-config", "python3.13-config", "wheel", "python3.13", "python"]) {
+      touch(path.join(bin, name));
+    }
+
+    prune(layout);
+
+    expect(fs.readdirSync(bin).sort()).toEqual(["python", "python3", "python3.13"]);
+    // `python -m pip` stays: the build uses it, and the marker below decides what it may do.
+    expect(fs.existsSync(path.join(layout.sitePackages, "pip", "__init__.py"))).toBe(true);
+  });
+
+  it("removes Windows' Scripts launchers", () => {
+    const { layout, touch } = fakeRuntime("win-x64");
+    const scripts = path.join(layout.pythonDir, "Scripts");
+    for (const name of ["pip.exe", "pip3.exe", "pip3.13.exe", "idle.exe", "wheel.exe"]) {
+      touch(path.join(scripts, name));
+    }
+    prune(layout);
+    expect(fs.existsSync(scripts) ? fs.readdirSync(scripts) : []).toEqual([]);
+    expect(fs.existsSync(layout.python)).toBe(true);
+  });
+
+  it("marks the interpreter externally managed (PEP 668), naming the app", () => {
+    for (const target of ["mac-arm64", "win-x64"]) {
+      const { layout } = fakeRuntime(target);
+      markExternallyManaged(layout);
+      const text = fs.readFileSync(path.join(layout.stdlib, "EXTERNALLY-MANAGED"), "utf8");
+      expect(text).toBe(EXTERNALLY_MANAGED);
+      expect(text).toMatch(/^\[externally-managed\]\nError=/);
+      expect(text).toContain("text-to-cad");
+      expect(text).toContain("venv");
+    }
   });
 });

@@ -4,7 +4,7 @@ export default { rendererCommands: {"list_open_tabs": "list-tabs", "show_tab": "
   tool("reveal", "Reveal a workspace file or directory without changing the file being viewed.", { path }),
   tool("list_open_tabs", "List tabs belonging to the calling session only, within its workspace root, including background tabs."),
   tool("show_tab", "Select an existing tab in this session's explorer; never switch the user's active session.", { tabId }),
-  tool("close_tab", "Close a tab. Temporary drawings are discarded; terminal tabs stop their app-owned process. Dirty documents must be saved or explicitly discarded first.", { tabId }),
+  tool("close_tab", "Close a tab. Temporary drawings are discarded; terminal tabs stop their app-owned process. A document with unsaved changes is not closed by this tool (none can discard it): save it first.", { tabId }),
   tool("attach_snapshot", "Read an existing workspace image into this tool result so the agent and user can inspect it.", { path }, "image"),
   tool("list_skills", "List the focused skills supplied to this session."),
   tool("read_skill", "Read a supplied skill or a file within it.", { name: z.string().min(1), path: z.string().optional() }),

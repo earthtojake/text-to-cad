@@ -1,6 +1,10 @@
+import { EventEmitter } from "node:events";
+import os from "node:os";
+import path from "node:path";
+
 import { describe, expect, it } from "vitest";
 
-import { DAEMON_ARGS, DaemonWarmer } from "@main/cad/daemon";
+import { DAEMON_ARGS, DaemonWarmer, daemonPids } from "@main/cad/daemon";
 
 /**
  * The daemon warmer only ever spawns `python -m cadgen.daemon` — the
@@ -14,6 +18,7 @@ function warmer(options: { env?: Record<string, string>; fail?: boolean } = {}) 
   const daemon = new DaemonWarmer({
     env: (resolved) => ({ ...resolved.env, ...(options.env ?? {}) }),
     logFile: () => "/data/cad-runtime.log",
+    cwd: () => "/data",
     spawn: (python, args, spawnOptions) => {
       if (options.fail) {
         throw new Error("ENOENT");
@@ -37,13 +42,14 @@ const resolved = { python: "/py", source: "checkout" as const, env: { PYTHONPATH
 describe("DaemonWarmer", () => {
   it("starts the daemon as cadgen's own command, detached, in the cadgen environment", () => {
     const w = warmer();
-    expect(w.daemon.warm(resolved, "/proj")).toBe(true);
+    expect(w.daemon.warm(resolved)).toBe(true);
     expect(w.spawns).toHaveLength(1);
     const [spawn] = w.spawns;
     expect(spawn!.python).toBe("/py");
     expect(spawn!.args).toEqual(DAEMON_ARGS);
     expect(spawn!.args).toEqual(["-m", "cadgen.daemon"]);
-    expect(spawn!.cwd).toBe("/proj");
+    // Not the project: a cwd locks its folder on Windows and outlives the session.
+    expect(spawn!.cwd).toBe("/data");
     expect(spawn!.env.PYTHONPATH).toBe("/src");
     expect(spawn!.env.CADGEN_NODE).toBe("/electron");
     expect(spawn!.logFile).toBe("/data/cad-runtime.log");
@@ -55,23 +61,52 @@ describe("DaemonWarmer", () => {
 
   it("warms once per interpreter per app run", () => {
     const w = warmer();
-    expect(w.daemon.warm(resolved, "/proj")).toBe(true);
-    expect(w.daemon.warm(resolved, "/other")).toBe(false);
-    expect(w.daemon.warm({ ...resolved, python: "/py2" }, "/proj")).toBe(true);
+    expect(w.daemon.warm(resolved)).toBe(true);
+    expect(w.daemon.warm(resolved)).toBe(false);
+    expect(w.daemon.warm({ ...resolved, python: "/py2" })).toBe(true);
     expect(w.spawns.map((spawn) => spawn.python)).toEqual(["/py", "/py2"]);
   });
 
   it("starts nothing when the person turned the daemon off", () => {
     const w = warmer({ env: { CADGEN_DAEMON: "0" } });
-    expect(w.daemon.warm(resolved, "/proj")).toBe(false);
+    expect(w.daemon.warm(resolved)).toBe(false);
     expect(w.spawns).toHaveLength(0);
     expect(w.daemon.list()).toEqual([]);
   });
 
   it("a spawn that fails is logged and can be tried again", () => {
     const w = warmer({ fail: true });
-    expect(w.daemon.warm(resolved, "/proj")).toBe(false);
+    expect(w.daemon.warm(resolved)).toBe(false);
     expect(w.logs).toEqual(["could not start the daemon: ENOENT"]);
     expect(w.daemon.list()).toEqual([]);
+  });
+
+  it("stops listing a daemon's pid once it has exited, so a reused pid is never spared", () => {
+    const child = Object.assign(new EventEmitter(), { pid: 424_242, unref: () => undefined });
+    const daemon = new DaemonWarmer({
+      env: () => ({}),
+      logFile: () => "/data/cad-runtime.log",
+      cwd: () => "/data",
+      spawn: () => child,
+      log: () => undefined,
+    });
+    expect(daemon.warm(resolved)).toBe(true);
+    expect(daemonPids()).toContain(424_242);
+    child.emit("exit", 0, null);
+    expect(daemonPids()).not.toContain(424_242);
+  });
+
+  it("does the same for a real, short-lived child started through the default spawn", async () => {
+    // This binary run as Node with the daemon's arguments (`-m …`) exits at once: a daemon that died.
+    const daemon = new DaemonWarmer({
+      env: () => ({ ELECTRON_RUN_AS_NODE: "1" }),
+      logFile: () => path.join(os.tmpdir(), "daemon-pid-test.log"),
+      cwd: () => os.tmpdir(),
+      log: () => undefined,
+    });
+    expect(daemon.warm({ ...resolved, python: process.execPath })).toBe(true);
+    const [pid] = daemonPids().slice(-1);
+    expect(pid).toBeGreaterThan(0);
+    await expect.poll(() => daemonPids().includes(pid!), { timeout: 10_000 }).toBe(false);
   });
 });

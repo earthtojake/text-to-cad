@@ -9,6 +9,7 @@
  */
 import { Monitor, Moon, Sun } from "lucide-react";
 import { cn } from "cn";
+import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 
 import {
   SelectRow,
@@ -188,25 +189,25 @@ function AccentRow({
       </div>
       <div className="flex shrink-0 items-center gap-1.5">
         {(Object.keys(ACCENT_LABELS) as AccentColor[]).map((accent) => (
-          <button
-            aria-label={ACCENT_LABELS[accent]}
-            aria-pressed={value === accent}
-            className={cn(
-              "size-6 rounded-full border transition-transform",
-              value === accent
-                ? "ring-2 ring-ring ring-offset-2 ring-offset-card"
-                : "hover:scale-110",
-            )}
-            key={accent}
-            onClick={() => onSelect(accent)}
-            // The neutral swatch has no override to show, so it shows the
-            // token itself — which is exactly what choosing it restores.
-            style={{
-              backgroundColor: accent === "neutral" ? "var(--primary)" : ACCENTS[accent].swatch,
-            }}
-            title={ACCENT_LABELS[accent]}
-            type="button"
-          />
+          <TooltipHint content={ACCENT_LABELS[accent]} key={accent}>
+            <button
+              aria-label={ACCENT_LABELS[accent]}
+              aria-pressed={value === accent}
+              className={cn(
+                "size-6 rounded-full border transition-transform",
+                value === accent
+                  ? "ring-2 ring-ring ring-offset-2 ring-offset-card"
+                  : "hover:scale-110",
+              )}
+              onClick={() => onSelect(accent)}
+              // The neutral swatch has no override to show, so it shows the
+              // token itself — which is exactly what choosing it restores.
+              style={{
+                backgroundColor: accent === "neutral" ? "var(--primary)" : ACCENTS[accent].swatch,
+              }}
+              type="button"
+            />
+          </TooltipHint>
         ))}
       </div>
     </div>

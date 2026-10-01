@@ -6,9 +6,11 @@ import Text from "@tiptap/extension-text";
 import { Placeholder } from "@tiptap/extensions";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import { useEffect, useImperativeHandle, useMemo, useRef, type KeyboardEvent, type Ref } from "react";
+import { toast } from "sonner";
 
 import { cn } from "@renderer/lib/utils";
 
+import { attachmentRefusal, MAX_INLINE_TEXT_BYTES } from "./attachments";
 import { ReferenceNode } from "./ReferenceNode";
 import { docFromText, inlineContentFromText, textFromDoc } from "./references";
 
@@ -85,7 +87,13 @@ export function ComposerEditor({
       Document.extend({ content: "paragraph" }),
       Paragraph,
       Text,
-      HardBreak,
+      // Shift+Enter only. The extension's default also binds Mod-Enter to a break, a chord the
+      // shortcuts table does not list (Enter sends), so it would silently add a line.
+      HardBreak.extend({
+        addKeyboardShortcuts() {
+          return { "Shift-Enter": () => this.editor.commands.setHardBreak() };
+        },
+      }),
       ReferenceNode,
       Placeholder.configure({ placeholder, showOnlyWhenEditable: false }),
       Extension.create({
@@ -120,7 +128,9 @@ export function ComposerEditor({
           class: "composer-editor max-h-[180px] min-h-10 overflow-y-auto px-3 py-2.5 text-[13px] leading-5 outline-none",
           role: "textbox",
           "aria-multiline": "true",
-          "aria-label": placeholder,
+          // The placeholder changes mid-turn ("Send another message…"); a name that did would be
+          // re-announced as a different control, so the name is fixed and the placeholder stays visual.
+          "aria-label": "Prompt",
           // What Playwright's `getByPlaceholder` and a person read; the
           // Placeholder extension draws it.
           placeholder,
@@ -148,6 +158,13 @@ export function ComposerEditor({
           const text = event.clipboardData?.getData("text/plain") ?? "";
           if (!text) {
             return false;
+          }
+          // An attached text file past the limit is refused; pasted, it is
+          // the same prompt, so it is refused the same way. Claimed, so
+          // ProseMirror does not paste it either.
+          if (text.length > MAX_INLINE_TEXT_BYTES / 4 && new TextEncoder().encode(text).length > MAX_INLINE_TEXT_BYTES) {
+            toast.error(attachmentRefusal.pasteTooLarge());
+            return true;
           }
           // Pasted text is read the way typed text is: its references are
           // chips at once, its newlines hard breaks.

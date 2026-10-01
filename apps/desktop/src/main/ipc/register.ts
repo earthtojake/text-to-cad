@@ -1,6 +1,8 @@
 /**
- * Registration: walks the contract and the handler tree together, so every
- * channel that exists is served and every handler that exists is reachable.
+ * Registration: walks the contract and the handler tree, so every channel that
+ * exists is served (the contract walk) and every handler that exists is
+ * reachable (the handler walk — a key with no declared channel refuses startup
+ * rather than sitting unserved).
  *
  * Both directions are validated. The request because the renderer is a browser
  * context and its messages are untrusted input; the response because a handler
@@ -44,10 +46,31 @@ function handlerAt(handlers: unknown, path: string[]): unknown {
   );
 }
 
+/**
+ * Throw on the first key in the handler tree that the contract does not
+ * declare. The type checker catches an extra key only in an object literal;
+ * a branch spread in from its own module is not checked for excess keys.
+ */
+function assertNoStrayHandlers(contract: IpcNode, handlers: unknown, path: string[] = []): void {
+  for (const [key, handler] of Object.entries(handlers as Record<string, unknown>)) {
+    const at = [...path, key];
+    const node: unknown = isInvokeDef(contract) ? undefined : (contract as Record<string, unknown>)[key];
+    const branch = typeof handler === "object" && handler !== null;
+    if (branch && (node === undefined || !isInvokeDef(node))) {
+      // An undeclared branch is walked against an empty one, so the error
+      // names the handler inside it rather than the branch.
+      assertNoStrayHandlers((node ?? {}) as IpcNode, handler, at);
+    } else if (node === undefined || branch) {
+      throw new Error(`no IPC channel for handler ${at.join(".")}`);
+    }
+  }
+}
+
 export function registerIpc<T extends IpcNode>(
   contract: T,
   handlers: IpcHandlers<T, IpcContext>,
 ): void {
+  assertNoStrayHandlers(contract, handlers);
   for (const [name, def] of ipcChannels(contract)) {
     const handler = handlerAt(handlers, name.split("."));
     if (typeof handler !== "function") {
@@ -97,18 +120,21 @@ export function emit<C extends IpcEventChannel>(
   targets: Iterable<WebContents>,
   channel: C,
   payload: IpcEventPayload<C>,
-): void {
+): number {
   const validated = parse(ipcEvents[channel] as z.ZodType, payload, `${channel} event`);
+  let delivered = 0;
   for (const target of targets) {
     if (!target.isDestroyed()) {
       target.send(`${IPC_EVENT_PREFIX}${channel}`, validated);
+      delivered += 1;
     }
   }
+  return delivered;
 }
 
-/** Broadcast to every open window. */
-export function broadcast<C extends IpcEventChannel>(channel: C, payload: IpcEventPayload<C>) {
-  emit(
+/** Broadcast to every open window; answers how many there were (macOS keeps the app alive with none). */
+export function broadcast<C extends IpcEventChannel>(channel: C, payload: IpcEventPayload<C>): number {
+  return emit(
     BrowserWindow.getAllWindows().map((window) => window.webContents),
     channel,
     payload,

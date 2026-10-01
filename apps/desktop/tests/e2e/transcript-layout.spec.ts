@@ -2,8 +2,9 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
-import { _electron as electron, expect, test } from "@playwright/test";
+import { expect } from "@playwright/test";
 import type { TextToCadApi } from "../../src/shared/ipc";
+import { chooseDirectory, launch, test } from "./launch";
 
 declare const window: { textToCad: TextToCadApi };
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
@@ -34,16 +35,11 @@ test("long activity stays inside the transcript and full details remain accessib
   ].map(frame => JSON.stringify(frame)).join("\n"));
   const agent = path.join(base, "agent.mjs");
   fs.writeFileSync(agent, `process.argv.push("--fixture", ${JSON.stringify(fixture)});\nawait import(${JSON.stringify(pathToFileURL(path.join(appRoot, "tests/fake-agent/index.mjs")).href)});\n`);
-  const app = await electron.launch({
-    args: [path.join(appRoot, "out/main/index.js"), `--user-data-dir=${path.join(base, "profile")}`],
-    env: { ...process.env, NODE_ENV: "test", TEXT_TO_CAD_FAKE_AGENT: agent },
-  });
+  const { app, page } = await launch({ userData: path.join(base, "profile"), env: { TEXT_TO_CAD_FAKE_AGENT: agent } });
   try {
-    const page = await app.firstWindow();
-    await page.waitForLoadState("domcontentloaded");
     await page.evaluate(() => window.textToCad.settings.set({ theme: "light" }));
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1000, 760));
-    const added = await page.evaluate(root => window.textToCad.projects.addPath({ path: root }), project);
+    const added = await chooseDirectory(app, project);
     const session = await page.evaluate(projectId => window.textToCad.sessions.create({ projectId, agentId: "claude-code", gitMode: "none" }), added.id);
     await page.locator(`[data-session-row="${session.id}"]`).getByRole("button").first().click();
     await page.evaluate(id => window.textToCad.sessions.prompt({ id, content: [{ type: "text", text: "Check the car preview." }] }), session.id);

@@ -6,6 +6,9 @@ name: Publish Release
 # the rehearsal branch. Manual dispatch republishes or resumes the current head of a
 # branch: a run that uploaded the wheel and died before the tag is finished by
 # dispatching this on main again (PyPI's skip-existing makes the re-upload a no-op).
+# A tagged version resumes only when the tag points at the commit being run and its
+# Release is still a draft or missing; a tag on another commit, or a published
+# Release, ends the run at the gate.
 #
 # Two kinds of step. Everything up to and including the artifact upload runs on both
 # branches. The IRREVERSIBLE steps -- PyPI upload, docs deploy, tag + GitHub Release --
@@ -67,12 +70,15 @@ jobs:
         run: scripts/release/check-version.sh
 
       # Publish only when the version is new: past the latest release tag (either
-      # spelling), or equal to it with the tag missing (a run that uploaded the wheel
-      # and died before tagging; a rerun resumes it). On build-test the same
+      # spelling), or equal to it with the tag missing or its Release unpublished (a
+      # run that uploaded the wheel and died before tagging, or tagged and died
+      # before the Release had its files; a rerun resumes it). On build-test the same
       # comparison runs against the same real tags -- a rehearsal bump passes the
       # gate exactly as it would on main, and an unbumped build-test push skips.
       - name: Evaluate release gate
         id: gate
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           current_version="$(tr -d '[:space:]' < VERSION)"
           echo "version=$current_version" >> "$GITHUB_OUTPUT"
@@ -89,7 +95,7 @@ jobs:
             echo "No release tag yet; publishing $current_version."
             exit 0
           fi
-          if scripts/release/check-version.sh --incremented-from "refs/tags/$latest_tag" >/tmp/publish-tag-version-check.log 2>&1; then
+          if scripts/release/check-version.sh --incremented-from "refs/tags/$latest_tag" >"${RUNNER_TEMP:-${TMPDIR:-/tmp}}/publish-tag-version-check.log" 2>&1; then
             echo "should_publish=true" >> "$GITHUB_OUTPUT"
             echo "Release version $current_version advanced past $latest_tag; publishing."
             exit 0
@@ -99,8 +105,37 @@ jobs:
             echo "Version $current_version has no tag ($current_tag) yet; resuming publish."
             exit 0
           fi
+          # publish-github-release.sh pushes the tag before it creates the Release and
+          # attaches the files, so a tag alone is not a finished release: only a
+          # published Release ends the resume. And only THIS commit resumes it: the tag
+          # names the commit the installers were built from, so a later push to main
+          # (or a dispatch of another head) with the same version must not rebuild and
+          # re-upload over it.
+          tag_commit="$(git rev-list -n1 "refs/tags/$current_tag")"
+          if [ "$tag_commit" != "$GITHUB_SHA" ]; then
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::Version $current_version is tagged ($current_tag) at $tag_commit, not at this commit ($GITHUB_SHA); not publishing. Dispatch the workflow on the tagged commit to resume it."
+            exit 0
+          fi
+          # Only gh's "release not found" means the Release is absent. Any other
+          # failure (rate limit, 5xx) says nothing about it, and guessing "absent"
+          # would upload over a published Release's installers and update feeds.
+          if release_state="$(gh release view "$current_tag" --json isDraft --jq .isDraft 2>&1)"; then
+            :
+          elif printf '%s\n' "$release_state" | grep -Eq 'release not found|HTTP 404'; then
+            release_state=absent
+          else
+            echo "::error::Could not read the Release for $current_tag:"
+            printf '%s\n' "$release_state" >&2
+            exit 1
+          fi
+          if [ "$release_state" != "false" ]; then
+            echo "should_publish=true" >> "$GITHUB_OUTPUT"
+            echo "Version $current_version is tagged ($current_tag) but its Release is not published; resuming publish."
+            exit 0
+          fi
           echo "should_publish=false" >> "$GITHUB_OUTPUT"
-          echo "Nothing to publish: version $current_version is already tagged ($current_tag)."
+          echo "Nothing to publish: version $current_version is already released ($current_tag)."
 
       - name: Set up dependencies
         if: steps.gate.outputs.should_publish == 'true'
@@ -237,9 +272,10 @@ jobs:
   # release is a package that does not exist yet.
   #
   # Signing is decided by the environment inside scripts/package.mjs and nowhere else:
-  # the CSC_*/APPLE_* secrets below are empty until they are added, and an empty secret
-  # is an unsigned build with CSC_IDENTITY_AUTO_DISCOVERY=false. Adding the secrets is
-  # the entire act of turning signing on.
+  # the CSC_*/APPLE_*/WIN_CSC_* secrets below are empty until they are added, and an
+  # empty secret is an unsigned build with CSC_IDENTITY_AUTO_DISCOVERY=false. Adding
+  # the secrets is the entire act of turning signing on: each leg is handed the ones
+  # its os reads (SIGNING_SECRETS in scripts/package.mjs).
   desktop:
     name: Desktop (${{ matrix.name }})
     needs: publish
@@ -371,12 +407,18 @@ jobs:
       # builder's: tag-release attaches the artifacts to the Release it creates.
       - name: Build and package
         env:
-          # Empty until the secrets exist. See the note above the job.
-          CSC_LINK: ${{ secrets.CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          # Empty until the secrets exist. See the note above the job. The Apple
+          # certificate and credentials reach the macOS leg only: electron-builder
+          # signs Windows with CSC_LINK when WIN_CSC_LINK is unset, which would
+          # Authenticode-sign the installer with the Apple cert (package.mjs's
+          # signingEnv drops them off the Mac too).
+          CSC_LINK: ${{ matrix.name == 'macOS' && secrets.CSC_LINK || '' }}
+          CSC_KEY_PASSWORD: ${{ matrix.name == 'macOS' && secrets.CSC_KEY_PASSWORD || '' }}
+          APPLE_ID: ${{ matrix.name == 'macOS' && secrets.APPLE_ID || '' }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ matrix.name == 'macOS' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ matrix.name == 'macOS' && secrets.APPLE_TEAM_ID || '' }}
+          WIN_CSC_LINK: ${{ matrix.name == 'Windows' && secrets.WIN_CSC_LINK || '' }}
+          WIN_CSC_KEY_PASSWORD: ${{ matrix.name == 'Windows' && secrets.WIN_CSC_KEY_PASSWORD || '' }}
           TEXT_TO_CAD_APTABASE_KEY: ${{ secrets.TEXT_TO_CAD_APTABASE_KEY }}
           # electron-builder's own GitHub client reads this; `--publish never` means it
           # never uses it, and leaving it unset avoids any ambiguity about that.
@@ -424,15 +466,21 @@ jobs:
     # PyPI release untagged (Deploy Docs can be re-run on its own).
     #
     # `desktop` is a need so the installers exist by the time this uploads them, but
-    # deliberately NOT a condition: `always()` plus an explicit test of `publish`
-    # means a desktop build that failed on one platform delays the tag rather than
-    # preventing it -- the wheel is already on PyPI at that point, and an untagged
-    # release is the worse outcome. The upload step below tolerates whatever is or
-    # is not there.
+    # deliberately NOT a success condition: `!cancelled()` plus an explicit test of
+    # `publish` means a desktop build that failed on one platform delays the tag
+    # rather than preventing it -- the wheel is already on PyPI at that point, and an
+    # untagged release is the worse outcome. The upload step below tolerates whatever is or
+    # is not there, except that a release missing the macOS or Windows update feed
+    # is tagged as a DRAFT (see that step).
     needs:
       - publish
       - desktop
-    if: ${{ always() && needs.publish.result == 'success' && needs.publish.outputs.should_publish == 'true' && needs.publish.outputs.is_main == 'true' }}
+    # A cancelled run tags nothing: `always()` would run this job through a
+    # cancellation, pushing the tag and creating a draft the operator meant to stop.
+    # `desktop.result` is deliberately not tested: a leg that hits its
+    # timeout-minutes reports `cancelled` there without the run being cancelled, and
+    # that hung leg delays the tag like any failed one.
+    if: ${{ !cancelled() && needs.publish.result == 'success' && needs.publish.outputs.should_publish == 'true' && needs.publish.outputs.is_main == 'true' }}
     runs-on: ubuntu-latest
 
     steps:
@@ -497,13 +545,30 @@ jobs:
       # A push-triggered run has no `publish` input: it publishes. Only a manual
       # dispatch can ask for a draft. Every asset is attached by the same
       # create/resume/clobber path, so a resumed run repairs the release in one pass.
+      #
+      # Except when the macOS or Windows leg produced no update feed (latest-mac.yml,
+      # latest.yml): electron-updater reads the LATEST published release, and one
+      # without its platform's feed leaves every installed app on that platform
+      # without updates until the next release. Such a release is tagged but left a
+      # draft, so installed apps keep the previous release's feed; re-running the
+      # failed desktop jobs of this run re-runs this job too, which publishes it.
+      # Linux is best-effort (plan §14), so latest-linux.yml is not required.
       - name: Create release tag and GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
           INPUT_PUBLISH: ${{ inputs.publish }}
         run: |
           args=(--target HEAD)
-          if [ "${INPUT_PUBLISH:-true}" = "true" ]; then
+          publish="${INPUT_PUBLISH:-true}"
+          missing=()
+          for feed in latest-mac.yml latest.yml; do
+            [ -f "desktop-artifacts/$feed" ] || missing+=("$feed")
+          done
+          if [ "$publish" = "true" ] && [ "${#missing[@]}" -gt 0 ]; then
+            echo "::warning title=Desktop update feed missing::${missing[*]} not among the desktop artifacts; the GitHub Release stays a draft. Re-run the failed desktop jobs to publish it."
+            publish=false
+          fi
+          if [ "$publish" = "true" ]; then
             args+=(--publish)
           fi
           shopt -s nullglob
