@@ -936,12 +936,13 @@ class StoreCli(StoreCase):
         self.assertIn("would remove 1 objects", out)
         self.assertTrue(has_object(orphan))
 
-    def test_gc_and_info_report_the_cap_and_retired_kinds(self) -> None:
+    def test_gc_and_info_report_the_cap_retired_kinds_and_a_newer_cadgen(self) -> None:
         import json
 
         from cadgen.store.drawings import DRAWING_ENTRY_SCHEMA_VERSION
         from cadgen.store.index import entry_path, write_entry
         from cadgen.store.objects import has_object, object_path, put_object
+        from cadgen.store.records import RECORD_SCHEMA_VERSION
 
         cached = put_object(b"a cached drawing payload")
         write_entry("drawing", "d" * 64, {"schemaVersion": DRAWING_ENTRY_SCHEMA_VERSION, "object": cached})
@@ -960,7 +961,16 @@ class StoreCli(StoreCase):
         code, out = self.run_cli(["info", "--json"])
         self.assertEqual(code, 0)
         info = json.loads(out)
-        self.assertEqual((info["cap"], info["retired"]), (20 * 1024**3, {"op": 1}))
+        self.assertEqual((info["cap"], info["retired"], info["deferred"]), (20 * 1024**3, {"op": 1}, None))
+
+        write_entry("model", "a" * 64, {"schemaVersion": RECORD_SCHEMA_VERSION + 1, "tree": "b" * 64})
+        code, out = self.run_cli(["gc", "--max-size", "1"])
+        self.assertEqual(code, 0)
+        self.assertIn("a newer cadgen writes to this store", out)
+        self.assertIn("nothing was removed", out)
+        self.assertTrue(has_object(cached) and (retired / ("e" * 64)).is_file())
+        code, out = self.run_cli(["info", "--json"])
+        self.assertIn(f"index/model entries in format {RECORD_SCHEMA_VERSION + 1}", json.loads(out)["deferred"]["evidence"][0])
 
 
 # The two-level fixture ChildrenByResult runs: a pin and an arm that places it twice.

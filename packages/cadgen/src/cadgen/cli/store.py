@@ -16,6 +16,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 from pathlib import Path
 from typing import Sequence
 
@@ -37,11 +38,28 @@ def _human(size: int) -> str:
     return f"{size} B"
 
 
+def _when(timestamp: float) -> str:
+    return time.strftime("%Y-%m-%d %H:%M", time.localtime(timestamp))
+
+
+def _deferred_lines(deferred: dict) -> list[str]:
+    from cadgen.store.gc import NEWER_CADGEN_SECONDS
+
+    days = round(NEWER_CADGEN_SECONDS / 86400)
+    return [
+        "a newer cadgen writes to this store, and this one cannot tell what that one still needs:",
+        *(f"  {what}" for what in deferred["evidence"]),
+        f"last written {_when(deferred['lastWritten'])}. That cadgen's `cadgen store gc` collects this store; "
+        f"this one leaves it alone until {days} days after that.",
+    ]
+
+
 def _cmd_info(as_json: bool) -> int:
-    from cadgen.store.gc import configured_cap, scan
+    from cadgen.store.gc import configured_cap, newer_cadgen, scan
     from cadgen.store.paths import INDEX_KINDS
 
     found = scan()
+    deferred = newer_cadgen(found)
     object_bytes = sum(size for size, _ in found.objects.values())
     try:
         cap, cap_error = configured_cap(), None
@@ -54,6 +72,8 @@ def _cmd_info(as_json: bool) -> int:
         "bytes": found.total,
         "cap": cap,
         "retired": {kind: len(found.entries[kind]) for kind in found.retired},
+        "unknown": sorted(found.unknown),
+        "deferred": deferred,
     }
     if cap_error:
         payload["capError"] = cap_error
@@ -83,6 +103,11 @@ def _cmd_info(as_json: bool) -> int:
         print(f"index/{kind:<10} {count} {labels[kind]}")
     for kind, count in payload["retired"].items():
         print(f"index/{kind:<10} {count} entries of a kind this cadgen retired; the daemon removes them when idle, or `cadgen store gc`")
+    for kind in payload["unknown"]:
+        print(f"index/{kind:<10} a folder this cadgen does not know; it never touches it")
+    if deferred:
+        for line in _deferred_lines(deferred):
+            print(line)
     return 2 if cap_error else 0
 
 
@@ -193,12 +218,18 @@ def _cmd_gc(dry_run: bool, grace_hours: float, max_size: str | None, as_json: bo
         "retiredBytes": report.retired_bytes,
         "bytesBefore": report.bytes_before,
         "bytesAfter": report.bytes_after,
+        "deferred": report.deferred,
     }
     if max_size is not None:
         payload.update({"cap": report.cap, "evicted": report.evicted, "evictedBytes": report.evicted_bytes,
                         "protectedBytes": report.protected_bytes})
     if as_json:
         print(json.dumps(payload, separators=(",", ":")))
+        return 0
+    if report.deferred:
+        for line in _deferred_lines(report.deferred):
+            print(line)
+        print("nothing was removed")
         return 0
     verb = "would remove" if dry_run else "removed"
     for kind, count in sorted(report.retired.items()):
@@ -260,7 +291,8 @@ def build_parser(prog: str | None = None) -> argparse.ArgumentParser:
             "entry, and not written or claimed within the grace window. --max-size first evicts those derived "
             "entries, least recently written first, until the store fits 80%% of the cap (the newest keep a "
             "fifth of the cap when records and documents leave less room); records, document entries and "
-            "output entries are never evicted. The daemon does the same when idle."
+            "output entries are never evicted. The daemon does the same when idle. A store a newer cadgen "
+            "wrote to in the last 30 days is left to that cadgen, and nothing is removed."
         ),
     )
     gc.add_argument("--dry-run", action="store_true", help="report what would go; delete nothing")

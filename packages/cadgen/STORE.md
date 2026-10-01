@@ -18,7 +18,7 @@ right.
 | [5](#5-invariants) | Each invariant with the failure it prevents | any store write |
 | [6](#6-link-or-component) | Whether a child becomes a link or the parent's geometry | composition, materialize, packaging |
 | [7](#7-concurrency) | Why there is no lock | concurrent builds, publish races |
-| [8](#8-gc-eviction-and-the-cap) | The sweeper: retired kinds, eviction to the cap, unreachable objects, and why a pass needs no lock | anything that deletes |
+| [8](#8-gc-eviction-and-the-cap) | The sweeper: retired kinds, eviction to the cap, unreachable objects, a store two cadgens share, and why a pass needs no lock | anything that deletes |
 | [9](#9-the-daemon) | The build pool, job ledger and slots | daemon, workers, jobs |
 | [9a](#9a-lazy-children) | Lazy children: pins at the call, forcing, exact-`Compound` reference preservation | a decorated call's return, parallel child builds |
 | [9b](#9b-editing-previews-and-explicit-saves) | Announced preview trees, the feed, explicit saves | the viewer's live-edit path |
@@ -77,9 +77,12 @@ Nothing else lives under the root. A build's progress is process state, not
 content: the daemon's job ledger, read over its socket (§7, §9). Editing
 previews use the same immutable objects, with ephemeral request handles in
 that ledger (§9b); there is no preview directory or persistent session index.
-A folder under `index/` that is not listed here is a **retired kind** --
-`index/op`, the operation cache of cadgen 0.7.4 and earlier, is one. Nothing
-reads it, and the sweeper removes it with every object only it named (§8).
+A **retired kind** is one an older cadgen wrote and nothing reads any more:
+`RETIRED_KINDS` in `store/paths.py`, today only `index/op`, the operation
+cache of cadgen 0.7.4 and earlier. The sweeper removes it with every object
+only it named (§8). Retiring a kind means moving it from `INDEX_KINDS` to
+`RETIRED_KINDS`. Any other folder under `index/` belongs to a newer cadgen or
+to none, and nothing here touches it.
 
 `index/bounds` holds bounding boxes of stored geometry (`store/bounds.py`).
 A key names what was measured and how: a component's BREP object hash or a
@@ -949,10 +952,10 @@ One sweeper, `cadgen.store.gc`: by hand as `cadgen store gc [--dry-run]
 pass scans the store once (names, sizes, mtimes), marks once, and removes three
 kinds of thing:
 
-1. **Retired kinds.** A folder under `index/` that is not in `INDEX_KINDS`
-   (`index/op`, §2) goes, with every object only its entries named. An entry
-   naming an object the grace window still keeps waits for the next pass, so
-   that object goes with its kind rather than with the next full sweep.
+1. **Retired kinds.** The folders in `RETIRED_KINDS` (`index/op`, §2) go,
+   with every object only their entries named. An entry naming an object the
+   grace window still keeps waits for the next pass, so that object goes with
+   its kind rather than with the next full sweep.
 2. **Evicted entries**, only under a cap: the derived kinds -- `mesh`,
    `surface`, `component`, `bounds`, `drawing` -- least recently written
    first, until the store fits 80% of the cap. Sizes are deduplicated: an
@@ -991,6 +994,26 @@ holds none -- never writing a record that names a missing object. So a pass may
 run beside builds without a lock. The grace window is the whole protection for
 a pin a build holds before its publish, so do not sweep with `--grace-hours 0`
 while anything is building.
+
+**A store two cadgens share.** Every cadgen on a machine uses the same store
+by default, and a pass can only judge what it can read. A newer cadgen's
+records, document entries or trees may be in formats an older one rejects
+(each carries a `schemaVersion`, and a format change bumps it, §2), so the
+older one cannot tell which objects they still need -- and objects are shared
+by content across versions. So a pass that finds a record, document entry or
+tree in a newer format than its own, or a folder under `index/` it does not
+know, written within the last 30 days (`NEWER_CADGEN_SECONDS`), removes
+nothing at all and reports why (`deferred`); the newer cadgen collects the
+store. Thirty days after the newer cadgen's last write, it is taken to be
+gone, and passes resume: its records and trees are then a format nothing here
+reads, like any older cadgen's. The other way round needs no rule: a newer
+cadgen treats an older format as garbage, which is how an upgrade frees the
+space the old one used, and an older cadgen still in use rebuilds what it
+needs. A pass never touches anything outside its own folders: object shards
+named by two hex digits, and the `index/` folders in `INDEX_KINDS` and
+`RETIRED_KINDS`. This is why a new field that names objects, in a record, a
+document entry or a tree, is a format change and bumps that `schemaVersion`:
+an older sweeper cannot see it, and must know to stand down.
 
 The mark reads JSON only: records, document entries, derived entries and each
 tree they reach, once each, verified against its address. A leaf object counts
@@ -1425,9 +1448,11 @@ supersession does not cancel their exports.
   isolated and returns a newly parsed flattened view to every caller.
   Components carry `brep`, `codec` and `faceColors`; display SURF resolves
   separately through `store.surfaces` and `index/surface`.
-- `cadgen store info` sizes the store against its cap and names any retired
-  kind still present. `cadgen store gc --dry-run [--max-size [SIZE]]` reports
-  what a pass would retire, evict and remove, and deletes nothing.
+- `cadgen store info` sizes the store against its cap, names any retired
+  kind still present and any `index/` folder it does not know, and says when
+  a newer cadgen's writes keep passes off the store. `cadgen store gc
+  --dry-run [--max-size [SIZE]]` reports what a pass would retire, evict and
+  remove, and deletes nothing.
 - **Resets, smallest first.** `python model.py --force` rebuilds one model
   now. `cadgen store forget <model.py>` drops that model's record (the next
   run rebuilds it; children untouched, parents see the moved pin then);
@@ -1460,6 +1485,9 @@ supersession does not cancel their exports.
 - Write to the store on a read: no hit refreshes a stamp or an mtime (§5).
 - Evict a record, a document entry or an output entry, or delete an object any
   way but rename, then recheck (§8).
+- Delete anything from a store a newer cadgen wrote to within the last 30
+  days, or touch a folder under `index/` that is neither in `INDEX_KINDS` nor
+  in `RETIRED_KINDS` (§8).
 - Use process/display eviction as a reason to mutate exact geometry. Disposable
   memory budgets and worker reclamation follow §9 and never determine
   saved-artifact freshness.

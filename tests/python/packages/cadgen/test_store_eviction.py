@@ -1,8 +1,8 @@
 """Disk management (STORE.md §8): the old operation cache retired, a size cap
-with least-recently-written eviction, and the three ways an earlier version of
-it broke -- a hit that wrote, a reused object swept under a fresh record, and a
-full pass rerun while records alone overfilled the cap. Tiny stores in fresh
-temporary directories; no kernel."""
+with least-recently-written eviction, the three ways an earlier version of it
+broke -- a hit that wrote, a reused object swept under a fresh record, and a
+full pass rerun while records alone overfilled the cap -- and a store a newer
+cadgen shares. Tiny stores in fresh temporary directories; no kernel."""
 
 from __future__ import annotations
 
@@ -68,12 +68,17 @@ class StoreSweepCase(unittest.TestCase):
         self.old(entry_path("drawing", key), age)
         return digest
 
-    def op_entry(self, key: str, payload: dict, *, kind: str = "op", age: float = 3 * HOUR) -> None:
-        """An entry of an index kind this cadgen no longer defines."""
+    def raw_entry(self, kind: str, key: str, payload: dict, age: float = 3 * HOUR) -> Path:
+        """A file under index/<kind>/, written as some other cadgen would."""
         folder = self.store / "index" / kind
         folder.mkdir(parents=True, exist_ok=True)
         (folder / key).write_text(json.dumps(payload), encoding="utf-8")
         self.old(folder / key, age)
+        return folder / key
+
+    def op_entry(self, key: str, payload: dict, age: float = 3 * HOUR) -> None:
+        """An entry of the operation cache cadgen 0.7.4 and earlier wrote."""
+        self.raw_entry("op", key, payload, age)
 
     def snapshot(self) -> dict[str, tuple[int, int]]:
         found = {}
@@ -276,7 +281,6 @@ class Retirement(StoreSweepCase):
         reused = b"an op-memo shape a build publishes during the retirement"
         reused_digest = self.old_object(reused)
         fresh = put_object(b"an op-memo shape from the last hour")
-        verdict = self.old_object(b"an entry of another retired kind")
         garbage = self.old_object(b"unreachable, but not the retired kinds' to take")
         recipe = {"op": "fillet", "args": ["x" * 64]}
         self.op_entry("1" * 64, {"object": only_op, "cls": "build123d.topology.Solid", "recipe": recipe})
@@ -284,7 +288,6 @@ class Retirement(StoreSweepCase):
         self.op_entry("3" * 64, {"object": reused_digest, "cls": "build123d.topology.Solid", "recipe": recipe})
         self.op_entry("4" * 64, {"object": fresh, "cls": "build123d.topology.Solid", "recipe": recipe})
         self.op_entry("5" * 64, {"value": 42.0})
-        self.op_entry("6" * 64, {"memoScheme": 1, "object": verdict}, kind="verdict")
         mark = gc.protected_objects
 
         def mark_then_publish(found, **kwargs):
@@ -295,8 +298,6 @@ class Retirement(StoreSweepCase):
         with mock.patch.object(gc, "protected_objects", side_effect=mark_then_publish):
             gc.collect(retired_only=True)
         self.assertFalse(has_object(only_op))
-        self.assertFalse(has_object(verdict))
-        self.assertFalse((self.store / "index" / "verdict").exists())
         self.assertTrue(has_object(brep), "shared with a current tree")
         self.assertTrue(has_object(reused_digest), "claimed by a publish while retiring")
         self.assertTrue(has_object(fresh), "inside the grace window")
@@ -331,6 +332,78 @@ class Retirement(StoreSweepCase):
         self.assertFalse(any(has_object(d) for d in shapes))
         self.assertTrue(has_object(tree) and has_object(brep))
         self.assertIsNone(housekeeper.look(str(self.store), 20 * 1024**3), "nothing left to do")
+
+
+class NewerCadgen(StoreSweepCase):
+    """A store two cadgens share. The older one cannot read what the newer one
+    still needs, so while the newer one writes, the older one removes nothing;
+    and a folder under index/ it does not know, it never touches at all."""
+
+    def store_with_garbage(self) -> tuple[str, str, str]:
+        """A current document, an op entry and an unreachable object, all old:
+        a pass that runs takes the op entry, its shape and the garbage."""
+        tree, _brep = self.seed_document()
+        garbage = self.old_object(b"nothing reaches me")
+        shape = self.old_object(b"an op-memo shape")
+        self.op_entry("1" * 64, {"object": shape, "cls": "build123d.topology.Solid", "recipe": {}})
+        return tree, garbage, shape
+
+    def test_while_a_newer_cadgen_writes_to_the_store_a_pass_removes_nothing(self) -> None:
+        import shutil
+
+        from cadgen.daemon.housekeeping import Housekeeper
+        from cadgen.store import gc
+        from cadgen.store.index import write_entry
+        from cadgen.store.objects import put_object
+        from cadgen.store.records import DOCUMENT_SCHEMA_VERSION, RECORD_SCHEMA_VERSION
+        from cadgen.store.trees import TREE_KIND, TREE_SCHEMA
+
+        newer_tree = json.dumps({"kind": TREE_KIND, "schemaVersion": TREE_SCHEMA + 1, "components": {}, "links": []})
+        evidence = {
+            "a record in a newer format": lambda: write_entry(
+                "model", "a" * 64, {"schemaVersion": RECORD_SCHEMA_VERSION + 1, "tree": "b" * 64}),
+            "a document entry in a newer format": lambda: write_entry(
+                "document", "c" * 64, {"schemaVersion": DOCUMENT_SCHEMA_VERSION + 1, "tree": "d" * 64}),
+            "a tree in a newer format": lambda: write_entry(
+                "model", "e" * 64, {"schemaVersion": RECORD_SCHEMA_VERSION, "tree": put_object(newer_tree.encode())}),
+            "an index folder it does not know": lambda: self.raw_entry("next", "f" * 64, {"schemaVersion": 1}, age=HOUR),
+        }
+        for what, write in evidence.items():
+            with self.subTest(what):
+                shutil.rmtree(self.store, ignore_errors=True)
+                self.store_with_garbage()
+                write()
+                before = self.snapshot()
+                report = gc.collect(max_bytes=1)
+                self.assertIsNotNone(report.deferred)
+                self.assertEqual(self.snapshot(), before, "the pass removed something")
+        line = Housekeeper(active=lambda: False, state_dir=lambda: self.root / "daemon").look(str(self.store), 1)
+        self.assertIn("left alone: a newer cadgen writes to this store", line)
+        self.assertEqual(self.snapshot(), before)
+
+    def test_a_newer_cadgen_gone_a_month_is_collected_and_a_folder_it_does_not_know_never_is(self) -> None:
+        from cadgen.store import gc
+        from cadgen.store.index import entry_path, write_entry
+        from cadgen.store.objects import has_object
+        from cadgen.store.records import RECORD_SCHEMA_VERSION
+
+        tree, garbage, shape = self.store_with_garbage()
+        month = gc.NEWER_CADGEN_SECONDS + HOUR
+        write_entry("model", "a" * 64, {"schemaVersion": RECORD_SCHEMA_VERSION + 1, "tree": "b" * 64})
+        self.old(entry_path("model", "a" * 64), month)
+        foreign = [self.raw_entry("notes", "todo.txt", {"mine": True}, age=month)]
+        for path in (self.store / "objects" / "zz" / ".draft.tmp", self.store / "objects" / "ab" / "README"):
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text("not cadgen's", encoding="utf-8")
+            self.old(path, month)
+            foreign.append(path)
+
+        report = gc.collect(max_bytes=1)
+        self.assertIsNone(report.deferred)
+        self.assertFalse(has_object(garbage) or has_object(shape))
+        self.assertFalse((self.store / "index" / "op").exists())
+        self.assertTrue(has_object(tree))
+        self.assertTrue(all(path.is_file() for path in foreign), "files that are not cadgen's are never touched")
 
 
 class LeastRecentlyWritten(StoreSweepCase):

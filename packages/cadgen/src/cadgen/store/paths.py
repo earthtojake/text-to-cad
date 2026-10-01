@@ -19,9 +19,14 @@ from pathlib import Path
 MESH_TESSELLATION_VERSION = 5
 
 # "document" is the ARTIFACT side (sha256 of a file's bytes → its tree); every
-# other kind is the code/dependency side. STORE.md §2, the law. A folder under
-# index/ that is not one of these is a retired kind, and the sweeper removes it.
+# other kind is the code/dependency side. STORE.md §2, the law.
 INDEX_KINDS = ("model", "document", "output", "component", "surface", "bounds", "mesh", "drawing")
+
+# Kinds an older cadgen wrote and this one never reads: the sweeper removes
+# them, with every object only they named (STORE.md §8). A folder under index/
+# in neither list is not this cadgen's to judge -- a newer cadgen's, or no
+# cadgen's at all -- and nothing here touches it.
+RETIRED_KINDS = ("op",)
 
 # The kinds eviction may drop (STORE.md §8): derivations that a build or a
 # reader recomputes on a miss. Records, document entries and output entries

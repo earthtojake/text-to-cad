@@ -10,6 +10,9 @@ for ``QUIET_SECONDS``, one look -- a stat walk that keeps nothing per file:
 2. **Otherwise, a retired index kind** (``index/op``): a pass that retires it
    and sweeps only the objects its entries named.
 
+A pass that finds a newer cadgen writing to the store removes nothing and says
+so; the next one is as far off as after any other pass.
+
 ``after`` is noted beside the daemon's socket, per store, so a store whose
 records and documents alone hold more than the cap costs one pass per fifth of
 the cap it grows -- never one per idle moment, nor one per daemon start.
@@ -239,6 +242,9 @@ def _default_state_dir() -> Path:
 
 
 def _summary(report: dict) -> str:
+    deferred = report.get("deferred")
+    if deferred:
+        return "left alone: a newer cadgen writes to this store (" + "; ".join(deferred["evidence"]) + ")"
     parts = []
     if report.get("retired"):
         parts.append("retired " + ", ".join(f"index/{kind} ({count} entries)" for kind, count in sorted(report["retired"].items())))

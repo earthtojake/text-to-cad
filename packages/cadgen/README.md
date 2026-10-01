@@ -93,9 +93,11 @@ that information is in the wrong place.
 The store holds itself to a size cap (`CADGEN_STORE_MAX`, default 20 GB): the
 daemon, when idle, evicts derived entries (mesh, surface, component, bounds,
 drawing) least recently written first and sweeps what nothing reaches, and
-retires on sight any index kind this cadgen no longer defines. A record, a
-document entry or an output entry is never evicted. `cadgen store gc` does
-the same by hand (`STORE.md` §8). A read never writes the store, and a write
+retires on sight the index kinds an older cadgen left (`index/op`). A record,
+a document entry or an output entry is never evicted. `cadgen store gc` does
+the same by hand (`STORE.md` §8). A cadgen never judges what it cannot read:
+a store a newer cadgen wrote to within 30 days is left to that cadgen, and a
+folder it does not know is never touched. A read never writes the store, and a write
 that finds its bytes already present claims them, so deletion needs no
 coordination: a sweep keeps whatever a publish has claimed, and a racing
 reader re-misses and rebuilds. Store correctness needs
