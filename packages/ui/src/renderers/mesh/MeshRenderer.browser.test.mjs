@@ -369,7 +369,10 @@ test('a corrupt mesh raises the viewer\'s load alert and an empty one says there
   await alert.waitFor();
   assert.match(await alert.innerText(), /Couldn’t load the model/);
   assert.match(await alert.innerText(), /broken\.stl/);
-  await noTools(broken.pane);
+  // Nothing on screen is the file's to work on: the card alone, with no tools or view actions.
+  for (const name of ['Display settings', 'Reset view', 'Preview']) {
+    assert.equal(await broken.pane.getByRole('button', { name, exact: true }).count(), 0, `no ${name} over a failed load`);
+  }
   assert.equal(await alert.getByRole('button', { name: 'Try again', exact: true }).count(), 1);
   assert.equal(await alert.getByText('Details', { exact: true }).count(), 1);
 

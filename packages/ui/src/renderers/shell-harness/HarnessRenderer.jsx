@@ -63,6 +63,11 @@ const LOAD_STAGES = Object.freeze({
     load: { alert: { severity: "error", blocking: false, summary: "Update failed", title: "Harness update failed",
       message: "The harness could not load its latest revision. The existing model remains visible.",
       details: "harness detail", reload: true } }
+  },
+  // A load the model did not survive: nothing on screen is the file's to work on.
+  broken: {
+    load: { alert: { severity: "error", summary: "Load failed", title: "Couldn’t load the harness model",
+      message: "The harness file could not be loaded.", reload: true } }
   }
 });
 

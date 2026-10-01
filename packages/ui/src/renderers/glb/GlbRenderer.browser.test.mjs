@@ -368,6 +368,9 @@ test('a corrupt GLB raises the viewer\'s load alert, with reload and details', a
   await alert.waitFor();
   assert.match(await alert.innerText(), /Couldn’t load the model/);
   assert.match(await alert.innerText(), /broken\.glb/);
-  await noTools(pane);
+  // Nothing on screen is the file's to work on: the card alone, with no tools or view actions.
+  for (const name of ['Display settings', 'Reset view', 'Preview']) {
+    assert.equal(await pane.getByRole('button', { name, exact: true }).count(), 0, `no ${name} over a failed load`);
+  }
   void page;
 });

@@ -4,7 +4,7 @@ import { Play, Pause, RotateCcw, X } from "lucide-react";
 import { ToolbarButton } from "@text-to-cad/ui/primitives/toolbar-button";
 import PreviewChrome from "../tools/PreviewChrome.jsx";
 import { useViewerMobile } from "../../../file-viewer/responsive.js";
-import ViewerAlertCard from "../status/ViewerAlertCard.jsx";
+import ViewerAlertCard, { alertDismissible } from "../status/ViewerAlertCard.jsx";
 import { ViewUpdateStatus } from "../status/ViewUpdateStatus.jsx";
 import ViewerLoadingOverlay from "../status/ViewerLoadingOverlay.js";
 import { VIEWER_RENDER_PROFILE, renderProfileKeepsPixelRatio, sceneForRenderProfile } from "../viewport/renderProfile.js";
@@ -154,10 +154,14 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
   </>;
 
   const hasContent = Boolean(scene) && !viewerLoading;
-  // While the model loads, the viewer shows none of its own chrome: no tools, no Quick Edit, no
-  // cube and no view actions -- only the load itself. They arrive with the model, and stay
-  // through a rebuild that keeps it on screen (that is `updating`, not loading).
-  const chromeHidden = viewerLoading;
+  // A load the model did not survive: an alert that cannot be put away (a failed update that
+  // keeps the previous version on screen can be, and keeps its chrome).
+  const failed = Boolean(frame.viewerAlert) && !alertDismissible(frame.viewerAlert, hasContent);
+  // While the model loads, or once it has failed to, the viewer shows none of its own chrome: no
+  // tools, no Quick Edit, no cube, no view actions and no update status -- only the load itself,
+  // or the card saying why it failed. They arrive with the model, and stay through a rebuild that
+  // keeps it on screen (that is `updating`, not loading).
+  const chromeHidden = viewerLoading || failed;
   // A host showing the view small (inline in a conversation: `appearance.compact`) gets the model
   // alone, not the tools, Quick Edit, the view actions or the cube; shown full size, all return.
   const compact = Boolean(view.appearance?.compact);
@@ -228,7 +232,7 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
                     previewMode={previewing}
                     previewOrbitSpeed={frame.previewOrbitSpeed ?? 1}
                     isLoading={viewerLoading}
-                    viewCube={!compact}
+                    viewCube={!compact && !failed}
                     viewUpdate={frame.viewUpdate}
                     loadingPresentation={frame.loading}
                     drawingEnabled={frame.drawToolActive}
@@ -293,12 +297,12 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
               {/* One place says the view is catching up: a newer revision of the file loading behind the
                   model on screen, or a Display change being prepared — the latter's failure first, since
                   it is the one with something to retry. */}
-              <div className="pointer-events-none absolute left-1/2 z-30 flex max-w-[calc(100%-1rem)] -translate-x-1/2 items-center"
+              {failed ? null : <div className="pointer-events-none absolute left-1/2 z-30 flex max-w-[calc(100%-1rem)] -translate-x-1/2 items-center"
                 style={{ top: VIEWPORT_INSET_PX, height: VIEWPORT_TOP_BAR_PX }} data-viewport-status="">
                 <ViewUpdateStatus status={frame.loading.updating && !frame.viewUpdate.status.error
                   ? MODEL_UPDATE_STATUS : frame.viewUpdate.status} onRetry={frame.viewUpdate.retry}
                   className="rounded-md bg-background/95 px-1 py-0.5 shadow-sm" />
-              </div>
+              </div>}
               <ViewerLoadingOverlay
                 loading={frame.presentationState?.file === frame.modelKey && frame.presentationState?.covering ? null : frame.loading}
                 operationKey={frame.modelKey}

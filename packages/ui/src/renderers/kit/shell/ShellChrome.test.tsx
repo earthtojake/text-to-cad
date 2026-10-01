@@ -208,6 +208,22 @@ it('while the model loads the viewer shows none of its own chrome, and all of it
   expect(barButtons()).toEqual(['Display settings', 'Reset view', 'Preview']);
 });
 
+it('a load the model did not survive leaves only the card saying so, and a failed update it survives keeps the chrome', () => {
+  frame();
+  const stage = (name: string) => act(() => { fireEvent.click(document.querySelector(`[data-harness-stage="${name}"]`)!); });
+  stage('broken');
+  expect(screen.getByText('Couldn’t load the harness model')).toBeTruthy();
+  expect(screen.queryByRole('group', { name: 'Interaction tools' })).toBeNull();
+  expect(document.querySelector('[data-cad-tool-stack]')).toBeNull();
+  expect(barButtons()).toEqual([]);
+  expect(document.querySelector('[data-viewport-status]')).toBeNull();
+  expect(viewportProps.current.viewCube).toBe(false);
+  stage('failed');
+  expect(screen.getByRole('group', { name: 'Interaction tools' })).toBeTruthy();
+  expect(barButtons()).toEqual(['Display settings', 'Reset view', 'Preview']);
+  expect(viewportProps.current.viewCube).toBe(true);
+});
+
 it('a host showing the view small gets the model alone: no tools, no view actions, no Quick Edit, no cube', () => {
   frame({ appearance: { colorScheme: 'light', compact: true } });
   expect(screen.queryByRole('group', { name: 'Interaction tools' })).toBeNull();

@@ -10,7 +10,7 @@ import { useViewerMobile } from "../../../file-viewer/responsive.js";
  * it shows every alert; one the model survives can be dismissed: a failed update
  * (`blocking: false` — the previous version is still on screen) and a warning beside the model.
  */
-function alertDismissible(alert, hasContent) {
+export function alertDismissible(alert, hasContent) {
   return alert.blocking === false || (hasContent && alert.severity === "warning");
 }
 
