@@ -785,16 +785,20 @@ Every build goes through one interface, `cadgen.daemon.executors.submit(model)
   siblings. It inherits the environment, so a test's `CADGEN_CACHE_DIR`
   isolates its store; tests and CI run this way.
 
-**One daemon per address, by lock.** The daemon takes a process-lifetime
-exclusive lock keyed by its socket address (`cadgen.daemon.transport.
-SingletonLock`: `flock` on POSIX, `msvcrt.locking` on Windows, released by the
-kernel when the holder dies) before it binds — a private socket is a private
-daemon; a second daemon starting for the same address stands down at
-once, touching nothing; the winner is by construction alone, so a socket file it
-finds is dead and may be removed. Clients elect one spawner the same way and
-the rest wait for the address. The lock holder creates that address's authkey
-once via a linked temp file and republishes its in-memory key if an external
-cleanup replaces the file. This is the one lock cadgen keeps — a singleton for
+**One daemon per address, by lock.** The daemon takes an exclusive lock keyed
+by its socket address (`cadgen.daemon.transport.SingletonLock`: `flock` on
+POSIX, `msvcrt.locking` on Windows, released by the kernel when the holder
+dies) before it binds, and holds it while it serves that address — a private
+socket is a private daemon. A daemon that stops serving removes its address and
+then releases the lock, before any teardown. A second daemon starting for the
+same address waits up to five seconds for the lock — its predecessor may be
+between those two steps, or, when an upgrade replaces an earlier version, still
+shutting its pool down with the lock held — and otherwise stands down, touching
+nothing; the winner is by construction alone, so a socket file it finds is dead
+and may be removed. Clients elect one spawner the same way and the rest wait
+for the address. The lock holder creates that address's authkey once via a
+linked temp file and republishes its in-memory key if an external cleanup
+replaces the file. This is the one lock cadgen keeps — a singleton for
 the daemon, never a build lock (§7): twenty clients starting at once used to
 start twenty daemons that unlinked each other's live sockets.
 
@@ -817,10 +821,13 @@ status`, all snapshot orchestration) run in-process. STEP snapshots delegate
 missing document compilation and surface derivation to the artifact build pool;
 their request resolution and browser orchestration never import the CAD kernel.
 
-When the daemon's runtime changes during a build, the old daemon keeps its
-listener and singleton lock until active jobs and their dependencies finish.
-New top-level requests run cold during that drain; dependency requests remain
-serviceable so a parent cannot deadlock while saving its result.
+When the daemon's runtime changes, a request carrying the new version is told
+to restart. With nothing running, the old daemon releases its address and lock
+before it answers, so the client's respawn binds at once. During a build, it
+keeps its listener and singleton lock until active jobs and their dependencies
+finish. New top-level requests run cold during that drain — artifact requests,
+which have no cold path, keep asking until the successor binds; dependency
+requests remain serviceable so a parent cannot deadlock while saving its result.
 
 CPU scheduling and reuse remain independent of memory admission:
 

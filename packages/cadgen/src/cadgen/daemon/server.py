@@ -19,7 +19,9 @@ Protocol — one JSON request per connection, JSON-lines response:
             {"event": {...}} build-tree events, then {"exit": <int>} — or
             {"restart": true} when the client's version token differs from the
             daemon's startup token, after which the daemon finishes the jobs it
-            is running and exits so the client can respawn a fresh one.
+            is running and exits so the client can respawn a fresh one. It gives
+            up its address and singleton lock together, before any teardown --
+            before that reply when nothing is running -- so the respawn binds.
 
 Routing: a request that names a model script goes to THAT model's worker
 (STORE.md §9). A busy worker means an extra, never a wait; a model with no
@@ -56,6 +58,12 @@ _JOB_WATCH_SLOTS = threading.BoundedSemaphore(32)
 # A worker that produces NO frame for this long mid-job is treated as wedged. Generous:
 # a large model can legitimately be silent for many minutes inside one OCCT boolean.
 WORKER_SILENCE_TIMEOUT_SECONDS = 3600.0
+# How long a starting daemon waits for a held singleton lock before standing down (_bind).
+# A predecessor that has stopped serving may still hold it: for a moment in this version,
+# and through its whole pool shutdown (about half a second per warm worker) in earlier
+# ones -- the resident daemon an upgrade replaces.
+LOCK_HANDOVER_SECONDS = 5.0
+LOCK_POLL_SECONDS = 0.02
 
 # Parser modules are imported by the WORKERS, never by this process. They are ordinary
 # cadgen modules, so a worker imports them from the same distribution this file was
@@ -517,54 +525,85 @@ def _active_requests() -> list[threading.Thread]:
 _DAEMON_LOCK: transport.SingletonLock | None = None
 
 
-def _bind(address: str) -> transport.Server | None:
+def _release_lock() -> None:
+    global _DAEMON_LOCK
+    lock, _DAEMON_LOCK = _DAEMON_LOCK, None
+    if lock is not None:
+        lock.release()
+
+
+def _bind(address: str, *, wait: float = 0.0) -> transport.Server | None:
     """One daemon per address, decided by a lock -- never by probing or sweeping.
 
     Probing a leftover socket was a race: twenty clients starting at once spawn twenty
     daemons, the losers' probes against a backlog-8 listener are REFUSED, each reads
     refusal as "stale file", unlinks the winner's live socket and binds its own -- four
     daemons "serving" one path, the earlier ones orphaned with their workers. So the
-    decision is a process-lifetime exclusive lock (transport.SingletonLock, released by
-    the kernel when the holder dies): the loser stands down at once, touching nothing;
-    the winner is by construction the only daemon, so a socket file it finds is dead
-    and may be removed before binding.
+    decision is an exclusive lock (transport.SingletonLock), held for as long as the
+    daemon serves the address and released by the kernel if the holder dies: the loser
+    stands down, touching nothing; the winner is by construction the only daemon, so a
+    socket file it finds is dead and may be removed before binding.
+
+    The loser waits up to ``wait`` seconds first. A daemon that stops serving removes
+    its address and only then releases the lock -- the other order would let it unlink
+    a successor's socket -- so a client that finds the address gone can start a
+    successor while the lock is still held: for an instant in this version, and for a
+    whole pool shutdown in earlier ones, which an upgrade replaces. Standing down at once
+    left the address with no daemon at all. The lock still decides; waiting probes nothing.
     """
     global _DAEMON_LOCK
     lock = transport.daemon_lock(address)
-    if not lock.acquire():
-        _log(f"another daemon holds the lock for {address}; standing down")
-        return None
-    _DAEMON_LOCK = lock  # held for the daemon's whole life
+    deadline = time.monotonic() + wait
+    while not lock.acquire():
+        if time.monotonic() >= deadline:
+            _log(f"another daemon holds the lock for {address}; standing down")
+            return None
+        time.sleep(LOCK_POLL_SECONDS)
+    _DAEMON_LOCK = lock  # held while this daemon serves the address
     if transport.address_is_stale(address):
         transport.clear_address(address)
-    try:
-        authkey = transport.ensure_authkey(address)
-        return transport.Server(
-            address,
-            authkey,
-            backlog=128,
-            on_authentication_error=lambda: transport.publish_authkey(address, authkey),
-        )
-    except OSError as exc:
-        _log(f"cannot bind {address}: {exc}")
-        lock.release()
-        _DAEMON_LOCK = None
-        return None
+    while True:
+        try:
+            authkey = transport.ensure_authkey(address)
+            return transport.Server(
+                address,
+                authkey,
+                backlog=128,
+                on_authentication_error=lambda: transport.publish_authkey(address, authkey),
+            )
+        except OSError as exc:
+            # A Windows pipe name is refused (access denied) while any instance of it is
+            # open, and a predecessor can still be answering on one -- a job watch, the
+            # restart reply -- just after releasing the lock. It closes within a second.
+            if isinstance(exc, PermissionError) and time.monotonic() < deadline:
+                time.sleep(LOCK_POLL_SECONDS)
+                continue
+            _log(f"cannot bind {address}: {exc}")
+            lock.release()
+            _DAEMON_LOCK = None
+            return None
 
 
 def serve() -> int:
     os.environ["CADGEN_DAEMON_CHILD"] = "1"
     address = daemon_address()
     token = compute_version_token()
-    server = _bind(address)
+    server = _bind(address, wait=LOCK_HANDOVER_SECONDS)
     if server is None:
         return 0
     bound = {"address": True}
 
     def _release_address() -> None:
+        """Stop serving the address: the listener, the socket file, then the lock.
+
+        In that order, so this process can never unlink a successor's socket, and
+        before any teardown, so a client told to restart finds the lock free.
+        """
+        server.close()
         if bound["address"]:
             bound["address"] = False
             transport.clear_address(address)
+        _release_lock()
 
     def _shutdown_handler(*_args) -> None:
         raise _DaemonShutdown
@@ -640,17 +679,19 @@ def serve() -> int:
                     if active:
                         # Keep the old address and singleton lock together while its
                         # jobs finish. Their workers can still submit child/artifact
-                        # dependencies; fresh top-level calls are sent cold until the
-                        # drain completes. Closing the listener here deadlocked a long
-                        # job against its own final artifact request.
+                        # dependencies; fresh top-level calls are told to restart until
+                        # the drain completes (ordinary ones run cold, artifact requests
+                        # ask again until the successor binds). Closing the listener here
+                        # deadlocked a long job against its own final artifact request.
                         state["draining"] = True
                         _log(f"version token changed; finishing {len(active)} job(s) in flight before exiting")
                         with contextlib.suppress(OSError):
                             _send(conn, {"restart": True})
                         continue
-                    # With no work to preserve, release the address before replying so
-                    # the client's respawn cannot race this daemon's cleanup.
-                    server.close()
+                    # With no work to preserve, release the address and the lock before
+                    # replying, so the client's respawn binds at once. Holding the lock
+                    # through the pool shutdown below made that respawn stand down,
+                    # leaving the address with no daemon.
                     _release_address()
                     with contextlib.suppress(OSError):
                         _send(conn, {"restart": True})
@@ -678,9 +719,8 @@ def serve() -> int:
         _log("signal received; exiting")
         return 0
     finally:
-        _POOL.shutdown()
-        server.close()
         _release_address()
+        _POOL.shutdown()
 
 
 USAGE = """\
