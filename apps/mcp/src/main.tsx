@@ -4,6 +4,7 @@ import { version } from '../package.json';
 import App from './App';
 import Notice from './Notice';
 import { createBridge, type HostContext, type ToolResult } from './host/bridge';
+import { relaunch } from './host/relaunch';
 import { readPresentation } from './host/presentation';
 import { createServer, PROTOCOL, readLaunch, type Launch } from './host/server';
 import './styles.css';
@@ -40,7 +41,11 @@ async function start() {
   });
   try {
     await bridge.initialize({ name: 'CAD', version }, presentation === 'inline' ? { displayModes: ['inline', 'fullscreen'] } : undefined);
-    const [launch, session] = await Promise.all([launched, server.session()]);
+    const [restored, session] = await Promise.all([launched, server.session()]);
+    // A tab's own launch from an older build, with today's server: launched again, rather than a
+    // notice to close and reopen it. An inline card stays as it was: it is a past chat's.
+    const launch = restored.protocol !== PROTOCOL && session.protocol === PROTOCOL && presentation === 'tabs'
+      ? await relaunch(bridge, restored).catch(() => restored) : restored;
     if (launch.protocol !== PROTOCOL || session.protocol !== PROTOCOL) {
       root.render(<Notice title="CAD was updated" message="Close this tab and open CAD again to use the new version." details={`view ${PROTOCOL} · launch ${launch.protocol} · server ${session.protocol} (${session.version})`} />);
       return;

@@ -6,6 +6,7 @@ import { createCatalogFileSource } from '@text-to-cad/ui/catalog';
 import { frameClipboard } from './clipboard';
 import { createFilesystemSource } from './files';
 import { chatReach, createChatPromptContext } from './prompt';
+import { relaunch } from './relaunch';
 import { createServer, type ViewEvent } from './server';
 import { createTunnelFetch, decodeBase64, encodeBase64, TUNNEL_ORIGIN } from './tunnel';
 
@@ -129,6 +130,28 @@ describe('the fetch tunnel', () => {
   it('turns a failed call into the TypeError fetch throws', async () => {
     const tunnel = createTunnelFetch(createServer({ callTool: async () => ({ isError: true, content: [{ type: 'text', text: 'not this thread' }] }) }), { kind: 'workspace', path: '/p' });
     await expect(tunnel(`${TUNNEL_ORIGIN}/__cad/catalog`)).rejects.toThrow(TypeError);
+  });
+});
+
+describe('a tab restored from an older build', () => {
+  it('is launched again as it was: the home, a thread\'s tab, a file\'s tab or an agent\'s model', async () => {
+    const root = { kind: 'workspace' as const, path: '/work', name: 'work' };
+    const calls: [string, Record<string, unknown>][] = [];
+    const bridge = { callTool: vi.fn(async (name: string, args: Record<string, unknown>) => {
+      calls.push([name, args]);
+      return { structuredContent: { launch: { protocol: 3, page: name === 'cad_home' ? 'home' : 'viewer', model: (args.model as string) || null, root, explore: true } } } as ToolResult;
+    }) };
+    const stale = (patch: object) => ({ protocol: 2, page: 'viewer' as const, model: null, root, explore: true, ...patch });
+    expect((await relaunch(bridge, stale({ page: 'home', surface: 'sidebar' }))).page).toBe('home');
+    await relaunch(bridge, stale({ surface: 'tab' }));
+    await relaunch(bridge, stale({ surface: 'file', model: '/work/parts/a b.step' }));
+    const agent = await relaunch(bridge, stale({ surface: 'agent', model: '/work/parts/a.step' }));
+    expect(calls).toEqual([
+      ['cad_home', {}], ['cad_tab', {}],
+      ['cad_file', { file: { name: 'a b.step', resourceUri: 'file:///work/parts/a%20b.step' } }],
+      ['cad_launch', { model: '/work/parts/a.step' }],
+    ]);
+    expect([agent.protocol, agent.surface]).toEqual([3, 'agent']);
   });
 });
 
