@@ -123,6 +123,25 @@ export function meshStateIsComplete(meshState) {
   return !(Array.isArray(missing) && missing.length > 0);
 }
 
+// A rewritten file whose next revision is not built yet: the entry has no mesh while its render
+// artifact (re)builds, and the complete model of this same file is the one on screen. It stays
+// there, reported as an update, until the new revision replaces it atomically
+// (`shouldRetainCompleteSameFileMesh`): once a model has been shown, a rebuild never takes it down.
+export function awaitingSameFileRevision(current, entry) {
+  return Boolean(entry?.file) &&
+    String(current?.file || "") === String(entry.file) &&
+    meshStateIsComplete(current);
+}
+
+// What the viewer SHOWS while a same-file revision loads, whatever the entry's kind: the complete
+// model on screen until the new one is published. (`shouldRetainCompleteSameFileMesh` is the
+// loader's own, narrower question: whether to stage an assembly's replacement atomically.)
+export function replacingSameFileMesh(current, entry, targetMeshHash) {
+  return String(current?.file || "") === String(entry?.file || "") &&
+    String(current?.meshHash || "") !== String(targetMeshHash || "") &&
+    meshStateIsComplete(current);
+}
+
 export function shouldRetainCompleteSameFileMesh(current, entry, targetMeshHash) {
   return String(entry?.kind || "") === "assembly" &&
     String(current?.file || "") === String(entry?.file || "") &&

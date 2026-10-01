@@ -34,6 +34,7 @@ export function defineFileRenderer<T>(definition: FileRendererDefinition<T>): Re
           Component: (props) => createElement(Component, { ...props, data: document.data }),
           panels: panels ? (panelContext) => panels({ ...panelContext, data: document.data }) : undefined,
           text: document.text,
+          live: document.live === true,
           dispose,
         };
       } catch (error) {

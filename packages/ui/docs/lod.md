@@ -206,8 +206,10 @@ and rerunning the model reconnects it.
 
 **What stays on screen.** The prior model stays visible while the next request
 builds; failed updates remain visible while an idle disconnected feed retries
-quietly. Complete plain STEP assemblies also remain visible while replacement
-meshes load. Complete displayed component arrays remain available while a
+quietly. A complete model of the same file — a part's or an assembly's — also
+remains visible while its rewritten file is rebuilt and while the replacement
+meshes load (`replacingSameFileMesh`, `awaitingSameFileRevision`), reported as an
+update ("Updating model…"), never as the loading screen. Complete displayed component arrays remain available while a
 replacement stages or fails. Reuse requires the same runtime surface input,
 concrete surface object and tessellation; placements and appearance come from
 the new tree. Selection, measurements and reference copying wait for matching

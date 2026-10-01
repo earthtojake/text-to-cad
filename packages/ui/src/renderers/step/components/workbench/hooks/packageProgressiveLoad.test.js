@@ -18,6 +18,8 @@ import {
   progressivePublishDue,
   publishMeshCostAccounting,
   meshStateIsComplete,
+  awaitingSameFileRevision,
+  replacingSameFileMesh,
   shouldRetainCompleteSameFileMesh,
   tolerantAnimationClip,
   createDecodeSizeEstimator,
@@ -238,6 +240,24 @@ test("same-file complete revision replacement publishes atomically and accounts 
   assert.equal(shouldRetainCompleteSameFileMesh(current, { file: "gear.step", kind: "assembly" }, "old"), false);
   assert.equal(shouldRetainCompleteSameFileMesh(current, { file: "other.step", kind: "assembly" }, "new"), false);
   assert.equal(shouldRetainCompleteSameFileMesh({ ...current, assemblyInteractionReady: false }, { file: "gear.step", kind: "assembly" }, "new"), false);
+});
+
+test("once a model is on screen, its file's next revision is an update: a part's or an assembly's, built or still building", () => {
+  const current = { file: "plate.step", meshHash: "old", meshData: { parts: [{}] } };
+  // What the viewer keeps showing while the new revision loads, whatever the entry's kind.
+  for (const kind of ["part", "assembly"]) {
+    assert.equal(replacingSameFileMesh(current, { file: "plate.step", kind }, "new"), true, kind);
+    assert.equal(replacingSameFileMesh(current, { file: "plate.step", kind }, "old"), false, `${kind}: the same revision is no replacement`);
+  }
+  assert.equal(replacingSameFileMesh(current, { file: "other.step", kind: "part" }, "new"), false);
+  assert.equal(replacingSameFileMesh({ ...current, assemblyInteractionReady: false }, { file: "plate.step", kind: "assembly" }, "new"), false,
+    "a model still arriving in pieces is not complete");
+  // Before the rewritten file is built its entry has no mesh: what is on screen stays through that too.
+  assert.equal(awaitingSameFileRevision(current, { file: "plate.step" }), true);
+  assert.equal(awaitingSameFileRevision(current, { file: "other.step" }), false);
+  assert.equal(awaitingSameFileRevision(null, { file: "plate.step" }), false, "nothing on screen yet: that is the first load");
+  // The loader's own staging question stays an assembly's.
+  assert.equal(shouldRetainCompleteSameFileMesh(current, { file: "plate.step", kind: "part" }, "new"), false);
 });
 
 test("atomic same-file revision carries unchanged occurrence and tree identity through final publication", async () => {

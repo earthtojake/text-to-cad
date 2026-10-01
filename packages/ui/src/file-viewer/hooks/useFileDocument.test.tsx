@@ -38,6 +38,57 @@ test('source changes and explicit reloads refresh renderer metadata; navigating 
   expect(preparations.at(-1)?.refresh).toBe(false);
 });
 
+test('a live document stays open when its file changes, for its renderer follows the file; only the file going away reopens it', async () => {
+  const preparations: PrepareContext[] = [];
+  const listeners = new Set<Parameters<NonNullable<FileSource['subscribe']>>[0]>();
+  const source: FileSource = {
+    id: 'workspace', rootName: 'models',
+    stat: async (path) => ({ path, name: path, kind: 'file', size: 0, extension: 'step' }),
+    subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; },
+  };
+  const renderers: RendererRegistration[] = [{
+    id: 'cad', priority: 1, matches: () => true,
+    async prepare(context) { preparations.push(context); return { Component: () => null, live: true }; },
+  }];
+  const { result } = renderHook(() => useFileDocument('one.step', source, renderers), { wrapper: StrictMode });
+  await waitFor(() => expect(result.current.loaded.status).toBe('ready'));
+  const opened = { key: result.current.key, preparations: preparations.length };
+  const emit = (changes: FileChanges['changes']) => act(() => { for (const listener of listeners) listener({ sourceId: source.id, changes }); });
+  // A rewrite (and a write that briefly empties the file, then fills it) is the renderer's to show.
+  emit([{ kind: 'content', path: 'one.step', revision: 'r2' }]);
+  emit([{ kind: 'added', path: 'one.step' }]);
+  expect([result.current.key, result.current.loaded.status, preparations.length]).toEqual([opened.key, 'ready', opened.preparations]);
+  emit([{ kind: 'deleted', path: 'one.step' }]);
+  await waitFor(() => expect(result.current.key).not.toBe(opened.key));
+  await waitFor(() => expect(result.current.loaded.status).toBe('ready'));
+  expect(preparations.at(-1)?.refresh).toBe(true);
+});
+
+test('a file arriving while it opens is that open\'s to find; arriving after a failed open opens it again', async () => {
+  let stat = (path: string): Promise<{ path: string; name: string; kind: 'file'; size: number; extension: string }> => new Promise(() => {});
+  const preparations: PrepareContext[] = [];
+  const listeners = new Set<Parameters<NonNullable<FileSource['subscribe']>>[0]>();
+  const source: FileSource = {
+    id: 'workspace', rootName: 'models', stat: (path) => stat(path),
+    subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; },
+  };
+  const renderers: RendererRegistration[] = [{ id: 'cad', priority: 1, matches: () => true,
+    async prepare(context) { preparations.push(context); return { Component: () => null, live: true }; } }];
+  const { result } = renderHook(() => useFileDocument('one.step', source, renderers));
+  const emit = (changes: FileChanges['changes']) => act(() => { for (const listener of listeners) listener({ sourceId: source.id, changes }); });
+  const opening = result.current.key;
+  emit([{ kind: 'added', path: 'one.step' }]);
+  expect([result.current.key, result.current.loaded.status]).toEqual([opening, 'loading']);
+  // A failed open, then the file appears: it opens.
+  stat = async () => { throw new Error('No file at one.step'); };
+  act(() => result.current.reload());
+  await waitFor(() => expect(result.current.loaded.status).toBe('error'));
+  stat = async (path) => ({ path, name: path, kind: 'file', size: 0, extension: 'step' });
+  emit([{ kind: 'added', path: 'one.step' }]);
+  await waitFor(() => expect(result.current.loaded.status).toBe('ready'));
+  expect(preparations).toHaveLength(1);
+});
+
 function editable() {
   const listeners = new Set<(change: FileChanges) => void>();
   const contents = new Map([['one.txt', { content: 'one', revision: 'r1' }], ['two.txt', { content: 'two', revision: 'r2' }]]);

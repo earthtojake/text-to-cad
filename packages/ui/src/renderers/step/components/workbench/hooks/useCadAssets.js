@@ -37,6 +37,7 @@ import {
   PROGRESSIVE_LOAD_MAX_INFLIGHT_BYTES,
   progressiveLoadProgress,
   publishMeshCostAccounting,
+  awaitingSameFileRevision,
   shouldRetainCompleteSameFileMesh
 } from "./packageProgressiveLoad.js";
 import { initialDisplayLodPlan, probeInitialDisplayLod } from "../../../render/initialDisplayLod.js";
@@ -677,6 +678,13 @@ export function useCadAssets({
     const requestId = requestIdRef.current;
 
     if (!entryHasMesh(entry)) {
+      // The same file, rewritten, before its next revision is built: what is on screen stays,
+      // and the revision replaces it when it arrives.
+      if (awaitingSameFileRevision(meshStateRef.current, entry)) {
+        setStatus(ASSET_STATUS.PENDING);
+        setError("");
+        return;
+      }
       displayedLodPackageRef.current = null;
       displayedReferenceCompositionRef.current = null;
       syncDisplayedMemory(null);

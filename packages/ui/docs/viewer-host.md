@@ -283,6 +283,14 @@ add, delete and move notifications have distinct meanings. Desktop reconciles
 all affected tabs; web is a read-only CAD catalog, with no arbitrary filesystem
 access or editing.
 
+A document that follows its file itself is `live` (`PreparedDocument.live`; every CAD
+renderer's, from `prepareWorkspaceEntry`): a content change — or a write that briefly
+empties the file — never opens it again, because its renderer reads the live catalog
+entry and loads the next revision behind the model on screen, under "Updating model…".
+Once a model has been shown, a rebuild is an update, never the loading screen. Only the
+file going away (a delete, or a move) reopens a live document; a text document still
+reopens on a content change, or marks a dirty draft stale.
+
 State remains controlled through FileViewer props, and everything the viewer keeps
 is the tab's (`@text-to-cad/ui/tab-store`): one record per tab, `{ version, settings,
 files }`, thrown out with the tab and kept across a reload. The host supplies where it

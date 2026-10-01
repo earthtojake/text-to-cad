@@ -17,8 +17,14 @@ export function useFileDocument(file: string | FileMetadata | null, source: File
   const key = JSON.stringify([source.id, path, generation]);
   const [result, setResult] = useState<{ key: string; document: LoadedDocument } | null>(null);
   const [edit, setEdit] = useState<EditState | null>(null);
-  const current = useRef({ key, edit, source });
-  current.current = { key, edit, source };
+  const loaded: LoadedDocument = result?.key === key ? result.document : { status: path === null ? "empty" : "loading" };
+  // A live document follows its file itself (`PreparedDocument.live`): its content changes are not ours.
+  const live = loaded.status === "ready" && loaded.prepared.live === true;
+  // A file arriving while its document is still loading is the load's own to find: the catalog
+  // landing on a first open would otherwise start every open twice.
+  const opening = loaded.status === "loading";
+  const current = useRef({ key, edit, source, live, opening });
+  current.current = { key, edit, source, live, opening };
   const writes = useRef(new Set<AbortController>());
   const relocation = useRef<{ source: FileSource; path: string; edit: EditState | null } | null>(null);
   const reload = useCallback(() => { if (path) drafts?.put(source.id, path, null); setGeneration((value) => value + 1); }, [drafts, source.id, path]);
@@ -82,8 +88,9 @@ export function useFileDocument(file: string | FileMetadata | null, source: File
         drafts?.put(source.id, path, null);
         return;
       }
-      if (!change.changes.some(item => (item.kind === "content" && item.path === path && (!item.revision || item.revision !== document?.base.revision))
-        || (item.kind === "added" && item.path === path)
+      // A live document is updated in place by its renderer: only the file going away reopens it.
+      if (!change.changes.some(item => (!state.live && item.kind === "content" && item.path === path && (!item.revision || item.revision !== document?.base.revision))
+        || (!state.live && !state.opening && item.kind === "added" && item.path === path)
         || (item.kind === "deleted" && isSameOrUnder(path, item.path)))) return;
       if (document && document.value !== document.base.content) {
         setEdit((previous) => previous?.key === key ? { ...previous, stale: true } : previous);
@@ -136,7 +143,6 @@ export function useFileDocument(file: string | FileMetadata | null, source: File
     } finally { writes.current.delete(controller); }
   }, [key, path, source]);
 
-  const loaded: LoadedDocument = result?.key === key ? result.document : { status: path === null ? "empty" : "loading" };
   const document = useMemo<DocumentSession | null>(() => edit?.key === key && loaded.status === "ready" && loaded.prepared.text ? {
     key, value: edit.value, revision: edit.base.revision, readOnly: !!edit.base.readOnly || !!edit.base.truncated || !source.writeText,
     dirty: edit.value !== edit.base.content, saving: edit.saving, stale: edit.stale, error: edit.error,

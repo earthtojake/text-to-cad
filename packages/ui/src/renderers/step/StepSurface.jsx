@@ -117,8 +117,9 @@ import {
   resolveStepModuleFeatures
 } from "@text-to-cad/core/common/stepModule.js";
 import {
+  awaitingSameFileRevision,
   meshStateIsComplete,
-  shouldRetainCompleteSameFileMesh
+  replacingSameFileMesh
 } from "./components/workbench/hooks/packageProgressiveLoad.js";
 import { meshLoadErrorForViewer, shouldStartMeshLoad } from "./components/workbench/hooks/meshLoadTarget.js";
 import { useViewerHost } from "../../host/context.js";
@@ -408,16 +409,21 @@ function StepSurfaceBody({ view, data }) {
     !!selectedEntry &&
     meshState.file === fileKey(selectedEntry) &&
     meshState.meshHash === selectedMeshHash;
-  // useCadAssets retains the complete scene while a same-file STEP revision
-  // stages. Keep that predecessor renderable across the short entry-hash gap;
-  // reference matching remains hash-strict below, so its stale topology cannot
+  // useCadAssets keeps the complete scene while a same-file STEP revision loads
+  // (a part's or an assembly's). Keep that predecessor on screen until the new
+  // one is published: an edit is an update, never the loading screen again.
+  // Reference matching remains hash-strict below, so its stale topology cannot
   // be picked while the replacement geometry/selectors are loading.
+  // Before that, while the rewritten file's next revision is still being built, the entry has no
+  // mesh at all: the model on screen stays through that too (`awaitingSameFileRevision`), so a
+  // rebuild is only ever an update, never the loading screen again.
   const retainingPreviousStepMesh =
-    selectedEntryHasMesh &&
-    !!selectedMeshHash &&
-    !selectedStepModuleUrl &&
-    !selectedAnimationSourceKey &&
-    shouldRetainCompleteSameFileMesh(meshState, selectedEntry, selectedMeshHash);
+    (!selectedEntryHasMesh && awaitingSameFileRevision(meshState, selectedEntry)) || (
+      selectedEntryHasMesh &&
+      !!selectedMeshHash &&
+      !selectedStepModuleUrl &&
+      !selectedAnimationSourceKey &&
+      replacingSameFileMesh(meshState, selectedEntry, selectedMeshHash));
   const retainedPreviousStepMeshError = retainingPreviousStepMesh &&
     meshState?.assemblyBackgroundErrorMeshHash === selectedMeshHash
     ? String(meshState?.assemblyBackgroundError || "").trim()

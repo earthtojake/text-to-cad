@@ -28,5 +28,8 @@ export async function prepareWorkspaceEntry(client: WorkspaceClientOption, conte
   ]);
   context.signal.throwIfAborted();
   const renderSession = connection.createRenderSession({ file: context.file.path });
-  return { data: { entry, serverInfo, client: connection, renderSession }, dispose: () => renderSession.dispose() };
+  // Live: the renderer reads this file's catalog entry as it changes (`useWorkspaceDocument`), and
+  // loads a rewritten file's next revision behind the one on screen. Opening it again would take
+  // the model down for every edit.
+  return { data: { entry, serverInfo, client: connection, renderSession }, dispose: () => renderSession.dispose(), live: true };
 }

@@ -96,7 +96,17 @@ export interface PrepareContext {
   /** This same file was explicitly reloaded or invalidated by its source. */
   refresh?: boolean;
 }
-export interface PreparedDocument<T> { data: T; text?: TextDocument; dispose?: () => void }
+export interface PreparedDocument<T> {
+  data: T;
+  text?: TextDocument;
+  dispose?: () => void;
+  /**
+   * The document follows its file by itself: a rewritten file reaches the open renderer as an update
+   * (the CAD renderers read a live catalog entry), so the viewer keeps it open when the file's
+   * content changes instead of opening it again, and the model on screen is never taken down for it.
+   */
+  live?: boolean;
+}
 /** Renderer-owned actions shown at the navbar's right, before any declared panel's toggle. Never persisted. */
 export interface FileNavigationAction {
   id: string;
@@ -163,6 +173,8 @@ export interface PreparedRenderer {
   panels?: (context: PanelContext) => FilePanel[];
   text?: TextDocument;
   dispose?: () => void;
+  /** See `PreparedDocument.live`. */
+  live?: boolean;
 }
 export interface RendererRegistration {
   id: string;
