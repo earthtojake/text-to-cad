@@ -1,4 +1,4 @@
 interface:
   display_name: "CAD setup"
-  short_description: "Prepare the runtime CAD's viewer runs on."
-  default_prompt: "Use $cad-mcp-setup to set up the CAD plugin: check for uv, prepare its pinned cadgen runtime, and tell me when to restart Codex."
+  short_description: "Check that CAD's viewer can start."
+  default_prompt: "Use $cad-mcp-setup to check that the CAD plugin can start: confirm uv is installed and tell me when to restart Codex."

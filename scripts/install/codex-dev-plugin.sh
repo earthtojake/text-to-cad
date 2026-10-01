@@ -1,15 +1,17 @@
 #!/usr/bin/env bash
 # Install this checkout into the Codex app as the development CAD plugin,
-# cad@earthtojake-dev: its skills, and a `cadgen mcp` server run by this
+# text-to-cad@earthtojake-dev: its skills, and a `cadgen mcp` server run by this
 # checkout's .venv, serving a copy of this checkout's apps/mcp build.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd -P)"
 MARKETPLACE="earthtojake-dev"
-PLUGIN_ID="cad@$MARKETPLACE"
+# The plugin's own name, so the development install is the published plugin's twin.
+PLUGIN_NAME="$(python3 -c 'import json, sys; print(json.load(open(sys.argv[1]))["name"])' "$REPO_ROOT/.codex-plugin/plugin.json")"
+PLUGIN_ID="$PLUGIN_NAME@$MARKETPLACE"
 DEV_ROOT="$REPO_ROOT/tmp/codex-dev"
-PLUGIN_DIR="$DEV_ROOT/plugins/cad"
+PLUGIN_DIR="$DEV_ROOT/plugins/$PLUGIN_NAME"
 PYTHON="${CADGEN_PYTHON:-$REPO_ROOT/.venv/bin/python}"
 BUILD=1
 RESTART=0
@@ -23,7 +25,7 @@ Usage:
 
 Builds apps/mcp, assembles a plugin under tmp/codex-dev from this checkout
 (skills copied, server = this checkout's .venv running `cadgen mcp`), and
-installs it as cad@earthtojake-dev. Refuses while another CAD plugin is
+installs it as text-to-cad@earthtojake-dev. Refuses while another CAD plugin is
 installed: two copies means every skill twice.
 
 The plugin serves a copy of the built page, taken now, as an installed wheel
@@ -61,9 +63,9 @@ installed_cad() {
   "$CODEX" plugin list --json | python3 -c '
 import json, sys
 for plugin in json.load(sys.stdin).get("installed", []):
-    if plugin.get("name") == "cad":
+    if plugin.get("name") == sys.argv[1]:
         print(plugin["pluginId"])
-'
+' "$PLUGIN_NAME"
 }
 
 if [[ "$UNINSTALL" == 1 ]]; then
@@ -120,7 +122,7 @@ server = {"mcpServers": {"cad": {"command": python, "args": ["-m", "cadgen.cli",
                                          "env": {"CADGEN_MCP_APP_DIR": app}, "startup_timeout_sec": 30}}}
 (plugin / "codex.mcp.json").write_text(json.dumps(server, indent=2) + "\n", encoding="utf-8")
 catalog = {"name": marketplace, "interface": {"displayName": "CAD (this checkout)"}, "plugins": [{
-    "name": "cad", "source": {"source": "local", "path": "./plugins/cad"},
+    "name": manifest["name"], "source": {"source": "local", "path": f"./plugins/{manifest['name']}"},
     "policy": {"installation": "AVAILABLE", "authentication": "ON_INSTALL"}, "category": "Productivity"}]}
 (dev / ".agents" / "plugins" / "marketplace.json").write_text(json.dumps(catalog, indent=2) + "\n", encoding="utf-8")
 print(f"assembled {manifest['version']}")

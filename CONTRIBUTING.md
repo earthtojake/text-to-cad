@@ -470,7 +470,7 @@ scripts/install/codex-dev-plugin.sh --restart
 
 It builds `apps/mcp`, assembles a plugin under `tmp/codex-dev` (this
 checkout's skills, and a server run by this checkout's `.venv`), installs it as
-`cad@earthtojake-dev` and restarts the app. It refuses while another CAD plugin
+`text-to-cad@earthtojake-dev` and restarts the app. It refuses while another CAD plugin
 is installed; `--uninstall` removes it. The plugin serves a copy of the page
 taken at install, never `apps/mcp/dist` itself: a rebuild would change the
 page's URI under the running app, and Codex drops the frames showing the old

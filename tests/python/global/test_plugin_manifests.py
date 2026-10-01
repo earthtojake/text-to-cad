@@ -20,7 +20,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-PLUGIN_NAME = "cad"
+PLUGIN_NAME = "text-to-cad"
 MARKETPLACE_NAME = "earthtojake"
 
 CLAUDE_PLUGIN_PATH = REPO_ROOT / ".claude-plugin" / "plugin.json"

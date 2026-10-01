@@ -1,6 +1,6 @@
 ---
 name: cad-mcp-setup
-description: Set up the CAD plugin after installing it - install uv if it is missing (with the user's approval) and prepare the pinned cadgen runtime that CAD's viewer runs on, so CAD opens in the sidebar and in thread tabs. Use right after the CAD plugin is installed or updated, or when CAD's viewer did not start.
+description: Check that the CAD plugin can start after it is installed or updated - confirm uv is installed, point the user to uv's official installation guide when it is not, and tell them when to restart the app so CAD opens in the sidebar and in thread tabs. Use right after the CAD plugin is installed or updated, or when CAD's viewer did not start.
 ---
 
 # Set up CAD
@@ -9,12 +9,12 @@ Provenance: maintained in [earthtojake/text-to-cad](https://github.com/earthtoja
 Use the installed local skill files as the runtime source of truth; the
 repository link is only for provenance and release review.
 
-CAD's viewer is a local server, `cadgen mcp`, that the agent app starts with
-`uvx` for each thread, from a runtime pinned to this plugin's version (the
-`cadgen==` line in this skill's `requirements.txt`). uvx downloads that runtime
-the first time it starts after an install or an update, so a start needs a
-network connection. This skill installs uv and fetches the runtime ahead of the
-first start. It changes nothing in the user's projects.
+CAD's viewer is a local server that the agent app starts with `uvx`, from the
+command in this plugin's MCP config, pinned to the plugin's version. The app
+fetches that pinned runtime from PyPI the first time the server starts after an
+install or an update, so that start needs a network connection. This skill only
+checks and explains: it installs nothing, downloads nothing, and changes nothing
+in the user's projects.
 
 ## Steps
 
@@ -24,37 +24,20 @@ first start. It changes nothing in the user's projects.
    uv --version
    ```
 
-   If it is missing, ask the user before installing it. The official installer
-   is `curl -LsSf https://astral.sh/uv/install.sh | sh` on macOS and Linux and
-   `powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"`
-   on Windows; `brew install uv` also works.
+2. If uv is missing, tell the user CAD needs it, and give them uv's official
+   installation guide to install it themselves:
+   <https://docs.astral.sh/uv/getting-started/installation/>.
 
-2. From this skill's directory, prepare the pinned runtime. The first run
-   downloads cadgen and its CAD kernel once; later runs are instant:
-
-   ```bash
-   uvx --no-config --from "$(grep -m1 '^cadgen' requirements.txt)" cadgen doctor
-   ```
-
-   It prints the cadgen version the plugin pins.
-
-3. Check that the viewer's server starts the way the app starts it:
-
-   ```bash
-   uvx --no-config --from "$(grep -m1 '^cadgen' requirements.txt)" cadgen mcp --help
-   ```
-
-4. Tell the user to quit and reopen the app. Servers start with the app, so the
+3. Tell the user to quit and reopen the app. Servers start with the app, so the
    viewer appears after a restart: **CAD** in the sidebar, and **CAD** as a tab
    in each thread.
 
 ## When the viewer does not start
 
-- `uvx` not found: uv's installer puts it in `~/.local/bin`; the app reads the
-  login shell's `PATH`, so open a new shell to confirm `uvx --version`, then
-  restart the app.
-- A download or resolution error in step 2 or 3: rerun it with a working
-  network, then restart the app.
-- After a plugin update, restart the app: the first start downloads the new
-  pinned runtime, which can take a few minutes on a slow connection. Threads
-  started before the update keep the old one until the restart.
+- `uv` or `uvx` not found after installing uv: the app reads the login shell's
+  `PATH`, so confirm `uv --version` in a new shell, then restart the app.
+- No network on the first start after an install or an update: the pinned
+  runtime could not be fetched. Restart the app once online.
+- After a plugin update, restart the app: the first start fetches the new pinned
+  runtime, which can take a few minutes on a slow connection. Threads started
+  before the update keep the old one until the restart.

@@ -149,7 +149,7 @@ where those files ship, so these scripts are what produces them.
   skill directory (`--agent codex|claude|...`, `--all`, `--dry-run`). Developer
   step in `CONTRIBUTING.md`.
 - `codex-dev-plugin.sh` — builds `apps/mcp` and installs this checkout into the
-  Codex app as `cad@earthtojake-dev` (skills copied, server run by `.venv`,
+  Codex app as `text-to-cad@earthtojake-dev` (skills copied, server run by `.venv`,
   serving a copy of the page taken at install); `--restart` reopens the app,
   `--uninstall` removes it. Developer step in `CONTRIBUTING.md` ("CAD In Agent Hosts").
 - `claude-dev-server.sh` — builds `apps/mcp` and adds this checkout's `cadgen mcp`

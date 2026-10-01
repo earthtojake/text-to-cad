@@ -1,7 +1,7 @@
 {
-  "name": "cad",
+  "name": "text-to-cad",
   "version": "0.7.6",
-  "description": "Give your agent CAD superpowers. The CAD plugin gives your agent local workflows for generating 3D models as STEP, GLB, STL or 3MF files. It also does design for manufacturing checks, generates engineering drawings, and connects to popular 3D printing, sheet metal and CNC fabrication services. The CAD plugin is 100% open source and free to use for everyone.",
+  "description": "Give your agent CAD superpowers. The text-to-cad plugin gives your agent local workflows for generating 3D models as STEP, GLB, STL or 3MF files. It also does design for manufacturing checks, generates engineering drawings, and connects to popular 3D printing, sheet metal and CNC fabrication services. The text-to-cad plugin is 100% open source and free to use.",
   "author": {
     "name": "earthtojake",
     "url": "https://github.com/earthtojake"
@@ -22,18 +22,21 @@
   "skills": "./skills/",
   "mcpServers": "./codex.mcp.json",
   "interface": {
-    "displayName": "CAD",
+    "displayName": "text-to-cad",
     "shortDescription": "Design 3D models",
-    "longDescription": "Give your agent CAD superpowers. The CAD plugin gives your agent local workflows for generating 3D models as STEP, GLB, STL or 3MF files. It also does design for manufacturing checks, generates engineering drawings, and connects to popular 3D printing, sheet metal and CNC fabrication services. The CAD plugin is 100% open source and free to use for everyone.",
+    "longDescription": "Give your agent CAD superpowers. The text-to-cad plugin gives your agent local workflows for generating 3D models as STEP, GLB, STL or 3MF files. It also does design for manufacturing checks, generates engineering drawings, and connects to popular 3D printing, sheet metal and CNC fabrication services. The text-to-cad plugin is 100% open source and free to use.",
     "developerName": "earthtojake",
     "composerIcon": "./.codex-plugin/logo.png",
     "logo": "./.codex-plugin/logo.png",
-    "category": "Productivity",
+    "category": "Creativity",
     "capabilities": [
       "Write",
       "Interactive"
     ],
     "websiteURL": "https://www.texttocad.dev",
+    "privacyPolicyURL": "https://www.texttocad.dev/privacy-policy",
+    "termsOfServiceURL": "https://www.texttocad.dev/terms-of-service",
+    "supportURL": "https://github.com/earthtojake/text-to-cad/issues/new",
     "defaultPrompt": [
       "Create a CAD model and open it in CAD Viewer.",
       "Generate a URDF and review it locally.",
