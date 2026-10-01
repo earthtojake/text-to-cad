@@ -89,7 +89,10 @@ reference host `basic-host` does.
 - **One file.** The build inlines scripts, styles, workers (as blobs) and the
   drawing editor's fonts (as data URIs) into `dist/index.html`, and fails if
   anything would be left outside it: the host serves one resource and nothing
-  beside it.
+  beside it. Its scripts are still split where the app imports lazily (each
+  renderer, the drawing editor and its libraries): each chunk is a gzip'd string
+  that becomes a blob module only when something imports it, so a view parses
+  what it shows rather than all of the app (`vite.config.mjs`).
 - **Nothing waits unseen.** While the home's list is read, placeholder cards (or
   rows) stand where the models will be; a model being opened shows a spinner over
   its picture, and takes no second press, until the launch switches to the
