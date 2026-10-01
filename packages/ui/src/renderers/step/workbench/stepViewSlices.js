@@ -1,4 +1,5 @@
 import { entryAssetHash } from "@text-to-cad/core/lib/entryAssets.js";
+import { readAnnotations } from "./stepAnnotations.js";
 
 // The STEP renderer's own slices of the file's view (`kit/shell/fileView.js`): what it was
 // left looking at and posed to. The shell keeps the camera and the Display settings;
@@ -8,6 +9,7 @@ import { entryAssetHash } from "@text-to-cad/core/lib/entryAssets.js";
 //   tree       { expandedStepTreeNodeIds, hiddenPartIds, isolatedAssemblyNodeIds }   against the geometry
 //   pose       { parameterValues }                                                     against the motion sidecar
 //   largeFile  { selectableTopologyEnabled }                                           against the geometry
+//   annotations { items }                                                              against nothing
 //
 // A slice comes back only when the file it was written against is still the file on screen:
 // a rebuilt model has different topology, so node ids from the old one are not ids at all,
@@ -21,8 +23,9 @@ const idList = value => (Array.isArray(value) ? [...new Set(value.map(text).filt
 /**
  * What each slice is written against. The tree and the large-file decision both turn on the
  * model's geometry and topology; the pose comes out of the sidecar, so a rebuilt sidecar
- * invalidates it.
- * @returns {{ tree: string, pose: string, largeFile: string }}
+ * invalidates it. Annotations are written against nothing that changes: a note is the
+ * person's, whatever the model has become since, so its signature is a constant.
+ * @returns {{ tree: string, pose: string, largeFile: string, annotations: string }}
  */
 export function stepViewSignatures(entry) {
   const geometry = [
@@ -30,8 +33,11 @@ export function stepViewSignatures(entry) {
     entryAssetHash(entry, "selectorTopology"), entryAssetHash(entry, "topology"), entryAssetHash(entry, "glb")
   ].filter(Boolean).join(":") || text(entry?.file);
   const motion = [entryAssetHash(entry, "stepModule"), text(entry?.hash)].filter(Boolean).join(":");
-  return { tree: geometry, pose: motion, largeFile: geometry };
+  return { tree: geometry, pose: motion, largeFile: geometry, annotations: ANNOTATIONS_SIGNATURE };
 }
+
+/** The one signature annotations are ever written against (see `stepViewSignatures`). */
+export const ANNOTATIONS_SIGNATURE = "annotations:1";
 
 export const NO_TREE = Object.freeze({ expandedStepTreeNodeIds: [], hiddenPartIds: [], isolatedAssemblyNodeIds: [] });
 
@@ -55,15 +61,20 @@ export function readStepView(renderer) {
   return {
     tree: readTree(record.tree) || NO_TREE,
     pose: plainObject(record.pose?.parameterValues) ? { parameterValues: { ...record.pose.parameterValues } } : null,
-    largeFile: { selectableTopologyEnabled: record.largeFile?.selectableTopologyEnabled === true }
+    largeFile: { selectableTopologyEnabled: record.largeFile?.selectableTopologyEnabled === true },
+    annotations: readAnnotations(record.annotations?.items)
   };
 }
 
-/** The slices for the STEP on screen as it stands: its tree, its Position values and its large-file choice. */
-export function stepViewSlices({ tree, parameterValues, largeFileState }) {
+/**
+ * The slices for the STEP on screen as it stands: its tree, its Position values, its large-file
+ * choice and its annotations (`stepAnnotations.js`).
+ */
+export function stepViewSlices({ tree, parameterValues, largeFileState, annotations = [] }) {
   return {
     tree: readTree(tree) || NO_TREE,
     pose: { parameterValues: plainObject(parameterValues) ? { ...parameterValues } : {} },
-    largeFile: { selectableTopologyEnabled: largeFileState?.selectableTopologyEnabled === true }
+    largeFile: { selectableTopologyEnabled: largeFileState?.selectableTopologyEnabled === true },
+    annotations: { items: readAnnotations(annotations) }
   };
 }

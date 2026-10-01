@@ -2,11 +2,14 @@
 
 The viewer renderers, `cad` (STEP), `dxf`, `glb`, `mesh` (STL, 3MF) and `robot` (URDF, SRDF, SDF), and
 the kit and shell they are built on are in [CAD renderer](cad-renderer.md). They are
-this package's renderers because every host registers them.
+this package's renderers because both apps register them.
 
-A renderer only one host registers belongs to that host, with its own
-dependencies and tests. It uses only this package's public exports, and they are
-what a host renderer may rely on:
+A renderer only one host registers belongs to that host. The desktop's Markdown,
+code, image, PDF and unsupported-file renderers live in the desktop app
+(`apps/desktop/src/renderer/features/explorer/renderers/`), with their Monaco,
+TipTap and PDF.js dependencies and their tests; its README describes them. They
+use only this package's public exports, and they are what a host renderer may
+rely on:
 
 - `defineFileRenderer` and the registration contract from `@text-to-cad/ui/file-viewer`
   ([FileViewer](file-viewer.md)), including `fallback: true` for the one

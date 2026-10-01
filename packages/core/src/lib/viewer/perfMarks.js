@@ -1,7 +1,7 @@
 // Performance measures for the render path, recorded ONLY when a profiler
 // asks for them.
 //
-// A profiling harness sets `globalThis.__cadgenPerf`
+// A harness (apps/desktop/scripts/perf-cad.mjs) sets `globalThis.__cadgenPerf`
 // and reads the User Timing entries back with `performance.getEntriesByName`;
 // without that flag every call here is one property read, and the timeline
 // buffer — which is unbounded for measures — never grows under a long-lived

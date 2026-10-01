@@ -9,7 +9,7 @@ from tests.python.support.paths import REPO_ROOT
 
 WORKFLOW = (REPO_ROOT / ".github/workflows/test.yml").read_text(encoding="utf-8")
 JOBS = dict(re.findall(r"^  ([a-z][\w-]*):\n(.*?)(?=^  [a-z][\w-]*:\n|\Z)", WORKFLOW.split("\njobs:\n", 1)[1], re.M | re.S))
-CLASSES = {"cadgen", "core", "ui", "web", "skills", "docs", "infra"}
+CLASSES = {"cadgen", "core", "ui", "web", "desktop", "skills", "docs", "infra"}
 
 
 def selected_jobs(*changed: str) -> set[str]:
@@ -52,6 +52,10 @@ class WorkspaceWorkflowSelection(unittest.TestCase):
             r"^tests/python/skills/[^/]+/(.*/)?test_[^/]*\.py$",         # test-python.sh skills
             r"^tests/python/global/test_[^/]*\.py$",                     # test-global.sh
             r"^tests/browser/viewer-e2e\.mjs$",                          # test-viewer-browser.sh
+            r"^apps/desktop/tests/unit/(main|shared)/.*\.test\.ts$",       # apps/desktop vitest.config.ts
+            r"^apps/desktop/tests/unit/renderer/.*\.test\.tsx?$",         # apps/desktop vitest.config.ts
+            r"^apps/desktop/tests/browser/.*\.test\.mjs$",                # apps/desktop vitest.config.ts
+            r"^apps/desktop/tests/e2e/[^/]*\.spec\.m?[jt]s$",             # apps/desktop playwright.config.ts
         ]
         test_like = re.compile(r"(\.test\.|\.spec\.|(^|/)test_[^/]*\.py$|(^|/)e2e-[^/]*\.m?[jt]s$|^tests/browser/)")
         tracked = subprocess.run(["git", "ls-files"], cwd=REPO_ROOT, capture_output=True, text=True, check=True).stdout.split()
@@ -59,11 +63,14 @@ class WorkspaceWorkflowSelection(unittest.TestCase):
         self.assertTrue(tests)
         self.assertEqual([path for path in tests if not any(re.search(pattern, path) for pattern in collected)], [])
 
-    def test_ui_change_reaches_the_web_host_without_engine_or_docs_suites(self):
-        self.assertEqual(selected_jobs("ui"), {"web", "skills", "packaging"})
+    def test_ui_change_reaches_both_hosts_without_engine_or_docs_suites(self):
+        self.assertEqual(selected_jobs("ui"), {"web", "desktop", "skills", "packaging"})
 
-    def test_web_change_runs_only_web_policy_and_packaging(self):
+    def test_web_change_does_not_run_desktop(self):
         self.assertEqual(selected_jobs("web"), {"web", "skills", "packaging"})
+
+    def test_desktop_change_stays_in_desktop_and_policy(self):
+        self.assertEqual(selected_jobs("desktop"), {"desktop", "skills"})
 
     def test_docs_change_stays_in_docs(self):
         self.assertEqual(selected_jobs("docs"), {"docs"})
@@ -92,6 +99,7 @@ class WorkspaceWorkflowSelection(unittest.TestCase):
         self.assertIn("'packages/core/**'", JOBS["changes"])
         self.assertIn("'packages/ui/**'", JOBS["changes"])
         self.assertIn("'apps/web/**'", JOBS["changes"])
+        self.assertIn("'apps/desktop/**'", JOBS["changes"])
 
     def test_required_check_names_are_the_jobs(self):
         # main's branch protection requires exactly these names (CONTRIBUTING.md, Repository settings).

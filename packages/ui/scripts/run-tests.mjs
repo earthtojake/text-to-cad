@@ -57,6 +57,7 @@ const status = run(nodeTests, 4) || 0;
 const browserStatus = run(browserTests, browserConcurrency) || 0;
 if (status !== 0 || browserStatus !== 0) process.exit(status || browserStatus);
 if (!requestedTests.length) {
-  const unit = spawnSync(process.execPath, [path.join(packageRoot, '../../node_modules/vitest/vitest.mjs'), 'run', '--config', path.join(packageRoot, 'vitest.config.ts')], { cwd: packageRoot, env: process.env, stdio: 'inherit' });
+  const vitest = fileURLToPath(new URL('vitest.mjs', import.meta.resolve('vitest/package.json')));
+  const unit = spawnSync(process.execPath, [vitest, 'run', '--config', path.join(packageRoot, 'vitest.config.ts')], { cwd: packageRoot, env: process.env, stdio: 'inherit' });
   process.exit(unit.status ?? 1);
 }

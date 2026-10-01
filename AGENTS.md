@@ -64,6 +64,8 @@ for the full flow, the resume path, the rehearsal, and local/manual fallbacks.
   the skill CLI parsers, the CAD Viewer backend + client, and the Node/browser
   runtimes it executes.
 - `apps/docs/`: documentation site.
+- `apps/desktop/`: text-to-cad, the Electron agent workbench and FileViewer host.
+  A root npm workspace; its build packages the complete cadgen Python runtime.
 - `tests/`: root-owned test suites for skills, packages, viewer services, and
   repo-wide policy.
 - `scripts/`: durable repo commands grouped by purpose.
@@ -72,7 +74,7 @@ for the full flow, the resume path, the rehearsal, and local/manual fallbacks.
 
 - Boundaries and design laws live in each package's README: read
   `packages/cadgen/README.md` (the laws), `packages/core/README.md`, `packages/ui/README.md`,
-  `apps/web/README.md`, and `apps/docs/README.md` before changing
+  `apps/web/README.md`, `apps/desktop/README.md`, and `apps/docs/README.md` before changing
   generation, rendering, storage, layout, or public interfaces.
 - A README holds the laws; the mechanism each law constrains lives one link
   away, and the README names the link. Read the README, then follow the one
@@ -125,8 +127,9 @@ for the full flow, the resume path, the rehearsal, and local/manual fallbacks.
   once, at the cheapest level that exercises the real path: a unit or jsdom test
   first, a real browser (WebGL) only for what needs one. Await the condition, never
   a fixed sleep or a wall-clock bound; a flaky test is fixed or deleted, never
-  retried. CI time is a budget: the `web` job stays within 7 minutes, and a
-  change that lengthens any job says what it costs and why in its PR.
+  retried. CI time is a budget: the `web` job stays within 7 minutes and
+  `Desktop (macOS)` within 10, and a change that lengthens any job says what it
+  costs and why in its PR.
 - Benchmarks under `scripts/bench/` are manual and their output is never
   committed: reports, logs, profiles and screenshots go to an ignored `tmp/`.
   Only their pure helper units run in a test runner.
@@ -206,12 +209,12 @@ when touching shared surfaces or before handoff:
 - Focused runners: `scripts/test/test-js.sh`, `scripts/test/test-docs.sh`,
   `scripts/test/test-python.sh`, `scripts/test/test-global.sh`.
   `test-python.sh` takes `--select cadgen|viewer|skills|all` and
-  `--print-weights`; `test-js.sh` takes `--select core|ui|web|all`. See
-  `scripts/README.md`.
+  `--print-weights`; `test-js.sh` takes `--select core|ui|web|all`. Desktop uses
+  its workspace unit/Electron runners. See `scripts/README.md`.
 - In GitHub Actions, `test.yml` runs one conditional job per concern. The graph,
   stable required check names and workspace install recipes are in
-  `CONTRIBUTING.md#ci`. Core changes reach all consumers; UI reaches web; app
-  changes do not run unrelated apps. Manual dispatch runs all jobs.
+  `CONTRIBUTING.md#ci`. Core changes reach all consumers; UI reaches web and
+  desktop; app changes do not run unrelated apps. Manual dispatch runs all jobs.
 - Canonical release version: `scripts/release/check-version.sh`
 - Packaged runtime builds and is complete: `scripts/bundle/bundle.sh --check`
 - CAD Viewer or shared packages: build exports with `npm run build:packages`,

@@ -9,9 +9,9 @@ import { createRequire } from "node:module";
 import { execFileSync } from "node:child_process";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
-const require = createRequire(path.join(root, "packages/ui/package.json"));
+const require = createRequire(path.join(root, "apps/desktop/package.json"));
 const { build } = require("esbuild");
-const { chromium } = require("@playwright/test");
+const { chromium } = require("playwright");
 const sourceCommit = "ed6a16b25936031adfa0a6d4705d80e1c712eb37";
 const sourcePath = "apps/docs/src/lib/icon/model.mjs";
 const out = path.join(root, "packages/ui/src/assets");
@@ -74,7 +74,7 @@ const bundle = await build({
       };
     `,
   },
-  nodePaths: [path.join(root, "packages/ui/node_modules"), path.join(root, "node_modules")],
+  nodePaths: [path.join(root, "apps/desktop/node_modules")],
   bundle: true,
   write: false,
   format: "iife",

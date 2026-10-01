@@ -1,12 +1,13 @@
 # One job per concern, selected by the dependency graph. Shared core feeds
-# cadgen's runtime, UI, web and docs; UI feeds web. Apps never feed another
-# app. Policy checks run for changed shared contracts without also running
-# every skill suite. Runtime outputs are built only where needed.
+# cadgen's runtime, UI, web, docs and desktop; UI feeds web and desktop. Apps
+# never feed another app. Policy checks run for changed shared contracts without
+# also running every skill suite. Runtime outputs are built only where needed.
 #
 # Check names are the jobs' concerns: `core-js` tests packages/core, `web` tests
 # packages/ui and apps/web and drives the bundled viewer. main's required checks
 # name all eight jobs.
-# Prose-only root changes run Version Check only; skill/package Markdown remains
+# Desktop (macOS) also runs for desktop/shared/runtime changes; it is not yet a
+# required check. Prose-only root changes run Version Check only; skill/package Markdown remains
 # test input.
 name: Test
 
@@ -35,6 +36,7 @@ jobs:
       core: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.core == 'true' }}
       ui: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.ui == 'true' }}
       web: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.web == 'true' }}
+      desktop: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.desktop == 'true' }}
       skills: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.skills == 'true' }}
       docs: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.docs == 'true' }}
       infra: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.infra == 'true' }}
@@ -55,6 +57,8 @@ jobs:
               - 'packages/core/**'
             ui:
               - 'packages/ui/**'
+            desktop:
+              - 'apps/desktop/**'
             web:
               - 'apps/web/**'
               - 'tests/browser/**'
@@ -236,7 +240,7 @@ jobs:
   skills:
     name: skills
     needs: changes
-    if: needs.changes.outputs.skills == 'true' || needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.infra == 'true' || needs.changes.outputs.ui == 'true' || needs.changes.outputs.web == 'true'
+    if: needs.changes.outputs.skills == 'true' || needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.infra == 'true' || needs.changes.outputs.ui == 'true' || needs.changes.outputs.web == 'true' || needs.changes.outputs.desktop == 'true'
     runs-on: ubuntu-latest
     env:
       CADGEN_TEST_JOBS: "4"
@@ -324,3 +328,135 @@ jobs:
           [ "${#wheels[@]}" -eq 1 ] || { echo "Expected one verified wheel" >&2; exit 1; }
           scripts/test/test-installed.sh --wheel "${wheels[0]}"
 
+  # Electron/native integration follows only its actual dependencies. Budget: ten
+  # minutes. Everything before the e2e restores what an earlier green run already
+  # produced from the same inputs -- the checkout venv, typecheck and lint state, the
+  # built app -- because this runner is small (3 cores, 7 GB) and the renderer build
+  # alone is minutes on it.
+  desktop:
+    name: Desktop (macOS)
+    needs: changes
+    if: needs.changes.outputs.desktop == 'true' || needs.changes.outputs.ui == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.infra == 'true'
+    runs-on: macos-latest
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      # ui-browser: the unit tests include the PDF renderer's Chromium suite
+      # (apps/desktop/tests/browser), which launches headless, so the headless shell
+      # is all it needs; the Electron e2e needs no Playwright browser. Python is the
+      # checkout venv below, not requirements-dev.txt in the runner's interpreter.
+      - name: Set up desktop dependencies
+        uses: ./.github/actions/setup-deps
+        with:
+          npm: packages/core packages/ui apps/desktop
+          python: "false"
+          ui-browser: shell
+
+      - name: Set up Python
+        id: python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      # CadRuntime runs the checkout's .venv. Installing requirements-dev.txt is ~30 s
+      # of unpacking wheels (OCP, scipy) on every run, so the venv is cached on what
+      # decides it: the interpreter it links to and the two files pip reads. Its
+      # editable cadgen follows the source; unpinned dependencies stay at what the
+      # cached install resolved until one of those files changes.
+      - name: Restore the checkout venv
+        id: venv
+        uses: actions/cache@v5
+        with:
+          path: .venv
+          key: desktop-venv-${{ runner.os }}-${{ runner.arch }}-py${{ steps.python.outputs.python-version }}-${{ hashFiles('requirements-dev.txt', 'packages/cadgen/pyproject.toml') }}
+
+      - name: Create the checkout venv
+        if: steps.venv.outputs.cache-hit != 'true'
+        run: |
+          python -m venv .venv
+          .venv/bin/python -m pip install -r requirements-dev.txt
+
+      # The app's renderer supplies the UI. CAD tests need only cadgen's Node and
+      # browser assets (from core, which setup already built) and the native modules
+      # rebuilt against Electron's ABI.
+      - name: Prepare the CAD runtime and native modules
+        env:
+          CADGEN_RUNTIME_PACKAGES_BUILT: "1"
+        run: |
+          scripts/bundle/cadgen-runtime.sh --node --browser
+          npm run native:rebuild -w @text-to-cad/desktop
+
+      # Both resume from the last green run: tsc's buildinfo (the projects are
+      # composite) re-checks what changed and what depends on it, and ESLint's
+      # content-keyed cache re-lints changed files -- no rule here is type-aware, so a
+      # file's lint result depends on that file and the config alone.
+      - name: Restore typecheck and lint state
+        uses: actions/cache@v5
+        with:
+          path: |
+            apps/desktop/node_modules/.tmp
+            apps/desktop/node_modules/.cache/eslint
+          key: desktop-checks-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-${{ github.sha }}
+          restore-keys: desktop-checks-${{ runner.os }}-${{ hashFiles('package-lock.json') }}-
+
+      - name: Typecheck
+        run: npm --prefix apps/desktop run typecheck
+
+      - name: Lint
+        run: npm --prefix apps/desktop run lint -- --cache --cache-strategy content --cache-location node_modules/.cache/eslint/
+
+      - name: Run unit tests
+        run: npm --prefix apps/desktop test
+
+      # The same inputs build the same out/, so a commit whose build inputs a green run
+      # already built -- a cadgen- or CI-only change, a re-run -- restores it instead.
+      # The key is git's own hashes of every committed input: the app less its tests,
+      # test configs and prose; the two workspaces it bundles; the skills it composes;
+      # the library builder; the lockfile; VERSION.
+      - name: Hash the build inputs
+        id: build-inputs
+        run: |
+          {
+            git ls-tree HEAD apps/desktop/ | grep -Ev $'\t''apps/desktop/(tests|docs|README\.md|AGENTS\.md|playwright\.config\.ts|vitest\.config\.ts|eslint\.config\.mjs)$'
+            git ls-tree HEAD packages/core packages/ui skills scripts/build package-lock.json VERSION
+          } | git hash-object --stdin | sed 's/^/hash=/' >> "$GITHUB_OUTPUT"
+
+      - name: Restore the build
+        id: build
+        uses: actions/cache@v5
+        with:
+          path: |
+            apps/desktop/out
+            apps/desktop/resources/skills
+          key: desktop-build-${{ runner.os }}-${{ runner.arch }}-${{ steps.build-inputs.outputs.hash }}
+
+      - name: Build
+        if: steps.build.outputs.cache-hit != 'true'
+        run: npm --prefix apps/desktop run build
+
+      - name: Run the Electron integration suite
+        env:
+          TEXT_TO_CAD_E2E_REQUIRE_CAD: "1"
+        run: npm --prefix apps/desktop run e2e
+
+      # The screenshots the e2e writes are the cheapest review of whether the app
+      # still looks like an app; a failed run's are the more interesting ones.
+      - name: Upload Playwright screenshots
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-screenshots
+          path: apps/desktop/test-results/**/*.png
+          if-no-files-found: ignore
+          retention-days: 3
+
+      - name: Upload failed Electron traces
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: desktop-test-results
+          path: apps/desktop/test-results/
+          if-no-files-found: ignore
+          retention-days: 3

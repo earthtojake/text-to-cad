@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Shared JavaScript suites: @text-to-cad/core, @text-to-cad/ui and the web app.
+# Shared JavaScript suites: @text-to-cad/core, @text-to-cad/ui and the web app. Electron's
+# native tests use apps/desktop's own runner.
 # --select lets a small change run only the affected workspace and its build.
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 SELECT=all

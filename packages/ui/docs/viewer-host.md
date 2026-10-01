@@ -42,10 +42,12 @@ are for reading and maintaining the contracts.
 | `RobotRendererOptions` (URDF, SRDF, SDF), `RobotLiveController`, `RobotLiveState` (`selectedLinks`, `selectedPartIds`) | [Robot registration](../src/renderers/robot/index.ts) | `@text-to-cad/ui/renderers/robot` |
 | `ViewerCommands`, `ViewerCommandSource` (the host requests every viewer renderer takes) | [Viewer commands](../src/renderers/workspace/commands.ts) | `@text-to-cad/ui/renderers/workspace` |
 
-Start with the actual composition in [web App](../../../apps/web/src/App.tsx).
-Its imports lead to the app-owned `host/`, `adapters/` and persistence
+Start with the actual composition in [web App](../../../apps/web/src/App.tsx)
+or [desktop FileTab](../../../apps/desktop/src/renderer/features/explorer/FileTab.tsx).
+Their imports lead to the app-owned `host/`, `adapters/` and persistence
 implementations. [Web storage](../../../apps/web/docs/storage.md) documents
-browser lifetimes. Shared component tests can
+browser lifetimes; [desktop README](../../../apps/desktop/README.md) documents
+native IPC, draft delivery and project persistence. Shared component tests can
 use the [explicit fake host](../src/host/testing/host.ts).
 
 ## What a CAD renderer does not use

@@ -2,9 +2,9 @@
 
 The shared React interface for text-to-cad. `FileViewer` is the complete file tab:
 its breadcrumb row, menus, content, file tree, one panel column, loading and
-error states, and common edit/save/reload lifecycle. `apps/web` consumes this
-component through the package's compiled exports; a host's own project, session
-and window layout remains application code.
+error states, and common edit/save/reload lifecycle. Both `apps/web` and
+`apps/desktop` consume this component through the package's compiled exports.
+The desktop's project/session/window layout remains application code.
 
 The viewer's tools, tool stack, settings, tooltips and keyboard follow one
 binding [design system](docs/settings-ui.md), the same in both apps. A change to
@@ -99,9 +99,10 @@ Each app registers only the file types its source supports. A renderer's code
 loads when a file selects it; adding a renderer does not add a branch to FileViewer.
 The registry rejects duplicate IDs and ambiguous matches.
 
-This package ships the viewer renderers. A renderer only one app registers is
-that app's own, built on the same public `defineFileRenderer` contract (see
-[renderers](docs/renderers.md)).
+This package ships the viewer renderers both apps register. A renderer only one
+app registers is that app's own, built on the same public `defineFileRenderer`
+contract: the desktop's Markdown, code, image, PDF and unsupported-file
+renderers live in `apps/desktop` (see [renderers](docs/renderers.md)).
 
 File listing is independent of renderer matching: the tree shows every entry
 the host's source returns. A host that exposes arbitrary files registers a

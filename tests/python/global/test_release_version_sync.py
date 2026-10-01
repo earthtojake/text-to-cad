@@ -27,6 +27,7 @@ from pathlib import Path
 from tests.python.support.paths import repo_path
 
 SYNC_SCRIPT = repo_path("scripts", "release", "sync-version.mjs")
+PERMANENT_PLACEHOLDER_VERSIONS = {"apps/desktop": "0.0.0"}
 
 
 def _node(script: str, cwd: Path | None = None) -> str:
@@ -97,6 +98,19 @@ class VersionSyncMirrorTests(unittest.TestCase):
                 if "node_modules" in name:
                     continue
                 with self.subTest(path=target["path"], entry=name or "<root>"):
+                    if name in PERMANENT_PLACEHOLDER_VERSIONS:
+                        placeholder = PERMANENT_PLACEHOLDER_VERSIONS[name]
+                        self.assertEqual(
+                            placeholder,
+                            entries[name].get("version"),
+                            f"{name} must retain its permanent {placeholder} manifest placeholder",
+                        )
+                        self.assertNotIn(
+                            ("packages", name, "version"),
+                            declared,
+                            f"{name} gets its release version at package time and must not be stamped",
+                        )
+                        continue
                     self.assertIn(
                         ("packages", name, "version"),
                         declared,

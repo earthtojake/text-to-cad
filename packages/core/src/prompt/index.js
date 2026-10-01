@@ -44,6 +44,12 @@ export function validatePromptContext(context) {
     ids.add(part.id);
     if (part.kind === 'text') requireValue(typeof part.text === 'string', 'text part must contain text');
     else if (part.kind === 'reference') { validatePromptReference(part.reference); references.add(part.id); }
+    else if (part.kind === 'annotation') {
+      requireValue(Array.isArray(part.references) && part.references.length > 0, 'annotation must be about at least one reference');
+      part.references.forEach(validatePromptReference);
+      requireValue(typeof part.text === 'string', 'annotation must contain its note');
+      requireValue(part.attachments === undefined || (Array.isArray(part.attachments) && part.attachments.every(id => typeof id === 'string')), 'annotation attachments must name attachment parts');
+    }
     else {
       requireValue(part.kind === 'attachment', 'unknown part kind');
       requireValue(typeof part.name === 'string' && part.name.length > 0 && typeof part.mimeType === 'string' && /^[\w.+-]+\/[\w.+-]+$/.test(part.mimeType), 'attachment needs a name and MIME type');
@@ -51,28 +57,35 @@ export function validatePromptContext(context) {
       requireValue(part.about === undefined || (Array.isArray(part.about) && part.about.every(id => typeof id === 'string')), 'attachment relationships must name reference parts');
     }
   }
-  for (const part of context.parts) if (part.kind === 'attachment') {
-    requireValue((part.about ?? []).every(id => references.has(id)), 'attachment refers to an absent reference');
+  const attachments = new Set(context.parts.filter(part => part.kind === 'attachment').map(part => part.id));
+  for (const part of context.parts) {
+    if (part.kind === 'attachment') requireValue((part.about ?? []).every(id => references.has(id)), 'attachment refers to an absent reference');
+    if (part.kind === 'annotation') requireValue((part.attachments ?? []).every(id => attachments.has(id)), 'annotation refers to an absent attachment');
   }
   return context;
 }
 
 export function createPromptContext(parts, operationId = `${operationNamespace}:${++operationSequence}`) {
   validatePromptContext({ schemaVersion: 1, operationId, parts });
+  const freezeReference = reference => {
+    const target = reference.target;
+    const frozenTarget = target.kind === 'cad-selector' ? { ...target, selectors: Object.freeze([...target.selectors]) }
+      : target.kind === 'text-range' ? { ...target, start: Object.freeze({ ...target.start }), end: Object.freeze({ ...target.end }) } : { ...target };
+    return Object.freeze({ ...reference, resource: Object.freeze({ ...reference.resource }), target: Object.freeze(frozenTarget) });
+  };
   const snapshot = parts.map(part => {
-    if (part.kind === 'reference') {
-      const target = part.reference.target;
-      const frozenTarget = target.kind === 'cad-selector' ? { ...target, selectors: Object.freeze([...target.selectors]) }
-        : target.kind === 'text-range' ? { ...target, start: Object.freeze({ ...target.start }), end: Object.freeze({ ...target.end }) } : { ...target };
-      return Object.freeze({ ...part, reference: Object.freeze({ ...part.reference,
-        resource: Object.freeze({ ...part.reference.resource }), target: Object.freeze(frozenTarget) }) });
-    }
+    if (part.kind === 'reference') return Object.freeze({ ...part, reference: freezeReference(part.reference) });
+    if (part.kind === 'annotation') return Object.freeze({ ...part, references: Object.freeze(part.references.map(freezeReference)),
+      ...(part.attachments ? { attachments: Object.freeze([...part.attachments]) } : {}) });
     return Object.freeze(part.kind === 'attachment' && part.about ? { ...part, about: Object.freeze([...part.about]) } : { ...part });
   });
   return Object.freeze({ schemaVersion: 1, operationId, parts: Object.freeze(snapshot) });
 }
 export function referencePart(reference, id = 'reference') { return { id, kind: 'reference', reference: validatePromptReference(reference) }; }
 export function textPart(text, id = 'text') { return { id, kind: 'text', text }; }
+export function annotationPart(references, text, id = 'annotation', attachments = undefined) {
+  return { id, kind: 'annotation', references: references.map(validatePromptReference), text, ...(attachments ? { attachments: [...attachments] } : {}) };
+}
 
 /** Keep machine identity structured; these strings are the portable human/prompt representation. */
 export function formatPromptReference(reference, { resolvePath } = {}) {
@@ -87,9 +100,22 @@ export function formatPromptReference(reference, { resolvePath } = {}) {
   }
   return quoted;
 }
+/**
+ * An annotation as one line: the references it is about, then the note
+ * ("a.step#o1.1.e3: make a hole"); `labels` adds each reference's label ("a.step#o1.1.e3 (Edge 3)").
+ */
+export function formatPromptAnnotation(part, { labels = false, ...options } = {}) {
+  const references = part.references.map(reference => {
+    const token = formatPromptReference(reference, options);
+    return labels && reference.label ? `${token} (${reference.label})` : token;
+  }).join(' ');
+  return part.text ? `${references}: ${part.text}` : references;
+}
 export function formatPromptContextText(context, options = {}) {
   validatePromptContext(context);
-  return context.parts.flatMap(part => part.kind === 'text' ? [part.text] : part.kind === 'reference' ? [formatPromptReference(part.reference, options)] : []).join('\n');
+  return context.parts.flatMap(part => part.kind === 'text' ? [part.text]
+    : part.kind === 'reference' ? [formatPromptReference(part.reference, options)]
+    : part.kind === 'annotation' ? [formatPromptAnnotation(part, options)] : []).join('\n');
 }
 
 const failureMessage = error => error instanceof Error ? error.message : String(error);

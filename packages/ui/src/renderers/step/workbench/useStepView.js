@@ -14,17 +14,17 @@ import { readStepView, stepViewSignatures, stepViewSlices } from "./stepViewSlic
  * - `scheduleSave` is asked to save after every change to an input.
  *
  * @param {{ state: unknown, entry: object, tree: object, parameterValues: object, largeFileState: object,
- *   scheduleSave: () => void, restore: (view: ReturnType<typeof readStepView>) => void }} options
+ *   annotations: object[], scheduleSave: () => void, restore: (view: ReturnType<typeof readStepView>) => void }} options
  */
-export function useStepView({ state, entry, tree, parameterValues, largeFileState, scheduleSave, restore }) {
+export function useStepView({ state, entry, tree, parameterValues, largeFileState, annotations, scheduleSave, restore }) {
   const [stored] = useState(() => state);
   const signatures = useMemo(() => stepViewSignatures(entry), [entry]);
   const inputsRef = useRef(null);
-  inputsRef.current = { tree, parameterValues, largeFileState };
+  inputsRef.current = { tree, parameterValues, largeFileState, annotations };
   const rendererState = useMemo(() => ({ signatures, read: () => stepViewSlices(inputsRef.current) }), [signatures]);
   const readStored = useCallback(() => readStepView(readFileView(stored, signatures).renderer), [stored, signatures]);
   useEffect(() => { scheduleSave(); }, [scheduleSave, tree.expandedStepTreeNodeIds, tree.hiddenPartIds, tree.isolatedAssemblyNodeIds,
-    parameterValues, largeFileState, signatures]);
+    parameterValues, largeFileState, annotations, signatures]);
   const restored = useRef(false);
   useLayoutEffect(() => {
     if (restored.current) return;

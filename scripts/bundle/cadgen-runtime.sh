@@ -83,6 +83,10 @@ Options:
   --clean          Remove the _runtime tree first, so the build starts from nothing.
   --print-outputs  Print the generated output paths (repo-relative), then exit.
   -h, --help       Show this help.
+
+Environment:
+  CADGEN_RUNTIME_PACKAGES_BUILT=1  The workspaces the stages bundle (core, and ui for
+                   the viewer) were just built from this tree; do not rebuild them.
 EOF
 }
 
@@ -187,6 +191,11 @@ build_stage_packages() {
   # Node and browser runtime stages consume only @text-to-cad/core and must remain
   # runnable in Python/core CI jobs that install that workspace alone. The
   # Viewer is the only stage that also needs @text-to-cad/ui.
+  # CADGEN_RUNTIME_PACKAGES_BUILT=1 says the caller has just built them from this
+  # tree (a CI job whose dependency setup already did), so a second build is skipped.
+  if [ "${CADGEN_RUNTIME_PACKAGES_BUILT:-}" = "1" ]; then
+    return
+  fi
   if [ "$STAGE_VIEWER" -eq 1 ] && [ "$MODE" != "check" ]; then
     npm --prefix "$REPO_ROOT" run build:packages
   elif [ "$STAGE_NODE" -eq 1 ] || [ "$STAGE_BROWSER" -eq 1 ]; then

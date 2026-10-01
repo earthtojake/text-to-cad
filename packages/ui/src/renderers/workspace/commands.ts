@@ -6,6 +6,8 @@
 export interface ViewerCommands {
   captureRequest?: { key: string | number } | null;
   selectReference?: { selector: string; key?: string | number } | null;
+  /** Open an annotation's card and select its geometry again (the chat box's entry for it was pressed). */
+  openAnnotation?: { id: string; key: string | number } | null;
 }
 export interface ViewerCommandSource {
   subscribe(listener: () => void): () => void;

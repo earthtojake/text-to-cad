@@ -1,0 +1,49 @@
+{
+  "_": [
+    "The pinned python-build-standalone release the bundled CAD runtime is built from",
+    "(scripts/bundle-runtime.mjs). One asset per packaged target, `install_only` flavour;",
+    "the sha256 is the release's SHA256SUMS entry for that file and every download is",
+    "checked against it before extraction. `pip.platforms` are the wheel platform tags pip",
+    "resolves the target's dependency closure with (`pip install --platform`): pip expands a",
+    "macOS tag to the versions below it, but a `manylinux_X_Y` tag is matched exactly, so",
+    "Linux lists every tag the closure's wheels carry (cadquery-ocp is manylinux_2_31;",
+    "shapely and vtk are manylinux2014/manylinux_2_17). The macOS tag is the HIGHEST",
+    "minimum in the closure, and therefore the oldest macOS the runtime runs on: 12.0 on",
+    "Apple silicon (scipy, scikit-learn), 11.0 on Intel (cadquery-ocp).",
+    "3.13 because cadgen's wheels (cadquery-ocp, build123d) ship for it and the constraints",
+    "file scripts/cad-resources.mjs freezes comes from a 3.13 venv, so the bundled runtime",
+    "and the development runtime resolve the same closure."
+  ],
+  "release": "20260901",
+  "version": "3.13.15",
+  "targets": {
+    "mac-arm64": {
+      "file": "cpython-3.13.15+20260901-aarch64-apple-darwin-install_only.tar.gz",
+      "sha256": "b9054a9d3d54f4cb5573d44907fddb29874b08909bde73f29f2868cf872223ee",
+      "pip": { "platforms": ["macosx_12_0_arm64"] }
+    },
+    "mac-x64": {
+      "file": "cpython-3.13.15+20260901-x86_64-apple-darwin-install_only.tar.gz",
+      "sha256": "49f0d97f506b855eed60b74a8ac138595c5b39799a6aa5e0d7ca8abe1019a4d4",
+      "pip": { "platforms": ["macosx_11_0_x86_64"] }
+    },
+    "win-x64": {
+      "file": "cpython-3.13.15+20260901-x86_64-pc-windows-msvc-install_only.tar.gz",
+      "sha256": "9bcc038a0bf180612ed56dec93d4977d035e80b8d9320ef51a38c287baf134b7",
+      "pip": { "platforms": ["win_amd64"] }
+    },
+    "linux-x64": {
+      "file": "cpython-3.13.15+20260901-x86_64-unknown-linux-gnu-install_only.tar.gz",
+      "sha256": "0651dd7157d3debf769e15a52c1de9de7fbcdc36ba72faf79fde3c44f14d9461",
+      "pip": {
+        "platforms": [
+          "manylinux_2_31_x86_64",
+          "manylinux_2_28_x86_64",
+          "manylinux_2_24_x86_64",
+          "manylinux_2_17_x86_64",
+          "manylinux2014_x86_64"
+        ]
+      }
+    }
+  }
+}

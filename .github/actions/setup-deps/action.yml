@@ -9,7 +9,10 @@ inputs:
     description: Install Python Playwright's snapshot browser (requires python).
     default: "true"
   ui-browser:
-    description: Install the npm Playwright Chromium used by the shared UI, web and desktop browser tests.
+    description: >-
+      Install the npm Playwright Chromium used by the shared UI, web and desktop browser
+      tests: "true" for the full browser, "shell" for only the headless shell (enough
+      when every browser test the job runs launches headless), "false" for none.
     default: "false"
   npm:
     description: Space-separated root workspace paths, or "none". Include shared dependencies used by the job.
@@ -70,11 +73,12 @@ runs:
 
     # npm and Python Playwright can require different Chromium revisions.
     - name: Install shared UI and web test browser
-      if: inputs.ui-browser == 'true'
+      if: inputs.ui-browser == 'true' || inputs.ui-browser == 'shell'
       shell: bash
+      env:
+        UI_BROWSER: ${{ inputs.ui-browser }}
       run: |
-        if [ "$RUNNER_OS" = "Linux" ]; then
-          npx --no-install playwright install --with-deps chromium
-        else
-          npx --no-install playwright install chromium
-        fi
+        args=(chromium)
+        if [ "$UI_BROWSER" = "shell" ]; then args+=(--only-shell); fi
+        if [ "$RUNNER_OS" = "Linux" ]; then args+=(--with-deps); fi
+        npx --no-install playwright install "${args[@]}"
