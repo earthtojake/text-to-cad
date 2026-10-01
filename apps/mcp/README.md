@@ -45,6 +45,11 @@ reference host `basic-host` does.
   its drive, whose catalog holds only the file on screen (a hidden folder it is in
   included) and which nothing lists. *Open with CAD* and an inline card show one
   file and have no explorer either.
+- **One request to the network: the newest release.** The page asks the server
+  once (`cad_release`); the server asks GitHub's latest-release API at most every
+  six hours and keeps the answer in the user's state directory (`release.json`,
+  shared by every process), and a failure is no answer. A newer release is the
+  blue download button (the navbar's, and the home's under its wordmark).
 - **Told how it is presented, before it greets the host.** A host that mounts
   views inline is served the page with `<meta name="cad-presentation"
   content="inline">` in its head: the page offers that host `inline` and

@@ -39,10 +39,12 @@ none.
   its ⋯ — the explorer's own menu for that file; the name has no right-click menu
   and there are no crumbs. With no file open, the words "Select file" (not a
   control) stand in the name's place beside the explorer's toggle. Right: a
-  declared panel's toggle, the version (`v0.7.4`), whose menu holds the release
-  notes, GitHub and Discord, then the view's controls (Display settings,
-  Preview). A CAD file declares no panel and publishes no navbar action. A host's home has
-  no navbar: the version stands under its CAD wordmark. A view shown small in a
+  declared panel's toggle, the update — a blue download button, there only when
+  the host found a newer release, whose menu says the step to it, how this host
+  updates and what is new — then the view's controls (Settings, Preview). The
+  version, GitHub and Discord are in the Settings popover's header. A CAD file
+  declares no panel and publishes no navbar action. A host's home has no navbar:
+  its update (when there is one), GitHub and Discord stand under its CAD wordmark. A view shown small in a
   conversation (`compact`) has none either, and draws the model alone: no tools,
   view actions, cube or Quick Edit.
 - **File explorer** floats over the view's left, inset 8px like the toolbar, on a
@@ -50,7 +52,7 @@ none.
   less the inset at either end: past that its list scrolls. While it is open the
   tool strip and the stack are out of sight under it, kept as they are. Opening it
   never resizes the view; it stays up while a person walks the tree, and a press
-  outside it (the navbar aside) closes it.
+  anywhere outside it, the navbar included, closes it (its own toggle closes it too).
 - **Toolbar** at top-left, 8px in — the gap between it and the stack under it.
 - **Tool stack** beneath the toolbar: the panels of the tool in hand and of the
   effects a person keeps (see [The tool stack](#the-tool-stack)). The column is
@@ -63,15 +65,17 @@ none.
 - **View cube** at bottom-left, 2px from the left and 8px off the bottom so the
   axes drawn in its lower corner never touch the edge, in a 6rem area: enlarged
   face/edge/corner hit areas and neutral hover and XYZ guides. Preview omits it.
-- **View controls** at the navbar's right end, after the version: **Display
-  settings** (cog), then **Preview** (a fullscreen icon, two diagonal arrows),
-  the navbar's 24px icon buttons with 14px icons and hints below them. Display
-  settings' popover opens down from its button, end-aligned. A view shown small
-  has no navbar, and so none of them.
-- **Playbar** (preview's) sits at bottom-centre, on a line 1.75rem up (a host
-  whose control floats over the view's bottom moves it with
-  `--cad-viewport-bottom-center`), and nothing else does; **Playback settings**
-  is the cog at its right end, and its menu opens upward.
+- **View controls** at the navbar's right end: **Settings** (cog), then
+  **Preview** (a fullscreen icon, two diagonal arrows), the navbar's 24px icon
+  buttons with 14px icons and hints below them. Settings' popover opens down from
+  its button, end-aligned: a header — "Settings", the version in gray, then
+  GitHub and Discord as icon links and its X — over the Display sections, whose
+  own heading keeps its Reset. A view shown small has no navbar, and so none of
+  them.
+- **Playbar** (preview's, a file with routines only) sits at bottom-centre, on a
+  line 1.75rem up (a host whose control floats over the view's bottom moves it
+  with `--cad-viewport-bottom-center`), and nothing else does; a static file has
+  nothing at the bottom.
 - **Model update status** sits at top-centre of the viewport, vertically centred
   in the same 34px row as the top-left toolbar in every host.
   It is renderer chrome, independent of the host's navigation status slot.
@@ -505,8 +509,9 @@ The buttons, left to right, are only those the host can carry out, and the right
 is the primary one, which Enter presses (Shift+Enter is a new line). They are the
 `Button` primitive in its own shape — 28px squares with its rounded corners, each an
 icon with a name and a hint — and every one is solid: the primary in the `default`
-variant, the others in `secondary`. While there is no note they are disabled, dimmed
-but still drawn:
+variant, the others in `secondary`. Where Copy Prompt is the only one (a host that
+takes no message, as the web), it is a button in words, "Copy Prompt" with its icon
+first. While there is no note they are disabled, dimmed but still drawn:
 
 - **Copy Prompt** (copy icon), always. It copies the note as text: its references
   spelled as copied references are, and a sketch by the path it was saved at, since
@@ -543,16 +548,15 @@ in the navbar ("Preview"). It is fullscreen: the renderer says so
 (`onFullscreenChange`), and the navbar, the explorer and any declared panel step
 aside while it lasts, Display settings with them; the toolbar, the tool stack and
 its resize handles, Quick Edit, joint handles, cube and context menu are gone. Its
-way out is the view's own: a minimize icon ("Exit preview") at the view's top-right,
-on the floating surface, which fades with the playbar; Escape leaves it too. It
+way out is the view's own: an X ("Exit preview") at the view's top-right,
+transparent over the model, which fades with the playbar; Escape leaves it too. It
 starts orbiting, unless the file's Playback settings turned its orbit off. **Playback
-settings** (a cog; `PlaybackMenu`) ends the playbar under the model and opens
-upward. It holds, for a file with routines, **Animation** — the Routine (with more than one), Speed, Loop and
+settings** (a cog; `PlaybackMenu`) sits in that corner before the X, where Settings
+sits outside preview, and opens down. It holds, for a file with routines, **Animation** — the Routine (with more than one), Speed, Loop and
 Autoplay — then **Orbit**: on or off, and its speed. Under the model, an
-animated file shows its playbar (play/pause, the scrubber, then the cog); a
-static one an orbit play/pause and the cog. These controls share one one-second idle deadline and a 150ms
-fade: movement wakes them, and hovering their area, an open menu or the Display
-popover holds them.
+animated file shows its playbar (play/pause and the scrubber); a static one shows
+nothing there. These controls and the corner share one one-second idle deadline and a
+150ms fade: movement wakes them, and hovering their area or an open menu holds them.
 
 Routines play in preview alone: there is no Animate tool. Entering preview
 starts the routine when Autoplay is on (off by default); leaving it stops the

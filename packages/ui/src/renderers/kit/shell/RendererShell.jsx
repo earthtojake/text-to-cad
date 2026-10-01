@@ -1,9 +1,8 @@
-import { VIEWPORT_BOTTOM_CENTER, VIEWPORT_INSET_PX, VIEWPORT_STACK_BOTTOM, VIEWPORT_TOP_BAR_PX } from "./viewportLayout.js";
+import { VIEWPORT_INSET_PX, VIEWPORT_STACK_BOTTOM, VIEWPORT_TOP_BAR_PX } from "./viewportLayout.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Maximize2, Minimize2, Play, Pause } from "lucide-react";
+import { Maximize2, X } from "lucide-react";
 import { Button } from "@text-to-cad/ui/primitives/button";
-import { ToolbarButton } from "@text-to-cad/ui/primitives/toolbar-button";
 import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 import { cn } from "@text-to-cad/ui/utils";
 import PreviewChrome from "../tools/PreviewChrome.jsx";
@@ -278,26 +277,19 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
                 <NavbarControl label="Preview" disabled={shell.idle} onClick={enterPreview}><Maximize2 className="size-3.5" aria-hidden="true" /></NavbarControl>
               </>, view.navbarSlot) : null}
               {/* Preview: fullscreen, the navbar and the tools put away and the model orbiting, its
-                  routines playing; at the top-right its way out, and under the model the playbar (a
-                  static file's, the orbit's play and pause), with Playback settings' cog at its
-                  right end. */}
+                  routines playing. At the top-right, where Settings sits outside it, Playback
+                  settings (the routine's and the orbit's) then its way out; under the model, a
+                  file with routines has its playbar, and a static file nothing at all. */}
               <PreviewChrome active={previewing} surface={frame.hostElement} hold={displayOpen}
-                corner={<NavbarControl label="Exit preview" onClick={leavePreview}><Minimize2 className="size-3.5" aria-hidden="true" /></NavbarControl>}
-                playbar={onMenuOpenChange => {
-                  const settings = <PlaybackMenu animation={playbackMenuRuntime} onOpenChange={onMenuOpenChange}
+                corner={onMenuOpenChange => <>
+                  <PlaybackMenu animation={playbackMenuRuntime} onOpenChange={onMenuOpenChange}
                     autoplay={shell.autoplay} onAutoplayChange={shell.setAutoplay}
                     orbit={orbitPlaying} onOrbitChange={setOrbitPlaying}
-                    orbitSpeed={frame.previewOrbitSpeed || 1} onOrbitSpeedChange={frame.setPreviewOrbitSpeed} />;
-                  return hasAnimation ? <ViewportAnimationBar key={frame.modelKey} runtime={animation} trailing={settings}
-                    className="pointer-events-auto" disabled={viewerLoading || !scene} /> :
-                  <div role="toolbar" aria-label="Orbit playback" data-preview-hover-hold="" style={{ bottom: VIEWPORT_BOTTOM_CENTER }}
-                    className="pointer-events-auto absolute left-1/2 flex -translate-x-1/2 translate-y-1/2 items-center gap-1 px-6 py-4">
-                    <ToolbarButton tooltip={false} label={orbitPlaying ? "Pause orbit" : "Play orbit"} onClick={() => setOrbitPlaying(value => !value)}>
-                      {orbitPlaying ? <Pause className="size-3.5" /> : <Play className="size-3.5" />}
-                    </ToolbarButton>
-                    {settings}
-                  </div>;
-                }}>
+                    orbitSpeed={frame.previewOrbitSpeed || 1} onOrbitSpeedChange={frame.setPreviewOrbitSpeed} />
+                  <NavbarControl label="Exit preview" onClick={leavePreview}><X className="size-3.5" aria-hidden="true" /></NavbarControl>
+                </>}
+                playbar={hasAnimation ? <ViewportAnimationBar key={frame.modelKey} runtime={animation}
+                  className="pointer-events-auto" disabled={viewerLoading || !scene} /> : null}>
 
               {/* The file explorer floats over this corner, as tall as its rows: the tools step out of
                   sight under it, kept as they are for when it closes. */}

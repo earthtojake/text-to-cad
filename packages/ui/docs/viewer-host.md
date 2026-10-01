@@ -51,7 +51,7 @@ are for reading and maintaining the contracts.
 | `ModelLibrary`, `ModelLibrarySource`, `ModelPictureSource`, `useModelThumbnail` (a host's home: the CAD title over the host's links, then the models opened before, pinned first, as cards or rows, and with none an "Open File" card that opens the chooser; `pick` only where the host has a file chooser; `pictureFrom` where it can reach a model to picture it) | [Model library](../src/library/ModelLibrary.tsx), [thumbnails](../src/library/thumbnails.ts) | `@text-to-cad/ui/library` |
 | `CadViewer` (FileViewer over one root's CAD catalog: the five CAD renderers, catalog following, the home, the loading and missing-file pages, the library's pictures) | [CAD viewer](../src/cad-viewer/CadViewer.tsx) | `@text-to-cad/ui/cad-viewer` |
 | `createCatalogFileSource`, `createCadFileActions`, `rootPath`, `pathUnderRoot`, `referencePath` (a CAD catalog as a read-only `FileSource`, the file menu's copies and reveal, the paths a root names a file by) | [Catalog](../src/cad-viewer/catalog.ts) | `@text-to-cad/ui/catalog` |
-| `ViewerLinks`, `viewerLinks` (the navbar's version, GitHub and Discord, and how a link is followed) | [Host types](../src/host/types.ts), [links](../src/file-viewer/navigation/links.js) | `@text-to-cad/ui/links` |
+| `ViewerLinks`, `viewerLinks` (the version, GitHub, Discord, the newest release and how to update, and how a link is followed) | [Host types](../src/host/types.ts), [links](../src/file-viewer/navigation/links.js) | `@text-to-cad/ui/links` |
 
 Start with the actual compositions: [web App](../../../apps/web/src/App.tsx) and the
 MCP app's [ModelView](../../../apps/mcp/src/ModelView.tsx), both one `CadViewer`.
@@ -360,10 +360,11 @@ host's files can be browsed (`files.list`), then the open file's name and its â‹
 which is the explorer's own entry menu for that file (no right-click on the name).
 With no file open the name's place says "Select file" (words, not a control), and
 the page says "Ask the agent to show a model". Right: the renderer's navigation actions, any
-declared panel's toggle, then `links` â€” the version (`v0.7.4`), whose menu ends with the release notes, GitHub and Discord
-(`NavbarLinks.jsx`). The version opens a menu of what it is and how to update it;
-a host that checks for newer releases says what it found (`links.latest`), and the
-version then reads "Update". A link opens the ordinary way unless the host supplies
+declared panel's toggle, then the update (`UpdateButton`, `NavbarLinks.jsx`): where the host
+found a newer release (`links.latest`), a blue download button whose menu says the step to it,
+how this host updates (`links.install`) and what is new; without one, nothing. The version,
+GitHub and Discord (`CommunityLinks`) are the CAD renderer's Settings popover's header and the
+home's, under its wordmark. A link opens the ordinary way unless the host supplies
 `links.open` (a page in a sandboxed frame hands it to its host). `displayActions`
 passes host-owned appearance controls into the Display section beside Projection
 via `RendererViewProps`. The shell handles placement and hides the toolbar in

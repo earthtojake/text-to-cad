@@ -359,6 +359,7 @@ class Server:
 
         return [
             app("cad_session", "CAD session", "The server's build, protocol and this thread's workspace.", _object()),
+            app("cad_release", "CAD release", "The newest CAD release, and whether it is newer than this one.", _object()),
             app("cad_launch", "Open model", "The launch for opening a model in this view.",
                 _object({"model": {"type": "string"}}, ["model"])),
             app("cad_pick_model", "Open Model", "Choose a model with the desktop's file chooser. Only for an explicit Open Model action.",
@@ -516,6 +517,16 @@ class Server:
 
         return _data({"protocol": PROTOCOL, "build": self.page.build, "version": __version__, "platform": sys.platform,
                       "workspace": [Root("workspace", path).public() for path in self.workspace.paths]})
+
+    def _tool_cad_release(self, arguments, context):
+        # The update button's: GitHub's latest release, asked at most every few hours and shared
+        # through the state directory. The one request to the network this server makes.
+        from cadgen import __version__
+        from cadgen.viewer.recents import state_dir
+
+        from .releases import latest_release
+
+        return _data({"latest": latest_release(__version__, cache=state_dir() / "release.json")})
 
     # the agent's tools ----------------------------------------------------------
 

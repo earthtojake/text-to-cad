@@ -49,6 +49,8 @@ export function createServer(bridge: Pick<Bridge, 'callTool'>) {
   }
   return {
     session: (options?: CallOptions) => call<Session>('cad_session', {}, options),
+    /** The newest release, as GitHub says it (the server asks at most every few hours), or null. */
+    release: () => call<{ latest: { version: string; url: string; newer: boolean } | null }>('cad_release').then(value => value.latest),
     launch: (model: string) => call<{ launch: Launch }>('cad_launch', { model }).then(value => value.launch),
     pickModel: () => call<{ launch?: Launch; cancelled?: boolean }>('cad_pick_model', {}, { timeoutMs: 16 * 60_000 }),
     recents: (args: { action?: 'list' | 'pin' | 'unpin' | 'remove' | 'thumbnail'; path?: string; png?: string } = {}) =>

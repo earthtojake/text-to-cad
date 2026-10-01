@@ -94,7 +94,7 @@ const ready = pane => pane.locator('[aria-busy="false"] > div > canvas').first()
 // A GLB has no tools; its Display settings are the button beside Preview.
 const noTools = async (pane) => {
   assert.equal(await pane.getByRole('group', { name: 'Interaction tools' }).count(), 0, 'a static GLB has no tools, so no strip');
-  assert.equal(await pane.getByRole('button', { name: 'Display settings', exact: true }).count(), 1, 'its Display settings are the button beside Preview');
+  assert.equal(await pane.getByRole('button', { name: 'Settings', exact: true }).count(), 1, 'its Display settings are the button beside Preview');
   for (const name of ['Orbit', 'Draw', 'Select', 'Measure', 'Position', 'Animate']) {
     assert.equal(await pane.getByRole('button', { name, exact: true }).count(), 0, name);
   }
@@ -177,7 +177,7 @@ test('a static GLB opens on its native scene with no tools: display settings, or
   // where a file opens. So it opens with the column shut and the model given the room.
   assert.deepEqual(await panels(pane), ['Show files:false']);
   assert.equal(await pane.locator('[data-tool-panel]').count(), 0, 'nothing in the tool stack');
-  await pane.getByRole('button', { name: 'Display settings', exact: true }).click();
+  await pane.getByRole('button', { name: 'Settings', exact: true }).click();
   await pane.page().locator('[data-display-popover]').waitFor();
   assert.deepEqual(await panels(pane), ['Show files:false']);
   const displayMenu = page.locator('[data-display-popover]');
@@ -188,7 +188,7 @@ test('a static GLB opens on its native scene with no tools: display settings, or
   await page.keyboard.press('Escape');
   assert.equal(await displayMenu.getByRole('heading', { name: 'Surfaces', exact: true }).count(), 1);
   for (const section of ['Edges', 'Cross-section', 'Explode']) assert.equal(await displayMenu.getByRole('heading', { name: section, exact: true }).count(), 0, section);
-  await pane.getByRole('button', { name: 'Display settings', exact: true }).click();
+  await pane.getByRole('button', { name: 'Settings', exact: true }).click();
   await pane.page().locator('[data-display-popover]').waitFor({ state: 'detached' });
   // The column closing reaches the scene as a resize; let that frame land before comparing pictures.
   await page.waitForFunction(() => document.querySelector('[data-testid="one"] [aria-busy] > div > canvas').width >= 790);
@@ -350,8 +350,8 @@ test('an animated GLB opens at rest, plays in preview, and leaving preview puts 
   assert.deepEqual(await page.evaluate(() => window.__cadStage().studioGround), floor);
 
   // Preview orbits every GLB: the Orbit this file's record turned off is one tick away in
-  // Playback settings, and ticked, the preview camera turns.
-  await pane.getByRole('toolbar', { name: 'Animation playback' }).getByRole('button', { name: 'Playback settings', exact: true }).click();
+  // Playback settings, in the view's top-right corner, and ticked, the preview camera turns.
+  await pane.locator('[data-preview-corner]').getByRole('button', { name: 'Playback settings', exact: true }).click();
   const orbit = page.getByRole('menuitemcheckbox', { name: 'Orbit', exact: true });
   assert.equal(await orbit.getAttribute('aria-checked'), 'false', "the file's choice");
   const held = await page.evaluate(() => window.__cadCamera().position);
@@ -369,7 +369,7 @@ test('a corrupt GLB raises the viewer\'s load alert, with reload and details', a
   assert.match(await alert.innerText(), /Couldn’t load the model/);
   assert.match(await alert.innerText(), /broken\.glb/);
   // Nothing on screen is the file's to work on: the card alone, with no tools or view actions.
-  for (const name of ['Display settings', 'Preview']) {
+  for (const name of ['Settings', 'Preview']) {
     assert.equal(await pane.getByRole('button', { name, exact: true }).count(), 0, `no ${name} over a failed load`);
   }
   void page;

@@ -33,6 +33,7 @@ function host(initial: HostContext, hostCapabilities: Record<string, unknown> = 
   const server = {
     events: () => new Promise(() => {}), report: vi.fn(async () => ({})), reply: vi.fn(async () => ({})),
     recents: vi.fn(async () => []), thumbnails: vi.fn(async () => ({})), http: () => new Promise(() => {}),
+    release: vi.fn(async () => ({ version: '0.7.5', url: 'https://github.com/earthtojake/text-to-cad/releases/tag/v0.7.5', newer: true })),
     launch: vi.fn(async (model: string) => ({ ...home, page: 'viewer', model })), pickModel: vi.fn(async () => ({ cancelled: true })),
     reveal: vi.fn(async () => {}),
   };
@@ -71,6 +72,9 @@ it('a model opened from the home is launched by the server and leads back to it;
   expect(viewer.props!.file).toBe('');
   await act(async () => viewer.props!.host.links!.open!('https://github.com/earthtojake/text-to-cad'));
   expect(bridge.request).toHaveBeenCalledWith('ui/open-link', { url: 'https://github.com/earthtojake/text-to-cad' });
+  // The newest release, asked of the server once: the links carry it to the update button.
+  expect(server.release).toHaveBeenCalledTimes(1);
+  expect(viewer.props!.host.links!.latest).toEqual({ version: '0.7.5', url: 'https://github.com/earthtojake/text-to-cad/releases/tag/v0.7.5', newer: true });
   const { perform, platform } = viewer.props!.host.fileActions!;
   // A file on its own, in no project: its path is its only one.
   expect([platform, Object.keys(perform!).sort()]).toEqual(['darwin', ['copy-path', 'reveal']]);

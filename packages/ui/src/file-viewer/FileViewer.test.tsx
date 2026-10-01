@@ -36,74 +36,49 @@ it('draws the navbar only when it has something to hold, and never for a view sh
   expect(screen.queryByRole('button', { name: 'File actions' })).toBeNull();
   expect(screen.queryByRole('button', { name: 'Show files' })).toBeNull();
   cleanup();
-  // The host's links, the same in every app: the version, whose menu holds GitHub and Discord,
-  // each followed the host's way.
-  const user = userEvent.setup();
-  const followed: string[] = [];
-  const linked = { ...host, links: viewerLinks({ version: 'v0.7.4', open: async (url: string) => { followed.push(url); } }) };
+  // The host's links: without an update, nothing of them in the navbar (GitHub, Discord and the
+  // version are the renderer's Settings' and the home's).
+  const linked = { ...host, links: viewerLinks({ version: 'v0.7.4' }) };
   open({ navigationPath: null, host: linked });
   await screen.findByText('shown');
-  const version = screen.getByRole('button', { name: 'Version 0.7.4' });
-  expect(version.textContent).toBe('v0.7.4');
-  expect(screen.queryByRole('link', { name: 'GitHub' })).toBeNull();
-  await user.click(version);
-  const menu = await screen.findByRole('menu');
-  expect(within(menu).getByRole('menuitem', { name: 'Discord' }).getAttribute('href')).toBe('https://discord.gg/5FGB9DwJYU');
-  await user.click(within(menu).getByRole('menuitem', { name: 'GitHub' }));
-  expect(followed).toEqual(['https://github.com/earthtojake/text-to-cad']);
+  expect(navbar()).not.toBeNull();
+  expect(navbar()!.querySelectorAll('button, a').length).toBe(0);
   cleanup();
   open({ host: { ...linked, environment: { colorScheme: 'light', compact: true } } });
   await screen.findByText('shown');
   expect(navbar()).toBeNull();
 });
 
-it('says how its host updates: a command and a message for an agent, or a line where the update is not a command, each only when given', async () => {
+it('an update is a blue download button whose menu says the step to it, how this host updates and what is new; nothing without one', async () => {
   const user = userEvent.setup();
-  const versionMenu = async (install?: object) => {
-    open({ navigationPath: null, host: { ...host, links: viewerLinks({ version: '0.7.4', install }) } });
+  const notes = 'https://github.com/earthtojake/text-to-cad/releases/tag/v0.7.5';
+  const followed: string[] = [];
+  const updateMenu = async (latest: object | null, install?: object) => {
+    open({ navigationPath: null, host: { ...host, links: viewerLinks({ version: '0.7.4', latest, install, open: async (url: string) => { followed.push(url); } }) } });
     await screen.findByText('shown');
-    await user.click(screen.getByRole('button', { name: 'Version 0.7.4' }));
+    const button = screen.queryByRole('button', { name: 'Update to 0.7.5' });
+    if (!button) return null;
+    await user.click(button);
     return screen.findByRole('menu');
   };
-  // The skills' update, by default: a command for a terminal, and the same for an agent.
-  let menu = await versionMenu();
+  // Up to date, or never checked: nothing.
+  expect(await updateMenu({ version: '0.7.4', url: notes, newer: false })).toBeNull();
+  cleanup();
+  expect(await updateMenu(null)).toBeNull();
+  cleanup();
+  // A newer release: the step to it, the skills' update by default, and what is new, followed the host's way.
+  let menu = (await updateMenu({ version: '0.7.5', url: notes, newer: true }))!;
+  expect(menu.querySelector('[data-version-update]')?.textContent).toBe('Update availablev0.7.4 → v0.7.5');
   expect(within(menu).getByText('npx skills add earthtojake/text-to-cad')).toBeTruthy();
   expect(within(menu).getByText('Or ask your agent')).toBeTruthy();
-  expect(menu.querySelector('[data-install-message]')).toBeNull();
+  await user.click(within(menu).getByRole('menuitem', { name: 'What’s new in v0.7.5' }));
+  expect(followed).toEqual([notes]);
   cleanup();
   // A host whose update is not a command says how in a line, and nothing else.
   const message = 'Update CAD from the plugin marketplace, then restart the app.';
-  menu = await versionMenu({ message });
+  menu = (await updateMenu({ version: '0.7.5', url: notes, newer: true }, { message }))!;
   expect(menu.querySelector('[data-install-message]')?.textContent).toBe(message);
   expect(within(menu).queryByText('In your terminal')).toBeNull();
-  expect(within(menu).queryByText('Or ask your agent')).toBeNull();
-});
-
-it('marks a newer release with a dot on the version, and says where the person stands: up to date, or the step to the new one', async () => {
-  const user = userEvent.setup();
-  const versionFor = async (latest: object | null) => {
-    open({ navigationPath: null, host: { ...host, links: viewerLinks({ version: '0.7.4', latest }) } });
-    await screen.findByText('shown');
-    return screen.getByRole('button', { name: /^Version 0\.7\.4/ });
-  };
-  // A newer release: a dot on the version; open, the step to it, how to update, and what is new.
-  const notes = 'https://github.com/earthtojake/text-to-cad/releases/tag/v0.7.5';
-  let version = await versionFor({ version: '0.7.5', url: notes, newer: true });
-  expect([version.getAttribute('aria-label'), version.hasAttribute('data-update')]).toEqual(['Version 0.7.4, update available', true]);
-  await user.click(version);
-  let menu = await screen.findByRole('menu');
-  expect(menu.querySelector('[data-version-update]')?.textContent).toBe('Update availablev0.7.4 → v0.7.5');
-  expect(within(menu).getByText('In your terminal')).toBeTruthy();
-  expect(within(menu).getByRole('menuitem', { name: 'What’s new in v0.7.5' }).getAttribute('href')).toBe(notes);
-  cleanup();
-  // Up to date: no dot, and nothing to do.
-  version = await versionFor({ version: '0.7.4', url: notes, newer: false });
-  expect([version.getAttribute('aria-label'), version.hasAttribute('data-update')]).toEqual(['Version 0.7.4', false]);
-  await user.click(version);
-  menu = await screen.findByRole('menu');
-  expect(within(menu).getByText('Up to date')).toBeTruthy();
-  expect(within(menu).queryByText('In your terminal')).toBeNull();
-  expect(within(menu).getByRole('menuitem', { name: 'Release notes' })).toBeTruthy();
 });
 
 it('steps the navbar aside while the renderer shows its file fullscreen', async () => {

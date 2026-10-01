@@ -84,16 +84,19 @@ it("names a panel's handle and its sheet after the panel, never after the toggle
   expect(screen.getByRole('dialog', { name: 'Files' })).toBeTruthy();
 });
 
-it('the explorer goes when a press lands outside it, but not for the navbar it hangs from or a press inside', () => {
+it('the explorer goes when a press lands anywhere outside it, the navbar included; not for its own toggle or a press inside', () => {
   const dismiss = vi.fn();
   render(<div>
-    <header data-viewer-navbar=""><button type="button">Rename</button></header>
+    <header data-viewer-navbar=""><button type="button" data-file-panel="tree">Hide files</button><button type="button">File actions</button></header>
     <FileExplorer label="Files" width={240} onWidthChange={() => {}} onDismiss={dismiss}><button type="button">tree row</button></FileExplorer>
     <main>model</main>
   </div>);
   fireEvent.pointerDown(screen.getByRole('button', { name: 'tree row' }));
-  fireEvent.pointerDown(screen.getByRole('button', { name: 'Rename' }));
+  // Its toggle closes it itself.
+  fireEvent.pointerDown(screen.getByRole('button', { name: 'Hide files' }));
   expect(dismiss).not.toHaveBeenCalled();
-  fireEvent.pointerDown(screen.getByText('model'));
+  fireEvent.pointerDown(screen.getByRole('button', { name: 'File actions' }));
   expect(dismiss).toHaveBeenCalledTimes(1);
+  fireEvent.pointerDown(screen.getByText('model'));
+  expect(dismiss).toHaveBeenCalledTimes(2);
 });

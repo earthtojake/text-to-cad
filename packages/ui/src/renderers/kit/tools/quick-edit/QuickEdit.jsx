@@ -265,9 +265,14 @@ export default function QuickEdit({ resource, references = EMPTY, sketch = null,
         className="max-h-40 min-h-14 w-full resize-none rounded-md border border-input bg-background/80 px-2 py-1.5 text-xs leading-5 text-foreground outline-none transition-[border-color,box-shadow] [field-sizing:content] placeholder:text-muted-foreground focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:focus:border-blue-400 dark:focus:ring-blue-400/20"
         onChange={event => { setText(event.target.value); setError(""); }} onKeyDown={onKeyDown} />
       {error ? <p role="alert" className="text-tiny text-destructive">{error}</p> : null}
-      {/* Buttons of the ordinary shape, all solid: the primary in its colour, the others secondary. */}
+      {/* Buttons of the ordinary shape, all solid: the primary in its colour, the others secondary.
+          Copy Prompt alone (a host that takes no message) says so in words, its icon first. */}
       <div className="flex items-center justify-end gap-1.5">
-        {actions.map(({ id, label, hint, Icon }) => <TooltipHint key={id} content={hint} side="bottom">
+        {actions.length === 1 ? <Button type="button" variant="default" size="sm" className="h-7 gap-1.5 px-2.5 text-xs"
+          aria-label={copied ? "Prompt copied" : undefined} aria-busy={pending === "copy" || undefined} disabled={!ready} onClick={() => run("copy")} data-quick-edit-action="copy">
+          {copied ? <Check className="size-3.5" aria-hidden="true" /> : <Copy className="size-3.5" aria-hidden="true" />}
+          {copied ? "Copied" : "Copy Prompt"}
+        </Button> : actions.map(({ id, label, hint, Icon }) => <TooltipHint key={id} content={hint} side="bottom">
           <Button type="button" variant={id === primary ? "default" : "secondary"} size="icon-sm" className="size-7"
             aria-label={id === "copy" && copied ? "Prompt copied" : label} disabled={!ready} aria-busy={pending === id || undefined} onClick={() => run(id)} data-quick-edit-action={id}>
             {id === "copy" && copied ? <Check className="size-3.5" aria-hidden="true" /> : <Icon className="size-3.5" aria-hidden="true" />}

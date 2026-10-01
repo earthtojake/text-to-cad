@@ -160,8 +160,11 @@ export default function App({ bridge, server, launch: initial, session, presenta
 
   // The navbar's links: the same three as every app's, followed through the host (a frame cannot open one itself),
   // and how this host updates CAD.
-  const links = useMemo(() => viewerLinks({ version, install: UPDATE[presentation], open: url => bridge.request('ui/open-link', { url }).then(() => {}) }),
-    [bridge, presentation]);
+  // The newest release, asked once: an update shows as the blue download button, and nothing shows without one.
+  const [latest, setLatest] = useState<{ version: string; url: string; newer: boolean } | null>(null);
+  useEffect(() => { void server.release().then(setLatest, () => {}); }, [server]);
+  const links = useMemo(() => viewerLinks({ version, install: UPDATE[presentation], latest, open: url => bridge.request('ui/open-link', { url }).then(() => {}) }),
+    [bridge, presentation, latest]);
   // A view opened on the home (the sidebar's) goes back to it; one opened on a model has no home.
   const home = initial.page === 'home' ? initial : null;
   const goHome = home ? () => setShowing(previous => ({ launch: home, sequence: previous.sequence + 1 })) : undefined;

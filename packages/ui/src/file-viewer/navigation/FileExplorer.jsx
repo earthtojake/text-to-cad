@@ -12,10 +12,10 @@ const MOBILE_WIDTH = 280;
 // A drag has to go well below the minimum — past half of it — before the explorer closes: one that
 // merely overshoots stops at the minimum.
 const COLLAPSE_WIDTH = PANEL_MIN_WIDTH / 2;
-// A press here is not one outside the explorer: the navbar it hangs from (whose toggle closes it
-// itself, and whose file menu acts on what the explorer shows), and the popups the explorer opens,
-// which portal outside it.
-const INSIDE = "[data-viewer-navbar], [data-file-panel], [data-slot=select-content], [data-slot=dropdown-menu-content], [data-slot=dropdown-menu-sub-content], [data-slot=popover-content], [data-slot=context-menu-content]";
+// A press here is not one outside the explorer: its toggle in the navbar (which closes it itself)
+// and the popups the explorer opens, which portal outside it. Anywhere else — the rest of the
+// navbar included — puts it away.
+const INSIDE = "[data-file-panel], [data-slot=select-content], [data-slot=dropdown-menu-content], [data-slot=dropdown-menu-sub-content], [data-slot=popover-content], [data-slot=context-menu-content]";
 
 /**
  * The file explorer: a panel that floats over the LEFT of the view, never beside it.

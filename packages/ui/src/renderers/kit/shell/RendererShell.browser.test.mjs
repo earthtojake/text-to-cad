@@ -134,7 +134,7 @@ test('a shell renderer restores isolated view state on a remount', async (t) => 
   const first = page.getByTestId('one');
   // Display's settings are a popover from the button beside Preview (`DisplayPopover.jsx`),
   // portaled out of the pane: a file never opens with it, and it is not a tool.
-  const displayButton = pane => pane.getByRole('button', { name: 'Display settings', exact: true });
+  const displayButton = pane => pane.getByRole('button', { name: 'Settings', exact: true });
   const display = page.locator('[data-display-popover]');
   const cameraZoom = id => page.evaluate(pane => window.cadHarness[pane].controller?.readState().camera?.zoom ?? null, id);
   await displayButton(first).waitFor().catch(async (error) => { throw new Error(`${error.message}; page errors: ${errors.join('; ')}; body: ${await page.locator("body").innerText()}; requests: ${requests.join(", ")}`); });
@@ -447,7 +447,7 @@ test('a renderer says more about its load than a download: finding the file, edi
   assert.ok(offBottom >= 6 && offBottom < 16, `the view cube sits just off the bottom-left corner: ${offBottom}px`);
   assert.ok(cubeBox.x < frameBox.x + 20, 'the view cube stays against the left edge');
   assert.ok(stackBox.y + stackBox.height <= cubeBox.y, 'the tool stack stops above the cube');
-  for (const name of ['Display settings', 'Preview']) {
+  for (const name of ['Settings', 'Preview']) {
     assert.equal(await pane.locator('[data-viewer-navbar]').getByRole('button', { name, exact: true }).count(), 1, `${name} is in the navbar`);
   }
 

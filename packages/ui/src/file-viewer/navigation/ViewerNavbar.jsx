@@ -8,7 +8,7 @@ import { cn } from "@text-to-cad/ui/utils";
 import { EntryMenuItems, useEntryMenuFocusGuard } from "./EntryMenu.jsx";
 import { entryMenu } from "./entry-menu.js";
 import { InlineName } from "./InlineName.jsx";
-import { NavbarLinks } from "./NavbarLinks.jsx";
+import { UpdateButton } from "./NavbarLinks.jsx";
 
 /**
  * The row above a file: ONE navbar, the same in every app, so a person finds each control in the
@@ -20,9 +20,9 @@ import { NavbarLinks } from "./NavbarLinks.jsx";
  * are not a control: the explorer's toggle beside them is. The name is not a menu of its own, and
  * has no right-click: the ⋯ is the one door.
  *
- * Right: the file's own actions, the toggles of any panel the file declares, the host's version,
- * whose menu holds GitHub and Discord (`NavbarLinks.jsx`), then the renderer's view controls
- * (`controlsRef`: the CAD viewer's Display settings and Preview).
+ * Right: the file's own actions, the toggles of any panel the file declares, the host's update —
+ * a blue download button, only where the host found a newer release (`NavbarLinks.jsx`) — then
+ * the renderer's view controls (`controlsRef`: the CAD viewer's Settings and Preview).
  *
  * Nothing here is drawn for its own sake: a control appears only where it does something.
  */
@@ -133,7 +133,7 @@ export function ViewerNavbar({ onBack, explorer = null, file = null, selecting =
       </nav>
       <div className="flex shrink-0 items-center gap-0.5">
         {trailing}
-        {links ? <NavbarLinks links={links} clipboard={clipboard} onError={onError} /> : null}
+        {links ? <UpdateButton links={links} clipboard={clipboard} onError={onError} /> : null}
         <div ref={controlsRef} className="contents" data-navbar-controls="" />
       </div>
     </header>

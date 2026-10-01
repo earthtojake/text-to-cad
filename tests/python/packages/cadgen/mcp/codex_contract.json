@@ -547,6 +547,28 @@
     "openWorldHint": false,
     "readOnlyHint": true
    },
+   "description": "The newest CAD release, and whether it is newer than this one.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {},
+    "type": "object"
+   },
+   "name": "cad_release",
+   "title": "CAD release"
+  },
+  {
+   "_meta": {
+    "ui": {
+     "visibility": [
+      "app"
+     ]
+    }
+   },
+   "annotations": {
+    "destructiveHint": false,
+    "openWorldHint": false,
+    "readOnlyHint": true
+   },
    "description": "The launch for opening a model in this view.",
    "inputSchema": {
     "additionalProperties": false,

@@ -158,7 +158,7 @@ it('robot Select defaults match Links and Position remains an explicit tool', as
 
   // Display is not a tool: its popover opens over Position and leaves it the tool, knobs and panel.
   expect(within(robot.pane).queryByRole('button', { name: 'Display' })).toBeNull();
-  fireEvent.click(within(robot.pane).getByRole('button', { name: 'Display settings' }));
+  fireEvent.click(within(robot.pane).getByRole('button', { name: 'Settings' }));
   await waitFor(() => expect(document.querySelector('[data-display-popover]')).not.toBeNull());
   expect(robot.toolNames()).toEqual(['Select:false', 'Position:true']);
   expect(robot.stack()).toEqual(['Position controls']);

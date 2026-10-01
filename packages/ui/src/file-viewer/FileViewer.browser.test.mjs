@@ -104,14 +104,19 @@ test("panel exclusivity, capability menus, rename and create use the shared chro
   await page.getByRole("tree").waitFor();
   assert.equal(await page.getByText("Injected panel").count(), 0);
   // The navbar's ⋯ is the explorer's menu for the open file: what the host can do, and no more.
+  // A press on the navbar is one outside the explorer, which goes.
   await page.getByTestId("file-actions").click();
+  assert.equal(await page.getByRole("tree").count(), 0, "a press on the navbar puts the explorer away");
   assert.equal(await page.getByRole("menuitem", { name: /Reveal|Open with|Move to trash/ }).count(), 0);
   await page.getByRole("menuitem", { name: /^Rename/ }).click();
   await page.getByRole("textbox", { name: "Rename file", exact: true }).fill("renamed.txt");
   await page.getByRole("textbox", { name: "Rename file", exact: true }).press("Enter");
   await page.locator('[data-file-name]', { hasText: "renamed.txt" }).waitFor();
-  // The tab follows the file to its new name through the host, and keeps the panel it had.
-  assert.deepEqual(await page.evaluate(() => window.harness.opened.at(-1)), { path: "renamed.txt", options: { target: "current", panel: "tree" } });
+  // The tab follows the file to its new name through the host.
+  const renamed = await page.evaluate(() => window.harness.opened.at(-1));
+  assert.deepEqual([renamed.path, renamed.options.target], ["renamed.txt", "current"]);
+  await page.getByTestId("tree-toggle").click();
+  await page.getByRole("tree").waitFor();
   await page.getByRole("tree").dispatchEvent("contextmenu", { button: 2 });
   await page.getByRole("menuitem", { name: /New file/ }).click();
   await page.getByRole("textbox", { name: "New file name", exact: true }).fill("created.txt");

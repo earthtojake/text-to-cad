@@ -260,13 +260,19 @@ export const ViewerNavbar: ComponentType<{
   className?: string;
 }>;
 
-/** The version, whose menu holds the release notes, GitHub and Discord, as the navbar's right end draws it. */
-export const NavbarLinks: ComponentType<{
+/** A newer release, as a blue download button whose menu says how to update; nothing without one. */
+export const UpdateButton: ComponentType<{
   links: import("../../host/types.js").ViewerLinks;
   clipboard: import("../../host/types.js").ClipboardPort;
   onError?: (error: Error) => void;
-  /** How the menu lines up with the version: `end` in the navbar, `center` under the home's wordmark. */
+  /** How the menu lines up with the button: `end` in the navbar, `center` under the home's wordmark. */
   align?: "start" | "center" | "end";
+}>;
+
+/** GitHub and Discord, as icon links. */
+export const CommunityLinks: ComponentType<{
+  links: import("../../host/types.js").ViewerLinks;
+  onError?: (error: Error) => void;
 }>;
 
 /** One panel's toggle in the navbar; `active` is its panel being open. */
