@@ -3,12 +3,15 @@
 Twenty clients starting at once used to start twenty daemons; the losers' probes
 against a backlog-8 listener were refused, read as a stale socket, and unlinked
 the winner's live address. These pin the three pieces that replaced the probe:
-the process-lifetime SingletonLock, the spawn election, and the linked authkey.
+the SingletonLock, the spawn election, and the linked authkey -- and that a stale
+daemon hands its lock over before it tells a client to restart.
 """
 
 from __future__ import annotations
 
+import json
 import os
+import shutil
 import tempfile
 import threading
 import unittest
@@ -155,6 +158,59 @@ class SpawnElectionTest(unittest.TestCase):
         self.assertEqual(results, ["channel"] * 8)
         self.assertEqual(len(spawns), 1, f"expected one spawn, got {len(spawns)}")
         reap.assert_called_once_with(mock.ANY)
+
+
+class RestartHandoverTest(unittest.TestCase):
+    """A stale daemon gives up its lock BEFORE it tells the client to restart.
+
+    The client respawns at once. The stale daemon used to clear its address, reply,
+    and hold the lock through its pool shutdown (about half a second per warm worker),
+    so the respawned daemon stood down and the address was left with no daemon: the
+    CAD Viewer's geometry request, which has no cold path, failed.
+    """
+
+    def test_the_lock_is_free_when_a_client_is_told_to_restart(self):
+        tmp = Path(tempfile.mkdtemp(prefix="cgr-", dir=None if os.name == "nt" else "/tmp"))
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        address = rf"\\.\pipe\cadgen-handover-{os.getpid()}" if os.name == "nt" else str(tmp / "d.sock")
+        listening, teardown = threading.Event(), threading.Event()
+
+        class _Pool:
+            """No workers, and a teardown that lasts until the test has looked."""
+
+            def ensure_spares(self):
+                listening.set()
+
+            def unbind_idle(self):
+                pass
+
+            def shutdown(self):
+                teardown.wait(30)
+
+        stale = threading.Thread(target=server.serve, daemon=True)
+        with mock.patch.dict(os.environ, {"CADGEN_DAEMON_SOCKET": address, "CADGEN_DAEMON_STATE_DIR": str(tmp)}), \
+                mock.patch.object(server, "_POOL", _Pool()), \
+                mock.patch.object(server, "_DAEMON_LOCK", None), \
+                mock.patch.object(server, "compute_version_token", return_value="stale"), \
+                mock.patch.object(server.signal, "signal"), \
+                mock.patch.object(server, "_log"):
+            stale.start()
+            try:
+                self.assertTrue(listening.wait(30), "the stale daemon never bound")
+                channel = transport.connect(address, transport.read_authkey(address))
+                try:
+                    channel.send(json.dumps({"tool": "run", "argv": [], "token": "current"}).encode("utf-8"))
+                    self.assertEqual(json.loads(channel.recv(30.0)), {"restart": True})
+                finally:
+                    channel.close()
+                successor = transport.daemon_lock(address)
+                self.assertTrue(successor.acquire(), "the respawned daemon would stand down")
+                successor.release()
+            finally:
+                teardown.set()
+                stale.join(30)
+                if server._DAEMON_LOCK is not None:
+                    server._DAEMON_LOCK.release()
 
 
 if __name__ == "__main__":

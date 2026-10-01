@@ -28,6 +28,10 @@ from cadgen.daemon import transport
 CADGEN_DIR = Path(__file__).resolve().parents[1]
 
 SPAWN_WAIT_SECONDS = 30.0  # first daemon start pays the full OCP import
+# A daemon still finishing the jobs it was running when its code changed keeps its address
+# and answers every new request "restart" until they end. A strict request has no cold
+# path, so it asks again this often until the successor takes it.
+RESTART_POLL_SECONDS = 0.5
 
 # The daemon handles requests STRICTLY SEQUENTIALLY. A client that connects while
 # the daemon is still finishing someone else's build — including an orphaned one
@@ -308,7 +312,8 @@ def run_artifact(payload: dict, *, subscriber=None):
 def _run_with_retry(payload: dict, *, on_stream=None, on_event=None,
                     on_artifact_result=None, strict: bool = False, on_connection=None, cancelled=None) -> int | None:
     address = daemon_address()
-    for attempt in range(2):
+    restarted, deadline = False, None
+    while True:
         if cancelled is not None and cancelled():
             return None
         try:
@@ -335,12 +340,23 @@ def _run_with_retry(payload: dict, *, on_stream=None, on_event=None,
                 pass
             if on_connection is not None:
                 on_connection(None)
-        if outcome is _RESTART and attempt == 0:
-            continue  # stale daemon exited; respawn once and retry
-        if outcome is _RESTART and strict and on_stream is not None:
-            on_stream("The geometry service is updating while existing builds finish. Retry after those builds finish.")
-        return outcome if isinstance(outcome, int) else None
-    return None
+        if outcome is not _RESTART:
+            return outcome if isinstance(outcome, int) else None
+        if not restarted:
+            restarted = True
+            continue  # the stale daemon is going; an idle one already released its address
+        # Told to restart again: the stale daemon is finishing jobs and keeps its address
+        # until they end. An ordinary request runs cold meanwhile; a strict one waits for
+        # the successor as long as it would wait on a silent daemon.
+        if not strict:
+            return None
+        if deadline is None:
+            deadline = time.monotonic() + request_timeout()
+        if time.monotonic() >= deadline:
+            if on_stream is not None:
+                on_stream("The geometry service is updating while existing builds finish. Retry after those builds finish.")
+            return None
+        time.sleep(RESTART_POLL_SECONDS)
 
 
 def _connect(address: str) -> transport.Channel:

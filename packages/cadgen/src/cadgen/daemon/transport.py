@@ -244,7 +244,7 @@ def _lock_name(address: str) -> str:
 
 
 def daemon_lock(address: str) -> SingletonLock:
-    """The lock a daemon holds for its whole life: one daemon per ADDRESS. Keyed by
+    """The lock a daemon holds while it serves an address: one daemon per ADDRESS. Keyed by
     the socket, not the identity, so a private socket (a test's, a pilot's) is a
     private daemon even when it serves the same cadgen as the user's."""
     return SingletonLock(state_dir() / f"cadgen-daemon-v{PROTOCOL}-{_lock_name(address)}.lock")
