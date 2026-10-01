@@ -161,11 +161,13 @@ def package_content_files(root: Path) -> list[Path]:
     return [path for path in package_files(root) if not is_run_state(path)]
 
 
-def mtimes(root: Path) -> dict[str, int]:
-    """Every build-output mtime: model-side files keyed root-relative, store
-    package files keyed store-relative. A rebuild changes these; a move
-    followed by a no-op does not. Stronger than reading a producer's own
-    "current" wording, which is exactly the claim under test."""
+def write_identities(root: Path) -> dict[str, int]:
+    """Every build output's write identity: a model-side file's mtime, keyed
+    root-relative, and a store object's inode, keyed store-relative -- a publish
+    that reuses an object claims it, which moves its mtime but never rewrites it
+    (STORE.md §8), while a rewrite is a temp file renamed over it. A rebuild
+    changes these; a move followed by a no-op does not. Stronger than reading a
+    producer's own "current" wording, which is exactly the claim under test."""
     from cadgen.store.paths import objects_dir
 
     out: dict[str, int] = {}
@@ -174,8 +176,9 @@ def mtimes(root: Path) -> dict[str, int]:
         try:
             key = f"<store>/{path.relative_to(store).as_posix()}"
         except ValueError:
-            key = str(path.relative_to(root))
-        out[key] = path.stat().st_mtime_ns
+            out[str(path.relative_to(root))] = path.stat().st_mtime_ns
+        else:
+            out[key] = path.stat().st_ino
     return out
 
 
@@ -310,9 +313,9 @@ class PackagePortabilityTest(unittest.TestCase):
         shutil.copytree(self.root, moved)
         self.addCleanup(shutil.rmtree, self.root.parent / "deeper", True)
 
-        before = mtimes(moved)
+        before = write_identities(moved)
         self._noop_pass(moved)
-        self.assertEqual(before, mtimes(moved), "relocating the project rebuilt its packages")
+        self.assertEqual(before, write_identities(moved), "relocating the project rebuilt its packages")
 
         from tests.python.support.viewer_status import viewer_artifact_status
 

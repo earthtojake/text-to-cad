@@ -19,9 +19,14 @@ from pathlib import Path
 MESH_TESSELLATION_VERSION = 5
 
 # "document" is the ARTIFACT side (sha256 of a file's bytes → its tree); every
-# other kind is the code/dependency side. STORE.md §2, the law.
+# other kind is the code/dependency side. STORE.md §2, the law. A folder under
+# index/ that is not one of these is a retired kind, and the sweeper removes it.
 INDEX_KINDS = ("model", "document", "output", "component", "surface", "bounds", "mesh", "drawing")
 
+# The kinds eviction may drop (STORE.md §8): derivations that a build or a
+# reader recomputes on a miss. Records, document entries and output entries
+# are never evicted.
+DERIVED_KINDS = ("component", "surface", "bounds", "mesh", "drawing")
 
 def store_root() -> Path:
     override = os.environ.get("CADGEN_CACHE_DIR", "").strip()

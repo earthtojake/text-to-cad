@@ -156,10 +156,24 @@ function recordForPayload(key, bytes) {
   return row;
 }
 
+// Reusing an object claims it, as cadgen.store.objects.put_object does: its
+// mtime becomes now, so a store sweep that is already running keeps it for its
+// grace window. False only when it is gone; any other refusal (a read-only
+// store) leaves the bytes as they are.
+function claimObject(target) {
+  const now = new Date();
+  try {
+    fs.utimesSync(target, now, now);
+    return true;
+  } catch (error) {
+    return error?.code !== "ENOENT";
+  }
+}
+
 function putObject(row, bytes, env) {
   const target = objectPath(row.object, env);
   const existing = readExactObjectBytes(target, row.byteLength);
-  if (existing && digestBytes(existing) === row.object) return;
+  if (existing && digestBytes(existing) === row.object && claimObject(target)) return;
   writeAtomic(target, bytes);
   const verified = readExactObjectBytes(target, row.byteLength);
   if (!verified || digestBytes(verified) !== row.object) {

@@ -3,18 +3,32 @@
 An object is named by the sha256 of its bytes and sharded ``ab/cdef…`` like
 git. Writing is idempotent and atomic (temp + rename), so a reader can never
 observe a partial object. Explicit recovery can replace bytes that no longer
-match their address; a valid existing object is left alone.
+match their address; a valid existing object is never rewritten.
+
+A write that finds its bytes already present is a REUSE, and a reuse claims
+the object: its mtime becomes now (:func:`claim_object`). The sweeper keeps
+anything claimed within its grace window and deletes only by rename, then
+recheck (:func:`delete_unclaimed`), so an object a publish has claimed is
+never deleted under it (STORE.md §8).
 """
 
 from __future__ import annotations
 
 import contextlib
 import hashlib
+import os
 import shutil
+import time
 from pathlib import Path
 from typing import Iterator
 
-from cadgen._internal.atomic_replace import replace_atomic, temp_suffix
+from cadgen._internal.atomic_replace import (
+    RETRY_DELAYS_SECONDS,
+    WINDOWS_SHARING_VIOLATION,
+    move_atomic,
+    replace_atomic,
+    temp_suffix,
+)
 from cadgen.store.paths import objects_dir
 
 
@@ -76,11 +90,106 @@ def _replace_object(tmp: Path, target: Path, digest: str, *, repair: bool) -> No
             tmp.unlink(missing_ok=True)
 
 
+def _claim(path: Path) -> bool:
+    """Set ``path``'s mtime to now. False only when the file is gone.
+
+    Windows refuses the timestamp write while another process holds the file
+    open (a sharing violation, WinError 32), so that one wait gets the same
+    bounded ladder the renames use. Any other refusal (a read-only store,
+    another owner's file) leaves the object as it is: claiming is never a new
+    way for a write to fail where finding the bytes used to succeed.
+    """
+    for delay in (*RETRY_DELAYS_SECONDS, None):
+        try:
+            os.utime(path)
+            return True
+        except FileNotFoundError:
+            return False
+        except OSError as error:
+            if getattr(error, "winerror", None) == WINDOWS_SHARING_VIOLATION and delay is not None:
+                time.sleep(delay)
+                continue
+            return path.is_file()
+    return path.is_file()
+
+
+def claim_object(digest: str) -> bool:
+    """Claim an existing object for whatever is about to reference it.
+
+    True: the object is there and its mtime is now (or the store refused the
+    timestamp, and it is still there). False: it is gone -- a sweep took it
+    first -- and the caller writes its bytes again, or fails when it holds none.
+    """
+    try:
+        return _claim(object_path(digest))
+    except ValueError:
+        return False
+
+
+SWEPT = ".swept"
+
+
+def swept_address(path: Path) -> Path | None:
+    """The object path a sweep's held file (:func:`delete_unclaimed`) came from;
+    None for any other file."""
+    name = path.name
+    if not name.startswith(".") or SWEPT + "." not in name:
+        return None
+    return path.with_name(name[1:name.index(SWEPT + ".")])
+
+
+def delete_unclaimed(path: Path, cutoff: float) -> int:
+    """Delete one object nothing reaches unless it was claimed after ``cutoff``.
+
+    Returns the bytes freed, 0 when the object stays. The check and the delete
+    cannot be one step, so the object is first renamed out of reach and its
+    mtime read again from the renamed file: a writer that claimed it before
+    the rename shows in that mtime, and the object goes back; a writer that
+    comes after the rename finds it gone and writes it again. Either way no
+    claim is lost. A rename refused because the file is in use (Windows) just
+    leaves the object for a later sweep. A pass that dies holding an object
+    leaves it under :func:`swept_address`'s name, and the next one puts a
+    claimed one back.
+    """
+    try:
+        if path.stat().st_mtime > cutoff:
+            return 0
+    except OSError:
+        return 0
+    held = path.with_name(f".{path.name}{SWEPT}{temp_suffix()}")
+    try:
+        move_atomic(path, held)
+    except OSError:
+        return 0
+    try:
+        stat = held.stat()
+    except OSError:
+        return 0
+    if stat.st_mtime > cutoff:
+        try:
+            move_atomic(held, path)
+        except OSError:
+            # A writer has published the same bytes at the address since.
+            with contextlib.suppress(OSError):
+                held.unlink()
+        return 0
+    try:
+        held.unlink()
+    except OSError:
+        return 0
+    return stat.st_size
+
+
 def put_object(data: bytes, *, repair: bool = False) -> str:
-    """Store ``data``; return its hash. Idempotent and atomic."""
+    """Store ``data``; return its hash. Idempotent and atomic.
+
+    Bytes already present are claimed (:func:`claim_object`) instead of
+    rewritten; bytes a sweep removed between the check and the claim are
+    written again.
+    """
     digest = object_hash(data)
     target = object_path(digest)
-    if target.is_file() and (not repair or _object_matches(target, digest)):
+    if target.is_file() and (not repair or _object_matches(target, digest)) and _claim(target):
         return digest
     _mkdir(target.parent)
     tmp = target.with_name(f".{target.name}{temp_suffix()}")
@@ -99,7 +208,7 @@ def put_object_from_file(path: Path, *, repair: bool = False) -> str:
             digest.update(chunk)
     hexdigest = digest.hexdigest()
     target = object_path(hexdigest)
-    if target.is_file() and (not repair or _object_matches(target, hexdigest)):
+    if target.is_file() and (not repair or _object_matches(target, hexdigest)) and _claim(target):
         return hexdigest
     _mkdir(target.parent)
     tmp = target.with_name(f".{target.name}{temp_suffix()}")

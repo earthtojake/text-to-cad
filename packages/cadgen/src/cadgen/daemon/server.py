@@ -42,6 +42,7 @@ import time
 import traceback
 
 from cadgen.daemon import transport
+from cadgen.daemon.housekeeping import Housekeeper
 from cadgen.daemon.jobs import JobLedger, failure_message
 from cadgen.daemon.client import (
     compute_version_token,
@@ -508,6 +509,9 @@ _INFLIGHT: set[threading.Thread] = set()
 _JOBS = JobLedger()
 _STARTED_AT = time.time()
 _REQUESTS_SERVED = [0]
+# Idle-time store housekeeping (STORE.md §8): retire old index kinds, evict to
+# the cap. It never starts, or continues, while a request is in flight.
+_HOUSEKEEPER = Housekeeper(active=lambda: bool(_active_requests()), log=lambda message: _log(message))
 
 
 def _serve_connection(conn, request) -> None:
@@ -517,6 +521,7 @@ def _serve_connection(conn, request) -> None:
         _log("unhandled error serving a job:\n" + traceback.format_exc())
     finally:
         _INFLIGHT.discard(threading.current_thread())
+        _HOUSEKEEPER.note(request.get("store_root"), request.get("env"))
         with contextlib.suppress(OSError):
             conn.close()
 
@@ -623,6 +628,7 @@ def serve() -> int:
     # the side: the watchdog closes the listener, which makes the pending accept return.
     # Closing is portable across both families and does not reach into Listener internals.
     state = {"last_activity": time.monotonic(), "idle_exit": False, "draining": False}
+    _HOUSEKEEPER.active = lambda: bool(_active_requests()) or state["draining"] or server.closed
 
     def _watch_for_idle() -> None:
         slice_seconds = max(0.5, min(idle_timeout / 4, 5.0))
@@ -632,8 +638,8 @@ def serve() -> int:
                 return
             _POOL.unbind_idle()
             active = _active_requests()
-            if active:
-                state["last_activity"] = time.monotonic()  # a long build is not idleness
+            if active or _HOUSEKEEPER.busy():
+                state["last_activity"] = time.monotonic()  # a long build is not idleness, nor a pass
                 continue
             if state["draining"]:
                 server.close()
@@ -642,6 +648,7 @@ def serve() -> int:
                 state["idle_exit"] = True
                 server.close()
                 return
+            _HOUSEKEEPER.tick()
 
     threading.Thread(target=_watch_for_idle, daemon=True).start()
 
@@ -723,6 +730,7 @@ def serve() -> int:
         return 0
     finally:
         _release_address()
+        _HOUSEKEEPER.stop()
         _POOL.shutdown()
 
 

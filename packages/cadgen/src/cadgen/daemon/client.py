@@ -65,13 +65,15 @@ _TIMED_OUT = object()
 # client's cwd, because the worker runs elsewhere.
 # CADGEN_FFMPEG is the same kind of per-client choice: `snapshot --video` encodes
 # with the ffmpeg the CALLER has, and a warm worker's ambient PATH is whatever
-# shell happened to start the daemon.
+# shell happened to start the daemon. CADGEN_STORE_MAX is the cap the daemon's
+# idle housekeeping holds the client's store to (STORE.md §8).
 FORWARDED_ENV_VARS = (
     "CADGEN_CACHE_DIR",
     "XDG_CACHE_HOME",
     "LOCALAPPDATA",
     "PYTHONPATH",
     "CADGEN_FFMPEG",
+    "CADGEN_STORE_MAX",
 )
 
 # The client's own ffmpeg, looked up once per process. Resolved HERE rather than

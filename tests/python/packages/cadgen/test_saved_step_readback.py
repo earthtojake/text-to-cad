@@ -613,7 +613,8 @@ class ObjectRepairTest(unittest.TestCase):
         with mock.patch.object(objects, "replace_atomic", side_effect=AssertionError("rewrote valid object")):
             self.assertEqual(objects.put_object(payload, repair=True), digest)
             self.assertEqual(objects.put_object_from_file(source, repair=True), digest)
-        self.assertEqual(path.stat().st_mtime_ns, original_stat.st_mtime_ns)
+        # Claimed in place for the sweeper's grace window (STORE.md §8), never rewritten.
+        self.assertEqual(path.stat().st_ino, original_stat.st_ino)
         for writer in (lambda: objects.put_object(payload, repair=True),
                        lambda: objects.put_object_from_file(source, repair=True)):
             path.write_bytes(b"corrupt bytes")

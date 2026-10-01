@@ -18,7 +18,7 @@ right.
 | [5](#5-invariants) | Each invariant with the failure it prevents | any store write |
 | [6](#6-link-or-component) | Whether a child becomes a link or the parent's geometry | composition, materialize, packaging |
 | [7](#7-concurrency) | Why there is no lock | concurrent builds, publish races |
-| [8](#8-gc) | The only sweeper | anything that deletes |
+| [8](#8-gc-eviction-and-the-cap) | The sweeper: retired kinds, eviction to the cap, unreachable objects, and why a pass needs no lock | anything that deletes |
 | [9](#9-the-daemon) | The build pool, job ledger and slots | daemon, workers, jobs |
 | [9a](#9a-lazy-children) | Lazy children: pins at the call, forcing, exact-`Compound` reference preservation | a decorated call's return, parallel child builds |
 | [9b](#9b-editing-previews-and-explicit-saves) | Announced preview trees, the feed, explicit saves | the viewer's live-edit path |
@@ -44,6 +44,8 @@ One word per concept; the code uses these words and no others.
 | **index** | the input-addressed side of the store: records, bounds, mesh entries |
 | **closure** | what a model's build depended on: the source it reaches, the files it read, the folders it listed, and the files its imports rely on not existing |
 | **stale / current**, **gate** | the freshness state and the check that decides it |
+| **claim** | what a write does to an object it finds already present: its mtime becomes now, so the sweeper's grace window covers it (§8) |
+| **evict** | drop a derived entry to keep the store under its cap; only the derived kinds are ever evicted (§8) |
 | **worker / spare / extra**, **job** | daemon vocabulary (the daemon's own documentation) |
 
 Retired words: node, package, manifest, ref (as a store concept), scope, blob.
@@ -75,6 +77,9 @@ Nothing else lives under the root. A build's progress is process state, not
 content: the daemon's job ledger, read over its socket (§7, §9). Editing
 previews use the same immutable objects, with ephemeral request handles in
 that ledger (§9b); there is no preview directory or persistent session index.
+A folder under `index/` that is not listed here is a **retired kind** --
+`index/op`, the operation cache of cadgen 0.7.4 and earlier, is one. Nothing
+reads it, and the sweeper removes it with every object only it named (§8).
 
 `index/bounds` holds bounding boxes of stored geometry (`store/bounds.py`).
 A key names what was measured and how: a component's BREP object hash or a
@@ -743,6 +748,18 @@ Each with the failure it prevents.
   the project; the record validates them by sha (clause 5). Prevents: a
   store wipe destroying a user's documents, and a document pretending to be
   current after a hand edit.
+- **A hit is a read.** No reader writes the store: a mesh probe, a surface
+  lookup, a bounds hit, a document lookup, the gate, a materialized pin --
+  none refreshes a stamp or an mtime, so "recently used" for eviction means
+  recently written (§8). Prevents: a store this user cannot write failing
+  every build that only hits it, which the last-use stamps an earlier
+  eviction wrote on each hit did.
+- **A write claims what it reuses.** Bytes a write finds already present are
+  claimed (their mtime becomes now) instead of skipped, and a publish claims
+  its record's whole closure before it writes the record; the sweeper deletes
+  only by rename, then recheck (§8). Prevents: a sweep that began before a
+  publish deleting an object the new record reuses, out of a grace window
+  that never saw the reuse.
 - **No locks are needed for correctness.** Objects are idempotent, entries
   are temp+rename, the publish rule decides concurrent same-model outcomes,
   pins isolate parents. There is no lock layer (§7); two builders of one
@@ -879,6 +896,11 @@ are not cancelled merely because a newer editing request exists.
 - **Edit a parent while a child builds.** Unrelated: the child's record and
   tree are its own. The parent's next build calls the child, finds it
   current, and pins the new tree.
+- **A sweep beside a build.** A pass never coordinates with builds: a write
+  claims what it reuses, a publish claims its record's closure, and the
+  sweeper deletes by rename, then recheck (§5, §8), so no record is written
+  naming an object a concurrent pass took. The daemon runs its own passes
+  only while it has no request in flight.
 - **Dependency waits** release the parent's CPU slot but retain its geometry
   and memory reservation. A coalesced child may have been started by another
   consumer; it must remain alive while any required consumer uses it.
@@ -920,19 +942,88 @@ missing derived objects are compiled from the bytes that actually exist.
 Explicit regeneration repairs the annotation pair. No reader consults locks
 or source to recover an artifact.
 
-## 8. GC
+## 8. GC, eviction and the cap
 
-`cadgen store gc [--dry-run] [--grace-hours H]` — mark and sweep. Reachable =
-every object referenced (transitively, through links) from a record's result
-and document trees or a current-schema document index, plus the
-objects component/op/mesh entries point at, plus anything modified within the
-grace period (default 1 h — the window in which a build may still hold a pin
-to a child's previous tree). A saved document retains its geometry even after
-model/output records are forgotten. Its mesh ledger records hashes of external
-output files; those hashes do not root store objects. No age sweeps, no per-tier rules. GC does not
-consult the daemon: the grace period is the whole protection for a build in
-flight, so do not sweep with `--grace-hours 0` while anything is building.
-Nothing runs GC automatically.
+One sweeper, `cadgen.store.gc`: by hand as `cadgen store gc [--dry-run]
+[--grace-hours H] [--max-size [SIZE]]`, and by the daemon when idle (below). A
+pass scans the store once (names, sizes, mtimes), marks once, and removes three
+kinds of thing:
+
+1. **Retired kinds.** A folder under `index/` that is not in `INDEX_KINDS`
+   (`index/op`, §2) goes, with every object only its entries named. An entry
+   naming an object the grace window still keeps waits for the next pass, so
+   that object goes with its kind rather than with the next full sweep.
+2. **Evicted entries**, only under a cap: the derived kinds -- `mesh`,
+   `surface`, `component`, `bounds`, `drawing` -- least recently written
+   first, until the store fits 80% of the cap. Sizes are deduplicated: an
+   object goes only when nothing that stays still needs it, so evicting a
+   component entry whose BREP a current tree places frees only the entry.
+   When what no pass may remove leaves less room than the fifth of the cap
+   above that 80%, the most recently written derived entries keep that fifth:
+   a cap the records and documents outgrew never empties every derived cache.
+   **Records, document entries and output entries are never evicted.**
+3. **Unreachable objects.** Kept: every object in the closure, through links,
+   of a current-schema record's `tree` or `documentTree` or a current-schema
+   document entry's tree (the *protected* set); every object a surviving
+   derived entry names; anything written or claimed within the grace window
+   (default 1 h). Everything else goes, and so do temp files a crashed writer
+   or an interrupted pass left, once past the grace window. A saved document
+   retains its geometry even after model/output records are forgotten; its
+   mesh ledger records hashes of external output files, which root nothing.
+
+**Recently used means recently written.** A hit is a read (§5). An entry's age
+is when a build or a derivation last wrote it -- a publish rewrites every
+component entry its tree has; a derivation writes the surface, mesh, bounds or
+drawing entry it computed -- and an object's is when a publish last wrote or
+claimed it. A display cache that is only ever read ages, goes when the cap needs
+the room, and costs one recomputation when it is next shown. Evicting never
+changes an answer: every reader treats a missing entry or object as a miss.
+
+**Deletion is rename, then recheck** (`objects.delete_unclaimed`). A write that
+finds its bytes already present claims them (`objects.put_object`,
+`objects.claim_object`), and a publish claims its record's whole closure --
+its own components, and a child's tree it pinned long before -- right before it
+writes the record (`trees.claim_tree`). The sweeper renames an object it means
+to delete, then reads the mtime again from the renamed file: a claim made
+before the rename shows there, and the object goes back; a claim made after it
+finds the object gone and writes the bytes again, or fails the publish when it
+holds none -- never writing a record that names a missing object. So a pass may
+run beside builds without a lock. The grace window is the whole protection for
+a pin a build holds before its publish, so do not sweep with `--grace-hours 0`
+while anything is building.
+
+The mark reads JSON only: records, document entries, derived entries and each
+tree they reach, once each, verified against its address. A leaf object counts
+by being there; whoever reads its bytes verifies them and repairs or recompiles
+a damaged one, so the sweep never reads a BREP or SURF body.
+
+**The cap** is `CADGEN_STORE_MAX` (`20G`, `500M`, `1.5GiB`, `0` for none;
+default 20 GiB) over the apparent bytes of `objects/` and `index/`. `cadgen
+store info` shows the size against it.
+
+**The daemon's housekeeping.** When a request against a store finishes and no
+request has been in flight for 30 s, the daemon looks at that store once, under
+the cap the requesting client had in force (`CADGEN_STORE_MAX` is forwarded
+with every request):
+
+- larger than `max(cap, after + cap/5)` -- `after` being where its last pass
+  under that cap ended -- gets a full pass with the cap;
+- otherwise, a store holding a retired kind gets a retiring pass, which sweeps
+  only the objects the retired entries named.
+
+`after` is noted beside the daemon's socket, per store, in its state
+directory, so a store whose records and documents alone hold more than the
+cap costs one pass per fifth of the cap it grows -- never one per idle moment,
+nor one per daemon start; losing the note costs one pass. The look itself is
+a stat walk that keeps nothing per file. A pass runs as `python -m
+cadgen.store.gc`, a process of its own, so the record it keeps per object and
+entry leaves with it rather than staying in the daemon; the daemon closes its
+stdin the moment a request arrives or it winds down, and the pass stops at its
+next step. Every step leaves a consistent store, so stopping anywhere is safe
+and the next idle look picks it up; even a pass killed between a rename and
+its recheck leaves the object under a `.swept` name, which the next pass puts
+back if it was claimed and deletes if not. With `CADGEN_DAEMON=0` nothing runs
+automatically; `cadgen store gc --max-size` runs a pass by hand.
 
 ## 9. The daemon
 
@@ -1001,7 +1092,8 @@ start twenty daemons that unlinked each other's live sockets.
 The **store root is a field on every request** (`store_root`), applied per
 job in the worker, never inherited from whichever build spawned the daemon:
 one daemon serves any number of isolated stores. The daemon holds no store
-state of its own. `cadgen daemon status` reports each worker's `model`,
+state of its own beyond where each store's last housekeeping pass ended
+(§8). `cadgen daemon status` reports each worker's `model`,
 `busy`, `jobs`, `extra`, plus `spares`, `imports` (cold spawns),
 `concurrent` (extras bound) and `jobs running n/N, queued m, coalesced k`;
 `--json` adds the **job ledger** (`cadgen.daemon.jobs`): every job the
@@ -1333,8 +1425,9 @@ supersession does not cancel their exports.
   isolated and returns a newly parsed flattened view to every caller.
   Components carry `brep`, `codec` and `faceColors`; display SURF resolves
   separately through `store.surfaces` and `index/surface`.
-- `cadgen store info` sizes the store. `cadgen store gc --dry-run` lists what
-  a sweep would remove.
+- `cadgen store info` sizes the store against its cap and names any retired
+  kind still present. `cadgen store gc --dry-run [--max-size [SIZE]]` reports
+  what a pass would retire, evict and remove, and deletes nothing.
 - **Resets, smallest first.** `python model.py --force` rebuilds one model
   now. `cadgen store forget <model.py>` drops that model's record (the next
   run rebuilds it; children untouched, parents see the moved pin then);
@@ -1364,9 +1457,12 @@ supersession does not cancel their exports.
   `index/document` → objects.
 - Make a reader refuse, or a door rebuild from source: a missing tree is a
   compile job from the file's bytes; "behind its script" is `store why`'s.
-- Run automatic persistent-store GC or use process/display eviction as a
-  reason to mutate exact geometry. Disposable memory budgets and worker
-  reclamation follow §9 and never determine saved-artifact freshness.
+- Write to the store on a read: no hit refreshes a stamp or an mtime (§5).
+- Evict a record, a document entry or an output entry, or delete an object any
+  way but rename, then recheck (§8).
+- Use process/display eviction as a reason to mutate exact geometry. Disposable
+  memory budgets and worker reclamation follow §9 and never determine
+  saved-artifact freshness.
 - Let a decorator argument change the geometry a model produces: arguments
   place files, tune how they are written, and declare kinematics; the tree
   is the return value as returned (README law 16).

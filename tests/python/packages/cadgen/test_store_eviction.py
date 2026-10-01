@@ -1,0 +1,386 @@
+"""Disk management (STORE.md §8): the old operation cache retired, a size cap
+with least-recently-written eviction, and the three ways an earlier version of
+it broke -- a hit that wrote, a reused object swept under a fresh record, and a
+full pass rerun while records alone overfilled the cap. Tiny stores in fresh
+temporary directories; no kernel."""
+
+from __future__ import annotations
+
+import base64
+import hashlib
+import json
+import os
+import time
+import unittest
+from pathlib import Path
+from unittest import mock
+
+from tests.python.support.paths import add_repo_path
+from tests.python.support.tmp_root import generated_cad_directory
+
+add_repo_path("packages/cadgen/src")
+
+HOUR = 3600.0
+
+
+class StoreSweepCase(unittest.TestCase):
+    def setUp(self) -> None:
+        self.tmp = generated_cad_directory(prefix="store-evict-")
+        self.addCleanup(self.tmp.cleanup)
+        self.root = Path(self.tmp.name)
+        self.store = self.root / "store"
+        patch = mock.patch.dict(os.environ, {"CADGEN_CACHE_DIR": str(self.store)})
+        patch.start()
+        self.addCleanup(patch.stop)
+        os.environ.pop("CADGEN_STORE_MAX", None)
+
+    # --- fixtures -------------------------------------------------------------
+
+    def seed_document(self) -> tuple[str, str]:
+        """A record, its document entry, its tree, a component and its surface;
+        returns (tree, the component's brep object)."""
+        from cadgen.store.trees import get_tree
+        from tests.python.support.store_fixtures import seed_result
+
+        document = self.root / "part.step"
+        document.write_bytes(b"fixture document")
+        tree = seed_result(document)
+        return tree, next(iter(get_tree(tree)["components"].values()))["brep"]
+
+    def old(self, path: Path, age: float = 3 * HOUR) -> None:
+        then = time.time() - age
+        os.utime(path, (then, then))
+
+    def old_object(self, payload: bytes, age: float = 3 * HOUR) -> str:
+        from cadgen.store.objects import object_path, put_object
+
+        digest = put_object(payload)
+        self.old(object_path(digest), age)
+        return digest
+
+    def drawing_entry(self, key: str, payload: bytes, age: float) -> str:
+        """A derived entry and the object only it names, last written ``age`` ago."""
+        from cadgen.store.drawings import DRAWING_ENTRY_SCHEMA_VERSION
+        from cadgen.store.index import entry_path, write_entry
+
+        digest = self.old_object(payload, age)
+        write_entry("drawing", key, {"schemaVersion": DRAWING_ENTRY_SCHEMA_VERSION, "object": digest})
+        self.old(entry_path("drawing", key), age)
+        return digest
+
+    def op_entry(self, key: str, payload: dict, *, kind: str = "op", age: float = 3 * HOUR) -> None:
+        """An entry of an index kind this cadgen no longer defines."""
+        folder = self.store / "index" / kind
+        folder.mkdir(parents=True, exist_ok=True)
+        (folder / key).write_text(json.dumps(payload), encoding="utf-8")
+        self.old(folder / key, age)
+
+    def snapshot(self) -> dict[str, tuple[int, int]]:
+        found = {}
+        for folder, _dirs, files in os.walk(self.store):
+            for name in files:
+                stat = os.stat(os.path.join(folder, name))
+                found[os.path.relpath(os.path.join(folder, name), self.store)] = (stat.st_size, stat.st_mtime_ns)
+        return found
+
+
+class HitsNeverWrite(StoreSweepCase):
+    """Bug 1: last-use stamps refreshed on a hit made every hit a write, and a
+    store this user cannot write failed the build that hit it."""
+
+    def test_every_cache_hit_is_a_pure_read(self) -> None:
+        from cadgen.store import bounds, drawings, meshes, surfaces
+        from cadgen.store.gate import stale
+        from cadgen.store.records import tree_for_document_hash
+        from cadgen.store.trees import capture_tree, get_tree
+        from tests.python.support.store_fixtures import FIXTURE_SURFACE_PRODUCER
+        from tests.python.support.tessellation import tessellation_fixture
+
+        tree, _brep = self.seed_document()
+        component = next(iter(get_tree(tree)["components"].values()))
+        mesh = tessellation_fixture()
+        meshes.write(mesh["key"], base64.b64decode(mesh["bytes"]))
+        drawings.write("d" * 64, b"drawing payload")
+        versions = ("0.11.1", "7.9.3.1", "7.9.3.1.1")
+        with mock.patch.object(bounds, "kernel_versions", return_value=versions):
+            bounds.cached_box("test-box", ("brep", 1), lambda: [0.0, 0.0, 0.0, 1.0, 2.0, 3.0])
+        bounds.clear()
+        before = self.snapshot()
+
+        def never_measured():
+            raise AssertionError("a hit measures nothing and writes nothing")
+
+        with mock.patch.object(bounds, "kernel_versions", return_value=versions):
+            self.assertEqual(bounds.cached_box("test-box", ("brep", 1), never_measured), [0.0, 0.0, 0.0, 1.0, 2.0, 3.0])
+        self.assertFalse(stale(self.root / "part.step").stale)
+        self.assertEqual(tree_for_document_hash(hashlib.sha256(b"fixture document").hexdigest()), tree)
+        self.assertIsNotNone(capture_tree(tree, retain_payloads=False))
+        self.assertIsNotNone(surfaces.lookup(component, FIXTURE_SURFACE_PRODUCER))
+        self.assertIsNotNone(meshes.probe(mesh["key"]))
+        self.assertIsNotNone(meshes.read(mesh["key"]))
+        self.assertEqual(drawings.read("d" * 64), b"drawing payload")
+        self.assertEqual(self.snapshot(), before, "nothing under the store changed")
+
+
+class ReusedObjectsSurvive(StoreSweepCase):
+    """Bug 2: a write that found its bytes already present left their mtime
+    alone, so the grace window never covered an object a just-published record
+    reused, and a running sweep deleted it."""
+
+    def test_an_object_reused_after_a_sweep_began_is_kept(self) -> None:
+        from cadgen.store import gc
+        from cadgen.store.objects import has_object, put_object
+
+        reused = b"component bytes no record reaches at the sweep's mark"
+        digest = self.old_object(reused)
+        garbage = self.old_object(b"bytes nobody reuses")
+        mark = gc.protected_objects
+
+        def mark_then_publish(found, **kwargs):
+            protected = mark(found, **kwargs)
+            put_object(reused)  # a build publishes the same bytes while the sweep runs
+            return protected
+
+        with mock.patch.object(gc, "protected_objects", side_effect=mark_then_publish):
+            report = gc.collect()
+        self.assertTrue(has_object(digest))
+        self.assertFalse(has_object(garbage))
+        self.assertEqual(report.removed, 1)
+
+    def test_a_claim_between_the_sweeps_check_and_its_delete_is_not_lost(self) -> None:
+        from cadgen.store import objects
+        from cadgen.store.objects import object_path, read_verified_object
+
+        payload = b"claimed in the instant after the sweep checked it"
+        digest = self.old_object(payload)
+        path = object_path(digest)
+        real_stat = type(path).stat
+        checked = []
+
+        def claimed_after_check(self_path, *args, **kwargs):
+            result = real_stat(self_path, *args, **kwargs)
+            if self_path == path and not checked:
+                checked.append(result)
+                os.utime(path)  # a publish claims it right after the sweep's check
+            return result
+
+        with mock.patch.object(type(path), "stat", claimed_after_check):
+            self.assertEqual(objects.delete_unclaimed(path, time.time() - HOUR), 0)
+        self.assertTrue(checked, "the sweep checked the object")
+        self.assertEqual(read_verified_object(digest), payload)
+        self.assertEqual([p.name for p in path.parent.iterdir()], [path.name], "no tombstone left")
+
+    def test_a_publish_claims_a_pinned_childs_whole_closure(self) -> None:
+        from cadgen.store import gc, trees
+        from cadgen.store.index import iter_entries, remove_entry
+        from cadgen.store.objects import has_object, object_path, read_verified_object
+        from cadgen.store.trees import IDENTITY_16, get_tree, put_tree
+
+        child, brep = self.seed_document()
+        for kind in ("model", "document", "surface"):
+            for key, _ in list(iter_entries(kind)):
+                remove_entry(kind, key)  # the child moved on: nothing reaches its old tree
+        parent = put_tree({"label": "parent", "units": "mm", "entryKind": "assembly", "components": {},
+                           "occurrences": [], "links": [{"id": "o1.1", "name": "child", "tree": child, "transform": IDENTITY_16}],
+                           "assembly": {"root": {"id": "o1", "nodeType": "assembly",
+                                                 "children": [{"id": "o1.1", "nodeType": "link", "children": []}]}}})
+        for digest in (parent, child, brep):
+            self.old(object_path(digest))
+        brep_bytes = read_verified_object(brep)
+        claim = trees.claim_object
+
+        def swept_after_verifying(digest):
+            if digest == brep:
+                object_path(brep).unlink()  # a sweep took it after the publish read it
+            return claim(digest)
+
+        mark = gc.protected_objects
+
+        def mark_then_claim(found, **kwargs):
+            protected = mark(found, **kwargs)
+            with mock.patch.object(trees, "claim_object", side_effect=swept_after_verifying):
+                self.assertTrue(trees.claim_tree(parent))
+            return protected
+
+        with mock.patch.object(gc, "protected_objects", side_effect=mark_then_claim):
+            gc.collect()
+        self.assertTrue(all(has_object(d) for d in (parent, child, brep)))
+        self.assertEqual(read_verified_object(brep), brep_bytes)
+        self.assertEqual(get_tree(parent)["links"][0]["tree"], child)
+
+
+    def test_a_pass_that_died_holding_a_claimed_object_puts_it_back(self) -> None:
+        from cadgen._internal.atomic_replace import temp_suffix
+        from cadgen.store import gc
+        from cadgen.store.objects import SWEPT, object_path
+
+        held = {}
+        for name, claimed in (("claimed", True), ("unclaimed", False)):
+            payload = f"held when its pass died: {name}".encode()
+            path = object_path(self.old_object(payload))
+            held[name] = (path, path.with_name(f".{path.name}{SWEPT}{temp_suffix()}"), payload)
+            os.replace(path, held[name][1])  # renamed out of reach; the recheck never ran
+            if claimed:
+                os.utime(held[name][1])  # a publish had claimed it just before the rename
+        report = gc.collect(should_stop=lambda: True)
+        self.assertTrue(report.stopped, "a pass asked to stop ends at its first step")
+        self.assertTrue(held["claimed"][1].exists() and held["unclaimed"][1].exists(), "and touches nothing")
+
+        gc.collect()
+        path, _, payload = held["claimed"]
+        self.assertEqual(path.read_bytes(), payload, "a claimed object goes back to its address")
+        self.assertFalse(held["unclaimed"][0].exists() or held["unclaimed"][1].exists())
+        self.assertEqual([p.name for p in self.store.joinpath("objects").rglob(f"*{SWEPT}*")], [])
+
+
+class CapPasses(StoreSweepCase):
+    """Bug 3: an idle daemon reran a full pass every few minutes while records
+    and documents alone held more than the cap, though no pass could help."""
+
+    def test_records_alone_over_the_cap_cost_one_pass_per_fifth_of_the_cap(self) -> None:
+        from cadgen.daemon.housekeeping import Housekeeper
+        from cadgen.store import gc
+
+        tree, brep = self.seed_document()
+        derived = self.drawing_entry("a" * 64, b"x" * 4000, age=5 * HOUR)
+        newest = self.drawing_entry("b" * 64, b"n" * 200, age=2 * HOUR)
+        found = gc.scan()
+        cap = 2000  # below what the record and document alone keep
+        self.assertGreater(sum(found.objects[d][0] for d in gc.protected_objects(found)), cap)
+        housekeeper = Housekeeper(active=lambda: False, state_dir=lambda: self.root / "daemon")
+        real_pass = Housekeeper._pass
+
+        with mock.patch.object(Housekeeper, "_pass", autospec=True, side_effect=real_pass) as passes:
+            housekeeper.look(str(self.store), cap)
+            self.assertEqual(passes.call_count, 1)
+            self.assertFalse((self.store / "objects" / derived[:2] / derived[2:]).exists(), "evicted")
+            self.assertTrue((self.store / "objects" / brep[:2] / brep[2:]).exists(), "a record's geometry is never evicted")
+            self.assertTrue((self.store / "objects" / newest[:2] / newest[2:]).exists(),
+                            "the most recent derived entries keep a fifth of the cap")
+            housekeeper.look(str(self.store), cap)
+            Housekeeper(active=lambda: False, state_dir=lambda: self.root / "daemon").look(str(self.store), cap)
+            self.assertEqual(passes.call_count, 1, "no pass while nothing a pass could free has grown, across daemons")
+
+            self.drawing_entry("c" * 64, b"y" * (cap // 5 + 1000), age=1.5 * HOUR)
+            housekeeper.look(str(self.store), cap)
+            self.assertEqual(passes.call_count, 2, "a fifth of the cap of growth earns the next pass")
+
+
+class Retirement(StoreSweepCase):
+    def test_retiring_the_operation_cache_takes_only_what_it_alone_named(self) -> None:
+        from cadgen.store import gc
+        from cadgen.store.objects import has_object, put_object
+
+        tree, brep = self.seed_document()
+        only_op = self.old_object(b"an op-memo shape")
+        reused = b"an op-memo shape a build publishes during the retirement"
+        reused_digest = self.old_object(reused)
+        fresh = put_object(b"an op-memo shape from the last hour")
+        verdict = self.old_object(b"an entry of another retired kind")
+        garbage = self.old_object(b"unreachable, but not the retired kinds' to take")
+        recipe = {"op": "fillet", "args": ["x" * 64]}
+        self.op_entry("1" * 64, {"object": only_op, "cls": "build123d.topology.Solid", "recipe": recipe})
+        self.op_entry("2" * 64, {"object": brep, "cls": "build123d.topology.Solid", "recipe": recipe})
+        self.op_entry("3" * 64, {"object": reused_digest, "cls": "build123d.topology.Solid", "recipe": recipe})
+        self.op_entry("4" * 64, {"object": fresh, "cls": "build123d.topology.Solid", "recipe": recipe})
+        self.op_entry("5" * 64, {"value": 42.0})
+        self.op_entry("6" * 64, {"memoScheme": 1, "object": verdict}, kind="verdict")
+        mark = gc.protected_objects
+
+        def mark_then_publish(found, **kwargs):
+            protected = mark(found, **kwargs)
+            put_object(reused)
+            return protected
+
+        with mock.patch.object(gc, "protected_objects", side_effect=mark_then_publish):
+            gc.collect(retired_only=True)
+        self.assertFalse(has_object(only_op))
+        self.assertFalse(has_object(verdict))
+        self.assertFalse((self.store / "index" / "verdict").exists())
+        self.assertTrue(has_object(brep), "shared with a current tree")
+        self.assertTrue(has_object(reused_digest), "claimed by a publish while retiring")
+        self.assertTrue(has_object(fresh), "inside the grace window")
+        self.assertTrue(has_object(garbage), "retiring sweeps only what the retired entries named")
+        self.assertEqual(sorted(p.name for p in (self.store / "index" / "op").iterdir()),
+                         sorted(["3" * 64, "4" * 64]), "entries naming objects the grace window kept wait for the next pass")
+
+        for digest in (reused_digest, fresh):
+            self.old(self.store / "objects" / digest[:2] / digest[2:])
+        gc.collect(retired_only=True)
+        self.assertFalse(has_object(fresh))
+        self.assertFalse(has_object(reused_digest))
+        self.assertFalse((self.store / "index" / "op").exists())
+        self.assertTrue(has_object(garbage))
+        gc.collect()
+        self.assertFalse(has_object(garbage))
+        self.assertTrue(has_object(tree) and has_object(brep))
+
+
+    def test_the_daemon_retires_a_retired_kind_on_its_own_under_the_cap(self) -> None:
+        from cadgen.daemon.housekeeping import Housekeeper
+        from cadgen.store.objects import has_object
+
+        tree, brep = self.seed_document()
+        shapes = [self.old_object(f"op-memo shape {i}".encode()) for i in range(3)]
+        for i, digest in enumerate(shapes):
+            self.op_entry(f"{i:064x}", {"object": digest, "cls": "build123d.topology.Solid", "recipe": {}})
+        housekeeper = Housekeeper(active=lambda: False, state_dir=lambda: self.root / "daemon")
+        line = housekeeper.look(str(self.store), 20 * 1024**3)
+        self.assertIn("retired index/op (3 entries)", line)
+        self.assertFalse((self.store / "index" / "op").exists())
+        self.assertFalse(any(has_object(d) for d in shapes))
+        self.assertTrue(has_object(tree) and has_object(brep))
+        self.assertIsNone(housekeeper.look(str(self.store), 20 * 1024**3), "nothing left to do")
+
+
+class LeastRecentlyWritten(StoreSweepCase):
+    def test_eviction_takes_the_oldest_derived_entries_and_never_a_record_or_document(self) -> None:
+        from cadgen.store import gc
+        from cadgen.store.index import iter_entries
+        from cadgen.store.objects import has_object
+
+        tree, brep = self.seed_document()
+        ages = {"a": 5, "b": 4, "c": 3, "d": 2}
+        objects = {name: self.drawing_entry(name * 64, name.encode() * 20000, age=hours * HOUR)
+                   for name, hours in ages.items()}
+        recent = self.drawing_entry("e" * 64, b"e" * 20000, age=600)
+        found = gc.scan()
+        weight = {name: found.entries["drawing"][name * 64][0] + found.objects[digest][0] for name, digest in objects.items()}
+        after_two = found.total - weight["a"] - weight["b"]
+        cap = int(after_two / gc.LOW_WATERMARK) + 1
+
+        report = gc.collect(max_bytes=cap)
+        self.assertEqual(report.evicted, {"drawing": 2})
+        self.assertEqual({name for name, digest in objects.items() if not has_object(digest)}, {"a", "b"})
+
+        report = gc.collect(max_bytes=1)
+        self.assertEqual(report.evicted, {"drawing": 2})
+        self.assertTrue(has_object(recent), "an entry written inside the grace window is leased")
+        self.assertEqual(len(list(iter_entries("model"))), 1)
+        self.assertEqual(len(list(iter_entries("document"))), 1)
+        self.assertTrue(has_object(tree) and has_object(brep))
+
+    def test_an_entry_written_again_after_the_scan_stays(self) -> None:
+        from cadgen.store import gc
+        from cadgen.store.index import entry_path
+        from cadgen.store.objects import has_object, put_object
+
+        payload = b"z" * 20000
+        digest = self.drawing_entry("f" * 64, payload, age=5 * HOUR)
+        real_scan = gc.scan
+
+        def scan_then_rewrite():
+            found = real_scan()
+            put_object(payload)
+            os.utime(entry_path("drawing", "f" * 64))  # a derivation writes it again
+            return found
+
+        with mock.patch.object(gc, "scan", side_effect=scan_then_rewrite):
+            report = gc.collect(max_bytes=1)
+        self.assertEqual(report.evicted, {})
+        self.assertTrue(entry_path("drawing", "f" * 64).is_file())
+        self.assertTrue(has_object(digest))
+
+
+if __name__ == "__main__":
+    unittest.main()

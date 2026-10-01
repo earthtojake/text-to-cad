@@ -140,3 +140,16 @@ test("filesystem writes bound inspection and verification of CAS objects", (t) =
   assert.equal(fs.statSync(object).size, row.byteLength);
   assert.deepEqual([...fs.readFileSync(object)], [...bytes]);
 });
+
+test("a write that reuses an existing object claims it for the store's sweep", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "cadgen-tess-fs-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const env = { CADGEN_CACHE_DIR: root };
+  const key = tessellationCacheKey(D, Q);
+  const row = writeCachedTessellationBytes(key, payload(), env);
+  const object = path.join(root, "objects", row.object.slice(0, 2), row.object.slice(2));
+  const old = new Date(Date.now() - 3 * 3600 * 1000);
+  fs.utimesSync(object, old, old);
+  writeCachedTessellationBytes(key, payload(), env);
+  assert.ok(fs.statSync(object).mtimeMs > Date.now() - 60 * 1000, "the grace window covers the reused object again");
+});

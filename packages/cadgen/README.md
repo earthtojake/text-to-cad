@@ -90,12 +90,20 @@ that information is in the wrong place.
 
 **The store is what the sources imply; the sidecar is what the author meant.**
 
-There is no automatic GC: `cadgen store gc` is the only sweeper, and every
-object is immutable and idempotently written, so deletion never needs
-coordination — a racing reader re-misses and rebuilds. Store correctness needs
+The store holds itself to a size cap (`CADGEN_STORE_MAX`, default 20 GB): the
+daemon, when idle, evicts derived entries (mesh, surface, component, bounds,
+drawing) least recently written first and sweeps what nothing reaches, and
+retires on sight any index kind this cadgen no longer defines. A record, a
+document entry or an output entry is never evicted. `cadgen store gc` does
+the same by hand (`STORE.md` §8). A read never writes the store, and a write
+that finds its bytes already present claims them, so deletion needs no
+coordination: a sweep keeps whatever a publish has claimed, and a racing
+reader re-misses and rebuilds. Store correctness needs
 no lock protocol: atomic writes, pins and the publish rule (`STORE.md` §5, §7)
 decide concurrent outcomes. Saved-file readers never wait for a source model
 to finish; missing derived artifacts are resolved through the build pool.
+*Pressure-test*: build a model and snapshot it, make the store read-only, then
+do both again: each succeeds and nothing under the store changes.
 
 ### 3. One sidecar per artifact, and it belongs to that artifact alone
 
@@ -321,7 +329,9 @@ de-duplications (an order-keeping set, and a `Vertex` hash by point that
 leaves equality alone), lazy children defer a child's geometry until it is
 read (`STORE.md` §9a), and the file trace only watches what the run opens
 (`STORE.md` §5). An expensive or independently edited part gets its
-speed by being its own model, never from a cache inside one.
+speed by being its own model, never from a cache inside one. What an older
+cadgen cached inside a run (`index/op`, the operation cache) is never read,
+and is retired with every object only it named (`STORE.md` §8).
 *Pressure-test*: call a model's function under plain Python and inside a
 cadgen build; the geometry it returns, and the answer to every `==` and
 `is_same` along the way, are the same.

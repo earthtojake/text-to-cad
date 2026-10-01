@@ -37,7 +37,7 @@ import threading
 import time
 from typing import Any
 
-from cadgen.store.objects import object_path, put_object, read_verified_object
+from cadgen.store.objects import claim_object, object_path, put_object, read_verified_object
 
 TREE_KIND = "geometry-tree"
 TREE_SCHEMA = 2
@@ -126,6 +126,26 @@ def tree_complete(tree_hash: str) -> bool:
         return True
     except (OSError, ValueError, TypeError, KeyError, RuntimeError, OverflowError):
         return False
+
+
+def claim_tree(tree_hash: str) -> bool:
+    """:func:`tree_complete` for a publish: verify the closure, then claim all of it.
+
+    A record about to name this tree must not lose any part of it -- its own
+    components, or a child's tree pinned long ago -- to a sweep that began
+    before the publish (STORE.md §8). Every object in the verified closure is
+    claimed (its mtime becomes now), and one a sweep removed after the
+    verified read is written back from the bytes that read returned. False
+    when the closure is incomplete.
+    """
+    try:
+        _descriptor, captured = capture_tree(tree_hash)
+    except (OSError, ValueError, TypeError, KeyError, RuntimeError, OverflowError):
+        return False
+    for digest, payload in captured.items():
+        if not claim_object(digest):
+            put_object(payload)
+    return True
 
 
 # --- transforms ---------------------------------------------------------------

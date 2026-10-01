@@ -936,6 +936,32 @@ class StoreCli(StoreCase):
         self.assertIn("would remove 1 objects", out)
         self.assertTrue(has_object(orphan))
 
+    def test_gc_and_info_report_the_cap_and_retired_kinds(self) -> None:
+        import json
+
+        from cadgen.store.drawings import DRAWING_ENTRY_SCHEMA_VERSION
+        from cadgen.store.index import entry_path, write_entry
+        from cadgen.store.objects import has_object, object_path, put_object
+
+        cached = put_object(b"a cached drawing payload")
+        write_entry("drawing", "d" * 64, {"schemaVersion": DRAWING_ENTRY_SCHEMA_VERSION, "object": cached})
+        retired = Path(os.environ["CADGEN_CACHE_DIR"]) / "index" / "op"
+        retired.mkdir(parents=True)
+        (retired / ("e" * 64)).write_text('{"value": 1.0}', encoding="utf-8")
+        old = time.time() - 7200
+        for path in (object_path(cached), entry_path("drawing", "d" * 64)):
+            os.utime(path, (old, old))
+
+        code, out = self.run_cli(["gc", "--dry-run", "--max-size", "1"])
+        self.assertEqual(code, 0)
+        self.assertIn("index/op is retired: would remove 1 entries", out)
+        self.assertIn("would evict 1 drawing", out)
+        self.assertTrue(has_object(cached) and (retired / ("e" * 64)).is_file(), "a dry run deletes nothing")
+        code, out = self.run_cli(["info", "--json"])
+        self.assertEqual(code, 0)
+        info = json.loads(out)
+        self.assertEqual((info["cap"], info["retired"]), (20 * 1024**3, {"op": 1}))
+
 
 # The two-level fixture ChildrenByResult runs: a pin and an arm that places it twice.
 # Written by the test so the run reads nothing under models/.
@@ -1006,10 +1032,24 @@ class ChildrenByResult(StoreCase):
         self.assertEqual(self.run_model(pin), "built", "a semantic edit rebuilds the child")
         self.assertEqual(self.run_model(arm), "current", "identical geometry: the parent's pin still holds")
 
+        # A publish claims everything its record names -- reused components and
+        # a pinned child's tree alike -- so a sweep already running keeps it all
+        # (STORE.md §8). Everything here is past the grace window beforehand.
+        from cadgen.store.objects import iter_objects, object_path
+        from cadgen.store.records import read_record
+        from cadgen.store.trees import tree_objects
+
+        then = time.time() - 3 * 3600
+        for _digest, path in iter_objects():
+            os.utime(path, (then, then))
+        arm.write_text(arm.read_text(encoding="utf-8").replace("40.0, 8.0", "40.0 * 1.0, 8.0"), encoding="utf-8")
+        self.assertEqual(self.run_model(arm), "built", "the parent alone rebuilds; its child stays current")
+        named = tree_objects(read_record(arm)["tree"]) | tree_objects(read_record(arm)["documentTree"])
+        self.assertIn(read_record(pin)["tree"], named)
+        self.assertEqual([d for d in named if object_path(d).stat().st_mtime < then + 3600], [])
+
         pin.write_text(pin.read_text(encoding="utf-8").replace("radius=2.0", "radius=2.5"), encoding="utf-8")
         self.assertEqual(self.run_model(arm), "built", "a geometry change reaches the parent")
-
-        from cadgen.store.records import read_record
 
         record = read_record(arm)
         self.assertEqual([Path(c["model"]).name for c in record["children"]], ["link_pin.py::link_pin"])

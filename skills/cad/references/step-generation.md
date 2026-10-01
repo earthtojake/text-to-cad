@@ -565,4 +565,6 @@ Use one cache store for normal project work. A separate `CADGEN_CACHE_DIR`
 is useful for isolated tests, but two stores writing the same project outputs
 can cause repeated freshness misses. The store holds derived results only.
 Prefer a targeted `--force` or `cadgen store forget <model>.py` when diagnosing
-one stale result; `cadgen store gc` removes unreachable cache data.
+one stale result; `cadgen store gc` removes unreachable cache data. The store
+keeps itself under `CADGEN_STORE_MAX` (default 20 GB) by evicting its least
+recently written derived entries; `cadgen store info` shows its size.

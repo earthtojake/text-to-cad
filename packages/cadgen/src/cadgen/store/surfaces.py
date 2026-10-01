@@ -224,7 +224,9 @@ def derive(tree_hash: str, cids: list[str] | None = None, *, force: bool = False
             raise ValueError("surface producer conflict for the pinned input")
         # The complete verified object is durable first; failure earlier cannot
         # create a readiness marker. Concurrent writers derive identical bytes.
-        write_entry("surface", expected["surfaceInput"], actual)
+        # A hit is a read and writes nothing (STORE.md §8).
+        if actual != prior:
+            write_entry("surface", expected["surfaceInput"], actual)
         result[cid] = actual
     return result
 

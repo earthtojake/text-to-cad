@@ -47,7 +47,7 @@ from cadgen.store.materialize import (
     _location_from_matrix,
     materialized_children,
 )
-from cadgen.store.objects import put_object, read_verified_object
+from cadgen.store.objects import claim_object, put_object, read_verified_object
 from cadgen.store.trees import put_tree
 
 
@@ -558,7 +558,10 @@ def _publish_tree(
                 read_verified_object(entry[object_key])
             except (OSError, ValueError):
                 ready = False
-        if ready:
+        # Reused bytes are claimed for this publish, so a sweep that started
+        # before it cannot take them (STORE.md §8); ones a sweep already took
+        # are written again from the bytes in hand.
+        if ready and all(claim_object(entry[key]) for key in ("brep", "eagerSurface") if entry.get(key)):
             reused.append(cid)
         else:
             # Capture owns these exact bytes; repair does not ask the live

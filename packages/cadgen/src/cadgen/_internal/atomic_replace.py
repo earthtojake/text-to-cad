@@ -187,6 +187,20 @@ def replace_atomic(temp_path: Path | str, target_path: Path | str) -> None:
             fresh.unlink(missing_ok=True)
 
 
+def move_atomic(source_path: Path | str, target_path: Path | str) -> None:
+    """``os.replace`` of one existing file with the same bounded retry, and no copy.
+
+    For a rename whose whole point is that THIS file moves: the store's sweeper
+    takes an object out of reach before it deletes it
+    (``cadgen.store.objects.delete_unclaimed``), and a copy would leave the
+    original where a writer can still claim it. Exhaustion reports the rename
+    failure itself, as :func:`replace_dir_atomic` does.
+    """
+    blocked = _run_ladder(source_path, target_path)
+    if blocked is not None:
+        raise blocked
+
+
 def write_bytes_atomic(target_path: Path, payload: bytes) -> None:
     """Write ``payload`` to ``target_path`` through a temp file in the same directory.
 
