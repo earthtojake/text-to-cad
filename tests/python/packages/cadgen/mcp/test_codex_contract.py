@@ -9,6 +9,7 @@ paths replaced by placeholders. A change to Codex's side has to change that file
 from __future__ import annotations
 
 import json
+import os
 import re
 import shutil
 import tempfile
@@ -83,6 +84,10 @@ def converse(tmp: Path) -> dict:
 
 
 class CodexContractTest(unittest.TestCase):
+    # The record is the exchange as text, its paths spelled as POSIX spells them under <tmp>. Windows
+    # spells the same paths with a drive and (JSON-escaped) backslashes, so it cannot read as the
+    # same text; the record is pinned where it was recorded, and the catalog test below runs everywhere.
+    @unittest.skipIf(os.name == "nt", "the record spells its paths as POSIX does")
     def test_codex_is_served_exactly_what_it_was(self) -> None:
         tmp = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)

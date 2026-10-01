@@ -41,7 +41,8 @@ class ViewerUrlTest(unittest.TestCase):
     def test_a_reused_viewer_is_read_past_its_narration(self) -> None:
         command, marker = self.launch("reused")
         self.assertEqual(viewer_url(str(self.folder), command=command), "http://127.0.0.1:3245/")
-        self.assertEqual(marker.read_text(encoding="utf-8").splitlines()[1], os.path.realpath(self.folder))
+        # Resolved on both sides: macOS reports /private/var for /var, Windows a short 8.3 name for a long one.
+        self.assertEqual(os.path.realpath(marker.read_text(encoding="utf-8").splitlines()[1]), os.path.realpath(self.folder))
 
     def test_a_started_viewer_is_left_serving(self) -> None:
         command, marker = self.launch("started")

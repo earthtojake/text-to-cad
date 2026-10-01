@@ -3,6 +3,7 @@ import { ArrowUp, Check, Copy, ListPlus, X } from "lucide-react";
 import { Button } from "@text-to-cad/ui/primitives/button";
 import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 import { cn } from "@text-to-cad/ui/utils";
+import { promptReferenceIds } from "@text-to-cad/core/prompt";
 import { usePromptDestination, useViewerHost } from "../../../../host/context.js";
 import { FLOATING_SURFACE_CLASS } from "../floatingSurface.js";
 import { TOOL_PANEL_BUTTON_CLASS } from "../ToolPanel.jsx";
@@ -19,11 +20,9 @@ const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
 const failure = result => (result && (result.status === "failed" || result.status === "cancelled") ? result.message || "The prompt did not go." : "");
 
-/** Each selected reference by its id, one a line: a selector (`o1.1.f2`), or a text range. */
+/** Each selected reference by its ids, one a line, as the prompt grammar names them (`promptReferenceIds`). */
 export function quickEditReferenceIds(selection) {
-  return selection.flatMap(reference => reference.target.kind === "cad-selector"
-    ? reference.target.selectors.map(String)
-    : [reference.label || `${reference.target.start.line}:${reference.target.start.column}–${reference.target.end.line}:${reference.target.end.column}`]);
+  return selection.flatMap(promptReferenceIds);
 }
 
 /**

@@ -5,6 +5,7 @@ export declare function validatePromptContext(context: unknown): PromptContext;
 export declare function createPromptContext(parts: readonly PromptPart[], operationId?: string): PromptContext;
 export declare function referencePart(reference: PromptReference, id?: string): Extract<PromptPart, { kind: 'reference' }>;
 export declare function textPart(text: string, id?: string): Extract<PromptPart, { kind: 'text' }>;
+export declare function promptReferenceIds(reference: PromptReference): string[];
 export declare function formatPromptReference(reference: PromptReference, options?: PromptTextOptions): string;
 export declare function formatPromptContextText(context: PromptContext, options?: PromptTextOptions): string;
 export declare function formatPromptMessage(context: PromptContext, options?: PromptMessageOptions): string;

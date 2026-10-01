@@ -76,8 +76,8 @@ function NavbarControl({ label, disabled = false, onClick, children }) {
  *   than through `useRendererShell`'s `animation`. Routines play in preview alone.
  *   `references`: what is selected, in the prompt grammar — the references a Quick Edit attaches
  *   (`kit/tools/quick-edit/QuickEdit.jsx`), counted in its header; the file itself always goes. A
- *   renderer that hands none has no Quick Edit: it is a STEP file's, whose picks and sketches it
- *   carries. The box sizes itself, for as long as it is open: a drag of its corner renders nothing
+ *   renderer that hands none has no Quick Edit: only a view whose picks and sketches a note can
+ *   carry offers one. The box sizes itself, for as long as it is open: a drag of its corner renders nothing
  *   here. `onClearReferences`: the renderer's clear of that selection, as a press on the
  *   background makes it; Quick Edit's X calls it, and clears Draw's ink too.
  *   `copySelection`: the viewer's copy key (⌘C / Ctrl+C) while the renderer's own tool is up and

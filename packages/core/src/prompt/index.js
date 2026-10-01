@@ -75,6 +75,20 @@ export function createPromptContext(parts, operationId = `${operationNamespace}:
 export function referencePart(reference, id = 'reference') { return { id, kind: 'reference', reference: validatePromptReference(reference) }; }
 export function textPart(text, id = 'text') { return { id, kind: 'text', text }; }
 
+/**
+ * What a reference names inside its file, as a person reads it, one id a line: each CAD selector,
+ * a text range's span (its label, if it has one), or a whole file's label.
+ */
+export function promptReferenceIds(reference) {
+  const { target } = reference;
+  if (target.kind === 'cad-selector') return target.selectors.map(String);
+  if (target.kind === 'text-range') {
+    const { start, end } = target;
+    return [reference.label || `${start.line + 1}:${start.character + 1}–${end.line + 1}:${end.character + 1}`];
+  }
+  return reference.label ? [reference.label] : [];
+}
+
 /** Keep machine identity structured; these strings are the portable human/prompt representation. */
 export function formatPromptReference(reference, { resolvePath } = {}) {
   validatePromptReference(reference);

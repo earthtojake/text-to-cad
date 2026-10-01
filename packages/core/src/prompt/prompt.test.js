@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createPromptContext, createPromptDeliveryLedger, referencePart, textPart, validatePromptContext, formatPromptContextText, formatPromptMessage, formatPromptReference } from './index.js';
+import { createPromptContext, createPromptDeliveryLedger, referencePart, textPart, validatePromptContext, formatPromptContextText, formatPromptMessage, formatPromptReference, promptReferenceIds } from './index.js';
 
 const reference = { resource: { kind: 'workspace-file', workspaceId: 'root', path: 'STEP/my part.step', revision: 'v1' }, target: { kind: 'cad-selector', selectors: ['o1.2.f45'] } };
 test('one context retains image/reference relationships and formats canonical references', () => {
@@ -26,6 +26,14 @@ test('code targets preserve explicit ranges rather than borrowing the CAD fragme
   assert.equal(formatPromptReference(code), 'src/bracket.py:5:3-7:1');
   assert.equal(formatPromptReference(code, { resolvePath: r => `/project/${r.path}` }), '/project/src/bracket.py:5:3-7:1');
 });
+test('a reference names its ids as a person reads them: each selector, a range from 1, or its label', () => {
+  assert.deepEqual(promptReferenceIds({ ...reference, target: { kind: 'cad-selector', selectors: ['o1.f2', 'o1.e3'] } }), ['o1.f2', 'o1.e3']);
+  const range = { resource: { kind: 'workspace-file', workspaceId: 'root', path: 'a.py' }, target: { kind: 'text-range', start: { line: 0, character: 4 }, end: { line: 2, character: 0 } } };
+  assert.deepEqual(promptReferenceIds(range), ['1:5–3:1']);
+  assert.deepEqual(promptReferenceIds({ ...range, label: 'def plate' }), ['def plate']);
+  assert.deepEqual(promptReferenceIds({ ...range, target: { kind: 'whole-resource' } }), []);
+});
+
 test('invalid bundles fail before delivery, including dangling relationships and unknown targets', () => {
   assert.throws(() => createPromptContext([textPart('a'), textPart('b')]), /unique/);
   assert.throws(() => createPromptContext([{ id: 'i', kind: 'attachment', name: 'a.pdf', mimeType: 'application/pdf', content: new Blob(), about: ['missing'] }]), /absent reference/);
