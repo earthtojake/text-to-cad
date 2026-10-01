@@ -161,7 +161,7 @@ separate Grok plugin manifest.
 ```bash
 # Grok Build
 grok plugin install earthtojake/text-to-cad --trust
-grok plugin enable cad
+grok plugin enable text-to-cad
 ```
 
 Restart your agent if newly installed skills do not appear. For local

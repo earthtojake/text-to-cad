@@ -648,9 +648,9 @@ archived as `.mcp.json`, and the archived manifest points there.
 For each release, a person with the access below:
 
 1. Downloads `cad-openai-plugin-<version>.zip` from the release page.
-2. On the Plugins page, opens the CAD plugin, selects **Upload plugin to make
-   changes**, and uploads the ZIP. The first submission uses **Upload new or
-   existing plugin** instead.
+2. On the Plugins page, opens the text-to-cad plugin, selects **Upload plugin
+   to make changes**, and uploads the ZIP. The first submission uses **Upload
+   new or existing plugin** instead.
 3. Resolves the automated findings, selects **Submit for review**, and completes
    the policy attestations.
 4. After approval, selects **Publish plugin**.
