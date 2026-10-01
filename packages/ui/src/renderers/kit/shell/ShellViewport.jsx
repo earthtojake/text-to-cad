@@ -51,7 +51,7 @@ import { disposeSceneObject } from "../viewport/sceneObjects.js";
 import { renderThumbnail } from "../viewport/thumbnail.js";
 import { useViewerRuntime } from "../viewport/useViewerRuntime.js";
 import ViewportError from "../status/ViewportError.jsx";
-import { VIEWPORT_CUBE_SIZE, VIEWPORT_CORNER_INSET_PX } from "./viewportLayout.js";
+import { VIEWPORT_CUBE_BOTTOM_PX, VIEWPORT_CUBE_SIZE, VIEWPORT_CORNER_INSET_PX } from "./viewportLayout.js";
 
 const STORED_CAMERA_COORDINATES = "cad-z-up-v1";
 /** How long after the open-time fit the viewport and projection may still be settling. */
@@ -1011,7 +1011,7 @@ const ShellViewport = forwardRef(function ShellViewport({
         // Close into the bottom-left corner, under its actions: the cube's box is larger than the
         // cube, whose labels overhang it.
         viewPlaneOffsetLeft={VIEWPORT_CORNER_INSET_PX}
-        viewPlaneOffsetBottom={VIEWPORT_CORNER_INSET_PX}
+        viewPlaneOffsetBottom={VIEWPORT_CUBE_BOTTOM_PX}
         viewPlaneSize={VIEWPORT_CUBE_SIZE}
         compact={false}
         activeViewPlaneFace={activeViewPlaneFace}

@@ -16,8 +16,8 @@ belong to apps through the [host contract](viewer-host.md).
 
 FileViewer owns the navbar, the file explorer (the host's file tree), the column a
 file's declared panels open in, and which panel is open. RendererShell owns the scene's chrome: the toolbar, the
-tool stack under it, Quick Edit, the view cube with the view actions on top of it,
-the playbar and preview mode. Renderers supply their tools, their document state and their tool
+tool stack under it, Quick Edit, the view cube, the view's controls it draws into the
+navbar (Display settings, Preview), the playbar and preview mode. Renderers supply their tools, their document state and their tool
 panels; the shell never inspects a format's parts, joints or topology. A CAD
 file's controls are never a panel of the host's: no pick or tool opens, closes or
 turns the explorer.
@@ -51,21 +51,21 @@ none.
 - **Toolbar** at top-left, 8px in — the gap between it and the stack under it.
 - **Tool stack** beneath the toolbar: the panels of the tool in hand and of the
   effects a person keeps (see [The tool stack](#the-tool-stack)). The column is
-  exactly the height the stack may take: it stops 8px above the view actions, so
-  it never runs under the cube, and while the panels fit only a panel's inner
+  exactly the height the stack may take: it stops 8px above the cube, so it never
+  runs under it, and while the panels fit only a panel's inner
   body scrolls.
 - **Quick Edit** at top-right, 8px in, a STEP file's: the box of the note a person
   writes to their agent, there only while something is picked or drawn (see
   [Quick Edit](#quick-edit)). The rest of the right side of the view is clear.
-- **View cube** at bottom-left, 2px in, in a 6rem area: enlarged
+- **View cube** at bottom-left, 2px from the left and 8px off the bottom so the
+  axes drawn in its lower corner never touch the edge, in a 6rem area: enlarged
   face/edge/corner hit areas and neutral hover and XYZ guides. Preview omits it.
-- **View actions** directly on top of the cube, centred on it, a 2px gap between
-  them: a bar the cube's width (6rem) and 24px tall, of 20px transparent buttons
-  with 12px icons — **Display settings** (cog), **Reset view**, then **Preview**
-  (a play icon). Mobile uses the same cube and bar layout. In preview the same
-  bar, in the same place, keeps Display and Reset, then an X where Preview was.
-  Display settings' popover opens upward from its button, and the bar's hints
-  show above its buttons.
+- **View controls** in the navbar's right end, before the version: **Display
+  settings** (cog), then **Preview** (a play icon), the navbar's 24px icon
+  buttons with 14px icons and hints below them. In preview the navbar keeps
+  them, with an X ("Exit preview") where Preview was. Display settings' popover
+  opens down from its button, end-aligned. A view shown small has no navbar, and
+  so none of them.
 - **Playbar** (preview's) sits at bottom-centre, and nothing else does;
   **Playback settings** is the cog at its right end, and its menu opens upward.
 - **Model update status** sits at top-centre of the viewport, vertically centred
@@ -91,8 +91,8 @@ to the shared shell; no host or file-format branch belongs in the button.
 
 There is no separator or activity dot. There is no Animate tool: routines play in
 [preview](#camera-animation-and-preview). Display is not a tool: every 3D
-renderer has its **Display settings** button in the view actions on top of the
-cube, beside Preview (see
+renderer has its **Display settings** button among the view's controls in the
+navbar, beside Preview (see
 [Display settings](#display-settings-and-section-primitives)). A file with no
 tools has no strip at all.
 
@@ -354,10 +354,10 @@ minimum closes the panel, and the keyboard never does. The next open starts at
 
 ## Display settings and section primitives
 
-Display is not a tool. Its button — the cog icon, "Display settings" — sits in the
-view actions on top of the cube, beside Preview, in the same place in the tools view and in
-preview, and opens an ordinary popover upward from it, start-aligned (`kit/shell/DisplayPopover.jsx`), 256px wide and
-never taller than the viewer below the tool strip. Opening it leaves the tool in hand as it is: a
+Display is not a tool. Its button — the cog icon, "Display settings" — sits among
+the view's controls in the navbar, beside Preview, in the same place in the tools view and in
+preview, and opens an ordinary popover down from it, end-aligned (`kit/shell/DisplayPopover.jsx`), 256px wide and
+never taller than the room below it. Opening it leaves the tool in hand as it is: a
 selection, a Draw session or Position stay. It goes with Escape, its button, or
 a press anywhere but the model; a press on the model (to orbit and judge a
 setting) and setting changes leave it up. It is the same popover, the same
@@ -540,12 +540,12 @@ STEP context-menu items; the live `resetCamera` command takes the same fit path.
 
 **Preview** is available for every 3D file, animated or not, and is the shell's
 own state (`previewing`); hosts neither start nor observe it. Its button is the
-play icon in the view actions ("Preview"). It fills the viewer below the
+play icon among the view's controls in the navbar ("Preview"). It fills the viewer below the
 host's navbar, which stays, and under the host's explorer, which stays as it was
 and can still be opened and shut; the toolbar, the tool stack and its resize
 handles, Quick Edit, joint handles, cube and context menu are gone. It starts
-orbiting, unless the file's Playback settings turned its orbit off. Its view actions are the tools view's bar in the same place:
-**Display settings**, **Reset view** and an X ("Exit preview") where Preview was. **Playback
+orbiting, unless the file's Playback settings turned its orbit off. The navbar keeps the
+view's controls: **Display settings**, and an X ("Exit preview") where Preview was. **Playback
 settings** (a cog; `PlaybackMenu`) ends the playbar under the model and opens
 upward. It holds, for a file with routines, **Animation** — the Routine (with more than one), Speed, Loop and
 Autoplay — then **Orbit**: on or off, and its speed. Under the model, an
@@ -615,8 +615,8 @@ pressed in while focus is on the page. Editable targets keep their own keys.
 Every hint is a `TooltipHint`: compact text, one surface and arrow, a 400ms
 delay. No native `title` anywhere in chrome. Prefer one or two words; show a
 full technical name only when it is truncated (`overflowOnly`). Quick Edit's button,
-Playback settings and the view actions (Reset view, Display settings, Preview) are
-hinted by name, the view actions' above their buttons; there is no hint on Exit, X,
+Playback settings and the view's controls (Display settings, Preview) are hinted by
+name, the controls' below their buttons in the navbar; there is no hint on Exit, X,
 the transport, drawing tools or labelled text buttons (Quick Edit's alone say what
 they do). A disabled, selected or expanded control has none; pressing or leaving cancels a
 pending one. A hint appears on focus only for keyboard navigation (a Tab), never

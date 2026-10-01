@@ -374,8 +374,8 @@ time, the explorer included.
 
 The viewport's corners are the shell's, never the host's: the tool strip and its
 stack at the top-left, Quick Edit at the top-right, and the view cube at the
-bottom-left with the view actions (Display settings, Reset view, Preview) on top
-of it. What Quick Edit offers follows the subscribed destination capability and
+bottom-left. The view's own controls (Display settings, Preview) are the
+renderer's, drawn into the navbar's right end before the version (`navbarSlot`). What Quick Edit offers follows the subscribed destination capability and
 the ports, never an app name: Copy Prompt always, Queue for a composer
 destination, Send where the prompt port has `send`. The navbar's snapshot is a
 clipboard destination's: the viewport PNG goes straight through

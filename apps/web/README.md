@@ -245,8 +245,8 @@ toolbar with the rest of the tool stack; Position's panel replaces it while Posi
 is the tool. The navbar has no panel of the file's: the explorer's is its one toggle.
 STEP and robot files have a
 top-left toolbar; GLB, STL and 3MF have none. Every 3D file has Display settings
-and Preview among the view actions on top of the view cube at the bottom-left,
-and Quick Edit at the top-right. DXF is a 2D canvas with pan, zoom, snapshot and
+and Preview among the view's controls in the navbar's right end, the view cube at
+the bottom-left, and Quick Edit at the top-right. DXF is a 2D canvas with pan, zoom, snapshot and
 Quick Edit, without a 3D toolbar or tool stack.
 
 The file explorer floats over the view's left and never resizes it. Below 720px of

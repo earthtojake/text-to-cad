@@ -1,7 +1,10 @@
 import { VIEWPORT_BOTTOM_CENTER, VIEWPORT_INSET_PX, VIEWPORT_STACK_BOTTOM, VIEWPORT_TOP_BAR_PX } from "./viewportLayout.js";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Play, Pause, RotateCcw, X } from "lucide-react";
+import { createPortal } from "react-dom";
+import { Play, Pause, X } from "lucide-react";
+import { Button } from "@text-to-cad/ui/primitives/button";
 import { ToolbarButton } from "@text-to-cad/ui/primitives/toolbar-button";
+import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 import PreviewChrome from "../tools/PreviewChrome.jsx";
 import { useViewerMobile } from "../../../file-viewer/responsive.js";
 import ViewerAlertCard, { alertDismissible } from "../status/ViewerAlertCard.jsx";
@@ -28,14 +31,24 @@ const INSET = `${VIEWPORT_INSET_PX}px`;
 const TOOLBAR_POSITION = Object.freeze({ top: INSET, left: INSET, bottom: VIEWPORT_STACK_BOTTOM, maxWidth: "calc(100% - 3.5rem)" });
 const QUICK_EDIT_POSITION = Object.freeze({ top: INSET, right: INSET, left: INSET });
 const MODEL_UPDATE_STATUS = Object.freeze({ pending: true, label: "Updating model…" });
-// The view's actions, on top of the cube, are transparent over the model.
-const BAR_BUTTON_CLASS = "size-5 bg-transparent hover:bg-transparent dark:hover:bg-transparent";
+// The view's controls in the navbar look as its own icon buttons do.
+export const NAVBAR_CONTROL_CLASS = "size-6 text-muted-foreground hover:text-foreground aria-pressed:bg-accent aria-pressed:text-accent-foreground";
+
+/** One of the view's controls in the navbar: an icon button with its name on hover. */
+function NavbarControl({ label, disabled = false, onClick, children }) {
+  return <TooltipHint content={label}>
+    <Button type="button" variant="ghost" size="icon-xs" aria-label={label} disabled={disabled} onClick={onClick} className={NAVBAR_CONTROL_CLASS}>
+      {children}
+    </Button>
+  </TooltipHint>;
+}
 
 /**
  * The frame every file-family renderer draws itself in: the viewport box with the tool strip at
  * its top-left corner and the tool stack under it, Quick Edit at the top-right, the cube in the
- * bottom-left corner with the view's actions on top of it (Display settings, Reset view and
- * Preview), the loading, update and alert overlays, and preview mode's controls. The same
+ * bottom-left corner, the view's controls in the navbar's right end (Display settings and
+ * Preview, in the renderer's `navbarSlot`), the loading, update and alert overlays, and preview
+ * mode's controls. The same
  * structure, classes and data attributes for every renderer: hosts, stylesheets and tests key on
  * them. A file's controls are never a sidebar: they are panels in the tool stack, shown by the
  * tool they belong to. Nothing sits at the bottom centre but preview's playbar.
@@ -248,24 +261,19 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
                 </div>
               </div>
 
+              {/* The view's controls, in the navbar's right end: Display settings, then Preview — an
+                  X for it in preview. Not while the model loads or after it failed to, and not in a
+                  host that shows the view small. */}
+              {view.navbarSlot && !toolsHidden ? createPortal(<>
+                <DisplayPopover open={displayOpen} onOpenChange={setDisplayOpen} disabled={shell.idle}>{frame.display}</DisplayPopover>
+                {previewing
+                  ? <NavbarControl key="exit" label="Exit preview" onClick={leavePreview}><X className="size-3.5" aria-hidden="true" /></NavbarControl>
+                  : <NavbarControl key="preview" label="Preview" disabled={shell.idle} onClick={enterPreview}><Play className="size-3.5" aria-hidden="true" /></NavbarControl>}
+              </>, view.navbarSlot) : null}
               {/* Preview: the tools and Quick Edit put away and the model orbiting, its routines
-                  playing. The view's actions stay where they are — Display settings in the same
-                  place — with an X for Preview; under the model, the playbar (a static file's, the
-                  orbit's play and pause), with Playback settings' cog at its right end. */}
+                  playing; under the model, the playbar (a static file's, the orbit's play and pause),
+                  with Playback settings' cog at its right end. */}
               <PreviewChrome active={previewing} surface={frame.hostElement} hold={displayOpen}
-                actions={toolsHidden ? undefined : () => <>
-                  <DisplayPopover open={displayOpen} onOpenChange={setDisplayOpen} disabled={shell.idle} boundary={frame.hostElement}>{frame.display}</DisplayPopover>
-                  <ToolbarButton label="Reset view" tooltipSide="top" className={BAR_BUTTON_CLASS} disabled={shell.idle} onClick={shell.resetView}>
-                    <RotateCcw className="size-3" strokeWidth={1.5} aria-hidden="true" />
-                  </ToolbarButton>
-                  {previewing
-                    ? <ToolbarButton key="exit" tooltip={false} label="Exit preview" className={BAR_BUTTON_CLASS} onClick={leavePreview}>
-                      <X className="size-3" strokeWidth={1.5} aria-hidden="true" />
-                    </ToolbarButton>
-                    : <ToolbarButton key="preview" label="Preview" tooltipSide="top" className={BAR_BUTTON_CLASS} disabled={shell.idle} onClick={enterPreview}>
-                      <Play className="size-3" strokeWidth={1.5} aria-hidden="true" />
-                    </ToolbarButton>}
-                </>}
                 playbar={onMenuOpenChange => {
                   const settings = <PlaybackMenu animation={playbackMenuRuntime} onOpenChange={onMenuOpenChange}
                     autoplay={shell.autoplay} onAutoplayChange={shell.setAutoplay}

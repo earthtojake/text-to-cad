@@ -305,22 +305,6 @@ test('a file opens framed at 100% of its own ruler: the open fit is the fit, wha
   const fitted = await page.evaluate(() => window.__cadCamera());
   assert.ok(Math.hypot(fitted.position[0] - fitted.target[0], fitted.position[1] - fitted.target[1]) / Math.abs(fitted.position[2] - fitted.target[2]) < 0.001,
     'Zoom to fit retains the top-view orientation');
-  await pane.getByRole('button', { name: 'Reset view', exact: true }).click();
-  const defaultDirection = new THREE.Vector3(...DEFAULT_VIEW_DIRECTION).normalize().toArray();
-  await page.waitForFunction(expectedDirection => {
-    const camera = window.__cadCamera();
-    const delta = camera.position.map((value, index) => value - camera.target[index]);
-    const length = Math.hypot(...delta);
-    return delta.every((value, index) => Math.abs(value / length - expectedDirection[index]) < 1e-5)
-      && Math.abs(camera.zoomPercent - 100) < 0.01;
-  }, defaultDirection);
-  const reset = await page.evaluate(() => window.__cadCamera());
-  assert.ok(Math.abs(reset.halfHeight - opened.halfHeight) / opened.halfHeight < 0.01,
-    'Reset restores the opening orientation and fitted zoom');
-  await pane.getByRole('button', { name: 'Preview', exact: true }).click();
-  await pane.getByRole('button', { name: 'Exit preview', exact: true }).waitFor();
-  await pane.getByRole('button', { name: 'Reset view', exact: true }).click();
-  await pane.getByRole('button', { name: 'Preview', exact: true }).waitFor();
   assert.deepEqual(errors, []);
 });
 
@@ -452,19 +436,20 @@ test('a renderer says more about its load than a download: finding the file, edi
   assert.equal(await overlay.count(), 0, 'a plain load covers nothing');
   assert.equal(await card.count(), 0, 'and raises nothing');
 
-  // THE CUBE IS THE BOTTOM-LEFT CORNER'S, under the Display and Preview buttons, and the tool
-  // stack stops above them: the right of the view is Quick Edit's, and the bottom middle the
-  // host's (a composer, on some) and preview's playbar.
+  // THE CUBE IS THE BOTTOM-LEFT CORNER'S, far enough off the bottom that its axes stay inside the
+  // view, and the tool stack stops above it. The view's controls (Display settings, Preview) are
+  // the navbar's. The right of the view is Quick Edit's, and the bottom middle the host's (a
+  // composer, on some) and preview's playbar.
   const frameBox = await canvasElement.boundingBox();
-  const actionsBox = await pane.locator('[data-viewport-actions]').boundingBox();
   const cubeBox = await pane.getByLabel('View cube', { exact: true }).boundingBox();
   const stackBox = await pane.locator('[data-cad-tool-groups]').boundingBox();
-  assert.ok(cubeBox.y + cubeBox.height > frameBox.y + frameBox.height - 16 && actionsBox.y + actionsBox.height <= cubeBox.y,
-    'the view cube occupies the bottom-left corner under the action buttons');
-  assert.ok(Math.abs(cubeBox.x + cubeBox.width / 2 - actionsBox.x - actionsBox.width / 2) < 1,
-    'the buttons are centred on top of the cube');
+  const offBottom = frameBox.y + frameBox.height - cubeBox.y - cubeBox.height;
+  assert.ok(offBottom >= 6 && offBottom < 16, `the view cube sits just off the bottom-left corner: ${offBottom}px`);
   assert.ok(cubeBox.x < frameBox.x + 20, 'the view cube stays against the left edge');
-  assert.ok(stackBox.y + stackBox.height <= actionsBox.y, 'the tool stack stops above the buttons');
+  assert.ok(stackBox.y + stackBox.height <= cubeBox.y, 'the tool stack stops above the cube');
+  for (const name of ['Display settings', 'Preview']) {
+    assert.equal(await pane.locator('[data-viewer-navbar]').getByRole('button', { name, exact: true }).count(), 1, `${name} is in the navbar`);
+  }
 
   // FINDING: the wait before the file is even located covers the viewport, and says
   // so as such rather than as a phase of reading it.
@@ -485,7 +470,7 @@ test('a renderer says more about its load than a download: finding the file, edi
   const toolsBox = await pane.getByRole('group', { name: 'Interaction tools' }).boundingBox();
   const middleY = box => box.y + box.height / 2;
   assert.ok(Math.abs(middleY(updateBox) - middleY(toolsBox)) < 1,
-    `model update status is vertically centred with the tool strip: ${JSON.stringify({ updateBox, toolsBox, actionsBox })}`);
+    `model update status is vertically centred with the tool strip: ${JSON.stringify({ updateBox, toolsBox })}`);
 
   // THE PREVIEW ENDS IT: the result is on screen, so the wait is over even though the
   // write is not.

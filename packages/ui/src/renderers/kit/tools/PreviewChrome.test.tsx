@@ -1,31 +1,21 @@
 import React from 'react';
 import { cleanup, fireEvent, render, screen, act } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
-import { ViewerMobileContext } from '../../../../dist/file-viewer/responsive.js';
 import PreviewChrome, { PREVIEW_CHROME_IDLE_MS } from '../../../../dist/renderers/kit/tools/PreviewChrome.js';
 
 afterEach(() => { cleanup(); vi.useRealTimers(); });
-it('keeps editor controls hidden throughout Preview and restores them on exit, with one bar on top of the cube in both', () => {
-  const actions = vi.fn(() => <button>Display settings</button>);
-  const { container, rerender } = render(<PreviewChrome active actions={actions}><button>Tool</button></PreviewChrome>);
+it('keeps editor controls hidden throughout Preview and restores them on exit', () => {
+  const { container, rerender } = render(<PreviewChrome active><button>Tool</button></PreviewChrome>);
   const chrome = container.querySelector('[data-preview-chrome]')!;
-  const bar = container.querySelector('[data-viewport-actions]')!;
   expect(chrome.hasAttribute('hidden')).toBe(true);
   expect(chrome.hasAttribute('inert')).toBe(true);
   fireEvent.pointerMove(document.body);
   expect(chrome.getAttribute('data-visible')).toBe('false');
   expect(screen.queryByRole('button', { name: 'Tool' })).toBeNull();
-  expect(screen.getByRole('button', { name: 'Display settings' })).toBeTruthy();
-  rerender(<PreviewChrome active={false} actions={actions}><button>Tool</button></PreviewChrome>);
+  rerender(<PreviewChrome active={false}><button>Tool</button></PreviewChrome>);
   expect(chrome.hasAttribute('hidden')).toBe(false);
   expect(chrome.hasAttribute('inert')).toBe(false);
   expect(screen.getByRole('button', { name: 'Tool' })).toBeTruthy();
-  // The same bar, in the same place, in either mode.
-  expect(container.querySelector('[data-viewport-actions]')).toBe(bar);
-  expect(screen.getByRole('button', { name: 'Display settings' })).toBeTruthy();
-  expect([(bar as HTMLElement).style.bottom, (bar as HTMLElement).style.left]).toEqual(['calc(4px + 6rem)', '2px']);
-  rerender(<ViewerMobileContext.Provider value={true}><PreviewChrome active={false} actions={actions} /></ViewerMobileContext.Provider>);
-  expect((container.querySelector('[data-viewport-actions]') as HTMLElement).style.bottom).toBe('calc(4px + 6rem)');
 });
 
 it('fades preview controls together, keeps their hover area awake, and never reveals editing tools', () => {
@@ -53,9 +43,8 @@ it('fades preview controls together, keeps their hover area awake, and never rev
   expect(controls.getAttribute('data-visible')).toBe('true');
 });
 
-it('shows the bar and no playbar outside preview', () => {
-  const { container } = render(<PreviewChrome active={false} playbar={<div data-testid="playback" />} actions={() => <button>Preview</button>} />);
+it('shows no playbar outside preview', () => {
+  const { container } = render(<PreviewChrome active={false} playbar={<div data-testid="playback" />} />);
   expect(container.querySelector('[data-preview-controls]')!.getAttribute('data-visible')).toBe('true');
   expect(screen.queryByTestId('playback')).toBeNull();
-  expect(screen.getByRole('button', { name: 'Preview' })).toBeTruthy();
 });

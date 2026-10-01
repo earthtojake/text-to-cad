@@ -276,8 +276,8 @@ gets nothing. No panel is saved in a file's record.
 The binding [viewer design system](docs/settings-ui.md) defines tool lifecycle,
 the tool stack, mobile layout, section density, keyboard scope, tooltips
 and preview. RendererShell owns the top-left toolbar, Quick Edit at the top-right,
-and the bottom-left cube with the view actions on top of it: Display settings,
-Reset view, then Preview. Preview is the shell's own
+the bottom-left cube, and the view's controls it draws into the navbar's right end
+(`navbarSlot`): Display settings, then Preview. Preview is the shell's own
 mode, where routines play and the model orbits, and preserves the parent
 navbar. Keep app-specific effects in the
 [host contract](docs/viewer-host.md), not in renderer components.

@@ -56,9 +56,17 @@ function tabSettings(initial: object = {}) {
   return store;
 }
 type Settings = ReturnType<typeof tabSettings>;
+// The navbar FileViewer hands a renderer: where the view's controls go.
+function navbarSlot() {
+  const slot = document.createElement('div');
+  slot.setAttribute('data-test-navbar', '');
+  document.body.append(slot);
+  return slot;
+}
+afterEach(() => document.querySelectorAll('[data-test-navbar]').forEach(slot => slot.remove()));
 function frame({ path = 'panel.harness', preferences = tabSettings(), state = undefined as unknown, mobile = false, onStateChange = (_: unknown) => {}, onPanelOpen = vi.fn(), appearance = { colorScheme: 'light' } as object } = {}) {
   const props = { source: { id: 'one', rootName: 'one' }, file: { path, name: path, kind: 'file' }, document: null, openPanel: '', panelSlot: null,
-    onPanelOpen, onReady() {}, onOpenFile() {}, appearance, state, onStateChange, reload() {}, data: { services: { preferences } } };
+    navbarSlot: navbarSlot(), onPanelOpen, onReady() {}, onOpenFile() {}, appearance, state, onStateChange, reload() {}, data: { services: { preferences } } };
   const element = () => <ViewerHostContext.Provider value={testHost()}><ViewerMobileContext.Provider value={mobile}>
     <HarnessRenderer {...(props as any)} /></ViewerMobileContext.Provider></ViewerHostContext.Provider>;
   const view = render(element());
@@ -79,8 +87,8 @@ function drag(handle: Element, [dx, dy]: [number, number], { release = true } = 
 it('the chrome is inset from the viewer, every panel opens one width, the tree at half the stack and the Reference at its cap, and nothing is stored until a person sizes one', () => {
   const { preferences } = frame();
   // The strip and the stack under it, 8px in from the viewer's top and left, stopping 8px above
-  // the cube and its actions in the bottom-left corner.
-  expect(document.querySelector<HTMLElement>('[data-cad-tool-groups]')!.style).toMatchObject({ top: '8px', left: '8px', bottom: 'calc(36px + 6rem)' });
+  // the cube in the bottom-left corner (itself 8px off the bottom).
+  expect(document.querySelector<HTMLElement>('[data-cad-tool-groups]')!.style).toMatchObject({ top: '8px', left: '8px', bottom: 'calc(16px + 6rem)' });
   expect(shown()).toEqual(['Harness tree', 'Harness reference']);
   expect(TOOL_PANEL_WIDTH).toBe(164);
   expect([width('Harness tree'), width('Harness reference')]).toEqual([TOOL_PANEL_WIDTH, TOOL_PANEL_WIDTH]);
@@ -191,13 +199,13 @@ it("on a phone a tree's default cap is the whole column, not half of it", () => 
 });
 
 const displayPopover = () => document.querySelector<HTMLElement>('[data-display-popover]');
-const barButtons = () => [...document.querySelector('[data-viewport-actions]')!.querySelectorAll('button')].map(button => button.getAttribute('aria-label'));
+const barButtons = () => [...document.querySelector('[data-test-navbar]')!.querySelectorAll('button')].map(button => button.getAttribute('aria-label'));
 
 it('while the model loads the viewer shows none of its own chrome, and all of it returns with the model', () => {
   frame();
   const stage = (name: string) => act(() => { fireEvent.click(document.querySelector(`[data-harness-stage="${name}"]`)!); });
   expect(screen.getByRole('group', { name: 'Interaction tools' })).toBeTruthy();
-  expect(barButtons()).toEqual(['Display settings', 'Reset view', 'Preview']);
+  expect(barButtons()).toEqual(['Display settings', 'Preview']);
   stage('finding');
   expect(screen.queryByRole('group', { name: 'Interaction tools' })).toBeNull();
   expect(document.querySelector('[data-cad-tool-stack]')).toBeNull();
@@ -205,7 +213,7 @@ it('while the model loads the viewer shows none of its own chrome, and all of it
   expect(viewportProps.current.isLoading).toBe(true);
   stage('idle');
   expect(screen.getByRole('group', { name: 'Interaction tools' })).toBeTruthy();
-  expect(barButtons()).toEqual(['Display settings', 'Reset view', 'Preview']);
+  expect(barButtons()).toEqual(['Display settings', 'Preview']);
 });
 
 it('a load the model did not survive leaves only the card saying so, and a failed update it survives keeps the chrome', () => {
@@ -220,7 +228,7 @@ it('a load the model did not survive leaves only the card saying so, and a faile
   expect(viewportProps.current.viewCube).toBe(false);
   stage('failed');
   expect(screen.getByRole('group', { name: 'Interaction tools' })).toBeTruthy();
-  expect(barButtons()).toEqual(['Display settings', 'Reset view', 'Preview']);
+  expect(barButtons()).toEqual(['Display settings', 'Preview']);
   expect(viewportProps.current.viewCube).toBe(true);
 });
 
@@ -236,7 +244,7 @@ it('a host showing the view small gets the model alone: no tools, no view action
 it('Display is a popover beside Preview, never a tool: opened over Draw it leaves Draw in hand with its panel, and the stack as it was', async () => {
   const user = userEvent.setup();
   frame();
-  expect(barButtons()).toEqual(['Display settings', 'Reset view', 'Preview']);
+  expect(barButtons()).toEqual(['Display settings', 'Preview']);
   expect(within(screen.getByRole('group', { name: 'Interaction tools' })).queryByRole('button', { name: /^Display/ })).toBeNull();
   await user.click(tool('Keep'));
   await user.click(tool('Draw'));
@@ -300,7 +308,7 @@ it("Preview puts the strip and the stack away and keeps the bar, never opening t
   expect([chrome.hidden, chrome.hasAttribute('inert')]).toEqual([true, true]);
   expect(chrome.contains(document.querySelector('[data-cad-tool-stack]'))).toBe(true);
   expect(displayPopover()).toBeNull();
-  expect(barButtons()).toEqual(['Display settings', 'Reset view', 'Exit preview']);
+  expect(barButtons()).toEqual(['Display settings', 'Exit preview']);
   expect(viewportProps.current.previewMode).toBe(true);
   await user.click(screen.getByRole('button', { name: 'Exit preview' }));
   expect(chrome.hidden).toBe(false);

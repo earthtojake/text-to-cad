@@ -252,6 +252,8 @@ export const ViewerNavbar: ComponentType<{
   selecting?: boolean;
   status?: ReactNode;
   trailing?: ReactNode;
+  /** The box the renderer draws its view controls into, before the host's version. */
+  controlsRef?: (element: HTMLDivElement | null) => void;
   links?: import("../../host/types.js").ViewerLinks;
   clipboard: import("../../host/types.js").ClipboardPort;
   onError?: (error: Error) => void;

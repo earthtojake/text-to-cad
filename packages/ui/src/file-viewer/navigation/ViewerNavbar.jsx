@@ -21,7 +21,8 @@ import { NavbarLinks } from "./NavbarLinks.jsx";
  * has no right-click: the ⋯ is the one door.
  *
  * Right: the file's own actions (a renderer's snapshot), the toggles of any panel the file
- * declares, then the host's version, whose menu holds GitHub and Discord (`NavbarLinks.jsx`).
+ * declares, the renderer's view controls (`controlsRef`: the CAD viewer's Display settings and
+ * Preview), then the host's version, whose menu holds GitHub and Discord (`NavbarLinks.jsx`).
  *
  * Nothing here is drawn for its own sake: a control appears only where it does something.
  */
@@ -105,12 +106,13 @@ function FileActions({ entry, capabilities, platform, onAction }) {
  * @param {boolean} [props.selecting] No file is open: the name's place asks for one.
  * @param {import("react").ReactNode} [props.status] After the name: the unsaved-changes dot.
  * @param {import("react").ReactNode} [props.trailing] The file's actions and its panels' toggles.
+ * @param {(element: HTMLDivElement | null) => void} [props.controlsRef] The box the renderer draws its view controls into.
  * @param {import("../../host/types.js").ViewerLinks} [props.links]
  * @param {import("../../host/types.js").ClipboardPort} props.clipboard
  * @param {(error: Error) => void} [props.onError]
  * @param {string} [props.className]
  */
-export function ViewerNavbar({ onBack, explorer = null, file = null, selecting = false, status = null, trailing = null, links, clipboard, onError, className }) {
+export function ViewerNavbar({ onBack, explorer = null, file = null, selecting = false, status = null, trailing = null, controlsRef, links, clipboard, onError, className }) {
   const name = file ? file.path.split("/").pop() || file.path : "";
   return (
     <header className={cn("flex h-9 shrink-0 items-center gap-2 border-b border-border bg-background px-2 text-foreground", className)} data-viewer-navbar="">
@@ -131,6 +133,7 @@ export function ViewerNavbar({ onBack, explorer = null, file = null, selecting =
       </nav>
       <div className="flex shrink-0 items-center gap-0.5">
         {trailing}
+        <div ref={controlsRef} className="contents" data-navbar-controls="" />
         {links ? <NavbarLinks links={links} clipboard={clipboard} onError={onError} /> : null}
       </div>
     </header>

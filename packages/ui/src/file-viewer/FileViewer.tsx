@@ -56,6 +56,7 @@ export function FileViewer({ file, host, renderers, state, onStateChange, displa
   const viewerElement = useRef<HTMLDivElement | null>(null);
   const bindElement = useCallback((element: HTMLDivElement | null) => { viewerElement.current = element; rootRef(element); }, [rootRef]);
   const [panelSlot, setPanelSlot] = useState<HTMLDivElement | null>(null);
+  const [navbarSlot, setNavbarSlot] = useState<HTMLDivElement | null>(null);
   const [readiness, setReadiness] = useState<{ key: string; ready: boolean } | null>(null);
   const [navActions, setNavActions] = useState<{ key: string; actions: readonly FileNavigationAction[] } | null>(null);
   const onNavigationActionsChange = useCallback((actions: readonly FileNavigationAction[]) => { if (currentKey.current === key) setNavActions({ key, actions }); }, [key]);
@@ -89,11 +90,11 @@ export function FileViewer({ file, host, renderers, state, onStateChange, displa
     if (!shown) return null;
     const Renderer = shown.prepared.Component;
     return <RenderBoundary key={key} onError={onError}><Renderer displayActions={displayActions} key={key} file={shown.file} source={source} document={document}
-      openPanel={openId} panelSlot={panelSlot} onPanelOpen={setPanel} onReady={onReady}
+      openPanel={openId} panelSlot={panelSlot} navbarSlot={navbarSlot} onPanelOpen={setPanel} onReady={onReady}
       onNavigationActionsChange={onNavigationActionsChange}
       onOpenFile={openFromRenderer} appearance={appearance}
       state={rendererState} onStateChange={setRendererState} reload={reload} /></RenderBoundary>;
-  }, [shown, key, onError, displayActions, source, document, openId, panelSlot, setPanel, onReady,
+  }, [shown, key, onError, displayActions, source, document, openId, panelSlot, navbarSlot, setPanel, onReady,
     onNavigationActionsChange, openFromRenderer, appearance, rendererState, setRendererState, reload]);
 
   // A host's home stands where no file is open, as a page of its own.
@@ -121,7 +122,7 @@ export function FileViewer({ file, host, renderers, state, onStateChange, displa
   // end, gets the file with no row above it.
   const navbar = !appearance.compact && !home && (Boolean(host.links) || Boolean(onBack) || Boolean(explorer) || navigation.file !== null || Boolean(trailing) || Boolean(dirty));
   return <ViewerMobileContext.Provider value={mobile}><ViewerHostContext.Provider value={host}><ViewerElementContext.Provider value={viewerElement}><div className="text-to-cad-file-viewer text-ui font-normal flex h-full min-h-0 min-w-0 flex-col overflow-hidden" ref={bindElement} data-viewer-layout={mobile ? "mobile" : "desktop"} tabIndex={-1}>
-    {navbar ? <ViewerNavbar onBack={onBack} explorer={explorer} file={navigation.file} selecting={loaded.status === "empty"} status={dirty} trailing={trailing}
+    {navbar ? <ViewerNavbar onBack={onBack} explorer={explorer} file={navigation.file} selecting={loaded.status === "empty"} status={dirty} trailing={trailing} controlsRef={setNavbarSlot}
       links={host.links} clipboard={host.clipboard} onError={onError} /> : null}
     {document?.stale ? <div className="flex shrink-0 items-center gap-2 border-b bg-amber-500/10 px-3 py-1.5 text-xs text-amber-700 dark:text-amber-400" role="status">
       <RotateCw className="size-3.5 shrink-0" /><span className="flex-1">This file changed on disk since you opened it.</span>

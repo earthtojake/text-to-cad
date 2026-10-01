@@ -34,6 +34,14 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); viewport.props = null; });
 
+// The navbar FileViewer hands a renderer: where the view's controls go.
+function navbarSlot() {
+  const slot = document.createElement('div');
+  slot.setAttribute('data-test-navbar', '');
+  document.body.append(slot);
+  return slot;
+}
+afterEach(() => document.querySelectorAll('[data-test-navbar]').forEach(slot => slot.remove()));
 function mount(host = testHost(), state?: unknown) {
   const save = vi.fn();
   const navigation = vi.fn();
@@ -42,7 +50,7 @@ function mount(host = testHost(), state?: unknown) {
   const preferences = { getSnapshot: () => settings, subscribe: (listener: () => void) => { listeners.add(listener); return () => listeners.delete(listener); },
     update: (patch: any) => { settings = { ...settings, ...patch }; listeners.forEach(listener => listener()); } };
   const props = { source: { id: 'one', rootName: 'one' }, file: { path: 'one.harness', name: 'one.harness', kind: 'file' }, document: null,
-    openPanel: '', panelSlot: null, onPanelOpen() {}, onReady() {}, onOpenFile() {}, appearance: { colorScheme: 'light' },
+    openPanel: '', panelSlot: null, navbarSlot: navbarSlot(), onPanelOpen() {}, onReady() {}, onOpenFile() {}, appearance: { colorScheme: 'light' },
     state, onStateChange: save, onNavigationActionsChange: navigation, reload() {}, data: { services: { preferences } } };
   const view = render(<ViewerHostContext.Provider value={host}><HarnessRenderer {...(props as any)} /></ViewerHostContext.Provider>);
   const canvas = view.container.querySelector('[data-stand-in-viewport] > canvas') as HTMLCanvasElement;
@@ -202,40 +210,3 @@ it('the renderer is told the camera settled, through what the viewport reports: 
 
 // The full reset crosses the renderer callback and the shell's tool/preview
 // lifecycle; it must reach the camera only after those changes commit.
-it('Reset view clears inspection edits, preserves appearance and exits Preview before resetting the camera', () => {
-  const appearance = { mode: 'xray', edges: { enabled: true, visibility: 'all' } };
-  const { canvas, overlay, unmount, save } = mount(testHost(), { version: 2, display: {
-    ...appearance, clip: { enabled: true, axis: 'x', offset: 0.3 }, exploded: { enabled: true, amount: 0.4 }
-  } });
-  secondaryTap(canvas, 300, 200);
-  fireEvent.click(screen.getByRole('menuitem', { name: 'Note the press' }));
-  expect(overlay('menu-note')).toBe('300,200');
-  fireEvent.click(screen.getByRole('button', { name: 'Draw' }));
-  expect(viewport.props.drawingEnabled).toBe(true);
-  const clearInk = vi.fn();
-  act(() => viewport.props.drawing.onReady({ clear: clearInk }));
-  viewport.resetView.mockImplementationOnce(() => {
-    expect(viewport.props.drawingEnabled).toBe(false);
-    expect(overlay('menu-note')).toBe('');
-    return true;
-  });
-  fireEvent.click(screen.getByRole('button', { name: 'Reset view' }));
-  expect(clearInk).toHaveBeenCalledTimes(1);
-  expect(viewport.resetView).toHaveBeenCalledTimes(1);
-  fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
-  expect(viewport.props.previewMode).toBe(true);
-  viewport.resetView.mockImplementationOnce(() => {
-    expect(viewport.props.previewMode).toBe(false);
-    return true;
-  });
-  fireEvent.click(screen.getByRole('button', { name: 'Reset view' }));
-  expect(viewport.resetView).toHaveBeenCalledTimes(2);
-  expect(screen.getByRole('button', { name: 'Preview' })).toBeTruthy();
-  unmount();
-  const display = save.mock.calls.at(-1)![0].display;
-  expect(display).toMatchObject(appearance);
-  expect(display.clip?.enabled ?? false).toBe(false);
-  expect(display.exploded?.enabled ?? false).toBe(false);
-  expect(display.clip?.offset ?? 0).toBe(0);
-  expect(display.exploded?.amount ?? 0).toBe(0);
-});

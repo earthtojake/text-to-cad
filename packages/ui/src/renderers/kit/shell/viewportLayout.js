@@ -10,10 +10,10 @@ export const VIEWPORT_BOTTOM_CENTER = "var(--cad-viewport-bottom-center, 3.5rem)
 export const VIEWPORT_INSET_PX = CHROME_INSET_PX;
 // One tool strip's height, shared by the toolbar and status row.
 export const VIEWPORT_TOP_BAR_PX = 34;
-// The cube, in the bottom-left corner, and the row of view actions on top of it (Display
-// settings, Reset view, Preview) share a width, so their centres line up.
+// The cube, in the bottom-left corner: its box hugs the left edge, and sits far enough off the
+// bottom that the axes drawn in its lower corner never touch the viewer's edge.
 export const VIEWPORT_CUBE_SIZE = "6rem";
 export const VIEWPORT_CORNER_INSET_PX = 2;
-export const VIEWPORT_ACTION_HEIGHT_PX = 24;
-// Where the tool stack stops: an inset above the cube and its actions in the bottom-left corner.
-export const VIEWPORT_STACK_BOTTOM = `calc(${VIEWPORT_CUBE_SIZE} + ${VIEWPORT_ACTION_HEIGHT_PX + VIEWPORT_CORNER_INSET_PX * 2 + CHROME_INSET_PX}px)`;
+export const VIEWPORT_CUBE_BOTTOM_PX = 8;
+// Where the tool stack stops: an inset above the cube.
+export const VIEWPORT_STACK_BOTTOM = `calc(${VIEWPORT_CUBE_SIZE} + ${VIEWPORT_CUBE_BOTTOM_PX + CHROME_INSET_PX}px)`;

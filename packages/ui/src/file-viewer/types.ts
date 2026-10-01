@@ -124,6 +124,11 @@ export interface RendererViewProps {
   openPanel: string;
   /** The column's box for a declared `"slot"` panel to draw into. */
   panelSlot: HTMLElement | null;
+  /**
+   * The navbar's box for the renderer's own view controls, at its right before the host's version
+   * (the CAD viewer's Display settings and Preview); null where no navbar is drawn.
+   */
+  navbarSlot: HTMLElement | null;
   onPanelOpen: (id: string) => void;
   onReady: (ready: boolean) => void;
   onOpenFile: (path: string, options?: { target: "current" | "new" }) => void;
