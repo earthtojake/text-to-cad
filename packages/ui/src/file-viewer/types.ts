@@ -118,8 +118,9 @@ export interface RendererViewProps {
   document: DocumentSession | null;
   /**
    * The open panel id, for a renderer that declares `panels` of its own (the desktop markdown's
-   * source view). The CAD renderers declare none and read none of `openPanel`, `panelSlot` or
-   * `onPanelOpen`: their controls are tool-stack panels, never the host's column.
+   * source view). The CAD renderers declare none and read none of `panelSlot` or `onPanelOpen`:
+   * their controls are tool-stack panels, never the host's column. Their frame reads `openPanel`
+   * only to put its tools out of sight while the explorer (`"tree"`) is open over them.
    */
   openPanel: string;
   /** The column's box for a declared `"slot"` panel to draw into. */
@@ -129,6 +130,11 @@ export interface RendererViewProps {
    * (the CAD viewer's Display settings and Preview); null where no navbar is drawn.
    */
   navbarSlot: HTMLElement | null;
+  /**
+   * The renderer shows its file fullscreen (the CAD viewer's Preview), or no longer does: the
+   * navbar, the explorer and any declared panel step aside while it lasts.
+   */
+  onFullscreenChange: (fullscreen: boolean) => void;
   onPanelOpen: (id: string) => void;
   onReady: (ready: boolean) => void;
   onOpenFile: (path: string, options?: { target: "current" | "new" }) => void;

@@ -286,7 +286,7 @@ const ShellViewport = forwardRef(function ShellViewport({
   const coordinateSystemFor = useCallback(() => STORED_CAMERA_COORDINATES, []);
   const {
     activateViewPlaneFace, orbitFromViewCube, applyInitialPerspective, emitPerspectiveChange,
-    resetZoomAndPan, resetView, syncPreviewCamera, syncViewPlaneOrientation
+    resetZoomAndPan, syncPreviewCamera, syncViewPlaneOrientation
   } = useViewportCamera({
     coordinateSystemFor, activeViewPlaneFaceRef, previewCameraRef,
     lastEmittedPerspectiveRef, cameraMovedRef, modelBounds: scene?.restBounds || scene?.bounds || null, modelKey, modelKeyRef,
@@ -400,7 +400,6 @@ const ShellViewport = forwardRef(function ShellViewport({
     // Frame the model again, from where the camera looks now. A renderer's "Zoom to
     // fit" and the live `resetCamera` command are both this one act.
     resetZoom() { return resetZoomAndPan({ animate: true }); },
-    resetView,
     // The scene moved its own bounds (a pose, a frame of a routine): lighting, shadows and
     // the floor follow it NOW, with no React render, no re-adoption and no reframe.
     syncSceneBounds() {
@@ -416,7 +415,7 @@ const ShellViewport = forwardRef(function ShellViewport({
       if (!bounds || !runtime) return false;
       return zoomRuntimeToBounds(runtime, bounds, sceneScaleModeRef.current, { animate, modelOffset: modelTransformRef.current.offset });
     }
-  }), [activateViewPlaneFace, modelKey, normalizedSceneScaleMode, resetZoomAndPan, resetView, scene]);
+  }), [activateViewPlaneFace, modelKey, normalizedSceneScaleMode, resetZoomAndPan, scene]);
 
   // Read-only debug/test seam: the LIVE camera of the viewport that mounted last, so a
   // browser test can assert that moving a model leaves the framing exactly where it was.

@@ -64,9 +64,9 @@ function navbarSlot() {
   return slot;
 }
 afterEach(() => document.querySelectorAll('[data-test-navbar]').forEach(slot => slot.remove()));
-function frame({ path = 'panel.harness', preferences = tabSettings(), state = undefined as unknown, mobile = false, onStateChange = (_: unknown) => {}, onPanelOpen = vi.fn(), appearance = { colorScheme: 'light' } as object } = {}) {
-  const props = { source: { id: 'one', rootName: 'one' }, file: { path, name: path, kind: 'file' }, document: null, openPanel: '', panelSlot: null,
-    navbarSlot: navbarSlot(), onPanelOpen, onReady() {}, onOpenFile() {}, appearance, state, onStateChange, reload() {}, data: { services: { preferences } } };
+function frame({ path = 'panel.harness', preferences = tabSettings(), state = undefined as unknown, mobile = false, onStateChange = (_: unknown) => {}, onPanelOpen = vi.fn(), onFullscreenChange = vi.fn(), openPanel = '', appearance = { colorScheme: 'light' } as object } = {}) {
+  const props = { source: { id: 'one', rootName: 'one' }, file: { path, name: path, kind: 'file' }, document: null, openPanel, panelSlot: null,
+    navbarSlot: navbarSlot(), onFullscreenChange, onPanelOpen, onReady() {}, onOpenFile() {}, appearance, state, onStateChange, reload() {}, data: { services: { preferences } } };
   const element = () => <ViewerHostContext.Provider value={testHost()}><ViewerMobileContext.Provider value={mobile}>
     <HarnessRenderer {...(props as any)} /></ViewerMobileContext.Provider></ViewerHostContext.Provider>;
   const view = render(element());
@@ -232,6 +232,16 @@ it('a load the model did not survive leaves only the card saying so, and a faile
   expect(viewportProps.current.viewCube).toBe(true);
 });
 
+it('the file explorer, open over the top-left corner, puts the tools out of sight, kept as they are', () => {
+  frame({ openPanel: 'tree' });
+  const groups = document.querySelector<HTMLElement>('[data-cad-tool-groups]')!;
+  expect(groups.classList.contains('invisible')).toBe(true);
+  expect(shown()).toEqual(['Harness tree', 'Harness reference']);
+  cleanup();
+  frame();
+  expect(document.querySelector<HTMLElement>('[data-cad-tool-groups]')!.classList.contains('invisible')).toBe(false);
+});
+
 it('a host showing the view small gets the model alone: no tools, no view actions, no Quick Edit, no cube', () => {
   frame({ appearance: { colorScheme: 'light', compact: true } });
   expect(screen.queryByRole('group', { name: 'Interaction tools' })).toBeNull();
@@ -296,10 +306,11 @@ it('two surfaces: the strip and the stack share the light chrome surface, and a 
   expect(has(screen.getByRole('menu'), FLOATING_SURFACE_CLASS)).toBe(true);
 });
 
-it("Preview puts the strip and the stack away and keeps the bar, never opening the host's column; its X brings back the tool in hand with its panel", async () => {
+it("Preview is fullscreen: the strip, the stack and the navbar's controls step aside, never opening the host's column; its corner's way out brings back the tool in hand with its panel", async () => {
   const user = userEvent.setup();
   const onPanelOpen = vi.fn();
-  frame({ onPanelOpen });
+  const onFullscreenChange = vi.fn();
+  frame({ onPanelOpen, onFullscreenChange });
   await user.click(tool('Pose'));
   expect(shown()).toContain('Harness position');
   await user.click(screen.getByRole('button', { name: 'Display settings' }));
@@ -308,11 +319,16 @@ it("Preview puts the strip and the stack away and keeps the bar, never opening t
   expect([chrome.hidden, chrome.hasAttribute('inert')]).toEqual([true, true]);
   expect(chrome.contains(document.querySelector('[data-cad-tool-stack]'))).toBe(true);
   expect(displayPopover()).toBeNull();
-  expect(barButtons()).toEqual(['Display settings', 'Exit preview']);
+  // The page steps aside (the host hides its navbar), and the way out is the view's own corner.
+  expect(onFullscreenChange.mock.calls).toEqual([[true]]);
+  expect(barButtons()).toEqual([]);
+  const corner = document.querySelector<HTMLElement>('[data-preview-corner]')!;
   expect(viewportProps.current.previewMode).toBe(true);
-  await user.click(screen.getByRole('button', { name: 'Exit preview' }));
+  await user.click(within(corner).getByRole('button', { name: 'Exit preview' }));
+  expect(onFullscreenChange.mock.calls).toEqual([[true], [false]]);
   expect(chrome.hidden).toBe(false);
   expect(viewportProps.current.previewMode).toBe(false);
+  expect(barButtons()).toEqual(['Display settings', 'Preview']);
   expect(shown()).toContain('Harness position');
   expect(tool('Pose').getAttribute('aria-pressed')).toBe('true');
   // Escape is the viewer's: whatever it closes, it is never the host's column (only its toggle does that).

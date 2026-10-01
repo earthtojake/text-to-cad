@@ -73,13 +73,6 @@ none.
   It is renderer chrome, independent of the host's navigation status slot.
   On mobile it is a tappable progress icon whose popover names what is loading.
 
-**Reset view** restores the opening orientation and fits the complete model,
-returns Position to its default pose, clears selection, measurements and ink,
-disables Clip and Explode, restores hidden parts, and returns to Select. It
-keeps appearance preferences. This is distinct from Zoom to fit, which retains
-the camera orientation. Renderer-specific tool state is reset through a callback
-to the shared shell; no host or file-format branch belongs in the button.
-
 ## Tools and lifecycle
 
 | File | Toolbar, left to right |

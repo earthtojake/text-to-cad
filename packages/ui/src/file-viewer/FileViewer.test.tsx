@@ -106,6 +106,24 @@ it('marks a newer release with a dot on the version, and says where the person s
   expect(within(menu).getByRole('menuitem', { name: 'Release notes' })).toBeTruthy();
 });
 
+it('steps the navbar aside while the renderer shows its file fullscreen', async () => {
+  const fullscreen = defineFileRenderer({
+    id: 'full', priority: 2, matches: () => true, prepare: async () => ({ data: null }),
+    load: async () => ({ default: ({ onFullscreenChange }: any) => <>
+      <button type="button" onClick={() => onFullscreenChange(true)}>Fullscreen</button>
+      <button type="button" onClick={() => onFullscreenChange(false)}>Back</button>
+    </> }),
+  });
+  render(<FileViewer file="parts/a.step" host={{ ...host, links: viewerLinks({ version: '0.7.4' }) } as any} renderers={[fullscreen]}
+    state={{ panel: null, panelWidth: 220 }} onStateChange={() => {}} />);
+  await screen.findByRole('button', { name: 'Fullscreen' });
+  expect(navbar()).not.toBeNull();
+  act(() => screen.getByRole('button', { name: 'Fullscreen' }).click());
+  expect(navbar()).toBeNull();
+  act(() => screen.getByRole('button', { name: 'Back' }).click());
+  expect(navbar()).not.toBeNull();
+});
+
 it('leads back to the host\'s home from a file, and draws no navbar over the home itself', async () => {
   const home = vi.fn();
   const homed = { ...host, links: viewerLinks({ version: '0.7.4' }), navigation: { openFile() {}, home } };

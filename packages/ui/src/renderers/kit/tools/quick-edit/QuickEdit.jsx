@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUp, Copy, ListPlus, X } from "lucide-react";
+import { ArrowUp, Check, Copy, ListPlus, X } from "lucide-react";
 import { Button } from "@text-to-cad/ui/primitives/button";
 import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 import { cn } from "@text-to-cad/ui/utils";
@@ -33,7 +33,7 @@ export function quickEditReferenceIds(selection) {
  * is picked or sketched, and closes when that goes. A written note keeps it open, whatever is
  * picked, until it goes or its X clears it. The X clears everything it would carry too — the
  * selection, as a press on the background would, and the sketch (`onClear`) — and so does a note
- * that has gone. It takes the keyboard for the person — each pick of theirs, or a sketch's first
+ * queued or sent. It takes the keyboard for the person — each pick of theirs, or a sketch's first
  * stroke once the pen lifts — never for an agent's selection.
  *
  * Its header names what goes with the note — the selected references (`references`, the selection
@@ -43,8 +43,9 @@ export function quickEditReferenceIds(selection) {
  * Prompt always — the note as text to paste into an agent's prompt box, its references as copied
  * references are spelled (`referencePath`) and its sketch saved as a file it names
  * (`host.attachments`); Queue where the destination is a composer (the host's context for the next
- * message); Send where the host can post a message now (`promptContext.send`). Each clears and
- * closes the box once it has gone; a failure keeps the note and says why. Its corner resizes it for
+ * message); Send where the host can post a message now (`promptContext.send`). Queue and Send
+ * clear and close the box once the note has gone; Copy Prompt keeps it all (nothing has gone yet),
+ * its button showing a tick for a moment. A failure keeps the note and says why. Its corner resizes it for
  * as long as it is open: the size is the box's own, written to it a frame at a time, so a drag
  * renders nothing, and it goes with the box — the next one opens at the default size.
  *
@@ -138,6 +139,15 @@ export default function QuickEdit({ resource, references = EMPTY, sketch = null,
 
   // The note, and everything it would carry: the box goes with them.
   const clearAll = () => { setText(""); setError(""); onClear?.(); };
+  // A copied prompt has gone nowhere yet: the box keeps it, and its button says it was copied.
+  const [copied, setCopied] = useState(false);
+  const copiedTimer = useRef(0);
+  useEffect(() => () => clearTimeout(copiedTimer.current), []);
+  const showCopied = () => {
+    clearTimeout(copiedTimer.current);
+    setCopied(true);
+    copiedTimer.current = setTimeout(() => setCopied(false), 1600);
+  };
   // Everything happens inside the press: the host binds its destination (and the clipboard its
   // write) before the picture has finished encoding.
   const run = action => {
@@ -160,7 +170,8 @@ export default function QuickEdit({ resource, references = EMPTY, sketch = null,
     Promise.resolve(outcome).then(result => {
       const message = failure(result);
       if (message) throw new Error(message);
-      clearAll();
+      if (action === "copy") showCopied();
+      else clearAll();
     }).catch(caught => setError(caught instanceof Error ? caught.message : String(caught)))
       .finally(() => setPending(""));
   };
@@ -258,8 +269,8 @@ export default function QuickEdit({ resource, references = EMPTY, sketch = null,
       <div className="flex items-center justify-end gap-1.5">
         {actions.map(({ id, label, hint, Icon }) => <TooltipHint key={id} content={hint} side="bottom">
           <Button type="button" variant={id === primary ? "default" : "secondary"} size="icon-sm" className="size-7"
-            aria-label={label} disabled={!ready} aria-busy={pending === id || undefined} onClick={() => run(id)} data-quick-edit-action={id}>
-            <Icon className="size-3.5" aria-hidden="true" />
+            aria-label={id === "copy" && copied ? "Prompt copied" : label} disabled={!ready} aria-busy={pending === id || undefined} onClick={() => run(id)} data-quick-edit-action={id}>
+            {id === "copy" && copied ? <Check className="size-3.5" aria-hidden="true" /> : <Icon className="size-3.5" aria-hidden="true" />}
           </Button>
         </TooltipHint>)}
       </div>

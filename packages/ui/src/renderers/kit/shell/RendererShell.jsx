@@ -1,12 +1,14 @@
 import { VIEWPORT_BOTTOM_CENTER, VIEWPORT_INSET_PX, VIEWPORT_STACK_BOTTOM, VIEWPORT_TOP_BAR_PX } from "./viewportLayout.js";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { Play, Pause, X } from "lucide-react";
+import { Maximize2, Minimize2, Play, Pause } from "lucide-react";
 import { Button } from "@text-to-cad/ui/primitives/button";
 import { ToolbarButton } from "@text-to-cad/ui/primitives/toolbar-button";
 import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
+import { cn } from "@text-to-cad/ui/utils";
 import PreviewChrome from "../tools/PreviewChrome.jsx";
 import { useViewerMobile } from "../../../file-viewer/responsive.js";
+import { FILE_PANEL_TREE } from "../../../file-viewer/navigation/panels.js";
 import ViewerAlertCard, { alertDismissible } from "../status/ViewerAlertCard.jsx";
 import { ViewUpdateStatus } from "../status/ViewUpdateStatus.jsx";
 import ViewerLoadingOverlay from "../status/ViewerLoadingOverlay.js";
@@ -146,6 +148,13 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
     if (hasAnimation && shell.autoplay && !animation.playing) animation.onPlayToggle();
   };
   const leavePreview = () => { setDisplayOpen(false); setPreviewing(false); };
+  // Preview is fullscreen: the page around the view steps aside while it lasts.
+  const onFullscreenChange = view.onFullscreenChange;
+  useEffect(() => {
+    if (!previewing) return undefined;
+    onFullscreenChange?.(true);
+    return () => onFullscreenChange?.(false);
+  }, [previewing, onFullscreenChange]);
   const releaseRef = useRef(null);
   releaseRef.current = animation?.onRelease || null;
   const wasPreviewing = useRef(previewing);
@@ -261,19 +270,19 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
                 </div>
               </div>
 
-              {/* The view's controls, in the navbar's right end: Display settings, then Preview — an
-                  X for it in preview. Not while the model loads or after it failed to, and not in a
-                  host that shows the view small. */}
-              {view.navbarSlot && !toolsHidden ? createPortal(<>
+              {/* The view's controls, at the navbar's right end: Display settings, then Preview. Not
+                  while the model loads or after it failed to, not in a host that shows the view
+                  small, and not in Preview, which has the page to itself. */}
+              {view.navbarSlot && !toolsHidden && !previewing ? createPortal(<>
                 <DisplayPopover open={displayOpen} onOpenChange={setDisplayOpen} disabled={shell.idle}>{frame.display}</DisplayPopover>
-                {previewing
-                  ? <NavbarControl key="exit" label="Exit preview" onClick={leavePreview}><X className="size-3.5" aria-hidden="true" /></NavbarControl>
-                  : <NavbarControl key="preview" label="Preview" disabled={shell.idle} onClick={enterPreview}><Play className="size-3.5" aria-hidden="true" /></NavbarControl>}
+                <NavbarControl label="Preview" disabled={shell.idle} onClick={enterPreview}><Maximize2 className="size-3.5" aria-hidden="true" /></NavbarControl>
               </>, view.navbarSlot) : null}
-              {/* Preview: the tools and Quick Edit put away and the model orbiting, its routines
-                  playing; under the model, the playbar (a static file's, the orbit's play and pause),
-                  with Playback settings' cog at its right end. */}
+              {/* Preview: fullscreen, the navbar and the tools put away and the model orbiting, its
+                  routines playing; at the top-right its way out, and under the model the playbar (a
+                  static file's, the orbit's play and pause), with Playback settings' cog at its
+                  right end. */}
               <PreviewChrome active={previewing} surface={frame.hostElement} hold={displayOpen}
+                corner={<NavbarControl label="Exit preview" onClick={leavePreview}><Minimize2 className="size-3.5" aria-hidden="true" /></NavbarControl>}
                 playbar={onMenuOpenChange => {
                   const settings = <PlaybackMenu animation={playbackMenuRuntime} onOpenChange={onMenuOpenChange}
                     autoplay={shell.autoplay} onAutoplayChange={shell.setAutoplay}
@@ -290,7 +299,9 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
                   </div>;
                 }}>
 
-              {toolsHidden ? null : <div className="group/tool-stack pointer-events-none absolute z-20 flex flex-col items-start gap-2" style={TOOLBAR_POSITION}
+              {/* The file explorer floats over this corner, as tall as its rows: the tools step out of
+                  sight under it, kept as they are for when it closes. */}
+              {toolsHidden ? null : <div className={cn("group/tool-stack pointer-events-none absolute z-20 flex flex-col items-start gap-2", view.openPanel === FILE_PANEL_TREE && "invisible")} style={TOOLBAR_POSITION}
                 data-mobile={mobile ? "" : undefined} data-cad-tool-groups="">
                 <FloatingToolBar tools={tools} />
                 <ToolStack hidden={previewing} mobile={mobile} layout={frame.toolStack} onLayoutChange={frame.changeToolStack}>{shellPanels}{toolPanels}</ToolStack>

@@ -52,9 +52,10 @@ it('drags the explorer\'s right edge from its left: past the minimum it stops at
   expect(collapse).not.toHaveBeenCalled();
   pointer(handle, 'pointermove', 8 + PANEL_MIN_WIDTH / 2 - 1);
   expect(collapse).toHaveBeenCalledOnce();
-  // It floats: inset from the view's corner like the tool strip, above what it covers.
+  // It floats: inset from the view's corner like the tool strip, above the view, as tall as its
+  // rows up to the view's height less the inset at either end.
   const panel = screen.getByRole('complementary', { name: 'Files' });
-  expect([panel.style.top, panel.style.left, panel.style.bottom, panel.style.width]).toEqual(['8px', '8px', '8px', '320px']);
+  expect([panel.style.top, panel.style.left, panel.style.bottom, panel.style.maxHeight, panel.style.width]).toEqual(['8px', '8px', '', 'calc(100% - 16px)', '320px']);
 });
 
 it('drags a declared panel\'s left border from the column\'s right, and a cancelled drag resizes nothing', () => {

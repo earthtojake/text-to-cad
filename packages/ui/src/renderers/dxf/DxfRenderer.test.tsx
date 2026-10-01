@@ -152,11 +152,10 @@ it('a DXF has no panels of its own, no tools and no preview', async () => {
   dispose();
 });
 
-it('a clipboard DXF retains the snapshot action', async () => {
-  const { pane, delivered, dispose } = await openDrawing('clipboard');
-  fireEvent.click(await waitFor(() => within(pane).getByRole('button', { name: 'Take snapshot' })));
-  await waitFor(() => expect(delivered).toHaveLength(1));
-  expect(delivered[0].type).toBe('image/png');
+it('a DXF has no snapshot in the navbar, whatever the destination: its note to the agent is Quick Edit\'s', async () => {
+  const { pane, dispose } = await openDrawing('clipboard');
+  await waitFor(() => expect(pane.querySelector('canvas')).not.toBeNull());
+  expect(within(pane).queryByRole('button', { name: 'Take snapshot' })).toBeNull();
   dispose();
 });
 

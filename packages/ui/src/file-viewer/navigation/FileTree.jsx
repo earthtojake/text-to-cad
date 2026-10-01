@@ -517,7 +517,9 @@ export function FileTree({ source, activePath, reveal = null, edit = null, onOpe
     ) : null;
 
   return (
-    <div className="flex h-full min-h-0 flex-col bg-sidebar/40">
+    // Two rows, the filter and the list: the list takes what the filter leaves, and scrolls once the
+    // panel holding the tree stops growing (the explorer fits its rows, up to the view's height).
+    <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] bg-sidebar/40">
       <TreeFilterInput data-mobile-panel-top-row=""
         label="Filter files"
         onChange={setQuery}
@@ -529,7 +531,7 @@ export function FileTree({ source, activePath, reveal = null, edit = null, onOpe
       <ContextMenu modal={false}>
         <ContextMenuTrigger asChild>
           <ScrollArea
-            className="min-h-0 flex-1"
+            className="min-h-0"
             onContextMenu={aim}
             // A host control floating over the page's bottom (a chat's composer) covers the last
             // rows: they scroll clear of it, and a revealed row stops above it.

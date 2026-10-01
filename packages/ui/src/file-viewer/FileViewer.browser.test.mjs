@@ -304,7 +304,15 @@ test("the explorer floats over the view's left, inset like its tool strip, and o
     pane.locator('[data-file-explorer]').evaluate(element => element.getBoundingClientRect().toJSON()),
     pane.locator('[data-file-explorer]').evaluate(element => element.parentElement.getBoundingClientRect().toJSON()),
   ]);
-  assert.deepEqual([explorer.left - body.left, explorer.top - body.top, body.bottom - explorer.bottom], [8, 8, 8]);
+  // As tall as its rows: a short tree leaves the view below it...
+  assert.deepEqual([explorer.left - body.left, explorer.top - body.top], [8, 8]);
+  assert.ok(body.bottom - explorer.bottom > 8, `a short tree leaves room below it: ${body.bottom - explorer.bottom}px`);
+  // ...and a long one stops 8px above the view's bottom, its list scrolling.
+  await page.evaluate(() => { for (let index = 0; index < 80; index += 1) window.harness.a.add(`many-${String(index).padStart(2, "0")}.txt`); });
+  await page.locator('[role="treeitem"][data-path="many-00.txt"]').waitFor();
+  await page.waitForFunction(() => document.querySelector('[data-testid="primary"] [role="tree"]')?.scrollHeight > document.querySelector('[data-testid="primary"] [role="tree"]')?.clientHeight);
+  const tall = await pane.locator('[data-file-explorer]').evaluate(element => element.getBoundingClientRect().toJSON());
+  assert.equal(Math.round(body.bottom - tall.bottom), 8, "a long tree fills the view's height, less its inset");
   // A pick in it keeps it up on a wide view, beside the file it opened.
   await page.locator('[role="treeitem"][data-path="next.txt"]').click();
   await waitValue("root-a next");

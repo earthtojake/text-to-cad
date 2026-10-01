@@ -1,5 +1,5 @@
 import { useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Camera, Pencil } from "lucide-react";
+import { Pencil } from "lucide-react";
 import { clonePerspectiveSnapshot } from "@text-to-cad/core/lib/perspective.js";
 import { VIEWER_SCENE_SCALE } from "@text-to-cad/core/lib/viewer/sceneScale.js";
 import { ViewerElementContext, useViewerHost, usePromptDestination } from "../../../host/context.js";
@@ -153,7 +153,6 @@ const EMPTY = Object.freeze({});
  *   previewing, when the renderer holds that state itself: a renderer that must answer "is what is on screen
  *   the document I asked for" before this hook runs — a live preview deciding whether its own result has
  *   landed (`presentationIsPending` with `shellPresentationKey(modelKey, revisionKey)`). Omitted: the shell holds it.
- * @param {() => void} [options.onResetView] Reset renderer-owned inspection state and pose before fitting.
  * @param {string} [options.sceneScaleMode]
  */
 export function useRendererShell({
@@ -162,7 +161,7 @@ export function useRendererShell({
   animation = null, live = EMPTY, promptReferences = null, promptContext = createViewPromptContext,
   escape = EMPTY, rendererState = null,
   onCameraSettled = null, preserveInteractionPixelRatio = false, runtimeLifecycle = null,
-  onRuntimeAlert = null, presentationReport = null, onResetView = null,
+  onRuntimeAlert = null, presentationReport = null,
   sceneScaleMode = VIEWER_SCENE_SCALE.CAD
 }) {
   const host = useViewerHost();
@@ -170,7 +169,7 @@ export function useRendererShell({
   const destination = usePromptDestination();
   const promptAvailable = destination.available;
   const composer = destination.kind === "composer";
-  const { onNavigationActionsChange, onStateChange, appearance } = view;
+  const { onStateChange, appearance } = view;
   const colorScheme = appearance?.colorScheme === "dark" ? "dark" : "light";
   const ownPreview = usePreviewState();
   const { previewing, set: setPreviewing } = preview || ownPreview;
@@ -334,26 +333,6 @@ export function useRendererShell({
   const selectDefaultTool = useCallback(() => setToolMode(toolModes ? toolModes.defaultMode : ""), [toolModes, setToolMode]);
   const drawing = useDrawingSession(drawToolActive, CAD_DRAWING_DEFAULTS);
 
-  const resetRendererRef = useRef(onResetView);
-  resetRendererRef.current = onResetView;
-  const [resetGeneration, setResetGeneration] = useState(0);
-  const resetView = useCallback(() => {
-    try {
-      resetRendererRef.current?.();
-      drawing.clear();
-      setPreviewing(false);
-      selectDefaultTool();
-      viewSettingsStore.resetTools();
-      setResetGeneration(value => value + 1);
-    } catch (error) { reportActionError(error); }
-  }, [drawing.clear, setPreviewing, selectDefaultTool, viewSettingsStore, reportActionError]);
-  useLayoutEffect(() => {
-    if (!resetGeneration) return;
-    // Child viewport layout effects first restore Preview's saved camera and
-    // adopt the renderer's reset scene; now fit that committed state once.
-    if (!viewerRef.current?.resetView()) reportActionError(new Error("The viewer is not ready to reset."));
-    scheduleSessionSave();
-  }, [resetGeneration]);
 
   // ---- prompt snapshots, clipboard ------------------------------------------
   const showPromptResult = useCallback((result) => reportActionError(promptDeliveryError(result)), [reportActionError]);
@@ -411,18 +390,6 @@ export function useRendererShell({
     services.acknowledgeCommand?.("captureRequest", captureKey);
     capture();
   }, [captureKey, viewerLoading, promptAvailable, services.acknowledgeCommand, capture]);
-
-  // A clipboard destination keeps an explicit snapshot control. A composer destination, or a
-  // host with no prompt workflow (`unavailable`), has none: its note to the agent is Quick Edit's.
-  const snapshotAction = destination.kind === "clipboard";
-  const captureRef = useRef(capture);
-  captureRef.current = capture;
-  useEffect(() => {
-    const actions = snapshotAction && modelKey ? [{ id: "snapshot", label: "Take snapshot", hint: "Snapshot", icon: Camera,
-      disabled: viewerLoading || !scene || !promptAvailable, onInvoke: () => captureRef.current() }] : [];
-    onNavigationActionsChange?.(actions);
-    return () => onNavigationActionsChange?.([]);
-  }, [onNavigationActionsChange, snapshotAction, modelKey, viewerLoading, Boolean(scene), promptAvailable]);
 
   // ---- shortcuts ------------------------------------------------------------
   const escapeRef = useRef(escape.handle);
@@ -537,7 +504,7 @@ export function useRendererShell({
 
   return {
     // Renderer-facing.
-    toolMode, selectTool, selectDefaultTool, resetView, tools, idle, previewing, setPreviewing,
+    toolMode, selectTool, selectDefaultTool, tools, idle, previewing, setPreviewing,
     // Preview's Playback settings, the file's own: orbit and its speed, Autoplay, and the routine's chosen speed and loop.
     autoplay, setAutoplay, playback, setPlayback,
     // Deliver a prompt context through the host, reporting a failure as the viewport's alert.

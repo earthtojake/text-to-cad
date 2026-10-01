@@ -1,5 +1,8 @@
 import { useEffect, useState } from "react";
 import { ToolbarTooltipScope } from "@text-to-cad/ui/primitives/toolbar-button";
+import { cn } from "@text-to-cad/ui/utils";
+import { VIEWPORT_INSET_PX } from "../shell/viewportLayout.js";
+import { FLOATING_SURFACE_CLASS } from "./floatingSurface.js";
 
 export const PREVIEW_CHROME_IDLE_MS = 1000;
 // A browser test on a slow software renderer stretches the idle (`window.__cadPreviewChromeIdleMs`)
@@ -8,19 +11,19 @@ const previewChromeIdleMs = () => Number(globalThis.window?.__cadPreviewChromeId
 
 /**
  * The viewer's chrome around preview mode. `children` — the tool strip and its stack, Quick Edit,
- * everything a person edits with — is hidden and inert while `active`; the view's own controls
- * (Display settings, Preview) are in the navbar, outside the view, and stay. In preview the
- * `playbar` under the model has one idle deadline and a 150ms fade: movement over `surface` wakes
- * it, and hovering it (`data-preview-hover-hold`), an open menu, or `hold` (a popover the owner
- * keeps, such as Display settings) keeps it up.
+ * everything a person edits with — is hidden and inert while `active`. Preview is fullscreen: the
+ * navbar steps aside with the view's controls in it, and the view holds its own way out at its
+ * top-right (`corner`). The corner and the `playbar` under the model share one idle deadline and a
+ * 150ms fade: movement over `surface` wakes them, and hovering them (`data-preview-hover-hold`),
+ * an open menu, or `hold` (a popover the owner keeps) keeps them up.
  *
- * @param {{ active: boolean, surface?: Element | null, hold?: boolean,
+ * @param {{ active: boolean, surface?: Element | null, hold?: boolean, corner?: import("react").ReactNode,
  *   playbar?: import("react").ReactNode | ((onMenuOpenChange: (open: boolean) => void) => import("react").ReactNode),
  *   children?: import("react").ReactNode }} props
  *   `playbar`, when it is a function, is given the setter a menu in it reports its open state to
  *   (Playback settings sits at the playbar's right end).
  */
-export default function PreviewChrome({ active, surface, hold = false, playbar, children }) {
+export default function PreviewChrome({ active, surface, hold = false, corner = null, playbar, children }) {
   const [visible, setVisible] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
   const held = menuOpen || hold;
@@ -70,6 +73,8 @@ export default function PreviewChrome({ active, surface, hold = false, playbar, 
       data-visible={shown} inert={!shown}
       className="pointer-events-none absolute inset-0 z-30 transition-opacity duration-150"
       style={{ opacity: shown ? 1 : 0 }}>
+      {active && corner ? <div data-preview-hover-hold="" data-preview-corner="" style={{ top: VIEWPORT_INSET_PX, right: VIEWPORT_INSET_PX }}
+        className={cn(FLOATING_SURFACE_CLASS, "pointer-events-auto absolute flex items-center rounded-md p-0.5")}>{corner}</div> : null}
       {active ? (typeof playbar === "function" ? playbar(setMenuOpen) : playbar) : null}
     </div></ToolbarTooltipScope>
   </>;

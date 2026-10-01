@@ -9,11 +9,11 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 // on, a runtime whose renderer's canvas is the scene's), and records the props the shell wired, so
 // the camera reports reach the renderer through exactly the callbacks the real viewport calls.
 // The viewport's own half of those reports (a resize, a preview camera) is ShellViewport.test.tsx.
-const viewport = vi.hoisted(() => ({ props: null as any, resetView: vi.fn(() => true) }));
+const viewport = vi.hoisted(() => ({ props: null as any }));
 vi.mock('../../../../dist/renderers/kit/shell/ShellViewport.js', () => ({
   default: forwardRef(function StandInViewport(props: any, ref) {
     viewport.props = props;
-    useImperativeHandle(ref, () => ({ captureScreenshotBlob: async () => new Blob(['pixels'], { type: 'image/png' }), resetView: viewport.resetView }));
+    useImperativeHandle(ref, () => ({ captureScreenshotBlob: async () => new Blob(['pixels'], { type: 'image/png' }) }));
     const hostRef = useRef<HTMLDivElement | null>(null);
     const runtimeRef = useRef<any>(null);
     const context = { hostRef, runtimeRef, mountRef: hostRef, viewerReadyTick: 1, commitScene: () => true };
@@ -28,7 +28,6 @@ import { ViewerHostContext } from '../../../../dist/host/context.js';
 import { testHost } from '../../../../dist/host/testing/host.js';
 
 beforeEach(() => {
-  viewport.resetView.mockClear();
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
   vi.stubGlobal('matchMedia', (query: string) => ({ matches: false, media: query, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} }));
 });
@@ -160,23 +159,20 @@ it('a sketch opens Quick Edit, which sends the file, the note and the view with 
   expect(clearInk).toHaveBeenCalledTimes(1);
 });
 
-it('clipboard destinations keep the snapshot action, and Draw copies its ink from the foot of its controls', async () => {
+it('a clipboard destination has no snapshot in the navbar, and Draw copies its ink from the foot of its controls', async () => {
   const destination = { kind: 'clipboard', available: true } as const;
   const writeImage = vi.fn(async () => {}), deliver = vi.fn();
   const { navigation } = mount(testHost({
     promptContext: { getSnapshot: () => destination, subscribe: () => () => {}, deliver } as any,
     clipboard: { writeText: async () => {}, readText: async () => '', writeImage },
   }));
-  const snapshot = navigation.mock.calls.at(-1)![0];
-  expect(snapshot.map((action: any) => action.label)).toEqual(['Take snapshot']);
-  act(() => snapshot[0].onInvoke());
-  await waitFor(() => expect(writeImage).toHaveBeenCalledTimes(1));
+  expect(navigation.mock.calls.flatMap(([actions]) => actions)).toEqual([]);
   fireEvent.click(screen.getByRole('button', { name: 'Draw' }));
   const controls = () => screen.getByRole('region', { name: 'Drawing controls' });
   expect(within(controls()).queryByRole('button', { name: /^Copy/ })).toBeNull();
   act(() => viewport.props.drawing.onContentChange(true, 1));
   fireEvent.click(within(controls()).getByRole('button', { name: 'Copy Drawing' }));
-  await waitFor(() => expect(writeImage).toHaveBeenCalledTimes(2));
+  await waitFor(() => expect(writeImage).toHaveBeenCalledTimes(1));
   // A clipboard destination's Quick Edit copies its prompt, and nothing else.
   expect(within(screen.getByRole('region', { name: 'Quick Edit' })).queryByRole('button', { name: 'Queue' })).toBeNull();
   expect(deliver).not.toHaveBeenCalled();

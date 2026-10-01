@@ -185,34 +185,6 @@ export function useViewportCamera({
     syncViewPlaneOrientation(runtime);
     return true;
   }, []);
-  // A full view reset is separate from Zoom to fit: discard orbit momentum,
-  // then frame the authored model from its opening direction.
-  const resetView = useCallback(() => {
-    const runtime = runtimeRef.current;
-    if (!runtime?.controls) return false;
-    const controls = runtime.controls;
-    const damping = controls.enableDamping;
-    runWithoutPerspectiveEvents(() => {
-      cancelCameraTransition(runtime, { scheduleIdle: false });
-      clearKeyboardOrbitState(runtime.keyboardOrbitState);
-      controls.autoRotate = false;
-      controls.enableDamping = false;
-      controls.update();
-    });
-    const reset = zoomRuntimeToBounds(runtime, runtimeFramingBounds(runtime, modelBoundsRef.current), sceneScaleModeRef.current, {
-      animate: false, modelOffset: modelTransformRef.current.offset,
-      viewDirection: DEFAULT_VIEW_DIRECTION, viewUp: WORLD_UP, resetZoomBaseline: true
-    });
-    controls.enableDamping = damping;
-    if (!reset) return false;
-    runtime.userMovedCamera = false;
-    activeViewPlaneFaceRef.current = "";
-    setActiveViewPlaneFace("");
-    emitPerspectiveChange(runtime);
-    syncViewPlaneOrientation(runtime);
-    runtime.requestRender?.();
-    return true;
-  }, []);
   // Stable, and built only from refs and setters: the view cube is memoized, so a viewer
   // render that changed nothing of the cube's (every animation frame) does not redraw it.
   const activateViewPlaneFace = useCallback((faceId) => {
@@ -253,7 +225,6 @@ export function useViewportCamera({
     applyInitialPerspective,
     emitPerspectiveChange,
     resetZoomAndPan,
-    resetView,
     syncPreviewCamera,
     syncViewPlaneOrientation
   };

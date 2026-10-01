@@ -119,7 +119,7 @@ it('offers the buttons the host can carry out, the rightmost primary and pressed
   expect(deliver).not.toHaveBeenCalled();
 });
 
-it('copies the note with its references as copied, and its sketch saved as a file it names', async () => {
+it('copies the note with its references as copied, and its sketch saved as a file it names, keeping it all in the box', async () => {
   let copied: Promise<string> | string = '';
   const saved: string[] = [];
   const host = testHost({
@@ -132,7 +132,9 @@ it('copies the note with its references as copied, and its sketch saved as a fil
   expect(buttons()).toEqual(['Close Quick Edit', 'Copy Prompt']);
   fireEvent.change(field(), { target: { value: 'Round this edge.' } });
   fireEvent.click(within(box()!).getByRole('button', { name: 'Copy Prompt' }));
-  await waitFor(() => expect(clear).toHaveBeenCalledTimes(1));
+  // Copied, nothing has gone yet: the note and what it carries stay, and the button says so.
+  await waitFor(() => expect(within(box()!).getByRole('button', { name: 'Prompt copied' })).toBeTruthy());
+  expect([field().value, clear.mock.calls.length]).toEqual(['Round this edge.', 0]);
   expect(await copied).toBe('Round this edge.\n\nFile: models/parts/bracket.step\nReferences:\nmodels/parts/bracket.step#o1.f2\nSketch: /tmp/cadgen-sketches/bracket-sketch.png');
   expect(saved).toEqual(['bracket-sketch.png']);
 });

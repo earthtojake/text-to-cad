@@ -115,20 +115,3 @@ test("lighting and floor edits do not invalidate geometry settings, and no-op ed
 });
 
 
-test("resetTools clears retained effects atomically while preserving display appearance", () => {
-  const appearance = { mode: "xray", camera: { projection: "perspective" }, surfaces: { opacity: 0.4 }, lighting: { exposure: 0.7 } };
-  const store = createViewSettingsStore({ ...appearance,
-    clip: { enabled: false, offsets: { x: 0.3 }, invert: true }, exploded: { enabled: true, amount: 0.8 } });
-  let updates = 0;
-  store.subscribe(() => {
-    updates++;
-    const view = store.getSnapshot().scene.view;
-    assert.equal(view.clip.enabled, false);
-    assert.equal(view.exploded.enabled, false);
-  });
-  store.resetTools();
-  assert.equal(updates, 1);
-  assert.deepEqual(store.getSnapshot().display, { ...appearance, clip: { enabled: false }, exploded: { enabled: false } });
-  store.resetTools();
-  assert.equal(updates, 1);
-});

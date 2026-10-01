@@ -23,7 +23,8 @@ const INSIDE = "[data-viewer-navbar], [data-file-panel], [data-slot=select-conte
  * It overlays what it opens over — a model, its tools, a host's home — and never resizes or
  * moves any of it: the viewport keeps its size and its framing, the tool strip keeps its corner.
  * It is inset from the view's edges exactly as the tool strip is (`CHROME_INSET_PX`), on a solid
- * background, above the tools. It stays up while a person walks the tree file by file; a press
+ * background, above the tools, and as tall as its rows, up to the view's height: past that its
+ * list scrolls (one grid row, capped by the panel's max height). It stays up while a person walks the tree file by file; a press
  * anywhere outside it, or its toggle in the navbar, closes it.
  *
  * Its right edge is its one handle: dragged, it sizes the explorer between the tab's bounds
@@ -105,9 +106,9 @@ export function FileExplorer({ label, width, onWidthChange, onCollapse, mobile =
   };
   return (
     <aside ref={panel} aria-label={label} data-file-panel-container="tree" data-file-explorer=""
-      className="absolute z-40 flex overflow-hidden rounded-lg border bg-background shadow-lg"
-      style={{ top: CHROME_INSET_PX, left: CHROME_INSET_PX, bottom: CHROME_INSET_PX, width, maxWidth: `calc(100% - ${CHROME_INSET_PX * 2}px)` }}>
-      <div className="min-h-0 min-w-0 flex-1 overflow-hidden">{children}</div>
+      className="absolute z-40 grid grid-rows-[minmax(0,1fr)] overflow-hidden rounded-lg border bg-background shadow-lg"
+      style={{ top: CHROME_INSET_PX, left: CHROME_INSET_PX, width, maxWidth: `calc(100% - ${CHROME_INSET_PX * 2}px)`, maxHeight: `calc(100% - ${CHROME_INSET_PX * 2}px)` }}>
+      <div className="min-h-0 min-w-0 overflow-hidden">{children}</div>
       <div
         aria-label={`Resize ${label.toLowerCase()} panel`}
         aria-orientation="vertical"

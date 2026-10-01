@@ -57,6 +57,10 @@ export function FileViewer({ file, host, renderers, state, onStateChange, displa
   const bindElement = useCallback((element: HTMLDivElement | null) => { viewerElement.current = element; rootRef(element); }, [rootRef]);
   const [panelSlot, setPanelSlot] = useState<HTMLDivElement | null>(null);
   const [navbarSlot, setNavbarSlot] = useState<HTMLDivElement | null>(null);
+  // A renderer showing its file fullscreen has the page to itself, until it says otherwise or goes.
+  const [fullscreen, setFullscreen] = useState(false);
+  useEffect(() => { setFullscreen(false); }, [key]);
+  const onFullscreenChange = useCallback((full: boolean) => { if (currentKey.current === key) setFullscreen(full); }, [key]);
   const [readiness, setReadiness] = useState<{ key: string; ready: boolean } | null>(null);
   const [navActions, setNavActions] = useState<{ key: string; actions: readonly FileNavigationAction[] } | null>(null);
   const onNavigationActionsChange = useCallback((actions: readonly FileNavigationAction[]) => { if (currentKey.current === key) setNavActions({ key, actions }); }, [key]);
@@ -90,11 +94,11 @@ export function FileViewer({ file, host, renderers, state, onStateChange, displa
     if (!shown) return null;
     const Renderer = shown.prepared.Component;
     return <RenderBoundary key={key} onError={onError}><Renderer displayActions={displayActions} key={key} file={shown.file} source={source} document={document}
-      openPanel={openId} panelSlot={panelSlot} navbarSlot={navbarSlot} onPanelOpen={setPanel} onReady={onReady}
+      openPanel={openId} panelSlot={panelSlot} navbarSlot={navbarSlot} onFullscreenChange={onFullscreenChange} onPanelOpen={setPanel} onReady={onReady}
       onNavigationActionsChange={onNavigationActionsChange}
       onOpenFile={openFromRenderer} appearance={appearance}
       state={rendererState} onStateChange={setRendererState} reload={reload} /></RenderBoundary>;
-  }, [shown, key, onError, displayActions, source, document, openId, panelSlot, navbarSlot, setPanel, onReady,
+  }, [shown, key, onError, displayActions, source, document, openId, panelSlot, navbarSlot, onFullscreenChange, setPanel, onReady,
     onNavigationActionsChange, openFromRenderer, appearance, rendererState, setRendererState, reload]);
 
   // A host's home stands where no file is open, as a page of its own.
@@ -105,8 +109,8 @@ export function FileViewer({ file, host, renderers, state, onStateChange, displa
   else if (loaded.status === "error") body = presentation?.error?.(loaded.message) ?? <EmptyState icon={FileText} title="Could not open that file" description={loaded.message} tone="warn" />;
   else body = rendererBody;
   const shownActions = navActions?.key === key && ready ? navActions.actions : [];
-  const treeOpen = openPanel?.content === "tree";
-  const columnPanel = openPanel && openPanel.content === "slot" ? openPanel : null;
+  const treeOpen = openPanel?.content === "tree" && !fullscreen;
+  const columnPanel = openPanel && openPanel.content === "slot" && !fullscreen ? openPanel : null;
   const explorer = panels.some(panel => panel.id === FILE_PANEL_TREE) ? { open: treeOpen, onToggle: () => setPanel(nextOpenPanel(openId, FILE_PANEL_TREE)) } : null;
   // With a file asked for, the navbar leads back to the host's home.
   const onBack = file ? host.navigation.home : undefined;
@@ -120,7 +124,7 @@ export function FileViewer({ file, host, renderers, state, onStateChange, displa
   // or for a view shown small in a conversation (`compact`), whose frame already says what it
   // shows. A host that shows one file without browsing it or naming it, with nothing at either
   // end, gets the file with no row above it.
-  const navbar = !appearance.compact && !home && (Boolean(host.links) || Boolean(onBack) || Boolean(explorer) || navigation.file !== null || Boolean(trailing) || Boolean(dirty));
+  const navbar = !appearance.compact && !home && !fullscreen && (Boolean(host.links) || Boolean(onBack) || Boolean(explorer) || navigation.file !== null || Boolean(trailing) || Boolean(dirty));
   return <ViewerMobileContext.Provider value={mobile}><ViewerHostContext.Provider value={host}><ViewerElementContext.Provider value={viewerElement}><div className="text-to-cad-file-viewer text-ui font-normal flex h-full min-h-0 min-w-0 flex-col overflow-hidden" ref={bindElement} data-viewer-layout={mobile ? "mobile" : "desktop"} tabIndex={-1}>
     {navbar ? <ViewerNavbar onBack={onBack} explorer={explorer} file={navigation.file} selecting={loaded.status === "empty"} status={dirty} trailing={trailing} controlsRef={setNavbarSlot}
       links={host.links} clipboard={host.clipboard} onError={onError} /> : null}

@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Camera } from "lucide-react";
 import { cn } from "@text-to-cad/ui/utils";
 import { usePromptDestination, useViewerHost } from "../../host/context.js";
 import ViewerAlertCard from "../kit/status/ViewerAlertCard.jsx";
@@ -45,7 +44,7 @@ function DxfSurface({ view, data }) {
   const file = workspace.entry?.file || view.file.path;
   const payload = useDrawingPayload({ client: workspace.client, file, revision: workspace.resource.revision });
   const [actionError, setActionError] = useState(null);
-  const { onReady, onNavigationActionsChange, onStateChange } = view;
+  const { onReady, onStateChange } = view;
 
   // ---- the view this file was left at ---------------------------------------
   // The file's view (`kit/shell/fileView.js`) with the drawing's transform as its camera and
@@ -127,23 +126,6 @@ function DxfSurface({ view, data }) {
     declinedSelect.current = selectKey;
     workspace.acknowledgeCommand?.("selectReference", selectKey);
   }, [selectKey, workspace.acknowledgeCommand]);
-
-  // ---- the navbar ------------------------------------------------------------
-  // One action, and it is not the camera's. Zooming a drawing is the pointer's job —
-  // wheel or pinch about the pointer, drag to pan, double-click to fit — so there are
-  // no zoom buttons to press, here or anywhere else in the viewer. A clipboard
-  // destination's snapshot is the one action; any other host's note to the agent is Quick Edit's.
-  const snapshotAction = destination.kind === "clipboard";
-  const actionsRef = useRef({ snapshot });
-  actionsRef.current = { snapshot };
-  useEffect(() => {
-    const actions = snapshotAction ? [
-      { id: "snapshot", label: "Take snapshot", hint: "Snapshot", icon: Camera, disabled: !ready || !promptAvailable,
-        onInvoke: () => actionsRef.current.snapshot() }
-    ] : [];
-    onNavigationActionsChange?.(actions);
-    return () => onNavigationActionsChange?.([]);
-  }, [onNavigationActionsChange, snapshotAction, ready, promptAvailable]);
 
   // ---- the live command surface ----------------------------------------------
   const runtimeRef = useRef(null);
