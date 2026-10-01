@@ -32,6 +32,7 @@ this file cover the pass on raw text and end to end.
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import os
 import tempfile
@@ -183,11 +184,15 @@ class StepWriteDeterminismTest(unittest.TestCase):
             export_build123d_step_file(_build_assembly(), out)
             self.assertNotIn(b"\r\n", out.read_bytes())
 
-    def _write_with(self, applier: str, path: Path, **rig_kwargs) -> bytes:
+    def _write_with(self, applier: str, path: Path, *, scrambled: list[int] | None = None, **rig_kwargs) -> bytes:
         """Export the rig with the style-tail permutation applied in `text` or
-        in `model`."""
+        in `model`. With ``scrambled`` (a list), the tail's MDGPR blocks are
+        first laid out in the reverse of their canonical order, each in the DFS
+        layout OCCT gives a block -- what another heap order would have written --
+        and the number of blocks is appended."""
         import os
 
+        import cadgen.step_export as step_export
         from cadgen.step_export import export_build123d_step_file
 
         previous = os.environ.get("CADGEN_STEP_STYLE_REORDER")
@@ -195,8 +200,47 @@ class StepWriteDeterminismTest(unittest.TestCase):
             os.environ["CADGEN_STEP_STYLE_REORDER"] = "model"
         else:
             os.environ.pop("CADGEN_STEP_STYLE_REORDER", None)
+        scan_tail = step_export._style_tail_scan
+        busy = False
+
+        def scrambling_scan(model):
+            # Every scan of the writer's model scrambles its tail first. Not keyed by
+            # model: each Model() call hands back a fresh Python wrapper.
+            nonlocal busy
+            if not busy:
+                busy = True
+                try:
+                    plan = step_export._style_tail_plan(model)
+                    if plan is not None:
+                        tail_start, _total, canonical = plan
+                        step_export._apply_style_tail_plan_in_model(model, tail_start, canonical)
+                        scan = scan_tail(model)  # canonical numbering: blocks ascend
+                        layout: list[int] = []
+                        seen: set[int] = set()
+
+                        def visit(number: int) -> None:
+                            if number not in seen:
+                                seen.add(number)
+                                layout.append(number)
+                                for child in scan.children[number]:
+                                    visit(child)
+
+                        for mdgpr in sorted(scan.mdgpr_nums, reverse=True):
+                            visit(mdgpr)
+                        if len(layout) == scan.size:
+                            step_export._apply_style_tail_plan_in_model(model, tail_start, layout)
+                            scrambled.append(len(scan.mdgpr_nums))
+                finally:
+                    busy = False
+            return scan_tail(model)
+
+        scrambling = (
+            mock.patch.object(step_export, "_style_tail_scan", scrambling_scan)
+            if scrambled is not None else contextlib.nullcontext()
+        )
         try:
-            export_build123d_step_file(_build_assembly(**rig_kwargs), path)
+            with scrambling:
+                export_build123d_step_file(_build_assembly(**rig_kwargs), path)
         finally:
             if previous is None:
                 os.environ.pop("CADGEN_STEP_STYLE_REORDER", None)
@@ -205,11 +249,15 @@ class StepWriteDeterminismTest(unittest.TestCase):
         return path.read_bytes()
 
     def test_both_appliers_write_identical_bytes(self) -> None:
-        """The fast text path and the quadratic model path are the same file.
+        """The fast text path and the quadratic model path are the same file,
+        whatever order the tail starts in.
 
         This is the gate on the text rewrite: the written bytes are the
         content-addressed store key, so "equivalent STEP" is not good enough —
         a different line wrap would orphan every package built before it.
+        OCCT's own tail order comes from address-hashed maps and is sometimes
+        already canonical, which would compare two untouched files; so each
+        applier also starts from a tail whose blocks run backwards, never canonical.
         """
         with tempfile.TemporaryDirectory(prefix="step-appliers-") as tmp:
             for label, rig_kwargs in (
@@ -217,55 +265,18 @@ class StepWriteDeterminismTest(unittest.TestCase):
                 ("transparent", {"transparent_part": True}),
             ):
                 with self.subTest(rig=label):
-                    in_text = self._write_with(
-                        "text", Path(tmp) / f"{label}-text.step", **rig_kwargs
-                    )
-                    in_model = self._write_with(
-                        "model", Path(tmp) / f"{label}-model.step", **rig_kwargs
-                    )
-                    self.assertEqual(
-                        hashlib.sha256(in_text).hexdigest(),
-                        hashlib.sha256(in_model).hexdigest(),
-                        "text and model appliers disagree on the written bytes",
-                    )
-
-    def test_the_appliers_actually_reorder_something(self) -> None:
-        """Control for the test above: both appliers must be doing work.
-
-        If the rig ever stopped producing a permuted tail, the equality test
-        would pass by comparing two untouched files. ``_style_tail_order`` is
-        the one step both routes share, so its result is what gets captured."""
-        import cadgen.step_export as step_export
-
-        with tempfile.TemporaryDirectory(prefix="step-appliers-") as tmp:
-            orders: list = []
-            original = step_export._style_tail_order
-
-            def capture(scan, targets, contexts=None):
-                order = original(scan, targets, contexts)
-                orders.append((scan, targets, order))
-                return order
-
-            step_export._style_tail_order = capture
-            try:
-                self._write_with("text", Path(tmp) / "probe.step")
-            finally:
-                step_export._style_tail_order = original
-
-            # The scan's coverage probe runs first with empty targets; the
-            # last call is the real order, with the targets read from the file.
-            self.assertTrue(orders, "no style tail order was made")
-            scan, targets, old_numbers = orders[-1]
-            self.assertTrue(
-                any(targets.values()), "the in-file applier read no styled targets"
-            )
-            self.assertIsNotNone(old_numbers)
-            self.assertGreater(len(old_numbers), 1, "tail must hold several entities")
-            self.assertNotEqual(
-                old_numbers, list(range(scan.tail_start, scan.total + 1)),
-                "the rig's tail was already in canonical order — this fixture no "
-                "longer exercises the reorder",
-            )
+                    as_written = self._write_with("text", Path(tmp) / f"{label}.step", **rig_kwargs)
+                    for applier in ("text", "model"):
+                        sizes: list[int] = []
+                        reordered = self._write_with(
+                            applier, Path(tmp) / f"{label}-{applier}.step", scrambled=sizes, **rig_kwargs
+                        )
+                        self.assertTrue(sizes and min(sizes) > 1, f"the {applier} applier got no blocks to reorder")
+                        self.assertEqual(
+                            hashlib.sha256(reordered).hexdigest(),
+                            hashlib.sha256(as_written).hexdigest(),
+                            f"the {applier} applier wrote other bytes from a reversed tail",
+                        )
 
     def test_unrecognized_file_shape_falls_back_to_the_whole_file_pass(self) -> None:
         """When the in-place applier refuses the written file, the writer runs
