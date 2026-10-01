@@ -5,6 +5,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@text-to
 import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 import { cn } from "@text-to-cad/ui/utils";
 
+import { NAVBAR_CONTROLS_CLASS, NAVBAR_ROW_CLASS } from "../../lib/navbarRow.js";
+
 import { EntryMenuItems, useEntryMenuFocusGuard } from "./EntryMenu.jsx";
 import { entryMenu } from "./entry-menu.js";
 import { InlineName } from "./InlineName.jsx";
@@ -115,23 +117,23 @@ function FileActions({ entry, capabilities, platform, onAction }) {
 export function ViewerNavbar({ onBack, explorer = null, file = null, selecting = false, status = null, trailing = null, controlsRef, links, clipboard, onError, className }) {
   const name = file ? file.path.split("/").pop() || file.path : "";
   return (
-    <header className={cn("flex h-9 shrink-0 items-center gap-2 border-b border-border bg-background px-2 text-foreground", className)} data-viewer-navbar="">
+    <header className={cn(NAVBAR_ROW_CLASS, "border-border bg-background text-foreground", className)} data-viewer-navbar="">
       <nav aria-label="Viewer" className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden text-sm">
         {onBack ? <BackButton onBack={onBack} /> : null}
         {explorer ? <PanelToggle icon={Folders} id="tree" testId="tree-toggle" active={explorer.open}
           label={explorer.open ? "Hide files" : "Show files"} onClick={explorer.onToggle} /> : null}
-        {file ? <span className="ml-1 flex min-w-0 items-center gap-1">
+        {file ? <span className="flex min-w-0 items-center gap-1">
           {file.renaming ? <InlineName initial={name} kind="file" label="Rename file" className="max-w-64"
             onCancel={file.renaming.cancel} onCommit={file.renaming.commit} /> : <>
             {/* The name keeps its width longest: it is what the row is about. Its full path, only when it is cut short. */}
-            <TooltipHint content={file.path} overflowOnly><span className="min-w-0 truncate px-0.5" data-file-name="">{name}</span></TooltipHint>
+            <TooltipHint content={file.path} overflowOnly><span className="min-w-0 truncate" data-file-name="">{name}</span></TooltipHint>
             {status}
             <FileActions entry={{ path: file.path, kind: "file", surface: "navbar" }} capabilities={file.capabilities}
               platform={file.platform} onAction={file.onAction} />
           </>}
-        </span> : selecting && explorer ? <span className="ml-1 truncate px-0.5 text-muted-foreground" data-select-file="">Select file</span> : status}
+        </span> : selecting && explorer ? <span className="truncate text-muted-foreground" data-select-file="">Select file</span> : status}
       </nav>
-      <div className="flex shrink-0 items-center gap-0.5">
+      <div className={NAVBAR_CONTROLS_CLASS}>
         {trailing}
         {links ? <UpdateButton links={links} clipboard={clipboard} onError={onError} /> : null}
         <div ref={controlsRef} className="contents" data-navbar-controls="" />

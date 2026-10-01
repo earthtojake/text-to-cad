@@ -37,7 +37,8 @@ none.
   to the host's home where it has one (the size of the row's icon buttons), the file
   explorer's toggle where there are files to browse, then the open file's name and
   its ⋯ — the explorer's own menu for that file; the name has no right-click menu
-  and there are no crumbs. With no file open, the words "Select file" (not a
+  and there are no crumbs. The name sits the row's 4px gap after the button before
+  it, with no margin of its own. With no file open, the words "Select file" (not a
   control) stand in the name's place beside the explorer's toggle. Right: a
   declared panel's toggle, the update — a blue download button, there only when
   the host found a newer release, whose menu says the step to it, how this host
@@ -67,7 +68,7 @@ none.
   face/edge/corner hit areas and neutral hover and XYZ guides. Preview omits it.
 - **View controls** at the navbar's right end: **Settings** (cog), then
   **Preview** (a fullscreen icon, two diagonal arrows), the navbar's 24px icon
-  buttons with 14px icons and hints below them. Settings' popover opens down from
+  buttons with 14px icons, 4px apart, and hints below them. Settings' popover opens down from
   its button, end-aligned: a header — "Settings", the version in gray, then
   GitHub and Discord as icon links and its X — over the Display sections, whose
   own heading keeps its Reset. A view shown small has no navbar, and so none of
@@ -548,8 +549,9 @@ in the navbar ("Preview"). It is fullscreen: the renderer says so
 (`onFullscreenChange`), and the navbar, the explorer and any declared panel step
 aside while it lasts, Display settings with them; the toolbar, the tool stack and
 its resize handles, Quick Edit, joint handles, cube and context menu are gone. Its
-way out is the view's own: an X ("Exit preview") at the view's top-right,
-transparent over the model, which fades with the playbar; Escape leaves it too. It
+way out is the view's own: an X ("Exit preview") at the view's top-right, exactly
+where Preview sat in the navbar (the corner is a row of the navbar's own geometry,
+`lib/navbarRow.js`), transparent over the model, which fades with the playbar; Escape leaves it too. It
 starts orbiting, unless the file's Playback settings turned its orbit off. **Playback
 settings** (a cog; `PlaybackMenu`) sits in that corner before the X, where Settings
 sits outside preview, and opens down. It holds, for a file with routines, **Animation** — the Routine (with more than one), Speed, Loop and

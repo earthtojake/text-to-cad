@@ -186,7 +186,7 @@ async function open(options = {}) {
     reload: async () => { await page.reload(); Object.assign(opened, await ready()); },
     state: () => page.evaluate(() => window.cadHarness.a.controller.readState()),
     display: patch => page.evaluate(next => window.cadHarness.a.controller.setDisplaySettings(next), patch),
-    // Preview: its button, the play icon beside Display settings; its X back. The file's view was
+    // Preview: its button, the fullscreen icon beside Settings; its X back. The file's view was
     // seeded with Orbit off: a still camera, so what moves in a frame is the model.
     enterPreview: async () => {
       await pane.getByRole('button', { name: 'Preview', exact: true }).click();
@@ -196,7 +196,7 @@ async function open(options = {}) {
       await pane.getByRole('button', { name: 'Exit preview', exact: true }).click();
       await pane.getByRole('button', { name: 'Preview', exact: true }).waitFor();
     },
-    // Display is not a tool: its settings button sits beside Preview at the viewport's top right.
+    // Display is not a tool: its Settings button sits beside Preview at the navbar's right end.
     tool: name => name === 'Display' ? pane.getByRole('button', { name: 'Settings', exact: true })
       : pane.locator(name === 'Reset' ? '[data-cad-camera-controls]' : '[data-cad-toolbar]').getByRole('button', { name, exact: true }),
     tools: () => pane.locator('[data-cad-toolbar]').getByRole('button')
@@ -829,7 +829,13 @@ test('preview opens paused, its playbar plays and pauses the routine without mov
   // The tools view carries nothing of the routine's: no Animate tool, no transport.
   assert.equal(await view.tool('Animate').count(), 0);
   assert.equal(await pane.locator('[data-animation-transport]').count(), 0);
+  const boxes = names => Promise.all(names.map(name => pane.getByRole('button', { name, exact: true }).boundingBox()));
+  const navbarControls = await boxes(['Settings', 'Preview']);
   await view.enterPreview();
+  // Preview has the page to itself: the navbar goes, and its corner holds Playback settings and the
+  // way out exactly where Settings and Preview sat in it.
+  await pane.locator('[data-viewer-navbar]').waitFor({ state: 'hidden' });
+  assert.deepEqual(await boxes(['Playback settings', 'Exit preview']), navbarControls);
   // The tools are put away, and the playbar is under the model.
   assert.equal(await pane.getByRole('group', { name: 'Interaction tools' }).isVisible(), false);
   const bar = pane.getByRole('toolbar', { name: 'Animation playback' });

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ToolbarTooltipScope } from "@text-to-cad/ui/primitives/toolbar-button";
-import { VIEWPORT_INSET_PX } from "../shell/viewportLayout.js";
+import { cn } from "@text-to-cad/ui/utils";
+import { NAVBAR_CONTROLS_CLASS, NAVBAR_ROW_CLASS } from "../../../lib/navbarRow.js";
 
 export const PREVIEW_CHROME_IDLE_MS = 1000;
 // A browser test on a slow software renderer stretches the idle (`window.__cadPreviewChromeIdleMs`)
@@ -11,7 +12,8 @@ const previewChromeIdleMs = () => Number(globalThis.window?.__cadPreviewChromeId
  * The viewer's chrome around preview mode. `children` — the tool strip and its stack, Quick Edit,
  * everything a person edits with — is hidden and inert while `active`. Preview is fullscreen: the
  * navbar steps aside with the view's controls in it, and the view holds its own at its top-right
- * (`corner`: Playback settings and the way out), transparent over the model. The corner and the
+ * (`corner`: Playback settings and the way out), transparent over the model, on a row of the
+ * navbar's own geometry: each lands where its counterpart (Settings, Preview) sat. The corner and the
  * `playbar` under the model share one idle deadline and a 150ms fade: movement over `surface`
  * wakes them, and hovering them (`data-preview-hover-hold`), an open menu, or `hold` (a popover
  * the owner keeps) keeps them up.
@@ -73,8 +75,11 @@ export default function PreviewChrome({ active, surface, hold = false, corner = 
       data-visible={shown} inert={!shown}
       className="pointer-events-none absolute inset-0 z-30 transition-opacity duration-150"
       style={{ opacity: shown ? 1 : 0 }}>
-      {active && corner ? <div data-preview-hover-hold="" data-preview-corner="" style={{ top: VIEWPORT_INSET_PX, right: VIEWPORT_INSET_PX }}
-        className="pointer-events-auto absolute flex items-center gap-0.5">{typeof corner === "function" ? corner(setMenuOpen) : corner}</div> : null}
+      {active && corner ? <div className={cn(NAVBAR_ROW_CLASS, "absolute inset-x-0 top-0 justify-end border-transparent")}>
+        <div data-preview-hover-hold="" data-preview-corner="" className={cn(NAVBAR_CONTROLS_CLASS, "pointer-events-auto")}>
+          {typeof corner === "function" ? corner(setMenuOpen) : corner}
+        </div>
+      </div> : null}
       {active ? (typeof playbar === "function" ? playbar(setMenuOpen) : playbar) : null}
     </div></ToolbarTooltipScope>
   </>;
