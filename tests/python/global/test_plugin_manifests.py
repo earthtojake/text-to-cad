@@ -112,7 +112,8 @@ class PluginManifestPolicyTest(unittest.TestCase):
         # server knows where the thread's files are before the agent says anything.
         manifest = load_json(CODEX_PLUGIN_PATH)
         self.assertEqual(manifest.get("mcpServers"), "./codex.mcp.json")
-        self.assertEqual(manifest.get("extensions", {}).get("com.openai", {}).get("onboardingSkill"), "setup")
+        # Codex resolves the onboarding skill as a path from the plugin root, to its SKILL.md.
+        self.assertEqual(manifest.get("extensions", {}).get("com.openai", {}).get("onboardingSkill"), "./skills/setup/SKILL.md")
         self.assertTrue((SKILLS_ROOT / "setup" / "SKILL.md").is_file())
         servers = load_json(CODEX_MCP_PATH)["mcpServers"]
         self.assertEqual(list(servers), ["text_to_cad"])
