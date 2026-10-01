@@ -54,8 +54,12 @@ from cadgen._internal.generation_spec import (
 def _sha256_of(path: Path) -> str:
     import hashlib
 
+    from cadgen._internal.atomic_replace import open_with_ladder
+
+    # Through the ladder: a peer build publishing the same model may be renaming
+    # over this very file, which Windows refuses an open for (STORE.md §7).
     digest = hashlib.sha256()
-    with open(path, "rb") as handle:
+    with open_with_ladder(path, "rb") as handle:
         for chunk in iter(lambda: handle.read(1 << 20), b""):
             digest.update(chunk)
     return digest.hexdigest()

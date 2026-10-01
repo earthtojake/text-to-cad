@@ -397,6 +397,40 @@ class OpenWithLadderTest(unittest.TestCase):
                 atomic_replace.open_with_ladder(self.path.with_name("absent.step"), "rb")
         self.assertEqual(0, sleep.call_count)
 
+    def test_windows_reports_a_held_file_through_errno_alone_and_it_is_waited_out(self) -> None:
+        """What Windows' open() really raises for a file a peer is renaming over:
+        EACCES and no winerror. Two builds of one model, each reading back the
+        .step the other was replacing, failed a save on the Windows runner so."""
+        import errno
+
+        real_open = Path.open
+        attempts = []
+
+        def held(self_path, mode, *args, **kwargs):
+            attempts.append(mode)
+            if len(attempts) <= 2:
+                raise PermissionError(errno.EACCES, "Permission denied")
+            return real_open(self_path, mode, *args, **kwargs)
+
+        with mock.patch.object(atomic_replace, "_OPEN_REFUSAL_IS_ERRNO_ONLY", True), \
+                mock.patch.object(Path, "open", held), mock.patch("time.sleep") as sleep:
+            with atomic_replace.open_with_ladder(self.path, "rb") as handle:
+                self.assertEqual(b"ISO-10303-21;\n", handle.read())
+        self.assertEqual(3, len(attempts))
+        self.assertEqual(2, sleep.call_count)
+
+    def test_an_errno_denial_with_no_file_there_or_off_windows_surfaces_at_once(self) -> None:
+        import errno
+
+        denied = PermissionError(errno.EACCES, "Permission denied")
+        for windows, path in ((True, self.path.with_name("absent.step")), (False, self.path)):
+            with self.subTest(windows=windows), \
+                    mock.patch.object(atomic_replace, "_OPEN_REFUSAL_IS_ERRNO_ONLY", windows), \
+                    mock.patch.object(Path, "open", side_effect=denied), mock.patch("time.sleep") as sleep:
+                with self.assertRaises(PermissionError):
+                    atomic_replace.open_with_ladder(path, "rb")
+                self.assertEqual(0, sleep.call_count)
+
     def test_every_step_writer_reopen_goes_through_the_ladder(self) -> None:
         """The rule the atomic_replace docstring states: harden one and the
         failure moves to the next. Pins that no reopen of the written STEP was

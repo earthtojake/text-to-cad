@@ -141,6 +141,32 @@ class PublishRuleTest(unittest.TestCase):
 
         self.assertFalse(stale(script).stale)
 
+    def test_reading_back_a_step_a_peer_is_replacing_waits_it_out(self):
+        # The race above, pinned without a second process: Windows refuses an open of a
+        # file another build is renaming over with EACCES and no winerror, and the
+        # publish's read-back of the .step must wait that out rather than fail the save.
+        import errno
+        import hashlib
+
+        from cadgen._internal import atomic_replace, generation
+
+        step = self.root / "widget.step"
+        step.write_bytes(b"ISO-10303-21;\n")
+        real_open = Path.open
+        refused = []
+
+        def peer_renaming(path, mode="r", *args, **kwargs):
+            if Path(path) == step and not refused:
+                refused.append(path)
+                raise PermissionError(errno.EACCES, "Permission denied")
+            return real_open(path, mode, *args, **kwargs)
+
+        with mock.patch.object(atomic_replace, "_OPEN_REFUSAL_IS_ERRNO_ONLY", True), \
+                mock.patch.object(Path, "open", peer_renaming), mock.patch("time.sleep"):
+            digest, _sidecar = generation._document_pair_state(step)
+        self.assertTrue(refused)
+        self.assertEqual(hashlib.sha256(b"ISO-10303-21;\n").hexdigest(), digest)
+
     def test_a_child_edited_mid_parent_build_leaves_the_parent_flagged_stale(self):
         leaf = self.root / "leaf.py"
         parent = self.root / "parent.py"

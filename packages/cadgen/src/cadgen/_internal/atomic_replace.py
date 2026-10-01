@@ -70,6 +70,7 @@ is one more bounded wait.
 from __future__ import annotations
 
 import contextlib
+import errno
 import os
 import shutil
 import time
@@ -85,30 +86,47 @@ RETRY_DELAYS_SECONDS = (0.05, 0.1, 0.2, 0.4)
 
 
 def open_with_ladder(path: Path | str, mode: str):
-    """``open()`` behind the same bounded, WinError-32-only retry the renames get.
+    """``open()`` behind the same bounded retry the renames get.
 
     Reopening a file this process just wrote and closed is refused on Windows
     while a handle lingers -- a deferred close, a real-time scanner, or an
     indexer -- and every rename in this module already waits that out. The
     reopens did not, which mattered once the STEP writer began rewriting its own
     tail in place: the file OCCT had just closed is reopened up to three times
-    per export.
+    per export. So is reading a file a peer build is renaming over: two builds
+    of one model each hash the .step the other publishes.
 
-    Deliberately narrow: only WinError 32 waits. (A rename also waits out a
-    denial onto an existing file -- that is a held DESTINATION, which an open
-    for reading never has.)
-    A denial (5), a missing file, or a bad mode is a real error and surfaces at
-    once rather than 750 ms later, and off Windows ``winerror`` does not exist,
-    so this is precisely ``open()`` on POSIX.
+    Deliberately narrow: only a held FILE waits (:func:`_open_held`). A missing
+    file, a denial with no file there, or a bad mode is a real error and
+    surfaces at once rather than 750 ms later, and off Windows this is
+    precisely ``open()``.
     """
     for delay in (*RETRY_DELAYS_SECONDS, None):
         try:
             return Path(path).open(mode)
         except OSError as error:
-            if getattr(error, "winerror", None) != WINDOWS_SHARING_VIOLATION or delay is None:
+            if delay is None or not _open_held(error, path):
                 raise
             time.sleep(delay)
     raise AssertionError("unreachable: the ladder either returns a handle or raises")
+
+
+# Windows' open() reports a refusal through errno alone: a sharing violation, and a
+# file another process is renaming over, both arrive as EACCES with no winerror --
+# the "[Errno 13] Permission denied" two builds of one model hit reading back the
+# .step the other was replacing.
+_OPEN_REFUSAL_IS_ERRNO_ONLY = os.name == "nt"
+
+
+def _open_held(error: OSError, path: Path | str) -> bool:
+    """Whether a refused open is a handle someone will let go of: a sharing
+    violation, or on Windows an ``EACCES`` with a FILE there -- the rule
+    :func:`_held` applies to a rename's destination. With nothing there, or off
+    Windows, a denial is a real one."""
+    code = getattr(error, "winerror", None)
+    if code is not None:
+        return code == WINDOWS_SHARING_VIOLATION
+    return _OPEN_REFUSAL_IS_ERRNO_ONLY and error.errno == errno.EACCES and os.path.isfile(path)
 
 
 def read_bytes_with_ladder(path: Path | str) -> bytes:
