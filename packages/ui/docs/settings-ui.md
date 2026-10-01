@@ -37,8 +37,8 @@ none.
   to the host's home where it has one (the size of the row's icon buttons), the file
   explorer's toggle where there are files to browse, then the open file's name and
   its ⋯ — the explorer's own menu for that file; the name has no right-click menu
-  and there are no crumbs. With no file open, "Select file" stands in the name's
-  place and opens the explorer. Right: the renderer's actions (the snapshot camera),
+  and there are no crumbs. With no file open, the words "Select file" (not a
+  control) stand in the name's place beside the explorer's toggle. Right: the renderer's actions (the snapshot camera),
   a declared panel's toggle, then the version (`v0.7.4`), whose menu holds the
   release notes, GitHub and Discord. A CAD file declares no panel. A host's home has
   no navbar: the version stands under its CAD wordmark. A view shown small in a

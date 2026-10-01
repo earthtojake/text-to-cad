@@ -355,7 +355,7 @@ has none (it holds the links itself, under its title). Left: a back arrow to the
 (`navigation.home`) where the host has one, then the file explorer's toggle where the
 host's files can be browsed (`files.list`), then the open file's name and its ⋯ menu,
 which is the explorer's own entry menu for that file (no right-click on the name).
-With no file open the name's place says "Select file", which opens the explorer, and
+With no file open the name's place says "Select file" (words, not a control), and
 the page says "Ask the agent to show a model". Right: the renderer's navigation actions, any
 declared panel's toggle, then `links` — the version (`v0.7.4`), whose menu ends with the release notes, GitHub and Discord
 (`NavbarLinks.jsx`). The version opens a menu of what it is and how to update it;

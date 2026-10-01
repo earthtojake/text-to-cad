@@ -298,9 +298,9 @@ saved through the host's `attachments` (`createHttpAttachmentStore`, over
 
 ### No file open
 
-With no file open, the navbar keeps its place: the explorer's toggle, then "Select
-file" where a file's name goes (it opens the explorer too), and the page says "Ask
-the agent to show a model". The explorer does not open by itself.
+With no file open, the navbar keeps its place: the explorer's toggle, then the words
+"Select file" where a file's name goes, and the page says "Ask the agent to show a
+model". The explorer does not open by itself.
 
 ### The model library
 

@@ -248,7 +248,7 @@ export const ViewerNavbar: ComponentType<{
   onBack?: () => void;
   explorer?: { open: boolean; onToggle: () => void } | null;
   file?: NavbarFile | null;
-  /** No file is open: the name's place says "Select file", which opens the explorer. */
+  /** No file is open: the name's place says "Select file" (words, not a control) where there is an explorer. */
   selecting?: boolean;
   status?: ReactNode;
   trailing?: ReactNode;

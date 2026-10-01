@@ -121,14 +121,13 @@ test("panel exclusivity, capability menus, rename and create use the shared chro
   assert.deepEqual(await page.evaluate(() => window.harness.opened.at(-1)), { path: "created.txt", options: { target: "new", panel: "tree" } });
   assert.equal(await page.getByRole("tree").count(), 1);
 });
-test("an empty tab asks for a file with the explorer shut, Select file opens it, and a pick there opens the file with the tree", async () => {
+test("an empty tab asks for a file with the explorer shut, and a pick in the explorer opens the file with the tree", async () => {
   // With no file to show, the navbar asks for one; the explorer opens when the person asks.
   await reset();
   await page.evaluate(() => window.harness.open(null));
-  const select = page.getByRole("button", { name: "Select file", exact: true });
-  await select.waitFor();
+  await page.getByText("Select file", { exact: true }).waitFor();
   assert.equal(await page.getByRole("tree").count(), 0);
-  await select.click();
+  await page.getByTestId("tree-toggle").click();
   await page.getByRole("tree").waitFor();
   assert.equal(await page.getByTestId("tree-toggle").getAttribute("aria-pressed"), "true");
 
@@ -319,9 +318,10 @@ test("a narrow empty tab asks for a file too, and a file picked in its sheet ope
   await page.waitForFunction(() => document.querySelector('[data-viewer-layout]')?.dataset.viewerLayout === 'mobile');
   // A file opens with no sheet over it on a narrow viewer...
   assert.equal(await page.getByRole("tree").count(), 0);
-  // ...and with no file, the sheet is the person's to open, from Select file.
+  // ...and with no file, the sheet is the person's to open, from the explorer's toggle.
   await page.evaluate(() => window.harness.open(null));
-  await page.getByRole("button", { name: "Select file", exact: true }).click();
+  await page.getByText("Select file", { exact: true }).waitFor();
+  await page.getByTestId("tree-toggle").click();
   await page.getByRole("tree").waitFor();
   assert.equal(await page.getByTestId("tree-toggle").getAttribute("aria-pressed"), "true");
   // A host hands focus back to whatever opened the tab (a closing menu's trigger): that is not a

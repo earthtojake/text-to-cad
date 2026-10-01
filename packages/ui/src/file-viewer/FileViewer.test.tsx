@@ -108,12 +108,14 @@ it('with no file open and no home, the navbar asks for one, and the explorer ope
   render(<Tab />);
   expect(await screen.findByText('nothing open')).toBeTruthy();
   expect(document.querySelector('[data-file-explorer]')).toBeNull();
-  act(() => screen.getByRole('button', { name: 'Select file' }).click());
+  // Words in the name's place, not a control: the toggle beside them opens the explorer.
+  expect(screen.getByText('Select file').closest('button')).toBeNull();
+  act(() => screen.getByRole('button', { name: 'Show files' }).click());
   expect(document.querySelector('[data-file-explorer]')).toBeTruthy();
   cleanup();
   // With no files to browse there is nothing to select: the navbar holds only the links.
   open({ host: { ...host, links: viewerLinks({ version: '0.7.4' }) }, file: null, presentation: { empty: <p>nothing open</p> } });
   expect(await screen.findByText('nothing open')).toBeTruthy();
   expect(navbar()).not.toBeNull();
-  expect(screen.queryByRole('button', { name: 'Select file' })).toBeNull();
+  expect(screen.queryByText('Select file')).toBeNull();
 });
