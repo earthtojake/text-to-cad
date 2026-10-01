@@ -196,8 +196,10 @@ def _run_one_file(path: str, top: str, verbose: bool) -> tuple[str, int, str, fl
 
 def _read_back(stream) -> str:
     stream.seek(0)
-    # The encoding `text=True` would have read a pipe with.
-    return stream.read().decode(locale.getpreferredencoding(False), errors="replace")
+    # What `text=True` did to a pipe: its encoding, and universal newlines. A Windows
+    # child ends lines with \r\n, and a summary line left ending in \r matches no regex.
+    text = stream.read().decode(locale.getpreferredencoding(False), errors="replace")
+    return text.replace("\r\n", "\n").replace("\r", "\n")
 
 
 def run_in_parallel(files: list[str], top: str, jobs: int, verbose: bool, print_weights: bool = False) -> int:

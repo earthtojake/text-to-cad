@@ -105,6 +105,16 @@ class HangGuard(unittest.TestCase):
         self.assertIn("in test_waits_forever", report.getvalue())
         self.assertIn(f"failing modules:\n  {hung}", report.getvalue())
 
+    def test_a_windows_childs_summary_still_parses(self):
+        # Read back from a file, a Windows child's \r\n reaches the parser untranslated:
+        # once, every module of a passing Windows run counted as one with no summary.
+        with tempfile.TemporaryFile() as stream:
+            stream.write(b"..\r\n" + b"-" * 70 + b"\r\nRan 2 tests in 0.010s\r\n\r\nOK (skipped=1)\r\n")
+            output = runner._read_back(stream)
+        self.assertTrue(runner._RAN.search(output))
+        self.assertEqual(runner._counts(output)["tests"], 2)
+        self.assertEqual(runner._counts(output)["skipped"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()
