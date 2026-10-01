@@ -580,7 +580,7 @@ class Server:
         except ViewerUnavailable as failure:
             relative = quote(os.path.relpath(model, folder).replace(os.sep, "/"), safe="/")
             raise ToolFailed(f"This app cannot show CAD views, and the CAD Viewer did not start ({failure}). Run "
-                             f"`cd \"{folder}\" && cadgen viewer --host 127.0.0.1 --json` and open the url it prints "
+                             f"`cd \"{folder}\" && cadgen viewer --host 127.0.0.1 --json --detach` and open the url it prints "
                              f"with ?file={relative} added.") from failure
         link = model_link(url, folder, model)
         return _text(f"This app cannot show CAD views, so {os.path.basename(model)} is in the CAD Viewer: {link}\n"

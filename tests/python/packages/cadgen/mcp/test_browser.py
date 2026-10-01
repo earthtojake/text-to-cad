@@ -9,12 +9,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from cadgen.mcp.browser import ViewerUnavailable, model_link, viewer_url
+from cadgen.mcp.browser import LAUNCH, ViewerUnavailable, model_link, viewer_url
 
-# Stands in for `cadgen viewer --json`: says what the real one says, then either exits (it reused a
-# Viewer) or goes on serving until the test lets it go (it started one).
+# Stands in for `cadgen viewer --json --detach`: says what the real one says, then exits, whether it
+# reused a Viewer or started one in the background.
 FAKE = r"""
-import json, os, pathlib, sys, time
+import json, os, pathlib, sys
 mode, marker = sys.argv[1], pathlib.Path(sys.argv[2])
 marker.write_text(f"{os.getpid()}\n{os.getcwd()}", encoding="utf-8")
 if mode == "reused":
@@ -22,8 +22,6 @@ if mode == "reused":
     print("CAD Viewer URL: http://127.0.0.1:3245/")
 if mode != "silent":
     print(json.dumps({"url": "http://127.0.0.1:3245/", "port": 3245, "action": mode}), flush=True)
-while mode == "started" and not marker.with_suffix(".done").exists():
-    time.sleep(0.01)
 """
 
 
@@ -44,12 +42,12 @@ class ViewerUrlTest(unittest.TestCase):
         # Resolved on both sides: macOS reports /private/var for /var, Windows a short 8.3 name for a long one.
         self.assertEqual(os.path.realpath(marker.read_text(encoding="utf-8").splitlines()[1]), os.path.realpath(self.folder))
 
-    def test_a_started_viewer_is_left_serving(self) -> None:
-        command, marker = self.launch("started")
-        self.addCleanup(marker.with_suffix(".done").touch)
+    def test_a_started_viewer_runs_detached_from_the_launch(self) -> None:
+        # The launch returns once the Viewer answers; the Viewer runs on in its own session and
+        # writes to its own log, never into a pipe this server stopped reading.
+        self.assertIn("--detach", LAUNCH)
+        command, _ = self.launch("started")
         self.assertEqual(viewer_url(str(self.folder), command=command), "http://127.0.0.1:3245/")
-        pid = int(marker.read_text(encoding="utf-8").splitlines()[0])
-        os.kill(pid, 0)  # still running: the Viewer outlives the call that started it
 
     def test_a_launcher_that_prints_no_url_is_a_failure(self) -> None:
         command, _ = self.launch("silent")
