@@ -3,19 +3,18 @@ import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@text-to-cad/ui/primitives/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@text-to-cad/ui/primitives/dropdown-menu";
-import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 import { cn } from "@text-to-cad/ui/utils";
 
 import { DiscordMark, GitHubMark } from "./brandMarks.jsx";
 import wordmark from "../../assets/logo-cad.svg";
 
 /**
- * The navbar's right end: the version, then GitHub and Discord as icons — the same three in every
- * app (`ViewerHost.links`, built by `viewerLinks` in `links.js`).
+ * The navbar's right end: the version (`v0.7.4`), the same in every app (`ViewerHost.links`, built
+ * by `viewerLinks` in `links.js`).
  *
- * The version opens a menu of what it is and how to update it — the command for a terminal and the
- * message for an agent, or a line saying how where the host's update is not a command — and the
- * release notes. A host that checked for a newer release says so (`links.latest`), and the version
+ * It opens a menu of what it is and how to update it — the command for a terminal and the message
+ * for an agent, or a line saying how where the host's update is not a command — then the release
+ * notes, GitHub and Discord. A host that checked for a newer release says so (`links.latest`), and the version
  * then reads "Update". Every link opens the host's way: a page that can open one itself follows an
  * ordinary link to a new tab; a page in a frame that cannot hands it to `links.open` (the host's own
  * browser). Copies go through the host's clipboard.
@@ -31,22 +30,15 @@ export function NavbarLinks({ links, clipboard, onError }) {
     const url = event.currentTarget.href;
     void Promise.resolve().then(() => links.open(url)).catch((error) => onError?.(error instanceof Error ? error : new Error(String(error))));
   } : undefined;
-  return <>
-    <VersionMenu links={links} clipboard={clipboard} onFollow={follow} />
-    <IconLink href={links.github} label="GitHub" icon={GitHubMark} onFollow={follow} />
-    <IconLink href={links.discord} label="Discord" icon={DiscordMark} onFollow={follow} />
-  </>;
+  return <VersionMenu links={links} clipboard={clipboard} onFollow={follow} />;
 }
 
-function IconLink({ href, label, icon: Icon, onFollow }) {
+/** One of the menu's links, opened the host's way. */
+function MenuLink({ href, icon: Icon = null, onFollow, children }) {
   if (!href) return null;
-  return <TooltipHint content={label}>
-    <Button asChild variant="ghost" size="icon-xs" className="size-6 text-muted-foreground hover:text-foreground">
-      <a href={href} target="_blank" rel="noreferrer" aria-label={label} onClick={onFollow} data-navbar-link={label.toLowerCase()}>
-        <Icon className="size-3.5" />
-      </a>
-    </Button>
-  </TooltipHint>;
+  return <DropdownMenuItem asChild><a href={href} target="_blank" rel="noreferrer" onClick={onFollow}>
+    {Icon ? <Icon className="size-3.5" aria-hidden="true" /> : null}{children}
+  </a></DropdownMenuItem>;
 }
 
 function VersionRow({ label, version, action = null }) {
@@ -54,7 +46,7 @@ function VersionRow({ label, version, action = null }) {
     <div className="flex min-w-0 flex-col items-start gap-1.5 px-0.5 text-left">
       <span className="text-tiny leading-none text-muted-foreground">{label}</span>
       <div className="flex min-w-0 items-center gap-2">
-        <span className="min-w-0 text-left font-mono text-xs leading-5 text-foreground tabular-nums">{version}</span>
+        <span className="min-w-0 text-left font-mono text-xs leading-5 text-foreground tabular-nums">v{version}</span>
         {action}
       </div>
     </div>
@@ -102,7 +94,7 @@ function VersionMenu({ links, clipboard, onFollow }) {
         <Button variant={update ? "default" : "ghost"} size="xs"
           className={cn("h-6 rounded-sm px-2 text-tiny", !update && "text-muted-foreground tabular-nums hover:text-foreground")}
           aria-label={update ? `Update to ${latest.version}` : `Version ${version}`} data-navbar-version="">
-          {update ? "Update" : version}
+          {update ? "Update" : `v${version}`}
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" sideOffset={6}
@@ -131,10 +123,12 @@ function VersionMenu({ links, clipboard, onFollow }) {
             </div>
           ) : null}
         </div>
-        {release ? <>
+        {release || links.github || links.discord ? <>
           {/* Edge to edge, outside the content's own padding, with room either side. */}
           <DropdownMenuSeparator className="-mx-2 my-2" />
-          <DropdownMenuItem asChild><a href={release} target="_blank" rel="noreferrer" onClick={onFollow}>Release notes</a></DropdownMenuItem>
+          <MenuLink href={release} onFollow={onFollow}>Release notes</MenuLink>
+          <MenuLink href={links.github} icon={GitHubMark} onFollow={onFollow}>GitHub</MenuLink>
+          <MenuLink href={links.discord} icon={DiscordMark} onFollow={onFollow}>Discord</MenuLink>
         </> : null}
       </DropdownMenuContent>
     </DropdownMenu>

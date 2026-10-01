@@ -36,16 +36,21 @@ it('draws the navbar only when it has something to hold, and never for a view sh
   expect(screen.queryByRole('button', { name: 'File actions' })).toBeNull();
   expect(screen.queryByRole('button', { name: 'Show files' })).toBeNull();
   cleanup();
-  // The host's links, the same three in every app, followed the host's way.
+  // The host's links, the same in every app: the version, whose menu holds GitHub and Discord,
+  // each followed the host's way.
+  const user = userEvent.setup();
   const followed: string[] = [];
   const linked = { ...host, links: viewerLinks({ version: 'v0.7.4', open: async (url: string) => { followed.push(url); } }) };
   open({ navigationPath: null, host: linked });
   await screen.findByText('shown');
-  expect(screen.getByRole('button', { name: 'Version 0.7.4' })).toBeTruthy();
-  act(() => screen.getByRole('link', { name: 'GitHub' }).click());
-  act(() => screen.getByRole('link', { name: 'Discord' }).click());
-  await act(async () => {});
-  expect(followed).toEqual(['https://github.com/earthtojake/text-to-cad', 'https://discord.gg/5FGB9DwJYU']);
+  const version = screen.getByRole('button', { name: 'Version 0.7.4' });
+  expect(version.textContent).toBe('v0.7.4');
+  expect(screen.queryByRole('link', { name: 'GitHub' })).toBeNull();
+  await user.click(version);
+  const menu = await screen.findByRole('menu');
+  expect(within(menu).getByRole('menuitem', { name: 'Discord' }).getAttribute('href')).toBe('https://discord.gg/5FGB9DwJYU');
+  await user.click(within(menu).getByRole('menuitem', { name: 'GitHub' }));
+  expect(followed).toEqual(['https://github.com/earthtojake/text-to-cad']);
   cleanup();
   open({ host: { ...linked, environment: { colorScheme: 'light', compact: true } } });
   await screen.findByText('shown');

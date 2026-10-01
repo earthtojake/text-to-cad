@@ -258,7 +258,7 @@ export const ViewerNavbar: ComponentType<{
   className?: string;
 }>;
 
-/** The version, GitHub and Discord, as the navbar's right end draws them. */
+/** The version, whose menu holds the release notes, GitHub and Discord, as the navbar's right end draws it. */
 export const NavbarLinks: ComponentType<{
   links: import("../../host/types.js").ViewerLinks;
   clipboard: import("../../host/types.js").ClipboardPort;

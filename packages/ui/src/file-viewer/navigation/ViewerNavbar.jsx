@@ -20,7 +20,7 @@ import { NavbarLinks } from "./NavbarLinks.jsx";
  * explorer. The name is not a menu of its own, and has no right-click: the ⋯ is the one door.
  *
  * Right: the file's own actions (a renderer's snapshot), the toggles of any panel the file
- * declares, then the host's links — the version, GitHub and Discord (`NavbarLinks.jsx`).
+ * declares, then the host's version, whose menu holds GitHub and Discord (`NavbarLinks.jsx`).
  *
  * Nothing here is drawn for its own sake: a control appears only where it does something.
  */
@@ -126,8 +126,8 @@ export function ViewerNavbar({ onBack, explorer = null, file = null, selecting =
             <FileActions entry={{ path: file.path, kind: "file", surface: "navbar" }} capabilities={file.capabilities}
               platform={file.platform} onAction={file.onAction} />
           </>}
-        </span> : selecting && explorer ? <button type="button" onClick={explorer.onToggle} data-select-file=""
-          className="ml-1 truncate rounded-sm px-0.5 text-muted-foreground outline-none transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring">Select file</button> : status}
+        </span> : selecting && explorer ? <Button type="button" variant="ghost" size="xs" onClick={explorer.onToggle} data-select-file=""
+          className="h-6 px-1.5 text-sm font-normal text-muted-foreground hover:text-foreground">Select file</Button> : status}
       </nav>
       <div className="flex shrink-0 items-center gap-0.5">
         {trailing}

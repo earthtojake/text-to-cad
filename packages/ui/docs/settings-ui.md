@@ -33,14 +33,17 @@ turns the explorer.
 Hosts pass no preview, chrome-visibility or notification props; there are
 none.
 
-- **Navbar.** One row, the same in every app and on every page. Left: the C mark
-  (home, a burger under the pointer; the brand on the home itself), the file
-  explorer's toggle, then the open file's name and its ⋯ — the explorer's own menu
-  for that file; the name has no right-click menu and there are no crumbs. Right:
-  the renderer's actions (the snapshot camera), a declared panel's toggle, then the
-  version, GitHub and Discord as icons. A CAD file declares no panel. The home
-  page has the same row; a view shown small in a conversation (`compact`) has none,
-  and draws the model alone: no tools, view actions, cube or Quick Edit.
+- **Navbar.** One row, the same in every app, over every file. Left: a back arrow
+  to the host's home where it has one (the size of the row's icon buttons), the file
+  explorer's toggle where there are files to browse, then the open file's name and
+  its ⋯ — the explorer's own menu for that file; the name has no right-click menu
+  and there are no crumbs. With no file open, "Select file" stands in the name's
+  place and opens the explorer. Right: the renderer's actions (the snapshot camera),
+  a declared panel's toggle, then the version (`v0.7.4`), whose menu holds the
+  release notes, GitHub and Discord. A CAD file declares no panel. A host's home has
+  no navbar: the version stands under its CAD wordmark. A view shown small in a
+  conversation (`compact`) has none either, and draws the model alone: no tools,
+  view actions, cube or Quick Edit.
 - **File explorer** floats over the view's left, inset 8px like the toolbar, on a
   solid background above the tools. Opening it never resizes the view or moves its
   tools; it stays up while a person walks the tree, and a press outside it (the

@@ -19,14 +19,12 @@ function library(models: LibraryModel[], extra: Partial<ModelLibrarySource> = {}
   };
 }
 
-it('heads the home with the CAD wordmark over the host\'s links, as the navbar has them, and no tagline', async () => {
+it('heads the home with the CAD wordmark over the host\'s version, as the navbar has it, and no tagline', async () => {
   const links = { version: '0.7.4', release: 'r', github: 'https://github.com/earthtojake/text-to-cad', discord: 'https://discord.gg/x', install: { command: 'c', prompt: 'p' } };
   const clipboard = { writeText: async () => {}, readText: async () => '', writeImage: async () => {} };
   render(<ModelLibrary library={library([])} links={links} clipboard={clipboard} />);
   const nav = await screen.findByRole('navigation', { name: 'CAD links' });
-  expect(within(nav).getByRole('button', { name: 'Version 0.7.4' })).toBeTruthy();
-  expect(within(nav).getByRole('link', { name: 'GitHub' })).toBeTruthy();
-  expect(within(nav).getByRole('link', { name: 'Discord' })).toBeTruthy();
+  expect(within(nav).getByRole('button', { name: 'Version 0.7.4' }).textContent).toBe('v0.7.4');
   expect(screen.queryByText('Build things')).toBeNull();
 });
 

@@ -357,7 +357,7 @@ host's files can be browsed (`files.list`), then the open file's name and its �
 which is the explorer's own entry menu for that file (no right-click on the name).
 With no file open the name's place says "Select file", which opens the explorer, and
 the page says "Ask the agent to show a model". Right: the renderer's navigation actions, any
-declared panel's toggle, then `links` — the version, GitHub and Discord as icons
+declared panel's toggle, then `links` — the version (`v0.7.4`), whose menu ends with the release notes, GitHub and Discord
 (`NavbarLinks.jsx`). The version opens a menu of what it is and how to update it;
 a host that checks for newer releases says what it found (`links.latest`), and the
 version then reads "Update". A link opens the ordinary way unless the host supplies
