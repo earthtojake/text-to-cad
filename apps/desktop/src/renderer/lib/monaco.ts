@@ -11,29 +11,12 @@
  * pays for the editor.
  */
 import * as monaco from "monaco-editor";
-// The explorer owns the worker environment and the base themes; the session
-// only adds two transparent variants so a diff sits on the transcript itself.
+// The explorer registers every theme, the transcript's transparent variants
+// included (`setupMonaco`), so there is one place and one order for them.
 import { languageFor, setupMonaco } from "@renderer/features/explorer/renderers/code/editor";
 
-let configured = false;
-
 export function configureMonaco(): typeof monaco {
-  if (!configured) {
-    configured = true;
-    setupMonaco();
-    monaco.editor.defineTheme("text-to-cad-light", {
-      base: "vs",
-      inherit: true,
-      rules: [],
-      colors: { "editor.background": "#00000000", "editorGutter.background": "#00000000" },
-    });
-    monaco.editor.defineTheme("text-to-cad-dark", {
-      base: "vs-dark",
-      inherit: true,
-      rules: [],
-      colors: { "editor.background": "#00000000", "editorGutter.background": "#00000000" },
-    });
-  }
+  setupMonaco();
   return monaco;
 }
 

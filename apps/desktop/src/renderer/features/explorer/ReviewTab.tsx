@@ -1,6 +1,6 @@
-import type { IDisposable } from "monaco-editor";
-import { DiffEditor } from "@monaco-editor/react";
 import {
+  AlertCircle,
+  AlertTriangle,
   ChevronDown,
   ChevronRight,
   GitCommitHorizontal,
@@ -8,10 +8,11 @@ import {
   GitPullRequest,
   RotateCw,
 } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type RefObject } from "react";
 import { createPromptContext, textPart } from "@text-to-cad/core/prompt";
 import { toast } from "sonner";
 
+import { Alert, AlertDescription } from "@renderer/components/ui/alert";
 import { Button } from "@renderer/components/ui/button";
 import {
   DropdownMenu,
@@ -21,11 +22,6 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@renderer/components/ui/dropdown-menu";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@renderer/components/ui/popover";
 import { Spinner } from "@renderer/components/ui/spinner";
 import { Textarea } from "@renderer/components/ui/textarea";
 import { useResolvedTheme } from "@renderer/hooks/use-theme";
@@ -43,16 +39,14 @@ import {
   type ReviewScope,
   type Session,
 } from "@shared/types";
+import { errorMessage } from "@shared/ipc/errors";
 import type { Project } from "@shared/types";
 
 import { EmptyState } from "@text-to-cad/ui/navigation";
+import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 import { FileIcon } from "@text-to-cad/ui/navigation";
-import {
-  SHARED_EDITOR_OPTIONS,
-  languageFor,
-  monacoTheme,
-  setupMonaco,
-} from "@renderer/features/explorer/renderers/code/editor";
+import { setupMonaco } from "@renderer/features/explorer/renderers/code/editor";
+import { ReviewDiff, type ReviewSelection } from "./review-diff";
 import type { ChangedFile, FileDiff, GitStatus } from "./types";
 
 /**
@@ -76,12 +70,22 @@ import type { ChangedFile, FileDiff, GitStatus } from "./types";
  * the *name* of the scope and main resolves it, because the marks are its
  * record, not a number the UI is allowed to compute (plan §13, P7).
  *
- * Choosing one of them pins the session onto the tab. That matters because the
- * strip belongs to the **project**: a review that followed whichever thread
- * happened to be selected would change what it was showing every time someone
- * clicked another row in the sidebar. A pinned session also moves the whole
- * read into that session's working directory, which for a thread in `worktree`
- * mode is not the project's checkout at all.
+ * The tab belongs to the session it was opened in (`sessionId`, fixed for
+ * the tab's life), and every scope is read for that session: its marks, and
+ * its working directory, which for a thread in `worktree` mode is not the
+ * project's checkout at all. Choosing a scope changes only the scope.
+ *
+ * ## Staying current
+ *
+ * File changes the explorer reports re-read the status in batches: the first
+ * at once, then at most one per `STATUS_GAP_MS` (500 ms), the last batch
+ * always answered. Only a file the answer says something new about re-reads
+ * its diff. A refresh that fails with nothing on screen is an empty state with
+ * Try again; one that fails over an earlier answer keeps that answer, under a
+ * `role="alert"` strip — "Could not refresh" and Try again. A diff that cannot
+ * be read says so with its error and a Retry, over whatever diff it last drew.
+ * Each drawn block carries `data-review-ready` once its editor has drawn
+ * (`review-diff.tsx`), which is what a reader or a test waits on.
  */
 
 const SCOPES = ReviewScopeSchema.options;
@@ -112,7 +116,7 @@ export function ReviewTab(props: {
 }) {
   return (
     <ReviewBody
-      key={`${props.project.id}:${props.scope}:${props.sessionId ?? ""}`}
+      key={`${props.project.id}:${props.scope}:${props.sessionId}`}
       {...props}
     />
   );
@@ -134,42 +138,102 @@ function ReviewBody({
   const info = useProjectGitInfo(project.id);
 
   // Review revisions always belong to this tab's immutable session owner.
-  const candidate = sessions.find(session => session.id === sessionId) ?? null;
-  const target = candidate;
+  const session = sessions.find(row => row.id === sessionId) ?? null;
   const request = useMemo(
     () => ({ projectId: project.id, sessionId }),
     [project.id, sessionId],
   );
 
   const [status, setStatus] = useState<GitStatus | null>(null);
+  // Per file, the answer its diff has to be at least as new as. A file's
+  // stamp moves only when that answer says something new about it — its
+  // entry changed, the watcher saw it written, Refresh or a new scope asked
+  // for everything — so an agent writing one file does not re-read the diff
+  // of every open section (`fileStamps`).
+  const [stamps, setStamps] = useState<ReadonlyMap<string, number>>(() => new Map());
+  const answers = useRef(0);
+  const entries = useRef(new Map<string, string>());
+  const written = useRef(new Set<string>());
+  const everything = useRef(true);
+  // Status reads while writes stream: the first at once, then at most one
+  // per STATUS_GAP_MS, the last batch always answered.
+  const lastBatchRead = useRef(Number.NEGATIVE_INFINITY);
+  const trailingRead = useRef<number | null>(null);
+  // A read that failed: git's own words, shown with a retry. Not the same as
+  // `isRepository: false`, which is an answer — this is the absence of one.
+  const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [open, setOpen] = useState<Set<string>>(() => new Set());
+  const [committing, setCommitting] = useState(false);
+  const commitTrigger = useRef<HTMLButtonElement | null>(null);
+  // Per mounted tab: two Review tabs must not share the id aria-controls names.
+  const commitPanelId = useId();
+  const closeCommit = useCallback(() => {
+    setCommitting(false);
+    commitTrigger.current?.focus();
+  }, []);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const sections = useRef(new Map<string, HTMLElement>());
+  // Reads overlap — the first one, a refresh, every batch of file changes —
+  // and answer in any order. Only the latest one asked is allowed to land, so
+  // an older, slower answer cannot replace a newer one.
+  const latestRead = useRef(0);
+  const stampsRef = useRef<ReadonlyMap<string, number>>(new Map());
+  // Opening the top files is owed by the first read even when a later read
+  // supersedes it; the read that lands pays it.
+  const owesOpenTop = useRef(false);
 
   const read = useCallback(
-    (openTop: boolean) =>
-      window.textToCad.git
-        .status({ ...request, scope: diffScopeFor(scope) })
-        .catch(() => null)
-        .then((next) => {
+    (openTop: boolean) => {
+      const sequence = ++latestRead.current;
+      if (openTop) {
+        owesOpenTop.current = true;
+        everything.current = true;
+      }
+      // One read per refresh, whatever the scope: the answer carries the
+      // working tree's file count for the commit button (`workingFiles`).
+      return window.textToCad.git.status({ ...request, scope: diffScopeFor(scope) }).then(
+        (next) => {
+          if (sequence !== latestRead.current) return;
           setStatus(next);
+          answers.current += 1;
+          const nextStamps = fileStamps(next.files, {
+            answer: answers.current,
+            entries: entries.current,
+            stamps: stampsRef.current,
+            // The watcher's paths are the project's (or worktree's); git's are the repository's.
+            written: new Set([...written.current].map((path) => `${next.prefix ?? ""}${path}`)),
+            everything: everything.current,
+          });
+          everything.current = false;
+          written.current = new Set();
+          stampsRef.current = nextStamps;
+          setStamps(nextStamps);
+          setError(null);
           setLoading(false);
-          if (openTop) {
+          if (owesOpenTop.current) {
+            owesOpenTop.current = false;
             // The first few files open by default: a review whose sections are
             // all shut is a list of filenames, which is not a review. Binary
             // files are skipped — they have no diff to show, and a review that
             // opens on three "Binary file" panels has told you nothing.
             setOpen(
               new Set(
-                (next?.files ?? [])
+                next.files
                   .filter((file) => !file.binary)
                   .slice(0, 3)
                   .map((file) => file.path),
               ),
             );
           }
-        }),
+        },
+        (failure: unknown) => {
+          if (sequence !== latestRead.current) return;
+          setError(errorMessage(failure));
+          setLoading(false);
+        },
+      );
+    },
     [request, scope],
   );
 
@@ -185,27 +249,38 @@ function ReviewBody({
    * survive it. `git status` on a large repository is tens of milliseconds and
    * the watcher already batches.
    */
-  useEffect(
-    () =>
-      useExplorer.subscribe((state, previous) => {
-        if (state.fsRevision !== previous.fsRevision) {
-          void read(false);
-        }
-      }),
-    [read],
-  );
+  useEffect(() => {
+    const unsubscribe = useExplorer.subscribe((state, previous) => {
+      if (state.fsRevision === previous.fsRevision) return;
+      for (const change of state.changedEntries) {
+        written.current.add(change.path);
+        if (change.kind === "moved") written.current.add(change.previousPath);
+      }
+      if (trailingRead.current !== null) return;
+      const go = () => {
+        trailingRead.current = null;
+        lastBatchRead.current = Date.now();
+        void read(false);
+      };
+      const wait = lastBatchRead.current + STATUS_GAP_MS - Date.now();
+      if (wait <= 0) go();
+      else trailingRead.current = window.setTimeout(go, wait);
+    });
+    return () => {
+      unsubscribe();
+      if (trailingRead.current !== null) window.clearTimeout(trailingRead.current);
+      trailingRead.current = null;
+    };
+  }, [read]);
 
   const refresh = useCallback(() => {
     setLoading(true);
+    everything.current = true;
     void read(false);
   }, [read]);
 
   const chooseScope = (next: ReviewScope) => {
-    // Pin the session the moment a scope needs one, so the tab keeps showing
-    // the thread it was opened against rather than following the sidebar.
-    update(tabId, {
-      scope: next,
-    });
+    update(tabId, { scope: next });
   };
 
   const scrollTo = (path: string) => {
@@ -225,6 +300,18 @@ function ReviewBody({
     );
   }
 
+  if (error && !status) {
+    return (
+      <EmptyState
+        action={<Button className="h-7 text-[12px]" onClick={refresh} size="sm" variant="outline">Try again</Button>}
+        description={error}
+        icon={AlertTriangle}
+        title="Could not read the changes"
+        tone="warn"
+      />
+    );
+  }
+
   if (!status?.isRepository) {
     return (
       <EmptyState
@@ -234,6 +321,11 @@ function ReviewBody({
       />
     );
   }
+
+  // Commits a Push would send: none when there is nowhere to push them (an
+  // upstream that is a local branch counts them as ahead all the same).
+  const pushable = info?.hasRemote ? status.ahead : 0;
+  const commitOpen = committing && (status.workingFiles > 0 || pushable > 0);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -254,7 +346,7 @@ function ReviewBody({
                 // The two session scopes need a thread to measure from; with
                 // none they are shown and disabled rather than hidden, so the
                 // menu does not change shape depending on what is selected.
-                disabled={scopeNeedsSession(option) && !candidate}
+                disabled={scopeNeedsSession(option) && !session}
                 key={option}
                 onSelect={() => chooseScope(option)}
               >
@@ -264,30 +356,30 @@ function ReviewBody({
           </DropdownMenuContent>
         </DropdownMenu>
 
-        <Totals deletions={status.deletions} insertions={status.insertions} />
+        {status.unmarked ? null : <Totals deletions={status.deletions} insertions={status.insertions} />}
 
         <div className="flex-1" />
 
         {/*
-          Which thread, then which branch. The title gives up its width first:
-          a thread names itself from its first prompt, which can be a
-          paragraph, and the branch is the shorter and more load-bearing of
-          the two — it says where a commit from this header would land.
+          The branch alone: it says where a commit from this header would
+          land. The thread's title is the session header's, one pane over;
+          repeated here it only ever showed truncated. Its directory — a
+          worktree's is not the project's — is the hover.
         */}
-        {target ? (
-          <span
-            className="max-w-[160px] truncate text-[12px] text-muted-foreground"
-            title={`${target.title} · ${target.cwd}`}
-          >
-            {target.title}
-          </span>
-        ) : null}
-
         {status.branch ? (
-          <span className="shrink-0 text-[12px] text-muted-foreground">{status.branch}</span>
+          <TooltipHint content={session?.cwd}>
+            <span className="min-w-0 truncate text-[12px] text-muted-foreground">
+              {status.branch}
+            </span>
+          </TooltipHint>
         ) : null}
 
+        {/* Always mounted, so the words arriving in it are announced; the spinner is only drawn. */}
+        <span aria-live="polite" className="sr-only" role="status">
+          {loading ? "Refreshing…" : ""}
+        </span>
         <Button
+          aria-busy={loading}
           aria-label="Refresh"
           className="size-6 text-muted-foreground"
           onClick={refresh}
@@ -297,16 +389,71 @@ function ReviewBody({
           <RotateCw className={cn("size-3.5", loading && "animate-spin")} />
         </Button>
 
-        <CommitPopover
-          canOpenPullRequest={Boolean(info?.hasGh && info.hasRemote)}
-          disabled={status.files.length === 0}
-          onDone={refresh}
-          request={request}
-          session={target}
+        <CommitTrigger
+          canPush={Boolean(info?.hasRemote)}
+          // The panel commits the whole working tree (`git add -A`),
+          // whatever scope is on screen, so its button follows the working
+          // tree: a "Last turn" with nothing in it can sit beside uncommitted
+          // work from earlier, and a scope full of committed history beside a
+          // clean tree.
+          fileCount={status.workingFiles}
+          // A push that failed after its commit leaves a clean tree and
+          // commits the remote lacks: the same button sends them.
+          ahead={pushable}
+          onToggle={() => setCommitting((current) => !current)}
+          panelId={commitPanelId}
+          open={commitOpen}
+          ref={commitTrigger}
         />
       </header>
 
-      {status.files.length === 0 ? (
+      {commitOpen ? (
+        <CommitPanel
+          ahead={pushable}
+          canOpenPullRequest={Boolean(info?.hasGh && info.hasRemote)}
+          canPush={Boolean(info?.hasRemote)}
+          fileCount={status.workingFiles}
+          id={commitPanelId}
+          onClose={closeCommit}
+          onDone={refresh}
+          request={request}
+          session={session}
+        />
+      ) : null}
+
+      {/* A re-read that failed keeps the last answer on screen, marked stale. */}
+      {error ? (
+        <div className="flex shrink-0 items-center gap-2 border-b bg-amber-500/10 px-3 py-1.5 text-[12px]" role="alert">
+          <AlertTriangle className="size-3.5 shrink-0 text-amber-600 dark:text-amber-400" />
+          <TooltipHint content={error} overflowOnly>
+            <span className="min-w-0 flex-1 truncate">Could not refresh: {error}</span>
+          </TooltipHint>
+          <Button className="h-6 px-2 text-[12px]" onClick={refresh} size="sm" variant="outline">Try again</Button>
+        </div>
+      ) : null}
+
+      {/*
+        No commits yet, so no mark could be taken: the scope is the working
+        tree, and it says so rather than passing it off as the turn's diff.
+      */}
+      {status.fromStart ? (
+        <p className="shrink-0 border-b px-3 py-1.5 text-[12px] text-muted-foreground">
+          {fromStartNote(scope)}
+        </p>
+      ) : null}
+
+      {/*
+        Main had no recorded revision for this scope. Its answer is empty on
+        purpose — the working tree would be a different revision under this
+        scope's name — so say why rather than "No changes".
+      */}
+      {status.unmarked ? (
+        <EmptyState
+          description={unmarkedDescription(status.unmarked)}
+          icon={GitCompare}
+          title={status.unmarked === "turn" ? "No turn recorded yet" : "No session start recorded"}
+        />
+      ) : status.files.length === 0 ? (
         <EmptyState
           description={emptyDescription(scope)}
           icon={GitCompare}
@@ -337,7 +484,8 @@ function ReviewBody({
                   }
                 }}
                 request={request}
-                root={target?.cwd ?? null}
+                revision={stamps.get(file.path) ?? 0}
+                root={session?.cwd ?? null}
                 scope={scope}
               />
             ))}
@@ -357,6 +505,62 @@ function ReviewBody({
   );
 }
 
+/** The shortest gap between two status reads that batches of file changes ask for. */
+const STATUS_GAP_MS = 500;
+
+/**
+ * Each file's stamp for a new status answer: the answer's own number when
+ * something about the file is new — its entry (status, counts, old path)
+ * differs from the last answer's, the watcher reported it written since, or
+ * everything is asked for — and the stamp it had otherwise. `entries` is
+ * updated in place to this answer's.
+ */
+function fileStamps(
+  files: readonly ChangedFile[],
+  at: {
+    answer: number;
+    entries: Map<string, string>;
+    stamps: ReadonlyMap<string, number>;
+    written: ReadonlySet<string>;
+    everything: boolean;
+  },
+): ReadonlyMap<string, number> {
+  const next = new Map<string, number>();
+  const seen = new Map<string, string>();
+  for (const file of files) {
+    const entry = JSON.stringify([file.status, file.insertions, file.deletions, file.oldPath ?? null, file.binary]);
+    seen.set(file.path, entry);
+    const previous = at.stamps.get(file.path);
+    const fresh = at.everything || previous === undefined || at.entries.get(file.path) !== entry
+      || at.written.has(file.path) || (file.oldPath !== undefined && at.written.has(file.oldPath));
+    next.set(file.path, fresh ? at.answer : previous);
+  }
+  at.entries.clear();
+  for (const [path, entry] of seen) at.entries.set(path, entry);
+  return next;
+}
+
+// A repository with no commits never lands here: main answers that case from
+// the working tree (`fromStart`).
+// Each sentence is written for its scope rather than built around the menu's label: a label is a
+// name, and "so This session is measured…" reads as one pasted into the middle of a sentence.
+function unmarkedDescription(which: "turn" | "session"): string {
+  return which === "turn"
+    ? "A turn is measured from the prompt that starts it, so there is nothing to show until the next one. The working tree's changes are under “All changes”."
+    : "No revision was recorded when this session began, so there is nothing to measure it from. The working tree's changes are under “All changes”.";
+}
+
+/** What `fromStartNote` says is measured; the time windows are "this window". */
+const FROM_START_SUBJECT: Partial<Record<ReviewScope, string>> = {
+  turn: "the last turn",
+  session: "this session",
+  all: "every change",
+};
+
+function fromStartNote(scope: ReviewScope): string {
+  return `This repository has no commits yet, so ${FROM_START_SUBJECT[scope] ?? "this window"} is measured from the repository's start.`;
+}
+
 function emptyDescription(scope: ReviewScope): string {
   switch (scope) {
     case "all":
@@ -374,7 +578,7 @@ function emptyDescription(scope: ReviewScope): string {
 /* Pieces                                                                      */
 /* -------------------------------------------------------------------------- */
 
-/** The project (and optionally session) every read in this tab is answered for. */
+/** The project and the session every read in this tab is answered for. */
 type ReviewRequest = { projectId: string; sessionId: string };
 
 function Totals({ insertions, deletions }: { insertions: number; deletions: number }) {
@@ -390,22 +594,23 @@ function RailRow({ file, onSelect }: { file: ChangedFile; onSelect: () => void }
   const badge = badgeFor(file.status);
   const name = file.path.split("/").pop() ?? file.path;
   return (
-    <button
-      className="flex h-7 w-full items-center gap-1.5 px-3 text-left text-[13px] transition-colors hover:bg-accent/50"
-      onClick={onSelect}
-      title={file.path}
-      type="button"
-    >
-      <span className={cn("w-2 shrink-0 font-mono font-semibold", badge.className)}>
-        {badge.letter}
-      </span>
-      <FileIcon className="size-3 shrink-0 text-muted-foreground" path={file.path} />
-      <span className="min-w-0 flex-1 truncate">{name}</span>
-      <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
-        <span className="text-emerald-600 dark:text-emerald-400">+{file.insertions}</span>{" "}
-        <span className="text-rose-600 dark:text-rose-400">−{file.deletions}</span>
-      </span>
-    </button>
+    <TooltipHint content={file.path}>
+      <button
+        className="flex h-7 w-full items-center gap-1.5 px-3 text-left text-[13px] transition-colors hover:bg-accent/50"
+        onClick={onSelect}
+        type="button"
+      >
+        <span className={cn("w-2 shrink-0 font-mono font-semibold", badge.className)}>
+          {badge.letter}
+        </span>
+        <FileIcon className="size-3 shrink-0 text-muted-foreground" path={file.path} />
+        <span className="min-w-0 flex-1 truncate">{name}</span>
+        <span className="shrink-0 font-mono text-[10px] text-muted-foreground">
+          <span className="text-emerald-600 dark:text-emerald-400">+{file.insertions}</span>{" "}
+          <span className="text-rose-600 dark:text-rose-400">−{file.deletions}</span>
+        </span>
+      </button>
+    </TooltipHint>
   );
 }
 
@@ -414,6 +619,7 @@ function FileSection({
   file,
   request,
   scope,
+  revision,
   open,
   onToggle,
   ref,
@@ -422,15 +628,25 @@ function FileSection({
   file: ChangedFile;
   request: ReviewRequest;
   scope: ReviewScope;
+  /** The status answer this file's diff must be read for: a newer one re-reads it when open. */
+  revision: number;
   open: boolean;
   onToggle: () => void;
   ref: (node: HTMLElement | null) => void;
 }) {
-  const [diff, setDiff] = useState<FileDiff | null>(null);
-  const selection = useRef<{ side: string; start: number; end: number; text: string } | null>(null);
-  const listeners = useRef<IDisposable[]>([]);
+  // The diff and the status answer it was read for. A diff from an older
+  // answer stays on screen while the newer one is read, rather than
+  // flickering back to a spinner on every batch of file changes.
+  const [loaded, setLoaded] = useState<{ diff: FileDiff; revision: number } | null>(null);
+  const diff = loaded?.diff ?? null;
+  const current = loaded?.revision === revision;
+  // A read that failed says so, over whatever diff is still on screen, until
+  // a read succeeds: swallowed, it left "Reading the diff…" up for good.
+  // `attempt` is Retry's: the same revision, read again.
+  const [failure, setFailure] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
+  const selection = useRef<ReviewSelection | null>(null);
   const promptContext = useMemo(() => createDesktopPromptContext(request.projectId, root, JSON.stringify(["desktop", request.projectId, root]), request.sessionId), [request.projectId, root, request.sessionId]);
-  useEffect(() => () => { listeners.current.forEach((listener) => listener.dispose()); }, []);
   const requestRevision = () => {
     const selected = selection.current;
     const excerpt = selected ? `\nSelected ${selected.side} lines ${selected.start}–${selected.end}:\n\`\`\`\n${selected.text}\n\`\`\`\n` : "";
@@ -441,32 +657,69 @@ function FileSection({
   const theme = useResolvedTheme();
   setupMonaco();
 
+  // One read at a time, and it is never cancelled by a newer stamp: a file
+  // written faster than its diff can be read (every status answer moves the
+  // stamp) would otherwise cancel every read and show "Reading the diff…"
+  // for as long as the writes go on. The read that lands is shown, and the
+  // stamp it is behind asks for the next (`landed`).
+  const reading = useRef(false);
+  const mounted = useRef(true);
+  const [landed, setLanded] = useState(0);
+  // The newest stamp, for a read that settles after it moved: the stamp's own
+  // re-run found a read in flight and asked nothing.
+  const latest = useRef(revision);
   useEffect(() => {
-    if (!open || diff) {
+    latest.current = revision;
+  }, [revision]);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
+  useEffect(() => {
+    if (!open || current || reading.current) {
       return;
     }
-    let cancelled = false;
+    reading.current = true;
+    const asked = revision;
     void window.textToCad.git
       .fileDiff({ ...request, path: file.path, scope: diffScopeFor(scope) })
       .then((result) => {
-        if (!cancelled) {
-          setDiff(result);
-        }
+        reading.current = false;
+        if (!mounted.current) return;
+        setLoaded({ diff: result, revision: asked });
+        setFailure(null);
+        setLanded((count) => count + 1);
       })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, [open, diff, request, file.path, scope]);
+      .catch((error: unknown) => {
+        reading.current = false;
+        if (!mounted.current) return;
+        // The failure is shown with its Retry. A stamp that moved while it
+        // was read asks again, as a landed read would; the same stamp waits
+        // for Retry or a newer one.
+        setFailure(errorMessage(error));
+        if (latest.current !== asked) setLanded((count) => count + 1);
+      });
+  }, [open, current, request, file.path, scope, revision, attempt, landed]);
+  const retry = () => {
+    setFailure(null);
+    setAttempt((count) => count + 1);
+  };
 
   const badge = badgeFor(file.status);
-  const height = useMemo(() => sectionHeight(diff), [diff]);
 
   return (
-    <section className="border-b" ref={ref}>
-      <div className="bg-card/60">
+    <section className="border-b" data-review-file={file.path} ref={ref}>
+      {/*
+        One row: the toggle takes the name and the counts, and Request
+        revision sits after them at the right — a sibling, since a button
+        cannot hold a button.
+      */}
+      <div className="flex min-w-0 items-center gap-1 bg-card/60 pr-2">
         <button
-          className="flex w-full min-w-0 items-center gap-2 px-3 py-2 text-left transition-colors hover:bg-accent/40"
+          aria-expanded={open}
+          className="flex min-w-0 flex-1 items-center gap-2 py-2 pl-3 text-left transition-colors hover:bg-accent/40"
           onClick={onToggle}
           type="button"
         >
@@ -478,22 +731,30 @@ function FileSection({
           <span className={cn("shrink-0 font-mono text-[11px] font-semibold", badge.className)}>
             {badge.letter}
           </span>
-          <span className="min-w-0 flex-1 truncate font-mono text-[12px]" title={file.path}>
-            {file.oldPath ? (
-              <>
-                <span className="text-muted-foreground line-through">{file.oldPath}</span>
-                <span className="text-muted-foreground"> → </span>
-              </>
-            ) : null}
-            {file.path}
-          </span>
+          <TooltipHint content={file.path} overflowOnly>
+            <span className="min-w-0 flex-1 truncate font-mono text-[12px]">
+              {file.oldPath ? (
+                <>
+                  <span className="text-muted-foreground line-through">{file.oldPath}</span>
+                  <span className="text-muted-foreground"> → </span>
+                </>
+              ) : null}
+              {file.path}
+            </span>
+          </TooltipHint>
           <Totals deletions={file.deletions} insertions={file.insertions} />
         </button>
-        <div className="flex justify-end px-2 pb-1">
-          <Button aria-label={`Request revision for ${file.path}`} className="h-6 shrink-0 px-2 text-xs" onMouseDown={(event) => event.preventDefault()} onClick={requestRevision} size="sm" variant="ghost">
-            Request revision
-          </Button>
-        </div>
+        <Button
+          aria-label={`Request revision for ${file.path}`}
+          className="h-6 shrink-0 px-2 text-xs text-muted-foreground hover:text-foreground"
+          onClick={requestRevision}
+          // Keeps the editor's selection, which is what the request quotes.
+          onMouseDown={(event) => event.preventDefault()}
+          size="sm"
+          variant="ghost"
+        >
+          Request revision
+        </Button>
       </div>
 
       {open ? (
@@ -501,41 +762,30 @@ function FileSection({
           <p className="px-4 py-6 text-center text-xs text-muted-foreground">
             Binary file — no textual diff.
           </p>
-        ) : diff ? (
-          <div style={{ height }}>
-            <DiffEditor
-              onMount={(editor) => {
-                listeners.current.forEach((listener) => listener.dispose());
-                selection.current = null;
-                listeners.current = ([
-                  ["original", editor.getOriginalEditor()],
-                  ["modified", editor.getModifiedEditor()],
-                ] as const).flatMap(([side, code]) => {
-                  const remember = () => {
-                    const range = code.getSelection();
-                    const text = range && !range.isEmpty() ? code.getModel()?.getValueInRange(range) : "";
-                    selection.current = range && text ? { side, text, start: range.startLineNumber, end: range.endLineNumber } : null;
-                  };
-                  return [code.onDidChangeCursorSelection(remember), code.onDidFocusEditorText(remember)];
-                });
-              }}
-              language={languageFor(file.path)}
-              modified={diff.after ?? ""}
-              options={{
-                ...SHARED_EDITOR_OPTIONS,
-                // Codex's review is a unified diff, and a pane this wide has
-                // no room for two columns.
-                renderSideBySide: false,
-                readOnly: true,
-                renderOverviewRuler: false,
-                scrollBeyondLastLine: false,
-                hideUnchangedRegions: { enabled: true, revealLineCount: 3, minimumLineCount: 3 },
-                scrollbar: { alwaysConsumeMouseWheel: false, verticalScrollbarSize: 10 },
-              }}
-              original={diff.before ?? ""}
-              theme={monacoTheme(theme)}
-            />
-          </div>
+        ) : failure || diff ? (
+          <>
+            {failure ? (
+              <Alert className="m-2 w-auto px-3 py-2 text-xs" variant="destructive">
+                <AlertCircle />
+                <AlertDescription className="flex min-w-0 flex-row items-center gap-2 text-xs">
+                  <span className="min-w-0 flex-1 break-words">Could not read the diff: {failure}</span>
+                  <Button className="h-6 shrink-0 px-2 text-[12px]" onClick={retry} size="sm" variant="outline">
+                    Retry
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            ) : null}
+            {diff ? (
+              <ReviewDiff
+                diff={diff}
+                onSelect={(next) => {
+                  selection.current = next;
+                }}
+                path={file.path}
+                theme={theme}
+              />
+            ) : null}
+          </>
         ) : (
           <div className="flex items-center justify-center gap-2 py-8 text-xs text-muted-foreground">
             <Spinner className="size-3.5" />
@@ -548,7 +798,56 @@ function FileSection({
 }
 
 /**
- * `Commit or push`, and `Create pull request` beside it (plan §9).
+ * The header's commit button: `Commit or push` with a remote to push to,
+ * plain `Commit` without one — a label that offers a push the panel cannot do
+ * is a promise it breaks. Primary, because it is the header's one action —
+ * until the panel is open: then the panel's own Commit is the action, and this
+ * one is the toggle that opened it, drawn as a pressed outline so the header
+ * and the panel do not show two filled Commit buttons one above the other.
+ */
+function CommitTrigger({
+  ahead,
+  canPush,
+  fileCount,
+  open,
+  onToggle,
+  panelId,
+  ref,
+}: {
+  /** Commits the remote lacks. */
+  ahead: number;
+  canPush: boolean;
+  fileCount: number;
+  open: boolean;
+  onToggle: () => void;
+  /** The panel's id, for aria-controls. */
+  panelId: string;
+  ref: RefObject<HTMLButtonElement | null>;
+}) {
+  return (
+    <Button
+      aria-controls={panelId}
+      aria-expanded={open}
+      className="h-6 gap-1.5 px-2 text-[12px]"
+      disabled={fileCount === 0 && ahead === 0}
+      onClick={onToggle}
+      ref={ref}
+      size="sm"
+      variant={open ? "outline" : "default"}
+    >
+      <GitCommitHorizontal className="size-3.5" />
+      {fileCount === 0 && ahead > 0 ? "Push" : canPush ? "Commit or push" : "Commit"}
+    </Button>
+  );
+}
+
+/**
+ * The commit form, and `Create pull request` beside it (plan §9).
+ *
+ * A strip under the header rather than a floating popover: a popover wide
+ * enough for a commit message hangs over the first file's header — its name,
+ * its `+/−`, its Request revision — and this pushes the files down instead.
+ * Escape closes it and gives focus back to the header's button.
  *
  * The settings' commit instructions are the message box's **placeholder**, not
  * text prepended to what the person writes: they are house style for whoever
@@ -559,21 +858,31 @@ function FileSection({
  * repository has a remote. Everything else it needs — pushing a branch that
  * has no upstream, choosing the base, the draft setting — main does.
  */
-function CommitPopover({
+function CommitPanel({
+  ahead,
   request,
   session,
-  disabled,
+  fileCount,
   canOpenPullRequest,
+  canPush,
+  id,
+  onClose,
   onDone,
 }: {
+  /** Commits the remote lacks: with a clean tree, the panel's one job is to push them. */
+  ahead: number;
   request: ReviewRequest;
   session: Session | null;
-  disabled: boolean;
+  /** Files in the working tree — what `Commit` takes, not what the scope shows. */
+  fileCount: number;
   canOpenPullRequest: boolean;
+  /** A remote to push to; without one `Commit and push` is not offered. */
+  canPush: boolean;
+  id: string;
+  onClose: () => void;
   onDone: () => void;
 }) {
   const settings = useSettings((state) => state.settings);
-  const [open, setOpen] = useState(false);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -587,20 +896,31 @@ function CommitPopover({
     try {
       await work();
       setMessage("");
-      setOpen(false);
+      onClose();
       onDone();
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : String(caught));
+      setError(errorMessage(caught));
     } finally {
       setBusy(false);
     }
   };
 
   const commit = (push: boolean) => {
-    if (message.trim() === "") {
+    if (message.trim() === "" && fileCount > 0) {
       return;
     }
-    void run(() => window.textToCad.git.commit({ ...request, message: message.trim(), push }));
+    void run(async () => {
+      const { sha, pushedOnly, pushed } = await window.textToCad.git.commit({ ...request, message: message.trim(), push });
+      // The files this message was for were committed by someone else between
+      // the last read and this request: say nothing was committed.
+      if (pushedOnly && fileCount > 0) {
+        toast.success(`Nothing new to commit; pushed ${pushed ?? 0} ${pushed === 1 ? "commit" : "commits"}`);
+        return;
+      }
+      toast.success(
+        fileCount === 0 ? `Pushed ${sha.slice(0, 7)}` : `${push ? "Committed and pushed" : "Committed"} ${sha.slice(0, 7)}`,
+      );
+    });
   };
 
   /**
@@ -626,19 +946,29 @@ function CommitPopover({
   };
 
   return (
-    <Popover onOpenChange={setOpen} open={open}>
-      <PopoverTrigger asChild>
-        <Button className="h-6 gap-1.5 px-2 text-[12px]" disabled={disabled} size="sm" variant="secondary">
-          <GitCommitHorizontal className="size-3.5" />
-          Commit or push
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent align="end" className="w-96 p-3">
-        <p className="mb-2 text-[12px] font-medium">Commit every change</p>
+    <section
+      aria-label="Commit changes"
+      className="shrink-0 border-b bg-card/60 px-3 py-2.5"
+      id={id}
+      onKeyDown={(event) => {
+        if (event.key === "Escape") {
+          event.stopPropagation();
+          onClose();
+        }
+      }}
+    >
+      <p className="mb-2 text-[12px] font-medium">
+        {fileCount === 0
+          ? `${ahead} ${ahead === 1 ? "commit" : "commits"} not pushed`
+          : `Commit ${fileCount} ${fileCount === 1 ? "file" : "files"}`}
+      </p>
+      {/* Pushing commits already made needs no message; the box stays only as a pull request's title. */}
+      {fileCount > 0 || canOpenPullRequest ? (
+        <>
         <Textarea
           aria-label="Commit message"
           autoFocus
-          className="min-h-20 text-[13px]"
+          className="min-h-16 text-[13px]"
           onChange={(event) => setMessage(event.target.value)}
           placeholder={settings?.commitInstructions?.trim() || "Message"}
           value={message}
@@ -648,72 +978,65 @@ function CommitPopover({
             {settings.commitInstructions.trim()}
           </p>
         ) : null}
-        {error ? <p className="mt-2 text-[11px] text-destructive">{error}</p> : null}
-        <div className="mt-2.5 flex items-center gap-1.5">
-          {canOpenPullRequest ? (
-            <Button
-              className="h-7 gap-1.5 text-xs"
-              disabled={busy || (message.trim() === "" && !session?.title)}
-              onClick={pullRequest}
-              size="sm"
-              variant="ghost"
-            >
-              <GitPullRequest className="size-3.5" />
-              Create pull request
-            </Button>
-          ) : null}
-          <div className="flex-1" />
-          <Button
-            className="h-7 text-xs"
-            disabled={busy || message.trim() === ""}
-            onClick={() => commit(false)}
-            size="sm"
-            variant="secondary"
-          >
-            Commit
-          </Button>
-          <Button
-            className="h-7 text-xs"
-            disabled={busy || message.trim() === ""}
-            onClick={() => commit(true)}
-            size="sm"
-          >
-            {busy ? <Spinner className="size-3" /> : null}
-            Commit and push
-          </Button>
-        </div>
+        </>
+      ) : null}
+      {error ? <p className="mt-2 text-[11px] text-destructive">{error}</p> : null}
+      <div className="mt-2.5 flex items-center gap-1.5">
         {canOpenPullRequest ? (
-          <p className="mt-2 text-[11px] leading-snug text-muted-foreground">
-            {settings?.pullRequestInstructions?.trim() ||
-              "The first line is the title, the rest the description. Uncommitted work is not included."}
-          </p>
+          <Button
+            className="h-7 gap-1.5 text-xs"
+            disabled={busy || (message.trim() === "" && !session?.title)}
+            onClick={pullRequest}
+            size="sm"
+            variant="ghost"
+          >
+            <GitPullRequest className="size-3.5" />
+            Create pull request
+          </Button>
         ) : null}
-      </PopoverContent>
-    </Popover>
+        <div className="flex-1" />
+        <Button className="h-7 text-xs" onClick={onClose} size="sm" variant="ghost">
+          Cancel
+        </Button>
+        {fileCount === 0 ? (
+          <Button className="h-7 text-xs" disabled={busy} onClick={() => commit(true)} size="sm">
+            {busy ? <Spinner className="size-3" /> : null}
+            Push
+          </Button>
+        ) : (
+          <>
+            <Button
+              className="h-7 text-xs"
+              disabled={busy || message.trim() === ""}
+              onClick={() => commit(false)}
+              size="sm"
+              // With no remote this is the panel's one action, so it takes the fill.
+              variant={canPush ? "secondary" : "default"}
+            >
+              {busy && !canPush ? <Spinner className="size-3" /> : null}
+              Commit
+            </Button>
+            {canPush ? (
+              <Button
+                className="h-7 text-xs"
+                disabled={busy || message.trim() === ""}
+                onClick={() => commit(true)}
+                size="sm"
+              >
+                {busy ? <Spinner className="size-3" /> : null}
+                Commit and push
+              </Button>
+            ) : null}
+          </>
+        )}
+      </div>
+      {canOpenPullRequest ? (
+        <p className="mt-2 text-[11px] leading-snug text-muted-foreground">
+          {settings?.pullRequestInstructions?.trim() ||
+            "The first line is the title, the rest the description. Uncommitted work is not included."}
+        </p>
+      ) : null}
+    </section>
   );
 }
 
-/* -------------------------------------------------------------------------- */
-/* Helpers                                                                     */
-/* -------------------------------------------------------------------------- */
-
-/**
- * How tall a section needs to be. Monaco has no intrinsic height, so someone
- * has to guess.
- *
- * The guess is the *change*, not the file. `hideUnchangedRegions` collapses
- * everything that did not move into a one-line "407 hidden lines" band, so
- * sizing by the file's length leaves a screen of blank editor under a
- * four-line edit — which is what the first review screenshot showed.
- */
-const LINE_HEIGHT = 20;
-
-function sectionHeight(diff: FileDiff | null): number {
-  if (!diff) {
-    return 120;
-  }
-  // The changed lines, plus the context Monaco keeps around each collapsed
-  // band, plus the band itself.
-  const lines = diff.insertions + diff.deletions + 8;
-  return Math.min(560, Math.max(120, lines * LINE_HEIGHT));
-}

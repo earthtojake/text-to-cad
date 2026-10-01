@@ -4,10 +4,13 @@
   The hardened runtime's exceptions, kept to what text-to-cad actually does.
 
   JIT and unsigned executable memory: V8. Dyld environment variables: Electron's
-  own helper processes. The two file entitlements: the app opens whatever
-  directory the person points it at, and reads and writes their projects.
-  Network client: the agent adapters, the CAD Viewer's local server and the
-  update check.
+  own helper processes. Library validation off: the bundled Python runtime's
+  libraries are not signed by this app's team. The file entitlement
+  (user-selected read-write): the app opens whatever directory the person
+  points it at, and reads and writes their projects. Network client: the agent
+  adapters, the CAD Viewer's local server and the update check. Network server:
+  the loopback servers main listens on (the MCP bridge, the embedded browser's
+  CDP endpoint).
 
   Nothing here is speculative. An entitlement that is not needed is an
   entitlement that has to be justified later, so add one when a feature fails

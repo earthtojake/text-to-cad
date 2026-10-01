@@ -32,6 +32,13 @@ export const IntegrationCommandSchema = z.object({
   title: z.string().min(1).max(200).optional(),
   /** Main-resolved workspace directory, never supplied by the model. */
   rootDirectory: z.string().optional(),
+  /**
+   * The same directory as the session recorded it, when that spelling is not
+   * `rootDirectory` (a `/tmp`, `/var/folders` or symlinked checkout). Terminal
+   * tabs and sessions keep the recorded spelling; the renderer does no fs,
+   * so main hands it both to compare against.
+   */
+  rootAliases: z.array(z.string()).optional(),
   params: z.record(z.string(), z.unknown()).optional(),
 });
 export type IntegrationCommand = z.infer<typeof IntegrationCommandSchema>;

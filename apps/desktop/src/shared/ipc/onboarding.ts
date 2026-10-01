@@ -8,13 +8,14 @@
  */
 import { z } from "zod";
 
+import { ProjectSchema } from "../types";
 import { invoke } from "./define";
 
 export const OnboardingStatusSchema = z.object({
   /**
    * False under the test suites (`NODE_ENV=test`), whose fresh profiles would
    * otherwise open on the welcome instead of the screen they test.
-   * `TEXT_TO_CAD_ONBOARDING=1` turns it back on for the onboarding specs.
+   * `TEXT_TO_CAD_ONBOARDING=1` turns it back on for a test that wants the welcome.
    */
   enabled: z.boolean(),
 });
@@ -25,8 +26,11 @@ export const onboardingContract = {
     status: invoke(z.void(), OnboardingStatusSchema),
     /**
      * Copies the bundled sample to `~/Documents/text-to-cad Sample` (or reuses
-     * the copy already there) and answers with its path.
+     * the copy already there), makes it a folder main chose, and answers with
+     * the project. It broadcasts nothing: the welcome selects the answer
+     * itself, and not at all if the person went Back while it copied. Never a
+     * path for the renderer to hand back: no channel takes one.
      */
-    createSample: invoke(z.void(), z.object({ path: z.string() })),
+    createSample: invoke(z.void(), ProjectSchema),
   },
 } as const;

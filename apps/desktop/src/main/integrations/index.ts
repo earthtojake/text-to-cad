@@ -13,6 +13,7 @@ import { createActions, RendererCommands } from "./actions";
 import { integrationServers } from "./manager";
 import { createTerminalActions } from "./terminals/actions";
 import { explorerTerminals } from "../ipc/explorer";
+import { sessionRuntimePath } from "../cad";
 import { BrowserConnections } from "../browser/connections";
 import { McpBridge, type BridgeSession } from "./mcp-bridge";
 import { EMPTY_SKILLS, materialiseSkillsRoot, skillsPreamble, SKILLS_ROOT_ENV, type SkillSummary, type SkillsRoot } from "./skills";
@@ -77,7 +78,7 @@ export async function initIntegrations(deps: { sendCommand: (command: Integratio
   const actionDeps = { sessionRoot, send: deps.sendCommand, cancel: deps.cancelCommand, newId: () => randomUUID() };
   const browsers = new BrowserConnections(actionDeps, commandsInstance, path.join(app.getPath("userData"), "browser-artifacts"));
   const actions = { ...createActions(actionDeps, commandsInstance),
-    ...createTerminalActions(actionDeps, commandsInstance, explorerTerminals),
+    ...createTerminalActions(actionDeps, commandsInstance, explorerTerminals, sessionRuntimePath),
     browser_connection: (session: BridgeSession, _params: Record<string, unknown>, signal?: AbortSignal) => browsers.connect(session, signal) };
   bridgeInstance = new McpBridge(actions, mcpServerScript, browsers);
   await bridgeInstance.start();

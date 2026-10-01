@@ -1,4 +1,5 @@
-import { useMemo } from "react";
+import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
+import { useId, useMemo, useState } from "react";
 import {
   Check,
   Folder,
@@ -10,6 +11,7 @@ import {
   Zap,
 } from "lucide-react";
 import { cn } from "cn";
+import { toast } from "sonner";
 
 import {
   DropdownMenu,
@@ -21,7 +23,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@renderer/components/ui/dropdown-menu";
-import { useOpenFolder } from "@renderer/hooks/use-open-folder";
+import { useOpenFolderOrToast } from "@renderer/hooks/use-open-folder";
 import { agentIcon } from "@renderer/lib/agent-icons";
 import { GIT_MODE_LABELS, gitModeAvailability, localGitMode } from "@renderer/lib/git-mode";
 import { recentProjects } from "@renderer/lib/projects";
@@ -60,6 +62,8 @@ export function Chip({
   className,
   testId,
   maxWidth = 200,
+  disabledReason,
+  hintSide = "bottom",
 }: {
   icon: React.ReactNode;
   maxWidth?: number;
@@ -71,30 +75,86 @@ export function Chip({
   title?: string;
   className?: string;
   testId?: string;
+  /**
+   * Why the chip cannot be used now. It stays focusable and in the accessibility tree
+   * (`aria-disabled`, never `disabled` or `inert`) with this as its description, and a click says
+   * it rather than opening the menu. No native `title`: the reason is the description.
+   */
+  disabledReason?: string;
+  /**
+   * Which way the hint opens: away from the box. The row's chips sit under it and open below; the
+   * strip's sit over it and open above, off the sentence. The row's right end (model, effort) opens
+   * to the left: in a live session the row is 16px off the window's edge, a hint below it flips to
+   * the top, and above those chips is send.
+   */
+  hintSide?: "top" | "bottom" | "left";
 }) {
+  const reasonId = useId();
+  // ONE button whether or not the chip can be used, so a keyboard user focused on it while the agent
+  // reconnects keeps their place when it comes back. Unavailable, it refuses activation before the
+  // menu's own pointer and key handlers see it (they skip a default-prevented event) and says why.
+  // Enter and Space say it here: preventing their default is what stops the button's own click,
+  // and the click is where a pointer hears the reason.
+  const refuse = (event: React.SyntheticEvent, say = false) => {
+    if (!disabledReason) return;
+    event.preventDefault();
+    if (say) toast.info(disabledReason);
+  };
+  // The menu is controlled so that one open when the chip becomes unavailable closes with it: its
+  // items would otherwise still run against an agent that is reconnecting.
+  const [open, setOpen] = useState(false);
+  const menuOpen = open && !disabledReason;
+  // The chip's hint is the kit's `TooltipHint`, never a native `title`; it stands aside while the
+  // menu is open (`aria-expanded`), and while the chip is unavailable its reason is the description.
   const body = (
-    <button
-      className={cn(
-        "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-1.5 text-[12px] leading-none text-muted-foreground transition-colors",
-        menu ? "hover:bg-accent hover:text-accent-foreground data-[state=open]:bg-accent data-[state=open]:text-accent-foreground" : "cursor-default",
-        className,
-      )}
-      data-chip={testId}
-      style={{ maxWidth }}
-      title={title}
-      type="button"
-    >
-      <span className="[&>svg]:size-3.5">{icon}</span>
-      {label ? <span className="truncate text-foreground/90">{label}</span> : null}
-      {detail ? <span className="truncate">{detail}</span> : null}
-    </button>
+    // `disabled`, not a missing `content`: without content the hint renders a different tree, and
+    // the button would be remounted — focus lost — when the chip comes back.
+    <TooltipHint content={title} disabled={Boolean(disabledReason)} side={hintSide}>
+      <button
+        aria-describedby={disabledReason ? reasonId : undefined}
+        aria-disabled={disabledReason ? "true" : undefined}
+        className={cn(
+          "inline-flex h-7 shrink-0 items-center gap-1.5 rounded-md px-1.5 text-[12px] leading-none text-muted-foreground transition-colors",
+          disabledReason
+            ? "cursor-not-allowed opacity-50"
+            : menu
+              ? "hover:bg-accent hover:text-accent-foreground data-[state=open]:bg-accent data-[state=open]:text-accent-foreground"
+              : "cursor-default",
+          className,
+        )}
+        data-chip={testId}
+        onClick={(event) => {
+          if (!disabledReason) return;
+          event.preventDefault();
+          toast.info(disabledReason);
+        }}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") refuse(event, true);
+          else if (event.key === "ArrowDown" || event.key === "ArrowUp") refuse(event);
+        }}
+        onPointerDown={refuse}
+        style={{ maxWidth }}
+        type="button"
+      >
+        <span className="[&>svg]:size-3.5">{icon}</span>
+        {label ? <span className="truncate text-foreground/90">{label}</span> : null}
+        {detail ? <span className="truncate">{detail}</span> : null}
+      </button>
+    </TooltipHint>
   );
+  const reason = disabledReason ? <span className="sr-only" id={reasonId}>{disabledReason}</span> : null;
   if (!menu) {
-    return body;
+    return (
+      <>
+        {body}
+        {reason}
+      </>
+    );
   }
   return (
-    <DropdownMenu>
+    <DropdownMenu onOpenChange={setOpen} open={menuOpen}>
       <DropdownMenuTrigger asChild>{body}</DropdownMenuTrigger>
+      {reason}
       {/*
         Capped at what Radix measured is actually there and scrolled inside,
         rather than at a fraction of the window: a model menu with a group
@@ -106,12 +166,29 @@ export function Chip({
         className="max-h-[var(--radix-dropdown-menu-content-available-height)] w-64 overflow-y-auto"
         collisionPadding={12}
         side="top"
+        {...openOnChecked}
       >
         {menu}
       </DropdownMenuContent>
     </DropdownMenu>
   );
 }
+
+/**
+ * A menu of choices opens on the one chosen, not on the first row: Enter on the mode chip then
+ * says "Plan, checked" rather than "Ask", and the arrows start from there. DropdownMenu's types
+ * leave out `onOpenAutoFocus`, but it hands the prop to the Menu content underneath, which runs
+ * it before its own entry focus (tests/unit/renderer/session-chips.test.tsx holds it to that).
+ */
+const openOnChecked = {
+  onOpenAutoFocus: (event: Event) => {
+    const content = event.currentTarget instanceof HTMLElement ? event.currentTarget : null;
+    const checked = content?.querySelector<HTMLElement>("[role=menuitemradio][aria-checked=true]");
+    if (!checked) return;
+    event.preventDefault();
+    checked.focus();
+  },
+} as Record<string, unknown>;
 
 /* -------------------------------------------------------------------------- */
 /* New-session chips                                                           */
@@ -125,33 +202,36 @@ export function Chip({
 export function ProjectChip({ project, onChange }: { project: Project | null; onChange: (id: string) => void }) {
   const projects = useProjects((state) => state.projects);
   const sessions = useSessions((state) => state.sessions);
-  const openFolder = useOpenFolder();
+  const openFolder = useOpenFolderOrToast();
+  // The folder this draft is in is listed whether or not a session has run there yet, first when
+  // it has none: a menu that leaves out its own check mark reads as a different folder.
   const recent = useMemo(() => {
     const activeDirectories = new Set(sessions.filter(session => !session.archived).map(session => session.projectId));
-    return recentProjects(projects.filter(candidate => activeDirectories.has(candidate.id)), sessions);
-  }, [projects, sessions]);
+    const listed = recentProjects(projects.filter(candidate => activeDirectories.has(candidate.id)), sessions);
+    return project && !listed.some(candidate => candidate.id === project.id) ? [project, ...listed] : listed;
+  }, [project, projects, sessions]);
   return (
     <Chip
       icon={<Folder />}
       label={project?.name ?? "Choose folder"}
       menu={
         <>
-          <DropdownMenuLabel className="text-[11px] text-muted-foreground uppercase">Recent</DropdownMenuLabel>
+          {recent.length > 0 ? (
+            <DropdownMenuLabel className="text-[11px] text-muted-foreground uppercase">Recent</DropdownMenuLabel>
+          ) : null}
           {recent.map((candidate) => (
-            <DropdownMenuItem
-              key={candidate.id}
-              onSelect={() => onChange(candidate.id)}
-              // The name is what a person picks by; the path is a hover away
-              // rather than a second line under every row.
-              title={candidate.path}
-            >
-              <span className="flex size-4 shrink-0 items-center justify-center">
-                {candidate.id === project?.id ? <Check className="size-3.5" /> : null}
-              </span>
-              <span className="truncate">{candidate.name}</span>
-            </DropdownMenuItem>
+            // The name is what a person picks by; the path is a hover away
+            // rather than a second line under every row.
+            <TooltipHint content={candidate.path} key={candidate.id} side="right">
+              <DropdownMenuItem onSelect={() => onChange(candidate.id)}>
+                <span className="flex size-4 shrink-0 items-center justify-center">
+                  {candidate.id === project?.id ? <Check className="size-3.5" /> : null}
+                </span>
+                <span className="truncate">{candidate.name}</span>
+              </DropdownMenuItem>
+            </TooltipHint>
           ))}
-          <DropdownMenuSeparator />
+          {recent.length > 0 ? <DropdownMenuSeparator /> : null}
           <DropdownMenuItem
             onSelect={() =>
               void openFolder().then((added) => {
@@ -165,6 +245,7 @@ export function ProjectChip({ project, onChange }: { project: Project | null; on
           </DropdownMenuItem>
         </>
       }
+      hintSide="top"
       maxWidth={150}
       testId="project"
       title={project?.path}
@@ -220,6 +301,7 @@ export function GitModeChip({
           </DropdownMenuRadioItem>
         </DropdownMenuRadioGroup>
       }
+      hintSide="top"
       testId="git-mode"
       title={isWorktree ? "A fresh branch in a worktree of its own" : "The project's own folder"}
     />
@@ -245,14 +327,17 @@ export function ModeChip({
   modes,
   currentModeId,
   onChange,
+  disabledReason,
 }: {
   modes: SessionMode[];
   currentModeId: string | null;
   onChange: (modeId: string) => void;
+  disabledReason?: string;
 }) {
   const current = modes.find((mode) => mode.id === currentModeId) ?? null;
   return (
     <Chip
+      disabledReason={disabledReason}
       icon={<ShieldCheck />}
       label={current?.name ?? "Mode"}
       maxWidth={160}
@@ -316,6 +401,7 @@ export function ModelChip({
   onChange,
   fast,
   onFastChange,
+  disabledReason,
 }: {
   providers: ModelProvider[];
   /** Whose model is showing. */
@@ -323,6 +409,7 @@ export function ModelChip({
   onChange: (agentId: string, value: string) => void;
   fast?: FastSwitch | null;
   onFastChange?: (configId: string, value: string | boolean) => void;
+  disabledReason?: string;
 }) {
   const current = providers.find((provider) => provider.agentId === agentId) ?? providers[0] ?? null;
   if (!current) {
@@ -331,8 +418,10 @@ export function ModelChip({
   const many = providers.length > 1;
   return (
     <Chip
+      disabledReason={disabledReason}
       icon={<ProviderGlyph icon={current.icon} />}
       label={currentName(current.model)}
+      hintSide="left"
       maxWidth={190}
       menu={
         <>
@@ -410,14 +499,18 @@ function splitModelValue(value: string): [string | null, string | null] {
 export function EffortChip({
   effort,
   onChange,
+  disabledReason,
 }: {
   effort: SelectOption;
   onChange: (configId: string, value: string) => void;
+  disabledReason?: string;
 }) {
   return (
     <Chip
+      disabledReason={disabledReason}
       icon={<Gauge />}
       label={currentName(effort)}
+      hintSide="left"
       maxWidth={130}
       menu={
         <>

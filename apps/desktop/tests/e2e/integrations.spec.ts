@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { expect, test, type ElectronApplication, type Page } from "@playwright/test";
 import type { TextToCadApi } from "../../src/shared/ipc";
-import { launch, mod, scratch } from "./launch";
+import { chooseDirectory, launch, mod, scratch } from "./launch";
 
 /**
  * What the app gives an agent, on the wire (plan §8, as revised), and what an
@@ -54,7 +54,7 @@ test.beforeAll(async () => {
   }));
   page.on("pageerror", (error) => errors.push(error.message));
   await page.evaluate(() => window.textToCad.settings.set({ theme: "dark" }));
-  projectId = (await page.evaluate((root) => window.textToCad.projects.addPath({ path: root }), project)).id;
+  projectId = (await chooseDirectory(app, project)).id;
 });
 
 test.afterAll(async () => {

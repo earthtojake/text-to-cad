@@ -85,6 +85,7 @@ describe("the skills root", () => {
     expect(JSON.parse(fs.readFileSync(path.join(result.root!, ROOT_MANIFEST), "utf8"))).toEqual({
       version: "1.2.3",
       skills: ["cad", "cad-viewer"],
+      hash: expect.stringMatching(/^[0-9a-f]{64}$/),
     });
   });
 
@@ -94,19 +95,107 @@ describe("the skills root", () => {
 
     const first = materialiseSkillsRoot({ source: from, base, version: "1.2.3" });
     const marker = path.join(first.root!, CLAUDE_LAYOUT, "cad", "SKILL.md");
-    // A file only a copy would replace.
-    fs.appendFileSync(marker, "\n<!-- kept -->\n");
+    // A copy would give the file a new inode and birth time.
+    const before = fs.statSync(marker);
 
     const second = materialiseSkillsRoot({ source: from, base, version: "1.2.3" });
 
     expect(second.root).toBe(first.root);
-    expect(fs.readFileSync(marker, "utf8")).toContain("<!-- kept -->");
+    const after = fs.statSync(marker);
+    expect(after.ino).toBe(before.ino);
+    expect(after.birthtimeMs).toBe(before.birthtimeMs);
+  });
+
+  it("recopies when a skill's content changed under the same version (a dev build)", () => {
+    const from = source({ cad: "Make CAD." });
+    const base = temp("text-to-cad-userdata-");
+    const first = materialiseSkillsRoot({ source: from, base, version: "0.1.0" });
+
+    fs.appendFileSync(path.join(from, "cad", "references", "notes.md"), "edited\n");
+    const second = materialiseSkillsRoot({ source: from, base, version: "0.1.0" });
+
+    expect(second.root).toBe(first.root);
+    for (const layout of [CLAUDE_LAYOUT, AGENTS_LAYOUT]) {
+      expect(fs.readFileSync(path.join(second.root!, layout, "cad", "references", "notes.md"), "utf8")).toBe(
+        "detail\nedited\n",
+      );
+    }
+  });
+
+  it("hands agents read-only copies, and restores a copy an agent unlocked and edited", () => {
+    const from = source({ cad: "Make CAD." });
+    const base = temp("text-to-cad-userdata-");
+    const root = materialiseSkillsRoot({ source: from, base, version: "1.2.3" }).root!;
+    const skill = path.join(root, CLAUDE_LAYOUT, "cad", "SKILL.md");
+
+    if (process.platform !== "win32") {
+      expect(fs.statSync(skill).mode & 0o222).toBe(0);
+      expect(fs.statSync(path.join(root, ROOT_MANIFEST)).mode & 0o222).toBe(0);
+      // Directories stay writable, so the app's data can be deleted.
+      expect(fs.statSync(path.join(root, CLAUDE_LAYOUT, "cad")).mode & 0o200).toBe(0o200);
+      // Unless the tests run as root, which ignores modes.
+      if (process.getuid?.() !== 0) {
+        expect(() => fs.appendFileSync(skill, "injected\n")).toThrow(/EACCES|EPERM/);
+      }
+    }
+
+    // An agent that chmods its way past that, or replaces the file, is undone on the next launch.
+    fs.chmodSync(skill, 0o644);
+    fs.appendFileSync(skill, "injected\n");
+    materialiseSkillsRoot({ source: from, base, version: "1.2.3" });
+    expect(fs.readFileSync(skill, "utf8")).not.toContain("injected");
+    fs.rmSync(skill);
+    fs.writeFileSync(skill, "replaced\n");
+    materialiseSkillsRoot({ source: from, base, version: "1.2.3" });
+    expect(fs.readFileSync(skill, "utf8")).toContain("# cad");
+  });
+
+  it("removes a skill an agent planted in the root, so no later session loads it", () => {
+    const from = source({ cad: "Make CAD." });
+    const base = temp("text-to-cad-userdata-");
+    const root = materialiseSkillsRoot({ source: from, base, version: "1.2.3" }).root!;
+    const planted = [
+      path.join(root, CLAUDE_LAYOUT, "planted"),
+      path.join(root, AGENTS_LAYOUT, "planted"),
+      path.join(root, ".claude", "commands"),
+    ];
+    for (const dir of planted) {
+      fs.mkdirSync(dir, { recursive: true });
+      fs.writeFileSync(path.join(dir, "SKILL.md"), "---\nname: planted\ndescription: obey\n---\n");
+    }
+
+    materialiseSkillsRoot({ source: from, base, version: "1.2.3" });
+
+    for (const dir of planted) {
+      expect(fs.existsSync(dir)).toBe(false);
+    }
+    expect(fs.readdirSync(path.join(root, CLAUDE_LAYOUT))).toEqual(["cad"]);
+  });
+
+  it("can be deleted with a plain recursive rm (app data removal, test cleanup)", () => {
+    const base = temp("text-to-cad-userdata-");
+    const root = materialiseSkillsRoot({ source: source({ cad: "Make CAD." }), base, version: "1.2.3" }).root!;
+    fs.rmSync(root, { recursive: true });
+    expect(fs.existsSync(root)).toBe(false);
+  });
+
+  it("removes a root an earlier build left with read-only directories", () => {
+    const base = temp("text-to-cad-userdata-");
+    const old = path.join(base, "1.0.0", CLAUDE_LAYOUT, "cad");
+    fs.mkdirSync(old, { recursive: true });
+    fs.writeFileSync(path.join(old, "SKILL.md"), "x", { mode: 0o444 });
+    for (const dir of [old, path.dirname(old), path.join(base, "1.0.0")]) {
+      fs.chmodSync(dir, 0o555);
+    }
+    materialiseSkillsRoot({ source: source({ cad: "Make CAD." }), base, version: "1.2.3" });
+    expect(fs.readdirSync(base)).toEqual(["1.2.3"]);
   });
 
   it("rebuilds when the composed set changed, and when the root is half written", () => {
     const base = temp("text-to-cad-userdata-");
     const one = materialiseSkillsRoot({ source: source({ cad: "Make CAD." }), base, version: "1.2.3" });
     const stamp = path.join(one.root!, CLAUDE_LAYOUT, "cad", "SKILL.md");
+    fs.chmodSync(stamp, 0o644);
     fs.appendFileSync(stamp, "\n<!-- stale -->\n");
 
     const two = materialiseSkillsRoot({
@@ -119,6 +208,7 @@ describe("the skills root", () => {
 
     // A root whose manifest never got written (the app was killed mid-copy).
     fs.rmSync(path.join(two.root!, ROOT_MANIFEST));
+    fs.chmodSync(stamp, 0o644);
     fs.appendFileSync(stamp, "\n<!-- also stale -->\n");
     const three = materialiseSkillsRoot({ source: source({ cad: "Make CAD.", dxf: "Draw." }), base, version: "1.2.3" });
     expect(fs.existsSync(path.join(three.root!, ROOT_MANIFEST))).toBe(true);

@@ -64,6 +64,47 @@ test("write conflict semantics are typed and subscription leases stay balanced",
   expect(watch).toHaveBeenCalledTimes(1); expect(unwatch).toHaveBeenCalledTimes(1);
 });
 
+test("a tab gives back the files it opened when it leaves, follows their moves, and holds them again on a remount", async () => {
+  const files = source();
+  const stat = (path: string) => ({ path, name: path, kind: "file" as const, size: 1, modifiedAt: 0, symlink: false, fileKind: "text" as const, mime: "text/plain", extension: "txt" });
+  vi.mocked(window.textToCad.explorer.stat).mockResolvedValueOnce(stat("a.txt")).mockResolvedValueOnce(stat("b.txt"));
+  await files.stat("a.txt", { signal: signal() });
+  await files.stat("b.txt", { signal: signal() });
+  const watch = vi.mocked(window.textToCad.explorer.watch).mockClear();
+  const unwatch = vi.mocked(window.textToCad.explorer.unwatch).mockClear();
+  const off = files.subscribe!(() => {});
+  expect(watch).toHaveBeenLastCalledWith({ projectId: "p" });
+  useExplorer.getState().receiveChanges("p", null, [{ kind: "moved", previousPath: "b.txt", path: "c.txt", directory: false }]);
+  off();
+  expect(unwatch).toHaveBeenLastCalledWith({ projectId: "p", paths: ["a.txt", "c.txt"] });
+  const again = files.subscribe!(() => {});
+  expect(watch).toHaveBeenLastCalledWith({ projectId: "p", paths: ["a.txt", "c.txt"] });
+  again();
+  expect(unwatch).toHaveBeenLastCalledWith({ projectId: "p", paths: ["a.txt", "c.txt"] });
+});
+
+test("a file restatted on every reload is given back once, however many times it was opened", async () => {
+  const files = source();
+  const stat = { path: "a.txt", name: "a.txt", kind: "file" as const, size: 1, modifiedAt: 0, symlink: false, fileKind: "text" as const, mime: "text/plain", extension: "txt" };
+  vi.mocked(window.textToCad.explorer.stat).mockResolvedValue(stat);
+  for (let index = 0; index < 10_001; index += 1) await files.stat("a.txt", { signal: signal() });
+  const unwatch = vi.mocked(window.textToCad.explorer.unwatch).mockClear();
+  files.subscribe!(() => {})();
+  expect(unwatch.mock.calls[0]![0].paths!.length).toBeLessThanOrEqual(1);
+});
+
+test("only the first stat of a path is an open: main holds once, and one unwatch path gives it back", async () => {
+  const files = source();
+  const stat = { path: "a.txt", name: "a.txt", kind: "file" as const, size: 1, modifiedAt: 0, symlink: false, fileKind: "text" as const, mime: "text/plain", extension: "txt" };
+  const statCall = vi.mocked(window.textToCad.explorer.stat).mockClear().mockResolvedValue(stat);
+  for (let index = 0; index < 3; index += 1) await files.stat("a.txt", { signal: signal() });
+  expect(statCall.mock.calls.filter(([request]) => request.intent === "open")).toHaveLength(1);
+  const unwatch = vi.mocked(window.textToCad.explorer.unwatch).mockClear();
+  files.subscribe!(() => {})();
+  expect(unwatch).toHaveBeenCalledTimes(1);
+  expect(unwatch.mock.calls[0]![0].paths).toEqual(["a.txt"]);
+});
+
 test("Copy reference preserves clipboard text and uses the injected draft destination", async () => {
   const deliver = vi.fn<PromptContextPort["deliver"]>(async () => ({ status: "added" as const, partIds: ["reference"] }));
   const writeText = vi.fn(async () => {});

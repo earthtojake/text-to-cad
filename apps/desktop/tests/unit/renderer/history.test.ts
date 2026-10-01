@@ -37,7 +37,6 @@ function session(id: string, projectId: string): Session {
     archived: false,
     sessionHead: null,
     turnHead: null,
-    turnStartedAt: null,
   };
 }
 
@@ -66,7 +65,7 @@ describe("the top-level history", () => {
     await land(() => useProjects.getState().setActive("p1"));
     await land(() => useSessions.getState().select("s1"));
     await land(() => useSessions.getState().select("s2"));
-    // `New chat` — the same selection the sidebar's link makes.
+    // `New session` — the same selection the sidebar's link makes.
     await land(() => useSessions.getState().setActive(null));
 
     expect(useHistory.getState().entries).toEqual([
@@ -160,6 +159,22 @@ describe("the top-level history", () => {
     expect(useSessions.getState().activeId).toBe("s2");
   });
 
+  /**
+   * Archiving hides a thread from the sidebar without deleting it, so its
+   * session is still in the list — but back is not a door to a thread the
+   * person put away. It is stepped over like a deleted one.
+   */
+  it("steps over an entry whose session is archived", async () => {
+    await land(() => useProjects.getState().setActive("p1"));
+    await land(() => useSessions.getState().select("s1"));
+    await land(() => useSessions.getState().select("s2"));
+    await land(() => useSessions.getState().receive([{ ...session("s1", "p1"), archived: true }, session("s2", "p1"), session("s3", "p2")]));
+
+    await land(() => useHistory.getState().back());
+    expect(useSessions.getState().activeId).toBeNull();
+    expect(useHistory.getState().index).toBe(0);
+  });
+
   it("steps over entries in a project that is gone", async () => {
     await land(() => useProjects.getState().setActive("p1"));
     await land(() => useSessions.getState().select("s3"));
@@ -174,5 +189,18 @@ describe("the top-level history", () => {
   it("records nothing while no project is bound", async () => {
     await land(() => useSessions.getState().setActive(null));
     expect(useHistory.getState().entries).toEqual([]);
+  });
+  it("keeps the last 100 places and drops the oldest", async () => {
+    await land(() => useProjects.getState().setActive("p1"));
+    for (let turn = 0; turn < 75; turn += 1) {
+      await land(() => useSessions.getState().select("s1"));
+      await land(() => useSessions.getState().select("s2"));
+    }
+    const { entries, index } = useHistory.getState();
+    expect(entries).toHaveLength(100);
+    expect(index).toBe(99);
+    expect(entries.at(-1)).toEqual({ projectId: "p1", sessionId: "s2" });
+    await land(() => useHistory.getState().back());
+    expect(useSessions.getState().activeId).toBe("s1");
   });
 });

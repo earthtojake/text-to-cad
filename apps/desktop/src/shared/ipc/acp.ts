@@ -31,7 +31,7 @@ export const acpContract = {
      * The working directory is **not** given: main resolves it from
      * `gitMode` (plan §9), which is the only place that knows where worktrees
      * go and what they are called. `cwd` is the one exception — Settings'
-     * `New chat in this worktree` — and main checks it belongs to the project
+     * `New session in this worktree` — and main checks it belongs to the project
      * before running anything in it.
      */
     create: invoke(
@@ -64,11 +64,13 @@ export const acpContract = {
     ),
     /**
      * Send a prompt. Resolves when the turn ends (the whole turn streams on
-     * `session.update` in the meantime), with the agent's stop reason.
+     * `session.update` in the meantime), with the agent's stop reason — or at
+     * once with `refused`, the reason, when the prompt holds a block the agent
+     * did not say it takes; no turn began and nothing was written.
      */
     prompt: invoke(
       Id.extend({ content: z.array(PromptBlockSchema).min(1) }),
-      z.object({ stopReason: z.string() }),
+      z.object({ stopReason: z.string(), refused: z.string().optional() }),
     ),
     cancel: invoke(Id, z.void()),
     /**
@@ -89,6 +91,11 @@ export const acpContract = {
       }),
       z.void(),
     ),
+    /**
+     * Run the setup a create reported as failed (`session.status.error`) again on the live
+     * session: null when it went through, else the note. Never a reconnect.
+     */
+    retrySetup: invoke(Id, z.object({ error: z.string().nullable() })),
     /** Override the agent's title with a user-supplied name that later notifications preserve. */
     rename: invoke(Id.extend({ title: z.string().min(1).max(200) }), SessionSchema),
     /** Hide from (or restore to) the sidebar. Archiving closes the adapter. */
@@ -126,7 +133,9 @@ export const acpEvents = {
     data: z.string(),
     /** Set once on exit. */
     exit: z.object({ exitCode: z.number().nullable(), signal: z.string().nullable() }).nullable(),
+    /** On the exit chunk: the command wrote nothing, ever. */
+    silent: z.boolean().optional(),
   }),
-  /** The agent wrote files through `fs/write_text_file`; the explorer should refresh them. */
-  "files.changed": z.object({ sessionId: z.string(), paths: z.array(z.string()) }),
+  // An agent's `fs/write_text_file` is announced on the explorer's
+  // `files.changed` (src/shared/ipc/explorer.ts), which owns that event.
 } as const;

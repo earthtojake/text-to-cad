@@ -7,12 +7,19 @@
  * back — costs a spawn, an `initialize` and a replay (README, "Opening a
  * session"). So every reduced `SessionState` main sees is written here,
  * debounced, and the renderer paints *that* the moment a row is clicked
- * while the real load runs behind it.
+ * while the real load runs behind it. Nothing is filed while the connection is
+ * `connecting` (`SessionManager.onEvent`): a replay's transcript is the
+ * beginning of its own reload and would replace the whole stored one. A reload
+ * that fails `discard`s the pending write for the same reason, and `loadNow`
+ * flushes first, so the connection it replaces is written before that.
  *
  * It is a cache and it is treated as one: a row that no longer parses is
  * dropped and the session falls back to the spinner, exactly as a session
  * created before this feature does. Nothing is ever read back into a live
- * connection — the live state is the agent's, and this is a picture of it.
+ * connection's state — the live state is the agent's, and this is a picture of
+ * it. The one read a load makes is `loadNow`'s, for the title the replay does
+ * not send again and for `answered` (whether an agent turn stored there says the
+ * first prompt was read), both handed to `loadSession`.
  *
  * Two caps, because a transcript is not a bounded thing:
  *
@@ -29,6 +36,7 @@
  * thing you see for the second or two before the real state lands, never a
  * thing the agent is told.
  */
+import { withoutParked } from "../../shared/acp/reduce";
 import { SessionStateSchema, type Part, type SessionState } from "../../shared/acp/types";
 
 /** Characters kept per bulk field of a tool call, in the snapshot. */
@@ -110,6 +118,10 @@ function capPart(part: Part): Part {
       };
     case "subagent":
       return { ...part, parts: part.parts.map(capPart) };
+    case "permission_request":
+      // No agent is left to answer it: painted as pending, it would be a
+      // live card whose buttons go nowhere.
+      return part.outcome.state === "pending" ? { ...part, outcome: { state: "cancelled" } } : part;
     default:
       return part;
   }
@@ -124,11 +136,14 @@ function capPart(part: Part): Part {
  * composer of a session that is about to be live, and a stored `error` would
  * show a failure from last week beside a working thread.
  * `pendingPermissions` goes because a request cannot be answered without the
- * agent that asked it; the requests stay in the transcript as history.
+ * agent that asked it; the requests stay in the transcript as history, and
+ * one still pending is written as `cancelled` (`capPart`) so the painted
+ * card is not an answerable one.
  */
 export function trimForSnapshot(state: SessionState): SessionState {
+  // Parked updates wait for a spawn that will not arrive after a restart.
   const capped: SessionState = {
-    ...state,
+    ...withoutParked(state),
     status: "idle",
     error: null,
     pendingPermissions: [],
@@ -214,6 +229,16 @@ export class SessionSnapshotWriter {
       return null;
     }
     return parsed.data;
+  }
+
+  /**
+   * Cancel the pending write and keep the row: what was stored stands. For a
+   * state that is not worth filing over it — a reload that failed leaves an
+   * empty transcript, and the stored one is the only copy.
+   */
+  discard(sessionId: string): void {
+    this.pending.get(sessionId)?.timer.cancel();
+    this.pending.delete(sessionId);
   }
 
   /** Cancel the pending write and drop the row: the session is gone. */

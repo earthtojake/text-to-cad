@@ -3,7 +3,7 @@ import { create } from "zustand";
 /**
  * The Settings pages, in the order the plan lists them (§10) — minus CAD
  * Runtime: the runtime ships inside the app, and what is left to say about
- * it is a status block on About & Updates.
+ * it is a status block on About and updates.
  */
 export const SETTINGS_SECTIONS = [
   "general",
@@ -21,9 +21,9 @@ export const SETTINGS_SECTION_LABELS: Record<SettingsSection, string> = {
   general: "General",
   agents: "Agents",
   appearance: "Appearance",
-  git: "Git & Worktrees",
+  git: "Git and worktrees",
   shortcuts: "Keyboard shortcuts",
-  about: "About & Updates",
+  about: "About and updates",
 };
 
 /**
@@ -65,7 +65,9 @@ export const useUi = create<UiState>((set) => ({
     set((state) => ({
       route: "settings",
       settingsSection: section ?? state.settingsSection,
+      // Closing the palette by any door forgets what was typed in it.
       commandPaletteOpen: false,
+      commandPaletteQuery: "",
     })),
   closeSettings: () => set({ route: "app" }),
   setSettingsSection: (settingsSection) => set({ settingsSection }),

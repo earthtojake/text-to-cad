@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { createRequire } from 'node:module';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -16,7 +17,10 @@ import { test } from 'vitest';
 test('PDF.js renders the same two-page document that live read, page, selection and capture use', { timeout: 120_000 }, async () => {
   const root = fileURLToPath(new URL('../..', import.meta.url));
   const pdfRoot = path.dirname(createRequire(import.meta.url).resolve('pdfjs-dist/package.json'));
-  const server = await createServer({ configFile: false, root, server: { host: '127.0.0.1', port: 0 },
+  // A fresh dependency cache every run: what Vite optimises is then the same here
+  // and in CI, and a late discovery (a reload mid-test) shows up every time.
+  const cacheDir = mkdtempSync(path.join(tmpdir(), 'pdf-harness-vite-'));
+  const server = await createServer({ configFile: false, root, cacheDir, server: { host: '127.0.0.1', port: 0 },
     plugins: [{ name: 'pdf-harness', configureServer(server) { server.middlewares.use((request, response, next) => {
       if (/^\/pdfjs\/(cmaps|standard_fonts|wasm|iccs)\/[\w.-]+$/.test(request.url ?? '')) {
         response.end(readFileSync(path.join(pdfRoot, request.url.slice('/pdfjs/'.length)))); return;
@@ -28,15 +32,22 @@ test('PDF.js renders the same two-page document that live read, page, selection 
     // the root, which here is the renderer's — a scan that fails on its aliases
     // and leaves discovery to the page, whose late finds re-optimise and reload
     // it mid-test.
-    optimizeDeps: { entries: ['tests/browser/pdf/index.tsx'] } });
+    // `include` names what the scan cannot see: the automatic JSX runtime esbuild
+    // injects is `react/jsx-dev-runtime` here, and Vite finding it from the page
+    // re-optimises and reloads mid-test.
+    optimizeDeps: { entries: ['tests/browser/pdf/index.tsx'], include: ['react/jsx-dev-runtime'] } });
   let browser;
   try {
     await server.listen(); browser = await chromium.launch({ headless: true });
     const page = await browser.newPage(); const errors = []; const assetRequests = [];
     page.on('response', response => { if (response.url().includes('/pdfjs/')) assetRequests.push({ url: response.url(), status: response.status() }); });
     page.on('pageerror', error => { errors.push(error.message); console.error(error.message); });
+    let loads = 0; page.on('load', () => { loads += 1; });
     await page.goto(`http://127.0.0.1:${server.httpServer.address().port}/`);
     await page.waitForFunction(() => window.pdfHarness?.live?.state().pageCount === 2);
+    // Vite reloads the page when it finds a dependency its scan missed; a reload
+    // mid-load restarts the harness and the wait above can miss its window.
+    assert.equal(loads, 1, 'the harness loaded once: no Vite re-optimise reload mid-test');
     await page.getByText('First PDF page', { exact: true }).waitFor();
     const text = await page.evaluate(() => window.pdfHarness.live.read(1, 2));
     assert.equal(text[1].text.trim(), 'Second PDF page');
@@ -64,5 +75,5 @@ test('PDF.js renders the same two-page document that live read, page, selection 
     await page.evaluate(() => window.pdfHarness.unmount());
     assert.equal(await page.evaluate(() => window.pdfHarness.live), null);
     assert.deepEqual(errors, []);
-  } finally { await browser?.close(); await server.close(); }
+  } finally { await browser?.close(); await server.close(); rmSync(cacheDir, { recursive: true, force: true }); }
 });

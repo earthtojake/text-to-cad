@@ -1,12 +1,14 @@
 import { useMemo } from "react";
+import { toast } from "sonner";
 import { create } from "zustand";
 
 import { sidebarSections, type SidebarSection } from "@renderer/lib/sidebar";
+import { errorMessage } from "@shared/ipc/errors";
 import type { GitMode, Session } from "@shared/types";
 
 import { useAgents } from "./agents";
 import { useProjects } from "./projects";
-import { flushSessionTabs, useExplorer } from "./explorer";
+import { flushSessionTabs, pruneSessionStorage, useExplorer } from "./explorer";
 import { useSettings, useSidebarSettings } from "./settings";
 
 /**
@@ -16,8 +18,11 @@ import { useSettings, useSidebarSettings } from "./settings";
  *
  * `activeId === null` is the new-session state for the active project. Every
  * mutation is an IPC call and the `sessions.changed` event that follows is
- * what updates the list, so a rename from the header and one from the
- * sidebar's menu land in the same place.
+ * what updates the list, so a pin or an archive from the header and one from
+ * the sidebar's menu land in the same place. A rename is the exception: it
+ * writes the new title into the list at once, and rolls it back with a toast
+ * if main refuses (unless a `sessions.changed` has written another title
+ * meanwhile, which stands).
  */
 type SessionsState = {
   sessions: Session[];
@@ -33,13 +38,23 @@ type SessionsState = {
   /** Move the row into the sidebar's `Pinned` section, or back to its project. */
   setPinned: (id: string, pinned: boolean) => Promise<void>;
   remove: (id: string) => Promise<void>;
+  /**
+   * Main's whole list — `load`, and every `sessions.changed`. Only this
+   * list says a session is gone, so only this prunes what one left behind.
+   */
   receive: (sessions: Session[]) => void;
+  /**
+   * One row this renderer just made, ahead of the `sessions.changed` that
+   * brings it. Not the list: before `load` has answered, the rows beside it
+   * are simply not here yet, and nothing is pruned for their absence.
+   */
+  adopt: (session: Session) => void;
   /**
    * Start a thread and select it (plan §9).
    *
    * The working directory is main's to decide: this passes the mode, not a
    * path, and main resolves the worktree. `cwd` is the one exception —
-   * Settings' `New chat in this worktree` names a directory that already
+   * Settings' `New session in this worktree` names a directory that already
    * exists, and main checks it belongs to the project.
    */
   start: (input: {
@@ -76,6 +91,7 @@ export const useSessions = create<SessionsState>((set, get) => ({
     if (!trimmed) {
       return;
     }
+    const before = get().sessions.find((session) => session.id === id)?.title;
     // Optimistic: the header's inline edit should not flash the old title
     // back while the round trip completes. `sessions.changed` corrects it.
     set((state) => ({
@@ -83,7 +99,20 @@ export const useSessions = create<SessionsState>((set, get) => ({
         session.id === id ? { ...session, title: trimmed } : session,
       ),
     }));
-    await window.textToCad.sessions.rename({ id, title: trimmed });
+    try {
+      await window.textToCad.sessions.rename({ id, title: trimmed });
+    } catch (error) {
+      // Main refused: put the old title back — unless a `sessions.changed` has since
+      // written another one, which is main's word and stays.
+      if (before !== undefined) {
+        set((state) => ({
+          sessions: state.sessions.map((session) =>
+            session.id === id && session.title === trimmed ? { ...session, title: before } : session,
+          ),
+        }));
+      }
+      toast.error(`Could not rename the thread: ${errorMessage(error)}`);
+    }
   },
 
   archive: async (id, archived) => {
@@ -114,6 +143,7 @@ export const useSessions = create<SessionsState>((set, get) => ({
         useExplorer.getState().discardSessionResources(session.id, { preserveTabs: Boolean(current?.archived) });
       }
     }
+    pruneSessionStorage(new Set(byId.keys()));
     const selected = previous.activeId ? byId.get(previous.activeId) : undefined;
     const alreadyArchived = previous.sessions.find(session => session.id === previous.activeId)?.archived;
     // Archiving the open session dismisses it, but a deliberately opened
@@ -122,6 +152,14 @@ export const useSessions = create<SessionsState>((set, get) => ({
     useProjects.getState().derive(sessions);
     if (selected?.archived && activeId) useProjects.getState().setActive(selected.projectId);
     set({ sessions, ready: true, activeId });
+  },
+
+  adopt: (session) => {
+    const current = get().sessions;
+    if (current.some(item => item.id === session.id)) return;
+    const sessions = [...current, session];
+    useProjects.getState().derive(sessions);
+    set({ sessions });
   },
 
   start: async (input, options) => {
@@ -136,8 +174,7 @@ export const useSessions = create<SessionsState>((set, get) => ({
       ...(input.cwd ? { cwd: input.cwd } : {}),
       ...(input.name ? { name: input.name } : {}),
     });
-    const sessions = get().sessions;
-    if (!sessions.some(item => item.id === session.id)) get().receive([...sessions, session]);
+    get().adopt(session);
     if (options?.select !== false) get().select(session.id);
     return session;
   },

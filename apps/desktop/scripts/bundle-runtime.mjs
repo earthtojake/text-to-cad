@@ -204,8 +204,18 @@ function which(name) {
   return first || null;
 }
 
-/** Directories a runtime never reads, removed after the install. */
-function prune(layout) {
+/**
+ * Launchers in the interpreter's own `bin/` (posix) or `Scripts/` (Windows)
+ * that an app runtime never runs and an agent must not: pip (which would
+ * write into the signed, read-only bundle), IDLE, `python3-config` (build
+ * flags for this build machine's paths) and wheel. `python`, `python3` and
+ * `python3.X` stay. `python -m pip` stays too — the build uses it — and the
+ * EXTERNALLY-MANAGED marker decides what it may do afterwards.
+ */
+const LAUNCHERS_TO_PRUNE = /^(pip|idle|wheel)[\d.]*(\.exe)?$|-config$/i;
+
+/** Directories and files a runtime never reads, removed after the install. */
+export function prune(layout) {
   const removed = [];
   const rm = (target) => {
     if (fs.existsSync(target)) {
@@ -218,6 +228,17 @@ function prune(layout) {
   // Console scripts pip wrote for --target, with the build machine's shebang.
   rm(path.join(layout.sitePackages, "bin"));
   rm(path.join(layout.sitePackages, "Scripts"));
+  // pip, idle, *-config and wheel launchers (LAUNCHERS_TO_PRUNE).
+  for (const dir of [path.dirname(layout.python), path.join(layout.pythonDir, "bin"), path.join(layout.pythonDir, "Scripts")]) {
+    if (!fs.existsSync(dir)) {
+      continue;
+    }
+    for (const name of fs.readdirSync(dir)) {
+      if (LAUNCHERS_TO_PRUNE.test(name)) {
+        rm(path.join(dir, name));
+      }
+    }
+  }
   // Documentation and static libraries.
   rm(path.join(layout.pythonDir, "share"));
   // Every package's tests, and every bytecode cache (recompiled below).
@@ -241,6 +262,36 @@ function prune(layout) {
   };
   walk(layout.pythonDir);
   return removed;
+}
+
+/**
+ * PEP 668's marker, in the stdlib directory (`sysconfig.get_path("stdlib")`):
+ * pip then refuses to install into this interpreter — its own site-packages,
+ * `--user` — with this message. The bundle is inside a signed, read-only app,
+ * and its packages are the pinned closure cadgen was validated with; an
+ * agent's `pip install -U numpy` must fail with an explanation, not break the
+ * signature or the pins, nor die with EACCES. `pip install --target <dir>`
+ * and a venv still work.
+ */
+export const EXTERNALLY_MANAGED = [
+  "[externally-managed]",
+  "Error=This Python is the CAD runtime bundled inside the text-to-cad app. Its",
+  " packages are the pinned set cadgen was validated with, and the app bundle is",
+  " signed and read-only, so nothing can be installed into it.",
+  "",
+  " To use other packages, create a virtual environment that can still import",
+  " the bundled CAD packages:",
+  "",
+  "     python3 -m venv --system-site-packages .venv",
+  "     .venv/bin/python -m pip install <package>",
+  "",
+  " (On Windows: .venv\\Scripts\\python -m pip install <package>.) The runtime",
+  " updates with the app; see the text-to-cad README, \"CAD runtime\".",
+  "",
+].join("\n");
+
+export function markExternallyManaged(layout) {
+  fs.writeFileSync(path.join(layout.stdlib, "EXTERNALLY-MANAGED"), EXTERNALLY_MANAGED);
 }
 
 /** `python -I -c`: what `src/main/cad/runtime.ts` asks an interpreter, so the bundle is checked the way it is used. */
@@ -280,6 +331,16 @@ function directorySize(dir) {
   return total;
 }
 
+/**
+ * The `tar` that unpacks the interpreter. On Windows it is the system's own
+ * bsdtar, by full path: the release workflow runs this from Git Bash, whose
+ * PATH puts GNU tar first, and GNU tar reads the `C:` of `C:\…\python.tar.gz`
+ * as a remote host ("Cannot connect to C: resolve failed").
+ */
+export function tarCommand(platform = process.platform, env = process.env) {
+  return platform === "win32" ? path.win32.join(env.SystemRoot ?? env.windir ?? "C:\\Windows", "System32", "tar.exe") : "tar";
+}
+
 /** Pip arguments that install the selected release wheel and its pinned closure. */
 export function runtimePipInstallArgs({ layout, asset, pyMinor, wheel, constraints }) {
   const [major, minor] = pyMinor.split(".");
@@ -303,7 +364,7 @@ export async function bundleRuntime({ target, out, cache, wheels, version, pytho
   if (!asset) {
     throw new Error(`no pinned interpreter for ${target}`);
   }
-  const wheel = fs.existsSync(wheels) ? fs.readdirSync(wheels).find((name) => name.startsWith(`cadgen-${version}-`) && name.endsWith(".whl")) : null;
+  const wheel = releaseWheel(wheels, version)?.name;
   const constraints = path.join(wheels, "constraints.txt");
   if (!wheel) {
     throw new Error(`no cadgen-${version} wheel under ${wheels}; run \`npm run cad:resources\` (the release workflow downloads the published wheel there)`);
@@ -324,7 +385,7 @@ export async function bundleRuntime({ target, out, cache, wheels, version, pytho
   await fetchPinned(pythonBuildUrl(target, build), archive, asset.sha256);
   fs.rmSync(root, { recursive: true, force: true });
   fs.mkdirSync(root, { recursive: true });
-  run("tar", ["-xzf", archive, "-C", root]);
+  run(tarCommand(), ["-xzf", archive, "-C", root]);
   if (!fs.existsSync(layout.python)) {
     throw new Error(`the archive did not produce ${layout.python}`);
   }
@@ -343,6 +404,7 @@ export async function bundleRuntime({ target, out, cache, wheels, version, pytho
 
   // 3. prune, then bytecode
   const removed = prune(layout);
+  markExternallyManaged(layout);
   console.info(`pruned ${removed.length} paths (${removed.filter((entry) => !entry.endsWith("__pycache__")).slice(0, 6).join(", ")}${removed.length > 6 ? ", …" : ""})`);
   const compiler = native ? layout.python : hostPython(explicitPython, pyMinor);
   if (versionOf(compiler) === pyMinor) {
@@ -382,6 +444,7 @@ export async function bundleRuntime({ target, out, cache, wheels, version, pytho
     release: build.release,
     cadgen: version,
     wheel,
+    wheelSha256: releaseWheel(wheels, version).sha256,
     native,
     host: `${process.platform}-${process.arch}`,
     builtAt: new Date().toISOString(),
@@ -392,15 +455,44 @@ export async function bundleRuntime({ target, out, cache, wheels, version, pytho
   return { ...marker, root, bytes };
 }
 
-/** The marker a complete bundle carries, or null. `scripts/package.mjs` refuses to package without one. */
-export function bundledRuntime(out, target, version) {
-  const layout = runtimeLayout(path.join(out, target), target);
+/** The `cadgen-<version>-*.whl` under `wheels` and its sha256, or null when there is none. */
+export function releaseWheel(wheels, version) {
+  const name = fs.existsSync(wheels)
+    ? fs.readdirSync(wheels).find((entry) => entry.startsWith(`cadgen-${version}-`) && entry.endsWith(".whl"))
+    : undefined;
+  if (!name) {
+    return null;
+  }
+  return { name, sha256: createHash("sha256").update(fs.readFileSync(path.join(wheels, name))).digest("hex") };
+}
+
+/**
+ * The marker a complete bundle for this cadgen, this interpreter pin and the
+ * wheel now in `wheels` carries, or null. `scripts/package.mjs` refuses to
+ * package without one.
+ */
+export function bundledRuntime(out, target, version, wheels, build = PYTHON_BUILD) {
+  const layout = runtimeLayout(path.join(out, target), target, build.version);
   if (!fs.existsSync(layout.marker) || !fs.existsSync(layout.python) || missingCadgenRuntimeFiles(layout).length > 0) {
     return null;
   }
   try {
     const marker = JSON.parse(fs.readFileSync(layout.marker, "utf8"));
-    return marker.cadgen === version && marker.target === target ? marker : null;
+    // A bundle built from an older interpreter pin (python-build.json moved
+    // on) is stale however current its cadgen is. So is one installed from a
+    // different wheel of the same version — a rebuilt `cadgen-<v>` from
+    // `npm run cad:resources` after a source change — which only the hash
+    // tells apart: the file name is the same.
+    const wheel = releaseWheel(wheels, version);
+    return marker.cadgen === version &&
+      marker.target === target &&
+      marker.python === build.version &&
+      marker.release === build.release &&
+      wheel !== null &&
+      marker.wheel === wheel.name &&
+      marker.wheelSha256 === wheel.sha256
+      ? marker
+      : null;
   } catch {
     return null;
   }
@@ -421,8 +513,8 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const cache = path.resolve(options.cache ?? defaultCacheDir());
   const wheels = path.resolve(options.wheels ?? path.join(appRoot, "resources", "cadgen"));
   // `tar` is the extractor on every host (macOS and Linux always; Windows 10
-  // 1803+ ships bsdtar as tar.exe).
-  execFileSync("tar", ["--version"], { stdio: "ignore" });
+  // 1803+ ships bsdtar as System32\tar.exe — `tarCommand`).
+  execFileSync(tarCommand(), ["--version"], { stdio: "ignore" });
   for (const target of targets) {
     await bundleRuntime({ target, out, cache, wheels, version, python: options.python });
   }

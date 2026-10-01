@@ -1,3 +1,4 @@
+import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 import { Box, FileText, Folder } from "lucide-react";
 import { createContext, useContext, useEffect, type AnchorHTMLAttributes, type ReactNode } from "react";
 
@@ -44,7 +45,8 @@ export function pathTarget(href: string | undefined): PathTarget | null {
     return null;
   }
   path = path.replace(/^(\.\/|\/)+/, "").replace(/\/+$/, "");
-  if (!path || path.includes("..")) {
+  // A `..` segment climbs out; `v1..v2.txt` and `..keep/a.txt` are only names.
+  if (!path || path.split(/[\\/]/).includes("..")) {
     return null;
   }
   return { path, selector: selector && isSelectorList(selector) ? selector : "" };
@@ -59,6 +61,8 @@ export function PathLink({
   children,
   className,
   node: _node,
+  // A markdown link's own title would be a native one; the hint says it all.
+  title: _title,
   ...rest
 }: AnchorHTMLAttributes<HTMLAnchorElement> & { node?: unknown; children?: ReactNode }) {
   const scope = useContext(TranscriptScopeContext);
@@ -68,11 +72,16 @@ export function PathLink({
       return <span className={className}>{children}</span>;
     }
     // `target="_blank"` reaches main's window-open handler, which hands the
-    // URL to the OS browser rather than opening a window of its own.
+    // URL to the OS browser rather than opening a window of its own. The
+    // label is the agent's words and one click opens it, so the hint says
+    // where it really goes — broken anywhere, since a URL has no spaces to
+    // wrap at and a long one ran out of the hint's box.
     return (
-      <a className={cn("font-medium text-primary underline", className)} href={href} rel="noreferrer" target="_blank" {...rest}>
-        {children}
-      </a>
+      <TooltipHint content={<span className="break-all" data-link-hint>{href}</span>}>
+        <a className={cn("font-medium text-primary underline", className)} href={href} rel="noreferrer" target="_blank" {...rest}>
+          {children}
+        </a>
+      </TooltipHint>
     );
   }
   return (
@@ -109,17 +118,18 @@ function FileLink({ scope, target, children }: { scope: TranscriptScope; target:
     }
   };
   return (
-    <button
-      className="inline-flex max-w-full items-baseline gap-1 rounded-sm font-medium text-primary underline decoration-primary/40 underline-offset-2 hover:decoration-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-      data-path-link={target.path}
-      data-path-selector={reference || undefined}
-      data-path-kind={kind}
-      onClick={open}
-      title={reference ? `Open ${target.path} and select ${reference}` : kind === "directory" ? `Reveal ${target.path}` : `Open ${target.path}`}
-      type="button"
-    >
-      <Icon aria-hidden className="size-3 shrink-0 self-center opacity-70" />
-      <span className="min-w-0 break-all">{children}</span>
-    </button>
+    <TooltipHint content={reference ? `Open ${target.path} and select ${reference}` : kind === "directory" ? `Reveal ${target.path}` : `Open ${target.path}`}>
+      <button
+        className="inline-flex max-w-full items-baseline gap-1 rounded-sm font-medium text-primary underline decoration-primary/40 underline-offset-2 hover:decoration-primary focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+        data-path-link={target.path}
+        data-path-selector={reference || undefined}
+        data-path-kind={kind}
+        onClick={open}
+        type="button"
+      >
+        <Icon aria-hidden className="size-3 shrink-0 self-center opacity-70" />
+        <span className="min-w-0 break-all">{children}</span>
+      </button>
+    </TooltipHint>
   );
 }

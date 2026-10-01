@@ -10,10 +10,14 @@ import { useUi } from '@renderer/state/ui';
 
 const capture = vi.hoisted(() => vi.fn());
 vi.mock('@text-to-cad/ui/drawing', () => ({ exportDrawingScenePng: capture }));
+const shrink = vi.hoisted(() => vi.fn());
+vi.mock('@renderer/lib/shrink-image', () => ({ shrinkImage: shrink }));
+import { MAX_IMAGE_BYTES } from '@shared/image-cap';
 let projectId: string;
 let sequence = 0;
 beforeEach(() => {
   vi.useFakeTimers();
+  shrink.mockReset();
   capture.mockReset().mockResolvedValue({ type: 'image/png', arrayBuffer: async () => new Uint8Array([137, 80, 78, 71]).buffer });
   projectId = `drawing-project-${++sequence}`;
   useProjects.setState({ projects: [projectId, 'other'].map(id => ({ id, name: id, path: `/projects/${id}`, createdAt: 0 })), activeId: projectId });
@@ -78,4 +82,22 @@ it('propagates encoder failures without changing the current sketch', async () =
   capture.mockRejectedValueOnce(new Error('Encoder failed'));
   await expect(performIntegrationCommand({ sessionId: projectId, requestId: 'r', kind: 'drawing-capture', projectId, tabId: tab.id })).rejects.toThrow('Encoder failed');
   expect(getDrawingScene(tab.id)).toBe(scene);
+});
+it('scales a capture over the model image limit down, and says so', async () => {
+  const tab = useExplorer.getState().open('drawing')!;
+  retainDrawingScene(tab.id, () => JSON.stringify(emptyDrawingDocument()));
+  const big = new Blob([new Uint8Array(4 * 1024 * 1024)], { type: 'image/png' });
+  capture.mockResolvedValueOnce(big);
+  shrink.mockResolvedValueOnce(new Blob([new Uint8Array([137, 80, 78, 71])], { type: 'image/png' }));
+  const result = await performIntegrationCommand({ sessionId: projectId, requestId: 'r', kind: 'drawing-capture', projectId, tabId: tab.id }) as { base64: string; scaled?: boolean };
+  expect(big.size).toBeGreaterThan(MAX_IMAGE_BYTES);
+  expect(result.scaled).toBe(true);
+  expect(result.base64.length * 3 / 4).toBeLessThan(MAX_IMAGE_BYTES);
+});
+it('refuses a capture it cannot scale under the limit rather than returning it', async () => {
+  const tab = useExplorer.getState().open('drawing')!;
+  retainDrawingScene(tab.id, () => JSON.stringify(emptyDrawingDocument()));
+  capture.mockResolvedValueOnce(new Blob([new Uint8Array(4 * 1024 * 1024)], { type: 'image/png' }));
+  shrink.mockResolvedValue(null);
+  await expect(performIntegrationCommand({ sessionId: projectId, requestId: 'r', kind: 'drawing-capture', projectId, tabId: tab.id })).rejects.toThrow(/image limit/);
 });

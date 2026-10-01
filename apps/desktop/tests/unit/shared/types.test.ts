@@ -118,6 +118,22 @@ describe("Settings", () => {
   });
 });
 
+describe("the branch prefix", () => {
+  it("is refused in a patch when git would refuse the branches it makes", () => {
+    for (const prefix of ["a b/", "a..b/", "a~/", "a^/", "a:/", "a?/", "a*/", "a[/", "a\\b/", "a//b/", "a.lock/", "/a/", "-a/", ".a/", "a/.b", "a@{b/"]) {
+      expect(SettingsPatchSchema.safeParse({ branchPrefix: prefix }).success, prefix).toBe(false);
+    }
+    for (const prefix of ["", "text-to-cad/", "me/", "team.x/", "a.lock", "feature-"]) {
+      expect(SettingsPatchSchema.safeParse({ branchPrefix: prefix }).success, prefix).toBe(true);
+    }
+  });
+
+  it("reads a refused one already stored as the default, rather than failing every read", () => {
+    expect(SettingsSchema.parse({ branchPrefix: "a b/" }).branchPrefix).toBe("text-to-cad/");
+    expect(SettingsSchema.parse({ branchPrefix: "me/" }).branchPrefix).toBe("me/");
+  });
+});
+
 describe("Session", () => {
   const base = {
     id: "s1",
@@ -212,12 +228,12 @@ describe("review scopes", () => {
     expect(resolveDiffScope({ kind: "session" }, marks)).toEqual({ kind: "range", from: "aaa" });
     expect(resolveDiffScope({ kind: "turn" }, marks)).toEqual({ kind: "range", from: "bbb" });
 
-    // No session, or no mark on it: the working tree, which is the honest
-    // answer — everything in it is new since a point that was never recorded.
-    expect(resolveDiffScope({ kind: "turn" }, null)).toEqual({ kind: "working-tree" });
+    // No session, or no mark on it: an explicit unmarked scope, never the
+    // working tree under the scope's name.
+    expect(resolveDiffScope({ kind: "turn" }, null)).toEqual({ kind: "unmarked", scope: "turn" });
     expect(
       resolveDiffScope({ kind: "turn" }, { turnHead: null, sessionHead: "aaa" }),
-    ).toEqual({ kind: "working-tree" });
+    ).toEqual({ kind: "unmarked", scope: "turn" });
 
     // Everything else passes through untouched, including no scope at all.
     expect(resolveDiffScope(undefined, marks)).toEqual({ kind: "working-tree" });

@@ -18,10 +18,10 @@ import { scopeKey, usePathLinks } from "@renderer/state/path-links";
 
 describe("the path grammar", () => {
   it("recognises relative paths and file names, not versions, URLs or absolute paths", () => {
-    for (const yes of ["models/bracket.step", "README.md", "src/", "src/main", "apps/desktop/AGENTS.md", "Makefile.in", "a.b/c"]) {
+    for (const yes of ["models/bracket.step", "README.md", "src/", "src/main", "apps/desktop/AGENTS.md", "Makefile.in", "a.b/c", "v1..v2.txt", "..keep/a.txt"]) {
       expect(looksLikePath(yes), yes).toBe(true);
     }
-    for (const no of ["0.5.0", "3.14", "https://x.y/z", "/etc/hosts", "~/x", "C:\\x", "foo:", "a..b", "hello", "."]) {
+    for (const no of ["0.5.0", "3.14", "https://x.y/z", "/etc/hosts", "~/x", "C:\\x", "foo:", "../x", "a/../b", "hello", "."]) {
       expect(looksLikePath(no), no).toBe(false);
     }
   });
@@ -94,6 +94,10 @@ describe("pathTarget", () => {
     expect(pathTarget("https://example.com/x.step")).toBeNull();
     expect(pathTarget("mailto:a@b.c")).toBeNull();
     expect(pathTarget("/../etc")).toBeNull();
+    expect(pathTarget("../x")).toBeNull();
+    expect(pathTarget("docs/..%2Fx")).toBeNull();
+    expect(pathTarget("v1..v2.txt")).toMatchObject({ path: "v1..v2.txt" });
+    expect(pathTarget("..keep/a.txt")).toMatchObject({ path: "..keep/a.txt" });
   });
 });
 
@@ -173,5 +177,30 @@ describe("PathLink", () => {
 
     wrap("https://example.com/docs", "the docs");
     expect(screen.getByRole("link", { name: "the docs" })).toHaveAttribute("href", "https://example.com/docs");
+  });
+
+  /**
+   * An outside link opens in one click, and its label is the agent's words —
+   * `[docs.python.org](https://somewhere.else/…)` reads as one place and goes
+   * to another. The hint says where it really goes (the kit's, not a native
+   * `title`).
+   */
+  it("says where an outside link really goes on hover", async () => {
+    const user = userEvent.setup();
+    wrap("https://somewhere.example/collect?d=1", "docs.python.org");
+    const link = screen.getByRole("link", { name: "docs.python.org" });
+    expect(link).not.toHaveAttribute("title");
+    await user.hover(link);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("https://somewhere.example/collect?d=1");
+  });
+
+  it("breaks a long URL inside the hint rather than running out of its box", async () => {
+    const user = userEvent.setup();
+    const long = "https://example.org/very/long/path/that/goes/on/and/on/and/on/and/on/and/on/and/on/and/on?query=1&other=2";
+    wrap(long, long);
+    await user.hover(screen.getByRole("link"));
+    await screen.findByRole("tooltip");
+    const hint = document.querySelector("[data-slot=tooltip-content] [data-link-hint]");
+    expect(hint).toHaveClass("break-all");
   });
 });

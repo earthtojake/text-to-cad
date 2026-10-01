@@ -51,7 +51,7 @@ export function AuthPrompt({
             {message ?? "The agent needs an account before it can start a session."}
           </p>
           {apiKey ? (
-            <p className="mt-0.5 text-[12px] leading-5 text-muted-foreground/80">
+            <p className="mt-0.5 text-[12px] leading-5 text-muted-foreground">
               Or set {apiKey.envVars.join(" or ")} in your shell and try again.
             </p>
           ) : null}

@@ -52,6 +52,30 @@ export const GitStatusSchema = z.object({
   files: z.array(ChangedFileSchema),
   insertions: z.number(),
   deletions: z.number(),
+  /**
+   * Files in the working tree — what `Commit` takes — whatever the scope. It
+   * rides on every answer so the review's commit button needs no second read.
+   */
+  workingFiles: z.number().int().nonnegative(),
+  /**
+   * Where the directory asked about sits in the repository, `/`-separated with
+   * a trailing slash (`app/`), or empty at its top. `files` name paths from
+   * the repository's top; the explorer's watcher names them from the project
+   * (or worktree) the review reads in, and this is the difference.
+   */
+  prefix: z.string().optional(),
+  /**
+   * Set when the scope asked for was `Last turn` or `This session` and the
+   * session has no recorded revision for it. `files` is then empty — not the
+   * working tree — and the review says why rather than "No changes".
+   */
+  unmarked: z.enum(["turn", "session"]).optional(),
+  /**
+   * A session scope in a repository with no commits yet. No mark can exist
+   * there, and every change is new since the repository began, so `files` is
+   * the working tree and the review says it is measuring from the start.
+   */
+  fromStart: z.literal(true).optional(),
 });
 export type GitStatus = z.infer<typeof GitStatusSchema>;
 
@@ -93,16 +117,19 @@ export const ProjectGitInfoSchema = z.object({
 });
 export type ProjectGitInfo = z.infer<typeof ProjectGitInfoSchema>;
 
-/** One row of Settings › Git & Worktrees' per-project card. */
+/** One row of Settings › Git and worktrees' per-project card. */
 export const WorktreeSchema = z.object({
   path: z.string(),
   branch: z.string().nullable(),
-  /** Directory mtime: when someone last wrote in it. Null when it is gone. */
+  /** The newest file mtime in it (`lastWrittenAt`): when someone last wrote in it. Null when it is gone. */
   lastUsedAt: z.number().nullable(),
   /** Sessions still pointing at it — never swept, and a warning before Delete. */
   openSessions: z.number().int().nonnegative(),
-  /** Uncommitted work: `Delete` refuses rather than discarding it. */
-  dirty: z.boolean(),
+  /**
+   * Uncommitted work: `Delete` refuses rather than discarding it. Null when
+   * git could not check — shown as unknown, and kept like dirty.
+   */
+  dirty: z.boolean().nullable(),
   locked: z.boolean(),
 });
 export type Worktree = z.infer<typeof WorktreeSchema>;
@@ -119,7 +146,19 @@ const InProject = z.object({
    */
   sessionId: z.string().optional(),
 });
-const AtPath = InProject.extend({ path: z.string() });
+/**
+ * A repository-relative path: never absolute, never climbing out with `..`.
+ * Main resolves it again against the repository after realpath; this is the
+ * first lock on the same door.
+ */
+const RepositoryPath = z
+  .string()
+  .min(1)
+  .refine(
+    (value) => !value.includes("\0") && !/^(?:[\\/]|[A-Za-z]:)/.test(value) && !value.split(/[\\/]/).includes(".."),
+    { message: "path must be relative to the repository" },
+  );
+const AtPath = InProject.extend({ path: RepositoryPath });
 
 export const gitIpc = {
   git: {
@@ -138,8 +177,11 @@ export const gitIpc = {
       z.object({ patch: z.string() }),
     ),
     commit: invoke(
-      InProject.extend({ message: z.string().min(1), push: z.boolean().optional() }),
-      z.object({ sha: z.string() }),
+      // Empty only for a push of commits already made (main refuses an empty commit message).
+      InProject.extend({ message: z.string(), push: z.boolean().optional() }),
+      // `pushedOnly`: the tree was clean by the time the request arrived, so nothing was
+      // committed and only the `pushed` commits already made were sent.
+      z.object({ sha: z.string(), pushedOnly: z.boolean().optional(), pushed: z.number().optional() }),
     ),
     /**
      * `gh pr create`, pushing first when the branch has no upstream. Answers

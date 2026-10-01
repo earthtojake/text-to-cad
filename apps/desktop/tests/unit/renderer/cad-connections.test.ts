@@ -3,7 +3,7 @@ import { createCadClient } from "@text-to-cad/core/client";
 import type * as CadClientModule from "@text-to-cad/core/client";
 import type { CadClient } from "@text-to-cad/core/client";
 import type { PrepareContext } from "@text-to-cad/ui/file-viewer";
-import { createDesktopCadConnectionRegistry, createDesktopCadConnections } from "@renderer/features/explorer/adapters/cadRuntime";
+import { createDesktopCadConnectionRegistry, createDesktopCadConnections, desktopCadConnectionForTab } from "@renderer/features/explorer/adapters/cadRuntime";
 import { closeSessionTab, useExplorer } from "@renderer/state/explorer";
 import { createDesktopRenderers } from "@renderer/features/explorer/renderers";
 import type { ViewerOrigin } from "@shared/ipc/cad";
@@ -201,4 +201,15 @@ it("does not acquire a backend for an already cancelled tab", async () => {
   owner.dispose();
   expect(window.textToCad.cad.viewerOrigin).not.toHaveBeenCalled();
   expect(createCadClient).not.toHaveBeenCalled();
+});
+
+it("keeps the window's CAD connections through a cancelled unload and releases them when the page goes", () => {
+  const tab = { id: "unload-cad-tab", sessionId: "unload-session", projectId: "unload-project", root: null };
+  const borrowed = desktopCadConnectionForTab(tab);
+  // A reload refused over unsaved drafts, then cancelled by the person.
+  const beforeunload = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(beforeunload);
+  expect(desktopCadConnectionForTab(tab)).toBe(borrowed);
+  window.dispatchEvent(new Event("pagehide"));
+  expect(desktopCadConnectionForTab(tab)).not.toBe(borrowed);
 });

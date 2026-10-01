@@ -5,7 +5,8 @@
  * kills it, and finally releases it. Output is buffered per terminal up to a
  * byte limit — the agent's `outputByteLimit`, or a default — and truncated
  * from the front on a character boundary, as the protocol asks. Every chunk
- * is also handed to `onOutput` so the explorer's terminal tab can mirror it.
+ * is also handed to `onOutput` so the transcript's activity row can show it
+ * live; a released terminal hands over nothing more.
  *
  * The process factory is injected. Main uses node-pty (`pty-backend.ts`);
  * the tests and the CLI harness use `child_process` (`process-backend.ts`),
@@ -32,7 +33,12 @@ export type SpawnTerminal = (options: {
   env: Record<string, string>;
 }) => TerminalProcess;
 
-export type TerminalOutputListener = (terminalId: string, data: string, exit: TerminalExit | null) => void;
+/**
+ * `silent` rides on the exit chunk: the process ended having written nothing at all. The
+ * renderer that only learned of the command after it began can tell "silent" from "output I
+ * missed" by it.
+ */
+export type TerminalOutputListener = (terminalId: string, data: string, exit: TerminalExit | null, silent?: boolean) => void;
 
 type Terminal = {
   id: string;
@@ -42,6 +48,12 @@ type Terminal = {
   limit: number;
   exit: TerminalExit | null;
   exited: Promise<TerminalExit>;
+  /**
+   * Set by `release`. The process interface has no way to remove a listener
+   * (node-pty's `onData` returns a disposable, `child_process` has none the
+   * two share), so the listeners stay on the process and go quiet.
+   */
+  released: boolean;
 };
 
 /** 1 MiB, the default when the agent gives no `outputByteLimit`. */
@@ -86,16 +98,22 @@ export class TerminalManager {
       limit: options.outputByteLimit ?? DEFAULT_OUTPUT_BYTE_LIMIT,
       exit: null,
       exited,
+      released: false,
     };
     this.terminals.set(id, terminal);
     process.onData((data) => {
+      if (terminal.released) {
+        return;
+      }
       this.append(terminal, data);
       this.onOutput(id, data, null);
     });
     process.onExit((exit) => {
       terminal.exit = exit;
       resolveExit(exit);
-      this.onOutput(id, "", exit);
+      if (!terminal.released) {
+        this.onOutput(id, "", exit, terminal.buffer.length === 0);
+      }
     });
     return id;
   }
@@ -142,6 +160,9 @@ export class TerminalManager {
     if (!terminal) {
       return;
     }
+    // Before the kill: the process's last words, and its exit, are not the
+    // transcript's any more.
+    terminal.released = true;
     if (!terminal.exit) {
       terminal.process.kill("SIGTERM");
     }

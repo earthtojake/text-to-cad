@@ -40,6 +40,20 @@ export function appVersion() {
   }
 }
 
+/**
+ * `version`, unless it is the `0.0.0` stand-in `appVersion()` answers without
+ * a VERSION file. A build a person installs must carry the real number: the
+ * updater compares it, the skills root is keyed by it, and a 0.0.0 installer
+ * would never be offered an update. `scripts/package.mjs` refuses to run
+ * without one.
+ */
+export function releaseVersion(version = appVersion()) {
+  if (version === "0.0.0") {
+    throw new Error(`no release version: ${versionFile} is missing (or says 0.0.0); packaging needs the real one`);
+  }
+  return version;
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   process.stdout.write(`${appVersion()}\n`);
 }

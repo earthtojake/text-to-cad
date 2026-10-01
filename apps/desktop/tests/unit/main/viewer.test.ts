@@ -28,12 +28,12 @@ class FakeChild extends EventEmitter implements ViewerChild {
   }
 }
 
-function manager(options: { runtime?: boolean; probe?: () => Promise<boolean> } = {}) {
+function manager(options: { now?: () => number; inUse?: () => string[]; maxLive?: number; runtime?: boolean; gate?: Promise<void>; probe?: () => Promise<boolean>; delay?: () => Promise<void> } = {}) {
   const children: Array<{ child: FakeChild; python: string; args: string[]; cwd: string; env: Record<string, string> }> = [];
   const delays: number[] = [];
   const logs: string[] = [];
   const viewers = new ViewerManager({
-    runtime: async () => (options.runtime === false ? null : { python: "/py", source: "override", env: { PYTHONPATH: "/src" } }),
+    runtime: async () => (await options.gate, options.runtime === false ? null : { python: "/py", source: "override", env: { PYTHONPATH: "/src" } }),
     env: (resolved) => ({ ...resolved.env, HOME: "/home" }),
     spawn: (python, args, spawnOptions) => {
       const child = new FakeChild();
@@ -43,8 +43,12 @@ function manager(options: { runtime?: boolean; probe?: () => Promise<boolean> } 
     probe: options.probe ?? (async () => true),
     delay: async (ms) => {
       delays.push(ms);
+      await options.delay?.();
     },
     log: (line) => logs.push(line),
+    ...(options.inUse ? { inUse: options.inUse } : {}),
+    ...(options.now ? { now: options.now } : {}),
+    ...(options.maxLive ? { maxLive: options.maxLive } : {}),
   });
   return { viewers, children, delays, logs };
 }
@@ -174,6 +178,118 @@ describe("ViewerManager", () => {
     expect(m.viewers.list()).toEqual([]);
   });
 
+  it("a stop during a crash's restart delay cancels the restart, even with no entry left", async () => {
+    for (const halt of ["stop", "stopAll"] as const) {
+      let release!: () => void;
+      const gate = new Promise<void>((resolve) => (release = resolve));
+      const m = manager({ delay: () => gate });
+      const pending = m.viewers.originFor("/proj");
+      await new Promise((resolve) => setImmediate(resolve));
+      m.children[0]!.child.say('{"url":"http://127.0.0.1:3250/","port":3250,"action":"started"}');
+      await pending;
+
+      m.children[0]!.child.exit(1);
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(m.delays).toEqual([1000]);
+      if (halt === "stop") m.viewers.stop("/proj");
+      else m.viewers.stopAll();
+      release();
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(m.children).toHaveLength(1);
+      expect(m.viewers.list()).toEqual([]);
+
+      // Asked for again afterwards, it launches as usual.
+      const again = m.viewers.originFor("/proj");
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(m.children).toHaveLength(2);
+      m.children[1]!.child.say('{"url":"http://127.0.0.1:3251/","port":3251,"action":"started"}');
+      expect(await again).toEqual({ origin: "http://127.0.0.1:3251" });
+    }
+  });
+
+  it("a stop while a restart is launching kills it when it announces, and does not retry", async () => {
+    const m = manager();
+    const pending = m.viewers.originFor("/proj");
+    await new Promise((resolve) => setImmediate(resolve));
+    m.children[0]!.child.say('{"url":"http://127.0.0.1:3250/","port":3250,"action":"started"}');
+    await pending;
+
+    m.children[0]!.child.exit(1);
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(m.children).toHaveLength(2);
+    m.viewers.stop("/proj");
+    m.children[1]!.child.say('{"url":"http://127.0.0.1:3250/","port":3250,"action":"started"}');
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(m.children[1]!.child.killed).toBe(true);
+    expect(m.children).toHaveLength(2);
+    expect(m.delays).toEqual([1000]);
+    expect(m.viewers.list()).toEqual([]);
+  });
+
+  it("a stop during the first launch kills it when it announces, and keeps nothing", async () => {
+    // A session deleted while its viewer is still coming up.
+    const m = manager();
+    const pending = m.viewers.originFor("/proj");
+    await new Promise((resolve) => setImmediate(resolve));
+    m.viewers.stop("/proj");
+    m.children[0]!.child.say('{"url":"http://127.0.0.1:3250/","port":3250,"action":"started"}');
+    expect(await pending).toMatchObject({ origin: null, reason: "viewer-failed" });
+    expect(m.children[0]!.child.killed).toBe(true);
+    expect(m.viewers.list()).toEqual([]);
+    expect(m.children).toHaveLength(1);
+  });
+
+  it("counts crashes in a row: an instance that stayed up is forgiven, a crash loop is given up on", async () => {
+    let clock = 0;
+    const m = manager({ now: () => clock });
+    const settle = () => new Promise((resolve) => setImmediate(resolve));
+    const announce = (index: number) => m.children[index]!.child.say('{"url":"http://127.0.0.1:3250/","port":3250,"action":"started"}');
+    const first = m.viewers.originFor("/proj");
+    await settle();
+    announce(0);
+    await first;
+    // Ten crashes, each after ten minutes up: never an nth in a row.
+    for (let crash = 0; crash < 10; crash += 1) {
+      clock += 10 * 60_000;
+      m.children[crash]!.child.exit(1);
+      await settle();
+      expect(m.children).toHaveLength(crash + 2);
+      announce(crash + 1);
+      await settle();
+    }
+    expect(m.delays).toEqual(Array(10).fill(1000));
+    // The last forgiven restart is attempt 1, so four more quick crashes in a
+    // row are restarted (attempts 2 to 5) and the fifth is given up on.
+    const base = m.children.length;
+    for (let crash = 0; crash < 4; crash += 1) {
+      clock += 1_000;
+      m.children.at(-1)!.child.exit(1);
+      await settle();
+      announce(m.children.length - 1);
+      await settle();
+    }
+    expect(m.children).toHaveLength(base + 4);
+    clock += 1_000;
+    m.children.at(-1)!.child.exit(1);
+    await settle();
+    expect(m.children).toHaveLength(base + 4);
+  });
+
+  it("a launch asked for after a stop is its own, not the stopped one it would have joined", async () => {
+    const m = manager();
+    const first = m.viewers.originFor("/proj");
+    await new Promise((resolve) => setImmediate(resolve));
+    m.viewers.stop("/proj");
+    const second = m.viewers.originFor("/proj");
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(m.children).toHaveLength(2);
+    m.children[1]!.child.say('{"url":"http://127.0.0.1:3251/","port":3251,"action":"started"}');
+    expect(await second).toEqual({ origin: "http://127.0.0.1:3251" });
+    expect(await first).toMatchObject({ origin: null, reason: "viewer-failed", message: expect.stringContaining("stopped while launching") });
+    expect(m.children[0]!.child.killed).toBe(true);
+    expect(m.viewers.list()).toEqual([{ root: "/proj", origin: "http://127.0.0.1:3251", reused: false, pid: 4242 }]);
+  });
+
   it("stopAll kills every instance it started", async () => {
     const m = manager();
     const a = m.viewers.originFor("/a");
@@ -185,5 +301,64 @@ describe("ViewerManager", () => {
     m.viewers.stopAll();
     expect(m.children.every((entry) => entry.child.killed)).toBe(true);
     expect(m.viewers.list()).toEqual([]);
+  });
+
+  it("a stop while the runtime resolves does not spawn a second viewer", async () => {
+    let release!: () => void;
+    const m = manager({ gate: new Promise<void>((resolve) => (release = resolve)) });
+    const first = m.viewers.originFor("/proj");
+    m.viewers.stop("/proj");
+    const second = m.viewers.originFor("/proj");
+    release();
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(m.children).toHaveLength(1);
+    m.children[0]!.child.say('{"url":"http://127.0.0.1:3253/","port":3253,"action":"started"}');
+    expect(await second).toEqual({ origin: "http://127.0.0.1:3253" });
+    expect(await first).toMatchObject({ origin: null, reason: "viewer-failed", message: expect.stringContaining("stopped while launching") });
+  });
+
+  it("stopAll stops a root still launching, so the next ask starts its own", async () => {
+    const m = manager();
+    const first = m.viewers.originFor("/p");
+    await new Promise((resolve) => setImmediate(resolve));
+    m.viewers.stopAll();
+    const second = m.viewers.originFor("/p");
+    await new Promise((resolve) => setImmediate(resolve));
+    expect(m.children).toHaveLength(2);
+    expect(m.children[0]!.child.killed).toBe(true);
+    m.children[1]!.child.say('{"url":"http://127.0.0.1:3252/","port":3252,"action":"started"}');
+    expect(await second).toEqual({ origin: "http://127.0.0.1:3252" });
+    expect(await first).toMatchObject({ origin: null, reason: "viewer-failed" });
+  });
+
+  describe("the bound on live viewers", () => {
+    const settle = () => new Promise((resolve) => setImmediate(resolve));
+    async function bring(m: ReturnType<typeof manager>, root: string, port: number) {
+      const pending = m.viewers.originFor(root);
+      await settle();
+      m.children.at(-1)!.child.say(`{"url":"http://127.0.0.1:${port}/","port":${port},"action":"started"}`);
+      await pending;
+    }
+
+    it("stops the least recently asked-for viewer when a fourth root comes up", async () => {
+      const m = manager();
+      await bring(m, "/a", 1);
+      await bring(m, "/b", 2);
+      await bring(m, "/c", 3);
+      await m.viewers.originFor("/a"); // /a is now newer than /b
+      await bring(m, "/d", 4);
+      expect(m.children.map((entry) => entry.child.killed)).toEqual([false, true, false, false]);
+      expect(m.viewers.list().map((entry) => entry.root).sort()).toEqual(["/a", "/c", "/d"]);
+    });
+
+    it("never stops a root with a CAD tab open, even the oldest", async () => {
+      const m = manager({ inUse: () => ["/a"] });
+      await bring(m, "/a", 1);
+      await bring(m, "/b", 2);
+      await bring(m, "/c", 3);
+      await bring(m, "/d", 4);
+      expect(m.children.map((entry) => entry.child.killed)).toEqual([false, true, false, false]);
+      expect(m.viewers.list().map((entry) => entry.root).sort()).toEqual(["/a", "/c", "/d"]);
+    });
   });
 });

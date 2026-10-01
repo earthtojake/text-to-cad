@@ -51,7 +51,6 @@ Object.defineProperty(window, "textToCad", {
     projects: {
       list: vi.fn(async () => []),
       add: vi.fn(async () => null),
-      addPath: vi.fn(),
       remove: vi.fn(),
       rename: vi.fn(),
     },
@@ -74,6 +73,7 @@ Object.defineProperty(window, "textToCad", {
       info: vi.fn(async () => ({ root: null, skills: [] })),
     },
     runtime: {
+      revealLog: vi.fn(async () => ({ revealed: true })),
       status: vi.fn(async () => ({
         state: "missing",
         python: null,
@@ -85,8 +85,9 @@ Object.defineProperty(window, "textToCad", {
       repair: vi.fn(),
     },
     dialogs: { chooseDirectory: vi.fn(async () => null), chooseFile: vi.fn(async () => null) },
-    settings: { get: vi.fn(), set: vi.fn() },
+    settings: { get: vi.fn(), set: vi.fn(), fallbacks: vi.fn(async () => ({ refused: {}, gone: {} })) },
     window: { state: vi.fn() },
+    ui: { ready: vi.fn(async () => []) },
     shell: { openExternal: vi.fn(), showItemInFolder: vi.fn() },
     explorer: {
       list: vi.fn(async () => []),
@@ -143,6 +144,7 @@ Object.defineProperty(window, "textToCad", {
         files: [],
         insertions: 0,
         deletions: 0,
+        workingFiles: 0,
       })),
       fileDiff: vi.fn(async () => null),
       unifiedDiff: vi.fn(async () => ({ patch: "" })),

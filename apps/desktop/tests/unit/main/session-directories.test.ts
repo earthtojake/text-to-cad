@@ -35,3 +35,13 @@ test("a missing checkout does not erase its group or surviving worktree identity
   expect(projects.list()).toHaveLength(1);
   expect(projects.get(missing)).toMatchObject({ id: missing, path: missing });
 });
+
+test("an id that is only a path names no project until main chose it", () => {
+  // `explorer.read({ projectId: "/", path: "etc/hosts" })` resolves through here.
+  expect(projects.get("/")).toBeNull();
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "text-to-cad-directory-")); temporary.push(dir);
+  expect(projects.get(fs.realpathSync(dir))).toBeNull();
+  const chosen = projects.choose(dir);
+  expect(projects.get(chosen.id)).toEqual(chosen);
+  expect(projects.list()).toEqual([]);
+});

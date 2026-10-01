@@ -28,7 +28,7 @@ export function ProjectMenuItems({
     <>
       <MenuItem
         icon={<MessageSquarePlus />}
-        label="New chat here"
+        label="New session here"
         onSelect={() => {
           setActiveProject(project.id);
           setActiveSession(null);
@@ -41,7 +41,7 @@ export function ProjectMenuItems({
       <MenuItem
         icon={<FolderOpen />}
         label="Reveal in Finder"
-        onSelect={() => void window.textToCad.shell.showItemInFolder({ path: project.path })}
+        onSelect={() => void window.textToCad.shell.showItemInFolder({ projectId: project.id })}
       />
     </>
   );

@@ -83,6 +83,13 @@ export const SessionSchema = z.object({
    * that nothing is ever allowed to delete.
    */
   worktreePath: z.string().optional(),
+  /**
+   * True when the create that wrote this row cut `worktreePath` itself, rather than being
+   * pointed at one that was already there (`New session in this worktree`). Only an owned
+   * worktree is released when `boot` finds the create dead; absent on rows from before
+   * migration 12, which are treated as given.
+   */
+  worktreeOwned: z.boolean().optional(),
   /** Agent-provided name, first-prompt fallback, or an explicit user rename. */
   title: z.string(),
   /** A user rename takes precedence over subsequent agent title updates. */
@@ -114,21 +121,24 @@ export const SessionSchema = z.object({
    */
   pinned: z.boolean().default(false),
   /**
-   * The commit the working tree was at when the session was created, and when
-   * the newest turn began (plan §2, the review's `Last Turn ▾`).
+   * The revision the working tree was at when the session was created, and
+   * when the newest turn began (plan §2, the review's `Last Turn ▾`): a
+   * snapshot tree of the working tree, or the base commit for the session mark
+   * of a worktree main cut fresh.
    *
-   * The review's `This session` and `Last turn` scopes are `git diff <sha>`
+   * The review's `This session` and `Last turn` scopes are `git diff <rev>`
    * against the working tree, so what they need is a revision, recorded at the
-   * moment the scope starts. Timestamps cannot do this job on their own: two
-   * commits can share a second, and `--before=` picks a commit, not a moment.
-   * `turnStartedAt` is kept beside the sha for the header's label and for the
-   * one case a sha cannot cover — a repository with no commits yet.
+   * moment the scope starts. Timestamps cannot do this job: two commits can
+   * share a second, and `--before=` picks a commit, not a moment. A repository
+   * with no commits yet is marked with the empty tree, so its scopes stay a
+   * range once the first commit lands.
    *
-   * Null when the session's directory is not a repository, or has no commits.
+   * Null when the session's directory is not a repository, or git could not
+   * answer; main then reads the scope as unmarked rather than as the working
+   * tree.
    */
   sessionHead: z.string().nullable().default(null),
   turnHead: z.string().nullable().default(null),
-  turnStartedAt: z.number().int().nullable().default(null),
 });
 export type Session = z.infer<typeof SessionSchema>;
 
@@ -158,7 +168,7 @@ const ExplorerTabBase = {
  *
  * Null is the project directory. A string is the absolute path of one of the
  * project's own worktrees (plan §9) — a session in `worktree` mode works in
- * `~/.text-to-cad/worktrees/<project>/<slug>`, and the files it writes, the
+ * `~/.text-to-cad/worktrees/<project-slug>-<8hex>/<slug>`, and the files it writes, the
  * tree beside them, the terminal's cwd and the CAD viewer serving them all
  * belong to that directory, not to the checkout. The explorer store carries
  * the *active* root, chosen from the active session; every tab carries the
@@ -275,11 +285,19 @@ export function diffScopeFor(scope: ReviewScope): DiffScope {
  *
  * The marks are revisions rather than times on purpose: two commits can share
  * a second, and `--before=` picks a commit, not a moment. A session with no
- * mark — its directory is not a repository, or had no commits when the mark
- * was taken — falls back to the working tree, which is the honest answer,
- * because everything in it *is* new since that point.
+ * mark — no session at all, its directory was not a repository or had no
+ * commits when the mark was taken, or the row predates the marks — resolves
+ * to `unmarked`, which main answers with an empty review that says why. It is
+ * never the working tree: that would be a different revision under the
+ * scope's name (docs/integrations.md). The one exception is decided in main,
+ * which can see the repository: with no commits yet, no mark can exist and the
+ * working tree is everything since the start, so `status` answers it there
+ * and says so (`fromStart`).
  */
-export type ResolvedDiffScope = Exclude<DiffScope, { kind: "turn" } | { kind: "session" }>;
+export type UnmarkedScope = "turn" | "session";
+export type ResolvedDiffScope =
+  | Exclude<DiffScope, { kind: "turn" } | { kind: "session" }>
+  | { kind: "unmarked"; scope: UnmarkedScope };
 
 export function resolveDiffScope(
   scope: DiffScope | undefined,
@@ -292,7 +310,7 @@ export function resolveDiffScope(
     return scope;
   }
   const from = scope.kind === "turn" ? marks?.turnHead : marks?.sessionHead;
-  return from ? { kind: "range", from } : { kind: "working-tree" };
+  return from ? { kind: "range", from } : { kind: "unmarked", scope: scope.kind };
 }
 
 /** The working tree's diff, per file. */
@@ -314,15 +332,27 @@ export const BrowserTabSchema = z.object({
 export const TerminalTabSchema = z.object({
   ...ExplorerTabBase,
   kind: z.literal("terminal"),
-  /** Set once the pty exists; null after a restart, when it is respawned. */
+  /**
+   * Set once the pty exists; null after a restart, when it is respawned
+   * (`loadTabs` releases an id no live pty answers to).
+   */
   ptyId: z.string().nullable(),
   /**
    * Absolute working directory. Null means the project root — a session that
    * runs in a worktree (§9) points its terminals at that instead.
    */
   cwd: z.string().nullable().default(null),
-  /** Agent-created ACP terminals are shown read-only with a label. */
+  /**
+   * A terminal that cannot be typed into (the widget disables stdin). Nothing sets it today: an
+   * agent's terminal is marked by `agent` below, and a person can type into it.
+   */
   readOnly: z.boolean().default(false),
+  /**
+   * Opened by the agent (`create_terminal`). Its shell gets the runtime
+   * launchers on PATH, and a respawn after a relaunch must give it the same.
+   * The tab's footer labels it "agent".
+   */
+  agent: z.boolean().default(false),
 });
 
 /** A scratch drawing. Metadata and scene live only in renderer memory. */
@@ -501,6 +531,42 @@ export const SidebarSettingsSchema = z.object({
 export type SidebarSettings = z.infer<typeof SidebarSettingsSchema>;
 
 /**
+ * Why git would refuse a branch prefix, or null when it would not.
+ *
+ * Every worktree session's branch is `<prefix><name>`, made with
+ * `git worktree add -b`, so a prefix git's ref rules (`git check-ref-format`)
+ * refuse fails every one of them — long after the setting was typed. The name
+ * that follows the prefix is the app's own and already valid; these are the
+ * rules the prefix alone can break. An empty prefix is allowed.
+ */
+export function branchPrefixProblem(prefix: string): string | null {
+  // Control characters are refused by git as well; the pattern names them by code.
+  // eslint-disable-next-line no-control-regex
+  if (/[\u0000-\u001f\u007f]/.test(prefix)) return "Git refuses control characters in a branch name.";
+  if (/\s/.test(prefix)) return "Git refuses spaces in a branch name.";
+  const forbidden = prefix.match(/[~^:?*[\\]/);
+  if (forbidden) return `Git refuses “${forbidden[0]}” in a branch name.`;
+  if (prefix.includes("..")) return "Git refuses “..” in a branch name.";
+  if (prefix.includes("//")) return "Git refuses “//” in a branch name.";
+  if (prefix.includes("@{")) return "Git refuses “@{” in a branch name.";
+  if (prefix.startsWith("/")) return "A branch name cannot start with “/”.";
+  if (prefix.startsWith("-")) return "A branch name cannot start with “-”.";
+  // Every part between slashes — the last one too, which the name continues.
+  const parts = prefix.split("/");
+  if (parts.some((part) => part.startsWith("."))) return "No part of a branch name can start with “.”.";
+  // Only a finished part (one a slash closes) can end in .lock or a dot.
+  const finished = parts.slice(0, -1);
+  if (finished.some((part) => part.endsWith(".lock"))) return "No part of a branch name can end in “.lock”.";
+  if (finished.some((part) => part.endsWith("."))) return "No part of a branch name can end in “.”.";
+  return null;
+}
+
+export const BranchPrefixSchema = z.string().superRefine((prefix, context) => {
+  const problem = branchPrefixProblem(prefix);
+  if (problem) context.addIssue({ code: "custom", message: problem });
+});
+
+/**
  * Everything Settings can change. Every field has a default, so a settings row
  * written by an older build parses into a complete object and the app never
  * has to ask "is this undefined because it is off, or because it is new?".
@@ -549,7 +615,12 @@ export const SettingsSchema = z.object({
   defaultGitMode: GitModeSchema.default("checkout"),
   /** Null means `~/.text-to-cad/worktrees` — main expands it, so the row shows the default without storing a home path. */
   worktreeRoot: z.string().nullable().default(null),
-  branchPrefix: z.string().default("text-to-cad/"),
+  /**
+   * Checked against git's ref rules (`branchPrefixProblem`). A stored prefix
+   * git refuses — written before the check existed — reads as the default,
+   * rather than failing every worktree session at `git worktree add -b`.
+   */
+  branchPrefix: BranchPrefixSchema.default("text-to-cad/").catch("text-to-cad/"),
   fetchBeforeCreate: z.boolean().default(true),
   autoDeleteWorktrees: z.boolean().default(false),
   worktreeKeepLimit: z.number().int().min(1).default(10),
@@ -606,10 +677,19 @@ function patchSchemaOf<Shape extends z.ZodRawShape>(
   const shape = Object.fromEntries(
     Object.entries(fields).map(([key, field]) => [
       key,
-      (field instanceof z.ZodDefault ? (field.removeDefault() as z.ZodTypeAny) : field).optional(),
+      withoutDefault(field instanceof z.ZodCatch ? (field.unwrap() as z.ZodTypeAny) : field).optional(),
     ]),
   );
   return z.object(shape) as unknown as z.ZodType<Partial<z.infer<z.ZodObject<Shape>>>>;
+}
+
+/**
+ * A stored row falls back where it has to; a patch is someone asking for a
+ * value, and a value the field would refuse is refused — not swapped for the
+ * fallback behind their back. So both `.catch` and `.default` come off.
+ */
+function withoutDefault(field: z.ZodTypeAny): z.ZodTypeAny {
+  return field instanceof z.ZodDefault ? (field.removeDefault() as z.ZodTypeAny) : field;
 }
 
 /* -------------------------------------------------------------------------- */

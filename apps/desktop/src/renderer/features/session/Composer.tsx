@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { Paperclip, X } from "lucide-react";
 import { cn } from "cn";
 import { toast } from "sonner";
@@ -37,12 +38,20 @@ import { useActiveProject } from "@renderer/state/projects";
 import { useSessions } from "@renderer/state/sessions";
 import type { AvailableCommand, PromptBlock } from "@shared/acp/types";
 
-import { dataUrlOf, rememberFiles } from "./composer/attachments";
+import {
+  AttachmentFiles,
+  attachmentRefusal,
+  dataUrlOf,
+  MAX_ATTACHMENT_BYTES,
+  MAX_INLINE_TEXT_BYTES,
+  openAttachmentFiles,
+  screenAttachments,
+} from "./composer/attachments";
 import { AttachmentImagePreview } from "./composer/AttachmentImagePreview";
 import { ComposerEditor, type ComposerEditorHandle } from "./composer/ComposerEditor";
 import { ReferenceScopeContext } from "./composer/ReferenceScope";
 import { AnnotationsChip, annotationImageParts, withAnnotations } from "./composer/AnnotationsChip";
-import type { DraftAnnotation } from "@renderer/state/composer";
+import type { DraftAnnotation, TakenDraft } from "@renderer/state/composer";
 
 const NO_ANNOTATIONS: DraftAnnotation[] = [];
 
@@ -91,6 +100,7 @@ export function Composer({
   disabled,
   placeholder = "Do anything",
   autoFocus,
+  refuseSend,
   onSubmit,
   onStop,
 }: {
@@ -106,13 +116,20 @@ export function Composer({
   disabled?: boolean;
   placeholder?: string;
   autoFocus?: boolean;
-  onSubmit: (text: string, content: PromptBlock[]) => Promise<void> | void;
+  /**
+   * Why a send cannot go out now. The box still takes a draft; send is shown unavailable and
+   * says this, the way a chip with a `disabledReason` does, and the draft stays where it is.
+   */
+  refuseSend?: string;
+  /** `draft` is what the box held, kept apart, so a queued prompt can be put back as it was. */
+  onSubmit: (text: string, content: PromptBlock[], draft: TakenDraft) => Promise<void> | void;
   onStop?: () => void;
 }) {
   // The draft lives in the composer store, per session, so switching
   // sessions and back does not lose typed text and a suggestion card can
   // fill the box from outside.
   const draftKey = sessionId ?? newDraftKey ?? NEW_SESSION_KEY;
+  const refuseId = useId();
   const project = useActiveProject();
   const session = useSessions((state) => state.sessions.find((item) => item.id === sessionId));
   const draftRoot = useComposer((state) => state.draftRoots[draftKey]);
@@ -135,11 +152,45 @@ export function Composer({
   useEffect(() => {
     if (focusRequest !== null) textRef.current?.focus();
   }, [focusRequest]);
+  // A send asked for from outside (the new-session state's Try again) is Enter's send: the form
+  // submits what the box holds now, through `handleSubmit` below. The request is consumed when it
+  // is handled, and one already in the store when this composer mounted is not this composer's to
+  // act on — either way a composer for the same key arriving later never sends its box unasked.
+  const submitRequest = useComposer((state) => state.submitRequest?.key === draftKey ? state.submitRequest.nonce : null);
+  const staleSubmitRequest = useRef(useComposer.getState().submitRequest?.nonce ?? null);
+  useEffect(() => {
+    if (submitRequest === null || submitRequest === staleSubmitRequest.current) return;
+    useComposer.getState().consumeSubmit(submitRequest);
+    const form = textRef.current?.form() ?? null;
+    const submit = form?.querySelector('button[type="submit"]') as HTMLButtonElement | null;
+    if (form && !submit?.disabled) form.requestSubmit();
+  }, [submitRequest]);
 
+  // The files behind this box's attachments (`composer/attachments.ts`), for as long as it is mounted.
+  const [attachmentFiles] = useState(() => new AttachmentFiles());
+  useEffect(() => openAttachmentFiles(attachmentFiles), [attachmentFiles]);
   // The form's attachments, for the `+` that now sits outside the form.
   const attachmentsRef = useRef<AttachmentsHandle | null>(null);
+  // Every way a file reaches the box — the paperclip, a paste, a drop, the viewer — is sorted here
+  // first (`screenAttachments`): refused files are refused now, with the reason, rather than shown
+  // as attached and dropped at send; a CAD file the project holds goes in as its reference.
+  const admit = useCallback<Admit>(async (files, add) => {
+    const scope = referenceScope ? { projectId: referenceScope.projectId, root: referenceScope.root } : null;
+    const screened = await screenAttachments(files, scope);
+    for (const message of screened.refusals) {
+      toast.error(message);
+    }
+    for (const reference of screened.references) {
+      useComposer.getState().insertReference(draftKey, reference);
+    }
+    if (screened.attach.length > 0) {
+      add(attachmentFiles.remember(screened.attach));
+    }
+  }, [referenceScope, draftKey, attachmentFiles]);
   const queue = useQueue(sessionId);
   const dequeue = useComposer((state) => state.dequeue);
+  // A failed turn holds the queue until the next turn starts; said here, with a way to go on.
+  const queuePaused = useComposer((state) => (sessionId ? sessionId in state.paused : false));
 
   useEffect(() => {
     if (autoFocus) {
@@ -154,6 +205,11 @@ export function Composer({
 
   const handleSubmit = useCallback(
     async (message: PromptInputMessage) => {
+      if (refuseSend) {
+        toast.info(refuseSend);
+        // Rejected, so the form keeps its attachments; the draft was never taken.
+        throw new Error(refuseSend);
+      }
       // Annotations added from the viewer go out with the prompt, after what was typed.
       const pending = useComposer.getState().annotations[draftKey] ?? NO_ANNOTATIONS;
       const trimmed = withAnnotations(message.text.trim(), pending);
@@ -161,25 +217,71 @@ export function Composer({
         return;
       }
       // A note's sketch goes out with it, after the form's own attachments.
-      const content = await toPromptBlocks(trimmed, [...message.files, ...await annotationImageParts(pending)]);
+      const content = await toPromptBlocks(trimmed, [...message.files, ...await annotationImageParts(pending)], attachmentFiles);
       if (content.length === 0) {
         return;
       }
-      setText("");
-      if (pending.length) removeAnnotations(draftKey);
-      await onSubmit(trimmed, content);
+      // The box empties now, but what it held is kept whole — the typed text and the annotations
+      // apart, with their chips' labels — rather than as the flattened prompt: a start that fails
+      // puts it back as it was (the catch below), and so does taking it out of the queue.
+      const taken = useComposer.getState().takeDraft(draftKey);
+      // With its files, for a refusal that comes back after the box has let them go.
+      const files = message.files.flatMap((part) => attachmentFiles.fileFor(part) ?? []);
+      const sent = files.length ? { ...taken, files } : taken;
+      // The strip empties with the text, now: `onSubmit` settles when the turn ends, and waiting
+      // for that kept the image chip on screen through the whole turn, sent it again with the
+      // next message typed meanwhile, and let the form's late clear wipe a file attached since.
+      attachmentsRef.current?.clear();
+      // Not awaited for the same reason. A start that fails puts the draft back as it was, its
+      // files in the strip again (`restoreDraft`), from wherever the rejection arrives.
+      void (async () => {
+        try {
+          await onSubmit(trimmed, content, sent);
+        } catch {
+          useComposer.getState().restoreDraft(draftKey, sent);
+        }
+      })();
     },
-    [onSubmit, setText, removeAnnotations, draftKey],
+    [onSubmit, refuseSend, draftKey, attachmentFiles],
   );
 
   return (
-    <div className="relative flex flex-col gap-2" data-composer>
+    <div
+      className="relative flex flex-col gap-2"
+      data-composer
+      onDropCapture={(event) => {
+        // Ahead of the vendored form's own drop handler, which would attach the file unchecked.
+        const dropped = [...(event.dataTransfer?.files ?? [])];
+        if (dropped.length === 0) {
+          return;
+        }
+        event.preventDefault();
+        event.stopPropagation();
+        const add = attachmentsRef.current?.add;
+        if (add) {
+          void admit(dropped, add);
+        }
+      }}
+    >
       {queue.length > 0 && sessionId ? (
         <Queue className="rounded-xl px-2 pt-1 pb-1">
           <QueueSection defaultOpen>
             <QueueSectionTrigger className="px-2 py-1 text-[12px]">
               <QueueSectionLabel count={queue.length} label={queue.length === 1 ? "queued prompt" : "queued prompts"} />
             </QueueSectionTrigger>
+            {/* Always mounted, so the text arriving in it is announced; the button stays outside. */}
+            <div className="flex items-center justify-between gap-2 px-2 text-[12px] text-muted-foreground">
+              <span aria-live="polite" role="status">{queuePaused ? "Paused after an error" : ""}</span>
+              {queuePaused ? (
+                <button
+                  className="my-1 rounded-md px-2 py-0.5 font-medium text-foreground hover:bg-muted"
+                  onClick={() => void useComposer.getState().resume(sessionId)}
+                  type="button"
+                >
+                  Resume
+                </button>
+              ) : null}
+            </div>
             <QueueSectionContent>
               <QueueList className="mt-1">
                 {queue.map((item) => (
@@ -189,10 +291,12 @@ export function Composer({
                       <QueueItemContent>{item.text || "(attachments)"}</QueueItemContent>
                       <QueueItemActions>
                         <QueueItemAction
-                          aria-label="Remove from queue"
+                          aria-label={`Remove from queue: ${(item.text || "attachments").slice(0, 40)}`}
                           onClick={() => {
                             const removed = dequeue(sessionId, item.id);
-                            if (removed) {
+                            if (removed?.draft) {
+                              useComposer.getState().restoreDraft(draftKey, removed.draft);
+                            } else if (removed) {
                               setText((current) => (current ? current : removed.text));
                             }
                           }}
@@ -233,7 +337,7 @@ export function Composer({
             "[&>[data-slot=input-group]]:h-auto",
             disabled && "opacity-70",
           )}
-          maxFileSize={20 * 1024 * 1024}
+          maxFileSize={MAX_ATTACHMENT_BYTES}
           multiple
           onError={(error) => toast.error(error.message)}
           onSubmit={handleSubmit}
@@ -243,8 +347,9 @@ export function Composer({
               onRemove={() => removeAnnotations(draftKey)} onRemoveOne={(id) => removeAnnotations(draftKey, [id])} scope={referenceScope} />}
             hasAnnotations={annotations.length > 0}
           />
-          <AttachmentSink draftKey={draftKey} />
+          <AttachmentSink admit={admit} draftKey={draftKey} />
           <AttachmentBridge targetRef={attachmentsRef} />
+          <AttachmentFilesSync files={attachmentFiles} />
           {/*
            * No <PromptInputBody>: it renders `display: contents`, which the
            * InputGroup's direct-child stacking selector does not see, and the
@@ -259,6 +364,7 @@ export function Composer({
           <div className="flex w-full min-w-0 items-center gap-1 pr-1.5">
             <ReferenceScopeContext.Provider value={referenceScope}>
               <ComposerEditorField
+                admit={admit}
                 autoFocus={autoFocus}
                 disabled={disabled}
                 handle={textRef}
@@ -293,7 +399,10 @@ export function Composer({
               className={cn(
                 "size-7 shrink-0 rounded-full",
                 status === "streaming" && "bg-foreground text-background",
+                refuseSend && status === "ready" && "cursor-not-allowed opacity-50",
               )}
+              aria-describedby={refuseSend ? refuseId : undefined}
+              aria-disabled={refuseSend ? "true" : undefined}
               disabled={disabled || status === "submitted"}
               onStop={onStop}
               size="icon-sm"
@@ -301,6 +410,7 @@ export function Composer({
             />
           </div>
         </PromptInput>
+        {refuseSend ? <span className="sr-only" id={refuseId}>{refuseSend}</span> : null}
 
         {/*
          * The row, under the box. `+` and the caller's chips on the left,
@@ -311,7 +421,7 @@ export function Composer({
          */}
         <div className="flex h-7 items-center gap-1 px-0.5" data-composer-row>
           <div className="flex min-w-0 flex-1 items-center gap-0.5 overflow-hidden">
-            <AttachButton attachmentsRef={attachmentsRef} disabled={disabled} />
+            <AttachButton admit={admit} attachmentsRef={attachmentsRef} disabled={disabled} />
             {chips}
           </div>
           <div className="flex min-w-0 shrink-0 items-center gap-2">{trailing}</div>
@@ -344,7 +454,16 @@ function AttachmentBridge({ targetRef }: { targetRef: React.RefObject<Attachment
   return null;
 }
 
+/** The box's attachments, told to its files as they change: a new one is bound, a gone one let go. */
+function AttachmentFilesSync({ files }: { files: AttachmentFiles }) {
+  const attachments = usePromptInputAttachments();
+  useEffect(() => files.sync(attachments.files), [files, attachments.files]);
+  return null;
+}
+
 type AttachmentsHandle = ReturnType<typeof usePromptInputAttachments>;
+/** Sort files, then hand what may be attached to the form's `add`. */
+type Admit = (files: readonly File[], add: (files: File[]) => void) => Promise<void>;
 
 /**
  * The editor, with the three things the textarea did for the form: Enter
@@ -354,10 +473,12 @@ type AttachmentsHandle = ReturnType<typeof usePromptInputAttachments>;
  * inside `PromptInput`.
  */
 function ComposerEditorField({
+  admit,
   handle,
   onKeyDown,
   ...props
 }: Omit<React.ComponentProps<typeof ComposerEditor>, "onSubmit" | "onPasteFiles" | "onKeyDown"> & {
+  admit: Admit;
   handle: React.RefObject<ComposerEditorHandle | null>;
   onKeyDown: (event: React.KeyboardEvent) => void;
 }) {
@@ -379,7 +500,7 @@ function ComposerEditorField({
           }
         }
       }}
-      onPasteFiles={(files) => attachments.add(rememberFiles(files))}
+      onPasteFiles={(files) => void admit(files, attachments.add)}
       onSubmit={() => {
         const form = handle.current?.form() ?? null;
         const submit = form?.querySelector('button[type="submit"]') as HTMLButtonElement | null;
@@ -395,15 +516,15 @@ function ComposerEditorField({
  * Files the explorer attached — a capture of the viewer — reach the form's
  * attachments here, the one place inside `PromptInput` that can add them.
  */
-function AttachmentSink({ draftKey }: { draftKey: string }) {
+function AttachmentSink({ admit, draftKey }: { admit: Admit; draftKey: string }) {
   const attachments = usePromptInputAttachments();
   const pending = useComposer((state) => state.pendingFiles[draftKey]);
   const takeFiles = useComposer((state) => state.takeFiles);
   useEffect(() => {
     if (pending && pending.length > 0) {
-      attachments.add(rememberFiles(takeFiles(draftKey)));
+      void admit(takeFiles(draftKey), attachments.add);
     }
-  }, [pending, attachments, takeFiles, draftKey]);
+  }, [pending, attachments, takeFiles, draftKey, admit]);
   return null;
 }
 
@@ -418,9 +539,11 @@ function AttachmentSink({ draftKey }: { draftKey: string }) {
  * through `AttachmentBridge`'s ref rather than through the form's context.
  */
 function AttachButton({
+  admit,
   attachmentsRef,
   disabled,
 }: {
+  admit: Admit;
   attachmentsRef: React.RefObject<AttachmentsHandle | null>;
   disabled?: boolean;
 }) {
@@ -428,23 +551,25 @@ function AttachButton({
   const take = (event: React.ChangeEvent<HTMLInputElement>) => {
     const picked = [...(event.currentTarget.files ?? [])];
     event.currentTarget.value = "";
-    if (picked.length > 0) {
-      attachmentsRef.current?.add(rememberFiles(picked));
+    const add = attachmentsRef.current?.add;
+    if (picked.length > 0 && add) {
+      void admit(picked, add);
     }
   };
   return (
     <>
       <input aria-hidden className="hidden" data-attach-input multiple onChange={take} ref={files} tabIndex={-1} type="file" />
-      <PromptInputButton
-        aria-label="Attach files or photos"
-        className="size-7 text-muted-foreground"
-        disabled={disabled}
-        onClick={() => files.current?.click()}
-        size="icon-sm"
-        title="Attach files or photos"
-      >
-        <Paperclip className="size-4" />
-      </PromptInputButton>
+      <TooltipHint content="Attach files or photos" side="bottom">
+        <PromptInputButton
+          aria-label="Attach files or photos"
+          className="size-7 text-muted-foreground"
+          disabled={disabled}
+          onClick={() => files.current?.click()}
+          size="icon-sm"
+        >
+          <Paperclip className="size-4" />
+        </PromptInputButton>
+      </TooltipHint>
     </>
   );
 }
@@ -567,18 +692,20 @@ function SlashPalette({
 /**
  * The composer's files become ACP content blocks: images as `image`
  * (base64), text files embedded as `resource` so the agent has the
- * content whether or not its sandbox can reach the path. Anything else is
- * refused with a toast rather than sent as bytes the agent cannot read.
+ * content whether or not its sandbox can reach the path. What may be attached
+ * is decided when a file is added (`screenAttachments`); the checks here are
+ * the backstop for a file that reached the form another way, and refuse with
+ * the same words rather than send bytes the agent cannot read.
  * The bytes come through `dataUrlOf`: the vendored form's own blob fetch
  * fails on a `file://` renderer (`composer/attachments.ts`).
  */
-export async function toPromptBlocks(text: string, files: FileUIPart[]): Promise<PromptBlock[]> {
+export async function toPromptBlocks(text: string, files: FileUIPart[], remembered: AttachmentFiles | null = null): Promise<PromptBlock[]> {
   const blocks: PromptBlock[] = [];
   if (text) {
     blocks.push({ type: "text", text });
   }
   for (const file of files) {
-    const parsed = parseDataUrl((await dataUrlOf(file)) ?? "");
+    const parsed = parseDataUrl((await dataUrlOf(file, remembered)) ?? "");
     if (!parsed) {
       toast.error(`${file.filename ?? "An attachment"} could not be read, so it was not attached.`);
       continue;
@@ -591,7 +718,11 @@ export async function toPromptBlocks(text: string, files: FileUIPart[]): Promise
     }
     const decoded = decodeText(parsed.base64);
     if (decoded === null) {
-      toast.error(`${name} is not text or an image, so it was not attached.`);
+      toast.error(attachmentRefusal.notText(name));
+      continue;
+    }
+    if (new TextEncoder().encode(decoded).length > MAX_INLINE_TEXT_BYTES) {
+      toast.error(attachmentRefusal.tooLarge(name));
       continue;
     }
     blocks.push({ type: "resource", uri: `attachment:///${encodeURIComponent(name)}`, text: decoded, mimeType });

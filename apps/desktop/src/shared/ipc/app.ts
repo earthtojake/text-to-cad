@@ -20,15 +20,21 @@ import { invoke } from "./define";
  * and for the pushes that follow, because About renders the same card either
  * way and a second shape would be a second thing to keep in step.
  *
- * - `unsupported` — a development build, or one with no update feed. There is
- *   nothing to check and the UI says so rather than offering a dead button.
- * - `idle` — checked, and this is the newest build.
+ * - `unsupported` — a development build, or an install the updater is inactive
+ *   for. There is nothing to check and the UI says so rather than offering a
+ *   dead button; an optional `message` says why when it is not a checkout.
+ * - `idle` — checked, and this is the newest build (or the release has no feed
+ *   for this platform yet).
  * - `checking` — a check is in flight.
  * - `available` — a newer version exists and has NOT been downloaded
  *   (`autoDownload` is off; downloading is the user's decision).
  * - `downloading` — with `percent`.
  * - `downloaded` — staged; restarting installs it.
- * - `error` — with a `message` safe to show.
+ * - `installing` — Restart was pressed and the quit has not happened yet.
+ *   Ends in the quit, in an `error` from the installer, or in an `error` when
+ *   a minute passes without either.
+ * - `error` — with a `message` safe to show. An error that still carries the
+ *   `version` of a staged download can be answered with Restart again.
  */
 export const UpdateStatusSchema = z.object({
   state: z.enum([
@@ -38,13 +44,14 @@ export const UpdateStatusSchema = z.object({
     "available",
     "downloading",
     "downloaded",
+    "installing",
     "error",
   ]),
   /** The version the state is about, when there is one. */
   version: z.string().optional(),
   /** 0–100, only while downloading. */
   percent: z.number().min(0).max(100).optional(),
-  /** Set on `error`. */
+  /** Set on `error`, and on `unsupported` when the reason is not a development build. */
   message: z.string().optional(),
 });
 export type UpdateStatus = z.infer<typeof UpdateStatusSchema>;

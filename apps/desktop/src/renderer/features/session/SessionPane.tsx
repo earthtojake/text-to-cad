@@ -2,7 +2,8 @@ import { useEffect } from "react";
 import { FolderOpen } from "lucide-react";
 
 import { Button } from "@renderer/components/ui/button";
-import { useOpenFolder } from "@renderer/hooks/use-open-folder";
+import { useOpenFolderOrToast } from "@renderer/hooks/use-open-folder";
+import { isPrimaryModifier } from "@renderer/lib/platform";
 import { useActiveProject } from "@renderer/state/projects";
 import { useActiveSession, useSessions } from "@renderer/state/sessions";
 
@@ -22,11 +23,11 @@ export function SessionPane() {
   const project = useActiveProject();
   const session = useActiveSession();
   const setActiveSession = useSessions((state) => state.setActive);
-  const openFolder = useOpenFolder();
+  const openFolder = useOpenFolderOrToast();
 
   useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key.toLowerCase() === "n" && (event.metaKey || event.ctrlKey) && !event.shiftKey && !event.altKey) {
+      if (event.key.toLowerCase() === "n" && isPrimaryModifier(event) && !event.shiftKey && !event.altKey) {
         event.preventDefault();
         setActiveSession(null);
       }
@@ -41,7 +42,8 @@ export function SessionPane() {
 
   return (
     <div className="flex h-full flex-col">
-      <SessionHeader session={null} title={project ? project.name : "New session"} />
+      {/* No folder yet: nothing to name — the main area's Open folder… is the whole message. */}
+      <SessionHeader session={null} title={project ? project.name : ""} />
       {project ? (
         <NewSession key={project.id} project={project} />
       ) : (

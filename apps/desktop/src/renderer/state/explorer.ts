@@ -1,9 +1,9 @@
 import { FILE_PANEL_TREE, PANEL_DEFAULT_WIDTH, clampPanelWidth } from "@text-to-cad/ui/navigation";
 import { create } from "zustand";
 import { toast } from "sonner";
-import { hasDirtyDocument, releaseDocumentTab, discardDocumentTab } from "./live-documents";
+import { desktopSourceId, hasDirtyDocument, moveDocuments, releaseDocumentTab, discardDocumentTab } from "./live-documents";
 import { releaseCadTab } from "./live-cad";
-import { forgetTabStore } from "@renderer/features/explorer/adapters/tabStore";
+import { forgetSessionTabStores, forgetTabStore, pruneTabStores, rememberTabOwners } from "@renderer/features/explorer/adapters/tabStore";
 
 import { reconcileFileTree, movedFilePath } from "@text-to-cad/ui/file-viewer";
 import { deleteDrawingScene } from "@renderer/state/drawings";
@@ -21,6 +21,8 @@ import type {
   ReviewTab,
   TerminalTab,
 } from "@shared/types";
+import { errorMessage } from "@shared/ipc/errors";
+import { basename } from "@renderer/lib/paths";
 
 /**
  * Every session owns its own strip and pane state. Directory/root identity is
@@ -81,6 +83,24 @@ function bySession<T>(key: string): Record<string, T> {
   });
 }
 
+function forgetPanePreferences(doomed: (sessionId: string) => boolean): void {
+  for (const key of [PANE_COLLAPSED_KEY, PANE_WIDTH_KEY]) {
+    const stored = bySession<unknown>(key);
+    const kept = Object.fromEntries(Object.entries(stored).filter(([sessionId]) => !doomed(sessionId)));
+    if (Object.keys(kept).length !== Object.keys(stored).length) writeLocal(key, JSON.stringify(kept));
+  }
+}
+
+/**
+ * Drop what storage holds for sessions that no longer exist — tab records and
+ * pane preferences — given every session there is, archived ones included. A
+ * session deleted while its strip was never loaded is only caught here.
+ */
+export function pruneSessionStorage(sessions: ReadonlySet<string>): void {
+  pruneTabStores(sessions);
+  forgetPanePreferences((sessionId) => !sessions.has(sessionId));
+}
+
 /**
  * The pane is closed until something opens it, and a person's own choice is
  * remembered for the session they made it in.
@@ -127,7 +147,7 @@ type TabInit = {
   file: Partial<Pick<FileTab, "path" | "root" | "panel">>;
   review: Partial<Pick<ReviewTab, "scope">>;
   browser: Partial<Pick<BrowserTab, "url" | "root">>;
-  terminal: Partial<Pick<TerminalTab, "cwd" | "readOnly" | "ptyId">>;
+  terminal: Partial<Pick<TerminalTab, "cwd" | "readOnly" | "ptyId" | "agent">>;
   drawing: Partial<Pick<DrawingTab, "root" | "title">>;
 };
 
@@ -201,7 +221,7 @@ type ExplorerState = {
    * captures, and consumed by `CadRenderer` as the viewer's `captureRequest`.
    */
   cadCapture: { projectId: string; tabId: string; path: string; root: ExplorerRoot; nonce: number } | null;
-  /** An annotation the chat box asked a CAD tab to open (its entry there was pressed). Nonce-keyed like `cadSelection`. */
+  /** An annotation the composer asked a CAD tab to open (its entry there was pressed). Nonce-keyed like `cadSelection`. */
   cadAnnotation: { projectId: string; tabId: string; path: string; root: ExplorerRoot; id: string; nonce: number } | null;
 
   bindSession: (sessionId: string | null, projectId: string | null, root?: ExplorerRoot) => Promise<void>;
@@ -285,6 +305,7 @@ function blankTab(
         ptyId: null,
         cwd: null,
         readOnly: false,
+        agent: false,
         ...init,
       } as TerminalTab;
   }
@@ -319,6 +340,7 @@ function flushTabSave(sessionId: string): void {
   const tabs = pendingSaves.get(sessionId);
   pendingSaves.delete(sessionId);
   if (!tabs || discardedSessions.has(sessionId)) return;
+  rememberTabOwners(sessionId, tabs.filter(tab => tab.kind === "file").map(tab => tab.id));
   const write = async () => {
     if (!discardedSessions.has(sessionId)) await window.textToCad.explorer.saveTabs({ sessionId, tabs });
   };
@@ -341,14 +363,16 @@ function saveStrip(sessionId: string, strip: Strip): void {
  * restore, a drag — a second tab for a path already in it is dropped, and a
  * selection that pointed at the dropped one moves to the survivor, so the
  * strip can never show two tabs for one file. Blank file tabs (`path`
- * null) are slots, not files, and are left alone.
+ * null) are slots, not files, and are left alone. The dropped tabs are
+ * returned: a caller that published the strip disposes them, as a close would.
  */
 export function dedupeFileTabs(
   tabs: ExplorerTab[],
   activeId: string | null,
-): { tabs: ExplorerTab[]; activeId: string | null } {
+): { tabs: ExplorerTab[]; activeId: string | null; dropped: ExplorerTab[] } {
   const seen = new Map<string, string>();
   const dropped = new Map<string, string>();
+  const gone: ExplorerTab[] = [];
   const kept = tabs.filter((tab) => {
     if (tab.kind !== "file" || tab.path === null) {
       return true;
@@ -357,12 +381,13 @@ export function dedupeFileTabs(
     const survivor = seen.get(key);
     if (survivor) {
       dropped.set(tab.id, survivor);
+      gone.push(tab);
       return false;
     }
     seen.set(key, tab.id);
     return true;
   });
-  return { tabs: kept, activeId: activeId && dropped.has(activeId) ? (dropped.get(activeId) ?? null) : activeId };
+  return { tabs: kept, activeId: activeId && dropped.has(activeId) ? (dropped.get(activeId) ?? null) : activeId, dropped: gone };
 }
 
 /** Renumber, publish, and schedule the write. The one mutation path. */
@@ -384,6 +409,7 @@ function commit(
     cadAnnotation: stillTargets(current.cadAnnotation) ? current.cadAnnotation : null });
   if (sessionId) saveStrip(sessionId, { tabs: ordered, activeId: unique.activeId,
     trees: current.trees, reveal: current.reveal, collapsed: current.collapsed, width: current.width });
+  for (const tab of unique.dropped) disposeTab(tab);
 }
 
 /** The watcher for one root, started and stopped with the binding. */
@@ -448,7 +474,9 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
     } catch (error) {
       if (binding !== bindingSequence || get().sessionId !== sessionId) return;
       // Failed reads must never masquerade as an empty strip and overwrite saved tabs.
-      set({ loadError: error instanceof Error ? error.message : String(error), ready: false, collapsed: false });
+      // The pane pair stays what the person left it (only their toggle or drag
+      // writes it): an open pane shows the retry, a shut one shows it on reopening.
+      set({ loadError: errorMessage(error), ready: false });
     }
   },
 
@@ -461,6 +489,8 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
     if (options?.preserveTabs) archivedDocumentTabs.set(sessionId, [...tabs.values()].filter(tab => tab.kind === "file"));
     else archivedDocumentTabs.delete(sessionId);
     for (const tab of tabs.values()) disposeTab(tab, true, options?.preserveTabs);
+    // Also what a strip never loaded this run left in storage.
+    if (!options?.preserveTabs) { forgetSessionTabStores(sessionId); forgetPanePreferences((id) => id === sessionId); }
     pendingSaves.delete(sessionId);
     clearTimeout(saveTimers.get(sessionId)); saveTimers.delete(sessionId);
     retainedStrips.delete(sessionId); loadingStrips.delete(sessionId); notifySessionTabs();
@@ -530,7 +560,7 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
       return existing;
     }
     // An empty file tab is the slot the `+` button made; fill it instead of
-    // leaving an "Untitled" behind.
+    // leaving an "Open file…" tab behind.
     const blank = tabs.find((tab) => tab.kind === "file" && tab.path === null);
     if (blank) {
       const next = tabs.map((tab) =>
@@ -550,7 +580,8 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
     }
     const closing = tabs[index];
     if (hasDirtyDocument(id)) {
-      toast.error("This file has unsaved changes.", { description: "Save it before closing, or discard your edits.",
+      // One toast per tab: a second Cmd+W replaces it rather than stacking a copy.
+      toast.error("This file has unsaved changes.", { id: `dirty:${id}`, description: "Save it before closing, or discard your edits.",
         action: { label: "Discard and close", onClick: () => {
           // A toast can outlive a session switch. Do not close a different strip.
           if (get().sessionId !== sessionId) return;
@@ -717,6 +748,7 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
       return true;
     });
     if (!changes.length) return;
+    for (const change of changes) if (change.kind === "moved") moveDocuments(desktopSourceId(projectId, root), change.previousPath, change.path);
     for (const [sessionId, strip] of retainedStrips) {
       if (sessionId === get().sessionId || !strip.tabs.some(tab => tab.projectId === projectId)) continue;
       let changed = false;
@@ -727,7 +759,12 @@ export const useExplorer = create<ExplorerState>((set, get) => ({
         changed ||= path !== tab.path;
         return path === tab.path ? tab : { ...tab, path };
       });
-      const next = { ...strip, tabs, trees: {} };
+      // The changed root's cached listings are stale and dropped; the folders
+      // the person opened are not (a moved folder stays open under its new name).
+      const key = treeKey(root), tree = strip.trees?.[key];
+      const trees = tree ? { ...strip.trees, [key]: {
+        open: new Set(reconcileFileTree(tree.listings, [...tree.open], changes.map(viewerFileChange)).expanded), listings: {} } } : strip.trees;
+      const next = { ...strip, tabs, trees };
       if (changed) saveStrip(sessionId, next); else retainedStrips.set(sessionId, next);
     }
     if (get().projectId !== projectId) return;
@@ -778,7 +815,7 @@ export function useActiveTab(): ExplorerTab | null {
 export function tabTitle(tab: ExplorerTab): string {
   switch (tab.kind) {
     case "file":
-      return tab.path ? (tab.path.split("/").pop() ?? tab.path) : "Untitled";
+      return tab.path ? basename(tab.path) : "Open file…";
     case "review":
       return "Review";
     case "browser":
@@ -823,6 +860,7 @@ export async function readSessionStrip(sessionId: string): Promise<Strip> {
       const persisted = await window.textToCad.explorer.loadTabs({ sessionId });
       if (discardedSessions.has(sessionId) || (sessionGenerations.get(sessionId) ?? 0) !== generation) throw new Error("This session is no longer active.");
       const tabs = (persisted as ExplorerTab[]).filter(tab => tab.sessionId === sessionId && tab.kind !== "drawing");
+      rememberTabOwners(sessionId, tabs.filter(tab => tab.kind === "file").map(tab => tab.id));
       const strip = currentStrip(sessionId) ?? { tabs, activeId: tabs[0]?.id ?? null };
       retainedStrips.set(sessionId, strip);
       notifySessionTabs();
@@ -841,6 +879,7 @@ function updateSessionStrip(sessionId: string, strip: Strip): void {
   const active = useExplorer.getState().sessionId === sessionId && useExplorer.getState().ready;
   if (active) useExplorer.setState({ ...next, cadSelection: null, cadCapture: null, cadAnnotation: null });
   saveStrip(sessionId, next);
+  for (const tab of unique.dropped) disposeTab(tab);
 }
 
 function disposeTab(tab: ExplorerTab, discard = false, preserveDocuments = false): void {
@@ -852,7 +891,7 @@ function disposeTab(tab: ExplorerTab, discard = false, preserveDocuments = false
   // with it; one retained for a later restore keeps it.
   if (tab.kind === "file" && !preserveDocuments) forgetTabStore(tab.id);
   if (tab.kind === "drawing") deleteDrawingScene(tab.id);
-  if (tab.kind === "terminal" && tab.ptyId) void window.textToCad.terminal.kill({ id: tab.ptyId }).catch(() => {});
+  if (tab.kind === "terminal" && tab.ptyId) void window.textToCad.terminal.kill({ id: tab.ptyId, sessionId: tab.sessionId }).catch(() => {});
   if (tab.kind === "browser") void window.textToCad.browser.close({ sessionId: tab.sessionId, projectId: tab.projectId, root: tab.root, tabId: tab.id }).catch(() => {});
 }
 

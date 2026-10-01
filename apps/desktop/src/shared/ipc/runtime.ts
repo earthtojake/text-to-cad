@@ -4,7 +4,7 @@
  * `scripts/bundle-runtime.mjs`), or the interpreter standing in for it in
  * development (plan §8, as revised: nothing downloads at first launch).
  *
- * Read by the status block in Settings › About & Updates and by the CAD file
+ * Read by the status block in Settings › About and updates and by the CAD file
  * tab when it has no viewer to show.
  */
 import { z } from "zod";
@@ -14,7 +14,11 @@ import { invoke } from "./define";
 /**
  * - `missing` — no interpreter at all: no bundle beside the app, no checkout
  *   venv, no override. `message` says where the app looked.
- * - `ready` — Python, cadgen and cadgen's viewer all import.
+ * - `ready` — Python, cadgen and cadgen's viewer all import. `kernel` is set
+ *   when the CAD kernel is `missing`, `unsupported` by cadgen's own check, or
+ *   its check hit a `timeout` (no verdict; asked again next time): GLB, STL
+ *   and DXF still open, a STEP build may fail, and `message` there is the
+ *   interpreter's words for why.
  * - `error` — an interpreter was found and cannot run cadgen; `message` has
  *   the interpreter's words and `log` the file with the rest.
  */
@@ -36,6 +40,12 @@ export const RuntimeStatusSchema = z.object({
   viewerBuilt: z.boolean().default(false),
   /** The runtime log (`userData/cad-runtime.log`), once anything has been written to it. */
   log: z.string().nullable().default(null),
+  /**
+   * On `ready` only: the CAD kernel, when it is not fine (`missing`,
+   * `unsupported`, `timeout`), in cadgen's words. A kernel that fails to load
+   * is `error`.
+   */
+  kernel: z.object({ state: z.string(), message: z.string() }).optional(),
   /** Set on `missing` and `error`; safe to show. */
   message: z.string().optional(),
 });
@@ -47,6 +57,12 @@ export const runtimeContract = {
     status: invoke(z.void(), RuntimeStatusSchema),
     /** Forget the probe and look again; answers with the new state. */
     repair: invoke(z.void(), RuntimeStatusSchema),
+    /**
+     * Shows the runtime log (`userData/cad-runtime.log`) in Finder/Explorer.
+     * No path in the request: main names the one file, so this is not a door
+     * to any other. `revealed` is false when there is no log yet.
+     */
+    revealLog: invoke(z.void(), z.object({ revealed: z.boolean() })),
   },
 } as const;
 

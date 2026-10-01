@@ -1,0 +1,6 @@
+# The onboarding sample ships inside the app (electron-builder extraResources),
+# and the release checkout has no LFS: a pointer here is a sample that fails to
+# open. So it is a plain file, despite the root's `*.step filter=lfs`.
+# scripts/github-workflows/check-builds.sh fails on any LFS path under
+# apps/desktop/resources/.
+l_bracket.step !filter !diff !merge text

@@ -11,11 +11,12 @@ import { desktopTabStore } from "./tabStore";
  */
 export function useDesktopViewState(sourceId: string, tabId: string, root: ExplorerRoot, panel: string | null) {
   const store = desktopTabStore(tabId);
-  const record = useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
+  // Subscribe to the tab record so a write re-renders; `forRoot` is memoised per snapshot itself.
+  useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
   const panelWidth = useExplorer((state) => state.panelWidth);
   const { open } = useTree(root);
   // View choices belong to this persisted tab; immutable geometry caches still share resources.
-  const renderers = useMemo(() => store.files.forRoot(sourceId), [store, record, sourceId]);
+  const renderers = store.files.forRoot(sourceId);
   const state = useMemo<FileViewerState>(() => ({ panel, panelWidth, expandedDirectories: [...open], renderers }), [panel, panelWidth, open, renderers]);
   const onStateChange = useCallback((next: FileViewerState) => {
     const explorer = useExplorer.getState();

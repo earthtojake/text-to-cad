@@ -46,8 +46,9 @@ export const cadIpc = {
     viewerOrigin: invoke(z.object({ projectId: z.string().min(1), root: z.string().optional() }), ViewerOriginSchema),
     /**
      * A project opened in the explorer: start what its first CAD file will
-     * need — the runtime probe, the viewer for this root, the warm build
-     * daemon — now, off the critical path, rather than on the first click.
+     * need — the runtime probe, the viewer for this root (only when the root
+     * holds a model), the warm build daemon — now, off the critical path,
+     * rather than on the first click.
      * Answers once the work is STARTED; never waits for the viewer, and a
      * failure here is not an error (the first `viewerOrigin` reports it).
      */

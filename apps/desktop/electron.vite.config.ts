@@ -56,9 +56,29 @@ export default defineConfig({
     // Reacts and the file tab dies with React error #525 ("an element from an
     // older version of React was rendered") the moment the CAD surface
     // mounts — in dev, pre-bundling hides it. One React: this app's.
+    //
+    // Shiki is here for size, not correctness: `@streamdown/code` carries its
+    // own shiki 3 under its node_modules while code-block.tsx takes this app's
+    // shiki 4, and every one of the ~230 grammars and themes — the same bytes in
+    // both — was emitted twice, ~6 MB of chunks nothing ever loads twice.
+    // streamdown's plugin calls only `createHighlighter`, `bundledLanguages`,
+    // `bundledLanguagesInfo` and the JavaScript regex engine, which shiki 4
+    // keeps. `tests/unit/main/renderer-bundle.test.ts` fails when a pair
+    // comes back.
     resolve: {
       alias,
-      dedupe: ["react", "react-dom", "three"],
+      dedupe: [
+        "react",
+        "react-dom",
+        "three",
+        "shiki",
+        "@shikijs/core",
+        "@shikijs/engine-javascript",
+        "@shikijs/engine-oniguruma",
+        "@shikijs/langs",
+        "@shikijs/themes",
+        "@shikijs/types",
+      ],
     },
     // The viewer's surf tessellation workers are ES modules, and so are
     // Monaco's. The classic-worker default fails at *run* time, not at build

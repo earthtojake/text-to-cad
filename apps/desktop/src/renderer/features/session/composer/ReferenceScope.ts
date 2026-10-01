@@ -17,7 +17,7 @@ export function openComposerReference(scope: ReferenceScope, reference: CadRefer
   const file = reference.file || (current?.kind === "file" && current.root === scope.root && current.path && isCadFile(current.path)
     ? current.path : "");
   if (!file) {
-    throw new Error("Open the model in this chat’s workspace to view this reference.");
+    throw new Error("Open the model in this session’s workspace to view this reference.");
   }
   const tab = explorer.openFile(file, scope.root);
   if (tab && reference.selector) explorer.selectCadReference(tab.id, reference.selector);

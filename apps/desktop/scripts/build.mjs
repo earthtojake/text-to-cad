@@ -16,9 +16,18 @@ import { fileURLToPath } from "node:url";
 import { appVersion } from "./app-version.mjs";
 import { buildMcpServer } from "./build-mcp.mjs";
 import { buildSkills } from "./build-skills.mjs";
+import { nodeTool } from "./node-bin.mjs";
 
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const repoRoot = path.resolve(appRoot, "..", "..");
+
+/**
+ * `electron-vite build`, run by this Node from the package's own entry — not
+ * `npx`, whose Windows shim Node refuses to spawn (scripts/node-bin.mjs).
+ */
+export function electronViteBuild() {
+  return nodeTool("electron-vite", ["build"]);
+}
 
 export function buildAll({ env = process.env } = {}) {
   const version = appVersion();
@@ -26,7 +35,6 @@ export function buildAll({ env = process.env } = {}) {
   const skills = buildSkills({ repoRoot, out: path.join(appRoot, "resources", "skills") });
   console.info(`composed ${skills.skills.length} skills -> resources/skills`);
 
-  const npx = process.platform === "win32" ? "npx.cmd" : "npx";
   // Rollup holds the whole renderer graph in memory, and this renderer is a
   // large one — Monaco, three.js, shiki's grammars, the CAD Viewer's client.
   // A build peaks around 4.6 GB, which is over Node's default old-space cap on
@@ -35,7 +43,8 @@ export function buildAll({ env = process.env } = {}) {
   // Whatever the caller already asked for wins.
   const heap = "--max-old-space-size=6144";
   const nodeOptions = env.NODE_OPTIONS ?? "";
-  const result = spawnSync(npx, ["electron-vite", "build"], {
+  const [command, args] = electronViteBuild();
+  const result = spawnSync(command, args, {
     cwd: appRoot,
     stdio: "inherit",
     env: {

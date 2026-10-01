@@ -59,6 +59,33 @@ export * from "./cad";
 export * from "./explorer";
 export * from "./git";
 
+/** The menu (or a shortcut) asked the renderer to navigate. */
+export const UiCommandSchema = z.object({
+  command: z.enum([
+    "open-settings",
+    "close-settings",
+    "toggle-sidebar",
+    "toggle-explorer",
+    "new-session",
+    "command-palette",
+    /**
+     * The top level's history: the project new-session screens and the
+     * threads the session pane has shown (`state/history.ts`). Not the
+     * explorer's tabs.
+     */
+    "navigate-back",
+    "navigate-forward",
+  ]),
+  /**
+   * `new-session` only: the project to start it in, and the directory to
+   * start it in — Settings › Git and worktrees' `New session in this worktree`
+   * (plan §2). Without them, `new-session` means "in whatever project is
+   * selected, in the default mode".
+   */
+  projectId: z.string().optional(),
+  cwd: z.string().optional(),
+});
+
 /* -------------------------------------------------------------------------- */
 /* Requests                                                                    */
 /* -------------------------------------------------------------------------- */
@@ -79,8 +106,9 @@ export const ipcContract = defineIpc({
      * outcome, not an error.
      */
     add: invoke(z.void(), ProjectSchema.nullable()),
-    /** Validates a directory for a session draft; does not save a project. */
-    addPath: invoke(z.object({ path: z.string().min(1) }), ProjectSchema),
+    // No channel takes a directory by name. A folder becomes a project only
+    // through a chooser main opened, the sample main copied, or a session
+    // that already records it (`projects.get` in src/main/db/repositories.ts).
   },
 
   /** P1: `sessions.*` lives in ./ipc/acp.ts. */
@@ -95,7 +123,7 @@ export const ipcContract = defineIpc({
   /** P5: the skills root every session is handed. */
   ...skillsContract,
 
-  /** P6, stubbed until P5: the managed Python and cadgen runtime. */
+  /** P5: the CAD runtime that ships inside the app — its status and a re-probe. */
   ...runtimeContract,
 
   /** First run: whether onboarding shows, and the sample project. */
@@ -114,10 +142,36 @@ export const ipcContract = defineIpc({
      * mention.
      */
     set: invoke(SettingsPatchSchema, SettingsSchema),
+    /**
+     * Stored values the read refused and answered with the default in place
+     * of, by field — a branch prefix git refuses, written before the check
+     * existed — so the page that shows the field can say so; and, apart from
+     * those, the remembered folders that are gone.
+     */
+    fallbacks: invoke(
+      z.void(),
+      z.object({
+        refused: z.record(z.string(), z.string()),
+        /**
+         * Remembered folders (`defaultProjectFolder`, `worktreeRoot`) that are not folders any more: stored fine, just
+         * gone. `missing` is nothing at the path; `file` is a file there, which a worktree cannot be made under.
+         */
+        gone: z.record(z.string(), z.object({ path: z.string(), reason: z.enum(["missing", "file"]) })),
+      }),
+    ),
   },
 
   window: {
     state: invoke(z.void(), WindowStateSchema),
+  },
+
+  ui: {
+    /**
+     * The page is listening: answers with the `ui.command`s main held for it
+     * (the menu's New Session or Settings… that opened this window), once.
+     * A push at `did-finish-load` could arrive before the page subscribed.
+     */
+    ready: invoke(z.void(), z.array(UiCommandSchema)),
   },
 
   shell: {
@@ -127,8 +181,20 @@ export const ipcContract = defineIpc({
      * custom-scheme URL.
      */
     openExternal: invoke(z.object({ url: z.string().url() }), z.void()),
-    /** Reveals a path in Finder/Explorer. */
-    showItemInFolder: invoke(z.object({ path: z.string().min(1) }), z.void()),
+    /**
+     * Reveals a project directory in Finder/Explorer: the project itself, one
+     * of its worktrees (`root`), or the folder its worktrees live in
+     * (`worktrees`). Never a bare path — main resolves it like every other
+     * renderer path, and refuses anything that is not the project's.
+     */
+    showItemInFolder: invoke(
+      z.object({
+        projectId: z.string().min(1),
+        root: z.string().nullable().optional(),
+        worktrees: z.literal(true).optional(),
+      }),
+      z.void(),
+    ),
   },
 
   ...clipboardContract,
@@ -162,34 +228,8 @@ export const ipcEvents = {
   /** Settings changed anywhere — including from the app menu. */
   "settings.changed": SettingsSchema,
   /** The menu (or a shortcut) asked the renderer to navigate. */
-  "ui.command": z.object({
-    command: z.enum([
-      "open-settings",
-      "close-settings",
-      "toggle-sidebar",
-      "toggle-explorer",
-      "new-session",
-      "command-palette",
-      /**
-       * The top level's history: the project new-session screens and the
-       * threads the session pane has shown (`state/history.ts`). Not the
-       * explorer's tabs.
-       */
-      "navigate-back",
-      "navigate-forward",
-      /** The files-changed pill: show the session's diff in the explorer's Review tab (P3). */
-      "open-review",
-    ]),
-    /**
-     * `new-session` only: the project to start it in, and the directory to
-     * start it in — Settings › Git & Worktrees' `New chat in this worktree`
-     * (plan §2). Without them, `new-session` means "in whatever project is
-     * selected, in the default mode".
-     */
-    projectId: z.string().optional(),
-    cwd: z.string().optional(),
-  }),
-  /** electron-updater's progress, surfaced on About & Updates. */
+  "ui.command": UiCommandSchema,
+  /** electron-updater's progress, surfaced on About and updates. */
   ...appEvents,
   ...acpEvents,
   ...agentsEvents,

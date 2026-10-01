@@ -48,6 +48,35 @@ describe("tracked children", () => {
     expect(service.stdout?.destroyed).toBe(true);
   });
 
+  /** A child that has installed its SIGTERM handler, which is what git's lock cleanup is. */
+  const writer = async (onTerm: string) => {
+    const child = trackChild(
+      spawn(process.execPath, ["-e", `process.on("SIGTERM", () => { ${onTerm} });\nconsole.log("ready");\nsetInterval(() => {}, 1000);`], {
+        stdio: ["pipe", "pipe", "pipe"],
+      }),
+      "write",
+    );
+    await once(child.stdout!, "data");
+    return child;
+  };
+
+  it("before-quit asks a write to stop with SIGTERM, so it can drop its lock, and lets go of its pipes", async () => {
+    // Exits 7 from its handler: a SIGKILL would end it by signal instead.
+    const write = await writer("process.exit(7)");
+    endTrackedChildren();
+    expect(await exited(write)).toBe(7);
+    expect(write.stdout?.destroyed).toBe(true);
+  });
+
+  it("will-quit kills a write that ignored SIGTERM", async () => {
+    const write = await writer("");
+    endTrackedChildren();
+    expect(write.exitCode).toBeNull();
+    expect(write.signalCode).toBeNull();
+    killTrackedChildren();
+    expect(await exited(write)).toBe("SIGKILL");
+  });
+
   it("will-quit kills whatever is left", async () => {
     const service = trackChild(sleeper(), "service");
     killTrackedChildren();

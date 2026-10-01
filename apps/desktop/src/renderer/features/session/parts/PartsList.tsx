@@ -1,4 +1,5 @@
 import { AlertCircle, Paperclip, RotateCcw, Unplug } from "lucide-react";
+import { useMemo } from "react";
 
 import { defaultRemarkPlugins } from "streamdown";
 
@@ -6,21 +7,22 @@ import { MessageResponse } from "@renderer/components/ai-elements/message";
 import { Button } from "@renderer/components/ui/button";
 import type { Part } from "@shared/acp/types";
 
-import { PathLink } from "../links/PathLink";
+import { TRANSCRIPT_COMPONENTS, TRANSCRIPT_REHYPE_PLUGINS } from "../links/components";
 import { remarkPathLinks } from "../links/remarkPathLinks";
 import { partsView, type ViewItem } from "../view";
 
 /**
  * The transcript's markdown: Streamdown's own plugins, then the one that
- * turns a path in prose into a link (`../links`). Module constants, because
- * `MessageResponse` is memoised on its children and a fresh array per render
- * would rebuild every block on every keystroke of the composer.
+ * turns a path in prose into a link (`../links`), drawn with the
+ * transcript's own link and image (`TRANSCRIPT_COMPONENTS`). Module
+ * constants, because `MessageResponse` is memoised on its children and a
+ * fresh array per render would rebuild every block on every keystroke of the
+ * composer.
  *
  * `remarkPlugins` *replaces* Streamdown's defaults rather than extending
  * them, so GFM is spread back in first.
  */
 const REMARK_PLUGINS = [...Object.values(defaultRemarkPlugins), remarkPathLinks];
-const COMPONENTS = { a: PathLink };
 import { ActivityGroup } from "./ActivityRow";
 import { PermissionCard } from "./PermissionCard";
 import { SubagentRow } from "./SubagentRow";
@@ -50,7 +52,7 @@ export function PartsList({
   /** Spawn the agent again and load the history; shown when the agent is gone. */
   onReconnect?: () => void;
 }) {
-  const items = partsView(parts, open, prefix);
+  const items = useMemo(() => partsView(parts, open, prefix), [parts, open, prefix]);
   return (
     <>
       {items.map((item) => (
@@ -75,7 +77,7 @@ function ViewItemView({
     case "text":
       return (
         <div className="prose-transcript my-2 min-w-0 [overflow-wrap:anywhere] text-[14px] leading-6" data-part="text">
-          <MessageResponse components={COMPONENTS} isAnimating={item.streaming} remarkPlugins={REMARK_PLUGINS}>
+          <MessageResponse components={TRANSCRIPT_COMPONENTS} isAnimating={item.streaming} rehypePlugins={TRANSCRIPT_REHYPE_PLUGINS} remarkPlugins={REMARK_PLUGINS}>
             {item.text}
           </MessageResponse>
         </div>

@@ -1,12 +1,17 @@
 import type { PromptReference } from "@text-to-cad/core/prompt";
+import { act, fireEvent, render, waitFor } from "@testing-library/react";
+import { createElement } from "react";
 import { beforeEach, expect, it, vi } from "vitest";
 
 import { createDesktopPromptContext } from "@renderer/features/explorer/host/promptContext";
+import { Composer } from "@renderer/features/session/Composer";
 import { openAnnotation, withAnnotations } from "@renderer/features/session/composer/AnnotationsChip";
+import { useAcp } from "@renderer/state/acp";
 import { useComposer } from "@renderer/state/composer";
-import type { DraftPart } from "@renderer/state/composer";
+import type { DraftPart, TakenDraft } from "@renderer/state/composer";
 import { useExplorer } from "@renderer/state/explorer";
 import { useSessions } from "@renderer/state/sessions";
+import { initialSessionState } from "@shared/acp/types";
 import type { FileTab } from "@shared/types";
 
 const key = "session-1";
@@ -18,7 +23,7 @@ const edge = (selector: string, label?: string): PromptReference => ({
 const annotation = (id: string, text: string): DraftPart => ({ id, kind: "annotation", text, references: [edge("o1.1.e3", "Edge 3")] });
 
 beforeEach(() => {
-  useComposer.setState({ drafts: {}, annotations: {}, acceptedContexts: {}, referenceLabels: {}, pendingFiles: {}, draftRoots: {} });
+  useComposer.setState({ drafts: {}, annotations: {}, acceptedContexts: {}, referenceLabels: {}, pendingFiles: {}, draftRoots: {}, queues: {}, sending: {} });
 });
 
 it("annotations from the viewer ride beside the draft's text, not inside it", () => {
@@ -120,4 +125,69 @@ it("a note on a sketch keeps the sketch with it, out of the attachment strip, an
   expect(withAnnotations("Fix it.", state.annotations[key]!)).toBe(
     "Fix it.\n\nAnnotations:\n1. parts/bracket.step (Drawing): round this corner [sketch: bracket-drawing.png]",
   );
+});
+
+// The composer's editor is ProseMirror, which scrolls the selection into view by measuring it;
+// jsdom lays nothing out, so a measurement is an empty rectangle.
+const noRects = () => Object.assign([], { item: () => null }) as unknown as DOMRectList;
+Range.prototype.getClientRects ??= noRects;
+Range.prototype.getBoundingClientRect ??= () => new DOMRect();
+(Text.prototype as unknown as { getClientRects: () => DOMRectList }).getClientRects ??= noRects;
+
+function renderComposer(draftKey: string, onSubmit: (text: string, content: unknown[], draft: TakenDraft) => Promise<void>, sessionId: string | null = null) {
+  const view = render(createElement(Composer, { sessionId, newDraftKey: draftKey, chips: null, commands: [], status: "ready", onSubmit }));
+  const send = () => fireEvent.submit(view.container.querySelector("form")!);
+  return { ...view, send };
+}
+
+it("a send that fails puts the draft back as it was: the typed text, the annotations apart, the chips' labels and the workspace", async () => {
+  const draftKey = "__new__:p";
+  useComposer.getState().acceptContext(draftKey, "op-1", [
+    { id: "r", kind: "reference", text: "@parts/bracket.step#o1.1.e3", label: "Edge 3" },
+    annotation("a1", "make a hole in it"),
+  ], { root: "/p/worktree", focus: false });
+  useComposer.getState().setDraft(draftKey, `${useComposer.getState().drafts[draftKey]}make it lighter`);
+  const typed = useComposer.getState().drafts[draftKey]!;
+  const onSubmit = vi.fn(async () => { throw new Error("Authentication required"); });
+  const { send } = renderComposer(draftKey, onSubmit);
+
+  await act(async () => send());
+  await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+  const [sent] = onSubmit.mock.calls[0] as unknown as [string];
+  expect(sent, "the prompt carries the annotations as its list").toMatch(/make it lighter\n\nAnnotations:\n1\. .*make a hole in it/);
+
+  await waitFor(() => expect(useComposer.getState().drafts[draftKey]).toBe(typed));
+  const state = useComposer.getState();
+  expect(state.annotations[draftKey]?.map(item => [item.id, item.text]), "the note is its chip again, not text").toEqual([["a1", "make a hole in it"]]);
+  expect(state.drafts[draftKey]).not.toContain("Annotations:");
+  expect(state.referenceLabels[draftKey]).toEqual({ "@parts/bracket.step#o1.1.e3": "Edge 3" });
+  expect(state.draftRoots[draftKey]).toBe("/p/worktree");
+});
+
+it("a send that goes through leaves the draft and its annotations empty", async () => {
+  const draftKey = "__new__:p";
+  useComposer.getState().acceptContext(draftKey, "op-1", [annotation("a1", "fillet it")], { root: "/p", focus: false });
+  useComposer.getState().setDraft(draftKey, "round the edge");
+  const onSubmit = vi.fn(async () => undefined);
+  const { send } = renderComposer(draftKey, onSubmit);
+  await act(async () => send());
+  await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1));
+  expect(useComposer.getState().drafts[draftKey]).toBe("");
+  expect(useComposer.getState().annotations[draftKey]).toBeUndefined();
+});
+
+it("a queued prompt taken back out of the queue restores its text and annotations apart", async () => {
+  const session = "session-q";
+  useComposer.getState().acceptContext(session, "op-1", [annotation("a1", "fillet it")], { root: "/p", focus: false });
+  useComposer.getState().setDraft(session, "round the edge");
+  // A turn is running, so the real `submit` queues it.
+  useAcp.setState({ sessions: { [session]: { ...initialSessionState(session, "claude"), status: "running" } } });
+  const view = renderComposer(session, (text, content, draft) => useComposer.getState().submit(session, text, content as never, draft), session);
+  await act(async () => view.send());
+  await waitFor(() => expect(useComposer.getState().queues[session]).toHaveLength(1));
+  expect(useComposer.getState().annotations[session]).toBeUndefined();
+
+  await act(async () => fireEvent.click(view.getByRole("button", { name: /^Remove from queue/ })));
+  expect(useComposer.getState().drafts[session]).toBe("round the edge");
+  expect(useComposer.getState().annotations[session]?.map(item => item.text)).toEqual(["fillet it"]);
 });

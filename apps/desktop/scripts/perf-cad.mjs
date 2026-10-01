@@ -389,7 +389,10 @@ const PERF_NAMES = { tessellate: "cad:tessellate", hoverPick: "cad:hover-pick", 
 
 async function launchApp(userData, cacheEnv) {
   const { CAD_DESKTOP_PYTHON: _unset, ...inherited } = process.env;
-  const env = { ...inherited, NODE_ENV: "test", ...cacheEnv };
+  // NODE_ENV=test turns the project-open pre-warm off (src/main/ipc/cad.ts);
+  // the "viewer up after add" and "daemon warming after add" columns measure
+  // that pre-warm, so this run asks for it back.
+  const env = { ...inherited, NODE_ENV: "test", TEXT_TO_CAD_PREWARM: "1", ...cacheEnv };
   const stdoutLines = [];
   const started = performance.now();
   const app = await electron.launch({
@@ -411,8 +414,11 @@ async function launchApp(userData, cacheEnv) {
   return { app, page, stdoutLines, windowReadyMs };
 }
 
-async function addProject(page) {
-  await page.evaluate((root) => window.textToCad.projects.addPath({ path: root }), repoRoot);
+async function addProject(app, page) {
+  // No renderer channel takes a path; the folder is chosen from main's side,
+  // through the door `NODE_ENV=test` installs (src/main/test-door.ts), as
+  // tests/e2e/launch.ts's `chooseDirectory` does.
+  await app.evaluate((_electron, root) => globalThis.__textToCadE2E.choose(root), repoRoot);
   // The strip binds to the project asynchronously; `+` does nothing until it has.
   const newTab = page.getByRole("button", { name: "New tab", exact: true });
   await newTab.waitFor({ state: "visible", timeout: 30_000 });
@@ -682,7 +688,7 @@ async function measureApp(options, scratch) {
     recordResponses(launched.page, responses);
     const context = { ...launched, responses };
     const projectStarted = performance.now();
-    await addProject(launched.page);
+    await addProject(launched.app, launched.page);
     result.launches.push({ label, windowReadyMs: round(launched.windowReadyMs, 0), projectReadyMs: round(performance.now() - projectStarted, 0) });
     try {
       await body(context);
@@ -699,6 +705,13 @@ async function measureApp(options, scratch) {
       const closing = performance.now();
       await launched.app.close();
       launch.quitMs = round(performance.now() - closing, 0);
+    }
+    // `resolvePython` has already thrown on a machine with no runtime, so a
+    // null here is a pre-warm that did not happen, not a missing runtime; a
+    // column of dashes would pass for a result. (The daemon column may be null
+    // on its own: `CADGEN_DAEMON=0` or a CAD kernel that cannot start it.)
+    if (result.launches.at(-1).viewerWarmMs === null) {
+      throw new Error(`launch "${label}": no "[viewer] started|reused" line after the project was added; the project-open pre-warm did not run (hasCadFile warms a viewer only for a root with a .step/.stp/.stl/.3mf/.glb/.gltf/.dxf/.urdf/.srdf/.sdf file within three folders and inside its 400-listing cap: does ${repoRoot} still hold one, or has it moved deeper?)`);
     }
   };
 

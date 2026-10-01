@@ -1,18 +1,20 @@
 /**
- * Every IPC handler the app serves, assembled into the shape of the contract.
- *
- * P0 covers projects, sessions (read-only), settings, shell and app info;
- * P3 adds `explorer.*`, `terminal.*`, `git.*` and the `cad.viewerOrigin`
- * stub. Each phase's branch is one file in `src/shared/ipc/` and one object
- * spread in below — `registerIpc` refuses to start if the two disagree.
+ * Every IPC handler the app serves, assembled into the shape of the contract
+ * from one handler object per contract branch: each branch is one file in
+ * `src/shared/ipc/` and one handler object from `src/main/ipc/<branch>.ts`
+ * spread in below, beside the few channels (`app`, `projects`, `settings`,
+ * `shell`, `ui`, `window`) answered here — `registerIpc` refuses to start if
+ * the two disagree.
  */
 import { BrowserWindow, app, dialog, shell } from "electron";
 
 import { ipcContract, type IpcContract } from "../../shared/ipc";
 import { projects, settings } from "../db/repositories";
 import { viewers } from "../cad";
-import { track } from "../telemetry";
+import { changedSettingsKeys, track } from "../telemetry";
 import { applySettingsEffects } from "../settings-effects";
+import { settingsFallbacks } from "./settings-fallbacks";
+import { takeQueuedCommands } from "../menu";
 import { acpHandlers } from "./acp";
 import { agentOptionsHandlers } from "./agent-options";
 import { agentsHandlers } from "./agents";
@@ -21,12 +23,13 @@ import { integrationHandlers } from "./integrations";
 import { cadHandlers } from "./cad";
 import { clipboardHandlers } from "./clipboard";
 import { browserHandlers } from "./browser";
-import { dialogsHandlers } from "./dialogs";
-import { explorerHandlers, initExplorerServices } from "./explorer";
+import { dialogsHandlers, existingPath } from "./dialogs";
+import { explorerHandlers, initExplorerServices, revealProjectDirectory } from "./explorer";
 import { gitHandlers } from "./git";
-import { runtimeHandlers } from "./runtime";
+import { refreshRuntimeAfterOverride, runtimeHandlers } from "./runtime";
 import { onboardingHandlers } from "./onboarding";
 import { skillsHandlers } from "./skills";
+import { installE2eDoor } from "../test-door";
 import { IpcError, broadcast, registerIpc, type IpcContext } from "./register";
 
 export { broadcast } from "./register";
@@ -49,20 +52,15 @@ const handlers = {
 
     add: async (_request: void, ctx: IpcContext) => {
       const window = BrowserWindow.fromWebContents(ctx.sender);
+      const options = { ...openProjectDialog, ...(await defaultPathOption()) };
       const result = window
-        ? await dialog.showOpenDialog(window, openProjectDialog)
-        : await dialog.showOpenDialog(openProjectDialog);
+        ? await dialog.showOpenDialog(window, options)
+        : await dialog.showOpenDialog(options);
       const directory = result.canceled ? undefined : result.filePaths[0];
       if (!directory) {
         return null;
       }
-      const selected = projects.add(directory);
-      broadcast("ui.directorySelected", selected);
-      return selected;
-    },
-
-    addPath: ({ path: directory }: { path: string }) => {
-      const selected = projects.add(directory);
+      const selected = projects.choose(directory);
       broadcast("ui.directorySelected", selected);
       return selected;
     },
@@ -105,18 +103,30 @@ const handlers = {
       // now configured, instead of handing out a process the old one runs.
       if (previous.cadPythonOverride !== next.cadPythonOverride) {
         viewers().stopAll();
+        // And the status every window shows is the new interpreter's.
+        void refreshRuntimeAfterOverride().catch((error: unknown) => {
+          console.error("[runtime] status after the override changed:", error);
+        });
       }
       // The field's NAME, never its value: "someone changed the git mode" is a
       // product question, "to what" is their business (src/main/telemetry.ts).
-      for (const key of Object.keys(patch) as (keyof typeof patch & string)[]) {
+      // Only a field whose value actually moved: the renderer re-sends
+      // `layout` and `sidebar` on every pane drag, and a patch that restates
+      // a value is not a change anyone made.
+      for (const key of changedSettingsKeys(previous, next, patch)) {
         track({ name: "settings_changed", key });
       }
       return next;
     },
+    fallbacks: settingsFallbacks,
   },
 
   window: {
     state: () => settings.windowState(),
+  },
+
+  ui: {
+    ready: (_request: void, ctx: IpcContext) => takeQueuedCommands(ctx.sender),
   },
 
   shell: {
@@ -131,9 +141,7 @@ const handlers = {
       await shell.openExternal(url);
     },
 
-    showItemInFolder: ({ path: target }: { path: string }) => {
-      shell.showItemInFolder(target);
-    },
+    showItemInFolder: revealProjectDirectory,
   },
 
   // A phase's handlers live in their own file and are spread in, exactly as
@@ -154,13 +162,23 @@ const openProjectDialog = {
   properties: ["openDirectory", "createDirectory"],
 } as const satisfies Electron.OpenDialogOptions;
 
+// Settings › General › "Where the Open folder chooser opens". A folder that
+// has since been moved or deleted is left out, so the chooser opens where the
+// OS would have put it rather than on an error.
+async function defaultPathOption(): Promise<{ defaultPath?: string }> {
+  const defaultPath = await existingPath(settings.get().defaultProjectFolder ?? undefined, { directory: true });
+  return defaultPath === undefined ? {} : { defaultPath };
+}
+
 export function registerIpcHandlers() {
   // The watcher and the pty manager push events, so they are handed the
   // broadcaster rather than reaching back for it.
   initExplorerServices(broadcast);
   registerIpc(ipcContract, handlers);
+  installE2eDoor();
   // Boot is a settings change like any other: the login item, the menu-bar
   // item and the window's vibrancy have to match what is stored before the
   // first window is shown.
   applySettingsEffects(settings.get());
 }
+

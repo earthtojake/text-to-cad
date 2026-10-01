@@ -25,7 +25,10 @@
  * Nothing here ever carries a path, a file name, a project name, a prompt, an
  * agent's output, or the contents of a setting.
  */
+import { isDeepStrictEqual } from "node:util";
+
 import { initialize, trackEvent } from "@aptabase/electron/main";
+import { app } from "electron";
 
 import { settings } from "./db/repositories";
 import type { Settings } from "../shared/types";
@@ -48,16 +51,37 @@ export type Event =
   | { name: "settings_changed"; key: keyof Settings & string };
 
 /**
- * Called once at startup, after the database is open. The app version reaches
- * Aptabase from `app.getVersion()` on its own; nothing is passed here beyond
- * the key.
+ * Called once, at the top level of `src/main/index.ts` — BEFORE `app.whenReady()`.
+ * Aptabase's `initialize` registers a privileged scheme, which Electron only
+ * allows before ready, and so it returns early ("must be invoked before the app
+ * is ready. Tracking will be disabled.") when the app already is. Called late,
+ * every `trackEvent` would push into its pre-init buffer and nothing would ever
+ * be sent — so a late call here refuses rather than pretending to be on.
+ *
+ * The app version reaches Aptabase from `app.getVersion()` on its own; nothing
+ * is passed here beyond the key. The user's setting is not read here (the
+ * database is not open yet): `track` reads it per event.
  */
 export function initTelemetry() {
-  if (!APTABASE_KEY) {
+  if (!APTABASE_KEY || initialized) {
     return;
   }
-  void initialize(APTABASE_KEY);
+  if (app.isReady()) {
+    console.warn("[telemetry] initTelemetry() after app ready; telemetry disabled for this launch");
+    return;
+  }
   initialized = true;
+  void initialize(APTABASE_KEY).catch((error: unknown) => {
+    initialized = false;
+    console.warn("[telemetry] initialize failed", error);
+  });
+}
+
+/** The settings fields whose value differs between two snapshots. */
+export function changedSettingsKeys<T extends object>(previous: T, next: T, patch: Partial<T>): (keyof T & string)[] {
+  return (Object.keys(patch) as (keyof T & string)[]).filter(
+    (key) => !isDeepStrictEqual(previous[key], next[key]),
+  );
 }
 
 /**
@@ -85,7 +109,9 @@ export function track(event: Event) {
 /**
  * The extension of a path, lowercased and without its dot — the only part of a
  * file name `file_opened` is allowed to carry. Answers `"none"` for a file with
- * no extension so the event still counts.
+ * no extension so the event still counts, and `"other"` for a suffix that is
+ * not a short run of letters and digits: whatever follows the last dot of
+ * `plan.acme-q3-layoffs` is part of a name, not a file type.
  */
 export function fileExtension(filePath: string): string {
   const base = filePath.split(/[\\/]/).pop() ?? "";
@@ -93,7 +119,8 @@ export function fileExtension(filePath: string): string {
   if (dot <= 0 || dot === base.length - 1) {
     return "none";
   }
-  return base.slice(dot + 1).toLowerCase();
+  const extension = base.slice(dot + 1).toLowerCase();
+  return /^[a-z0-9]{1,8}$/.test(extension) ? extension : "other";
 }
 
 /** True when a key was compiled in — Settings shows the switch either way. */

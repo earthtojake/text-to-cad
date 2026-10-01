@@ -81,7 +81,7 @@ page count, selection and resource identity. `read_pdf` reads 1–50 pages from
 the same loaded document (defaults to the visible page). An empty text result
 can indicate a scanned page; inspect `capture_pdf` rather than inventing text.
 `set_pdf_page` changes the visible page; `capture_pdf` produces a PNG of the
-specified page without changing the view. These operations are read-only.
+specified page without changing the view. A capture over the model's image limit is redrawn smaller; its result then carries `scaled: true`, `scale` (how much each side shrank) and, for a PNG, `scaledFrom: {width, height}` (the original pixel size), so a point read off the picture maps back as `pixel / scale`. These operations are read-only.
 
 The PDF toolbar's Add to prompt action includes the page capture and selected
 text through the app's existing prompt destination. It never sends the prompt.

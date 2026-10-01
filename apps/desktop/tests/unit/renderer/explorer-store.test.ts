@@ -4,6 +4,15 @@ import { dedupeFileTabs, getDrawingTab, tabTitle, useExplorer } from "@renderer/
 import { deleteDrawingScene } from "@renderer/state/drawings";
 
 vi.mock("@renderer/state/drawings", () => ({ deleteDrawingScene: vi.fn() }));
+vi.mock("sonner", () => ({ toast: Object.assign(vi.fn(), { error: vi.fn(), success: vi.fn(), dismiss: vi.fn() }) }));
+vi.mock("@renderer/state/live-documents", async (importOriginal) => {
+  const actual = await importOriginal<typeof LiveDocuments>();
+  return { ...actual, hasDirtyDocument: vi.fn(actual.hasDirtyDocument), releaseDocumentTab: vi.fn(actual.releaseDocumentTab) };
+});
+
+import { toast } from "sonner";
+import { desktopLiveDocuments, hasDirtyDocument, releaseDocumentTab } from "@renderer/state/live-documents";
+import type * as LiveDocuments from "@renderer/state/live-documents";
 
 import { PersistedExplorerTabSchema } from "@shared/types";
 import type { PersistedExplorerTab } from "@shared/types";
@@ -58,6 +67,17 @@ describe("the explorer strip", () => {
     await useExplorer.getState().bindSession(null, null);
     await vi.runOnlyPendingTimersAsync();
     vi.useRealTimers();
+  });
+
+  it("keeps one unsaved-changes toast per tab however often it is closed", () => {
+    const tab = useExplorer.getState().open("file")!;
+    vi.mocked(hasDirtyDocument).mockImplementation((id) => id === tab.id);
+    useExplorer.getState().close(tab.id);
+    useExplorer.getState().close(tab.id);
+    const ids = vi.mocked(toast.error).mock.calls.map(([, options]) => options?.id);
+    expect(ids).toEqual([`dirty:${tab.id}`, `dirty:${tab.id}`]);
+    expect(useExplorer.getState().tabs.map((candidate) => candidate.id)).toContain(tab.id);
+    vi.mocked(hasDirtyDocument).mockReset();
   });
 
   it("opens each of the five kinds into one strip", () => {
@@ -273,7 +293,7 @@ describe("the explorer strip", () => {
     const tab = useExplorer.getState().open("terminal");
     useExplorer.getState().update(tab!.id, { ptyId: "pty-9" });
     useExplorer.getState().close(tab!.id);
-    expect(window.textToCad.terminal.kill).toHaveBeenCalledWith({ id: "pty-9" });
+    expect(window.textToCad.terminal.kill).toHaveBeenCalledWith({ id: "pty-9", sessionId: expect.any(String) });
   });
 
   it("reuses the tab already showing a file", () => {
@@ -304,6 +324,17 @@ describe("the explorer strip", () => {
     const result = dedupeFileTabs(tabs, "t2");
     expect(result.tabs.map((tab: { id: string }) => tab.id)).toEqual(["t1", "t3", "t4"]);
     expect(result.activeId).toBe("t1");
+  });
+
+  it("disposes the tab a move leaves as a duplicate, as a close would", () => {
+    const { openFile } = useExplorer.getState();
+    const first = openFile("a.txt")!;
+    const second = openFile("b.txt")!;
+    vi.mocked(releaseDocumentTab).mockClear();
+    // a.txt was renamed over b.txt, which is open: one tab is left for the file.
+    useExplorer.getState().receiveChanges(PROJECT, null, [{ kind: "moved", previousPath: "a.txt", path: "b.txt", directory: false }]);
+    expect(useExplorer.getState().tabs.map((tab) => tab.id)).toEqual([first.id]);
+    expect(releaseDocumentTab).toHaveBeenCalledWith(second.id);
   });
 
   it("fills the blank tab the + button made instead of stacking one", () => {
@@ -411,6 +442,21 @@ describe("the explorer strip", () => {
     expect(useExplorer.getState().tabs).toMatchObject([{ id: tab.id, path: "icon.png" }]);
   });
 
+  it("keeps the stored pane pair when a restore fails, so the retry shows only inside an open pane", async () => {
+    const shut = `failing-${PROJECT}`;
+    vi.mocked(window.textToCad.explorer.loadTabs).mockRejectedValueOnce(new Error("disk said no"));
+    await useExplorer.getState().bindSession(shut, PROJECT);
+    // Only a person's toggle or drag writes the pair: a failure neither opens the pane nor records a choice.
+    expect(useExplorer.getState()).toMatchObject({ sessionId: shut, loadError: "disk said no", ready: false, collapsed: true });
+    expect(window.localStorage.getItem("text-to-cad.explorer.session.collapsed") ?? "").not.toContain(shut);
+
+    const open = `open-${PROJECT}`;
+    window.localStorage.setItem("text-to-cad.explorer.session.collapsed", JSON.stringify({ [open]: false }));
+    vi.mocked(window.textToCad.explorer.loadTabs).mockRejectedValueOnce(new Error("again"));
+    await useExplorer.getState().bindSession(open, PROJECT);
+    expect(useExplorer.getState()).toMatchObject({ sessionId: open, loadError: "again", collapsed: false });
+  });
+
   it("shares an in-flight session restore without applying it to a different session", async () => {
     const earlier = deferred<PersistedExplorerTab[]>();
     const fresh = `unloaded-${PROJECT}`;
@@ -435,6 +481,23 @@ describe("the explorer strip", () => {
     expect(useExplorer.getState().changedRoot).toBeNull();
     useExplorer.getState().receiveChanges(PROJECT, "/wt/slug", [{ kind: "changed", path: "b.txt", directory: false }]);
     expect(useExplorer.getState().changedRoot).toBe("/wt/slug");
+  });
+
+  it("carries an unmounted tab's draft to the file's new name", () => {
+    const tab = useExplorer.getState().open("file", { path: "old.txt" })!;
+    const drafts = desktopLiveDocuments(tab.id, { projectId: PROJECT, root: null }).documents!.drafts;
+    // The id the tab's FileSource carries (adapters/fileSource.ts).
+    const source = JSON.stringify(["desktop", PROJECT, null]);
+    drafts.put(source, "old.txt", { base: { content: "base", revision: "r1" }, value: "unsaved", stale: false });
+
+    // No view is mounted, so only the store sees the rename.
+    useExplorer.getState().receiveChanges(PROJECT, null, [{ kind: "moved", previousPath: "old.txt", path: "new.txt", directory: false }]);
+    expect(useExplorer.getState().tabs.find((candidate) => candidate.id === tab.id)).toMatchObject({ path: "new.txt" });
+    expect(drafts.get(source, "new.txt")).toMatchObject({ value: "unsaved" });
+
+    // The view that mounts under the new name saves, and the tab closes clean.
+    drafts.put(source, "new.txt", null);
+    expect(hasDirtyDocument(tab.id)).toBe(false);
   });
 
   /**
@@ -493,6 +556,19 @@ describe("the explorer strip", () => {
       expect(window.textToCad.explorer.watch).not.toHaveBeenCalled();
     });
 
+    it("keeps a background session's open folders when a file changes, and drops only its listings", async () => {
+      useExplorer.getState().open("file", { path: "src/a.py" });
+      useExplorer.getState().setTreeOpen(null, (open) => new Set([...open, "src", "src/deep"]));
+      useExplorer.getState().setTreeListing(null, "src", [{ path: "src/a.py", name: "a.py", kind: "file", size: 1, modifiedAt: 0, symlink: false }]);
+      await useExplorer.getState().bindSession("other-session", PROJECT, null);
+      useExplorer.getState().receiveChanges(PROJECT, null, [{ kind: "changed", path: "src/a.py", directory: false }]);
+      vi.mocked(window.textToCad.explorer.loadTabs).mockClear();
+      await useExplorer.getState().bindSession(PROJECT, PROJECT, null);
+      const tree = useExplorer.getState().trees[""];
+      expect([...tree!.open].sort()).toEqual(["", "src", "src/deep"]);
+      expect(tree!.listings).toEqual({});
+    });
+
     it("drops a reveal when the root changes; a reveal names its root", () => {
       useExplorer.getState().setRoot(null);
       useExplorer.getState().setReveal({ path: "STEP", directory: true, root: null });
@@ -528,7 +604,7 @@ describe("the explorer strip", () => {
     expect(tabTitle({ ...base, kind: "file", path: "src/wrist.step", root: null, panel: null })).toBe(
       "wrist.step",
     );
-    expect(tabTitle({ ...base, kind: "file", path: null, root: null, panel: null })).toBe("Untitled");
+    expect(tabTitle({ ...base, kind: "file", path: null, root: null, panel: null })).toBe("Open file…");
     expect(tabTitle({ ...base, kind: "browser", root: null, url: "https://example.com/a/b" })).toBe(
       "example.com",
     );

@@ -10,10 +10,15 @@
  * has a sixty-second timeout, and the process left when it did.
  *
  * So every spawn registers here and `endTrackedChildren` is called from
- * `before-quit`. Two kinds:
+ * `before-quit`. Three kinds:
  *
  *   - `probe`   stateless: a `--version`, a `git status`, a login-shell
  *               `env`. Killed outright; the answer is not wanted any more.
+ *   - `write`   a mutating `git` call (commit, push, worktree add/remove):
+ *               SIGTERM, not SIGKILL. git removes the `index.lock` and the
+ *               half-written files it holds on SIGTERM; a SIGKILL leaves
+ *               them, and the next commit or worktree add fails on a lock
+ *               nobody owns. Its pipes are dropped like a service's.
  *   - `service` the viewer, an adapter, an install: told to stop by its
  *               owner (SIGTERM, so the viewer unregisters itself) and left to
  *               go. Its pipes are dropped and it is unref'd here, so nothing
@@ -27,7 +32,7 @@
  * mixed in and no events at all. `Trackable` is what the two have in common.
  */
 
-export type ChildKind = "probe" | "service";
+export type ChildKind = "probe" | "service" | "write";
 
 type Closable = { destroy?: () => void } | null | undefined;
 
@@ -91,12 +96,15 @@ export function trackedChildren(): Array<{ pid: number | undefined; kind: ChildK
  * `before-quit`: kill every probe, and detach every child from this process
  * so nothing here waits for it. Services keep running until their owner's
  * signal lands; that owner has already sent it by the time this is called.
+ * A write is asked to stop, so it can release what it holds.
  */
 export function endTrackedChildren(): void {
   for (const [child, record] of live) {
     const { kind } = record;
     if (kind === "probe") {
       kill(child, record);
+    } else if (kind === "write") {
+      terminate(child);
     }
     detach(child);
   }
@@ -131,6 +139,17 @@ function kill(child: Trackable, record: Tracked): void {
   try {
     if ((child.exitCode ?? null) === null && (child.signalCode ?? null) === null) {
       child.kill("SIGKILL");
+    }
+  } catch {
+    // Gone between the check and the signal; that is the outcome wanted.
+  }
+}
+
+/** SIGTERM, for a child that cleans up after itself when asked. */
+function terminate(child: Trackable): void {
+  try {
+    if ((child.exitCode ?? null) === null && (child.signalCode ?? null) === null) {
+      child.kill("SIGTERM");
     }
   } catch {
     // Gone between the check and the signal; that is the outcome wanted.

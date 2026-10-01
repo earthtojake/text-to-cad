@@ -17,6 +17,7 @@ import {
 } from "@renderer/features/settings/SettingCard";
 import { playNotificationSound } from "@renderer/features/settings/sound";
 import {
+  useSettingsFallbacks,
   useSettingsPatch,
   useSettingsValue,
 } from "@renderer/features/settings/settings-value";
@@ -45,6 +46,7 @@ const TELEMETRY_EVENTS: [string, string][] = [
 export function GeneralPage() {
   const settings = useSettingsValue();
   const patch = useSettingsPatch();
+  const fallbacks = useSettingsFallbacks();
 
   return (
     <>
@@ -60,6 +62,13 @@ export function GeneralPage() {
               })
               .then((chosen) => chosen && patch({ defaultProjectFolder: chosen.path }));
           }}
+          note={
+            fallbacks.gone.defaultProjectFolder?.reason === "file"
+              ? "This is a file, not a folder, so the chooser opens where it last did."
+              : fallbacks.gone.defaultProjectFolder
+                ? "This folder no longer exists, so the chooser opens where it last did."
+                : undefined
+          }
           onClear={() => patch({ defaultProjectFolder: null })}
           placeholder="Your home folder"
           title="Default project folder"
@@ -123,7 +132,7 @@ export function GeneralPage() {
           title="Notifications"
         />
         <SettingRow
-          control={
+          control={(describedBy) => (
             <>
               <Button
                 className="h-8 gap-1.5"
@@ -136,20 +145,21 @@ export function GeneralPage() {
                 Preview
               </Button>
               <Switch
+                aria-describedby={describedBy}
                 aria-label="Sound"
                 checked={settings.notificationSound}
                 disabled={!settings.notificationsEnabled}
                 onCheckedChange={(notificationSound) => patch({ notificationSound })}
               />
             </>
-          }
+          )}
           description="Play a sound with the notification."
           keywords="audio chime"
           title="Sound"
         />
         <PathRow
           chooseLabel="Choose…"
-          description="An aiff, wav, mp3 or m4a file. Empty plays text-to-cad's own chime."
+          description="An aiff, wav, mp3, m4a or ogg file. Empty plays text-to-cad's own chime."
           keywords="audio file custom"
           onChoose={() => {
             void window.textToCad.dialogs
@@ -175,10 +185,10 @@ export function GeneralPage() {
         />
         <SwitchRow
           checked={settings.notificationOsBanners}
-          description="Show notifications in the system's own notification centre as well."
-          keywords="banner system notification centre center"
+          description="Also show them as banners in the system's notification centre, not only inside text-to-cad."
+          keywords="os banner system notification centre center"
           onChange={(notificationOsBanners) => patch({ notificationOsBanners })}
-          title="OS notifications"
+          title="System banners"
         />
       </SettingCard>
 

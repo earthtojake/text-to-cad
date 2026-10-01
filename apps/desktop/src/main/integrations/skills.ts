@@ -18,13 +18,14 @@
  * Agents that ignore additional directories — Gemini, Copilot, OpenCode,
  * Goose, everything but Claude Code and Codex — get the root a second way:
  * `preamble()` names it, and its files in the first prompt of a session,
- * beside the `text-to-cad` MCP server's `list_skills` / `read_skill` tools which
- * read the same directory.
+ * beside the `text-to-cad-workspace` MCP server's `list_skills` / `read_skill`
+ * tools which read the same directory.
  *
  * Everything here is plain `node:fs` over paths passed in, so the materialiser
  * is testable without Electron (tests/unit/main/skills.test.ts). Main wires it
- * in `src/main/cad/index.ts`.
+ * in `src/main/integrations/index.ts` (`materialiseSkills`).
  */
+import { createHash } from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -112,34 +113,134 @@ export function composedSkills(source: string): SkillSummary[] {
 /* Materialising                                                               */
 /* -------------------------------------------------------------------------- */
 
-type Manifest = { version: string; skills: string[] };
+type Manifest = { version: string; skills: string[]; hash: string };
 
 function readManifest(root: string): Manifest | null {
   try {
     const parsed = JSON.parse(fs.readFileSync(path.join(root, ROOT_MANIFEST), "utf8")) as Partial<Manifest>;
-    return typeof parsed.version === "string" && Array.isArray(parsed.skills)
-      ? { version: parsed.version, skills: parsed.skills.filter((name): name is string => typeof name === "string") }
+    return typeof parsed.version === "string" && Array.isArray(parsed.skills) && typeof parsed.hash === "string"
+      ? {
+          version: parsed.version,
+          skills: parsed.skills.filter((name): name is string => typeof name === "string"),
+          hash: parsed.hash,
+        }
       : null;
   } catch {
     return null;
   }
 }
 
-/** Both layouts hold every named skill, with its SKILL.md. */
-function complete(root: string, names: readonly string[]): boolean {
-  return names.every((name) =>
-    SKILL_LAYOUTS.every((layout) => fs.existsSync(path.join(root, layout, name, "SKILL.md"))),
-  );
+/**
+ * One SHA-256 over every file of the named skills under `dir`: relative path
+ * and bytes, in a fixed order, following links the way the copy does. Taken of
+ * the source and of each layout of the root, so an edited SKILL.md — in the
+ * app's resources (a dev build keeps one version) or in the materialised copy
+ * (an agent that got past the read-only modes) — is a mismatch. The skills are
+ * under a megabyte, so this costs a few milliseconds per launch.
+ */
+function treeHash(dir: string, names: readonly string[]): string | null {
+  const hash = createHash("sha256");
+  const walk = (relative: string): void => {
+    const absolute = path.join(dir, relative);
+    const stat = fs.statSync(absolute);
+    if (stat.isDirectory()) {
+      for (const entry of fs.readdirSync(absolute).sort()) {
+        walk(path.join(relative, entry));
+      }
+    } else if (stat.isFile()) {
+      hash.update(`${relative.split(path.sep).join("/")}\0${stat.size}\0`);
+      hash.update(fs.readFileSync(absolute));
+    } else {
+      // A FIFO, socket or device is never ours; naming it makes it a mismatch.
+      hash.update(`${relative.split(path.sep).join("/")}\0other\0`);
+    }
+  };
+  try {
+    for (const name of names) {
+      walk(name);
+    }
+  } catch {
+    return null;
+  }
+  return hash.digest("hex");
+}
+
+/**
+ * Whether `dir` holds exactly `names` and nothing else. `treeHash` reads only
+ * the entries it is given, so without this a skill an agent planted beside
+ * ours — `<root>/.claude/skills/<its own>/SKILL.md` — would hash clean, survive
+ * every launch, and be loaded by every later session of every agent.
+ */
+function holdsExactly(dir: string, names: readonly string[]): boolean {
+  try {
+    const entries = fs.readdirSync(dir).sort();
+    const expected = [...names].sort();
+    return entries.length === expected.length && entries.every((entry, index) => entry === expected[index]);
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Make every FILE under `dir` read-only (0444, execute bits kept), so an
+ * agent's — or an injected prompt's — plain write to a SKILL.md fails.
+ * Directories stay writable (0755): a read-only directory makes a recursive
+ * `rm` of the app's data fail with ENOTEMPTY (the e2e suite's cleanup, CI, a
+ * person deleting their app data). An agent can therefore still unlink and
+ * replace a file; the defence against that is `treeHash`, which rebuilds any
+ * copy that differs from the source on every launch.
+ */
+function lockFiles(dir: string): void {
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      lockFiles(full);
+    } else if (entry.isFile()) {
+      fs.chmodSync(full, fs.statSync(full).mode & 0o7555);
+    }
+  }
+}
+
+/**
+ * Remove a root. Roots written by an earlier build had 0555 directories,
+ * which `rmSync` cannot empty, so directories are made writable first.
+ */
+function removeTree(dir: string): void {
+  const writable = (current: string): void => {
+    let stat: fs.Stats;
+    try {
+      stat = fs.lstatSync(current);
+    } catch {
+      return;
+    }
+    if (!stat.isDirectory()) {
+      return;
+    }
+    try {
+      fs.chmodSync(current, stat.mode | 0o700);
+    } catch {
+      // Not ours to change; the removal will say so.
+    }
+    for (const entry of fs.readdirSync(current)) {
+      writable(path.join(current, entry));
+    }
+  };
+  writable(dir);
+  fs.rmSync(dir, { recursive: true, force: true });
 }
 
 /**
  * Make `<base>/<version>/` hold the composed skills in both layouts, and
  * remove every other version under `base`.
  *
- * Idempotent: a root whose manifest records this version and this set of
- * skills, and whose files are all there, is left alone — so the common launch
- * copies nothing. A version bump, a changed skill set, or a half-written root
- * (the app was killed mid-copy) is rebuilt from scratch.
+ * Idempotent: a root whose manifest records this version, this set of skills
+ * and the source's content hash, and whose two layouts still hash to it, is
+ * left alone — so the common launch copies nothing. A version bump, a changed
+ * skill set, changed skill content (dev builds keep one version while
+ * SKILL.md files are edited), an edited copy, anything in the root that is
+ * not ours (a skill an agent planted beside them), or a half-written root (the
+ * app was killed mid-copy) is rebuilt from scratch. Its files are then made
+ * read-only (see `lockFiles`).
  */
 export function materialiseSkillsRoot(options: {
   /** `resources/skills` — one directory per skill. */
@@ -155,16 +256,27 @@ export function materialiseSkillsRoot(options: {
   }
   const names = skills.map((skill) => skill.name);
   const root = path.join(base, version);
+  const hash = treeHash(source, names);
+  if (!hash) {
+    throw new Error(`could not read the composed skills in ${source}`);
+  }
 
   const manifest = readManifest(root);
   const fresh =
     manifest?.version === version &&
+    manifest.hash === hash &&
     manifest.skills.length === names.length &&
     manifest.skills.every((name, index) => name === names[index]) &&
-    complete(root, names);
+    holdsExactly(root, [ROOT_MANIFEST, ...SKILL_LAYOUTS.map((layout) => layout.split(path.sep)[0]!)]) &&
+    SKILL_LAYOUTS.every(
+      (layout) =>
+        holdsExactly(path.join(root, path.dirname(layout)), [path.basename(layout)]) &&
+        holdsExactly(path.join(root, layout), names) &&
+        treeHash(path.join(root, layout), names) === hash,
+    );
 
   if (!fresh) {
-    fs.rmSync(root, { recursive: true, force: true });
+    removeTree(root);
     for (const layout of SKILL_LAYOUTS) {
       const target = path.join(root, layout);
       fs.mkdirSync(target, { recursive: true });
@@ -175,14 +287,15 @@ export function materialiseSkillsRoot(options: {
     // Last, so a root that exists without it is rebuilt rather than trusted.
     fs.writeFileSync(
       path.join(root, ROOT_MANIFEST),
-      `${JSON.stringify({ version, skills: names } satisfies Manifest, null, 2)}\n`,
+      `${JSON.stringify({ version, skills: names, hash } satisfies Manifest, null, 2)}\n`,
     );
+    lockFiles(root);
   }
 
   // Only this app's own versions: `base` is a directory the app owns.
   for (const entry of fs.readdirSync(base)) {
     if (entry !== version) {
-      fs.rmSync(path.join(base, entry), { recursive: true, force: true });
+      removeTree(path.join(base, entry));
     }
   }
 

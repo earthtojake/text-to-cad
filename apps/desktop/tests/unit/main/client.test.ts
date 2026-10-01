@@ -1,16 +1,18 @@
-import { mkdtemp, readFile, realpath, symlink, writeFile } from "node:fs/promises";
-import os from "node:os";
+import { readFile, symlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 
 import { AcpClient, confineToCwd } from "@main/acp/client";
 import { TerminalManager } from "@main/acp/terminals";
 import type { SessionEvent } from "@shared/acp/types";
+import { cleanTempDirs, tempDir } from "./temp-dirs";
 
-async function scratch() {
-  return realpath(await mkdtemp(path.join(os.tmpdir(), "text-to-cad-client-")));
+function scratch() {
+  return tempDir("text-to-cad-client-");
 }
+
+afterEach(cleanTempDirs);
 
 function client(cwd: string) {
   const events: SessionEvent[] = [];
@@ -109,6 +111,26 @@ describe("AcpClient files", () => {
     await expect(instance.writeTextFile({ sessionId: "s", path: path.join(dir, "..", "escape.txt"), content: "" })).rejects.toThrow(/outside/);
     await symlink(outside, path.join(dir, "link"));
     await expect(instance.writeTextFile({ sessionId: "s", path: path.join(dir, "link", "y.txt"), content: "" })).rejects.toThrow(/link/);
+  });
+
+  it("writes inside a session directory spelled through a symlink", async () => {
+    const real = await scratch();
+    const alias = path.join(await scratch(), "alias");
+    await symlink(real, alias);
+    const { instance, changed } = client(alias);
+    const target = path.join(alias, "deep", "new", "a.txt");
+    await instance.writeTextFile({ sessionId: "s", path: target, content: "via alias" });
+    expect(await readFile(path.join(real, "deep", "new", "a.txt"), "utf8")).toBe("via alias");
+    expect(changed).toEqual([[target]]);
+    expect(await confineToCwd(alias, path.join(real, "b.txt"))).toBe(path.join(real, "b.txt"));
+    await expect(confineToCwd(alias, path.join(alias, "..", "escape.txt"))).rejects.toThrow(/outside/);
+  });
+
+  it("confineToCwd accepts a top-level entry named ..keep and still refuses ../escape", async () => {
+    const dir = await scratch();
+    expect(await confineToCwd(dir, path.join(dir, "..keep"))).toBe(path.join(dir, "..keep"));
+    expect(await confineToCwd(dir, path.join(dir, "..keep", "a.txt"))).toBe(path.join(dir, "..keep", "a.txt"));
+    await expect(confineToCwd(dir, path.join(dir, "..", "escape"))).rejects.toThrow(/outside/);
   });
 
   it("confineToCwd answers the normalised path for an inside target", async () => {

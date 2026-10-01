@@ -1,5 +1,5 @@
 /**
- * About & Updates (plan §10). The version, where it came from, the one
+ * About and updates (plan §10). The version, where it came from, the one
  * button the updater's current state allows — and the CAD runtime's status,
  * read-only: the runtime ships inside the app (plan §8, as revised), so what
  * used to be a page of its own is a block here that says whether it works,
@@ -7,8 +7,10 @@
  */
 import { useEffect } from "react";
 import { RefreshCw } from "lucide-react";
+import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 
 import { Button } from "@renderer/components/ui/button";
+import { Progress } from "@renderer/components/ui/progress";
 import {
   ActionRow,
   SettingCard,
@@ -107,6 +109,11 @@ export function AboutPage() {
   );
 }
 
+/** A line of the updater's error, not a page of it: main sends one line, this is the backstop. */
+const MAX_ERROR_LENGTH = 160;
+const clamp = (text: string) =>
+  text.length > MAX_ERROR_LENGTH ? `${text.slice(0, MAX_ERROR_LENGTH - 1).trimEnd()}…` : text;
+
 /**
  * The updater, as one row: what the state is on the left, the only action that
  * state allows on the right.
@@ -126,10 +133,13 @@ function UpdateRow() {
 
   const { description, action } = {
     unsupported: {
-      description: "Updates are delivered to installed builds; this one runs from a checkout.",
+      description: status.message ?? "Updates are delivered to installed builds; this one runs from a checkout.",
       action: null,
     },
     idle: {
+      // Also a release whose feed for this platform is still being uploaded:
+      // nothing newer is published for this build. An inactive updater is
+      // `unsupported`, not this.
       description: "text-to-cad is up to date.",
       action: { label: "Check now", onClick: check },
     },
@@ -139,16 +149,29 @@ function UpdateRow() {
       action: { label: "Download", onClick: download },
     },
     downloading: {
-      description: `Downloading${version}… ${Math.round(status.percent ?? 0)}%`,
+      // No number here: this is a polite live region, and a percentage that
+      // changes every second would be read out every second. The reading is the
+      // progress bar's (and is printed beside it, outside the region).
+      description: `Downloading${version}…`,
       action: null,
     },
     downloaded: {
       description: `Version${version} is ready. Restarting installs it.`,
-      action: { label: "Restart", onClick: install },
+      // The visible word stays the start of the name (label in name); the
+      // version says which build the button installs.
+      action: { label: "Restart", name: `Restart to install${version}`, onClick: install },
     },
+    // Main's state, not the IPC round trip: the button stays off for as long as
+    // the install is under way (a minute, at most — then it is an error).
+    installing: { description: `Restarting to install${version}…`, action: { label: "Restarting…", onClick: install, pending: true } },
     error: {
-      description: status.message ?? "The update check failed.",
-      action: { label: "Try again", onClick: check },
+      description: clamp(status.message ?? "The update check failed."),
+      // An install that did not start leaves the download staged: the retry is
+      // Restart, not another check.
+      action:
+        status.version !== undefined
+          ? { label: "Restart", name: `Restart to install${version}`, onClick: install }
+          : { label: "Try again", onClick: check },
     },
   }[status.state];
 
@@ -158,23 +181,41 @@ function UpdateRow() {
         action ? (
           <Button
             className="h-8"
-            disabled={busy}
+            aria-label={busy || action.pending ? undefined : action.name}
+            disabled={busy || action.pending}
             onClick={() => void action.onClick()}
             size="sm"
-            variant={status.state === "downloaded" ? "default" : "secondary"}
+            variant={status.state === "downloaded" || status.state === "installing" ? "default" : "secondary"}
           >
-            {action.label}
+            {busy && action.onClick === install ? "Restarting…" : action.label}
           </Button>
         ) : (
           <span className="text-sm text-muted-foreground">
-            {status.state === "checking" || status.state === "downloading" ? "…" : "—"}
+            {status.state === "downloading"
+              ? `${Math.round(status.percent ?? 0)}%`
+              : status.state === "checking"
+                ? "…"
+                : "—"}
           </span>
         )
       }
       description={description}
       keywords="update download install restart version"
+      live
       title="Software update"
-    />
+    >
+      {status.state === "downloading" ? (
+        // The vendored Progress draws `value` but does not hand it to Radix's
+        // root, which would then announce an indeterminate bar: the reading is
+        // passed as the ARIA attribute as well.
+        <Progress
+          aria-label="Update download progress"
+          aria-valuenow={Math.round(status.percent ?? 0)}
+          className="h-1"
+          value={Math.round(status.percent ?? 0)}
+        />
+      ) : null}
+    </SettingRow>
   );
 }
 
@@ -224,8 +265,8 @@ function RuntimeCard({ appVersion }: { appVersion: string | null }) {
       <SettingRow
         control={
           <>
-            <StatusLabel tone={status ? STATE_TONE[status.state] : "busy"}>
-              {status ? STATE_LABEL[status.state] : "Checking…"}
+            <StatusLabel tone={status ? (status.kernel ? "warn" : STATE_TONE[status.state]) : "busy"}>
+              {status ? `${STATE_LABEL[status.state]}${status.kernel ? ` — CAD kernel: ${status.kernel.state}` : ""}` : "Checking…"}
             </StatusLabel>
             <Button
               className="h-8 gap-1.5"
@@ -247,10 +288,19 @@ function RuntimeCard({ appVersion }: { appVersion: string | null }) {
         keywords="python cadgen runtime repair interpreter bundled"
         title="Runtime"
       >
-        {status?.log && status.state !== "ready" ? (
-          <p className="truncate text-[11px] text-muted-foreground" title={status.log}>
-            Log: <span data-selectable>{status.log}</span>
+        {status?.kernel ? (
+          // Ready, but a STEP build may fail: cadgen's own words for why.
+          <p className="text-[11px] text-muted-foreground" data-runtime-kernel={status.kernel.state}>
+            CAD kernel: {status.kernel.state}: <span data-selectable>{status.kernel.message}</span>
+            {status.kernel.state === "timeout" ? ". That says nothing about whether the kernel loads; Repair checks again." : null}
           </p>
+        ) : null}
+        {status?.log && (status.state !== "ready" || status.kernel) ? (
+          <TooltipHint content={status.log} overflowOnly side="top">
+            <p className="truncate text-[11px] text-muted-foreground">
+              Log: <span data-selectable>{status.log}</span>
+            </p>
+          </TooltipHint>
         ) : null}
       </SettingRow>
 

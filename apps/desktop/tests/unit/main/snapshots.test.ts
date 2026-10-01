@@ -7,6 +7,7 @@ import {
   trimForSnapshot,
   type SnapshotStore,
 } from "@main/acp/snapshots";
+import { reduce } from "@shared/acp/reduce";
 import { initialSessionState, type Part, type SessionState, type Turn } from "@shared/acp/types";
 
 /**
@@ -126,6 +127,49 @@ describe("trimForSnapshot", () => {
     expect(part.output).toBeNull();
   });
 
+  it("cancels a permission request still pending, wherever it sits, since no agent is left to answer it", () => {
+    const permission = (requestId: string, outcome: Extract<Part, { type: "permission_request" }>["outcome"]): Part => ({
+      type: "permission_request",
+      requestId,
+      toolCallId: "cmd",
+      title: "Run ls?",
+      description: null,
+      options: [{ optionId: "allow", name: "Yes", kind: "allow_once", description: null }],
+      outcome,
+    });
+    const state = stateWith([
+      turn("t1", [
+        permission("top", { state: "pending" }),
+        permission("answered", { state: "selected", optionId: "allow" }),
+        toolCall({ children: [permission("nested", { state: "pending" })] }),
+        {
+          type: "subagent",
+          sessionId: "sub",
+          name: "helper",
+          task: null,
+          state: "running",
+          parts: [permission("in-subagent", { state: "pending" })],
+        } as Part,
+      ]),
+    ]);
+    const outcomes: Record<string, unknown> = {};
+    const walk = (parts: Part[]) => {
+      for (const part of parts) {
+        if (part.type === "permission_request") outcomes[part.requestId] = part.outcome;
+        if (part.type === "tool_call") walk(part.children);
+        if (part.type === "subagent") walk(part.parts);
+      }
+    };
+    walk(trimForSnapshot(state).turns[0]!.parts);
+    expect(outcomes).toEqual({
+      top: { state: "cancelled" },
+      answered: { state: "selected", optionId: "allow" },
+      nested: { state: "cancelled" },
+      "in-subagent": { state: "cancelled" },
+    });
+    expect(trimForSnapshot(state).pendingPermissions).toEqual([]);
+  });
+
   it("leaves a small tool call exactly as it was, nested calls included", () => {
     const child = toolCall({ id: "child", stream: "ok", input: { path: "a" } });
     const state = stateWith([turn("t1", [toolCall({ children: [child] })])]);
@@ -197,6 +241,23 @@ describe("SessionSnapshotWriter", () => {
     timers.fire();
     expect(store.writes).toBe(1);
     expect(writer.read("s1")!.turns.at(-1)!.id).toBe("t49");
+  });
+
+  /** Parked updates wait for a subagent spawn that will not arrive after a restart. */
+  it("stores no parked updates, and reads none back", () => {
+    const store = memoryStore();
+    const writer = new SessionSnapshotWriter({ store, schedule: manualSchedule().schedule });
+    const state: SessionState = {
+      ...stateWith([turn("t1", [])]),
+      parked: [{ acpSessionId: "child", update: { sessionUpdate: "agent_message_chunk" }, at: 1, bytes: 40 }],
+      parkedDropWarned: true,
+    };
+    writer.save("s1", state);
+    writer.flush("s1");
+    const stored = JSON.parse(store.rows.get("s1")!) as Record<string, unknown>;
+    expect(stored).not.toHaveProperty("parked");
+    expect(stored).not.toHaveProperty("parkedDropWarned");
+    expect(writer.read("s1")).not.toHaveProperty("parked");
   });
 
   it("keeps one pending write per session", () => {
@@ -273,5 +334,28 @@ describe("SessionSnapshotWriter", () => {
     expect(() => writer.save("s1", stateWith([]))).not.toThrow();
     expect(() => writer.flush("s1")).not.toThrow();
     expect(writer.read("s1")).toBeNull();
+  });
+});
+
+describe("the snapshot and the commands list", () => {
+  it("keeps the session's commands and puts none of them in a turn", () => {
+    let state = reduce(initialSessionState("s1", "claude-code"), {
+      type: "session/connected",
+      acpSessionId: "root",
+      modes: null,
+      configOptions: null,
+      loading: false,
+      at: 1,
+    });
+    state = reduce(state, { type: "prompt/start", turnId: "t1", content: [{ type: "text", text: "hi" }], at: 2 });
+    state = reduce(state, {
+      type: "session/update",
+      acpSessionId: "root",
+      update: { sessionUpdate: "available_commands_update", availableCommands: [{ name: "review", description: "" }] },
+      at: 3,
+    });
+    const snapshot = trimForSnapshot(state);
+    expect(snapshot.turns.flatMap((turn) => turn.parts.map((part) => part.type))).not.toContain("available_commands");
+    expect(snapshot.availableCommands.map((command) => command.name)).toEqual(["review"]);
   });
 });

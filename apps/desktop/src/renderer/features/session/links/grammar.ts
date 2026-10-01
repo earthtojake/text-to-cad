@@ -48,7 +48,8 @@ export function looksLikePath(candidate: string): boolean {
   if (candidate.startsWith("/") || candidate.startsWith("~") || candidate.startsWith("\\")) {
     return false;
   }
-  if (!PATH_CHARS_RE.test(candidate) || candidate.includes("..") || candidate.includes("//")) {
+  // A `..` segment climbs out of the workspace; `v1..v2.txt` is only a name.
+  if (!PATH_CHARS_RE.test(candidate) || candidate.split("/").includes("..") || candidate.includes("//")) {
     return false;
   }
   // `foo:` is a label or a drive, not a path; `a:b/c` is neither.

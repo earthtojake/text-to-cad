@@ -116,3 +116,19 @@ it('preserves a background command admitted while watcher startup is still pendi
   watched(); await binding;
   expect(useExplorer.getState().tabs).toMatchObject([{ id: opened.tabId }]);
 });
+
+it("lists a terminal the person opened under the recorded spelling when main names the real path", async () => {
+  // `/tmp/p` is `/private/tmp/p` on macOS; a tab keeps the first, main resolves the second.
+  const terminal = useExplorer.getState().open("terminal")!;
+  useExplorer.getState().update(terminal.id, { cwd: `${projectId}/sub` });
+  const listed = await performIntegrationCommand({ sessionId: sessionA, projectId, requestId: "list", kind: "list-tabs", root: null,
+    rootDirectory: `/private${projectId}`, rootAliases: [projectId] }) as { tabs: Array<{ id: string }> };
+  expect(listed.tabs.map(tab => tab.id)).toEqual([terminal.id]);
+});
+
+it("marks a terminal tab the agent opens as the agent's, so its respawn keeps the runtime PATH", async () => {
+  const opened = await performIntegrationCommand({ sessionId: sessionA, projectId, requestId: "terminal", kind: "terminal-open", root: null,
+    rootDirectory: projectId, params: { cwd: projectId, ptyId: "pty-agent" } }) as { tabId: string };
+  expect(useExplorer.getState().tabs.find(tab => tab.id === opened.tabId)).toMatchObject({ kind: "terminal", agent: true });
+  expect(useExplorer.getState().open("terminal")).toMatchObject({ agent: false });
+});

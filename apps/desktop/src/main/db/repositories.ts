@@ -20,6 +20,7 @@ import {
 } from "../../shared/acp/types";
 import type { AgentOptions } from "../../shared/ipc/agent-options";
 import {
+  BranchPrefixSchema,
   PersistedExplorerTabSchema,
   ProjectSchema,
   SessionSchema,
@@ -42,6 +43,9 @@ import { db } from "./index";
 function directoryDescriptor(directory: string, createdAt = 0): Project {
   return ProjectSchema.parse({ id: directory, name: path.basename(directory) || directory, path: directory, createdAt });
 }
+
+/** What `projects.choose` handed out this run, by id. Never persisted. */
+const chosen = new Map<string, Project>();
 
 export const projects = {
   list(): Project[] {
@@ -66,13 +70,29 @@ export const projects = {
     return directoryDescriptor(canonical);
   },
 
-  /** Resolve a stable directory identity, including before the first session. */
+  /**
+   * A directory the person chose in main — the folder chooser, the sample —
+   * resolved and remembered for this run, so it can be read before its first
+   * session records it. The one way a directory becomes a project without a
+   * session row.
+   */
+  choose(directory: string): Project {
+    const project = projects.add(directory);
+    chosen.set(project.id, project);
+    return project;
+  },
+
+  /**
+   * Resolve a stable directory identity, including before the first session:
+   * one a session records, or one `choose` was handed this run. Nothing else.
+   * An id is renderer input, and a lookup that resolved any absolute path it
+   * was given would make `/` a project and every file under it readable.
+   */
   get(id: string): Project | null {
     // A checkout may be unmounted while its session's worktree still exists.
     // Recorded identities must remain readable, without rewriting their ids.
     const recorded = projects.list().find(project => project.id === id);
-    if (recorded) return recorded;
-    try { return projects.add(id); } catch { return null; }
+    return recorded ?? chosen.get(id) ?? null;
   },
 };
 
@@ -99,15 +119,17 @@ type SessionRow = {
   archived: number;
   pinned: number;
   worktree_path: string | null;
+  worktree_owned: number;
   session_head: string | null;
   turn_head: string | null;
-  turn_started_at: number | null;
 };
 
+// `turn_started_at` (migration 5) stays in the table, unread and unwritten: the
+// review's scopes are revisions, and nothing ever showed the time.
 const SESSION_COLUMNS =
   "id, project_id, agent_id, cwd, git_mode, branch, title, created_at, updated_at, status, " +
   "acp_session_id, changed_files, insertions, deletions, archived, pinned, " +
-  "worktree_path, session_head, turn_head, turn_started_at, title_source";
+  "worktree_path, worktree_owned, session_head, turn_head, title_source";
 
 const toSession = (row: SessionRow): Session =>
   SessionSchema.parse({
@@ -118,6 +140,7 @@ const toSession = (row: SessionRow): Session =>
     gitMode: row.git_mode,
     branch: row.branch ?? undefined,
     worktreePath: row.worktree_path ?? undefined,
+    ...(row.worktree_owned === 1 ? { worktreeOwned: true } : {}),
     title: row.title,
     titleSource: row.title_source,
     createdAt: row.created_at,
@@ -131,7 +154,6 @@ const toSession = (row: SessionRow): Session =>
     pinned: row.pinned === 1,
     sessionHead: row.session_head,
     turnHead: row.turn_head,
-    turnStartedAt: row.turn_started_at,
   });
 
 export const sessions = {
@@ -163,7 +185,7 @@ export const sessions = {
         `INSERT INTO sessions (${SESSION_COLUMNS})
          VALUES (@id, @projectId, @agentId, @cwd, @gitMode, @branch, @title, @createdAt, @updatedAt, @status,
                  @acpSessionId, @changedFiles, @insertions, @deletions, @archived, @pinned,
-                 @worktreePath, @sessionHead, @turnHead, @turnStartedAt, @titleSource)
+                 @worktreePath, @worktreeOwned, @sessionHead, @turnHead, @titleSource)
          ON CONFLICT(id) DO UPDATE SET
            agent_id = excluded.agent_id,
            cwd = excluded.cwd,
@@ -180,9 +202,9 @@ export const sessions = {
            archived = excluded.archived,
            pinned = excluded.pinned,
            worktree_path = excluded.worktree_path,
+           worktree_owned = excluded.worktree_owned,
            session_head = excluded.session_head,
-           turn_head = excluded.turn_head,
-           turn_started_at = excluded.turn_started_at`,
+           turn_head = excluded.turn_head`,
       )
       .run({
         ...parsed,
@@ -190,6 +212,7 @@ export const sessions = {
         archived: parsed.archived ? 1 : 0,
         pinned: parsed.pinned ? 1 : 0,
         worktreePath: parsed.worktreePath ?? null,
+        worktreeOwned: parsed.worktreeOwned ? 1 : 0,
       });
     return parsed;
   },
@@ -452,6 +475,8 @@ function safeJson(value: string): unknown {
  * to Settings while still being one table to back up.
  */
 const WINDOW_STATE_KEY = "__window";
+/** The agent detector's last table (`src/main/agents/cache.ts`), under the same terms. */
+const AGENTS_CACHE_KEY = "__agents";
 
 function readRaw(): Record<string, unknown> {
   const rows = db().prepare("SELECT key, value FROM settings").all() as {
@@ -482,16 +507,77 @@ function writeRaw(values: Record<string, unknown>) {
   write();
 }
 
+const SETTINGS_FIELDS = SettingsSchema.shape as unknown as Record<string, z.ZodType>;
+
+/**
+ * Stored values the read refused and answered with the default in place of,
+ * by field name: a branch prefix git refuses (`.catch` in `SettingsSchema`),
+ * or any other field whose stored JSON no longer parses. The value is the
+ * stored text, so the page that says so can quote it.
+ */
+function fallbacksOf(raw: Record<string, unknown>): Record<string, string> {
+  const refused: Record<string, string> = {};
+  for (const [key, field] of Object.entries(SETTINGS_FIELDS)) {
+    const stored = raw[key];
+    if (stored === undefined) {
+      continue;
+    }
+    const accepted = key === "branchPrefix" ? BranchPrefixSchema.safeParse(stored).success : field.safeParse(stored).success;
+    if (!accepted) {
+      refused[key] = typeof stored === "string" ? stored : JSON.stringify(stored);
+    }
+  }
+  return refused;
+}
+
+/**
+ * The row, one field at a time. A field that no longer parses (an older or
+ * newer build's shape, a hand-edited value) takes its own default and leaves
+ * the rest alone: `settings.get` runs at boot for the theme, and one bad
+ * `sidebar` must not take every setting, and the window, down with it.
+ */
+function parseFields(raw: Record<string, unknown>): Settings {
+  const fields: Record<string, unknown> = {};
+  for (const [key, field] of Object.entries(SETTINGS_FIELDS)) {
+    const parsed = field.safeParse(raw[key]);
+    fields[key] = parsed.success ? parsed.data : field.parse(undefined);
+  }
+  return fields as Settings;
+}
+
+/** Each refused stored value is said once a run, not on every settings read. */
+const loggedFallbacks = new Set<string>();
+
 export const settings = {
   get(): Settings {
-    return SettingsSchema.parse(readRaw());
+    const raw = readRaw();
+    for (const [key, stored] of Object.entries(fallbacksOf(raw))) {
+      if (!loggedFallbacks.has(`${key}:${stored}`)) {
+        loggedFallbacks.add(`${key}:${stored}`);
+        console.warn(
+          key === "branchPrefix"
+            ? `[settings] the stored branch prefix “${stored}” is one git refuses; using the default until another is set`
+            : `[settings] the stored ${key} (${stored}) is not valid; using its default until it is set again`,
+        );
+      }
+    }
+    return parseFields(raw);
   },
 
-  /** Merge a partial update over what is stored and answer with the whole. */
+  /**
+   * Merge a partial update over what is stored and answer with the whole.
+   * Only the fields the patch names are written: the rest are already stored
+   * or defaults, and writing the whole object back would replace a refused
+   * stored value with its fallback without anyone having set it.
+   */
   set(patch: Partial<Settings>): Settings {
-    const next = SettingsSchema.parse({ ...readRaw(), ...patch });
-    writeRaw(next as unknown as Record<string, unknown>);
+    const next = parseFields({ ...readRaw(), ...patch });
+    writeRaw(Object.fromEntries(Object.keys(patch).map((key) => [key, next[key as keyof Settings]])));
     return next;
+  },
+
+  fallbacks(): Record<string, string> {
+    return fallbacksOf(readRaw());
   },
 
   windowState(): WindowState {
@@ -502,5 +588,14 @@ export const settings = {
     const parsed = WindowStateSchema.parse(state);
     writeRaw({ [WINDOW_STATE_KEY]: parsed });
     return parsed;
+  },
+
+  /** Whatever the detector stored, unchecked: its module validates it. */
+  agentsCache(): unknown {
+    return readRaw()[AGENTS_CACHE_KEY];
+  },
+
+  setAgentsCache(value: unknown): void {
+    writeRaw({ [AGENTS_CACHE_KEY]: value });
   },
 };

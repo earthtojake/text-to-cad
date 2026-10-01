@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 
 import { describe, expect, it } from "vitest";
 
-import { AGENT_PROVIDERS, agentProvider } from "@main/agents/registry";
+import { AGENT_PROVIDERS, CLAUDE_ADAPTER, CODEX_ADAPTER, agentProvider } from "@main/agents/registry";
 import { AgentProviderSchema } from "@shared/agents";
 
 describe("the agent registry", () => {
@@ -42,18 +42,62 @@ describe("the agent registry", () => {
     }
   });
 
-  it("launches Claude Code and Codex through the public ACP adapters", () => {
+  it("launches Claude Code and Codex through the public ACP adapters, pinned exactly", () => {
+    // `npx -y <pkg>@latest` ran a stale global install (claude-agent-acp
+    // 0.69.0 with 0.84.0 on the registry): positional npx looks in the global
+    // tree for the command before it looks in its own cache. `--package` with
+    // an exact version never consults the global tree.
+    for (const provider of AGENT_PROVIDERS) {
+      expect(provider.launch.args.join(" "), provider.id).not.toMatch(/@latest/);
+      // A pin is served from npx's cache: no manifest round trip in front of a session start.
+      expect(provider.launch.args, provider.id).not.toContain("--prefer-online");
+    }
     expect(agentProvider("claude-code")?.launch).toEqual({
-      command: "npx",
-      args: ["-y", "@agentclientprotocol/claude-agent-acp@latest"],
+      command: "npm",
+      args: [
+        "exec",
+        "--yes",
+        "--prefer-offline",
+        "--no-audit",
+        "--no-fund",
+        "--no-update-notifier",
+        `--package=@agentclientprotocol/claude-agent-acp@${CLAUDE_ADAPTER.version}`,
+        "--",
+        "claude-agent-acp",
+      ],
       env: {},
     });
     expect(agentProvider("codex")?.launch).toEqual({
-      command: "npx",
-      args: ["-y", "@agentclientprotocol/codex-acp@latest"],
+      command: "npm",
+      args: [
+        "exec",
+        "--yes",
+        "--prefer-offline",
+        "--no-audit",
+        "--no-fund",
+        "--no-update-notifier",
+        `--package=@agentclientprotocol/codex-acp@${CODEX_ADAPTER.version}`,
+        "--",
+        "codex-acp",
+      ],
       env: {},
     });
+    for (const adapter of [CLAUDE_ADAPTER, CODEX_ADAPTER]) {
+      expect(adapter.version).toMatch(/^\d+\.\d+\.\d+$/);
+    }
     expect(agentProvider("gemini-cli")?.launch).toEqual({ command: "gemini", args: ["--acp"], env: {} });
+  });
+
+  it("names the pinned adapter on the two rows that have one, and null elsewhere", () => {
+    expect(agentProvider("claude-code")?.adapter).toEqual({
+      package: "@agentclientprotocol/claude-agent-acp",
+      version: CLAUDE_ADAPTER.version,
+    });
+    expect(agentProvider("codex")?.adapter).toEqual({
+      package: "@agentclientprotocol/codex-acp",
+      version: CODEX_ADAPTER.version,
+    });
+    expect(agentProvider("gemini-cli")?.adapter).toBeNull();
   });
 
   it("gives every provider a launch command, a binary, and at least one install line somewhere", () => {

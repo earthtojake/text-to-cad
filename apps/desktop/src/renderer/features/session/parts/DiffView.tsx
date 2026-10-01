@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef } from "react";
 import { DiffEditor, type DiffOnMount } from "@monaco-editor/react";
 
 import { useResolvedTheme } from "@renderer/hooks/use-theme";
+import { transcriptMonacoTheme } from "@renderer/features/explorer/renderers/code/editor";
 import { configureMonaco, languageForPath } from "@renderer/lib/monaco";
 
 const LINE_HEIGHT = 18;
@@ -74,7 +75,7 @@ export default function DiffView({
           diffWordWrap: "off",
         }}
         original={oldText}
-        theme={theme === "dark" ? "text-to-cad-dark" : "text-to-cad-light"}
+        theme={transcriptMonacoTheme(theme)}
       />
     </div>
   );

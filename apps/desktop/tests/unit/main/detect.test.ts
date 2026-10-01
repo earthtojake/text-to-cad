@@ -1,7 +1,12 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
 import { describe, expect, it } from "vitest";
 
-import { AgentDetector, parseVersion, which, type DetectorProbes } from "@main/agents/detect";
-import { agentProvider } from "@main/agents/registry";
+import { AgentDetector, nodeProbes, parseVersion, which, type DetectorProbes } from "@main/agents/detect";
+import type { AgentStatus } from "@shared/agents";
+import { CLAUDE_ADAPTER, CODEX_ADAPTER, agentProvider } from "@main/agents/registry";
 import { parseEnv, stripHostSession } from "@main/agents/shell-env";
 
 /** A fake machine: which files are executable, what each prints, which credential files exist. */
@@ -60,6 +65,20 @@ describe("which", () => {
   });
 });
 
+describe("the real executable probe", () => {
+  it.skipIf(process.platform === "win32")("is a regular executable file, never a directory of that name", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "text-to-cad-detect-"));
+    try {
+      fs.mkdirSync(path.join(dir, "claude"));
+      fs.writeFileSync(path.join(dir, "codex"), "#!/bin/sh\n", { mode: 0o755 });
+      expect(await nodeProbes.isExecutable(path.join(dir, "claude"))).toBe(false);
+      expect(await nodeProbes.isExecutable(path.join(dir, "codex"))).toBe(true);
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
 describe("AgentDetector", () => {
   const providers = [agentProvider("claude-code")!, agentProvider("codex")!, agentProvider("gemini-cli")!];
 
@@ -86,6 +105,33 @@ describe("AgentDetector", () => {
     });
     expect(byId.codex).toMatchObject({ installed: true, version: "0.149.1", auth: "unauthenticated" });
     expect(byId["gemini-cli"]).toMatchObject({ installed: false, binaryPath: null, version: null });
+  });
+
+  it("carries the registry's adapter pin onto the status, installed or not", async () => {
+    const detector = new AgentDetector(providers, machine({}));
+    const byId = Object.fromEntries((await detector.refresh()).map((status) => [status.id, status]));
+    expect(byId["claude-code"]?.adapter).toEqual({
+      package: "@agentclientprotocol/claude-agent-acp",
+      version: CLAUDE_ADAPTER.version,
+    });
+    expect(byId.codex?.adapter).toEqual({ package: "@agentclientprotocol/codex-acp", version: CODEX_ADAPTER.version });
+    expect(byId["gemini-cli"]?.adapter).toBeNull();
+  });
+
+  it("falls back to the credential file when the auth probe fails for a reason that is not a sign-out", async () => {
+    const detector = new AgentDetector(
+      [agentProvider("claude-code")!],
+      machine({
+        executables: ["/opt/homebrew/bin/claude"],
+        files: ["/Users/me/.claude/.credentials.json"],
+        outputs: {
+          "/opt/homebrew/bin/claude --version": { stdout: "1.0.0 (Claude Code)" },
+          "/opt/homebrew/bin/claude auth status": { stderr: "error: unknown command 'auth'", code: 1 },
+        },
+      }),
+    );
+    const [claude] = await detector.refresh();
+    expect(claude).toMatchObject({ installed: true, auth: "authenticated" });
   });
 
   it("treats an API key in the environment as authenticated without running anything", async () => {
@@ -144,6 +190,117 @@ describe("AgentDetector", () => {
   });
 });
 
+describe("AgentDetector on a cold table", () => {
+  const providers = [agentProvider("claude-code")!, agentProvider("codex")!];
+  const deferred = <T,>() => {
+    let resolve!: (value: T) => void;
+    const promise = new Promise<T>((done) => (resolve = done));
+    return { promise, resolve };
+  };
+
+  it("folds a refreshed row into the probe in flight, not over it, and never caches a row it did not check", async () => {
+    const written: AgentStatus[][] = [];
+    const gate = deferred<Record<string, string>>();
+    const probes = machine({ executables: ["/usr/local/bin/claude", "/usr/local/bin/codex"], outputs: {
+      "/usr/local/bin/claude --version": { stdout: "2.0.0" },
+      "/usr/local/bin/claude auth status": { code: 0 },
+      "/usr/local/bin/codex --version": { stdout: "0.1.0" },
+      "/usr/local/bin/codex login status": { code: 0 },
+    } });
+    let first = true;
+    const detector = new AgentDetector(providers, {
+      ...probes,
+      env: async () => {
+        if (first) {
+          first = false;
+          return gate.promise;
+        }
+        return { PATH: "/usr/local/bin" };
+      },
+    }, { read: () => null, write: (statuses) => written.push(statuses) });
+    const seen: AgentStatus[][] = [];
+    detector.onChange((statuses) => seen.push(statuses));
+
+    const all = detector.refresh(false);
+    const one = detector.refreshOne("claude-code");
+    gate.resolve({ PATH: "/usr/local/bin" });
+    await Promise.all([all, one]);
+
+    expect(seen.every((table) => table.every((row) => row.checkedAt > 0))).toBe(true);
+    expect(written.every((table) => table.every((row) => row.checkedAt > 0))).toBe(true);
+    expect(detector.list().map((row) => [row.id, row.installed])).toEqual([["claude-code", true], ["codex", true]]);
+  });
+
+  it("keeps the flagged rows in view when a login re-probes one agent after a cold probe failed", async () => {
+    const written: AgentStatus[][] = [];
+    const probes = machine({ executables: ["/usr/local/bin/claude"], outputs: {
+      "/usr/local/bin/claude --version": { stdout: "2.0.0" },
+      "/usr/local/bin/claude auth status": { code: 0 },
+    } });
+    // The cached environment is what fails; a forced re-resolve, as a login does, works.
+    const detector = new AgentDetector(providers, {
+      ...probes,
+      env: async (force) => {
+        if (!force) throw new Error("the login shell went away");
+        return { PATH: "/usr/local/bin" };
+      },
+    }, { read: () => null, write: (statuses) => written.push(statuses) });
+    const seen: AgentStatus[][] = [];
+    detector.onChange((statuses) => seen.push(statuses));
+    await detector.refresh(false).catch(() => undefined);
+
+    await detector.refreshOne("claude-code");
+    let table = seen.at(-1)!;
+    expect(table.map((row) => [row.id, row.probeFailed === true])).toEqual([["claude-code", false], ["codex", true]]);
+    expect(table.find((row) => row.id === "claude-code")?.installed).toBe(true);
+    expect(written.flat().some((row) => row.checkedAt === 0)).toBe(false);
+
+    // A later probe that fails again does not flag the row this run has checked.
+    await detector.refresh(false).catch(() => undefined);
+    table = seen.at(-1)!;
+    expect(table.map((row) => [row.id, row.probeFailed === true])).toEqual([["claude-code", false], ["codex", true]]);
+  });
+
+  it("does not resolve the environment again for a list, and leaves no rejection unhandled when it fails", async () => {
+    const forced: boolean[] = [];
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on("unhandledRejection", onUnhandled);
+    try {
+      const detector = new AgentDetector(providers, {
+        ...machine({}),
+        env: async (force) => {
+          forced.push(force);
+          throw new Error("the login shell went away");
+        },
+      });
+      detector.list();
+      // Nothing here waits on the probe, so nobody else handles its rejection: if `list` did not,
+      // it is reported once the microtasks are done.
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      expect(forced).toEqual([false]);
+      expect(unhandled).toEqual([]);
+    } finally {
+      process.off("unhandledRejection", onUnhandled);
+    }
+  });
+
+  it("says a probe that failed with no last launch to fall back on: every row flagged, not an empty table", async () => {
+    const detector = new AgentDetector(providers, {
+      ...machine({}),
+      env: async () => {
+        throw new Error("the login shell went away");
+      },
+    });
+    const seen: AgentStatus[][] = [];
+    detector.onChange((statuses) => seen.push(statuses));
+    await detector.refresh(false).catch(() => undefined);
+    expect(seen).toHaveLength(1);
+    expect(seen[0]!.map((row) => row.probeFailed)).toEqual([true, true]);
+    expect(seen[0]!.some((row) => row.probing)).toBe(false);
+  });
+});
+
 describe("the login shell environment", () => {
   it("parses env -0 output and drops the shell's own bookkeeping", () => {
     const env = parseEnv("PATH=/a:/b\0SHLVL=2\0MULTI=line1\nline2\0_=/usr/bin/env\0");
@@ -166,5 +323,18 @@ describe("the login shell environment", () => {
     expect(nested).toEqual({ ANTHROPIC_API_KEY: "sk", PATH: "/a" });
     const plain = { ANTHROPIC_BASE_URL: "http://proxy", PATH: "/a" };
     expect(stripHostSession(plain)).toBe(plain);
+  });
+
+  it("strips the host session's scratch and plugin directories too", () => {
+    // Both are set in a host Claude Code session (seen 2026-09-29); a nested
+    // `claude` would write its temp files and plugin data into the host's.
+    const nested = stripHostSession({
+      CLAUDECODE: "1",
+      CLAUDE_TMPDIR: "/private/tmp/claude-501",
+      CLAUDE_PLUGIN_DATA: "/Users/me/.claude/plugins/data/x",
+      CLAUDE_CONFIG_DIR: "/Users/me/.claude-work",
+      PATH: "/a",
+    });
+    expect(nested).toEqual({ CLAUDE_CONFIG_DIR: "/Users/me/.claude-work", PATH: "/a" });
   });
 });

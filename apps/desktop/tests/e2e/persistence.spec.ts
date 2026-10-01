@@ -3,7 +3,7 @@ import path from "node:path";
 
 import { expect, test, type ElectronApplication, type Locator, type Page } from "@playwright/test";
 import type { TextToCadApi } from "../../src/shared/ipc";
-import { launch, scratch, type Launched } from "./launch";
+import { chooseDirectory, launch, type Launched, scratch } from "./launch";
 
 /**
  * What a quit and a relaunch keep, and what opening a session then costs —
@@ -74,7 +74,7 @@ test("the first launch: a project, two sessions, the chips a person picked, a ti
     // Every provider answers with the same fake models; pin the one under test so this
     // machine's installed agents cannot change whose preferences are restored.
     await page.evaluate(() => window.textToCad.settings.set({ defaultAgentId: "claude-code" }));
-    const added = await page.evaluate((dir) => window.textToCad.projects.addPath({ path: dir }), project);
+    const added = await chooseDirectory(app, project);
     await expect(page.getByRole("heading", { name: `What should we build in ${path.basename(project)}?` })).toBeVisible();
     const row = page.locator("[data-new-session] [data-composer-row]");
     // The chips appear once the agent has been probed, which on a first run spawns it.
@@ -84,7 +84,7 @@ test("the first launch: a project, two sessions, the chips a person picked, a ti
     // The mode, per provider: picked once here and never touched again. Every model switch
     // below has to leave it alone, and so does the quit.
     await pick(page, row.locator("[data-chip=mode]"), "Plan");
-    const composer = page.getByPlaceholder("Do anything");
+    const composer = page.getByPlaceholder("Describe a part to build…", { exact: true });
     await composer.fill("hello");
     await composer.press("Enter");
     await expect(page.locator("[data-session-view]")).toHaveAttribute("data-session-status", "idle", { timeout: 30_000 });
@@ -169,7 +169,7 @@ test("the second launch comes back to all of it, and opening its sessions is che
     // `settings` with what it ended up on — the agent's word, not the app's. (Before any
     // session/load: the fake's load answers with no config options, and a load that does so
     // replaces the cached snapshot the chips are drawn from.)
-    const composer = page.getByPlaceholder("Do anything");
+    const composer = page.getByPlaceholder("Describe a part to build…", { exact: true });
     await composer.fill("settings");
     await composer.press("Enter");
     await expect(page.locator("[data-session-view]")).toHaveAttribute("data-session-status", "idle", { timeout: 30_000 });
@@ -226,7 +226,7 @@ test("the second launch comes back to all of it, and opening its sessions is che
     await expect(page.locator("[data-turn][data-role=user]").first()).toBeVisible();
     await expect(page.locator("[data-reconnecting]")).toBeVisible();
     await expect(page.locator("[data-connecting]")).toHaveCount(0);
-    await expect(page.getByPlaceholder("Do anything")).toBeEnabled();
+    await expect(page.getByPlaceholder("Do anything", { exact: true })).toBeEnabled();
     // ...and the live state replaces the picture, replayed once: the replay's events are
     // dropped while the snapshot is on screen, or every turn would arrive twice.
     await expect(page.locator("[data-reconnecting]")).toHaveCount(0, { timeout: 30_000 });

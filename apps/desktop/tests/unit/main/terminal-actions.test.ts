@@ -3,7 +3,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { RendererCommands } from '@main/integrations/actions';
-import { createTerminalActions } from '@main/integrations/terminals/actions';
+import { MAX_TERMINALS_PER_SESSION, createTerminalActions } from '@main/integrations/terminals/actions';
 import { Terminals } from '@main/explorer/terminal';
 import type { BridgeSession } from '@main/integrations/mcp-bridge';
 import type { IntegrationCommand } from '@shared/ipc/integrations';
@@ -63,8 +63,10 @@ it('honors cursor limits and guarded input and leaves stopped output available',
   await expect(f.actions.write_terminal!(f.session, { tabId: 'tab', data: 'x\n', expectedSequence: 1, expectedInputRevision: 0 })).rejects.toThrow('changed');
   expect(await f.actions.write_terminal!(f.session, { tabId: 'tab', data: 'x\n', expectedSequence: 2, expectedInputRevision: 0 })).toMatchObject({ inputRevision: 1 });
   expect(f.process.write).toHaveBeenCalledExactlyOnceWith('x\n');
-  expect(await f.actions.stop_terminal!(f.session, { tabId: 'tab' })).toEqual({ stopped: true, id: info.id });
+  const stopping = f.actions.stop_terminal!(f.session, { tabId: 'tab' });
+  await vi.waitFor(() => expect(f.process.kill).toHaveBeenCalledOnce());
   (f.process.onExit.mock.calls[0]![0] as (event: { exitCode: number }) => void)({ exitCode: 143 });
+  expect(await stopping).toEqual({ stopped: true, id: info.id, exited: true, exitCode: 143 });
   expect(await f.actions.read_terminal!(f.session, { tabId: 'tab' })).toMatchObject({ data: 'oldernewer', info: { exitCode: 143 } });
   expect(f.terminals.list()).toHaveLength(1); f.terminals.killAll();
 });
@@ -97,4 +99,42 @@ it('kills a terminal that finishes spawning after its session is archived', asyn
   expect(f.terminals.list()).toEqual([]);
   expect(f.process.kill).toHaveBeenCalledOnce();
   expect(f.sent).toEqual([]);
+});
+
+it('puts the session runtime in front of a created terminal\'s PATH, as it is for the agent', async () => {
+  const f = fixture();
+  const actions = createTerminalActions({ sessionRoot: () => ({ directory, root: directory }), send: () => {}, newId: () => 'r' },
+    { request: async () => ({}) } as unknown as RendererCommands, () => f.terminals, () => ['/app/runtime/launchers']);
+  await actions.create_terminal!(f.session, {});
+  const env = spawn.mock.calls[0]![2].env as Record<string, string>;
+  const key = Object.keys(env).find(name => name.toUpperCase() === 'PATH')!;
+  expect(env[key]!.split(path.delimiter)[0]).toBe('/app/runtime/launchers');
+  f.terminals.killAll();
+});
+it('refuses a terminal past the per-session cap, counting concurrent requests', async () => {
+  const f = fixture();
+  await Promise.all(Array.from({ length: MAX_TERMINALS_PER_SESSION }, () => f.actions.create_terminal!(f.session, {})));
+  expect(f.terminals.list()).toHaveLength(MAX_TERMINALS_PER_SESSION);
+  await expect(f.actions.create_terminal!(f.session, {})).rejects.toThrow(`already has ${MAX_TERMINALS_PER_SESSION} terminals`);
+  await expect(Promise.all([f.actions.create_terminal!(f.session, {}), f.actions.create_terminal!(f.session, {})])).rejects.toThrow('already has');
+  expect(f.terminals.list()).toHaveLength(MAX_TERMINALS_PER_SESSION);
+  // Another session's shells do not count against this one.
+  await f.terminals.create({ cwd: directory, projectId: 'project', sessionId: 'other' });
+  expect(f.terminals.list()).toHaveLength(MAX_TERMINALS_PER_SESSION + 1);
+  f.terminals.killAll();
+});
+it('reports stop_terminal as exited only once the pty has, and as not exited when it ignores the signal', async () => {
+  vi.useFakeTimers();
+  try {
+    const f = fixture(); const info = await f.terminals.create({ cwd: directory, projectId: 'project', sessionId: 's' });
+    f.answer({ id: 'tab', kind: 'terminal', root: directory, ptyId: info.id });
+    const stopping = f.actions.stop_terminal!(f.session, { tabId: 'tab' });
+    await vi.waitFor(() => expect(f.process.kill).toHaveBeenCalledOnce());
+    // The signal is delivered but the program does not exit.
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(await stopping).toEqual({ stopped: true, id: info.id, exited: false });
+    f.terminals.killAll();
+  } finally {
+    vi.useRealTimers();
+  }
 });

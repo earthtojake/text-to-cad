@@ -4,9 +4,13 @@
  * text-to-cad passes it in `session/new`'s `mcpServers`.
  *
  * The server knows nothing about Electron. It reads four environment
- * variables for the bridge URL, a scoped token, session metadata and integration ID,
- * and forwards app-owned tool calls to main as `POST <bridge>/rpc` (see
- * `src/main/integrations/mcp-bridge.ts`). Main does the work; this file is the
+ * variables: `TEXT_TO_CAD_BRIDGE_URL` and `TEXT_TO_CAD_BRIDGE_TOKEN` (the
+ * bridge and the scoped token that names one session), `TEXT_TO_CAD_INTEGRATION`
+ * (which integration's tools it serves, "workspace" when unset) and
+ * `TEXT_TO_CAD_SKILLS_ROOT` (the skills the app materialised). It forwards
+ * app-owned tool calls to main as `POST <bridge>/rpc` (see
+ * `src/main/integrations/mcp-bridge.ts`, whose `BRIDGE_ENV` also sets the
+ * session id and cwd; the token already names both, so they are not read here). Main does the work; this file is the
  * agent-facing description of it. The browser entry instead bootstraps a
  * scoped native connection and runs the upstream Playwright MCP server.
  *
@@ -89,12 +93,30 @@ export function readSkills(root) {
       continue;
     }
     const file = path.join(directory, entry.name, "SKILL.md");
-    if (!fs.existsSync(file)) {
+    // A regular file only: a FIFO an agent left in the root would block the
+    // read below forever, and with it every tool this server answers.
+    if (!fs.statSync(file, { throwIfNoEntry: false })?.isFile()) {
       continue;
     }
     skills.push({ name: entry.name, description: skillFrontmatter(fs.readFileSync(file, "utf8")).description ?? "" });
   }
   return skills.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/**
+ * Whether `child` lies strictly under `parent`. `path.relative` answers an
+ * ABSOLUTE path, not one starting with "..", when the two are on different
+ * Windows drives (C:\… vs D:\…), so both cases are refused. `flavour` is
+ * for the tests, which check Windows paths from any machine.
+ */
+export function isInside(parent, child, flavour = path) {
+  const relative = flavour.relative(flavour.resolve(parent), flavour.resolve(child));
+  return (
+    relative !== "" &&
+    !flavour.isAbsolute(relative) &&
+    relative !== ".." &&
+    !relative.startsWith(`..${flavour.sep}`)
+  );
 }
 
 /**
@@ -107,14 +129,14 @@ export function readSkillFile(root, name, relative = "SKILL.md") {
   }
   const directory = path.resolve(path.join(root, SKILLS_LAYOUT, name));
   const skillRoot = path.resolve(path.join(root, SKILLS_LAYOUT));
-  if (path.relative(skillRoot, directory).split(path.sep)[0] === "..") {
+  if (!isInside(skillRoot, directory)) {
     throw new Error(`${name} is not a skill`);
   }
   if (!fs.existsSync(path.join(directory, "SKILL.md"))) {
     throw new Error(`no skill named ${name}; call list_skills`);
   }
   const target = path.resolve(directory, relative);
-  if (path.relative(directory, target).split(path.sep)[0] === "..") {
+  if (!isInside(directory, target)) {
     throw new Error(`${relative} is outside the ${name} skill`);
   }
   if (!fs.existsSync(target) || !fs.statSync(target).isFile()) {

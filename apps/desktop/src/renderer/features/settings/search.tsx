@@ -33,13 +33,15 @@ export function matchesQuery(query: string, ...fields: (string | undefined)[]): 
 /* -------------------------------------------------------------------------- */
 
 type RowReport = (id: string, matched: boolean) => void;
+/** A card reporting how many of its rows matched (0 withdraws it). */
+type CardReport = (id: string, rows: number) => void;
 
 type SearchValue = {
   query: string;
   /** The section being rendered, so a card's report can be counted per page. */
   section: SettingsSection;
-  /** A card reporting whether any of its rows matched. */
-  reportCard: RowReport;
+  /** A card reporting how many of its rows matched. */
+  reportCard: CardReport;
 };
 
 const SearchContext = createContext<SearchValue | null>(null);
@@ -79,7 +81,7 @@ export function useCardReport(): RowReport {
   return report ?? noop;
 }
 
-export function useSectionReport(): { section: SettingsSection; report: RowReport } {
+export function useSectionReport(): { section: SettingsSection; report: CardReport } {
   const context = useContext(SearchContext);
   return {
     section: context?.section ?? "general",
@@ -98,7 +100,7 @@ function noop() {}
  * cards). The setter compares before it writes, so a row reporting the same
  * answer twice does not schedule a render.
  */
-export function useMatchSet(): { anyMatched: boolean; matched: Set<string>; report: RowReport } {
+export function useMatchSet(): { anyMatched: boolean; matchedCount: number; matched: Set<string>; report: RowReport } {
   const [matched, setMatched] = useState<Set<string>>(() => new Set());
 
   const report = useCallback((id: string, isMatch: boolean) => {
@@ -116,5 +118,5 @@ export function useMatchSet(): { anyMatched: boolean; matched: Set<string>; repo
     });
   }, []);
 
-  return { anyMatched: matched.size > 0, matched, report };
+  return { anyMatched: matched.size > 0, matchedCount: matched.size, matched, report };
 }

@@ -5,8 +5,8 @@ import { createPromptContext } from "@text-to-cad/core/prompt";
 import { createDesktopPromptContext } from "./host/promptContext";
 import { useSessions } from "@renderer/state/sessions";
 import { toast } from "sonner";
-import { SquareTerminal, MessageSquarePlus } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Eraser, SquareTerminal, MessageSquarePlus } from "lucide-react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 
 import "@xterm/xterm/css/xterm.css";
 
@@ -14,9 +14,13 @@ import { Button } from "@renderer/components/ui/button";
 import { useResolvedTheme } from "@renderer/hooks/use-theme";
 import { terminalPromptRoot } from "@renderer/lib/terminal-workspace";
 import { useExplorer, updateSessionTab } from "@renderer/state/explorer";
+import { isTerminalReply } from "@shared/terminal-replies";
 import type { Project } from "@shared/types";
 
 import { EmptyState } from "@text-to-cad/ui/navigation";
+
+import { claimFocus, holdFocusClaim } from "./focus";
+import { errorMessage } from "@shared/ipc/errors";
 
 /**
  * xterm.js over a pty in main.
@@ -84,6 +88,46 @@ function themeFor(mode: "light" | "dark") {
       };
 }
 
+/** Before Settings has written `--font-mono`, and in a test with no stylesheet. */
+const FALLBACK_FONT = 'ui-monospace, "SF Mono", SFMono-Regular, Menlo, Monaco, "Cascadia Mono", Consolas, monospace';
+
+/** The Code font the person chose, as the rest of the app's code reads it. */
+function codeFont(): string {
+  return getComputedStyle(document.documentElement).getPropertyValue("--font-mono").trim() || FALLBACK_FONT;
+}
+
+/**
+ * Tab-focus mode, as Monaco's (Ctrl+Shift+M, `lib/shortcuts.ts`): while it is
+ * on, Tab and Shift+Tab move focus out of the terminal instead of reaching the
+ * shell. Off by default — completion is what Tab is for in a shell — and one
+ * switch for every terminal, as Monaco's is one for every editor. Without it a
+ * terminal is a keyboard trap: xterm takes every key, Escape included, which
+ * belongs to whatever runs in it.
+ */
+let tabMovesFocus = false;
+const tabModeListeners = new Set<() => void>();
+function toggleTabMovesFocus() {
+  tabMovesFocus = !tabMovesFocus;
+  for (const listener of tabModeListeners) listener();
+}
+function useTabMovesFocus(): boolean {
+  return useSyncExternalStore(
+    (listener) => {
+      tabModeListeners.add(listener);
+      return () => tabModeListeners.delete(listener);
+    },
+    () => tabMovesFocus,
+  );
+}
+
+/** The chord, as `event` has it: Control and Shift, on every platform, like Monaco's on macOS. */
+export function isTabFocusChord(event: KeyboardEvent): boolean {
+  return event.ctrlKey && event.shiftKey && !event.metaKey && !event.altKey && event.key.toLowerCase() === "m";
+}
+
+/** Shells being spawned, by tab, until the tab has their id (or the spawn failed). */
+const spawning = new Map<string, Promise<unknown>>();
+
 export function TerminalTab({
   tabId,
   sessionId,
@@ -91,6 +135,7 @@ export function TerminalTab({
   ptyId,
   cwd,
   readOnly,
+  agent = false,
 }: {
   tabId: string;
   sessionId: string;
@@ -98,6 +143,8 @@ export function TerminalTab({
   ptyId: string | null;
   cwd: string | null;
   readOnly: boolean;
+  /** Opened by the agent: a respawned shell gets the runtime launchers on PATH again. */
+  agent?: boolean;
 }) {
   const update = useExplorer((state) => state.update);
   const mode = useResolvedTheme();
@@ -106,6 +153,12 @@ export function TerminalTab({
   const [error, setError] = useState<string | null>(null);
   const [selection, setSelection] = useState("");
   const [exited, setExited] = useState<number | null>(null);
+  const tabMoves = useTabMovesFocus();
+  // Focus is taken when the person opened or picked this tab (`./focus`), never
+  // on every mount: a session switch, Back or a theme change remounts it too.
+  useEffect(() => (readOnly ? undefined : holdFocusClaim(tabId, () => termRef.current?.focus())), [tabId, readOnly]);
+  // A rebuild of this same terminal (the theme changed) keeps focus it had.
+  const hadFocus = useRef(false);
 
   const sessions = useSessions(state => state.sessions);
   const promptRoot = useMemo(() => terminalPromptRoot(project, cwd, sessions.filter(session => session.id === sessionId)), [sessionId, cwd, project, sessions]);
@@ -119,29 +172,30 @@ export function TerminalTab({
     }).catch(error => toast.error(String(error)));
   };
 
-  // Spawn once, when the tab has no pty yet. `starting` guards React's double
-  // effect invocation in development, which would otherwise leave an orphan
-  // shell running for every terminal tab opened.
-  const starting = useRef(false);
+  // Spawn once, when the tab has no pty yet. The spawn is `spawning`'s, by tab and not by
+  // instance: React's double effect in development and a body that unmounts and mounts again
+  // (a tab picked away and back) while `create` is still in flight would each start a shell
+  // for the one tab, and the loser would be an orphan counting toward the agent's 16.
   useEffect(() => {
-    if (ptyId || starting.current) {
+    if (ptyId) {
       return;
     }
-    starting.current = true;
-    void window.textToCad.terminal
-      .create({ sessionId, projectId: project.id, ...(cwd ? { cwd } : {}) })
-      .then((info) => {
+    let spawn = spawning.get(tabId);
+    if (!spawn) {
+      spawn = window.textToCad.terminal
+        .create({ sessionId, projectId: project.id, ...(cwd ? { cwd } : {}), ...(agent ? { agent } : {}) })
         // A shell can finish spawning after the person changes sessions.
-        void updateSessionTab(sessionId, tabId, { ptyId: info.id, cwd: info.cwd })
-          .catch(() => window.textToCad.terminal.kill({ id: info.id }));
-      })
-      .catch((caught: unknown) => {
-        setError(caught instanceof Error ? caught.message : String(caught));
-      })
-      .finally(() => {
-        starting.current = false;
-      });
-  }, [ptyId, sessionId, project.id, cwd, tabId, update]);
+        .then((info) => updateSessionTab(sessionId, tabId, { ptyId: info.id, cwd: info.cwd })
+          .catch(() => window.textToCad.terminal.kill({ id: info.id, sessionId }).catch(() => {})))
+        .finally(() => {
+          spawning.delete(tabId);
+        });
+      spawning.set(tabId, spawn);
+    }
+    void spawn.catch((caught: unknown) => {
+      setError(errorMessage(caught));
+    });
+  }, [ptyId, sessionId, project.id, cwd, agent, tabId]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -153,8 +207,7 @@ export function TerminalTab({
       allowProposedApi: true,
       cursorBlink: !readOnly,
       disableStdin: readOnly,
-      fontFamily:
-        'ui-monospace, "SF Mono", SFMono-Regular, Menlo, Monaco, "Cascadia Mono", Consolas, monospace',
+      fontFamily: codeFont(),
       fontSize: 12,
       lineHeight: 1.35,
       // Main keeps 512 KB for replay; this is what a person can scroll back
@@ -182,7 +235,7 @@ export function TerminalTab({
     const push = () => {
       fit.fit();
       void window.textToCad.terminal
-        .resize({ id: ptyId, cols: term.cols, rows: term.rows })
+        .resize({ id: ptyId, sessionId, cols: term.cols, rows: term.rows })
         .catch(() => {});
     };
 
@@ -200,6 +253,13 @@ export function TerminalTab({
      */
     let snapshotSeq: number | null = null;
     let pending: { seq: number; data: string }[] = [];
+    /**
+     * True while the scrollback is being parsed. A query in it (`ESC[6n`, a
+     * device-attributes request) was asked of a widget that is long gone;
+     * xterm answers it again on replay, and that answer, sent on, arrives at
+     * whatever runs now as if it had been typed. It is dropped here.
+     */
+    let replaying = false;
 
     const offData = window.textToCad.on("terminal.data", (event) => {
       if (event.id !== ptyId) {
@@ -214,14 +274,17 @@ export function TerminalTab({
 
     // Attach: whatever the shell wrote while this tab was closed.
     void window.textToCad.terminal
-      .attach({ id: ptyId })
+      .attach({ id: ptyId, sessionId })
       .then((attached) => {
         if (!attached) {
           setError("That shell is no longer running.");
           return;
         }
         if (attached.scrollback) {
-          term.write(attached.scrollback);
+          replaying = true;
+          term.write(attached.scrollback, () => {
+            replaying = false;
+          });
         }
         snapshotSeq = attached.seq;
         for (const chunk of pending) {
@@ -244,20 +307,32 @@ export function TerminalTab({
 
     if (!readOnly) {
       term.onData((data) => {
-        void window.textToCad.terminal.write({ id: ptyId, data }).catch(() => {});
+        if (replaying && isTerminalReply(data)) {
+          return;
+        }
+        void window.textToCad.terminal.write({ id: ptyId, sessionId, data }).catch(() => {});
       });
     }
 
-    // Cmd/Ctrl+K clears, as it does in every terminal on this platform; the
-    // copy/paste chords are handled here too because xterm swallows keys
-    // before the menu's accelerators see them.
+    // Cmd/Ctrl+K belongs to the command palette, app-wide: it is passed over
+    // here (not written to the shell, not handled) so the palette's window
+    // listener and the menu accelerator see it exactly as they do anywhere
+    // else. Clearing is the footer's Clear button. Copy is handled
+    // here because xterm swallows keys before the menu's accelerators see it.
     term.attachCustomKeyEventHandler((event) => {
       if (event.type !== "keydown") {
         return true;
       }
+      if (isTabFocusChord(event)) {
+        toggleTabMovesFocus();
+        return false;
+      }
+      // Not handled, so not prevented: the browser moves focus.
+      if (event.key === "Tab" && tabMovesFocus && !event.ctrlKey && !event.metaKey && !event.altKey) {
+        return false;
+      }
       const modifier = event.metaKey || event.ctrlKey;
       if (modifier && event.key.toLowerCase() === "k") {
-        term.clear();
         return false;
       }
       if (modifier && event.key.toLowerCase() === "c" && term.hasSelection()) {
@@ -265,12 +340,12 @@ export function TerminalTab({
         term.clearSelection();
         return false;
       }
+      // Paste is xterm's: passed over (not prevented) so the browser's paste
+      // event reaches xterm's own listener, which wraps the text in bracketed-
+      // paste markers when the shell asked for them. Writing the clipboard here
+      // as well would run a pasted command twice, once unbracketed. Returning
+      // false also keeps Ctrl+V from reaching the shell as ^V.
       if (modifier && event.key.toLowerCase() === "v") {
-        void navigator.clipboard.readText().then((text) => {
-          if (text) {
-            void window.textToCad.terminal.write({ id: ptyId, data: text }).catch(() => {});
-          }
-        });
         return false;
       }
       return true;
@@ -280,19 +355,41 @@ export function TerminalTab({
     // follow the element rather than the window.
     const observer = new ResizeObserver(() => push());
     observer.observe(host);
+    // Settings' Code font is `--font-mono` on <html> (`use-appearance.ts`),
+    // written in an effect that runs after this one; follow it rather than
+    // rebuild the terminal, which would replay the whole scrollback.
+    const fontObserver = new MutationObserver(() => {
+      const family = codeFont();
+      if (term.options.fontFamily !== family) {
+        term.options.fontFamily = family;
+        push();
+      }
+    });
+    fontObserver.observe(document.documentElement, { attributes: true, attributeFilter: ["style"] });
     push();
-    if (!readOnly) {
+    if (!readOnly && (claimFocus(tabId) || hadFocus.current)) {
       term.focus();
     }
 
     return () => {
+      hadFocus.current = host.contains(document.activeElement);
       observer.disconnect();
+      fontObserver.disconnect();
       offData();
       offExit();
       term.dispose();
       termRef.current = null;
     };
-  }, [ptyId, readOnly, mode]);
+    // `tabId` is fixed for the component's life: the body is keyed on it.
+  }, [ptyId, sessionId, readOnly, mode, tabId]);
+
+  // A new shell for this tab. The old pty is killed first: main keeps an
+  // exited pty's scrollback (up to 512 KB) until its tab lets go of the id,
+  // and a tab that only forgot it would leave that behind on every restart.
+  const restart = () => {
+    if (ptyId) void window.textToCad.terminal.kill({ id: ptyId, sessionId }).catch(() => {});
+    update(tabId, { ptyId: null });
+  };
 
   if (error) {
     return (
@@ -302,7 +399,7 @@ export function TerminalTab({
             className="h-7 text-xs"
             onClick={() => {
               setError(null);
-              update(tabId, { ptyId: null });
+              restart();
             }}
             size="sm"
             variant="secondary"
@@ -320,11 +417,15 @@ export function TerminalTab({
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-background">
-      <div className="min-h-0 flex-1 overflow-hidden px-2 pt-2" data-selectable ref={hostRef} />
+      <div className="min-h-0 flex-1 overflow-hidden px-2 pt-2" data-selectable data-terminal-body ref={hostRef} />
       <div className="flex h-6 shrink-0 items-center gap-2 border-t px-3 text-[11px] text-muted-foreground">
         <span className="truncate">{cwd ?? project.path}</span>
-        {readOnly ? <span className="shrink-0 rounded-sm bg-muted px-1">agent</span> : null}
+        {agent ? <span className="shrink-0 rounded-sm bg-muted px-1">agent</span> : null}
         <span className="flex-1" />
+        {/* Said when it changes, since the key that changes it draws nothing else. */}
+        <span className="shrink-0" role="status">{tabMoves ? "Tab moves focus" : ""}</span>
+        <button type="button" className="inline-flex h-5 shrink-0 items-center gap-1 hover:text-foreground"
+          onClick={() => { termRef.current?.clear(); termRef.current?.focus(); }}><Eraser className="size-3" />Clear</button>
         <button type="button" className="inline-flex h-5 shrink-0 items-center gap-1 hover:text-foreground disabled:opacity-40"
           disabled={!selection} onClick={addSelection}><MessageSquarePlus className="size-3" />Add to prompt</button>
         {exited === null ? null : (
@@ -334,7 +435,7 @@ export function TerminalTab({
               className="ml-2 underline underline-offset-2 hover:text-foreground"
               onClick={() => {
                 setExited(null);
-                update(tabId, { ptyId: null });
+                restart();
               }}
               type="button"
             >

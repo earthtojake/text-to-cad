@@ -1,8 +1,10 @@
-import { describe, expect, it, beforeEach } from "vitest";
+import { act } from "react";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import { ExplorerToggle } from "@renderer/app/PaneToggles";
+import { Shell } from "@renderer/app/Shell";
 import { SettingCard, SettingRow } from "@renderer/features/settings/SettingCard";
 import { SettingsRoute } from "@renderer/features/settings/SettingsRoute";
 import { ExplorerPane } from "@renderer/features/explorer/ExplorerPane";
@@ -10,6 +12,12 @@ import { TooltipProvider } from "@text-to-cad/ui/primitives/tooltip";
 import { useExplorer } from "@renderer/state/explorer";
 import { useProjects } from "@renderer/state/projects";
 import { useUi } from "@renderer/state/ui";
+
+// The sidebar and the session have their own suites; for the shell only the
+// row and its separators are under test. The explorer is the real one, since
+// this file covers it too.
+vi.mock("@renderer/features/sidebar/Sidebar", () => ({ Sidebar: () => null }));
+vi.mock("@renderer/features/session/SessionPane", () => ({ SessionPane: () => null }));
 
 const wrap = (ui: React.ReactNode) => render(<TooltipProvider>{ui}</TooltipProvider>);
 
@@ -74,12 +82,13 @@ describe("Explorer", () => {
 
     await user.click(screen.getByRole("menuitem", { name: /^File/ }));
     expect(useExplorer.getState().tabs).toHaveLength(1);
-    expect(screen.getByRole("button", { name: "Close Untitled" })).toBeInTheDocument();
+    // Hidden from the accessibility tree (Delete on the tab is its keyboard twin).
+    expect(document.querySelector('button[aria-label="Close Open file…"]')).toBeInTheDocument();
   });
 
   it("opens a file tab on Mod+T without the menu", async () => {
     withSession();
-    wrap(<ExplorerPane />);
+    wrap(<Shell />);
     fireEvent.keyDown(window, { key: "t", metaKey: true, ctrlKey: true });
     expect(useExplorer.getState().tabs).toHaveLength(1);
     expect(useExplorer.getState().tabs[0]?.kind).toBe("file");
@@ -91,7 +100,7 @@ describe("Explorer", () => {
     wrap(<ExplorerPane />);
     await user.click(screen.getByRole("button", { name: "New tab" }));
     await user.click(screen.getByRole("menuitem", { name: /^File/ }));
-    await user.click(screen.getByRole("button", { name: "Close Untitled" }));
+    await user.click(document.querySelector<HTMLElement>('button[aria-label="Close Open file…"]')!);
     expect(useExplorer.getState().tabs).toHaveLength(0);
   });
 
@@ -128,6 +137,60 @@ describe("Explorer", () => {
   });
 });
 
+describe("Shell separators", () => {
+  // jsdom lays nothing out, so the row measures zero and every pane would
+  // collapse for want of room. A laptop-sized row instead.
+  beforeEach(() => {
+    vi.spyOn(HTMLElement.prototype, "getBoundingClientRect").mockReturnValue({ width: 1600 } as DOMRect);
+    useExplorer.setState({ sessionId: "s1", projectId: "p1", collapsed: false, width: 600 });
+  });
+  afterEach(() => {
+    vi.restoreAllMocks();
+    document.body.style.removeProperty("user-select");
+  });
+
+  const explorer = () => document.getElementById("explorer")!;
+  const separator = () => document.querySelector<HTMLElement>("[data-separator=explorer]")!;
+
+  // The arrow keys used to commit and then report a drag in the same batch,
+  // so the shell kept drawing that drag's width for good: the next session's
+  // explorer came up at this one's size.
+  it("draws the stored width again after an arrow key", () => {
+    render(<Shell />);
+    expect(explorer().style.width).toBe("600px");
+    fireEvent.keyDown(separator(), { key: "ArrowLeft" });
+    expect(useExplorer.getState().width).toBe(616);
+    expect(explorer().style.width).toBe("616px");
+    act(() => useExplorer.setState({ width: 500 }));
+    expect(explorer().style.width).toBe("500px");
+  });
+
+  it("draws the stored width again after a drag that ends where it started", () => {
+    render(<Shell />);
+    fireEvent.pointerDown(separator(), { button: 0, clientX: 800 });
+    fireEvent.pointerMove(window, { clientX: 760 });
+    expect(explorer().style.width).toBe("640px");
+    fireEvent.pointerMove(window, { clientX: 800 });
+    fireEvent.pointerUp(window);
+    act(() => useExplorer.setState({ width: 500 }));
+    expect(explorer().style.width).toBe("500px");
+  });
+
+  // The separator can go mid-drag without the pointer coming up: the session
+  // is switched, or the window narrows past what holds the pane.
+  it("lets go of the gesture when the separator goes away mid-drag", () => {
+    render(<Shell />);
+    fireEvent.pointerDown(separator(), { button: 0, clientX: 800 });
+    fireEvent.pointerMove(window, { clientX: 760 });
+    expect(document.body.style.userSelect).toBe("none");
+    act(() => useExplorer.setState({ sessionId: null }));
+    expect(separator()).toBeNull();
+    expect(document.body.style.userSelect).toBe("");
+    act(() => useExplorer.setState({ sessionId: "s2", width: 500 }));
+    expect(explorer().style.width).toBe("500px");
+  });
+});
+
 describe("Settings", () => {
   it("renders the six pages in the nav", () => {
     wrap(<SettingsRoute />);
@@ -135,9 +198,9 @@ describe("Settings", () => {
       "General",
       "Agents",
       "Appearance",
-      "Git & Worktrees",
+      "Git and worktrees",
       "Keyboard shortcuts",
-      "About & Updates",
+      "About and updates",
     ]) {
       expect(screen.getAllByText(label).length).toBeGreaterThan(0);
     }

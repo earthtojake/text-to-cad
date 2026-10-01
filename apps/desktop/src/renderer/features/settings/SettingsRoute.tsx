@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ArrowLeft, Search } from "lucide-react";
 import { cn } from "cn";
 
@@ -7,6 +7,8 @@ import { Input } from "@renderer/components/ui/input";
 import { ScrollArea } from "@renderer/components/ui/scroll-area";
 import { SettingsPage } from "@renderer/features/settings/pages";
 import { SettingsSearchProvider } from "@renderer/features/settings/search";
+import { noteSessions, seedSessions, useWorktreeCache } from "@renderer/features/settings/worktree-cache";
+import { useSessions } from "@renderer/state/sessions";
 import {
   SETTINGS_SECTIONS,
   SETTINGS_SECTION_LABELS,
@@ -34,30 +36,51 @@ export function SettingsRoute() {
   const [query, setQuery] = useState("");
   const searching = query.trim() !== "";
 
+  // The worktree lists are kept for this visit (`worktree-cache.ts`): a session
+  // opening, closing or moving changes a row's "in use" (status churn does
+  // not), and closing Settings drops them.
+  useEffect(() => {
+    seedSessions(useSessions.getState().sessions);
+    const off = window.textToCad.on("sessions.changed", noteSessions);
+    return () => {
+      off();
+      useWorktreeCache.getState().clear();
+    };
+  }, []);
+
   // Which sections have a card that matched, so the nav can drop the ones that
-  // did not. Cards report; a section with no reports has nothing to show.
+  // did not, and how many rows each card matched, for the status line. Cards
+  // report; a section with no reports has nothing to show.
   //
-  // Never cleared. Cards report by a `useId` that is stable for as long as they
-  // are mounted, so a card that stops matching says so; the only entries that
-  // go stale are the unprefixed ones written while no query is active, and
-  // `isSection` discards those.
-  const [matches, setMatches] = useState<Record<string, boolean>>({});
-  const reportCard = useCallback((id: string, matched: boolean) => {
-    setMatches((current) => (current[id] === matched ? current : { ...current, [id]: matched }));
+  // Cards report by a `useId` that is stable for as long as they are mounted,
+  // so a card that stops matching says so, and a card that unmounts withdraws
+  // its match (`SettingCard`). The unprefixed entries written while no query
+  // is active are not about a search at all, and `isSection` discards those.
+  const [matches, setMatches] = useState<Record<string, number>>({});
+  const reportCard = useCallback((id: string, rows: number) => {
+    setMatches((current) => (current[id] === rows ? current : { ...current, [id]: rows }));
   }, []);
 
   const matchedSections = useMemo(() => {
     const found = new Set<SettingsSection>();
-    for (const [id, matched] of Object.entries(matches)) {
+    for (const [id, rows] of Object.entries(matches)) {
       const candidate = id.split("|")[0];
       // Reports made while not searching are unprefixed; they are about a card
       // that is not part of this query and are not a section name either.
-      if (matched && isSection(candidate)) {
+      if (rows > 0 && isSection(candidate)) {
         found.add(candidate);
       }
     }
     return found;
   }, [matches]);
+
+  // How many rows the query matched, for the status line: the page below is seven pages
+  // stacked, and a count is the one thing that says whether the typing found anything.
+  // Rows, not cards: a card is a group of rows and "sound" finds three in one.
+  const matchedRows = Object.entries(matches).reduce(
+    (total, [id, rows]) => (isSection(id.split("|")[0]) && id.includes("|") ? total + rows : total),
+    0,
+  );
 
   const navSections = searching
     ? SETTINGS_SECTIONS.filter((candidate) => matchedSections.has(candidate))
@@ -88,13 +111,16 @@ export function SettingsRoute() {
       </header>
 
       <div className="flex min-h-0 flex-1">
-        <nav className="flex w-[232px] shrink-0 flex-col gap-2 border-r px-3 py-2">
+        <nav aria-label="Settings" className="flex w-[232px] shrink-0 flex-col gap-2 border-r px-3 py-2">
           <div className="relative">
             <Search className="pointer-events-none absolute top-1/2 left-2.5 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            {/* `pl-8!`, not `pl-8`: `cn` keeps the vendored Input's `px-3`
+                beside it (different properties), and in the built sheet
+                `px-3` lands later and wins, putting the glyph over the text. */}
             <Input
               aria-label="Search settings"
               autoFocus
-              className="h-8 pl-8 text-sm"
+              className="h-8 pl-8! text-sm"
               onChange={(event) => setQuery(event.target.value)}
               placeholder="Search settings"
               value={query}
@@ -112,24 +138,33 @@ export function SettingsRoute() {
                 }}
               />
             ))}
-            {searching && navSections.length === 0 ? (
-              <p className="px-2 py-3 text-xs text-muted-foreground">No matching settings.</p>
-            ) : null}
+            {/* One live region, there before the first keystroke so the count is announced.
+                Nothing matching is said on the page; a count is for the ear. */}
+            <p
+              className={cn(searching && matchedRows === 0 ? "px-2 py-3 text-xs text-muted-foreground" : "sr-only")}
+              role="status"
+            >
+              {!searching ? "" : matchedRows === 0 ? "No matching settings." : `${matchedRows} ${matchedRows === 1 ? "row matches" : "rows match"}`}
+            </p>
           </div>
         </nav>
 
         <ScrollArea className="min-h-0 flex-1">
-          <div className="mx-auto w-full max-w-[720px] px-8 py-8">
+          <main className="mx-auto w-full max-w-[720px] px-8 py-8">
             {searching ? (
-              SETTINGS_SECTIONS.map((candidate) => (
-                <SearchedSection
-                  hidden={!matchedSections.has(candidate)}
-                  key={candidate}
-                  query={query}
-                  reportCard={reportCard}
-                  section={candidate}
-                />
-              ))
+              <>
+                {/* The page's one h1 while searching; each page's heading is an h2 under it. */}
+                <h1 className="sr-only">Search results</h1>
+                {SETTINGS_SECTIONS.map((candidate) => (
+                  <SearchedSection
+                    hidden={!matchedSections.has(candidate)}
+                    key={candidate}
+                    query={query}
+                    reportCard={reportCard}
+                    section={candidate}
+                  />
+                ))}
+              </>
             ) : (
               <SettingsSearchProvider query="" reportCard={reportCard} section={section}>
                 <h1 className="mb-6 text-xl font-semibold tracking-tight">
@@ -138,7 +173,7 @@ export function SettingsRoute() {
                 <SettingsPage section={section} />
               </SettingsSearchProvider>
             )}
-          </div>
+          </main>
         </ScrollArea>
       </div>
     </div>
@@ -158,20 +193,20 @@ function SearchedSection({
   section: SettingsSection;
   query: string;
   hidden: boolean;
-  reportCard: (id: string, matched: boolean) => void;
+  reportCard: (id: string, rows: number) => void;
 }) {
   // Cards report by their own `useId`, which is unique per tree; prefixing with
   // the section is what lets the route count matches per page.
   const report = useCallback(
-    (id: string, matched: boolean) => reportCard(`${section}|${id}`, matched),
+    (id: string, rows: number) => reportCard(`${section}|${id}`, rows),
     [reportCard, section],
   );
 
   return (
     <section hidden={hidden}>
-      <h1 className="mb-6 text-xl font-semibold tracking-tight">
+      <h2 className="mb-6 text-xl font-semibold tracking-tight">
         {SETTINGS_SECTION_LABELS[section]}
-      </h1>
+      </h2>
       <SettingsSearchProvider query={query} reportCard={report} section={section}>
         <SettingsPage section={section} />
       </SettingsSearchProvider>
@@ -198,6 +233,8 @@ function NavItem({
         "rounded-md px-2 py-1.5 text-left text-[13px] transition-colors",
         active ? "bg-accent text-accent-foreground" : "text-muted-foreground hover:bg-accent/60",
       )}
+      // The page on screen, said as well as tinted.
+      aria-current={active ? "page" : undefined}
       onClick={onSelect}
       type="button"
     >

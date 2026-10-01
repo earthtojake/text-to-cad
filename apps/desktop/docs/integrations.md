@@ -54,10 +54,17 @@ Paths on disk are resolved against the session's project/worktree using main's
 normal realpath boundary. A matching filename in another root is not the same
 resource.
 
+`attach_snapshot` reads an image (PNG, JPEG, WebP, GIF, at most 3.75 MB of file so the base64 stays under the model's 5 MB, and only when the file's first bytes are that image type)
+in main from one handle, opened non-blocking and checked with `fstat`. Once it is
+open the path is resolved again with a fresh `realpath`, which must still be
+inside the workspace (`climbsOut`, so a folder named `..keep` is fine) and name
+the file the handle holds (same device and inode); a path swapped for a link out
+of the root between the check and the open is refused.
+
 ## Lifetimes and conflict behavior
 
-Archiving/deleting a session revokes its integration credentials and releases
-its native app resources. Unsaved text drafts remain in memory on archive so
+Archiving/deleting a session changes its row first, then revokes its
+integration credentials and releases its native app resources. Unsaved text drafts remain in memory on archive so
 restoring the session can recover them; deletion discards them. Switching tabs or sessions does not close resources.
 Each session starts with an empty explorer. All commands carry the authenticated
 session ID chosen by main, never supplied by the model. Open/show/close updates
@@ -72,7 +79,7 @@ Browser targets/storage partitions and PTYs carry the same session owner.
 | PDF | Retains the last page/selection snapshot, marked inactive; page extraction/capture/navigation requires the mounted document. | Releases worker, loading task, text layer and capability. |
 | CAD | Retains serializable last-view state, marked inactive; viewport changes and capture require the mounted model. | Releases controller registration and inactive snapshot; shared CAD cache policy remains separate. |
 | Browser | Main retains the actual page and its navigation state; presentation can detach without destroying it. Tools address that page even in the background. | Destroys the app-owned page. |
-| Terminal | The PTY and bounded output buffer continue independently of the mounted xterm view. | Releases the app-owned process and terminal resources. Stop keeps its output available until close. |
+| Terminal | The PTY and bounded output buffer continue independently of the mounted xterm view. A session holds at most 16 PTYs, the person's own and stopped ones included; `create_terminal` refuses past that. | Releases the app-owned process and terminal resources. Stop keeps its output available until close. |
 | Drawing | Renderer memory retains the serialized scene. | Discards the sketch. Drawings are also discarded on reload or app exit. |
 
 Text's live revision is an opaque buffer token, separate from `diskRevision`.
@@ -90,7 +97,32 @@ instructions. Playwright MCP includes page evaluation and short Playwright scrip
 in its stdio subprocess; native target scope is enforced by the host adapter.
 It is not an OS sandbox for agent code (see [browser](browser.md)). Terminal writes require the
 observed output sequence and input revision; new output or intervening user
-input requires another read.
+input requires another read. `stop_terminal` signals the shell and waits up to
+two seconds for it to exit: it returns `exited: true` with the `exitCode`, or
+`exited: false` when the program is still running.
+
+Commands the renderer performs are relayed (`RendererCommands` in
+`src/main/integrations/actions.ts`) and wait ten seconds for the window's
+reply, twelve for the viewer's live commands (`select-reference`,
+`cad-clear-selection`, `cad-camera`, `cad-reset-camera`, `cad-render-mode`; the
+clock starts before the IPC send, so they need more than the viewer's own ten),
+thirty for the slow ones: `document-save`, `capture-view`,
+`drawing-capture` and `pdf-capture`, which wait on the disk or on a frame and
+an encode. A relayed command reports that it may have completed when the wait
+ends without a reply: a timeout says "the command may still complete, so check
+before retrying", and an abort after the command was sent says it "may already
+have been applied". A handler that finished before the abort reports "was
+applied, but the request was aborted before the reply".
+
+The window's reply is itself made only once the effect is on screen, and a
+viewer command that cannot get there says "The viewer did not finish applying
+this command." after ten seconds. The relay's tiers nest around that bound:
+`capture-view` waits for the camera to rest inside the viewer's ten seconds and
+then encodes, all inside the relay's thirty; the other viewer commands have
+twelve so the viewer's sentence arrives first. "The text-to-cad window did not
+answer within 12 s" means no window replied at all. What each command waits for
+is stated once, in
+[Live commands](../../../packages/ui/docs/cad-renderer.md#live-commands).
 
 The PDF renderer and its agent tools share one real Mozilla PDF.js document,
 worker and text layer. Page reads are bounded to 50 pages/one million
@@ -105,8 +137,8 @@ A capture tool returns an image to the agent. An **Add to prompt** action
 prepares a draft through the existing `PromptContextPort`; neither submits a
 prompt. The producer freezes file/revision, selected range or page, and capture
 identity before asynchronous encoding. Desktop binds the tab's owning session
-in the host, independently of the selected chat, and rechecks it before
-accepting bytes. Switching chats cannot redirect a delayed callback or capture.
+in the host, independently of the selected session, and rechecks it before
+accepting bytes. Switching sessions cannot redirect a delayed callback or capture.
 Deleted or archived owners cancel delivery; workspace mismatches fail without
 creating or selecting another session.
 
@@ -127,12 +159,15 @@ The registry supplies browser, PDF, documents, terminals, drawings and the
 embedded `cad-viewer` skill. Other repository CAD authoring skills still ship;
 the standalone viewer-launching skill is replaced by the embedded handoff.
 Native skill loaders receive the root on session creation/load, while other
-adapters receive the concise existing skill preamble and workspace skill-read
-tools. Vendored upstream skills retain their license and provenance.
+adapters receive the concise existing skill preamble, kept until a
+`session/prompt` is taken (a rejected first prompt restores it, and
+`loadSession` never sets it), and workspace skill-read tools. Vendored upstream skills retain their license and provenance.
 
 A provider's built-in filesystem and shell tools still work on disk. They are
 not the live-document API and cannot observe an unsaved editor buffer. Likewise,
-a provider-owned terminal/process ID is not an app-owned PTY ID. Use document
+a provider-owned terminal/process ID is not an app-owned PTY ID. A restored
+terminal tab whose saved PTY id no live PTY answers to starts a fresh shell, and
+one the agent opened (`agent: true`) respawns with the runtime on `PATH`. Use document
 integration tools when the task concerns the person's live draft; use the
 provider's disk tools for ordinary repository work, then open completed results
 through workspace tools. Watchers reconcile changed disk artifacts with views.

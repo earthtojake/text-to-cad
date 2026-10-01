@@ -19,6 +19,9 @@ import path from "node:path";
 
 import type * as pty from "node-pty";
 
+import { isTerminalReply } from "../../shared/terminal-replies";
+import { stripHostSession } from "../agents/shell-env";
+
 /* -------------------------------------------------------------------------- */
 /* Sessions                                                                    */
 /* -------------------------------------------------------------------------- */
@@ -28,12 +31,27 @@ export type TerminalOptions = {
   cwd: string;
   sessionId?: string;
   projectId?: string;
-  /** Override the login shell — tests use this to run something predictable. */
+  /**
+   * Override the login shell — main-side tests use this to run something
+   * predictable. Not on the IPC contract: the renderer never names a binary.
+   */
   shell?: string;
   args?: string[];
   cols?: number;
   rows?: number;
   env?: Record<string, string>;
+  /**
+   * Directories put in front of `PATH`: the app's runtime launchers, for a
+   * terminal an agent creates, so the `cadgen` its skill promises is there.
+   */
+  pathPrefix?: readonly string[];
+  /**
+   * Refuse when the session already has this many ptys, stopped ones included
+   * (each keeps its scrollback until its tab is closed). Set for a terminal an
+   * agent creates, but the count is of every pty of the session: the person's
+   * own terminals count toward the agent's 16.
+   */
+  maxPerSession?: number;
 };
 
 export type TerminalInfo = {
@@ -81,6 +99,8 @@ class Session {
   /** Chunks written so far. See the note on `TerminalEvent`. */
   private emitted = 0;
   exitCode: number | null = null;
+  /** Woken by the pty's exit, for `Terminals.exited`. */
+  readonly exitWaiters = new Set<() => void>();
   inputRevision = 0;
   inputPending = false;
 
@@ -177,13 +197,17 @@ export function shellArgs(shell: string): string[] {
  *
  * Electron's own variables are stripped: a shell that inherits
  * `ELECTRON_RUN_AS_NODE` runs `node` when the user types `electron`, and
- * `NODE_OPTIONS` from the app's own launch leaks into everything spawned.
+ * `NODE_OPTIONS` from the app's own launch leaks into everything spawned. So
+ * are a host Claude Code session's (`stripHostSession`), for the reason the
+ * agents' environment drops them: a `claude` typed here would otherwise
+ * report itself logged out.
  */
 export function terminalEnv(
   base: NodeJS.ProcessEnv = process.env,
   extra: Record<string, string> = {},
+  pathPrefix: readonly string[] = [],
 ): Record<string, string> {
-  const env: Record<string, string> = {};
+  const own: Record<string, string> = {};
   for (const [key, value] of Object.entries(base)) {
     if (value === undefined) {
       continue;
@@ -191,13 +215,21 @@ export function terminalEnv(
     if (key.startsWith("ELECTRON_") || key === "NODE_OPTIONS") {
       continue;
     }
-    env[key] = value;
+    own[key] = value;
   }
+  const env = stripHostSession(own);
   env.TERM = "xterm-256color";
   env.COLORTERM = "truecolor";
   // Tools that ask "am I in a terminal a person is watching?" — this one is.
   env.TERM_PROGRAM = "text-to-cad";
-  return { ...env, ...extra };
+  const merged = { ...env, ...extra };
+  if (pathPrefix.length > 0) {
+    // The PATH key's case varies on Windows; prepend to the one that is there.
+    const key = Object.keys(merged).find((name) => name.toUpperCase() === "PATH") ?? "PATH";
+    const prefix = pathPrefix.join(path.delimiter);
+    merged[key] = merged[key] ? `${prefix}${path.delimiter}${merged[key]}` : prefix;
+  }
+  return merged;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -228,6 +260,12 @@ export class Terminals {
 
   async create(options: TerminalOptions): Promise<TerminalInfo> {
     const nodePty = await this.pty();
+    // Checked after the last await and before the pty is registered, so
+    // concurrent creates cannot each see room for one more.
+    if (options.maxPerSession !== undefined && options.sessionId !== undefined &&
+        [...this.sessions.values()].filter((session) => session.sessionId === options.sessionId).length >= options.maxPerSession) {
+      throw new Error(`this session already has ${options.maxPerSession} terminals; close one before opening another`);
+    }
     const shell = options.shell ?? loginShell();
     const cols = options.cols ?? DEFAULT_COLS;
     const rows = options.rows ?? DEFAULT_ROWS;
@@ -238,7 +276,7 @@ export class Terminals {
       cwd: options.cwd || os.homedir(),
       cols,
       rows,
-      env: terminalEnv(process.env, options.env ?? {}),
+      env: terminalEnv(process.env, options.env ?? {}, options.pathPrefix),
     });
 
     const session = new Session(id, child, options.cwd, shell, cols, rows, options.projectId, options.sessionId);
@@ -250,20 +288,31 @@ export class Terminals {
     });
     child.onExit(({ exitCode, signal }) => {
       session.exitCode = exitCode;
+      for (const wake of [...session.exitWaiters]) wake();
       this.emit({ id, type: "exit", exitCode, signal });
     });
 
     return session.info();
   }
 
+  /**
+   * The person's input, from the tab. It is what the agent's guarded write
+   * waits on: every write moves `inputRevision`, and a line left unfinished —
+   * no newline, return or ^C after the last character — sets `inputPending`.
+   * The widget's own answers to a program's queries (`isTerminalReply`) pass
+   * through untouched: nobody typed them, and counting them would leave a
+   * person's shell looking half-typed whenever a program asked for the cursor.
+   */
   write(id: string, data: string): void {
     const session = this.sessions.get(id);
     if (!session || session.exitCode !== null) {
       return;
     }
-    session.inputRevision++;
-    const resetAt = Math.max(data.lastIndexOf("\n"), data.lastIndexOf("\r"), data.lastIndexOf("\x03"));
-    session.inputPending = resetAt >= 0 ? resetAt < data.length - 1 : (session.inputPending || data.length > 0);
+    if (!isTerminalReply(data)) {
+      session.inputRevision++;
+      const resetAt = Math.max(data.lastIndexOf("\n"), data.lastIndexOf("\r"), data.lastIndexOf("\x03"));
+      session.inputPending = resetAt >= 0 ? resetAt < data.length - 1 : (session.inputPending || data.length > 0);
+    }
     session.process.write(data);
   }
 
@@ -271,6 +320,10 @@ export class Terminals {
     const session = this.sessions.get(id);
     if (!session) throw new Error("terminal no longer exists");
     return session.read(after, limit);
+  }
+
+  has(id: string): boolean {
+    return this.sessions.has(id);
   }
 
   owns(id: string, sessionId: string): boolean {
@@ -283,13 +336,34 @@ export class Terminals {
     if (session.sequence !== expectedSequence || session.inputRevision !== expectedInputRevision || session.inputPending) {
       throw new Error("terminal changed or has unfinished input; read it again before sending input");
     }
-    this.write(id, data);
+    // The revision moves, so a read taken before this write is stale, but
+    // `inputPending` is the person's alone: an agent answering `y` and then
+    // sending the newline is two writes, and the first must not lock it out
+    // of the second.
+    session.inputRevision++;
+    session.process.write(data);
   }
 
   stop(id: string): void {
     const session = this.sessions.get(id);
     if (!session) throw new Error("terminal no longer exists");
     if (session.exitCode === null) session.process.kill();
+  }
+
+  /**
+   * The exit code once the shell has exited, or null if it is still up after
+   * `timeoutMs`: `stop` only signals, and a program that ignores SIGHUP
+   * outlives it.
+   */
+  exited(id: string, timeoutMs: number): Promise<number | null> {
+    const session = this.sessions.get(id);
+    if (!session) return Promise.resolve(null);
+    if (session.exitCode !== null) return Promise.resolve(session.exitCode);
+    return new Promise((resolve) => {
+      const wake = () => { clearTimeout(timer); session.exitWaiters.delete(wake); resolve(session.exitCode); };
+      const timer = setTimeout(wake, timeoutMs);
+      session.exitWaiters.add(wake);
+    });
   }
 
   resize(id: string, cols: number, rows: number): void {

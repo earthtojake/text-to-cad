@@ -11,7 +11,12 @@ const AgentId = z.object({ agentId: z.string().min(1) });
 
 export const agentsContract = {
   agents: {
-    /** Every provider with its status; served from the cache, never blocking on a probe. */
+    /**
+     * Every provider with its status, from the cache; before the first probe
+     * has answered, the last launch's table with every row `probing`, and
+     * with none of those it waits for the probe, up to `COLD_LIST_WAIT_MS`
+     * (`src/main/ipc/agents.ts`), and answers empty past that.
+     */
     list: invoke(z.void(), z.array(AgentStatusSchema)),
     /** Re-resolve the login shell's PATH and re-probe every binary. */
     refresh: invoke(z.void(), z.array(AgentStatusSchema)),

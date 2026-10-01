@@ -4,6 +4,7 @@ import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { _electron as electron, expect, test } from "@playwright/test";
 import type { TextToCadApi } from "../../src/shared/ipc";
+import { chooseDirectory } from "./launch";
 
 declare const window: { textToCad: TextToCadApi };
 const appRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../..");
@@ -43,7 +44,7 @@ test("long activity stays inside the transcript and full details remain accessib
     await page.waitForLoadState("domcontentloaded");
     await page.evaluate(() => window.textToCad.settings.set({ theme: "light" }));
     await app.evaluate(({ BrowserWindow }) => BrowserWindow.getAllWindows()[0]?.setSize(1000, 760));
-    const added = await page.evaluate(root => window.textToCad.projects.addPath({ path: root }), project);
+    const added = await chooseDirectory(app, project);
     const session = await page.evaluate(projectId => window.textToCad.sessions.create({ projectId, agentId: "claude-code", gitMode: "none" }), added.id);
     await page.locator(`[data-session-row="${session.id}"]`).getByRole("button").first().click();
     await page.evaluate(id => window.textToCad.sessions.prompt({ id, content: [{ type: "text", text: "Check the car preview." }] }), session.id);

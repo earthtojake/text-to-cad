@@ -11,6 +11,7 @@ import { useProjects } from "./projects";
 import { useSessions } from "./sessions";
 import { hasDirtyDocument, performDocumentCommand, performPdfCommand } from "./live-documents";
 import { performCadViewerCommand } from "./live-cad";
+import { imageResult } from "./image-result";
 
 async function rendererIdForPath(projectId: string, root: string | null, path: string, tabId: string) {
   const composition = createDesktopRenderers(projectId, root, tabId);
@@ -21,19 +22,25 @@ async function rendererIdForPath(projectId: string, root: string | null, path: s
   finally { composition.dispose(); }
 }
 
+const slashed = (directory: string) => directory.replace(/\\/g, "/").replace(/\/$/, "");
+
 function inScope(tab: ExplorerTab, command: IntegrationCommand) {
   if (tab.sessionId !== command.sessionId || tab.projectId !== command.projectId) return false;
   if ("root" in tab) return tab.root === (command.root ?? null);
+  // Main's real path and the session's recorded spelling name one directory;
+  // a tab carries whichever it was opened with.
+  const roots = command.rootDirectory ? [command.rootDirectory, ...(command.rootAliases ?? [])].map(slashed) : [];
   if (tab.kind === "terminal") {
-    const root = command.rootDirectory?.replace(/\\/g, "/").replace(/\/$/, "");
-    const cwd = (tab.cwd ?? useProjects.getState().projects.find(project => project.id === tab.projectId)?.path)?.replace(/\\/g, "/").replace(/\/$/, "");
-    return Boolean(root && cwd && (cwd === root || cwd.startsWith(`${root}/`)));
+    const cwd = tab.cwd ?? useProjects.getState().projects.find(project => project.id === tab.projectId)?.path;
+    if (!cwd) return false;
+    return roots.some(root => slashed(cwd) === root || slashed(cwd).startsWith(`${root}/`));
   }
   // Review tabs lack root identity; do not reveal a different worktree's review.
   if (tab.kind !== "review") return false;
   const session = useSessions.getState().sessions.find(candidate => candidate.id === tab.sessionId);
   const project = useProjects.getState().projects.find(candidate => candidate.id === command.projectId);
-  return Boolean(session && session.cwd === (command.rootDirectory ?? project?.path));
+  if (!session) return false;
+  return roots.length > 0 ? roots.includes(slashed(session.cwd)) : session.cwd === project?.path;
 }
 
 async function scopedTabs(command: IntegrationCommand, signal?: AbortSignal) {
@@ -51,12 +58,6 @@ async function scopedTab(command: IntegrationCommand, signal?: AbortSignal) {
   const tab = strip.tabs.find(tab => tab.id === (command.tabId ?? strip.activeId));
   if (!tab) throw new Error("that tab is closed or belongs to another workspace");
   return tab;
-}
-
-async function imageResult(blob: Blob, metadata: Record<string, unknown>) {
-  const bytes = new Uint8Array(await blob.arrayBuffer());
-  let binary = ""; for (const byte of bytes) binary += String.fromCharCode(byte);
-  return { ...metadata, mimeType: blob.type, base64: btoa(binary) };
 }
 
 export async function performIntegrationCommand(command: IntegrationCommand, signal?: AbortSignal): Promise<unknown> {
@@ -142,7 +143,7 @@ export async function performIntegrationCommand(command: IntegrationCommand, sig
       return { tabId: tab.id, closed: true };
     }
     case "terminal-open": {
-      const tab = await openSessionTab(command.sessionId, command.projectId, scope.root, "terminal", { cwd: String(params.cwd ?? command.rootDirectory), ptyId: String(params.ptyId) }, signal);
+      const tab = await openSessionTab(command.sessionId, command.projectId, scope.root, "terminal", { cwd: String(params.cwd ?? command.rootDirectory), ptyId: String(params.ptyId), agent: true }, signal);
       if (!tab) throw new Error("the explorer could not open a terminal tab");
       return { tabId: tab.id, ptyId: params.ptyId, cwd: params.cwd };
     }

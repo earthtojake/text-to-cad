@@ -10,7 +10,9 @@
  * one that has hung.
  */
 import { useEffect, useMemo, useRef, useState } from "react";
-import { CheckCircle2, ExternalLink, Loader2, Terminal } from "lucide-react";
+import { CheckCircle2, ExternalLink, Terminal } from "lucide-react";
+import { Spinner } from "@renderer/components/ui/spinner";
+import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 
 import { Button } from "@renderer/components/ui/button";
 import { Input } from "@renderer/components/ui/input";
@@ -29,15 +31,18 @@ import {
   SheetTitle,
 } from "@renderer/components/ui/sheet";
 import { Textarea } from "@renderer/components/ui/textarea";
+import { useReturnFocus } from "@renderer/hooks/use-return-focus";
 import { AgentMark } from "@renderer/features/settings/AgentMark";
+import { InlineCode } from "@renderer/features/settings/inline-code";
 import { StatusLabel, type Tone } from "@renderer/features/settings/StatusDot";
 import {
   useSettingsPatch,
   useSettingsValue,
 } from "@renderer/features/settings/settings-value";
+import { useDraft } from "@renderer/features/settings/SettingCard";
 import { useSkills } from "@renderer/features/settings/use-skills";
 import { useAgents } from "@renderer/state/agents";
-import type { AgentStatus, AuthState, Platform } from "@shared/agents";
+import type { AgentJobOutput, AgentStatus, AuthState, Platform } from "@shared/agents";
 
 const AUTH_TONE: Record<AuthState, Tone> = {
   authenticated: "ok",
@@ -46,12 +51,24 @@ const AUTH_TONE: Record<AuthState, Tone> = {
   "not-required": "ok",
 };
 
-const AUTH_LABEL: Record<AuthState, string> = {
+// "unknown" says only what detection knows — whether the CLI is here — the
+// same words as the agent rows (`features/session/agent-setup.tsx`).
+const AUTH_LABEL: Record<Exclude<AuthState, "unknown">, string> = {
   authenticated: "Signed in",
   unauthenticated: "Not signed in",
-  unknown: "Unknown",
   "not-required": "No sign-in needed",
 };
+
+export function authLabel(agent: Pick<AgentStatus, "auth" | "installed" | "probing">): string {
+  // The last launch's row: its login is being asked again, so it says nothing yet.
+  if (agent.probing && agent.auth === "unauthenticated") {
+    return "Checking…";
+  }
+  if (agent.auth === "unknown") {
+    return agent.installed ? "Installed" : "Not installed";
+  }
+  return AUTH_LABEL[agent.auth];
+}
 
 /** What `capabilities` means in a sentence, for the "Supports:" line. */
 function supports(agent: AgentStatus): string {
@@ -82,11 +99,14 @@ export function AgentDrawer({
   platform: Platform;
   onOpenChange: (open: boolean) => void;
 }) {
+  // Opened from a row, not a Sheet trigger: Escape hands focus back to that row by hand.
+  const returnFocus = useReturnFocus();
   return (
     <Sheet onOpenChange={onOpenChange} open={open}>
       <SheetContent
         className="w-full gap-0 overflow-y-auto p-0 sm:max-w-[520px]"
         side="right"
+        {...returnFocus}
       >
         {/* Keyed by agent: every field inside is per-agent state, and the
             cheapest correct reset is a new component. */}
@@ -104,7 +124,7 @@ function DrawerBody({ agent, platform }: { agent: AgentStatus; platform: Platfor
           <AgentMark icon={agent.icon} id={agent.id} name={agent.name} size="drawer" />
           <div className="min-w-0 flex-1">
             <SheetTitle className="text-base">{agent.name}</SheetTitle>
-            <SheetDescription className="mt-0.5 text-xs">{agent.description}</SheetDescription>
+            <SheetDescription className="mt-0.5 text-xs"><InlineCode text={agent.description} /></SheetDescription>
           </div>
         </div>
         <div className="flex items-center justify-between gap-3">
@@ -164,7 +184,7 @@ function InstallationSection({ agent, platform }: { agent: AgentStatus; platform
   const methods = agent.install[platform];
   const [index, setIndex] = useState(0);
   const install = useAgents((state) => state.install);
-  const { jobId, output, running, start } = useJob();
+  const { jobId, output, running, failure, start } = useJob(agent.id, "install", agent.installed);
 
   if (agent.installed) {
     return (
@@ -174,9 +194,19 @@ function InstallationSection({ agent, platform }: { agent: AgentStatus; platform
           <p className="min-w-0 break-all text-muted-foreground" data-selectable>
             Found at <span className="text-foreground">{agent.binaryPath}</span>
             {agent.version ? ` · v${agent.version}` : ""}
+            {agent.adapter ? ` · adapter ${agent.adapter.version}` : ""}
           </p>
         </div>
-        {jobId ? <JobLog output={output} /> : null}
+        {jobId ? <JobLog failure={failure} output={output} /> : null}
+      </Section>
+    );
+  }
+
+  // The last launch's "not installed" is provisional: nothing to install until it is confirmed.
+  if (agent.probing) {
+    return (
+      <Section title="Installation">
+        <p className="text-xs text-muted-foreground">Checking…</p>
       </Section>
     );
   }
@@ -223,14 +253,14 @@ function InstallationSection({ agent, platform }: { agent: AgentStatus; platform
           onClick={() => void start(() => install(agent.id, index))}
           size="sm"
         >
-          {running ? <Loader2 className="size-3.5 animate-spin" /> : null}
+          {running ? <Spinner aria-hidden className="size-3.5" /> : null}
           Install
         </Button>
       </div>
       <p className="mt-2 font-mono text-[11px] break-all text-muted-foreground" data-selectable>
         {methods[index]?.command}
       </p>
-      {jobId ? <JobLog output={output} /> : null}
+      {jobId ? <JobLog failure={failure} output={output} /> : null}
     </Section>
   );
 }
@@ -245,29 +275,34 @@ const PLATFORM_NAMES: Record<Platform, string> = {
 
 function AuthenticationSection({ agent }: { agent: AgentStatus }) {
   const login = useAgents((state) => state.login);
-  const { jobId, output, running, start } = useJob();
+  const { jobId, output, running, failure, start } = useJob(agent.id, "login", agent.auth === "authenticated");
 
   const cliLogin = agent.authMethods.find((method) => method.type === "cli-login");
   const apiKey = agent.authMethods.find((method) => method.type === "api-key");
 
+  const signedIn = agent.auth === "authenticated";
+
   return (
     <Section
-      action={<StatusLabel tone={AUTH_TONE[agent.auth]}>{AUTH_LABEL[agent.auth]}</StatusLabel>}
+      action={<StatusLabel tone={agent.probing && agent.auth === "unauthenticated" ? "idle" : AUTH_TONE[agent.auth]}>{authLabel(agent)}</StatusLabel>}
       title="Authentication"
     >
+      {/* Signed in, the status on the right already says so: what is left is
+          one quiet way to redo it. Signed out, the method's own words sit
+          beside the primary button. */}
       {cliLogin ? (
-        <div className="flex items-center justify-between gap-3">
-          <p className="min-w-0 text-xs text-muted-foreground">{cliLogin.label}</p>
+        <div className={signedIn ? "flex justify-end" : "flex items-center justify-between gap-3"}>
+          {signedIn ? null : <p className="min-w-0 text-xs text-muted-foreground">{cliLogin.label}</p>}
           <Button
             className="h-8 gap-1.5"
             // Signing in runs the agent's own CLI, which has to be installed.
             disabled={running || !agent.installed}
             onClick={() => void start(() => login(agent.id))}
             size="sm"
-            variant={agent.auth === "authenticated" ? "secondary" : "default"}
+            variant={signedIn ? "secondary" : "default"}
           >
-            {running ? <Loader2 className="size-3.5 animate-spin" /> : null}
-            {agent.auth === "authenticated" ? "Sign in again" : "Sign in"}
+            {running ? <Spinner aria-hidden className="size-3.5" /> : null}
+            {signedIn ? "Sign in again" : "Sign in"}
           </Button>
         </div>
       ) : null}
@@ -278,19 +313,26 @@ function AuthenticationSection({ agent }: { agent: AgentStatus }) {
         </p>
       ) : null}
 
+      {/* The API key is the other way in, not a step after signing in: it is
+          folded away, and open only when it is the one way there is. */}
       {apiKey ? (
-        <div className="mt-3 rounded-lg border bg-muted/40 px-3 py-2.5">
-          <p className="text-xs text-muted-foreground">
-            {apiKey.label}: set one of these in the shell text-to-cad launches from, then press
-            Refresh.
-          </p>
-          <p className="mt-1.5 font-mono text-[11px]" data-selectable>
-            {apiKey.envVars.join("  ·  ")}
-          </p>
-        </div>
+        <details className="group mt-3 text-xs" open={!cliLogin && !signedIn}>
+          <summary className="cursor-default text-muted-foreground select-none hover:text-foreground">
+            Use an API key instead
+          </summary>
+          <div className="mt-2 rounded-lg border bg-muted/40 px-3 py-2.5">
+            <p className="text-muted-foreground">
+              {apiKey.label}: set one of these in the shell text-to-cad launches from, then press
+              Refresh.
+            </p>
+            <p className="mt-1.5 font-mono text-[11px]" data-selectable>
+              {apiKey.envVars.join("  ·  ")}
+            </p>
+          </div>
+        </details>
       ) : null}
 
-      {jobId ? <JobLog output={output} /> : null}
+      {jobId ? <JobLog failure={failure} output={output} /> : null}
     </Section>
   );
 }
@@ -308,19 +350,26 @@ function SkillsSection({ agent }: { agent: AgentStatus }) {
       title="Skills"
     >
       <p className="text-xs text-muted-foreground">
-        {count > 0
-          ? `Every session in text-to-cad is handed the app's CAD skills and focused workspace integration skills as an extra directory,
+        <InlineCode
+          text={
+            count > 0
+              ? `Every session in text-to-cad is handed the app's CAD skills and focused workspace integration skills as an extra directory,
              ${
                native
                  ? `which ${agent.name} loads by itself.`
                  : `and, because ${agent.name} does not load one, a line in the first prompt saying where they are. The app's MCP server can read them too.`
              } Nothing is installed into ${agent.name}'s own configuration.`
-          : `text-to-cad hands its skills to every session. This build has none composed yet — run \`npm run build\`.`}
+              : "text-to-cad hands its skills to every session. This build has none composed yet — run `npm run build`."
+          }
+        />
       </p>
       {skills?.root ? (
-        <p className="mt-2 truncate text-[11px] text-muted-foreground" title={skills.root}>
-          <span data-selectable>{skills.root}</span>
-        </p>
+        // The whole path when the line has cut it short.
+        <TooltipHint content={skills.root} overflowOnly side="top">
+          <p className="mt-2 truncate text-[11px] text-muted-foreground">
+            <span data-selectable>{skills.root}</span>
+          </p>
+        </TooltipHint>
       ) : null}
     </Section>
   );
@@ -356,12 +405,10 @@ function AdvancedSection({ agent }: { agent: AgentStatus }) {
   const patch = useSettingsPatch();
   const override = settings.agentOverrides[agent.id];
 
-  // Initialised from the stored value and owned by the fields after that; the
-  // drawer is keyed by agent id, so switching agents remounts this rather than
-  // synchronising two copies of the same string.
-  const [extraArgs, setExtraArgs] = useState(() => (override?.extraArgs ?? []).join(" "));
-  const [env, setEnv] = useState(() => formatEnv(override?.env ?? {}));
-
+  // Each field is a draft (`useDraft`): written on blur, and on unmount for an
+  // edit the drawer closed on (Esc) before any blur. The two fields save as one
+  // record, so a commit reads the other field's draft from `typed`.
+  const typed = useRef({ extraArgs: "", env: "" });
   const save = (nextArgs: string, nextEnv: string) => {
     const parsedArgs = nextArgs.split(/\s+/).filter(Boolean);
     const parsedEnv = parseEnv(nextEnv);
@@ -374,6 +421,18 @@ function AdvancedSection({ agent }: { agent: AgentStatus }) {
     }
     patch({ agentOverrides: overrides });
   };
+  const extraArgs = useDraft((override?.extraArgs ?? []).join(" "), (next) => save(next, typed.current.env));
+  // The saved record is the parse of the text, so the text is still the field's
+  // when it parses to what the store holds: comments and malformed lines stay.
+  const env = useDraft(
+    formatEnv(override?.env ?? {}),
+    (next) => save(typed.current.extraArgs, next),
+    sameEnv,
+  );
+  useEffect(() => {
+    typed.current = { extraArgs: extraArgs.value, env: env.value };
+  });
+  const dropped = droppedEnvLines(env.value);
 
   const launchEnv = Object.entries(agent.launch.env);
 
@@ -398,10 +457,13 @@ function AdvancedSection({ agent }: { agent: AgentStatus }) {
       <Input
         className="mt-1.5 h-8 font-mono text-xs"
         id={`${agent.id}-extra-args`}
-        onBlur={() => save(extraArgs, env)}
-        onChange={(event) => setExtraArgs(event.target.value)}
-        placeholder="--verbose --model gpt-6"
-        value={extraArgs}
+        onBlur={extraArgs.onBlur}
+        onChange={(event) => extraArgs.onChange(event.target.value)}
+        onFocus={extraArgs.onFocus}
+        // Neutral: one drawer serves every agent, and a model name in the
+        // hint was one agent's flag shown on all the others.
+        placeholder="--flag value"
+        value={extraArgs.value}
       />
 
       <label className="mt-3 block text-xs" htmlFor={`${agent.id}-env`}>
@@ -410,11 +472,18 @@ function AdvancedSection({ agent }: { agent: AgentStatus }) {
       <Textarea
         className="mt-1.5 min-h-16 font-mono text-xs"
         id={`${agent.id}-env`}
-        onBlur={() => save(extraArgs, env)}
-        onChange={(event) => setEnv(event.target.value)}
+        onBlur={env.onBlur}
+        onChange={(event) => env.onChange(event.target.value)}
+        onFocus={env.onFocus}
         placeholder={"KEY=value\nANOTHER=value"}
-        value={env}
+        value={env.value}
       />
+      {dropped.length > 0 ? (
+        <p className="mt-1.5 text-[11px] text-amber-600 dark:text-amber-500" role="status">
+          {dropped.length === 1 ? `Line ${dropped[0]} has` : `Lines ${dropped.slice(0, -1).join(", ")} and ${dropped.at(-1)} have`}{" "}
+          no KEY=value and will not be saved.
+        </p>
+      ) : null}
       <p className="mt-1.5 text-[11px] text-muted-foreground">
         One per line. Merged over the launch environment when text-to-cad starts {agent.name}.
       </p>
@@ -433,21 +502,41 @@ function Field({ label, value }: { label: string; value: string }) {
   );
 }
 
+/** One line of the environment field: blank and `#` lines say nothing; the rest are `KEY=value` or not. */
+function envEntry(line: string): { key: string; value: string } | "ignored" | "malformed" {
+  const trimmed = line.trim();
+  if (trimmed === "" || trimmed.startsWith("#")) {
+    return "ignored";
+  }
+  const split = trimmed.indexOf("=");
+  if (split <= 0) {
+    return "malformed";
+  }
+  return { key: trimmed.slice(0, split).trim(), value: trimmed.slice(split + 1).trim() };
+}
+
 /** `KEY=value` lines → a record. Blank lines and comments are ignored. */
 export function parseEnv(text: string): Record<string, string> {
   const entries: Record<string, string> = {};
   for (const line of text.split("\n")) {
-    const trimmed = line.trim();
-    if (trimmed === "" || trimmed.startsWith("#")) {
-      continue;
+    const entry = envEntry(line);
+    if (typeof entry === "object") {
+      entries[entry.key] = entry.value;
     }
-    const split = trimmed.indexOf("=");
-    if (split <= 0) {
-      continue;
-    }
-    entries[trimmed.slice(0, split).trim()] = trimmed.slice(split + 1).trim();
   }
   return entries;
+}
+
+/** The 1-based numbers of the lines `parseEnv` drops without saying so: not blank, not a comment, no `KEY=`. */
+export function droppedEnvLines(text: string): number[] {
+  return text
+    .split("\n")
+    .flatMap((line, index) => (envEntry(line) === "malformed" ? [index + 1] : []));
+}
+
+/** Whether `draft` is a spelling of the env text `value` (a `formatEnv` result). */
+function sameEnv(draft: string, value: string): boolean {
+  return formatEnv(parseEnv(draft)) === value;
 }
 
 export function formatEnv(env: Record<string, string>): string {
@@ -464,9 +553,34 @@ export function formatEnv(env: Record<string, string>): string {
  * The job id comes back from the IPC call and the output arrives on
  * `agents.output` afterwards, so the component has to remember the id to know
  * which stream is its own — two drawers open on two agents share one store.
+ * The remembered id dies with the component, though the installer does not: a
+ * job of this agent and kind still running in the store is this one's too, so a
+ * drawer closed and reopened (or a welcome left for Settings and back) finds
+ * the install under way instead of offering to start a second.
+ *
+ * `done` is whether the step the job is for has been achieved (installed, or
+ * signed in): a failure of an earlier run is then history and is not worded.
  */
-export function useJob() {
-  const [jobId, setJobId] = useState<string | null>(null);
+export function useJob(agentId: string, kind: AgentJobOutput["kind"], done = false) {
+  const [startedId, setStartedId] = useState<string | null>(null);
+  // This agent and kind's latest job in the store (insertion order): running, it is this
+  // one's whoever started it; finished with a non-zero code, it stays to say so on a remount.
+  const latestId = useAgents(
+    (state) =>
+      Object.keys(state.jobs)
+        .filter((id) => state.jobs[id]?.agentId === agentId && state.jobs[id]?.kind === kind)
+        .at(-1) ?? null,
+  );
+  const latest = useAgents((state) => (latestId ? state.jobs[latestId] : undefined));
+  const remembered = latest && (latest.exitCode === null || latest.exitCode !== 0) ? latestId : null;
+  // The job this mount started, once a newer one of this agent and kind is in the store: it is
+  // history (a failed run must not return after a later run succeeded), and `remembered` says
+  // what the newer one left. Until the started job has reached the store it is the newest.
+  const startedIsOld = useAgents(
+    (state) => startedId !== null && startedId in state.jobs && startedId !== latestId,
+  );
+  // A job still running anywhere in the store beats the id this mount remembers.
+  const jobId = (latest?.exitCode === null ? latestId : null) ?? (startedIsOld ? null : startedId) ?? remembered;
   const job = useAgents((state) => (jobId ? state.jobs[jobId] : undefined));
   const starting = useRef(false);
 
@@ -476,7 +590,7 @@ export function useJob() {
     }
     starting.current = true;
     try {
-      setJobId(await run());
+      setStartedId(await run());
     } finally {
       starting.current = false;
     }
@@ -487,12 +601,17 @@ export function useJob() {
     output: job?.output ?? "",
     // A job with an exit code has finished, whatever the code was.
     running: jobId !== null && (job?.exitCode ?? null) === null,
+    // A finished job's non-zero code, in words; the log above it is the why.
+    failure:
+      !done && job && job.exitCode !== null && job.exitCode !== 0
+        ? `${kind === "install" ? "Install" : "Sign in"} failed (exit ${job.exitCode})`
+        : null,
     start,
   };
 }
 
 /** The tail of a running job, scrolled to the bottom. */
-export function JobLog({ output }: { output: string }) {
+export function JobLog({ output, failure = null }: { output: string; failure?: string | null }) {
   const ref = useRef<HTMLPreElement>(null);
   const text = useMemo(() => stripAnsi(output).trimEnd(), [output]);
 
@@ -504,19 +623,26 @@ export function JobLog({ output }: { output: string }) {
   }, [text]);
 
   return (
-    <pre
-      className="mt-3 max-h-40 overflow-auto rounded-lg border bg-muted/40 px-3 py-2 font-mono text-[11px] leading-relaxed whitespace-pre-wrap"
-      ref={ref}
-    >
-      {text === "" ? (
-        <span className="flex items-center gap-1.5 text-muted-foreground">
-          <Terminal className="size-3" />
-          Waiting for output…
-        </span>
-      ) : (
-        <code data-selectable>{text}</code>
-      )}
-    </pre>
+    <>
+      {failure ? (
+        <p className="mt-3 text-xs text-destructive" role="alert">
+          {failure}
+        </p>
+      ) : null}
+      <pre
+        className="mt-3 max-h-40 overflow-auto rounded-lg border bg-muted/40 px-3 py-2 font-mono text-[11px] leading-relaxed whitespace-pre-wrap"
+        ref={ref}
+      >
+        {text === "" ? (
+          <span className="flex items-center gap-1.5 text-muted-foreground">
+            <Terminal className="size-3" />
+            Waiting for output…
+          </span>
+        ) : (
+          <code data-selectable>{text}</code>
+        )}
+      </pre>
+    </>
   );
 }
 

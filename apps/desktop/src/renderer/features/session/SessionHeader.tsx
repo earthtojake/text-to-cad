@@ -1,5 +1,6 @@
-import { useState } from "react";
-import { Archive, MoreHorizontal, Pencil, Trash2, Unplug } from "lucide-react";
+import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
+import { useEffect, useRef, useState } from "react";
+import { Archive, Copy, FolderOpen, MoreHorizontal, Pencil, RotateCcw, Trash2, Unplug } from "lucide-react";
 
 import { ExplorerToggle, HistoryNav, SidebarToggle } from "@renderer/app/PaneToggles";
 import { Button } from "@renderer/components/ui/button";
@@ -42,6 +43,15 @@ export function SessionHeader({
   const archive = useSessions((state) => state.archive);
   const remove = useSessions((state) => state.remove);
   const closeSession = useAcp((state) => state.close);
+  const reconnect = useAcp((state) => state.load);
+  // The same reading as SessionView's Reconnect bar: what is held says closed, or nothing is
+  // held for a closed row. A session already disconnected is offered the way back, not a
+  // second disconnect.
+  const disconnected = useAcp((state) => {
+    if (!session || state.loading[session.id]) return false;
+    const held = state.sessions[session.id];
+    return held ? held.status === "closed" : session.status === "closed";
+  });
   const sidebarCollapsed = useSettings((state) => state.settings?.layout.sidebarCollapsed ?? false);
   const explorerCollapsed = useExplorer((state) => state.collapsed);
   const projectName = useProjects(
@@ -49,6 +59,17 @@ export function SessionHeader({
   );
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(title);
+
+  // Enter and Escape end the edit by unmounting the box that had focus, which left it on the page;
+  // the title button takes it back. A blur that ends the edit (a click elsewhere) must not.
+  const titleButton = useRef<HTMLButtonElement | null>(null);
+  const refocusTitle = useRef(false);
+  useEffect(() => {
+    if (!editing && refocusTitle.current) {
+      refocusTitle.current = false;
+      titleButton.current?.focus();
+    }
+  }, [editing]);
 
   const startEditing = () => {
     if (session) {
@@ -89,24 +110,31 @@ export function SessionHeader({
             onChange={(event) => setDraft(event.target.value)}
             onKeyDown={(event) => {
               if (event.key === "Enter") {
+                // Not let through: the keypress that follows would land on the title button, which has
+                // the focus by then, and click it straight back into the box.
+                event.preventDefault();
+                refocusTitle.current = true;
                 commit();
               } else if (event.key === "Escape") {
+                refocusTitle.current = true;
                 setEditing(false);
               }
             }}
             value={draft}
           />
         ) : (
-          <button
-            className="truncate text-[13px] font-medium"
-            data-session-title
-            disabled={!session}
-            onClick={startEditing}
-            title={session ? "Rename" : undefined}
-            type="button"
-          >
-            {title}
-          </button>
+          <TooltipHint content={session ? "Rename" : undefined}>
+            <button
+              className="truncate text-[13px] font-medium"
+              data-session-title
+              disabled={!session}
+              onClick={startEditing}
+              ref={titleButton}
+              type="button"
+            >
+              {title}
+            </button>
+          </TooltipHint>
         )}
         {/* Where the session lives, as a badge after its name — the way a
             thread is titled in Claude Code. The new-session screen's title is
@@ -132,18 +160,27 @@ export function SessionHeader({
                 Rename
               </DropdownMenuItem>
               <DropdownMenuItem onSelect={() => void navigator.clipboard.writeText(session.cwd)}>
+                <Copy />
                 Copy path
               </DropdownMenuItem>
               <DropdownMenuItem
-                onSelect={() => void window.textToCad.shell.showItemInFolder({ path: session.cwd })}
+                onSelect={() => void window.textToCad.shell.showItemInFolder({ projectId: session.projectId, root: session.cwd })}
               >
+                <FolderOpen />
                 Reveal in Finder
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onSelect={() => void closeSession(session.id)}>
-                <Unplug />
-                Disconnect agent
-              </DropdownMenuItem>
+              {disconnected ? (
+                <DropdownMenuItem onSelect={() => void reconnect(session.id)}>
+                  <RotateCcw />
+                  Reconnect
+                </DropdownMenuItem>
+              ) : (
+                <DropdownMenuItem onSelect={() => void closeSession(session.id)}>
+                  <Unplug />
+                  Disconnect agent
+                </DropdownMenuItem>
+              )}
               <DropdownMenuItem onSelect={() => void archive(session.id, true)}>
                 <Archive />
                 Archive

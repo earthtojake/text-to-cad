@@ -1,6 +1,7 @@
 import { useShallow } from "zustand/react/shallow";
 import { ChevronRight, Plus } from "lucide-react";
 import { cn } from "cn";
+import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 
 import { Button } from "@renderer/components/ui/button";
 import {
@@ -72,20 +73,22 @@ export function SessionSection({ section }: { section: SidebarSection }) {
       className="flex h-7 items-center gap-0.5 rounded-md pr-0.5 pl-2"
       data-sidebar-section-header
     >
+      {/* Named for the section, always: the state is aria-expanded's to say, not the name's. */}
       <button
         aria-expanded={collapsible ? !collapsed : undefined}
-        aria-label={
-          collapsible ? (collapsed ? `Expand ${section.name}` : `Collapse ${section.name}`) : undefined
-        }
         className="flex min-w-0 flex-1 items-center gap-1 text-left"
         disabled={!collapsible}
         onClick={toggle}
-        title={project?.path ?? section.name}
         type="button"
       >
-        <span className="truncate text-[11px] font-medium text-muted-foreground">
-          {section.name}
-        </span>
+        {/* The project's folder, on the name rather than the button: the kit
+            holds a hint back from an expanded control, and an open section's
+            header is one. `Pinned` and the flat list have no folder to show. */}
+        <TooltipHint content={project?.path}>
+          <span className="truncate text-[11px] font-medium text-muted-foreground">
+            {section.name}
+          </span>
+        </TooltipHint>
         {collapsible ? (
           <ChevronRight
             className={cn(
@@ -103,7 +106,7 @@ export function SessionSection({ section }: { section: SidebarSection }) {
            palette searches every thread and the filters are global — and a
            control that appears on hover is one nobody finds. */
         <Button
-          aria-label={`New chat in ${project.name}`}
+          aria-label={`New session in ${project.name}`}
           className="size-5 shrink-0 text-muted-foreground"
           onClick={newHere}
           size="icon-xs"

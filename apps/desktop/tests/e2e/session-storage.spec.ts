@@ -87,7 +87,9 @@ test("upgrade preserves sessions, snapshots and owned tabs; restart and deletion
     expect(await page.evaluate(() => window.textToCad.explorer.loadTabs({ sessionId: "one" }))).toEqual(tabs.one);
     await app!.close(); app = null;
 
-    const backups = fs.readdirSync(profile).filter(name => name.includes(".before-v11-"));
+    // The backup is named for the version the upgrade lands on, so the next
+    // migration does not strand this spec.
+    const backups = fs.readdirSync(profile).filter(name => name.includes(`.before-v${MIGRATIONS.at(-1)!.version}-`));
     expect(backups).toHaveLength(1);
     expect(sqlScript(path.join(profile, backups[0]!), "console.log(JSON.stringify(db.prepare('SELECT count(*) AS count FROM sessions').get()))")).toEqual({ count: 3 });
     expect(sqlScript(database, `console.log(JSON.stringify({

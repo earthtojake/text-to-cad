@@ -27,8 +27,12 @@ export function BrowserTab({ sessionId, projectId, root, tabId, url }: { session
   const prompt = useMemo(() => createDesktopPromptContext(projectId, root, JSON.stringify(["desktop", projectId, root]), sessionId), [sessionId, projectId, root]);
   const [adding, setAdding] = useState(false);
   const [promptStatus, setPromptStatus] = useState<string | null>(null);
-  const [draft, setDraft] = useState<{ value: string; source: string | null } | null>(null);
-  const [showConsole, setShowConsole] = useState(false);
+  const [draft, setDraft] = useState<{ value: string; source: string | null; committed: boolean } | null>(null);
+  const [focused, setFocused] = useState(false);
+  // In the store, not local state: the poll only carries console lines while
+  // the panel is open.
+  const showConsole = useBrowser(state => Boolean(state.consoles[tabId]));
+  const setConsoleOpen = useBrowser(state => state.setConsoleOpen);
   const current = target?.url && target.url !== "about:blank" ? target.url : url;
   const loading = target?.loading ?? false;
   const canGoBack = target?.canGoBack ?? false;
@@ -38,12 +42,17 @@ export function BrowserTab({ sessionId, projectId, root, tabId, url }: { session
   useEffect(() => {
     if (viewRef.current) return mount({ sessionId, projectId, root, tabId }, initialURL.current, viewRef.current);
   }, [mount, sessionId, projectId, root, tabId]);
-  const address = draft?.source === current ? draft.value : current ?? "";
-  const setAddress = (value: string) => setDraft({ value, source: current });
+  // What is being typed outlives blur, as in Chrome and Safari, and goes on
+  // Escape, on commit, or once the page's URL moves while the field is not
+  // focused; while it is focused a URL change under it does not disturb it.
+  // What was committed is shown only until the page moves on.
+  const address = draft && (draft.committed ? draft.source === current : focused || draft.source === current) ? draft.value : current ?? "";
+  if (!focused && draft && !draft.committed && draft.source !== current) setDraft(null);
+  const setAddress = (value: string) => setDraft({ value, source: current, committed: false });
   const navigate = useCallback((raw: string) => {
     const resolved = resolveAddress(raw);
     if (!resolved) return;
-    setDraft({ value: resolved, source: current });
+    setDraft({ value: resolved, source: current, committed: true });
     void navigatePage({ sessionId, projectId, root, tabId }, { url: resolved });
   }, [navigatePage, sessionId, projectId, root, tabId, current]);
   const move = (direction: "back" | "forward" | "reload" | "stop") => void navigatePage({ sessionId, projectId, root, tabId }, { direction });
@@ -62,7 +71,7 @@ export function BrowserTab({ sessionId, projectId, root, tabId, url }: { session
     }).catch(error => setPromptStatus(error instanceof Error ? error.message : String(error))).finally(() => setAdding(false));
   };
 
-  const errors = logs.filter((line) => line.level === "error").length;
+  const errors = target?.errors ?? logs.filter((line) => line.level === "error").length;
 
   return (
     <WebPreview className="size-full rounded-none border-0 bg-transparent">
@@ -93,13 +102,16 @@ export function BrowserTab({ sessionId, projectId, root, tabId, url }: { session
           aria-label="Address"
           className="mx-1 h-6 min-w-0 flex-1 rounded-md bg-muted/60 px-2.5 text-[12px] outline-none placeholder:text-muted-foreground focus:bg-muted"
           onChange={(event) => setAddress(event.target.value)}
-          onFocus={(event) => event.currentTarget.select()}
+          onBlur={() => setFocused(false)}
+          onFocus={(event) => { setFocused(true); event.currentTarget.select(); }}
           onKeyDown={(event) => {
+            // The Enter that picks a candidate in an input method belongs to it (229: Safari-era keyCode).
+            if (event.nativeEvent.isComposing || event.keyCode === 229) return;
             if (event.key === "Enter") {
               navigate(event.currentTarget.value);
             }
             if (event.key === "Escape") {
-              setAddress(current ?? "");
+              setDraft(null);
               event.currentTarget.blur();
             }
           }}
@@ -115,7 +127,8 @@ export function BrowserTab({ sessionId, projectId, root, tabId, url }: { session
           <Camera className="size-3.5" />
         </WebPreviewNavigationButton>
         <WebPreviewNavigationButton
-          onClick={() => setShowConsole((open) => !open)}
+          aria-pressed={showConsole}
+          onClick={() => setConsoleOpen(tabId, !showConsole)}
           tooltip={errors > 0 ? `Console (${errors} errors)` : "Console"}
         >
           <Terminal className={cn("size-3.5", errors > 0 && "text-destructive")} />
@@ -198,10 +211,18 @@ export function resolveAddress(raw: string): string | null {
   if (/^[a-z][a-z0-9+.-]*:\/\//i.test(value)) {
     return value;
   }
-  // `localhost:5273`, `example.com`, `192.168.0.4/status` — an address, not a
-  // search. A bare word with no dot and no port is a search.
-  if (/^localhost(:\d+)?(\/|$)/i.test(value) || /^[\w-]+(\.[\w-]+)+(:\d+)?(\/|$)/.test(value)) {
-    return `https://${value}`.replace(/^https:\/\/localhost/, "http://localhost");
+  // `localhost:5273`, `example.com`, `192.168.0.4/status`, `[::1]:3000`,
+  // `web:3000` — an address, not a search. A bare word is a search unless it
+  // has a port: docker-compose services, hosts aliases and MagicDNS names are
+  // far more common here than a search that looks like `word:123`.
+  const address = /^(\[[0-9a-f:.]+\]|[\w-]+(?:\.[\w-]+)*)(?::(\d+))?(?=[/?#]|$)/i.exec(value);
+  const host = address?.[1]?.toLowerCase();
+  if (address && host && (host.includes(".") || host.startsWith("[") || host === "localhost" || address[2])) {
+    // A dev server or LAN device is almost never serving TLS; a public name
+    // is, and so is anything on a TLS port.
+    const port = address[2];
+    const local = host === "localhost" || host.startsWith("[") || /^\d{1,3}(\.\d{1,3}){3}$/.test(host) || host.endsWith(".local") || Boolean(port);
+    return `${local && port !== "443" && port !== "8443" ? "http" : "https"}://${value}`;
   }
   return `https://duckduckgo.com/?q=${encodeURIComponent(value)}`;
 }

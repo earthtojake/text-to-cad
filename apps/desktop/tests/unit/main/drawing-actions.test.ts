@@ -37,7 +37,13 @@ it('opens only an empty temporary drawing in the authenticated session root', as
   expect(f.sent[0]).toMatchObject({ kind: 'open-drawing', projectId: 'project', root: f.session.cwd, title: 'Sketch' });
   expect(f.sent[0]).not.toHaveProperty('path');
   expect(f.sent[0]).not.toHaveProperty('scene');
-  expect(() => f.actions.open_drawing!(f.session, { path: 'plan.excalidraw' })).toThrow();
+  // The refusal itself: every ZodError's message contains `"path": []`, so a
+  // bare /path/ would match any validation failure.
+  let refusal: unknown;
+  try { f.actions.open_drawing!(f.session, { path: 'plan.excalidraw' }); } catch (error) { refusal = error; }
+  expect((refusal as { issues?: unknown }).issues).toEqual([
+    expect.objectContaining({ code: 'unrecognized_keys', keys: ['path'] }),
+  ]);
   expect(f.sent).toHaveLength(1);
 });
 it('reads and captures an identified sketch without exposing an editable scene or destination path', async () => {

@@ -1,3 +1,4 @@
+import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 import { Expand } from "lucide-react";
 
 import { AttachmentPreview } from "@renderer/components/ai-elements/attachments";
@@ -10,17 +11,18 @@ export function AttachmentImagePreview({ file }: { file: FileUIPart }) {
   return (
     <Dialog>
       <DialogTrigger asChild>
-        <button
-          aria-label={`Enlarge ${name}`}
-          className="ui-preview-trigger group/preview relative shrink-0 cursor-zoom-in rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
-          title="Click to enlarge"
-          type="button"
-        >
-          <AttachmentPreview className="size-16 rounded-md border bg-background [&_img]:object-contain" />
-          <span className="pointer-events-none absolute right-1 bottom-1 rounded bg-background/90 p-0.5 opacity-0 transition-opacity group-hover/preview:opacity-100 group-focus-visible/preview:opacity-100" aria-hidden>
-            <Expand className="size-3" />
-          </span>
-        </button>
+        <TooltipHint content="Enlarge">
+          <button
+            aria-label={`Enlarge ${name}`}
+            className="ui-preview-trigger group/preview relative shrink-0 cursor-zoom-in rounded-md outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+            type="button"
+          >
+            <AttachmentPreview className="size-16 rounded-md border bg-background [&_img]:object-contain" />
+            <span className="pointer-events-none absolute right-1 bottom-1 rounded bg-background/90 p-0.5 opacity-0 transition-opacity group-hover/preview:opacity-100 group-focus-visible/preview:opacity-100" aria-hidden>
+              <Expand className="size-3" />
+            </span>
+          </button>
+        </TooltipHint>
       </DialogTrigger>
       <DialogContent
         aria-describedby={undefined}

@@ -13,7 +13,7 @@ by this session's tools.
 
 The embedded viewer already belongs to the workspace. Use workspace `open_file` on a completed artifact instead of starting `cadgen viewer` or posting a localhost link. Use `list_open_tabs` for tab IDs and `show_tab` to display a model before controlling it.
 
-The `cad` integration supplies `viewer_state`, `select_reference` and `capture_view`. Viewer state includes model revision, actual selection and camera. Inactive snapshots are marked `active:false`; activate the model before mutating or capturing its viewport. Captures are tool results, not a submitted prompt.
+The `cad` integration supplies `viewer_state`, `select_reference` and `capture_view`. Viewer state includes model revision, actual selection and camera. Inactive snapshots are marked `active:false`; activate the model before mutating or capturing its viewport. Captures are tool results, not a submitted prompt. A capture over the model's image limit is redrawn smaller; its result then carries `scaled: true`, `scale` (how much each side shrank) and, for a PNG, `scaledFrom: {width, height}` (the original pixel size), so a point read off the picture maps back as `pixel / scale`. `capture_view` rejects with "the viewer's WebGL context is lost; try again once it restores" when the GPU dropped the viewer's context: ask again a moment later rather than reading it as a broken model.
 
 Use the bundled `cad` authoring skill for modeling and exact inspection: cadgen.read_step, cadgen.read_scene and cadgen.geometry. Viewer feature recognition is not authoring history or a replacement for kernel inspection. Resolve copied topology references against the matching scene revision.
 

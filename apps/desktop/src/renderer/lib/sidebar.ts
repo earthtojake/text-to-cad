@@ -167,8 +167,10 @@ function compareTitles(a: Session, b: Session): number {
  *   - `idle`        a hollow circle — nothing to say, and the row it is on is
  *                   the common case, so it must be the quietest mark;
  *   - `running`     a filled dot that pulses;
- *   - `waiting`     an amber triangle: the agent is blocked on the person,
- *                   which is the one state a sidebar exists to surface;
+ *   - `waiting`     an accent-coloured ringed dot ("needs you"): the agent
+ *                   is blocked on the person, which is the one state a
+ *                   sidebar exists to surface — and not a warning, so not
+ *                   amber and not a triangle;
  *   - `error`       a red triangle;
  *   - `connecting`  a hollow circle with a spinner ring around it.
  *

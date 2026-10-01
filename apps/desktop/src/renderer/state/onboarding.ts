@@ -16,11 +16,20 @@ import { useSettings } from "@renderer/state/settings";
 type OnboardingState = {
   /** Null until main has answered. */
   enabled: boolean | null;
+  /**
+   * The welcome's step. Here and not in the component: Settings replaces the
+   * welcome as it replaces the shell (App), and Settings › Agents is one click
+   * from the agent step — a step held in state came back as the first.
+   */
+  step: number;
+  setStep: (step: number) => void;
   load: () => Promise<void>;
 };
 
 export const useOnboarding = create<OnboardingState>((set) => ({
   enabled: null,
+  step: 0,
+  setStep: (step) => set({ step }),
   load: async () => {
     const { enabled } = await window.textToCad.onboarding.status();
     set({ enabled });
@@ -67,5 +76,17 @@ export function markViewerOpened(): void {
   const { settings, patch } = useSettings.getState();
   if (settings && !settings.onboardingViewerOpened) {
     void patch({ onboardingViewerOpened: true });
+  }
+}
+
+/**
+ * Leaves the welcome as Skip does, if it is up. For the command palette: a row
+ * that opens a session or a folder while the welcome covers the window would
+ * otherwise change a screen nobody can see.
+ */
+export function leaveWelcome(): void {
+  const { settings, patch } = useSettings.getState();
+  if (useOnboarding.getState().enabled === true && settings && !settings.onboardingCompleted) {
+    void patch({ onboardingCompleted: true });
   }
 }

@@ -5,7 +5,7 @@ import { expect, test, type ElectronApplication, type Page } from "@playwright/t
 
 import { TITLEBAR_HEIGHT, TRAFFIC_LIGHTS_INSET, trafficLightPosition } from "../../src/shared/titlebar";
 import { PANE_LIMITS } from "../../src/shared/types";
-import { dragSeparator, launch, mod, scratch, setContentSize, shoot as shootInto } from "./launch";
+import { chooseDirectory, dragSeparator, launch, mod, newTab as newTabIn, scratch, setContentSize, setTheme as setThemeIn, shoot as shootInto } from "./launch";
 import { selectFixtureSession } from "./session-fixture";
 
 /**
@@ -53,7 +53,6 @@ declare const window: {
   __schemeSamples: { dark: boolean; colorScheme: string; prefersDark: boolean }[];
   __schemeFrames: number;
   textToCad: {
-    projects: { addPath(request: { path: string }): Promise<{ id: string }> };
     settings: { get(): Promise<{ theme: string }>; set(patch: Record<string, unknown>): Promise<unknown> };
     agents: { list(): Promise<{ installed: boolean }[]> };
     sessions: { delete(request: { id: string }): Promise<void> };
@@ -169,21 +168,22 @@ test("the scheme holds across Settings and a reload, follows the OS on System, a
 /* Before a session                                                            */
 /* -------------------------------------------------------------------------- */
 
-test("before a session: two panes, no explorer, and the chooser in both halves", async () => {
+test("before a session: two panes, no explorer, and one chooser in the main area", async () => {
   // A strip belongs to a session: with none bound, neither the panel nor anything that would
   // open it — the title bar's toggle, the palette's row, Mod+Alt+B — is there.
   await expect(page.locator("[data-panel]")).toHaveCount(2);
   await expect(page.getByTestId("explorer")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Toggle explorer" })).toHaveCount(0);
-  await expect(page.getByTestId("sidebar").getByRole("button", { name: "Open folder…" })).toBeVisible();
+  await expect(page.getByTestId("sidebar").getByText("No sessions yet")).toBeVisible();
+  await expect(page.getByTestId("sidebar").getByRole("button", { name: "Open folder…" })).toHaveCount(0);
   await expect(page.locator("[data-no-project]").getByRole("button", { name: "Open folder…" })).toBeVisible();
   await page.keyboard.press(`${mod}+K`);
-  await expect(page.getByPlaceholder("Search projects and commands…")).toBeVisible();
+  await expect(page.getByPlaceholder("Search sessions, projects and commands…")).toBeVisible();
   await expect(page.getByRole("option", { name: "Toggle sidebar" })).toBeVisible();
   await expect(page.getByRole("option", { name: "Open folder…" })).toBeVisible();
   await expect(page.getByRole("option", { name: "Toggle explorer" })).toHaveCount(0);
   await page.keyboard.press("Escape");
-  await expect(page.getByPlaceholder("Search projects and commands…")).toBeHidden();
+  await expect(page.getByPlaceholder("Search sessions, projects and commands…")).toBeHidden();
   await page.keyboard.press(`${mod}+Alt+b`);
   await expect(page.getByTestId("explorer")).toHaveCount(0);
   // The sidebar's collapse is in its title strip, level with the session's bar.
@@ -272,10 +272,10 @@ test("the lights' corner stays clear, and a drag stops at the minimum or closes 
   await page.getByRole("button", { name: "Back to app" }).click();
   await expect(page.getByText("Choose a folder to get started")).toBeVisible();
   await page.keyboard.press(`${mod}+K`);
-  await expect(page.getByPlaceholder("Search projects and commands…")).toBeVisible();
+  await expect(page.getByPlaceholder("Search sessions, projects and commands…")).toBeVisible();
   await expectClear("palette");
   await page.keyboard.press("Escape");
-  await expect(page.getByPlaceholder("Search projects and commands…")).toBeHidden();
+  await expect(page.getByPlaceholder("Search sessions, projects and commands…")).toBeHidden();
 });
 
 /* -------------------------------------------------------------------------- */
@@ -286,9 +286,9 @@ const PAGES: [slug: string, label: string][] = [
   ["general", "General"],
   ["agents", "Agents"],
   ["appearance", "Appearance"],
-  ["git", "Git & Worktrees"],
+  ["git", "Git and worktrees"],
   ["shortcuts", "Keyboard shortcuts"],
-  ["about", "About & Updates"],
+  ["about", "About and updates"],
 ];
 
 test("Settings: every page renders, and what it shows comes from main", async () => {
@@ -318,13 +318,13 @@ test("Settings: every page renders, and what it shows comes from main", async ()
 
   // A switch round-trips through main's database: leave the page and come back, and the value
   // is sqlite's, not a component's memory.
-  await open("Git & Worktrees");
+  await open("Git and worktrees");
   const fetchBefore = () => page.getByRole("switch", { name: "Fetch before creating" });
   await expect(fetchBefore()).toBeChecked();
   await fetchBefore().click();
   await expect(fetchBefore()).not.toBeChecked();
   await open("General");
-  await open("Git & Worktrees");
+  await open("Git and worktrees");
   await expect(fetchBefore()).not.toBeChecked();
   await fetchBefore().click();
   await expect(fetchBefore()).toBeChecked();
@@ -348,7 +348,9 @@ test("Settings: every page renders, and what it shows comes from main", async ()
     await expect(drawer.getByText("Skills", { exact: true })).toBeVisible();
     await expect(drawer.getByText(/plugin/i)).toHaveCount(0);
     await expect(drawer.getByRole("button", { name: /reinstall/i })).toHaveCount(0);
-    await expect(drawer.getByText("npx", { exact: true })).toBeVisible();
+    // The launch line is the registry's pin (`npm exec … --package=<pkg>@<version>`), not a bare npx.
+    await expect(drawer.getByText("npm", { exact: true })).toBeVisible();
+    await expect(drawer.getByText(/--package=@agentclientprotocol\/(claude-agent-acp|codex-acp)@\d+\.\d+\.\d+/)).toBeVisible();
     await shoot(`settings-agent-${slug}.png`);
     // Escape closes the drawer, not the route behind it...
     await page.keyboard.press("Escape");
@@ -365,7 +367,7 @@ test("Settings: every page renders, and what it shows comes from main", async ()
 /* -------------------------------------------------------------------------- */
 
 test("a session owns the explorer: its toggles, its strip and its shortcuts", async () => {
-  const session = await selectFixtureSession(page, project);
+  const session = await selectFixtureSession(app, page, project);
   // Selecting a session brings the toggle with that session's own state — closed.
   const header = page.locator("[data-session-header]");
   const toggle = header.getByRole("button", { name: "Toggle explorer" });
@@ -390,7 +392,7 @@ test("a session owns the explorer: its toggles, its strip and its shortcuts", as
     await page.getByRole("option", { name, exact: false }).first().click();
     await expect(page.getByRole("tab", { name: new RegExp(name.replace(".", "\\.")) })).toBeVisible();
   }
-  const selected = () => page.locator("[role=tab] [aria-selected=true]");
+  const selected = () => page.locator("[role=tab][aria-selected=true]");
   await page.keyboard.press(`${mod}+1`);
   await expect(selected()).toContainText("one.md");
   await page.keyboard.press(`${mod}+2`);
@@ -451,10 +453,10 @@ test("a session owns the explorer: its toggles, its strip and its shortcuts", as
 });
 
 test("in the composer, Shift+Enter is a newline, Enter sends, Escape stops, and Mod+N starts over", async () => {
-  await page.evaluate((dir) => window.textToCad.projects.addPath({ path: dir }), project);
+  await chooseDirectory(app, project);
   // Sending needs an agent, and the chip fills in once the detector has probed.
   await expect(page.locator("[data-new-session] [data-composer-row] [data-chip=model]")).toBeVisible({ timeout: 30_000 });
-  const composer = page.getByPlaceholder("Do anything");
+  const composer = page.getByPlaceholder("Describe a part to build…", { exact: true });
   await composer.click();
   await composer.fill("first line");
   await page.keyboard.press("Shift+Enter");
@@ -489,14 +491,11 @@ async function open(label: string) {
 }
 
 async function newTab(label: "File" | "Terminal") {
-  await page.getByRole("button", { name: "New tab", exact: true }).click();
-  await page.getByRole("menuitem", { name: label }).click();
-  await expect(page.getByRole("menu")).toHaveCount(0);
+  await newTabIn(page, label);
 }
 
 async function setTheme(theme: "dark" | "light") {
-  await page.evaluate((value) => window.textToCad.settings.set({ theme: value }), theme);
-  await expect(page.locator("html")).toHaveClass(theme === "dark" ? /\bdark\b/ : /^(?!.*\bdark\b).*$/);
+  await setThemeIn(page, theme);
 }
 
 /** No frame since the last drain disagreed with the expected scheme; waits for sampled frames. */

@@ -18,7 +18,7 @@ afterEach(async () => { await fs.rm(directory, { recursive: true, force: true })
 const session = { sessionId: "session", projectId: "project", cwd: "/untrusted" };
 function fixture() {
   const commands = { request: vi.fn().mockResolvedValue({ tabId: "new-tab" }) };
-  const service = { open: vi.fn().mockResolvedValue({ tabId: "new-tab" }), invoke: vi.fn().mockResolvedValue({}) };
+  const service = { open: vi.fn().mockResolvedValue({ tabId: "new-tab" }), invoke: vi.fn().mockResolvedValue({}), disposeSession: vi.fn() };
   const connections = new BrowserConnections({ sessionRoot: () => ({ directory, root: null }) }, commands, path.join(directory, "artifacts"), service as unknown as BrowserService);
   return { commands, service, connections };
 }
@@ -48,4 +48,49 @@ it("cancellation prevents resource creation, including after renderer admission"
   await expect(endpoints[0]!.tabs.open("https://example.com", controller.signal)).rejects.toThrow("cancelled");
   expect(service.open).not.toHaveBeenCalled();
   await connections.dispose();
+});
+it("disposePages closes every page when the workspace is gone", async () => {
+  const { service } = fixture();
+  const connections = new BrowserConnections({ sessionRoot: () => null }, { request: vi.fn() }, path.join(directory, "artifacts"), service as unknown as BrowserService);
+  await connections.disposePages(session);
+  expect(service.disposeSession).toHaveBeenCalledWith("session", undefined);
+});
+it("disposePages closes the session's native pages but keeps its endpoint", async () => {
+  const { connections, service } = fixture();
+  await connections.connect(session);
+  await connections.disposePages(session);
+  expect(service.disposeSession).toHaveBeenCalledWith("session", { sessionId: "session", projectId: "project", root: directory });
+  expect(endpoints[0]!.dispose).not.toHaveBeenCalled();
+  await connections.dispose();
+});
+it("disposePages from a superseded workspace change cannot close the pages of the newer one", async () => {
+  const { service } = fixture();
+  const dirs = ["/work-b", "/work-c"];
+  const connections = new BrowserConnections({ sessionRoot: () => ({ directory: dirs.shift()!, root: null }) }, { request: vi.fn() }, path.join(directory, "artifacts"), service as unknown as BrowserService);
+  let resolveB!: (value: string) => void;
+  const realpath = vi.spyOn(fs, "realpath").mockImplementation((async (target: string) => target === "/work-b" ? new Promise<string>(resolve => { resolveB = resolve; }) : target) as typeof fs.realpath);
+  try {
+    const first = connections.disposePages(session);
+    await connections.disposePages(session);
+    resolveB("/work-b");
+    await first;
+  } finally { realpath.mockRestore(); }
+  // B's late completion would keep B and close C's pages.
+  expect(service.disposeSession.mock.calls).toEqual([["session", { sessionId: "session", projectId: "project", root: "/work-c" }]]);
+});
+it("the newest disposePages still wins when each call follows a revoke, as the bridge's tokenFor does", async () => {
+  const { service } = fixture();
+  const dirs = ["/work-b", "/work-c"];
+  const connections = new BrowserConnections({ sessionRoot: () => ({ directory: dirs.shift()!, root: null }) }, { request: vi.fn() }, path.join(directory, "artifacts"), service as unknown as BrowserService);
+  let resolveB!: (value: string) => void;
+  const realpath = vi.spyOn(fs, "realpath").mockImplementation((async (target: string) => target === "/work-b" ? new Promise<string>(resolve => { resolveB = resolve; }) : target) as typeof fs.realpath);
+  try {
+    connections.revoke(session.sessionId);
+    const first = connections.disposePages(session);
+    connections.revoke(session.sessionId);
+    await connections.disposePages(session);
+    resolveB("/work-b");
+    await first;
+  } finally { realpath.mockRestore(); }
+  expect(service.disposeSession.mock.calls).toEqual([["session", { sessionId: "session", projectId: "project", root: "/work-c" }]]);
 });

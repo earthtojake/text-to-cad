@@ -293,6 +293,26 @@ describe("AgentOptionStore", () => {
     expect(probe).toHaveBeenCalledTimes(2);
   });
 
+  it("asks nothing of an agent main would refuse to probe, and says nothing about it", async () => {
+    // The new-session screen asks for every agent that can launch, and the
+    // eight `launchWithoutBinary` rows can — but a probe is only ever run for
+    // one whose CLI is here (`SessionManager.canProbe`). Refused inside the
+    // probe, each of the others was a thrown "is not installed" and a log
+    // line on every launch.
+    const probe = vi.fn(async () => snapshot([model()], modes));
+    const failures: string[] = [];
+    const { subject } = store({
+      probe,
+      probeable: (agentId) => agentId === "claude-code",
+      onProbeFailed: (agentId) => failures.push(agentId),
+    });
+    await subject.ensure("cline", null);
+    expect(probe).not.toHaveBeenCalled();
+    expect(failures).toEqual([]);
+    await subject.ensure("claude-code", null);
+    expect(probe).toHaveBeenCalledTimes(1);
+  });
+
   it("treats an agent that answers with nothing as one that did not answer", async () => {
     const probe = vi.fn(async () => snapshot());
     const { subject, rows } = store({ probe });

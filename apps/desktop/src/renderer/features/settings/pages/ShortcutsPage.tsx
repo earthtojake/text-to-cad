@@ -25,6 +25,8 @@ export function ShortcutsPage() {
         Shortcuts are fixed for now. The ones with a menu item work even when the keyboard is
         inside an editor or a browser tab.
       </p>
+      {/* The toast chord differs by platform, and a row holds one portable binding. */}
+      <p className="px-1 text-xs text-muted-foreground">Toasts: ⌘⌥T on macOS, Ctrl+Shift+T elsewhere.</p>
     </>
   );
 }

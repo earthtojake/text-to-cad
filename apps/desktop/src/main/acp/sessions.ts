@@ -5,8 +5,11 @@
  * (`sessions` table). `SessionManager` maps a row to at most one
  * `SessionConnection`, creates rows, resumes them with `session/load`, and
  * forwards every event to the renderer through `broadcast`. A connection
- * that dies stays in the index with `status: error`; the next `prompt` or
- * `load` spawns a fresh adapter and loads the transcript back.
+ * that dies stays in the index with `status: error`; the next `load` spawns a
+ * fresh adapter and loads the transcript back, and so does the next `prompt`
+ * — except for an archived row with no live connection, which `prompt`
+ * refuses ("This thread is archived; unarchive it first.") after awaiting an
+ * in-flight create.
  *
  * Opening a session used to be that whole sequence with a spinner over it —
  * two and a half seconds for Claude Code, one for Codex, measured by the
@@ -26,6 +29,7 @@ import nodePath from "node:path";
 import type { McpServer } from "@agentclientprotocol/sdk";
 
 import { effortOption, modeChoice, modelOption, preferredMode } from "../../shared/acp/options";
+import { diffCounts } from "../../shared/diff-counts";
 import type {
   ConfigOption,
   PromptBlock,
@@ -34,16 +38,21 @@ import type {
   SessionState,
 } from "../../shared/acp/types";
 import type { IpcEventChannel, IpcEventPayload } from "../../shared/ipc";
+import { DELETED_WHILE_STARTING } from "../../shared/ipc/errors";
 import type { Launch } from "../../shared/agents";
 import type { GitMode, Session, SessionStatus } from "../../shared/types";
-import type { AgentDetector } from "../agents/detect";
+import type { Event as TelemetryEvent } from "../telemetry";
+import { startTimer } from "../timer";
+import { PROBE_WAIT_MS, type AgentDetector } from "../agents/detect";
 import { agentProvider } from "../agents/registry";
-import { SessionConnection, type SessionConnectionOptions } from "./connection";
+import { adapterOptionsKey, SessionConnection, type SessionConnectionOptions } from "./connection";
 import { LiveConnections } from "./live";
 import { SessionSnapshotWriter, type SnapshotStore } from "./snapshots";
 import type { SpawnTerminal } from "./terminals";
 import { createTimer, loadTimer } from "./timing";
 import { WarmAdapterPool } from "./warm";
+
+export { diffCounts };
 
 export interface SessionRepository {
   list(projectId?: string): Session[];
@@ -65,8 +74,9 @@ export type SessionManagerDeps = {
   spawnTerminal: SpawnTerminal;
   broadcast: <C extends IpcEventChannel>(channel: C, payload: IpcEventPayload<C>) => void;
   /**
-   * The MCP servers a session gets: text-to-cad's own, minted per session
-   * (src/main/cad). A probe (`probeOptions`) is minted one too, and revokes
+   * The MCP servers a session gets: text-to-cad's seven domain servers
+   * (`text-to-cad-<integration>`), minted per session by `mcpServersFor` in
+   * src/main/integrations/index.ts. A probe (`probeOptions`) is minted one too, and revokes
    * it when it is done: the adapter is spawned exactly as a real session's
    * would be, or the options it reports are not the options it would have.
    */
@@ -140,9 +150,16 @@ export type SessionManagerDeps = {
     gitMode: GitMode;
     /** The first prompt, when the caller has one: the worktree's slug. */
     name?: string | undefined;
-    /** An explicit directory — Settings' `New chat in this worktree`. */
+    /** An explicit directory — Settings' `New session in this worktree`. */
     cwd?: string | undefined;
   }) => Promise<SessionWorkspace>;
+
+  /**
+   * P7: told once the workspace `workspace` answered is recorded on a session
+   * row — or abandoned by a create that failed. Until then a new worktree
+   * belongs to no session, and main keeps the keep-limit sweep off it.
+   */
+  workspaceSettled?: (workspace: SessionWorkspace) => void;
 
   /**
    * P7: the commit a directory is at. Recorded when the session is created and
@@ -151,8 +168,38 @@ export type SessionManagerDeps = {
    */
   head?: (cwd: string) => Promise<string | null>;
 
-  /** P7: remove the session's worktree on delete, if the settings allow it. */
-  releaseWorkspace?: (session: Session) => Promise<void>;
+  /**
+   * P7: the working tree as a tree object, pinned under `mark`
+   * (`<session id>/turn`). When present it is the turn mark — and the session
+   * mark outside a worktree — because `head` is where the last commit was,
+   * not where the work stood: until a commit lands, a range from HEAD is
+   * everything. Null falls back to `head`.
+   */
+  snapshot?: (cwd: string, mark: string) => Promise<string | null>;
+
+  /** P7: unpin a session's snapshot marks when it is deleted. */
+  dropMarks?: (cwd: string, sessionId: string) => Promise<void>;
+
+  /**
+   * P7: the empty tree's id when `cwd` is a repository with no commits, else
+   * null. Asked only after `head` answered null, and it must prove the
+   * repository unborn — `head`'s null also means "git failed".
+   */
+  emptyTree?: (cwd: string) => Promise<string | null>;
+
+  /**
+   * P7: remove the session's worktree on delete, if the settings allow it.
+   * Answers whether it did and, when it kept one, why — which is logged.
+   *
+   * `abandoned` is a create that failed after its worktree was made: nobody
+   * has worked in it and no session will ever open it, so it goes whatever
+   * the setting says — otherwise every failed sign-in leaves `slug`,
+   * `slug-2`, … and their branches behind.
+   */
+  releaseWorkspace?: (
+    session: Session,
+    options?: { abandoned?: boolean },
+  ) => Promise<{ removed: boolean; reason?: string } | void>;
 
   /**
    * Where the painted-on-select snapshot of each session's transcript is
@@ -170,6 +217,19 @@ export type SessionManagerDeps = {
    * spare.
    */
   keepAlive?: number;
+
+  /**
+   * P8: anonymous usage events (`../telemetry.ts`). Injected for the same
+   * reason as everything else here; the only thing this file reports is
+   * that a session was created, and with which agent.
+   */
+  track?: (event: TelemetryEvent) => void;
+
+  /**
+   * Start a timer that calls `fire` after `ms`; returns its cancel. The clock
+   * for the archive's wait on a create, injected so a test fires it by hand.
+   */
+  startTimer?: (ms: number, fire: () => void) => () => void;
 };
 
 /** A provisional title until the agent supplies one, trimmed to fit a sidebar row. */
@@ -186,7 +246,22 @@ export function titleFromPrompt(content: PromptBlock[], max = 60): string {
   return collapsed.length > max ? `${collapsed.slice(0, max - 1).trimEnd()}…` : collapsed;
 }
 
-type ChangeTally = { files: Set<string>; insertions: number; deletions: number };
+/**
+ * `baseFiles`: files counted before this app run, when a reload replayed no
+ * diffs — their paths are not known, so a later edit to one of them counts
+ * it again. The row's `changedFiles` is `baseFiles + files.size`.
+ */
+type ChangeTally = { files: Set<string>; baseFiles: number; insertions: number; deletions: number };
+
+/** How long a turn (or a create) waits for the working tree to be snapshotted. */
+const MARK_WAIT_MS = 5_000;
+const EXPIRED = Symbol("mark wait expired");
+
+/** A turn in flight, or a connection on its way up: neither evicted nor left standing at startup. */
+const ACTIVE: ReadonlySet<SessionStatus> = new Set(["running", "waiting", "connecting"]);
+
+/** How long an archive waits for a create still running before it abandons that create. */
+const ARCHIVE_WAIT_MS = 10_000;
 
 /** How long a config-option probe may take before it is abandoned. */
 const PROBE_TIMEOUT_MS = 60_000;
@@ -208,6 +283,20 @@ export class SessionManager {
   private readonly tallies = new Map<string, ChangeTally>();
   /** The `load` in flight per session, so two callers wait on one spawn. */
   private readonly loads = new Map<string, Promise<SessionState>>();
+  /**
+   * The connections a `prompt` is between `ensureLive` and the end of its
+   * turn. The turn mark waits on git, and until `session/prompt` is sent the
+   * connection is `idle`, which `busy` alone would let a second session's
+   * `create` or `load` evict from under the prompt.
+   */
+  private readonly held = new Set<SessionConnection>();
+  /**
+   * The `create` still spawning per session, settled when it succeeds or fails.
+   * The row is in the index (and in the sidebar) from before `session/new`, so
+   * a click on it — or a prompt — arrives while the row has no agent session
+   * id yet, and `load` waits here rather than say it never connected.
+   */
+  private readonly creating = new Map<string, Promise<void>>();
   /** An agent may announce its title before session/new tells us its session id. */
   private readonly pendingTitles = new Map<string, Map<string, string>>();
   private readonly snapshots: SessionSnapshotWriter | null;
@@ -217,14 +306,19 @@ export class SessionManager {
     this.live = new LiveConnections({
       ...(deps.keepAlive === undefined ? {} : { limit: deps.keepAlive }),
       // A turn in flight is never evicted: the work and the reason for it
-      // would both be lost, and the limit comes back down when it ends.
+      // would both be lost, and the limit comes back down when it ends. Nor
+      // is one still connecting — in `session/new` or `session/load`: closing
+      // it rejects the load, and a prompt waiting on that load in
+      // `ensureLive` with it. Nor one whose prompt is on its way out — idle
+      // until the turn mark is taken and `session/prompt` is sent (`held`).
       busy: (connection) =>
-        connection.state.status === "running" || connection.state.status === "waiting",
+        this.held.has(connection) || ACTIVE.has(connection.state.status),
       onEvict: (sessionId) => {
         console.info(`[acp] ${sessionId.slice(0, 8)} was closed to keep the adapter count at the limit`);
         // The snapshot, now: the adapter is gone and a click on that row has
         // only the picture to paint (`./snapshots.ts`).
         this.snapshots?.flush(sessionId);
+        this.announceClosed(sessionId);
         if (this.deps.repo.get(sessionId)) {
           this.setStatus(sessionId, "closed");
         }
@@ -242,11 +336,51 @@ export class SessionManager {
   /* ---------------------------------------------------------------------- */
 
   list(projectId?: string): Session[] {
+    this.boot();
     return this.deps.repo.list(projectId);
   }
 
   get(id: string): Session | null {
+    this.boot();
     return this.deps.repo.get(id);
+  }
+
+  /**
+   * Once, before the index is first read: a row left `running`, `waiting` or
+   * `connecting` names an adapter that died with the last app run (a crash or
+   * a force-quit skips `closeAll`). Nothing can be live before this manager
+   * has spawned something, so those rows become `closed` — otherwise a
+   * "needs you" glyph outlives the agent that needed you. Lazy rather than in
+   * the constructor, which runs before the database is open; `updatedAt` is
+   * kept so the sidebar's order does not change.
+   *
+   * A row with no agent session id is a `create` that never reached
+   * `session/new`'s answer — the app quit mid-spawn, and `create`'s cleanup
+   * cannot run once the database is closed. It can never be loaded, so it is
+   * removed rather than left in the sidebar as a "New session" nobody made,
+   * and the worktree it cut (`worktreeOwned`) is released with it.
+   */
+  private booted = false;
+  private boot(): void {
+    if (this.booted) {
+      return;
+    }
+    this.booted = true;
+    for (const session of this.deps.repo.list()) {
+      if (!session.acpSessionId && !this.creating.has(session.id)) {
+        this.deps.repo.remove(session.id);
+        void this.unpinMarks(session);
+        // The worktree the dead create cut goes with it; one it was handed was
+        // there before and stays.
+        if (session.worktreeOwned && session.worktreePath) {
+          void Promise.resolve(this.deps.releaseWorkspace?.(session, { abandoned: true })).catch(() => undefined);
+        }
+        continue;
+      }
+      if (ACTIVE.has(session.status) && !this.live.get(session.id)?.alive) {
+        this.deps.repo.upsert({ ...session, status: "closed" });
+      }
+    }
   }
 
   /**
@@ -259,11 +393,25 @@ export class SessionManager {
    * gets the spinner, the way every session did before migration 10.
    */
   state(id: string): { state: SessionState; live: boolean } | null {
+    this.boot();
     const connection = this.live.get(id);
     // `acpSessionId`, not merely `alive`: a connection that is spawned but
-    // still replaying holds an empty state, and the snapshot is a better
-    // picture of the session than the beginning of its own reload.
+    // has not answered `session/new` holds an empty state, and the snapshot is
+    // a better picture than that. A `loadSession` dispatches `session/connected`
+    // first, so a replaying connection is `live: true` here — `connecting`, with
+    // the transcript replayed so far. The renderer that started the load drops
+    // that connection's events until the load's own state lands (`reconnecting`
+    // in `state/acp.ts`); one that reloaded mid-load paints this state from
+    // `ensureLoaded` and reduces the replay's events as they come, which the
+    // load's final `session.state` then replaces.
     if (connection?.alive && connection.acpSessionId) {
+      // A create still in its preferences and marks: the reducer says idle from
+      // `session/new`, but the row says `connecting` until `create` returns,
+      // and the composer follows the row (the model chip would be overwritten
+      // by `applyPreferences`). The end of `create` broadcasts the real state.
+      if (this.creating.has(id) && connection.state.status === "idle") {
+        return { state: { ...connection.state, status: "connecting" }, live: true };
+      }
       return { state: connection.state, live: true };
     }
     const stored = this.snapshots?.read(id) ?? null;
@@ -292,21 +440,38 @@ export class SessionManager {
     name?: string | undefined;
     branch?: string;
   }): Promise<Session> {
+    this.boot();
     if (!agentProvider(input.agentId)) {
       throw new Error(`unknown agent: ${input.agentId}`);
     }
 
     const workspace = await this.workspaceFor(input);
-    const startHead = await this.headOf(workspace.cwd);
+    const id = this.deps.newId();
+    // A worktree this create cut is clean, so its start is a commit, and that
+    // commit is also the base its branch is deleted against
+    // (`releaseWorkspace`). A checkout can hold anything already, and so can a
+    // worktree the caller named (`New session in this worktree`, which sends
+    // `cwd`), so the start of those is the tree as it is.
+    const fresh = input.gitMode === "worktree" && !input.cwd;
+    // Started now and settled after `session/new`: the marks are of the tree
+    // before the first prompt, which cannot go out until this create has
+    // returned, so they overlap the spawn rather than delay it.
+    const owner = { id, projectId: input.projectId, cwd: workspace.cwd };
+    const marks: Promise<[string | null, string | null]> = fresh
+      ? Promise.all([this.headOf(workspace.cwd), this.markWithin(owner, "turn")])
+      : this.markWithin(owner, "session").then((head) => [head, head]);
     const now = Date.now();
     const session: Session = {
-      id: this.deps.newId(),
+      id,
       projectId: input.projectId,
       agentId: input.agentId,
       cwd: workspace.cwd,
       gitMode: input.gitMode,
       branch: workspace.branch ?? input.branch,
       ...(workspace.worktreePath ? { worktreePath: workspace.worktreePath } : {}),
+      // Recorded for `boot`, which cannot tell a worktree this create cut from
+      // one it was handed.
+      ...(workspace.worktreePath && fresh ? { worktreeOwned: true } : {}),
       title: "New session",
       titleSource: "prompt",
       createdAt: now,
@@ -318,50 +483,183 @@ export class SessionManager {
       deletions: 0,
       archived: false,
       pinned: false,
-      // Both scopes start here. `turnHead` is the session's head until the
-      // first turn moves it, so a review taken before any prompt shows what
-      // the person changed by hand rather than nothing at all.
-      sessionHead: startHead,
-      turnHead: startHead,
-      turnStartedAt: null,
+      // Both scopes start at `marks`, filled in below once they have landed.
+      // `turnHead` is the session's mark until the first turn moves it, so a
+      // review taken before any prompt shows what the person changed by hand
+      // rather than nothing at all.
+      sessionHead: null,
+      turnHead: null,
     };
-    this.deps.repo.upsert(session);
-    this.broadcastIndex();
-
-    const timer = createTimer();
-    let warmed = false;
-    let connection: SessionConnection;
     try {
-      connection = await this.connect(session, {
-        onWarm: () => {
-          warmed = true;
-        },
-      });
-      timer.mark("spawn");
-      await connection.initialize();
-      timer.mark("initialize");
-      await connection.newSession();
-      timer.mark("session/new");
-      console.info(
-        `[acp] create ${session.id.slice(0, 8)} ${session.agentId} warm=${warmed ? "yes" : "no"} ${timer.format()}`,
-      );
-    } catch (error) {
-      // A row with no agent session id can never be loaded; the renderer
-      // shows the failure (sign in, install) and the user creates again.
-      this.live.delete(session.id)?.close();
-      this.pendingTitles.delete(session.id);
-      this.deps.repo.remove(session.id);
-      this.broadcastIndex();
-      throw error;
+      this.deps.repo.upsert(session);
+    } finally {
+      this.deps.workspaceSettled?.(workspace);
     }
-    // What the person last chose for this agent — the model, the effort and
-    // the mode. Never a reason for the session to fail: a refused
-    // `set_config_option` leaves the session at the agent's own defaults,
-    // which is a working session.
-    await this.applyPreferences(session, connection);
-    const updated = this.update(session.id, { acpSessionId: connection.acpSessionId, status: "idle" });
+    let created!: () => void;
+    this.creating.set(id, new Promise<void>((resolve) => (created = resolve)));
+    // The connection this create is still setting up, in `held` from `connect`
+    // until it returns: idle through the preferences and the marks (up to five
+    // seconds), it is not `busy` to the keep-alive limit, and another create or
+    // load past the limit would close it under this one.
+    let setup: SessionConnection | undefined;
+    try {
+      this.broadcastIndex();
+
+      const timer = createTimer();
+      let warmed = false;
+      let connection: SessionConnection;
+      try {
+        connection = await this.connect(session, {
+          onWarm: () => {
+            warmed = true;
+          },
+        });
+        timer.mark("spawn");
+        this.held.add(connection);
+        setup = connection;
+        await connection.initialize();
+        timer.mark("initialize");
+        await connection.newSession();
+        timer.mark("session/new");
+        // On its own, before the preferences and the marks: the row is what
+        // `boot` purges when it has no agent session id, and a crash while
+        // the marks are pending must not take a connected session with it.
+        this.update(session.id, { acpSessionId: connection.acpSessionId });
+        console.info(
+          `[acp] create ${session.id.slice(0, 8)} ${session.agentId} warm=${warmed ? "yes" : "no"} ${timer.format()}`,
+        );
+      } catch (error) {
+        // A row with no agent session id can never be loaded; the renderer
+        // shows the failure (sign in, install) and the user creates again.
+        // Unless the person deleted it: that is not a failure to show.
+        const deleted = !this.deps.repo.get(session.id);
+        await this.abandonCreate(session, input, workspace, marks);
+        throw deleted ? new Error(DELETED_WHILE_STARTING) : error;
+      }
+      // What the person last chose for this agent — the model, the effort and
+      // the mode. Never a reason for the session to fail: a refused
+      // `set_config_option` leaves the session at the agent's own defaults,
+      // which is a working session.
+      try {
+        await this.applyPreferences(session, connection);
+        const [sessionHead, turnHead] = await marks;
+        // Only a row still `connecting` goes idle. A `close` during the
+        // preferences or the marks has set `closed` over a retired connection,
+        // and writing `idle` back would draw a live composer on a dead one.
+        const stillConnecting = this.deps.repo.get(session.id)?.status === "connecting";
+        const updated = this.update(
+          session.id,
+          stillConnecting ? { status: "idle", sessionHead, turnHead } : { sessionHead, turnHead },
+        );
+        if (stillConnecting) {
+          this.deps.broadcast("session.state", { sessionId: session.id, state: connection.state });
+        }
+        // The registry id and nothing else — no directory, project or prompt.
+        this.deps.track?.({ name: "session_created", agent: session.agentId });
+        return updated;
+      } catch (error) {
+        // A throw between `session/new` and the row going idle (the store
+        // refusing `remember`, say). One contract: a `create` that reached
+        // `session/new` and still has its connection RESOLVES with the session,
+        // so the renderer adopts the row and offers no second create; the
+        // failure is logged and told to the index as a note. One whose
+        // connection is gone rejects and leaves no row, as a failure before
+        // `session/new` does — its agent session was never used, so a Retry that
+        // loaded it would have nothing to resume ("this session never
+        // connected; create it again").
+        const row = this.deps.repo.get(session.id);
+        if (row && row.status !== "connecting") return row; // closed under this create: that state stands
+        if (!row || !connection.alive) {
+          await this.abandonCreate(session, input, workspace, marks);
+          // A row gone under the create is a delete, not a failure to show.
+          throw row ? error : new Error(DELETED_WHILE_STARTING);
+        }
+        console.warn(`[acp] create ${session.id.slice(0, 8)} finished with a warning: ${String(error)}`);
+        try {
+          return await this.settleAfterFailedCreate(session, connection, marks, error);
+        } catch (settleError) {
+          // The store refused the settle too (the same SQLITE_BUSY, persistent). Nothing may stay
+          // `connecting` with a live connection and no owner: retire it and take the row.
+          console.warn(`[acp] create ${session.id.slice(0, 8)} could not settle: ${String(settleError)}`);
+          await this.abandonCreate(session, input, workspace, marks);
+          throw error;
+        }
+      }
+    } finally {
+      if (setup) this.held.delete(setup);
+      this.creating.delete(id);
+      created();
+    }
+  }
+
+  /**
+   * A `create` that will not produce a session: the connection, the row, and
+   * the worktree this create cut all go. Not a worktree it was given
+   * (`New session in this worktree` sends `cwd`): that directory was there before.
+   */
+  private async abandonCreate(
+    session: Session,
+    input: { cwd?: string },
+    workspace: { worktreePath?: string | undefined },
+    marks: Promise<[string | null, string | null]>,
+  ): Promise<void> {
+    this.retire(session.id);
+    this.pendingTitles.delete(session.id);
+    this.deps.repo.remove(session.id);
+    this.broadcastIndex();
+    // The marks may still be landing: unpin them once they have, and take
+    // the branch's base from the session mark (`releaseWorkspace`).
+    const [startHead] = await marks.catch(() => [null, null] as const);
+    await this.unpinMarks(session);
+    if (workspace.worktreePath && !input.cwd) {
+      await this.deps.releaseWorkspace?.({ ...session, sessionHead: startHead }, { abandoned: true }).catch(() => undefined);
+    }
+  }
+
+  /**
+   * The row a `create` that failed after `session/new` leaves, its connection
+   * alive: idle, so the composer opens, with what went wrong as a note on the
+   * index (`session.status` carries `error` beside a live status).
+   */
+  private async settleAfterFailedCreate(
+    session: Session,
+    connection: SessionConnection,
+    marks: Promise<[string | null, string | null]>,
+    cause: unknown,
+  ): Promise<Session> {
+    const [sessionHead, turnHead] = await marks.catch(() => [null, null] as const);
+    const row = this.update(session.id, { status: "idle", sessionHead, turnHead });
     this.deps.broadcast("session.state", { sessionId: session.id, state: connection.state });
-    return updated;
+    this.deps.broadcast("session.status", {
+      sessionId: session.id,
+      status: "idle",
+      error: `The session started, but setting it up failed: ${cause instanceof Error ? cause.message : String(cause)}`,
+    });
+    return row;
+  }
+
+  /**
+   * Run the setup again on a live, idle session that `settleAfterFailedCreate` left with a note:
+   * the same `applyPreferences` a create runs. Resolves with the new note, or null when it went
+   * through (the renderer drops its held note on null); a failure is also re-broadcast as the
+   * note. It is the only way to retry: `load` on a live connection re-broadcasts its state and
+   * returns, so it would retry nothing.
+   */
+  async retrySetup(id: string): Promise<{ error: string | null }> {
+    const connection = this.requireLive(id);
+    const session = this.require(id);
+    if (session.status !== "idle") {
+      throw new Error("The session is busy; set it up again when it is idle.");
+    }
+    try {
+      await this.applyPreferences(session, connection);
+    } catch (error) {
+      const note = `Setting it up again failed: ${error instanceof Error ? error.message : String(error)}`;
+      this.setStatus(id, "idle", note);
+      return { error: note };
+    }
+    this.deps.broadcast("session.state", { sessionId: id, state: connection.state });
+    return { error: null };
   }
 
   /**
@@ -440,6 +738,33 @@ export class SessionManager {
   }
 
   /**
+   * Whether `probeOptions` would run for this agent at all: its CLI is on
+   * this machine, or a launch override makes every provider the same test
+   * process. `launchWithoutBinary` is not enough — it says the adapter can
+   * run without the CLI, which a session the person asked for may use, not
+   * that a speculative probe should fetch it (see `probeOptions`).
+   *
+   * "Not installed" is a verdict only from this launch's probe: a warm launch's first table is
+   * the last launch's, and a CLI installed since is on this machine now. A row that says absent
+   * waits for the fresh table, with the bound `connect` uses, before it refuses.
+   */
+  async canProbe(agentId: string): Promise<boolean> {
+    const provider = agentProvider(agentId);
+    if (!provider) {
+      return false;
+    }
+    if (this.deps.launchOverride?.(provider.id)) {
+      return true;
+    }
+    const held = this.deps.detector.list().find((candidate) => candidate.id === provider.id);
+    if (held?.installed === true) {
+      return true;
+    }
+    const fresh = await this.deps.detector.freshWithin(PROBE_WAIT_MS);
+    return (fresh ?? this.deps.detector.list()).find((candidate) => candidate.id === provider.id)?.installed === true;
+  }
+
+  /**
    * What one `session/new` with this agent would offer, without keeping the
    * session: the adapter is spawned exactly as a real session's is — the same
    * environment, the same MCP servers, the project's own directory — asked
@@ -462,7 +787,6 @@ export class SessionManager {
       throw new Error(`unknown agent: ${input.agentId}`);
     }
     const launch = this.deps.launchOverride?.(provider.id) ?? null;
-    const status = this.deps.detector.list().find((candidate) => candidate.id === provider.id);
     // Stricter than `connect`, on purpose. A session is something a person
     // asked for and is worth an `npx -y` download; a probe is speculative,
     // and eight `launchWithoutBinary` providers fetching their adapters on a
@@ -470,7 +794,7 @@ export class SessionManager {
     // nobody asked for. So: the CLI is on this machine, or nothing. (With a
     // launch override in force every provider is the same test process, and
     // the machine's PATH says nothing about it.)
-    if (!launch && !status?.installed) {
+    if (!(await this.canProbe(provider.id))) {
       throw new Error(`${provider.name} is not installed`);
     }
     if (!existsSync(input.cwd)) {
@@ -512,6 +836,11 @@ export class SessionManager {
    * the same shape for the two adapters (README, "Opening a session").
    */
   async load(id: string): Promise<SessionState> {
+    this.boot();
+    const creation = this.creating.get(id);
+    if (creation) {
+      return creation.then(() => this.load(id));
+    }
     // One load per session at a time. The renderer starts one behind the
     // painted snapshot, and a prompt typed into that snapshot's composer
     // arrives while it is still running — two spawns for one session, and a
@@ -526,15 +855,49 @@ export class SessionManager {
       this.deps.broadcast("session.state", { sessionId: id, state: existing.state });
       return existing.state;
     }
-    const work = this.loadNow(id).finally(() => {
-      this.loads.delete(id);
+    const work: Promise<SessionState> = this.loadNow(id).finally(() => {
+      // Its own entry only: a close drops an abandoned load's, and the load a Reconnect then
+      // started is not this one's to delete.
+      if (this.loads.get(id) === work) this.loads.delete(id);
     });
     this.loads.set(id, work);
     return work;
   }
 
+  /**
+   * How many times each session was closed by a person. A load that began before one is for
+   * nobody: a close that lands while `connect` is still reading the shell environment finds no
+   * connection to retire, and the load would go on to make the row `idle` again — or `error`, if
+   * the close is what made it fail.
+   */
+  private readonly disconnects = new Map<string, number>();
+
+  /**
+   * A load that failed: the row goes to `error`. A failure the connection
+   * already put on `session.update` (an agent that answered session/load with
+   * an error, an adapter that died) has been heard; one that never reached it
+   * — a `connect` that threw, no loadSession capability, an `initialize` that
+   * threw — is said here, where the renderer listens, so the state it holds
+   * does not keep the old status.
+   */
+  private failLoad(id: string, message: string, alreadyReported = false) {
+    this.setStatus(id, "error", message);
+    if (!alreadyReported && !this.shuttingDown) {
+      this.deps.broadcast("session.update", {
+        sessionId: id,
+        event: { type: "status", status: "error", error: message, at: Date.now() },
+      });
+    }
+  }
+
   private async loadNow(id: string): Promise<SessionState> {
     const session = this.require(id);
+    const disconnectsAtStart = this.disconnects.get(id) ?? 0;
+    const overtaken = () => (this.disconnects.get(id) ?? 0) !== disconnectsAtStart;
+    // What the connection this replaces last said, written now: a reload that
+    // fails `discard`s the pending write below, and the dead connection's
+    // final state (a crashed turn's, queued 750 ms out) is the only copy of it.
+    this.snapshots?.flush(id);
     if (!session.acpSessionId) {
       throw new Error("this session never connected; create it again");
     }
@@ -545,25 +908,76 @@ export class SessionManager {
     const replay: { onReplayUpdate?: () => void } = {
       onReplayUpdate: () => timer.mark("firstUpdate"),
     };
-    const connection = await this.connect(session, {
-      onWarm: () => {
-        warmed = true;
-      },
-      replay,
-    });
+    // A `connect` that throws after it quietly retired the old connection (the shell env probe,
+    // the spawn) has left the renderer with its last status and the row `connecting`: said here,
+    // the same way a failed `initialize` is.
+    let connection: SessionConnection;
+    try {
+      connection = await this.connect(session, {
+        overtaken,
+        onWarm: () => {
+          warmed = true;
+        },
+        replay,
+      });
+    } catch (error) {
+      if (overtaken()) throw error;
+      this.failLoad(id, error instanceof Error ? error.message : String(error));
+      throw error;
+    }
+    if (overtaken()) return this.abandon(id, connection);
     timer.mark("spawn");
+    // session/load replays the whole history, edits included, through
+    // `tallyUpdate`: start the count again rather than add a second copy of
+    // it to what an earlier load (or turn) in this app run counted.
+    this.tallies.delete(id);
     try {
       await connection.initialize();
       timer.mark("initialize");
-      await connection.loadSession(session.acpSessionId);
+      // The agent's title, which the replay does not send again: the last
+      // state's, or the row's when the agent is who named it.
+      const stored = this.snapshots?.read(id) ?? null;
+      const title = stored?.title ?? (session.titleSource === "agent" ? session.title : null);
+      // The preamble went out with the first prompt: an agent turn with more
+      // in it than an error says that prompt was read, whatever the replay
+      // brings back (`loadSession`).
+      const answered =
+        stored?.turns.some((turn) => turn.role === "agent" && turn.parts.some((part) => part.type !== "error")) ?? false;
+      await connection.loadSession(session.acpSessionId, title, answered);
+      // An adapter that replays no diffs leaves nothing counted, and the
+      // next persistTally would overwrite the row with one turn's edits:
+      // the persisted counts are then the history to add to.
+      // Unless a delete (or another retire) took the session meanwhile: a
+      // tally made now would be one nothing ever forgets.
+      const persisted = this.deps.repo.get(id);
+      if (!this.tallies.has(id) && persisted && this.live.get(id) === connection) {
+        this.tallies.set(id, {
+          files: new Set(),
+          baseFiles: persisted.changedFiles ?? 0,
+          insertions: persisted.insertions ?? 0,
+          deletions: persisted.deletions ?? 0,
+        });
+      }
     } catch (error) {
-      this.setStatus(id, "error");
+      // Out of the live set before it is closed: its `closed` is then a
+      // detached connection's and dropped (`onEvent`), and the row keeps
+      // the error.
+      const reported = connection.state.status === "error";
+      // Closed by the person mid-load: the failure is the close's, and the row keeps `closed`.
+      const closed = overtaken();
+      if (this.live.get(id) === connection) this.live.delete(id);
       connection.close();
-      this.live.delete(id);
+      // The error state has no transcript (the reload never replayed one), and
+      // its pending write would put that over the stored one 750 ms later —
+      // the previous snapshot is the only copy of the session's history.
+      this.snapshots?.discard(id);
+      if (closed) throw error;
+      this.failLoad(id, error instanceof Error ? error.message : String(error), reported);
       throw error;
     } finally {
       replay.onReplayUpdate = undefined;
     }
+    if (overtaken()) return this.abandon(id, connection);
     timer.mark("replay");
     console.info(
       `[acp] load ${id.slice(0, 8)} ${session.agentId} warm=${warmed ? "yes" : "no"} ${timer.format()}`,
@@ -571,6 +985,13 @@ export class SessionManager {
     this.update(id, { status: "idle" });
     this.deps.broadcast("session.state", { sessionId: id, state: connection.state });
     return connection.state;
+  }
+
+  /** A load a person's close overtook: its connection goes, and nothing is written over the `closed` row or broadcast over the pane. */
+  private abandon(id: string, connection: SessionConnection): never {
+    if (this.live.get(id) === connection) this.live.delete(id);
+    connection.close();
+    throw new Error("the session was disconnected while it loaded");
   }
 
   /**
@@ -616,32 +1037,65 @@ export class SessionManager {
     return this.warm.has(agentId);
   }
 
-  async prompt(id: string, content: PromptBlock[]): Promise<{ stopReason: string }> {
+  async prompt(id: string, content: PromptBlock[]): Promise<{ stopReason: string; refused?: string }> {
+    this.require(id);
+    // An archive that landed during a create closed the connection once the
+    // create settled, and the first prompt (`NewSession` sends it as the
+    // create returns) would reconnect the archived row and run a turn in a
+    // thread the person put away. Wait the create out, then look.
+    await this.creating.get(id)?.catch(() => undefined);
     const session = this.require(id);
-    const connection = await this.ensureLive(session);
-    // The session being prompted is the one in use: it goes to the front of
-    // the keep-alive queue and is never what an eviction closes.
-    this.live.touch(id);
-    // Re-read after reconnect: session/load may have supplied the agent's
-    // title while ensureLive was in flight.
-    const current = this.require(id);
-    if (current.titleSource === "prompt" && current.title === "New session") {
-      this.update(id, { title: titleFromPrompt(content), titleSource: "prompt" });
+    // Only a row with nothing live is refused: an archived transcript the
+    // person opened and Reconnected is theirs to continue, and it has a
+    // connection. What `prompt` must not do is be the reconnect.
+    if (session.archived && !this.live.get(id)?.alive) {
+      throw new Error("This thread is archived; unarchive it first.");
     }
-    // The turn's starting point, read before the agent can move it. This is
-    // what the review's `Last turn` scope diffs against; taking it afterwards
-    // would measure the turn against its own result.
-    this.update(id, {
-      turnHead: await this.headOf(session.cwd),
-      turnStartedAt: Date.now(),
-    });
+    const connection = await this.ensureLive(session);
+    // A block the agent did not say it takes (`promptCapabilities`) is
+    // refused before anything moves — the turn mark, the title, the
+    // transcript. An answer rather than a rejection: nothing failed, and the
+    // renderer keeps the draft and says why beside it.
+    const refused = connection.refusal(content);
+    if (refused) {
+      return { stopReason: "refused", refused };
+    }
+    this.held.add(connection);
     try {
-      const response = await connection.prompt(content, `${id}:${Date.now()}`);
-      this.persistTally(id);
-      return { stopReason: response.stopReason };
-    } catch (error) {
-      this.persistTally(id);
-      throw error;
+      // The session being prompted is the one in use: it goes to the front of
+      // the keep-alive queue and is never what an eviction closes.
+      this.live.touch(id);
+      // Re-read after reconnect: session/load may have supplied the agent's
+      // title while ensureLive was in flight.
+      const current = this.require(id);
+      if (current.titleSource === "prompt" && current.title === "New session") {
+        this.update(id, { title: titleFromPrompt(content), titleSource: "prompt" });
+      }
+      // The turn's starting point, read before the agent can move it. This is
+      // what the review's `Last turn` scope diffs against; taking it afterwards
+      // would measure the turn against its own result. A snapshot that takes
+      // too long keeps the previous mark: a wider `Last turn` is still a
+      // review, where a null would unmark it altogether.
+      const turnHead = await this.markWithin(session, "turn", current.turnHead);
+      // Deleted while the snapshot ran: `delete` unpinned before this mark
+      // was pinned, and nothing else would ever drop the ref it just made.
+      if (!this.deps.repo.get(id)) {
+        await this.unpinMarks(session);
+        throw new Error(`no such session: ${id}`);
+      }
+      this.update(id, turnHead === null ? {} : { turnHead });
+      try {
+        const response = await connection.prompt(content, `${id}:${Date.now()}`);
+        this.persistTally(id);
+        return { stopReason: response.stopReason };
+      } catch (error) {
+        // A turn cut short by `close` (or an eviction, or a reconnect) is not
+        // activity in the session: its counts are kept, its row does not move.
+        this.persistTally(id, { touch: this.live.get(id) === connection });
+        throw error;
+      }
+    } finally {
+      this.held.delete(connection);
     }
   }
 
@@ -697,8 +1151,15 @@ export class SessionManager {
     );
   }
 
+  /**
+   * Throws when nothing is waiting on `requestId` — answered already, or
+   * asked by an adapter that has since gone — so the card can say so rather
+   * than swallow the click.
+   */
   respondPermission(id: string, requestId: string, optionId: string | null): void {
-    this.requireLive(id).respondPermission(requestId, optionId);
+    if (!this.requireLive(id).respondPermission(requestId, optionId)) {
+      throw new Error("This request has expired — reconnect and ask again.");
+    }
   }
 
   rename(id: string, title: string): Session {
@@ -706,13 +1167,47 @@ export class SessionManager {
     return this.update(id, { title: title.trim(), titleSource: "user" });
   }
 
-  /** Hide the row from the sidebar. The adapter is closed; `load` still resumes it later. */
-  archive(id: string, archived: boolean): Session {
-    this.require(id);
+  /**
+   * Hide the row from the sidebar. The adapter is closed; `load` still resumes it later.
+   *
+   * A row still being created is archived once its create has settled: `close`
+   * under it would reject `session/new`, and `create` would then remove the row
+   * and its worktree — an "archived" thread destroyed, and a create error shown
+   * for it. The create runs to its end (the row goes idle), then this closes it.
+   */
+  async archive(id: string, archived: boolean): Promise<Session> {
+    const session = this.require(id);
     if (archived) {
+      const creation = this.creating.get(id);
+      if (creation && !(await this.settlesWithin(creation, ARCHIVE_WAIT_MS))) {
+        // A create that never answers (`initialize` and `session/new` have no
+        // timeout of their own) would leave the sidebar's archive click dead.
+        // Past the limit, the old way: close under it. `session/new` rejects,
+        // `create` removes the row and its worktree and rejects to its caller,
+        // so the thread is gone, not archived; this answers with the row as it
+        // stood.
+        console.warn(`[acp] archive ${id.slice(0, 8)}: create still running after ${ARCHIVE_WAIT_MS / 1000} s, abandoning it`);
+        this.close(id);
+        return this.deps.repo.get(id) ? this.update(id, { archived }) : { ...session, archived, status: "closed" };
+      }
+      // A create that failed took the row with it: there is nothing left to archive.
+      this.require(id);
       this.close(id);
     }
     return this.update(id, { archived });
+  }
+
+  /** Whether `work` settled (either way) before `ms` passed. */
+  private async settlesWithin(work: Promise<unknown>, ms: number): Promise<boolean> {
+    let cancel = () => {};
+    const expired = new Promise<false>((resolve) => {
+      cancel = (this.deps.startTimer ?? startTimer)(ms, () => resolve(false));
+    });
+    try {
+      return await Promise.race([work.then(() => true, () => true), expired]);
+    } finally {
+      cancel();
+    }
   }
 
   /**
@@ -729,7 +1224,10 @@ export class SessionManager {
   }
 
   close(id: string): void {
-    this.live.delete(id)?.close();
+    this.disconnects.set(id, (this.disconnects.get(id) ?? 0) + 1);
+    // An abandoned load is for nobody: a Reconnect that joined it would inherit its refusal.
+    this.loads.delete(id);
+    this.retire(id);
     this.pendingTitles.delete(id);
     // The transcript as it stood, written now rather than in a second: the
     // adapter is gone and the next click has only the snapshot to paint.
@@ -749,9 +1247,21 @@ export class SessionManager {
    * delete the thread over it would leave a thread nobody wants and a
    * directory they cannot see.
    */
-  async delete(id: string): Promise<void> {
+  async delete(
+    id: string,
+    options: {
+      /**
+       * Runs after the row is gone and before the worktree is released: the
+       * terminals, browser targets and CAD viewer holding the session's
+       * directory open (`src/main/ipc/acp.ts`). After the row, so a delete
+       * that fails leaves the session whole; before the release, so nothing
+       * outlives its directory. A throw here keeps the worktree on disk.
+       */
+      beforeRelease?: (session: Session | null) => void | Promise<void>;
+    } = {},
+  ): Promise<void> {
     const session = this.deps.repo.get(id);
-    this.live.delete(id)?.close();
+    this.retire(id);
     this.pendingTitles.delete(id);
     this.tallies.delete(id);
     // The snapshot row goes with the session's own (ON DELETE CASCADE); this
@@ -759,8 +1269,17 @@ export class SessionManager {
     this.snapshots?.forget(id);
     this.deps.repo.remove(id);
     this.broadcastIndex();
+    await options.beforeRelease?.(session);
     if (session) {
-      await this.deps.releaseWorkspace?.(session).catch(() => undefined);
+      // Before the worktree goes: the refs live in the repository it shares.
+      await this.unpinMarks(session);
+      const released = await this.deps.releaseWorkspace?.(session).catch((error: unknown) => ({
+        removed: false,
+        reason: error instanceof Error ? error.message : String(error),
+      }));
+      if (released && !released.removed && released.reason) {
+        console.warn(`[acp] kept the worktree ${session.worktreePath ?? session.cwd} of deleted session ${id.slice(0, 8)}: ${released.reason}`);
+      }
     }
   }
 
@@ -771,6 +1290,10 @@ export class SessionManager {
    * a minute earlier.
    */
   closeAll(): void {
+    // From here the database is about to close: an adapter's late event — the
+    // in-flight prompt's rejection arriving as `prompt/error` after its
+    // process was killed — must not write a status through it.
+    this.shuttingDown = true;
     this.warm.closeAll();
     for (const id of this.live.keys()) {
       this.close(id);
@@ -809,15 +1332,102 @@ export class SessionManager {
     return { cwd: input.cwd };
   }
 
+  /** Unpin the snapshot marks a session took, in the project and in its own directory. */
+  private async unpinMarks(session: Pick<Session, "id" | "projectId" | "cwd">): Promise<void> {
+    for (const repository of new Set([session.projectId, session.cwd])) {
+      await this.deps.dropMarks?.(repository, session.id).catch(() => undefined);
+    }
+  }
+
+  /** The snapshots running, per mark: a second `git add -A` of the same tree waits for the first. */
+  private readonly snapshotting = new Map<string, Promise<string | null>>();
+
+  /**
+   * The working tree as it stands, pinned under `<id>/<kind>`; null where no
+   * snapshot can be taken (no `snapshot` dep, or git failed).
+   *
+   * One at a time per mark: a snapshot past `MARK_WAIT_MS` is still running
+   * when the next turn asks for its own, and a second one would stack another
+   * `add -A` on a tree that is already slow, and could land after the first
+   * and re-point the ref away from the tree the newer mark stored. The second
+   * asker takes the first's result.
+   */
+  private snapshotOf(cwd: string, mark: string): Promise<string | null> {
+    if (!this.deps.snapshot) {
+      return Promise.resolve(null);
+    }
+    const key = `${cwd}\0${mark}`;
+    const running = this.snapshotting.get(key);
+    if (running) {
+      return running;
+    }
+    const flight: Promise<string | null> = this.deps.snapshot(cwd, mark)
+      .catch(() => null)
+      .finally(() => {
+        if (this.snapshotting.get(key) === flight) this.snapshotting.delete(key);
+      });
+    this.snapshotting.set(key, flight);
+    return flight;
+  }
+
+  /**
+   * The working tree, as `snapshotOf` takes it, but only up to `MARK_WAIT_MS`:
+   * a `git add` in a huge or locked tree can take a minute, and a turn — or a
+   * new session — waits for its mark on the way out. Past the wait, or where no
+   * snapshot can be taken, `fallback` stands in for the tree — the previous
+   * mark where the caller has one (a wider `Last turn` than the turn, never a
+   * different one), the commit where it has not.
+   *
+   * The late snapshot goes on running and pins its ref when it lands. A
+   * session deleted (or a create that failed) in the meantime has already
+   * unpinned its marks, so a result that finds no row unpins them again.
+   */
+  private async markWithin(
+    owner: Pick<Session, "id" | "projectId" | "cwd">,
+    kind: "turn" | "session",
+    fallback?: string | null,
+  ): Promise<string | null> {
+    const flight = this.snapshotOf(owner.cwd, `${owner.id}/${kind}`);
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const expired = new Promise<typeof EXPIRED>((resolve) => {
+      timer = setTimeout(() => resolve(EXPIRED), MARK_WAIT_MS);
+    });
+    try {
+      const tree = await Promise.race([flight, expired]);
+      if (tree === EXPIRED) {
+        console.warn(`[acp] mark fell back after ${MARK_WAIT_MS / 1000} s`);
+        void flight.then(async (late) => {
+          if (late !== null && !this.deps.repo.get(owner.id)) {
+            await this.unpinMarks(owner);
+          }
+        });
+        return fallback ?? (await this.headOf(owner.cwd));
+      }
+      // No snapshot to take (or git failed): the commit is what the tree is at.
+      return tree ?? (await this.headOf(owner.cwd));
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
   /** The commit a directory is at, or null — never a reason to fail a turn. */
   private async headOf(cwd: string): Promise<string | null> {
     if (!this.deps.head) {
       return null;
     }
-    return this.deps.head(cwd).catch(() => null);
+    const head = await this.deps.head(cwd).catch(() => null);
+    // A repository with no commits yet has no HEAD, but it does have a
+    // beginning: the empty tree. Marking that — rather than nothing — keeps
+    // `This session` and `Last turn` a range once the first commit lands
+    // mid-session (a null mark would read as "no mark recorded" by then).
+    if (head !== null || !this.deps.emptyTree) {
+      return head;
+    }
+    return this.deps.emptyTree(cwd).catch(() => null);
   }
 
   private require(id: string): Session {
+    this.boot();
     const session = this.deps.repo.get(id);
     if (!session) {
       throw new Error(`no such session: ${id}`);
@@ -842,6 +1452,11 @@ export class SessionManager {
    * `session/load`.
    */
   private async ensureLive(session: Session): Promise<SessionConnection> {
+    // The connection of a create is live from `session/new`, but the create
+    // has not written the row's marks yet: a turn run in that window has its
+    // mark written over by the create's (and a crash in it leaves the row
+    // unmarked). It goes out after the create has returned.
+    await this.creating.get(session.id);
     const inflight = this.loads.get(session.id);
     if (inflight) {
       await inflight;
@@ -857,9 +1472,11 @@ export class SessionManager {
 
   /**
    * The environment an adapter is spawned with: the login shell's, with the
-   * bundled CAD runtime's bin directory in front of `PATH`. A session's
-   * `cadgen` and `python` are then the app's own, whatever the person's shell
-   * would have found — and nothing about it is installed on the machine.
+   * app's launcher directory (`cadgen`, `python3`, `python` — not the bundled
+   * runtime's own bin, whose pip is off the PATH) in front of `PATH`. A
+   * session's `cadgen` and `python` are then the app's own, whatever the
+   * person's shell would have found — and nothing about it is installed on
+   * the machine.
    */
   private async environment(): Promise<Record<string, string>> {
     const env = await this.deps.detector.environment();
@@ -916,6 +1533,8 @@ export class SessionManager {
     session: Session,
     /** Held by reference: `loadNow` clears its hook when the replay is over. */
     replay: { onReplayUpdate?: () => void } = {},
+    /** The connection these options end up on, set by `connect` once it exists. */
+    owner: { connection?: SessionConnection } = {},
   ): Pick<
     SessionConnectionOptions,
     | "sessionId"
@@ -927,6 +1546,13 @@ export class SessionManager {
     | "onStderr"
   > {
     const provider = agentProvider(session.agentId);
+    // Only the session's current connection speaks for it. One that was
+    // closed, evicted or replaced still has things to say — the SDK rejects
+    // its pending turn as `prompt/error`, `close` dispatches `closed`, late
+    // writes would count into a tally and ask the explorer to re-read — and
+    // none of it is about the row any more: whoever detached it has already
+    // set the status it should have, and the row may already be deleted.
+    const current = () => owner.connection !== undefined && this.live.get(session.id) === owner.connection;
     return {
       sessionId: session.id,
       mcpServers: this.deps.mcpServers?.(session) ?? [],
@@ -934,14 +1560,20 @@ export class SessionManager {
       // themselves (plan §8, as revised).
       preamble: provider?.skillRoots === "preamble" ? (this.deps.skills?.preamble() ?? null) : null,
       onEvent: (event) => {
+        if (!current()) {
+          return;
+        }
         if (event.type === "session/update") {
           replay.onReplayUpdate?.();
         }
         this.onEvent(session.id, event);
       },
-      onTerminalOutput: (terminalId, data, exit) =>
-        this.deps.broadcast("terminal.output", { sessionId: session.id, terminalId, data, exit }),
+      onTerminalOutput: (terminalId, data, exit, silent) =>
+        this.deps.broadcast("terminal.output", { sessionId: session.id, terminalId, data, exit, ...(silent ? { silent } : {}) }),
       onFilesChanged: (paths) => {
+        if (!current()) {
+          return;
+        }
         const tally = this.tally(session.id);
         for (const file of paths) {
           tally.files.add(file);
@@ -972,13 +1604,21 @@ export class SessionManager {
    */
   private async connect(
     session: Session,
-    hooks: { onWarm?: () => void; replay?: { onReplayUpdate?: () => void } } = {},
+    hooks: {
+      onWarm?: () => void;
+      replay?: { onReplayUpdate?: () => void };
+      /** A person's close landed since the load began: nothing this call does may touch the session. */
+      overtaken?: () => boolean;
+    } = {},
   ): Promise<SessionConnection> {
+    const stop = () => {
+      if (hooks.overtaken?.()) throw new Error("the session was disconnected while it loaded");
+    };
     const provider = agentProvider(session.agentId);
     if (!provider) {
       throw new Error(`unknown agent: ${session.agentId}`);
     }
-    const status = this.deps.detector.list().find((candidate) => candidate.id === provider.id);
+    let status = this.deps.detector.list().find((candidate) => candidate.id === provider.id);
     // With a launch override in force every provider is the same test process
     // and the machine's PATH says nothing about it — the same reasoning the
     // options probe states above. Without this an agent whose adapter is a
@@ -986,7 +1626,14 @@ export class SessionManager {
     // any machine that has not installed it, fake agent or not.
     const overridden = Boolean(this.deps.launchOverride?.(provider.id));
     if (!overridden && !provider.launchWithoutBinary && status && !status.installed) {
-      throw new Error(`${provider.name} is not installed`);
+      // "Not installed" is only a verdict from this launch's probe: the last launch's row may
+      // predate an install, and a restored session auto-loads before the probe lands. Wait for
+      // it; past the bound the spawn's own failure says what is missing.
+      const fresh = await this.deps.detector.freshWithin(PROBE_WAIT_MS);
+      status = fresh?.find((candidate) => candidate.id === provider.id);
+      if (status && !status.installed) {
+        throw new Error(`${provider.name} is not installed`);
+      }
     }
     // A worktree removed from Settings, or from a terminal, while its thread
     // was closed. The adapter would fail to spawn with an ENOENT naming an
@@ -999,21 +1646,37 @@ export class SessionManager {
       this.setStatus(session.id, "error", message);
       throw new Error(message);
     }
-    this.live.delete(session.id)?.close();
+    // Before the old connection is retired and the row says `connecting`: an overtaken load's
+    // connect is for nobody, and would write over the `closed` row or over the connection of the
+    // load a Reconnect started since.
+    stop();
+    // Quietly: this is a reconnect, not a close. The renderer may not have
+    // asked for it (a prompt into a crashed session reconnects on its own),
+    // and a `closed` would show it Disconnected until `session/connected`.
+    this.retire(session.id, { announce: false });
     this.setStatus(session.id, "connecting");
 
-    const sessionOptions = this.sessionOptions(session, hooks.replay ?? {});
-    const warm = this.warm.take(session.agentId, session.cwd);
+    const owner: { connection?: SessionConnection } = {};
+    const sessionOptions = this.sessionOptions(session, hooks.replay ?? {}, owner);
+    // Read before the pool is asked: a warm adapter is only this session's if
+    // it was spawned with the options a fresh spawn would get now.
+    const adapterOptions = await this.adapterOptions(session.agentId, session.cwd);
+    // Deleted while the options were read: an adapter made live now would
+    // belong to a row that is gone, and nothing would ever retire it.
+    if (!this.deps.repo.get(session.id)) {
+      throw new Error("this session was deleted");
+    }
+    stop();
+    const warm = this.warm.take(session.agentId, session.cwd, adapterOptionsKey(adapterOptions));
     if (warm) {
       warm.adopt(sessionOptions);
+      owner.connection = warm;
       hooks.onWarm?.();
       this.live.set(session.id, warm);
       return warm;
     }
-    const connection = new SessionConnection({
-      ...(await this.adapterOptions(session.agentId, session.cwd)),
-      ...sessionOptions,
-    });
+    const connection = new SessionConnection({ ...adapterOptions, ...sessionOptions });
+    owner.connection = connection;
     this.live.set(session.id, connection);
     return connection;
   }
@@ -1039,13 +1702,65 @@ export class SessionManager {
     return connection;
   }
 
+  /**
+   * Take a session's connection out of the live set and close it. Out first,
+   * so `onEvent` drops what the closing connection says; the one thing of it
+   * the renderer needs — that it is closed — is then said here, unless
+   * `announce: false` (a reconnect replacing it, `connect`).
+   */
+  private retire(id: string, { announce = true }: { announce?: boolean } = {}): void {
+    const connection = this.live.delete(id);
+    if (!connection) {
+      return;
+    }
+    // A connection still connecting has only the beginning of its own reload (the rule in
+    // `onEvent`); one that was not is filed as `close` leaves it.
+    const connecting = connection.state.status === "connecting";
+    connection.close();
+    if (announce) {
+      // Its own `closed` event was dropped by the owner check above (it is out of `live`), so
+      // `onEvent` never saw the state that ended the turn: without this the stored snapshot is
+      // the last one before the close, an open turn with its calls running and its card
+      // pending, and a repaint from it shows the session still streaming.
+      if (!connecting && this.deps.repo.get(id)) {
+        this.snapshots?.save(id, connection.state);
+      }
+      this.announceClosed(id);
+    }
+  }
+
+  /**
+   * `closed` on `session.update`, which is where the renderer hears it
+   * (`session.status` feeds only the index): its next click on the row then
+   * reconnects, and it lets go of what it held for the adapter.
+   */
+  private announceClosed(id: string): void {
+    if (this.shuttingDown) {
+      return;
+    }
+    this.deps.broadcast("session.update", {
+      sessionId: id,
+      event: { type: "status", status: "closed", error: null, at: Date.now() },
+    });
+  }
+
+  /** Set by `closeAll` on quit; `onEvent` drops everything after it. */
+  private shuttingDown = false;
+
   private onEvent(id: string, event: SessionEvent) {
+    if (this.shuttingDown) {
+      return;
+    }
     this.deps.broadcast("session.update", { sessionId: id, event });
     // Every state main sees is a state the next click could paint from
     // (`./snapshots.ts`). Debounced there, so a streaming turn is one write
-    // when it stops rather than one per token.
+    // when it stops rather than one per token. Not while the connection is
+    // still connecting — in `session/new`, or replaying `session/load`: its
+    // transcript is the beginning of its own reload, and filed now (a quit, a
+    // Disconnect) it would replace the whole one stored. `session/loaded`
+    // ends the replay, and its state is the one worth keeping.
     const current = this.live.get(id)?.state;
-    if (current && this.deps.repo.get(id)) {
+    if (current && current.status !== "connecting" && this.deps.repo.get(id)) {
       this.snapshots?.save(id, current);
     }
     // Every time the agent tells us what a session can be configured with —
@@ -1090,11 +1805,15 @@ export class SessionManager {
         this.setStatus(id, "waiting");
         this.deps.broadcast("session.permission", { sessionId: id, request: event.request });
         break;
-      case "permission/resolve":
-        if (this.live.get(id)?.state.status === "running") {
-          this.setStatus(id, "running");
+      case "permission/resolve": {
+        // Running when a turn is open; idle when the request came after the turn had closed and
+        // there is no `prompt/end` still to come to say so.
+        const status = this.live.get(id)?.state.status;
+        if (status === "running" || status === "idle") {
+          this.setStatus(id, status);
         }
         break;
+      }
       case "prompt/start":
         this.setStatus(id, "running");
         break;
@@ -1127,7 +1846,7 @@ export class SessionManager {
   private tally(id: string): ChangeTally {
     let tally = this.tallies.get(id);
     if (!tally) {
-      tally = { files: new Set(), insertions: 0, deletions: 0 };
+      tally = { files: new Set(), baseFiles: 0, insertions: 0, deletions: 0 };
       this.tallies.set(id, tally);
     }
     return tally;
@@ -1155,21 +1874,34 @@ export class SessionManager {
     }
   }
 
-  private persistTally(id: string) {
-    const tally = this.tallies.get(id);
-    if (tally && this.deps.repo.get(id)) {
-      this.update(id, {
-        changedFiles: tally.files.size,
-        insertions: tally.insertions,
-        deletions: tally.deletions,
-      });
+  /** `touch: false` writes the counts without stamping `updatedAt` (see `setPinned`). */
+  private persistTally(id: string, { touch = true }: { touch?: boolean } = {}) {
+    // After `closeAll` the database is closing: a turn the quit killed
+    // rejects into here, and must not read or write the row.
+    const tally = this.shuttingDown ? undefined : this.tallies.get(id);
+    const session = tally ? this.deps.repo.get(id) : null;
+    if (!tally || !session) {
+      return;
     }
+    const counts = {
+      changedFiles: tally.baseFiles + tally.files.size,
+      insertions: tally.insertions,
+      deletions: tally.deletions,
+    };
+    if (touch) {
+      this.update(id, counts);
+      return;
+    }
+    this.deps.repo.upsert({ ...session, ...counts });
+    this.broadcastIndex();
   }
 
   private setStatus(id: string, status: SessionStatus, error: string | null = null) {
     const session = this.deps.repo.get(id);
     if (!session || session.status === status) {
-      if (session) {
+      // Unchanged and with nothing to say: the index already says so, and a renderer that took the
+      // repeat could not tell it from a note.
+      if (session && error) {
         this.deps.broadcast("session.status", { sessionId: id, status, error });
       }
       return;
@@ -1188,30 +1920,4 @@ export class SessionManager {
   private broadcastIndex() {
     this.deps.broadcast("sessions.changed", this.deps.repo.list());
   }
-}
-
-/** Lines added and removed between two texts, as a multiset difference — a pill, not a diff viewer. */
-export function diffCounts(oldText: string, newText: string): { insertions: number; deletions: number } {
-  const count = (text: string) => {
-    const map = new Map<string, number>();
-    if (text === "") {
-      return map;
-    }
-    // A trailing newline ends the last line; it does not start an empty one.
-    for (const line of text.replace(/\n$/, "").split("\n")) {
-      map.set(line, (map.get(line) ?? 0) + 1);
-    }
-    return map;
-  };
-  const before = count(oldText);
-  const after = count(newText);
-  let insertions = 0;
-  let deletions = 0;
-  for (const [line, n] of after) {
-    insertions += Math.max(0, n - (before.get(line) ?? 0));
-  }
-  for (const [line, n] of before) {
-    deletions += Math.max(0, n - (after.get(line) ?? 0));
-  }
-  return { insertions, deletions };
 }

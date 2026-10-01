@@ -1,8 +1,10 @@
 import { useCallback } from "react";
+import { toast } from "sonner";
 
 import { useProjects } from "@renderer/state/projects";
 import { useSessions } from "@renderer/state/sessions";
 import type { Project } from "@shared/types";
+import { errorMessage } from "@shared/ipc/errors";
 
 /**
  * `Open folder…`: the native chooser, and then that folder's new-session
@@ -31,4 +33,24 @@ export function useOpenFolder(): () => Promise<Project | null> {
     }
     return project;
   }, [add, setActiveSession]);
+}
+
+/**
+ * The same action for the places with no error line of their own: a chooser or
+ * `projects.add` that rejects is said in a toast, and reads as a cancelled
+ * chooser (null) to the caller. The welcome screen has its own line for it and
+ * uses `useOpenFolder` directly.
+ */
+export function useOpenFolderOrToast(): () => Promise<Project | null> {
+  const openFolder = useOpenFolder();
+  return useCallback(
+    () =>
+      openFolder().catch((error: unknown) => {
+        toast.error("Could not open that folder", {
+          description: errorMessage(error),
+        });
+        return null;
+      }),
+    [openFolder],
+  );
 }

@@ -61,6 +61,24 @@ export async function launch(options: {
   return { app, page, lines };
 }
 
+/** What main's e2e door answers with: the chosen folder, as `projects.add` would. */
+export type ChosenDirectory = { id: string; name: string; path: string; createdAt: number };
+
+/**
+ * Choose a folder the way the native chooser does — main resolves it, selects
+ * it and broadcasts `ui.directorySelected` — without the chooser, which
+ * Playwright cannot drive. No renderer channel takes a path, so this goes in
+ * through main: the `NODE_ENV=test` door `installE2eDoor` puts on main's
+ * global (src/main/test-door.ts).
+ */
+export async function chooseDirectory(app: ElectronApplication, directory: string): Promise<ChosenDirectory> {
+  return app.evaluate(
+    (_electron, chosen) =>
+      (globalThis as unknown as { __textToCadE2E: { choose(directory: string): ChosenDirectory } }).__textToCadE2E.choose(chosen),
+    directory,
+  );
+}
+
 /** A scratch directory, realpath'd: Electron resolves paths, and macOS's /var is a link. */
 export function scratch(prefix: string): string {
   return fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), `text-to-cad-${prefix}-`)));
@@ -137,6 +155,19 @@ export async function settleTerminal(page: Page) {
       { intervals: [100, 250, 1_000], timeout: 30_000 },
     )
     .toBe(true);
+}
+
+/** `+` is a menu of the tab kinds; a closing Radix menu can swallow the next click, so wait it out. */
+export async function newTab(page: Page, label: string) {
+  await page.getByRole("button", { name: "New tab", exact: true }).click();
+  await page.getByRole("menuitem", { name: label }).click();
+  await expect(page.getByRole("menu")).toHaveCount(0);
+}
+
+/** Set the theme through the settings and wait for the document to wear it. */
+export async function setTheme(page: Page, theme: "dark" | "light") {
+  await page.evaluate((value) => (window as unknown as { textToCad: { settings: { set(patch: { theme: string }): Promise<unknown> } } }).textToCad.settings.set({ theme: value }), theme);
+  await expect(page.locator("html")).toHaveClass(theme === "dark" ? /\bdark\b/ : /^(?!.*\bdark\b).*$/);
 }
 
 /** Screenshot with transitions finished, into the test's output directory. */
