@@ -231,8 +231,8 @@ a card over the viewport (`kit/status/ViewerAlertCard.jsx`) with its explanation
 its next step and the full diagnostic under Details: an error always shows, and a
 failed update the model survives (`blocking: false`, the previous version still on
 screen) has a Dismiss button and stays dismissed until the alert changes, or
-clears and is raised again. A warning is a card only while nothing is on screen;
-beside a model, a STEP lists it in its panel's Issues. Once a
+clears and is raised again. A warning is a card too, one that can be dismissed
+while the model is on screen: the card is the one place a problem is said. Once a
 usable current view is displayed, saving, successful completion, idle edit-feed
 state and routine refinement stay quiet. A sidecar this build cannot read raises
 no alert: the model renders with no kinematics, no materials and no routine, and

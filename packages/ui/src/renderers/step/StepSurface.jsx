@@ -88,9 +88,6 @@ import {
   stepModuleTopologyOccurrenceIds
 } from "./workbench/topologyCapabilities.js";
 import { stepJointHandles, stepPosableDofs } from "./workbench/jointHandles.js";
-import {
-  buildFileStatusItems,
-} from "./workbench/fileStatusItems.js";
 import { useArtifact } from "./components/workbench/hooks/useArtifact.js";
 import {
   rootAssemblyInspectionNodeId,
@@ -227,7 +224,7 @@ export default function StepSurface({ view, data }) {
 // preference stores, the shell's services) is `useWorkspaceDocument`'s, as it is for every
 // renderer on the shell.
 function StepSurfaceBody({ view, data }) {
-  const { client, entry, serverInfo, renderSession: cadRenderSession } = data;
+  const { client, entry, renderSession: cadRenderSession } = data;
   const workspace = useWorkspaceDocument({ view, data });
   const { resource: documentResource, services, acknowledgeCommand } = workspace;
   const selectReference = workspace.commands.selectReference;
@@ -358,10 +355,6 @@ function StepSurfaceBody({ view, data }) {
   // every loading state that is not an artifact build). Only meaningful while
   // generating — a stale frame must not outlive the build that produced it.
   const selectedArtifactProgress = selectedArtifactGenerating ? selectedArtifact.progress : null;
-  const activeStepArtifactGenerationFiles = useMemo(
-    () => (selectedArtifactGenerating && liveEntry ? [fileKey(liveEntry)] : []),
-    [selectedArtifactGenerating, liveEntry]
-  );
   // The name copied refs give this file, so they still say which file they belong to when
   // pasted into a prompt spanning several: the host's, which knows its root (FileSource.referencePath).
   const referencePath = fileReferencePath(view.source, view.file.path);
@@ -391,26 +384,12 @@ function StepSurfaceBody({ view, data }) {
     }
     previousPreviewTree.current = next;
   }, [selectedEntry?.file, selectedEntry?.hash, selectedEntry?.editingPreview]);
-  // Cache states never become user-facing "issues"; only a fatal build/source failure does.
-  const selectedStepSourceStatus = selectedArtifact.status === "failed" && !editingHasView
-    ? {
-        artifact: {
-          ok: false,
-          error: "render_artifact_unavailable",
-          message: selectedArtifact.error || "Render artifact is unavailable.",
-          stepPath: liveEntry ? fileKey(liveEntry) : "",
-        },
-      }
-    : null;
   // This renderer is only ever handed a STEP (its `matches`, index.ts), keyed per file, and an
   // entry is always present: so every capability a STEP has (parts, topology, Measure, a
   // sidecar's parameters, the Select and Draw tools) is simply on here, and nothing below asks
   // the format again.
   // The URL's path IS the directory, so there is nothing to select and no state to
   // reconcile — the Viewer always has exactly one directory, the one it was opened at.
-  const stepArtifactGenerationAvailable = serverInfo
-    ? serverInfo.stepArtifactGenerationAvailable !== false
-    : true;
   // What this file's view opts into: a B-rep model takes every Display section, preset and
   // surface style. The shell configures the store with it (`features`).
   const viewFeatures = ALL_VIEW_FEATURES;
@@ -859,8 +838,8 @@ function StepSurfaceBody({ view, data }) {
     setHoveredModelPartId("");
   }, []);
 
-  // A routine that failed to load has no playbar to say so on: it is one of the file's
-  // Issues instead.
+  // A routine that failed to load has no playbar to say so on: the viewport's card says so, one
+  // the person can put away (the geometry is all there).
   const annotationAlert = useMemo(() => (selectedAnimationError ? {
     severity: "warning", blocking: false,
     summary: "Animation unavailable",
@@ -868,30 +847,6 @@ function StepSurfaceBody({ view, data }) {
     message: "The geometry is visible, but its animation could not be loaded, so preview has no routine to play.",
     details: `File: ${fileKey(selectedEntry)}\n${selectedAnimationError}`,
   } : null), [selectedAnimationError, selectedEntry]);
-  const selectedFileStatusItems = useMemo(() => (
-    selectedArtifactGenerating
-      ? []
-      : buildFileStatusItems({
-        entry: selectedEntry,
-        stepSourceStatus: selectedStepSourceStatus,
-        viewerAlert,
-        warningAlert: annotationAlert,
-        stepArtifactGenerationAvailable,
-        activeGenerationFiles: activeStepArtifactGenerationFiles,
-        viewerServerInfo: serverInfo,
-        artifactAdvisory: selectedArtifact.advisory
-      })
-  ), [
-    activeStepArtifactGenerationFiles,
-    selectedEntry,
-    selectedArtifact.advisory,
-    selectedArtifactGenerating,
-    stepArtifactGenerationAvailable,
-    selectedStepSourceStatus,
-    viewerAlert,
-    annotationAlert,
-    serverInfo
-  ]);
 
 
   // ---- this STEP's own slices of the file's view -------------------------------------------
@@ -1573,7 +1528,7 @@ function StepSurfaceBody({ view, data }) {
       busy: viewportIsLoading,
       updating: !viewportIsLoading && (effectiveViewerLoading || selectedMeshPartial),
       progress: selectedLoadProgress || (editingPreview.state.phase ? { phase: editingPreview.state.phase, detail: editingPreview.state.detail } : null),
-      alert: viewerAlert || (!selectedMeshData && catalogError ? catalogError : null),
+      alert: viewerAlert || (!selectedMeshData && catalogError ? catalogError : null) || annotationAlert,
       editPending: ["submitted", "queued", "building"].includes(editingPreview.state?.state) && !editingPreview.state?.saved,
       currentPreview: currentPreviewVisible,
       finding: !catalogHydrated || selectedCatalogPending
@@ -3327,8 +3282,7 @@ function StepSurfaceBody({ view, data }) {
     menuForNode: assemblyNodeMenu,
     menuForReferences: topologyReferenceMenu,
     partMenuActions,
-    showAllHiddenParts: handleShowAllHiddenParts,
-    statusItems: selectedFileStatusItems
+    showAllHiddenParts: handleShowAllHiddenParts
   });
 
   return <RendererShell shell={shell} tools={tools} playback={viewportAnimation} toolPanels={<>{stepPanels}{modelEffects.panels}</>}

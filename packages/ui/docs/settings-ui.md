@@ -116,7 +116,7 @@ returns to Select before it acts.
 
 **Every tool's panel but Select's has an X, and no fold chevron.** The X puts
 the tool down and returns to Select, the default tool, which cannot itself be put
-down — its panels (Features or Links, Issues, SDF) fold instead.
+down — its panels (Features or Links, SDF) fold instead.
 
 **No tool has a menu on the strip.** A press on a tool is its only action:
 it takes the tool up, and — for a tool that toggles (Draw, Measure, Explode,
@@ -217,7 +217,7 @@ on the strip.
 Under the toolbar, in one column: the shell's tool's panel (**Drawing**) while
 Draw is up; Select's **Features** (STEP; a
 robot's **Links**) and, whenever something is selected, its **Reference** (then
-STEP's **Issues**, a `.sdf`'s **SDF**); Position's **Position**; then the panels
+a `.sdf`'s **SDF**); Position's **Position**; then the panels
 of the effects a person keeps (**Measurements**, **Explode**, **Clip**). A panel
 whose tool is not up is `hidden`, not unmounted: a tree keeps its expansion,
 filter and scroll across a trip to another tool. Preview hides the whole
@@ -225,7 +225,7 @@ stack.
 
 - **Two kinds of panel.** The tree (Features, Links) and **Position** are
   *resizable*: the person's to size, each on its own. Every other panel —
-  Drawing, Measurements, Explode, Clip, the Reference, Issues, SDF — is *fixed*:
+  Drawing, Measurements, Explode, Clip, the Reference, SDF — is *fixed*:
   one width, its content's height, and no handle. The Reference is the one
   exception to the width: it sits under the tree and takes the tree's width
   (`widthFrom="tree"`), following a drag live, while its height stays fixed. A
@@ -263,12 +263,12 @@ stack.
   actions and an 8px gap above them (`VIEWPORT_STACK_BOTTOM`, `calc(6rem +
   36px)`): it never runs under the cube. When the panels need more, the tree gives way first and
   scrolls inside itself, down to 128px or its content, whichever is less; then a
-  details panel (Reference, Position, Measurements, Issues)
+  details panel (Reference, Position, Measurements)
   gives way, down to 96px or its content; a small panel (Explode, Clip, Drawing)
   keeps its height. If what cannot give way still does not fit, the column
   itself scrolls — a panel is never cut. On mobile the tree starts folded and,
   opened, may take the whole column, giving way as other panels join it.
-- **Folding.** Only Select's panels fold (Features or Links, Issues, SDF): every tool panel and the Reference has an X instead. A folding panel folds to its first row and unfolds again,
+- **Folding.** Only Select's panels fold (Features or Links, SDF): every tool panel and the Reference has an X instead. A folding panel folds to its first row and unfolds again,
   by a chevron at that row's trailing end: up while open (fold), down while
   folded (open), with `aria-expanded` and the panel's name ("Collapse
   features"). Folded content stays mounted, so a tree keeps its expansion,

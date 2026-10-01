@@ -11,7 +11,7 @@ test("the layout is the sizes a person set, by panel, and the folded panels — 
   for (const value of [null, undefined, "240", Number.NaN, {}, [], { width: 240, heights: { tree: 300 } }]) {
     assert.deepEqual(normalizeToolStack(value), { panels: {}, collapsed: {} }, `${JSON.stringify(value)}: an older record's stack width and caps are nobody's`);
   }
-  assert.deepEqual(normalizeToolStack({ panels: { tree: { width: 240.4, height: 300 }, position: { height: 12, width: 12 }, reference: { width: 0 }, "Not an id": { width: 200 }, clip: "wide", issues: {} },
+  assert.deepEqual(normalizeToolStack({ panels: { tree: { width: 240.4, height: 300 }, position: { height: 12, width: 12 }, reference: { width: 0 }, "Not an id": { width: 200 }, clip: "wide", sdf: {} },
     collapsed: { tree: true, sdf: false, "Not an id": true, clip: "yes" } }),
   { panels: { tree: { width: 240, height: 300 }, position: { width: TOOL_PANEL_WIDTH, height: TOOL_PANEL_MIN_HEIGHT } }, collapsed: { tree: true, sdf: false } },
   "a size is rounded and bounded, a panel with neither is absent, and only booleans fold");

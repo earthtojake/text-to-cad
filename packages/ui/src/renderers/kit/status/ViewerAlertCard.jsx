@@ -6,14 +6,12 @@ import { cn } from "@text-to-cad/ui/utils";
 import { useViewerMobile } from "../../../file-viewer/responsive.js";
 
 /**
- * Which alert the viewport shows. An error always does, and the viewport is the one
- * place that says so: a failed update the model survives (`blocking: false` — the
- * previous version is still on screen) as much as one that leaves nothing to look at.
- * A warning shows only while there is nothing on screen instead; beside a model it is
- * the file's Issues' to list.
+ * Whether the card can be put away. The viewport is the one place a file's problem is said, so
+ * it shows every alert; one the model survives can be dismissed: a failed update
+ * (`blocking: false` — the previous version is still on screen) and a warning beside the model.
  */
-export function viewportAlert(alert, hasContent) {
-  return alert && (alert.severity !== "warning" || (!hasContent && alert.blocking !== false)) ? alert : null;
+function alertDismissible(alert, hasContent) {
+  return alert.blocking === false || (hasContent && alert.severity === "warning");
 }
 
 // The same failure raised again is the same alert, even as a new object.
@@ -25,8 +23,7 @@ const alertKey = alert => JSON.stringify([alert.severity, alert.title, alert.mes
  * changes, or clears and is raised again (a retry that failed the same way). Long
  * compiler output stays complete in a scrollable diagnostic, never clipped.
  */
-export default function ViewerAlertCard({ alert, hasContent, onReload }) {
-  const shown = viewportAlert(alert, hasContent);
+export default function ViewerAlertCard({ alert: shown, hasContent, onReload }) {
   const mobile = useViewerMobile();
   const [dismissed, setDismissed] = useState("");
   if (!shown) {
@@ -34,7 +31,7 @@ export default function ViewerAlertCard({ alert, hasContent, onReload }) {
     return null;
   }
   const key = alertKey(shown);
-  const dismissible = shown.blocking === false;
+  const dismissible = alertDismissible(shown, hasContent);
   if (dismissible && dismissed === key) return null;
   const reason = String(shown.reason || "");
   const shortReason = reason.split("\n").find((line) => line.trim()) || "";

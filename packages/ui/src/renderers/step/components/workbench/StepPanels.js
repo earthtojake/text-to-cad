@@ -1,7 +1,6 @@
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { buildPositionSection } from './MotionControlsSection.js';
 import { STEP_MODEL_ROOT_ID } from '@text-to-cad/core/lib/step/stepTree.js';
-import { buildIssuesSection } from './FileStatusSection.js';
 import { useStepReference } from './StepReferenceSection.js';
 import ModelingTree from './ModelingTree.jsx';
 import ToolPanel from '../../../kit/tools/ToolPanel.jsx';
@@ -32,8 +31,8 @@ function useLatestActions(actions) {
 
 /**
  * A STEP's panels in the tool stack, top to bottom: while Select is the tool, **Features** (the
- * filter and the model tree), the **Reference** for what is selected, and **Issues** when there
- * are any; while Position is the tool, **Position**. Each stays mounted while its tool is not
+ * filter and the model tree) and the **Reference** for what is selected; while Position is the
+ * tool, **Position**. Each stays mounted while its tool is not
  * up, so the tree keeps its expansion, filter and scroll. The kept effects' panels follow them
  * (`ModelTools.jsx`); the stack itself is the shell's (`kit/shell/RendererShell.jsx`).
  *
@@ -56,7 +55,7 @@ export function useStepPanels({
   // and edges (the viewport's menu over that topology), and the one set of actions behind both.
   menuForNode = null, menuForReferences = null, partMenuActions = null,
   treeSelectionDisabled = false, selectMode = 'all', loadingGeometry = false,
-  statusItems = EMPTY, positionRuntime = null, selectModeMenu = null, onCopyReference = null, onClosePosition = null,
+  positionRuntime = null, selectModeMenu = null, onCopyReference = null, onClosePosition = null,
   // The viewport's hover (`workbench/hoverStore.js`): a large tree under Faces or Edges asks for the
   // topology of the part the pointer rests on.
   hoverStore = null,
@@ -111,7 +110,6 @@ export function useStepPanels({
   if (!selectedEntry) return null;
   const selectionDetails = selectedReferences.length || measuredSelection.partIds.length ? reference : null;
   const position = buildPositionSection({ poseRuntime: positionRuntime });
-  const issues = buildIssuesSection(statusItems);
   return <>
     {/* Features, then the Reference for a selection: both the tree's, which knows what is picked in it. */}
     <ModelingTree key={`${selectedEntry.file}:${geometryInspection?.revision}`}
@@ -124,7 +122,6 @@ export function useStepPanels({
       onLoadTopology={loadTopology} onSelect={selectReferenceGroup} onClearSelection={clearSelection}
       partControls={partControls} hoverStore={hoverStore}
     />
-    {issues ? <ToolPanel id="issues" title={issues.title} label="Issues" fit="details" hidden={!selectActive}>{issues.content}</ToolPanel> : null}
     {/* Headed "Position" with its Reset; sized like the tree: its content's height, up to half the stack. */}
     {/* Its X puts Position down, back to Select; the values stay. */}
     {position ? <ToolPanel id="position" title={position.title} actions={position.actions} label="Position controls" fit="details" resizable

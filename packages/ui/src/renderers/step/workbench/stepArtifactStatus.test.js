@@ -10,7 +10,6 @@ import {
   stepArtifactStatusMessage
 } from "./stepArtifactStatus.js";
 import { buildViewerMeshAlert } from "./viewerAlerts.js";
-import { stepFileStatusItems } from "./fileStatusItems.js";
 
 test("stepArtifactCanGenerate allows buildable STEP artifact warnings", () => {
   for (const code of BUILDABLE_STEP_ARTIFACT_ERROR_CODES) {
@@ -67,11 +66,9 @@ test("stepArtifactGenerationInProgress matches viewer retries and lock-file outp
 });
 
 
-test("the viewer card and the Status tab word a failed artifact the same way", () => {
-  // One message table serves both: the alert over the viewport and the file's Status row.
+test("the viewer card words a failed artifact from the one message table", () => {
   const artifact = { ok: false, error: "missing_source_path" };
   const entry = { file: "part.step", kind: "part", artifact };
   assert.equal(stepArtifactStatusMessage(artifact), "Generated GLB metadata is missing its source path.");
   assert.equal(buildViewerMeshAlert(entry, false, "", null)?.message, `“part.step”: ${stepArtifactStatusMessage(artifact)}`);
-  assert.ok(stepFileStatusItems({ entry }).some(item => item.message === stepArtifactStatusMessage(artifact)));
 });

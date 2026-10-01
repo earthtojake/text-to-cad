@@ -266,8 +266,8 @@ tool stack, shown by the tool they belong to. Select shows Features (a robot's L
 and, with a selection, the Reference; Position shows Position; Display and Draw show
 their own panels; kept effects (Explode, Clip, Measure's results) follow. A panel
 whose tool is not up stays mounted, hidden, so a tree keeps its scroll and expansion;
-only what is on screen does background work. Issues and SDF metadata are Select's
-panels too. Links is the description's link tree, with the Model tree's rows, filter
+only what is on screen does background work. SDF metadata is a Select panel
+too. Links is the description's link tree, with the Model tree's rows, filter
 and Reference panel; see [robot links](docs/cad-renderer.md#robot-links). Which of
 the host's panels a file opens with is the host's to apply
 (`ViewerHost.navigation.openFile(path, { target, panel })`): a file picked in the
