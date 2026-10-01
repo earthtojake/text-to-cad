@@ -573,6 +573,10 @@ Where the built things live instead:
   exercises it, keeps the distribution as a workflow artifact, uploads it to
   PyPI (the install channel every skill pins against), and attaches that same
   wheel and sdist to the GitHub Release as the provenance copy of what shipped.
+- **The plugin ZIP** (`cad-openai-plugin-<version>.zip`) is the plugin in the
+  layout OpenAI's plugin submission portal takes. It is built from the release
+  commit and attached to the GitHub Release beside the wheel. See [Submitting
+  the plugin to OpenAI](#submitting-the-plugin-to-openai).
 - **A checkout** builds its own: run `scripts/bundle/bundle.sh` once after
   cloning (and after pulling changes to `packages/core`); a missing runtime
   fails with a message that says so.
@@ -603,7 +607,12 @@ is involved) and deletes the branch. The merged commit is THE release commit.
 1. `check-version.sh`, then the gate: `VERSION` must be past the latest release
    tag (either spelling — `scripts/release/release-tags.sh` is the one place
    that knows `v0.5.0` and the bare `0.4.28` before it, and it compares
-   versions, not tag strings), or equal to it with the tag missing.
+   versions, not tag strings), or equal to it with the tag missing. Then
+   `scripts/release/plugin_zip.py` builds the plugin ZIP from the untouched
+   release commit and checks it against the portal's package rules, so a
+   package the portal would refuse stops the release before anything
+   irreversible. The ZIP is kept as a workflow artifact
+   (`cad-openai-plugin-<version>`).
 2. `bundle.sh --clean` — which is where cadgen's whole runtime comes into
    existence, Node builders, snapshot bundle and Viewer client alike, because
    the release commit carries none of it — then `check-builds.sh`, the docs and
@@ -616,10 +625,49 @@ is involved) and deletes the branch. The merged commit is THE release commit.
    artifact (`cadgen-<version>`).
 4. **On `main` only:** PyPI upload (`skip-existing`, so a rerun is a no-op),
    `Deploy Docs`, then the `v<VERSION>` tag and the GitHub Release, with the
-   wheel and sdist from that same artifact attached as release assets (PyPI
-   stays the install channel; the release page is the provenance copy). Nothing is
-   committed or pushed to `main` after the release PR merge: the tag points at
-   the source commit, and `git describe` on `main` is meaningful.
+   wheel and sdist from that same artifact and the plugin ZIP attached as
+   release assets (PyPI stays the install channel; the release page is the
+   provenance copy). Nothing is committed or pushed to `main` after the release
+   PR merge: the tag points at the source commit, and `git describe` on `main`
+   is meaningful.
+
+### Submitting the plugin to OpenAI
+
+The plugin directory shared by ChatGPT and Codex takes plugins only through the
+web portal at <https://platform.openai.com/plugins>. OpenAI documents no API or
+CLI for uploading, submitting or publishing, so CD cannot do it and no secret is
+involved. What CD does is build the file to upload: each GitHub Release carries
+`cad-openai-plugin-<version>.zip`. It holds one top-level `cad/` directory with
+`.codex-plugin/` (manifest and icons), `skills/`, `LICENSE`, and every file the
+manifest points at. The portal requires `mcpServers` to resolve to a root
+`.mcp.json`, so a server config the checkout keeps under another name is
+archived as `.mcp.json`, and the archived manifest points there.
+
+For each release, a person with the access below:
+
+1. Downloads `cad-openai-plugin-<version>.zip` from the release page.
+2. On the Plugins page, opens the CAD plugin, selects **Upload plugin to make
+   changes**, and uploads the ZIP. The first submission uses **Upload new or
+   existing plugin** instead.
+3. Resolves the automated findings, selects **Submit for review**, and completes
+   the policy attestations.
+4. After approval, selects **Publish plugin**.
+
+One-time setup, in the OpenAI Platform organization that owns the plugin:
+complete individual or business verification under
+<https://platform.openai.com/settings/organization/general>. Submitting needs an
+organization owner, or a member granted **Apps Management Write**
+(`api.apps.write`).
+
+`python3 scripts/release/plugin_zip.py --check` runs the same checks locally;
+`--out PATH` also writes the ZIP. `tests/python/global/test_plugin_zip.py` runs
+them on every pull request that touches the plugin. The checks are the portal's
+documented package rules
+([submission errors](https://developers.openai.com/plugins/deploy/submission-errors)),
+with the final-submission listing limits, such as 30 characters for the name and
+subtitle. A missing `interface.logo` or `interface.composerIcon` is a warning,
+not an error, but the portal refuses the upload without them. The portal's own
+skill and policy scans still run after upload.
 
 ### Resuming and republishing
 

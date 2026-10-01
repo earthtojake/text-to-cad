@@ -24,7 +24,8 @@ any branch but `release/*`. Releases are two GitHub Actions workflows:
   the distribution as a workflow artifact, then — on `main` only — uploads to
   PyPI, deploys the docs site, and tags (`v<VERSION>`; releases before 0.5.0
   are bare `0.4.x` tags) + GitHub-Releases that same merged commit with the
-  wheel and sdist that went to PyPI attached as release assets.
+  wheel and sdist that went to PyPI attached as release assets, plus the
+  plugin ZIP that a person uploads to OpenAI's plugin portal, which has no API.
 
 When asked to publish, make, or ship a release, dispatch `Prepare Release` on
 `main`. Never pick the semver bump yourself: if the request does not name patch,

@@ -118,6 +118,12 @@ where those files ship, so these scripts are what produces them.
   `_runtime/{node,browser,viewer}` are inside it, with bytes identical to the
   bundled source. The only gate on package data, which fails quietly. Called by
   `test.yml` and `release-publish.yml`.
+- `plugin_zip.py --out PATH | --check` — builds the plugin ZIP OpenAI's plugin
+  submission portal takes (`cad/` holding `.codex-plugin/`, `skills/`,
+  `LICENSE` and every file the manifest names, with the MCP config as the root
+  `.mcp.json`) and checks it against the portal's documented package rules.
+  Called by `release-publish.yml`; tested by
+  `tests/python/global/test_plugin_zip.py`.
 - `publish-github-release.sh [--target REF] [--dry-run] [--publish]` — creates and
   pushes the `v<VERSION>` tag and the GitHub Release (a draft unless
   `--publish`). Called by `release-publish.yml`; a local run on the merged release
@@ -171,7 +177,7 @@ manual; their `*.test.mjs` helper units run in `test-js.sh`.
 | -------- | --------------- | ------- |
 | `test.yml` | pushes to `main`; PRs to `main`; manual dispatch | One job per thing that has to work, each conditional on the paths that can break it (`CONTRIBUTING.md` documents the graph): `Version Check` always; the cadgen package suite on Linux and Windows; `core-js` (`@text-to-cad/core`), `web` (shared UI and the web app), skills and docs on Linux; `packaging` bundles from clean (nothing under `_runtime/` is committed, so this is where it comes from), checks the layout, inspects the wheel and runs the installed-mode tests. Superseded PR runs are cancelled. |
 | `release-prepare.yml` (`Prepare Release`) | manual dispatch | The version bump as a PR: bumps `VERSION`, stamps metadata and skill pins, opens `release/X.Y.Z` against `target` (default `main`; `build-test` rehearses) and merges it. The merge is what runs `Publish Release`. |
-| `release-publish.yml` (`Publish Release`) | pushes to `main` and `build-test`; manual dispatch (resume/republish the head) | Gate (VERSION past the latest tag, or untagged), bundle, tests, wheel build, an `unzip -l` assertion that the shipping wheel carries `_runtime`, install test, distribution artifact; then — on `main` only — PyPI upload, docs deploy, `v<VERSION>` tag and GitHub Release carrying the wheel and sdist. On `build-test` it prints what it would have tagged and stops. |
+| `release-publish.yml` (`Publish Release`) | pushes to `main` and `build-test`; manual dispatch (resume/republish the head) | Gate (VERSION past the latest tag, or untagged), bundle, tests, wheel build, an `unzip -l` assertion that the shipping wheel carries `_runtime`, install test, distribution artifact, and the checked OpenAI plugin ZIP (built first, from the untouched release commit); then — on `main` only — PyPI upload, docs deploy, `v<VERSION>` tag and GitHub Release carrying the wheel, sdist and plugin ZIP. On `build-test` it prints what it would have tagged and stops. |
 | `deploy-docs.yml` (`Deploy Docs`) | manual dispatch; called by `release-publish.yml` | Deploys the docs app to Vercel production from a ref (default `main`): configures Vercel Authentication for preview deployments only, runs `vercel pull/build/deploy --prod`, and verifies the public production URLs. |
 
 `Prepare Release` bumps, `Publish Release` ships, `Deploy Docs`

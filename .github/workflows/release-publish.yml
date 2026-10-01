@@ -101,6 +101,26 @@ jobs:
           echo "should_publish=false" >> "$GITHUB_OUTPUT"
           echo "Nothing to publish: version $current_version is already tagged ($current_tag)."
 
+      # The plugin as OpenAI's plugin submission portal takes it, built from the release
+      # commit before anything else in this run touches the tree. It is checked against
+      # the portal's package rules here, ahead of every irreversible step: a package the
+      # portal would refuse stops the release before PyPI, not after it. The portal has
+      # no API, so a person uploads this file (CONTRIBUTING.md, Releases); tag-release
+      # attaches these same bytes to the GitHub Release.
+      - name: Build the OpenAI plugin ZIP
+        if: steps.gate.outputs.should_publish == 'true'
+        env:
+          VERSION: ${{ steps.gate.outputs.version }}
+        run: python3 scripts/release/plugin_zip.py --out "$RUNNER_TEMP/plugin/cad-openai-plugin-$VERSION.zip"
+
+      - name: Upload the OpenAI plugin ZIP as a workflow artifact
+        if: steps.gate.outputs.should_publish == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: cad-openai-plugin-${{ steps.gate.outputs.version }}
+          path: ${{ runner.temp }}/plugin/
+          if-no-files-found: error
+
       - name: Set up dependencies
         if: steps.gate.outputs.should_publish == 'true'
         uses: ./.github/actions/setup-deps
@@ -228,7 +248,7 @@ jobs:
           # --dry-run computes the tag and the release it would create without
           # pushing anything; the version check inside it runs for real.
           args=(--target HEAD --dry-run --publish)
-          for file in packages/cadgen/dist/*; do args+=(--asset "$file"); done
+          for file in packages/cadgen/dist/* "$RUNNER_TEMP"/plugin/*.zip; do args+=(--asset "$file"); done
           scripts/release/publish-github-release.sh "${args[@]}"
 
   # The docs site is built from the release commit itself: main is the source tree,
@@ -281,9 +301,16 @@ jobs:
           name: cadgen-${{ needs.publish.outputs.version }}
           path: packages/cadgen/dist
 
+      # The plugin ZIP the publish job built and checked from this same commit.
+      - name: Download the OpenAI plugin ZIP
+        uses: actions/download-artifact@v8
+        with:
+          name: cad-openai-plugin-${{ needs.publish.outputs.version }}
+          path: ${{ runner.temp }}/plugin
+
       # A push-triggered run has no `publish` input: it publishes. Only a manual
-      # dispatch can ask for a draft. The wheel and sdist are attached to the
-      # release; a resumed run attaches them to the release that already exists.
+      # dispatch can ask for a draft. The wheel, sdist and plugin ZIP are attached to
+      # the release; a resumed run attaches them to the release that already exists.
       - name: Create release tag and GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -293,8 +320,8 @@ jobs:
           if [ "${INPUT_PUBLISH:-true}" = "true" ]; then
             args+=(--publish)
           fi
-          ls -l packages/cadgen/dist
-          for file in packages/cadgen/dist/*.whl packages/cadgen/dist/*.tar.gz; do
+          ls -l packages/cadgen/dist "$RUNNER_TEMP/plugin"
+          for file in packages/cadgen/dist/*.whl packages/cadgen/dist/*.tar.gz "$RUNNER_TEMP"/plugin/*.zip; do
             [ -f "$file" ] && args+=(--asset "$file")
           done
           scripts/release/publish-github-release.sh "${args[@]}"
