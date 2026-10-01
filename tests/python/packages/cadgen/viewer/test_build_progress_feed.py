@@ -39,11 +39,14 @@ def job(subject, outputs, state, *, id="job-1", phase=None, detail="", done=None
 
 
 class _NeverCompiles:
-    def compile(self, candidate, *, force=False):
+    def start(self, candidate, *, force=False):
         raise AssertionError("no compile should start in these tests")
 
     def in_flight(self, key):
         return False
+
+    def failure(self, candidate):
+        return None
 
     def shutdown(self):
         pass

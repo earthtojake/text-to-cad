@@ -13,6 +13,13 @@ Concurrent viewer requests for one document attach to the first: one job, one
 answer for all of them. Progress reaches the status endpoint through the
 daemon's job ledger (``build_progress``), not through this module — the job is
 the producer, this is a waiter.
+
+The viewer's build request STARTS a compile (:meth:`DocumentCompiler.start`) and
+answers at once; it never holds its request for the job's length (a host that
+relays requests through a few shared slots would lose one for that long). The
+client follows the job through the status route, as it follows a peer's, and a
+compile that failed is remembered against the document's bytes so the status
+route can say so rather than offer the same compile again.
 """
 
 from __future__ import annotations
@@ -52,6 +59,14 @@ def _failure(output: str, document: str) -> dict:
     return answer
 
 
+def _signature(candidate: str) -> tuple[int, int] | None:
+    try:
+        stat = os.stat(candidate)
+    except OSError:
+        return None
+    return (stat.st_mtime_ns, stat.st_size)
+
+
 def _submit(document: Path, *, force: bool):
     from cadgen.daemon.executors import submit_compile
 
@@ -67,6 +82,8 @@ class DocumentCompiler:
         self._submit = submit or _submit
         self._lock = threading.Lock()
         self._in_flight: dict[str, _Compile] = {}
+        # The last failed compile of a document, with the bytes it failed on (mtime, size).
+        self._failed: dict[str, tuple[tuple[int, int] | None, dict]] = {}
 
     def shutdown(self) -> None:
         """Nothing to own: the jobs belong to the pool, which outlives the viewer."""
@@ -112,9 +129,52 @@ class DocumentCompiler:
             entry.done.set()
         return result
 
+    def start(self, candidate: str, *, force: bool = False) -> None:
+        """Start compiling one document, or join the compile already in flight; never wait.
+
+        The compile is registered before this returns, so the status route reports it
+        from the very next request; the job itself runs on its own thread.
+        """
+        build_key = build_scope(candidate)
+        with self._lock:
+            if build_key in self._in_flight:
+                return
+            entry = self._in_flight[build_key] = _Compile()
+        signature = _signature(candidate)
+        threading.Thread(target=self._finish, args=(candidate, force, build_key, entry, signature),
+                         name="cadgen-viewer-compile", daemon=True).start()
+
+    def _finish(self, candidate: str, force: bool, build_key: str, entry: _Compile, signature) -> None:
+        result: dict | None = None
+        try:
+            result = self._run(candidate, force=force)
+        except BaseException as error:  # noqa: BLE001 - a fault is still the compile's answer
+            result = {"ok": False, "error": str(error).strip() or type(error).__name__, "errorType": type(error).__name__}
+        finally:
+            with self._lock:
+                self._in_flight.pop(build_key, None)
+                if result is not None and result.get("ok"):
+                    self._failed.pop(build_key, None)
+                elif result is not None:
+                    self._failed[build_key] = (signature, result)
+            entry.result = result
+            entry.done.set()
+
+    def failure(self, candidate: str) -> dict | None:
+        """The last compile's failure, while the document still has the bytes it failed on."""
+        with self._lock:
+            recorded = self._failed.get(build_scope(candidate))
+        if recorded is None or recorded[0] != _signature(candidate):
+            return None
+        return recorded[1]
+
     def in_flight(self, build_key: str) -> bool:
         with self._lock:
             return build_key in self._in_flight
+
+    def any_in_flight(self) -> bool:
+        with self._lock:
+            return bool(self._in_flight)
 
     def waiters(self, build_key: str) -> int:
         """Requests attached to the in-flight compile of ``build_key`` besides

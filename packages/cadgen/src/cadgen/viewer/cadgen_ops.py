@@ -91,6 +91,13 @@ class CadgenOps:
         # viewer never asks who wrote it — a compile job builds the tree from
         # the bytes, whoever wrote them (STORE.md §2, §9).
         if verdict.get("rawStep"):
+            # A compile of these very bytes already failed: say so, rather than offer it again.
+            failure = self.client.failure(candidate)
+            if failure is not None:
+                answer = {"state": ARTIFACT_STATE.FAILED, "error": failure.get("error") or "Compiling the document failed."}
+                if failure.get("errorType"):
+                    answer["errorType"] = failure["errorType"]
+                return answer
             # The compile offer is exactly three keys. It deliberately does
             # NOT carry `blocked` through from `status`.
             #
@@ -123,32 +130,14 @@ class CadgenOps:
 
         candidate = self._candidate(file_ref)
         if self._is_raw_step_file(candidate):
-            # A job in the pool: it waits for a slot there if it must, so this
-            # request thread simply waits for the answer (a peer's request for
-            # the same document attaches to the same job).
-            compiled = self.client.compile(candidate, force=force)
-            if compiled.get("ok"):
-                # The compile payload is spread LAST, so its own ok/document
-                # land on the wire and its ok wins.
-                return {
-                    "ok": True,
-                    "state": ARTIFACT_STATE.COMPILED,
-                    "compiled": True,
-                    **compiled,
-                }
-            # `error` is the BARE reason the compile job reported — "failed to
-            # read STEP file: ..." — with no prefix: the client puts it under
-            # its own title. The exception class, when there was one, rides as
-            # its own field so a diagnostic can have it without the sentence
-            # acquiring a "RuntimeError:" nobody asked for.
-            failure = {
-                "ok": False,
-                "state": ARTIFACT_STATE.FAILED,
-                "error": compiled.get("error") or "Compiling the document failed.",
-            }
-            if compiled.get("errorType"):
-                failure["errorType"] = compiled["errorType"]
-            return failure
+            # A job in the pool, started and left to run: this answers at once, and the
+            # client follows the job through the status route (its progress, then
+            # `compiled`, or `failed` with the job's BARE reason -- "failed to read STEP
+            # file: ..." -- and the exception class apart, as `errorType`). A request
+            # held for a compile's length would cost a host that relays requests
+            # through a few shared slots one of them for that long.
+            self.client.start(candidate, force=force)
+            return {"ok": True, "state": ARTIFACT_STATE.COMPILING}
         return {"ok": False, "state": ARTIFACT_STATE.FAILED, "error": f"Artifact source not found: {file_ref}"}
 
     @staticmethod

@@ -220,16 +220,15 @@ test('polling targets active render sessions and continues observing selected-fi
   release();
 });
 
-test('artifact compile sends the guard header and publishes only into its own client', async () => {
+test('artifact compile sends the guard header and answers with the server\'s start of the build', async () => {
   const calls = [];
   const client = createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: async (url, options) => {
-    calls.push({ url, options }); return json({ ok: true, state: 'rendered', catalog: { entries: [{ file: 'part.step', url: '/asset' }] } });
+    calls.push({ url, options }); return json({ ok: true, state: 'compiling' });
   } });
-  await client.requestArtifact('part.step', { force: true });
+  assert.deepEqual(await client.requestArtifact('part.step', { force: true }), { ok: true, state: 'compiling' });
   assert.equal(calls[0].options.method, 'POST');
   assert.equal(calls[0].options.headers['x-cadgen-viewer'], '1');
   assert.equal(new URL(calls[0].url).searchParams.get('force'), '1');
-  assert.equal(client.getSnapshot().entries[0].url, 'http://one.test/asset');
   client.dispose();
 });
 

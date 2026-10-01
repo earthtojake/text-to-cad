@@ -268,8 +268,9 @@ class CadApp:
             return self._busy_requests
 
     def restart_is_safe(self) -> bool:
-        """``SourceReloader``'s idle gate: nothing this restart would destroy."""
-        return self.busy_requests() == 0
+        """``SourceReloader``'s idle gate: nothing this restart would destroy -- no request
+        in flight, and no compile the build route started and left running."""
+        return self.busy_requests() == 0 and not self.ops.client.any_in_flight()
 
     # --- server info ------------------------------------------------------
 
@@ -610,36 +611,19 @@ class CadApp:
         response.send_json(200, {**status, "ref": self._entry_ref_for_status(file_ref)})
 
     def _handle_artifact_build(self, request, response, query):
-        """``ref`` and ``catalog`` both come from ONE post-build scan.
+        """Start the document's compile and answer at once.
 
-        The Node backend scanned twice and disagreed with itself: ``ref`` came
-        from a scan taken BEFORE the build and ``catalog`` from one taken after,
-        so a cold import answered with a ref pointing at the pre-import URL —
-        no ``&v=`` cache-buster — while the catalog it shipped in the same body
-        carried the post-import one. DECIDED, deliberately, to keep the port's
-        post-build ref rather than restore that: the import is precisely the
-        event that changes this entry's URL, and two fields of one payload
-        describing two different moments is a bug that happened to be
-        unobserved (no client reads ``ref`` today) rather than a contract.
-
-        Folding both onto a single scan is the other half of the decision. Node
-        paid for two full directory walks per build POST; this pays for one, and
-        it is the one that makes the two fields agree by construction rather
-        than by care.
+        The compile is a job in the pool; this request is never held for its
+        length (a host relaying requests through a few shared slots would lose
+        one for that long). The answer is ``compiling``, and the client follows
+        the job through the status route -- its progress, then ``compiled``, or
+        ``failed`` with the job's own reason -- and reads the catalog again when it
+        ends. An entry that needs no compile answers ``compiled`` at once.
         """
         file_ref = query.get("file") or ""
         # Only the literal string "1" forces; anything else is a normal build.
         result = self.ops.build_artifact(file_ref, force=query.get("force") == "1")
-        # Scanned AFTER the build, success or failure, and republished by the
-        # client — the import is precisely the event that changes what the
-        # catalog says about this entry.
-        catalog = self.read_catalog(file_ref)
-        payload = {
-            **result,
-            "ref": self._entry_ref_for_status(file_ref, catalog),
-            "catalog": catalog,
-        }
-        response.send_json(500 if result.get("ok") is False else 200, payload)
+        response.send_json(500 if result.get("ok") is False else 200, result)
 
     def _handle_store_asset(self, request, response, query):
         """A tree served as if it were a directory: ``<tree>/assembly.json`` is

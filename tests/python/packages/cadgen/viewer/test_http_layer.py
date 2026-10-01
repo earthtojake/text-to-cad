@@ -334,21 +334,15 @@ class ServerInfo(HttpLayerTestCase):
 
 
 class ArtifactBuildPayload(HttpLayerTestCase):
-    """``ref`` and ``catalog`` describe the SAME moment.
+    """The build route answers at once: it never holds a request for a build.
 
-    The Node backend took ``ref`` from a scan made BEFORE the build and
-    ``catalog`` from one made after, so a cold import shipped a pre-import ref
-    (no ``&v=`` cache-buster) inside a post-import catalog. This backend takes
-    one post-build scan and derives both from it: the import is exactly the
-    event that changes this entry's URL, and one payload cannot honestly
-    describe two moments.
-
-    An ``.stl`` is the subject on purpose — ``build_artifact`` answers "compiled"
+    An ``.stl`` is the subject on purpose -- ``build_artifact`` answers "compiled"
     for an unowned entry without touching the kernel, so this pins the payload
-    shape rather than exercising a compile.
+    shape rather than exercising a compile (``test_document_compile`` follows a
+    compile through the status route).
     """
 
-    def test_ref_is_the_url_of_the_entry_in_the_attached_catalog(self):
+    def test_an_entry_with_nothing_to_build_answers_compiled_and_nothing_else(self):
         import json as json_module
 
         target = os.path.join(self.fixture.root, "part.stl")
@@ -359,13 +353,7 @@ class ArtifactBuildPayload(HttpLayerTestCase):
             headers={"x-cadgen-viewer": "1"},
         )
         self.assertEqual(status, 200, body[:400])
-        payload = json_module.loads(body)
-        self.assertEqual(payload["state"], "compiled")
-        entry = next(
-            e for e in payload["catalog"]["entries"] if e["rootRelativeFile"] == "part.stl"
-        )
-        self.assertTrue(payload["ref"])
-        self.assertEqual(payload["ref"], entry["url"])
+        self.assertEqual(json_module.loads(body), {"ok": True, "state": "compiled"})
 
 
 class StaticDistAndSpa(HttpLayerTestCase):

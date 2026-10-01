@@ -1,7 +1,8 @@
 """The viewer's document compile: a job in the pool, de-duplicated, errors as values.
 
 The private compile pool is gone; ``DocumentCompiler`` submits ``submit_compile``
-jobs and waits. Driven by a fake ``submit`` so the outcomes are deterministic
+jobs; the build route starts one and answers at once, and the status route
+follows it. Driven by a fake ``submit`` so the outcomes are deterministic
 and fast: what these cover is the waiter's behaviour — one job per document,
 attached requests sharing the answer, a failed job's bare message — and the
 ops wiring around it. The pool's own behaviour (slots, coalescing, spares) has
@@ -92,6 +93,13 @@ class CompileTestCase(unittest.TestCase):
         path.write_bytes(f"ISO-10303-21;{name}".encode())
         return str(path)
 
+    def settle(self, ops: CadgenOps, name: str, timeout: float = 5.0) -> None:
+        """Until the compile the build route started for ``name`` has ended."""
+        deadline = time.monotonic() + timeout
+        while ops.client.in_flight(_scope(str(self.root / name))):
+            self.assertLess(time.monotonic(), deadline, f"the compile of {name} never ended")
+            time.sleep(0.005)
+
 
 class ResultsAndErrorsAreValues(CompileTestCase):
     def test_a_successful_compile_answers_with_the_document(self):
@@ -180,29 +188,31 @@ class OpsWiring(CompileTestCase):
             {"state": "not-compiled", "reason": "missing_glb", "compile": True},
         )
 
-    def test_a_successful_compile_is_rendered_and_spreads_the_job_answer(self):
+    def test_a_build_starts_the_compile_and_answers_at_once_and_a_second_press_joins_it(self):
+        # The request is never held for the job: a host relaying requests through a few
+        # shared slots would lose one for the compile's length.
         ops = self.ops()
-        candidate = self.step("ok.step")
-        result = ops.build_artifact("ok.step")
-        self.assertEqual(
-            result,
-            {"ok": True, "state": "compiled", "compiled": True, "document": str(Path(candidate).resolve())},
-        )
-        self.assertNotIn("contended", result)
+        self.step("slow.step")
+        self.submit.gate = threading.Event()
+        self.assertEqual(ops.build_artifact("slow.step"), {"ok": True, "state": "compiling"})
+        self.assertEqual(ops.artifact_status("slow.step")["state"], "compiling")
+        self.assertEqual(ops.build_artifact("slow.step"), {"ok": True, "state": "compiling"})
+        self.submit.gate.set()
+        self.settle(ops, "slow.step")
+        self.assertEqual(len(self.submit.calls), 1)
 
-    def test_a_failed_compile_is_a_500_shaped_payload_with_the_bare_message(self):
+    def test_a_failed_compile_is_the_status_routes_answer_with_the_bare_message_until_the_bytes_change(self):
         ops = self.ops()
-        self.step("crash.step")
-        result = ops.build_artifact("crash.step")
+        candidate = self.step("crash.step")
+        self.assertEqual(ops.build_artifact("crash.step"), {"ok": True, "state": "compiling"})
+        self.settle(ops, "crash.step")
         self.assertEqual(
-            result,
-            {
-                "ok": False,
-                "state": "failed",
-                "error": "failed to read STEP file: not a STEP",
-                "errorType": "RuntimeError",
-            },
+            ops.artifact_status("crash.step"),
+            {"state": "failed", "error": "failed to read STEP file: not a STEP", "errorType": "RuntimeError"},
         )
+        # New bytes are a new document: the compile is offered again.
+        Path(candidate).write_bytes(b"ISO-10303-21;crash, rewritten and longer")
+        self.assertEqual(ops.artifact_status("crash.step")["state"], "not-compiled")
 
     def test_an_in_flight_compile_with_no_progress_record_yet_is_indeterminate_generating(self):
         ops = self.ops()
@@ -243,6 +253,7 @@ class ContainmentHappensBeforeTheJob(CompileTestCase):
         ops = self.ops()
         candidate = self.step("inside.step")
         self.assertTrue(ops.build_artifact(candidate)["ok"])
+        self.settle(ops, "inside.step")
         self.assertEqual(len(self.submit.calls), 1)
 
 

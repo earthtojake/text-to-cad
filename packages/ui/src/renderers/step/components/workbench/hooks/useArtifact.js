@@ -205,6 +205,10 @@ export function useArtifact(fileRef, { enabled = true, freshnessKey = "", client
           // busy elsewhere); keep them for the file sheet's status section.
           finished = true;
           stopPolling();
+          // A build just ended (ours or a peer's): the catalog has the entry it wrote.
+          if (attached && typeof client.refresh === "function") {
+            void client.refresh({ file: activeRef, markRefreshing: false }).catch(() => {});
+          }
           settle({ ...READY, advisory: artifactAdvisoryFor(status) });
           return;
         }
@@ -222,9 +226,8 @@ export function useArtifact(fileRef, { enabled = true, freshnessKey = "", client
           pollTimer = window.setTimeout(pollProgress, ARTIFACT_PROGRESS_FIRST_POLL_MS);
           return;
         }
-        // not-compiled -> we own the compile. The POST is one long-lived request that resolves
-        // only when the build finishes, so its position comes from the concurrent status
-        // poll below.
+        // not-compiled -> we start the compile. The POST answers at once (`compiling`), and the
+        // build is followed through the status route like a peer's: its position, then its end.
         attached = false;
         showGenerating(status);
         pollTimer = window.setTimeout(pollProgress, ARTIFACT_PROGRESS_FIRST_POLL_MS);
@@ -235,8 +238,7 @@ export function useArtifact(fileRef, { enabled = true, freshnessKey = "", client
           return;
         }
         if (result?.ok && result.state === "compiling") {
-          // The server handed us off to a peer that took the lock first. Attach to it
-          // rather than reporting a failure.
+          // The compile is running in the pool (ours, or a peer's we joined): follow it.
           attached = true;
           showGenerating(result);
           pollTimer = window.setTimeout(pollProgress, ARTIFACT_PROGRESS_FIRST_POLL_MS);

@@ -35,7 +35,6 @@ export interface CadRequestOptions { signal?: AbortSignal }
 export interface CadArtifactResult {
   ok?: boolean;
   state: 'compiled' | 'not-compiled' | 'compiling' | 'failed';
-  catalog?: CadCatalog;
   error?: string;
   [key: string]: unknown;
 }

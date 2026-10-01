@@ -205,13 +205,13 @@ export function createCadClient({ origin = '', workspaceId = '', fetch: fetchImp
       if (!file) return Promise.reject(new Error('Missing file'));
       return request('/__cad/artifact', { file, signal, timeoutMs: 10_000, operation: 'status' });
     },
-    async requestArtifact(file, { force = false, signal } = {}) {
-      if (!file) throw new Error('Missing file');
-      const payload = await request('/__cad/artifact', {
+    // Starts the file's compile and answers at once (`compiling`, or `compiled` when there is
+    // nothing to build); the build is followed through `requestArtifactStatus`.
+    requestArtifact(file, { force = false, signal } = {}) {
+      if (!file) return Promise.reject(new Error('Missing file'));
+      return request('/__cad/artifact', {
         file, signal, method: 'POST', operation: 'compile', params: force ? { force: '1' } : {}, headers: { 'x-cadgen-viewer': '1' }
       });
-      if (payload?.catalog) publishCatalog(payload.catalog);
-      return payload;
     },
     drawing(file, { signal } = {}) {
       // A `.dxf` flattened to 2D render primitives on the SERVER: ezdxf does the
