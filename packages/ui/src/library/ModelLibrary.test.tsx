@@ -19,23 +19,28 @@ function library(models: LibraryModel[], extra: Partial<ModelLibrarySource> = {}
   };
 }
 
+it('heads the home with the CAD wordmark over the host\'s links, as the navbar has them, and no tagline', async () => {
+  const links = { version: '0.7.4', release: 'r', github: 'https://github.com/earthtojake/text-to-cad', discord: 'https://discord.gg/x', install: { command: 'c', prompt: 'p' } };
+  const clipboard = { writeText: async () => {}, readText: async () => '', writeImage: async () => {} };
+  render(<ModelLibrary library={library([])} links={links} clipboard={clipboard} />);
+  const nav = await screen.findByRole('navigation', { name: 'CAD links' });
+  expect(within(nav).getByRole('button', { name: 'Version 0.7.4' })).toBeTruthy();
+  expect(within(nav).getByRole('link', { name: 'GitHub' })).toBeTruthy();
+  expect(within(nav).getByRole('link', { name: 'Discord' })).toBeTruthy();
+  expect(screen.queryByText('Build things')).toBeNull();
+});
+
 it('offers Open only where the host has a chooser, and opens and pins through the host', async () => {
   const pick = vi.fn(async () => {});
   render(<ModelLibrary library={library([], { pick })} />);
   await act(async () => { fireEvent.click(await screen.findByRole('button', { name: 'Open', exact: true })); });
   expect(pick).toHaveBeenCalledTimes(1);
-  // Empty, the library is one card that opens a file: the host's explorer where it has one, else its chooser.
+  // Empty, the library is one card that opens the chooser.
   const card = await screen.findByRole('button', { name: 'Open File' });
   await act(async () => { fireEvent.click(card); });
   expect(pick).toHaveBeenCalledTimes(2);
   cleanup();
-  const browse = vi.fn();
-  render(<ModelLibrary library={library([], { pick })} browse={browse} />);
-  const browsing = await screen.findByRole('button', { name: 'Open File' });
-  await act(async () => { fireEvent.click(browsing); });
-  expect([browse.mock.calls.length, pick.mock.calls.length]).toEqual([1, 2]);
-  cleanup();
-  // With neither, it says how a file gets here.
+  // With no chooser, it says how a file gets here.
   render(<ModelLibrary library={library([])} />);
   expect(await screen.findByText('Open a CAD file to see it here.')).toBeTruthy();
   cleanup();

@@ -9,9 +9,9 @@ Hosts present it in one of two ways, which the server tells apart at
 `initialize` (Codex names itself `codex-mcp-client`; an MCP Apps host advertises
 the `io.modelcontextprotocol/ui` extension):
 
-- **Tabs (Codex).** **CAD** in the sidebar, a **CAD** tab beside each thread,
-  and *Open with CAD* for a model file. The agent opens a tab once (`cad_open`)
-  and drives it (`cad_show`).
+- **Tabs (Codex).** **CAD** in the sidebar (the home: the models opened before,
+  and Open), a **CAD** tab beside each thread, and *Open with CAD* for a model
+  file. The agent opens a tab once (`cad_open`) and drives it (`cad_show`).
 - **Inline (Claude Desktop, and every other MCP Apps host).** Each `cad_show`
   mounts a viewer card in the chat, and the host keeps the old cards. A card
   shows the model alone (a compact viewer: no tools, view actions, cube or Quick
@@ -29,21 +29,22 @@ reference host `basic-host` does.
 - **One page, told what to show.** Every surface loads this one page. The tool
   that opened it returns a *launch* — `page` (`home` or `viewer`), `model`,
   `root`, `explore` — and the page renders it: the shared CAD viewer over the
-  launch's root, showing its model or, with none, the home. Every launch names a
-  root, the home's included. The server computes the root from the workspace; the
-  page never guesses where it is, and nothing here branches on a surface's name
-  (`surface` is only reported back to the server).
-- **The root follows context, as the host's own file tree does.** A model in the
-  thread's project (Codex's workspace, or the roots a host lists) browses that
-  project's catalog: `workspace`. A model with no project around it — the
-  sidebar's Open, a chat with no folder — browses its filesystem: `global`,
-  rooted at `/` or its drive and never walked. Its explorer reads each folder it
-  opens (`/__cad/list`) from wherever the model is, up and down, and its catalog
-  holds only the file on screen; a hidden folder the file is in still shows, so
-  the tree reaches it. The home browses the workspace, else the filesystem the
-  user's home is on, and a file picked in its explorer is launched by the server
-  (`cad_launch`), as the library's are. A surface that shows one file (*Open with
-  CAD*, an inline card) has no explorer, and reads only that file.
+  launch's root, showing its model, or the home. Every launch names a root, the
+  home's included. The server computes the root from the workspace; the page never
+  guesses where it is, and nothing here branches on a surface's name (`surface` is
+  only reported back to the server).
+- **Only the sidebar has a home.** `cad_home` is its one launch with `page: home`:
+  the library, and Open with the desktop's chooser. A model opened from it gets a
+  back arrow to it in place of an explorer. Every other surface is about files a
+  thread or chat shows, and has no home: with nothing shown yet it says "Ask the
+  agent to show a model".
+- **Only a project is browsed.** A model in the thread's project (Codex's
+  workspace, or the roots a host lists) browses that project's catalog:
+  `workspace`, with `explore`. A model with no project around it — opened from the
+  home, or outside the workspace — is shown on its own: a `global` root at `/` or
+  its drive, whose catalog holds only the file on screen (a hidden folder it is in
+  included) and which nothing lists. *Open with CAD* and an inline card show one
+  file and have no explorer either.
 - **Told how it is presented, before it greets the host.** A host that mounts
   views inline is served the page with `<meta name="cad-presentation"
   content="inline">` in its head: the page offers that host `inline` and
@@ -90,7 +91,7 @@ reference host `basic-host` does.
 | `bridge.ts` | JSON-RPC 2.0 over `postMessage`: requests, the opening tool's result, host context, teardown |
 | `server.ts` | typed calls to the server's tools, `cad_reveal` among them: the file menu's Reveal, in the desktop's file manager (the server is on the person's machine) |
 | `tunnel.ts` | the `fetch` over `cad_http` |
-| `files.ts` | a filesystem's read-only `FileSource`, a folder at a time, whose copied references name files by absolute path (a project's is `@text-to-cad/ui/catalog`'s, as the web Viewer's is); no listing when the launch does not browse |
+| `files.ts` | a filesystem's read-only `FileSource`: the file on screen, never listed, whose copied references name files by absolute path (a project's is `@text-to-cad/ui/catalog`'s, as the web Viewer's is) |
 | `prompt.ts` | Quick Edit's chat: `chatReach`, what the host's chat takes, and the prompt port over it — Queue through `ui/update-model-context` (a text block titled `Quick edit · <file>` and the sketch's image block, kept until the host clears its model context), Send through `ui/message` — with references as absolute paths (Copy Prompt spells them as copied references are) |
 | `live.ts`, `events.ts` | the mounted view's live controller (`@text-to-cad/ui/host`'s registry), and the `cad_events` long-poll that answers the agent (`show`, `capture`, `describe`) |
 | `presentation.ts` | how the host presents the page, and the election that retires older inline views |
@@ -100,9 +101,9 @@ the one the web Viewer shows) over one launch's root, with this host's ports —
 tunnel (which also carries a copied prompt's sketch to the server: `attachments`), its
 chat, its file menu (copy path, copy relative path under a project,
 Reveal through `cad_reveal`), the navbar's links, followed through `ui/open-link`,
-and its library, with Open: the desktop's file chooser, where any file can be chosen. With no model it is
-the home; the navbar's C mark goes back to it (the launch a view opened on, when it
-opened on the home). `App.tsx` frames it (full page, or an inline card with its
+and, on the sidebar, its library, with Open: the desktop's file chooser, where any file can be chosen.
+With no model there it is the home, and a model opened from it has the navbar's back
+arrow to it. `App.tsx` frames it (full page, or an inline card with its
 full-size button). In a tab, preview's playbar sits on the line of Codex's
 composer, which floats over the page (`--cad-viewport-bottom-center`), and the
 home's and the explorer's lists scroll clear of it (`--cad-host-bottom-inset`).

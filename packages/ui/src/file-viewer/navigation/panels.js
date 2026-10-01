@@ -60,24 +60,21 @@ import { Folders } from "lucide-react";
 export const FILE_PANEL_TREE = "tree";
 
 /**
- * The file tree, as the last entry in every panel list: the explorer, whose toggle is the
- * navbar's second control, after the home mark.
+ * The file tree, as the last entry in every panel list: the explorer, whose toggle leads the
+ * navbar's file controls.
  *
- * It stays open while a person walks the tree from file to file, but it is not
- * what a file opens with — except where there is no file to show at all, when
- * the tree is the only thing to reach for (`empty`).
+ * It stays open while a person walks the tree from file to file, but nothing opens with it, a
+ * tab with no file included: a person opens it.
  *
  * @param {string} open
- * @param {{ empty?: boolean }} [options]
  * @returns {FilePanel}
  */
-export function treePanel(open, { empty = false } = {}) {
+export function treePanel(open) {
   return {
     id: FILE_PANEL_TREE,
     label: open === FILE_PANEL_TREE ? "Hide files" : "Show files",
     icon: Folders,
-    content: "tree",
-    defaultOpen: empty
+    content: "tree"
   };
 }
 

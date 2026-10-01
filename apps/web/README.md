@@ -13,7 +13,7 @@ the shared CAD interface.
 persistence, the file menu's reveal route, and this app's release check.
 `src/App.tsx` composes an explicit `ViewerHost` and hands it to the shared
 `CadViewer` (`@text-to-cad/ui/cad-viewer`), which registers one renderer per file
-family and draws the navbar, the explorer and the home. The catalog exposes CAD
+family and draws the navbar and the explorer. The catalog exposes CAD
 artifacts only, and the web app has no file-writing endpoints.
 Follow the [shared host contract](../../packages/ui/docs/viewer-host.md) when
 adding viewer features; browser effects belong in this app's adapters.
@@ -35,7 +35,7 @@ this app. The Python wheel consumes only the production build.
 src/
   App.tsx               the CadViewer's browser host: URL, history, title and appearance
   main.tsx              host/client bootstrap and cleanup
-  adapters/             the file menu's actions (copies, reveal) and the model library
+  adapters/             the file menu's actions (copies, reveal) and what it records in the model library
   host/                 browser clipboard, prompt delivery, the navbar's links and release check, development auto-reload
   persistence/          the tab record in sessionStorage
   client/               appearance control and styling
@@ -296,21 +296,21 @@ text itself once it arrives where the browser takes no pending item. A sketch is
 saved through the host's `attachments` (`createHttpAttachmentStore`, over
 `POST /__cad/sketches`) and named in the text by its absolute path.
 
-### Home
+### No file open
 
-With no file open, the Viewer shows its Home, the same page the MCP app shows
-(`@text-to-cad/ui/library`, drawn by `CadViewer`): the CAD wordmark centred at the
-top over its tagline ("Build things"), then "Files" with its search and a grid/list
-switch (kept in the tab's settings), and the models every CAD view shares that sit
-under the folder this Viewer serves — pinned first — as solid cards (a picture over
-the file's name and when it was edited) or rows. It is drawn on the navbar's colour.
-Opening one shows it in place. There is no Open: the files are in the explorer, and
-with no models yet the one empty card, "Open File", opens it. The file
-on screen joins the library through `GET|POST /__cad/recents`, with a picture taken
-once it has settled — the model framed whole from the default direction, whatever
-the camera — served by `GET /__cad/recents/thumbnail`; `cadgen.viewer.recents` keeps
-it in the user's state directory, shared with every other Viewer and the MCP app,
-and reports each file's modification time for "Edited 16h ago".
+With no file open, the navbar keeps its place: the explorer's toggle, then "Select
+file" where a file's name goes (it opens the explorer too), and the page says "Ask
+the agent to show a model". The explorer does not open by itself.
+
+### The model library
+
+The Viewer has no home: the library of models every CAD view shares is the Codex
+sidebar's to show (`@text-to-cad/ui/library`). The Viewer only writes to it, through
+`POST /__cad/recents`: the file on screen joins it once the catalog has it
+(`{action: "open"}`), and its picture once it has settled — the model framed whole
+from the default direction, whatever the camera (`{action: "thumbnail"}`).
+`cadgen.viewer.recents` keeps the library in the user's state directory, shared with
+every other Viewer and the MCP app.
 
 ### File storage and host actions
 
@@ -342,8 +342,8 @@ and web stay consistent without host-specific copies of those controls.
 
 The Viewer has the one navbar every app shares (see
 [the host contract](../../packages/ui/docs/viewer-host.md#host-chrome-slots)): at the
-left the C mark — Home from a file, the brand on the Home — the explorer's toggle
-and the open file's name with its ⋯; at the right the renderer's snapshot action,
+left the explorer's toggle and the open file's name with its ⋯ ("Select file" with
+none open); at the right the renderer's snapshot action,
 then the version, GitHub and Discord. This host supplies the links
 (`src/host/viewerLinks.js`): its version, the GitHub and Discord its build names
 (`VIEWER_GITHUB_URL`, `VIEWER_DISCORD_URL`), and what GitHub's latest-release API

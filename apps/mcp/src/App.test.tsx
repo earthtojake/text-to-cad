@@ -38,17 +38,18 @@ function host(initial: HostContext, hostCapabilities: Record<string, unknown> = 
   };
   return { bridge, server };
 }
-const session: Session = { protocol: 2, build: 'b', version: 'test', platform: 'darwin', workspace: [] };
-const home: Launch = { protocol: 2, page: 'home', model: null, root: { kind: 'workspace', path: '/work', name: 'work' }, explore: true };
+const session: Session = { protocol: 3, build: 'b', version: 'test', platform: 'darwin', workspace: [] };
+// The sidebar's home, as the server launches it: the library, over a filesystem it does not browse.
+const home: Launch = { protocol: 3, page: 'home', model: null, root: { kind: 'global', path: '/', name: '/' }, explore: false };
 const sized = (notify: ReturnType<typeof vi.fn>) => notify.mock.calls.filter(([method]) => method === 'ui/notifications/size-changed');
 
-it('a tab host gets the page it always had, down to its bottom: the home, with its explorer, no card to size and no full-size button', () => {
+it('a tab host gets the page it always had, down to its bottom: the home, with no explorer, no card to size and no full-size button', () => {
   const { bridge, server } = host({ displayMode: 'fullscreen', safeAreaInsets: { top: 4, bottom: 72 } });
   const { container } = render(<App bridge={bridge as any} server={server as any} launch={{ ...home, surface: 'sidebar' }} session={session} />);
-  // The home is the viewer with nothing open: its library, with this host's Open, and the root's files.
+  // The home is the viewer with nothing open: its library, with this host's Open, and no files to browse.
   expect(viewer.props!.file).toBe('');
-  expect(typeof viewer.props!.library.pick).toBe('function');
-  expect(viewer.props!.host.files.list).toBeDefined();
+  expect(typeof viewer.props!.library!.pick).toBe('function');
+  expect(viewer.props!.host.files.list).toBeUndefined();
   expect(container.querySelector('[aria-label="Full size"]')).toBeNull();
   expect(sized(bridge.notify)).toEqual([]);
   // The host's composer floats over the page's bottom: no strip is kept for it, preview's playbar
@@ -59,21 +60,30 @@ it('a tab host gets the page it always had, down to its bottom: the home, with i
   expect(frame.style.getPropertyValue('--cad-host-bottom-inset')).toBe('72px');
 });
 
-it('a file picked on the home is launched by the server; the navbar\'s links and file menu go through the host', async () => {
+it('a model opened from the home is launched by the server and leads back to it; the navbar\'s links and file menu go through the host', async () => {
   const { bridge, server } = host({ displayMode: 'fullscreen' });
   render(<App bridge={bridge as any} server={server as any} launch={home} session={session} />);
-  await act(async () => viewer.props!.onShow('parts/a.step'));
+  await act(async () => viewer.props!.library!.open({ path: '/work/parts/a.step', name: 'a.step', folder: 'work/parts', pinned: false, thumbnail: null, openedAt: 1 } as any));
   expect(server.launch).toHaveBeenCalledWith('/work/parts/a.step');
-  expect(viewer.props!.file).toBe('parts/a.step');
-  // Home again: the launch the view opened on.
+  expect(viewer.props!.file).toBe('work/parts/a.step');
+  // Back: the home the view opened on.
   act(() => viewer.props!.onShow(''));
   expect(viewer.props!.file).toBe('');
   await act(async () => viewer.props!.host.links!.open!('https://github.com/earthtojake/text-to-cad'));
   expect(bridge.request).toHaveBeenCalledWith('ui/open-link', { url: 'https://github.com/earthtojake/text-to-cad' });
   const { perform, platform } = viewer.props!.host.fileActions!;
-  expect([platform, Object.keys(perform!).sort()]).toEqual(['darwin', ['copy-path', 'copy-relative-path', 'reveal']]);
-  await act(async () => perform!.reveal!({ path: 'parts/a.step', kind: 'file' }));
-  expect(server.reveal).toHaveBeenCalledWith(expect.objectContaining({ kind: 'workspace', path: '/work' }), 'parts/a.step');
+  // A file on its own, in no project: its path is its only one.
+  expect([platform, Object.keys(perform!).sort()]).toEqual(['darwin', ['copy-path', 'reveal']]);
+  await act(async () => perform!.reveal!({ path: 'work/parts/a.step', kind: 'file' }));
+  expect(server.reveal).toHaveBeenCalledWith(expect.objectContaining({ kind: 'global', path: '/' }), 'work/parts/a.step');
+});
+
+it('a thread\'s tab has no home: no library, and nothing to go back to, but its project to browse', () => {
+  const { bridge, server } = host({ displayMode: 'fullscreen' });
+  render(<App bridge={bridge as any} server={server as any} session={session}
+    launch={{ protocol: 3, page: 'viewer', model: null, root: { kind: 'workspace', path: '/work', name: 'work' }, explore: true, surface: 'tab' }} />);
+  expect(viewer.props!.library).toBeUndefined();
+  expect(viewer.props!.host.files.list).toBeDefined();
 });
 
 it('an inline host gets a card of a height it is told, which goes full size in place', () => {
@@ -96,7 +106,7 @@ it('an inline host gets a card of a height it is told, which goes full size in p
 });
 
 it('a Quick Edit queues into a tab host\'s composer always, into an inline host\'s when it takes model context, and sends where the host takes messages', () => {
-  const model: Launch = { protocol: 2, page: 'viewer', model: '/work/part.stl', root: { kind: 'global', path: '/', name: '/' }, explore: false };
+  const model: Launch = { protocol: 3, page: 'viewer', model: '/work/part.stl', root: { kind: 'global', path: '/', name: '/' }, explore: false };
   const reach = (presentation: 'tabs' | 'inline', capabilities: Record<string, unknown>) => {
     const { bridge, server } = host({ displayMode: presentation === 'tabs' ? 'fullscreen' : 'inline' }, capabilities);
     render(<App bridge={bridge as any} server={server as any} presentation={presentation} session={session} launch={model} />);

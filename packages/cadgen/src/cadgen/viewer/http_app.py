@@ -32,7 +32,7 @@ from hashlib import sha256
 from pathlib import Path
 
 from . import reload as dev_reload
-from .backend import ForbiddenAssetError, LocalAssetBackend, normalized_file_ref, relative_file_ref
+from .backend import ForbiddenAssetError, LocalAssetBackend, normalized_file_ref
 from .cadgen_ops import create_cadgen_ops
 from .content_types import content_type_for_static_asset
 from .encoding import UriError, strict_decode_uri_component
@@ -437,12 +437,6 @@ class CadApp:
                     response.send_json(200, self.server_info())
                 elif pathname == "/__cad/catalog":
                     self._handle_catalog(request, response)
-                elif pathname == "/__cad/list" and self.backend.lazy:
-                    self._handle_list(request, response, query)
-                elif pathname == "/__cad/recents":
-                    response.send_json(200, self._library())
-                elif pathname == "/__cad/recents/thumbnail":
-                    self._handle_library_thumbnail(response, query)
                 elif pathname == "/__cad/artifact":
                     self._handle_artifact_status(request, response, query)
                 elif pathname == "/__cad/preview":
@@ -555,18 +549,6 @@ class CadApp:
             self._recents = RecentStore()
         return self._recents
 
-    def _library(self) -> dict:
-        """The library as this Viewer shows it: the models its catalog lists, by ``file``."""
-        root = self.backend.root_path
-        models = []
-        for entry in self.recents.list():
-            if not catalog_lists(root, entry.path):
-                continue
-            file = relative_file_ref(root, entry.path)
-            folder = file.rpartition("/")[0]
-            models.append({**entry.public(), "file": file, "folder": f"{self.root_name}/{folder}" if folder else self.root_name})
-        return {"recents": models}
-
     def _library_path(self, ref) -> str:
         """The absolute path of a model in this Viewer's catalog, from the ``file`` a page sends."""
         normalized = normalized_file_ref(ref)
@@ -581,7 +563,7 @@ class CadApp:
         return path
 
     def _handle_library_change(self, request, response):
-        """Record an open, pin, unpin or remove, or keep a thumbnail; answer the library as it is after."""
+        """Record a model this Viewer opened, or keep its picture, for every CAD view's library."""
         from .recents import thumbnail_png
 
         payload = json.loads(request.body())
@@ -592,37 +574,16 @@ class CadApp:
             if not os.path.isfile(path):
                 raise ValueError("no such model")
             self.recents.opened(path)
-        elif action in ("pin", "unpin"):
-            self.recents.pin(path, action == "pin")
-        elif action == "remove":
-            self.recents.remove(path)
         elif action == "thumbnail":
             self.recents.thumbnail(path, thumbnail_png(payload.get("png")))
         else:
             raise ValueError(f"unknown library action {action!r}")
-        response.send_json(200, self._library())
-
-    def _handle_library_thumbnail(self, response, query):
-        """A thumbnail of a model this Viewer lists; nothing else in the store is its to hand out."""
-        name = str(query.get("name") or "")
-        png = self.recents.read_thumbnail(name) if any(model["thumbnail"] == name for model in self._library()["recents"]) else None
-        if png is None:
-            response.send_json(404, {"error": "Not found"})
-            return
-        response.send_bytes(200, png, "image/png")
+        response.send_json(200, {"ok": True})
 
     # --- placeholders filled by later steps of the port -------------------
 
     def _handle_catalog(self, request, response):
         response.send_json(200, self.read_catalog(request.query.get("file")))
-
-    def _handle_list(self, request, response, query):
-        """One folder of a lazy root, whose catalog holds only the files a view shows."""
-        entries = self.backend.list_directory(query.get("dir") or "")
-        if entries is None:
-            response.send_json(404, {"error": "Not found"})
-            return
-        response.send_json(200, {"entries": entries})
 
     def _entry_ref_for_status(self, file_ref, catalog=None) -> str:
         """The catalog URL for this ref, or ``""``.

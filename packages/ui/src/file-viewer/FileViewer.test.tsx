@@ -1,4 +1,5 @@
 import { act, cleanup, render, screen, within } from '@testing-library/react';
+import { useState } from 'react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { unavailablePromptContext } from '@text-to-cad/core/prompt';
@@ -66,36 +67,48 @@ it('says how its host updates: a command and a message for an agent, or a line w
   expect(menu.querySelector('[data-install-message]')).toBeNull();
   cleanup();
   // A host whose update is not a command says how in a line, and nothing else.
-  const message = "Update CAD from Codex's plugin marketplace, then run $setup and restart Codex.";
+  const message = 'Update CAD from the plugin marketplace, then restart the app.';
   menu = await versionMenu({ message });
   expect(menu.querySelector('[data-install-message]')?.textContent).toBe(message);
   expect(within(menu).queryByText('In your terminal')).toBeNull();
   expect(within(menu).queryByText('Or ask your agent')).toBeNull();
 });
 
-it('leads home from a file where the host has a home, and is the brand on the home itself', async () => {
+it('leads back to the host\'s home from a file, and draws no navbar over the home itself', async () => {
   const home = vi.fn();
   const homed = { ...host, links: viewerLinks({ version: '0.7.4' }), navigation: { openFile() {}, home } };
   open({ host: homed });
   await screen.findByText('shown');
-  act(() => screen.getByRole('button', { name: 'Home' }).click());
+  act(() => screen.getByRole('button', { name: 'Back' }).click());
   expect(home).toHaveBeenCalledOnce();
   cleanup();
   open({ host: homed, file: null, presentation: { home: <p>home</p> } });
   await screen.findByText('home');
-  expect(screen.queryByRole('button', { name: 'Home' })).toBeNull();
-  expect(screen.getByRole('img', { name: 'CAD' })).toBeTruthy();
+  expect(navbar()).toBeNull();
+  cleanup();
+  // No home, no way back to one.
+  open({ host: { ...host, links: viewerLinks({ version: '0.7.4' }) } });
+  await screen.findByText('shown');
+  expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
 });
 
-it('opens a tab with no file on the host\'s home with the explorer shut, and on the explorer where there is no home', async () => {
-  const browsing = { ...host, files: { ...host.files, list: async () => [] } };
-  open({ host: browsing, file: null, presentation: { home: <p>home</p> } });
-  expect(await screen.findByText('home')).toBeTruthy();
-  expect(screen.getByRole('button', { name: 'Show files' })).toBeTruthy();
+it('with no file open and no home, the navbar asks for one, and the explorer opens only when asked', async () => {
+  const browsing = { ...host, links: viewerLinks({ version: '0.7.4' }), files: { ...host.files, list: async () => [] } };
+  // The tab's state is the host's: here, kept as a host keeps it.
+  function Tab() {
+    const [state, setState] = useState<{ panel: string | null; panelWidth: number }>({ panel: null, panelWidth: 220 });
+    return <FileViewer file={null} host={browsing as any} renderers={[renderer]} state={state as any} onStateChange={setState as any}
+      presentation={{ empty: <p>nothing open</p> }} />;
+  }
+  render(<Tab />);
+  expect(await screen.findByText('nothing open')).toBeTruthy();
   expect(document.querySelector('[data-file-explorer]')).toBeNull();
-  cleanup();
-  // With nothing of its own there, the explorer is all there is to reach for.
-  open({ host: browsing, file: null, presentation: { empty: <p>nothing open</p> } });
-  expect(await screen.findByRole('button', { name: 'Hide files' })).toBeTruthy();
+  act(() => screen.getByRole('button', { name: 'Select file' }).click());
   expect(document.querySelector('[data-file-explorer]')).toBeTruthy();
+  cleanup();
+  // With no files to browse there is nothing to select: the navbar holds only the links.
+  open({ host: { ...host, links: viewerLinks({ version: '0.7.4' }) }, file: null, presentation: { empty: <p>nothing open</p> } });
+  expect(await screen.findByText('nothing open')).toBeTruthy();
+  expect(navbar()).not.toBeNull();
+  expect(screen.queryByRole('button', { name: 'Select file' })).toBeNull();
 });

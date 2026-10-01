@@ -70,7 +70,6 @@ __all__ = [
     "catalog_lists",
     "is_hidden_name",
     "is_served_cad_asset",
-    "list_cad_directory",
     "path_is_inside",
     "node_basename",
     "path_relative",
@@ -971,29 +970,3 @@ def scan_cad_files(repo_root, files) -> dict:
     }
 
 
-# A file chooser's rule rather than a catalog's: every folder is there to open,
-# except hidden ones and the ones cadgen and Python keep caches in.
-_UNLISTED_FOLDERS = frozenset({"__cadgen__", "__pycache__"})
-
-
-def list_cad_directory(directory: str) -> list[dict]:
-    """The folders and CAD files directly in ``directory``, as ``{name, kind}``, in walk order.
-
-    Links are followed; broken ones and hidden names are left out. Raises
-    ``OSError`` for a directory that cannot be read.
-    """
-    listed = []
-    with os.scandir(directory) as scan:
-        entries = sorted(((_node_decoded_name(entry.name), entry) for entry in scan), key=lambda pair: _walk_sort_key(pair[0]))
-    for name, entry in entries:
-        if is_hidden_name(name):
-            continue
-        try:
-            if entry.is_dir():
-                if name not in _UNLISTED_FOLDERS:
-                    listed.append({"name": name, "kind": "directory"})
-            elif entry.is_file() and extension_of(name) in SOURCE_EXTENSIONS:
-                listed.append({"name": name, "kind": "file"})
-        except OSError:
-            continue
-    return listed

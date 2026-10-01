@@ -48,7 +48,7 @@ from urllib.parse import unquote, urlparse
 from cadgen.viewer.scanner import SOURCE_EXTENSIONS, catalog_lists
 
 from .protocol import INVALID_PARAMS, METHOD_NOT_FOUND, Connection, RequestContext, RpcError, claim_stdout
-from .roots import Root, ThreadWorkspace, filesystem_of, home_filesystem
+from .roots import WORKSPACE, Root, ThreadWorkspace, filesystem_of, home_filesystem
 from .ui import MIME, RESOURCE_META, AppPage
 from .views import POLL_SECONDS, NoAnswer, ViewRegistry
 
@@ -57,8 +57,9 @@ LOG = logging.getLogger("cadgen.mcp")
 NAME = "text_to_cad"
 TITLE = "CAD"
 # The launch/view protocol between this server and its page. 2: every launch names a root, the
-# home's included, and the page reveals files (`cad_reveal`).
-PROTOCOL = 2
+# home's included, and the page reveals files (`cad_reveal`). 3: only the sidebar has a home, and
+# a launch browses only the thread's project.
+PROTOCOL = 3
 _PROTOCOL_VERSIONS = ("2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05")
 _RESOURCE_NOT_FOUND = -32002
 EXTENSIONS = sorted(SOURCE_EXTENSIONS)
@@ -329,9 +330,6 @@ class Server:
                              "its file changes, so show a model once, not after every rebuild. The result names the view: "
                              "pass it to cad_view or cad_screenshot."),
              "inputSchema": _object({"path": _SHOWN_PATH}, ["path"])},
-            {"name": "cad_home", "title": TITLE, "icons": [ICON], "annotations": _READ_ONLY, "_meta": shows,
-             "description": "Show CAD in the chat: the user's recent and pinned models, and Open Model to pick one from disk.",
-             "inputSchema": _object()},
             {"name": "cad_view", "title": "Read CAD view", "icons": [ICON], "annotations": _READ_ONLY,
              "description": ("Describe a CAD viewer in this chat: its model and revision, what the user has selected (as "
                              "references you can quote back), and the camera."),
@@ -423,21 +421,20 @@ class Server:
         return Root("workspace", project) if project else filesystem_of(model)
 
     def _home_root(self) -> Root:
-        """Where a view with no model browses: the thread's workspace, else the filesystem of the user's home."""
+        """Where a view with no model sits: the thread's workspace, else the filesystem of the user's home."""
         return self.workspace.root() or home_filesystem()
 
     def _launch(self, model: str | None, *, surface: str | None = None, explore: bool = True) -> dict[str, Any]:
-        # An inline view is a card in the chat: it shows the model, not a file browser.
-        explore = explore and self.tabs
-        launch: dict[str, Any] = {"protocol": PROTOCOL, "page": "viewer", "model": model, "explore": explore}
+        root = self._root_for(model) if model is not None else self._home_root()
+        # Only a project is browsed: the thread's workspace. A model with no project around it is
+        # shown on its own, and an inline view is a card in the chat, which browses nothing.
+        launch: dict[str, Any] = {"protocol": PROTOCOL, "page": "viewer", "model": model, "root": root.public(),
+                                  "explore": explore and self.tabs and root.kind == WORKSPACE}
         if surface:
             launch["surface"] = surface
         if model is not None:
-            launch["root"] = self._root_for(model).public()
             self._model = model
             self._remember(model)
-        else:
-            launch["root"] = self._home_root().public()
         return launch
 
     def _mounted(self, launch: dict[str, Any]) -> dict[str, Any]:
@@ -472,14 +469,10 @@ class Server:
         return path
 
     def _tool_cad_home(self, arguments, context):
-        # The home browses where a view with no model would: the workspace, else the filesystem. An
-        # inline card, which shows no file browser, only names it.
-        root = self._home_root().public()
-        if not self.tabs:
-            launch = self._mounted({"protocol": PROTOCOL, "page": "home", "surface": "inline", "model": None, "root": root, "explore": False})
-            return _text(f"CAD is showing in the chat (view {launch['view']}).", {"launch": launch})
+        # The sidebar's home: the library, and Open with the desktop's chooser. It browses no folder,
+        # so its root is the filesystem, whose catalog holds nothing until a model is shown.
         return _text("CAD is open.", {"launch": {"protocol": PROTOCOL, "page": "home", "surface": "sidebar",
-                                                  "model": None, "root": root, "explore": True}})
+                                                  "model": None, "root": home_filesystem().public(), "explore": False}})
 
     def _tool_cad_tab(self, arguments, context):
         current = next((view.model for view in self.views.live(context.meta.get("threadId")) if view.model), None) or self._model

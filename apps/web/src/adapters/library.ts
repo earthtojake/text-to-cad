@@ -1,34 +1,17 @@
-import type { CadWorkspaceService } from '@text-to-cad/core/client';
-import type { LibraryModel, ModelLibrarySource } from '@text-to-cad/ui/library';
-
-/** A model in this Viewer's library, with the `file` its catalog and `?file=` name it by. */
-export interface WebModel extends LibraryModel { file: string }
+/**
+ * The library every CAD view shares, as this Viewer takes part in it: it records the models it
+ * opens and their pictures, for the views that show the library (the Codex sidebar's home). The
+ * Viewer has no home of its own, so it never reads the library.
+ */
 
 const CHANGE_HEADERS = { 'x-cadgen-viewer': '1', 'content-type': 'application/json' };
 
-async function library(response: Response): Promise<readonly WebModel[]> {
-  const body = await response.json().catch(() => null) as { recents?: WebModel[]; error?: string } | null;
-  if (!response.ok || !body?.recents) throw new Error(body?.error || 'The model library could not be read.');
-  return body.recents;
-}
-
-function change(body: { action: string; file: string; png?: string }): Promise<readonly WebModel[]> {
-  return fetch('/__cad/recents', { method: 'POST', headers: CHANGE_HEADERS, body: JSON.stringify(body) }).then(library);
-}
-
-/**
- * The library every CAD view shares, as this Viewer shows it: the models under the folder it
- * serves. They open in place, beside the files; there is no chooser to pick one from disk. A card
- * without a picture has its model drawn from this Viewer's own catalog (`client`), where it lives.
- */
-export function createWebLibrary({ open, client }: { open(file: string): void; client: CadWorkspaceService }): ModelLibrarySource<WebModel> {
-  return {
-    list: () => fetch('/__cad/recents', { cache: 'no-store' }).then(library),
-    change: (action, model) => change({ action, file: model.file }),
-    thumbnail: async name => `/__cad/recents/thumbnail?name=${encodeURIComponent(name)}`,
-    open: async model => open(model.file),
-    pictureFrom: model => ({ client, file: model.file, keep: png => recordThumbnail(png, model.file) }),
-  };
+async function change(body: { action: 'open' | 'thumbnail'; file: string; png?: string }): Promise<void> {
+  const response = await fetch('/__cad/recents', { method: 'POST', headers: CHANGE_HEADERS, body: JSON.stringify(body) });
+  if (!response.ok) {
+    const failure = await response.json().catch(() => null) as { error?: string } | null;
+    throw new Error(failure?.error || 'The model library could not be written.');
+  }
 }
 
 /** The file on screen joins the library. */

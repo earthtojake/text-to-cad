@@ -41,7 +41,7 @@
      "explore": false,
      "model": "<tmp>/project/parts/bracket.stl",
      "page": "viewer",
-     "protocol": 2,
+     "protocol": 3,
      "root": {
       "kind": "global",
       "name": "/",
@@ -60,14 +60,14 @@
    ],
    "structuredContent": {
     "launch": {
-     "explore": true,
+     "explore": false,
      "model": null,
      "page": "home",
-     "protocol": 2,
+     "protocol": 3,
      "root": {
-      "kind": "workspace",
-      "name": "project",
-      "path": "<tmp>/project"
+      "kind": "global",
+      "name": "/",
+      "path": "/"
      },
      "surface": "sidebar"
     }
@@ -80,7 +80,7 @@
      "explore": true,
      "model": "<tmp>/project/parts/bracket.stl",
      "page": "viewer",
-     "protocol": 2,
+     "protocol": 3,
      "root": {
       "kind": "workspace",
       "name": "project",
@@ -93,10 +93,10 @@
    "content": [],
    "structuredContent": {
     "launch": {
-     "explore": true,
+     "explore": false,
      "model": "<tmp>/downloads/loose.stl",
      "page": "viewer",
-     "protocol": 2,
+     "protocol": 3,
      "root": {
       "kind": "global",
       "name": "/",
@@ -117,7 +117,7 @@
      "explore": true,
      "model": "<tmp>/project/parts/bracket.stl",
      "page": "viewer",
-     "protocol": 2,
+     "protocol": 3,
      "root": {
       "kind": "workspace",
       "name": "project",
@@ -159,7 +159,7 @@
      "explore": true,
      "model": "<tmp>/project/parts/bracket.stl",
      "page": "viewer",
-     "protocol": 2,
+     "protocol": 3,
      "root": {
       "kind": "workspace",
       "name": "project",

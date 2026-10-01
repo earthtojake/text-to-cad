@@ -48,7 +48,7 @@ are for reading and maintaining the contracts.
 | `RobotRendererOptions` (URDF, SRDF, SDF), `RobotLiveController`, `RobotLiveState` (`selectedLinks`, `selectedPartIds`) | [Robot registration](../src/renderers/robot/index.ts) | `@text-to-cad/ui/renderers/robot` |
 | `ViewerCommands`, `ViewerCommandSource` (the host requests every viewer renderer takes) | [Viewer commands](../src/renderers/workspace/commands.ts) | `@text-to-cad/ui/renderers/workspace` |
 | `createLiveRegistry`, `LiveRegistry` (the host's handle on the mounted view: its renderers' `live`) | [Live registry](../src/host/liveRegistry.ts) | `@text-to-cad/ui/host` |
-| `ModelLibrary`, `ModelLibrarySource`, `ModelPictureSource`, `useModelThumbnail` (a host's home: the models opened before, pinned first, as cards or rows, and with none an "Open File" card that opens the explorer (`browse`) or else the chooser; `pick` only where the host has a file chooser; `pictureFrom` where it can reach a model to picture it) | [Model library](../src/library/ModelLibrary.tsx), [thumbnails](../src/library/thumbnails.ts) | `@text-to-cad/ui/library` |
+| `ModelLibrary`, `ModelLibrarySource`, `ModelPictureSource`, `useModelThumbnail` (a host's home: the CAD title over the host's links, then the models opened before, pinned first, as cards or rows, and with none an "Open File" card that opens the chooser; `pick` only where the host has a file chooser; `pictureFrom` where it can reach a model to picture it) | [Model library](../src/library/ModelLibrary.tsx), [thumbnails](../src/library/thumbnails.ts) | `@text-to-cad/ui/library` |
 | `CadViewer` (FileViewer over one root's CAD catalog: the five CAD renderers, catalog following, the home, the loading and missing-file pages, the library's pictures) | [CAD viewer](../src/cad-viewer/CadViewer.tsx) | `@text-to-cad/ui/cad-viewer` |
 | `createCatalogFileSource`, `createCadFileActions`, `rootPath`, `pathUnderRoot`, `referencePath` (a CAD catalog as a read-only `FileSource`, the file menu's copies and reveal, the paths a root names a file by) | [Catalog](../src/cad-viewer/catalog.ts) | `@text-to-cad/ui/catalog` |
 | `ViewerLinks`, `viewerLinks` (the navbar's version, GitHub and Discord, and how a link is followed) | [Host types](../src/host/types.ts), [links](../src/file-viewer/navigation/links.js) | `@text-to-cad/ui/links` |
@@ -105,9 +105,10 @@ the selection through `promptContext.deliver`. Neither route detects the platfor
 
 `navigation.openFile(path, { target, panel })` shows a file in this view
 (`"current"`) or in a new one, where the host has more than one (`"new"`).
-`navigation.home()`, where the host has a home, shows it in this view: the navbar's
-C mark is the way to it from a file (a burger under the pointer), and on the home
-itself the mark is the brand. `CadViewer` implements both over the host's `onShow`. `panel`
+`navigation.home()`, where the host has a home, shows it in this view: from a file,
+the navbar leads with a back arrow to it, and the home itself has no navbar.
+`CadViewer` implements both over the host's `onShow`, and gives a host a home only
+with a `library`. `panel`
 is the panel the file opens with: FileViewer asks for the tree (`"tree"`) for a
 file picked in the tree, so the tree stays up while a person walks it. Without a
 panel, a file shown in place or in a new view starts at `FileViewerState.panel:
@@ -243,8 +244,8 @@ there, and where the picture is kept): `CadViewer` mounts a viewer of its own fo
 it — its own renderers and live binding, compact, behind the page at the picture's
 size — one model at a time, each once per visit, and only a model whose artifact
 status is already `compiled`. The home never builds anything: an unbuilt model keeps
-its placeholder until a view shows it. The web library draws from its own catalog;
-the MCP app's from the model's whole filesystem, whose lazy root reads only that file.
+its placeholder until a view shows it. The MCP app's library draws from the model's
+whole filesystem, whose lazy root reads only that file.
 `readState().display` and `setDisplaySettings(patch)` use the same sparse grouped
 schema as snapshots: `mode` selects `solid`, `render`, `xray`, `hidden-line`, or
 `wireframe`; camera, surfaces, edges, lighting, background, floor, grid and axes
@@ -349,11 +350,13 @@ permit its compilation in CSP without enabling JavaScript eval.
 
 ## Host chrome slots
 
-FileViewer draws ONE navbar, the same in every app and over every page. Left: the
-C mark — `navigation.home` from a file, the brand on the home — then the file
-explorer's toggle where the host's files can be browsed (`files.list`), then the
-open file's name and its ⋯ menu, which is the explorer's own entry menu for that
-file (no right-click on the name). Right: the renderer's navigation actions, any
+FileViewer draws ONE navbar, the same in every app and over every file; a host's home
+has none (it holds the links itself, under its title). Left: a back arrow to the home
+(`navigation.home`) where the host has one, then the file explorer's toggle where the
+host's files can be browsed (`files.list`), then the open file's name and its ⋯ menu,
+which is the explorer's own entry menu for that file (no right-click on the name).
+With no file open the name's place says "Select file", which opens the explorer, and
+the page says "Ask the agent to show a model". Right: the renderer's navigation actions, any
 declared panel's toggle, then `links` — the version, GitHub and Discord as icons
 (`NavbarLinks.jsx`). The version opens a menu of what it is and how to update it;
 a host that checks for newer releases says what it found (`links.latest`), and the

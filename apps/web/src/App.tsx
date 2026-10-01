@@ -6,7 +6,7 @@ import { createHttpAttachmentStore, type CadServerInfo } from '@text-to-cad/core
 import type { createCadClient } from '@text-to-cad/core/client';
 import { useViewerAutoReload } from './host/useViewerAutoReload.js';
 import { createWebFileActions } from './adapters/fileActions';
-import { createWebLibrary, recordOpened, recordThumbnail } from './adapters/library';
+import { recordOpened, recordThumbnail } from './adapters/library';
 import { browserClipboard, browserClipboardSupportsImages } from './host/clipboard';
 import { createWebPromptContext } from './host/promptContext';
 import { useViewerLinks } from './host/viewerLinks.js';
@@ -63,7 +63,7 @@ function RootView({ client, server, tabStore }: { client: CadClient; server: Cad
   }, []);
   const shownFile = useRef(file);
   shownFile.current = file;
-  /** Show a file by its path, or the home (''), whether or not the catalog has read it yet: the viewer resolves it. */
+  /** Show a file by its path ('' is none), whether or not the catalog has read it yet: the viewer resolves it. */
   const show = useCallback((next: string) => {
     const path = normalizeCadFileQueryParam(next);
     if (path === shownFile.current) return;
@@ -78,14 +78,13 @@ function RootView({ client, server, tabStore }: { client: CadClient; server: Cad
     if (!readCadParam()) writeCadParam(path, { history: 'replace' });
     void recordOpened(path).catch(() => {});
   }, []);
-  const library = useMemo(() => createWebLibrary({ open: show, client }), [show, client]);
   const host = useMemo<Omit<ViewerHost, 'navigation'>>(() => ({
     files: source, fileActions, clipboard: browserClipboard, promptContext, attachments, links,
     environment: { colorScheme: appearance.colorScheme, platform: keyboardPlatform() },
   }), [source, fileActions, promptContext, attachments, links, appearance.colorScheme]);
   return <div className="flex h-svh flex-col overflow-hidden"><div className="min-h-0 flex-1">
     <CadViewer client={client} host={host} tabStore={tabStore} live={live} file={file} onShow={show} onShown={shown}
-      rootPath={server.rootPath || ''} library={library} onThumbnail={recordThumbnail}
+      rootPath={server.rootPath || ''} onThumbnail={recordThumbnail}
       displayActions={<ViewerAppearance colorSchemePreference={appearance.preference} resolvedColorSchemeMode={appearance.colorScheme} onColorSchemePreferenceChange={changeColorScheme} />} />
   </div></div>;
 }

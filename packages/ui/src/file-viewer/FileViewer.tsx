@@ -45,9 +45,8 @@ export function FileViewer({ file, host, renderers, state, onStateChange, displa
   // Width matters only as the breakpoint: this state changes when it is crossed, never per pixel.
   const [rootRef, mobile] = useViewerMobileMeasure();
   // Mobile sheets are deliberate, temporary openings. Keep the wide layout's panel preference intact.
-  // `null` is nobody having said: a file opens with nothing, but an empty tab still opens on its tree.
-  const [mobilePanel, setMobilePanel] = useState<string | null>(null);
-  useEffect(() => { setMobilePanel(null); }, [key, mobile]);
+  const [mobilePanel, setMobilePanel] = useState("");
+  useEffect(() => { setMobilePanel(""); }, [key, mobile]);
   const setPanel = useCallback((panel: string) => {
     if (currentKey.current !== key) return;
     if (mobile) setMobilePanel(panel);
@@ -63,11 +62,8 @@ export function FileViewer({ file, host, renderers, state, onStateChange, displa
   const onReady = useCallback((ready: boolean) => { if (currentKey.current === key) setReadiness((previous) => previous?.key === key && previous.ready === ready ? previous : { key, ready }); }, [key]);
   const ready = loaded.status === "ready" && (readiness?.key === key ? readiness.ready : true);
   const declared = (open: string) => loaded.status === "ready" ? loaded.prepared.panels?.({ open, ready, file: loaded.file }) ?? [] : [];
-  // The tree is what an empty tab opens on, unless the host has a home to show there: the explorer
-  // floats over what it opens on, and a home is a page to see, not something to cover.
-  const treeFirst = loaded.status === "empty" && !presentation?.home;
-  const panelsAt = (open: string) => [...declared(open), ...(source.list ? [treePanel(open, { empty: treeFirst })] : [])];
-  const requestedPanel = mobile ? mobilePanel ?? (treeFirst ? null : "") : state.panel;
+  const panelsAt = (open: string) => [...declared(open), ...(source.list ? [treePanel(open)] : [])];
+  const requestedPanel = mobile ? mobilePanel : state.panel;
   const openId = resolveOpenPanel(panelsAt(requestedPanel ?? ""), requestedPanel)?.id ?? "";
   const panels = panelsAt(openId);
   const openPanel = panels.find((panel) => panel.id === openId);
@@ -100,8 +96,10 @@ export function FileViewer({ file, host, renderers, state, onStateChange, displa
   }, [shown, key, onError, displayActions, source, document, openId, panelSlot, setPanel, onReady,
     onNavigationActionsChange, openFromRenderer, appearance, rendererState, setRendererState, reload]);
 
+  // A host's home stands where no file is open, as a page of its own.
+  const home = loaded.status === "empty" ? presentation?.home : undefined;
   let body: ReactNode;
-  if (loaded.status === "empty") body = presentation?.home ?? presentation?.empty ?? <EmptyState icon={FileText} title="No file open" description={source.list ? "Pick one from the files, or filter by name." : "Choose a file to open."} />;
+  if (loaded.status === "empty") body = home ?? presentation?.empty ?? <EmptyState icon={FileText} title="No file open" />;
   else if (loaded.status === "loading") body = presentation?.loading ?? <div className="flex h-full items-center justify-center gap-2 text-xs text-muted-foreground" role="status"><Spinner className="size-3.5" />Opening…</div>;
   else if (loaded.status === "error") body = presentation?.error?.(loaded.message) ?? <EmptyState icon={FileText} title="Could not open that file" description={loaded.message} tone="warn" />;
   else body = rendererBody;
@@ -109,20 +107,21 @@ export function FileViewer({ file, host, renderers, state, onStateChange, displa
   const treeOpen = openPanel?.content === "tree";
   const columnPanel = openPanel && openPanel.content === "slot" ? openPanel : null;
   const explorer = panels.some(panel => panel.id === FILE_PANEL_TREE) ? { open: treeOpen, onToggle: () => setPanel(nextOpenPanel(openId, FILE_PANEL_TREE)) } : null;
-  // With a file asked for, the mark leads back to the host's home; on the home it is the brand.
-  const onHome = file ? host.navigation.home : undefined;
+  // With a file asked for, the navbar leads back to the host's home.
+  const onBack = file ? host.navigation.home : undefined;
   const dirty = document?.dirty ? <TooltipHint content="Unsaved changes"><span aria-label="Unsaved changes" className="ml-1 size-1.5 shrink-0 rounded-full bg-foreground/60" /></TooltipHint> : null;
   const trailing = shownActions.length || panels.some(panel => panel.id !== FILE_PANEL_TREE) ? <>
     {shownActions.map(({ id, label, hint, icon: Icon, disabled, active, onInvoke }) => <TooltipHint key={id} content={hint ?? label}><Button type="button" variant="ghost" size="icon-xs" className="size-6 text-muted-foreground aria-pressed:bg-accent aria-pressed:text-accent-foreground" aria-label={label} disabled={disabled} aria-pressed={active} onClick={() => { try { void Promise.resolve(onInvoke()).catch(error => onError?.(error)); } catch (error) { onError?.(error instanceof Error ? error : new Error(String(error))); } }}><Icon className="size-3.5" aria-hidden="true" /></Button></TooltipHint>)}
     {panels.filter(panel => panel.id !== FILE_PANEL_TREE).map((panel) => <PanelToggle key={panel.id} id={panel.id} active={panel.id === openId} icon={panel.icon} label={panel.label} onClick={() => setPanel(nextOpenPanel(openId, panel.id))} />)}
   </> : null;
-  // The navbar is drawn only to hold something — the way home, the explorer, the file's name, its
-  // actions, the host's links — and never for a view shown small in a conversation (`compact`),
-  // whose frame already says what it shows. A host that shows one file without browsing it or
-  // naming it, with nothing at either end, gets the file with no row above it.
-  const navbar = !appearance.compact && (Boolean(host.links) || Boolean(onHome) || Boolean(explorer) || navigation.file !== null || Boolean(trailing) || Boolean(dirty));
+  // The navbar is drawn only to hold something — the way back home, the explorer, the file's name,
+  // its actions, the host's links — and never over the host's home, which holds its links itself,
+  // or for a view shown small in a conversation (`compact`), whose frame already says what it
+  // shows. A host that shows one file without browsing it or naming it, with nothing at either
+  // end, gets the file with no row above it.
+  const navbar = !appearance.compact && !home && (Boolean(host.links) || Boolean(onBack) || Boolean(explorer) || navigation.file !== null || Boolean(trailing) || Boolean(dirty));
   return <ViewerMobileContext.Provider value={mobile}><ViewerHostContext.Provider value={host}><ViewerElementContext.Provider value={viewerElement}><div className="text-to-cad-file-viewer text-ui font-normal flex h-full min-h-0 min-w-0 flex-col overflow-hidden" ref={bindElement} data-viewer-layout={mobile ? "mobile" : "desktop"} tabIndex={-1}>
-    {navbar ? <ViewerNavbar onHome={onHome} explorer={explorer} file={navigation.file} status={dirty} trailing={trailing}
+    {navbar ? <ViewerNavbar onBack={onBack} explorer={explorer} file={navigation.file} selecting={loaded.status === "empty"} status={dirty} trailing={trailing}
       links={host.links} clipboard={host.clipboard} onError={onError} /> : null}
     {document?.stale ? <div className="flex shrink-0 items-center gap-2 border-b bg-amber-500/10 px-3 py-1.5 text-xs text-amber-700 dark:text-amber-400" role="status">
       <RotateCw className="size-3.5 shrink-0" /><span className="flex-1">This file changed on disk since you opened it.</span>

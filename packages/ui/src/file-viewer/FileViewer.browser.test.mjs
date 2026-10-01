@@ -121,15 +121,18 @@ test("panel exclusivity, capability menus, rename and create use the shared chro
   assert.deepEqual(await page.evaluate(() => window.harness.opened.at(-1)), { path: "created.txt", options: { target: "new", panel: "tree" } });
   assert.equal(await page.getByRole("tree").count(), 1);
 });
-test("an empty tab opens on the tree, and a pick in the tree opens the file with the tree", async () => {
-  // With no file to show, the tree is the one thing to reach for: it is what an empty tab opens on.
+test("an empty tab asks for a file with the explorer shut, Select file opens it, and a pick there opens the file with the tree", async () => {
+  // With no file to show, the navbar asks for one; the explorer opens when the person asks.
   await reset();
   await page.evaluate(() => window.harness.open(null));
+  const select = page.getByRole("button", { name: "Select file", exact: true });
+  await select.waitFor();
+  assert.equal(await page.getByRole("tree").count(), 0);
+  await select.click();
   await page.getByRole("tree").waitFor();
   assert.equal(await page.getByTestId("tree-toggle").getAttribute("aria-pressed"), "true");
 
-  // A pick in the tree asks the host for the file WITH the tree, so a person walks it file by
-  // file — the empty tab's tree too, which nobody opened by hand.
+  // A pick in the tree asks the host for the file WITH the tree, so a person walks it file by file.
   await page.locator('[role="treeitem"][data-path="next.txt"]').click();
   await waitValue("root-a next");
   assert.deepEqual(await page.evaluate(() => window.harness.opened.at(-1)), { path: "next.txt", options: { target: "new", panel: "tree" } });
@@ -309,15 +312,16 @@ test("the explorer floats over the view's left, inset like its tool strip, and o
   assert.equal(await page.getByRole("tree").count(), 1);
 });
 
-test("a narrow empty tab still opens on its tree, and a file picked there opens with nothing over it", async () => {
+test("a narrow empty tab asks for a file too, and a file picked in its sheet opens with nothing over it", async () => {
   await reset();
   const pane = page.getByTestId('primary');
   await pane.evaluate(element => { element.parentElement.style.width = '560px'; });
   await page.waitForFunction(() => document.querySelector('[data-viewer-layout]')?.dataset.viewerLayout === 'mobile');
   // A file opens with no sheet over it on a narrow viewer...
   assert.equal(await page.getByRole("tree").count(), 0);
-  // ...but with no file there is nothing to show except the tree, and the empty state says so.
+  // ...and with no file, the sheet is the person's to open, from Select file.
   await page.evaluate(() => window.harness.open(null));
+  await page.getByRole("button", { name: "Select file", exact: true }).click();
   await page.getByRole("tree").waitFor();
   assert.equal(await page.getByTestId("tree-toggle").getAttribute("aria-pressed"), "true");
   // A host hands focus back to whatever opened the tab (a closing menu's trigger): that is not a

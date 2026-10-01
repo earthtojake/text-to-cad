@@ -240,14 +240,16 @@ export type NavbarFile = {
 };
 
 /**
- * The one navbar, over a file and over a host's home. Left: the home mark, the explorer's toggle,
- * the open file's name and its ⋯. Right: `trailing` (the file's actions, its panels' toggles),
- * then the host's links.
+ * The one navbar, over a file (a host's home has none). Left: the way back to the host's home, the
+ * explorer's toggle, the open file's name and its ⋯. Right: `trailing` (the file's actions, its
+ * panels' toggles), then the host's links.
  */
 export const ViewerNavbar: ComponentType<{
-  onHome?: () => void;
+  onBack?: () => void;
   explorer?: { open: boolean; onToggle: () => void } | null;
   file?: NavbarFile | null;
+  /** No file is open: the name's place says "Select file", which opens the explorer. */
+  selecting?: boolean;
   status?: ReactNode;
   trailing?: ReactNode;
   links?: import("../../host/types.js").ViewerLinks;

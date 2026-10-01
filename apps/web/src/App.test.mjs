@@ -44,12 +44,12 @@ test('the web host keeps the URL, the history, the title and the appearance, and
   for (const [key, value] of Object.entries({ window, document: window.document, navigator: window.navigator, localStorage: window.localStorage, sessionStorage: window.sessionStorage, matchMedia, IS_REACT_ACT_ENVIRONMENT: true })) Object.defineProperty(globalThis, key, { configurable: true, writable: true, value });
   window.matchMedia = matchMedia;
   const serverCalls = [];
-  // The library every CAD view shares, reached over this Viewer's routes.
+  // The library every CAD view shares, written over this Viewer's routes.
   const libraryCalls = [];
   const fetchBefore = globalThis.fetch;
   globalThis.fetch = async (url, init = {}) => {
     libraryCalls.push([url, init.body ? JSON.parse(init.body) : null]);
-    return new Response(JSON.stringify({ recents: [] }), { headers: { 'content-type': 'application/json' } });
+    return new Response(JSON.stringify({ ok: true }), { headers: { 'content-type': 'application/json' } });
   };
   const client = { serverInfo: async options => { serverCalls.push(options); return { identityToken: 'restarted' }; } };
   const root = createRoot(window.document.getElementById('root'));
@@ -98,18 +98,14 @@ test('the web host keeps the URL, the history, the title and the appearance, and
     assert.equal(window.history.length, historyLength + 1, 'the file on screen is no navigation at all');
     await act(() => { window.history.replaceState({}, '', '?file=one.step'); window.dispatchEvent(new window.PopStateEvent('popstate')); });
     assert.equal(viewer().file, 'one.step');
-    // Home is the viewer with no file: the URL names none.
-    await act(() => viewer().onShow(''));
+    // A URL that names no file shows none, and the page is plain CAD.
+    await act(() => { window.history.replaceState({}, '', '/'); window.dispatchEvent(new window.PopStateEvent('popstate')); });
     assert.equal(viewer().file, '');
-    assert.equal(new URL(window.location.href).searchParams.get('file'), null);
     await act(() => viewer().onShown(null));
     assert.equal(window.document.title, 'CAD');
-    // Its models open in place, beside the files: there is no chooser to pick one from disk.
-    assert.equal(viewer().library.pick, undefined);
-    await act(() => viewer().library.open({ file: 'folder/two.step' }));
-    assert.equal(viewer().file, 'folder/two.step');
+    // No home: the library is the sidebar's to show, and this Viewer only writes to it.
+    assert.equal(viewer().library, undefined);
     // A file the URL did not name (a build's default) is written there once the catalog has it.
-    await act(() => { window.history.replaceState({}, '', '/'); });
     await act(() => viewer().onShown('folder/two.step'));
     assert.equal(new URL(window.location.href).searchParams.get('file'), 'folder/two.step');
 

@@ -26,7 +26,7 @@ _ALLOWED_METHODS = frozenset({"GET", "HEAD", "POST"})
 _API_PREFIXES = ("/__cad/", "/__tess_cache")
 # Routes whose effects belong to a host: the web app's reveal and clipboard, and its model library
 # (a view here reaches the library through cad_recents).
-_HOST_EFFECT_ROUTES = frozenset({"/__cad/reveal", "/__cad/clipboard", "/__cad/recents", "/__cad/recents/thumbnail"})
+_HOST_EFFECT_ROUTES = frozenset({"/__cad/reveal", "/__cad/clipboard", "/__cad/recents"})
 
 
 class _CapturedHandler:

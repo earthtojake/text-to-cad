@@ -102,7 +102,7 @@ class TabServerTest(_Session):
         read = self.server.handle("resources/read", {"uri": uri}, None)["contents"][0]
         self.assertEqual((read["mimeType"], read["text"]), ("text/html;profile=mcp-app", "<!doctype html><title>CAD</title>"))
 
-    def test_a_thread_browses_its_workspace_and_a_model_with_no_project_its_filesystem(self) -> None:
+    def test_a_thread_browses_its_workspace_and_a_model_with_no_project_is_shown_on_its_own(self) -> None:
         opened = self.launch("cad_open", {"path": "parts/bracket.stl"})
         self.assertEqual(opened["model"], str(self.workspace / "parts" / "bracket.stl"))
         self.assertEqual((opened["root"]["kind"], opened["root"]["path"], opened["explore"]), ("workspace", str(self.workspace), True))
@@ -111,12 +111,12 @@ class TabServerTest(_Session):
         loose = str(self.tmp / "elsewhere" / "loose.stl")
         anchor = os.path.splitdrive(loose)[0] + os.sep
         outside = self.launch("cad_open", {"path": loose})
-        self.assertEqual((outside["root"]["kind"], outside["root"]["path"], outside["explore"]), ("global", anchor, True))
+        self.assertEqual((outside["root"]["kind"], outside["root"]["path"], outside["explore"]), ("global", anchor, False))
         # A model in a folder the workspace's catalog skips has no project around it either.
         (self.workspace / "build").mkdir()
         (self.workspace / "build" / "out.stl").write_bytes(STL)
         built = self.launch("cad_open", {"path": "build/out.stl"})
-        self.assertEqual((built["root"]["kind"], built["root"]["path"]), ("global", anchor))
+        self.assertEqual((built["root"]["kind"], built["root"]["path"], built["explore"]), ("global", anchor, False))
         # A file the host hands over is shown on its own, with no explorer.
         handed = self.launch("cad_file", {"file": {"name": "loose.stl", "resourceUri": "x"}}, {"openai/resource": {"path": loose}})
         self.assertEqual((handed["model"], handed["explore"], handed["root"]["kind"]), (loose, False, "global"))
@@ -167,17 +167,19 @@ class TabServerTest(_Session):
             effect = self.call("cad_http", {"root": root, "method": "POST", "url": route, "body": ""})["structuredContent"]
             self.assertEqual(effect["status"], 404)
 
-    def test_the_home_browses_the_workspace_else_the_filesystem_the_users_home_is_on(self) -> None:
+    def test_only_the_sidebar_has_a_home_and_a_tab_with_nothing_shown_browses_the_project_if_any(self) -> None:
+        user_filesystem = ("global", os.path.splitdrive(os.path.expanduser("~"))[0] + os.sep)
         home = self.launch("cad_home")
-        self.assertEqual((home["page"], home["model"], home["explore"]), ("home", None, True))
-        self.assertEqual((home["root"]["kind"], home["root"]["path"]), ("workspace", str(self.workspace)))
+        self.assertEqual((home["page"], home["model"], home["explore"], (home["root"]["kind"], home["root"]["path"])),
+                         ("home", None, False, user_filesystem))
+        tab = self.launch("cad_tab")
+        self.assertEqual((tab["page"], tab["model"], tab["explore"], tab["root"]["kind"], tab["root"]["path"]),
+                         ("viewer", None, True, "workspace", str(self.workspace)))
         homeless = Server(launch_cwd=None, page=AppPage(self.tmp / "app"), recents=RecentStore(self.tmp / "other"))
         homeless.handle("initialize", {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": CODEX}, None)
         context = RequestContext(1, {"threadId": "t"}, self.connection)
-        for tool in ("cad_home", "cad_tab"):
-            launch = homeless.handle("tools/call", {"name": tool, "arguments": {}}, context)["structuredContent"]["launch"]
-            self.assertEqual((launch["root"]["kind"], launch["root"]["path"]),
-                             ("global", os.path.splitdrive(os.path.expanduser("~"))[0] + os.sep))
+        launch = homeless.handle("tools/call", {"name": "cad_tab", "arguments": {}}, context)["structuredContent"]["launch"]
+        self.assertEqual((launch["page"], launch["explore"], (launch["root"]["kind"], launch["root"]["path"])), ("viewer", False, user_filesystem))
 
     def test_the_page_reveals_a_file_only_under_a_root_this_thread_may_browse(self) -> None:
         root = {"kind": "workspace", "path": str(self.workspace)}
@@ -197,12 +199,11 @@ class TabServerTest(_Session):
                 self.assertTrue(refused["isError"], arguments)
             run.assert_called_once()
 
-    def test_a_global_root_reads_a_folder_at_a_time_and_catalogs_only_what_is_shown(self) -> None:
-        # A model under a hidden folder, as an agent's worktree is: shown, though no listing shows the folder.
+    def test_a_global_root_catalogs_only_what_is_shown_and_lists_no_folder(self) -> None:
+        # A model under a hidden folder, as an agent's worktree is: shown all the same.
         hidden = self.tmp / "elsewhere" / ".worktree"
         hidden.mkdir()
         (hidden / "part.stl").write_bytes(STL)
-        (self.tmp / "elsewhere" / "notes.txt").write_text("x", encoding="utf-8")
         loose = self.tmp / "elsewhere" / "loose.stl"
         root = self.launch("cad_open", {"path": str(loose)})["root"]
 
@@ -212,8 +213,7 @@ class TabServerTest(_Session):
             return reply["status"], json.loads(body) if reply["headers"].get("content-type", "").startswith("application/json") else body
 
         relative = os.path.relpath(loose.parent, root["path"]).replace(os.sep, "/")
-        status, listing = get(f"/__cad/list?dir={relative}")
-        self.assertEqual((status, listing["entries"]), (200, [{"name": "loose.stl", "kind": "file", "path": f"{relative}/loose.stl"}]))
+        self.assertEqual(get(f"/__cad/list?dir={relative}")[0], 404)
         status, catalog = get(f"/__cad/catalog?file={relative}/.worktree/part.stl")
         self.assertEqual((status, [entry["rootRelativeFile"] for entry in catalog["entries"]]), (200, [f"{relative}/.worktree/part.stl"]))
         self.assertEqual(get(f"/__cad/asset?file={hidden / 'part.stl'}"), (200, STL))
@@ -231,9 +231,9 @@ class InlineServerTest(_Session):
     def test_an_inline_host_shows_models_with_one_tool_and_is_told_so(self) -> None:
         tools = {tool["name"]: tool for tool in self.server.handle("tools/list", {}, None)["tools"]}
         agent = {name for name, tool in tools.items() if tool.get("_meta", {}).get("ui", {}).get("visibility") != ["app"]}
-        self.assertEqual(agent, {"cad_show", "cad_home", "cad_view", "cad_screenshot"})
+        # A chat shows files: no home.
+        self.assertEqual(agent, {"cad_show", "cad_view", "cad_screenshot"})
         uri = tools["cad_show"]["_meta"]["ui"]["resourceUri"]
-        self.assertEqual(tools["cad_home"]["_meta"]["ui"]["resourceUri"], uri)
         self.assertFalse(any(key.startswith("openai/") for tool in tools.values() for key in tool.get("_meta", {})))
         self.assertEqual((tools["cad_view"]["inputSchema"]["required"], tools["cad_screenshot"]["inputSchema"]["required"]), (["view"], ["view"]))
         self.assertNotIn("experimental", self.initialized["capabilities"])
@@ -252,9 +252,6 @@ class InlineServerTest(_Session):
         self.assertEqual((second["root"]["kind"], second["model"]), ("global", str(self.tmp / "elsewhere" / "loose.stl")))
         shown = self.call("cad_show", {"path": "parts/bracket.stl"})
         self.assertIn(shown["structuredContent"]["launch"]["view"], shown["content"][0]["text"])
-        # A home card names where it is, and browses nothing: the card shows the library alone.
-        home = self.launch("cad_home")
-        self.assertEqual((home["page"], home["explore"], home["root"]["kind"]), ("home", False, "workspace"))
 
     def test_the_agent_reads_only_the_view_it_names(self) -> None:
         model = str(self.workspace / "parts" / "bracket.stl")

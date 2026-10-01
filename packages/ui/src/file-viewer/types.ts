@@ -178,9 +178,8 @@ export interface FileViewerProps {
   presentation?: {
     empty?: ReactNode;
     /**
-     * A host's home, shown for a tab with no file in place of `empty`: a page of its own, not a
-     * pointer to the files. So on a phone, where the file tree is a sheet over the body, the tab
-     * opens on the home rather than under the tree.
+     * A host's home, shown for a tab with no file in place of `empty`: a page of its own, with no
+     * navbar over it (it holds the host's links itself).
      */
     home?: ReactNode;
     loading?: ReactNode;

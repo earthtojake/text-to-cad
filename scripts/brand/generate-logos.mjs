@@ -190,8 +190,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   for (const [name, text, standalone] of [['logo-c', 'C', true], ['logo-cad', 'CAD', false], ['logo-text2cad', 'TEXT2CAD', false]]) {
     await writeFile(path.join(out, `${name}.svg`), logoSvg(text, { standalone }));
   }
-  // The viewer's navbar and home draw the C and the CAD wordmark from the shared UI package.
-  for (const name of ['logo-c', 'logo-cad']) await copyFile(path.join(out, `${name}.svg`), path.join(root, `packages/ui/src/assets/${name}.svg`));
+  // The viewer's home and version menu draw the CAD wordmark from the shared UI package.
+  await copyFile(path.join(out, 'logo-cad.svg'), path.join(root, 'packages/ui/src/assets/logo-cad.svg'));
   const cadSources = path.join(root, 'models/branding/src');
   await mkdir(cadSources, { recursive: true });
   await writeFile(path.join(cadSources, 'profiles.json'), `${JSON.stringify(logoProfiles(), null, 2)}\n`);

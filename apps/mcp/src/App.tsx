@@ -162,9 +162,9 @@ export default function App({ bridge, server, launch: initial, session, presenta
   // and how this host updates CAD.
   const links = useMemo(() => viewerLinks({ version, install: UPDATE[presentation], open: url => bridge.request('ui/open-link', { url }).then(() => {}) }),
     [bridge, presentation]);
-  // A view opened on the home goes back to that home; one opened on a model, to its own root's.
+  // A view opened on the home (the sidebar's) goes back to it; one opened on a model has no home.
   const home = initial.page === 'home' ? initial : null;
-  const goHome = () => setShowing(previous => ({ launch: home ?? { ...previous.launch, page: 'home', model: null }, sequence: previous.sequence + 1 }));
+  const goHome = home ? () => setShowing(previous => ({ launch: home, sequence: previous.sequence + 1 })) : undefined;
   const show = (launch: Launch) => setShowing(previous => ({ launch, sequence: previous.sequence + 1 }));
   const { launch } = showing;
   if (superseded) {

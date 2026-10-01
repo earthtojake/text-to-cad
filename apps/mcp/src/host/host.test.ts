@@ -132,24 +132,14 @@ describe('the fetch tunnel', () => {
   });
 });
 
-describe('a filesystem, a folder at a time', () => {
-  it('reads a folder through the tunnel, keeps the way to the open file, and ignores the file on screen changing', async () => {
-    const asked: string[] = [];
-    const fetchFolder = (async (input: RequestInfo | URL) => {
-      asked.push(String(input));
-      return new Response(JSON.stringify({ entries: [{ name: 'b.stl', kind: 'file', path: 'Users/me/b.stl' }, { name: 'parts', kind: 'directory', path: 'Users/me/parts' }] }), { headers: { 'content-type': 'application/json' } });
-    }) as typeof fetch;
+describe('a filesystem, the file on screen alone', () => {
+  it('lists nothing, and hears only the file that stayed change, not another file shown', async () => {
     let entries: any[] = [{ file: '/Users/me/.work/a.step', rootRelativeFile: 'Users/me/.work/a.step', hash: '1' }];
     const listeners = new Set<() => void>();
     const changed = () => { for (const listener of [...listeners]) listener(); };
     const client = { getSnapshot: () => ({ entries, hydrated: true }), subscribe: (listener: () => void) => { listeners.add(listener); return () => listeners.delete(listener); } } as any;
-    const source = createFilesystemSource(client, { kind: 'global', path: '/', name: '/' }, fetchFolder, { id: 'fs', explore: true, showing: () => 'Users/me/.work/a.step' });
-    const signal = new AbortController().signal;
-    const listed = await source.list!('Users/me', { signal });
-    expect(asked).toEqual([`${TUNNEL_ORIGIN}/__cad/list?dir=Users%2Fme`]);
-    // The hidden folder the open file is in, which no listing shows, is on the way to it.
-    expect(listed.map(entry => [entry.path, entry.kind])).toEqual([['Users/me/.work', 'directory'], ['Users/me/parts', 'directory'], ['Users/me/b.stl', 'file']]);
-    expect(await source.paths!({ signal })).toEqual(['Users/me/b.stl']);
+    const source = createFilesystemSource(client, { kind: 'global', path: '/', name: '/' }, { id: 'fs' });
+    expect([source.list, source.paths]).toEqual([undefined, undefined]);
     const seen: unknown[] = [];
     source.subscribe!(change => seen.push(change.changes));
     entries = [{ ...entries[0], hash: '2' }];
@@ -161,8 +151,7 @@ describe('a filesystem, a folder at a time', () => {
 
   it('names its files absolutely in copied references, where a project names them by its own paths', () => {
     const client = { getSnapshot: () => ({ entries: [], hydrated: true }), subscribe: () => () => {} } as any;
-    const fetchFolder = (async () => new Response('{}')) as typeof fetch;
-    const filesystem = (path: string) => createFilesystemSource(client, { kind: 'global', path, name: path }, fetchFolder, { id: path, explore: true, showing: () => null });
+    const filesystem = (path: string) => createFilesystemSource(client, { kind: 'global', path, name: path }, { id: path });
     expect(filesystem('/').referencePath?.('Users/me/a.step')).toBe('/Users/me/a.step');
     expect(filesystem('C:\\').referencePath?.('work/a.step')).toBe('C:\\work\\a.step');
     // A project's catalog keeps the default: the path under its root.

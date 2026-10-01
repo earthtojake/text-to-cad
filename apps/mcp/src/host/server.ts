@@ -2,11 +2,12 @@ import type { Bridge, CallOptions, ToolResult } from './bridge';
 
 /**
  * The launch/view protocol this page speaks with `cadgen mcp` (its `PROTOCOL`). 2: every launch
- * names a root, the home's included, and the page reveals files (`cad_reveal`).
+ * names a root, the home's included, and the page reveals files (`cad_reveal`). 3: only the
+ * sidebar has a home, and a launch browses only the thread's project.
  */
-export const PROTOCOL = 2;
+export const PROTOCOL = 3;
 
-/** Where a view browses: its project's catalog (`workspace`), or a filesystem, a folder at a time (`global`). */
+/** Where a view is: its project's catalog (`workspace`, browsed), or a filesystem holding only the file on screen (`global`). */
 export interface Root { kind: 'workspace' | 'global'; path: string; name: string }
 /** What an opening tool tells the page to show. The server decides all of it. */
 export interface Launch {

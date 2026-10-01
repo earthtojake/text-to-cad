@@ -1,4 +1,4 @@
-"""The Viewer's model library: the recents every CAD view shares, as one Viewer shows them."""
+"""The Viewer's part in the model library every CAD view shares: it records what it opens."""
 
 from __future__ import annotations
 
@@ -55,18 +55,15 @@ class LibraryTest(unittest.TestCase):
         status, body = self.request("POST", "/__cad/recents", {"action": action, "file": file, **extra})
         return status, json.loads(body)
 
-    def test_a_viewer_records_what_it_opens_and_shows_only_the_models_it_lists(self) -> None:
-        RecentStore().opened(str(self.tmp / "elsewhere.stl"))  # opened in another view: not this Viewer's to show
-        status, library = self.change("open", "parts/a.stl")
-        shown = [(model["file"], model["folder"], model["path"]) for model in library["recents"]]
-        self.assertEqual((status, shown), (200, [("parts/a.stl", "models/parts", str(self.root / "parts" / "a.stl"))]))
-        self.assertEqual(json.loads(self.request("GET", "/__cad/recents")[1]), library)
-        self.assertTrue(self.change("pin", "parts/a.stl")[1]["recents"][0]["pinned"])
-        thumbnail = self.change("thumbnail", "parts/a.stl", png=base64.b64encode(PNG).decode("ascii"))[1]["recents"][0]["thumbnail"]
-        self.assertEqual(self.request("GET", f"/__cad/recents/thumbnail?name={thumbnail}"), (200, PNG))
-        self.assertEqual(self.change("remove", "parts/a.stl"), (200, {"recents": []}))
-        # Once no model this Viewer lists has it, the picture is not this Viewer's to hand out.
-        self.assertEqual(self.request("GET", f"/__cad/recents/thumbnail?name={thumbnail}")[0], 404)
+    def test_a_viewer_records_what_it_opens_and_its_picture_for_the_sidebars_home(self) -> None:
+        self.assertEqual(self.change("open", "parts/a.stl"), (200, {"ok": True}))
+        self.assertEqual(self.change("thumbnail", "parts/a.stl", png=base64.b64encode(PNG).decode("ascii")), (200, {"ok": True}))
+        [entry] = RecentStore().list()
+        self.assertEqual(entry.path, str(self.root / "parts" / "a.stl"))
+        self.assertEqual(RecentStore().read_thumbnail(entry.public()["thumbnail"]), PNG)
+        # The library is the home's to show, and a Viewer has no home: it only writes.
+        self.assertEqual(self.request("GET", "/__cad/recents")[0], 404)
+        self.assertEqual(self.change("pin", "parts/a.stl")[0], 400)
 
     def test_a_viewer_records_only_models_in_its_folder(self) -> None:
         self.assertEqual(self.change("open", str(self.tmp / "elsewhere.stl"))[0], 403)

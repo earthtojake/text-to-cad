@@ -45,7 +45,6 @@ from .scanner import (
     CAD_CATALOG_SCHEMA_VERSION,
     catalog_input_fingerprint,
     is_served_cad_asset,
-    list_cad_directory,
     node_basename,
     path_is_inside,
     path_relative,
@@ -389,25 +388,6 @@ class LocalAssetBackend:
         if self._reject_outside_root(candidate):
             return None
         return candidate
-
-    def list_directory(self, directory) -> list[dict] | None:
-        """A lazy root's folder, as its explorer shows it: ``{path, name, kind}`` for
-        each folder and CAD file directly in it, ``path`` root-relative POSIX.
-
-        ``None`` for a folder that is not there; ``ForbiddenAssetError`` for one
-        outside the root, or that this process may not read.
-        """
-        normalized = normalized_file_ref(directory)
-        candidate = os.path.abspath(normalized if os.path.isabs(normalized) else os.path.join(self.root_path, normalized))
-        require_contained(self.root_path, candidate)
-        try:
-            listed = list_cad_directory(candidate)
-        except PermissionError as error:
-            raise ForbiddenAssetError() from error
-        except (NotADirectoryError, FileNotFoundError):
-            return None
-        prefix = relative_file_ref(self.root_path, candidate)
-        return [{**entry, "path": f"{prefix}/{entry['name']}" if prefix else entry["name"]} for entry in listed]
 
     # --- helpers ----------------------------------------------------------
 

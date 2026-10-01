@@ -56,7 +56,7 @@
 .dark .cad-library { --cad-library-card: color-mix(in oklab, var(--background) 88%, white); --cad-library-line: oklch(1 0 0 / 8%); }
 .cad-library-content { box-sizing: border-box; width: 100%; max-width: 1128px; margin: 0 auto; padding: 44px 24px calc(40px + var(--cad-host-bottom-inset, 0px)); }
 .cad-library-wordmark { display: block; width: auto; height: 64px; margin: 0 auto; user-select: none; -webkit-user-drag: none; }
-.cad-library-tagline { margin: 14px 0 44px; text-align: center; font-size: var(--text-3xl, 1.875rem); line-height: 1.2; font-weight: 700; letter-spacing: -0.02em; color: var(--foreground); }
+.cad-library-links { display: flex; align-items: center; justify-content: center; gap: 2px; margin: 12px 0 40px; }
 .cad-library-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
 .cad-library-heading { margin: 0; font-size: var(--text-base, 1rem); line-height: 24px; font-weight: 600; color: var(--foreground); }
 .cad-library-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }

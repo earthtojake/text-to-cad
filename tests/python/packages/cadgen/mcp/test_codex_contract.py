@@ -67,7 +67,7 @@ def converse(tmp: Path) -> dict:
             "cad_file": call("cad_file", {"file": {"name": "bracket.stl", "resourceUri": "x"}},
                              {"openai/resource": {"path": str(workspace / "parts" / "bracket.stl")}}),
             "cad_launch": call("cad_launch", {"model": "parts/bracket.stl"}),
-            # A model with no project around it (the sidebar's Open Model): its filesystem's explorer.
+            # A model with no project around it (the sidebar's Open): shown on its own, with no explorer.
             "cad_launch_elsewhere": call("cad_launch", {"model": str(tmp / "downloads" / "loose.stl")}),
             "cad_show": call("cad_show", {"path": "parts/bracket.stl"}),
             "cad_view": call("cad_view"),

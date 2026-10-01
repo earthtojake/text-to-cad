@@ -19,17 +19,15 @@ import * as panels from "./panels.js";
 /** A host renderer's own panel: the desktop markdown's source view, which replaces the body. */
 const SOURCE_PANEL = "source";
 const source = { id: SOURCE_PANEL, label: "View source", icon: () => null, content: "body" };
-const panelsOf = (declared, open = "", options) => [...declared, treePanel(open, options)];
+const panelsOf = (declared, open = "") => [...declared, treePanel(open)];
 
 test("a CAD file declares no panel of its own: its controls live in the viewer's tool stack", () => {
   assert.deepEqual(Object.keys(panels).sort(), ["FILE_PANEL_TREE", "nextOpenPanel", "resolveOpenPanel", "treePanel"]);
 });
 
-test("a file opened directly opens with nothing beside it, unless its own declaration asks; the tree only with no file", () => {
+test("a file opened directly opens with nothing beside it, unless its own declaration asks; the tree never by itself", () => {
   assert.equal(resolveOpenPanel(panelsOf([]), null), null);
   assert.equal(resolveOpenPanel(panelsOf([{ ...source, defaultOpen: true }]), null)?.id, SOURCE_PANEL);
-  // Only with no file to show at all is the tree the thing to reach for.
-  assert.equal(resolveOpenPanel(panelsOf([], "", { empty: true }), null)?.id, FILE_PANEL_TREE);
   // A retired panel id a host stored cannot occupy the column: the old Display
   // panel's, or a CAD file's old Settings.
   for (const retired of ["cad-display", "cad-file"]) assert.equal(resolveOpenPanel(panelsOf([]), retired), null);
