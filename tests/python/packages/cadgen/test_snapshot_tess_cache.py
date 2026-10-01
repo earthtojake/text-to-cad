@@ -156,6 +156,13 @@ class SnapshotAssetServerTests(unittest.TestCase):
         except urllib.error.HTTPError as error:
             return error.code, error.read(), dict(error.headers)
 
+    def test_the_bind_never_names_the_host_by_reverse_dns(self) -> None:
+        # http.server's own bind calls socket.getfqdn, which waits 35 s on a Mac
+        # whose resolver does not answer: every snapshot waited on it.
+        with mock.patch("socket.getfqdn", side_effect=AssertionError("a reverse DNS lookup at bind")):
+            server = SnapshotAssetServer(lambda: None)
+        server.close()
+
     def test_render_asset_containment(self) -> None:
         status, body, headers = self.request("GET", "/__render_asset/inside.step")
         self.assertEqual((status, body), (200, b"ISO-10303-21;"))

@@ -1430,6 +1430,7 @@ class SnapshotAssetServer:
 
     def __init__(self, root_provider) -> None:
         import http.server
+        import socketserver
 
         server = self
 
@@ -1550,8 +1551,15 @@ class SnapshotAssetServer:
                     return
                 self._send(_write_tessellation_cache_entry_status(pathname, body))
 
+        class Server(http.server.ThreadingHTTPServer):
+            def server_bind(self) -> None:
+                # Not HTTPServer's: it names the host by reverse DNS (socket.getfqdn),
+                # which waits 35 s where no resolver answers (GitHub's Macs). Unread here.
+                socketserver.TCPServer.server_bind(self)
+                self.server_name, self.server_port = self.server_address[:2]
+
         self.root_provider = root_provider
-        self._httpd = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self._httpd = Server(("127.0.0.1", 0), Handler)
         self._httpd.daemon_threads = True
         self.port = self._httpd.server_address[1]
         import threading

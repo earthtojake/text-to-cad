@@ -17,6 +17,7 @@ bottleneck was never component fetch — it is client-side tessellation.
 from __future__ import annotations
 
 import socket
+import socketserver
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
@@ -51,6 +52,13 @@ class CadHTTPServer(ThreadingHTTPServer):
     def __init__(self, address, handler_class, app):
         self.app = app
         super().__init__(address, handler_class)
+
+    def server_bind(self):  # noqa: D102
+        # Not HTTPServer's: it names the host by reverse DNS (socket.getfqdn),
+        # which waits 35 s where no resolver answers (GitHub's Macs) — all of it
+        # before the URL line. Nothing reads the name.
+        socketserver.TCPServer.server_bind(self)
+        self.server_name, self.server_port = self.server_address[:2]
 
     def handle_error(self, request, client_address):  # noqa: D102
         # A client that hangs up mid-stream is routine, not an incident. Only

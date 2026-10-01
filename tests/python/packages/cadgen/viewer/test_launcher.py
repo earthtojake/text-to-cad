@@ -24,6 +24,7 @@ import signal
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import unittest
 import urllib.error
@@ -197,22 +198,29 @@ class LauncherFixture(unittest.TestCase):
 
         Reading LINE BY LINE off a live process is the point: the launcher must
         flush, because Python block-buffers a non-TTY stdout and this process
-        never exits to flush on close.
+        never exits to flush on close. The read runs on a thread so the deadline
+        holds while the child is silent, and a launch that misses it is killed
+        before its stderr is read: a live server's stderr never ends.
         """
-        deadline = time.monotonic() + timeout
-        lines = []
-        while time.monotonic() < deadline:
-            if child.poll() is not None and child.stdout.closed:
-                break
-            line = child.stdout.readline()
-            if not line:
-                if child.poll() is not None:
-                    break
-                continue
-            lines.append(line)
-            if line.startswith(marker):
-                return "".join(lines)
-        self.fail(f"no {marker!r} line before timeout; got: {''.join(lines)!r} stderr={child.stderr.read()!r}")
+        lines: list[str] = []
+
+        def read() -> None:
+            for line in iter(child.stdout.readline, ""):
+                lines.append(line)
+                if line.startswith(marker):
+                    return
+
+        reader = threading.Thread(target=read, daemon=True)
+        reader.start()
+        reader.join(timeout)
+        if lines and lines[-1].startswith(marker):
+            return "".join(lines)
+        child.kill()
+        try:
+            _, stderr = child.communicate(timeout=5)
+        except subprocess.TimeoutExpired:
+            stderr = "(still held open by a process the launch started)"
+        self.fail(f"no {marker!r} line within {timeout:.0f}s; got: {''.join(lines)!r} stderr={stderr!r}")
         return ""
 
     @staticmethod

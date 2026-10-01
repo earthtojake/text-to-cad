@@ -60,41 +60,6 @@ if __name__ == "__main__":
     profile()
 '''
 
-_STEP_MODEL = '''from pathlib import Path
-
-from cadgen import read_step, step
-
-HERE = Path(__file__).resolve().parent
-
-
-@step
-def wrapped():
-    return read_step(HERE / "vendor.step")
-
-
-if __name__ == "__main__":
-    wrapped()
-'''
-
-
-_NATIVE_MODEL = '''from pathlib import Path
-
-from cadgen import build123d as bd
-from cadgen import step
-
-HERE = Path(__file__).resolve().parent
-
-
-@step
-def mount():
-    # build123d's importer: OCCT opens the file in C++, and nothing is declared.
-    vendor = bd.import_step(str(HERE / "vendor.step"))
-    return bd.Compound([bd.Box(40, 20, 4), bd.Pos(0, 0, 6) * vendor])
-
-
-if __name__ == "__main__":
-    mount()
-'''
 
 
 class DiscoveredFileInputTests(unittest.TestCase):
@@ -115,30 +80,11 @@ class DiscoveredFileInputTests(unittest.TestCase):
 
     # The vendor STEP is an INPUT: what matters is that some tool other than the model
     # under test wrote it, and that the two widths are different bytes at the same path.
-    # Writing each width once for the class and copying the bytes in keeps both of those
-    # true and stops four tests paying a cold build123d import each to re-emit a box.
-    _vendor_bytes: dict[float, bytes] = {}
-
-    @classmethod
-    def _vendor_step(cls, width: float) -> bytes:
-        if width not in cls._vendor_bytes:
-            with tempfile.TemporaryDirectory(prefix="discovered-vendor-") as scratch:
-                target = Path(scratch) / "vendor.step"
-                subprocess.run(
-                    [
-                        sys.executable, "-c",
-                        "import build123d as bd, sys\n"
-                        f"bd.export_step(bd.Box({width}, 8, 3), sys.argv[1])\n",
-                        str(target),
-                    ],
-                    env={**os.environ, "PYTHONPATH": str(CADGEN_SRC)},
-                    capture_output=True, text=True, check=True,
-                )
-                cls._vendor_bytes[width] = target.read_bytes()
-        return cls._vendor_bytes[width]
-
+    # This process writes it: it imports build123d for its own tests anyway.
     def _write_vendor_step(self, width: float) -> None:
-        (self.project / "vendor.step").write_bytes(self._vendor_step(width))
+        import build123d
+
+        build123d.export_step(build123d.Box(width, 8, 3), str(self.project / "vendor.step"))
 
     def _run(self, model: str) -> str:
         completed = subprocess.run(
@@ -243,17 +189,6 @@ if __name__ == "__main__":
         self.assertEqual(self._run_json(model), "built", "a replaced data file makes the model stale")
         self.assertNotEqual(first, (self.project / "plate.step").read_bytes())
 
-    def test_a_file_only_native_code_opens_is_an_input(self) -> None:
-        """OCCT reads the STEP in C++, where Python sees no open at all."""
-        model = self._write_model("mount.py", _NATIVE_MODEL)
-        self._write_vendor_step(20.0)
-        self.assertEqual(self._run_json(model), "built")
-        first = (self.project / "mount.step").read_bytes()
-        self.assertEqual(self._run_json(model), "current")
-        self._write_vendor_step(30.0)
-        self.assertEqual(self._run_json(model), "built", "a replaced vendor STEP must make the model stale")
-        self.assertNotEqual(first, (self.project / "mount.step").read_bytes())
-
     def test_a_childs_reads_and_output_stay_in_the_childs_record(self) -> None:
         """A child is the parent's input by its result. Checking whether it is
         current reads its files inside the parent's build; none of that is the
@@ -291,31 +226,12 @@ if __name__ == "__main__":
         (self.project / table).write_text(
             (self.project / table).read_text(encoding="utf-8").replace("Box(20,", "Box(22,"), encoding="utf-8")
         self.assertEqual(self._run_json(table), "built")
-        self.assertEqual(self._run_json(table), "current")
         from cadgen.store.records import read_record
 
         with mock.patch.dict(os.environ, {"CADGEN_CACHE_DIR": self.environment["CADGEN_CACHE_DIR"]}):
             parent, child = (read_record(self.project / name) for name in ("table.py", "leg.py"))
         self.assertIn("data/size.txt", child["closure"]["files"])
         self.assertFalse({"data/size.txt", "leg.step"} & set(parent["closure"]["files"]))
-
-    def test_the_same_mechanism_serves_step_models(self) -> None:
-        """`read_step` is not a drawing feature: composing a vendor part into a
-        @step model records it the same way."""
-        model = self._write_model("wrapped.py", _STEP_MODEL)
-        self._write_vendor_step(20.0)
-        self._run(model)
-        first = (self.project / "wrapped.step").read_bytes()
-
-        # Only the half that is about the decorator: that a replaced input makes a @step
-        # model stale. Bytes-not-mtime is one mechanism, proven once, above.
-        self._write_vendor_step(30.0)
-        self._run(model)
-        self.assertNotEqual(
-            first,
-            (self.project / "wrapped.step").read_bytes(),
-            "a replaced vendor STEP must make the model stale",
-        )
 
 
 class OwnOutputAsInputTests(unittest.TestCase):

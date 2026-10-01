@@ -158,6 +158,15 @@ class NonLoopbackBindDisablesTheGate(unittest.TestCase):
         self.assertTrue(host_is_allowed("anything", "192.168.1.5"))
 
 
+class BindAsksNoReverseDns(unittest.TestCase):
+    def test_the_bind_never_names_the_host_by_reverse_dns(self):
+        # http.server's own bind calls socket.getfqdn, which waits 35 s on a Mac
+        # whose resolver does not answer: every launch's URL line waited on it.
+        with mock.patch("socket.getfqdn", side_effect=AssertionError("a reverse DNS lookup at bind")):
+            server = handler_module.CadHTTPServer(("127.0.0.1", 0), handler_module.make_handler_class(None), None)
+        server.server_close()
+
+
 class SelectedFirstCatalog(unittest.TestCase):
     def setUp(self):
         self.fixture = ServerFixture()
