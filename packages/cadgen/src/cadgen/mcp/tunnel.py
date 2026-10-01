@@ -13,6 +13,7 @@ import base64
 import email.utils
 import io
 import threading
+import time
 from collections import OrderedDict
 from typing import Any
 
@@ -27,6 +28,9 @@ _API_PREFIXES = ("/__cad/", "/__tess_cache")
 # Routes whose effects belong to a host: the web app's reveal and clipboard, and its model library
 # (a view here reaches the library through cad_recents).
 _HOST_EFFECT_ROUTES = frozenset({"/__cad/reveal", "/__cad/clipboard", "/__cad/recents"})
+# How long one catalog read answers every view of a root that asks for its revision: views sync
+# each second, and N of them on one root then cost one scan, not N.
+CATALOG_REVISION_SECONDS = 0.75
 
 
 class _CapturedHandler:
@@ -62,10 +66,12 @@ def _result(status: int, headers: dict[str, str], body: bytes) -> dict[str, Any]
 class ViewerTunnel:
     """One viewer backend per root, most recently used kept."""
 
-    def __init__(self, *, limit: int = 8) -> None:
+    def __init__(self, *, limit: int = 8, clock=time.monotonic) -> None:
         self._apps: OrderedDict[tuple[str, str], Any] = OrderedDict()
         self._limit = limit
         self._lock = threading.Lock()
+        self._clock = clock
+        self._revisions: dict[tuple[tuple[str, str], str], tuple[float, str]] = {}
 
     def app_for(self, root: Root):
         with self._lock:
@@ -82,6 +88,35 @@ class ViewerTunnel:
             while len(self._apps) > self._limit:
                 self._apps.popitem(last=False)
             return app
+
+    # What a view watches, answered on its sync (``cad_sync``) rather than as requests of its own.
+
+    def catalog_revision(self, root: Root, file: str | None) -> str:
+        """A digest of the catalog the view reads (``/__cad/catalog?file=``): it moves whenever
+        anything the view would see in it does, and the view reads the catalog again only then."""
+        key = (root.key, file or "")
+        now = self._clock()
+        with self._lock:
+            cached = self._revisions.get(key)
+            if cached is not None and now - cached[0] < CATALOG_REVISION_SECONDS:
+                return cached[1]
+        revision = str(self.app_for(root).read_catalog(file or None).get("revision") or "")
+        with self._lock:
+            if len(self._revisions) > 64:
+                self._revisions = {name: value for name, value in self._revisions.items() if now - value[0] < 60.0}
+            self._revisions[key] = (now, revision)
+        return revision
+
+    def preview(self, root: Root, file: str) -> dict[str, Any]:
+        """One file's build feed, now (the route's ``after`` would hold the request; the view
+        asks again on its next sync)."""
+        from cadgen.viewer.preview import preview_update
+
+        app = self.app_for(root)
+        try:
+            return preview_update(app.backend.root_path, file, after=None, lazy=app.backend.lazy)
+        except Exception as error:  # noqa: BLE001 - the feed's failure is the view's to show, as the route's 4xx was
+            return {"error": str(error) or type(error).__name__}
 
     def serve(self, root: Root, *, method: str, url: str, headers: dict[str, str], body: bytes) -> dict[str, Any]:
         # ``url`` is already text (the view's fetch URL, often absolute against

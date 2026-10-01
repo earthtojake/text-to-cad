@@ -1,7 +1,7 @@
 """JSON-RPC 2.0 over newline-delimited stdio: the transport an MCP host speaks.
 
 One reader thread parses messages. Requests the host sends run on a small pool,
-so a long-polling request never blocks the others; ``initialize`` and ``ping``
+so a slow request (a model's bytes, a picture) never blocks the others; ``initialize`` and ``ping``
 run on the reader so a handshake is never queued behind work. Every outgoing
 message is one line written under one lock. Requests this side sends (a form
 elicitation, for instance) wait on a future keyed by their id.

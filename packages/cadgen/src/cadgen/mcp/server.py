@@ -6,8 +6,10 @@ the workspace, the open views, what was last shown -- is plain process memory.
 
 One page serves every surface. The tool that opens a surface returns a
 *launch* -- which page, which model, which root to browse -- and the page renders
-it; nothing in the page guesses where it is. Once open, a view polls
-``cad_events`` every second so the agent's questions reach it, and reaches the
+it; nothing in the page guesses where it is. Once open, a view makes ONE call each
+second, ``cad_sync``: it says what it shows (its model, its selection, whether a
+person just touched it) and what it watches (its root's catalog, a STEP's build
+feed), and gets back the agent's requests and what changed. It reaches the
 viewer's own HTTP routes through ``cad_http``. No call is held open (``views.py``).
 
 Hosts present views in one of three ways, told apart at initialize:
@@ -33,7 +35,6 @@ from __future__ import annotations
 
 import base64
 import binascii
-import contextlib
 import json
 import logging
 import os
@@ -58,12 +59,13 @@ NAME = "text_to_cad"
 TITLE = "CAD"
 # The launch/view protocol between this server and its page. 2: every launch names a root, the
 # home's included, and the page reveals files (`cad_reveal`). 3: only the sidebar has a home, and
-# a launch browses only the thread's project.
-PROTOCOL = 3
+# a launch browses only the thread's project. 4: a view makes one call a second (`cad_sync`), and
+# every launch carries what the page needs to start (the server's version and platform; the
+# home's, its recents), so it starts on the launch alone.
+PROTOCOL = 4
 _PROTOCOL_VERSIONS = ("2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05")
 _RESOURCE_NOT_FOUND = -32002
 EXTENSIONS = sorted(SOURCE_EXTENSIONS)
-_DESCRIBE_SECONDS = 2.0
 
 # Clients that present CAD as tabs (see the module docstring); every other client is shown views inline,
 # or told where the Viewer has them when it renders no MCP Apps.
@@ -120,9 +122,22 @@ def _object(properties: dict[str, Any] | None = None, required: list[str] | None
 _PATH = {"type": "string", "description": "A CAD file: an absolute path, or relative to the thread's workspace."}
 _VIEW = {"type": "string", "description": "A view id from cad_view; defaults to the most recently used viewer."}
 _ROOT = _object({"kind": {"type": "string", "enum": ["workspace", "global"]}, "path": {"type": "string"}}, ["kind", "path"])
+# What a view watches: its root's catalog (with the file it shows hydrated first), and the build
+# feed of each STEP it shows.
+_WATCH = _object({"root": _ROOT, "file": {"type": ["string", "null"]},
+                  "previews": {"type": "array", "items": {"type": "string"}, "maxItems": 4}}, ["root"])
 _SHOWN_PATH = {"type": "string", "description": "A CAD file: an absolute path, or relative to the project folder the chat works in."}
 _SHOWN_VIEW = {"type": "string", "description": "The view that cad_show returned."}
 _READ_ONLY = {"readOnlyHint": True, "destructiveHint": False, "openWorldHint": False}
+
+
+def _stamped(launch: dict[str, Any]) -> dict[str, Any]:
+    """A launch with what the page needs to start on it alone: this server's version and platform."""
+    from cadgen import __version__
+
+    launch["version"] = __version__
+    launch["platform"] = sys.platform if sys.platform in ("darwin", "win32") else "linux"
+    return launch
 
 
 def _presentation(client: dict[str, Any], offered: dict[str, Any]) -> str:
@@ -358,21 +373,17 @@ class Server:
                     "annotations": _READ_ONLY, "_meta": {"ui": {"visibility": ["app"]}}}
 
         return [
-            app("cad_session", "CAD session", "The server's build, protocol and this thread's workspace.", _object()),
             app("cad_release", "CAD release", "The newest CAD release, and whether it is newer than this one.", _object()),
             app("cad_launch", "Open model", "The launch for opening a model in this view.",
                 _object({"model": {"type": "string"}}, ["model"])),
             app("cad_pick_model", "Open Model", "Choose a model with the desktop's file chooser. Only for an explicit Open Model action.",
                 _object()),
-            app("cad_events", "CAD events", "The events waiting for this view, at once (it polls every second).",
-                _object({"view": {"type": "string"}, "surface": {"type": "string"}, "model": {"type": ["string", "null"]}},
-                        ["view", "surface"])),
-            app("cad_view_report", "Report CAD view", "Tell the server what this view shows.",
+            app("cad_sync", "CAD sync", "This view's one call each second: what it shows and watches, and what is waiting for it.",
                 _object({"view": {"type": "string"}, "surface": {"type": "string"}, "model": {"type": ["string", "null"]},
-                         "state": {"type": "object"}, "focused": {"type": "boolean"}}, ["view", "surface"])),
-            app("cad_capture_reply", "Answer CAD", "Answer the server's question: a capture or a description.",
-                _object({"requestId": {"type": "string"}, "png": {"type": "string"}, "error": {"type": "string"},
-                         "state": {"type": "object"}}, ["requestId"])),
+                         "focused": {"type": "boolean"}, "closed": {"type": "boolean"}, "state": {"type": "object"},
+                         "watch": _WATCH}, ["view", "surface"])),
+            app("cad_capture_reply", "Answer CAD", "Answer the server's request for a capture.",
+                _object({"requestId": {"type": "string"}, "png": {"type": "string"}, "error": {"type": "string"}}, ["requestId"])),
             app("cad_http", "CAD viewer request", "One request to the CAD viewer's routes, bodies base64.",
                 _object({"root": _ROOT, "method": {"type": "string"}, "url": {"type": "string"},
                          "headers": {"type": "object", "additionalProperties": {"type": "string"}},
@@ -403,7 +414,7 @@ class Server:
         except ToolFailed as failure:
             return _text(str(failure), error=True)
         finally:
-            if name not in ("cad_events", "cad_http"):
+            if name not in ("cad_sync", "cad_http"):
                 LOG.info("%s %.0fms", name, (time.monotonic() - started) * 1000)
 
     # launches -----------------------------------------------------------------
@@ -436,7 +447,7 @@ class Server:
         if model is not None:
             self._model = model
             self._remember(model)
-        return launch
+        return _stamped(launch)
 
     def _mounted(self, launch: dict[str, Any]) -> dict[str, Any]:
         """Stamp a launch that mounts a new inline view: its token, and its place among the views."""
@@ -471,9 +482,16 @@ class Server:
 
     def _tool_cad_home(self, arguments, context):
         # The sidebar's home: the library, and Open with the desktop's chooser. It browses no folder,
-        # so its root is the filesystem, whose catalog holds nothing until a model is shown.
-        return _text("CAD is open.", {"launch": {"protocol": PROTOCOL, "page": "home", "surface": "sidebar",
-                                                  "model": None, "root": home_filesystem().public(), "explore": False}})
+        # so its root is the filesystem, whose catalog holds nothing until a model is shown. The
+        # library comes with it, so the home draws its cards without asking first.
+        try:
+            recents = [entry.public() for entry in self.recents.list()]
+        except Exception:  # the home opens whatever the store says
+            LOG.exception("could not read recents")
+            recents = []
+        return _text("CAD is open.", {"launch": _stamped({"protocol": PROTOCOL, "page": "home", "surface": "sidebar",
+                                                           "model": None, "root": home_filesystem().public(), "explore": False,
+                                                           "recents": recents})})
 
     def _tool_cad_tab(self, arguments, context):
         current = next((view.model for view in self.views.live(context.meta.get("threadId")) if view.model), None) or self._model
@@ -511,12 +529,6 @@ class Server:
         if chosen is None:
             return _data({"cancelled": True})
         return _data({"launch": self._launch(self._model_path(chosen))})
-
-    def _tool_cad_session(self, arguments, context):
-        from cadgen import __version__
-
-        return _data({"protocol": PROTOCOL, "build": self.page.build, "version": __version__, "platform": sys.platform,
-                      "workspace": [Root("workspace", path).public() for path in self.workspace.paths]})
 
     def _tool_cad_release(self, arguments, context):
         # The update button's: GitHub's latest release, asked at most every few hours and shared
@@ -588,21 +600,9 @@ class Server:
         live = [self._shown(arguments.get("view"))] if not self.tabs else self.views.live(context.meta.get("threadId"))
         if not live:
             return _text("No CAD viewer is open in this thread.", {"views": []})
-        answers: dict[str, dict[str, Any]] = {}
-
-        def describe(view) -> None:
-            with contextlib.suppress(NoAnswer):
-                state = self.views.ask(view.id, "describe", timeout=_DESCRIBE_SECONDS).get("state")
-                if isinstance(state, dict):
-                    answers[view.id] = state
-
-        askers = [threading.Thread(target=describe, args=(view,), daemon=True) for view in live]
-        for asker in askers:
-            asker.start()
-        for asker in askers:
-            asker.join(_DESCRIBE_SECONDS + 0.5)
-        # A view that did not answer is described by what it last reported.
-        views = [{"view": view.id, "surface": view.surface, **(answers.get(view.id) or {"model": view.model, **view.state})} for view in live]
+        # What each view last said it shows: a view sends its state whenever it changes, on the
+        # sync it makes each second, so this answers at once without asking any of them.
+        views = [{"view": view.id, "surface": view.surface, "model": view.model, **view.state} for view in live]
         return _text(json.dumps({"views": views}, indent=1), {"views": views})
 
     def _tool_cad_screenshot(self, arguments, context):
@@ -632,26 +632,46 @@ class Server:
         self.views.register(view_id, surface=surface, thread_id=context.meta.get("threadId"), model=arguments.get("model"))
         return view_id
 
-    def _tool_cad_events(self, arguments, context):
-        view_id = self._register(arguments, context)
-        return _data({"events": self.views.poll(view_id)})
+    def _tool_cad_sync(self, arguments, context):
+        """A view's one call each second: it reports, the server answers with what waits.
 
-    def _tool_cad_view_report(self, arguments, context):
+        Up: the view's model, its state when it changed (what ``cad_view`` reads), ``focused``
+        when a person just touched it, and ``closed`` once a newer view took its place. Down: the
+        agent's requests for it (``show``, ``capture``), and for what it watches -- its root's
+        catalog and the build feed of any STEP it shows -- the catalog's revision (the view
+        reads the catalog again only when that moves) and each feed's current status.
+        """
         view_id = self._register(arguments, context)
-        state = arguments.get("state") if isinstance(arguments.get("state"), dict) else {}
-        if state.get("closed") is True:  # a view a newer one replaced: the agent can no longer reach it
+        if arguments.get("closed") is True:  # a view a newer one replaced: the agent can no longer reach it
             self.views.forget(view_id)
-            return _data({})
-        focused = bool(arguments.get("focused"))
-        self.views.report(view_id, model=arguments.get("model"), state=state, focused=focused)
+            return _data({"events": []})
+        state = arguments.get("state") if isinstance(arguments.get("state"), dict) else None
+        focused = arguments.get("focused") is True
+        if state is not None or focused:
+            self.views.report(view_id, model=arguments.get("model"), state=state, focused=focused)
         if focused and isinstance(arguments.get("model"), str):
             self._model = arguments["model"]
-        return _data({})
+        answer: dict[str, Any] = {}
+        watch = arguments.get("watch")
+        if isinstance(watch, dict) and isinstance(watch.get("root"), dict):
+            # What the view watches never costs it the agent's requests: a root refused or a
+            # catalog that will not read is said here, and the events still go.
+            try:
+                root = self.workspace.accept(watch["root"])
+                file = watch.get("file") if isinstance(watch.get("file"), str) else None
+                answer["catalog"] = {"revision": self.tunnel.catalog_revision(root, file)}
+            except Exception as error:  # noqa: BLE001 - the view shows the catalog's own failure on its next read
+                answer["catalog"] = {"error": str(error) or type(error).__name__}
+            else:
+                files = [item for item in watch.get("previews") or [] if isinstance(item, str)][:4]
+                if files:
+                    answer["previews"] = [{"file": item, **self.tunnel.preview(root, item)} for item in files]
+        # Last, so a sync that failed before this point has taken nothing from the queue.
+        answer["events"] = self.views.poll(view_id)
+        return _data(answer)
 
     def _tool_cad_capture_reply(self, arguments, context):
         reply: dict[str, Any] = {key: arguments[key] for key in ("png", "error") if isinstance(arguments.get(key), str)}
-        if isinstance(arguments.get("state"), dict):
-            reply["state"] = arguments["state"]
         return _data({"accepted": self.views.reply(str(arguments.get("requestId")), reply)})
 
     def _tool_cad_http(self, arguments, context):

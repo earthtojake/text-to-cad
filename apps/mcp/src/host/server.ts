@@ -1,11 +1,13 @@
+import type { CadEditingPreview } from '@text-to-cad/core/client';
 import type { Bridge, CallOptions, ToolResult } from './bridge';
 
 /**
  * The launch/view protocol this page speaks with `cadgen mcp` (its `PROTOCOL`). 2: every launch
  * names a root, the home's included, and the page reveals files (`cad_reveal`). 3: only the
- * sidebar has a home, and a launch browses only the thread's project.
+ * sidebar has a home, and a launch browses only the thread's project. 4: a view makes one call a
+ * second (`cad_sync`), and every launch carries what the page needs to start on it alone.
  */
-export const PROTOCOL = 3;
+export const PROTOCOL = 4;
 
 /** Where a view is: its project's catalog (`workspace`, browsed), or a filesystem holding only the file on screen (`global`). */
 export interface Root { kind: 'workspace' | 'global'; path: string; name: string }
@@ -18,16 +20,32 @@ export interface Launch {
   /** Where the view browses, whether or not a model is open: the server always says. */
   root: Root;
   explore: boolean;
+  /** The server's version and platform: the page starts on the launch alone. */
+  version?: string;
+  platform?: string;
+  /** The home's library as it stood, so the home draws its cards without asking first. */
+  recents?: Recent[];
   /** A view mounted inline: its token (the agent names it by that) and its place among the chat's views. */
   view?: string;
   order?: { createdAt: number; seq: number };
 }
-export interface Session { protocol: number; build: string; version: string; platform: string; workspace: Root[] }
 export interface Recent { path: string; name: string; folder: string; opened: number; modified: number | null; pinned: boolean; missing: boolean; thumbnail: string | null; pictured: number | null }
 export type ViewEvent =
   | { seq: number; type: 'show'; launch: Launch }
-  | { seq: number; type: 'capture' | 'describe'; requestId: string };
+  | { seq: number; type: 'capture'; requestId: string };
 export interface HttpReply { status: number; headers: Record<string, string>; body: string }
+/** A view's sync (`cad_sync`): what it says, and what comes back. */
+export interface SyncRequest {
+  view: string; surface: string; model: string | null;
+  focused?: boolean; closed?: boolean; state?: Record<string, unknown>;
+  watch?: { root: Pick<Root, 'kind' | 'path'>; file: string | null; previews?: string[] };
+}
+export interface SyncReply {
+  events: ViewEvent[];
+  /** The watched catalog's revision, or why it could not be read (the agent's requests come regardless). */
+  catalog?: { revision?: string; error?: string };
+  previews?: ({ file: string; error?: string } & CadEditingPreview)[];
+}
 
 export class ServerError extends Error {
   constructor(message: string) { super(message); this.name = 'ServerError'; }
@@ -48,7 +66,6 @@ export function createServer(bridge: Pick<Bridge, 'callTool'>) {
     return (result.structuredContent || {}) as T;
   }
   return {
-    session: (options?: CallOptions) => call<Session>('cad_session', {}, options),
     /** The newest release, as GitHub says it (the server asks at most every few hours), or null. */
     release: () => call<{ latest: { version: string; url: string; newer: boolean } | null }>('cad_release').then(value => value.latest),
     launch: (model: string) => call<{ launch: Launch }>('cad_launch', { model }).then(value => value.launch),
@@ -56,11 +73,10 @@ export function createServer(bridge: Pick<Bridge, 'callTool'>) {
     recents: (args: { action?: 'list' | 'pin' | 'unpin' | 'remove' | 'thumbnail'; path?: string; png?: string } = {}) =>
       call<{ recents: Recent[] }>('cad_recents', args).then(value => value.recents),
     thumbnails: (names: string[]) => call<{ thumbnails: Record<string, string> }>('cad_recents', { action: 'thumbnails', names }).then(value => value.thumbnails),
-    events: (view: string, surface: string, model: string | null, options?: CallOptions) =>
-      call<{ events: ViewEvent[] }>('cad_events', { view, surface, model }, options).then(value => value.events),
-    report: (view: string, surface: string, model: string | null, state: Record<string, unknown>, focused: boolean) =>
-      call('cad_view_report', { view, surface, model, state, focused }),
-    reply: (requestId: string, reply: { png?: string; error?: string; state?: Record<string, unknown> }) =>
+    /** This view's one call each second (`host/sync.ts`). */
+    sync: (request: SyncRequest, options?: CallOptions) =>
+      call<SyncReply>('cad_sync', request as unknown as Record<string, unknown>, options).then(value => ({ ...value, events: value.events || [] })),
+    reply: (requestId: string, reply: { png?: string; error?: string }) =>
       call('cad_capture_reply', { requestId, ...reply }),
     http: (args: { root: Pick<Root, 'kind' | 'path'>; method: string; url: string; headers: Record<string, string>; body: string }, options?: CallOptions) =>
       call<HttpReply>('cad_http', args, options),

@@ -33,6 +33,10 @@ reference host `basic-host` does.
   home's included. The server computes the root from the workspace; the page never
   guesses where it is, and nothing here branches on a surface's name (`surface` is
   only reported back to the server).
+- **A launch is enough to start.** It also carries what the server is — its
+  `protocol`, `version` and `platform` — and the home's carries its `recents`,
+  so the page asks nothing before it draws. A tab restored from an older build
+  is launched again by today's server; one that still disagrees says so.
 - **Only the sidebar has a home.** `cad_home` is its one launch with `page: home`:
   the library, and Open with the desktop's chooser. A model opened from it gets a
   back arrow to it in place of an explorer. Every other surface is about files a
@@ -90,13 +94,18 @@ reference host `basic-host` does.
   rows) stand where the models will be; a model being opened shows a spinner over
   its picture, and takes no second press, until the launch switches to the
   viewer, whose own progress takes over.
-- **Nothing is held open.** A host relays every call its views make through a few
-  slots they all share, and holds a call until one frees: with three views each
-  holding two calls open (the old 20-second `cad_events` long-poll and the
-  editing preview's one-second wait), every model load, picture and pick queued
-  behind them. `cad_events` answers at once and is polled every second
-  (`views.POLL_SECONDS`); the tunnel answers the editing preview at once, and the
-  feed paces itself (`@text-to-cad/core`'s `editingPreviewFeed.js`).
+- **Nothing is held open, and a view makes one call a second.** A host relays
+  every call its views make through a few slots they all share, and holds a call
+  until one frees: a call held open by one view queues every model load, picture
+  and pick of the others behind it. So a view syncs (`cad_sync`, `host/sync.ts`),
+  answered at once, about once a second (`views.POLL_SECONDS`). Up go what it
+  shows — its model, its state whenever that changed (what `cad_view` reads),
+  that a person just touched it — and what it watches: its root's catalog and
+  the build feed of a model being edited. Back come the agent's requests for it
+  (`show`, `capture`), the catalog's revision, which the view reads again only
+  when it moved, and each feed's status, handed to the client as its
+  `editingPreviewFeed`. A sync that brought news (an event, a moving build) is
+  followed by the next sooner.
 
 ## Host adapter (`src/host`)
 
@@ -107,7 +116,7 @@ reference host `basic-host` does.
 | `tunnel.ts` | the `fetch` over `cad_http` |
 | `files.ts` | a filesystem's read-only `FileSource`: the file on screen, never listed, whose copied references name files by absolute path (a project's is `@text-to-cad/ui/catalog`'s, as the web Viewer's is) |
 | `prompt.ts` | Quick Edit's chat: `chatReach`, what the host's chat takes, and the prompt port over it — Queue through `ui/update-model-context` (a text block titled `Quick edit · <file>` and the sketch's image block, kept until the host clears its model context), Send through `ui/message` — with references as absolute paths (Copy Prompt spells them as copied references are) |
-| `live.ts`, `events.ts` | the mounted view's live controller (`@text-to-cad/ui/host`'s registry), and the `cad_events` poll, every second, that answers the agent (`show`, `capture`, `describe`) |
+| `live.ts`, `sync.ts` | the mounted view's live controller (`@text-to-cad/ui/host`'s registry), and its sync (`cad_sync`), every second: its state for the agent, the agent's requests (`show`, `capture`), the catalog's revision and its build feeds |
 | `presentation.ts` | how the host presents the page, and the election that retires older inline views |
 
 `ModelView.tsx` is the page: the shared `CadViewer` (`@text-to-cad/ui/cad-viewer`,

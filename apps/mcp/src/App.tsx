@@ -7,11 +7,11 @@ import { Button } from '@text-to-cad/ui/primitives/button';
 import { createTabStore, memoryTabRecord } from '@text-to-cad/ui/tab-store';
 import { version } from '../package.json';
 import type { Bridge, HostContext } from './host/bridge';
-import { watchViewEvents } from './host/events';
 import { createLiveRegistry, describeView } from './host/live';
 import { watchSupersession, type Presentation } from './host/presentation';
 import { chatReach } from './host/prompt';
-import type { Launch, Root, Server, Session } from './host/server';
+import type { Launch, Root, Server } from './host/server';
+import { createViewSync } from './host/sync';
 import ModelView, { type ViewReporter } from './ModelView';
 
 interface Showing { launch: Launch; sequence: number }
@@ -92,7 +92,7 @@ function Superseded({ still }: { still: string | null }) {
  * One CAD view. Which page it shows comes from its launch and from what the agent or the user
  * opens next; nothing here asks where the view is.
  */
-export default function App({ bridge, server, launch: initial, session, presentation = 'tabs' }: { bridge: Bridge; server: Server; launch: Launch; session: Session; presentation?: Presentation }) {
+export default function App({ bridge, server, launch: initial, presentation = 'tabs' }: { bridge: Bridge; server: Server; launch: Launch; presentation?: Presentation }) {
   const surface = initial.surface || initial.page;
   // Inline, the server named this view (the agent reads it by that name); a tab names itself.
   const view = useMemo(() => initial.view ?? newViewId(), [initial.view]);
@@ -112,12 +112,23 @@ export default function App({ bridge, server, launch: initial, session, presenta
   const superseded = still !== undefined;
   const [showing, setShowing] = useState<Showing>({ launch: initial, sequence: 0 });
   const shown = useRef<{ model: string | null; resolvePath: (resource: ResourceRef) => string }>({ model: null, resolvePath: unresolved });
+  // This view's one call to the server each second: what it shows, the agent's requests for it,
+  // and what changed in what it watches (`host/sync.ts`).
+  const sync = useMemo(() => createViewSync(server, { id: view, surface, model: () => shown.current.model, hidden: () => document.visibilityState === 'hidden' }, {
+    show: launch => setShowing(previous => ({ launch, sequence: previous.sequence + 1 })),
+    capture: async () => {
+      const controller = live.current();
+      if (!controller) throw new Error('No model is showing in this CAD view.');
+      return controller.capture();
+    },
+    state: () => describeView(live.current(), shown.current.model, shown.current.resolvePath),
+  }), [server, view, surface, live]);
   const reporter = useMemo<ViewReporter>(() => ({
     showing(model, resolvePath) {
       shown.current = { model, resolvePath };
-      void server.report(view, surface, model, {}, true).catch(() => {});
+      sync.focus();
     },
-  }), [server, view, surface]);
+  }), [sync]);
 
   useEffect(() => {
     const order = initial.order;
@@ -128,35 +139,27 @@ export default function App({ bridge, server, launch: initial, session, presenta
       try { const png = await live.current()?.capture(); if (png) image = URL.createObjectURL(png); } catch { /* the note says enough */ }
       if (!active) return;
       setStill(image);
-      void server.report(view, surface, shown.current.model, { closed: true }, false).catch(() => {});
+      void sync.close();
     })());
     return () => { active = false; stop(); };
-  }, [initial.order, initial.view, live, server, view, surface]);
+  }, [initial.order, initial.view, live, sync]);
 
   useEffect(() => {
     if (superseded) return;
     const lifetime = new AbortController();
-    watchViewEvents(server, { id: view, surface, model: () => shown.current.model }, {
-      show: launch => setShowing(previous => ({ launch, sequence: previous.sequence + 1 })),
-      capture: async () => {
-        const controller = live.current();
-        if (!controller) throw new Error('No model is showing in this CAD view.');
-        return controller.capture();
-      },
-      describe: () => describeView(live.current(), shown.current.model, shown.current.resolvePath),
-    }, lifetime.signal);
+    sync.run(lifetime.signal);
     const stop = bridge.onTeardown(() => lifetime.abort());
-    // The view a person last touched is the one the agent's tools mean.
+    // The view a person last touched is the one the agent's tools mean: it says so on a sync now.
     let last = 0;
     const touched = () => {
       if (Date.now() - last < 2000) return;
       last = Date.now();
-      void server.report(view, surface, shown.current.model, {}, true).catch(() => {});
+      sync.focus();
     };
     window.addEventListener('pointerdown', touched, true);
     window.addEventListener('focus', touched);
     return () => { lifetime.abort(); stop(); window.removeEventListener('pointerdown', touched, true); window.removeEventListener('focus', touched); };
-  }, [bridge, server, view, surface, live, superseded]);
+  }, [bridge, sync, superseded]);
 
   // The navbar's links: the same three as every app's, followed through the host (a frame cannot open one itself),
   // and how this host updates CAD.
@@ -166,7 +169,8 @@ export default function App({ bridge, server, launch: initial, session, presenta
   const links = useMemo(() => viewerLinks({ version, install: UPDATE[presentation], latest, open: url => bridge.request('ui/open-link', { url }).then(() => {}) }),
     [bridge, presentation, latest]);
   // A view opened on the home (the sidebar's) goes back to it; one opened on a model has no home.
-  const home = initial.page === 'home' ? initial : null;
+  // The home's launch carried its library as it stood when the sidebar opened: going back reads it anew.
+  const home = initial.page === 'home' ? { ...initial, recents: undefined } : null;
   const goHome = home ? () => setShowing(previous => ({ launch: home, sequence: previous.sequence + 1 })) : undefined;
   const show = (launch: Launch) => setShowing(previous => ({ launch, sequence: previous.sequence + 1 }));
   const { launch } = showing;
@@ -175,7 +179,7 @@ export default function App({ bridge, server, launch: initial, session, presenta
   }
   return <Frame bridge={bridge} context={context} insets={insets} inline={inline} bottomCenter={bottomCenter}>
     <ModelView key={rootKey(launch.root)} launch={launch} root={launch.root} sequence={showing.sequence} bridge={bridge} server={server}
-      tabStore={tabStore} live={live} links={links} colorScheme={colorScheme} platform={session.platform} reporter={reporter} compact={inline} chat={chat}
+      tabStore={tabStore} live={live} links={links} colorScheme={colorScheme} platform={initial.platform || 'darwin'} reporter={reporter} sync={sync} compact={inline} chat={chat}
       onLaunch={show} onHome={goHome} />
   </Frame>;
 }

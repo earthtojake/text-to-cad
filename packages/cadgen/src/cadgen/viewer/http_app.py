@@ -218,6 +218,11 @@ def _is_ascii_digits(value: str) -> bool:
     return bool(value) and value.isascii() and value.isdigit()
 
 
+def catalog_revision(entries) -> str:
+    """A digest of a catalog's entries: it moves whenever anything a client would see in them does."""
+    return hashlib.sha256(json.dumps(entries, sort_keys=True, default=str).encode("utf-8")).hexdigest()[:24]
+
+
 class CadApp:
     """``handle(request, response)`` writes exactly one response.
 
@@ -307,9 +312,11 @@ class CadApp:
         }
 
     def read_catalog(self, preferred_file=None) -> dict:
-        """The backend catalog plus this connection's stable root identity."""
+        """The backend catalog plus this connection's stable root identity, and its revision: a
+        digest of the entries, which a client that only watches for change compares instead of
+        reading the catalog again."""
         catalog = self.backend.read_catalog(preferred_file)
-        return {**catalog, "rootId": self.root_id}
+        return {**catalog, "rootId": self.root_id, "revision": catalog_revision(catalog.get("entries", []))}
 
     # --- gates ------------------------------------------------------------
 

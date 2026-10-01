@@ -41,13 +41,15 @@
      "explore": false,
      "model": "<tmp>/project/parts/bracket.stl",
      "page": "viewer",
-     "protocol": 3,
+     "platform": "<platform>",
+     "protocol": 4,
      "root": {
       "kind": "global",
       "name": "/",
       "path": "/"
      },
-     "surface": "file"
+     "surface": "file",
+     "version": "<version>"
     }
    }
   },
@@ -63,13 +65,16 @@
      "explore": false,
      "model": null,
      "page": "home",
-     "protocol": 3,
+     "platform": "<platform>",
+     "protocol": 4,
+     "recents": [],
      "root": {
       "kind": "global",
       "name": "/",
       "path": "/"
      },
-     "surface": "sidebar"
+     "surface": "sidebar",
+     "version": "<version>"
     }
    }
   },
@@ -80,12 +85,14 @@
      "explore": true,
      "model": "<tmp>/project/parts/bracket.stl",
      "page": "viewer",
-     "protocol": 3,
+     "platform": "<platform>",
+     "protocol": 4,
      "root": {
       "kind": "workspace",
       "name": "project",
       "path": "<tmp>/project"
-     }
+     },
+     "version": "<version>"
     }
    }
   },
@@ -96,12 +103,14 @@
      "explore": false,
      "model": "<tmp>/downloads/loose.stl",
      "page": "viewer",
-     "protocol": 3,
+     "platform": "<platform>",
+     "protocol": 4,
      "root": {
       "kind": "global",
       "name": "/",
       "path": "/"
-     }
+     },
+     "version": "<version>"
     }
    }
   },
@@ -117,13 +126,15 @@
      "explore": true,
      "model": "<tmp>/project/parts/bracket.stl",
      "page": "viewer",
-     "protocol": 3,
+     "platform": "<platform>",
+     "protocol": 4,
      "root": {
       "kind": "workspace",
       "name": "project",
       "path": "<tmp>/project"
      },
-     "surface": "agent"
+     "surface": "agent",
+     "version": "<version>"
     }
    }
   },
@@ -159,13 +170,15 @@
      "explore": true,
      "model": "<tmp>/project/parts/bracket.stl",
      "page": "viewer",
-     "protocol": 3,
+     "platform": "<platform>",
+     "protocol": 4,
      "root": {
       "kind": "workspace",
       "name": "project",
       "path": "<tmp>/project"
      },
-     "surface": "tab"
+     "surface": "tab",
+     "version": "<version>"
     }
    }
   },
@@ -525,28 +538,6 @@
     "openWorldHint": false,
     "readOnlyHint": true
    },
-   "description": "The server's build, protocol and this thread's workspace.",
-   "inputSchema": {
-    "additionalProperties": false,
-    "properties": {},
-    "type": "object"
-   },
-   "name": "cad_session",
-   "title": "CAD session"
-  },
-  {
-   "_meta": {
-    "ui": {
-     "visibility": [
-      "app"
-     ]
-    }
-   },
-   "annotations": {
-    "destructiveHint": false,
-    "openWorldHint": false,
-    "readOnlyHint": true
-   },
    "description": "The newest CAD release, and whether it is newer than this one.",
    "inputSchema": {
     "additionalProperties": false,
@@ -620,49 +611,13 @@
     "openWorldHint": false,
     "readOnlyHint": true
    },
-   "description": "The events waiting for this view, at once (it polls every second).",
+   "description": "This view's one call each second: what it shows and watches, and what is waiting for it.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
-     "model": {
-      "type": [
-       "string",
-       "null"
-      ]
+     "closed": {
+      "type": "boolean"
      },
-     "surface": {
-      "type": "string"
-     },
-     "view": {
-      "type": "string"
-     }
-    },
-    "required": [
-     "view",
-     "surface"
-    ],
-    "type": "object"
-   },
-   "name": "cad_events",
-   "title": "CAD events"
-  },
-  {
-   "_meta": {
-    "ui": {
-     "visibility": [
-      "app"
-     ]
-    }
-   },
-   "annotations": {
-    "destructiveHint": false,
-    "openWorldHint": false,
-    "readOnlyHint": true
-   },
-   "description": "Tell the server what this view shows.",
-   "inputSchema": {
-    "additionalProperties": false,
-    "properties": {
      "focused": {
       "type": "boolean"
      },
@@ -680,6 +635,48 @@
      },
      "view": {
       "type": "string"
+     },
+     "watch": {
+      "additionalProperties": false,
+      "properties": {
+       "file": {
+        "type": [
+         "string",
+         "null"
+        ]
+       },
+       "previews": {
+        "items": {
+         "type": "string"
+        },
+        "maxItems": 4,
+        "type": "array"
+       },
+       "root": {
+        "additionalProperties": false,
+        "properties": {
+         "kind": {
+          "enum": [
+           "workspace",
+           "global"
+          ],
+          "type": "string"
+         },
+         "path": {
+          "type": "string"
+         }
+        },
+        "required": [
+         "kind",
+         "path"
+        ],
+        "type": "object"
+       }
+      },
+      "required": [
+       "root"
+      ],
+      "type": "object"
      }
     },
     "required": [
@@ -688,8 +685,8 @@
     ],
     "type": "object"
    },
-   "name": "cad_view_report",
-   "title": "Report CAD view"
+   "name": "cad_sync",
+   "title": "CAD sync"
   },
   {
    "_meta": {
@@ -704,7 +701,7 @@
     "openWorldHint": false,
     "readOnlyHint": true
    },
-   "description": "Answer the server's question: a capture or a description.",
+   "description": "Answer the server's request for a capture.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
@@ -716,9 +713,6 @@
      },
      "requestId": {
       "type": "string"
-     },
-     "state": {
-      "type": "object"
      }
     },
     "required": [

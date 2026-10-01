@@ -81,7 +81,7 @@ export function createBridge(host: Pick<Window, 'postMessage'>, self: Pick<Windo
     const method = message.method!;
     if (method === 'ui/resource-teardown') {
       // Acknowledge first: the host is waiting to dispose the frame, and our cleanup
-      // (cancelling the long-poll) is no reason to keep it waiting.
+      // (ending the view's sync) is no reason to keep it waiting.
       post({ id: message.id, result: {} });
       for (const listener of [...teardowns]) {
         try { listener(); } catch { /* a listener's failure must not reach the host */ }

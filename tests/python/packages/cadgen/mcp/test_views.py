@@ -85,7 +85,11 @@ class ViewRegistryTest(unittest.TestCase):
         registry.register("v1", surface="tab", thread_id="t", model=None)
         _answer_next(registry, "v1", lambda event: registry.reply(event["requestId"], {"error": "no model is open"}))
         with self.assertRaisesRegex(NoAnswer, "no model is open"):
-            registry.ask("v1", "describe", timeout=5)
+            registry.ask("v1", "capture", timeout=5)
+        # A view that closes with the question unanswered fails it then, not at its timeout.
+        _answer_next(registry, "v1", lambda event: registry.forget("v1"))
+        with self.assertRaisesRegex(NoAnswer, "closed before it answered"):
+            registry.ask("v1", "capture", timeout=60)
 
 
 if __name__ == "__main__":

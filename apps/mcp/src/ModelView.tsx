@@ -11,6 +11,7 @@ import { createFilesystemSource } from './host/files';
 import type { LiveRegistry } from './host/live';
 import { createChatPromptContext, type ChatReach } from './host/prompt';
 import type { Launch, Root, Server } from './host/server';
+import type { ViewSync } from './host/sync';
 import { createTunnelFetch, encodeBase64, TUNNEL_ORIGIN } from './host/tunnel';
 
 export interface ViewReporter {
@@ -24,9 +25,11 @@ export interface ViewReporter {
  * data — the root it browses, whether it browses at all, what a Quick Edit can do in the chat —
  * never by where the view is.
  */
-export default function ModelView({ launch, root: launchedRoot, sequence, bridge, server, tabStore, live, links, colorScheme, platform, reporter, onLaunch, onHome, compact = false, chat }: {
+export default function ModelView({ launch, root: launchedRoot, sequence, bridge, server, tabStore, live, links, colorScheme, platform, reporter, sync, onLaunch, onHome, compact = false, chat }: {
   launch: Launch; root: Root; sequence: number; bridge: Bridge; server: Server; tabStore: TabStore; live: LiveRegistry; links: ViewerLinks;
   colorScheme: 'light' | 'dark'; platform: string; reporter: ViewReporter;
+  /** The view's one call each second: it carries what this root's client would otherwise poll for. */
+  sync: ViewSync;
   /** Show what the server launched: a model, possibly under another root. */
   onLaunch(launch: Launch): void;
   /** Show this view's home: a view opened on one (the sidebar's) has it; one opened on a model has none. */
@@ -39,10 +42,11 @@ export default function ModelView({ launch, root: launchedRoot, sequence, bridge
   // Every launch carries its own root object; the same folder must keep its client and catalog.
   const root = useMemo(() => launchedRoot, [launchedRoot.kind, launchedRoot.path]);
   const tunnel = useMemo(() => createTunnelFetch(server, root), [server, root]);
+  // The client polls nothing: the view's sync says when the catalog moved, and carries the build
+  // feed of a STEP on screen (a call the view makes each second anyway).
   const client = useMemo(() => createCadClient({
-    origin: TUNNEL_ORIGIN, fetch: tunnel,
-    shouldPoll: () => document.visibilityState !== 'hidden',
-  }), [tunnel]);
+    origin: TUNNEL_ORIGIN, fetch: tunnel, pollIntervalMs: 0, editingPreviewFeed: sync.observePreview,
+  }), [tunnel, sync]);
   useEffect(() => () => client.dispose(), [client]);
   const sourceId = `local-fs:${root.path}`;
   const global = root.kind === 'global';
@@ -71,6 +75,10 @@ export default function ModelView({ launch, root: launchedRoot, sequence, bridge
   }), [root, platform, server, global]);
 
   useEffect(() => { setFile(launched()); }, [launch, root, sequence]);
+  useEffect(() => sync.watch({
+    root, file: () => showing.current || null, revision: () => client.getSnapshot().catalogRevision,
+    refresh: next => client.refresh({ ...(next ? { file: next } : {}), markRefreshing: false }),
+  }), [sync, client, root]);
   const model = file ? rootPath(root.path, file) : null;
   useEffect(() => { reporter.showing(model, resolvePath); }, [reporter, model, resolvePath]);
 
@@ -87,8 +95,14 @@ export default function ModelView({ launch, root: launchedRoot, sequence, bridge
   // the web viewer; Open picks one from disk with the desktop's chooser. Opening switches this same
   // view to the model.
   const homed = Boolean(onHome);
+  // The home's first list came with its launch: the cards draw at once, and later reads ask.
+  const seeded = useRef(launch.recents ?? null);
   const library = useMemo<ModelLibrarySource | undefined>(() => homed ? {
-    list: () => server.recents(),
+    list: () => {
+      const first = seeded.current;
+      seeded.current = null;
+      return first ? Promise.resolve(first) : server.recents();
+    },
     change: (action, entry) => server.recents({ action, path: entry.path }),
     thumbnail: name => server.thumbnails([name]).then(found => found[name] ? `data:image/png;base64,${found[name]}` : null),
     open: entry => server.launch(entry.path).then(next => opened.current(next)),

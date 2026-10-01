@@ -30,6 +30,8 @@ export interface CadCatalogSnapshot {
   refreshing: boolean;
   error: string;
   rootId: string;
+  /** The server's digest of the last catalog applied ('' before one is): what a change watcher compares. */
+  catalogRevision: string;
 }
 export interface CadRequestOptions { signal?: AbortSignal }
 export interface CadArtifactResult {
@@ -165,4 +167,9 @@ export interface CadClientOptions {
   pollIntervalMs?: number;
   /** Host visibility policy, evaluated at each polling interval. */
   shouldPoll?: () => boolean;
+  /**
+   * A file's build feed, from a host that already hears it on a call it makes anyway: the
+   * client then asks the preview route nothing. Returns the unsubscribe.
+   */
+  editingPreviewFeed?: (file: string, onUpdate: (preview: CadEditingPreview) => void, onError: (error: unknown) => void) => () => void;
 }

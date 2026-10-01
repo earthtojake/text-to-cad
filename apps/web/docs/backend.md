@@ -130,6 +130,12 @@ Both `/__cad/server` and `/__cad/catalog` expose `rootId`, a stable identity for
 the normalized filesystem root. The host uses it for source and session-state
 identity; changing the server port does not name a different root.
 
+The catalog also carries `revision`, a digest of its entries that moves whenever
+anything a client would see in them does. A host that cannot afford to read the
+whole catalog on a timer (the CAD app relays every request through its host's
+few shared slots) compares the revision it is told with the client's
+`catalogRevision`, and reads the catalog again only when they differ.
+
 `/__cad/asset` applies root containment, hidden-path rules and the served-asset
 extension filter. Model scripts are excluded. Absolute references returned by
 the catalog are valid only when they resolve inside the root. Artifact status
@@ -178,7 +184,7 @@ cache reads and writes.
 | Route | Purpose |
 |---|---|
 | `GET /__cad/server` | Server identity, root and capabilities. |
-| `GET /__cad/catalog` | Current catalog and root identity. |
+| `GET /__cad/catalog` | Current catalog, root identity and `revision`. |
 | `GET /__cad/asset?file=...` | Allowed artifact bytes inside the served root. |
 | `GET /__cad/store?file=...` | Virtual render assets from the shared store. |
 | `GET /__cad/drawing?file=...` | A `.dxf` flattened to 2D render primitives; the DXF pane's only source. |

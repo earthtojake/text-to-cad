@@ -2,15 +2,16 @@
 
 The host starts one server process per thread, so the registry holds that
 thread's views: its tab, the tabs the agent opened, a file view. A view is live
-while it keeps polling; one that has not polled for :data:`LIVE_SECONDS` is
+while it keeps syncing; one that has not synced for :data:`LIVE_SECONDS` is
 forgotten.
 
-Nothing here reaches into a view. A view polls :meth:`ViewRegistry.poll` about
-once a second; the server queues events for it -- show this model, capture a
-PNG, describe what you show -- and the next poll carries them. A poll never
+Nothing here reaches into a view. A view syncs about once a second (``cad_sync``):
+it reports what it shows -- its model, and its state whenever that changed, which
+is what the agent reads -- and :meth:`ViewRegistry.poll` hands it the events the
+server queued for it since (show this model, capture a PNG). A poll never
 waits: a host relays every call its views make through a few slots they all
 share (Codex holds a call until one frees), so a request held open is a slot
-taken from every view's model loads. A question is a request with a reply:
+taken from every view's model loads. A capture is a request with a reply:
 :meth:`ViewRegistry.ask` waits until the view answers through
 :meth:`ViewRegistry.reply`.
 """
@@ -69,13 +70,15 @@ class ViewRegistry:
             view.seen = self._clock()
             return view
 
-    def report(self, view_id: str, *, model: str | None, state: dict[str, Any], focused: bool) -> None:
+    def report(self, view_id: str, *, model: str | None, state: dict[str, Any] | None, focused: bool) -> None:
+        """What the view shows now; ``state`` None keeps the last one it sent."""
         with self._cond:
             view = self._views.get(view_id)
             if view is None:
                 return
             view.model = model
-            view.state = dict(state)
+            if state is not None:
+                view.state = dict(state)
             view.seen = self._clock()
             if focused:
                 view.focused = view.seen
@@ -90,6 +93,7 @@ class ViewRegistry:
     def forget(self, view_id: str) -> None:
         with self._cond:
             self._views.pop(view_id, None)
+            # A capture waiting on this view is answered now, not when it times out.
             self._cond.notify_all()
 
     def _expire(self) -> None:
@@ -108,7 +112,6 @@ class ViewRegistry:
                 if view is not None:
                     view.events.append({"seq": next(self._seq), **event})
                     delivered += 1
-            self._cond.notify_all()
         return delivered
 
     def poll(self, view_id: str) -> list[dict[str, Any]]:
@@ -121,10 +124,10 @@ class ViewRegistry:
             events, view.events = view.events, []
             return events
 
-    # -- questions -------------------------------------------------------------
+    # -- captures --------------------------------------------------------------
 
     def ask(self, view_id: str, kind: str, *, timeout: float = 10.0) -> dict[str, Any]:
-        """Ask ``view_id`` what only it knows (``capture``, ``describe``); wait for its reply."""
+        """Ask ``view_id`` for what only it can make (a ``capture``); wait for its reply."""
         request_id = uuid.uuid4().hex
         with self._cond:
             self._replies[request_id] = None
@@ -134,6 +137,8 @@ class ViewRegistry:
             deadline = self._clock() + timeout
             with self._cond:
                 while self._replies.get(request_id) is None:
+                    if view_id not in self._views:
+                        raise NoAnswer("that view closed before it answered")
                     remaining = deadline - self._clock()
                     if remaining <= 0:
                         raise NoAnswer("the view did not answer in time; is its tab still open?")

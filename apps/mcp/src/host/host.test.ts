@@ -1,13 +1,13 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createPromptContext, referencePart } from '@text-to-cad/core/prompt';
 import { createBridge, HostError, type ToolResult } from './bridge';
-import { EVENTS_POLL_MS, watchViewEvents } from './events';
 import { createCatalogFileSource } from '@text-to-cad/ui/catalog';
 import { frameClipboard } from './clipboard';
 import { createFilesystemSource } from './files';
 import { chatReach, createChatPromptContext } from './prompt';
 import { relaunch } from './relaunch';
-import { createServer, type ViewEvent } from './server';
+import { createServer, type SyncReply, type SyncRequest, type ViewEvent } from './server';
+import { createViewSync, NEWS_MS, SYNC_MS } from './sync';
 import { createTunnelFetch, decodeBase64, encodeBase64, TUNNEL_ORIGIN } from './tunnel';
 
 /** A host frame: records what the page posts and answers with `respond`. */
@@ -49,7 +49,7 @@ describe('the MCP Apps bridge', () => {
     const frame = fakeHost(() => undefined);
     const bridge = createBridge(frame.host, frame.self as any);
     const abort = new AbortController();
-    const pending = bridge.callTool('cad_events', { view: 'v' }, { signal: abort.signal });
+    const pending = bridge.callTool('cad_sync', { view: 'v' }, { signal: abort.signal });
     abort.abort();
     await expect(pending).rejects.toThrow();
     const call = frame.posted.find(message => message.method === 'tools/call');
@@ -69,45 +69,104 @@ describe('the MCP Apps bridge', () => {
   });
 });
 
-describe('the agent driving a view', () => {
-  it('shows what the agent sends and answers its questions, asking every second and never holding a call', async () => {
+describe('a view\'s one call each second', () => {
+  function syncing(replies: Partial<SyncReply>[]) {
+    const requests: SyncRequest[] = [];
+    const replies_ = [...replies];
+    const replied: unknown[] = [];
+    const server = {
+      sync: vi.fn(async (request: SyncRequest) => { requests.push(structuredClone(request)); return { events: [], ...(replies_.shift() || {}) } as SyncReply; }),
+      reply: async (requestId: string, reply: object) => { replied.push({ requestId, ...reply }); },
+    };
+    return { server, requests, replied };
+  }
+
+  it('answers the agent, asks again at once after news, and otherwise once a second; nothing is held', async () => {
     vi.useFakeTimers();
     try {
-      const launch = { protocol: 1, page: 'viewer' as const, model: '/p/b.step', root: null, explore: true };
-      const batches: ViewEvent[][] = [
-        [{ seq: 1, type: 'show', launch }, { seq: 2, type: 'capture', requestId: 'c1' }, { seq: 3, type: 'describe', requestId: 'd1' }],
-        [{ seq: 4, type: 'capture', requestId: 'c2' }],
-      ];
-      const polls: unknown[][] = [];
-      const replies: unknown[] = [];
-      // The server answers at once, with nothing once the scripted events are out.
-      const server = {
-        events: async (...args: any[]) => { polls.push(args.slice(0, 3)); return batches.shift() || []; },
-        reply: async (requestId: string, reply: object) => { replies.push({ requestId, ...reply }); },
-      };
+      const launch = { protocol: 4, page: 'viewer' as const, model: '/p/b.step', root: { kind: 'global' as const, path: '/', name: '/' }, explore: false };
+      const { server, requests, replied } = syncing([
+        { events: [{ seq: 1, type: 'show', launch }, { seq: 2, type: 'capture', requestId: 'c1' }] as ViewEvent[] },
+        { events: [{ seq: 3, type: 'capture', requestId: 'c2' }] as ViewEvent[] },
+      ]);
       const shown: unknown[] = [];
       const captures = [new Blob([new Uint8Array([1, 2, 3])], { type: 'image/png' })];
       const stop = new AbortController();
-      watchViewEvents(server as any, { id: 'v1', surface: 'tab', model: () => '/p/a.step' }, {
+      const sync = createViewSync(server, { id: 'v1', surface: 'tab', model: () => '/p/a.step' }, {
         show: next => shown.push(next.model),
         capture: async () => { const png = captures.shift(); if (!png) throw new Error('nothing to capture'); return png; },
-        describe: () => ({ model: '/p/a.step', selection: ['/p/a.step#o1.f2'] }),
-      }, stop.signal);
-      // Events are asked after again at once; an empty answer waits a second, so the loop never spins.
+        state: () => ({ model: '/p/a.step', selection: ['/p/a.step#o1.f2'] }),
+      });
+      sync.run(stop.signal);
       await vi.advanceTimersByTimeAsync(0);
-      expect(polls).toHaveLength(3);
-      await vi.advanceTimersByTimeAsync(EVENTS_POLL_MS - 1);
-      expect(polls).toHaveLength(3);
+      expect(requests).toHaveLength(3);
+      await vi.advanceTimersByTimeAsync(SYNC_MS - 1);
+      expect(requests).toHaveLength(3);
       await vi.advanceTimersByTimeAsync(1);
-      expect(polls).toHaveLength(4);
-      stop.abort();
+      expect(requests).toHaveLength(4);
+      // What the view shows goes up once, and again only when it changes.
+      expect(requests.map(request => Boolean(request.state))).toEqual([true, false, false, false]);
+      expect(requests[0]).toMatchObject({ view: 'v1', surface: 'tab', model: '/p/a.step', state: { selection: ['/p/a.step#o1.f2'] } });
       expect(shown).toEqual(['/p/b.step']);
-      expect(polls[0]).toEqual(['v1', 'tab', '/p/a.step']);
-      expect(replies).toEqual(expect.arrayContaining([
+      expect(replied).toEqual(expect.arrayContaining([
         { requestId: 'c1', png: encodeBase64(new Uint8Array([1, 2, 3])) },
-        { requestId: 'd1', state: { model: '/p/a.step', selection: ['/p/a.step#o1.f2'] } },
         { requestId: 'c2', error: 'nothing to capture' },
       ]));
+      // A touch is said at once; a newer view's taking over is the last sync.
+      sync.focus();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(requests.at(-1)).toMatchObject({ focused: true });
+      await sync.close();
+      expect(requests.at(-1)).toMatchObject({ closed: true });
+      const count = requests.length;
+      await vi.advanceTimersByTimeAsync(SYNC_MS * 3);
+      expect(requests).toHaveLength(count);
+      stop.abort();
+    } finally { vi.useRealTimers(); }
+  });
+
+  it('reads the catalog again only when its revision moves past the one applied, and carries a STEP\'s build feed', async () => {
+    vi.useFakeTimers();
+    try {
+      const { server, requests } = syncing([
+        { catalog: { revision: 'r1' } },
+        { catalog: { revision: 'r2' }, previews: [{ file: 'a.step', state: 'building', feedCursor: 'k1' }] as SyncReply['previews'] },
+        { catalog: { revision: 'r2' }, previews: [{ file: 'a.step', state: 'done', feedCursor: 'k2' }] as SyncReply['previews'] },
+        { catalog: { revision: 'r2' }, previews: [{ file: 'a.step', state: 'done', feedCursor: 'k2' }] as SyncReply['previews'] },
+      ]);
+      let applied = 'r1';
+      let hidden = false;
+      const refreshes: (string | null)[] = [];
+      const stop = new AbortController();
+      const sync = createViewSync(server, { id: 'v1', surface: 'tab', model: () => '/p/a.step', hidden: () => hidden },
+        { show() {}, capture: async () => new Blob(), state: () => ({}) });
+      sync.watch({ root: { kind: 'workspace', path: '/p' }, file: () => 'a.step', revision: () => applied,
+        refresh: async file => { refreshes.push(file); applied = 'r2'; } });
+      const feed: string[] = [];
+      sync.observePreview('a.step', preview => feed.push(String(preview.state)), () => {});
+      sync.run(stop.signal);
+      await vi.advanceTimersByTimeAsync(0);
+      expect(requests[0].watch).toEqual({ root: { kind: 'workspace', path: '/p' }, file: 'a.step', previews: ['a.step'] });
+      expect(refreshes).toEqual([]);
+      await vi.advanceTimersByTimeAsync(SYNC_MS);
+      expect(refreshes).toEqual(['a.step']);
+      // A moving build is asked after sooner; a still one waits the second.
+      expect(feed).toEqual(['building']);
+      await vi.advanceTimersByTimeAsync(NEWS_MS);
+      expect(feed).toEqual(['building', 'done']);
+      await vi.advanceTimersByTimeAsync(NEWS_MS);
+      expect(feed).toEqual(['building', 'done', 'done']);
+      await vi.advanceTimersByTimeAsync(NEWS_MS);
+      expect(requests).toHaveLength(4);
+      expect(refreshes).toEqual(['a.step']);
+      // A hidden page still syncs (the agent may want it) but watches nothing until it is shown.
+      hidden = true;
+      await vi.advanceTimersByTimeAsync(SYNC_MS);
+      expect(requests.at(-1)?.watch).toBeUndefined();
+      hidden = false;
+      await vi.advanceTimersByTimeAsync(SYNC_MS);
+      expect(requests.at(-1)?.watch).toMatchObject({ file: 'a.step' });
+      stop.abort();
     } finally { vi.useRealTimers(); }
   });
 });

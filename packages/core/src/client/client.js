@@ -37,12 +37,12 @@ const matchesFile = (entry, file) => [entry.rootRelativeFile, entry.file].some((
  * @param {import("./types.js").CadClientOptions} options
  * @returns {import("./types.js").CadClient}
  */
-export function createCadClient({ origin = '', workspaceId = '', fetch: fetchImpl = globalThis.fetch, pollIntervalMs = 2000, shouldPoll = () => true, resources: resourceProvider } = {}) {
+export function createCadClient({ origin = '', workspaceId = '', fetch: fetchImpl = globalThis.fetch, pollIntervalMs = 2000, shouldPoll = () => true, resources: resourceProvider, editingPreviewFeed = null } = {}) {
   origin = normalizeViewerOrigin(origin);
   let disposed = false;
   const resourceLifetime = new AbortController();
   const resources = scopeCadResources(resourceProvider || createHttpCadResourceProvider({ origin, fetch: fetchImpl }), resourceLifetime.signal);
-  let snapshot = { entries: [], revision: 0, hydrated: false, refreshing: false, error: '', rootId: workspaceId };
+  let snapshot = { entries: [], revision: 0, hydrated: false, refreshing: false, error: '', rootId: workspaceId, catalogRevision: '' };
   const listeners = new Set();
   const requests = new Set();
   const sessions = new Set();
@@ -110,9 +110,11 @@ export function createCadClient({ origin = '', workspaceId = '', fetch: fetchImp
     const presentKeys = new Set(entries.map(entryKey));
     for (const key of entrySequences.keys()) if (!presentKeys.has(key)) entrySequences.delete(key);
     const rootId = workspaceId || catalog?.rootId || snapshot.rootId;
+    // The server's digest of the catalog just applied: a host that watches for change compares it.
+    const catalogRevision = typeof catalog?.revision === 'string' ? catalog.revision : snapshot.catalogRevision;
     const changed = entries.length !== snapshot.entries.length || entries.some((entry, index) => entry !== snapshot.entries[index]);
-    if (changed || !snapshot.hydrated || snapshot.refreshing || snapshot.error || rootId !== snapshot.rootId) {
-      publish({ entries: changed ? entries : snapshot.entries, rootId, hydrated: true, refreshing: false, error: '' });
+    if (changed || !snapshot.hydrated || snapshot.refreshing || snapshot.error || rootId !== snapshot.rootId || catalogRevision !== snapshot.catalogRevision) {
+      publish({ entries: changed ? entries : snapshot.entries, rootId, hydrated: true, refreshing: false, error: '', catalogRevision });
     }
   }
 
@@ -240,7 +242,10 @@ export function createCadClient({ origin = '', workspaceId = '', fetch: fetchImp
     resolveSurfaceComponents(descriptor, requested, options) {
       return resolveSurfaceComponents(descriptor, requested, { ...options, client });
     },
+    // A host that already hears a file's build feed (on a call it makes anyway) hands it in as
+    // `editingPreviewFeed`, and nothing here asks the route.
     observeEditingPreview(file, onUpdate, onError, options) {
+      if (editingPreviewFeed) return editingPreviewFeed(file, onUpdate, onError);
       return observeEditingPreview(file, onUpdate, onError, { ...options, client });
     },
     createRenderSession({ file = '' } = {}) {

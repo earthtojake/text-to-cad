@@ -41,16 +41,17 @@ async function start() {
   });
   try {
     await bridge.initialize({ name: 'CAD', version }, presentation === 'inline' ? { displayModes: ['inline', 'fullscreen'] } : undefined);
-    const [restored, session] = await Promise.all([launched, server.session()]);
-    // A tab's own launch from an older build, with today's server: launched again, rather than a
-    // notice to close and reopen it. An inline card stays as it was: it is a past chat's.
-    const launch = restored.protocol !== PROTOCOL && session.protocol === PROTOCOL && presentation === 'tabs'
+    // The page starts on its launch alone: the launch carries what the server is (its protocol,
+    // version and platform). A tab's own launch from an older build is launched again by today's
+    // server rather than met with a notice; an inline card stays as it was: it is a past chat's.
+    const restored = await launched;
+    const launch = restored.protocol !== PROTOCOL && presentation === 'tabs'
       ? await relaunch(bridge, restored).catch(() => restored) : restored;
-    if (launch.protocol !== PROTOCOL || session.protocol !== PROTOCOL) {
-      root.render(<Notice title="CAD was updated" message="Close this tab and open CAD again to use the new version." details={`view ${PROTOCOL} · launch ${launch.protocol} · server ${session.protocol} (${session.version})`} />);
+    if (launch.protocol !== PROTOCOL) {
+      root.render(<Notice title="CAD was updated" message="Close this tab and open CAD again to use the new version." details={`view ${PROTOCOL} · launch ${launch.protocol}${launch.version ? ` (${launch.version})` : ''}`} />);
       return;
     }
-    root.render(<StrictMode><App bridge={bridge} server={server} launch={launch} session={session} presentation={presentation} /></StrictMode>);
+    root.render(<StrictMode><App bridge={bridge} server={server} launch={launch} presentation={presentation} /></StrictMode>);
   } catch (error) {
     root.render(<Notice title="CAD could not open" message={error instanceof Error ? error.message : String(error)} details={`CAD ${version}`} />);
   }

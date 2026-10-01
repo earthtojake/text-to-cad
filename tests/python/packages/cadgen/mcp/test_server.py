@@ -65,19 +65,20 @@ class _Session(unittest.TestCase):
         return self.call(name, arguments, meta)["structuredContent"]["launch"]
 
     def poll_as(self, view: str, surface: str, answers: int, model: str | None = None) -> threading.Thread:
-        """A view polling as the page does (every few milliseconds here), answering ``answers`` questions."""
-        self.call("cad_events", {"view": view, "surface": surface, "model": model})  # the first poll registers it
+        """A view syncing as the page does (every few milliseconds here): its first sync registers it
+        and says what it shows; it answers ``answers`` captures."""
+        state = {"model": model, "selection": [f"{model}#o1.f1"]}
+        self.call("cad_sync", {"view": view, "surface": surface, "model": model, "state": state})
 
         def page() -> None:
             asked = 0
             while asked < answers:
-                events = self.call("cad_events", {"view": view, "surface": surface, "model": model})["structuredContent"]["events"]
+                events = self.call("cad_sync", {"view": view, "surface": surface, "model": model})["structuredContent"]["events"]
                 if not events:
                     time.sleep(0.002)
                 for event in events:
                     asked += 1
-                    answer = {"png": "iVBORw0KGgo="} if event["type"] == "capture" else {"state": {"model": model, "selection": [f"{model}#o1.f1"]}}
-                    self.call("cad_capture_reply", {"requestId": event["requestId"], **answer})
+                    self.call("cad_capture_reply", {"requestId": event["requestId"], "png": "iVBORw0KGgo="})
 
         viewer = threading.Thread(target=page, daemon=True)
         viewer.start()
@@ -131,18 +132,19 @@ class TabServerTest(_Session):
 
     def test_cad_show_reaches_the_polling_view_without_opening_one(self) -> None:
         self.assertEqual(self.call("cad_show", {"path": "parts/bracket.stl"})["structuredContent"], {"delivered": 0})
-        # A poll answers at once: the first registers the view, the next carries what was sent since.
-        self.assertEqual(self.call("cad_events", {"view": "v1", "surface": "tab"})["structuredContent"], {"events": []})
+        # A sync answers at once: the first registers the view, the next carries what was sent since.
+        self.assertEqual(self.call("cad_sync", {"view": "v1", "surface": "tab"})["structuredContent"], {"events": []})
         shown = self.call("cad_show", {"path": "parts/bracket.stl"})
         self.assertEqual(shown["structuredContent"], {"delivered": 1, "view": "v1"})
-        (event,) = self.call("cad_events", {"view": "v1", "surface": "tab"})["structuredContent"]["events"]
+        (event,) = self.call("cad_sync", {"view": "v1", "surface": "tab"})["structuredContent"]["events"]
         self.assertEqual((event["type"], event["launch"]["model"]), ("show", str(self.workspace / "parts" / "bracket.stl")))
 
     def test_the_agent_reads_and_captures_what_the_open_view_shows(self) -> None:
         self.assertTrue(self.call("cad_screenshot")["isError"])
         model = str(self.workspace / "parts" / "bracket.stl")
         state = {"model": model, "selection": [f"{model}#o1.f1"]}
-        viewer = self.poll_as("v1", "tab", 2, model)
+        viewer = self.poll_as("v1", "tab", 1, model)
+        # What the view said it shows on its sync, answered at once: nothing asks the view.
         self.assertEqual(self.call("cad_view")["structuredContent"], {"views": [{"view": "v1", "surface": "tab", **state}]})
         shot = self.call("cad_screenshot")
         viewer.join(10)
@@ -160,6 +162,26 @@ class TabServerTest(_Session):
         for route in ("/__cad/reveal", "/__cad/recents"):  # the web app's effects; a view here has tools for them
             effect = self.call("cad_http", {"root": root, "method": "POST", "url": route, "body": ""})["structuredContent"]
             self.assertEqual(effect["status"], 404)
+
+    def test_a_sync_says_when_the_catalog_moved_and_how_a_watched_build_stands(self) -> None:
+        root = {"kind": "workspace", "path": str(self.workspace)}
+        watch = {"root": root, "file": "parts/bracket.stl", "previews": ["parts/bracket.stl"]}
+        first = self.call("cad_sync", {"view": "v1", "surface": "tab", "watch": watch})["structuredContent"]
+        catalog = json.loads(base64.b64decode(self.call("cad_http", {"root": root, "method": "GET",
+                                                                      "url": "http://cad.invalid/__cad/catalog?file=parts%2Fbracket.stl"})["structuredContent"]["body"]))
+        # The revision a view compares is the one its catalog read carries.
+        self.assertEqual(first["catalog"]["revision"], catalog["revision"])
+        self.assertEqual(first["previews"][0]["file"], "parts/bracket.stl")
+        (self.workspace / "parts" / "plate.stl").write_text((self.workspace / "parts" / "bracket.stl").read_text(encoding="utf-8"), encoding="utf-8")
+        with mock.patch("cadgen.mcp.tunnel.CATALOG_REVISION_SECONDS", 0):
+            moved = self.call("cad_sync", {"view": "v1", "surface": "tab", "watch": watch})["structuredContent"]
+        self.assertNotEqual(moved["catalog"]["revision"], first["catalog"]["revision"])
+        # A root the view may not watch is refused in the answer, and the agent's requests still reach it.
+        self.server.views.post(["v1"], {"type": "show", "model": "/a.step"})
+        refused = self.call("cad_sync", {"view": "v1", "surface": "tab", "watch": {"root": {"kind": "workspace", "path": str(self.tmp / "elsewhere")}}})
+        self.assertFalse(refused.get("isError"))
+        self.assertIn("error", refused["structuredContent"]["catalog"])
+        self.assertEqual([event["type"] for event in refused["structuredContent"]["events"]], ["show"])
 
     def test_the_tunnel_never_holds_a_call_open(self) -> None:
         # The preview feed's ``after`` holds a request until the build ledger moves. The host relays every
@@ -261,15 +283,15 @@ class InlineServerTest(_Session):
         model = str(self.workspace / "parts" / "bracket.stl")
         view = self.launch("cad_show", {"path": "parts/bracket.stl"})["view"]
         self.assertIn("pass the view", self.call("cad_view")["content"][0]["text"])
-        viewer = self.poll_as(view, "inline", 2, model)
+        viewer = self.poll_as(view, "inline", 1, model)
         # Another chat's view, served by the same process and touched since, is never the one read.
-        self.call("cad_view_report", {"view": "cad-other", "surface": "inline", "model": model, "state": {}, "focused": True})
+        self.call("cad_sync", {"view": "cad-other", "surface": "inline", "model": model, "focused": True})
         described = self.call("cad_view", {"view": view})["structuredContent"]["views"]
         self.assertEqual(described, [{"view": view, "surface": "inline", "model": model, "selection": [f"{model}#o1.f1"]}])
         self.assertEqual(self.call("cad_screenshot", {"view": view})["content"][0]["data"], "iVBORw0KGgo=")
         viewer.join(10)
         # A view a newer one replaced closes itself, and is no longer there to read.
-        self.call("cad_view_report", {"view": view, "surface": "inline", "model": model, "state": {"closed": True}})
+        self.call("cad_sync", {"view": view, "surface": "inline", "model": model, "closed": True})
         self.assertIn("not open", self.call("cad_view", {"view": view})["content"][0]["text"])
 
 
