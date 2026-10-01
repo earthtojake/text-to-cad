@@ -43,7 +43,8 @@ none.
   and draws the model alone: no tools, view actions, cube or Quick Edit.
 - **File explorer** floats over the view's left, inset 8px like the toolbar, on a
   solid background above the tools. Opening it never resizes the view or moves its
-  tools; it stays up while a person walks the tree.
+  tools; it stays up while a person walks the tree, and a press outside it (the
+  navbar aside) closes it.
 - **Toolbar** at top-left, 8px in — the gap between it and the stack under it.
 - **Tool stack** beneath the toolbar: the panels of the tool in hand and of the
   effects a person keeps (see [The tool stack](#the-tool-stack)). The column is
@@ -51,8 +52,9 @@ none.
   it never runs under the cube, and while the panels fit only a panel's inner
   body scrolls.
 - **Quick Edit** at top-right, 8px in: a standalone toolbar on the strip's
-  surface with one button, the note a person writes to their agent (see
-  [Quick Edit](#quick-edit)). The rest of the right side of the view is clear.
+  surface with one button, which becomes the box of the note a person writes to
+  their agent (see [Quick Edit](#quick-edit)). The rest of the right side of the
+  view is clear.
 - **View cube** at bottom-left, 2px in, in a 6rem area: enlarged
   face/edge/corner hit areas and neutral hover and XYZ guides. Preview omits it.
 - **View actions** directly on top of the cube, centred on it, a 2px gap between
@@ -176,10 +178,10 @@ Leaving Draw forgets the sketch, but not the tool, colour and weight in hand,
 which the next time opens with. Choosing a drawing tool changes the toolbar
 icon. Undo and Redo are disabled when their history is empty. The select tool uses lucide's
 SquareMousePointer. The pencil and the shapes share one default stroke width.
-Once there is ink, the Drawing panel ends in a full-row **Copy**, which writes the
-view with its ink to the clipboard as a PNG; the copy shortcut does the same. A
-sketch begun opens [Quick Edit](#quick-edit), whose **Sketch** chip carries that
-view. Draw disables the cube without hiding it.
+Once there is ink, the Drawing panel ends in a full-row **Copy Drawing**, which
+writes the view with its ink to the clipboard as a PNG and then says **Copied**, a
+tick where the shortcut was; the copy shortcut does the same. A sketch begun opens
+[Quick Edit](#quick-edit), whose header says **drawing** while the ink is there. Draw disables the cube without hiding it.
 
 **Measure.** Its **Measure** panel is up as soon as it is the tool, empty: a
 heading whose mode menu, beside the chevron and the X, holds the four snapping
@@ -283,20 +285,18 @@ stack.
   headings' text (11px, regular, `TOOL_PANEL_HEADING_TEXT_CLASS`), 28px tall,
   8px in — a title; a summary where there is one (Explode's and Clip's amount);
   then, at its right
-  end, its own actions (a mode or settings menu — Measure's —
-  Position's Reset, the Reference's Copy), the chevron where it folds, and an X
-  when there is something to remove. Every small button in a heading or a filter
-  row is 20px, 2px apart and 4px from the edge, so the icons line up down the
-  stack. The Reference's heading is the reference itself, then **Copy** (the
-  reference on show — the one browsed to, with several selected — as Copy
-  Reference copies it) and an X that clears the selection; a kept panel's X
-  removes the effect.
+  end, its own actions (a mode or settings menu — Measure's — or Position's
+  Reset), the chevron where it folds, and an X when there is something to remove.
+  Every small button in a heading or a filter row is 20px, 2px apart and 4px from
+  the edge, so the icons line up down the stack. The Reference's heading is the
+  reference itself, then an X that clears the selection; a kept panel's X removes
+  the effect.
 - **Footers.** A panel can end in one full-row button under its body, which
   never scrolls (`footer`, `ToolPanelFooterButton`): the Reference's **Copy** —
-  **Copy All** with several references, every one selected, where its heading's
-  Copy takes the one on show — and, once there is ink, Drawing's **Copy**. The
-  button shows the copy shortcut in the platform's form (a phone shows none) and
-  a tick for a moment after the copy.
+  **Copy All** with several references, every one selected — and, once there is
+  ink, Drawing's **Copy Drawing**. The button shows the copy shortcut in the
+  platform's form (a phone shows none); after a copy it says **Copied** for a
+  moment, a tick where the shortcut was.
 - **The layout is the person's.** The sizes and the folded panels are one of the
   tab's settings, across its files (`CadPreferences.toolStack`:
   `{ panels: { [panel id]: { width?, height? } }, collapsed: { [panel id]: boolean } }`,
@@ -446,10 +446,10 @@ raw id, which is the **ID** row. With several references the heading is a
 picker over them with a muted "i/N" beside the name — quiet on hover in either
 theme (no fill; only its chevron comes up), and nothing about it moves; that picker is all a
 multi-selection adds, and the rows are always the browsed reference's alone (no
-totals, no count line). An X at the heading's end clears the selection. Copy
-stays in row menus, the Reference heading and the copy shortcut, and the panel
-ends in a full-row **Copy** (**Copy All** with several references) that shows the
-shortcut. What goes to an agent goes through [Quick Edit](#quick-edit), which a
+totals, no count line). An X at the heading's end clears the selection; the
+heading has no Copy of its own. Copy stays in row menus and the copy shortcut, and
+the panel ends in a full-row **Copy** (**Copy All** with several references) that
+shows the shortcut. What goes to an agent goes through [Quick Edit](#quick-edit), which a
 pick opens and which carries the selected references with the file. Every copied
 reference carries its file prefix.
 
@@ -469,49 +469,49 @@ Clearing the selection or leaving isolation never leaves a stale Copy Reference.
 ## Quick Edit
 
 Quick Edit is a person's note to their agent about the file on screen, and the one
-way the viewer hands it over. It is a standalone toolbar at the viewport's
-top-right, 8px in, on the tool strip's surface, with one button: a speech bubble,
-named and hinted "Quick Edit". Every 3D file has it, and so has a DXF; a compact
-host gets none, and preview puts it away with the tools.
+way the viewer hands it over. At the viewport's top-right, 8px in, it is a standalone
+toolbar on the tool strip's surface with one button: a speech bubble, named and hinted
+"Quick Edit". Opened, the button becomes the box, in the button's place: there is
+never a button beside it. Every 3D file has it, and so has a DXF; a compact host gets
+none, and preview puts it away with the tools.
 
-Pressed, the box opens under the button: a heading ("Quick Edit") with an X, a row
-of chips, a textarea ("Describe your changes") and the buttons at its bottom-right. Opening takes the keyboard: focus
-goes to the textarea. The X clears the note and closes the box. The toolbar button
-hides the box and keeps the note, and the box then stays hidden, opening itself no
-more, until that button opens it again.
+The box is 15rem wide unless the person has sized it (its bottom-left corner drags
+it wider to the left and its note taller; the size holds from file to file). Its
+header is the title, one step up the type scale ("Quick Edit"); then what goes with
+the note, in muted text: **N ref(s)**, the selection counted one by one (a reference
+naming several picks counts each; hovering lists their ids, one a line), and
+**drawing** while Draw has ink; then an X. The file always goes and is not named.
+Under the header, the note ("Describe your changes"), its border blue while it has
+the keyboard, and the buttons at its bottom-right.
 
-It opens itself, and takes the keyboard, when a **selection begins** — something
-picked where nothing was — right after the person's primary press in this view, and when a
-**sketch begins** — the first ink of a Draw session; an undo and a redo of it is not
-another — once the pen lifts. A selection an agent or host makes through the live
-controller (`select`) never opens it: it must not take the person's keyboard. A box
-closed any other way (its X, an Escape in it empty, a button that went) stays closed
-while the person goes on picking or drawing; the next selection or sketch opens it again.
+While the note is empty the box follows what it would carry: it opens when something
+is picked or sketched, and closes when that goes. A written note keeps it open whatever
+is picked. The X clears the note and puts the box away until what is picked or
+sketched changes; Escape in an empty box does the same and is the viewer's Escape too
+(clearing the selection). Pressed with nothing picked, the button opens it.
 
-The chips follow the live view until a button is pressed: the **file**, always
-attached; **N references**, the selection counted one by one (under Select only; a
-whole-file reference is not counted, the file always goes); and **Sketch**, with a
-small picture of the view with its ink, while Draw has ink (redrawn once the ink has
-been still for about 350ms).
+Opening takes the keyboard when the opening is the person's: their pick (right after
+their primary press in this view), their first stroke of a sketch (once the pen
+lifts), or its button. A selection an agent or host makes through the live
+controller (`select`) opens it without taking the keyboard.
 
-The buttons, left to right, are only those the host can carry out, and the
-rightmost is the primary one, which Enter presses (Shift+Enter is a new line):
+The buttons, round icon buttons, left to right, are only those the host can carry
+out, and the rightmost is the primary one, filled, which Enter presses (Shift+Enter
+is a new line):
 
-- **Copy Prompt**, always. Its hint says to paste the prompt into the agent's
-  prompt box. It copies the note as text: its references spelled as copied
-  references are, and a sketch by the path it was saved at, since text cannot
-  carry a picture.
-- **Queue**, where the destination is a composer: the note goes into the context
-  of the person's next message.
-- **Send**, where the host can post a message: the note goes now, as the person's
-  message. A round button with an up arrow.
+- **Copy Prompt** (copy icon), always. It copies the note as text: its references
+  spelled as copied references are, and a sketch by the path it was saved at, since
+  text cannot carry a picture.
+- **Queue** (list-plus icon), where the destination is a composer: the note goes
+  into the context of the person's next message.
+- **Send** (up arrow), where the host can post a message: the note goes now, as the
+  person's message.
 
-Each clears the note and closes the box once it has gone, and the toolbar button
-shows a tick for a moment; a failure keeps the note and says why in the box. The
-message is one format, sent, queued or copied: what the person wrote; then
-`File: <path>`; then `References:` and one reference per line; then
-`Sketch: <path>` when the picture travels as a file (a picture sent beside the
-text is not named).
+Each clears the note and closes the box once it has gone, and the button shows a
+tick for a moment; a failure keeps the note and says why in the box. The message is
+one format, sent, queued or copied: what the person wrote; then `File: <path>`; then
+`References:` and one reference per line; then `Sketch: <path>` when the picture
+travels as a file (a picture sent beside the text is not named).
 
 ## Camera, animation and preview
 

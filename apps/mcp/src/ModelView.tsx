@@ -83,7 +83,7 @@ export default function ModelView({ launch, root: launchedRoot, sequence, bridge
     for (const pictureClient of pictureClients.current.values()) pictureClient.dispose();
     pictureClients.current.clear();
   }, []);
-  // The models opened before, from every view and the web viewer; Open Model picks one from disk
+  // The models opened before, from every view and the web viewer; Open picks one from disk
   // with the desktop's chooser. Opening switches this same view to the model.
   const library = useMemo<ModelLibrarySource>(() => ({
     list: () => server.recents(),

@@ -1,5 +1,5 @@
 import { X } from "lucide-react";
-import { useRef } from "react";
+import { useEffect, useRef } from "react";
 
 import { Button } from "../../primitives/button.jsx";
 import { Sheet, SheetClose, SheetContent, SheetTitle } from "../../primitives/sheet.jsx";
@@ -12,6 +12,10 @@ const MOBILE_WIDTH = 280;
 // A drag has to go well below the minimum — past half of it — before the explorer closes: one that
 // merely overshoots stops at the minimum.
 const COLLAPSE_WIDTH = PANEL_MIN_WIDTH / 2;
+// A press here is not one outside the explorer: the navbar it hangs from (whose toggle closes it
+// itself, and whose file menu acts on what the explorer shows), and the popups the explorer opens,
+// which portal outside it.
+const INSIDE = "[data-viewer-navbar], [data-file-panel], [data-slot=select-content], [data-slot=dropdown-menu-content], [data-slot=dropdown-menu-sub-content], [data-slot=popover-content], [data-slot=context-menu-content]";
 
 /**
  * The file explorer: a panel that floats over the LEFT of the view, never beside it.
@@ -19,8 +23,8 @@ const COLLAPSE_WIDTH = PANEL_MIN_WIDTH / 2;
  * It overlays what it opens over — a model, its tools, a host's home — and never resizes or
  * moves any of it: the viewport keeps its size and its framing, the tool strip keeps its corner.
  * It is inset from the view's edges exactly as the tool strip is (`CHROME_INSET_PX`), on a solid
- * background, above the tools. It stays up while a person walks the tree file by file; its toggle
- * in the navbar is how it closes.
+ * background, above the tools. It stays up while a person walks the tree file by file; a press
+ * anywhere outside it, or its toggle in the navbar, closes it.
  *
  * Its right edge is its one handle: dragged, it sizes the explorer between the tab's bounds
  * (`panelWidth.js`), and only a drag well below the minimum — past half of it — closes it; the
@@ -40,6 +44,22 @@ const COLLAPSE_WIDTH = PANEL_MIN_WIDTH / 2;
 export function FileExplorer({ label, width, onWidthChange, onCollapse, mobile = false, portalContainer = null, onDismiss, children }) {
   const drag = useRef(null);
   const content = useRef(null);
+  const panel = useRef(null);
+  const dismiss = useRef(onDismiss);
+  dismiss.current = onDismiss;
+  // A press outside the floating explorer puts it away; the phone's sheet does the same itself.
+  useEffect(() => {
+    if (mobile) return undefined;
+    const press = event => {
+      const target = event.target;
+      if (!(target instanceof Element) || panel.current?.contains(target)) return;
+      // A press that closes one of its popups (a row's menu) closes only that.
+      if (target.closest(INSIDE) || hasOpenPopup(panel.current)) return;
+      dismiss.current?.();
+    };
+    document.addEventListener("pointerdown", press, true);
+    return () => document.removeEventListener("pointerdown", press, true);
+  }, [mobile]);
   if (mobile) return <Sheet open onOpenChange={open => { if (!open) onDismiss?.(); }} modal={false}>
     <SheetContent ref={content} side="left" portalContainer={portalContainer} showCloseButton={false} aria-describedby={undefined}
       className="absolute inset-y-2 left-2 h-auto w-[min(var(--file-explorer-sheet-width),calc(100%-16px))] max-w-none gap-0 overflow-hidden rounded-lg border bg-background shadow-lg data-[state=open]:animate-none data-[state=closed]:animate-none"
@@ -84,7 +104,7 @@ export function FileExplorer({ label, width, onWidthChange, onCollapse, mobile =
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
   };
   return (
-    <aside aria-label={label} data-file-panel-container="tree" data-file-explorer=""
+    <aside ref={panel} aria-label={label} data-file-panel-container="tree" data-file-explorer=""
       className="absolute z-40 flex overflow-hidden rounded-lg border bg-background shadow-lg"
       style={{ top: CHROME_INSET_PX, left: CHROME_INSET_PX, bottom: CHROME_INSET_PX, width, maxWidth: `calc(100% - ${CHROME_INSET_PX * 2}px)` }}>
       <div className="min-h-0 min-w-0 flex-1 overflow-hidden">{children}</div>

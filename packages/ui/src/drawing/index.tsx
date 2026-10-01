@@ -49,8 +49,7 @@ export interface DrawingEditorProps {
   /** The host's keyboard platform (`ViewerHost.environment.platform`): ⌘ on `darwin`, Ctrl elsewhere. */
   platform?: string;
   onReady(controller: DrawingController | null): void;
-  /** Whether there is ink, and the ink's revision: a number that changes whenever any of it does. */
-  onContentChange?(hasContent: boolean, revision: number): void;
+  onContentChange?(hasContent: boolean): void;
   onHistoryChange?(history: { canUndo: boolean; canRedo: boolean }): void;
   onToolChange?(tool: string): void;
   onColorChange?(color: string): void;
@@ -255,10 +254,8 @@ export function DrawingEditor({ initialScene, name = 'Drawing', mode = 'canvas',
   const change = useCallback<NonNullable<Parameters<typeof Excalidraw>[0]['onChange']>>((elements, appState, files) => {
     latest.current = { elements, appState, files };
     const hasContent = elements.some(element => !element.isDeleted);
-    // Every change to an element bumps its version, a deletion included.
-    const revision = elements.reduce((sum, element) => sum + element.version, 0);
-    onContentChange?.(hasContent, revision);
-    session.onContentChange(hasContent, revision);
+    onContentChange?.(hasContent);
+    session.onContentChange(hasContent);
     setInitialized(true);
     const tool = appState.activeTool.type === 'custom' ? appState.activeTool.customType ?? 'custom' : appState.activeTool.type;
     const color = appState.currentItemStrokeColor;

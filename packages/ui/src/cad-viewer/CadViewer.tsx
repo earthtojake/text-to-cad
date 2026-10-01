@@ -146,7 +146,7 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
   const layout = settings.library.layout;
   const changeLayout = useCallback((next: LibraryLayout) => preferences.update({ library: { layout: next } }), [preferences]);
   const presentation = useMemo(() => ({
-    home: <ModelLibrary library={library} colorScheme={colorScheme} layout={layout} onLayoutChange={changeLayout} picture={picture} />,
+    home: <ModelLibrary library={library} layout={layout} onLayoutChange={changeLayout} picture={picture} />,
     loading: <div className="relative h-full"><ViewerLoadingOverlay viewerLoading /></div>,
     error: () => <div className="relative h-full">{catalog.error
       ? <EmptyState icon={FolderX} title="Could not read this folder" description={catalog.error} tone="warn" />

@@ -88,14 +88,13 @@ export async function runDrawScenario({ page, pane, errors }) {
   assert.equal(afterStroke.projection, locked.projection);
   const stroke = await ink();
   assert.ok(stroke.red > 50, `neon red ink: ${JSON.stringify(stroke)}`);
-  // A sketch begun opens Quick Edit once the pen lifts, with the view attached, and it takes the keyboard.
+  // A sketch begun opens Quick Edit, its header naming the drawing, and it takes the keyboard once
+  // the pen lifts.
   const quickEdit = pane.getByRole('region', { name: 'Quick Edit', exact: true });
-  await quickEdit.locator('[data-quick-edit-chip="sketch"]').waitFor();
+  assert.equal(await quickEdit.locator('[data-quick-edit-chip="sketch"]').innerText(), 'drawing');
   assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('aria-label')), 'Describe your changes');
+  // Written, the note keeps it open while the drawing goes on.
   await quickEdit.getByRole('textbox', { name: 'Describe your changes', exact: true }).fill('Add a boss where the ink is.');
-  // Put away, the note kept, it leaves the view to the pen: going on drawing does not bring it back.
-  await pane.getByRole('button', { name: 'Quick Edit', exact: true }).click();
-  await quickEdit.waitFor({ state: 'detached' });
   await settles('Undo', true);
   await settles('Redo', false);
   // Undo and Redo trade places in the history buttons, the one stroke going and coming back.
@@ -179,7 +178,7 @@ export async function runDrawScenario({ page, pane, errors }) {
   await fillsInside();
   assert.equal(await draw.locator('[data-drawing-tool]').getAttribute('data-drawing-tool'), 'fill');
 
-  assert.equal(await quickEdit.count(), 0, 'the sketch went on without Quick Edit coming back');
+  assert.equal(await quickEdit.getByRole('textbox').inputValue(), 'Add a boss where the ink is.', 'the note kept Quick Edit open while the sketch went on');
 
   // Quick Edit queues the note with the view and its ink for the host, as a PNG.
   await page.evaluate(() => {
@@ -193,7 +192,6 @@ export async function runDrawScenario({ page, pane, errors }) {
       return originalDeliver(context);
     };
   });
-  await pane.getByRole('button', { name: 'Quick Edit', exact: true }).click();
   assert.equal(await quickEdit.getByRole('textbox').inputValue(), 'Add a boss where the ink is.');
   await quickEdit.getByRole('button', { name: 'Queue', exact: true }).click();
   await page.waitForFunction(() => window.__drawingPrompts.length === 1);

@@ -1,7 +1,7 @@
 import React from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
-import QuickEdit from '../../../../../dist/renderers/kit/tools/quick-edit/QuickEdit.js';
+import QuickEdit, { quickEditReferenceIds } from '../../../../../dist/renderers/kit/tools/quick-edit/QuickEdit.js';
 import { ViewerHostContext } from '../../../../../dist/host/context.js';
 import { testHost } from '../../../../../dist/host/testing/host.js';
 
@@ -28,73 +28,77 @@ const press = () => {
 const field = () => screen.getByRole('textbox', { name: 'Describe your changes' }) as HTMLTextAreaElement;
 const buttons = () => within(box()!).getAllByRole('button').map(button => button.getAttribute('aria-label') || button.textContent);
 
-it('opens itself when a selection or a sketch begins, taking the keyboard, and attaches what is live', () => {
-  const sketch = { ink: true, capture: async () => new Blob(['png'], { type: 'image/png' }), subscribe: () => () => {} };
+it('follows what it would carry while the note is empty: open for the person with the keyboard, for an agent without it', () => {
   const edge = { resource, target: { kind: 'cad-selector', selectors: ['o1.e3'] } } as const;
   const { update } = mount();
   expect(box()).toBeNull();
-  // An agent's selection (no press of the person's) opens nothing.
-  update({ references: [face] });
-  expect(box()).toBeNull();
-  update({ references: [] });
-  press();
+  expect(screen.getByRole('toolbar', { name: 'Quick Edit' })).toBeTruthy();
+  // An agent's selection (no press of the person's) opens it, and leaves their keyboard where it was.
   update({ references: [face] });
   expect(box()).not.toBeNull();
+  expect(document.activeElement).not.toBe(field());
+  // The button becomes the box: there is no toolbar while it is open.
+  expect(screen.queryByRole('toolbar', { name: 'Quick Edit' })).toBeNull();
+  update({ references: [] });
+  expect(box()).toBeNull();
+  // The person's pick opens it with the keyboard in its note; the header counts what is picked.
+  press();
+  update({ references: [face] });
   expect(document.activeElement).toBe(field());
-  expect(within(box()!).getByText('bracket.step')).toBeTruthy();
-  expect(within(box()!).getByText('1 reference', { exact: false })).toBeTruthy();
+  expect(within(box()!).queryByText('bracket.step')).toBeNull();
+  expect(box()!.querySelector('[data-quick-edit-chip="references"]')!.textContent).toBe('1 ref');
   update({ references: [face, edge] });
-  expect(within(box()!).getByText('2 references', { exact: false })).toBeTruthy();
-  // A reference naming several picks counts each.
-  update({ references: [{ resource, target: { kind: 'cad-selector', selectors: ['o1.f2', 'o1.e3', 'o1.e4'] } }] });
-  expect(within(box()!).getByText('3 references', { exact: false })).toBeTruthy();
-  // The X clears the note and closes the box; the next selection opens it again.
+  expect(box()!.querySelector('[data-quick-edit-chip="references"]')!.textContent).toBe('2 refs');
+  // A reference naming several picks counts each, and each is listed by its id.
+  const several = [{ resource, target: { kind: 'cad-selector', selectors: ['o1.f2', 'o1.e3', 'o1.e4'] } }] as const;
+  update({ references: several });
+  expect(box()!.querySelector('[data-quick-edit-chip="references"]')!.textContent).toBe('3 refs');
+  expect(quickEditReferenceIds(several)).toEqual(['o1.f2', 'o1.e3', 'o1.e4']);
+  // A note keeps it open when the selection goes.
   fireEvent.change(field(), { target: { value: 'Round it.' } });
-  fireEvent.click(within(box()!).getByRole('button', { name: 'Clear Quick Edit' }));
-  expect(box()).toBeNull();
   update({ references: [] });
-  press();
-  update({ references: [edge] });
-  expect(field().value).toBe('');
-  // Its own button hides it with the note kept, and then it stays away — a selection or a sketch
-  // begun opens nothing — until that button opens it again, attaching what is live.
-  fireEvent.change(field(), { target: { value: 'Round it.' } });
-  fireEvent.click(screen.getByRole('button', { name: 'Quick Edit' }));
-  expect(box()).toBeNull();
-  update({ references: [] });
-  press();
-  update({ references: [face], sketch });
-  expect(box()).toBeNull();
-  fireEvent.click(screen.getByRole('button', { name: 'Quick Edit' }));
   expect(field().value).toBe('Round it.');
-  expect(document.activeElement).toBe(field());
-  expect(box()!.querySelector('[data-quick-edit-chip="references"]')).not.toBeNull();
-  expect(box()!.querySelector('[data-quick-edit-chip="sketch"]')).not.toBeNull();
+  // The X clears the note and puts it away until what is picked changes.
+  update({ references: [face] });
+  fireEvent.click(within(box()!).getByRole('button', { name: 'Close Quick Edit' }));
+  expect(box()).toBeNull();
+  update({ references: [face] });
+  expect(box()).toBeNull();
+  update({ references: [face, edge] });
+  expect(field().value).toBe('');
   // Escape keeps a note, box and all; in an empty box it closes it and is the viewer's too.
   const escape = vi.fn();
-  update({ references: [face], sketch, onEscape: escape });
+  update({ references: [face], onEscape: escape });
+  fireEvent.change(field(), { target: { value: 'Round it.' } });
   fireEvent.keyDown(field(), { key: 'Escape' });
   expect([box() !== null, escape.mock.calls.length]).toEqual([true, 0]);
   fireEvent.change(field(), { target: { value: '' } });
   fireEvent.keyDown(field(), { key: 'Escape' });
   expect([box(), escape.mock.calls.length]).toEqual([null, 1]);
+  // With nothing picked, its button opens it, with the keyboard.
+  update({ references: [] });
+  fireEvent.click(screen.getByRole('button', { name: 'Quick Edit' }));
+  expect(document.activeElement).toBe(field());
 });
 
-it('opens once per sketch: its first ink, not the ink an Undo takes away and a Redo puts back', () => {
-  const drawing = (ink: boolean) => ({ ink, capture: async () => new Blob(['png'], { type: 'image/png' }), subscribe: () => () => {} });
+it('opens with a sketch while there is ink, taking the keyboard once the pen lifts, and closes when the ink goes', () => {
+  const drawing = (ink: boolean) => ({ ink, capture: async () => new Blob(['png'], { type: 'image/png' }) });
+  const view = () => document.querySelector('[data-slot="cad-file-view"]')!;
   const { update } = mount();
   update({ sketch: drawing(false) });
   expect(box()).toBeNull();
+  fireEvent.pointerDown(view());
   update({ sketch: drawing(true) });
-  expect(box()).not.toBeNull();
-  fireEvent.click(within(box()!).getByRole('button', { name: 'Clear Quick Edit' }));
+  expect(box()!.querySelector('[data-quick-edit-chip="sketch"]')!.textContent).toBe('drawing');
+  expect(document.activeElement).not.toBe(field());
+  fireEvent.pointerUp(view(), { button: 0 });
+  expect(document.activeElement).toBe(field());
   update({ sketch: drawing(false) });
-  update({ sketch: drawing(true) });
   expect(box()).toBeNull();
-  // Draw put down and taken up again is a new sketch.
-  update({ sketch: null });
   update({ sketch: drawing(true) });
-  expect(box()).not.toBeNull();
+  fireEvent.change(field(), { target: { value: 'A boss here.' } });
+  update({ sketch: null });
+  expect(field().value).toBe('A boss here.');
 });
 
 it('offers the buttons the host can carry out, the rightmost primary and pressed by Enter', async () => {
@@ -102,7 +106,7 @@ it('offers the buttons the host can carry out, the rightmost primary and pressed
   const deliver = vi.fn(async () => ({ status: 'added' as const, partIds: [] }));
   mount(testHost({ promptContext: { getSnapshot: () => composer, subscribe: () => () => {}, deliver, send } }));
   fireEvent.click(screen.getByRole('button', { name: 'Quick Edit' }));
-  expect(buttons()).toEqual(['Clear Quick Edit', 'Copy Prompt', 'Queue', 'Send']);
+  expect(buttons()).toEqual(['Close Quick Edit', 'Copy Prompt', 'Queue', 'Send']);
   expect(within(box()!).getByRole('button', { name: 'Send' }).hasAttribute('disabled')).toBe(true);
   fireEvent.change(field(), { target: { value: 'Make it 2 mm thicker.' } });
   fireEvent.keyDown(field(), { key: 'Enter', shiftKey: true });
@@ -123,10 +127,9 @@ it('copies the note with its references as copied, and its sketch saved as a fil
     clipboard: { writeText: async text => { copied = text; }, readText: async () => '', writeImage: async () => {} },
     attachments: { save: async (_png, name) => { saved.push(name); return `/tmp/cadgen-sketches/${name}`; } },
   });
-  const sketch = { ink: true, capture: async () => new Blob(['png'], { type: 'image/png' }), subscribe: () => () => {} };
+  const sketch = { ink: true, capture: async () => new Blob(['png'], { type: 'image/png' }) };
   mount(host, { references: [face], sketch });
-  fireEvent.click(screen.getByRole('button', { name: 'Quick Edit' }));
-  expect(buttons()).toEqual(['Clear Quick Edit', 'Copy Prompt']);
+  expect(buttons()).toEqual(['Close Quick Edit', 'Copy Prompt']);
   fireEvent.change(field(), { target: { value: 'Round this edge.' } });
   fireEvent.click(within(box()!).getByRole('button', { name: 'Copy Prompt' }));
   await waitFor(() => expect(box()).toBeNull());

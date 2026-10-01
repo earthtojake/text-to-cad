@@ -123,7 +123,7 @@ versions the plugin is skipped silently and never appears in `codex plugin list`
 upgrade with `npm install -g @openai/codex@latest`.
 
 In the Codex app the plugin also brings the CAD viewer: **CAD** in the sidebar
-(recent models, and Open Model), a **CAD** tab beside each thread that the agent
+(recent models, and Open), a **CAD** tab beside each thread that the agent
 drives, and *Open with CAD* for model files. It runs locally through
 [uv](https://docs.astral.sh/uv/): after installing, ask Codex to run the
 plugin's `$setup` skill (it installs uv if you approve and prepares the pinned

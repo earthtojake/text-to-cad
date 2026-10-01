@@ -540,7 +540,7 @@ function ModelingTree({ modeling, active, disabled, mode='all', modeMenu=null, l
     {/* Not folded away: its X clears the selection, its heading's Copy copies the reference on show,
         and the Copy at its foot the whole selection (Copy All, with several references). */}
     {hasDetails ? <ToolPanel id="reference" title={referenceTitle || 'Reference'} label="Reference details" closeLabel="Clear selection" fit="details" widthFrom="tree" maxHeight={TOOL_PANEL_REFERENCE_HEIGHT}
-      collapsible={false} actions={selectionDetails?.actions} hidden={!active} onClose={clearSelection}
+      collapsible={false} hidden={!active} onClose={clearSelection}
       footer={selectionCopy ? <ToolPanelFooterButton label={selectionCopy.label} shortcut={mobile ? '' : selectionCopy.shortcut}
         disabled={disabled} onClick={selectionCopy.onCopy}/> : null}>
       <div className="px-2 pb-1.5">{details}</div>

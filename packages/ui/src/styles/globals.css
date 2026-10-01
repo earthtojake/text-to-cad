@@ -49,11 +49,11 @@
   }
 }
 
-/* The host's home (`library/`): the models opened before, to open again, on the viewport's own
- * colour (`--cad-library-backdrop`, set by the page from the scene theme). Centred, a grid of
- * about four solid cards a row at a typical width, or a list of rows. */
-.cad-library { width: 100%; height: 100%; background: var(--cad-library-backdrop, var(--background)); --cad-library-card: var(--card); --cad-library-line: var(--border); }
-.dark .cad-library { --cad-library-card: color-mix(in oklab, var(--cad-library-backdrop, var(--background)) 88%, white); --cad-library-line: oklch(1 0 0 / 8%); }
+/* The host's home (`library/`): the models opened before, to open again, on the page's own
+ * colour, the navbar's. Centred, a grid of about four solid cards a row at a typical width, or a
+ * list of rows. */
+.cad-library { width: 100%; height: 100%; background: var(--background); --cad-library-card: var(--card); --cad-library-line: var(--border); }
+.dark .cad-library { --cad-library-card: color-mix(in oklab, var(--background) 88%, white); --cad-library-line: oklch(1 0 0 / 8%); }
 .cad-library-content { box-sizing: border-box; width: 100%; max-width: 1128px; margin: 0 auto; padding: 44px 24px calc(40px + var(--cad-host-bottom-inset, 0px)); }
 .cad-library-wordmark { display: block; width: auto; height: 44px; margin: 0 auto 44px; user-select: none; -webkit-user-drag: none; }
 .cad-library-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; }

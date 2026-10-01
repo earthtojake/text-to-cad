@@ -45,7 +45,7 @@ const sized = (notify: ReturnType<typeof vi.fn>) => notify.mock.calls.filter(([m
 it('a tab host gets the page it always had, down to its bottom: the home, with its explorer, no card to size and no full-size button', () => {
   const { bridge, server } = host({ displayMode: 'fullscreen', safeAreaInsets: { top: 4, bottom: 72 } });
   const { container } = render(<App bridge={bridge as any} server={server as any} launch={{ ...home, surface: 'sidebar' }} session={session} />);
-  // The home is the viewer with nothing open: its library, with this host's Open Model, and the root's files.
+  // The home is the viewer with nothing open: its library, with this host's Open, and the root's files.
   expect(viewer.props!.file).toBe('');
   expect(typeof viewer.props!.library.pick).toBe('function');
   expect(viewer.props!.host.files.list).toBeDefined();

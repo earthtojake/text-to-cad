@@ -37,9 +37,7 @@ re-declared inside the editor, and the color strip is in the toolbar's flow
 rather than a portalled popover, so a dark application cannot restyle it). A
 host that places the toolbar itself passes `toolbar={false}` and drives the same
 component from `useDrawingSession` (`drawing/session.js`), as the CAD viewport
-does; its `subscribeInk` hears every change to the ink (a stroke's every point, an
-erase, an undo) without a React render, which is how Quick Edit redraws its Sketch
-chip. In CAD, Draw's controls are its **Drawing** panel in the tool stack while
+does. In CAD, Draw's controls are its **Drawing** panel in the tool stack while
 Draw is up (`layout="panel"`): one wrapping row, the tools then Color, Undo, Redo
 and Clear drawing, with no separator and no headings. Picking a tool changes the
 Draw button's icon. Pressing Draw again puts it down; leaving Draw ends the

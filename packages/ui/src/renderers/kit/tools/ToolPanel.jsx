@@ -39,8 +39,9 @@ const ToolPanelContext = createContext(null);
 
 /**
  * A panel's full-row action at its foot, under everything it holds: Copy under the Reference
- * (Copy All with several references) and under the drawing controls. `shortcut` is the key that
- * does the same from the viewer (⌘C). A press whose `onClick` answers true says so for a moment.
+ * (Copy All with several references) and Copy Drawing under the drawing controls. `shortcut` is the
+ * key that does the same from the viewer (⌘C). A press whose `onClick` answers true says "Copied",
+ * with a tick where the shortcut was, for a moment.
  * @param {{ label: string, shortcut?: string, disabled?: boolean, onClick(): unknown }} props
  */
 export function ToolPanelFooterButton({ label, shortcut = "", disabled = false, onClick }) {
@@ -54,9 +55,8 @@ export function ToolPanelFooterButton({ label, shortcut = "", disabled = false, 
   return <button type="button" aria-label={label} aria-keyshortcuts={keys} disabled={disabled} data-tool-panel-footer-button=""
     className="flex h-7 w-full shrink-0 items-center justify-center gap-2 rounded-b-md border-t border-border text-tiny text-foreground hover:bg-accent/70 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/45 disabled:opacity-50"
     onClick={async () => { if (await onClick()) setDone(true); }}>
-    {done ? <Check className="size-3" aria-hidden="true" /> : null}
-    <span>{label}</span>
-    {shortcut && !done ? <kbd aria-hidden="true" className="font-sans text-micro text-muted-foreground">{shortcut}</kbd> : null}
+    <span>{done ? "Copied" : label}</span>
+    {done ? <Check className="size-3" aria-hidden="true" /> : shortcut ? <kbd aria-hidden="true" className="font-sans text-micro text-muted-foreground">{shortcut}</kbd> : null}
   </button>;
 }
 

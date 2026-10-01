@@ -63,7 +63,7 @@ const BAR_BUTTON_CLASS = "size-5 bg-transparent hover:bg-transparent dark:hover:
  *   `playback`: the playbar runtime, when the renderer hands the shell one of its own rather
  *   than through `useRendererShell`'s `animation`. Routines play in preview alone.
  *   `references`: what is selected, in the prompt grammar — the references a Quick Edit attaches
- *   (`kit/tools/quick-edit/QuickEdit.jsx`), counted on its chip; the file itself always goes.
+ *   (`kit/tools/quick-edit/QuickEdit.jsx`), counted in its header; the file itself always goes.
  *   `copySelection`: the viewer's copy key (⌘C / Ctrl+C) while the renderer's own tool is up and
  *   something is selected (Draw's copies the view with its ink); null when there is nothing to copy.
  *   `contextMenuItems`: what THIS renderer offers on a secondary tap over the canvas; the
@@ -118,6 +118,8 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
   // Display's settings: a popover from its button among the view's actions, not a tool — opening
   // it leaves the tool in hand as it is. Another file starts with it shut.
   const [displayOpen, setDisplayOpen] = useState(false);
+  // Quick Edit's size as the person drags it, kept from one file to the next.
+  const [quickEditSize, setQuickEditSize] = useState(null);
   useEffect(() => { setPreviewing(false); setDisplayOpen(false); }, [frame.modelKey, setPreviewing]);
   // One viewport, two render profiles over the same Display settings (`renderProfile.js`): the
   // tools view is drawn for working on the model, preview for looking at it.
@@ -141,10 +143,10 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
   // tool, which cannot be put down: its panels fold instead).
   // The shell's own tool's panel leads the stack while its tool is up: Draw's tools, color and
   // history. The renderer's follow.
-  // Draw's controls, and once there is ink, Copy (the view with its ink) at their foot.
+  // Draw's controls, and once there is ink, Copy Drawing (the view with its ink) at their foot.
   const shellPanels = <>
     {frame.drawToolActive ? <ToolPanel id="drawing" label="Drawing controls" collapsible={false}
-      footer={frame.drawing.hasContent ? <ToolPanelFooterButton label="Copy" shortcut={mobile ? "" : frame.copyShortcut}
+      footer={frame.drawing.hasContent ? <ToolPanelFooterButton label="Copy Drawing" shortcut={mobile ? "" : frame.copyShortcut}
         disabled={viewerLoading || !scene} onClick={frame.copyDrawing} /> : null}>
       <DrawingToolbar drawing={frame.drawing} layout="panel" className="p-1" />
     </ToolPanel> : null}
@@ -167,9 +169,8 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
   };
   frame.copyActionRef.current = copyAction;
   // Quick Edit's sketch: while Draw is up, and the view with its ink once there is some.
-  const sketch = useMemo(() => frame.drawToolActive
-    ? { ink: frame.drawing.hasContent, capture: frame.captureView, subscribe: frame.drawing.subscribeInk } : null,
-  [frame.drawToolActive, frame.drawing.hasContent, frame.captureView, frame.drawing.subscribeInk]);
+  const sketch = useMemo(() => frame.drawToolActive ? { ink: frame.drawing.hasContent, capture: frame.captureView } : null,
+    [frame.drawToolActive, frame.drawing.hasContent, frame.captureView]);
   // The renderer's overlay and the shell's own layers share one viewport context.
   const overlay = viewport => <>
     {previewing || !contextMenuItems ? null : <ViewportContextMenu viewport={viewport} items={contextMenuItems} onOpenChange={onContextMenuOpenChange} />}
@@ -281,7 +282,8 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
               </div>}
               {toolsHidden ? null : <QuickEdit key={frame.modelKey} className="absolute z-30" style={QUICK_EDIT_POSITION}
                 resource={frame.resource} references={references} sketch={sketch} referencePath={frame.referencePath}
-                onCopy={copyAction} onEscape={frame.escape} disabled={viewerLoading || !scene} />}
+                onCopy={copyAction} onEscape={frame.escape} disabled={viewerLoading || !scene}
+                size={quickEditSize} onResize={setQuickEditSize} />}
 
               </PreviewChrome>
 

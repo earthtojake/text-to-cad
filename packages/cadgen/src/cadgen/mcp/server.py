@@ -511,7 +511,7 @@ class Server:
         from .picker import PickerFailed
 
         try:
-            chosen = self.picker.choose(EXTENSIONS)
+            chosen = self.picker.choose()
         except PickerFailed as failure:
             raise ToolFailed(str(failure)) from failure
         if chosen is None:

@@ -19,10 +19,10 @@ function library(models: LibraryModel[], extra: Partial<ModelLibrarySource> = {}
   };
 }
 
-it('offers Open Model only where the host has a chooser, and opens and pins through the host', async () => {
+it('offers Open only where the host has a chooser, and opens and pins through the host', async () => {
   const pick = vi.fn(async () => {});
   render(<ModelLibrary library={library([], { pick })} />);
-  await act(async () => { fireEvent.click(await screen.findByRole('button', { name: 'Open Model' })); });
+  await act(async () => { fireEvent.click(await screen.findByRole('button', { name: 'Open', exact: true })); });
   expect(pick).toHaveBeenCalled();
   expect(screen.getByText('Open a CAD file to see it here.')).toBeTruthy();
   cleanup();
@@ -30,7 +30,7 @@ it('offers Open Model only where the host has a chooser, and opens and pins thro
   const inPlace = library([model('a.step'), model('b.stl', { missing: true })]);
   render(<ModelLibrary library={inPlace} />);
   const open = await screen.findByRole('button', { name: 'Open a.step' });
-  expect(screen.queryByRole('button', { name: 'Open Model' })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Open', exact: true })).toBeNull();
   expect((screen.getByRole('button', { name: 'Open b.stl' }) as HTMLButtonElement).disabled).toBe(true);
   expect(screen.getByRole('button', { name: 'Open b.stl' }).textContent).toContain('File unavailable');
   await act(async () => { fireEvent.click(open); });
@@ -40,6 +40,10 @@ it('offers Open Model only where the host has a chooser, and opens and pins thro
   const files = within(screen.getByRole('list', { name: 'Files' })).getAllByRole('listitem');
   expect(files.map(item => within(item).getAllByRole('button')[0].getAttribute('aria-label'))).toEqual(['Open b.stl', 'Open a.step']);
   expect(screen.getByRole('button', { name: 'Unpin b.stl' }).getAttribute('aria-pressed')).toBe('true');
+  // A pinned card's pin is filled; a card has no Remove of its own.
+  expect(screen.getByRole('button', { name: 'Unpin b.stl' }).querySelector('svg')?.getAttribute('fill')).toBe('currentColor');
+  expect(screen.getByRole('button', { name: 'Pin a.step' }).querySelector('svg')?.getAttribute('fill')).toBe('none');
+  expect(screen.queryByRole('button', { name: 'Remove a.step' })).toBeNull();
 });
 
 it('names a card by its file and when it was edited, and switches between a grid and a list', async () => {
@@ -54,6 +58,8 @@ it('names a card by its file and when it was edited, and switches between a grid
   rerender(<ModelLibrary library={library([model('bracket.step')])} layout="list" onLayoutChange={layout => layouts.push(layout)} />);
   expect(screen.getByRole('button', { name: 'List' }).getAttribute('aria-pressed')).toBe('true');
   expect(screen.getByRole('list', { name: 'Files' }).className).toContain('cad-library-list');
+  // A row can be removed.
+  expect(screen.getByRole('button', { name: 'Remove bracket.step' })).toBeTruthy();
 });
 
 it('says how long ago a file changed in the largest unit that is at least one', () => {
@@ -85,7 +91,7 @@ it('asks for a picture of each card on screen that has none or an old one, one a
   render(<ModelLibrary library={library(models, { list })} picture={picture} />);
   await screen.findByRole('button', { name: 'Open new.step' });
   // The first, alone: the next waits for it.
-  expect(picture.mock.calls.map(([item]) => item.name)).toEqual(['new.step']);
+  await waitFor(() => expect(picture.mock.calls.map(([item]) => item.name)).toEqual(['new.step']));
   models = models.map(item => item.name === 'new.step' ? { ...item, thumbnail: 'new.png', pictured: Date.now() / 1000 } : item);
   await act(async () => finish(true));
   expect(list).toHaveBeenCalledTimes(2);

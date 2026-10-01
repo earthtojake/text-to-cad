@@ -19,9 +19,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
  * @property {boolean} canUndo
  * @property {boolean} canRedo
  * @property {boolean} hasContent
- * @property {(listener: () => void) => () => void} subscribeInk  Hears every change to the ink (a
- *   stroke's every point, an erase, an undo) without a render: the session's state changes only
- *   when there comes to be ink, or none.
  * @property {(tool: import('./toolbar.jsx').DrawingTool) => void} selectTool
  * @property {(color: string) => void} selectColor
  * @property {(width: number) => void} selectStrokeWidth
@@ -31,7 +28,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
  * @property {(target: DrawingToolbarTarget | null) => void} onReady
  * @property {(tool: string) => void} onToolChange
  * @property {(color: string) => void} onColorChange
- * @property {(hasContent: boolean, revision?: number) => void} onContentChange
+ * @property {(hasContent: boolean) => void} onContentChange
  * @property {(history: { canUndo: boolean, canRedo: boolean }) => void} onHistoryChange
  */
 
@@ -64,18 +61,7 @@ export function useDrawingSession(active = true, initial = {}) {
     setState(current => current[key] === value ? current : { ...current, [key]: value }), []);
   const onToolChange = useCallback((/** @type {string} */ tool) => report('tool', tool), [report]);
   const onColorChange = useCallback((/** @type {string} */ color) => report('color', color), [report]);
-  const inkListeners = useRef(/** @type {Set<() => void>} */ (new Set()));
-  const inkRevision = useRef(0);
-  const subscribeInk = useCallback((/** @type {() => void} */ listener) => {
-    inkListeners.current.add(listener);
-    return () => { inkListeners.current.delete(listener); };
-  }, []);
-  const onContentChange = useCallback((/** @type {boolean} */ hasContent, /** @type {number} */ revision = 0) => {
-    report('hasContent', hasContent);
-    if (revision === inkRevision.current) return;
-    inkRevision.current = revision;
-    for (const listener of [...inkListeners.current]) listener();
-  }, [report]);
+  const onContentChange = useCallback((/** @type {boolean} */ hasContent) => report('hasContent', hasContent), [report]);
   const onHistoryChange = useCallback((/** @type {{ canUndo: boolean, canRedo: boolean }} */ history) =>
     setState(current => current.canUndo === history.canUndo && current.canRedo === history.canRedo
       ? current : { ...current, ...history }), []);
@@ -88,5 +74,5 @@ export function useDrawingSession(active = true, initial = {}) {
     redo: () => target.current?.redo(),
     clear: () => target.current?.clear(),
   }), []);
-  return { ...state, ...actions, subscribeInk, onReady, onToolChange, onColorChange, onContentChange, onHistoryChange };
+  return { ...state, ...actions, onReady, onToolChange, onColorChange, onContentChange, onHistoryChange };
 }

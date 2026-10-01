@@ -1,5 +1,6 @@
 import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { LoaderCircle } from "lucide-react";
 
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from "@text-to-cad/ui/primitives/context-menu";
 import { ScrollArea } from "@text-to-cad/ui/primitives/scroll-area";
@@ -360,7 +361,9 @@ export function FileTree({ source, activePath, reveal = null, edit = null, onOpe
           name: entry.name,
           kind: entry.kind,
           depth,
-          expanded: open
+          expanded: open,
+          // Open, and its listing not read yet: its row says so until it is.
+          loading: open && children[entry.path] === undefined
         });
         if (open) {
           walk(entry.path, depth + 1);
@@ -553,7 +556,9 @@ export function FileTree({ source, activePath, reveal = null, edit = null, onOpe
               )
             ) : rows.length === 0 && !newEntryRow ? (
               <p className="px-3 py-6 text-center text-xs text-muted-foreground">
-                {children[""] === undefined ? "Reading…" : `${rootName} is empty`}
+                {children[""] === undefined
+                  ? <span role="status" className="inline-flex items-center gap-1.5"><LoaderCircle className="size-3 animate-spin" aria-hidden="true" />Loading files…</span>
+                  : `${rootName} is empty`}
               </p>
             ) : (
               <>
@@ -612,7 +617,9 @@ function TreeRow({ row, active, cursor, onSelect, onRename }) {
     ) : (
       <FileIcon className="size-3.5 shrink-0 text-muted-foreground" path={row.path} />
     );
-  const chevron = <TreeRowChevron expanded={row.expanded} branch={row.kind === "directory"} />;
+  const chevron = row.loading
+    ? <LoaderCircle className="size-3 shrink-0 animate-spin text-muted-foreground" aria-hidden="true" data-tree-row-loading="" />
+    : <TreeRowChevron expanded={row.expanded} branch={row.kind === "directory"} />;
 
   if (onRename) {
     return (
@@ -641,6 +648,7 @@ function TreeRow({ row, active, cursor, onSelect, onRename }) {
       active={active}
       cursor={cursor}
       aria-expanded={row.kind === "directory" ? row.expanded : undefined}
+      aria-busy={row.loading || undefined}
       aria-selected={active}
       data-kind={row.kind}
       data-path={row.path}

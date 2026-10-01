@@ -82,3 +82,17 @@ it("names a panel's handle and its sheet after the panel, never after the toggle
   render(<FileExplorer label="Files" width={280} onWidthChange={vi.fn()} mobile>Content</FileExplorer>);
   expect(screen.getByRole('dialog', { name: 'Files' })).toBeTruthy();
 });
+
+it('the explorer goes when a press lands outside it, but not for the navbar it hangs from or a press inside', () => {
+  const dismiss = vi.fn();
+  render(<div>
+    <header data-viewer-navbar=""><button type="button">Rename</button></header>
+    <FileExplorer label="Files" width={240} onWidthChange={() => {}} onDismiss={dismiss}><button type="button">tree row</button></FileExplorer>
+    <main>model</main>
+  </div>);
+  fireEvent.pointerDown(screen.getByRole('button', { name: 'tree row' }));
+  fireEvent.pointerDown(screen.getByRole('button', { name: 'Rename' }));
+  expect(dismiss).not.toHaveBeenCalled();
+  fireEvent.pointerDown(screen.getByText('model'));
+  expect(dismiss).toHaveBeenCalledTimes(1);
+});

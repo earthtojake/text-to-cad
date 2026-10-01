@@ -55,7 +55,7 @@ export function useStepPanels({
   // and edges (the viewport's menu over that topology), and the one set of actions behind both.
   menuForNode = null, menuForReferences = null, partMenuActions = null,
   treeSelectionDisabled = false, selectMode = 'all', loadingGeometry = false,
-  positionRuntime = null, selectModeMenu = null, onCopyReference = null, onClosePosition = null,
+  positionRuntime = null, selectModeMenu = null, onClosePosition = null,
   // The viewport's hover (`workbench/hoverStore.js`): a large tree under Faces or Edges asks for the
   // topology of the part the pointer rests on.
   hoverStore = null,
@@ -86,8 +86,7 @@ export function useStepPanels({
     return names;
   }, [stepTreeRoot]);
   const partName = useCallback(id => partNames.get(String(id || '')) || '', [partNames]);
-  const copyReference = useLatestCallback(onCopyReference);
-  const reference = useStepReference({ references: selectedReferences, meshData: selectedMeshData, sourceAppearance: selectedSourceAppearance, measurements, partName, onCopy: copyReference });
+  const reference = useStepReference({ references: selectedReferences, meshData: selectedMeshData, sourceAppearance: selectedSourceAppearance, measurements, partName });
   // What every tree row is handed, the same object until something in it changes: the host's
   // actions behind stable identities, its menus and state as they are.
   const toggleTreeNode = useLatestCallback(onToggleTreeNode), selectTreeNode = useLatestCallback(onSelectTreeNode);

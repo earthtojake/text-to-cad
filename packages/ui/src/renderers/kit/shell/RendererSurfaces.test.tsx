@@ -109,7 +109,7 @@ it('Quick Edit sits at the top right with what the host can do, is put away in P
   fireEvent.click(screen.getByRole('button', { name: 'Quick Edit' }));
   const box = screen.getByRole('region', { name: 'Quick Edit' });
   expect(document.activeElement).toBe(within(box).getByRole('textbox', { name: 'Describe your changes' }));
-  expect(within(box).getAllByRole('button').map(button => button.getAttribute('aria-label') || button.textContent)).toEqual(['Clear Quick Edit', 'Copy Prompt', 'Queue', 'Send']);
+  expect(within(box).getAllByRole('button').map(button => button.getAttribute('aria-label') || button.textContent)).toEqual(['Close Quick Edit', 'Copy Prompt', 'Queue', 'Send']);
   act(() => { fireEvent.click(screen.getByRole('button', { name: 'Preview' })); });
   expect(container.querySelector('[data-preview-chrome]')!.contains(container.querySelector('[data-quick-edit]'))).toBe(true);
   expect(container.querySelector('[data-preview-chrome]')!.hasAttribute('inert')).toBe(true);
@@ -150,7 +150,7 @@ it('clipboard destinations keep the snapshot action, and Draw copies its ink fro
   const controls = () => screen.getByRole('region', { name: 'Drawing controls' });
   expect(within(controls()).queryByRole('button', { name: /^Copy/ })).toBeNull();
   act(() => viewport.props.drawing.onContentChange(true, 1));
-  fireEvent.click(within(controls()).getByRole('button', { name: 'Copy' }));
+  fireEvent.click(within(controls()).getByRole('button', { name: 'Copy Drawing' }));
   await waitFor(() => expect(writeImage).toHaveBeenCalledTimes(2));
   // A clipboard destination's Quick Edit copies its prompt, and nothing else.
   expect(within(screen.getByRole('region', { name: 'Quick Edit' })).queryByRole('button', { name: 'Queue' })).toBeNull();
@@ -163,7 +163,7 @@ it('a host with no prompt workflow gets no snapshot, and Quick Edit copies a pro
   expect(navigation.mock.calls.flatMap(([actions]) => actions)).toEqual([]);
   fireEvent.click(screen.getByRole('button', { name: 'Quick Edit' }));
   expect(within(screen.getByRole('region', { name: 'Quick Edit' })).getAllByRole('button').map(button => button.getAttribute('aria-label') || button.textContent))
-    .toEqual(['Clear Quick Edit', 'Copy Prompt']);
+    .toEqual(['Close Quick Edit', 'Copy Prompt']);
 });
 
 it('the renderer is told the camera settled, through what the viewport reports: a recorded move and its own settle', () => {

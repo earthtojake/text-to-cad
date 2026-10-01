@@ -1,86 +1,92 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ArrowUp, Box, Check, MessageCircle, MousePointerClick, X } from "lucide-react";
-import { Button } from "@text-to-cad/ui/primitives/button";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { ArrowUp, Check, Copy, ListPlus, MessageCircle, X } from "lucide-react";
 import { ToolbarButton } from "@text-to-cad/ui/primitives/toolbar-button";
 import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 import { cn } from "@text-to-cad/ui/utils";
 import { usePromptDestination, useViewerHost } from "../../../../host/context.js";
 import { FLOATING_CHROME_SURFACE_CLASS, FLOATING_SURFACE_CLASS } from "../floatingSurface.js";
-import { TOOL_PANEL_BUTTON_CLASS, TOOL_PANEL_HEADING_TEXT_CLASS } from "../ToolPanel.jsx";
+import { TOOL_PANEL_BUTTON_CLASS } from "../ToolPanel.jsx";
 import { copiedQuickEdit, createQuickEditContext, quickEditSelection, sketchName } from "./quickEditPrompt.js";
 
 const EMPTY = Object.freeze([]);
-// The sketch's chip is redrawn once the ink has been still this long, not on every stroke's point.
-const THUMBNAIL_DELAY_MS = 350;
 const DONE_MS = 1200;
-// A selection the person made follows their press in this view; one an agent makes (the live
-// controller's `select`) follows none, and opens nothing: it must never take their keyboard.
+// A press of the person's in this view leads the selection it made; an agent's selection (the live
+// controller's `select`) follows none, and opens the box without taking their keyboard.
 const PICK_MS = 1500;
-const CHIP_CLASS = "inline-flex h-6 min-w-0 max-w-full items-center gap-1 rounded-md border border-border bg-muted/60 px-1.5 text-tiny text-foreground";
+// The box's size, as the person drags its corner: its width, and the note's height. Unset, it is
+// 15rem wide and the note grows with what is written.
+export const QUICK_EDIT_LIMITS = Object.freeze({ minWidth: 208, maxWidth: 640, minHeight: 56, maxHeight: 320 });
+const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
 const failure = result => (result && (result.status === "failed" || result.status === "cancelled") ? result.message || "The prompt did not go." : "");
 
+/** Each selected reference by its id, one a line: a selector (`o1.1.f2`), or a text range. */
+export function quickEditReferenceIds(selection) {
+  return selection.flatMap(reference => reference.target.kind === "cad-selector"
+    ? reference.target.selectors.map(String)
+    : [reference.label || `${reference.target.start.line}:${reference.target.start.column}–${reference.target.end.line}:${reference.target.end.column}`]);
+}
+
 /**
- * Quick Edit: a person's note about the file on screen, handed to their agent. A standalone
- * toolbar at the viewer's top-right, its one button a speech bubble; pressed, the box opens under
- * it and takes the keyboard — and it opens itself (and takes the keyboard) when a selection or a
- * sketch begins, so a pick leads straight to saying what should change.
+ * Quick Edit: a person's note about the file on screen, handed to their agent. At the viewer's
+ * top-right, a speech-bubble button that becomes the box when it opens, and comes back when it
+ * closes. While the note is empty the box follows what it would carry: it opens when something is
+ * picked or sketched, and closes when that goes. A written note keeps it open until it goes, or
+ * its X clears it (and puts it away until what is picked or sketched changes). It takes the keyboard
+ * when it opens for the person — their pick, their first stroke once the pen lifts, its button —
+ * never for an agent's selection.
  *
- * What goes with the note is shown as chips on top of it, and it follows the view until a button
- * is pressed: the file (always), how many references are selected (`references`, the selection in
- * the prompt grammar — the references themselves travel, not a picture of them), and the view with
- * its sketch while Draw has ink (`sketch`: present while Draw is up, with `ink` once it has some,
- * and `subscribe` hearing the ink change). The note itself
- * stays as it is written; the X clears it and closes the box, and the toolbar button hides the
- * box with the note kept — and then it stays hidden, opening itself no more, until that button
- * opens it again.
- *
- * The buttons, bottom-right, are the ones this host can carry out, and the rightmost is the
- * primary one, which Enter presses (Shift+Enter is a new line): Copy Prompt always — the note as
- * text for the person to paste into their agent's prompt box, its references as copied references
- * are spelled (`referencePath`) and its sketch saved as a file it names (`host.attachments`);
- * Queue where the destination is a composer (the host's context for the next message); Send where
- * the host can post a message now (`promptContext.send`). Each clears and closes the box once it
- * has gone; a failure keeps the note and says why.
+ * Its header names what goes with the note — the selected references (`references`, the selection
+ * in the prompt grammar; their ids on hover) and the view with its sketch while Draw has ink
+ * (`sketch`). The file always goes and is not named. The buttons, bottom-right, are the ones this
+ * host can carry out, the rightmost primary and pressed by Enter (Shift+Enter is a new line): Copy
+ * Prompt always — the note as text to paste into an agent's prompt box, its references as copied
+ * references are spelled (`referencePath`) and its sketch saved as a file it names
+ * (`host.attachments`); Queue where the destination is a composer (the host's context for the next
+ * message); Send where the host can post a message now (`promptContext.send`). Each clears and
+ * closes the box once it has gone; a failure keeps the note and says why. Its corner resizes it
+ * (`size`/`onResize` hold that across files; without them it keeps its own).
  *
  * @param {{ resource: import("@text-to-cad/core/prompt").ResourceRef,
  *   references?: readonly import("@text-to-cad/core/prompt").PromptReference[],
- *   sketch?: { ink: boolean, capture(): Promise<Blob>, subscribe(listener: () => void): () => void } | null,
+ *   sketch?: { ink: boolean, capture(): Promise<Blob> } | null,
  *   referencePath?: (path: string) => string, onCopy?: () => boolean, onEscape?: () => unknown, disabled?: boolean,
+ *   size?: { width: number, height: number } | null, onResize?: (size: { width: number, height: number }) => void,
  *   className?: string, style?: import("react").CSSProperties }} props
  *   `onCopy`: the viewer's own copy (⌘C / Ctrl+C: the selection's references, or the drawing),
  *   which the key still reaches from the box while none of the note is selected. `onEscape`: the
  *   viewer's own Escape (clearing the selection), which an empty box passes on as it closes; a box
  *   with a note keeps it, and Escape only hands the keyboard back to the view.
  */
-export default function QuickEdit({ resource, references = EMPTY, sketch = null, referencePath, onCopy, onEscape, disabled = false, className, style }) {
+export default function QuickEdit({ resource, references = EMPTY, sketch = null, referencePath, onCopy, onEscape, disabled = false,
+  size: heldSize, onResize, className, style }) {
   const host = useViewerHost();
   const destination = usePromptDestination();
-  const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const [pending, setPending] = useState("");
   const [error, setError] = useState("");
   const [done, setDone] = useState(false);
-  const [focusRequest, setFocusRequest] = useState(0);
+  // Opened with its button, with or without anything to carry.
+  const [asked, setAsked] = useState(false);
+  // What was attached when the person put the box away: it stays away until that changes.
+  const [dismissed, setDismissed] = useState(null);
+  const [ownSize, setOwnSize] = useState(null);
+  const size = heldSize === undefined ? ownSize : heldSize;
+  const resize = onResize || setOwnSize;
   const field = useRef(null);
+  const box = useRef(null);
   const root = useRef(null);
   const selection = useMemo(() => quickEditSelection(references), [references]);
+  const referenceIds = useMemo(() => quickEditReferenceIds(selection), [selection]);
+  const sketching = Boolean(sketch?.ink);
+  const attached = referenceIds.length > 0 || sketching;
+  const attachedKey = JSON.stringify([referenceIds, sketching]);
+  const written = Boolean(text.trim());
+  const open = written || asked || (attached && dismissed !== attachedKey);
+  // Put away, it stays away only while what it would carry stays as it was: any change ends that.
+  useEffect(() => { setDismissed(current => (current !== null && current !== attachedKey ? null : current)); }, [attachedKey]);
 
-  // Opening takes the keyboard, however it opens.
-  const reveal = useCallback(() => { setOpen(true); setError(""); setFocusRequest(count => count + 1); }, []);
-  useLayoutEffect(() => { if (focusRequest) field.current?.focus({ preventScroll: true }); }, [focusRequest]);
-  const openRef = useRef(open);
-  openRef.current = open;
-  // Put away with its own button, the box stays away until that button opens it again: the
-  // person said they did not want it now. Everything else that closes it leaves it to open itself.
-  const putAway = useRef(false);
-  const autoOpen = useCallback(() => { if (!openRef.current && !putAway.current) reveal(); }, [reveal]);
-  const toggle = () => {
-    putAway.current = open;
-    if (open) setOpen(false); else reveal();
-  };
-  // The person's presses: a sketch begins mid-stroke, and the box waits for the pen to lift before
-  // it takes the keyboard; and a selection opens it only when it follows a press in this view.
+  // The person's presses: a stroke is under way while one is down, and a pick follows one in this view.
   const pressed = useRef(false);
   const lastPress = useRef(-Infinity);
   useEffect(() => {
@@ -101,58 +107,38 @@ export default function QuickEdit({ resource, references = EMPTY, sketch = null,
       window.removeEventListener("pointercancel", up, true);
     };
   }, []);
-  // A selection begun (something picked where nothing was) right after the person's press in this
-  // view opens the box; so does a sketch begun, below.
-  const selecting = selection.length > 0;
-  const wasSelecting = useRef(selecting);
-  useEffect(() => {
-    const began = selecting && !wasSelecting.current;
-    wasSelecting.current = selecting;
-    if (began && performance.now() - lastPress.current < PICK_MS) autoOpen();
-  }, [selecting, autoOpen]);
-  // Once per sketch: the first ink of a Draw session, not the ink an Undo takes away and a Redo
-  // puts back.
-  const drawing = Boolean(sketch);
-  const sketching = Boolean(sketch?.ink);
-  const sketched = useRef(sketching);
-  useEffect(() => {
-    if (!drawing) { sketched.current = false; return undefined; }
-    if (!sketching || sketched.current) return undefined;
-    sketched.current = true;
-    if (!pressed.current) { autoOpen(); return undefined; }
-    const lifted = () => autoOpen();
-    window.addEventListener("pointerup", lifted, { once: true });
-    return () => window.removeEventListener("pointerup", lifted);
-  }, [drawing, sketching, autoOpen]);
 
-  // The sketch's chip: the view with its ink as it will go, redrawn once the ink is still.
-  const [thumbnail, setThumbnail] = useState("");
-  const thumbnailUrl = useRef("");
-  const showThumbnail = useCallback(url => {
-    if (thumbnailUrl.current) URL.revokeObjectURL(thumbnailUrl.current);
-    thumbnailUrl.current = url;
-    setThumbnail(url);
-  }, []);
-  useEffect(() => () => { if (thumbnailUrl.current) URL.revokeObjectURL(thumbnailUrl.current); }, []);
-  const sketchRef = useRef(sketch);
-  sketchRef.current = sketch;
-  useEffect(() => {
-    if (!open || !sketching) { showThumbnail(""); return undefined; }
-    let current = true;
-    let timer = 0;
-    const redraw = () => {
-      clearTimeout(timer);
-      timer = setTimeout(() => {
-        Promise.resolve().then(() => sketchRef.current?.capture())
-          .then(blob => { if (current && blob) showThumbnail(URL.createObjectURL(blob)); })
-          // A chip without its picture is still the sketch's.
-          .catch(() => {});
-      }, THUMBNAIL_DELAY_MS);
+  // Opening for the person takes the keyboard: now, and again once the press that opened it has
+  // finished, since a view that keeps its own keys focuses itself as a pick lands. A field the
+  // person has moved to since keeps it.
+  const takeKeyboard = useCallback(() => {
+    const focus = () => {
+      const note = field.current;
+      const active = document.activeElement;
+      const typing = active && active !== note && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.isContentEditable);
+      if (note && active !== note && !typing) note.focus({ preventScroll: true });
     };
-    redraw();
-    const stop = sketchRef.current?.subscribe(redraw);
-    return () => { current = false; clearTimeout(timer); stop?.(); };
-  }, [open, sketching, showThumbnail]);
+    focus();
+    setTimeout(focus, 0);
+  }, []);
+  const wasOpen = useRef(open);
+  const askedNow = useRef(false);
+  useEffect(() => {
+    const opened = open && !wasOpen.current;
+    wasOpen.current = open;
+    if (!opened) return undefined;
+    if (askedNow.current) { askedNow.current = false; takeKeyboard(); return undefined; }
+    // Ink is only ever the person's; a selection is theirs when it follows their press.
+    if (!sketching && performance.now() - lastPress.current >= PICK_MS) return undefined;
+    // A sketch opens it mid-stroke; the keyboard waits for the pen to lift.
+    if (pressed.current) {
+      const lifted = () => takeKeyboard();
+      window.addEventListener("pointerup", lifted, { once: true });
+      return () => window.removeEventListener("pointerup", lifted);
+    }
+    takeKeyboard();
+    return undefined;
+  }, [open, sketching, takeKeyboard]);
 
   useEffect(() => {
     if (!done) return undefined;
@@ -163,9 +149,9 @@ export default function QuickEdit({ resource, references = EMPTY, sketch = null,
   const canQueue = destination.kind === "composer" && destination.available;
   const canSend = typeof host.promptContext.send === "function";
   const spell = referencePath || (path => path);
-  const fileName = String(resource.kind === "url" ? resource.url : resource.path).split("/").pop();
-  const ready = Boolean(text.trim()) && !pending && !disabled;
+  const ready = written && !pending && !disabled;
 
+  const putAway = () => { setText(""); setError(""); setAsked(false); setDismissed(attachedKey); };
   // Everything happens inside the press: the host binds its destination (and the clipboard its
   // write) before the picture has finished encoding.
   const run = action => {
@@ -188,20 +174,18 @@ export default function QuickEdit({ resource, references = EMPTY, sketch = null,
     Promise.resolve(outcome).then(result => {
       const message = failure(result);
       if (message) throw new Error(message);
-      setText("");
-      setOpen(false);
+      putAway();
       setDone(true);
     }).catch(caught => setError(caught instanceof Error ? caught.message : String(caught)))
       .finally(() => setPending(""));
   };
   const actions = [
-    { id: "copy", label: "Copy Prompt", hint: "Copies this prompt: paste it into your agent's prompt box" },
-    canQueue ? { id: "queue", label: "Queue", hint: "Adds this to your next message" } : null,
-    canSend ? { id: "send", label: "Send", hint: "Sends this to your agent now" } : null,
+    { id: "copy", label: "Copy Prompt", hint: "Copy prompt", Icon: Copy },
+    canQueue ? { id: "queue", label: "Queue", hint: "Add to your next message", Icon: ListPlus } : null,
+    canSend ? { id: "send", label: "Send", hint: "Send now", Icon: ArrowUp } : null,
   ].filter(Boolean);
   const primary = actions.at(-1).id;
 
-  const clear = () => { setText(""); setError(""); setOpen(false); };
   const onKeyDown = event => {
     const target = event.currentTarget;
     const copyKey = event.key.toLowerCase() === "c" && (event.metaKey || event.ctrlKey) && !event.altKey && !event.shiftKey;
@@ -216,65 +200,84 @@ export default function QuickEdit({ resource, references = EMPTY, sketch = null,
       event.preventDefault();
       target.blur();
       target.closest("[data-cad-surface]")?.focus({ preventScroll: true });
-      if (!text.trim()) { setOpen(false); setError(""); onEscape?.(); }
+      if (!written) { putAway(); onEscape?.(); }
     }
   };
-  // What is picked, one by one: a reference may name several (`file#o1.1,o1.2`).
-  const referenceCount = selection.reduce((count, reference) => count + (reference.target.kind === "cad-selector" ? reference.target.selectors.length : 1), 0);
 
-  return <div ref={root} className={cn("pointer-events-none flex flex-col items-end gap-2", className)} style={style} data-quick-edit="">
-    <div role="toolbar" aria-label="Quick Edit" className={cn("pointer-events-auto inline-flex rounded-md p-1", FLOATING_CHROME_SURFACE_CLASS)}>
-      <ToolbarButton label="Quick Edit" active={open} aria-pressed={open} aria-expanded={open} disabled={disabled}
-        onClick={toggle}>
-        {done ? <Check className="size-3.5" aria-hidden="true" /> : <MessageCircle className="size-3.5" aria-hidden="true" />}
-      </ToolbarButton>
-    </div>
-    {open ? <section aria-label="Quick Edit" data-quick-edit-box=""
+  // The corner, bottom-left since the box hangs from the top-right: dragging it out grows the box
+  // leftward and its note downward.
+  const startResize = event => {
+    if (event.button !== 0 || !box.current || !field.current) return;
+    event.preventDefault();
+    const handle = event.currentTarget;
+    const start = { x: event.clientX, y: event.clientY, width: box.current.offsetWidth, height: field.current.offsetHeight };
+    handle.setPointerCapture?.(event.pointerId);
+    const move = moved => resize({
+      width: clamp(Math.round(start.width + start.x - moved.clientX), QUICK_EDIT_LIMITS.minWidth, QUICK_EDIT_LIMITS.maxWidth),
+      height: clamp(Math.round(start.height + moved.clientY - start.y), QUICK_EDIT_LIMITS.minHeight, QUICK_EDIT_LIMITS.maxHeight),
+    });
+    const end = () => {
+      handle.removeEventListener("pointermove", move);
+      handle.removeEventListener("pointerup", end);
+      handle.removeEventListener("pointercancel", end);
+    };
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener("pointerup", end);
+    handle.addEventListener("pointercancel", end);
+  };
+
+  const referenceCount = referenceIds.length;
+  return <div ref={root} className={cn("pointer-events-none flex flex-col items-end", className)} style={style} data-quick-edit="">
+    {open ? <section ref={box} aria-label="Quick Edit" data-quick-edit-box=""
+      style={size ? { width: size.width } : undefined}
       // A narrow viewer (a phone) gets it across its whole width, over the tool stack rather than beside it.
-      className={cn("pointer-events-auto flex w-[min(20rem,100%)] flex-col gap-1.5 rounded-lg p-2 text-tiny @max-md/cad-viewport:w-full", FLOATING_SURFACE_CLASS)}>
-      <div className="flex min-h-5 items-center gap-1">
-        <h3 className={cn("min-w-0 flex-1 truncate pl-0.5", TOOL_PANEL_HEADING_TEXT_CLASS)}>Quick Edit</h3>
-        <button type="button" aria-label="Clear Quick Edit" className={TOOL_PANEL_BUTTON_CLASS} onClick={clear}>
+      className={cn("pointer-events-auto relative flex max-w-full origin-top-right flex-col gap-2 rounded-lg p-2.5 text-tiny animate-in fade-in-0 zoom-in-95 duration-150 @max-md/cad-viewport:!w-full",
+        !size && "w-[min(15rem,100%)]", FLOATING_SURFACE_CLASS)}>
+      <div className="flex min-h-5 min-w-0 items-center gap-2">
+        <h3 className="shrink-0 pl-0.5 text-xs font-medium leading-5 text-foreground">Quick Edit</h3>
+        {/* What goes with the note, as it is now; the file always does. */}
+        <p className="flex min-w-0 flex-1 items-center gap-1.5 truncate text-tiny text-muted-foreground" data-quick-edit-attachments="">
+          {referenceCount ? <TooltipHint content={<span className="block whitespace-pre-line text-left">{referenceIds.join("\n")}</span>}>
+            <span tabIndex={0} className="rounded-sm outline-none focus-visible:ring-2 focus-visible:ring-ring/45" data-quick-edit-chip="references">
+              {referenceCount} {referenceCount === 1 ? "ref" : "refs"}
+            </span>
+          </TooltipHint> : null}
+          {referenceCount && sketching ? <span aria-hidden="true">·</span> : null}
+          {sketching ? <span data-quick-edit-chip="sketch">drawing</span> : null}
+        </p>
+        <button type="button" aria-label="Close Quick Edit" className={TOOL_PANEL_BUTTON_CLASS} onClick={putAway}>
           <X className="size-3" aria-hidden="true" />
         </button>
       </div>
-      {/* What goes with the note, as it is now. */}
-      <div className="flex min-w-0 flex-wrap items-center gap-1" aria-label="Attached" data-quick-edit-attachments="">
-        <TooltipHint content={spell(resource.kind === "url" ? resource.url : resource.path)}>
-          <span className={CHIP_CLASS} data-quick-edit-chip="file"><Box className="size-3 shrink-0 opacity-70" aria-hidden="true" /><span className="min-w-0 truncate">{fileName}</span></span>
-        </TooltipHint>
-        {referenceCount ? <span className={CHIP_CLASS} data-quick-edit-chip="references">
-          <MousePointerClick className="size-3 shrink-0 opacity-70" aria-hidden="true" />{referenceCount} {referenceCount === 1 ? "reference" : "references"}
-        </span> : null}
-        {sketching ? <span className={cn(CHIP_CLASS, "pl-0.5")} data-quick-edit-chip="sketch">
-          {thumbnail ? <img src={thumbnail} alt="" className="h-4.5 w-7 rounded-sm object-cover" /> : <span className="h-4.5 w-7 rounded-sm bg-muted" aria-hidden="true" />}
-          Sketch
-        </span> : null}
-      </div>
       <textarea ref={field} value={text} rows={2} placeholder="Describe your changes" aria-label="Describe your changes"
-        className="max-h-40 min-h-14 w-full resize-none rounded-md border border-input bg-background/80 px-2 py-1.5 text-xs leading-5 text-foreground outline-none [field-sizing:content] placeholder:text-muted-foreground focus-visible:ring-2 focus-visible:ring-ring/45"
+        style={size ? { height: size.height } : undefined}
+        className={cn("w-full resize-none rounded-md border border-input bg-background/80 px-2 py-1.5 text-xs leading-5 text-foreground outline-none transition-[border-color,box-shadow] placeholder:text-muted-foreground focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:focus:border-blue-400 dark:focus:ring-blue-400/20",
+          size ? "[field-sizing:fixed]" : "max-h-40 min-h-14 [field-sizing:content]")}
         onChange={event => { setText(event.target.value); setError(""); }} onKeyDown={onKeyDown} />
       {error ? <p role="alert" className="text-tiny text-destructive">{error}</p> : null}
       <div className="flex items-center justify-end gap-1">
-        {actions.map(action => {
-          const main = action.id === primary;
-          const busy = pending === action.id;
-          if (action.id === "send") {
-            return <TooltipHint key={action.id} content={action.hint} side="bottom">
-              <button type="button" aria-label="Send" disabled={!ready} aria-busy={busy || undefined} onClick={() => run("send")}
-                className="flex size-7 shrink-0 items-center justify-center rounded-full bg-foreground text-background transition hover:bg-foreground/85 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45 disabled:bg-muted-foreground/35 disabled:text-background/80">
-                <ArrowUp className="size-4" strokeWidth={2.25} aria-hidden="true" />
-              </button>
-            </TooltipHint>;
-          }
-          return <TooltipHint key={action.id} content={action.hint} side="bottom">
-            <Button type="button" size="xs" variant={main ? "default" : "ghost"} disabled={!ready} aria-busy={busy || undefined}
-              className={cn("h-7 px-2.5 text-xs", !main && "text-muted-foreground hover:text-foreground")} onClick={() => run(action.id)}>
-              {action.label}
-            </Button>
+        {actions.map(({ id, label, hint, Icon }) => {
+          const main = id === primary;
+          return <TooltipHint key={id} content={hint} side="bottom">
+            <button type="button" aria-label={label} disabled={!ready} aria-busy={pending === id || undefined} onClick={() => run(id)}
+              data-quick-edit-action={id}
+              className={cn("flex size-7 shrink-0 items-center justify-center rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45",
+                main
+                  ? "bg-foreground text-background hover:bg-foreground/85 disabled:bg-muted-foreground/35 disabled:text-background/80"
+                  : "text-muted-foreground hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-45")}>
+              <Icon className="size-3.5" strokeWidth={main ? 2.25 : 2} aria-hidden="true" />
+            </button>
           </TooltipHint>;
         })}
       </div>
-    </section> : null}
+      <div aria-hidden="true" onPointerDown={startResize} data-quick-edit-resize=""
+        className="group/resize absolute bottom-0 left-0 flex size-3.5 cursor-nesw-resize touch-none items-end justify-start p-0.5 @max-md/cad-viewport:hidden">
+        <svg viewBox="0 0 8 8" className="size-2 text-muted-foreground/50 group-hover/resize:text-muted-foreground"><path d="M1 2L6 7M1 5L3 7" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" fill="none" /></svg>
+      </div>
+    </section> : <div role="toolbar" aria-label="Quick Edit" className={cn("pointer-events-auto inline-flex rounded-md p-1", FLOATING_CHROME_SURFACE_CLASS)}>
+      <ToolbarButton label="Quick Edit" disabled={disabled} onClick={() => { askedNow.current = true; setAsked(true); setDismissed(null); }}>
+        {done ? <Check className="size-3.5" aria-hidden="true" /> : <MessageCircle className="size-3.5" aria-hidden="true" />}
+      </ToolbarButton>
+    </div>}
   </div>;
 }

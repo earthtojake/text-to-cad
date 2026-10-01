@@ -304,7 +304,7 @@ top, then "Files" with its search and a grid/list switch (kept in the tab's
 settings), and the models every CAD view shares that sit under the folder this
 Viewer serves — pinned first — as solid cards (a picture over the file's name and
 when it was edited) or rows. It is drawn on the viewport's own colour. Opening one
-shows it in place. There is no Open Model: the files are in the explorer. The file
+shows it in place. There is no Open: the files are in the explorer. The file
 on screen joins the library through `GET|POST /__cad/recents`, with a picture taken
 once it has settled — the model framed whole from the default direction, whatever
 the camera — served by `GET /__cad/recents/thumbnail`; `cadgen.viewer.recents` keeps

@@ -282,11 +282,11 @@ test("catalog arrival restarts the initial pending directory listing", async () 
   await page.goto(`http://127.0.0.1:${server.address().port}/?initialList=1`);
   await waitValue('root-a original');
   await page.getByTestId('tree-toggle').click();
-  await page.getByText('Reading…', { exact: true }).waitFor();
+  await page.getByText('Loading files…', { exact: true }).waitFor();
   await page.evaluate(() => window.harness.a.add('catalog-file.txt'));
   await page.locator('[role="treeitem"][data-path="catalog-file.txt"]').waitFor();
   await page.locator('[role="treeitem"][data-path="notes.txt"]').waitFor();
-  assert.equal(await page.getByText('Reading…', { exact: true }).count(), 0);
+  assert.equal(await page.getByText('Loading files…', { exact: true }).count(), 0);
   assert.ok(await page.evaluate(() => window.harness.events.filter(event => event === 'root-a:list').length >= 2));
 });
 

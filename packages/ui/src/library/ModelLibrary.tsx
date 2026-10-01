@@ -4,8 +4,6 @@ import type { CadWorkspaceService } from "@text-to-cad/core/client";
 import { Button } from "../primitives/button.jsx";
 import { Input } from "../primitives/input.jsx";
 import { ScrollArea as ScrollRegion } from "../primitives/scroll-area.jsx";
-import { TooltipHint } from "../primitives/tooltip.jsx";
-import { useSceneBackdrop } from "../renderers/kit/look/useSceneBackdrop.js";
 import type { LibraryLayout } from "../tab-store/tabRecord.js";
 import wordmark from "../assets/logo-cad.svg";
 
@@ -118,17 +116,16 @@ function Thumbnail<Model extends LibraryModel>({ item, load, seen }: { item: Mod
 /**
  * The host's home: the models opened before, from every view, to open again. The same page in
  * every app — the CAD wordmark centred at its top, then "Files" with its search, its grid/list
- * switch and, where the host has a chooser, Open Model; then the models, pinned first, as solid
- * cards (a picture over the name and when the file was edited) or as rows. It is drawn on the
- * viewport's own colour, so the page and the model it opens into are one surface.
+ * switch and, where the host has a chooser, Open; then the models, pinned first, as solid cards (a
+ * picture over the name and when the file was edited) or as rows. A card can be pinned (its pin
+ * filled); a row can also be removed. It is drawn on the page's own colour, the navbar's.
  *
  * Opening is the host's; nothing here waits visibly. A card on screen that wants a picture
  * (`wantsPicture`) is handed to `picture`, where the viewer draws one out of sight — one card at a
  * time, each once while the page is up — and the list is read again once one is kept.
  */
-export function ModelLibrary<Model extends LibraryModel>({ library, colorScheme = "light", layout = "grid", onLayoutChange, failure = "", picture }: {
+export function ModelLibrary<Model extends LibraryModel>({ library, layout = "grid", onLayoutChange, failure = "", picture }: {
   library: ModelLibrarySource<Model>;
-  colorScheme?: "light" | "dark";
   /** Grid or list; the host keeps the choice (the tab's settings). */
   layout?: LibraryLayout;
   onLayoutChange?(layout: LibraryLayout): void;
@@ -140,7 +137,6 @@ export function ModelLibrary<Model extends LibraryModel>({ library, colorScheme 
   const [items, setItems] = useState<readonly Model[] | null>(null);
   const [query, setQuery] = useState("");
   const [error, setError] = useState("");
-  const { backdrop } = useSceneBackdrop(colorScheme);
   // The host's library as it is now: a host may hand a new one each render.
   const current = useRef(library);
   current.current = library;
@@ -191,32 +187,32 @@ export function ModelLibrary<Model extends LibraryModel>({ library, colorScheme 
   // The host lists pinned models first; a search keeps that order.
   const shown = filterModels(all, searchQuery);
   const now = Date.now();
-  const actions = (item: Model) => <div className="cad-library-actions" data-pinned={item.pinned || undefined}>
-    <TooltipHint content={item.pinned ? "Unpin" : "Pin"}><Button variant="ghost" size="icon-xs" aria-label={`${item.pinned ? "Unpin" : "Pin"} ${item.name}`} aria-pressed={item.pinned} onClick={() => change(item.pinned ? "unpin" : "pin", item)}><Pin aria-hidden="true" /></Button></TooltipHint>
-    <TooltipHint content="Remove"><Button variant="ghost" size="icon-xs" aria-label={`Remove ${item.name}`} onClick={() => change("remove", item)}><X aria-hidden="true" /></Button></TooltipHint>
+  // A card pins; a row pins and removes.
+  const actions = (item: Model, removable: boolean) => <div className="cad-library-actions" data-pinned={item.pinned || undefined}>
+    <Button variant="ghost" size="icon-xs" aria-label={`${item.pinned ? "Unpin" : "Pin"} ${item.name}`} aria-pressed={item.pinned} onClick={() => change(item.pinned ? "unpin" : "pin", item)}><Pin aria-hidden="true" fill={item.pinned ? "currentColor" : "none"} /></Button>
+    {removable ? <Button variant="ghost" size="icon-xs" aria-label={`Remove ${item.name}`} onClick={() => change("remove", item)}><X aria-hidden="true" /></Button> : null}
   </div>;
   const status = (item: Model) => item.missing ? "File unavailable" : editedLabel(item.modified, now);
   const models = layout === "list"
     ? <ul className="cad-library-list" aria-label="Files">{shown.map(item => <li key={item.path} className="cad-library-row" data-missing={item.missing || undefined}>
-      <TooltipHint content={item.path}><button type="button" className="cad-library-open" disabled={item.missing} aria-label={`Open ${item.name}`} onClick={() => open(item)}>
+      <button type="button" className="cad-library-open" disabled={item.missing} aria-label={`Open ${item.name}`} onClick={() => open(item)}>
         <Thumbnail item={item} load={load} seen={seen} />
         <span className="cad-library-name">{item.name}</span>
         <span className="cad-library-status">{status(item)}</span>
-      </button></TooltipHint>
-      {actions(item)}
+      </button>
+      {actions(item, true)}
     </li>)}</ul>
     : <ul className="cad-library-grid" aria-label="Files">{shown.map(item => <li key={item.path} className="cad-library-card" data-missing={item.missing || undefined}>
-      <TooltipHint content={item.path}><button type="button" className="cad-library-open" disabled={item.missing} aria-label={`Open ${item.name}`} onClick={() => open(item)}>
+      <button type="button" className="cad-library-open" disabled={item.missing} aria-label={`Open ${item.name}`} onClick={() => open(item)}>
         <Thumbnail item={item} load={load} seen={seen} />
         <span className="cad-library-body">
           <span className="cad-library-name">{item.name}</span>
           <span className="cad-library-status">{status(item)}</span>
         </span>
-      </button></TooltipHint>
-      {actions(item)}
+      </button>
+      {actions(item, false)}
     </li>)}</ul>;
-  return <ScrollArea className="cad-library h-full text-ui" style={{ "--cad-library-backdrop": backdrop } as CSSProperties}
-    viewportClassName="cad-library-viewport" data-library-layout={layout}>
+  return <ScrollArea className="cad-library h-full text-ui" viewportClassName="cad-library-viewport" data-library-layout={layout}>
     <main className="cad-library-content" aria-label="CAD models">
       <img className="cad-library-wordmark" src={wordmark} alt="CAD" />
       <div className="cad-library-toolbar">
@@ -227,10 +223,10 @@ export function ModelLibrary<Model extends LibraryModel>({ library, colorScheme 
             <Input className="h-8" type="search" aria-label="Search models" placeholder="Search" value={query} onChange={(event: ChangeEvent<HTMLInputElement>) => setQuery(event.target.value)} />
           </div> : null}
           {all.length > 0 && onLayoutChange ? <div className="cad-library-layout" role="group" aria-label="Layout">
-            <TooltipHint content="Grid"><Button variant="ghost" size="icon-sm" aria-label="Grid" aria-pressed={layout === "grid"} onClick={() => onLayoutChange("grid")}><LayoutGrid aria-hidden="true" /></Button></TooltipHint>
-            <TooltipHint content="List"><Button variant="ghost" size="icon-sm" aria-label="List" aria-pressed={layout === "list"} onClick={() => onLayoutChange("list")}><List aria-hidden="true" /></Button></TooltipHint>
+            <Button variant="ghost" size="icon-sm" aria-label="Grid" aria-pressed={layout === "grid"} onClick={() => onLayoutChange("grid")}><LayoutGrid aria-hidden="true" /></Button>
+            <Button variant="ghost" size="icon-sm" aria-label="List" aria-pressed={layout === "list"} onClick={() => onLayoutChange("list")}><List aria-hidden="true" /></Button>
           </div> : null}
-          {pick ? <Button size="sm" onClick={pick}><FolderOpen aria-hidden="true" />Open Model</Button> : null}
+          {pick ? <Button size="sm" onClick={pick}><FolderOpen aria-hidden="true" />Open</Button> : null}
         </div>
       </div>
       {(error || failure) ? <div className="cad-library-error" role="alert"><p>{error || failure}</p></div> : null}

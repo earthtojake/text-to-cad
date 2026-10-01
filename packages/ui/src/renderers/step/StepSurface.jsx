@@ -1681,15 +1681,6 @@ function StepSurfaceBody({ view, data }) {
     try { await host.clipboard.writeText(text); return true; }
     catch (error) { shellRef.current?.reportActionError(error instanceof Error ? error.message : "Could not copy reference"); return false; }
   }, [canonicalCopySelectionLines, stepInteractionBlocked, host.clipboard]);
-  // The Reference heading's Copy: the one reference it shows, the way the selection is copied;
-  // with no reference of its own on show (parts alone), the selection.
-  const copyReference = useCallback(async (referenceId) => {
-    if (!referenceId) return copySelectedReferences();
-    const text = copyTextLines(selectionCopyPayload(copyContext, { referenceIds: [referenceId], partIds: [] }).lines, fileRefPrefix).join("\n");
-    if (!text || stepInteractionBlocked) return false;
-    try { await host.clipboard.writeText(text); return true; }
-    catch (error) { shellRef.current?.reportActionError(error instanceof Error ? error.message : "Could not copy reference"); return false; }
-  }, [copySelectedReferences, copyContext, fileRefPrefix, stepInteractionBlocked, host.clipboard]);
   // The tip teaches reference syntax, so it fires on the first pick that yields
   // a reference to copy — a component, a subassembly, or a face/edge. Gating it
   // on topology alone would hide it from anyone who only ever clicks parts.
@@ -3233,7 +3224,6 @@ function StepSurfaceBody({ view, data }) {
   // Under the strip: Select's Features and Reference, Position's joints, then the kept effects.
   const stepPanels = useStepPanels({
     // Select's mode and options: a menu in the Features filter row, beside its fold chevron.
-    onCopyReference: copyReference,
     onClosePosition: () => handleSelectTabToolMode(TAB_TOOL_MODE.REFERENCES),
     // One element until the mode or its options change: the Features panel is memoized.
     selectModeMenu: useMemo(() => <SelectModeMenu mode={selectionFilter} assembly={isAssemblyView} disabled={selectDisabled}

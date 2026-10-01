@@ -602,7 +602,7 @@ files, each `{ version, camera, display, playback, renderer }` (`kit/shell/fileV
 | The selection, measurements, Draw's ink | Empty |
 | Preview and its camera | Off; the tools view's camera is the one kept, and its Playback settings are the file's (`playback`) |
 | The routine, its time and whether it plays | At rest |
-| Quick Edit's note | Empty, its box closed |
+| Quick Edit's note | Empty, its box following what is picked or sketched |
 | The Select mode filter, hover, menus, popovers | Closed |
 
 The rule is one generic one in `readFileView(raw, signatures)`: a slice whose stored
@@ -619,21 +619,22 @@ controls use `host.clipboard`. The viewport only produces screenshot pixels.
 The port and app adapters own delivery and return an acknowledged outcome.
 
 Quick Edit (`kit/tools/quick-edit/QuickEdit.jsx`) is the shared note to the agent:
-a standalone toolbar at the top-right with one button, which `RendererShell` mounts
-for STEP, GLB, mesh and robot files and the DXF renderer mounts itself (a compact
-host gets none). Its box, chips and buttons are the design system's
+a standalone toolbar at the top-right with one button, which becomes its box, and
+which `RendererShell` mounts for STEP, GLB, mesh and robot files and the DXF renderer
+mounts itself (a compact host gets none). Its box, header and buttons are the design system's
 ([Quick Edit](settings-ui.md#quick-edit)); what it can do follows the host
 ([prompt handoff](viewer-host.md#prompt-handoff)), never an app. The renderer hands
 the shell what is selected as `references`, in the prompt grammar (STEP's, under
 Select while its references can be read; the file itself always goes), and the
 shell hands Quick Edit the file, how a copied prompt spells a path
 (`FileSource.referencePath`), the view as a picture, ink included (`captureView`),
-and the viewer's Escape. `quickEditPrompt.js` builds the context at the press, from
+the viewer's Escape, and the box's size as the person drags it, kept across files.
+`quickEditPrompt.js` builds the context at the press, from
 what is live then (`createQuickEditContext`), and the text a copy writes
 (`copiedQuickEdit`, over core's `formatPromptMessage`). Draw hands it the sketch:
-the view with its ink as a picture, and the drawing session's `subscribeInk`, which
-hears the ink change without a React render. Copying without Quick Edit is the
-Reference panel's Copy and Draw's Copy, which write the clipboard directly. See
+whether there is ink, and the view with its ink as a picture. Copying without Quick
+Edit is the Reference panel's Copy and Draw's Copy Drawing, which write the clipboard
+directly. See
 [ViewerHost](viewer-host.md) for lifetime, focus, supported content and clipboard
 representation limits.
 
@@ -1303,13 +1304,13 @@ panned pose when Draw ends.
 A sketch is session-only. It lives in the mounted editor, is never written to
 tab or file state, and is discarded when Draw is deselected, the file changes or
 the renderer unmounts; a restored tab never reopens in Draw. While the sketch has
-ink, the Drawing panel ends in a full-row **Copy**, with the copy shortcut beside it (⌘C or
+ink, the Drawing panel ends in a full-row **Copy Drawing**, with the copy shortcut beside it (⌘C or
 Ctrl+C does the same): the viewport capture with the editor's committed ink
 composited over it viewport-aligned (the ink canvas keeps its own pixel ratio and is
 scaled into the frame; selection handles are not included), written to the clipboard
-as a PNG (`host.clipboard.writeImage`). The same view with its ink is Quick Edit's
-**Sketch**: beginning one opens Quick Edit once the pen lifts, and its chip redraws
-once the ink has been still.
+as a PNG (`host.clipboard.writeImage`). The same view with its ink goes with a
+Quick Edit note: the first ink opens Quick Edit, whose header says **drawing**, and it
+takes the keyboard once the pen lifts; with its note empty it closes when the ink goes.
 
 ### File navbar
 

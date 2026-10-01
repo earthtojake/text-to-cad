@@ -52,7 +52,7 @@ export function useFileNavigation({ source, actions, state, onStateChange, onOpe
   const reconcile = useCallback((changes: readonly FileChange[]) => {
     if (current.current.source !== source) return;
     // The first catalog may arrive while the first root listing is awaiting
-    // it. Keep pending directories too, or that abort leaves "Reading…" forever.
+    // it. Keep pending directories too, or that abort leaves "Loading files…" forever.
     const before = current.current;
     const next = reconcileFileTree(before.listings, before.state.expandedDirectories ?? [], changes);
     const directories = new Set([...Object.keys(next.listings), ...next.expanded, ...requests.current.keys()]);

@@ -36,7 +36,7 @@ reference host `basic-host` does.
 - **The root follows context, as the host's own file tree does.** A model in the
   thread's project (Codex's workspace, or the roots a host lists) browses that
   project's catalog: `workspace`. A model with no project around it — the
-  sidebar's Open Model, a chat with no folder — browses its filesystem: `global`,
+  sidebar's Open, a chat with no folder — browses its filesystem: `global`,
   rooted at `/` or its drive and never walked. Its explorer reads each folder it
   opens (`/__cad/list`) from wherever the model is, up and down, and its catalog
   holds only the file on screen; a hidden folder the file is in still shows, so
@@ -100,7 +100,7 @@ the one the web Viewer shows) over one launch's root, with this host's ports —
 tunnel (which also carries a copied prompt's sketch to the server: `attachments`), its
 chat, its file menu (copy path, copy relative path under a project,
 Reveal through `cad_reveal`), the navbar's links, followed through `ui/open-link`,
-and its library, with Open Model: the desktop's file chooser. With no model it is
+and its library, with Open: the desktop's file chooser, where any file can be chosen. With no model it is
 the home; the navbar's C mark goes back to it (the launch a view opened on, when it
 opened on the home). `App.tsx` frames it (full page, or an inline card with its
 full-size button). In a tab, preview's playbar sits on the line of Codex's
