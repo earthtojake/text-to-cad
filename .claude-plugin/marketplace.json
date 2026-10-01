@@ -10,13 +10,13 @@
     "description": "Give your agent CAD superpowers."
   },
   "description": "Give your agent CAD superpowers.",
-  "version": "0.7.5",
+  "version": "0.7.6",
   "plugins": [
     {
       "name": "cad",
       "source": "./",
       "description": "Give your agent CAD superpowers.",
-      "version": "0.7.5",
+      "version": "0.7.6",
       "author": {
         "name": "earthtojake"
       },
