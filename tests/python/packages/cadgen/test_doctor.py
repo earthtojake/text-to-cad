@@ -39,11 +39,15 @@ def _run(argv: list[str]) -> tuple[int, str, str]:
 
 
 REFUSED = "ImportError: DLL load failed while importing OCP: Access is denied."
+UNSUPPORTED = (
+    "ValueError: op memo requires the cadquery-ocp-novtk distribution for persistent reuse "
+    "(PackageNotFoundError: No package metadata was found for cadquery-ocp-novtk)"
+)
 
 
 class DoctorTests(unittest.TestCase):
     def setUp(self) -> None:
-        patcher = mock.patch.object(doctor, "_probe_kernel", return_value=(doctor.KERNEL_OK, "/site/OCP.pyd"))
+        patcher = mock.patch.object(doctor, "_run_kernel_probe", return_value=(doctor.KERNEL_OK, "/site/OCP.pyd", None))
         patcher.start()
         self.addCleanup(patcher.stop)
 
@@ -58,7 +62,7 @@ class DoctorTests(unittest.TestCase):
         # The release workflow installs the wheel --no-deps and runs doctor: no OCP
         # there is a correct install, and the pin is what brings the kernel.
         missing = "ModuleNotFoundError: No module named 'OCP'"
-        with mock.patch.object(doctor, "_probe_kernel", return_value=(doctor.KERNEL_MISSING, missing)), \
+        with mock.patch.object(doctor, "_run_kernel_probe", return_value=(doctor.KERNEL_MISSING, missing, None)), \
                 TemporaryDirectory() as tmp:
             code, out, err = _run([tmp])
         self.assertEqual(code, 0)
@@ -66,8 +70,19 @@ class DoctorTests(unittest.TestCase):
         self.assertIn("pip install -r requirements.txt", out)
         self.assertNotIn("FAILED", err)
 
+    def test_an_ocp_cadgen_refuses_reads_unsupported_not_ok_and_exits_0(self) -> None:
+        # The text report and --json give one verdict: OCP imports, but
+        # cadgen's own kernel check refuses it, in that check's words.
+        probe = (doctor.KERNEL_OK, "/site/OCP/__init__.py", UNSUPPORTED)
+        with mock.patch.object(doctor, "_run_kernel_probe", return_value=probe), TemporaryDirectory() as tmp:
+            code, out, err = _run([tmp])
+        self.assertEqual(code, 0, "only a kernel that fails to load exits 4")
+        self.assertIn(f"kernel   unsupported: {UNSUPPORTED}", out)
+        self.assertNotIn("kernel   OK", out)
+        self.assertNotIn("FAILED", err)
+
     def test_a_kernel_that_will_not_load_exits_4(self) -> None:
-        with mock.patch.object(doctor, "_probe_kernel", return_value=(doctor.KERNEL_FAILED, REFUSED)), \
+        with mock.patch.object(doctor, "_run_kernel_probe", return_value=(doctor.KERNEL_FAILED, REFUSED, None)), \
                 mock.patch.object(sys, "platform", "linux"), TemporaryDirectory() as tmp:
             code, out, err = _run([tmp])
         self.assertEqual(code, 4)
@@ -77,7 +92,7 @@ class DoctorTests(unittest.TestCase):
         self.assertIn("pin      none found", out, "the rest of the report still prints")
 
     def test_a_refused_load_on_windows_names_smart_app_control(self) -> None:
-        with mock.patch.object(doctor, "_probe_kernel", return_value=(doctor.KERNEL_FAILED, REFUSED)), \
+        with mock.patch.object(doctor, "_run_kernel_probe", return_value=(doctor.KERNEL_FAILED, REFUSED, None)), \
                 mock.patch.object(sys, "platform", "win32"), TemporaryDirectory() as tmp:
             code, _, err = _run([tmp])
         self.assertEqual(code, 4)
@@ -86,7 +101,7 @@ class DoctorTests(unittest.TestCase):
 
     def test_a_pin_mismatch_outranks_the_kernel(self) -> None:
         # The install is wrong before the kernel is: fixing the pin may fix both.
-        with mock.patch.object(doctor, "_probe_kernel", return_value=(doctor.KERNEL_FAILED, REFUSED)), \
+        with mock.patch.object(doctor, "_run_kernel_probe", return_value=(doctor.KERNEL_FAILED, REFUSED, None)), \
                 TemporaryDirectory() as tmp:
             (Path(tmp) / "requirements.txt").write_text("cadgen==0.0.0.dev0\n", encoding="utf-8")
             code, _, err = _run([tmp])
@@ -154,13 +169,121 @@ class DoctorTests(unittest.TestCase):
                     self.assertIsNone(doctor._editable_source())
 
 
+class DoctorJsonTests(unittest.TestCase):
+    """``--json``: one object a program reads (the desktop's runtime probe).
+
+    Its ``kernel`` is the build path's verdict, not just ``import OCP``: an OCP
+    from a distribution cadgen does not build against imports and then fails
+    the first STEP, so it is ``ok: false`` in cadgen's own words.
+    """
+
+    def report(self, probe: tuple[str, str, str | None]) -> tuple[int, dict]:
+        import json
+
+        with mock.patch.object(doctor, "_run_kernel_probe", return_value=probe), TemporaryDirectory() as tmp:
+            code, out, err = _run([tmp, "--json"])
+        self.assertEqual(err, "")
+        return code, json.loads(out)
+
+    def test_a_kernel_cadgen_builds_with_is_ok(self) -> None:
+        code, report = self.report((doctor.KERNEL_OK, "/site/OCP/__init__.py", None))
+        self.assertEqual(code, 0)
+        self.assertEqual(report["version"], cadgen.__version__)
+        self.assertEqual(report["kernel"], {"ok": True, "state": "ok", "path": "/site/OCP/__init__.py", "error": None})
+        self.assertEqual(report["pin"], {"state": "none", "file": None, "pinned": None})
+        self.assertEqual(set(report["viewer"]), {"ok", "error"})
+
+    def test_an_ocp_cadgen_refuses_is_not_ok_in_the_checks_own_words(self) -> None:
+        code, report = self.report((doctor.KERNEL_OK, "/site/OCP/__init__.py", UNSUPPORTED))
+        self.assertEqual(code, 0, "the exit code is the text report's")
+        self.assertEqual(report["kernel"]["ok"], False)
+        self.assertEqual(report["kernel"]["state"], "unsupported")
+        self.assertEqual(report["kernel"]["error"], UNSUPPORTED)
+
+    def test_a_missing_or_refused_kernel_carries_the_interpreters_line(self) -> None:
+        missing = "ModuleNotFoundError: No module named 'OCP'"
+        code, report = self.report((doctor.KERNEL_MISSING, missing, None))
+        self.assertEqual((code, report["kernel"]), (0, {"ok": False, "state": "missing", "path": None, "error": missing}))
+        code, report = self.report((doctor.KERNEL_FAILED, REFUSED, None))
+        self.assertEqual((code, report["kernel"]["state"], report["kernel"]["error"]), (4, "failed", REFUSED))
+
+    def test_the_child_reports_cadgens_verdict_beside_the_path(self) -> None:
+        import json
+        import subprocess
+
+        answer = json.dumps({"path": "/site/OCP/__init__.py", "verify": UNSUPPORTED})
+        child = subprocess.CompletedProcess(args=[], returncode=0, stdout=answer + "\n", stderr="")
+        with mock.patch("subprocess.run", return_value=child):
+            self.assertEqual(doctor._run_kernel_probe(), (doctor.KERNEL_OK, "/site/OCP/__init__.py", UNSUPPORTED))
+            # The state and path are unchanged by the verdict.
+            self.assertEqual(doctor._run_kernel_probe()[:2], (doctor.KERNEL_OK, "/site/OCP/__init__.py"))
+
+
 class KernelProbeTest(unittest.TestCase):
     """The real probe, once: this interpreter's kernel imports in a child."""
 
     def test_the_probe_imports_ocp_in_a_fresh_interpreter(self) -> None:
-        state, detail = doctor._probe_kernel()
+        state, detail = doctor._run_kernel_probe()[:2]
         self.assertEqual(state, doctor.KERNEL_OK, detail)
         self.assertIn("OCP", detail)
+
+    def test_the_kernel_status_is_this_interpreters_build_path_verdict(self) -> None:
+        # For real: ok here means cadgen's own kernel check passed in a child;
+        # an interpreter whose OCP cadgen does not build against (a dev venv
+        # without the pinned distribution) must say so rather than ok.
+        status = doctor.kernel_status()
+        self.assertIn(status["state"], {doctor.KERNEL_OK, doctor.KERNEL_UNSUPPORTED}, status)
+        self.assertEqual(status["ok"], status["state"] == doctor.KERNEL_OK)
+        if status["ok"]:
+            self.assertIsNone(status["error"])
+        else:
+            self.assertTrue(status["error"], status)
+
+    def test_a_caller_bounds_the_kernel_child_and_a_timeout_is_its_own_state(self) -> None:
+        # The desktop runs doctor under its own deadline and hands it a shorter
+        # one, so the child is ended by subprocess.run rather than orphaned.
+        import subprocess
+
+        seen: list[float] = []
+
+        def run(*_args, timeout: float, **_kwargs):
+            seen.append(timeout)
+            raise subprocess.TimeoutExpired(cmd="python", timeout=timeout)
+
+        with mock.patch("subprocess.run", side_effect=run):
+            with mock.patch.dict("os.environ", {"CADGEN_DOCTOR_KERNEL_TIMEOUT": "90"}):
+                state, detail, _ = doctor._run_kernel_probe()
+            for value in ("nonsense", "inf", "-inf", "nan", "0", "86400"):
+                with mock.patch.dict("os.environ", {"CADGEN_DOCTOR_KERNEL_TIMEOUT": value}):
+                    doctor._run_kernel_probe()
+        # Not a number, not finite, not positive: the default. Over an hour: an hour.
+        self.assertEqual(seen, [90.0, 300.0, 300.0, 300.0, 300.0, 300.0, 3600.0])
+        # A timeout says nothing about whether the kernel loads: its own state.
+        self.assertEqual(state, doctor.KERNEL_TIMEOUT)
+        # The time, not the exception's repr of the whole probe script.
+        self.assertEqual(detail, "timed out after 90 s")
+
+    def test_a_timed_out_kernel_is_its_own_state_in_both_reports_and_still_exits_4(self) -> None:
+        import json
+
+        probe = (doctor.KERNEL_TIMEOUT, "timed out after 90 s", None)
+        with mock.patch.object(doctor, "_run_kernel_probe", return_value=probe), TemporaryDirectory() as tmp:
+            code, out, _ = _run([tmp, "--json"])
+            text_code, _, err = _run([tmp])
+        report = json.loads(out)
+        self.assertEqual(report["kernel"], {"ok": False, "state": "timeout", "path": None, "error": probe[1]})
+        self.assertEqual((code, text_code), (4, 4))
+        self.assertIn("kernel   timed out", err)
+        self.assertNotIn("FAILED", err)
+
+    def test_help_documents_the_exit_codes_and_the_kernel_timeout(self) -> None:
+        out = io.StringIO()
+        with redirect_stdout(out), self.assertRaises(SystemExit):
+            doctor.main(["--help"])
+        text = " ".join(out.getvalue().split())
+        self.assertIn("CADGEN_DOCTOR_KERNEL_TIMEOUT", text)
+        self.assertIn("at most 3600", text)
+        self.assertIn("4 CAD kernel failed to load or timed out", text)
 
     def test_the_probe_tells_a_missing_kernel_from_a_refused_one(self) -> None:
         # The child interpreter's last stderr line is all the probe has. A
@@ -174,12 +297,12 @@ class KernelProbeTest(unittest.TestCase):
         missing = child("Traceback...\nModuleNotFoundError: No module named 'OCP'\n")
         with mock.patch("subprocess.run", return_value=missing):
             self.assertEqual(
-                doctor._probe_kernel(),
+                doctor._run_kernel_probe()[:2],
                 (doctor.KERNEL_MISSING, "ModuleNotFoundError: No module named 'OCP'"),
             )
         refused = child("ImportError: DLL load failed while importing OCP: Access is denied.\n")
         with mock.patch("subprocess.run", return_value=refused):
-            state, detail = doctor._probe_kernel()
+            state, detail = doctor._run_kernel_probe()[:2]
         self.assertEqual(doctor.KERNEL_FAILED, state)
         self.assertIn("DLL load failed", detail)
 

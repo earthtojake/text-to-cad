@@ -123,9 +123,10 @@ where those files ship, so these scripts are what produces them.
 `github-workflows/` — scripts a workflow runs whole.
 
 - `check-builds.sh [--skip-bundle-check]` — the shipping contract: no tracked
-  symlink anywhere, no LFS path under `skills/`, no skill reaching into a repo
-  root; then `bundle.sh --check` unless the workflow already bundled; then every
-  path `cadgen-runtime.sh --print-outputs` names exists and holds no symlink.
+  symlink anywhere, no LFS path under `skills/` or `apps/desktop/resources/`, no
+  skill reaching into a repo root; then `bundle.sh --check` unless the workflow
+  already bundled; then every path `cadgen-runtime.sh --print-outputs` names
+  exists and holds no symlink.
   Called by `test.yml`, `release-publish.yml`, the pre-commit hook path. The
   no-symlink rule is load-bearing: Codex `plugin add` drops symlinks silently.
 - `deploy-vercel-app.sh` — deploys one Vercel project to production and verifies
@@ -157,7 +158,7 @@ manual; their `*.test.mjs` helper units run in `test-js.sh`.
 | -------- | --------------- | ------- |
 | `test.yml` | pushes to `main`; PRs to `main`; manual dispatch | One job per thing that has to work, each conditional on the paths that can break it (`CONTRIBUTING.md` documents the graph): `Version Check` always; the cadgen package suite on Linux and Windows; `core-js` (`@text-to-cad/core`), `web` (shared UI and the web app), skills and docs on Linux; desktop native and Electron checks on macOS; `packaging` bundles from clean (nothing under `_runtime/` is committed, so this is where it comes from), checks the layout, inspects the wheel and runs the installed-mode tests. Superseded PR runs are cancelled. |
 | `release-prepare.yml` (`Prepare Release`) | manual dispatch | The version bump as a PR: bumps `VERSION`, stamps metadata and skill pins, opens `release/X.Y.Z` against `target` (default `main`; `build-test` rehearses) and merges it. The merge is what runs `Publish Release`. |
-| `release-publish.yml` (`Publish Release`) | pushes to `main` and `build-test`; manual dispatch (resume/republish the head) | Gate (VERSION past the latest tag, or untagged), bundle, tests, wheel build, an `unzip -l` assertion that the shipping wheel carries `_runtime`, install test, distribution artifact; desktop installers and update feeds built from that exact wheel; then — on `main` only — PyPI upload, docs deploy, `v<VERSION>` tag and GitHub Release carrying both Python and desktop assets. On `build-test` it prints what it would have tagged and stops. |
+| `release-publish.yml` (`Publish Release`) | pushes to `main` and `build-test`; manual dispatch (resume/republish the head) | Gate (VERSION past the latest tag, or untagged, or tagged at this commit with its Release missing or a draft), bundle, tests, wheel build, an `unzip -l` assertion that the shipping wheel carries `_runtime`, install test, distribution artifact; desktop installers and update feeds built from that exact wheel; then — on `main` only — PyPI upload, docs deploy, `v<VERSION>` tag and GitHub Release carrying both Python and desktop assets. On `build-test` it prints what it would have tagged and stops. |
 | `deploy-docs.yml` (`Deploy Docs`) | manual dispatch; called by `release-publish.yml` | Deploys the docs app to Vercel production from a ref (default `main`): configures Vercel Authentication for preview deployments only, runs `vercel pull/build/deploy --prod`, and verifies the public production URLs. |
 
 `Prepare Release` bumps, `Publish Release` ships, `Deploy Docs`

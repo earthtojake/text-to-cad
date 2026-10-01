@@ -381,12 +381,34 @@ jobs:
       # The app's renderer supplies the UI. CAD tests need only cadgen's Node and
       # browser assets (from core, which setup already built) and the native modules
       # rebuilt against Electron's ABI.
-      - name: Prepare the CAD runtime and native modules
+      - name: Prepare the CAD runtime
         env:
           CADGEN_RUNTIME_PACKAGES_BUILT: "1"
-        run: |
-          scripts/bundle/cadgen-runtime.sh --node --browser
-          npm run native:rebuild -w @text-to-cad/desktop
+        run: scripts/bundle/cadgen-runtime.sh --node --browser
+
+      # `native:rebuild` (electron-builder install-app-deps) rebuilds node-pty and
+      # better-sqlite3 against Electron's ABI, about 8-12 s on this runner. Both load
+      # their addon from their own `build/Release` (node-pty's pty.node and spawn-helper,
+      # better-sqlite3's better_sqlite3.node), so those two directories are the whole
+      # output and the rebuild is skipped when they are restored. Keyed on the lockfile
+      # (their versions) and Electron's version (the ABI) plus the runner's OS and
+      # architecture. Restored after `npm ci` has put the package sources in place.
+      - name: Read the Electron version
+        id: electron
+        run: echo "version=$(node -p "require('electron/package.json').version")" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the native modules
+        id: native
+        uses: actions/cache@v5
+        with:
+          path: |
+            node_modules/node-pty/build
+            node_modules/better-sqlite3/build
+          key: desktop-native-${{ runner.os }}-${{ runner.arch }}-electron${{ steps.electron.outputs.version }}-${{ hashFiles('package-lock.json') }}
+
+      - name: Rebuild the native modules
+        if: steps.native.outputs.cache-hit != 'true'
+        run: npm run native:rebuild -w @text-to-cad/desktop
 
       # Both resume from the last green run: tsc's buildinfo (the projects are
       # composite) re-checks what changed and what depends on it, and ESLint's
@@ -435,6 +457,17 @@ jobs:
       - name: Build
         if: steps.build.outputs.cache-hit != 'true'
         run: npm --prefix apps/desktop run build
+
+      # The unit run above comes before the build, so its bundle check found no
+      # out/renderer and stood aside. This is that check with a bundle to read, and
+      # the variable makes a missing one a failure rather than a pass. A restored
+      # build was checked by the green run that saved it.
+      - name: Check the renderer bundle
+        if: steps.build.outputs.cache-hit != 'true'
+        env:
+          TEXT_TO_CAD_BUNDLE_CHECK: "1"
+        working-directory: apps/desktop
+        run: npx vitest run tests/unit/main/renderer-bundle.test.ts
 
       - name: Run the Electron integration suite
         env:

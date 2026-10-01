@@ -84,10 +84,12 @@ check_generated_path() {
 # shipping contract is checked over the tree itself, here, on every run:
 #
 #   * no symlink anywhere (tracked): Codex drops them silently -- see above;
-#   * no LFS-tracked path under skills/: installers clone without git-lfs and get
-#     pointer files, which for a skill fixture or runtime asset is a silently broken
-#     install. models/ and assets/ stay LFS: nothing installs them, .lfsconfig keeps
-#     them as pointers, and .gitattributes export-ignores models/ from archives;
+#   * no LFS-tracked path under skills/ or apps/desktop/resources/: installers clone
+#     without git-lfs and get pointer files, which for a skill fixture or runtime asset
+#     is a silently broken install; the release workflow checks out without LFS too,
+#     and electron-builder copies apps/desktop/resources/ into every desktop installer.
+#     models/ and assets/ stay LFS: nothing installs them, .lfsconfig keeps them as
+#     pointers, and .gitattributes export-ignores models/ from archives;
 #   * no skill reaching into a repo root (../../../packages/, apps/, tests/, models/):
 #     the Skills CLI installs skills/<name> alone, so the sibling is not there.
 check_tree_has_no_symlinks() {
@@ -101,12 +103,16 @@ check_tree_has_no_symlinks() {
   fi
 }
 
-check_skills_have_no_lfs_paths() {
+check_shipped_trees_have_no_lfs_paths() {
   local hits
-  hits="$(git -C "$REPO_ROOT" ls-files skills | git -C "$REPO_ROOT" check-attr --stdin filter |
-    sed -n 's/: filter: lfs$//p')"
+  # NUL-separated both ways: without -z git quotes a non-ASCII path ("r\303\251sum\303\251.step"),
+  # and the report would name that quoted spelling, not the file (check-attr --stdin
+  # unquotes its input, so the lookup itself was right). Its -z output is path,
+  # attribute, value triples, one field per line here.
+  hits="$(git -C "$REPO_ROOT" ls-files -z skills apps/desktop/resources | git -C "$REPO_ROOT" check-attr --stdin -z filter |
+    tr '\0' '\n' | sed -n 'N;N;s/^\(.*\)\nfilter\nlfs$/\1/p')"
   if [ -n "$hits" ]; then
-    echo "LFS-tracked paths under skills/ (installers clone without git-lfs):" >&2
+    echo "LFS-tracked paths under skills/ or apps/desktop/resources/ (installers and the release checkout have no git-lfs):" >&2
     printf '%s\n' "$hits" | sed 's/^/  /' >&2
     exit 1
   fi
@@ -126,7 +132,7 @@ check_skills_do_not_reach_repo_roots() {
 }
 
 check_tree_has_no_symlinks
-check_skills_have_no_lfs_paths
+check_shipped_trees_have_no_lfs_paths
 check_skills_do_not_reach_repo_roots
 
 # The runtime has to exist before its layout can be checked, and nothing in the
