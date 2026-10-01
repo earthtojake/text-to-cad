@@ -16,6 +16,7 @@ set -euo pipefail
 #   --browser   snapshot browser bundle   -> _runtime/browser
 #   --viewer    CAD Viewer client (vite)  -> _runtime/viewer
 #   --native    file tracer, every OS     -> _runtime/native
+#               (--native-host: this machine's only, which is all a test run loads)
 #
 # NOTHING here is committed. The whole _runtime tree is gitignored and built on demand:
 # the wheel is the only place these files ship, and a rebundle of the snapshot renderer
@@ -78,6 +79,7 @@ STAGE_NODE=0
 STAGE_BROWSER=0
 STAGE_VIEWER=0
 STAGE_NATIVE=0
+NATIVE_HOST_ONLY=0
 ANY_STAGE=0
 
 usage() {
@@ -93,6 +95,7 @@ Stages (default: all):
   --browser   snapshot browser bundle   -> _runtime/browser
   --viewer    CAD Viewer client (vite)  -> _runtime/viewer
   --native    file tracer, every OS     -> _runtime/native
+  --native-host  the file tracer for this machine only
 
 Options:
   --check          Build, then assert every required output exists. Skips the
@@ -112,6 +115,7 @@ while [ "$#" -gt 0 ]; do
     --browser) STAGE_BROWSER=1; ANY_STAGE=1 ;;
     --viewer) STAGE_VIEWER=1; ANY_STAGE=1 ;;
     --native) STAGE_NATIVE=1; ANY_STAGE=1 ;;
+    --native-host) STAGE_NATIVE=1; NATIVE_HOST_ONLY=1; ANY_STAGE=1 ;;
     -h|--help) usage; exit 0 ;;
     *) echo "Unknown argument: $1" >&2; usage >&2; exit 2 ;;
   esac
@@ -224,8 +228,24 @@ build_native_tracer() {
     echo "Building the file tracer needs zig: $python -m pip install -r requirements-dev.txt" >&2
     exit 1
   fi
+  local targets=("${NATIVE_TARGETS[@]}")
+  if [ "$NATIVE_HOST_ONLY" -eq 1 ]; then
+    local host
+    case "$(uname -s)-$(uname -m)" in
+      Darwin-arm64) host="aarch64-macos.11.0" ;;
+      Darwin-x86_64) host="x86_64-macos.10.15" ;;
+      Linux-x86_64) host="x86_64-linux-gnu.2.17" ;;
+      Linux-aarch64 | Linux-arm64) host="aarch64-linux-gnu.2.17" ;;
+      MINGW*-x86_64 | MSYS*-x86_64 | CYGWIN*-x86_64) host="x86_64-windows-gnu" ;;
+      *) echo "No file tracer target for $(uname -s) $(uname -m)" >&2; exit 1 ;;
+    esac
+    targets=()
+    for spec in "${NATIVE_TARGETS[@]}"; do
+      [ "${spec% *}" = "$host" ] && targets+=("$spec")
+    done
+  fi
   scratch="$(mktemp -d "${TMPDIR:-/tmp}/cadgen-native.XXXXXX")"
-  for spec in "${NATIVE_TARGETS[@]}"; do
+  for spec in "${targets[@]}"; do
     zig_target="${spec% *}"
     local flags=(-shared -O2 -s -fvisibility=hidden -Wall -Wextra -Werror)
     case "$zig_target" in
@@ -238,7 +258,7 @@ build_native_tracer() {
   # Renamed into place, never written over: a process that has the old library
   # loaded keeps its file, and macOS kills one whose signed pages change under it.
   mkdir -p "$target"
-  for spec in "${NATIVE_TARGETS[@]}"; do
+  for spec in "${targets[@]}"; do
     name="${spec#* }"
     cp "$scratch/${spec% *}/$name" "$target/.$name.tmp"
     mv -f "$target/.$name.tmp" "$target/$name"

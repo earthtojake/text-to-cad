@@ -32,10 +32,11 @@ ensure_packaged_runtime() {
       break
     fi
   done
-  # Every build loads the file tracer, so every suite that builds needs it.
+  # Every build loads the file tracer, so every suite that builds needs it: this
+  # machine's, which compiles in seconds where the Windows one takes the most.
   if ! compgen -G "$runtime/native/filetrace-*" >/dev/null; then
     section "Building cadgen's file tracer"
-    "$REPO_ROOT/scripts/bundle/cadgen-runtime.sh" --native
+    "$REPO_ROOT/scripts/bundle/cadgen-runtime.sh" --native-host
   fi
 }
 
