@@ -3,7 +3,7 @@ description: Install the selected root npm workspaces and optional Python/browse
 
 inputs:
   python:
-    description: Install requirements-dev.txt.
+    description: "true installs requirements-dev.txt; stdlib sets up Python only; false skips Python."
     default: "true"
   playwright:
     description: Install Python Playwright's snapshot browser (requires python).
@@ -19,18 +19,18 @@ runs:
   using: composite
   steps:
     - name: Set up Python
-      if: inputs.python == 'true'
+      if: inputs.python != 'false'
       uses: actions/setup-python@v7
       with:
         python-version: "3.12"
-        cache: pip
+        cache: ${{ inputs.python == 'true' && 'pip' || '' }}
         cache-dependency-path: requirements-dev.txt
 
     - name: Set up Node.js
       uses: actions/setup-node@v7
       with:
         node-version: "22"
-        cache: npm
+        cache: ${{ inputs.npm != 'none' && 'npm' || '' }}
         cache-dependency-path: package-lock.json
 
     - name: Install Python dependencies

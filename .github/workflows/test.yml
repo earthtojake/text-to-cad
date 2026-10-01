@@ -6,8 +6,8 @@
 # Check names are the jobs' concerns: `core-js` tests packages/core, `web` tests
 # packages/ui and apps/web and drives the bundled viewer. main's required checks
 # name all eight jobs.
-# Prose-only root changes run Version Check only; skill/package Markdown remains
-# test input.
+# Root prose runs Version Check only. Skill prose runs document contracts;
+# executable skill changes run the runtime suites. Package Markdown remains test input.
 name: Test
 
 on:
@@ -31,13 +31,18 @@ jobs:
     name: Changed paths
     runs-on: ubuntu-latest
     outputs:
-      cadgen: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.cadgen == 'true' }}
-      core: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.core == 'true' }}
-      ui: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.ui == 'true' }}
-      web: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.web == 'true' }}
-      skills: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.skills == 'true' }}
-      docs: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.docs == 'true' }}
-      infra: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.infra == 'true' }}
+      cadgen: ${{ steps.select.outputs.cadgen }}
+      core: ${{ steps.select.outputs.core }}
+      ui: ${{ steps.select.outputs.ui }}
+      web: ${{ steps.select.outputs.web }}
+      skills: ${{ steps.select.outputs.skills }}
+      docs: ${{ steps.select.outputs.docs }}
+      infra: ${{ steps.select.outputs.infra }}
+      policy: ${{ steps.select.outputs.policy }}
+      skill_prose: ${{ steps.select.outputs.skill_prose }}
+      skill_examples: ${{ steps.select.outputs.skill_examples }}
+      packaging: ${{ steps.select.outputs.packaging }}
+      skill_names: ${{ steps.select.outputs.skill_names }}
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -45,35 +50,17 @@ jobs:
       - uses: dorny/paths-filter@v4
         id: filter
         with:
+          list-files: json
           filters: |
-            cadgen:
-              - 'packages/cadgen/**'
-              - 'tests/python/packages/**'
-              - 'tests/python/support/**'
-              - 'requirements*.txt'
-            core:
-              - 'packages/core/**'
-            ui:
-              - 'packages/ui/**'
-            web:
-              - 'apps/web/**'
-              - 'tests/browser/**'
-            skills:
-              - 'skills/**'
-              - 'tests/python/skills/**'
-              - 'tests/python/global/**'
-            docs:
-              - 'apps/docs/**'
-            infra:
-              - 'scripts/**'
-              - '.github/**'
-              - 'VERSION'
-              - '.claude-plugin/**'
-              - '.codex-plugin/**'
-              - 'package.json'
-              - 'package-lock.json'
-              - '.gitattributes'
-              - '.gitignore'
+            changed:
+              - '**'
+
+      - name: Select affected contracts
+        id: select
+        env:
+          CHANGED_PATHS: ${{ steps.filter.outputs.changed_files }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: python3 scripts/github-workflows/select_checks.py
 
   version:
     name: Version Check
@@ -236,7 +223,7 @@ jobs:
   skills:
     name: skills
     needs: changes
-    if: needs.changes.outputs.skills == 'true' || needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.infra == 'true' || needs.changes.outputs.ui == 'true' || needs.changes.outputs.web == 'true'
+    if: needs.changes.outputs.skill_prose == 'true' || needs.changes.outputs.policy == 'true' || needs.changes.outputs.skills == 'true' || needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.infra == 'true' || needs.changes.outputs.ui == 'true' || needs.changes.outputs.web == 'true'
     runs-on: ubuntu-latest
     env:
       CADGEN_TEST_JOBS: "4"
@@ -248,21 +235,30 @@ jobs:
       - name: Set up dependencies
         uses: ./.github/actions/setup-deps
         with:
-          npm: packages/core
+          python: ${{ (needs.changes.outputs.skills == 'true' || needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.infra == 'true' || needs.changes.outputs.policy == 'true' || needs.changes.outputs.ui == 'true' || needs.changes.outputs.web == 'true' || needs.changes.outputs.skill_examples == 'true') && 'true' || 'stdlib' }}
+          playwright: ${{ needs.changes.outputs.skills == 'true' || needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.infra == 'true' }}
+          npm: ${{ (needs.changes.outputs.skills == 'true' || needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.infra == 'true' || needs.changes.outputs.policy == 'true' || needs.changes.outputs.ui == 'true' || needs.changes.outputs.web == 'true' || needs.changes.outputs.skill_examples == 'true') && 'packages/core' || 'none' }}
 
       - name: Run the policy gates
+        if: needs.changes.outputs.skills == 'true' || needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.infra == 'true' || needs.changes.outputs.policy == 'true' || needs.changes.outputs.ui == 'true' || needs.changes.outputs.web == 'true'
         run: scripts/test/test-global.sh
 
       - name: Run every skill suite
         if: needs.changes.outputs.skills == 'true' || needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.infra == 'true'
         run: scripts/test/test-python.sh --select skills --print-weights
 
-  # The docs site mirrors the skills' frontmatter, renders through core and
-  # documents cadgen's commands, so it runs on any of those changing.
+      - name: Run skill documentation contracts
+        if: needs.changes.outputs.skill_prose == 'true' && !(needs.changes.outputs.skills == 'true' || needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.infra == 'true')
+        env:
+          SKILL_DOC_NAMES: ${{ needs.changes.outputs.skill_names }}
+        run: scripts/test/test-skill-docs.sh
+
+  # The site owns its content; it does not import skill Markdown. Runtime changes
+  # still check its asset/command contracts and core renderer.
   docs:
     name: docs
     needs: changes
-    if: needs.changes.outputs.docs == 'true' || needs.changes.outputs.skills == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.infra == 'true'
+    if: needs.changes.outputs.docs == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.infra == 'true'
     runs-on: ubuntu-latest
 
     steps:
@@ -285,7 +281,7 @@ jobs:
   packaging:
     name: packaging
     needs: changes
-    if: needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.web == 'true' || needs.changes.outputs.ui == 'true' || needs.changes.outputs.infra == 'true'
+    if: needs.changes.outputs.packaging == 'true' || needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.web == 'true' || needs.changes.outputs.ui == 'true' || needs.changes.outputs.infra == 'true'
     runs-on: ubuntu-latest
 
     steps:

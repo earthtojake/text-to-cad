@@ -15,6 +15,7 @@ owns stamping every derived version from the canonical `VERSION` file, and
 from __future__ import annotations
 
 import json
+import re
 import unittest
 from pathlib import Path
 
@@ -108,6 +109,29 @@ class PluginManifestPolicyTest(unittest.TestCase):
                 (path / "SKILL.md").is_file(),
                 f"missing skill manifest: skills/{path.name}/SKILL.md",
             )
+
+
+class SkillCatalogPolicyTest(unittest.TestCase):
+    def test_site_catalog_targets_installed_skills(self):
+        # The site owns a static list, not a Markdown import. Check its references
+        # without a Next build when a skill is renamed or retired.
+        page = (REPO_ROOT / "apps/docs/src/app/page.tsx").read_text(encoding="utf-8")
+        names = re.findall(r'path: "skills/([a-z0-9-]+)"', page)
+        self.assertTrue(names, "no skill links found in the docs catalog")
+        for name in names:
+            self.assertTrue((SKILLS_ROOT / name / "SKILL.md").is_file(), f"site links to missing skill {name}")
+
+    def test_skill_handoffs_target_installed_skills(self):
+        # Lowercase $skill markers are handoffs; shell variables use uppercase.
+        documents = sorted(SKILLS_ROOT.rglob("*.md"))
+        self.assertTrue(documents)
+        for document in documents:
+            text = document.read_text(encoding="utf-8")
+            for name in set(re.findall(r"\$([a-z][a-z0-9-]*)\b", text)):
+                self.assertTrue(
+                    (SKILLS_ROOT / name / "SKILL.md").is_file(),
+                    f"{document.relative_to(REPO_ROOT)} hands off to missing skill ${name}",
+                )
 
 
 if __name__ == "__main__":

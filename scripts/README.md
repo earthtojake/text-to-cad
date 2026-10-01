@@ -70,6 +70,14 @@ where those files ship, so these scripts are what produces them.
 - `test-global.sh` — `tests/python/global`, the repo-wide policy suite. Like
   `test-python.sh`, it builds the `--node` and `--browser` runtime stages first
   when they are absent: the suites read them and a fresh clone has neither.
+- `test-skill-docs.sh` — document contracts without the full runtime suites or
+  bundling. `SKILL_DOC_NAMES='["urdf"]'` scopes skill-specific contracts; unset or
+  `[]` runs all. `skill_doc_contracts.py` collects global documentation policy and
+  each selected skill's `test_documented*.py`, `test_skill_structure.py` and
+  `test_report_template.py`, plus explicitly listed mixed legacy modules. New
+  documentation tests use these names; all remain collected by the full runners.
+  Most prose needs stdlib Python plus Node; CAD/DXF example tests need
+  `requirements-dev.txt` and compiled core exports, but no browser installation.
 - `test-docs.sh` — `npm --prefix apps/docs run check`, pulling the hero assets
   first. Called by `test.yml` and `release-publish.yml`.
 - `test-installed.sh` — builds the wheel (or accepts `--wheel PATH` to test
@@ -120,6 +128,11 @@ where those files ship, so these scripts are what produces them.
   `publish-github-release.sh`, `release-prepare.yml`, `release-publish.yml`.
 
 `github-workflows/` — scripts a workflow runs whole.
+
+- `select_checks.py` — maps Dorny's changed-path JSON to CI contract flags.
+  `test.yml` owns the job graph; `tests/python/global/test_ci_workspace_selection.py`
+  checks paths through those actual conditions, full-suite reachability, manual
+  dispatch and stable names. See `CONTRIBUTING.md#ci` before narrowing a mapping.
 
 - `check-builds.sh [--skip-bundle-check]` — the shipping contract: no tracked
   symlink anywhere, no LFS path under `skills/`, no skill reaching into a repo

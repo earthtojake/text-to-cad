@@ -234,27 +234,45 @@ requested separately. A manual dispatch runs every job.
 | Check | Runs for | Coverage |
 | --- | --- | --- |
 | Version Check | every change | canonical version, derived metadata, skill pins |
-| cadgen (Linux/Windows) | cadgen, core, infrastructure | Python engine, daemon, CLI and viewer backend |
-| core-js | core, infrastructure | `@text-to-cad/core` and benchmark helper units |
-| web | web, UI, core, cadgen, infrastructure | UI and web units, the UI browser specs, bundled launch, format/camera browser checks through the backend |
-| skills | skills or runtime/host contracts | repo policy; skill CLI suites only for skills, cadgen, core or infrastructure |
-| docs | docs, skills, cadgen, core, infrastructure | static asset contract, lint, Next build, icon verification |
-| packaging | cadgen, core, UI, web, infrastructure | clean bundle, wheel contents, installed CLI behavior |
+| cadgen (Linux/Windows) | cadgen, core, shared infrastructure | Python engine, daemon, CLI and viewer backend |
+| core-js | core, shared infrastructure | `@text-to-cad/core` and benchmark helper units |
+| web | web, UI, core, cadgen, viewer runners, shared infrastructure | UI and web units, browser specs, bundled launch and format/camera browser checks |
+| skills | skill prose/metadata, executable skills, policy or runtime/host contracts | documentation contracts for prose; full repo policy for executable/shared changes; full skill suites for skills, cadgen, core or shared infrastructure |
+| docs | docs, cadgen, core, docs infrastructure, shared infrastructure | catalog links, static assets, lint, Next build, icon verification |
+| packaging | cadgen, core, UI, web, packaging infrastructure, shared infrastructure | clean bundle, wheel contents, installed CLI behavior |
 
-Here `cadgen`, `core` and `UI` mean their package directories and tests;
-`web` and `docs` mean their app directories. Infrastructure includes
-`scripts/`, `.github/`, the root lockfile/manifests and version/plugin metadata.
-Root prose, manual model changes and `LICENSE` run only Version Check. Skill
-and package Markdown is test input and follows its owning component.
+The path-to-contract map is `scripts/github-workflows/select_checks.py`;
+`test.yml` holds the consumer graph and stable check names. Dorny supplies paths
+including deletions and renames, then the selector emits flags. It never parses
+source diffs: a comment in Python or shell follows the same coverage as code.
+Manual dispatch sets every flag. Root prose, manual model changes and `LICENSE`
+run only Version Check. Package Markdown still follows its owning component.
+
+Skill Markdown and `agents/*.yaml` metadata run `test-skill-docs.sh` inside the
+existing `skills` check. This checks real command parsers, dependency declarations,
+package boundaries, plugin/catalog/handoff references and the changed skills'
+documentation tests. Most prose needs only stdlib Python and Node. CAD/DXF docs
+contain executable examples, so those changes also install Python dependencies
+and compile core exports to run the existing example tests. No prose-only change
+installs Chromium, runs unrelated skill runtime suites or builds the docs site.
+The site owns its content; its skill links are checked cheaply on either side.
+Requirements, scripts, templates and unknown skill file types keep full skill
+coverage. Mixed changes take the union of their contracts.
+
+Infrastructure is scoped where its consumers are known: viewer launch/browser
+runners select web; installed-mode and wheel checks select packaging; release
+publishing selects packaging plus policy; release preparation and plugin manifests
+select policy; docs deployment selects docs. Shared bundle/setup/test-selection
+code, the lockfile, version/build inputs and unknown infrastructure select all
+consumers. Add a narrower mapping only with a selection regression covering the
+actual job and step conditions. Unknown paths under `scripts/` or `.github/`
+remain broad until their dependencies are established.
 
 A skipped job satisfies its required check. Renaming a job renames its required
-check, so it lands together with a matching branch-protection update.
-
-A web-only edit does not run the Python engine. A UI edit exercises the web
-host. Core changes reach every consumer. Policy checks for a host edit do not
-also run every skill CLI suite. Windows runs the Python package suite because
-paths, locks, subprocesses, file URLs and daemon behavior are
-platform-sensitive.
+check, so it lands together with a matching branch-protection update. Windows
+keeps the Python package suite because paths, locks, subprocesses, file URLs and
+daemon behavior are platform-sensitive. No existing test suite is removed;
+manual runs and shared changes still reach the full graph.
 
 Viewer browser failures upload bounded renderer-state JSON for three days.
 CI sets `VIEWER_TEST_DIAGNOSTICS_DIR` for this evidence; it does not enable the
