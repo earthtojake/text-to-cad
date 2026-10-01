@@ -11,7 +11,10 @@
 # packages/cadgen/src/cadgen/_runtime is gitignored and produced by
 # `scripts/bundle/bundle.sh`, so run that once after installing this file --
 # without it, mesh exports, DXF previews, snapshots and the packaged Viewer have
-# no runtime to execute, and cadgen names this command when it finds none.
+# no runtime to execute, and no build can see what it reads; cadgen names this
+# command when it finds none. zig, from this wheel, compiles the native file
+# tracer for every platform the one cadgen wheel ships to.
+ziglang
 
 # cadgen's own runtime dependencies (build123d, cadquery-ocp-novtk, ezdxf, shapely) come with
 # the editable install above. playwright is cadgen's `snapshot` extra, which the skills

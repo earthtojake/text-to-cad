@@ -24,14 +24,9 @@ def __getattr__(name: str):
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
-def _record_input(step_path: Path | str, *, reader: str) -> Path:
-    """Resolve a STEP a model asked for, and declare it a build input.
-
-    Both public readers go through here, because "which cadgen function records
-    what it reads" must not be a thing anyone has to remember: they all do. The
-    engine's own internal loads go straight to
-    :mod:`cadgen._internal.step_scene` and are unaffected — a build must not
-    record its own output as its input.
+def _resolve_input(step_path: Path | str, *, reader: str) -> Path:
+    """Resolve a STEP a model asked for: it must exist, and must not be an
+    output of the model reading it. The build's trace sees the read itself.
     """
     resolved = Path(step_path).expanduser().resolve()
     if not resolved.is_file():
@@ -41,10 +36,8 @@ def _record_input(step_path: Path | str, *, reader: str) -> Path:
             "inputs on its file: Path(__file__).parent / '../STEP/part.step'."
         )
     from cadgen._internal.self_input import refuse_own_output
-    from cadgen._internal.source_hash import note_discovered_input
 
     refuse_own_output(resolved, reader=reader)
-    note_discovered_input(resolved)
     return resolved
 
 
@@ -58,7 +51,7 @@ def read_scene(step_path: Path | str) -> StepScene:
     """
     from cadgen._internal.doors import STEP_SUFFIXES, document_target
 
-    path = _record_input(step_path, reader="read_scene")
+    path = _resolve_input(step_path, reader="read_scene")
     document_target(path, suffixes=STEP_SUFFIXES)
     from cadgen._internal.step_scene_package import load_step_scene_cached
 
@@ -291,4 +284,4 @@ def read_step(step_path: Path | str, *, label: str | None = None) -> Any:
     """
     from cadgen._internal.step_scene import import_step
 
-    return import_step(_record_input(step_path, reader="read_step"), label=label)
+    return import_step(_resolve_input(step_path, reader="read_step"), label=label)

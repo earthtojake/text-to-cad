@@ -162,7 +162,7 @@ class TreeLinkIntegrity(unittest.TestCase):
 
         output = self.store.parent / "recolored-part.step"
         export_build123d_step_file(materialize(parent_tree), output)
-        colors = list(load_step_scene(output, record_read=False).prototype_colors.values())
+        colors = list(load_step_scene(output).prototype_colors.values())
         self.assertEqual(len(colors), 1)
         for actual, expected in zip(colors[0], blue):
             self.assertAlmostEqual(actual, expected, places=6)

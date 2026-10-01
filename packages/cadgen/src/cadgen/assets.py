@@ -4,7 +4,8 @@ cadgen executes three kinds of thing it does not write in Python: Node builders 
 tree is baked by a JS child), a headless browser bundle (the snapshot CLI
 drives it in a page), and the CAD Viewer's built client (``cadgen viewer`` serves it).
 All three ship inside the distribution under ``cadgen/_runtime``; all three can be
-pointed elsewhere for development.
+pointed elsewhere for development. So does the native file tracer every build loads
+(``_runtime/native``, one library per platform, found by cadgen._internal.filetrace).
 
 **Every resolver here is CALL-TIME.** Nothing at import time touches the filesystem or
 looks for ``node``: ``pip install cadgen`` must succeed on a machine with no Node and no

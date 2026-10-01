@@ -247,9 +247,8 @@ What an importer TAKES from a model file decides how that file counts:
   editing a helper no model calls rebuilds nothing), and shared constants may
   live in a model file or in `lib/`.
 
-Inputs join the closure too: a `read_step` document is hashed as a build
-input, and so is every data file the model's Python code opens; a file only a
-native reader opens is declared with `cadgen.declare_input` (below). A new
+Inputs join the closure too: every data file the build opens is hashed as a
+build input, whatever opens it (below). A new
 file that changes what an import finds — an `__init__.py` added to a folder, a
 package beside a module, a same-named module earlier on the path — also makes
 the model stale. Embedded `animation=` source and named
@@ -422,38 +421,18 @@ already builds, call that model instead of reading the artifact.
 
 ### Inputs: a data file the model reads
 
-`read_step` records the STEP it reads because cadgen reads it for you. Any
-other file the model's Python code opens — a JSON routing atlas, a CSV of tap
-sizes, a table of solved offsets through `json.load`, `csv` or `np.load` — is
-recorded as the build reads it: edit `atlas.json` and the model is stale on its
-own; rewrite it with identical bytes and it stays current, because the input is
-the content and not the mtime. A folder the model globs is recorded too, so
-adding or removing a profile there rebuilds it.
+Every file the build opens is recorded as it reads it, whatever reads it: a
+JSON routing atlas through `json.load`, a CSV of tap sizes, a table through
+`np.load`, a BREP `bd.import_brep` opens in C++, a font `bd.Text` loads. Edit
+`atlas.json` and the model is stale on its own; rewrite it with identical bytes
+and it stays current, because the input is the content and not the mtime. A
+folder the model globs is recorded too, so adding or removing a profile there
+rebuilds it. Nothing is declared.
 
-A file opened in native code never passes through Python's `open`, so nothing
-sees it: `bd.import_step`, `bd.import_brep`, a font file. Declare such a file
-with `cadgen.declare_input`. It returns the resolved path and puts the file's
-content hash in the model's closure; the reader does its own parsing.
-
-```python
-from pathlib import Path
-
-from cadgen import build123d as bd
-from cadgen import declare_input, step
-
-_HERE = Path(__file__).resolve().parent
-
-
-@step
-def bracket():
-    return bd.import_brep(declare_input(_HERE / "imported" / "bracket.brep"))
-```
-
-Wrap the path, not the read, so there is no way to declare one file and read
-another. Without the declaration the model reports itself current forever after
-the file changes, and only `--force` gets the truth back. A missing file
-raises before the model's parser sees it. The rule about a model's own output
-applies here too: never declare a file the model writes.
+Not inputs: a file the build writes, the model's own outputs, the Python
+environment, and system files (fonts, time zones). A program the model starts
+as a separate process reads files on its own, unseen: keep that step outside
+the model and read its result.
 
 For structuring multi-part projects (folder layout, shared `src/lib/` code,
 commit policy), read `project-layout.md` and `project-template.md`.

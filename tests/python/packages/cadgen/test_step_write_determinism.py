@@ -113,7 +113,7 @@ class StepWriteDeterminismTest(unittest.TestCase):
                         path = Path(tmp) / f"{applier}-{run}.step"
                         export_build123d_step_file(root, path)
                         digests.add(hashlib.sha256(path.read_bytes()).hexdigest())
-                        scene = load_step_scene(path, record_read=False)
+                        scene = load_step_scene(path)
                         self.assertEqual(
                             [(node.name, node.color) for node in scene_leaf_occurrences(scene)],
                             [("leaf", (1.0, 0.0, 0.0, 1.0)), ("sibling", (0.0, 0.0, 1.0, 1.0))],

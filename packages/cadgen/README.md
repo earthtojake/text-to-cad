@@ -230,7 +230,8 @@ runs in the parent's process (its module body and model headers, never a
 model body), on a constant by its VALUE, on a helper by its REACH (the part of
 the helper the script and every file the build executed can run, closed
 statically; the whole file — or the whole closure — wherever the analysis
-cannot see), on a data file by its BYTES (whatever the model's code opened),
+cannot see), on a data file by its BYTES (every file the build opened,
+whoever opened it: STORE.md §5, every read is seen),
 and on every file whose appearance would change what an import finds
 ([`STORE.md`](STORE.md) §3) — and a model must never `read_step` its own
 output (14). The bundled runtime
@@ -337,10 +338,7 @@ src/cadgen/
                          #   writes no STEP
   kinematics.py          # typed mates vocabulary (revolute/slider/
                          #   cylindrical/fastened, couple, normalize)
-  step_scene.py          # read_step and scene loading (recorded inputs)
-  inputs.py              # declare_input: a data file a native reader opens
-                         #   (Python-level reads are discovered on their own)
-                         #   is a freshness input once the model says so
+  step_scene.py          # read_step and read_scene
   assembly.py            # label utilities and softly deprecated AssemblyHelper
   results.py             # the typed Results every verb returns (stdlib-only)
   store/                 # the store (STORE.md): objects, index, records, trees,
@@ -352,6 +350,7 @@ src/cadgen/
                          #   spares, extras), jobs (the ledger), server,
                          #   worker, client, transport
   _internal/             # the engine: generation pipeline, tree builder,
+                         #   filetrace (every file a build opens),
                          #   FK (kinematics_fk/resolve), mesh_export ledger,
                          #   cli_from_function, doors (documents by bytes),
                          #   source_sidecar, step_assemble/step_reemit
@@ -361,8 +360,9 @@ src/cadgen/
                          #   compiled / failed), build_progress (the daemon's
                          #   job ledger, read over its socket)
   _runtime/              # BUILT JS (browser snapshot renderer, node
-                         #   builders, the viewer client) — produced when the
-                         #   wheel is packaged, never committed, never edited
+                         #   builders, the viewer client) and the native file
+                         #   tracer, one library per platform — produced when
+                         #   the wheel is packaged, never committed, never edited
 ```
 
 Verbs by format: `step` compile · build · snapshot;

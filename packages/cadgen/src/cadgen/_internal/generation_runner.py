@@ -17,7 +17,6 @@ from cadgen._internal.source_hash import PythonSourceHash
 from cadgen._internal.source_hash import evict_first_party_modules
 from cadgen._internal.source_hash import is_first_party_source_file
 from cadgen._internal.source_hash import python_source_hash
-from cadgen._internal.source_hash import record_discovered_inputs
 from cadgen._internal.step_scene import LoadedStepScene
 from cadgen.catalog import build_scope
 from cadgen.cli_logging import CliLogger
@@ -33,6 +32,7 @@ from cadgen.render import relative_to_file
 from cadgen.step_export import build_build123d_step_scene
 
 from cadgen._internal.generation_spec import EntrySpec, _display_path
+from cadgen._internal import filetrace
 from cadgen._internal.import_roots import import_roots
 
 
@@ -513,18 +513,14 @@ def _run_script_generator_body(
     # Deterministic closure capture: start from a clean first-party module space, so
     # every first-party file the generator loads and runs executes inside the window
     # and is hashed as it runs (ExecutionHashes), from the source it was compiled from
-    # (_first_party_from_source). Alongside it, the DISCOVERED-input window: the data
-    # files the model's code opened, and the ones a native reader was told about.
+    # (_first_party_from_source). Alongside it, the trace: every file the build opened,
+    # whoever opened it, and the folders its code listed.
     evict_first_party_modules()
-    from cadgen._internal.source_hash import _excluded_roots
     from cadgen.store.closure import ExecutionHashes
 
-    # Classify before any hook is live: computing the roots imports sysconfig
-    # data, which would otherwise fire the hooks into a half-built classifier.
-    _excluded_roots()
     with (
+        filetrace.capture() as trace,
         _first_party_from_source(),
-        record_discovered_inputs() as read_files,
         ExecutionHashes() as executed_hashes,
     ):
         with logger.timed(f"load generator {spec.source_ref}"):
@@ -560,10 +556,13 @@ def _run_script_generator_body(
             raw_payload = generator()
 
     # A model's own outputs are never its inputs: reading one back reads the
-    # previous run, so a read the open hook saw is dropped here.
+    # previous run, so a read the trace saw is dropped here. What was read joins
+    # the hashes taken at execution, as it was read.
     from cadgen.metadata import declared_output_paths
 
-    read_files.difference_update(declared_output_paths(spec.script_path, function=entry_name))
+    read_files, listed = trace.inputs(outputs=declared_output_paths(spec.script_path, function=entry_name))
+    for read_path, digest in read_files.items():
+        executed_hashes.hashes.setdefault(str(read_path), digest)
     source_closure: PythonSourceClosure | None = None
     if model_format == "step":
         payload = _normalize_step_payload(raw_payload, script_path=spec.script_path)
@@ -579,11 +578,9 @@ def _run_script_generator_body(
         # every closure-keyed reuse.
         # The closure a record carries: the script + its static closure (stopping at
         # child models — a result edge is tracked by pin, not by file), every file
-        # that executed (hashed AT execution), and the data files the run declared.
+        # that executed (hashed AT execution), and the data files the run read.
         from cadgen.store.closure import build_closure
 
-        for read_path in read_files:
-            executed_hashes.note(read_path)
         # Every child the body called, with the tree it resolved to. Waits for
         # any child job the body never forced (called and discarded): its
         # result is still this build's dependency.
@@ -591,7 +588,7 @@ def _run_script_generator_body(
         store_closure = build_closure(
             spec.script_path,
             executed=executed_hashes.hashes,
-            discovered_inputs=read_files,
+            discovered_inputs=[*read_files, *listed],
             children=[child for child, _tree in child_trees],
             sources=executed_hashes.sources,
         )
@@ -630,12 +627,10 @@ def _run_script_generator_body(
         # and the data it read, hashed as they were when the body ran.
         from cadgen.store.closure import build_closure
 
-        for read_path in read_files:
-            executed_hashes.note(read_path)
         store_closure = build_closure(
             spec.script_path,
             executed=executed_hashes.hashes,
-            discovered_inputs=read_files,
+            discovered_inputs=[*read_files, *listed],
             children=[child for child, _tree in frame.child_trees()],
             sources=executed_hashes.sources,
         )

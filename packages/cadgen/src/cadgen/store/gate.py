@@ -25,6 +25,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Mapping
 
+from cadgen._internal import filetrace
 from cadgen.store.closure import changed_constant, current_closure_hash
 from cadgen.store.index import resolve_model_ref, split_model_ref
 from cadgen.store.records import read_record
@@ -97,6 +98,13 @@ def _closure_now(script: Path, record: Mapping[str, Any] | None) -> str | None:
 
 
 def stale(model: Path | str, *, memo: dict[str, Verdict] | None = None) -> Verdict:
+    # What the gate reads -- a child's files and outputs, inside a parent's build --
+    # is its own bookkeeping, never the build's input.
+    with filetrace.paused():
+        return _stale(model, memo=memo)
+
+
+def _stale(model: Path | str, *, memo: dict[str, Verdict] | None = None) -> Verdict:
     memo = memo if memo is not None else {}
     key = resolve_model_ref(model)
     script, _function = split_model_ref(key)

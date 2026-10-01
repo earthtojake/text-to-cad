@@ -1031,7 +1031,7 @@ def build_tree_through_step(
         readback, damaged_document = (None, False) if force else _lookup_document_readback(step_path, step_hash=step_hash)
         scene = readback.scene if readback is not None else None
         if scene is None:
-            scene = load_step_scene(step_path, record_read=False)
+            scene = load_step_scene(step_path)
     nodes: dict[str, Any] = {}
     stack = list(scene.roots)
     while stack:

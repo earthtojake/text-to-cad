@@ -5,13 +5,13 @@ import json
 from pathlib import Path
 
 from cadgen import build123d as bd
-from cadgen import declare_input, srgb
+from cadgen import srgb
 
 PROFILE_PATH = Path(__file__).resolve().parents[1] / "profiles.json"
 
 
 def make_logo(text: str) -> bd.Compound:
-    profiles = json.loads(declare_input(PROFILE_PATH).read_text())
+    profiles = json.loads(PROFILE_PATH.read_text())
     unit = profiles["unitMm"]
     height = profiles["height"]
     thickness = profiles["depth"] * unit

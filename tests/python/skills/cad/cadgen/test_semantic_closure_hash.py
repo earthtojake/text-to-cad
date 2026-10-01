@@ -5,8 +5,8 @@ from pathlib import Path
 from cadgen._internal import source_hash
 
 
-def _closure(script: Path, base: Path):
-    return source_hash.closure_for_files(script, [], base=base)
+def _hash(script: Path) -> str:
+    return source_hash._semantic_source_hash(script)
 
 
 class SemanticClosureHashTests(unittest.TestCase):
@@ -19,7 +19,7 @@ class SemanticClosureHashTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             a = self._write(root, "gen.py", "def model():\n    return build(radius=5)\n")
-            hash_a = _closure(a, root).closure_hash
+            hash_a = _hash(a)
             # add a comment, blank lines, and reindent-free formatting
             a.write_text(
                 "# a new comment\n\n"
@@ -27,62 +27,32 @@ class SemanticClosureHashTests(unittest.TestCase):
                 "    return build(radius=5)   # trailing comment\n\n\n",
                 encoding="utf-8",
             )
-            self.assertEqual(hash_a, _closure(a, root).closure_hash)
+            self.assertEqual(hash_a, _hash(a))
 
     def test_docstring_change_changes_hash(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             a = self._write(root, "gen.py", 'def model():\n    "one"\n    return 1\n')
-            hash_a = _closure(a, root).closure_hash
+            hash_a = _hash(a)
             a.write_text('def model():\n    "two"\n    return 1\n', encoding="utf-8")
-            self.assertNotEqual(hash_a, _closure(a, root).closure_hash)
+            self.assertNotEqual(hash_a, _hash(a))
 
     def test_real_code_change_changes_hash(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             a = self._write(root, "gen.py", "R = 5\ndef model():\n    return R\n")
-            hash_a = _closure(a, root).closure_hash
+            hash_a = _hash(a)
             a.write_text("R = 6\ndef model():\n    return R\n", encoding="utf-8")
-            self.assertNotEqual(hash_a, _closure(a, root).closure_hash)
+            self.assertNotEqual(hash_a, _hash(a))
 
     def test_syntax_error_falls_back_to_byte_hash(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             a = self._write(root, "broken.py", "def gen_step(:\n    return 1\n")
-            hash_a = _closure(a, root).closure_hash
+            hash_a = _hash(a)
             # a comment edit on an unparseable file DOES change the (byte) hash
             a.write_text("# c\ndef gen_step(:\n    return 1\n", encoding="utf-8")
-            self.assertNotEqual(hash_a, _closure(a, root).closure_hash)
-
-    def test_matches_rejects_legacy_byte_recorded_hash(self) -> None:
-        """A byte-recorded digest reports STALE and rebuilds — the fallback is gone.
-
-        There is one digest now. An assembly.json written before comment-insensitive hashing
-        reports stale exactly once, rebuilds, and re-records a semantic digest; the old
-        dual-hash acceptance cost a second full-content re-read of every closure file on
-        every miss and was the last data-compatibility path in the freshness stack.
-        """
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            self._write(root, "gen.py", "def model():\n    return 1\n")
-            legacy = source_hash._recompute_closure_hash(
-                ["gen.py"], base=root, hasher=source_hash._sha256_file
-            )
-            self.assertIsNotNone(legacy, "the byte recompute must still be reachable")
-            self.assertFalse(source_hash.closure_hash_matches(legacy, ["gen.py"], base=root))
-
-    def test_matches_accepts_semantic_hash_after_comment_edit(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            a = self._write(root, "gen.py", "def model():\n    return 1\n")
-            semantic = _closure(a, root).closure_hash
-            a.write_text("# comment\ndef model():\n    return 1\n", encoding="utf-8")
-            self.assertTrue(source_hash.closure_hash_matches(semantic, ["gen.py"], base=root))
-
-    def test_matches_rejects_missing_file(self) -> None:
-        with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp)
-            self.assertFalse(source_hash.closure_hash_matches("abc", ["gone.py"], base=root))
+            self.assertNotEqual(hash_a, _hash(a))
 
     def test_deep_but_importable_source_falls_back_instead_of_raising(self) -> None:
         # 'x = 1 + 1 + ... + 1' compiles and imports fine, but ast.dump on the
@@ -111,7 +81,6 @@ class SemanticClosureHashTests(unittest.TestCase):
             nested = self._write(root, "nested.py", "x = " + "-" * 100000 + "1\n")
             hash_a = source_hash._semantic_source_hash(nested)
             self.assertFalse(hash_a.startswith("ast1:"))
-            self.assertFalse(source_hash.closure_hash_matches("abc", ["nested.py"], base=root))
 
 
 class SemanticHashMemoTests(unittest.TestCase):

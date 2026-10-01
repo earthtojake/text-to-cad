@@ -501,7 +501,10 @@ they are wrong.
 
 `main` is source. Everything cadgen executes that is not Python — the Node
 builders and the snapshot browser bundle under `cadgen/_runtime/node` and
-`_runtime/browser`, and the CAD Viewer client under `_runtime/viewer` — is
+`_runtime/browser`, the CAD Viewer client under `_runtime/viewer`, and the file
+tracer every build loads under `_runtime/native` (one C file,
+`packages/cadgen/native/filetrace.c`, cross-compiled by zig for every platform
+into the one wheel; `ziglang` comes with `requirements-dev.txt`) — is
 gitignored and produced by `scripts/bundle/bundle.sh`. Nothing built is ever
 committed: a rebundle used to add a megabyte of history per commit, and a
 committed bundle can drift from the source that claims to produce it.
@@ -552,7 +555,7 @@ is involved) and deletes the branch. The merged commit is THE release commit.
    the release commit carries none of it — then `check-builds.sh`, the docs and
    code tests, the wheel-contents check, `python -m build`, and an `unzip -l`
    assertion that the wheel about to ship really holds `_runtime/node`,
-   `_runtime/browser` and `_runtime/viewer`.
+   `_runtime/browser`, `_runtime/viewer` and every `_runtime/native` tracer.
 3. Install test: the built wheel into a fresh venv — `cadgen --help`, `cadgen
    viewer --help`, `cadgen doctor skills/cad` — then
    `scripts/test/test-installed.sh --wheel <built-wheel>`; the distribution is uploaded as a workflow

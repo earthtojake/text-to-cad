@@ -29,9 +29,14 @@ ensure_packaged_runtime() {
     if [ ! -f "$runtime/$name" ]; then
       section "Building cadgen's packaged runtime (missing $name)"
       "$REPO_ROOT/scripts/bundle/cadgen-runtime.sh" --node --browser
-      return
+      break
     fi
   done
+  # Every build loads the file tracer, so every suite that builds needs it.
+  if ! compgen -G "$runtime/native/filetrace-*" >/dev/null; then
+    section "Building cadgen's file tracer"
+    "$REPO_ROOT/scripts/bundle/cadgen-runtime.sh" --native
+  fi
 }
 
 section() {

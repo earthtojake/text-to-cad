@@ -1,6 +1,6 @@
 """Regression tests for incremental-regen building blocks:
 
-- source import-closure capture/check (cadgen.source_hash)
+- first-party classification of loaded modules (cadgen.source_hash)
 - the binary (BinTools) scene cache round-trip
 """
 
@@ -31,35 +31,6 @@ def _face_count(shape: object) -> int:
 
 
 class SourceClosureTests(unittest.TestCase):
-    def test_closure_round_trip_detects_dependency_changes(self) -> None:
-        with temporary_directory(prefix="closure-") as raw_dir:
-            base = Path(raw_dir)
-            script = base / "part.py"
-            dep = base / "helper.py"
-            script.write_text("import helper\n", encoding="utf-8")
-            dep.write_text("VALUE = 1\n", encoding="utf-8")
-
-            closure = cad_source_hash.closure_for_files(script, [dep], base=base)
-            # The script and its dependency are both recorded.
-            self.assertEqual(2, len(closure.files))
-
-            # Re-checking the recorded file list against the recorded hash matches.
-            self.assertTrue(
-                cad_source_hash.closure_hash_matches(closure.closure_hash, closure.files, base=base)
-            )
-
-            # A semantic edit to a dependency invalidates the recorded hash (stale).
-            dep.write_text("VALUE = 2\n", encoding="utf-8")
-            self.assertFalse(
-                cad_source_hash.closure_hash_matches(closure.closure_hash, closure.files, base=base)
-            )
-
-            # A missing recorded file is never a match (callers treat as stale).
-            dep.unlink()
-            self.assertFalse(
-                cad_source_hash.closure_hash_matches(closure.closure_hash, closure.files, base=base)
-            )
-
     def test_repo_local_modules_key_on_interpreter_not_cwd(self) -> None:
         """First-party detection keys on the interpreter's stdlib/site-packages layout, NOT a
         repo-root global or the process working directory. So the dependency closure a generator

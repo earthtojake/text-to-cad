@@ -104,9 +104,16 @@ def _authkey_path(address: str) -> Path:
 
 
 def read_authkey(address: str) -> bytes | None:
-    """The shared secret for this daemon, or None if it has not been created."""
+    """The shared secret for this daemon, or None if it has not been created.
+
+    Read unseen by a build's file trace: a parent submitting a child reads it,
+    on whichever thread connects, and the daemon's key is never a model's input.
+    """
+    from cadgen._internal.filetrace import paused
+
     try:
-        return _authkey_path(address).read_bytes().strip() or None
+        with paused():
+            return _authkey_path(address).read_bytes().strip() or None
     except OSError:
         return None
 

@@ -7,9 +7,9 @@ from a vendor STEP kept reporting itself current after that STEP was replaced,
 and the only way to get the truth back was ``--force`` — a flag whose whole job
 was to say "the gate is lying to you".
 
-``cadgen.read_step`` closes that (design/dxf-build123d.md). It records the file
-it read into the run's closure, byte-hashed like any non-Python input, and the
-next run's gate re-hashes it.
+Nothing is declared: the build's trace (cadgen._internal.filetrace) sees every
+file the build opens -- Python's open, numpy, an OCCT reader in C++ -- and the
+next run's gate re-hashes what it read.
 
 The failure mode this phase guards against is SILENT: the wrong answer is a
 build that does nothing and says everything is fine. So the three cases are
@@ -77,27 +77,23 @@ if __name__ == "__main__":
 '''
 
 
-_JSON_MODEL = '''import json
-from pathlib import Path
+_NATIVE_MODEL = '''from pathlib import Path
 
 from cadgen import build123d as bd
-from cadgen import declare_input, step
+from cadgen import step
 
 HERE = Path(__file__).resolve().parent
 
 
-def _atlas():
-    return json.loads(declare_input(HERE / "atlas.json").read_text(encoding="utf-8"))
-
-
 @step
-def plate():
-    atlas = _atlas()
-    return bd.Box(atlas["width"], 20, 4)
+def mount():
+    # build123d's importer: OCCT opens the file in C++, and nothing is declared.
+    vendor = bd.import_step(str(HERE / "vendor.step"))
+    return bd.Compound([bd.Box(40, 20, 4), bd.Pos(0, 0, 6) * vendor])
 
 
 if __name__ == "__main__":
-    plate()
+    mount()
 '''
 
 
@@ -215,9 +211,8 @@ class DiscoveredFileInputTests(unittest.TestCase):
         return json.loads(completed.stdout.strip().splitlines()[-1])["outcome"]
 
     def test_a_file_the_model_reads_without_declaring_it_is_an_input(self) -> None:
-        """A plain ``read_text`` is seen through Python's open audit event: the
-        file joins the closure. Reading the model's own previous output is not an
-        input, or the model could never be current."""
+        """A plain ``read_text`` joins the closure. Reading the model's own
+        previous output is not an input, or the model could never be current."""
         model = self._write_model("plate.py", '''import json
 from pathlib import Path
 
@@ -247,6 +242,62 @@ if __name__ == "__main__":
         atlas.write_text('{"width": 30}', encoding="utf-8")
         self.assertEqual(self._run_json(model), "built", "a replaced data file makes the model stale")
         self.assertNotEqual(first, (self.project / "plate.step").read_bytes())
+
+    def test_a_file_only_native_code_opens_is_an_input(self) -> None:
+        """OCCT reads the STEP in C++, where Python sees no open at all."""
+        model = self._write_model("mount.py", _NATIVE_MODEL)
+        self._write_vendor_step(20.0)
+        self.assertEqual(self._run_json(model), "built")
+        first = (self.project / "mount.step").read_bytes()
+        self.assertEqual(self._run_json(model), "current")
+        self._write_vendor_step(30.0)
+        self.assertEqual(self._run_json(model), "built", "a replaced vendor STEP must make the model stale")
+        self.assertNotEqual(first, (self.project / "mount.step").read_bytes())
+
+    def test_a_childs_reads_and_output_stay_in_the_childs_record(self) -> None:
+        """A child is the parent's input by its result. Checking whether it is
+        current reads its files inside the parent's build; none of that is the
+        parent's."""
+        (self.project / "data").mkdir()
+        (self.project / "data" / "size.txt").write_text("10\n", encoding="utf-8")
+        self._write_model("leg.py", '''from pathlib import Path
+
+from cadgen import build123d as bd
+from cadgen import step
+
+HERE = Path(__file__).resolve().parent
+
+
+@step
+def leg():
+    return bd.Cylinder(2, float((HERE / "data" / "size.txt").read_text()))
+''')
+        table = self._write_model("table.py", '''from cadgen import build123d as bd
+from cadgen import step
+from leg import leg
+
+
+@step
+def table():
+    return bd.Compound([bd.Box(20, 20, 2), bd.Pos(0, 0, -5) * leg()])
+
+
+if __name__ == "__main__":
+    table()
+''')
+        self.assertEqual(self._run_json(table), "built")
+        # Rebuild the parent alone: the child has a record now, so checking it
+        # inside the parent's build reads its data file and its .step.
+        (self.project / table).write_text(
+            (self.project / table).read_text(encoding="utf-8").replace("Box(20,", "Box(22,"), encoding="utf-8")
+        self.assertEqual(self._run_json(table), "built")
+        self.assertEqual(self._run_json(table), "current")
+        from cadgen.store.records import read_record
+
+        with mock.patch.dict(os.environ, {"CADGEN_CACHE_DIR": self.environment["CADGEN_CACHE_DIR"]}):
+            parent, child = (read_record(self.project / name) for name in ("table.py", "leg.py"))
+        self.assertIn("data/size.txt", child["closure"]["files"])
+        self.assertFalse({"data/size.txt", "leg.step"} & set(parent["closure"]["files"]))
 
     def test_the_same_mechanism_serves_step_models(self) -> None:
         """`read_step` is not a drawing feature: composing a vendor part into a
@@ -326,31 +377,6 @@ class OwnOutputAsInputTests(unittest.TestCase):
         self.assertIn("is an output this model writes", completed.stderr)
         self.assertEqual(before, (self.project / "ouro.step").read_bytes())
 
-    def test_declare_input_on_a_declared_mesh_export_is_refused(self) -> None:
-        (self.project / "selfmesh.py").write_text(textwrap.dedent('''
-            from pathlib import Path
-
-            from cadgen import build123d as bd
-            from cadgen import declare_input, stl
-
-            HERE = Path(__file__).resolve().parent
-
-            @stl(out="selfmesh.stl")
-            def selfmesh():
-                declare_input(HERE / "selfmesh.stl")
-                return bd.Box(5, 5, 5)
-
-
-            if __name__ == "__main__":
-                selfmesh()
-            '''), encoding="utf-8")
-        (self.project / "selfmesh.stl").write_bytes(b"")
-
-        completed = self._run("selfmesh.py")
-
-        self.assertEqual(1, completed.returncode, completed.stdout + completed.stderr)
-        self.assertIn("is an output this model writes", completed.stderr)
-
     def test_reading_another_models_output_is_still_allowed(self) -> None:
         (self.project / "vendorsrc.py").write_text(textwrap.dedent('''
             from cadgen import build123d as bd
@@ -418,20 +444,12 @@ class ReaderSurfaceTests(unittest.TestCase):
         self.assertNotIn("read_step", str(caught.exception))
 
 
-class ScenePathRecordingTests(unittest.TestCase):
-    """`read_scene` records too.
-
-    It is the other public STEP reader, and a model that walks a vendor STEP's
-    occurrence tree depends on that file's bytes exactly as much as one that
-    takes its shape. Which cadgen reader records what it reads must not be
-    something anyone has to remember.
-    """
-
-    def test_the_public_scene_loader_declares_its_file(self) -> None:
+class ReadSceneTests(unittest.TestCase):
+    def test_the_document_read_scene_opens_is_traced(self) -> None:
         import build123d
 
         from cadgen import step_scene
-        from cadgen._internal.source_hash import record_discovered_inputs
+        from cadgen._internal import filetrace
 
         with tempfile.TemporaryDirectory(prefix="scene-recording-") as tmp:
             path = Path(tmp) / "part.step"
@@ -439,23 +457,11 @@ class ScenePathRecordingTests(unittest.TestCase):
             with mock.patch.dict(os.environ, {
                 "CADGEN_CACHE_DIR": str(Path(tmp) / "store"),
                 "CADGEN_DAEMON": "0",
-            }), record_discovered_inputs() as recorded:
-                step_scene.read_scene(path)
-            self.assertEqual(recorded, {path.resolve()})
-
-    def test_the_engines_own_loads_do_not_record(self) -> None:
-        """A build must never record its own output as its input."""
-        import build123d
-
-        from cadgen._internal import step_scene as engine
-        from cadgen._internal.source_hash import record_discovered_inputs
-
-        with tempfile.TemporaryDirectory(prefix="scene-recording-") as tmp:
-            path = Path(tmp) / "part.step"
-            build123d.export_step(build123d.Box(4, 3, 2), path)
-            with record_discovered_inputs() as recorded:
-                engine.load_step_scene(path)
-            self.assertEqual(recorded, set())
+            }):
+                with filetrace.capture() as trace:
+                    step_scene.read_scene(path)
+                files, _folders = trace.inputs()
+            self.assertEqual(set(files), {path.resolve()})
 
     def test_a_missing_scene_file_fails_loudly(self) -> None:
         from cadgen import step_scene
@@ -465,204 +471,126 @@ class ScenePathRecordingTests(unittest.TestCase):
         self.assertIn("read_scene", str(caught.exception))
 
 
-class DiscoveredInputRecordingTests(unittest.TestCase):
-    """The recorder itself, at the unit level."""
-
-    def test_recording_outside_a_build_is_a_no_op(self) -> None:
-        """Reading a STEP from a REPL, a test, or a tool is not a build."""
-        from cadgen._internal.source_hash import note_discovered_input
-
-        note_discovered_input(Path("/nonexistent/whatever.step"))  # must not raise
-
-    def test_nested_windows_propagate_upward(self) -> None:
-        """A nested capture hands its inputs to the enclosing one, so a build
-        that runs a sub-build does not lose the sub-build's data reach."""
-        from cadgen._internal.source_hash import note_discovered_input, record_discovered_inputs
-
-        with tempfile.TemporaryDirectory(prefix="discovered-nesting-") as tmp:
-            outer_file = Path(tmp) / "outer.step"
-            inner_file = Path(tmp) / "inner.step"
-            outer_file.write_text("outer", encoding="utf-8")
-            inner_file.write_text("inner", encoding="utf-8")
-            with record_discovered_inputs() as outer:
-                note_discovered_input(outer_file)
-                with record_discovered_inputs() as inner:
-                    note_discovered_input(inner_file)
-                self.assertEqual(inner, {inner_file.resolve()})
-                self.assertEqual(outer, {outer_file.resolve(), inner_file.resolve()})
-
-    def test_what_model_code_reads_is_recorded_and_what_cadgen_or_the_build_writes_is_not(self) -> None:
-        from cadgen._internal.source_hash import _sha256_file, record_discovered_inputs
-
-        with tempfile.TemporaryDirectory(prefix="discovered-reads-") as tmp:
-            root = Path(tmp)
-            data, table, engine, scratch = (root / name for name in ("dims.json", "table.csv", "engine.bin", "scratch.txt"))
-            data.write_text('{"w": 2}', encoding="utf-8")
-            table.write_text("1,2\n", encoding="utf-8")
-            engine.write_bytes(b"x")
-            with record_discovered_inputs() as recorded:
-                json.loads(data.read_text(encoding="utf-8"))
-                with open(table, newline="", encoding="utf-8") as handle:
-                    handle.read()
-                _sha256_file(engine)  # cadgen reading for itself
-                scratch.write_text("x", encoding="utf-8")  # the build's own file
-                scratch.read_text(encoding="utf-8")
-            self.assertEqual(recorded, {data.resolve(), table.resolve()})
-
-    def test_a_folder_the_model_code_lists_is_recorded_and_an_import_listing_is_not(self) -> None:
-        import importlib
-
-        from cadgen._internal.source_hash import record_discovered_inputs
-
-        with tempfile.TemporaryDirectory(prefix="discovered-listing-") as tmp:
-            root = Path(tmp)
-            profiles, package = root / "profiles", root / "pkg"
-            profiles.mkdir()
-            package.mkdir()
-            (profiles / "a.json").write_text("{}", encoding="utf-8")
-            (package / "helper_for_listing_test.py").write_text("X = 1\n", encoding="utf-8")
-            sys.path.insert(0, str(package))
-            self.addCleanup(sys.path.remove, str(package))
-            self.addCleanup(sys.modules.pop, "helper_for_listing_test", None)
-            with record_discovered_inputs() as recorded:
-                sorted(profiles.glob("*.json"))
-                importlib.import_module("helper_for_listing_test")  # the import system lists pkg/
-            self.assertEqual(recorded, {profiles.resolve()})
-
-    def test_a_recorded_input_joins_the_closure_and_is_byte_hashed(self) -> None:
-        from cadgen._internal.source_hash import closure_for_files, closure_hash_matches
-
-        with tempfile.TemporaryDirectory(prefix="discovered-closure-") as tmp:
-            root = Path(tmp)
-            script = root / "model.py"
-            script.write_text("x = 1\n", encoding="utf-8")
-            data = root / "vendor.step"
-            data.write_text("ISO-10303-21;\n", encoding="utf-8")
-
-            closure = closure_for_files(script, [data], base=root)
-            self.assertIn("vendor.step", closure.files)
-            self.assertTrue(closure_hash_matches(closure.closure_hash, closure.files, base=root))
-
-            # A non-.py input is hashed by its BYTES: the AST pass has nothing to
-            # say about a STEP file, and a comment there is content.
-            data.write_text("ISO-10303-21;\n/* a comment */\n", encoding="utf-8")
-            self.assertFalse(closure_hash_matches(closure.closure_hash, closure.files, base=root))
-
-
-class DeclaredDataInputTests(unittest.TestCase):
-    """A model's own data file is a build input once it says so.
-
-    `read_step` covers the files cadgen reads for the model. A JSON routing
-    atlas, a CSV table, a solved-offsets dump -- cadgen has no reader for
-    those, so it cannot record them, and a model that computes its geometry
-    from one used to report itself current forever after the file changed
-    (PR #370 bug record 012, whose workaround was to re-export the data as a
-    Python literal module so the IMPORT closure would carry it).
-
-    `cadgen.declare_input` is the declaration: the model still parses the file
-    itself, and the path it declares joins the closure. The three properties
-    are the same three that matter for `read_step`, because the failure being
-    guarded is the same silent one -- a build that does nothing and says
-    everything is fine.
-    """
+class FileTraceTests(unittest.TestCase):
+    """The trace at the unit level: what one capture calls an input."""
 
     def setUp(self) -> None:
-        self._tmp = tempfile.TemporaryDirectory(prefix="declared-inputs-")
+        self._tmp = tempfile.TemporaryDirectory(prefix="file-trace-")
         self.addCleanup(self._tmp.cleanup)
-        self.project = Path(self._tmp.name).resolve()
-        self.environment = dict(os.environ)
-        self.environment.update(
-            {
-                "CADGEN_DAEMON": "0",
-                "CADGEN_COMPONENT_WORKERS": "1",
-                "CADGEN_CACHE_DIR": str(self.project / "store"),
-                "PYTHONPATH": str(CADGEN_SRC),
-            }
-        )
-        (self.project / "plate.py").write_text(_JSON_MODEL, encoding="utf-8")
-        self.atlas = self.project / "atlas.json"
+        self.root = Path(self._tmp.name).resolve()
 
-    def _write_atlas(self, width: float) -> None:
-        self.atlas.write_text(json.dumps({"width": width}) + "\n", encoding="utf-8")
+    def _file(self, name: str, text: str = "x") -> Path:
+        path = self.root / name
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text, encoding="utf-8")
+        return path
 
-    def _run_outcome(self) -> str:
-        completed = subprocess.run(
-            [sys.executable, str(self.project / "plate.py"), "--json"],
-            cwd=str(self.project),
-            env=self.environment,
-            capture_output=True,
-            text=True,
-            timeout=600,
-        )
-        self.assertEqual(completed.returncode, 0, completed.stdout + completed.stderr)
-        return json.loads(completed.stdout.strip().splitlines()[-1])["outcome"]
+    def test_what_is_read_is_an_input_and_what_is_written_code_or_cadgens_is_not(self) -> None:
+        from cadgen._internal import filetrace
+        from cadgen._internal.source_hash import _sha256_file
 
-    def test_declared_input_is_content_addressed_recorded_and_required(self) -> None:
-        self._write_atlas(30.0)
-        self.assertEqual(self._run_outcome(), "built")
-        from cadgen.store.records import read_record
+        data, table, code, engine = (self._file(name, "1") for name in ("dims.json", "table.csv", "helper.py", "engine.bin"))
+        scratch = self.root / "scratch.txt"
+        with filetrace.capture() as trace:
+            json.loads(data.read_text(encoding="utf-8"))
+            with open(table, newline="", encoding="utf-8") as handle:
+                handle.read()
+            code.read_text(encoding="utf-8")  # code is tracked by reach
+            with filetrace.paused():
+                _sha256_file(engine)  # cadgen reading for itself
+            scratch.write_text("x", encoding="utf-8")  # the build's own file
+            scratch.read_text(encoding="utf-8")
+        files, folders = trace.inputs()
+        self.assertEqual(files, {data: _sha256_file(data), table: _sha256_file(table)})
+        self.assertEqual(folders, set())
 
-        with mock.patch.dict(os.environ, {"CADGEN_CACHE_DIR": self.environment["CADGEN_CACHE_DIR"]}):
-            recorded = read_record(self.project / "plate.py")
-        self.assertIsNotNone(recorded, "the build must leave a record for the model")
-        self.assertIn("atlas.json", sorted(recorded["closure"]["files"]))
-        # Bytes-not-mtime is one mechanism, proven once, above (read_step) and at
-        # unit level below; a declared input rides the same recorder.
+    def test_a_file_opened_only_in_native_code_is_traced(self) -> None:
+        import build123d
 
-        self._write_atlas(45.0)
-        self.assertEqual(
-            self._run_outcome(), "built", "a changed data file must make the model stale"
-        )
-        self.assertEqual(self._run_outcome(), "current")
+        from cadgen._internal import filetrace
 
-        self.atlas.unlink()
-        completed = subprocess.run(
-            [sys.executable, str(self.project / "plate.py")],
-            cwd=str(self.project),
-            env=self.environment,
-            capture_output=True,
-            text=True,
-            timeout=600,
-        )
-        self.assertNotEqual(completed.returncode, 0, "a missing input must not pass silently")
-        self.assertIn("declare_input", completed.stdout + completed.stderr)
+        part = self.root / "part.step"
+        build123d.export_step(build123d.Box(1, 2, 3), part)
+        with filetrace.capture() as trace:
+            build123d.import_step(str(part))
+        self.assertEqual(set(trace.inputs()[0]), {part})
 
-    def test_declaring_outside_a_build_resolves_but_records_nothing(self) -> None:
-        """A REPL, a test or a tool reading a data file is not a build."""
-        from cadgen import declare_input
-        from cadgen._internal.source_hash import record_discovered_inputs
+    def test_a_file_that_changed_or_vanished_after_its_read_is_recorded_changed(self) -> None:
+        from cadgen._internal import filetrace
 
-        self._write_atlas(30.0)
-        self.assertEqual(declare_input(self.atlas), self.atlas.resolve())
-        with record_discovered_inputs() as recorded:
-            declare_input(self.atlas)
-        self.assertEqual(recorded, {self.atlas.resolve()})
+        edited, removed = self._file("edited.json", "1"), self._file("removed.json", "1")
+        with filetrace.capture() as trace:
+            edited.read_text(encoding="utf-8")
+            removed.read_text(encoding="utf-8")
+            with filetrace.paused():  # another process, as far as the build can tell
+                edited.write_text("22", encoding="utf-8")
+                removed.unlink()
+        files, _folders = trace.inputs()
+        self.assertEqual(files, {edited: filetrace.CHANGED, removed: filetrace.CHANGED})
 
-    def test_edit_after_declared_read_keeps_the_closure_stale(self) -> None:
-        """@step and @dxf record one closure (``build_closure``): the first read's
-        hash stands, so an edit later in the body leaves the result stale."""
-        from unittest import mock
+    def test_the_daemon_key_read_on_a_job_thread_is_not_an_input(self) -> None:
+        """A parent submitting a child connects to the daemon on a job thread,
+        reading its key; that is cadgen's, on any thread."""
+        import threading
 
-        from cadgen import declare_input
-        from cadgen._internal.source_hash import record_discovered_inputs
-        from cadgen.store.closure import ExecutionHashes, build_closure, current_closure_hash
+        from cadgen._internal import filetrace
+        from cadgen.daemon import transport
+
+        address = str(self.root / "d.sock")
+        with mock.patch.dict(os.environ, {"CADGEN_DAEMON_STATE_DIR": str(self.root / "state")}):
+            transport.ensure_authkey(address)
+            with filetrace.capture() as trace:
+                thread = threading.Thread(target=transport.read_authkey, args=(address,))
+                thread.start()
+                thread.join()
+        self.assertEqual(trace.inputs(), ({}, set()))
+
+    def test_captures_nest(self) -> None:
+        from cadgen._internal import filetrace
+
+        outer_file, inner_file = self._file("outer.txt"), self._file("inner.txt")
+        with filetrace.capture() as outer:
+            outer_file.read_text(encoding="utf-8")
+            with filetrace.capture() as inner:
+                inner_file.read_text(encoding="utf-8")
+        self.assertEqual(set(inner.inputs()[0]), {inner_file})
+        self.assertEqual(set(outer.inputs()[0]), {outer_file, inner_file})
+
+    def test_a_folder_the_model_code_lists_is_an_input_and_an_import_listing_is_not(self) -> None:
+        import importlib
+
+        from cadgen._internal import filetrace
+
+        profiles, package = self.root / "profiles", self.root / "pkg"
+        self._file("profiles/a.json", "{}")
+        self._file("pkg/helper_for_listing_test.py", "X = 1\n")
+        sys.path.insert(0, str(package))
+        self.addCleanup(sys.path.remove, str(package))
+        self.addCleanup(sys.modules.pop, "helper_for_listing_test", None)
+        with filetrace.capture() as trace:
+            sorted(profiles.glob("*.json"))
+            importlib.import_module("helper_for_listing_test")  # the import system lists pkg/
+        self.assertEqual(trace.inputs()[1], {profiles})
+
+    def test_an_input_edited_mid_build_leaves_the_result_stale_and_unpublished(self) -> None:
+        """The geometry came from the first bytes: the record must not pair it
+        with the second, so the next gate rebuilds."""
+        from cadgen._internal import filetrace
+        from cadgen.store.closure import build_closure, current_closure_hash
         from cadgen.store.gate import stale
         from cadgen.store.publish import decide
 
-        script = self.project / "plain.py"
-        script.write_text("def model():\n    return None\n", encoding="utf-8")
-        self._write_atlas(30.0)
-        with record_discovered_inputs() as inputs, ExecutionHashes() as hashes:
-            consumed = json.loads(declare_input(self.atlas).read_text(encoding="utf-8"))
-            first_hash = hashes.hashes[str(self.atlas)]
-            self._write_atlas(45.0)
-            declare_input(self.atlas)  # A later declaration cannot erase the first read.
-        self.assertEqual(consumed["width"], 30.0)
-        for path in inputs:
-            hashes.note(path)  # The runner's post-body fallback must not overwrite it.
-
-        closure = build_closure(script, executed=hashes.hashes, discovered_inputs=inputs)
-        self.assertEqual(closure.shas["atlas.json"], first_hash)
+        script = self._file("plain.py", "def model():\n    return None\n")
+        atlas = self._file("atlas.json", '{"width": 30}')
+        with filetrace.capture() as trace:
+            consumed = json.loads(atlas.read_text(encoding="utf-8"))
+            with filetrace.paused():
+                atlas.write_text('{"width": 45}', encoding="utf-8")
+        self.assertEqual(consumed["width"], 30)
+        files, folders = trace.inputs()
+        closure = build_closure(script, executed={str(path): digest for path, digest in files.items()},
+                                discovered_inputs=[*files, *folders])
+        self.assertEqual(closure.shas["atlas.json"], filetrace.CHANGED)
         self.assertNotEqual(closure.hash, current_closure_hash(script, closure.files))
         record = {"tree": None, "closure": {"hash": closure.hash, "files": closure.files, "shas": closure.shas}}
         with mock.patch("cadgen.store.gate.read_record", return_value=record):
@@ -675,9 +603,10 @@ class DeclaredDataInputTests(unittest.TestCase):
             decision = decide(script, ran_closure_hash=closure.hash, ran_files=closure.files)
         self.assertFalse(decision.publish_outputs)
 
-    def test_pre_declaration_hash_records_miss_without_invalidating_saved_artifacts(self) -> None:
+
+class OldRecordTests(unittest.TestCase):
+    def test_an_old_late_hash_record_misses_without_invalidating_saved_artifacts(self) -> None:
         import hashlib
-        from unittest import mock
 
         from cadgen.catalog import result_snapshot_for
         from cadgen.store.closure import build_closure
@@ -686,7 +615,7 @@ class DeclaredDataInputTests(unittest.TestCase):
         from cadgen.store.records import note_document_tree, read_record, write_record
         from tests.python.support.tmp_root import generated_cad_directory
 
-        with generated_cad_directory(prefix="declared-input-admission-") as folder:
+        with generated_cad_directory(prefix="old-record-admission-") as folder:
             root = Path(folder)
             script = root / "model.py"
             script.write_text("def model():\n    return None\n", encoding="utf-8")

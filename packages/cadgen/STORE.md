@@ -384,12 +384,14 @@ A real one (`link_robot`: a base, two placements of `link_arm`, one of
   first-party, absolute and relative imports alike — a `lib/` package's
   `from .chain import X` counts, and importing `lib.x` executes
   `lib/__init__.py`, so the package is in it) **stopping at model files**, plus files executed in its own
-  frame, what importing its children ran in its process (below), and
-  discovered inputs: every data file the model's own code read through
-  Python's `open` (seen by an audit hook; not a file the build wrote, not one
-  of the model's own outputs, not the interpreter's, cadgen's or the store's),
-  and every file a native reader was told about (`read_step`,
-  `declare_input`). Three kinds of entry are not files: `<folder>/`, a folder
+  frame, what importing its children ran in its process (below), and every
+  data file the build read, whoever opened it -- Python's `open`, numpy, an
+  OCCT reader in C++ (§5, every read is seen). Nothing is declared. A file
+  read is not an input when the build wrote it, when it is one of the model's
+  own outputs, when it is code (Python source is the reach above; a compiled
+  library is the environment's), or when it lies in the environment: the
+  interpreter and its packages, cadgen, the store, and the folders the
+  operating system owns (fonts, time zones). Three kinds of entry are not files: `<folder>/`, a folder
   the model's code listed (a glob of profiles), hashed by its sorted entry
   names; `!<path>`, a file that
   must stay absent — one the imports were resolved past (a package beside a
@@ -418,8 +420,8 @@ A real one (`link_robot`: a base, two placements of `link_arm`, one of
   the model never reaches leaves it current. The record keeps the reached
   names per sliced file in `closure.names` and the file's whole-file hash, of
   the same bytes, in `closure.wholes`; a file absent from `names` (the script
-  itself, a model file taken as source, a `read_step` document, a file the
-  fallbacks below made whole) is hashed whole as before. What a slice is, by
+  itself, a model file taken as source, a data file the build read, a file
+  the fallbacks below made whole) is hashed whole as before. What a slice is, by
   construction:
   - A statement is an optional **definition** only inside a closed grammar:
     an undecorated function with no type parameters and with defaults and
@@ -621,7 +623,7 @@ tolerance for that run (flag > declaration > `@step` > default): each mesh's
 ledger entry records the pair the file was written at, so the declared meshes
 are re-cut from the current tree — the model is never rebuilt for it — and the
 next run without the flags restores them, once. Imported STEPs are inputs (a
-`read_step` file is in the closure), not models. `--force` rebuilds the named
+file the body reads is in the closure), not models. `--force` rebuilds the named
 model only; its children go through the gate as usual. `cadgen store forget
 <model.py>` drops the record instead, so the next run — not this one — rebuilds
 it (§10, Resets).
@@ -641,12 +643,26 @@ Each with the failure it prevents.
   (CPython accepts one by whole-second mtime and size, so two same-length edits
   inside a second would run stale bytecode), and its loader records exactly
   those bytes; a build writes no bytecode for anything it imports.
-  Declared data inputs retain their first declaration-time hash for both STEP
-  and DXF builds; an edit later in the body therefore leaves the result stale.
-  Since `declare_input` returns a path for the author's own reader, the author
-  must keep the file stable between declaration and that read. CAD readers
-  that own their input bytes record the exact consumed digest instead. A data
-  file found through the `open` audit event is hashed after the body returns.
+  A data file is hashed after the body returns, and only while it still has
+  the size and mtime it was opened with (the trace takes both at the open):
+  one that changed or vanished since is recorded `changed while building`,
+  which matches no file, so the next gate rebuilds.
+- **Every read is seen.** A build runs inside a capture
+  (`cadgen._internal.filetrace`). The tracer, one small native library per
+  platform in `_runtime/native`, rewires every library loaded in the build's
+  process -- and each one loaded later -- so its calls to the C library's
+  file opens (kernel32's on Windows) pass through a wrapper that logs the
+  file, its size and its mtime while the capture is open. Every reader ends
+  there: Python's `open`, numpy, build123d's importers, OCCT, FreeType.
+  Folders come from Python's `os.listdir` / `os.scandir` audit events, by
+  frame: the import system's listings and cadgen's own are not the model's.
+  The gate's own reading inside a build (a child's files and outputs, hashed
+  to decide whether it is current) is paused on its thread: a child is an
+  input by its result. Prevents: a model whose data changed reading as
+  current because nobody declared the file. Not seen: what a separate
+  program the model runs reads; calls made inside the operating system's own
+  libraries (the macOS shared cache); a file a third-party library caches
+  for the life of a warm worker, after the first build that reads it.
 - **Publish order.** Objects first (components, then the complete tree), the
   document-byte mapping, the outputs (`.step` moved into place atomically;
   digest-bound sidecar), output mappings, then the record. STEP export and

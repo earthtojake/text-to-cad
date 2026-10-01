@@ -72,7 +72,7 @@ class MaterializedIdentityTest(unittest.TestCase):
         from cadgen._internal.step_scene_loader import load_step_scene
         from cadgen._internal.step_scene_mesh import scene_leaf_occurrences, scene_occurrence_shape
 
-        scene = load_step_scene(self.root / "parent.step", record_read=False)
+        scene = load_step_scene(self.root / "parent.step")
         return sum(self.signed_volume(scene_occurrence_shape(scene, node)) for node in scene_leaf_occurrences(scene))
 
     def test_root_placement_label_color_overrides_keep_the_link(self):

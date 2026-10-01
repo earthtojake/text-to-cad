@@ -38,7 +38,7 @@ class DocumentTreePackagingTest(unittest.TestCase):
         from cadgen.store.records import note_document_tree
 
         digest = hashlib.sha256(output.read_bytes()).hexdigest()
-        raw_hash, raw_tree, _ = build_document_tree(load_step_scene(output, record_read=False))
+        raw_hash, raw_tree, _ = build_document_tree(load_step_scene(output))
         self.assertEqual(raw_hash, expected_tree)
         note_document_tree(digest, expected_tree)
         warm_scene = scene_from_render_package(output, step_hash=digest)
@@ -50,7 +50,7 @@ class DocumentTreePackagingTest(unittest.TestCase):
         # Force extraction in an empty store, not merely a hit of the generated
         # component index. The STEP bytes and intrinsic names are the inputs.
         with mock.patch.dict(os.environ, {"CADGEN_CACHE_DIR": str(self.root / "empty-store")}):
-            cold_hash, cold_tree, _ = build_document_tree(load_step_scene(copied, record_read=False))
+            cold_hash, cold_tree, _ = build_document_tree(load_step_scene(copied))
         self.assertEqual((cold_hash, cold_tree), (raw_hash, raw_tree))
         return raw_tree
 

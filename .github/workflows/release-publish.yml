@@ -184,7 +184,12 @@ jobs:
             cadgen/_runtime/browser/snapshot-render.js \
             cadgen/_runtime/browser/render.html \
             cadgen/_runtime/node/mesh-export.mjs \
-            cadgen/_runtime/viewer/index.html; do
+            cadgen/_runtime/viewer/index.html \
+            cadgen/_runtime/native/filetrace-macos-aarch64.dylib \
+            cadgen/_runtime/native/filetrace-macos-x86_64.dylib \
+            cadgen/_runtime/native/filetrace-linux-x86_64.so \
+            cadgen/_runtime/native/filetrace-linux-aarch64.so \
+            cadgen/_runtime/native/filetrace-windows-x86_64.dll; do
             if ! printf '%s\n' "$listing" | grep -qF " $required"; then
               echo "$(basename "$wheel") does not contain $required" >&2
               echo "scripts/bundle/bundle.sh produces it; [tool.setuptools.package-data] ships it." >&2

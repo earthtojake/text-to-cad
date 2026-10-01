@@ -345,7 +345,7 @@ def _scene_from_selected_bytes(resolved_step_path: Path, payload: bytes) -> Load
             snapshot.write(payload)
             snapshot_path = Path(snapshot.name)
         # The kernel reads our private snapshot; a failure names the USER's file.
-        scene = _load_step_scene_text(snapshot_path, record_read=False, named=resolved_step_path)
+        scene = _load_step_scene_text(snapshot_path, named=resolved_step_path)
     finally:
         if snapshot_path is not None:
             try:
@@ -355,12 +355,6 @@ def _scene_from_selected_bytes(resolved_step_path: Path, payload: bytes) -> Load
     scene.step_path = resolved_step_path
     scene.step_hash = step_hash
     return scene
-
-
-def _record_consumed_hash(step_path: Path, step_hash: str) -> None:
-    from cadgen.store.closure import note_consumed_file_hash
-
-    note_consumed_file_hash(step_path, step_hash)
 
 
 def load_step_scene_cached(step_path: Path, *, lazy: bool = False) -> LoadedStepScene:
@@ -384,7 +378,6 @@ def load_step_scene_cached(step_path: Path, *, lazy: bool = False) -> LoadedStep
         step_hash = hashlib.sha256(payload).hexdigest()
         from_package, damaged_document = lookup_document_scene(resolved_step_path, step_hash=step_hash, lazy=lazy)
         if from_package is not None:
-            _record_consumed_hash(resolved_step_path, step_hash)
             return from_package
 
         from cadgen.daemon import broker
@@ -411,7 +404,6 @@ def load_step_scene_cached(step_path: Path, *, lazy: bool = False) -> LoadedStep
             raise RuntimeError(f"Could not compile STEP cache for {resolved_step_path}{suffix}")
         from_package, _ = lookup_document_scene(resolved_step_path, step_hash=step_hash, lazy=lazy)
         if from_package is not None:
-            _record_consumed_hash(resolved_step_path, step_hash)
             return from_package
         # A replacement raced the submit: the worker correctly published the
         # bytes it snapshotted. A concurrent deletion of derived geometry can

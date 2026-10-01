@@ -77,10 +77,10 @@ class TildeExpansion(unittest.TestCase):
         self.assertIsNone(doctor._resolve_requirements("~/empty"))
 
     def test_scene_reader_expands_a_tilde(self) -> None:
-        from cadgen.step_scene import _record_input
+        from cadgen.step_scene import _resolve_input
         document = self.home / "part.step"
         document.write_text("fixture", encoding="utf-8")
-        self.assertEqual(_record_input("~/part.step", reader="read_scene"), document)
+        self.assertEqual(_resolve_input("~/part.step", reader="read_scene"), document)
 
     def test_source_from_path_expands_a_tilde(self) -> None:
         document = self.home / "imported.step"

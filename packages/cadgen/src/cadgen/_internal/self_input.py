@@ -1,17 +1,14 @@
-"""A model must not declare one of its own outputs as a build input.
+"""A model must not read one of its own outputs as geometry.
 
-``read_step``, ``read_scene`` and ``declare_input`` put a file's content
-hash in the model's closure. Pointed at a file the SAME model writes, that is
-not a loop but an input that changes every time the model runs: the gate can
-never say "current", every run is a full rebuild, and the geometry the model
-produces depends on whatever the previous run happened to leave on disk. A
-model whose body reads and re-wraps its own ``.step`` grows on every run and
-exits 0 each time -- plausible-wrong output, which is the one outcome the
-engine refuses to produce.
+A file the SAME model writes is not an input: the build records its own outputs
+as written, never read. What ``read_step`` / ``read_scene`` would hand back is
+whatever the previous run happened to leave on disk, so a model whose body reads
+and re-wraps its own ``.step`` grows on every run and exits 0 each time --
+plausible-wrong output, which is the one outcome the engine refuses to produce.
 
 The skill reference states the rule ("Never ``read_step`` your own output ...
 Input path and output path being different files is the whole rule"); this is
-where it is enforced, at the two doors that record an input.
+where it is enforced, at cadgen's two STEP readers.
 """
 
 from __future__ import annotations

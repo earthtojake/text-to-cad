@@ -1014,46 +1014,11 @@ class ExecutionHashes:
             for key, payload in self.sources.items():
                 _ACTIVE_SOURCES.setdefault(key, payload)
 
-    def note(self, path: Path) -> None:
-        """Hash a file the build read outside the exec hook (the script's own
-        bytes at load, a ``read_step`` input) — at the moment it was read."""
-        try:
-            resolved = Path(path).resolve()
-        except (OSError, ValueError):
-            return
-        key = str(resolved)
-        if key not in self.hashes and resolved.is_file():
-            try:
-                self.hashes[key] = _semantic_source_hash(resolved)
-            except OSError:
-                return
-
-
-def note_declared_file_hash(path: Path) -> None:
-    """Pin a declared input before the author reads it, while a build is active.
-
-    Keep the first declaration even if the file changes or is declared again
-    during the body. Publication and the next freshness gate must see that edit.
-    """
-    hashes = _ACTIVE_HASHES
-    if hashes is None:
-        return
-    resolved = path.resolve()
-    key = str(resolved)
-    if key not in hashes:
-        hashes[key] = _semantic_source_hash(resolved)
-
 
 def note_consumed_file_hash(path: Path | str, digest: str, *, source: bytes | None = None) -> None:
-    """Record the exact bytes a data reader consumed in the active build.
-
-    A discovered input is normally hashed after the model body returns.  A
-    path can be atomically replaced between a C++ reader opening it and that
-    later hash, though, which would bind old geometry to new bytes.  Readers
-    that already own the byte digest use this hook; ``ExecutionHashes.note``
-    deliberately keeps the first value and therefore cannot overwrite it. A
-    Python loader that owns the compiled buffer passes it as ``source`` so the
-    reach analysis reads the revision that ran.
+    """Record the exact source a loader compiled in the active build: its hash,
+    and the bytes as ``source`` so the reach analysis reads the revision that
+    ran. The first value stands; a file edited mid-build is caught by the gate.
     """
     hashes = _ACTIVE_HASHES
     value = str(digest or "").strip()
@@ -1145,7 +1110,8 @@ def build_closure(
     ``executed`` maps resolved paths to the hashes taken at execution
     (:class:`ExecutionHashes`), ``sources`` to the bytes captured then. The
     file set is: the script, its reach's source files, every executed
-    first-party file, and discovered inputs — minus files that belong to a
+    first-party file, and discovered inputs (what the build's trace saw it read
+    and list) — minus files that belong to a
     child model (its script and files reached only through it), which the
     boundary rule excludes. The reach walk starts at the script, then at every
     executed first-party ``.py`` file it did not reach and no child owns, each

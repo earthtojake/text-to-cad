@@ -34,7 +34,7 @@ class StepExportPlacementTests(unittest.TestCase):
                 path = Path(tmp) / "root.step"
                 export_build123d_step_file(root, path)
                 first_bytes = path.read_bytes()
-                scene = load_step_scene(path, record_read=False)
+                scene = load_step_scene(path)
                 self.assertEqual(len(scene.roots), 1)
                 loaded_root = scene.roots[0]
                 self.assertEqual((loaded_root.path, loaded_root.name), ((1,), "root"))

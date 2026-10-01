@@ -80,6 +80,13 @@ REQUIRED=(
   "cadgen/_runtime/browser/snapshot-render.js"
   "cadgen/_runtime/browser/render.html"
   "cadgen/_runtime/viewer/index.html"
+  # The file tracer every build loads, one per platform: a wheel missing one builds
+  # nothing on that platform.
+  "cadgen/_runtime/native/filetrace-macos-aarch64.dylib"
+  "cadgen/_runtime/native/filetrace-macos-x86_64.dylib"
+  "cadgen/_runtime/native/filetrace-linux-x86_64.so"
+  "cadgen/_runtime/native/filetrace-linux-aarch64.so"
+  "cadgen/_runtime/native/filetrace-windows-x86_64.dll"
 )
 
 echo "Building cadgen wheel for content check..."

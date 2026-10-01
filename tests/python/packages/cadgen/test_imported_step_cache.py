@@ -31,11 +31,8 @@ if sys.argv[2] == "forbid-text":
     package._load_step_scene_text = forbidden
 
 from cadgen._internal.step_scene_package import load_step_scene_cached
-from cadgen.store import closure
 
 document = Path(sys.argv[1]).resolve()
-consumed = {}
-closure.note_consumed_file_hash = lambda path, digest: consumed.setdefault(str(Path(path).resolve()), digest)
 scene = load_step_scene_cached(document)
 
 def node(value):
@@ -48,7 +45,6 @@ def node(value):
 
 print(json.dumps({
     "hash": scene.step_hash,
-    "consumedHash": consumed[str(document)],
     "roots": [node(root) for root in scene.roots],
     "prototypeNames": sorted(name or "" for name in scene.prototype_names.values()),
     "prototypeColors": sorted(
@@ -133,7 +129,6 @@ class ImportedStepCacheTests(unittest.TestCase):
         cold = self._read_fresh_process()
         digest = hashlib.sha256(authored_before[0]).hexdigest()
         self.assertEqual(cold["hash"], digest)
-        self.assertEqual(cold["consumedHash"], digest)
         self.assertEqual(len(cold["roots"]), 1)
         self.assertGreaterEqual(sum(cold["faceColorCounts"]), 2)
 
@@ -166,9 +161,9 @@ class ImportedStepCacheTests(unittest.TestCase):
         self.assertEqual(healed, first)
         self.assertTrue(tree_complete(tree_hash))
 
-    def test_snapshot_digest_and_closure_follow_the_bytes_parsed_during_replacement(self) -> None:
+    def test_a_document_replaced_while_it_is_read_is_recorded_changed(self) -> None:
+        from cadgen._internal import filetrace
         from cadgen._internal import step_scene_package as package
-        from cadgen.store.closure import ExecutionHashes, note_consumed_file_hash
 
         replacement = self.root / "replacement.step"
         self._write_fixture()
@@ -182,19 +177,22 @@ class ImportedStepCacheTests(unittest.TestCase):
         real_loader = package._load_step_scene_text
 
         def replace_then_parse(snapshot: Path, **kwargs):
-            self.step_path.write_bytes(replacement_bytes)
+            with filetrace.paused():  # another process's write, not the build's
+                self.step_path.write_bytes(replacement_bytes)
             return real_loader(snapshot, **kwargs)
 
-        with mock.patch.object(package, "_load_step_scene_text", side_effect=replace_then_parse):
+        with (
+            mock.patch.object(package, "_load_step_scene_text", side_effect=replace_then_parse),
+            filetrace.capture() as trace,
+        ):
             scene = package.load_step_scene_exact(self.step_path)
         self.assertEqual(scene.step_hash, consumed_hash)
         self.assertEqual(hashlib.sha256(self.step_path.read_bytes()).hexdigest(), replacement_hash)
 
-        # The exact-value hook wins over the normal after-body path hash.
-        with ExecutionHashes() as hashes:
-            note_consumed_file_hash(self.step_path, consumed_hash)
-            hashes.note(self.step_path)
-        self.assertEqual(hashes.hashes[str(self.step_path)], consumed_hash)
+        # The geometry is the first bytes; the file now holds others. Recorded as
+        # changed, the next gate rebuilds rather than pairing the two.
+        files, _folders = trace.inputs()
+        self.assertEqual(files[self.step_path.resolve()], filetrace.CHANGED)
 
     def test_nested_import_compile_yields_a_single_worker_slot(self) -> None:
         self._write_fixture()

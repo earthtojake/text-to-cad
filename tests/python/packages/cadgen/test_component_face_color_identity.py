@@ -110,7 +110,7 @@ class ComponentFaceColorIdentityTest(unittest.TestCase):
                 component = next(iter(document["components"].values()))
                 self.assertEqual(self.faces(component), colors)
                 with mock.patch.dict(os.environ, {"CADGEN_CACHE_DIR": str(self.root / f"cold-{name}")}):
-                    cold_hash, _, _ = build_document_tree(load_step_scene(output, record_read=False))
+                    cold_hash, _, _ = build_document_tree(load_step_scene(output))
                 self.assertEqual(cold_hash, stats["documentTree"])
                 documents.append(document)
                 step_hashes.append(digest)
@@ -185,7 +185,7 @@ class ComponentFaceColorIdentityTest(unittest.TestCase):
         shutil.rmtree(self.root / "store")
         with self.assertRaises(FileNotFoundError):
             materialize(red_tree)
-        cold_hash, _, _ = build_document_tree(load_step_scene(output, record_read=False))
+        cold_hash, _, _ = build_document_tree(load_step_scene(output))
         self.assertEqual((cold_hash, get_tree(cold_hash)), (stats["documentTree"], document))
 
     def test_pre_force_face_override_moves_without_reusing_the_original_child_finish(self):

@@ -90,11 +90,10 @@ python src/bracket.py
   `.moved()` or `Location * shape` to preserve shared geometry. Use meaningful
   occurrence labels and source-defined placements. Rerun the parent assembly
   to incorporate a changed child.
-- Read vendor STEP inputs with `cadgen.read_step`; it records the file as a
-  build input. A data file your Python code opens (`json.load`, `np.load`) is
-  recorded on its own; wrap a file a native reader opens (`bd.import_step`,
-  `bd.import_brep`) in `cadgen.declare_input`. Never read a model's own output
-  as its input. Geometry must not depend on untracked
+- Read vendor STEP inputs with `cadgen.read_step`. Every file a build opens is
+  an input on its own, whatever reads it (`json.load`, `np.load`,
+  `bd.import_step`, a font): nothing is declared. Never read a model's own
+  output as its input. Geometry must not depend on untracked
   time, random values, environment variables or the working directory.
 - When named purchasable parts are needed, search `$step-parts` before making
   placeholders. Record an unsuccessful search and any placeholder assumptions.
