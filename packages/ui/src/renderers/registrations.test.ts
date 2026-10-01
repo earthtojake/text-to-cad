@@ -1,9 +1,19 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { FileMetadata } from "../file-viewer/types.js";
 import { selectRenderer } from "../file-viewer/registry.js";
 import { createStepRenderer } from "./step/index.js";
 import { createDxfRenderer } from "./dxf/index.js";
+import { createGlbRenderer } from "./glb/index.js";
+import { createMeshRenderer } from "./mesh/index.js";
+import { createRobotRenderer } from "./robot/index.js";
+
+// A registration loads its component beside its document; these tests are about the document.
+vi.mock("./step/StepRenderer.js", () => ({ default: () => null }));
+vi.mock("./dxf/DxfRenderer.jsx", () => ({ default: () => null }));
+vi.mock("./glb/GlbRenderer.jsx", () => ({ default: () => null }));
+vi.mock("./mesh/MeshRenderer.jsx", () => ({ default: () => null }));
+vi.mock("./robot/RobotRenderer.jsx", () => ({ default: () => null }));
 
 const file = (path: string, mediaType: string, mime?: string): FileMetadata => ({
   path,
@@ -28,5 +38,23 @@ describe("viewer renderer registrations", () => {
     expect("panels" in dxf).toBe(false);
     // Preview is each viewer's own mode, never a flag a registration offers a host.
     expect(["fullscreen", "preview", "previewing"].some(key => key in dxf || key in step)).toBe(false);
+  });
+
+  it("prepares a live document for every workspace file: an edit updates the open model, never reopens it", async () => {
+    let disposed = 0;
+    const client = {
+      refresh: async () => {},
+      resolveEntry: async (path: string) => ({ file: path, kind: "part" }),
+      serverInfo: async () => ({}),
+      createRenderSession: () => ({ dispose: () => { disposed += 1; } }),
+    } as never;
+    const renderers = [createStepRenderer({ client }), createDxfRenderer({ client }), createGlbRenderer({ client }),
+      createMeshRenderer({ client }), createRobotRenderer({ client })];
+    for (const renderer of renderers) {
+      const prepared = await renderer.prepare({ file: file("part.step", "cad"), source: {} as never, signal: new AbortController().signal });
+      expect([renderer.id, prepared.live]).toEqual([renderer.id, true]);
+      prepared.dispose?.();
+    }
+    expect(disposed).toBe(renderers.length);
   });
 });

@@ -30,7 +30,7 @@ export function createGlbRenderer({ client, ...options }: GlbRendererOptions) {
     // model gets the room.
     async prepare(context) {
       const prepared = await prepareWorkspaceEntry(client, context);
-      return { data: { ...prepared.data, services }, dispose: prepared.dispose };
+      return { ...prepared, data: { ...prepared.data, services } };
     },
     load: () => import('./GlbRenderer.jsx') as Promise<{ default: ComponentType<FileRendererProps<PreparedGlbDocument>> }>
   });

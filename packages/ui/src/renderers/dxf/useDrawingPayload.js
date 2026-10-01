@@ -24,22 +24,26 @@ class DrawingSchemaError extends Error {
 }
 
 /**
- * Load and prepare one drawing.
+ * Load and prepare one drawing. A newer revision of the same file is read behind
+ * the drawing on screen: `loading` is a drawing with nothing to show yet, and
+ * `updating` the next revision of the one shown, which stays until it arrives —
+ * or, if that revision will not read, stays with the error beside it.
  *
  * @param {{ client: import("@text-to-cad/core/client").CadWorkspaceService, file: string, revision?: string }} options
- * @returns {{ drawing: object|null, error: unknown, loading: boolean }}
+ * @returns {{ drawing: object|null, error: unknown, loading: boolean, updating: boolean }}
  */
 export function useDrawingPayload({ client, file, revision = "" }) {
-  const [state, setState] = useState(() => ({ key: "", drawing: null, error: null, loading: true }));
+  const [state, setState] = useState(() => ({ key: "", file: "", drawing: null, error: null, loading: true }));
   const key = useMemo(() => JSON.stringify([file, revision]), [file, revision]);
   useEffect(() => {
     if (!file) {
-      setState({ key, drawing: null, error: new Error("This drawing has no file to read."), loading: false });
+      setState({ key, file, drawing: null, error: new Error("This drawing has no file to read."), loading: false });
       return undefined;
     }
     const controller = new AbortController();
     let live = true;
-    setState((previous) => (previous.key === key ? previous : { key, drawing: null, error: null, loading: true }));
+    const shown = (previous) => (previous.file === file ? previous.drawing : null);
+    setState((previous) => (previous.key === key ? previous : { key, file, drawing: shown(previous), error: null, loading: true }));
     client.drawing(file, { signal: controller.signal })
       .then((payload) => {
         if (payload?.schemaVersion !== DRAWING_SCHEMA_VERSION) {
@@ -47,15 +51,17 @@ export function useDrawingPayload({ client, file, revision = "" }) {
         }
         return prepareDrawing(payload);
       })
-      .then((drawing) => { if (live) setState({ key, drawing, error: null, loading: false }); })
+      .then((drawing) => { if (live) setState({ key, file, drawing, error: null, loading: false }); })
       .catch((error) => {
         if (!live || controller.signal.aborted) return;
-        setState({ key, drawing: null, error, loading: false });
+        setState((previous) => ({ key, file, drawing: shown(previous), error, loading: false }));
       });
     return () => { live = false; controller.abort(); };
   }, [client, file, key]);
-  return { drawing: state.key === key ? state.drawing : null, error: state.key === key ? state.error : null,
-    loading: state.key !== key || state.loading };
+  const current = state.key === key;
+  const drawing = current || state.file === file ? state.drawing : null;
+  const pending = !current || state.loading;
+  return { drawing, error: current ? state.error : null, loading: pending && !drawing, updating: pending && Boolean(drawing) };
 }
 
 /**

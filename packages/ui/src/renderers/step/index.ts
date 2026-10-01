@@ -31,7 +31,7 @@ export function createStepRenderer({ client, ...services }: StepRendererOptions)
     matches: (file) => !OTHER_RENDERERS_FILE.test(file.path) && (file.mediaType === 'cad' || Boolean(isCadFile(file.path))),
     async prepare(context) {
       const prepared = await prepareWorkspaceEntry(client, context);
-      return { data: { ...prepared.data, services }, dispose: prepared.dispose };
+      return { ...prepared, data: { ...prepared.data, services } };
     },
     load: () => import('./StepRenderer.js')
   });

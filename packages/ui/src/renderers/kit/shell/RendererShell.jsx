@@ -9,7 +9,7 @@ import PreviewChrome from "../tools/PreviewChrome.jsx";
 import { useViewerMobile } from "../../../file-viewer/responsive.js";
 import { FILE_PANEL_TREE } from "../../../file-viewer/navigation/panels.js";
 import ViewerAlertCard, { alertDismissible } from "../status/ViewerAlertCard.jsx";
-import { ViewUpdateStatus } from "../status/ViewUpdateStatus.jsx";
+import { MODEL_UPDATE_STATUS, ViewUpdateStatus } from "../status/ViewUpdateStatus.jsx";
 import ViewerLoadingOverlay from "../status/ViewerLoadingOverlay.js";
 import { VIEWER_RENDER_PROFILE, renderProfileKeepsPixelRatio, sceneForRenderProfile } from "../viewport/renderProfile.js";
 import DisplayPopover from "./DisplayPopover.jsx";
@@ -31,7 +31,6 @@ const INSET = `${VIEWPORT_INSET_PX}px`;
 // The strip and its stack stop short of Quick Edit's button at the top-right.
 const TOOLBAR_POSITION = Object.freeze({ top: INSET, left: INSET, bottom: VIEWPORT_STACK_BOTTOM, maxWidth: "calc(100% - 3.5rem)" });
 const QUICK_EDIT_POSITION = Object.freeze({ top: INSET, right: INSET, left: INSET });
-const MODEL_UPDATE_STATUS = Object.freeze({ pending: true, label: "Updating model…" });
 // The view's controls in the navbar look as its own icon buttons do.
 export const NAVBAR_CONTROL_CLASS = "size-6 text-muted-foreground hover:text-foreground aria-pressed:bg-accent aria-pressed:text-accent-foreground";
 

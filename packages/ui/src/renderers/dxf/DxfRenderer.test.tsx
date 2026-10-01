@@ -24,10 +24,17 @@ vi.mock('@text-to-cad/core/lib/drawing2d/index.js', async (importOriginal) => {
 });
 
 const noop = () => {};
+const json = (body: unknown) => new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } });
+
+// The file as the backend serves it: a test rewrites it, and decides how its next read answers.
+let revision = 'one-sample';
+let readDrawing: () => Response | Promise<Response> = () => json(SAMPLE);
 const context2d = new Proxy({}, { get: (_target, key) => (key === 'canvas' ? undefined : noop), set: () => true });
 
 beforeEach(() => {
   painted.length = 0;
+  revision = 'one-sample';
+  readDrawing = () => json(SAMPLE);
   vi.stubGlobal('requestAnimationFrame', (callback: FrameRequestCallback) => setTimeout(() => callback(performance.now()), 0));
   vi.stubGlobal('cancelAnimationFrame', (handle: number) => clearTimeout(handle));
   vi.stubGlobal('matchMedia', (query: string) => ({ matches: false, media: query, addEventListener: noop, removeEventListener: noop, addListener: noop, removeListener: noop }));
@@ -43,17 +50,15 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
-const json = (body: unknown) => new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json' } });
-
 /** One pane of the harness: a host, a workspace, host commands and a live binding, and the tab. */
 async function openDrawing(destinationKind = 'composer') {
   const fetch = vi.fn(async (input: RequestInfo | URL) => {
     const url = new URL(String(input));
     if (url.pathname.endsWith('/__cad/catalog')) {
-      return json({ rootId: 'one', entries: [{ kind: 'dxf', file: FILE, rootRelativeFile: FILE, url: `/${FILE}`, hash: 'one-sample', bytes: 4096 }] });
+      return json({ rootId: 'one', entries: [{ kind: 'dxf', file: FILE, rootRelativeFile: FILE, url: `/${FILE}`, hash: revision, bytes: 4096 }] });
     }
     if (url.pathname.endsWith('/__cad/server')) return json({ rootId: 'one', rootPath: '/models', backend: 'cadgen' });
-    if (url.pathname.endsWith('/__cad/drawing')) return json(SAMPLE);
+    if (url.pathname.endsWith('/__cad/drawing')) return readDrawing();
     return new Response('', { status: 404 });
   });
   const client = createCadClient({ origin: 'http://viewer.test/one', workspaceId: 'one', pollIntervalMs: 0, fetch: fetch as typeof globalThis.fetch });
@@ -111,7 +116,8 @@ async function openDrawing(destinationKind = 'composer') {
   });
   // The fitted picture is on the canvas.
   await waitFor(() => expect(painted.length).toBeGreaterThan(0));
-  return { pane, canvas, commands, request, delivered, get controller() { return controller; }, dispose: () => client.dispose() };
+  const refresh = () => act(async () => { await client.refresh(); });
+  return { pane, canvas, commands, request, delivered, refresh, get controller() { return controller; }, dispose: () => client.dispose() };
 }
 
 it('the cursor says the drawing can be dragged, and says so louder while it is', async () => {
@@ -201,5 +207,30 @@ it('a select-reference request is consumed without a notification', async () => 
   // Declined silently: no alert, no status, and the drawing is still the drawing.
   expect(within(pane).queryByRole('alert')).toBeNull();
   expect(pane.querySelector('[data-drawing-surface] canvas')).not.toBeNull();
+  dispose();
+});
+
+it('a rewritten drawing stays on screen while its next revision is read, and after one that will not read', async () => {
+  const { pane, canvas, refresh, dispose } = await openDrawing();
+  let release = noop;
+  readDrawing = () => new Promise(resolve => { release = () => resolve(json(SAMPLE)); });
+  revision = 'two-sample';
+  await refresh();
+  // The same drawing on the same canvas, nothing covering it: the update is said top-centre.
+  expect(await within(pane).findByText('Updating drawing…')).toBeTruthy();
+  expect(pane.querySelector('[data-drawing-surface] canvas')).toBe(canvas);
+  expect(pane.querySelector('[aria-busy="true"]')).not.toBeNull();
+  expect(pane.textContent).not.toContain('Reading drawing');
+  await act(async () => { release(); });
+  await waitFor(() => expect(pane.querySelector('[aria-busy="false"]')).not.toBeNull());
+  expect(within(pane).queryByText('Updating drawing…')).toBeNull();
+
+  // A revision that will not read leaves the last drawing to use, with the failure beside it.
+  readDrawing = () => new Response('the drawing is truncated', { status: 500 });
+  revision = 'three-sample';
+  await refresh();
+  expect(await within(pane).findByText(/The existing drawing remains visible/)).toBeTruthy();
+  expect(pane.querySelector('[data-drawing-surface] canvas')).toBe(canvas);
+  expect(pane.textContent).not.toContain('Reading drawing');
   dispose();
 });

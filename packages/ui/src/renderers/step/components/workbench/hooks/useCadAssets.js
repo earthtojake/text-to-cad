@@ -38,6 +38,7 @@ import {
   progressiveLoadProgress,
   publishMeshCostAccounting,
   awaitingSameFileRevision,
+  meshStateAfterCancelledLoad,
   shouldRetainCompleteSameFileMesh
 } from "./packageProgressiveLoad.js";
 import { initialDisplayLodPlan, probeInitialDisplayLod } from "../../../render/initialDisplayLod.js";
@@ -634,9 +635,7 @@ export function useCadAssets({
     if (ctx && ctx.complete === false) {
       lodPackageRef.current = null;
       setLodPackage(null);
-      setMeshState((current) => (
-        current && current.file === ctx.file && !current.assemblyInteractionReady ? null : current
-      ));
+      setMeshState((current) => meshStateAfterCancelledLoad(current, ctx.file));
       syncDisplayedMemory(null);
     }
     const displayed = matchingDisplayedPackageContext(

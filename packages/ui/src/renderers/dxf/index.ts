@@ -52,7 +52,7 @@ export function createDxfRenderer({ client, ...options }: DxfRendererOptions) {
     matches: (file) => DXF_FILE.test(file.path),
     async prepare(context) {
       const prepared = await prepareWorkspaceEntry(client, context);
-      return { data: { ...prepared.data, services }, dispose: prepared.dispose };
+      return { ...prepared, data: { ...prepared.data, services } };
     },
     load: () => import('./DxfRenderer.jsx') as Promise<{ default: ComponentType<FileRendererProps<PreparedDxfDocument>> }>
   });

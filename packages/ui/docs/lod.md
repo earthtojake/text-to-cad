@@ -209,7 +209,9 @@ builds; failed updates remain visible while an idle disconnected feed retries
 quietly. A complete model of the same file — a part's or an assembly's — also
 remains visible while its rewritten file is rebuilt and while the replacement
 meshes load (`replacingSameFileMesh`, `awaitingSameFileRevision`), reported as an
-update ("Updating model…"), never as the loading screen. Complete displayed component arrays remain available while a
+update ("Updating model…"), never as the loading screen — also when edits come
+faster than revisions load, and one revision's load is cancelled for the next
+(`meshStateAfterCancelledLoad`). Complete displayed component arrays remain available while a
 replacement stages or fails. Reuse requires the same runtime surface input,
 concrete surface object and tessellation; placements and appearance come from
 the new tree. Selection, measurements and reference copying wait for matching

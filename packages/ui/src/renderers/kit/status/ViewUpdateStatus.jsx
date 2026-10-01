@@ -10,6 +10,9 @@ import { Button } from '@text-to-cad/ui/primitives/button';
 // control disabling. Delay avoids flashing a spinner for next-frame updates.
 const SHOW_AFTER_MS = 150;
 
+/** A newer revision of the file loading behind the one on screen: the view stays usable meanwhile. */
+export const MODEL_UPDATE_STATUS = Object.freeze({ pending: true, label: "Updating model…" });
+
 export function ViewUpdateStatus({ status, onRetry, className }) {
   const mobile = useViewerMobile();
   const [visible, setVisible] = useState(false);

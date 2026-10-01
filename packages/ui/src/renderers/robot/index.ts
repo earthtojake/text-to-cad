@@ -41,7 +41,7 @@ export function createRobotRenderer({ client, ...options }: RobotRendererOptions
     matches: (file) => ROBOT_FILE.test(file.path),
     async prepare(context) {
       const prepared = await prepareWorkspaceEntry(client, context);
-      return { data: { ...prepared.data, services }, dispose: prepared.dispose };
+      return { ...prepared, data: { ...prepared.data, services } };
     },
     load: () => import('./RobotRenderer.jsx') as Promise<{ default: ComponentType<FileRendererProps<PreparedRobotDocument>> }>
   });

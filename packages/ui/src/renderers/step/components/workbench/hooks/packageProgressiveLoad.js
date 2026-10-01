@@ -142,6 +142,13 @@ export function replacingSameFileMesh(current, entry, targetMeshHash) {
     meshStateIsComplete(current);
 }
 
+// What stays on screen when a load is cancelled part-way (a newer revision, or another file):
+// the partial composition that load published for its file goes, a complete model -- a part's as
+// much as an assembly's -- stays, and another file's state is not the cancelled load's to touch.
+export function meshStateAfterCancelledLoad(current, cancelledFile) {
+  return current && current.file === cancelledFile && !meshStateIsComplete(current) ? null : current;
+}
+
 export function shouldRetainCompleteSameFileMesh(current, entry, targetMeshHash) {
   return String(entry?.kind || "") === "assembly" &&
     String(current?.file || "") === String(entry?.file || "") &&

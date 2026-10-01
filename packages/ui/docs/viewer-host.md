@@ -284,9 +284,10 @@ all affected tabs; web is a read-only CAD catalog, with no arbitrary filesystem
 access or editing.
 
 A document that follows its file itself is `live` (`PreparedDocument.live`; every CAD
-renderer's, from `prepareWorkspaceEntry`): a content change — or a write that briefly
-empties the file — never opens it again, because its renderer reads the live catalog
-entry and loads the next revision behind the model on screen, under "Updating model…".
+renderer's, from `prepareWorkspaceEntry`, which a registration passes on whole): a
+content change — or a write that briefly empties the file — never opens it again,
+because its renderer reads the live catalog entry and loads the next revision behind
+the model on screen, under "Updating model…" (a drawing's: "Updating drawing…").
 Once a model has been shown, a rebuild is an update, never the loading screen. Only the
 file going away (a delete, or a move) reopens a live document; a text document still
 reopens on a content change, or marks a dirty draft stale.

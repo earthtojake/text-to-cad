@@ -19,6 +19,7 @@ import {
   publishMeshCostAccounting,
   meshStateIsComplete,
   awaitingSameFileRevision,
+  meshStateAfterCancelledLoad,
   replacingSameFileMesh,
   shouldRetainCompleteSameFileMesh,
   tolerantAnimationClip,
@@ -258,6 +259,14 @@ test("once a model is on screen, its file's next revision is an update: a part's
   assert.equal(awaitingSameFileRevision(null, { file: "plate.step" }), false, "nothing on screen yet: that is the first load");
   // The loader's own staging question stays an assembly's.
   assert.equal(shouldRetainCompleteSameFileMesh(current, { file: "plate.step", kind: "part" }, "new"), false);
+  // Edits in quick succession: a revision's load cancelled for the next one leaves the complete
+  // model on screen -- a part's too, whose state has no interaction flag -- and drops only a
+  // partial composition that load had published.
+  assert.equal(meshStateAfterCancelledLoad(current, "plate.step"), current);
+  const partial = { ...current, meshData: { parts: [{}], missingComponentIds: ["c2"] } };
+  assert.equal(meshStateAfterCancelledLoad(partial, "plate.step"), null);
+  assert.equal(meshStateAfterCancelledLoad(partial, "other.step"), partial);
+  assert.equal(meshStateAfterCancelledLoad(null, "plate.step"), null);
 });
 
 test("atomic same-file revision carries unchanged occurrence and tree identity through final publication", async () => {

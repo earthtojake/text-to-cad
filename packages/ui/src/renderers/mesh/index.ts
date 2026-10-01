@@ -33,7 +33,7 @@ export function createMeshRenderer({ client, ...options }: MeshRendererOptions) 
     // model gets the room.
     async prepare(context) {
       const prepared = await prepareWorkspaceEntry(client, context);
-      return { data: { ...prepared.data, services }, dispose: prepared.dispose };
+      return { ...prepared, data: { ...prepared.data, services } };
     },
     load: () => import('./MeshRenderer.jsx') as Promise<{ default: ComponentType<FileRendererProps<PreparedMeshDocument>> }>
   });

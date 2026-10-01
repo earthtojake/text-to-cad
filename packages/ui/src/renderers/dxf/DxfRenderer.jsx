@@ -3,6 +3,8 @@ import { cn } from "@text-to-cad/ui/utils";
 import { usePromptDestination, useViewerHost } from "../../host/context.js";
 import ViewerAlertCard from "../kit/status/ViewerAlertCard.jsx";
 import ViewerLoadingOverlay from "../kit/status/ViewerLoadingOverlay.js";
+import { ViewUpdateStatus } from "../kit/status/ViewUpdateStatus.jsx";
+import { VIEWPORT_INSET_PX, VIEWPORT_TOP_BAR_PX } from "../kit/shell/viewportLayout.js";
 import { attachLiveBinding } from "../kit/shell/liveBinding.js";
 import { useWhenSettled } from "../kit/shell/useWhenSettled.js";
 import { createViewPromptContext, promptDeliveryError } from "../kit/shell/promptContext.js";
@@ -36,6 +38,7 @@ const NO_CAMERA = "A DXF is a flat drawing shown head on: it has no camera to po
 const NO_DISPLAY = "A DXF has no Display settings: a drawing is painted in the pens it declares, on the "
   + "theme's background, with no surfaces, lighting or render mode to configure.";
 const SAVE_DELAY_MS = 180;
+const DRAWING_UPDATE_STATUS = Object.freeze({ pending: true, label: "Updating drawing…" });
 
 function DxfSurface({ view, data }) {
   const host = useViewerHost();
@@ -75,8 +78,10 @@ function DxfSurface({ view, data }) {
   // ---- host chrome -----------------------------------------------------------
   useEffect(() => { onReady?.(true); }, [onReady]);
 
+  // With a drawing on screen, a failure to read the file again leaves that drawing to use.
+  const shown = Boolean(payload.drawing);
   const alert = useMemo(() => {
-    if (workspace.catalogError) {
+    if (workspace.catalogError && !shown) {
       return {
         severity: "error", kind: "status", title: "Couldn’t open the drawing",
         message: "The viewer couldn’t retrieve this file’s information.",
@@ -84,10 +89,12 @@ function DxfSurface({ view, data }) {
         details: String(workspace.catalogError), reload: true
       };
     }
-    return drawingLoadAlert(workspace.modelKey || file, payload.error);
-  }, [workspace.catalogError, workspace.modelKey, file, payload.error]);
-  const empty = Boolean(payload.drawing) && !payload.drawing.bounds;
-  const ready = Boolean(payload.drawing) && !payload.loading && !alert;
+    const failed = drawingLoadAlert(workspace.modelKey || file, payload.error);
+    return failed && shown ? { ...failed, blocking: false, message: `${failed.message} The existing drawing remains visible.` } : failed;
+  }, [workspace.catalogError, workspace.modelKey, file, payload.error, shown]);
+  const empty = shown && !payload.drawing.bounds;
+  // Settled is this revision's drawing painted: a capture waits out an update.
+  const ready = shown && !payload.loading && !payload.updating && !alert;
 
   // ---- snapshot to the prompt ------------------------------------------------
   const resourceRef = useRef(workspace.resource);
@@ -132,7 +139,7 @@ function DxfSurface({ view, data }) {
   runtimeRef.current = {
     readState: () => ({
       resource: { ...workspace.resource }, revision: String(workspace.resource.revision || ""),
-      loading: payload.loading, selection: [], camera: null, display: {}, renderMode: "inspect"
+      loading: payload.loading || payload.updating, selection: [], camera: null, display: {}, renderMode: "inspect"
     }),
     setCamera() { throw new Error(NO_CAMERA); },
     resetCamera() { fit(); },
@@ -152,7 +159,7 @@ function DxfSurface({ view, data }) {
   return (
     <div className="relative flex h-full min-h-0 flex-col overflow-hidden bg-background text-foreground"
       data-slot="cad-file-view" data-drawing-surface>
-      <div ref={containerRef} className="relative min-h-0 flex-1" aria-busy={payload.loading ? "true" : "false"}>
+      <div ref={containerRef} className="relative min-h-0 flex-1" aria-busy={payload.loading || payload.updating ? "true" : "false"}>
         <canvas ref={canvasRef} aria-label={`Drawing: ${view.file.name}`} role="img"
           className={cn("absolute inset-0 block touch-none select-none", dragging ? "cursor-grabbing" : "cursor-grab")} />
         {empty ? (
@@ -161,9 +168,13 @@ function DxfSurface({ view, data }) {
             This drawing has no geometry in its modelspace, so there is nothing to show.
           </p>
         ) : null}
+        {payload.updating && !alert ? <div className="pointer-events-none absolute left-1/2 z-30 flex max-w-[calc(100%-1rem)] -translate-x-1/2 items-center"
+          style={{ top: VIEWPORT_INSET_PX, height: VIEWPORT_TOP_BAR_PX }} data-viewport-status="">
+          <ViewUpdateStatus status={DRAWING_UPDATE_STATUS} className="rounded-md bg-background/95 px-1 py-0.5 shadow-sm" />
+        </div> : null}
         <ViewerLoadingOverlay loading={{ opening: payload.loading && !alert, progress: { label: "Reading drawing" } }}
           operationKey={file} />
-        <ViewerAlertCard alert={alert || (actionError ? { severity: "error", kind: "status", blocking: false, title: "Couldn’t capture the drawing", message: actionError } : null)} hasContent={Boolean(payload.drawing)} onReload={view.reload} />
+        <ViewerAlertCard alert={alert || (actionError ? { severity: "error", kind: "status", blocking: false, title: "Couldn’t capture the drawing", message: actionError } : null)} hasContent={shown} onReload={view.reload} />
       </div>
     </div>
   );
