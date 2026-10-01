@@ -26,10 +26,16 @@ concurrency:
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
+  # Each job's timeout is about twice its slowest recent run. A job that runs Python
+  # test files also leaves room for unittest_files.py's per-file hang guard (15 min)
+  # to fire first and name the file. A hang fails in minutes, not at GitHub's
+  # six-hour default.
+  #
   # What changed, as the classes above. Every other job's `if:` reads these.
   changes:
     name: Changed paths
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
       cadgen: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.cadgen == 'true' }}
       core: ${{ github.event_name == 'workflow_dispatch' || steps.filter.outputs.core == 'true' }}
@@ -78,6 +84,7 @@ jobs:
   version:
     name: Version Check
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Check out repository
@@ -114,6 +121,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.infra == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 40
     env:
       # Test files at a time: each is a kernel-loading interpreter (~450 MB).
       CADGEN_TEST_JOBS: "4"
@@ -139,6 +147,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.infra == 'true'
     runs-on: windows-latest
+    timeout-minutes: 45
     env:
       # Four, the core count. Six was measured: every file slowed by ~40% and the
       # run failed on timeouts -- the spawn-bound tail is not idle CPU to fill.
@@ -164,6 +173,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.core == 'true' || needs.changes.outputs.infra == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Check out repository
@@ -188,6 +198,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.web == 'true' || needs.changes.outputs.ui == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.infra == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - name: Check out repository
@@ -238,6 +249,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.skills == 'true' || needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.infra == 'true' || needs.changes.outputs.ui == 'true' || needs.changes.outputs.web == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     env:
       CADGEN_TEST_JOBS: "4"
 
@@ -264,6 +276,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.docs == 'true' || needs.changes.outputs.skills == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.infra == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
 
     steps:
       - name: Check out repository
@@ -287,6 +300,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.cadgen == 'true' || needs.changes.outputs.core == 'true' || needs.changes.outputs.web == 'true' || needs.changes.outputs.ui == 'true' || needs.changes.outputs.infra == 'true'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
 
     steps:
       - name: Check out repository

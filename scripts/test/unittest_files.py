@@ -23,14 +23,18 @@ before the temporary directories are removed, so modules cannot see one another'
 builds or stop one another's artifact workers. The per-module output is printed as each finishes and
 the final ``Ran N tests`` / ``OK`` / ``FAILED`` summary aggregates every module, so a
 log reads the same as a single-process run. The loaded test set is identical to
-`python -m unittest <files>` run from --top either way.
+`python -m unittest <files>` run from --top either way. A file still running
+``FILE_HANG_SECONDS`` after it started is hung: its interpreter prints every thread's
+stack and exits, and the run fails naming the file.
 """
 
 from __future__ import annotations
 
 import argparse
 import concurrent.futures
+import faulthandler
 import importlib
+import locale
 import os
 import re
 import shutil
@@ -41,6 +45,10 @@ import time
 import traceback
 import unittest
 import uuid
+
+# Hung, not slow: the slowest file CI has run took about four minutes. Without this a
+# hang runs out the CI job's timeout and says nothing about where it is.
+FILE_HANG_SECONDS = 15 * 60
 
 
 def dotted_name(path: str, top: str) -> str:
@@ -102,7 +110,9 @@ def load_file(loader: unittest.TestLoader, path: str, top: str) -> unittest.Test
     return loader.loadTestsFromModule(module)
 
 
-def run_in_process(files: list[str], top: str, verbose: bool) -> int:
+def run_in_process(files: list[str], top: str, verbose: bool, hang_seconds: float | None = None) -> int:
+    if hang_seconds:
+        faulthandler.dump_traceback_later(hang_seconds, exit=True)
     top = os.path.realpath(top)
     # `python -m unittest` runs with sys.path[0] == "" (the cwd); `python <script>`
     # puts the SCRIPT's directory there instead. Match -m so tests see the same path.
@@ -153,30 +163,41 @@ def _run_one_file(path: str, top: str, verbose: bool) -> tuple[str, int, str, fl
     env["CADGEN_DAEMON_STATE_DIR"] = state
     env["CADGEN_DAEMON_SOCKET"] = (rf"\\.\pipe\cadgen-test-{uuid.uuid4().hex}" if os.name == "nt"
                                   else os.path.join(state, "d.sock"))
-    argv = [sys.executable, os.path.abspath(__file__), "--top", top, "--jobs", "1"]
+    argv = [sys.executable, os.path.abspath(__file__), "--top", top, "--jobs", "1",
+            "--hang-seconds", str(FILE_HANG_SECONDS)]
     if verbose:
         argv.append("--verbose")
     argv.append(path)
-    try:
-        completed = subprocess.run(argv, env=env, capture_output=True, text=True, cwd=os.getcwd())
-    finally:
+    # Files, not pipes: a process the test started and left running would hold a pipe
+    # open, and this run would wait on it however its own interpreter ended.
+    with tempfile.TemporaryFile() as stdout, tempfile.TemporaryFile() as stderr:
         try:
-            # No key means no daemon could have bound under this private state.
-            if any(name.endswith(".key") for name in os.listdir(state)):
-                cleanup_env = dict(env)
-                cleanup_env["PYTHONPATH"] = os.pathsep.join(filter(None, [
-                    os.path.join(top, "packages", "cadgen", "src"), env.get("PYTHONPATH", "")
-                ]))
-                cleanup = subprocess.run([
-                    sys.executable, os.path.join(top, "tests", "python", "support", "daemon_cleanup.py"),
-                    env["CADGEN_DAEMON_SOCKET"],
-                ], env=cleanup_env, capture_output=True, text=True, timeout=15)
-                if cleanup.returncode:
-                    raise RuntimeError(f"test daemon cleanup failed: {cleanup.stdout}{cleanup.stderr}")
+            completed = subprocess.run(argv, env=env, stdout=stdout, stderr=stderr, cwd=os.getcwd())
         finally:
-            shutil.rmtree(store, ignore_errors=True)
-            shutil.rmtree(state, ignore_errors=True)
-    return path, completed.returncode, (completed.stdout or "") + (completed.stderr or ""), time.perf_counter() - started
+            try:
+                # No key means no daemon could have bound under this private state.
+                if any(name.endswith(".key") for name in os.listdir(state)):
+                    cleanup_env = dict(env)
+                    cleanup_env["PYTHONPATH"] = os.pathsep.join(filter(None, [
+                        os.path.join(top, "packages", "cadgen", "src"), env.get("PYTHONPATH", "")
+                    ]))
+                    cleanup = subprocess.run([
+                        sys.executable, os.path.join(top, "tests", "python", "support", "daemon_cleanup.py"),
+                        env["CADGEN_DAEMON_SOCKET"],
+                    ], env=cleanup_env, capture_output=True, text=True, timeout=15)
+                    if cleanup.returncode:
+                        raise RuntimeError(f"test daemon cleanup failed: {cleanup.stdout}{cleanup.stderr}")
+            finally:
+                shutil.rmtree(store, ignore_errors=True)
+                shutil.rmtree(state, ignore_errors=True)
+        output = "".join(_read_back(stream) for stream in (stdout, stderr))
+    return path, completed.returncode, output, time.perf_counter() - started
+
+
+def _read_back(stream) -> str:
+    stream.seek(0)
+    # The encoding `text=True` would have read a pipe with.
+    return stream.read().decode(locale.getpreferredencoding(False), errors="replace")
 
 
 def run_in_parallel(files: list[str], top: str, jobs: int, verbose: bool, print_weights: bool = False) -> int:
@@ -245,6 +266,11 @@ def main(argv: list[str] | None = None) -> int:
         action="store_true",
         help="print one `WEIGHT<TAB>path<TAB>seconds` line per slow file on stdout",
     )
+    parser.add_argument(
+        "--hang-seconds",
+        type=float,
+        help="print every thread's stack and exit 1 if the run is still going after this long",
+    )
     parser.add_argument("files", nargs="+", metavar="TEST_FILE")
     args = parser.parse_args(argv)
 
@@ -252,7 +278,7 @@ def main(argv: list[str] | None = None) -> int:
 
     if args.jobs > 1 and len(files) > 1:
         return run_in_parallel(files, args.top, args.jobs, args.verbose, args.print_weights)
-    return run_in_process(files, args.top, args.verbose)
+    return run_in_process(files, args.top, args.verbose, args.hang_seconds)
 
 
 if __name__ == "__main__":

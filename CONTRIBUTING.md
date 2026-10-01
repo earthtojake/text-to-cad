@@ -251,6 +251,10 @@ and package Markdown is test input and follows its owning component.
 A skipped job satisfies its required check. Renaming a job renames its required
 check, so it lands together with a matching branch-protection update.
 
+Every job has a timeout of about twice its slowest recent run, so a hang fails
+in minutes. Within a Python suite, a test file still running after 15 minutes
+prints every thread's stack and fails by name.
+
 A web-only edit does not run the Python engine. A UI edit exercises the web
 host. Core changes reach every consumer. Policy checks for a host edit do not
 also run every skill CLI suite. Windows runs the Python package suite because

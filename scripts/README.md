@@ -63,7 +63,8 @@ where those files ship, so these scripts are what produces them.
     read when a run is slow.
 - `unittest_files.py` — the runner underneath, invoked by `common.sh`. Loads each
   test file under its full dotted path so an import failure names the file, and
-  runs the files `--jobs` at a time in their own interpreters.
+  runs the files `--jobs` at a time in their own interpreters. A file still
+  running after 15 minutes is hung: it prints every thread's stack and fails.
 - `time-python.sh [N]` — times every Python test module on its own and prints
   them sorted by wall clock (results under `tmp/timing/`); `time_module.py` is
   its helper. Manual only: the first step of a bloat check. `--print-weights` is
