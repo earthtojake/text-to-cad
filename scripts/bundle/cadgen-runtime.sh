@@ -230,21 +230,22 @@ build_native_tracer() {
   fi
   local targets=("${NATIVE_TARGETS[@]}")
   if [ "$NATIVE_HOST_ONLY" -eq 1 ]; then
+    # The library this interpreter loads, named by cadgen itself.
     local host
-    case "$(uname -s)-$(uname -m)" in
-      Darwin-arm64) host="aarch64-macos.11.0" ;;
-      Darwin-x86_64) host="x86_64-macos.10.15" ;;
-      Linux-x86_64) host="x86_64-linux-gnu.2.17" ;;
-      Linux-aarch64 | Linux-arm64) host="aarch64-linux-gnu.2.17" ;;
-      MINGW*-x86_64 | MSYS*-x86_64 | CYGWIN*-x86_64) host="x86_64-windows-gnu" ;;
-      *) echo "No file tracer target for $(uname -s) $(uname -m)" >&2; exit 1 ;;
-    esac
+    host="$(PYTHONPATH="$REPO_ROOT/packages/cadgen/src" "$python" -c \
+      "from cadgen._internal.filetrace import _library_name; print(_library_name())")"
     targets=()
     for spec in "${NATIVE_TARGETS[@]}"; do
-      [ "${spec% *}" = "$host" ] && targets+=("$spec")
+      [ "${spec#* }" = "$host" ] && targets+=("$spec")
     done
+    if [ "${#targets[@]}" -eq 0 ]; then
+      echo "No file tracer target builds $host" >&2
+      exit 1
+    fi
   fi
+  NATIVE_BUILT=()
   scratch="$(mktemp -d "${TMPDIR:-/tmp}/cadgen-native.XXXXXX")"
+  trap 'rm -rf "$scratch"' EXIT
   for spec in "${targets[@]}"; do
     zig_target="${spec% *}"
     local flags=(-shared -O2 -s -fvisibility=hidden -Wall -Wextra -Werror)
@@ -262,6 +263,7 @@ build_native_tracer() {
     name="${spec#* }"
     cp "$scratch/${spec% *}/$name" "$target/.$name.tmp"
     mv -f "$target/.$name.tmp" "$target/$name"
+    NATIVE_BUILT+=("$name")
   done
   for name in "$target"/*; do
     case " ${NATIVE_OUTPUTS[*]} " in
@@ -270,6 +272,7 @@ build_native_tracer() {
     esac
   done
   rm -rf "$scratch"
+  trap - EXIT
 }
 
 build_stage_packages() {
@@ -383,7 +386,7 @@ if [ "$MODE" = "check" ]; then
     check_stage_outputs browser "${BROWSER_OUTPUTS[@]}"
   fi
   if [ "$STAGE_NATIVE" -eq 1 ]; then
-    check_stage_outputs native "${NATIVE_OUTPUTS[@]}"
+    check_stage_outputs native "${NATIVE_BUILT[@]}"
   fi
   if [ "$missing" -ne 0 ]; then
     echo "" >&2

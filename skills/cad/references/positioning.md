@@ -84,7 +84,7 @@ child's cache round trip. Define the joints needed by the parent in its source.
 ## Child models and imported components
 
 Call a project model to compose it. Use `cadgen.read_step` for a vendor document
-or an explicitly decoupled export; that records the file as a build input.
+or an explicitly decoupled export; like every file a build reads, it is an input.
 See the [model contract](step-generation.md) for dependency tracking.
 
 For imported geometry, inspect its existing origin, orientation and functional

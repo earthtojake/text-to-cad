@@ -2,11 +2,11 @@
 
 The published distribution: everything that turns CAD source into documents,
 documents into derived state, and derived state into pixels and meshes. One
-PyPI package carrying both language halves — the Python engine under
-`src/cadgen/`, and the built JavaScript it executes under
-`src/cadgen/_runtime/` (the shared JavaScript runtime and the CAD Viewer's client,
-bundled in at build time; the JS *source* lives in its own packages and never
-ships as source).
+PyPI package carrying the Python engine under `src/cadgen/` and what it executes
+that is not Python under `src/cadgen/_runtime/`: the shared JavaScript runtime and
+the CAD Viewer's client, bundled in at build time (the JS *source* lives in its own
+packages and never ships as source), and the native file tracer, one library per
+platform.
 
 **PURPOSE** — the engine and its command surface: model execution, the
 store, document assembly, kinematics, exports, validation, inspection,
@@ -15,7 +15,7 @@ snapshots, the warm daemon and its build pool, and the CAD Viewer
 instance).
 
 **MAY DEPEND ON** — the Python ecosystem it declares (OCP/build123d lazily,
-never at namespace-import time) and the bundled JavaScript runtime.
+never at namespace-import time) and the bundled runtime.
 Never app code, never JavaScript source at runtime.
 
 **DEPENDED ON BY** — every skill (as a pinned installed distribution). The
@@ -162,7 +162,7 @@ revision-scoped occurrence/selector views with caller-owned world geometry.
 `topology_errors`, `boundary_edges`, `self_intersections` and
 `mass_properties`. These operations accept native geometry and return facts;
 selection, units, thresholds, exclusions and verdicts belong to the caller's
-script. Every call runs the kernel (law 18). The inspect
+script. The inspect
 CLI and `step.inspect` are removed, with an immediate migration error.
 The contracts live in [`step_scene.py`](src/cadgen/step_scene.py) and
 [`geometry.py`](src/cadgen/geometry.py). They import no kernel at namespace
@@ -315,11 +315,12 @@ derives everything render-side from the bytes the run wrote (law 2). Inside a
 run, every modeling operation executes: cadgen never replays a stored result,
 never substitutes a copy for what an operation returned, and never changes
 what build123d's `==` and `is_same` answer. A script therefore behaves the
-same inside cadgen as under plain Python. Two hooks remain, and neither
-changes a result: `determinism.py` fixes the iteration order of build123d's
+same inside cadgen as under plain Python. The hooks that remain change no
+result: `determinism.py` fixes the iteration order of build123d's
 de-duplications (an order-keeping set, and a `Vertex` hash by point that
-leaves equality alone), and lazy children defer a child's geometry until it
-is read (`STORE.md` §9a). An expensive or independently edited part gets its
+leaves equality alone), lazy children defer a child's geometry until it is
+read (`STORE.md` §9a), and the file trace only watches what the run opens
+(`STORE.md` §5). An expensive or independently edited part gets its
 speed by being its own model, never from a cache inside one.
 *Pressure-test*: call a model's function under plain Python and inside a
 cadgen build; the geometry it returns, and the answer to every `==` and

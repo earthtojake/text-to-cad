@@ -94,10 +94,9 @@ def _load_generator_module(script_path: Path) -> object:
     # Capture the exact compiled buffer before executing any module code. The
     # file can change during module initialization, or even between compile and
     # exec; hashing its path later would associate new source with old geometry.
-    from cadgen.store.closure import execution_digest, note_consumed_file_hash
+    from cadgen.store.closure import note_compiled_source
 
-    note_consumed_file_hash(resolved_script_path, execution_digest(source_bytes, str(resolved_script_path)),
-                            source=source_bytes)
+    note_compiled_source(resolved_script_path, source_bytes)
 
     module = importlib.util.module_from_spec(module_spec)
     # sys.path is exactly what `python script.py` gives: the script's own folder first,
@@ -145,10 +144,9 @@ class _SourceOnlyLoader(importlib.machinery.SourceFileLoader):
     def get_code(self, fullname: str):  # noqa: ANN201 - importlib protocol
         path = self.get_filename(fullname)
         data = self.get_data(path)
-        from cadgen.store.closure import execution_digest, note_consumed_file_hash
+        from cadgen.store.closure import note_compiled_source
 
-        resolved = str(Path(path).resolve())
-        note_consumed_file_hash(resolved, execution_digest(data, resolved), source=data)
+        note_compiled_source(path, data)
         return compile(data, path, "exec", dont_inherit=True)
 
 
@@ -556,50 +554,43 @@ def _run_script_generator_body(
             raw_payload = generator()
 
     # A model's own outputs are never its inputs: reading one back reads the
-    # previous run, so a read the trace saw is dropped here. What was read joins
-    # the hashes taken at execution, as it was read.
+    # previous run, so a read the trace saw is dropped here.
     from cadgen.metadata import declared_output_paths
+    from cadgen.store.closure import build_closure
 
     read_files, listed = trace.inputs(outputs=declared_output_paths(spec.script_path, function=entry_name))
-    for read_path, digest in read_files.items():
-        executed_hashes.hashes.setdefault(str(read_path), digest)
-    source_closure: PythonSourceClosure | None = None
+    # The closure a record carries: the script + its static closure (stopping at
+    # child models — a result edge is tracked by pin, not by file), every file
+    # that executed (hashed AT execution), and the data files and folders the run
+    # read, as it read them. Paths are relative to the GENERATOR's folder, never
+    # the output's: `out=` routes the output anywhere, and basing the closure
+    # there would hash the same source differently depending on where its
+    # document is written. Every child the body called, with the tree it resolved
+    # to: this waits for any child job the body never forced (called and
+    # discarded), whose result is still this build's dependency.
+    child_trees = frame.child_trees()
+    store_closure = build_closure(
+        spec.script_path,
+        executed=executed_hashes.hashes,
+        inputs=read_files,
+        listings=listed,
+        children=[child for child, _tree in child_trees],
+        sources=executed_hashes.sources,
+    )
+    source_closure = PythonSourceClosure(
+        closure_hash=store_closure.hash,
+        files=store_closure.files,
+        constants=store_closure.constants,
+        file_hashes=store_closure.shas,
+        names=store_closure.names,
+        wholes=store_closure.wholes,
+    )
     if model_format == "step":
         payload = _normalize_step_payload(raw_payload, script_path=spec.script_path)
         if spec.step_path is None:
             raise RuntimeError(f"{spec.source_ref} has no configured STEP output")
         # Kinematics (validated at decoration) rides the scene into the sidecar.
         declared = _resolve_declared_kinematics(getattr(generator, "__cadgen_model__", None))
-        # Record paths relative to the model folder so the assembly.json stays
-        # portable. The base is the GENERATOR's folder, never the output's:
-        # `out=` routes the step_path anywhere, and basing the closure there
-        # would change every recorded relpath — the same source hashing
-        # differently depending on where its document is written, defeating
-        # every closure-keyed reuse.
-        # The closure a record carries: the script + its static closure (stopping at
-        # child models — a result edge is tracked by pin, not by file), every file
-        # that executed (hashed AT execution), and the data files the run read.
-        from cadgen.store.closure import build_closure
-
-        # Every child the body called, with the tree it resolved to. Waits for
-        # any child job the body never forced (called and discarded): its
-        # result is still this build's dependency.
-        child_trees = frame.child_trees()
-        store_closure = build_closure(
-            spec.script_path,
-            executed=executed_hashes.hashes,
-            discovered_inputs=[*read_files, *listed],
-            children=[child for child, _tree in child_trees],
-            sources=executed_hashes.sources,
-        )
-        source_closure = PythonSourceClosure(
-            closure_hash=store_closure.hash,
-            files=store_closure.files,
-            constants=store_closure.constants,
-            file_hashes=store_closure.shas,
-            names=store_closure.names,
-            wholes=store_closure.wholes,
-        )
         generated_scene = _write_shape_step_payload(
             payload,
             output_path=spec.step_path,
@@ -622,26 +613,6 @@ def _run_script_generator_body(
     elif model_format == "dxf":
         if spec.dxf_path is None:
             raise RuntimeError(f"{spec.source_ref} has no configured DXF output")
-        # The same closure a @step model records (relative to the model folder):
-        # reach, import-time code, the files its imports rely on not existing,
-        # and the data it read, hashed as they were when the body ran.
-        from cadgen.store.closure import build_closure
-
-        store_closure = build_closure(
-            spec.script_path,
-            executed=executed_hashes.hashes,
-            discovered_inputs=[*read_files, *listed],
-            children=[child for child, _tree in frame.child_trees()],
-            sources=executed_hashes.sources,
-        )
-        source_closure = PythonSourceClosure(
-            closure_hash=store_closure.hash,
-            files=store_closure.files,
-            constants=store_closure.constants,
-            file_hashes=store_closure.shas,
-            names=store_closure.names,
-            wholes=store_closure.wholes,
-        )
         # The product IS the .dxf: the run always writes it — the sibling by
         # default, `-o` renames — and the viewer parses that file directly.
         output_path = spec.dxf_path
@@ -654,9 +625,7 @@ def _run_script_generator_body(
         # clause 4 is vacuous). The children its body composed -- a flat pattern of
         # `bracket()` -- are pinned from the calls, so a child's new geometry makes
         # the drawing stale like any parent.
-        _write_drawing_record(
-            spec, output_path, source_closure=source_closure, child_trees=frame.child_trees()
-        )
+        _write_drawing_record(spec, output_path, source_closure=source_closure, child_trees=child_trees)
     if generated_scene is not None and source_closure is not None:
         generated_scene.source_closure_hash = source_closure.closure_hash
         generated_scene.source_closure_files = source_closure.files

@@ -28,13 +28,14 @@ where those files ship, so these scripts are what produces them.
   metadata (which IS committed) rather than writing it. `--clean` removes the
   `_runtime` tree first. Called by `test.yml`, `release-publish.yml`,
   `check-builds.sh`, the pre-commit hook.
-- `cadgen-runtime.sh` — builds the three runtime stages: `--node` (esbuilt Node
+- `cadgen-runtime.sh` — builds the four runtime stages: `--node` (esbuilt Node
   builders), `--browser` (snapshot browser bundle), `--viewer` (vite build of
-  `apps/web`). `--print-outputs` lists the two directories a bundle always
-  produces; `--check` skips the viewer stage, which needs the client's
-  `node_modules` and which nothing in a checkout reads. Called by `bundle.sh`,
-  `check-builds.sh`, `test/test-installed.sh`, and `test/common.sh` when a test
-  runner finds the two stages it needs missing; pinned by
+  `apps/web`), `--native` (the file tracer, zig-compiled for every platform;
+  `--native-host` builds this machine's only). `--print-outputs` lists the three
+  directories a bundle always produces; `--check` skips the viewer stage, which
+  needs the client's `node_modules` and which nothing in a checkout reads. Called
+  by `bundle.sh`, `check-builds.sh`, `test/test-installed.sh`, and
+  `test/common.sh` when a test runner finds a stage it needs missing; pinned by
   `tests/python/global/test_node_builder_bundles.py` and
   `test_js_runtime_reproducibility.py`. Call it directly only to debug one stage.
 - `lib/node_builders.sh`, `lib/snapshot_runtime.sh` — sourced by
@@ -68,8 +69,9 @@ where those files ship, so these scripts are what produces them.
   its helper. Manual only: the first step of a bloat check. `--print-weights` is
   the same measurement taken from a run that was happening anyway.
 - `test-global.sh` — `tests/python/global`, the repo-wide policy suite. Like
-  `test-python.sh`, it builds the `--node` and `--browser` runtime stages first
-  when they are absent: the suites read them and a fresh clone has neither.
+  `test-python.sh`, it builds the `--node` and `--browser` runtime stages and this
+  machine's file tracer first when they are absent: the suites read them and a
+  fresh clone has none.
 - `test-docs.sh` — `npm --prefix apps/docs run check`, pulling the hero assets
   first. Called by `test.yml` and `release-publish.yml`.
 - `test-installed.sh` — builds the wheel (or accepts `--wheel PATH` to test

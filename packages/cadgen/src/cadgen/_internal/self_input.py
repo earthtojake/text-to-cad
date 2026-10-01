@@ -34,9 +34,9 @@ def refuse_own_output(resolved: Path, *, reader: str) -> None:
     if not any(output == resolved for output in _declared_outputs()):
         return
     raise ValueError(
-        f"{reader}: {resolved} is an output this model writes. Reading a file the "
-        "model itself produces makes the model's own last run an input, so the gate "
-        "can never say 'current' and the geometry depends on what is left on disk. "
+        f"{reader}: {resolved} is an output this model writes. Reading it builds the "
+        "model from whatever its previous run left on disk, so each run can grow on "
+        "the last. "
         "Keep source documents where the model cannot write them (an 'imported/' "
         "folder beside the project), or -- when the geometry is something this "
         "project already builds -- call that model instead of reading its artifact."

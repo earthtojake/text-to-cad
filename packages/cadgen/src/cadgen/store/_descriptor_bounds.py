@@ -17,7 +17,7 @@ from typing import Any
 from cadgen.store.objects import object_path
 from cadgen.store.trees import flatten_tree
 
-OP = "component_bbox.canonical_full_placement.algorithm1"
+ALGORITHM = "component_bbox.canonical_full_placement.algorithm1"
 MAX_TREE_BYTES = 64 * 1024
 MAX_BREP_BYTES = 768 * 1024
 MAX_SURF_BYTES = 4 * 1024 * 1024
@@ -234,7 +234,7 @@ class Snapshot:
                     raise Ineligible("native bounds unavailable")
                 return _box_values([*box["min"], *box["max"]])
 
-            values = cached_box(OP, (brep, struct.pack("<16d", *transform)), compute)
+            values = cached_box(ALGORITHM, (brep, struct.pack("<16d", *transform)), compute)
             boxes.append(_box_values(values))
         return {"min": [min(box[a] for box in boxes) for a in range(3)],
                 "max": [max(box[a] for box in boxes) for a in range(3, 6)]}

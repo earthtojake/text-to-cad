@@ -4,8 +4,9 @@ cadgen executes three kinds of thing it does not write in Python: Node builders 
 tree is baked by a JS child), a headless browser bundle (the snapshot CLI
 drives it in a page), and the CAD Viewer's built client (``cadgen viewer`` serves it).
 All three ship inside the distribution under ``cadgen/_runtime``; all three can be
-pointed elsewhere for development. So does the native file tracer every build loads
-(``_runtime/native``, one library per platform, found by cadgen._internal.filetrace).
+pointed elsewhere for development. The native file tracer every build loads ships there
+too (``_runtime/native``, one library per platform, found by cadgen._internal.filetrace)
+and has no override.
 
 **Every resolver here is CALL-TIME.** Nothing at import time touches the filesystem or
 looks for ``node``: ``pip install cadgen`` must succeed on a machine with no Node and no
@@ -41,7 +42,7 @@ class AssetMissing(RuntimeError):
     """A runtime asset cadgen needs is not present in this installation."""
 
 
-def runtime_build_hint(path: Path | str) -> str:
+def runtime_build_hint(path: Path | str, *, overridable: bool = True) -> str:
     """The sentence to append when a packaged ``_runtime`` asset is not there.
 
     Two very different situations wear the same symptom, and the fix differs, so the
@@ -62,8 +63,9 @@ def runtime_build_hint(path: Path | str) -> str:
         )
     return (
         f"This cadgen installation is incomplete: {path} should ship inside the "
-        "distribution. Reinstall cadgen, or point the matching CADGEN_*_DIR environment "
-        "variable at a directory that holds it."
+        "distribution. Reinstall cadgen"
+        + (", or point the matching CADGEN_*_DIR environment variable at a directory "
+           "that holds it." if overridable else ".")
     )
 
 

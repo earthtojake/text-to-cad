@@ -57,10 +57,6 @@ class StoreCase(unittest.TestCase):
                 os.environ["CADGEN_CACHE_DIR"] = self.previous
 
         self.addCleanup(restore)
-        from cadgen.store.closure import forget_model_files
-
-        forget_model_files()
-        self.addCleanup(forget_model_files)
 
     # --- fixtures -------------------------------------------------------------
 

@@ -40,6 +40,20 @@ runs:
         python -m pip install --upgrade pip
         python -m pip install -r requirements-dev.txt
 
+    # zig compiles each target's C runtime once and keeps it in its global cache; the
+    # Windows one is most of a cold tracer build. Keyed on the pinned zig version.
+    - name: Cache zig's compiled C runtimes
+      if: inputs.python == 'true'
+      uses: actions/cache@v6
+      with:
+        path: ${{ runner.temp }}/zig-cache
+        key: zig-${{ runner.os }}-${{ hashFiles('requirements-dev.txt') }}
+
+    - name: Point zig at the cache
+      if: inputs.python == 'true'
+      shell: bash
+      run: echo "ZIG_GLOBAL_CACHE_DIR=${{ runner.temp }}/zig-cache" >> "$GITHUB_ENV"
+
     - name: Install the snapshot browser
       if: inputs.python == 'true' && inputs.playwright == 'true'
       shell: bash

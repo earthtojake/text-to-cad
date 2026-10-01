@@ -115,15 +115,9 @@ def _semantic_source_hash(path: Path) -> str:
 
 @dataclass(frozen=True)
 class PythonSourceClosure:
-    """Transitive local-import closure of a generator script.
-
-    ``files`` lists the manifest-relative paths of the script plus every
-    repository-local Python module it imported at run time (recursively).
-    ``closure_hash`` is a stable digest of those paths and their contents.
-
-    The closure is captured from ``sys.modules`` rather than by static analysis
-    because the generators reach sibling/shared modules through computed
-    ``sys.path`` insertions that static import resolution cannot follow.
+    """The closure a build records (``cadgen.store.closure.build_closure``),
+    carried with its scene into the record and the sidecar: ``files`` relative
+    to the script's folder, ``closure_hash`` the digest over their hashes.
     """
 
     closure_hash: str
@@ -268,8 +262,8 @@ def is_first_party_source_file(path: Path) -> bool:
 
 # Cache the per-module resolve()+classify keyed by the RAW ``__file__`` string.
 # ``repo_local_loaded_modules`` runs over ALL of ``sys.modules`` (thousands of
-# entries once numpy/OCP/etc. are imported) on every evict AND every closure
-# capture; the ``Path(...).resolve()`` realpath is the dominant cost and its
+# entries once numpy/OCP/etc. are imported) on every eviction; the
+# ``Path(...).resolve()`` realpath is the dominant cost and its
 # result never changes for a given file, so one lookup per distinct file per
 # process replaces a realpath-storm per build (~0.2-0.7 s on a warm build).
 _MISSING = object()
@@ -323,7 +317,7 @@ def evict_first_party_modules() -> tuple[str, ...]:
 
     Run BEFORE loading a generator: with a clean first-party module space, the
     generator's full dependency closure is freshly imported (and therefore freshly
-    EXECUTED, which :func:`record_first_party_execution` observes) on every run —
+    EXECUTED, which the build's execution hashes observe) on every run —
     regardless of what earlier builds in the same process imported, whether a
     previous build failed partway, or what the generator unloads mid-run. Runtime
     and third-party modules (cadgen, build123d, OCP, ...) are never touched: they
@@ -514,23 +508,3 @@ def record_first_party_execution():
         _ACTIVE_EXECUTION_CAPTURE = previous
         if previous is not None:
             previous |= recorded
-
-
-def _relative_to_base(path: Path, base: Path) -> str:
-    """A closure file's path relative to the model folder ``base`` (the directory that holds the
-    generator source / logical STEP). Uses ``os.path.relpath`` so a sibling or parent file gets a
-    clean ``../`` ref instead of an absolute or repo-root-anchored path — this keeps the closure
-    (and the assembly.json that records it) location-independent: the same model produces the same
-    closure regardless of where the repository lives on disk.
-
-    On Windows, ``relpath`` RAISES for paths on different drives (a model on ``D:`` importing a
-    helper from ``C:``), where no relative path exists at all. Recording the absolute path is
-    the only representation left, and it is honest: a dependency on another volume does not
-    travel with the model folder either. Better than the alternative, which was the ValueError
-    escaping into the build as a failure to generate."""
-    try:
-        return Path(os.path.relpath(path.resolve(), base.resolve())).as_posix()
-    except ValueError:
-        return path.resolve().as_posix()
-
-

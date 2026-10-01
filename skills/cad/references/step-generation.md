@@ -231,9 +231,9 @@ What an importer TAKES from a model file decides how that file counts:
   RESULT: the parent pins the child's tree, so an edit inside `widget()`'s body
   rebuilds the parent only when the child's geometry changes. Importing
   `widget.py` still runs its top level in the parent's process — its imports,
-  module-level code and decorator arguments — so an edit there rebuilds the
-  parent too. Keep a model file's top level to imports, constants and
-  definitions.
+  module-level code and any decorator argument that is not a literal — so an
+  edit there rebuilds the parent too (a literal such as `out="..."` does not).
+  Keep a model file's top level to imports, constants and definitions.
 - **`from widget import WIDTH`** (a module-level literal: a number, string,
   bool, `None`, or tuples/lists/dicts of those) → tracked by VALUE: a
   comment or body edit in `widget.py` leaves the importer current; only a
@@ -259,7 +259,7 @@ Every decorator argument is ordinary Python, evaluated when the module is
 imported: `out=f"{FOLDER}/{NAME}.step"`, `mesh_tolerance=TOL` with `TOL` from
 `lib/`, a path built from a constant — all fine, and nothing is read off the
 source text. The values feeding them are tracked like any other input (a
-`lib/` module by file, a model-file constant by value), so changing the
+`lib/` helper by reach, a model-file constant by value), so changing the
 constant behind an `out=` makes the model stale. The module top must still stay
 kernel-free so checking the model's declarations stays cheap.
 
@@ -368,12 +368,10 @@ the project needs. Either can participate in the containing assembly's kinematic
 
 ### Inputs: reading a STEP file the model does not generate
 
-Use `cadgen.read_step`, not `build123d.import_step`. It returns the same
-native shape, reuses cached geometry when available, and records the file's
-content hash as a build input. Replacing the vendor STEP
-then makes the model stale on its own, with no `--force`; read through
-build123d and the model stays "current" against a file that changed
-underneath it.
+Prefer `cadgen.read_step` to `build123d.import_step`: it returns the same
+native shape with the document's colours, and reads warm from the store when it
+already holds the file's tree. Either way the file is a build input: replacing
+the vendor STEP makes the model stale on its own, with no `--force`.
 
 ```python
 from pathlib import Path
@@ -423,7 +421,7 @@ already builds, call that model instead of reading the artifact.
 
 Every file the build opens is recorded as it reads it, whatever reads it: a
 JSON routing atlas through `json.load`, a CSV of tap sizes, a table through
-`np.load`, a BREP `bd.import_brep` opens in C++, a font `bd.Text` loads. Edit
+`np.load`, a BREP `bd.import_brep` opens in C++, a project font `bd.Text` loads. Edit
 `atlas.json` and the model is stale on its own; rewrite it with identical bytes
 and it stays current, because the input is the content and not the mtime. A
 folder the model globs is recorded too, so adding or removing a profile there
@@ -451,8 +449,8 @@ python src/frame.py --force         # force this model's body to run
 ```
 
 The gate cannot track geometry selected by environment variables, the working
-directory, time or randomness. Put configurations in source/factory arguments
-and declare file inputs explicitly. After a runtime fix, force affected models
+directory, time or randomness. Put configurations in source/factory arguments;
+the files a model reads are tracked on their own. After a runtime fix, force affected models
 if their cached results still reflect the old behavior.
 
 ## Generated assemblies

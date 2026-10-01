@@ -136,7 +136,8 @@ for the full flow, the resume path, the rehearsal, and local/manual fallbacks.
 - Reserve `scripts/` for durable repo commands. Do not write temporary,
   one-off, or local-only helper scripts there; use `tmp/` or `/tmp` instead.
 - cadgen's packaged runtime (`_runtime/node`, `_runtime/browser`,
-  `_runtime/viewer`) is BUILT, never committed: the whole directory is
+  `_runtime/viewer`, and the file tracer every build loads, `_runtime/native`)
+  is BUILT, never committed: the whole directory is
   gitignored and ships only inside the wheel. Build it with the one bundle
   entry point, `scripts/bundle/bundle.sh`; `bundle.sh --check` builds it and
   asserts every required output. Call `scripts/bundle/cadgen-runtime.sh`

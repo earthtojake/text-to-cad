@@ -631,7 +631,7 @@ def _publish_tree(
     return tree_hash, tree, stats
 
 
-_PREPARED_OCCURRENCE_BOUNDS_OP = "component_bbox.canonical_native_rotation.algorithm1"
+_PREPARED_OCCURRENCE_BOUNDS_ALGORITHM = "component_bbox.canonical_native_rotation.algorithm1"
 
 
 def _bbox_from_prepared_occurrences(walk: _Walk) -> dict[str, list[float]] | None:
@@ -675,7 +675,7 @@ def _bbox_from_prepared_occurrences(walk: _Walk) -> dict[str, list[float]] | Non
                 untranslated = leaf.Located(TopLoc_Location(transform))
 
                 box = cached_box(
-                    _PREPARED_OCCURRENCE_BOUNDS_OP,
+                    _PREPARED_OCCURRENCE_BOUNDS_ALGORITHM,
                     (str(entry["codec"]), str(entry["brep"]), leaf_ordinal,
                      struct.pack("<12d", *linear)),
                     lambda untranslated=untranslated: optimal_box(untranslated),

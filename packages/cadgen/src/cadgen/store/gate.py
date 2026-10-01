@@ -78,25 +78,6 @@ def _sha256_file(path: Path) -> str | None:
     return digest.hexdigest()
 
 
-def _closure_now(script: Path, record: Mapping[str, Any] | None) -> str | None:
-    """Clause 2's left-hand side: the record's closure files hashed as they are now.
-    None when the record names no files to hash (or there is no record)."""
-    closure = (record or {}).get("closure") or {}
-    recorded_hash = str(closure.get("hash") or "")
-    files = list(closure.get("files") or [])
-    names = dict(closure.get("names") or {})
-    if closure.get("static"):
-        # A closure with no source files to re-hash (a re-emitted document: its
-        # source is another document's bytes plus an annotation, both compared
-        # by the door that owns it). The hash stands as recorded.
-        return recorded_hash
-    # Sliced files keep their recorded slice while their whole-file hash is
-    # unchanged, and are re-sliced by their recorded names when it moved; the
-    # rest are hashed whole.
-    return current_closure_hash(script, files, names, shas=closure.get("shas") or {},
-                                wholes=closure.get("wholes") or {}) if files else None
-
-
 def stale(model: Path | str, *, memo: dict[str, Verdict] | None = None) -> Verdict:
     # What the gate reads -- a child's files and outputs, inside a parent's build --
     # is its own bookkeeping, never the build's input.
@@ -124,10 +105,23 @@ def _stale(model: Path | str, *, memo: dict[str, Verdict] | None = None) -> Verd
     clauses.append({"clause": 1, "stale": False})
     verdict.tree = str(record.get("tree") or "") or None
 
+    # Clause 2's left-hand side: the record's closure entries as they hash now.
     closure = record.get("closure") or {}
     recorded_hash = str(closure.get("hash") or "")
     files = list(closure.get("files") or [])
-    now = _closure_now(script, record)
+    if closure.get("static"):
+        # A closure with no source files to re-hash (a re-emitted document: its
+        # source is another document's bytes plus an annotation, both compared
+        # by the door that owns it). The hash stands as recorded.
+        now: str | None = recorded_hash
+    elif files:
+        # Sliced files keep their recorded slice while their whole-file hash is
+        # unchanged, and are re-sliced by their recorded names when it moved; the
+        # rest are hashed whole.
+        now = current_closure_hash(script, files, dict(closure.get("names") or {}),
+                                   shas=closure.get("shas") or {}, wholes=closure.get("wholes") or {})
+    else:
+        now = None
     verdict.closure = now or _sha256_file(script)
     if not recorded_hash or now != recorded_hash:
         clauses.append(
@@ -200,12 +194,13 @@ def _stale(model: Path | str, *, memo: dict[str, Verdict] | None = None) -> Verd
 
 def _closure_why(script: Path, closure: Mapping[str, Any], now: str | None) -> str:
     """Clause 2's phrase: name the files that moved when the record can say."""
-    from cadgen.store.closure import changed_closure_files
+    from cadgen.store.closure import changed_closure_files, source_files
 
     changed = changed_closure_files(script, closure.get("shas") or {}, closure.get("names") or {},
                                     closure.get("wholes") or {})
     if now is None:
-        missing = [rel for rel in changed if not (Path(script).resolve().parent / rel).exists()]
+        # Only a file can be missing: an absent, roots or listing entry changed.
+        missing = [rel for rel in source_files(changed) if not (Path(script).resolve().parent / rel).exists()]
         return f"closure file missing: {', '.join(missing or changed)}" if (missing or changed) else "closure file missing"
     return f"closure changed: {', '.join(changed)}" if changed else "closure changed"
 

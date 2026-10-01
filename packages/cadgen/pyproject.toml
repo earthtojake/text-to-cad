@@ -84,9 +84,10 @@ include = ["cadgen*"]
 
 [tool.setuptools.package-data]
 # _runtime holds everything cadgen executes that is not Python: the esbuilt Node
-# builders, the headless browser bundle the snapshot CLI drives, and the CAD Viewer's
-# built client that `cadgen viewer` serves. It is data, not a subpackage (no
-# __init__), and it is found at call time by cadgen.assets.
+# builders, the headless browser bundle the snapshot CLI drives, the CAD Viewer's
+# built client that `cadgen viewer` serves, and the file tracer every build loads
+# (one library per platform). It is data, not a subpackage (no __init__), and it is
+# found at call time by cadgen.assets and cadgen._internal.filetrace.
 # Verified by scripts/release/check-wheel-contents.sh.
 cadgen = ["py.typed", "*.pyi", "_runtime/**/*"]
 # The viewer server's catalog ordering is ICU root collation, read from this table at

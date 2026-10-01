@@ -281,7 +281,6 @@ class ReferenceSceneTests(Fixture):
         with contextlib.redirect_stdout(output), contextlib.redirect_stderr(output):
             for name in ("box", "curve"):
                 self.assertEqual(run_model_argv([str(self.root / f"{name}.py"), "--json"]), 0, output.getvalue())
-        from cadgen._internal import generation_runner
         from cadgen.store import _references
 
         results = []

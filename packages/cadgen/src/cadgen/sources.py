@@ -12,9 +12,9 @@ from its sibling ``.step.py`` loads it by path instead:
     def drawing():
         return {"document": _step.build_dxf()}
 
-The loaded module is registered in ``sys.modules``, so the runtime source-closure
-capture records the sibling file (and its own imports) as freshness inputs for the
-drawing package — editing the ``.step.py`` invalidates the cached DXF artifact.
+Loading it executes the sibling inside the build, so the closure records the sibling
+file (and what it imports) as freshness inputs of the drawing — editing the
+``.step.py`` invalidates the cached DXF artifact.
 """
 
 from __future__ import annotations

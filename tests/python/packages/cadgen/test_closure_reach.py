@@ -208,16 +208,12 @@ IMPORT_EFFECTS = {
 
 class ReachClosure(unittest.TestCase):
     def setUp(self):
-        from cadgen.store.closure import forget_model_files
-
         scratch = generated_cad_directory(prefix="closure-reach-")
         self.addCleanup(scratch.cleanup)
         self.root = Path(scratch.name)
         env = mock.patch.dict(os.environ, {"CADGEN_CACHE_DIR": str(self.root / "store")})
         env.start()
         self.addCleanup(env.stop)
-        forget_model_files()
-        self.addCleanup(forget_model_files)
         (self.root / "lib").mkdir()
         self.write("lib/__init__.py", "")
         self.geo = self.write("lib/geo.py", GEO)
@@ -392,26 +388,6 @@ class ReachClosure(unittest.TestCase):
                 self.assertIn("size", closure.names[f"lib/{path.name}"])
                 self.edit(path, old, new)
                 self.assert_clause_two(reference, True, f"lib/{path.name}")
-
-    def test_legacy_slice_records_rebuild_even_without_a_source_edit(self):
-        from cadgen.store.closure import closure_hash
-        from cadgen.store.records import read_record, write_record
-
-        self.write("lib/geo.py", "def plane(): return 1")
-        reference, _closure = self.record()
-        record = read_record(reference)
-        import ast
-        import hashlib
-
-        for version in ("slice1", "slice2", "slice3"):
-            with self.subTest(version=version):
-                digest = hashlib.sha256(version.encode())
-                digest.update(b"\0plane=")
-                digest.update(b"\0\0" + ast.dump(ast.parse("def plane(): return 1").body[0]).encode())
-                record["closure"]["shas"]["lib/geo.py"] = version + ":" + digest.hexdigest()
-                record["closure"]["hash"] = closure_hash(record["closure"]["shas"].items())
-                write_record(reference, record)
-                self.assert_clause_two(reference, True, "lib/geo.py")
 
     def test_module_level_side_effects_are_always_hashed(self):
         self.geo.write_text(self.geo.read_text(encoding="utf-8") + "\n\nREGISTRY = {}\nREGISTRY['k'] = unrelated(1)\n", encoding="utf-8")
@@ -720,7 +696,7 @@ class ReachClosure(unittest.TestCase):
         profiles.mkdir()
         (profiles / "a.json").write_text("{}", encoding="utf-8")
         script = self.root / "part.py"
-        closure = build_closure(script, executed={}, discovered_inputs=[profiles])
+        closure = build_closure(script, executed={}, listings=[profiles])
         self.assertIn("profiles/", closure.files)
         reference = model_ref(script, "part")
         write_record(reference, {"entryKind": "part", "sourceKind": "python", "tree": None,
@@ -854,8 +830,8 @@ class ReachClosure(unittest.TestCase):
         from cadgen.store.records import read_record, write_record
 
         reference, _closure = self.record()
-        with mock.patch.object(module, "_SYNTAX", module._ImportSyntaxMemo()), \
-                mock.patch.object(module, "_parse_import_syntax", wraps=module._parse_import_syntax) as parse:
+        with mock.patch.object(module, "_SYNTAX", module._SyntaxMemo()), \
+                mock.patch.object(module, "analyze", wraps=module.analyze) as parse:
             self.assert_clause_two(reference, False)
             self.assertEqual(parse.call_count, 0, "an unchanged file keeps its recorded slice")
             self.edit(self.geo, "return x + 1", "return x + 2")  # outside the slice
@@ -926,16 +902,12 @@ class ReachEndToEnd(unittest.TestCase):
     def setUp(self):
         import sys
 
-        from cadgen.store.closure import forget_model_files
-
         scratch = generated_cad_directory(prefix="closure-reach-e2e-")
         self.addCleanup(scratch.cleanup)
         self.root = Path(scratch.name)
         env = mock.patch.dict(os.environ, {"CADGEN_CACHE_DIR": str(self.root / "store")})
         env.start()
         self.addCleanup(env.stop)
-        forget_model_files()
-        self.addCleanup(forget_model_files)
         self.repo = Path(__file__).resolve().parents[4]
         self.python = sys.executable
         (self.root / "src" / "lib").mkdir(parents=True)

@@ -97,7 +97,7 @@ class DescriptorFixture:
     def bounds_keys(snapshot):
         """The ``index/bounds`` entry names ``snapshot.bounds()`` reads and writes."""
         breps = dict(snapshot.component_breps)
-        return [stored_bounds.bounds_key(bounds.OP, (breps[cid], struct.pack("<16d", *transform)))
+        return [stored_bounds.bounds_key(bounds.ALGORITHM, (breps[cid], struct.pack("<16d", *transform)))
                 for cid, transform in snapshot.occurrences]
 
 
@@ -236,17 +236,16 @@ class ProviderTests(DescriptorFixture, unittest.TestCase):
         from cadgen.store.index import entry_path, iter_entries
         snapshot = self.snapshot(self.parent())
         results, keys = [], []
-        for identity in ("native=A;binding=A", "native=B;binding=B"):
-            with mock.patch.object(stored_bounds, "native_identity", return_value=identity):
+        for identity in (("1", "A", "A"), ("1", "B", "B")):
+            with mock.patch.object(stored_bounds, "kernel_versions", return_value=identity):
                 results.append(snapshot.bounds())
                 keys.append(set(self.bounds_keys(snapshot)))
         self.assertEqual(results[0], results[1])
         self.assertFalse(keys[0] & keys[1])
         self.assertTrue(all(entry_path("bounds", key).is_file() for key in keys[0] | keys[1]))
-        self.assertTrue(stored_bounds.native_identity().startswith("native="))
         # An unknown build keys nothing: it measures and stores nothing.
         stored = sorted(iter_entries("bounds"))
-        with mock.patch.object(stored_bounds, "native_identity", side_effect=ValueError("unknown build")):
+        with mock.patch.object(stored_bounds, "kernel_versions", side_effect=ValueError("unknown build")):
             self.assertEqual(snapshot.bounds(), results[0])
         self.assertEqual(sorted(iter_entries("bounds")), stored)
 

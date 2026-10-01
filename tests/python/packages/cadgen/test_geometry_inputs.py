@@ -182,7 +182,7 @@ class GeometryInputs(unittest.TestCase):
         self.assertGreater(materialize(digest).volume,0)
 
     def test_unknown_producer_cannot_share_persistent_namespace(self):
-        with mock.patch('cadgen.store.surfaces._runtime_versions',return_value=('1','unknown','1')):
+        with mock.patch('cadgen.store.surfaces.kernel_versions',return_value=('1','unknown','1')):
             digest,tree=publish_document(self.scene())
             self.assertGreater(materialize(digest).volume,0)
             with self.assertRaises(ValueError):surfaces.derive(digest)
@@ -198,7 +198,7 @@ class GeometryInputs(unittest.TestCase):
     def test_geometry_identity_does_not_depend_on_surface_producer(self):
         scene=self.scene()
         first_hash,first=publish_document(scene)
-        with mock.patch('cadgen.store.surfaces._runtime_versions',return_value=('different','different','different')):
+        with mock.patch('cadgen.store.surfaces.kernel_versions',return_value=('different','different','different')):
             second_hash,second=publish_document(scene)
             changed=surfaces.request_view(first_hash)
         normal=surfaces.request_view(first_hash)

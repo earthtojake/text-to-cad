@@ -136,8 +136,8 @@ still compose into an assembly.
 Use factory arguments for configurations, with one entrypoint per independently
 exported model. Geometry must not depend on untracked environment variables,
 working-directory state, time or random values; the cache cannot detect those
-changes. Declare external file inputs as described in the
-[model contract](step-generation.md).
+changes. The files a model reads are tracked on their own (the
+[model contract](step-generation.md)).
 
 ## Naming
 

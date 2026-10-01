@@ -42,6 +42,7 @@ __all__ = ["CHANGED", "Trace", "capture", "paused"]
 CHANGED = "changed while building"
 
 _CODE_SUFFIXES = frozenset({".py", ".pyc", ".pyi", ".pth", ".so", ".pyd", ".dylib", ".dll"})
+_PROTOCOL = 2  # filetrace.c's FILETRACE_VERSION: what its log records mean
 
 _LOCK = threading.Lock()
 _TRACER: ctypes.CDLL | None = None
@@ -69,12 +70,12 @@ def _tracer() -> ctypes.CDLL:
             if not path.is_file():
                 raise AssetMissing(
                     f"cadgen's file tracer for this platform ({path.name}) is missing, and without "
-                    "it a build cannot see the files it reads. " + runtime_build_hint(path)
+                    "it a build cannot see the files it reads. " + runtime_build_hint(path, overridable=False)
                 )
             library = ctypes.CDLL(str(path))
             library.cadgen_filetrace_begin.argtypes = [ctypes.c_char_p]
             library.cadgen_filetrace_end.restype = None
-            if library.cadgen_filetrace_install() != 1:
+            if library.cadgen_filetrace_install() != _PROTOCOL:
                 raise RuntimeError(f"cadgen's file tracer ({path}) could not install in this process")
             _TRACER = library
         return _TRACER
@@ -85,6 +86,7 @@ class Trace:
     """What one capture saw opened and listed."""
 
     read: dict[str, set[tuple[int, int]]] = field(default_factory=dict)  # path -> {(size, mtime_ns)} at open
+    updated: set[str] = field(default_factory=set)  # read paths opened to read and write
     written: set[str] = field(default_factory=set)
     listed: set[str] = field(default_factory=set)
     unnamed: int = 0  # files opened whose path the tracer could not write down
@@ -103,11 +105,15 @@ class Trace:
                 self.written.add(path)
             else:
                 self.read.setdefault(path, set()).add((int(size), int(mtime)))
+                if kind == b"u":
+                    self.updated.add(path)
 
     def inputs(self, *, outputs: Iterable[Path] = ()) -> tuple[dict[Path, str], set[Path]]:
         """The files this build read, each with its content hash -- or
         :data:`CHANGED` when it no longer holds what was read -- and the
-        folders its code listed."""
+        folders its code listed. A file opened to read and write (a database,
+        ``r+``) is read while it still holds what it held; one the build
+        changed or removed is the build's own."""
         if self.unnamed:
             raise RuntimeError(
                 f"this build opened {self.unnamed} file(s) whose path could not be recorded (a path "
@@ -118,25 +124,31 @@ class Trace:
 
         excluded = _environment_roots()
         written = {_resolved(path) for path in (*self.written, *outputs)}
-        files: dict[Path, str] = {}
+        updated = {_resolved(path) for path in self.updated}
+        opened: dict[Path, set[tuple[int, int]]] = {}
         for raw, seen in self.read.items():
             path = _resolved(raw)
             if path is None or path in written or path.suffix.lower() in _CODE_SUFFIXES:
                 continue
-            if any(path.is_relative_to(root) for root in excluded):
-                continue
+            if not any(path.is_relative_to(root) for root in excluded):
+                opened.setdefault(path, set()).update(seen)
+        files: dict[Path, str] = {}
+        for path, seen in opened.items():
             try:
                 before = os.stat(path)
                 digest = _sha256_file(path)
                 after = os.stat(path)
             except OSError:
-                files[path] = CHANGED  # read, then gone
+                if path not in updated:
+                    files[path] = CHANGED  # read, then gone
                 continue
             if not stat.S_ISREG(before.st_mode):
                 continue
-            now = {(before.st_size, before.st_mtime_ns)}
-            unchanged = seen == now and (after.st_size, after.st_mtime_ns) == (before.st_size, before.st_mtime_ns)
-            files[path] = CHANGED if not unchanged or files.get(path) == CHANGED else digest
+            now = (before.st_size, before.st_mtime_ns)
+            if seen == {now} and (after.st_size, after.st_mtime_ns) == now:
+                files[path] = digest
+            elif path not in updated:
+                files[path] = CHANGED
         folders = {
             folder
             for folder in map(_resolved, self.listed)
@@ -240,13 +252,28 @@ def _listing_audit(event: str, args: tuple) -> None:
         return
     try:
         target = args[0] if args else None
-        if isinstance(target, int) or not _listed_by_model(sys._getframe(1)):
-            return  # a descriptor (its folder was opened by path), or not the model's listing
-        folder = os.path.abspath(os.fsdecode(target if target is not None else "."))
+        if not _listed_by_model(sys._getframe(1)):
+            return
+        folder = _descriptor_path(target) if isinstance(target, int) else os.path.abspath(
+            os.fsdecode(target if target is not None else "."))
+        if folder is None:
+            return
         for trace in tuple(_OPEN):
             trace.listed.add(folder)
     except Exception:  # noqa: BLE001 - an audit hook must never fail the call it observes
         pass
+
+
+def _descriptor_path(fd: int) -> str | None:
+    """The folder an open descriptor names (``os.fwalk``, ``scandir(fd)``)."""
+    try:
+        if sys.platform == "darwin":
+            import fcntl
+
+            return os.fsdecode(fcntl.fcntl(fd, fcntl.F_GETPATH, bytes(1024)).split(b"\0", 1)[0])
+        return os.readlink(f"/proc/self/fd/{fd}")
+    except (OSError, AttributeError, ValueError):
+        return None
 
 
 def _listed_by_model(frame) -> bool:

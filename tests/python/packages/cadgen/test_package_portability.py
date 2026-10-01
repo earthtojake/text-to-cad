@@ -322,28 +322,12 @@ class PackagePortabilityTest(unittest.TestCase):
 
 
 class RecordedPathHelpersTest(unittest.TestCase):
-    """The two functions every persisted path goes through."""
-
-    def test_a_sibling_and_a_parent_dependency_stay_relative(self) -> None:
-        from cadgen._internal.source_hash import _relative_to_base
-
-        with tempfile.TemporaryDirectory(prefix="cadrel-") as temp_dir:
-            root = Path(temp_dir)
-            (root / "models" / "parts").mkdir(parents=True)
-            (root / "shared").mkdir()
-            base = root / "models"
-            self.assertEqual(
-                "parts/bolt.py", _relative_to_base(base / "parts" / "bolt.py", base)
-            )
-            self.assertEqual(
-                "../shared/dims.py", _relative_to_base(root / "shared" / "dims.py", base)
-            )
+    """The function a persisted path goes through (``render.relative_to_directory``)."""
 
     def test_a_dependency_on_another_volume_is_recorded_rather_than_crashing(self) -> None:
         # os.path.relpath RAISES across Windows drives -- a model on D: importing a helper from
         # C:. There is no relative path to record, and the build must not die over it.
         from cadgen import render
-        from cadgen._internal import source_hash
 
         def _across_drives(*args, **kwargs):
             raise ValueError("path is on mount 'C:', start on mount 'D:'")
@@ -353,10 +337,6 @@ class RecordedPathHelpersTest(unittest.TestCase):
             dependency = root / "elsewhere.py"
             dependency.write_text("X = 1\n", encoding="utf-8")
             with unittest.mock.patch.object(os.path, "relpath", _across_drives):
-                self.assertEqual(
-                    dependency.resolve().as_posix(),
-                    source_hash._relative_to_base(dependency, root),
-                )
                 self.assertEqual(
                     dependency.resolve().as_posix(),
                     render.relative_to_directory(dependency, root),

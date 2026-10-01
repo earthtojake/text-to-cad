@@ -27,10 +27,6 @@ class StepPublicationTests(unittest.TestCase):
         })
         env.start()
         self.addCleanup(env.stop)
-        from cadgen.store.closure import forget_model_files
-
-        forget_model_files()
-        self.addCleanup(forget_model_files)
 
     def build(self, size: int, *, force: bool = False, annotated: bool = False) -> int:
         from cadgen.cli._run_model import run_model_argv

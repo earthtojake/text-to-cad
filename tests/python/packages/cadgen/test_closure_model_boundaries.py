@@ -32,16 +32,12 @@ def right():
 
 class ModelClosureBoundaries(unittest.TestCase):
     def setUp(self):
-        from cadgen.store.closure import forget_model_files
-
         scratch = generated_cad_directory(prefix="closure-model-boundaries-")
         self.addCleanup(scratch.cleanup)
         self.root = Path(scratch.name)
         env = mock.patch.dict(os.environ, {"CADGEN_CACHE_DIR": str(self.root / "store")})
         env.start()
         self.addCleanup(env.stop)
-        forget_model_files()
-        self.addCleanup(forget_model_files)
         self.family = self.write("family.py", FAMILY)
 
     def geometry_tree(self, label):
@@ -82,7 +78,7 @@ class ModelClosureBoundaries(unittest.TestCase):
         return reference
 
     def test_imported_model_names_from_a_multi_model_file_are_result_edges(self):
-        from cadgen.store.closure import is_model_file, static_closure
+        from cadgen.store.closure import static_closure
 
         cases = (
             ("from family import left", "return left()"),
@@ -93,7 +89,6 @@ class ModelClosureBoundaries(unittest.TestCase):
         # Result-only classification is AST work and must not import the model
         # merely to choose one of its declarations.
         with mock.patch("cadgen.metadata.imported_model", side_effect=AssertionError("model imported")):
-            self.assertTrue(is_model_file(self.family))
             for imports, body in cases:
                 with self.subTest(imports=imports):
                     closure = static_closure(self.parent(imports, body))

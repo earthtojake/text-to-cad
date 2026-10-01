@@ -107,10 +107,6 @@ class SavedDocumentIdentityTest(unittest.TestCase):
         )
         self._environment.start()
         self.addCleanup(self._environment.stop)
-        from cadgen.store.closure import forget_model_files
-
-        forget_model_files()
-        self.addCleanup(forget_model_files)
 
     def _write_model(self, folder: str, material: dict[str, float]) -> tuple[Path, Path]:
         directory = self.root / folder

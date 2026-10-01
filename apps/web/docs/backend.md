@@ -89,8 +89,10 @@ registry, and its API-only mode does not serve a SPA. See the
 
 Each instance serves one fixed filesystem root. `LocalAssetBackend` resolves
 and checks it at construction. Catalog entries include an absolute `file` and
-a `rootRelativeFile` for navigation. The scan skips dot-directories and writes
-no `catalog.json` or hidden catalog cache.
+a `rootRelativeFile` for navigation. The scan skips dot-directories and
+`__cadgen__`, `__pycache__`, `build`, `coverage`, `dist`, `node_modules` and
+`viewer` (`VIEWER_SKIPPED_DIRECTORIES`), and writes no `catalog.json` or hidden
+catalog cache.
 
 **The catalog is fresh on every request.** `GET /__cad/catalog` describes the
 served tree as it is when the request arrives: a model file created before the

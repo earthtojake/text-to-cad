@@ -36,7 +36,7 @@ edges from the solid it rounds, after that solid's last operation: an
 operation returns new native topology wherever it changed the solid, so an
 edge held from before it may not be the solid's own. A fillet silently skips
 such an edge, and fails when none is left; a chamfer fails on it. Shape
-equality and hashing are build123d's own and compare native handles, so
+equality is build123d's own and compares native handles, so
 `edge in solid.edges()` is true only for the solid's own edge.
 
 ## Labels and assemblies
@@ -201,8 +201,8 @@ intermediates around the suspect operation. A validity gate inside a model
 body — a retry ladder that accepts a fillet only when the result is sound, a
 stage check on a casting — uses build123d's `shape.is_valid` and
 `cadgen.geometry.is_sound` (the `BRepAlgoAPI_Check` verdict, which also
-identifies Boolean-suitability issues such as tiny edges). Every check runs
-the kernel, so there is no need to run an expensive diagnostic after every
+identifies Boolean-suitability issues such as tiny edges). A check costs
+kernel time, so gate where a failure is plausible rather than after every
 simple operation. Any repair must preserve the dimensions being checked. See
 [inspection](inspection-and-validation.md).
 

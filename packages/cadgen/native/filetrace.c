@@ -11,12 +11,13 @@
  *
  *     kind TAB size TAB mtime-ns TAB absolute-path NUL
  *
- * kind is 'r' for a regular file opened to read and 'w' for a path written
- * (opened to write, or renamed onto). size and mtime are the open file's, so
- * the reader can tell a file that changed after the build read it; a 'w'
- * record carries -1 for both. 'x' is a file opened whose path could not be
- * written down. cadgen._internal.filetrace reads the log back. Nothing is
- * classified, hashed or allocated here.
+ * kind is 'r' for a regular file opened to read; 'u' for one opened to read
+ * and write that keeps what it holds (r+, a+, a database); 'w' for a path
+ * written (opened write-only or truncated, or renamed onto). size and mtime
+ * are the open file's, so the reader can tell a file that changed after the
+ * build opened it; a 'w' record carries -1 for both. 'x' is a file opened
+ * whose path could not be written down. cadgen._internal.filetrace reads the
+ * log back. Nothing is classified, hashed or allocated here.
  *
  * The rewiring is per image, not per process: calls made inside the operating
  * system's own libraries (the macOS shared cache, kernelbase) are not seen.
@@ -26,7 +27,7 @@
  * cadgen/_runtime/native.
  */
 
-#define FILETRACE_VERSION 1
+#define FILETRACE_VERSION 2
 
 #ifdef _WIN32
 #define EXPORT __declspec(dllexport)
@@ -87,7 +88,7 @@ static void note(char kind, int fd, int dirfd, const char *path) {
     if (!capturing || paused || fd < 0 || !path) return;
     int saved = errno;
     long long size = -1, mtime = -1;
-    if (kind == 'r') {
+    if (kind != 'w') {
         struct stat st;
         if (fstat(fd, &st) != 0 || !S_ISREG(st.st_mode)) goto done;  /* a folder, a pipe, a device */
         size = (long long)st.st_size;
@@ -107,12 +108,20 @@ done:
     errno = saved;
 }
 
-static int mode_writes(const char *mode) {
-    return mode && (strchr(mode, 'w') || strchr(mode, 'a') || strchr(mode, '+'));
+/* fopen's mode: "w" and "a" only write, "r+" and "a+" read what is there too. */
+static char mode_kind(const char *mode) {
+    if (!mode) return 'r';
+    if (mode[0] == 'w') return 'w';
+    if (strchr(mode, '+')) return 'u';
+    return mode[0] == 'a' ? 'w' : 'r';
 }
 
-static int flags_write(int flags) {
-    return (flags & (O_WRONLY | O_RDWR | O_CREAT | O_TRUNC | O_APPEND)) != 0;
+/* open's flags: truncating or write-only writes; read-write (or creating)
+   may read what is there. */
+static char flags_kind(int flags) {
+    if ((flags & O_TRUNC) || (flags & O_ACCMODE) == O_WRONLY) return 'w';
+    if ((flags & O_ACCMODE) == O_RDWR || (flags & O_CREAT)) return 'u';
+    return 'r';
 }
 
 static int flags_need_mode(int flags) {
@@ -146,7 +155,7 @@ typedef int (*renameat_fn)(int, const char *, int, const char *);
     static int hook_##name(const char *path, int flags, ...) {              \
         MODE_ARG(flags, flags)                                              \
         int fd = real_##name(path, flags, mode);                            \
-        note(flags_write(flags) ? 'w' : 'r', fd, AT_FDCWD, path);           \
+        note(flags_kind(flags), fd, AT_FDCWD, path);           \
         return fd;                                                          \
     }
 #define OPENAT_HOOK(name)                                                   \
@@ -154,35 +163,35 @@ typedef int (*renameat_fn)(int, const char *, int, const char *);
     static int hook_##name(int dirfd, const char *path, int flags, ...) {   \
         MODE_ARG(flags, flags)                                              \
         int fd = real_##name(dirfd, path, flags, mode);                     \
-        note(flags_write(flags) ? 'w' : 'r', fd, dirfd, path);              \
+        note(flags_kind(flags), fd, dirfd, path);              \
         return fd;                                                          \
     }
 #define OPEN2_HOOK(name)                                                    \
     static open2_fn real_##name;                                            \
     static int hook_##name(const char *path, int flags) {                   \
         int fd = real_##name(path, flags);                                  \
-        note(flags_write(flags) ? 'w' : 'r', fd, AT_FDCWD, path);           \
+        note(flags_kind(flags), fd, AT_FDCWD, path);           \
         return fd;                                                          \
     }
 #define OPENAT2_HOOK(name)                                                  \
     static openat2_fn real_##name;                                          \
     static int hook_##name(int dirfd, const char *path, int flags) {        \
         int fd = real_##name(dirfd, path, flags);                           \
-        note(flags_write(flags) ? 'w' : 'r', fd, dirfd, path);              \
+        note(flags_kind(flags), fd, dirfd, path);              \
         return fd;                                                          \
     }
 #define FOPEN_HOOK(name)                                                    \
     static fopen_fn real_##name;                                            \
     static FILE *hook_##name(const char *path, const char *mode) {          \
         FILE *f = real_##name(path, mode);                                  \
-        if (f) note(mode_writes(mode) ? 'w' : 'r', fileno(f), AT_FDCWD, path); \
+        if (f) note(mode_kind(mode), fileno(f), AT_FDCWD, path); \
         return f;                                                           \
     }
 #define FREOPEN_HOOK(name)                                                  \
     static freopen_fn real_##name;                                          \
     static FILE *hook_##name(const char *path, const char *mode, FILE *s) { \
         FILE *f = real_##name(path, mode, s);                               \
-        if (f) note(mode_writes(mode) ? 'w' : 'r', fileno(f), AT_FDCWD, path); \
+        if (f) note(mode_kind(mode), fileno(f), AT_FDCWD, path); \
         return f;                                                           \
     }
 
@@ -459,6 +468,9 @@ EXPORT int cadgen_filetrace_install(void) {
 }
 
 EXPORT int cadgen_filetrace_begin(const char *log_path) {
+#ifndef __APPLE__
+    rewire_all();  /* what a load by bare name brought in since the last load by path */
+#endif
     int fd = open(log_path, O_WRONLY | O_APPEND | O_CREAT | O_TRUNC | O_CLOEXEC, 0600);
     if (fd < 0) return -1;
     if (log_fd < 0) {
@@ -505,7 +517,7 @@ static void note(char kind, HANDLE handle, const wchar_t *path) {
     if (!capturing || paused || !path) return;
     DWORD saved = GetLastError();
     long long size = -1, mtime = -1;
-    if (kind == 'r') {
+    if (kind != 'w') {
         BY_HANDLE_FILE_INFORMATION info;
         if (GetFileType(handle) != FILE_TYPE_DISK || !GetFileInformationByHandle(handle, &info)
             || (info.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY))
@@ -534,9 +546,10 @@ done:
 
 static void note_open(HANDLE handle, const wchar_t *path, DWORD access, DWORD disposition) {
     if (handle == INVALID_HANDLE_VALUE) return;
-    if ((access & WRITE_ACCESS) || disposition == CREATE_ALWAYS || disposition == CREATE_NEW
-        || disposition == TRUNCATE_EXISTING)
+    if (disposition == CREATE_ALWAYS || disposition == CREATE_NEW || disposition == TRUNCATE_EXISTING)
         note('w', handle, path);
+    else if (access & WRITE_ACCESS)
+        note(access & READ_ACCESS ? 'u' : 'w', handle, path);
     else if (access & READ_ACCESS)
         note('r', handle, path);  /* metadata-only opens (what os.stat does) read nothing */
 }
@@ -710,6 +723,7 @@ EXPORT int cadgen_filetrace_install(void) {
 }
 
 EXPORT int cadgen_filetrace_begin(const char *log_path) {
+    rewire_all();  /* a module loaded where no rewired LoadLibrary saw it */
     wchar_t path[32768];
     if (!MultiByteToWideChar(CP_UTF8, 0, log_path, -1, path, 32768)) return -1;
     HANDLE handle = real_CreateFileW(path, FILE_APPEND_DATA, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,

@@ -121,10 +121,9 @@ Copy the full template for the applicable workflow from
    (`from bracket import THICKNESS`) are tracked by value the same way.
 
 3. **Flat pattern of an imported STEP** (a `.step`/`.stp` with no Python source):
-   read it with `cadgen.read_step`, not `build123d.import_step`. It records the
-   file's content hash as a build INPUT, so replacing the vendor STEP makes the
-   drawing stale on its own, with no `--force`; read it through build123d and the
-   drawing stays "current" against a file that changed underneath it.
+   read it with `cadgen.read_step` (warm from the store, the same geometry as
+   `build123d.import_step`). Like every file a build reads, it is an input:
+   replacing the vendor STEP makes the drawing stale on its own, with no `--force`.
 
    ```python
    from pathlib import Path

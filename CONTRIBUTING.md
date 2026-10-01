@@ -109,12 +109,13 @@ on its own would fetch the previous RELEASE from PyPI over your working copy.
 
 `packages/cadgen/src/cadgen/_runtime/` is BUILT, not committed — the whole
 directory is gitignored, and the wheel is the only place those files ship. A
-fresh clone therefore has no Node builders, no snapshot browser bundle and no
-Viewer client until `scripts/bundle/bundle.sh` runs, and cadgen says so by name
-the first time it reaches for one. `scripts/test/test-python.sh` and
-`scripts/test/test-global.sh` build the two stages they read if they are
-missing, so this step is about having the whole thing, including the Viewer
-client the wheel carries.
+fresh clone therefore has no Node builders, no snapshot browser bundle, no
+Viewer client and no file tracer -- so it builds no model -- until
+`scripts/bundle/bundle.sh` runs, and cadgen says so by name the first time it
+reaches for one. `scripts/test/test-python.sh` and `scripts/test/test-global.sh`
+build the stages they read if they are missing (the tracer for this machine
+only), so this step is about having the whole thing, including the Viewer client
+and every platform's tracer the wheel carries.
 
 For CAD Viewer development:
 
@@ -262,8 +263,9 @@ optional review screenshots produced by `--out`. Capture timing stays in the
 job log, so a stalled screenshot still leaves useful state diagnostics.
 
 **The packaged runtime is built per job**, not built once and passed between
-them: `ensure_packaged_runtime` takes ~13 s, and an artifact would serialise
-every test job behind a bundle job for longer than that.
+them: `ensure_packaged_runtime` takes ~13 s plus the host's file tracer (seconds
+with zig's cache warm; setup-deps caches it per zig version), and an artifact would
+serialise every test job behind a bundle job for longer than that.
 
 **Flakes are fixed by mechanism or deleted — never skipped, retried, or tuned.**
 Classify first: a real bug, a retired behaviour, or a platform problem. Then fix

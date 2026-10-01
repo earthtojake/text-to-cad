@@ -2,7 +2,7 @@
 import hashlib,json
 from pathlib import Path
 import numpy as np
-from cadgen import step,read_step,build123d as bd
+from cadgen import step,build123d as bd
 from lib.native_integration import ROOT,leaves
 from lib.layout import THUMB_CMC
 from lib.finish import finish
@@ -19,7 +19,6 @@ def rib(cp,radius):
 def make_radial_bank_arm():
     from lib.phalanx_r5_boolean import cut
     source=ROOT/'STEP/imported/rigid_clearance_inputs.step'
-    read_step(source)  # Declare the native model dependency before reconstruction.
     parts={p.label:p for p in leaves(bd.import_step(str(source)))}
     name='thumb_radial_shared_guide_bank_structural';base=bd.Pos(*THUMB_CMC)*bd.Rot(0,0,45)
     body=parts[name];host=parts['palm_metacarpal_truss']

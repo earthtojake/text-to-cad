@@ -15,34 +15,13 @@ import hashlib
 import math
 import threading
 from collections import OrderedDict
-from functools import lru_cache
 from typing import Any, Callable
+
+from cadgen.store.surfaces import kernel_versions
 
 _RAM_ENTRIES = 1 << 16
 _ram: OrderedDict[str, Any] = OrderedDict()
 _lock = threading.Lock()
-
-
-@lru_cache(maxsize=1)
-def native_identity() -> str:
-    """The loaded OCP extension's own version and its provider distribution.
-
-    OCP.__version__ is exported by the native extension, not inferred from
-    build123d. An installation using another provider must not share a key.
-    Raises ValueError when either is unknown.
-    """
-    from importlib.metadata import PackageNotFoundError, version
-
-    import OCP
-
-    native = getattr(OCP, "__version__", None)
-    try:
-        binding = version("cadquery-ocp-novtk")
-    except PackageNotFoundError as error:
-        raise ValueError("missing native binding identity") from error
-    if type(native) is not str or not native or native == "unknown" or not binding:
-        raise ValueError("unsupported native identity")
-    return f"native={native};provider=cadquery-ocp-novtk;binding={binding}"
 
 
 def _is_box(value: Any) -> bool:
@@ -61,7 +40,7 @@ def _is_box(value: Any) -> bool:
 def bounds_key(algorithm: str, parts: tuple) -> str:
     """The ``index/bounds`` entry name for ``algorithm`` over ``parts`` on this
     OCP build. Raises ValueError when the OCP build is unknown."""
-    return hashlib.sha256(repr((algorithm, parts, native_identity())).encode()).hexdigest()
+    return hashlib.sha256(repr((algorithm, parts, kernel_versions())).encode()).hexdigest()
 
 
 def cached_box(algorithm: str, parts: tuple, measure: Callable[[], Any]) -> Any:

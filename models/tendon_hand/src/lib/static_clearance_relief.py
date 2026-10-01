@@ -59,7 +59,6 @@ def make_reliefs():
     assert jaw_check['input_sha256'][str(jaw_path)]==hashlib.sha256(jaw_path.read_bytes()).hexdigest()
     assert all(r['pass_'] for r in jaw_check['bores'])
     assert all(r['pass_'] for r in jaw_check['pulley_contacts'] if '_abduction_' in r['body'])
-    read_step(jaw_path)  # Declare the native model input before raw STEP reconstruction.
     jaw=bd.import_step(str(jaw_path));assert len(jaw.solids())==1
     jaw=jaw.solids()[0];jaw.label='thumb_cmc_negative_yaw_outlet_structural_jaw_1'
     originals[jaw.label]=jaw;parts[jaw.label]=jaw
@@ -68,7 +67,6 @@ def make_reliefs():
     bank_check=json.loads(bank_check_path.read_text());assert bank_check['pass']
     assert bank_check['input_sha256'][str(bank_path)]==hashlib.sha256(bank_path.read_bytes()).hexdigest()
     assert next(r for r in bank_check['remaining_interface_contacts'] if r['body']=='thumb_cmc_abduction_negative_drive_pulley')['intersection_mm3']<1e-7
-    read_step(bank_path)
     bank=bd.import_step(str(bank_path));assert len(bank.solids())==1
     bank=bank.solids()[0];bank.label='thumb_radial_shared_guide_bank_structural'
     originals[bank.label]=bank;parts[bank.label]=bank

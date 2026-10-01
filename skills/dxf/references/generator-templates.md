@@ -138,9 +138,9 @@ def drawing():
 
 ## 3. Flat pattern of an imported STEP
 
-For a vendor `.step` with no Python source. Read it with `cadgen.read_step`,
-which records the file's content hash as a build input — replacing the STEP
-makes the drawing stale on its own, with no `--force`.
+For a vendor `.step` with no Python source. Read it with `cadgen.read_step`;
+like every file a build reads, it is an input — replacing the STEP makes the
+drawing stale on its own, with no `--force`.
 
 The face selection is a part-specific judgment call: pick the planar face(s)
 that define the cut profile.

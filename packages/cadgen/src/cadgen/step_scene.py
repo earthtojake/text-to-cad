@@ -259,7 +259,7 @@ class StepScene:
 
 
 def read_step(step_path: Path | str, *, label: str | None = None) -> Any:
-    """Read a STEP file as build123d geometry, AND record it as a build input.
+    """Read a STEP file as build123d geometry.
 
     Usable in a ``@step`` body (composing a vendor part into an assembly) and in
     a ``@dxf`` body (deriving a cut profile from one) alike. The returned shape
@@ -271,15 +271,8 @@ def read_step(step_path: Path | str, *, label: str | None = None) -> Any:
     warm read, a cold parse and ``import_step`` agree by construction
     (``cadgen.store.build.build_tree_through_step``).
 
-    **The recording is the point.** Freshness used to follow a model's Python
-    import reach only, which is observable: modules announce themselves. A file
-    read as data announces nothing, so a model built from a vendor STEP went on
-    reporting itself current after that STEP was replaced, and the only way to
-    get the truth back was ``--force``. Reading through this function declares
-    the file: its path and content hash join the model's closure, and the next
-    run's gate re-hashes it (design/dxf-build123d.md).
-
-    A missing file raises here rather than deep inside the importer, because
+    Inside a build the file is an input, as every file a build reads is, and a
+    model's own output is refused. A missing file raises here rather than deep inside the importer, because
     "the vendor STEP is not where the model thinks it is" is the whole message.
     """
     from cadgen._internal.step_scene import import_step

@@ -65,11 +65,13 @@ def producer_fields(value: dict) -> dict:
 
 
 @lru_cache(maxsize=1)
-def _runtime_versions() -> tuple[str, str, str]:
-    """The loaded build123d, OCP and cadquery-ocp-novtk versions.
+def kernel_versions() -> tuple[str, str, str]:
+    """The loaded build123d, OCP and cadquery-ocp-novtk versions: who produced
+    a derived fact (an extracted surface, a measured box).
 
-    An unknown version is a ValueError: extraction output must never share a
-    producer identity with an unrelated kernel build.
+    OCP.__version__ is exported by the native extension, not inferred from
+    build123d. An unknown version is a ValueError: a derived fact must never
+    share an identity with an unrelated kernel build.
     """
     from importlib.metadata import PackageNotFoundError, version
 
@@ -79,15 +81,15 @@ def _runtime_versions() -> tuple[str, str, str]:
     try:
         distribution = version("cadquery-ocp-novtk")
     except PackageNotFoundError as error:
-        raise ValueError("surface extraction requires the cadquery-ocp-novtk distribution") from error
+        raise ValueError("a derived fact needs the cadquery-ocp-novtk distribution") from error
     versions = (getattr(build123d, "__version__", None), getattr(OCP, "__version__", None), distribution)
     if any(not isinstance(value, str) or not value.strip() or "unknown" in value.lower() for value in versions):
-        raise ValueError("surface extraction requires known build123d and OCP versions")
+        raise ValueError("a derived fact needs known build123d and OCP versions")
     return versions
 
 
 def producer_identity() -> dict:
-    build123d, ocp, distribution = _runtime_versions()
+    build123d, ocp, distribution = kernel_versions()
     identity = {"scheme": EXTRACTION_SCHEME, "surfFormat": SURF_FORMAT,
                 "build123d": build123d, "ocp": ocp, "cadqueryOcp": distribution}
     validate_producer(identity)

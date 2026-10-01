@@ -106,8 +106,8 @@ jobs:
         uses: ./.github/actions/setup-deps
 
       # The bundle feeds the WHEEL, and it is the only thing that does: cadgen's Node
-      # builders, the snapshot browser bundle and the CAD Viewer client are all
-      # gitignored, so the release commit carries none of them. Nothing here writes to
+      # builders, the snapshot browser bundle, the CAD Viewer client and the file
+      # tracers are all gitignored, so the release commit carries none of them. Nothing here writes to
       # git -- the wheel is the release asset.
       - name: Bundle production outputs
         if: steps.gate.outputs.should_publish == 'true'

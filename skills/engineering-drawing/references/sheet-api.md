@@ -50,8 +50,8 @@ argument list carries that, so the decorator is the whole surface.
 
 ## The part
 
-`cadgen.read_step(path)` returns build123d geometry, reads warm from the store,
-and records the file as an input. Anchor the path on the script
+`cadgen.read_step(path)` returns build123d geometry and reads warm from the
+store. Anchor the path on the script
 (`Path(__file__).parent / "../STEP/part.step"`) — it resolves against the
 process's working directory otherwise. A live build123d shape works too; a
 drawing takes geometry, not a file.

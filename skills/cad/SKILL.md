@@ -92,7 +92,7 @@ python src/bracket.py
   to incorporate a changed child.
 - Read vendor STEP inputs with `cadgen.read_step`. Every file a build opens is
   an input on its own, whatever reads it (`json.load`, `np.load`,
-  `bd.import_step`, a font): nothing is declared. Never read a model's own
+  `bd.import_step`, a project font): nothing is declared. Never read a model's own
   output as its input. Geometry must not depend on untracked
   time, random values, environment variables or the working directory.
 - When named purchasable parts are needed, search `$step-parts` before making

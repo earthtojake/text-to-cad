@@ -145,10 +145,6 @@ class ModuleSyntax:
     guards: frozenset[int]                       # unshadowed ``if __name__ == "__main__":`` blocks
     whole_hash: str                              # the whole-file semantic hash of these bytes
 
-    @property
-    def imports(self) -> tuple[tuple[str, Alias], ...]:
-        return tuple((name, alias) for name, aliases in self.aliases.items() for alias in aliases)
-
 
 # --- the whole-file semantic hash ------------------------------------------------
 
@@ -788,9 +784,6 @@ def slice_hash(syntax: ModuleSyntax, names: Iterable[str]) -> str:
     if syntax.dynamic is not None:
         return syntax.whole_hash
     closed = close_names(syntax, names)
-    # v4: scope-resolved reads plus every load as an edge, walked runtime
-    # imports, lazy annotations. Records sliced by v3 lack those cross-module
-    # edges; re-slicing cannot recover them, so they rebuild once.
     digest = hashlib.sha256(b"slice4")
     for name in sorted(closed):
         digest.update(b"\0" + name.encode("utf-8") + (b"=" if name in syntax.definitions else b"!"))

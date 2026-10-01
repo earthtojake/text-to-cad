@@ -321,9 +321,9 @@ if __name__ == "__main__":
 class OwnOutputAsInputTests(unittest.TestCase):
     """A model must not read a file it writes.
 
-    `read_step` on the model's own `.step` is not a loop: it is an input that
-    changes on every run, so the gate can never say "current" and the geometry
-    depends on what the previous run left on disk. A body that re-wraps its own
+    `read_step` on the model's own `.step` builds the model from what the
+    previous run left on disk (the build never counts its own output as an
+    input, so nothing else catches it). A body that re-wraps its own
     output grew by one box per run and exited 0 each time -- plausible-wrong
     output at exit 0, the one outcome the engine refuses to produce. The rule
     was written down (step-generation.md, "Never `read_step` your own output")
@@ -545,6 +545,41 @@ class FileTraceTests(unittest.TestCase):
                 thread.join()
         self.assertEqual(trace.inputs(), ({}, set()))
 
+    def test_a_file_opened_to_read_and_write_is_an_input_until_the_build_changes_it(self) -> None:
+        """A database or an ``r+`` read keeps what it holds: an input. One the
+        build writes is its own, and so is the journal a write leaves behind."""
+        import sqlite3
+
+        from cadgen._internal import filetrace
+
+        catalog, notes, scratch = self.root / "parts.db", self._file("notes.json", "1"), self.root / "scratch.db"
+        with sqlite3.connect(catalog) as db:
+            db.execute("create table part (name text)")
+            db.execute("insert into part values ('bolt')")
+        db.close()
+        with filetrace.capture() as trace:
+            with sqlite3.connect(catalog) as db:
+                rows = db.execute("select name from part").fetchall()
+            db.close()
+            with open(notes, "r+", encoding="utf-8") as handle:
+                handle.read()
+            with sqlite3.connect(scratch) as db:
+                db.execute("create table t (x)")
+            db.close()
+        self.assertEqual(rows, [("bolt",)])
+        self.assertEqual(set(trace.inputs()[0]), {catalog, notes})
+
+    def test_a_folder_listed_through_a_descriptor_is_an_input(self) -> None:
+        if not hasattr(os, "fwalk"):
+            self.skipTest("os.fwalk lists folders by descriptor on POSIX only")
+        from cadgen._internal import filetrace
+
+        profiles = self.root / "profiles"
+        self._file("profiles/a.json", "{}")
+        with filetrace.capture() as trace:
+            list(os.fwalk(profiles))
+        self.assertEqual(trace.inputs()[1], {profiles})
+
     def test_captures_nest(self) -> None:
         from cadgen._internal import filetrace
 
@@ -588,8 +623,7 @@ class FileTraceTests(unittest.TestCase):
                 atlas.write_text('{"width": 45}', encoding="utf-8")
         self.assertEqual(consumed["width"], 30)
         files, folders = trace.inputs()
-        closure = build_closure(script, executed={str(path): digest for path, digest in files.items()},
-                                discovered_inputs=[*files, *folders])
+        closure = build_closure(script, executed={}, inputs=files, listings=folders)
         self.assertEqual(closure.shas["atlas.json"], filetrace.CHANGED)
         self.assertNotEqual(closure.hash, current_closure_hash(script, closure.files))
         record = {"tree": None, "closure": {"hash": closure.hash, "files": closure.files, "shas": closure.shas}}
@@ -608,6 +642,7 @@ class OldRecordTests(unittest.TestCase):
     def test_an_old_late_hash_record_misses_without_invalidating_saved_artifacts(self) -> None:
         import hashlib
 
+        from cadgen._internal.source_hash import _sha256_file
         from cadgen.catalog import result_snapshot_for
         from cadgen.store.closure import build_closure
         from cadgen.store.gate import stale
@@ -625,7 +660,7 @@ class OldRecordTests(unittest.TestCase):
             data.write_text('{"width":45}', encoding="utf-8")
             # Reproduce the old late-hash record: its closure falsely agrees
             # with the edited input, although the body consumed width 30.
-            closure = build_closure(script, executed={}, discovered_inputs=[data])
+            closure = build_closure(script, executed={}, inputs={data: _sha256_file(data)})
             document = root / "saved.step"
             document.write_bytes(f"saved geometry width {consumed_width}".encode())
             document_hash = hashlib.sha256(document.read_bytes()).hexdigest()

@@ -541,8 +541,7 @@ def read_source_provenance(step_path: Path | str) -> dict[str, Any] | None:
     payload: dict[str, Any] = {
         "sourceKind": str(record.get("sourceKind") or "python"),
         "sourceClosureHash": str((record.get("closure") or {}).get("hash") or ""),
-        "sourceClosureFiles": source_files((record.get("closure") or {}).get("files") or [],
-                                           (record.get("closure") or {}).get("shas")),
+        "sourceClosureFiles": source_files((record.get("closure") or {}).get("files") or []),
         "tree": str(record.get("tree") or ""),
     }
     for key in ("sourceHash", "annotationHash", "kinematics", "stepHash"):

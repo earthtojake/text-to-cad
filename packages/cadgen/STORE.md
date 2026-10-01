@@ -42,7 +42,7 @@ One word per concept; the code uses these words and no others.
 | **pin** | the child tree hash a parent resolved during a build (noun and verb) |
 | **record** | the mutable per-model entry in `index/`: current tree hash, closure, children pins, outputs |
 | **index** | the input-addressed side of the store: records, bounds, mesh entries |
-| **closure** | the source files a model's build read |
+| **closure** | what a model's build depended on: the source it reaches, the files it read, the folders it listed, and the files its imports rely on not existing |
 | **stale / current**, **gate** | the freshness state and the check that decides it |
 | **worker / spare / extra**, **job** | daemon vocabulary (the daemon's own documentation) |
 
@@ -79,9 +79,10 @@ that ledger (§9b); there is no preview directory or persistent session index.
 `index/bounds` holds bounding boxes of stored geometry (`store/bounds.py`).
 A key names what was measured and how: a component's BREP object hash or a
 leaf's BinTools digest, the placement it is measured in, the measuring
-algorithm, and the loaded OCP build; the value is six numbers, inline. A box
-is a pure function of that key, so a hit can never differ from a measurement,
-and an unknown OCP build just measures. Nothing in the index holds a value
+algorithm, and the loaded kernel's versions (build123d, OCP and its
+distribution); the value is six numbers, inline. A box is a pure function of
+that key, so a hit can never differ from a measurement, and an unknown kernel
+build just measures. Nothing in the index holds a value
 computed while a model runs (README law 18): a model's own checks and
 operations always execute.
 
@@ -322,9 +323,10 @@ identity. A real one (`link_arm`: a bar plus two placements of a pin model):
   geometry while retaining their own finishes. Appearance-sensitive exports
   include the normalized appearance digest in their variant, including absence.
 
-  Model records use payload schema7. Earlier records are misses: the next
-  source run rebuilds outputs whose input hashes may have been captured after
-  a mid-build edit, as well as outputs predating distinct occurrence colours.
+  Model records use payload schema 8 (reach slices, import-time slices, absent,
+  roots and listing entries). Earlier records are misses: the next source run
+  rebuilds outputs whose input hashes may have been captured after a mid-build
+  edit, as well as outputs predating distinct occurrence colours.
   This is one source rebuild; existing geometry and surface objects remain reusable.
   Document mappings remain payload schema4: saved bytes stay
   authoritative and are reparsed without guessing colours that the document
@@ -358,7 +360,7 @@ A real one (`link_robot`: a base, two placements of `link_arm`, one of
 ```json
 {
   "kind": "record",
-  "schemaVersion": 7,
+  "schemaVersion": 8,
   "model": "/abs/models/assemblies/src/link_robot/link_robot.py::link_robot",
   "script": "/abs/models/assemblies/src/link_robot/link_robot.py",
   "function": "link_robot",
@@ -543,10 +545,7 @@ A real one (`link_robot`: a base, two placements of `link_arm`, one of
     marked unbound, because a binding added there later wins over the
     submodule. Which files declare models is read from their bytes, never
     cached by path, so a warm process sees a decorator added or removed.
-    Slice hashes use `slice4:`:
-    records made by the earlier `slice1:`–`slice3:` analyses rebuild once to
-    recover cross-module edges those analyses missed. Released whole-file
-    `ast1:` records remain compatible.
+    A sliced file's hash starts `slice4:`, a whole file's `ast1:`.
 - `constants` is `{"<model file, relative to the script>": {"<NAME>":
   "<sha256 of the literal's canonical repr>"}}` — every literal the model
   took from a model file by value. Empty for most models. The gate's clause
@@ -659,10 +658,13 @@ Each with the failure it prevents.
   The gate's own reading inside a build (a child's files and outputs, hashed
   to decide whether it is current) is paused on its thread: a child is an
   input by its result. Prevents: a model whose data changed reading as
-  current because nobody declared the file. Not seen: what a separate
-  program the model runs reads; calls made inside the operating system's own
-  libraries (the macOS shared cache); a file a third-party library caches
-  for the life of a warm worker, after the first build that reads it.
+  current because nobody declared the file. Not seen: a data file the model
+  looked for and did not find (one that appears later is no change); a `.py`
+  file read as text and `exec`'d rather than imported (source counts by reach,
+  and reach follows imports); what a separate program the model runs reads; calls made inside the operating
+  system's own libraries (the macOS shared cache); a file a third-party
+  library caches for the life of a warm worker, after the first build that
+  reads it.
 - **Publish order.** Objects first (components, then the complete tree), the
   document-byte mapping, the outputs (`.step` moved into place atomically;
   digest-bound sidecar), output mappings, then the record. STEP export and
@@ -821,8 +823,8 @@ Decided mechanically from the returned geometry and occurrence metadata.
 - A bounded descriptor composed entirely of pinned links may instead measure
   exact component bounds from verified canonical BREP objects. `index/bounds`
   stores only six finite numbers, keyed by BREP digest, all 16
-  placement doubles without rounding, the bounds algorithm and the actual
-  native/binding identity. It uses the same private reconstruction, placement,
+  placement doubles without rounding, the bounds algorithm and the kernel's
+  versions. It uses the same private reconstruction, placement,
   native leaf traversal and final numeric extrema merge as the whole document;
   rotated local AABBs and raw native-box merges are not substitutes. Missing,
   corrupt, unsupported or invalid inputs use the ordinary whole-document path;

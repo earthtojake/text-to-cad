@@ -237,7 +237,7 @@ class DocumentTreePackagingTest(unittest.TestCase):
         real_cached_box = bounds.cached_box
 
         def malformed_prepared_only(algorithm, parts, measure):
-            if algorithm == build._PREPARED_OCCURRENCE_BOUNDS_OP:
+            if algorithm == build._PREPARED_OCCURRENCE_BOUNDS_ALGORITHM:
                 return [0, 0, 0, 1, 1, float("nan")]
             return real_cached_box(algorithm, parts, measure)
 
