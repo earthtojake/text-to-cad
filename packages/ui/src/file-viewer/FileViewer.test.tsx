@@ -1,4 +1,5 @@
-import { act, cleanup, render, screen } from '@testing-library/react';
+import { act, cleanup, render, screen, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { unavailablePromptContext } from '@text-to-cad/core/prompt';
 import { FileViewer, defineFileRenderer } from '../../dist/file-viewer/index.js';
@@ -48,6 +49,20 @@ it('draws the navbar only when it has something to hold, and never for a view sh
   open({ host: { ...linked, environment: { colorScheme: 'light', compact: true } } });
   await screen.findByText('shown');
   expect(navbar()).toBeNull();
+});
+
+it('says how its host updates: where in the host, a command, a message for an agent and what finishes it, each only when given', async () => {
+  const user = userEvent.setup();
+  const install = { where: { label: 'In Codex', text: 'Plugins › Manage' }, command: 'codex plugin marketplace upgrade earthtojake', then: 'Then restart Codex.' };
+  open({ navigationPath: null, host: { ...host, links: viewerLinks({ version: '0.7.4', install }) } });
+  await screen.findByText('shown');
+  await user.click(screen.getByRole('button', { name: 'Version 0.7.4' }));
+  const menu = await screen.findByRole('menu');
+  expect(within(menu).getByText('In Codex')).toBeTruthy();
+  expect(within(menu).getByText('Plugins › Manage')).toBeTruthy();
+  expect(within(menu).getByText('codex plugin marketplace upgrade earthtojake')).toBeTruthy();
+  expect(within(menu).queryByText('Or ask your agent')).toBeNull();
+  expect(within(menu).getByText('Then restart Codex.')).toBeTruthy();
 });
 
 it('leads home from a file where the host has a home, and is the brand on the home itself', async () => {

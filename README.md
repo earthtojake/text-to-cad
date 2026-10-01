@@ -127,7 +127,9 @@ In the Codex app the plugin also brings the CAD viewer: **CAD** in the sidebar
 drives, and *Open with CAD* for model files. It runs locally through
 [uv](https://docs.astral.sh/uv/): after installing, ask Codex to run the
 plugin's `$setup` skill (it installs uv if you approve and prepares the pinned
-runtime), then restart the app. The marketplace was renamed from `text-to-cad`
+runtime), then restart the app. To update, upgrade the `earthtojake` marketplace
+(Plugins › Manage › Marketplace, or `codex plugin marketplace upgrade earthtojake`),
+run `$setup` again and restart the app. The marketplace was renamed from `text-to-cad`
 to `earthtojake`; if you added it before, remove the old one first
 (`codex plugin marketplace remove text-to-cad`).
 
@@ -142,7 +144,8 @@ appears as a viewer card you can orbit, add to your prompt, and open full size;
 Claude can read what you selected and see what you see. It runs locally through
 [uv](https://docs.astral.sh/uv/): add the server to Claude Desktop's config
 (Settings > Developer > Edit Config), then restart the app. If Claude Desktop
-cannot find `uvx`, give its full path (`which uvx`).
+cannot find `uvx`, give its full path (`which uvx`). Each start runs the newest
+release, so restarting the app updates it.
 
 ```json
 {

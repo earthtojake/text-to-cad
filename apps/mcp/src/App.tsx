@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react';
 import { Maximize2 } from 'lucide-react';
 import type { ResourceRef } from '@text-to-cad/core/prompt';
+import type { ViewerLinks } from '@text-to-cad/ui/host';
 import { viewerLinks } from '@text-to-cad/ui/links';
 import { Button } from '@text-to-cad/ui/primitives/button';
 import { createTabStore, memoryTabRecord } from '@text-to-cad/ui/tab-store';
@@ -27,6 +28,19 @@ export function useHostContext(bridge: Pick<Bridge, 'hostContext' | 'onHostConte
 // A tab host's composer floats over the bottom of the page, its middle this far above the edge: the
 // viewer's playback bars sit on that same line (Codex: a 45px box, 17px up).
 const TAB_BOTTOM_CENTER = '40px';
+
+// How each host updates CAD. Codex runs the plugin's pinned release offline: the marketplace's
+// upgrade moves the pin, `$setup` fetches that release, and a restart starts it. Every other host
+// starts the server through an unpinned `uvx --from cadgen`, which resolves the newest release.
+const UPDATE: Record<Presentation, ViewerLinks['install']> = {
+  tabs: {
+    where: { label: 'In Codex', text: 'Plugins › Manage › Marketplace › Upgrade earthtojake' },
+    command: 'codex plugin marketplace upgrade earthtojake',
+    prompt: 'Update the CAD plugin with `codex plugin marketplace upgrade earthtojake`, then run `$setup`.',
+    then: 'Then run $setup and restart Codex.',
+  },
+  inline: { then: 'Restart the app to update: CAD starts its newest release each time.' },
+};
 
 // Inline, a view is a card in the chat: as tall as its width suits, within what the host allows.
 const INLINE_ASPECT = 0.62, INLINE_MIN_HEIGHT = 320, INLINE_MAX_HEIGHT = 560;
@@ -148,8 +162,10 @@ export default function App({ bridge, server, launch: initial, session, presenta
     return () => { lifetime.abort(); stop(); window.removeEventListener('pointerdown', touched, true); window.removeEventListener('focus', touched); };
   }, [bridge, server, view, surface, live, superseded]);
 
-  // The navbar's links: the same three as every app's, followed through the host (a frame cannot open one itself).
-  const links = useMemo(() => viewerLinks({ version, open: url => bridge.request('ui/open-link', { url }).then(() => {}) }), [bridge]);
+  // The navbar's links: the same three as every app's, followed through the host (a frame cannot open one itself),
+  // and how this host updates CAD.
+  const links = useMemo(() => viewerLinks({ version, install: UPDATE[presentation], open: url => bridge.request('ui/open-link', { url }).then(() => {}) }),
+    [bridge, presentation]);
   // A view opened on the home goes back to that home; one opened on a model, to its own root's.
   const home = initial.page === 'home' ? initial : null;
   const goHome = () => setShowing(previous => ({ launch: home ?? { ...previous.launch, page: 'home', model: null }, sequence: previous.sequence + 1 }));

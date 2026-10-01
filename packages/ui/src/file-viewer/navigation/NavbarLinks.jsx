@@ -60,6 +60,16 @@ function VersionRow({ label, version, action = null }) {
   );
 }
 
+/** A step said where it is done: a path through the host's own menus. */
+function StepRow({ label, text }) {
+  return (
+    <div className="flex min-w-0 flex-col items-start gap-1.5 px-0.5 text-left">
+      <span className="text-tiny leading-none text-muted-foreground">{label}</span>
+      <span className="min-w-0 text-xs leading-5 text-foreground">{text}</span>
+    </div>
+  );
+}
+
 /** A line to copy — a command, or a message for an agent — with its own Copy button. */
 function CopyRow({ label, text, copyLabel, copiedLabel, mono = false, clipboard }) {
   const [status, setStatus] = useState("");
@@ -118,10 +128,12 @@ function VersionMenu({ links, clipboard, onFollow }) {
               ) : null} />
             </div>
           ) : <VersionRow label="Current Version" version={version} />}
-          <CopyRow label="In your terminal" text={install.command} mono clipboard={clipboard}
-            copyLabel="Copy install command" copiedLabel="Install command copied" />
-          <CopyRow label="Or ask your agent" text={install.prompt} clipboard={clipboard}
-            copyLabel="Copy agent message" copiedLabel="Agent message copied" />
+          {install.where ? <StepRow label={install.where.label} text={install.where.text} /> : null}
+          {install.command ? <CopyRow label="In your terminal" text={install.command} mono clipboard={clipboard}
+            copyLabel="Copy install command" copiedLabel="Install command copied" /> : null}
+          {install.prompt ? <CopyRow label="Or ask your agent" text={install.prompt} clipboard={clipboard}
+            copyLabel="Copy agent message" copiedLabel="Agent message copied" /> : null}
+          {install.then ? <p className="max-w-72 px-0.5 text-tiny leading-4 text-muted-foreground" data-install-then="">{install.then}</p> : null}
           {latest && !latest.newer ? (
             <div className="flex items-center gap-1.5 px-0.5 text-tiny text-muted-foreground">
               <CircleCheck className="size-3 text-primary" aria-hidden="true" />
