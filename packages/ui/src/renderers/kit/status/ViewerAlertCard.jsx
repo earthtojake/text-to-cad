@@ -17,6 +17,18 @@ function alertDismissible(alert, hasContent) {
 // The same failure raised again is the same alert, even as a new object.
 const alertKey = alert => JSON.stringify([alert.severity, alert.title, alert.message, alert.reason, alert.details]);
 
+/** A raw diagnostic folded behind a "Details" disclosure. The text inherits its size from `className`. */
+export function DiagnosticDetails({ text, className }) {
+  return (
+    <details className={cn("text-xs", className)}>
+      <summary className="w-fit cursor-pointer rounded-sm text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">Details</summary>
+      <ScrollArea className="mt-2 max-h-48 rounded-md bg-muted">
+        <pre className="whitespace-pre-wrap break-words p-3 font-mono leading-5 select-text">{text}</pre>
+      </ScrollArea>
+    </details>
+  );
+}
+
 /**
  * The card over the viewport for the alert it shows. One the model survives can be put
  * away — the previous version is there to inspect and to pick from — until the alert
@@ -58,14 +70,7 @@ export default function ViewerAlertCard({ alert: shown, hasContent, onReload }) 
             {shown.message ? <p className="whitespace-pre-line break-words">{shown.message}</p> : null}
             {readableReason ? <p className="break-words text-foreground">{readableReason}</p> : null}
             {shown.recovery ? <p className="break-words">{shown.recovery}</p> : null}
-            {shown.details ? (
-              <details className="text-xs">
-                <summary className="w-fit cursor-pointer rounded-sm text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-ring">Details</summary>
-                <ScrollArea className="mt-2 max-h-48 rounded-md bg-muted">
-                  <pre className="whitespace-pre-wrap break-words p-3 font-mono text-xs leading-5 select-text">{shown.details}</pre>
-                </ScrollArea>
-              </details>
-            ) : null}
+            {shown.details ? <DiagnosticDetails text={shown.details} /> : null}
             {shown.reload ? (
               <Button type="button" variant="outline" size="sm" onClick={onReload} disabled={!onReload}>
                 Try again

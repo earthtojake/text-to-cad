@@ -1,5 +1,5 @@
 import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { LoaderCircle } from "lucide-react";
 
 import { ContextMenu, ContextMenuContent, ContextMenuTrigger } from "@text-to-cad/ui/primitives/context-menu";
@@ -29,9 +29,15 @@ import { InlineName } from "./InlineName.jsx";
  * Every row has the entry menu (`EntryMenu.jsx`) on right-click, filtered by
  * what the host can actually do, and the two items that need a field — Rename,
  * New file/folder — draw it in the row (`InlineName`). The keyboard has the
- * same two: F2 renames the cursor row, ⌘⌫ (Ctrl+Delete) moves it to the trash.
- * Both are capabilities, so in a browser tab neither key does anything and
- * neither item is in the menu.
+ * same two: F2 renames the focused row, ⌘⌫ (Ctrl+Delete) moves it to the trash
+ * and says so. Both are capabilities, so in a browser tab neither key does
+ * anything and neither item is in the menu.
+ *
+ * The rows are the focus, one Tab stop between them (a roving tabindex): the
+ * arrows move focus row to row, and the row with focus is the cursor, the Tab
+ * stop and the row every key acts on. The filter is a combobox over the ranked
+ * list while it has a query: focus stays in the box, the arrows move the
+ * cursor, and `aria-activedescendant` names it.
  *
  * ## The source adapter
  *
@@ -82,6 +88,25 @@ const ROW_HEIGHT = TREE_ROW_HEIGHT;
 const INDENT = 12;
 
 /**
+ * Entries the tree leaves out: a repository's own internals, which are the
+ * version control's and never something to open — the `.git` folder, or the
+ * `.git` FILE at the root of a worktree. Other dotfiles and dotfolders
+ * (`.gitignore`, `.github`, `.env`) are the project's and stay. A hidden
+ * folder still shows while the open or revealed path is inside it.
+ */
+const HIDDEN_ENTRY_NAMES = new Set([".git"]);
+
+/** True for an entry, file or folder, the tree leaves out. */
+export function isHiddenTreeEntry(entry) {
+  return HIDDEN_ENTRY_NAMES.has(entry.name);
+}
+
+/** True for a path that is, or is inside, an entry the tree leaves out: the filter does not rank it. */
+export function isInsideHiddenTreeEntry(path) {
+  return path.split("/").some((segment) => HIDDEN_ENTRY_NAMES.has(segment));
+}
+
+/**
  * The one inline field the tree can show: a rename over a row, or a new entry
  * in a folder. An edit asked for from OUTSIDE — the navbar's `Rename` — arrives
  * as the same thing plus a nonce, so asking twice is two requests.
@@ -103,12 +128,31 @@ const INDENT = 12;
  */
 export function FileTree({ source, activePath, reveal = null, edit = null, onOpen }) {
   const [query, setQuery] = useState("");
+  /**
+   * Bumped when a file picked from the filter is the one already open: the
+   * reveal below keys on the open path, which did not move, so this asks for
+   * it again.
+   */
+  const [revealAgain, setRevealAgain] = useState(0);
+  /**
+   * A file picked from the filter, scrolled to once the tree has its row —
+   * and only while it is the file the tree reveals. A pick that did not open
+   * (or a reveal aimed elsewhere) is dropped: the next pick replaces it, the
+   * reveal moving to another path clears it, and so does a folder opened or
+   * shut by hand, so it can never pull the tree somewhere later.
+   */
+  const pendingScroll = useRef(null);
   const [cursor, setCursor] = useState(null);
   /** @type {[TreeEditRequest|null, Function]} */
   const [editing, setEditing] = useState(null);
   /** The row the context menu is aimed at; the root when the empty space was clicked. */
   const [menuTarget, setMenuTarget] = useState({ path: "", kind: "directory" });
   const listRef = useRef(null);
+  /** Said in the tree's own status region: the one edit that takes a row away without a field. */
+  const [announcement, setAnnouncement] = useState("");
+  const baseId = useId();
+  const listId = `${baseId}-list`;
+  const optionId = (index) => `${baseId}-option-${index}`;
 
   const {
     rootName,
@@ -133,7 +177,8 @@ export function FileTree({ source, activePath, reveal = null, edit = null, onOpe
     const parts = revealTarget.split("/");
     const segments = reveal?.directory && reveal.path === revealTarget ? parts : parts.slice(0, -1);
     return new Set(segments.map((_, index) => segments.slice(0, index + 1).join("/")));
-  }, [revealTarget, reveal]);
+    // `revealAgain` is a request, not an input: a new set re-runs the reveal.
+  }, [revealTarget, reveal, revealAgain]);
 
   const isExpanded = useCallback((directory) => expanded.has(directory), [expanded]);
 
@@ -251,6 +296,7 @@ export function FileTree({ source, activePath, reveal = null, edit = null, onOpe
    */
   const toggle = useCallback(
     (directory) => {
+      pendingScroll.current = null;
       const opening = !expanded.has(directory);
       setExpanded((current) => {
         const next = new Set(current);
@@ -297,6 +343,11 @@ export function FileTree({ source, activePath, reveal = null, edit = null, onOpe
         beginCreate(entry.path, action === "new-file" ? "file" : "directory");
         return;
       }
+      // The menu's Move to Trash and ⌘⌫ are one edit, announced the same way.
+      if (action === "trash" && source.trash) {
+        void trashEntryRef.current(entry);
+        return;
+      }
       source.onAction(action, entry);
     },
     [beginCreate, source]
@@ -339,13 +390,15 @@ export function FileTree({ source, activePath, reveal = null, edit = null, onOpe
 
   /**
    * When an inline field goes away the focus goes with it — to `body` — and
-   * the next F2 or arrow key would be lost. The list takes it back, so a
-   * rename from the keyboard ends where it began.
+   * the next F2 or arrow key would be lost. The row takes it back (the one
+   * renamed or made, which is the cursor now), so a rename from the keyboard
+   * ends where it began; the list, if that row is not drawn yet.
    */
   const wasEditing = useRef(false);
   useEffect(() => {
     if (wasEditing.current && editing === null) {
-      listRef.current?.focus();
+      const list = listRef.current;
+      (list?.querySelector('[role=treeitem][tabindex="0"]') ?? list)?.focus();
     }
     wasEditing.current = editing !== null;
   }, [editing]);
@@ -355,6 +408,9 @@ export function FileTree({ source, activePath, reveal = null, edit = null, onOpe
     const out = [];
     const walk = (directory, depth) => {
       for (const entry of children[directory] ?? []) {
+        if (isHiddenTreeEntry(entry) && !revealed.has(entry.path) && entry.path !== revealTarget) {
+          continue;
+        }
         const open = entry.kind === "directory" && isExpanded(entry.path);
         out.push({
           path: entry.path,
@@ -372,7 +428,34 @@ export function FileTree({ source, activePath, reveal = null, edit = null, onOpe
     };
     walk("", 0);
     return out;
-  }, [children, isExpanded]);
+  }, [children, isExpanded, revealed, revealTarget]);
+
+  /**
+   * The file picked from the filter, once its row is drawn: its folders open
+   * a render or two after the pick (the reveal, then their listings).
+   */
+  useEffect(() => {
+    const target = pendingScroll.current;
+    if (!target || filtering || target !== revealTarget) {
+      return;
+    }
+    const row = listRef.current?.querySelector(`[data-path="${CSS.escape(target)}"]`);
+    if (row) {
+      pendingScroll.current = null;
+      row.scrollIntoView({ block: "nearest" });
+    }
+  }, [rows, filtering, revealTarget]);
+
+  // The reveal moved on to another path: whatever was picked is not coming.
+  const pickedRevealTarget = useRef(revealTarget);
+  useEffect(() => {
+    if (revealTarget !== pickedRevealTarget.current) {
+      pickedRevealTarget.current = revealTarget;
+      if (pendingScroll.current !== revealTarget) {
+        pendingScroll.current = null;
+      }
+    }
+  }, [revealTarget]);
 
   /** Where the "new entry" field goes: first among its folder's children. */
   const creatingAt = useMemo(() => {
@@ -391,44 +474,102 @@ export function FileTree({ source, activePath, reveal = null, edit = null, onOpe
       : 0;
 
   const matches = useMemo(
-    () => (filtering ? fuzzyFilter(corpus?.paths ?? [], query, 200) : []),
+    () => (filtering ? fuzzyFilter((corpus?.paths ?? []).filter((path) => !isInsideHiddenTreeEntry(path)), query, 200) : []),
     [corpus, filtering, query]
   );
 
+  /**
+   * Open a file. One picked from the filter ends the search: the tree comes
+   * back, revealed to the file, rather than a one-row list that makes its
+   * folder look as if the file were all there is in it.
+   */
+  const open = (path) => {
+    if (filtering) {
+      setQuery("");
+      setCursor(path);
+      pendingScroll.current = path;
+      if (path === activePath) {
+        setRevealAgain((count) => count + 1);
+      }
+    }
+    onOpen(path);
+  };
+
   const visible = filtering ? matches.map((match) => match.path) : rows.map((row) => row.path);
 
+  // The keyboard cursor goes where the open file goes, however it was opened —
+  // from this tree, a tab or a link in the transcript. Left where it was, it
+  // sat on the row picked last (or the first row) as a second highlight beside
+  // the file actually open.
+  const [cursorFollows, setCursorFollows] = useState(activePath);
+  if (activePath !== cursorFollows) {
+    setCursorFollows(activePath);
+    if (activePath) setCursor(activePath);
+  }
   // A cursor that has scrolled out of the list is worse than none: arrow keys
-  // would move a selection nobody can see.
-  const cursorPath = cursor && visible.includes(cursor) ? cursor : (visible[0] ?? null);
+  // would move a selection nobody can see. With none put anywhere the keys
+  // start from the open file, else the first row — but that fallback is not
+  // drawn: a row tinted before anyone moved to it reads as a second selection.
+  // Filtering is the exception, where it is the match Enter opens.
+  const placed = cursor && visible.includes(cursor) ? cursor : null;
+  const cursorPath = placed ?? (activePath && visible.includes(activePath) ? activePath : (visible[0] ?? null));
+  const drawnCursor = filtering ? cursorPath : placed;
+  // Where Tab lands in the tree: the cursor row, else the open file, else the
+  // first row. The keys act on the row with focus, never on an undrawn cursor —
+  // ⌘⌫ on the list itself once trashed a folder nobody had picked — and a row
+  // with focus is the cursor, drawn.
+  const stopPath = filtering ? null : cursorPath;
 
-  const onKeyDown = (event) => {
-    if (visible.length === 0) {
-      return;
-    }
-    const at = cursorPath ? visible.indexOf(cursorPath) : -1;
-    if (event.key === "ArrowDown") {
+  /** Put the keyboard on a row: the cursor, and so the Tab stop, follows it. */
+  const focusRow = (path) => {
+    if (!path) return;
+    setCursor(path);
+    listRef.current?.querySelector(`[role=treeitem][data-path="${CSS.escape(path)}"]`)?.focus();
+  };
+
+  /**
+   * Move an entry to the trash and say so. The row goes with it, and focus on
+   * it would go to the page: it moves to the row after, or before, first.
+   */
+  const trashEntry = async (entry) => {
+    const at = rows.findIndex((row) => row.path === entry.path);
+    const inside = (path) => path === entry.path || path.startsWith(`${entry.path}/`);
+    const neighbour = rows.slice(at + 1).find((row) => !inside(row.path)) ?? rows.slice(0, Math.max(at, 0)).reverse()[0];
+    const hadFocus = Boolean(listRef.current?.contains(document.activeElement));
+    const moved = await source.trash?.(entry);
+    if (!moved) return;
+    setAnnouncement(`Moved ${entry.path.split("/").pop()} to the Trash`);
+    if (neighbour && (hadFocus || document.activeElement === document.body)) focusRow(neighbour.path);
+  };
+  // Read by the menu's handler, which is memoised on the source alone.
+  const trashEntryRef = useRef(trashEntry);
+  useEffect(() => {
+    trashEntryRef.current = trashEntry;
+  });
+
+  /** A focused row's keys. Only a row's own: an inline name's field keeps its keys. */
+  const onTreeKeyDown = (event) => {
+    const element = event.target;
+    if (!(element instanceof HTMLElement) || element.getAttribute("role") !== "treeitem") return;
+    const at = rows.findIndex((candidate) => candidate.path === element.dataset.path);
+    const row = rows[at];
+    if (!row) return;
+    const move = (path) => {
       event.preventDefault();
-      setCursor(visible[Math.min(at + 1, visible.length - 1)] ?? null);
-      return;
-    }
-    if (event.key === "ArrowUp") {
-      event.preventDefault();
-      setCursor(visible[Math.max(at - 1, 0)] ?? null);
-      return;
-    }
-    if (!cursorPath) {
-      return;
-    }
-    const row = rows.find((candidate) => candidate.path === cursorPath);
+      focusRow(path);
+    };
+    if (event.key === "ArrowDown") return move(rows[Math.min(at + 1, rows.length - 1)]?.path);
+    if (event.key === "ArrowUp") return move(rows[Math.max(at - 1, 0)]?.path);
+    if (event.key === "Home") return move(rows[0]?.path);
+    if (event.key === "End") return move(rows[rows.length - 1]?.path);
     // The two edits the menu offers, from the keyboard: F2 and ⌘⌫
     // (Ctrl+Delete). Both only where the host offers the menu item too.
-    if (row && event.key === "F2" && capabilities.has("rename")) {
+    if (event.key === "F2" && capabilities.has("rename")) {
       event.preventDefault();
       setEditing({ mode: "rename", entry: { path: row.path, kind: row.kind } });
       return;
     }
     if (
-      row &&
       capabilities.has("trash") &&
       (event.key === "Backspace" || event.key === "Delete") &&
       (platform === "darwin" ? event.metaKey : event.ctrlKey) &&
@@ -436,26 +577,59 @@ export function FileTree({ source, activePath, reveal = null, edit = null, onOpe
       !event.shiftKey
     ) {
       event.preventDefault();
-      void source.trash?.({ path: row.path, kind: row.kind });
+      void trashEntry({ path: row.path, kind: row.kind });
       return;
     }
-    if (event.key === "ArrowRight" && row?.kind === "directory" && !row.expanded) {
+    if (event.key === "ArrowRight" && row.kind === "directory") {
       event.preventDefault();
-      toggle(cursorPath);
+      // Open, then into it.
+      if (!row.expanded) toggle(row.path);
+      else if (rows[at + 1]?.depth > row.depth) focusRow(rows[at + 1].path);
       return;
     }
-    if (event.key === "ArrowLeft" && row?.kind === "directory" && row.expanded) {
+    if (event.key === "ArrowLeft") {
       event.preventDefault();
-      toggle(cursorPath);
+      // Shut, then up to the folder it is in.
+      if (row.kind === "directory" && row.expanded) toggle(row.path);
+      else focusRow(rows.slice(0, at).reverse().find((candidate) => candidate.depth < row.depth)?.path);
       return;
     }
     if (event.key === "Enter") {
+      // Not the button's own click as well.
       event.preventDefault();
-      if (row?.kind === "directory") {
-        toggle(cursorPath);
+      if (row.kind === "directory") {
+        toggle(row.path);
       } else {
-        onOpen(cursorPath);
+        onOpen(row.path);
       }
+    }
+  };
+
+  /**
+   * The filter's keys. With a query, the combobox's: the arrows move the
+   * cursor through the ranked list and Enter opens it. Without one, ArrowDown
+   * goes into the tree. F2 and ⌘⌫ are the box's own here (⌘⌫ deletes the text
+   * before the caret), never an edit of a row the person is not on.
+   */
+  const onFilterKeyDown = (event) => {
+    if (!filtering) {
+      if (event.key === "ArrowDown" && stopPath) {
+        event.preventDefault();
+        focusRow(stopPath);
+      }
+      return;
+    }
+    if (visible.length === 0 || !cursorPath) return;
+    const at = visible.indexOf(cursorPath);
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setCursor(visible[Math.min(at + 1, visible.length - 1)] ?? null);
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setCursor(visible[Math.max(at - 1, 0)] ?? null);
+    } else if (event.key === "Enter") {
+      event.preventDefault();
+      open(cursorPath);
     }
   };
 
@@ -494,9 +668,12 @@ export function FileTree({ source, activePath, reveal = null, edit = null, onOpe
 
   const newEntryRow =
     editing?.mode === "create" ? (
+      // A row of the tree, as the tree's children must be; its field is what has focus.
       <div
+        aria-label={editing.kind === "directory" ? "New folder" : "New file"}
         className="flex w-full items-center gap-1.5 pr-2"
         key="__new__"
+        role="treeitem"
         style={{ height: ROW_HEIGHT, paddingLeft: 6 + creatingDepth * INDENT }}
       >
         <span className="w-3 shrink-0" />
@@ -519,12 +696,20 @@ export function FileTree({ source, activePath, reveal = null, edit = null, onOpe
   return (
     <div className="flex h-full min-h-0 flex-col bg-sidebar/40">
       <TreeFilterInput data-mobile-panel-top-row=""
+        inputProps={{
+          role: "combobox",
+          "aria-autocomplete": "list",
+          "aria-controls": listId,
+          "aria-expanded": filtering,
+          "aria-activedescendant": filtering && cursorPath ? optionId(visible.indexOf(cursorPath)) : undefined
+        }}
         label="Filter files"
         onChange={setQuery}
-        onKeyDown={onKeyDown}
+        onKeyDown={onFilterKeyDown}
         placeholder="Filter files…"
         value={query}
       />
+      <div aria-live="polite" className="sr-only" role="status">{announcement}</div>
 
       <ContextMenu modal={false}>
         <ContextMenuTrigger asChild>
@@ -534,7 +719,16 @@ export function FileTree({ source, activePath, reveal = null, edit = null, onOpe
             // A host control floating over the page's bottom (a chat's composer) covers the last
             // rows: they scroll clear of it, and a revealed row stops above it.
             viewportClassName="px-1 pt-1 pb-[calc(0.25rem+var(--cad-host-bottom-inset,0px))] scroll-pb-[var(--cad-host-bottom-inset,0px)]"
-            viewportProps={{ onKeyDown, role: "tree", tabIndex: 0 }}
+            // A tree of rows (busy while the root is read), or the filter's ranked list — not
+            // while it has no match, when its line is not an option. Not a Tab stop: a row is.
+            viewportProps={{
+              id: listId,
+              onKeyDown: filtering ? undefined : onTreeKeyDown,
+              role: filtering ? (matches.length > 0 ? "listbox" : undefined) : "tree",
+              "aria-busy": !filtering && children[""] === undefined ? true : undefined,
+              "aria-label": filtering ? "Matching files" : "Files",
+              tabIndex: -1
+            }}
             viewportRef={listRef}
           >
             {filtering ? (
@@ -543,13 +737,14 @@ export function FileTree({ source, activePath, reveal = null, edit = null, onOpe
                   {corpus === null ? "Searching…" : `No file matches “${query.trim()}”`}
                 </p>
               ) : (
-                matches.map((match) => (
+                matches.map((match, index) => (
                   <FilterRow
                     active={match.path === activePath || match.path === reveal?.path}
-                    cursor={match.path === cursorPath}
+                    cursor={match.path === drawnCursor}
+                    id={optionId(index)}
                     indices={match.indices}
                     key={match.path}
-                    onOpen={() => onOpen(match.path)}
+                    onOpen={() => open(match.path)}
                     path={match.path}
                   />
                 ))
@@ -567,7 +762,11 @@ export function FileTree({ source, activePath, reveal = null, edit = null, onOpe
                   <Fragment key={row.path}>
                     <TreeRow
                       active={row.path === activePath || row.path === reveal?.path}
-                      cursor={row.path === cursorPath}
+                      cursor={row.path === drawnCursor}
+                      onFocus={() => {
+                        if (cursor !== row.path) setCursor(row.path);
+                      }}
+                      stop={row.path === stopPath}
                       onRename={
                         editing?.mode === "rename" && editing.entry.path === row.path
                           ? {
@@ -610,7 +809,7 @@ export function FileTree({ source, activePath, reveal = null, edit = null, onOpe
   );
 }
 
-function TreeRow({ row, active, cursor, onSelect, onRename }) {
+function TreeRow({ row, active, cursor, stop, onFocus, onSelect, onRename }) {
   const icon =
     row.kind === "directory" ? (
       <FolderIcon className="size-3.5 shrink-0 text-muted-foreground" open={row.expanded} />
@@ -624,9 +823,11 @@ function TreeRow({ row, active, cursor, onSelect, onRename }) {
   if (onRename) {
     return (
       <div
+        aria-label={row.name}
         className="flex w-full items-center gap-1.5 pr-2"
         data-kind={row.kind}
         data-path={row.path}
+        role="treeitem"
         style={{ height: ROW_HEIGHT, paddingLeft: 6 + row.depth * INDENT }}
       >
         {chevron}
@@ -649,12 +850,16 @@ function TreeRow({ row, active, cursor, onSelect, onRename }) {
       cursor={cursor}
       aria-expanded={row.kind === "directory" ? row.expanded : undefined}
       aria-busy={row.loading || undefined}
+      aria-level={row.depth + 1}
       aria-selected={active}
+      className="outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/45"
       data-kind={row.kind}
       data-path={row.path}
       onClick={onSelect}
+      onFocus={onFocus}
       role="treeitem"
       style={{ height: ROW_HEIGHT, paddingLeft: 6 + row.depth * INDENT }}
+      tabIndex={stop ? 0 : -1}
 
       type="button"
     >
@@ -665,7 +870,7 @@ function TreeRow({ row, active, cursor, onSelect, onRename }) {
   );
 }
 
-function FilterRow({ path, indices, active, cursor, onOpen }) {
+function FilterRow({ id, path, indices, active, cursor, onOpen }) {
   const lastSlash = path.lastIndexOf("/");
   const directory = lastSlash < 0 ? "" : path.slice(0, lastSlash + 1);
   return (
@@ -673,12 +878,16 @@ function FilterRow({ path, indices, active, cursor, onOpen }) {
       as="button"
       active={active}
       cursor={cursor}
-      aria-selected={active}
+      // The option the filter's Enter opens: the one `aria-activedescendant` names.
+      aria-selected={cursor}
       className="px-2"
       data-kind="file"
       data-path={path}
+      id={id}
       onClick={onOpen}
       role="option"
+      // The filter keeps focus while the list is up; a pointer picks.
+      tabIndex={-1}
       style={{ height: ROW_HEIGHT }}
 
       type="button"

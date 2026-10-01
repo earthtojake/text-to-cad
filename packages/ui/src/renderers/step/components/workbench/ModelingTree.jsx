@@ -12,9 +12,10 @@ import ToolPanel, { ToolPanelCollapse, ToolPanelFooterButton } from '../../../ki
 import { TOOL_PANEL_REFERENCE_HEIGHT } from '../../../kit/tools/toolStackLayout.js';
 import { useViewerMobile } from '../../../../file-viewer/responsive.js';
 import { modelingReferenceIds } from '../../workbench/modelingTree.js';
-import { implicitModelingRoots, presentModelingAssembly } from '../../workbench/modelingPresentation.js';
+import { implicitModelingRoots, modelingErrorText, presentModelingAssembly } from '../../workbench/modelingPresentation.js';
 import { modelTreeSearchChain, useTreeSearch } from '../../../kit/inspector/modelTreeSearch.js';
 import VirtualRows from '../../../kit/inspector/VirtualRows.jsx';
+import { DiagnosticDetails } from '../../../kit/status/ViewerAlertCard.jsx';
 
 const EMPTY = [];
 const NO_CONTROLS = {};
@@ -515,7 +516,13 @@ function ModelingTree({ modeling, active, disabled, mode='all', modeMenu=null, l
           <ToolPanelCollapse/>
         </>}/>}>
       <FeatureReferencesContext.Provider value={references}><div ref={treeRef} className="flex flex-col text-tiny" aria-label="Modeling tree">
-        {(error || failed>0) && <p role="alert" className="px-3 pb-2 text-micro text-muted-foreground">{error || `${failed} ${failed===1?'component is':'components are'} unavailable.`} <button type="button" className="underline" onClick={retryFailed}>Retry</button></p>}
+        {(error || failed>0) && <div role="alert" className="px-3 pb-2 text-micro text-muted-foreground">
+          <p>{modelingErrorText(error) || `${failed} ${failed===1?'component is':'components are'} unavailable.`} <button type="button" className="underline" onClick={retryFailed}>Retry</button></p>
+          {/* A raw diagnostic is folded behind the short line, never gone: with a model on screen
+              there is no viewport card to hold it. */}
+          {error && modelingErrorText(error) !== String(error).trim()
+            && <DiagnosticDetails className="mt-1 text-micro" text={String(error).trim()}/>}
+        </div>}
         <div ref={listRef} className="px-1 py-1" aria-label="Model tree area"
           onClick={event=>{if(!disabled && !event.target.closest('li,button,input,[role="menu"]'))clearSelection();}}>
           {isolatedLabels.length > 0 && <div role="status" aria-label="Isolation" className="mb-1 flex min-h-7 items-center gap-2 rounded-md bg-accent/60 px-2 text-tiny">

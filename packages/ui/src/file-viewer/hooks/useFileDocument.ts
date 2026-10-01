@@ -139,6 +139,7 @@ export function useFileDocument(file: string | FileMetadata | null, source: File
   const loaded: LoadedDocument = result?.key === key ? result.document : { status: path === null ? "empty" : "loading" };
   const document = useMemo<DocumentSession | null>(() => edit?.key === key && loaded.status === "ready" && loaded.prepared.text ? {
     key, value: edit.value, revision: edit.base.revision, readOnly: !!edit.base.readOnly || !!edit.base.truncated || !source.writeText,
+    ...(edit.base.truncated ? { readOnlyReason: "truncated" as const } : edit.base.readOnly ? { readOnlyReason: "encoding" as const } : {}),
     dirty: edit.value !== edit.base.content, saving: edit.saving, stale: edit.stale, error: edit.error,
     setValue, save, reload, keepMine,
   } : null, [edit, key, loaded, source, setValue, save, reload, keepMine]);

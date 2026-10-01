@@ -1,3 +1,4 @@
+import { stopOrbitMomentum } from "./orbitControls.js";
 // The camera of a viewport runtime: zoom percent against the authored framing,
 // projection and lens sync, serializable perspective snapshots, eased
 // transitions, fit-to-bounds and recentring. Every function takes the runtime
@@ -505,10 +506,27 @@ export function applyPerspectiveSnapshot(runtime, perspective, { scheduleIdle = 
     runtime.camera.updateProjectionMatrix?.();
   }
   runtime.camera.lookAt(runtime.controls.target);
+  // A drag's damping momentum would carry the camera off the pose just set, and so would a
+  // bare update() with the Preview orbit playing: it ticks auto-rotate one step.
+  stopOrbitMomentum(runtime.controls);
+  const autoRotateBeforeApply = runtime.controls.autoRotate;
+  runtime.controls.autoRotate = false;
   runtime.controls.update();
+  runtime.controls.autoRotate = autoRotateBeforeApply;
   if (scheduleIdle) {
     runtime.scheduleIdleQuality?.();
   }
+  runtime.requestRender?.();
+  return true;
+}
+
+// Starts the eased move just stored on `runtime.cameraTransition`. Damping goes off for the
+// move, and the next update() would then apply a drag's WHOLE remaining momentum at once: a
+// one-frame pop before the eased pose. Drop it first.
+function beginCameraTransition(runtime) {
+  stopOrbitMomentum(runtime.controls);
+  runtime.controls.enableDamping = false;
+  runtime.beginInteraction?.();
   runtime.requestRender?.();
   return true;
 }
@@ -566,10 +584,7 @@ export function transitionCameraToPerspectiveSnapshot(runtime, perspective, {
     resetZoomBaselineOnComplete,
     easing
   };
-  runtime.controls.enableDamping = false;
-  runtime.beginInteraction?.();
-  runtime.requestRender?.();
-  return true;
+  return beginCameraTransition(runtime);
 }
 
 // Aim the controls back at the model centre without touching orientation or
@@ -787,10 +802,7 @@ export function transitionCameraToViewPreset(runtime, preset) {
     startUp: runtime.camera.up.clone(),
     endUp: nextUp
   };
-  runtime.controls.enableDamping = false;
-  runtime.beginInteraction?.();
-  runtime.requestRender?.();
-  return true;
+  return beginCameraTransition(runtime);
 }
 
 // The snapshot a session stores: the camera, scoped to the model, scale mode and

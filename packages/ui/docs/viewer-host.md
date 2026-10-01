@@ -261,8 +261,12 @@ A file's view holds its camera: a mount restores it in place of the fit, and fit
 when there is none. Live
 commands reject retired field names rather than maintaining a second display
 authority. Unavailable selectors fail explicitly; topology is not silently
-loaded. Mutations return a view snapshot after the React frame; a mode switch
-waits for the requested settings to commit, with a ten-second bound.
+loaded. A mutating command returns a view snapshot only once its effect is on
+screen: a settled frame, then its committed predicate (the camera at rest and
+read back, with a request beyond the controls' clamp answered by the clamped
+camera; `resetCamera` easing to rest; the display settings or the render mode
+in the viewport), bounded at ten seconds, and `capture` waits for rest. The
+contract is stated once, in [Live commands](cad-renderer.md#live-commands).
 Loading views
 reject commands, and an operation whose resource/revision changes or viewport
 unmounts before completion rejects its late result. On unmount, the controller
@@ -320,6 +324,13 @@ so another viewer or the composer never receives Escape, copy or orbit keys on
 its behalf ([settings-ui.md](settings-ui.md#keyboard)). The standalone
 `DrawingEditor` takes the host's keyboard `platform` as a prop for its undo and
 redo keys.
+
+The file tree is a roving single Tab stop (`FileTree.jsx`): the arrows move
+focus row to row, and the focused row is the cursor that F2 (rename) and
+⌘⌫/Ctrl+Delete (move to trash) act on — both only when the host provides
+those capabilities. While the filter has a query, focus stays in its box and
+the arrows move the cursor through the ranked list
+(`aria-activedescendant`).
 
 ## Live text and PDF capabilities
 

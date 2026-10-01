@@ -78,10 +78,10 @@ it('filtered file rows and model search hits keep the same row and the same inse
   render(<Trees />);
   const files = screen.getByTestId('files'), model = screen.getByTestId('model');
   const shared = { list: ['px-1'], between: [], box: ['w-full'] };
-  fireEvent.change(within(files).getByRole('textbox', { name: 'Filter files' }), { target: { value: 'part' } });
+  fireEvent.change(within(files).getByRole('combobox', { name: 'Filter files' }), { target: { value: 'part' } });
   const option = await within(files).findByRole('option') as HTMLElement;
   expect(option.style.height).toBe('28px');
-  expect(insetOf(option, option.closest('[role="tree"]') as HTMLElement)).toEqual(shared);
+  expect(insetOf(option, option.closest('[role="listbox"]') as HTMLElement)).toEqual(shared);
   // "part 1" ranks the nested Part 1 — inside the still-collapsed Subassembly — above Part 10 and 11.
   fireEvent.change(within(model).getByRole('textbox', { name: 'Filter model' }), { target: { value: 'part 1' } });
   const results = await within(model).findByRole('list', { name: 'Model search results' });

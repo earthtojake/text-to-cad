@@ -35,3 +35,18 @@ export function updateOrbitControls(controls, timestamp, state) {
   }
   return deltaSeconds === null ? controls.update() : controls.update(deltaSeconds);
 }
+
+/**
+ * Drop the momentum a drag left in damped OrbitControls, so the next `update()` keeps the
+ * camera where it was just PUT. With `enableDamping` on, `update()` keeps adding the
+ * last drag's spherical delta, pan and dolly for a few hundred milliseconds; a camera
+ * handed to the viewport in that window drifts several units off what was asked.
+ * The fields are three's own (`_sphericalDelta`, `_panOffset`, `_scale`).
+ */
+export function stopOrbitMomentum(controls) {
+  if (!controls) return false;
+  controls._sphericalDelta?.set?.(0, 0, 0);
+  controls._panOffset?.set?.(0, 0, 0);
+  if ("_scale" in controls) controls._scale = 1;
+  return true;
+}

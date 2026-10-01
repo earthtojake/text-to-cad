@@ -28,6 +28,7 @@ const INSET = `${VIEWPORT_INSET_PX}px`;
 const TOOLBAR_POSITION = Object.freeze({ top: INSET, left: INSET, bottom: VIEWPORT_STACK_BOTTOM, maxWidth: "calc(100% - 3.5rem)" });
 const QUICK_EDIT_POSITION = Object.freeze({ top: INSET, right: INSET, left: INSET });
 const MODEL_UPDATE_STATUS = Object.freeze({ pending: true, label: "Updating model…" });
+const NO_VIEW_UPDATE = Object.freeze({ pending: false, error: null, label: "" });
 // The view's actions, on top of the cube, are transparent over the model.
 const BAR_BUTTON_CLASS = "size-5 bg-transparent hover:bg-transparent dark:hover:bg-transparent";
 
@@ -155,6 +156,11 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
   </>;
 
   const hasContent = Boolean(scene) && !viewerLoading;
+  // A failure that leaves no model to look at puts the tool stack away while its card is up: the
+  // panels would float over the card and its actions. With a model on screen the stack stays.
+  // They stay mounted, and come back as they were once the model loads.
+  const failure = frame.viewerAlert;
+  const failureCovers = failure?.severity === "error" && (failure.blocking === true || !hasContent);
   // While the model loads, the viewer shows none of its own chrome: no tools, no Quick Edit, no
   // cube and no view actions -- only the load itself. They arrive with the model, and stay
   // through a rebuild that keeps it on screen (that is `updating`, not loading).
@@ -282,7 +288,7 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
               {toolsHidden ? null : <div className="group/tool-stack pointer-events-none absolute z-20 flex flex-col items-start gap-2" style={TOOLBAR_POSITION}
                 data-mobile={mobile ? "" : undefined} data-cad-tool-groups="">
                 <FloatingToolBar tools={tools} />
-                <ToolStack hidden={previewing} mobile={mobile} layout={frame.toolStack} onLayoutChange={frame.changeToolStack}>{shellPanels}{toolPanels}</ToolStack>
+                <ToolStack hidden={previewing || failureCovers} mobile={mobile} layout={frame.toolStack} onLayoutChange={frame.changeToolStack}>{shellPanels}{toolPanels}</ToolStack>
               </div>}
               {/* Hidden, not unmounted, while the view loads: a note being written outlives a reload of the model. */}
               {compact || !references ? null : <QuickEdit key={frame.modelKey} className="absolute z-30" style={QUICK_EDIT_POSITION} hidden={chromeHidden}
@@ -294,11 +300,13 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
 
               {/* One place says the view is catching up: a newer revision of the file loading behind the
                   model on screen, or a Display change being prepared — the latter's failure first, since
-                  it is the one with something to retry. */}
+                  it is the one with something to retry. Under a failure card a Display change still in
+                  progress says nothing: it waits on a frame that is never drawn. One that failed keeps its Retry. */}
               <div className="pointer-events-none absolute left-1/2 z-30 flex max-w-[calc(100%-1rem)] -translate-x-1/2 items-center"
                 style={{ top: VIEWPORT_INSET_PX, height: VIEWPORT_TOP_BAR_PX }} data-viewport-status="">
-                <ViewUpdateStatus status={frame.loading.updating && !frame.viewUpdate.status.error
-                  ? MODEL_UPDATE_STATUS : frame.viewUpdate.status} onRetry={frame.viewUpdate.retry}
+                <ViewUpdateStatus status={frame.viewUpdate.status.error
+                  ? frame.viewUpdate.status : frame.loading.updating ? MODEL_UPDATE_STATUS
+                    : failureCovers ? NO_VIEW_UPDATE : frame.viewUpdate.status} onRetry={frame.viewUpdate.retry}
                   className="rounded-md bg-background/95 px-1 py-0.5 shadow-sm" />
               </div>
               <ViewerLoadingOverlay

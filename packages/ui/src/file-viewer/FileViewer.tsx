@@ -1,5 +1,5 @@
 import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
-import { FileText, RotateCw } from "lucide-react";
+import { FileText, Lock, RotateCw } from "lucide-react";
 import { Component, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ErrorInfo, ReactNode } from "react";
 import { Button } from "../primitives/button.jsx";
@@ -18,6 +18,12 @@ class RenderBoundary extends Component<{ children: ReactNode; onError?: (error: 
   componentDidCatch(error: Error, _info: ErrorInfo) { this.props.onError?.(error); }
   render() { return this.state.error ? <EmptyState icon={FileText} title="Could not display that file" description={this.state.error.message} tone="warn" /> : this.props.children; }
 }
+
+/** What a read-only file tab says about why: the file is the reason, so it is not a quiet editor that ignores typing. */
+const READ_ONLY_REASONS = {
+  encoding: "Read-only: this file is not UTF-8, and saving it here would replace the bytes that did not decode.",
+  truncated: "Read-only: this file is too large to edit here, so only its beginning is shown.",
+} as const;
 
 /** The complete file tab. Its only knowledge of formats comes from registrations. */
 export function FileViewer({ file, host, renderers, state, onStateChange, displayActions, navigationPath, reveal, onError, presentation }: FileViewerProps) {
@@ -128,6 +134,9 @@ export function FileViewer({ file, host, renderers, state, onStateChange, displa
       <RotateCw className="size-3.5 shrink-0" /><span className="flex-1">This file changed on disk since you opened it.</span>
       <Button className="h-6 px-2 text-xs font-normal" onClick={document.reload} size="sm" variant="secondary">Reload</Button>
       <Button className="h-6 px-2 text-xs font-normal" onClick={document.keepMine} size="sm" variant="ghost">Keep mine</Button>
+    </div> : null}
+    {document?.readOnlyReason ? <div className="flex shrink-0 items-center gap-2 border-b bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground" data-read-only-reason={document.readOnlyReason} role="status">
+      <Lock aria-hidden="true" className="size-3.5 shrink-0" /><span className="flex-1">{READ_ONLY_REASONS[document.readOnlyReason]}</span>
     </div> : null}
     {document?.error ? <div className="flex shrink-0 items-center gap-2 border-b bg-destructive/10 px-3 py-1.5 text-xs text-destructive" role="alert">
       <span className="flex-1">Could not save: {document.error}</span><Button className="h-6 px-2 text-xs font-normal" size="sm" variant="secondary" onClick={() => void document.save()}>Try again</Button>

@@ -70,4 +70,20 @@ describe('the shell live binding', () => {
     expect(frames).toBe(3);
     expect((await view.controller.setRenderMode(false)).camera?.projection).toBe('orthographic');
   });
+  it('ends the ten-second bound even when the frame never comes', async () => {
+    // A hidden window or a paused rAF never settles: the deadline is a timer, not a check after a frame.
+    vi.useFakeTimers();
+    try {
+      const view = harness({ declined, settle: () => new Promise<void>(() => {}) });
+      const reply = view.controller.resetCamera();
+      const outcome = expect(reply).rejects.toThrow('The viewer did not finish applying this command.');
+      await vi.advanceTimersByTimeAsync(9_999);
+      let settled = false;
+      reply.catch(() => { settled = true; });
+      await Promise.resolve();
+      expect(settled).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      await outcome;
+    } finally { vi.useRealTimers(); }
+  });
 });

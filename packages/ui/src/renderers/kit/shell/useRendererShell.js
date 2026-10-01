@@ -17,6 +17,7 @@ import { useAppliedViewSettings } from "../view-settings/useAppliedViewSettings.
 import { useViewSettings } from "../view-settings/useViewSettings.js";
 import { cameraForViewSettings, viewerDisplaySettingsForCamera } from "../view-settings/viewerDisplaySettings.js";
 import { attachLiveBinding } from "./liveBinding.js";
+import { cameraReadsBack, orbitReadsBack } from "./liveReadback.js";
 import { shellLoadReport } from "./loadReport.js";
 import { createViewPromptContext, promptDeliveryError } from "./promptContext.js";
 import { fileViewsEqual, plainShellCamera, readFileView, readFileViewSlices, scopeShellCamera, shellPresentationKey, writeFileView } from "./fileView.js";
@@ -473,24 +474,41 @@ export function useRendererShell({
       }
       const nextDisplay = viewerDisplaySettingsForCamera(viewSettingsStore.getSnapshot().display, camera);
       const requested = clonePerspectiveSnapshot(camera);
+      // The viewport is handed a camera DERIVED from the request (the configured projection
+      // and lens), and its controls may move it again (the distance is clamped to the model's
+      // range), so neither the request nor the handed camera is what reads back. What the
+      // viewport shows AFTER applying it, scoped the way `getPerspective` reads it, is the
+      // camera to record and to wait for: a request beyond the clamp replies with the clamped
+      // state instead of never reading back.
+      const appliedCamera = fallback => viewerRef.current?.getPerspective?.() ?? scopeShellCamera(fallback, modelKey, sceneScaleMode);
+      // With Preview's orbit playing the camera turns about its up axis every frame (a drag does
+      // not stop it), so the applied camera reads back up to that turn: same target, distance and
+      // height, azimuth free. The camera recorded is the applied one.
+      const settled = applied => state => !viewerRef.current?.isCameraTransitioning?.()
+        && (viewerRef.current?.isOrbiting?.() ? orbitReadsBack(state.camera, applied) : cameraReadsBack(state.camera, applied));
       if (previewing) {
         if (!viewerRef.current?.setPerspective?.(requested)) throw new Error("The viewer could not apply this camera.");
-        return;
+        return settled(appliedCamera(requested));
       }
       const snapshot = cameraForViewSettings(requested, nextDisplay, { lightingQuality: "preview" });
       if (!snapshot || !viewerRef.current?.setPerspective?.(snapshot, { resetZoomBaseline: true })) throw new Error("The viewer could not apply this camera.");
-      const scoped = scopeShellCamera(snapshot, modelKey, sceneScaleMode);
+      const scoped = appliedCamera(snapshot);
       viewSettingsStore.restore(nextDisplay);
       setViewerPerspective(scoped);
       handlePerspectiveChange(scoped);
+      return settled(scoped);
     },
     // Frame the model again, without turning the camera. The name is the host
-    // protocol's ("cad-reset-camera"); the viewport calls the same act resetZoom.
+    // protocol's ("cad-reset-camera"); the viewport calls the same act resetZoom. It eases, so
+    // the reply waits for the camera to come to rest, not for the first frame of the move.
     resetCamera() {
       if (!viewerRef.current?.resetZoom?.()) throw new Error("The viewer camera is unavailable.");
+      return () => !viewerRef.current?.isCameraTransitioning?.();
     },
     setDisplaySettings(patch) { viewSettingsStore.patch(patch); },
     setRenderMode(enabled) { viewSettingsStore.selectPreset(enabled ? "render" : "solid"); },
+    // A capture waits for the camera to come to rest, so the image and the state read with it agree.
+    atRest: () => !viewerRef.current?.isCameraTransitioning?.(),
     capture() {
       if (!viewerRef.current?.captureScreenshotBlob) throw new Error("The viewer cannot capture this model yet.");
       return viewerRef.current.captureScreenshotBlob();
