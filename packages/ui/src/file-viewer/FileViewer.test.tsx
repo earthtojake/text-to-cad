@@ -36,7 +36,7 @@ it('draws the navbar only when it has something to hold, and never for a view sh
   expect(screen.queryByRole('button', { name: 'File actions' })).toBeNull();
   expect(screen.queryByRole('button', { name: 'Show files' })).toBeNull();
   cleanup();
-  // The host's links: without an update, nothing of them in the navbar (GitHub, Discord and the
+  // The host's links: without an update, nothing of them in the navbar (X, Discord, GitHub and the
   // version are the renderer's Settings' and the home's).
   const linked = { ...host, links: viewerLinks({ version: 'v0.7.4' }) };
   open({ navigationPath: null, host: linked });

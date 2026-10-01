@@ -269,7 +269,7 @@ export const UpdateButton: ComponentType<{
   align?: "start" | "center" | "end";
 }>;
 
-/** GitHub and Discord, as icon links. */
+/** X, Discord and GitHub, as icon links, in that order. */
 export const CommunityLinks: ComponentType<{
   links: import("../../host/types.js").ViewerLinks;
   onError?: (error: Error) => void;

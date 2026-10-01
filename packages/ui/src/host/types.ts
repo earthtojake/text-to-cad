@@ -30,6 +30,7 @@ export interface ViewerLinks {
   version: string;
   /** That version's release notes. */
   release: string;
+  x: string;
   github: string;
   discord: string;
   /**
@@ -73,7 +74,7 @@ export interface ViewerHost {
     openFile(path: string, options?: { target: 'current' | 'new'; panel?: string }): void;
     home?(): void;
   };
-  /** The navbar's links: the version, GitHub and Discord. A host with none gets none. */
+  /** The navbar's links: the version, X, Discord and GitHub. A host with none gets none. */
   links?: ViewerLinks;
   /**
    * `platform` names the keyboard's modifiers (⌘ on `darwin`, Ctrl elsewhere); `reducedMotion` is

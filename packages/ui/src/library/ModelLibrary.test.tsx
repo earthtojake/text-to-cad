@@ -19,17 +19,17 @@ function library(models: LibraryModel[], extra: Partial<ModelLibrarySource> = {}
   };
 }
 
-it('heads the home with the CAD wordmark over GitHub and Discord, and an update only when there is one; no tagline', async () => {
-  const links = (latest: object | null) => ({ version: '0.7.4', release: 'r', github: 'https://github.com/earthtojake/text-to-cad', discord: 'https://discord.gg/x', install: { command: 'c', prompt: 'p' }, latest });
+it('heads the home with the CAD wordmark over X, Discord and GitHub, and an update only when there is one; no tagline', async () => {
+  const links = (latest: object | null) => ({ version: '0.7.4', release: 'r', x: 'https://x.com/earthtojake', github: 'https://github.com/earthtojake/text-to-cad', discord: 'https://discord.gg/x', install: { command: 'c', prompt: 'p' }, latest });
   const clipboard = { writeText: async () => {}, readText: async () => '', writeImage: async () => {} };
   render(<ModelLibrary library={library([])} links={links({ version: '0.7.4', url: 'u', newer: false })} clipboard={clipboard} />);
   let nav = await screen.findByRole('navigation', { name: 'CAD links' });
-  expect([...nav.querySelectorAll('a, button')].map(node => node.getAttribute('aria-label'))).toEqual(['GitHub', 'Discord']);
+  expect([...nav.querySelectorAll('a, button')].map(node => node.getAttribute('aria-label'))).toEqual(['X', 'Discord', 'GitHub']);
   expect(screen.queryByText('Build things')).toBeNull();
   cleanup();
   render(<ModelLibrary library={library([])} links={links({ version: '0.7.5', url: 'u', newer: true })} clipboard={clipboard} />);
   nav = await screen.findByRole('navigation', { name: 'CAD links' });
-  expect([...nav.querySelectorAll('a, button')].map(node => node.getAttribute('aria-label'))).toEqual(['Update to 0.7.5', 'GitHub', 'Discord']);
+  expect([...nav.querySelectorAll('a, button')].map(node => node.getAttribute('aria-label'))).toEqual(['Update to 0.7.5', 'X', 'Discord', 'GitHub']);
 });
 
 it('offers Open only where the host has a chooser, and opens and pins through the host', async () => {

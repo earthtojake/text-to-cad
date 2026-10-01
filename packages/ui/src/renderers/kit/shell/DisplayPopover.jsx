@@ -12,7 +12,7 @@ import { TOOL_PANEL_BUTTON_CLASS } from "../tools/ToolPanel.jsx";
 /**
  * Settings: an ordinary popover from the settings cog among the view's controls in the navbar,
  * before Preview, opening down from it, end-aligned. Its header is "Settings", the version this
- * host runs in gray beside it, then GitHub and Discord as icon links and the X at its right end;
+ * host runs in gray beside it, then X, Discord and GitHub as icon links and the close X at its right end;
  * under it, the Display settings (`children`), whose own heading keeps its Reset. It is not a
  * tool — opening it leaves the tool in hand as it is — and it goes as any popover does: Escape,
  * its button, its X, or a press anywhere outside it, the model included. It is never taller than

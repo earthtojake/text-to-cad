@@ -10,6 +10,7 @@
  */
 
 export const TEXT_TO_CAD_LINKS = Object.freeze({
+  x: "https://x.com/earthtojake",
   github: "https://github.com/earthtojake/text-to-cad",
   discord: "https://discord.gg/5FGB9DwJYU",
   install: Object.freeze({
@@ -40,6 +41,7 @@ export function releaseNotesUrl(repository, version) {
  *
  * @param {object} options
  * @param {string} options.version The version this host runs.
+ * @param {string} [options.x]
  * @param {string} [options.github]
  * @param {string} [options.discord]
  * @param {string} [options.release] This version's release notes; by default its tag on `github`.
@@ -49,11 +51,11 @@ export function releaseNotesUrl(repository, version) {
  *   The newest release, for a host that checked, and whether it is newer than `version`.
  * @param {(url: string) => Promise<void>} [options.open]
  */
-export function viewerLinks({ version, github = TEXT_TO_CAD_LINKS.github, discord = TEXT_TO_CAD_LINKS.discord,
+export function viewerLinks({ version, x = TEXT_TO_CAD_LINKS.x, github = TEXT_TO_CAD_LINKS.github, discord = TEXT_TO_CAD_LINKS.discord,
   release, install = TEXT_TO_CAD_LINKS.install, latest = null, open } = {}) {
   const bare = releaseVersion(version);
   return {
-    version: bare, github, discord, install, latest,
+    version: bare, x, github, discord, install, latest,
     release: release || releaseNotesUrl(github, bare),
     ...(open ? { open } : {})
   };

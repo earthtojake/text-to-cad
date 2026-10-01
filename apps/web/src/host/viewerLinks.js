@@ -90,7 +90,7 @@ function useLatestRelease({ latestReleaseApiUrl, latestReleaseUrl, mockLatestVer
   return release;
 }
 
-/** This Viewer's `ViewerHost.links`: the version it runs, its build's GitHub and Discord, and what GitHub says is newest. */
+/** This Viewer's `ViewerHost.links`: the version it runs, X, its build's GitHub and Discord, and what GitHub says is newest. */
 export function useViewerLinks() {
   const version = normalizeViewerReleaseVersion(viewerPackage.version);
   const github = normalizeViewerGithubUrl(import.meta.env?.VIEWER_GITHUB_URL);

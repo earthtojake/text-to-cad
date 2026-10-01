@@ -6,14 +6,14 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 import { cn } from "@text-to-cad/ui/utils";
 
-import { DiscordMark, GitHubMark } from "./brandMarks.jsx";
+import { DiscordMark, GitHubMark, XMark } from "./brandMarks.jsx";
 import wordmark from "../../assets/logo-cad.svg";
 
 /**
  * The host's links (`ViewerHost.links`, built by `viewerLinks` in `links.js`), as the viewer shows
  * them. A newer release the host found (`links.latest`) is a blue download button — nothing at all
  * when there is none — whose menu says what is new and how this host updates (`UpdateButton`).
- * GitHub and Discord are icon links (`CommunityLinks`): in the Settings popover's header, beside
+ * X, Discord and GitHub are icon links (`CommunityLinks`): in the Settings popover's header, beside
  * the version, and under the home's wordmark. Every link opens the host's way: a page that can open
  * one itself follows an ordinary link to a new tab; a page in a frame that cannot hands it to
  * `links.open` (the host's own browser). Copies go through the host's clipboard.
@@ -30,14 +30,15 @@ function useFollow(links, onError) {
 }
 
 /**
- * GitHub and Discord, as icon links.
+ * X, Discord and GitHub, as icon links, in that order.
  * @param {{ links: import("../../host/types.js").ViewerLinks, onError?: (error: Error) => void }} props
  */
 export function CommunityLinks({ links, onError }) {
   const follow = useFollow(links, onError);
   return <>
-    <IconLink href={links.github} label="GitHub" icon={GitHubMark} onFollow={follow} />
+    <IconLink href={links.x} label="X" icon={XMark} onFollow={follow} />
     <IconLink href={links.discord} label="Discord" icon={DiscordMark} onFollow={follow} />
+    <IconLink href={links.github} label="GitHub" icon={GitHubMark} onFollow={follow} />
   </>;
 }
 
