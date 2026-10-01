@@ -4,6 +4,7 @@ import type { CadWorkspaceService } from "@text-to-cad/core/client";
 import { Button } from "../primitives/button.jsx";
 import { Input } from "../primitives/input.jsx";
 import { ScrollArea as ScrollRegion } from "../primitives/scroll-area.jsx";
+import { Spinner } from "../primitives/spinner.jsx";
 import type { LibraryLayout } from "../tab-store/tabRecord.js";
 import wordmark from "../assets/logo-cad.svg";
 import { CommunityLinks, UpdateButton } from "../file-viewer/navigation/NavbarLinks.jsx";
@@ -88,7 +89,7 @@ const message = (failure: unknown) => failure instanceof Error ? failure.message
 const ScrollArea = ScrollRegion as unknown as ComponentType<{ className?: string; style?: CSSProperties; viewportClassName?: string; children: ReactNode; [data: `data-${string}`]: string }>;
 
 // A card's picture, read once the card is on screen; and a card on screen that wants one (`seen`).
-function Thumbnail<Model extends LibraryModel>({ item, load, seen }: { item: Model; load(name: string): Promise<string | null>; seen(item: Model): void }) {
+function Thumbnail<Model extends LibraryModel>({ item, load, seen, opening = false }: { item: Model; load(name: string): Promise<string | null>; seen(item: Model): void; opening?: boolean }) {
   const element = useRef<HTMLSpanElement>(null);
   const [image, setImage] = useState<string | null>(null);
   const latest = useRef({ item, seen });
@@ -112,7 +113,25 @@ function Thumbnail<Model extends LibraryModel>({ item, load, seen }: { item: Mod
     observer.observe(element.current);
     return () => { active = false; observer.disconnect(); };
   }, [item.path, item.thumbnail, item.missing, load]);
-  return <span className="cad-library-thumbnail" ref={element}>{image ? <img src={image} alt="" /> : <Box strokeWidth={1} aria-hidden="true" />}</span>;
+  return <span className="cad-library-thumbnail" ref={element}>
+    {image ? <img src={image} alt="" /> : <Box strokeWidth={1} aria-hidden="true" />}
+    {opening ? <span className="cad-library-opening"><Spinner aria-label={`Opening ${item.name}`} /></span> : null}
+  </span>;
+}
+
+/** Where the models will be while the list is read: cards (or rows) in their own places, pulsing. */
+function Placeholders({ layout }: { layout: LibraryLayout }) {
+  const status = <li className="sr-only" role="status">Loading files</li>;
+  return layout === "list"
+    ? <ul className="cad-library-list" aria-label="Files" aria-busy="true" data-loading="">{status}{[0, 1, 2].map(index => <li key={index} className="cad-library-row" aria-hidden="true">
+      <span className="cad-library-open"><span className="cad-library-thumbnail" /><span className="cad-library-placeholder" /></span>
+    </li>)}</ul>
+    : <ul className="cad-library-grid" aria-label="Files" aria-busy="true" data-loading="">{status}{[0, 1, 2, 3].map(index => <li key={index} className="cad-library-card" aria-hidden="true">
+      <span className="cad-library-open">
+        <span className="cad-library-thumbnail" />
+        <span className="cad-library-body"><span className="cad-library-placeholder" /><span className="cad-library-placeholder" data-short="" /></span>
+      </span>
+    </li>)}</ul>;
 }
 
 /**
@@ -124,7 +143,9 @@ function Thumbnail<Model extends LibraryModel>({ item, load, seen }: { item: Mod
  * also be removed. With none yet, one empty card opens the host's chooser. It is drawn on the
  * navbar's colour.
  *
- * Opening is the host's; nothing here waits visibly. A card on screen that wants a picture
+ * Nothing waits unseen. While the list is read, placeholder cards (or rows) stand where the models
+ * will be. A model being opened shows a spinner over its picture, and the library takes no other
+ * open until the host has opened it or failed to. A card on screen that wants a picture
  * (`wantsPicture`) is handed to `picture`, where the viewer draws one out of sight — one card at a
  * time, each once while the page is up — and the list is read again once one is kept.
  */
@@ -187,7 +208,14 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
     return image;
   }, []);
   const fail = (failure: unknown) => setError(message(failure));
-  const open = (item: Model) => { setError(""); void current.current.open(item).catch(fail); };
+  // The model being opened: the host may take a moment, and a second press must not open twice.
+  const [opening, setOpening] = useState<string | null>(null);
+  const open = (item: Model) => {
+    if (opening) return;
+    setError("");
+    setOpening(item.path);
+    void current.current.open(item).catch(fail).finally(() => setOpening(null));
+  };
   const pick = library.pick ? () => { setError(""); void current.current.pick?.().catch(fail); } : null;
   const change = (action: "pin" | "unpin" | "remove", item: Model) => { void current.current.change(action, item).then(setItems, fail); };
   const all = items ?? [];
@@ -202,17 +230,17 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   </div>;
   const status = (item: Model) => item.missing ? "File unavailable" : editedLabel(item.modified, now);
   const models = layout === "list"
-    ? <ul className="cad-library-list" aria-label="Files">{shown.map(item => <li key={item.path} className="cad-library-row" data-missing={item.missing || undefined}>
-      <button type="button" className="cad-library-open" disabled={item.missing} aria-label={`Open ${item.name}`} onClick={() => open(item)}>
-        <Thumbnail item={item} load={load} seen={seen} />
+    ? <ul className="cad-library-list" aria-label="Files">{shown.map(item => <li key={item.path} className="cad-library-row" data-missing={item.missing || undefined} data-opening={opening === item.path || undefined}>
+      <button type="button" className="cad-library-open" disabled={item.missing} aria-label={`Open ${item.name}`} aria-busy={opening === item.path || undefined} onClick={() => open(item)}>
+        <Thumbnail item={item} load={load} seen={seen} opening={opening === item.path} />
         <span className="cad-library-name">{item.name}</span>
         <span className="cad-library-status">{status(item)}</span>
       </button>
       {actions(item, true)}
     </li>)}</ul>
-    : <ul className="cad-library-grid" aria-label="Files">{shown.map(item => <li key={item.path} className="cad-library-card" data-missing={item.missing || undefined}>
-      <button type="button" className="cad-library-open" disabled={item.missing} aria-label={`Open ${item.name}`} onClick={() => open(item)}>
-        <Thumbnail item={item} load={load} seen={seen} />
+    : <ul className="cad-library-grid" aria-label="Files">{shown.map(item => <li key={item.path} className="cad-library-card" data-missing={item.missing || undefined} data-opening={opening === item.path || undefined}>
+      <button type="button" className="cad-library-open" disabled={item.missing} aria-label={`Open ${item.name}`} aria-busy={opening === item.path || undefined} onClick={() => open(item)}>
+        <Thumbnail item={item} load={load} seen={seen} opening={opening === item.path} />
         <span className="cad-library-body">
           <span className="cad-library-name">{item.name}</span>
           <span className="cad-library-status">{status(item)}</span>
@@ -242,7 +270,7 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
         </div>
       </div>
       {(error || failure) ? <div className="cad-library-error" role="alert"><p>{error || failure}</p></div> : null}
-      {items === null ? null
+      {items === null ? <Placeholders layout={layout} />
         : searchQuery && !shown.length ? <p className="cad-library-empty" role="status">No matching models.</p>
           : !all.length ? (pick
             ? <ul className="cad-library-grid" aria-label="Files"><li className="cad-library-card" data-empty="">

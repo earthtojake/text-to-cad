@@ -66,6 +66,37 @@ it('offers Open only where the host has a chooser, and opens and pins through th
   expect(screen.queryByRole('button', { name: 'Remove a.step' })).toBeNull();
 });
 
+it('stands placeholders where the models will be while the list is read, and opens one at a time with a spinner over it', async () => {
+  let listed!: (models: LibraryModel[]) => void;
+  let opened!: () => void;
+  const source = library([], {
+    list: () => new Promise<readonly LibraryModel[]>(resolve => { listed = resolve; }),
+    open: vi.fn(() => new Promise<void>(resolve => { opened = resolve; })),
+  });
+  render(<ModelLibrary library={source} layout="list" />);
+  // Read, the list is a few placeholder rows, busy, with its status said aloud.
+  let loading = screen.getByRole('list', { name: 'Files' });
+  expect([loading.getAttribute('aria-busy'), loading.querySelectorAll('.cad-library-row').length]).toEqual(['true', 3]);
+  expect(screen.getByRole('status').textContent).toBe('Loading files');
+  cleanup();
+  render(<ModelLibrary library={source} />);
+  loading = screen.getByRole('list', { name: 'Files' });
+  expect([loading.getAttribute('aria-busy'), loading.querySelectorAll('.cad-library-card').length]).toEqual(['true', 4]);
+  await act(async () => { listed([model('a.step'), model('b.step')]); });
+  expect(screen.getByRole('list', { name: 'Files' }).getAttribute('aria-busy')).toBeNull();
+  // The model being opened says so over its picture; a second press, on it or another, opens nothing.
+  const a = screen.getByRole('button', { name: 'Open a.step' });
+  await act(async () => { fireEvent.click(a); });
+  expect(a.getAttribute('aria-busy')).toBe('true');
+  expect(within(a).getByRole('status', { name: 'Opening a.step' })).toBeTruthy();
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Open b.step' })); fireEvent.click(a); });
+  expect(source.open).toHaveBeenCalledTimes(1);
+  await act(async () => { opened(); });
+  expect(a.getAttribute('aria-busy')).toBeNull();
+  await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Open b.step' })); });
+  expect(source.open).toHaveBeenCalledTimes(2);
+});
+
 it('names a card by its file and when it was edited, and switches between a grid and a list', async () => {
   const layouts: string[] = [];
   const { rerender } = render(<ModelLibrary library={library([model('bracket.step')])} layout="grid" onLayoutChange={layout => layouts.push(layout)} />);

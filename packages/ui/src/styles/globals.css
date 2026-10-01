@@ -104,6 +104,18 @@
 .cad-library-row .cad-library-status { flex: none; }
 .cad-library-row .cad-library-actions { right: 8px; top: 50%; transform: translateY(-50%); }
 .cad-library-empty { margin: 48px 0 0; text-align: center; color: var(--muted-foreground); line-height: 1.6; }
+/* While the list is read: the cards' own shapes, pulsing. */
+.cad-library [data-loading] .cad-library-open { cursor: default; }
+.cad-library [data-loading] .cad-library-thumbnail, .cad-library-placeholder { animation: cad-library-pulse 1.4s ease-in-out infinite; }
+.cad-library-placeholder { display: block; width: 60%; height: 10px; margin: 3px 0; border-radius: 4px; background: var(--muted); }
+.cad-library-placeholder[data-short] { width: 32%; }
+.cad-library-row .cad-library-placeholder { flex: none; width: 40%; }
+@keyframes cad-library-pulse { 50% { opacity: .5; } }
+/* The model being opened: a spinner over its picture until the host has it on screen. */
+.cad-library-thumbnail { position: relative; }
+.cad-library-opening { position: absolute; inset: 0; display: grid; place-items: center; background: color-mix(in oklab, var(--background) 45%, transparent); color: var(--foreground); }
+.cad-library-opening > svg { width: 20px; height: 20px; opacity: 1; }
+.cad-library-row .cad-library-opening > svg { width: 14px; height: 14px; }
 .cad-library-error { margin-bottom: 16px; color: var(--destructive); }
 .cad-library-error p { margin: 0; }
-@media (prefers-reduced-motion: reduce) { .cad-library-card, .cad-library-actions button, .cad-library-row .cad-library-open { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .cad-library-card, .cad-library-actions button, .cad-library-row .cad-library-open { transition: none; } .cad-library [data-loading] .cad-library-thumbnail, .cad-library-placeholder { animation: none; } }
