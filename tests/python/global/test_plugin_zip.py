@@ -33,18 +33,24 @@ class PluginZipTests(unittest.TestCase):
             package = plugin_zip.build(REPO_ROOT, out)
             self.assertEqual(package.errors, [])
             with zipfile.ZipFile(out) as archive:
-                names = set(archive.namelist())
-                manifest = json.loads(archive.read("cad/.codex-plugin/plugin.json"))
+                members = archive.namelist()
+                manifest = json.loads(archive.read(".codex-plugin/plugin.json"))
+        # The plugin is at the archive's root, each folder with an entry of its own: the
+        # portal turned away a top-level folder without one as holding no plugin.
+        names = {name for name in members if not name.endswith("/")}
+        self.assertEqual({name for name in members if name.endswith("/")},
+                         {f"{folder}/" for folder in plugin_zip.folders(names)})
+        self.assertIn(".codex-plugin/", members)
         # Everything tracked under the plugin's roots ships, `.codex-plugin/` icons included,
         # plus exactly the files the archived manifest points at; nothing else from the repo.
-        roots = {f"cad/{path}" for path in git(REPO_ROOT, "ls-files", "--", *plugin_zip.ROOTS).split()}
+        roots = set(git(REPO_ROOT, "ls-files", "--", *plugin_zip.ROOTS).split())
         interface = manifest["interface"]
         pointed_at = {value for name, value in interface.items() if name in plugin_zip.ICONS}
         pointed_at.update(interface.get("screenshots", []))
         if "mcpServers" in manifest:
             self.assertEqual(manifest["mcpServers"], "./.mcp.json")
             pointed_at.add("./.mcp.json")
-        self.assertEqual(names, roots | {f"cad/{path[2:]}" for path in pointed_at})
+        self.assertEqual(names, roots | {path[2:] for path in pointed_at})
 
     def test_mcp_config_moves_to_the_root_and_refused_values_fail(self):
         manifest = {
@@ -70,10 +76,10 @@ class PluginZipTests(unittest.TestCase):
 
             self.assertEqual(build(manifest, root / "out.zip"), [])
             with zipfile.ZipFile(root / "out.zip") as archive:
-                self.assertEqual(json.loads(archive.read("demo/.codex-plugin/plugin.json"))["mcpServers"],
+                self.assertEqual(json.loads(archive.read(".codex-plugin/plugin.json"))["mcpServers"],
                                  "./.mcp.json")
-                self.assertEqual(archive.read("demo/.mcp.json"), b'{"mcpServers": {}}\n')
-                self.assertNotIn("demo/codex.mcp.json", archive.namelist())
+                self.assertEqual(archive.read(".mcp.json"), b'{"mcpServers": {}}\n')
+                self.assertNotIn("codex.mcp.json", archive.namelist())
 
             # The portal refuses both: a subtitle over 30 characters (main's, until this
             # check) and an onboarding skill named instead of given as its SKILL.md path.

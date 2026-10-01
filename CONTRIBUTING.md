@@ -637,9 +637,11 @@ The plugin directory shared by ChatGPT and Codex takes plugins only through the
 web portal at <https://platform.openai.com/plugins>. OpenAI documents no API or
 CLI for uploading, submitting or publishing, so CD cannot do it and no secret is
 involved. What CD does is build the file to upload: each GitHub Release carries
-`cad-openai-plugin-<version>.zip`. It holds one top-level `cad/` directory with
-`.codex-plugin/` (manifest and icons), `skills/`, `LICENSE`, and every file the
-manifest points at. The portal requires `mcpServers` to resolve to a root
+`cad-openai-plugin-<version>.zip`. It holds the plugin at the archive's root,
+each folder with its own entry: `.codex-plugin/` (manifest and icons), `skills/`,
+`LICENSE`, and every file the manifest points at. (The portal turned away 0.7.6's
+first ZIP, one top-level `cad/` folder with no directory entry of its own, as
+holding no plugin.) The portal requires `mcpServers` to resolve to a root
 `.mcp.json`, so a server config the checkout keeps under another name is
 archived as `.mcp.json`, and the archived manifest points there.
 
