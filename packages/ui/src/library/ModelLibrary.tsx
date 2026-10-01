@@ -115,16 +115,18 @@ function Thumbnail<Model extends LibraryModel>({ item, load, seen }: { item: Mod
 
 /**
  * The host's home: the models opened before, from every view, to open again. The same page in
- * every app — the CAD wordmark centred at its top, then "Files" with its search, its grid/list
- * switch and, where the host has a chooser, Open; then the models, pinned first, as solid cards (a
- * picture over the name and when the file was edited) or as rows. A card can be pinned (its pin
- * filled); a row can also be removed. It is drawn on the page's own colour, the navbar's.
+ * every app — the CAD wordmark centred at its top over its tagline, then "Files" with its search,
+ * its grid/list switch and, where the host has a chooser, Open; then the models, pinned first, as
+ * solid cards (a picture over the name and when the file was edited) or as rows. A card can be
+ * pinned (its pin filled); a row can also be removed. With none yet, one empty card opens a file:
+ * the host's file explorer (`browse`), else its chooser. It is drawn on the page's own colour, the
+ * navbar's.
  *
  * Opening is the host's; nothing here waits visibly. A card on screen that wants a picture
  * (`wantsPicture`) is handed to `picture`, where the viewer draws one out of sight — one card at a
  * time, each once while the page is up — and the list is read again once one is kept.
  */
-export function ModelLibrary<Model extends LibraryModel>({ library, layout = "grid", onLayoutChange, failure = "", picture }: {
+export function ModelLibrary<Model extends LibraryModel>({ library, layout = "grid", onLayoutChange, failure = "", picture, browse }: {
   library: ModelLibrarySource<Model>;
   /** Grid or list; the host keeps the choice (the tab's settings). */
   layout?: LibraryLayout;
@@ -133,6 +135,8 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   failure?: string;
   /** Draw and keep a model's picture; true once it is kept. */
   picture?(model: Model): Promise<boolean>;
+  /** Show the host's file explorer, where a file is opened from: what the empty card does. */
+  browse?(): void;
 }) {
   const [items, setItems] = useState<readonly Model[] | null>(null);
   const [query, setQuery] = useState("");
@@ -215,6 +219,7 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   return <ScrollArea className="cad-library h-full text-ui" viewportClassName="cad-library-viewport" data-library-layout={layout}>
     <main className="cad-library-content" aria-label="CAD models">
       <img className="cad-library-wordmark" src={wordmark} alt="CAD" />
+      <p className="cad-library-tagline">Build things</p>
       <div className="cad-library-toolbar">
         <h1 className="cad-library-heading">Files</h1>
         <div className="cad-library-controls">
@@ -232,7 +237,14 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
       {(error || failure) ? <div className="cad-library-error" role="alert"><p>{error || failure}</p></div> : null}
       {items === null ? null
         : searchQuery && !shown.length ? <p className="cad-library-empty" role="status">No matching models.</p>
-          : !all.length ? <p className="cad-library-empty">Open a CAD file to see it here.</p>
+          : !all.length ? (browse || pick
+            ? <ul className="cad-library-grid" aria-label="Files"><li className="cad-library-card" data-empty="">
+              <button type="button" className="cad-library-open" onClick={() => (browse ? browse() : pick?.())}>
+                <span className="cad-library-thumbnail"><Box strokeWidth={1} aria-hidden="true" /></span>
+                <span className="cad-library-body"><span className="cad-library-name">Open File</span></span>
+              </button>
+            </li></ul>
+            : <p className="cad-library-empty">Open a CAD file to see it here.</p>)
             : models}
     </main>
   </ScrollArea>;

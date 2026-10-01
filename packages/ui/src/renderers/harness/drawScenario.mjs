@@ -180,7 +180,8 @@ export async function runDrawScenario({ page, pane, errors }) {
 
   assert.equal(await quickEdit.getByRole('textbox').inputValue(), 'Add a boss where the ink is.', 'the note kept Quick Edit open while the sketch went on');
 
-  // Quick Edit queues the note with the view and its ink for the host, as a PNG.
+  // Quick Edit queues the note with the view and its ink for the host, as a PNG; queued, the note
+  // goes with its sketch.
   await page.evaluate(() => {
     window.__drawingPrompts = [];
     const port = window.cadHarness.a.host.promptContext;
@@ -198,6 +199,7 @@ export async function runDrawScenario({ page, pane, errors }) {
   const [added] = await page.evaluate(() => window.__drawingPrompts);
   assert.ok(added.type === 'image/png' && added.size > 100, JSON.stringify(added));
   await quickEdit.waitFor({ state: 'detached' });
+  assert.equal((await ink()).ink, 0, 'the sketch went with the note');
 
   // Leaving Draw ends the session and the sketch with it; the tool and colour in hand wait for the next.
   await pane.getByRole('group', { name: 'Interaction tools' }).getByRole('button', { name: 'Select', exact: true }).click();

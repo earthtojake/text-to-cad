@@ -109,3 +109,15 @@ it('follows its orientation store alone: an equal orientation is no change, a ne
   expect(screen.getByLabelText('View cube').querySelectorAll('polygon').length).toBe(1);
   expect(renders).toBe(1);
 });
+it('keeps every axis label inside its own box, however the cube is turned, so a corner of the view never cuts one off', () => {
+  // Seen from below at 45°, the Z axis points straight down: its label would sit past the box's edge.
+  const DOWN = { x: [0.707, 0.5, 0.5], y: [-0.707, 0.5, 0.5], z: [0, -0.707, 0.707] };
+  for (const orientation of [ISO, DOWN]) {
+    cleanup();
+    cube({ orientation: createViewPlaneOrientationStore(orientation) });
+    for (const axis of ['X', 'Y', 'Z']) {
+      const label = screen.getByText(axis);
+      for (const value of [Number(label.getAttribute('x')), Number(label.getAttribute('y'))]) expect(value >= 6 && value <= 94, `${axis}: ${value}`).toBe(true);
+    }
+  }
+});

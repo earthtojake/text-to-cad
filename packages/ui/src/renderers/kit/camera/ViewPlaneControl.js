@@ -19,6 +19,8 @@ const HOME_CORNER_ID = "iso+-+";
 // SVG units: the cube's half-size on screen, and where its centre sits.
 const SCALE = 21;
 const CENTER = 50;
+// An axis label's centre, kept inside the 0–100 view box by more than half its 10-unit glyph.
+const inBox = value => Math.min(94, Math.max(6, value));
 
 function normalizeCssLength(value, fallback = "") {
   if (typeof value === "number" && Number.isFinite(value) && value > 0) return `${value}px`;
@@ -187,7 +189,9 @@ function ViewPlaneControl({
     const direction = length > 1 ? [dx / length, dy / length] : fallback;
     // The two adjacent faces determine whether this edge lies behind the cube.
     const visible = ["x", "y", "z"].some((other) => other !== axis && orientation[other][2] < 0);
-    return { axis, x, y, lx: x + direction[0] * 7, ly: y + direction[1] * 7, visible };
+    // A label sits a little past its axis's end, but never outside the cube's own box: in a corner
+    // of the view the box's edge is the view's, which would cut it off.
+    return { axis, x, y, lx: inBox(x + direction[0] * 7), ly: inBox(y + direction[1] * 7), visible };
   });
 
   const sizeStyle = compact ? undefined : {

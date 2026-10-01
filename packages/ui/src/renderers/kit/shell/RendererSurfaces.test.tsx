@@ -61,6 +61,11 @@ function secondaryTap(target: Element, x: number, y: number, init: Record<string
   pointer(target, 'pointerup', { button: 2, clientX: x, clientY: y, ...init });
 }
 const menuAnchor = () => document.querySelector('button[aria-hidden="true"][style*="position: fixed"]') as HTMLElement | null;
+// The harness's selection: a press it notes through its menu, which Quick Edit carries as a reference.
+function pick(canvas: Element) {
+  secondaryTap(canvas, 300, 200);
+  act(() => { fireEvent.click(screen.getByRole('menuitem', { name: 'Note the press' })); });
+}
 
 it('a secondary tap on the canvas opens the renderer\'s own items at the press, in the renderer\'s state, and an item acts on that press', () => {
   const { canvas, overlay } = mount();
@@ -101,15 +106,22 @@ it('a press the renderer has nothing to say about, a secondary drag, or a press 
   expect(screen.getByRole('menu')).toBeTruthy();
 });
 
-it('Quick Edit sits at the top right with what the host can do, is put away in Preview, and nothing sits at the bottom', () => {
+it('Quick Edit is there once something is picked, with what the host can do, is put away in Preview, and nothing sits at the bottom', () => {
   const destination = { kind: 'composer', available: true } as const;
   const send = vi.fn(async () => ({ status: 'sent' as const, partIds: [] }));
-  const { container } = mount(testHost({ promptContext: { getSnapshot: () => destination, subscribe: () => () => {}, deliver: async () => ({ status: 'added', partIds: [] }), send } }));
+  const { container, canvas } = mount(testHost({ promptContext: { getSnapshot: () => destination, subscribe: () => () => {}, deliver: async () => ({ status: 'added', partIds: [] }), send } }));
   expect(container.querySelector('[data-viewport-bottom-actions]')).toBeNull();
-  fireEvent.click(screen.getByRole('button', { name: 'Quick Edit' }));
+  // Nothing picked, nothing drawn: no Quick Edit at all, not even a button.
+  expect(container.querySelector('[data-quick-edit-box]')).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Quick Edit' })).toBeNull();
+  pick(canvas);
   const box = screen.getByRole('region', { name: 'Quick Edit' });
-  expect(document.activeElement).toBe(within(box).getByRole('textbox', { name: 'Describe your changes' }));
+  expect(box.querySelector('[data-quick-edit-chip="references"]')!.textContent).toBe('1 ref');
   expect(within(box).getAllByRole('button').map(button => button.getAttribute('aria-label') || button.textContent)).toEqual(['Close Quick Edit', 'Copy Prompt', 'Queue', 'Send']);
+  // Its X clears the pick, as a press on the background would, and goes with it.
+  fireEvent.click(within(box).getByRole('button', { name: 'Close Quick Edit' }));
+  expect(screen.queryByRole('region', { name: 'Quick Edit' })).toBeNull();
+  pick(canvas);
   act(() => { fireEvent.click(screen.getByRole('button', { name: 'Preview' })); });
   expect(container.querySelector('[data-preview-chrome]')!.contains(container.querySelector('[data-quick-edit]'))).toBe(true);
   expect(container.querySelector('[data-preview-chrome]')!.hasAttribute('inert')).toBe(true);
@@ -121,6 +133,9 @@ it('a sketch opens Quick Edit, which sends the file, the note and the view with 
   const host = testHost({ promptContext: { getSnapshot: () => destination, subscribe: () => () => {}, deliver: async () => ({ status: 'added', partIds: [] }), send } as any });
   mount(host);
   fireEvent.click(screen.getByRole('button', { name: 'Draw' }));
+  // The surface clears its ink as the viewport's does, saying so once it is gone.
+  const clearInk = vi.fn(() => viewport.props.drawing.onContentChange(false, 0));
+  act(() => viewport.props.drawing.onReady({ clear: clearInk }));
   act(() => viewport.props.drawing.onContentChange(true, 1));
   const box = screen.getByRole('region', { name: 'Quick Edit' });
   expect(box.querySelector('[data-quick-edit-chip="sketch"]')).not.toBeNull();
@@ -132,7 +147,9 @@ it('a sketch opens Quick Edit, which sends the file, the note and the view with 
   const context = send.mock.calls[0][0] as any;
   expect(context.parts.map((part: any) => part.kind)).toEqual(['text', 'reference', 'attachment']);
   expect((await context.parts[2].content).type).toBe('image/png');
+  // Sent, the note goes with its sketch.
   await waitFor(() => expect(screen.queryByRole('region', { name: 'Quick Edit' })).toBeNull());
+  expect(clearInk).toHaveBeenCalledTimes(1);
 });
 
 it('clipboard destinations keep the snapshot action, and Draw copies its ink from the foot of its controls', async () => {
@@ -159,9 +176,9 @@ it('clipboard destinations keep the snapshot action, and Draw copies its ink fro
 
 it('a host with no prompt workflow gets no snapshot, and Quick Edit copies a prompt: left out, not disabled', () => {
   // The test host composes `unavailablePromptContext`.
-  const { navigation } = mount();
+  const { navigation, canvas } = mount();
   expect(navigation.mock.calls.flatMap(([actions]) => actions)).toEqual([]);
-  fireEvent.click(screen.getByRole('button', { name: 'Quick Edit' }));
+  pick(canvas);
   expect(within(screen.getByRole('region', { name: 'Quick Edit' })).getAllByRole('button').map(button => button.getAttribute('aria-label') || button.textContent))
     .toEqual(['Close Quick Edit', 'Copy Prompt']);
 });

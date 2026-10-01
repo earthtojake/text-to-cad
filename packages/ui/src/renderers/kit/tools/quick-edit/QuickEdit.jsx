@@ -1,15 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ArrowUp, Check, Copy, ListPlus, MessageCircle, X } from "lucide-react";
-import { ToolbarButton } from "@text-to-cad/ui/primitives/toolbar-button";
+import { ArrowUp, Copy, ListPlus, X } from "lucide-react";
 import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 import { cn } from "@text-to-cad/ui/utils";
 import { usePromptDestination, useViewerHost } from "../../../../host/context.js";
-import { FLOATING_CHROME_SURFACE_CLASS, FLOATING_SURFACE_CLASS } from "../floatingSurface.js";
+import { FLOATING_SURFACE_CLASS } from "../floatingSurface.js";
 import { TOOL_PANEL_BUTTON_CLASS } from "../ToolPanel.jsx";
 import { copiedQuickEdit, createQuickEditContext, quickEditSelection, sketchName } from "./quickEditPrompt.js";
 
 const EMPTY = Object.freeze([]);
-const DONE_MS = 1200;
 // A press of the person's in this view leads the selection it made; an agent's selection (the live
 // controller's `select`) follows none, and opens the box without taking their keyboard.
 const PICK_MS = 1500;
@@ -28,13 +26,14 @@ export function quickEditReferenceIds(selection) {
 }
 
 /**
- * Quick Edit: a person's note about the file on screen, handed to their agent. At the viewer's
- * top-right, a speech-bubble button that becomes the box when it opens, and comes back when it
- * closes. While the note is empty the box follows what it would carry: it opens when something is
- * picked or sketched, and closes when that goes. A written note keeps it open until it goes, or
- * its X clears it (and puts it away until what is picked or sketched changes). It takes the keyboard
- * when it opens for the person — their pick, their first stroke once the pen lifts, its button —
- * never for an agent's selection.
+ * Quick Edit: a person's note about the file on screen, handed to their agent, in a box at the
+ * viewer's top-right that is there only while it has something to say about: nothing shows
+ * otherwise. While the note is empty the box follows what it would carry: it opens when something
+ * is picked or sketched, and closes when that goes. A written note keeps it open, whatever is
+ * picked, until it goes or its X clears it. The X clears everything it would carry too — the
+ * selection, as a press on the background would, and the sketch (`onClear`) — and so does a note
+ * that has gone. It takes the keyboard for the person — each pick of theirs, or a sketch's first
+ * stroke once the pen lifts — never for an agent's selection.
  *
  * Its header names what goes with the note — the selected references (`references`, the selection
  * in the prompt grammar; their ids on hover) and the view with its sketch while Draw has ink
@@ -50,26 +49,22 @@ export function quickEditReferenceIds(selection) {
  * @param {{ resource: import("@text-to-cad/core/prompt").ResourceRef,
  *   references?: readonly import("@text-to-cad/core/prompt").PromptReference[],
  *   sketch?: { ink: boolean, capture(): Promise<Blob> } | null,
- *   referencePath?: (path: string) => string, onCopy?: () => boolean, onEscape?: () => unknown, disabled?: boolean,
- *   size?: { width: number, height: number } | null, onResize?: (size: { width: number, height: number }) => void,
+ *   referencePath?: (path: string) => string, onCopy?: () => boolean, onEscape?: () => unknown, onClear?: () => void, disabled?: boolean,
+ *   hidden?: boolean, size?: { width: number, height: number } | null, onResize?: (size: { width: number, height: number }) => void,
  *   className?: string, style?: import("react").CSSProperties }} props
  *   `onCopy`: the viewer's own copy (⌘C / Ctrl+C: the selection's references, or the drawing),
  *   which the key still reaches from the box while none of the note is selected. `onEscape`: the
  *   viewer's own Escape (clearing the selection), which an empty box passes on as it closes; a box
- *   with a note keeps it, and Escape only hands the keyboard back to the view.
+ *   with a note keeps it, and Escape only hands the keyboard back to the view. `hidden`: out of
+ *   sight with all it holds (the view is loading).
  */
-export default function QuickEdit({ resource, references = EMPTY, sketch = null, referencePath, onCopy, onEscape, disabled = false,
-  size: heldSize, onResize, className, style }) {
+export default function QuickEdit({ resource, references = EMPTY, sketch = null, referencePath, onCopy, onEscape, onClear, disabled = false,
+  hidden = false, size: heldSize, onResize, className, style }) {
   const host = useViewerHost();
   const destination = usePromptDestination();
   const [text, setText] = useState("");
   const [pending, setPending] = useState("");
   const [error, setError] = useState("");
-  const [done, setDone] = useState(false);
-  // Opened with its button, with or without anything to carry.
-  const [asked, setAsked] = useState(false);
-  // What was attached when the person put the box away: it stays away until that changes.
-  const [dismissed, setDismissed] = useState(null);
   const [ownSize, setOwnSize] = useState(null);
   const size = heldSize === undefined ? ownSize : heldSize;
   const resize = onResize || setOwnSize;
@@ -80,11 +75,8 @@ export default function QuickEdit({ resource, references = EMPTY, sketch = null,
   const referenceIds = useMemo(() => quickEditReferenceIds(selection), [selection]);
   const sketching = Boolean(sketch?.ink);
   const attached = referenceIds.length > 0 || sketching;
-  const attachedKey = JSON.stringify([referenceIds, sketching]);
   const written = Boolean(text.trim());
-  const open = written || asked || (attached && dismissed !== attachedKey);
-  // Put away, it stays away only while what it would carry stays as it was: any change ends that.
-  useEffect(() => { setDismissed(current => (current !== null && current !== attachedKey ? null : current)); }, [attachedKey]);
+  const open = written || attached;
 
   // The person's presses: a stroke is under way while one is down, and a pick follows one in this view.
   const pressed = useRef(false);
@@ -121,15 +113,16 @@ export default function QuickEdit({ resource, references = EMPTY, sketch = null,
     focus();
     setTimeout(focus, 0);
   }, []);
-  const wasOpen = useRef(open);
-  const askedNow = useRef(false);
+  const referenceKey = referenceIds.join("\n");
+  const seen = useRef({ referenceKey, sketching });
   useEffect(() => {
-    const opened = open && !wasOpen.current;
-    wasOpen.current = open;
-    if (!opened) return undefined;
-    if (askedNow.current) { askedNow.current = false; takeKeyboard(); return undefined; }
+    const before = seen.current;
+    seen.current = { referenceKey, sketching };
+    const picked = referenceIds.length > 0 && referenceKey !== before.referenceKey;
+    const inked = sketching && !before.sketching;
+    if (!picked && !inked) return undefined;
     // Ink is only ever the person's; a selection is theirs when it follows their press.
-    if (!sketching && performance.now() - lastPress.current >= PICK_MS) return undefined;
+    if (!inked && performance.now() - lastPress.current >= PICK_MS) return undefined;
     // A sketch opens it mid-stroke; the keyboard waits for the pen to lift.
     if (pressed.current) {
       const lifted = () => takeKeyboard();
@@ -138,20 +131,15 @@ export default function QuickEdit({ resource, references = EMPTY, sketch = null,
     }
     takeKeyboard();
     return undefined;
-  }, [open, sketching, takeKeyboard]);
-
-  useEffect(() => {
-    if (!done) return undefined;
-    const timer = setTimeout(() => setDone(false), DONE_MS);
-    return () => clearTimeout(timer);
-  }, [done]);
+  }, [referenceKey, sketching, takeKeyboard]);
 
   const canQueue = destination.kind === "composer" && destination.available;
   const canSend = typeof host.promptContext.send === "function";
   const spell = referencePath || (path => path);
   const ready = written && !pending && !disabled;
 
-  const putAway = () => { setText(""); setError(""); setAsked(false); setDismissed(attachedKey); };
+  // The note, and everything it would carry: the box goes with them.
+  const clearAll = () => { setText(""); setError(""); onClear?.(); };
   // Everything happens inside the press: the host binds its destination (and the clipboard its
   // write) before the picture has finished encoding.
   const run = action => {
@@ -174,8 +162,7 @@ export default function QuickEdit({ resource, references = EMPTY, sketch = null,
     Promise.resolve(outcome).then(result => {
       const message = failure(result);
       if (message) throw new Error(message);
-      putAway();
-      setDone(true);
+      clearAll();
     }).catch(caught => setError(caught instanceof Error ? caught.message : String(caught)))
       .finally(() => setPending(""));
   };
@@ -200,7 +187,7 @@ export default function QuickEdit({ resource, references = EMPTY, sketch = null,
       event.preventDefault();
       target.blur();
       target.closest("[data-cad-surface]")?.focus({ preventScroll: true });
-      if (!written) { putAway(); onEscape?.(); }
+      if (!written) onEscape?.();
     }
   };
 
@@ -227,7 +214,7 @@ export default function QuickEdit({ resource, references = EMPTY, sketch = null,
   };
 
   const referenceCount = referenceIds.length;
-  return <div ref={root} className={cn("pointer-events-none flex flex-col items-end", className)} style={style} data-quick-edit="">
+  return <div ref={root} className={cn("pointer-events-none flex-col items-end", hidden ? "hidden" : "flex", className)} style={style} data-quick-edit="">
     {open ? <section ref={box} aria-label="Quick Edit" data-quick-edit-box=""
       style={size ? { width: size.width } : undefined}
       // A narrow viewer (a phone) gets it across its whole width, over the tool stack rather than beside it.
@@ -245,7 +232,7 @@ export default function QuickEdit({ resource, references = EMPTY, sketch = null,
           {referenceCount && sketching ? <span aria-hidden="true">·</span> : null}
           {sketching ? <span data-quick-edit-chip="sketch">drawing</span> : null}
         </p>
-        <button type="button" aria-label="Close Quick Edit" className={TOOL_PANEL_BUTTON_CLASS} onClick={putAway}>
+        <button type="button" aria-label="Close Quick Edit" className={TOOL_PANEL_BUTTON_CLASS} onClick={clearAll}>
           <X className="size-3" aria-hidden="true" />
         </button>
       </div>
@@ -274,10 +261,6 @@ export default function QuickEdit({ resource, references = EMPTY, sketch = null,
         className="group/resize absolute bottom-0 left-0 flex size-3.5 cursor-nesw-resize touch-none items-end justify-start p-0.5 @max-md/cad-viewport:hidden">
         <svg viewBox="0 0 8 8" className="size-2 text-muted-foreground/50 group-hover/resize:text-muted-foreground"><path d="M1 2L6 7M1 5L3 7" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" fill="none" /></svg>
       </div>
-    </section> : <div role="toolbar" aria-label="Quick Edit" className={cn("pointer-events-auto inline-flex rounded-md p-1", FLOATING_CHROME_SURFACE_CLASS)}>
-      <ToolbarButton label="Quick Edit" disabled={disabled} onClick={() => { askedNow.current = true; setAsked(true); setDismissed(null); }}>
-        {done ? <Check className="size-3.5" aria-hidden="true" /> : <MessageCircle className="size-3.5" aria-hidden="true" />}
-      </ToolbarButton>
-    </div>}
+    </section> : null}
   </div>;
 }

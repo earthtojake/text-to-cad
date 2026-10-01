@@ -51,10 +51,9 @@ none.
   exactly the height the stack may take: it stops 8px above the view actions, so
   it never runs under the cube, and while the panels fit only a panel's inner
   body scrolls.
-- **Quick Edit** at top-right, 8px in: a standalone toolbar on the strip's
-  surface with one button, which becomes the box of the note a person writes to
-  their agent (see [Quick Edit](#quick-edit)). The rest of the right side of the
-  view is clear.
+- **Quick Edit** at top-right, 8px in, a STEP file's: the box of the note a person
+  writes to their agent, there only while something is picked or drawn (see
+  [Quick Edit](#quick-edit)). The rest of the right side of the view is clear.
 - **View cube** at bottom-left, 2px in, in a 6rem area: enlarged
   face/edge/corner hit areas and neutral hover and XYZ guides. Preview omits it.
 - **View actions** directly on top of the cube, centred on it, a 2px gap between
@@ -85,7 +84,7 @@ to the shared shell; no host or file-format branch belongs in the button.
 | STEP | Select, Position (movable joints only), Draw, Measure, Explode (two or more parts), Clip |
 | URDF / SRDF / SDF | Select, Position (posable joints only) |
 | GLB / STL / 3MF | none |
-| DXF | none: a 2D canvas, with Quick Edit; a clipboard destination's navigation snapshot |
+| DXF | none: a 2D canvas; a clipboard destination's navigation snapshot |
 
 There is no separator or activity dot. There is no Animate tool: routines play in
 [preview](#camera-animation-and-preview). Display is not a tool: every 3D
@@ -468,12 +467,13 @@ Clearing the selection or leaving isolation never leaves a stale Copy Reference.
 
 ## Quick Edit
 
-Quick Edit is a person's note to their agent about the file on screen, and the one
-way the viewer hands it over. At the viewport's top-right, 8px in, it is a standalone
-toolbar on the tool strip's surface with one button: a speech bubble, named and hinted
-"Quick Edit". Opened, the button becomes the box, in the button's place: there is
-never a button beside it. Every 3D file has it, and so has a DXF; a compact host gets
-none, and preview puts it away with the tools.
+Quick Edit is a person's note to their agent about the STEP file on screen, and the
+one way the viewer hands it over: a box at the viewport's top-right, 8px in, on the
+floating surface. It is there only while it has something to carry or a note to keep:
+nothing stands in for it otherwise, not even a button. It is a STEP file's alone,
+since only a STEP has picks and sketches to carry; a compact host gets none, and
+preview puts it away with the tools. While the view loads it is out of sight, its note
+and its state kept.
 
 The box is 15rem wide unless the person has sized it (its bottom-left corner drags
 it wider to the left and its note taller; the size holds from file to file). Its
@@ -486,14 +486,16 @@ the keyboard, and the buttons at its bottom-right.
 
 While the note is empty the box follows what it would carry: it opens when something
 is picked or sketched, and closes when that goes. A written note keeps it open whatever
-is picked. The X clears the note and puts the box away until what is picked or
-sketched changes; Escape in an empty box does the same and is the viewer's Escape too
-(clearing the selection). Pressed with nothing picked, the button opens it.
+is picked, even with nothing picked or sketched, until the X. The X clears everything:
+the note, the selection (as a press on the model's background does) and the sketch, so
+the box goes. A note that has gone (Copy Prompt, Queue, Send) clears the same way.
+Escape in an empty box is the viewer's Escape (clearing the selection, and so the box);
+in a box with a note it only hands the keyboard back to the model.
 
-Opening takes the keyboard when the opening is the person's: their pick (right after
-their primary press in this view), their first stroke of a sketch (once the pen
-lifts), or its button. A selection an agent or host makes through the live
-controller (`select`) opens it without taking the keyboard.
+The person's picks put the keyboard in the note, each one (a pick right after their
+primary press in this view), and so does a sketch's first stroke once the pen lifts. A
+selection an agent or host makes through the live controller (`select`) opens it without
+taking the keyboard.
 
 The buttons, round icon buttons, left to right, are only those the host can carry
 out, and the rightmost is the primary one, filled, which Enter presses (Shift+Enter
@@ -507,8 +509,8 @@ is a new line):
 - **Send** (up arrow), where the host can post a message: the note goes now, as the
   person's message.
 
-Each clears the note and closes the box once it has gone, and the button shows a
-tick for a moment; a failure keeps the note and says why in the box. The message is
+Each clears the note and closes the box once it has gone; a failure keeps the note
+and says why in the box. The message is
 one format, sent, queued or copied: what the person wrote; then `File: <path>`; then
 `References:` and one reference per line; then `Sketch: <path>` when the picture
 travels as a file (a picture sent beside the text is not named).

@@ -171,7 +171,7 @@ test('a static GLB opens on its native scene with no tools: display settings, or
   // Nothing of a GLB picks, measures, poses or is drawn on: the viewport simply
   // orbits, pans and zooms, with no strip over it.
   await noTools(pane);
-  assert.equal(await pane.getByRole('button', { name: 'Quick Edit', exact: true }).count(), 1, 'a model without selection still takes a note to the agent');
+  assert.equal(await pane.locator('[data-quick-edit]').count(), 0, 'Quick Edit is a STEP file\'s: a GLB has nothing to pick');
 
   // A GLB has no panel of its own: its only settings are Display's, and Display is never
   // where a file opens. So it opens with the column shut and the model given the room.

@@ -28,7 +28,6 @@ const INSET = `${VIEWPORT_INSET_PX}px`;
 const TOOLBAR_POSITION = Object.freeze({ top: INSET, left: INSET, bottom: VIEWPORT_STACK_BOTTOM, maxWidth: "calc(100% - 3.5rem)" });
 const QUICK_EDIT_POSITION = Object.freeze({ top: INSET, right: INSET, left: INSET });
 const MODEL_UPDATE_STATUS = Object.freeze({ pending: true, label: "Updating model…" });
-const EMPTY_REFERENCES = Object.freeze([]);
 // The view's actions, on top of the cube, are transparent over the model.
 const BAR_BUTTON_CLASS = "size-5 bg-transparent hover:bg-transparent dark:hover:bg-transparent";
 
@@ -63,7 +62,10 @@ const BAR_BUTTON_CLASS = "size-5 bg-transparent hover:bg-transparent dark:hover:
  *   `playback`: the playbar runtime, when the renderer hands the shell one of its own rather
  *   than through `useRendererShell`'s `animation`. Routines play in preview alone.
  *   `references`: what is selected, in the prompt grammar — the references a Quick Edit attaches
- *   (`kit/tools/quick-edit/QuickEdit.jsx`), counted in its header; the file itself always goes.
+ *   (`kit/tools/quick-edit/QuickEdit.jsx`), counted in its header; the file itself always goes. A
+ *   renderer that hands none has no Quick Edit: it is a STEP file's, whose picks and sketches it
+ *   carries. `onClearReferences`: the renderer's clear of that selection, as a press on the
+ *   background makes it; Quick Edit's X calls it, and clears Draw's ink too.
  *   `copySelection`: the viewer's copy key (⌘C / Ctrl+C) while the renderer's own tool is up and
  *   something is selected (Draw's copies the view with its ink); null when there is nothing to copy.
  *   `contextMenuItems`: what THIS renderer offers on a secondary tap over the canvas; the
@@ -84,7 +86,7 @@ const BAR_BUTTON_CLASS = "size-5 bg-transparent hover:bg-transparent dark:hover:
  *   it. The frame focuses itself on such a press whatever the renderer does; this is for a renderer
  *   that also has something to put down when the person reaches for the model.
  */
-export default function RendererShell({ shell, tools, playback = null, toolPanels = null, references = EMPTY_REFERENCES, copySelection = null, contextMenuItems = null,
+export default function RendererShell({ shell, tools, playback = null, toolPanels = null, references = null, onClearReferences = null, copySelection = null, contextMenuItems = null,
   onContextMenuOpenChange = null, viewportOverlay = null,
   frameProvider = null, onCanvasPointerDown = null }) {
   const frame = shell.frame;
@@ -169,6 +171,8 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
   };
   frame.copyActionRef.current = copyAction;
   // Quick Edit's sketch: while Draw is up, and the view with its ink once there is some.
+  // Quick Edit's X: nothing picked and nothing drawn, as the person would clear each.
+  const clearQuickEdit = () => { onClearReferences?.(); if (frame.drawing.hasContent) frame.drawing.clear(); };
   const sketch = useMemo(() => frame.drawToolActive ? { ink: frame.drawing.hasContent, capture: frame.captureView } : null,
     [frame.drawToolActive, frame.drawing.hasContent, frame.captureView]);
   // The renderer's overlay and the shell's own layers share one viewport context.
@@ -280,9 +284,10 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
                 <FloatingToolBar tools={tools} />
                 <ToolStack hidden={previewing} mobile={mobile} layout={frame.toolStack} onLayoutChange={frame.changeToolStack}>{shellPanels}{toolPanels}</ToolStack>
               </div>}
-              {toolsHidden ? null : <QuickEdit key={frame.modelKey} className="absolute z-30" style={QUICK_EDIT_POSITION}
+              {/* Hidden, not unmounted, while the view loads: a note being written outlives a reload of the model. */}
+              {compact || !references ? null : <QuickEdit key={frame.modelKey} className="absolute z-30" style={QUICK_EDIT_POSITION} hidden={chromeHidden}
                 resource={frame.resource} references={references} sketch={sketch} referencePath={frame.referencePath}
-                onCopy={copyAction} onEscape={frame.escape} disabled={viewerLoading || !scene}
+                onCopy={copyAction} onEscape={frame.escape} onClear={clearQuickEdit} disabled={viewerLoading || !scene}
                 size={quickEditSize} onResize={setQuickEditSize} />}
 
               </PreviewChrome>

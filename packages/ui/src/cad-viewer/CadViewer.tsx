@@ -4,7 +4,7 @@ import type { CadWorkspaceService } from '@text-to-cad/core/client';
 import { FileViewer } from '../file-viewer/FileViewer.js';
 import { EmptyCadBackdrop } from '../file-viewer/empty.js';
 import { MissingFileAlert, ViewerLoadingOverlay } from '../file-viewer/presentation.js';
-import { EmptyState } from '../file-viewer/navigation/index.js';
+import { EmptyState, FILE_PANEL_TREE } from '../file-viewer/navigation/index.js';
 import type { ViewerHost } from '../host/types.js';
 import type { LiveRegistry } from '../host/liveRegistry.js';
 import { ModelLibrary, type LibraryModel, type ModelLibrarySource, type ModelPictureSource } from '../library/ModelLibrary.js';
@@ -145,13 +145,16 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
   const colorScheme = host.environment.colorScheme;
   const layout = settings.library.layout;
   const changeLayout = useCallback((next: LibraryLayout) => preferences.update({ library: { layout: next } }), [preferences]);
+  // The empty library's card opens the explorer, where the root has one.
+  const browsable = typeof host.files.list === 'function';
+  const browse = useMemo(() => (browsable ? () => setPanel(FILE_PANEL_TREE) : undefined), [browsable, setPanel]);
   const presentation = useMemo(() => ({
-    home: <ModelLibrary library={library} layout={layout} onLayoutChange={changeLayout} picture={picture} />,
+    home: <ModelLibrary library={library} layout={layout} onLayoutChange={changeLayout} picture={picture} browse={browse} />,
     loading: <div className="relative h-full"><ViewerLoadingOverlay viewerLoading /></div>,
     error: () => <div className="relative h-full">{catalog.error
       ? <EmptyState icon={FolderX} title="Could not read this folder" description={catalog.error} tone="warn" />
       : <EmptyCadBackdrop colorScheme={colorScheme}><MissingFileAlert missingFileRef={file} rootPath={rootPath} /></EmptyCadBackdrop>}</div>,
-  }), [library, colorScheme, layout, changeLayout, catalog.error, file, rootPath, picture]);
+  }), [library, colorScheme, layout, changeLayout, catalog.error, file, rootPath, picture, browse]);
   return <>
     <FileViewer file={file || null} host={viewerHost} renderers={renderers} state={state} onStateChange={onStateChange}
       displayActions={displayActions} navigationPath={navigationPath} onError={onError} presentation={presentation} />

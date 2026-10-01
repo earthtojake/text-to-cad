@@ -58,7 +58,7 @@ its settings are a popover from a button beside Preview (`kit/shell/DisplayPopov
 builds its own list from `shell.tools.own(...)`, adding `shell.tools.draw` where it offers
 Draw; STEP's is in `step/StepSurface.jsx`. There is no Animate tool: routines play in
 preview, whose Playback settings and playbar the shell draws for any file with
-routines. Preview is not a tool: it is a button among the view actions on top of the cube. Nor is Quick Edit: it is the top-right toolbar's one button. `createToolModes({ defaultMode, modes })`
+routines. Preview is not a tool: it is a button among the view actions on top of the cube. Nor is Quick Edit: it is a STEP file's box at the top-right, there while something is picked or drawn. `createToolModes({ defaultMode, modes })`
 answers what a press does (`next`), what a saved tab may record (`persisted`) and
 which tool a file opens in (`restore`); the STEP declaration is
 `CAD_TOOL_MODES` in `workbench/constants.js`. The playbar follows the clock on
@@ -266,8 +266,7 @@ renderer does not match one.
 It is **not on the shell**, and that is the whole design: a DXF is a finished 2D
 document, so the pane is a canvas and the drawing is painted on it. No three.js, no
 viewport, no scene, no panel of its own, no Display settings, no tools, no toolbar, no
-preview: only Quick Edit, the note to the agent that every view offers, at its
-top-right. The
+preview. The
 questions the old Material/Bends/Layers tabs answered were about a sheet-metal part
 the viewer was inventing from the file; a drawing is not that.
 
@@ -619,9 +618,9 @@ controls use `host.clipboard`. The viewport only produces screenshot pixels.
 The port and app adapters own delivery and return an acknowledged outcome.
 
 Quick Edit (`kit/tools/quick-edit/QuickEdit.jsx`) is the shared note to the agent:
-a standalone toolbar at the top-right with one button, which becomes its box, and
-which `RendererShell` mounts for STEP, GLB, mesh and robot files and the DXF renderer
-mounts itself (a compact host gets none). Its box, header and buttons are the design system's
+a box at the top-right, there only while it has something to carry, which
+`RendererShell` mounts for a renderer that hands it `references` — STEP alone, the one
+format with picks and sketches (a compact host gets none). Its box, header and buttons are the design system's
 ([Quick Edit](settings-ui.md#quick-edit)); what it can do follows the host
 ([prompt handoff](viewer-host.md#prompt-handoff)), never an app. The renderer hands
 the shell what is selected as `references`, in the prompt grammar (STEP's, under
@@ -1464,7 +1463,7 @@ opened file with the mesh loader's own `resolveLocalAssetFileRef` (an SRDF's
 URDF is always beside it). A `package://` reference, or one that leaves the
 served root, has no path here and stays plain text. A parent or child link name
 selects that link in the tree and the viewport.
-There is no copy action: robot formats have no reference grammar to deliver, so a robot's Quick Edit carries the file and no references.
+There is no copy action and no Quick Edit: robot formats have no reference grammar to deliver.
 
 
 ### Tool panels and dark surfaces

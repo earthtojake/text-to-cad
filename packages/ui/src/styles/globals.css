@@ -55,14 +55,16 @@
 .cad-library { width: 100%; height: 100%; background: var(--background); --cad-library-card: var(--card); --cad-library-line: var(--border); }
 .dark .cad-library { --cad-library-card: color-mix(in oklab, var(--background) 88%, white); --cad-library-line: oklch(1 0 0 / 8%); }
 .cad-library-content { box-sizing: border-box; width: 100%; max-width: 1128px; margin: 0 auto; padding: 44px 24px calc(40px + var(--cad-host-bottom-inset, 0px)); }
-.cad-library-wordmark { display: block; width: auto; height: 44px; margin: 0 auto 44px; user-select: none; -webkit-user-drag: none; }
+.cad-library-wordmark { display: block; width: auto; height: 64px; margin: 0 auto; user-select: none; -webkit-user-drag: none; }
+.cad-library-tagline { margin: 14px 0 44px; text-align: center; font-size: var(--text-3xl, 1.875rem); line-height: 1.2; font-weight: 700; letter-spacing: -0.02em; color: var(--foreground); }
 .cad-library-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
-.cad-library-heading { margin: 0; font-size: var(--text-sm, 0.875rem); line-height: 20px; font-weight: 500; color: var(--foreground); }
+.cad-library-heading { margin: 0; font-size: var(--text-base, 1rem); line-height: 24px; font-weight: 600; color: var(--foreground); }
 .cad-library-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .cad-library-search { position: relative; width: 200px; }
 .cad-library-search > svg { position: absolute; left: 10px; top: 50%; width: 14px; height: 14px; transform: translateY(-50%); color: var(--muted-foreground); pointer-events: none; }
 .cad-library-search input { padding-left: 30px; background: var(--cad-library-card); }
-.cad-library-layout { display: flex; gap: 2px; padding: 2px; border: 1px solid var(--cad-library-line); border-radius: calc(var(--radius) - 2px); background: var(--cad-library-card); }
+/* The search, the layout switch and Open stand one height: 32px. */
+.cad-library-layout { display: flex; gap: 2px; padding: 1px; border: 1px solid var(--cad-library-line); border-radius: calc(var(--radius) - 2px); background: var(--cad-library-card); }
 .cad-library-layout button { width: 28px; height: 28px; color: var(--muted-foreground); }
 .cad-library-layout button[aria-pressed=true] { background: var(--accent); color: var(--accent-foreground); }
 .cad-library-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(232px, 1fr)); gap: 20px; margin: 0; padding: 0; list-style: none; }
@@ -76,6 +78,10 @@
 .cad-library-thumbnail { display: grid; place-items: center; overflow: hidden; background: var(--cad-library-backdrop, var(--muted)); color: var(--muted-foreground); }
 .cad-library-thumbnail img { width: 100%; height: 100%; object-fit: contain; }
 .cad-library-thumbnail > svg { width: 28px; height: 28px; opacity: .7; }
+/* The empty library's one card, which opens a file: dashed, its box large. */
+.cad-library-card[data-empty] { border-style: dashed; }
+.cad-library-card[data-empty] .cad-library-thumbnail { background: transparent; }
+.cad-library-card[data-empty] .cad-library-thumbnail > svg { width: 64px; height: 64px; opacity: .55; }
 .cad-library-card .cad-library-thumbnail { width: 100%; aspect-ratio: 4 / 3; border-bottom: 1px solid var(--cad-library-line); }
 .cad-library-body { display: flex; flex-direction: column; gap: 2px; min-width: 0; padding: 10px 76px 12px 12px; }
 .cad-library-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--foreground); }

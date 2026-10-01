@@ -32,7 +32,7 @@ checked-in images and need neither Git access nor the rendering tools.
 
 # C and CAD marks
 
-`logo-c.svg` (the navbar's home mark) and `logo-cad.svg` (the home page's wordmark)
+`logo-c.svg` (the navbar's home mark) and `logo-cad.svg` (the home page's and the version menu's wordmark)
 are the blue relief marks `scripts/brand/generate-logos.mjs` generates for the docs
 site's brand folder; the generator writes these two copies too, so every app draws
 the same marks from this package. Regenerate them with the brand recipe rather than

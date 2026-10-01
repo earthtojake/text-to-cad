@@ -143,25 +143,18 @@ it('a DXF has no panels of its own, no tools and no preview', async () => {
     expect(inPane.queryByRole('button', { name }), name).toBeNull();
   }
   expect(inPane.queryAllByRole('tab')).toHaveLength(0);
-  // What a drawing offers a composer: Quick Edit, a note about the file, and no snapshot.
+  // A composer gets no snapshot from a drawing, and a drawing has nothing to pick: no Quick Edit,
+  // which is a STEP file's.
   expect(inPane.queryByRole('button', { name: 'Take snapshot' })).toBeNull();
   expect(pane.querySelector('[data-viewport-bottom-actions]')).toBeNull();
-  fireEvent.click(await waitFor(() => inPane.getByRole('button', { name: 'Quick Edit' })));
-  const note = inPane.getByRole('textbox', { name: 'Describe your changes' });
-  fireEvent.change(note, { target: { value: 'Widen the slot.' } });
-  fireEvent.click(inPane.getByRole('button', { name: 'Queue' }));
-  // The note and the file, through the host's prompt destination: a drawing's references are the file.
-  await waitFor(() => expect(delivered).toHaveLength(1));
-  expect(delivered[0].parts).toEqual(['text', 'reference']);
+  expect(pane.querySelector('[data-quick-edit]')).toBeNull();
+  expect(delivered).toHaveLength(0);
   dispose();
 });
 
-it('a clipboard DXF retains the snapshot action, and its Quick Edit copies a prompt', async () => {
+it('a clipboard DXF retains the snapshot action', async () => {
   const { pane, delivered, dispose } = await openDrawing('clipboard');
-  fireEvent.click(await waitFor(() => within(pane).getByRole('button', { name: 'Quick Edit' })));
-  expect(within(pane).getByRole('button', { name: 'Copy Prompt' })).toBeTruthy();
-  expect(within(pane).queryByRole('button', { name: 'Queue' })).toBeNull();
-  fireEvent.click(within(pane).getByRole('button', { name: 'Take snapshot' }));
+  fireEvent.click(await waitFor(() => within(pane).getByRole('button', { name: 'Take snapshot' })));
   await waitFor(() => expect(delivered).toHaveLength(1));
   expect(delivered[0].type).toBe('image/png');
   dispose();

@@ -23,8 +23,21 @@ it('offers Open only where the host has a chooser, and opens and pins through th
   const pick = vi.fn(async () => {});
   render(<ModelLibrary library={library([], { pick })} />);
   await act(async () => { fireEvent.click(await screen.findByRole('button', { name: 'Open', exact: true })); });
-  expect(pick).toHaveBeenCalled();
-  expect(screen.getByText('Open a CAD file to see it here.')).toBeTruthy();
+  expect(pick).toHaveBeenCalledTimes(1);
+  // Empty, the library is one card that opens a file: the host's explorer where it has one, else its chooser.
+  const card = await screen.findByRole('button', { name: 'Open File' });
+  await act(async () => { fireEvent.click(card); });
+  expect(pick).toHaveBeenCalledTimes(2);
+  cleanup();
+  const browse = vi.fn();
+  render(<ModelLibrary library={library([], { pick })} browse={browse} />);
+  const browsing = await screen.findByRole('button', { name: 'Open File' });
+  await act(async () => { fireEvent.click(browsing); });
+  expect([browse.mock.calls.length, pick.mock.calls.length]).toEqual([1, 2]);
+  cleanup();
+  // With neither, it says how a file gets here.
+  render(<ModelLibrary library={library([])} />);
+  expect(await screen.findByText('Open a CAD file to see it here.')).toBeTruthy();
   cleanup();
 
   const inPlace = library([model('a.step'), model('b.stl', { missing: true })]);

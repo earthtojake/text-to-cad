@@ -120,6 +120,9 @@ function HarnessSurface({ view, data }) {
     setSettleLabel(String(settles.current));
   }, []);
   const [picked, setPicked] = useState("");
+  // The noted press is the harness's selection: the reference a Quick Edit carries.
+  const references = useMemo(() => (picked ? [{ resource, target: { kind: "cad-selector", selectors: [`press-${picked.replace(",", "-")}`] } }] : []),
+    [picked, resource]);
   const [menuUp, setMenuUp] = useState(false);
   const [shadowReception, setShadowReception] = useState("");
   scene.onShadowReception = setShadowReception;
@@ -189,7 +192,7 @@ function HarnessSurface({ view, data }) {
   </>;
 
   return <RendererShell shell={shell} tools={withPanel ? [shell.tools.draw, keepTool, poseTool] : [shell.tools.draw]}
-    toolPanels={toolPanels}
+    toolPanels={toolPanels} references={references} onClearReferences={() => setPicked("")}
     contextMenuItems={contextMenuItems} onContextMenuOpenChange={setMenuUp}
     frameProvider={frame => <HarnessFrameContext.Provider value={`frame:${stage}`}>{frame}</HarnessFrameContext.Provider>}
     onCanvasPointerDown={() => setPutDown(`put down @${stage}`)}

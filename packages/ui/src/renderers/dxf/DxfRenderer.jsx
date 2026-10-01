@@ -11,8 +11,6 @@ import { useWorkspaceDocument } from "../workspace/useWorkspaceDocument.js";
 import { drawingLoadAlert, useDrawingPayload } from "./useDrawingPayload.js";
 import { useDrawingView } from "./useDrawingView.js";
 import { readFileView, writeFileView } from "../kit/shell/fileView.js";
-import QuickEdit from "../kit/tools/quick-edit/QuickEdit.jsx";
-import { VIEWPORT_INSET_PX } from "../kit/shell/viewportLayout.js";
 import { drawingTransformCamera, readDrawingTransform } from "./drawingTransform.js";
 
 /**
@@ -184,9 +182,6 @@ function DxfSurface({ view, data }) {
         <ViewerLoadingOverlay loading={{ opening: payload.loading && !alert, progress: { label: "Reading drawing" } }}
           operationKey={file} />
         <ViewerAlertCard alert={alert || (actionError ? { severity: "error", kind: "status", blocking: false, title: "Couldn’t capture the drawing", message: actionError } : null)} hasContent={Boolean(payload.drawing)} onReload={view.reload} />
-        {ready && !view.appearance?.compact ? <QuickEdit className="absolute z-30"
-          style={{ top: VIEWPORT_INSET_PX, right: VIEWPORT_INSET_PX, left: VIEWPORT_INSET_PX }}
-          resource={workspace.resource} referencePath={path => (view.source?.referencePath ? view.source.referencePath(path) : path)} /> : null}
       </div>
     </div>
   );

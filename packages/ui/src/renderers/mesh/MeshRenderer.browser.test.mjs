@@ -170,7 +170,7 @@ test('an STL opens as one mesh with no tools: display settings, orbit, host comm
   // Nothing of a mesh picks, measures, poses, plays or is drawn on: the viewport
   // simply orbits, pans and zooms, with no strip over it.
   await noTools(pane);
-  assert.equal(await pane.getByRole('button', { name: 'Quick Edit', exact: true }).count(), 1, 'a model without selection still takes a note to the agent');
+  assert.equal(await pane.locator('[data-quick-edit]').count(), 0, 'Quick Edit is a STEP file\'s: a mesh has nothing to pick');
 
   // A mesh has no panel of its own: its only settings are Display's, and Display is never
   // where a file opens. So it opens with the column shut and the model given the room.

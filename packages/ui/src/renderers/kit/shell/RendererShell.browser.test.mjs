@@ -459,39 +459,12 @@ test('a renderer says more about its load than a download: finding the file, edi
   const actionsBox = await pane.locator('[data-viewport-actions]').boundingBox();
   const cubeBox = await pane.getByLabel('View cube', { exact: true }).boundingBox();
   const stackBox = await pane.locator('[data-cad-tool-groups]').boundingBox();
-  const quickEditBox = await pane.getByRole('toolbar', { name: 'Quick Edit', exact: true }).boundingBox();
   assert.ok(cubeBox.y + cubeBox.height > frameBox.y + frameBox.height - 16 && actionsBox.y + actionsBox.height <= cubeBox.y,
     'the view cube occupies the bottom-left corner under the action buttons');
   assert.ok(Math.abs(cubeBox.x + cubeBox.width / 2 - actionsBox.x - actionsBox.width / 2) < 1,
     'the buttons are centred on top of the cube');
   assert.ok(cubeBox.x < frameBox.x + 20, 'the view cube stays against the left edge');
   assert.ok(stackBox.y + stackBox.height <= actionsBox.y, 'the tool stack stops above the buttons');
-  assert.ok(quickEditBox.x + quickEditBox.width > frameBox.x + frameBox.width - 20 && quickEditBox.y < frameBox.y + 20,
-    'Quick Edit takes the top-right corner');
-  // Its button becomes the box, in the button's place, 15rem wide; its corner sizes it.
-  await pane.getByRole('button', { name: 'Quick Edit', exact: true }).click();
-  const quickEdit = pane.getByRole('region', { name: 'Quick Edit', exact: true });
-  await quickEdit.waitFor();
-  await quickEdit.evaluate(node => Promise.all(node.getAnimations().map(animation => animation.finished)));
-  assert.equal(await pane.getByRole('toolbar', { name: 'Quick Edit', exact: true }).count(), 0, 'no button beside the box');
-  const opened = await quickEdit.boundingBox();
-  assert.ok(Math.abs(opened.x + opened.width - quickEditBox.x - quickEditBox.width) < 1 && Math.abs(opened.y - quickEditBox.y) < 1,
-    `the box takes the button's corner: ${JSON.stringify([opened, quickEditBox])}`);
-  assert.equal(Math.round(opened.width), 240);
-  const note = quickEdit.getByRole('textbox', { name: 'Describe your changes', exact: true });
-  const noteHeight = (await note.boundingBox()).height;
-  const corner = await quickEdit.locator('[data-quick-edit-resize]').boundingBox();
-  await page.mouse.move(corner.x + corner.width / 2, corner.y + corner.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(corner.x + corner.width / 2 - 60, corner.y + corner.height / 2 + 40, { steps: 4 });
-  await page.mouse.up();
-  await page.waitForFunction(width => Math.abs(document.querySelector('[data-quick-edit-box]').getBoundingClientRect().width - width) <= 1, opened.width + 60);
-  const resized = await quickEdit.boundingBox();
-  assert.ok(Math.abs(resized.width - opened.width - 60) <= 1, `dragged out 60px: ${opened.width} -> ${resized.width}`);
-  assert.ok(Math.abs((await note.boundingBox()).height - noteHeight - 40) <= 1, 'and its note 40px down');
-  assert.ok(Math.abs(resized.x + resized.width - opened.x - opened.width) < 1, 'still hanging from the same corner');
-  await quickEdit.getByRole('button', { name: 'Close Quick Edit', exact: true }).click();
-  await quickEdit.waitFor({ state: 'detached' });
 
   // FINDING: the wait before the file is even located covers the viewport, and says
   // so as such rather than as a phase of reading it.
@@ -582,5 +555,32 @@ test('a renderer says more about its load than a download: finding the file, edi
   await page.waitForFunction(() => document.querySelector('[data-harness-put-down]')?.textContent === 'put down @idle');
   // And the frame still takes focus on that same press, as it always did.
   assert.equal(await page.evaluate(() => document.activeElement?.dataset?.slot), 'cad-file-view');
+
+  // Quick Edit is nowhere until something is picked; then it takes the top-right corner, 15rem
+  // wide, and its own corner sizes it.
+  const quickEdit = pane.getByRole('region', { name: 'Quick Edit', exact: true });
+  assert.equal(await pane.locator('[data-quick-edit-box]').count(), 0, 'nothing picked: no Quick Edit, not even a button');
+  await canvasElement.click({ button: 'right', position: { x: 300, y: 200 } });
+  await page.getByRole('menuitem', { name: 'Note the press', exact: true }).click();
+  await quickEdit.waitFor();
+  await quickEdit.evaluate(node => Promise.all(node.getAnimations().map(animation => animation.finished)));
+  const opened = await quickEdit.boundingBox();
+  assert.ok(opened.x + opened.width > frameBox.x + frameBox.width - 20 && opened.y < frameBox.y + 20,
+    `Quick Edit takes the top-right corner: ${JSON.stringify([opened, frameBox])}`);
+  assert.equal(Math.round(opened.width), 240);
+  const note = quickEdit.getByRole('textbox', { name: 'Describe your changes', exact: true });
+  const noteHeight = (await note.boundingBox()).height;
+  const corner = await quickEdit.locator('[data-quick-edit-resize]').boundingBox();
+  await page.mouse.move(corner.x + corner.width / 2, corner.y + corner.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(corner.x + corner.width / 2 - 60, corner.y + corner.height / 2 + 40, { steps: 4 });
+  await page.mouse.up();
+  await page.waitForFunction(width => Math.abs(document.querySelector('[data-quick-edit-box]').getBoundingClientRect().width - width) <= 1, opened.width + 60);
+  const resized = await quickEdit.boundingBox();
+  assert.ok(Math.abs(resized.width - opened.width - 60) <= 1, `dragged out 60px: ${opened.width} -> ${resized.width}`);
+  assert.ok(Math.abs((await note.boundingBox()).height - noteHeight - 40) <= 1, 'and its note 40px down');
+  assert.ok(Math.abs(resized.x + resized.width - opened.x - opened.width) < 1, 'still hanging from the same corner');
+  await quickEdit.getByRole('button', { name: 'Close Quick Edit', exact: true }).click();
+  await quickEdit.waitFor({ state: 'detached' });
   assert.deepEqual(errors, []);
 });

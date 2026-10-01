@@ -185,14 +185,6 @@ async function open(options = {}) {
     // The page again — the same tab, for a page whose tab record is in sessionStorage.
     reload: async () => { await page.reload(); Object.assign(opened, await ready()); },
     state: () => page.evaluate(() => window.cadHarness.a.controller.readState()),
-    // A pick opens Quick Edit at the viewer's top right, over whatever of the model is there. Put
-    // away with its X, as a person reaching past it would, it stays away until what is picked changes.
-    putQuickEditAway: async () => {
-      const box = pane.getByRole('region', { name: 'Quick Edit', exact: true });
-      await box.waitFor();
-      await box.getByRole('button', { name: 'Close Quick Edit', exact: true }).click();
-      await box.waitFor({ state: 'detached' });
-    },
     display: patch => page.evaluate(next => window.cadHarness.a.controller.setDisplaySettings(next), patch),
     // Preview: its button, the play icon beside Display settings; its X back. The file's view was
     // seeded with Orbit off: a still camera, so what moves in a frame is the model.
@@ -357,7 +349,6 @@ test('Select picks parts and faces, a selection lives only under Select, and the
   const quickEdit = pane.getByRole('region', { name: 'Quick Edit', exact: true });
   await quickEdit.locator('[data-quick-edit-chip="references"]').waitFor();
   assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('aria-label')), 'Describe your changes');
-  await view.putQuickEditAway();
   await page.mouse.click(...at([10, 6, 5]));
   await page.waitForFunction(() => { const ids = window.cadHarness.a.controller.readState().selectedReferenceIds;
     return ids.length === 1 && /\.e\d+$/.test(ids[0]); });
@@ -369,8 +360,6 @@ test('Select picks parts and faces, a selection lives only under Select, and the
   assert.deepEqual(await view.stack(), ['Features']);
   await page.mouse.click(...at([6, 6, 5]));
   await page.waitForFunction(() => window.cadHarness.a.controller.readState().selectedPartIds.length === 1);
-  // A new selection brings Quick Edit back; put away, it leaves the model to the picks that follow.
-  await view.putQuickEditAway();
   assert.deepEqual((await view.state()).selectedPartIds, ['o1.1']);
   // Headed by the part's name; the id is a row, what a copy carries.
   assert.match((await reference.innerText()).replace(/\s+/g, ' '), /^base .*Type Component.*ID o1\.1.*Size 20 × 20 × 10 mm.*Color #3A6EA5/);
@@ -428,8 +417,8 @@ test('Select picks parts and faces, a selection lives only under Select, and the
   }
   await page.evaluate(() => document.documentElement.classList.remove('dark'));
   assert.doesNotMatch(await reference.innerText(), /Selection ·|references|Total/);
-  // The shift-click changed the selection, which brought Quick Edit back with both references and
-  // the keyboard; Escape in its empty box puts it away and clears the selection, as it would from the model.
+  // Quick Edit counts both references, and the person's pick put the keyboard in its note; Escape in
+  // its empty box clears the selection, as it would from the model, and the box goes with it.
   await quickEdit.waitFor();
   assert.equal(await quickEdit.locator('[data-quick-edit-chip="references"]').innerText(), '2 refs');
   assert.equal(await page.evaluate(() => document.activeElement?.getAttribute('aria-label')), 'Describe your changes');
@@ -652,7 +641,6 @@ test('the context menu\'s Zoom to selection frames the selection', async () => {
   const fitted = armWidth(await frameWhen(view, shot => armWidth(shot) > 0, 'drew the arm'));
   await pane.getByRole('button', { name: 'Select arm', exact: true }).click();
   await page.waitForFunction(() => window.cadHarness.a.controller.readState().selectedPartIds.join() === 'o1.2');
-  await view.putQuickEditAway();
   await page.mouse.click(...at([6, 6, 5]), { button: 'right' });
   await page.getByRole('menu').waitFor();
   assert.equal(await menuItem('Zoom to selection').getAttribute('aria-disabled'), null, 'a selection enables it');
@@ -1159,7 +1147,6 @@ test('a click selects at once, and a double-click ends where it did when a click
   await page.waitForFunction(() => window.__selectedByProbe !== null);
   assert.equal(await page.evaluate(() => window.__selectedByProbe), true, 'the arm is selected before any double-click window could close');
   assert.deepEqual(await selection(), { parts: ['o1.2'], refs: [], isolated: [] });
-  await view.putQuickEditAway();
   // The Reference panel's Copy, at its foot: the selection's reference.
   await view.pane.getByRole('region', { name: 'Reference details', exact: true }).getByRole('button', { name: 'Copy', exact: true }).click();
   await page.waitForFunction(() => window.__clipboardWrites.length === 1);

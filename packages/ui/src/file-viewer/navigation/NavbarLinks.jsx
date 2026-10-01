@@ -7,6 +7,7 @@ import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 import { cn } from "@text-to-cad/ui/utils";
 
 import { DiscordMark, GitHubMark } from "./brandMarks.jsx";
+import wordmark from "../../assets/logo-cad.svg";
 
 /**
  * The navbar's right end: the version, then GitHub and Discord as icons — the same three in every
@@ -106,7 +107,7 @@ function VersionMenu({ links, clipboard, onFollow }) {
       <DropdownMenuContent align="end" sideOffset={6}
         className="w-fit max-w-[calc(100vw-1rem)] border border-border bg-popover p-2 text-left text-popover-foreground shadow-lg shadow-black/10">
         <div className="inline-flex max-w-full flex-col gap-3">
-          <div className="px-0.5 text-sm font-medium leading-none text-foreground">text-to-cad</div>
+          <img src={wordmark} alt="CAD" className="h-5 w-auto self-start px-0.5 select-none" draggable={false} />
           {update ? (
             <div className="grid w-full min-w-0 grid-cols-2 gap-3">
               <VersionRow label="Current Version" version={version} />

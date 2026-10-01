@@ -198,17 +198,14 @@ it('while the model loads the viewer shows none of its own chrome, and all of it
   const stage = (name: string) => act(() => { fireEvent.click(document.querySelector(`[data-harness-stage="${name}"]`)!); });
   expect(screen.getByRole('group', { name: 'Interaction tools' })).toBeTruthy();
   expect(barButtons()).toEqual(['Display settings', 'Reset view', 'Preview']);
-  expect(screen.getByRole('toolbar', { name: 'Quick Edit' })).toBeTruthy();
   stage('finding');
   expect(screen.queryByRole('group', { name: 'Interaction tools' })).toBeNull();
   expect(document.querySelector('[data-cad-tool-stack]')).toBeNull();
   expect(barButtons()).toEqual([]);
-  expect(screen.queryByRole('toolbar', { name: 'Quick Edit' })).toBeNull();
   expect(viewportProps.current.isLoading).toBe(true);
   stage('idle');
   expect(screen.getByRole('group', { name: 'Interaction tools' })).toBeTruthy();
   expect(barButtons()).toEqual(['Display settings', 'Reset view', 'Preview']);
-  expect(screen.getByRole('toolbar', { name: 'Quick Edit' })).toBeTruthy();
 });
 
 it('a host showing the view small gets the model alone: no tools, no view actions, no Quick Edit, no cube', () => {
@@ -216,7 +213,7 @@ it('a host showing the view small gets the model alone: no tools, no view action
   expect(screen.queryByRole('group', { name: 'Interaction tools' })).toBeNull();
   expect(document.querySelector('[data-cad-tool-stack]')).toBeNull();
   expect(barButtons()).toEqual([]);
-  expect(screen.queryByRole('toolbar', { name: 'Quick Edit' })).toBeNull();
+  expect(document.querySelector('[data-quick-edit]')).toBeNull();
   expect(viewportProps.current.viewCube).toBe(false);
 });
 

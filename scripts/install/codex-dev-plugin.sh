@@ -106,6 +106,8 @@ cp "$REPO_ROOT/apps/mcp/dist/index.html" "$APP_DIR/index.html"
 rm -rf "$PLUGIN_DIR"
 mkdir -p "$PLUGIN_DIR/.codex-plugin" "$DEV_ROOT/.agents/plugins"
 rsync -a --delete --exclude '__pycache__' --exclude '*.pyc' "$REPO_ROOT/skills/" "$PLUGIN_DIR/skills/"
+# The manifest's own files (its icons), beside the manifest written below.
+find "$REPO_ROOT/.codex-plugin" -maxdepth 1 -type f ! -name plugin.json -exec cp {} "$PLUGIN_DIR/.codex-plugin/" \;
 python3 - "$REPO_ROOT" "$DEV_ROOT" "$PLUGIN_DIR" "$MARKETPLACE" "$PYTHON" "$VERSION" "$APP_DIR" <<'EOF'
 import json, pathlib, sys
 repo, dev, plugin = (pathlib.Path(value) for value in sys.argv[1:4])

@@ -3276,7 +3276,7 @@ function StepSurfaceBody({ view, data }) {
   });
 
   return <RendererShell shell={shell} tools={tools} playback={viewportAnimation} toolPanels={<>{stepPanels}{modelEffects.panels}</>}
-    references={selectionActionVisible ? promptSelection : EMPTY_LIST} copySelection={copySelection}
+    references={selectionActionVisible ? promptSelection : EMPTY_LIST} onClearReferences={clearAssemblySelection} copySelection={copySelection}
     contextMenuItems={selectionToolActive
       ? press => viewportContextMenuItems(press, pickAtRef.current?.(press.clientX, press.clientY) || "") : null}
     onContextMenuOpenChange={handleViewportContextMenuOpenChange}
