@@ -2,6 +2,19 @@ import { STEP_MODEL_ROOT_ID, stepTreeNodeIsTopology, stepTreeNodeLeafPartIds, st
 import { stepProductName } from '@text-to-cad/core/lib/step/productName.js';
 import { unique } from './modelingGeometry.js';
 
+/**
+ * What the Features panel says when the model's geometry could not be read: the loader's own
+ * words when they are one short sentence, otherwise a plain line. A raw diagnostic (a runtime
+ * traceback, a multi-line log) belongs to the viewport's card — its Details and Copy details —
+ * never to a narrow panel.
+ */
+export function modelingErrorText(error) {
+  const text = String(error || '').trim();
+  if (!text) return '';
+  const raw = text.includes('\n') || text.length > 120 || /Traceback|\bFile "|Error:|Exception/.test(text);
+  return raw ? 'The model’s features couldn’t be read.' : text;
+}
+
 const folders = {boss:'Bosses',pocket:'Pockets',hole:'Bores',cut:'Cuts',round:'Edge blends'};
 
 // Structural wrappers add no choice when there is only one. Keep them in the

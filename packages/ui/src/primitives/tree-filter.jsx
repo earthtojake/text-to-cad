@@ -7,9 +7,10 @@ import { cn } from '@text-to-cad/ui/utils';
  * owns its corpus, ranking and keyboard. `yieldWhileTyping`: the `trailing` controls step aside
  * while the box has focus, so the whole row is the box (a narrow panel's filter). `dense`: a
  * tool-stack panel's first row — a panel heading's 28px and 11px text, the box close to its walls,
- * so its buttons sit exactly where a heading's do.
+ * so its buttons sit exactly where a heading's do. `inputProps`: the box's own ARIA, for a caller
+ * whose filter is a combobox over its list.
  */
-export function TreeFilterInput({ label, placeholder, value, onChange, onKeyDown, trailing, yieldWhileTyping = false, dense = false, clearLabel = 'Clear filter', className, ...props }) {
+export function TreeFilterInput({ label, placeholder, value, onChange, onKeyDown, trailing, yieldWhileTyping = false, dense = false, clearLabel = 'Clear filter', inputProps, className, ...props }) {
   return <div {...props} data-slot="tree-filter" className={cn('group/filter flex shrink-0 items-center gap-1',
     // Dense, the separator is an inset line rather than a border, so the row's full 28px centre its
     // buttons exactly as a heading's (a border would take a pixel from under them).
@@ -17,6 +18,7 @@ export function TreeFilterInput({ label, placeholder, value, onChange, onKeyDown
     <div className="relative flex min-w-0 flex-1 items-center">
       <Search className={cn('pointer-events-none absolute text-muted-foreground', dense ? 'left-1.5 size-2.5' : 'left-2 size-3')} />
       <input
+        {...inputProps}
         aria-label={label}
         className={cn('w-full min-w-0 rounded-md bg-transparent pr-5 outline-none placeholder:text-muted-foreground focus:bg-background/70',
           dense ? 'h-5 pl-5 text-tiny' : 'h-6 pl-6.5 text-xs')}

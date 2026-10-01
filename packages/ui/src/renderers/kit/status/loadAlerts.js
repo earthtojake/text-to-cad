@@ -23,7 +23,7 @@ export function failureAlert(fileRef, error, failure, compile = false) {
     failure?.status && `HTTP status: ${failure.status}`,
     detail
   ].filter(Boolean).join("\n");
-  const common = { severity: "error", kind, details: diagnostics };
+  const common = { severity: "error", kind, file: fileRef, details: diagnostics };
   if (kind === "network") return {
     ...common, summary: "Connection lost", title: "Can’t reach the viewer",
     message: `The browser lost contact with the viewer while ${operation} for “${fileRef}”. Check that the viewer is running and this tab has the correct address, then reload.`,
@@ -63,6 +63,8 @@ export function failureAlert(fileRef, error, failure, compile = false) {
 export function noGeometryAlert(fileRef) {
   return {
     severity: "error",
+    kind: "empty",
+    file: fileRef,
     summary: "Mesh unavailable",
     title: "No geometry to display",
     message: `“${fileRef}” is listed in the file browser, but loading it produced no visible geometry.`,

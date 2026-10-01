@@ -221,6 +221,12 @@ export async function buildCompositeScreenshotBlob(runtime, overlayCanvas, {
   if (!renderer || !scene || !camera || width <= 0 || height <= 0) {
     throw new Error("Screenshot capture failed");
   }
+  // A lost context leaves a canvas that draws nothing; painting it onto the
+  // background fill would succeed with a blank picture the caller takes for
+  // the model.
+  if (renderer.getContext?.()?.isContextLost?.()) {
+    throw new Error("the viewer's WebGL context is lost; try again once it restores");
+  }
 
   const previousRenderTarget = renderer.getRenderTarget();
   const previousXrEnabled = renderer.xr?.enabled === true;

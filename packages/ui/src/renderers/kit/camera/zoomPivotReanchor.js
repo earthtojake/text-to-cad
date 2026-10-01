@@ -1,3 +1,26 @@
+/**
+ * Which `change` of the controls may re-anchor the pivot: the one a wheel zoom produces. The
+ * controls take the wheel synchronously (damping is off for it) and emit `change` from inside
+ * it, so the wheel's own change arrives between `wheelStart` (our capture-phase listener,
+ * before theirs) and `wheelEnd` (a bubble-phase one registered after theirs). Any other
+ * change (a live `setCamera`, the last frame of an eased move) and a wheel the controls did not
+ * act on (clamped at the distance limit: no change at all) must not re-anchor along a pointer
+ * ray that is no longer the camera's.
+ */
+export function createZoomPivotGate() {
+  let inWheel = false;
+  return {
+    wheelStart() { inWheel = true; },
+    wheelEnd() { inWheel = false; },
+    /** A `change` arrived: is it a wheel zoom's, to be re-anchored once? */
+    consumeChange() {
+      const fromWheel = inWheel;
+      inWheel = false;
+      return fromWheel;
+    }
+  };
+}
+
 export function createZoomPivotReanchor(THREE) {
   const pointer = new THREE.Vector2();
   const forward = new THREE.Vector3();

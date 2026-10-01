@@ -286,6 +286,8 @@ export const FileNavRow: ComponentType<{
   leading?: ReactNode;
   status?: ReactNode;
   trailing?: ReactNode;
+  /** No file is open: with no `leading`, the left end reads a muted "Files" instead of nothing. */
+  empty?: boolean;
   className?: string;
 }>;
 

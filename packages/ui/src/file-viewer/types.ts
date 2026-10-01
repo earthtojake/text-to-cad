@@ -74,6 +74,12 @@ export interface DocumentSession {
   value: string;
   revision?: string;
   readOnly: boolean;
+  /**
+   * Why a document the source could save is read-only, when the file is
+   * the reason: its bytes are not UTF-8 (a save would write U+FFFD over
+   * them), or it was cut at the source's size cap. The viewer says so.
+   */
+  readOnlyReason?: "encoding" | "truncated";
   dirty: boolean;
   saving: boolean;
   stale: boolean;

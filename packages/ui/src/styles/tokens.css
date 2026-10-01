@@ -106,7 +106,9 @@
   --secondary: oklch(0.97 0 0);
   --secondary-foreground: oklch(0.205 0 0);
   --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
+  /* Darker than shadcn's 0.556 (#737373), which is 4.3:1 on --muted and --accent: 0.51 (#666)
+   * is 4.5:1 or more on every quiet surface (tests/unit/renderer/contrast.test.ts). */
+  --muted-foreground: oklch(0.51 0 0);
   --accent: oklch(0.97 0 0);
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
@@ -188,7 +190,8 @@
   --secondary: oklch(0.34 0 0);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.34 0 0);
-  --muted-foreground: oklch(0.75 0 0);
+  /* 0.77, not 0.75: on --accent 0.75 fell just short of 4.5:1. */
+  --muted-foreground: oklch(0.77 0 0);
   --accent: oklch(0.38 0 0);
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);

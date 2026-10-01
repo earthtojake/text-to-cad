@@ -7,6 +7,7 @@ import { PositionToolIcon, positionValuesAreDefault } from "../kit/inspector/kin
 import { filterSelectionReferences, toggleReferenceGroupSelection, connectedReferenceIds } from "./workbench/selectionFilter.js";
 import { buildTangentFaceGraph } from "./workbench/tangentFaceSelection.js";
 import { createHoverStore } from "./workbench/hoverStore.js";
+import { selectionCommitted } from "./live.js";
 
 import * as THREE from "three";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
@@ -1625,41 +1626,28 @@ function StepSurfaceBody({ view, data }) {
   useEffect(() => {
     if (!animateModeActive && animationOwnsPose) releaseAnimation?.();
   }, [animateModeActive, animationOwnsPose, releaseAnimation]);
-  const selectedWholeTopologyReferencePartIds = useMemo(() => (
-    uniqueStringList(
-      selectedReferenceIds.flatMap((referenceId) => renderPartIdsForWholeTopologyReference(referenceId))
-    )
-  ), [
-    renderPartIdsForWholeTopologyReference,
-    selectedReferenceIds
-  ]);
-  const viewerSelectedPartIds = useMemo(() => {
+  // The part ids the viewport highlights for a selection: the assembly's parts re-mapped to
+  // render parts, and the parts of each whole-topology reference. `select` asks the same
+  // question of the selection it is about to commit.
+  const viewerPartIdsForSelection = useCallback((partIds, referenceIds, renderPartIdByAssemblyPartId) => {
+    const wholeTopologyPartIds = referenceIds.flatMap((referenceId) => renderPartIdsForWholeTopologyReference(referenceId));
     if (!isAssemblyView) {
       return uniqueStringList([
-        ...(selectedPartIds.includes(STEP_MODEL_ROOT_ID) ? [STEP_MODEL_RENDER_PART_ID] : []),
-        ...selectedWholeTopologyReferencePartIds,
+        ...(partIds.includes(STEP_MODEL_ROOT_ID) ? [STEP_MODEL_RENDER_PART_ID] : []),
+        ...wholeTopologyPartIds,
       ]);
     }
-    return uniqueStringList(
-      [
-        ...selectedPartIds.flatMap((id) => {
-          const normalizedId = String(id || "").trim();
-          return renderPartIdsForAssemblySelection(
-            normalizedId,
-            selectedRenderPartIdByAssemblyPartId[normalizedId]
-          );
-        }),
-        ...selectedWholeTopologyReferencePartIds
-      ]
-    );
-  }, [
-    focusedAssemblyNodeIds,
-    isAssemblyView,
-    renderPartIdsForAssemblySelection,
-    selectedPartIds,
-    selectedRenderPartIdByAssemblyPartId,
-    selectedWholeTopologyReferencePartIds
-  ]);
+    return uniqueStringList([
+      ...partIds.flatMap((id) => {
+        const normalizedId = String(id || "").trim();
+        return renderPartIdsForAssemblySelection(normalizedId, renderPartIdByAssemblyPartId[normalizedId]);
+      }),
+      ...wholeTopologyPartIds,
+    ]);
+  }, [isAssemblyView, renderPartIdsForAssemblySelection, renderPartIdsForWholeTopologyReference]);
+  const viewerSelectedPartIds = useMemo(
+    () => viewerPartIdsForSelection(selectedPartIds, selectedReferenceIds, selectedRenderPartIdByAssemblyPartId),
+    [viewerPartIdsForSelection, selectedPartIds, selectedReferenceIds, selectedRenderPartIdByAssemblyPartId]);
   // What the viewport draws as hovered, from the hover store's snapshot: the parts to light
   // and the reference to outline. The viewport's layers call it with each hover change
   // (`scene/StepSceneLayers.jsx`); it changes identity only with what it resolves THROUGH —
@@ -3281,9 +3269,17 @@ function StepSurfaceBody({ view, data }) {
       const references = uniqueStringList([...(replace ? [] : selectedReferenceIdsRef.current), ...selections.filter(selection => selection.kind === 'reference').map(selection => selection.id)]);
       setSelectedPartIds(parts);
       setSelectedReferenceIds(references);
-      setSelectedRenderPartIdByAssemblyPartId(current => Object.fromEntries(parts.map(id => [id, renderPartIdForAssemblySelection(id, current[id])]).filter(([, id]) => id)));
+      const renderPartIdByAssemblyPartId = Object.fromEntries(parts.map(id => [id, renderPartIdForAssemblySelection(id, selectedRenderPartIdByAssemblyPartIdRef.current[id])]).filter(([, id]) => id));
+      setSelectedRenderPartIdByAssemblyPartId(renderPartIdByAssemblyPartId);
       const last = selections[selections.length - 1];
       revealStepTreeNode(last.kind === 'part' ? last.id : findStepTreeTopologyNodeIdForReference(displayStepTreeRoot, last.id) || referencePartId(effectiveActiveReferenceMap.get(last.id)), { source: 'reference' });
+      // Committed once the live selection IS what was resolved: the viewer's part ids and the
+      // references, and for a replacing select nothing besides (a previous selection, or a
+      // selector with no references, would otherwise answer for it on the old state).
+      return selectionCommitted({
+        partIds: viewerPartIdsForSelection(parts, references, renderPartIdByAssemblyPartId),
+        referenceIds: references, replace
+      });
     },
     clearSelection() {
       setSelectedPartIds([]);

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { foldRepeatedParts, presentModelingAssembly } from './modelingPresentation.js';
+import { foldRepeatedParts, modelingErrorText, presentModelingAssembly } from './modelingPresentation.js';
 
 const part=(id,label,component)=>({id:`model:${id}`,kind:'part',label,selectionId:id,leafPartIds:[id],component});
 const labels=nodes=>nodes.map(node=>node.label);
@@ -82,4 +82,12 @@ test('an assembly read from the STEP tree folds its repeated children',()=>{
  const rows=presentModelingAssembly(descriptor,{},stepRoot);
  assert.deepEqual(labels(rows),['plant_1 (2)','lid']);
  assert.deepEqual(rows[0].memberSelectionIds,['o1','o2']);
+});
+
+test('the Features panel keeps a short loader message and never a raw diagnostic',()=>{
+ assert.equal(modelingErrorText(''),'');
+ assert.equal(modelingErrorText('Geometry is unavailable.'),'Geometry is unavailable.');
+ const traceback='artifact request failed: Traceback (most recent call last): File "/opt/python/importlib/metadata.py", line 563, in from_name\nStopIteration';
+ assert.equal(modelingErrorText(traceback),'The model’s features couldn’t be read.');
+ assert.equal(modelingErrorText('x'.repeat(200)),'The model’s features couldn’t be read.');
 });

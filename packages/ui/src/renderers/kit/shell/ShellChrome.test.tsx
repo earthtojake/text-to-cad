@@ -359,3 +359,71 @@ it('the Display popover keeps its controls together: a dropdown or a color edito
   expect(displayPopover()).toBeNull();
   expect(screen.getByRole('button', { name: 'Display settings' }).getAttribute('aria-pressed')).toBe('false');
 });
+
+it('a failure that leaves nothing on screen puts the tool stack away under its card; with a model on screen the stack stays', () => {
+  frame();
+  const stack = () => document.querySelector<HTMLElement>('[data-cad-tool-stack]')!;
+  const stage = (name: string) => fireEvent.click(document.querySelector(`[data-harness-stage="${name}"]`)!);
+  expect(stack().hidden).toBe(false);
+  stage('broken');
+  expect(screen.getByRole('alert').textContent).toContain('Harness build failed');
+  expect(stack().hidden).toBe(true);
+  // Kept mounted: the panels come back as they were.
+  expect(panel('Harness tree')).not.toBeNull();
+  stage('failed');
+  expect(screen.getByRole('alert').textContent).toContain('Harness update failed');
+  expect(stack().hidden).toBe(false);
+  // An error raised beside a model on screen, saying nothing about blocking, leaves the stack up.
+  stage('beside');
+  expect(screen.getByRole('alert').textContent).toContain('Couldn’t load the harness extra');
+  expect(stack().hidden).toBe(false);
+  stage('idle');
+  expect(stack().hidden).toBe(false);
+});
+
+it("a failure card has no view-update spinner beside it: a theme switch under it waits on a frame that is never drawn", async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  try {
+    const slot = document.createElement('div');
+    document.body.append(slot);
+    const props = (colorScheme: string) => ({ source: { id: 'one', rootName: 'one' }, file: { path: 'panel.harness', name: 'panel.harness', kind: 'file' }, document: null,
+      openPanel: '', panelSlot: null, navigationStatusSlot: slot, onPanelOpen() {}, onReady() {}, onOpenFile() {}, appearance: { colorScheme }, state: undefined,
+      onStateChange() {}, reload() {}, data: { services: { preferences: tabSettings() } } });
+    const element = (colorScheme: string) => <ViewerHostContext.Provider value={testHost()}><ViewerMobileContext.Provider value={false}>
+      <HarnessRenderer {...(props(colorScheme) as any)} /></ViewerMobileContext.Provider></ViewerHostContext.Provider>;
+    const view = render(element('light'));
+    fireEvent.click(document.querySelector('[data-harness-stage="broken"]')!);
+    expect(screen.getByRole('alert').textContent).toContain('Harness build failed');
+    view.rerender(element('dark'));
+    await act(async () => { vi.advanceTimersByTime(500); });
+    expect(slot.querySelector('[data-view-update-status]')).toBeNull();
+    slot.remove();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+it("a failure card hides only the Display change still in progress: one that failed keeps its Retry", async () => {
+  vi.useFakeTimers({ shouldAdvanceTime: true });
+  try {
+    const slot = document.createElement('div');
+    document.body.append(slot);
+    const props = (colorScheme: string) => ({ source: { id: 'one', rootName: 'one' }, file: { path: 'panel.harness', name: 'panel.harness', kind: 'file' }, document: null,
+      openPanel: '', panelSlot: null, navigationStatusSlot: slot, onPanelOpen() {}, onReady() {}, onOpenFile() {}, appearance: { colorScheme }, state: undefined,
+      onStateChange() {}, reload() {}, data: { services: { preferences: tabSettings() } } });
+    const element = (colorScheme: string) => <ViewerHostContext.Provider value={testHost()}><ViewerMobileContext.Provider value={false}>
+      <HarnessRenderer {...(props(colorScheme) as any)} /></ViewerMobileContext.Provider></ViewerHostContext.Provider>;
+    const view = render(element('light'));
+    fireEvent.click(document.querySelector('[data-harness-stage="broken"]')!);
+    view.rerender(element('dark'));
+    await act(async () => { vi.advanceTimersByTime(500); });
+    // The viewport reports the Display change failed.
+    const { viewUpdate } = viewportProps.current;
+    await act(async () => { viewUpdate.binding.complete(viewUpdate.revision, new Error('Render studio unavailable')); });
+    expect(slot.querySelector('[data-view-update-status]')?.textContent).toContain('Couldn’t update view');
+    expect(within(slot).getByRole('button', { name: 'Retry view update' })).toBeTruthy();
+    slot.remove();
+  } finally {
+    vi.useRealTimers();
+  }
+});
