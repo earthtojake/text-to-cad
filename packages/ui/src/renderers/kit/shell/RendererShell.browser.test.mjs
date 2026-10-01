@@ -557,7 +557,8 @@ test('a renderer says more about its load than a download: finding the file, edi
   assert.equal(await page.evaluate(() => document.activeElement?.dataset?.slot), 'cad-file-view');
 
   // Quick Edit is nowhere until something is picked; then it takes the top-right corner, 15rem
-  // wide, and its own corner sizes it.
+  // wide, and its own corner sizes it: wider to the left, and its note taller than the 10rem it
+  // grows to with what is written. The box keeps up with the corner, a frame after each move.
   const quickEdit = pane.getByRole('region', { name: 'Quick Edit', exact: true });
   assert.equal(await pane.locator('[data-quick-edit-box]').count(), 0, 'nothing picked: no Quick Edit, not even a button');
   await canvasElement.click({ button: 'right', position: { x: 300, y: 200 } });
@@ -571,14 +572,19 @@ test('a renderer says more about its load than a download: finding the file, edi
   const note = quickEdit.getByRole('textbox', { name: 'Describe your changes', exact: true });
   const noteHeight = (await note.boundingBox()).height;
   const corner = await quickEdit.locator('[data-quick-edit-resize]').boundingBox();
-  await page.mouse.move(corner.x + corner.width / 2, corner.y + corner.height / 2);
+  const grip = { x: corner.x + corner.width / 2, y: corner.y + corner.height / 2 };
+  await page.mouse.move(grip.x, grip.y);
   await page.mouse.down();
-  await page.mouse.move(corner.x + corner.width / 2 - 60, corner.y + corner.height / 2 + 40, { steps: 4 });
+  await page.mouse.move(grip.x - 30, grip.y + 60, { steps: 2 });
+  await settle(page);
+  const midway = (await quickEdit.boundingBox()).width;
+  assert.ok(Math.abs(midway - opened.width - 30) <= 1, `mid-drag, the box is where its corner is: ${opened.width} -> ${midway}`);
+  await page.mouse.move(grip.x - 60, grip.y + 120, { steps: 2 });
   await page.mouse.up();
-  await page.waitForFunction(width => Math.abs(document.querySelector('[data-quick-edit-box]').getBoundingClientRect().width - width) <= 1, opened.width + 60);
   const resized = await quickEdit.boundingBox();
   assert.ok(Math.abs(resized.width - opened.width - 60) <= 1, `dragged out 60px: ${opened.width} -> ${resized.width}`);
-  assert.ok(Math.abs((await note.boundingBox()).height - noteHeight - 40) <= 1, 'and its note 40px down');
+  const noteResized = (await note.boundingBox()).height;
+  assert.ok(noteResized > 160 && Math.abs(noteResized - noteHeight - 120) <= 1, `and its note 120px down: ${noteHeight} -> ${noteResized}`);
   assert.ok(Math.abs(resized.x + resized.width - opened.x - opened.width) < 1, 'still hanging from the same corner');
   await quickEdit.getByRole('button', { name: 'Close Quick Edit', exact: true }).click();
   await quickEdit.waitFor({ state: 'detached' });

@@ -51,18 +51,26 @@ it('draws the navbar only when it has something to hold, and never for a view sh
   expect(navbar()).toBeNull();
 });
 
-it('says how its host updates: where in the host, a command, a message for an agent and what finishes it, each only when given', async () => {
+it('says how its host updates: a command and a message for an agent, or a line where the update is not a command, each only when given', async () => {
   const user = userEvent.setup();
-  const install = { where: { label: 'In Codex', text: 'Plugins › Manage' }, command: 'codex plugin marketplace upgrade earthtojake', then: 'Then restart Codex.' };
-  open({ navigationPath: null, host: { ...host, links: viewerLinks({ version: '0.7.4', install }) } });
-  await screen.findByText('shown');
-  await user.click(screen.getByRole('button', { name: 'Version 0.7.4' }));
-  const menu = await screen.findByRole('menu');
-  expect(within(menu).getByText('In Codex')).toBeTruthy();
-  expect(within(menu).getByText('Plugins › Manage')).toBeTruthy();
-  expect(within(menu).getByText('codex plugin marketplace upgrade earthtojake')).toBeTruthy();
+  const versionMenu = async (install?: object) => {
+    open({ navigationPath: null, host: { ...host, links: viewerLinks({ version: '0.7.4', install }) } });
+    await screen.findByText('shown');
+    await user.click(screen.getByRole('button', { name: 'Version 0.7.4' }));
+    return screen.findByRole('menu');
+  };
+  // The skills' update, by default: a command for a terminal, and the same for an agent.
+  let menu = await versionMenu();
+  expect(within(menu).getByText('npx skills add earthtojake/text-to-cad')).toBeTruthy();
+  expect(within(menu).getByText('Or ask your agent')).toBeTruthy();
+  expect(menu.querySelector('[data-install-message]')).toBeNull();
+  cleanup();
+  // A host whose update is not a command says how in a line, and nothing else.
+  const message = "Update CAD from Codex's plugin marketplace, then run $setup and restart Codex.";
+  menu = await versionMenu({ message });
+  expect(menu.querySelector('[data-install-message]')?.textContent).toBe(message);
+  expect(within(menu).queryByText('In your terminal')).toBeNull();
   expect(within(menu).queryByText('Or ask your agent')).toBeNull();
-  expect(within(menu).getByText('Then restart Codex.')).toBeTruthy();
 });
 
 it('leads home from a file where the host has a home, and is the brand on the home itself', async () => {

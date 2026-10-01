@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowUp, Copy, ListPlus, X } from "lucide-react";
+import { Button } from "@text-to-cad/ui/primitives/button";
 import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 import { cn } from "@text-to-cad/ui/utils";
 import { usePromptDestination, useViewerHost } from "../../../../host/context.js";
@@ -11,8 +12,8 @@ const EMPTY = Object.freeze([]);
 // A press of the person's in this view leads the selection it made; an agent's selection (the live
 // controller's `select`) follows none, and opens the box without taking their keyboard.
 const PICK_MS = 1500;
-// The box's size, as the person drags its corner: its width, and the note's height. Unset, it is
-// 15rem wide and the note grows with what is written.
+// The box's size, as the person drags its corner: its width, and the note's height. A box opens
+// 15rem wide, its note growing with what is written.
 export const QUICK_EDIT_LIMITS = Object.freeze({ minWidth: 208, maxWidth: 640, minHeight: 56, maxHeight: 320 });
 const clamp = (value, min, max) => Math.min(max, Math.max(min, value));
 
@@ -43,15 +44,15 @@ export function quickEditReferenceIds(selection) {
  * references are spelled (`referencePath`) and its sketch saved as a file it names
  * (`host.attachments`); Queue where the destination is a composer (the host's context for the next
  * message); Send where the host can post a message now (`promptContext.send`). Each clears and
- * closes the box once it has gone; a failure keeps the note and says why. Its corner resizes it
- * (`size`/`onResize` hold that across files; without them it keeps its own).
+ * closes the box once it has gone; a failure keeps the note and says why. Its corner resizes it for
+ * as long as it is open: the size is the box's own, written to it a frame at a time, so a drag
+ * renders nothing, and it goes with the box — the next one opens at the default size.
  *
  * @param {{ resource: import("@text-to-cad/core/prompt").ResourceRef,
  *   references?: readonly import("@text-to-cad/core/prompt").PromptReference[],
  *   sketch?: { ink: boolean, capture(): Promise<Blob> } | null,
  *   referencePath?: (path: string) => string, onCopy?: () => boolean, onEscape?: () => unknown, onClear?: () => void, disabled?: boolean,
- *   hidden?: boolean, size?: { width: number, height: number } | null, onResize?: (size: { width: number, height: number }) => void,
- *   className?: string, style?: import("react").CSSProperties }} props
+ *   hidden?: boolean, className?: string, style?: import("react").CSSProperties }} props
  *   `onCopy`: the viewer's own copy (⌘C / Ctrl+C: the selection's references, or the drawing),
  *   which the key still reaches from the box while none of the note is selected. `onEscape`: the
  *   viewer's own Escape (clearing the selection), which an empty box passes on as it closes; a box
@@ -59,15 +60,12 @@ export function quickEditReferenceIds(selection) {
  *   sight with all it holds (the view is loading).
  */
 export default function QuickEdit({ resource, references = EMPTY, sketch = null, referencePath, onCopy, onEscape, onClear, disabled = false,
-  hidden = false, size: heldSize, onResize, className, style }) {
+  hidden = false, className, style }) {
   const host = useViewerHost();
   const destination = usePromptDestination();
   const [text, setText] = useState("");
   const [pending, setPending] = useState("");
   const [error, setError] = useState("");
-  const [ownSize, setOwnSize] = useState(null);
-  const size = heldSize === undefined ? ownSize : heldSize;
-  const resize = onResize || setOwnSize;
   const field = useRef(null);
   const box = useRef(null);
   const root = useRef(null);
@@ -192,21 +190,35 @@ export default function QuickEdit({ resource, references = EMPTY, sketch = null,
   };
 
   // The corner, bottom-left since the box hangs from the top-right: dragging it out grows the box
-  // leftward and its note downward.
+  // leftward and its note downward. The size is written to the two elements, once a frame, and kept
+  // nowhere else: nothing renders under the pointer, and a box that closes takes its size with it.
   const startResize = event => {
-    if (event.button !== 0 || !box.current || !field.current) return;
+    const section = box.current, note = field.current;
+    if (event.button !== 0 || !section || !note) return;
     event.preventDefault();
     const handle = event.currentTarget;
-    const start = { x: event.clientX, y: event.clientY, width: box.current.offsetWidth, height: field.current.offsetHeight };
+    const start = { x: event.clientX, y: event.clientY, width: section.offsetWidth, height: note.offsetHeight };
     handle.setPointerCapture?.(event.pointerId);
-    const move = moved => resize({
-      width: clamp(Math.round(start.width + start.x - moved.clientX), QUICK_EDIT_LIMITS.minWidth, QUICK_EDIT_LIMITS.maxWidth),
-      height: clamp(Math.round(start.height + moved.clientY - start.y), QUICK_EDIT_LIMITS.minHeight, QUICK_EDIT_LIMITS.maxHeight),
-    });
+    let next = null, frame = 0;
+    const draw = () => {
+      frame = 0;
+      section.style.width = `${next.width}px`;
+      note.style.height = `${next.height}px`;
+      note.style.maxHeight = "none";
+    };
+    const move = moved => {
+      next = {
+        width: clamp(Math.round(start.width + start.x - moved.clientX), QUICK_EDIT_LIMITS.minWidth, QUICK_EDIT_LIMITS.maxWidth),
+        height: clamp(Math.round(start.height + moved.clientY - start.y), QUICK_EDIT_LIMITS.minHeight, QUICK_EDIT_LIMITS.maxHeight),
+      };
+      frame ||= requestAnimationFrame(draw);
+    };
     const end = () => {
       handle.removeEventListener("pointermove", move);
       handle.removeEventListener("pointerup", end);
       handle.removeEventListener("pointercancel", end);
+      // The last move, if its frame has not come yet.
+      if (frame) { cancelAnimationFrame(frame); draw(); }
     };
     handle.addEventListener("pointermove", move);
     handle.addEventListener("pointerup", end);
@@ -216,10 +228,11 @@ export default function QuickEdit({ resource, references = EMPTY, sketch = null,
   const referenceCount = referenceIds.length;
   return <div ref={root} className={cn("pointer-events-none flex-col items-end", hidden ? "hidden" : "flex", className)} style={style} data-quick-edit="">
     {open ? <section ref={box} aria-label="Quick Edit" data-quick-edit-box=""
-      style={size ? { width: size.width } : undefined}
       // A narrow viewer (a phone) gets it across its whole width, over the tool stack rather than beside it.
-      className={cn("pointer-events-auto relative flex max-w-full origin-top-right flex-col gap-2 rounded-lg p-2.5 text-tiny animate-in fade-in-0 zoom-in-95 duration-150 @max-md/cad-viewport:!w-full",
-        !size && "w-[min(15rem,100%)]", FLOATING_SURFACE_CLASS)}>
+      // It opens in 150ms, animate-in's own: a `duration-*` class would also ease every width a drag
+      // writes (the transition is of `all`), and the box would trail its corner.
+      className={cn("pointer-events-auto relative flex w-[min(15rem,100%)] max-w-full origin-top-right flex-col gap-2 rounded-lg p-2.5 text-tiny animate-in fade-in-0 zoom-in-95 @max-md/cad-viewport:!w-full",
+        FLOATING_SURFACE_CLASS)}>
       <div className="flex min-h-5 min-w-0 items-center gap-2">
         <h3 className="shrink-0 pl-0.5 text-xs font-medium leading-5 text-foreground">Quick Edit</h3>
         {/* What goes with the note, as it is now; the file always does. */}
@@ -236,26 +249,19 @@ export default function QuickEdit({ resource, references = EMPTY, sketch = null,
           <X className="size-3" aria-hidden="true" />
         </button>
       </div>
+      {/* It grows with what is written, up to 10rem, until a drag of the corner gives it a height. */}
       <textarea ref={field} value={text} rows={2} placeholder="Describe your changes" aria-label="Describe your changes"
-        style={size ? { height: size.height } : undefined}
-        className={cn("w-full resize-none rounded-md border border-input bg-background/80 px-2 py-1.5 text-xs leading-5 text-foreground outline-none transition-[border-color,box-shadow] placeholder:text-muted-foreground focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:focus:border-blue-400 dark:focus:ring-blue-400/20",
-          size ? "[field-sizing:fixed]" : "max-h-40 min-h-14 [field-sizing:content]")}
+        className="max-h-40 min-h-14 w-full resize-none rounded-md border border-input bg-background/80 px-2 py-1.5 text-xs leading-5 text-foreground outline-none transition-[border-color,box-shadow] [field-sizing:content] placeholder:text-muted-foreground focus:border-blue-500 focus:ring-2 focus:ring-blue-500/20 dark:focus:border-blue-400 dark:focus:ring-blue-400/20"
         onChange={event => { setText(event.target.value); setError(""); }} onKeyDown={onKeyDown} />
       {error ? <p role="alert" className="text-tiny text-destructive">{error}</p> : null}
-      <div className="flex items-center justify-end gap-1">
-        {actions.map(({ id, label, hint, Icon }) => {
-          const main = id === primary;
-          return <TooltipHint key={id} content={hint} side="bottom">
-            <button type="button" aria-label={label} disabled={!ready} aria-busy={pending === id || undefined} onClick={() => run(id)}
-              data-quick-edit-action={id}
-              className={cn("flex size-7 shrink-0 items-center justify-center rounded-full transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/45",
-                main
-                  ? "bg-foreground text-background hover:bg-foreground/85 disabled:bg-muted-foreground/35 disabled:text-background/80"
-                  : "text-muted-foreground hover:bg-accent hover:text-foreground disabled:pointer-events-none disabled:opacity-45")}>
-              <Icon className="size-3.5" strokeWidth={main ? 2.25 : 2} aria-hidden="true" />
-            </button>
-          </TooltipHint>;
-        })}
+      {/* Buttons of the ordinary shape, all solid: the primary in its colour, the others secondary. */}
+      <div className="flex items-center justify-end gap-1.5">
+        {actions.map(({ id, label, hint, Icon }) => <TooltipHint key={id} content={hint} side="bottom">
+          <Button type="button" variant={id === primary ? "default" : "secondary"} size="icon-sm" className="size-7"
+            aria-label={label} disabled={!ready} aria-busy={pending === id || undefined} onClick={() => run(id)} data-quick-edit-action={id}>
+            <Icon className="size-3.5" aria-hidden="true" />
+          </Button>
+        </TooltipHint>)}
       </div>
       <div aria-hidden="true" onPointerDown={startResize} data-quick-edit-resize=""
         className="group/resize absolute bottom-0 left-0 flex size-3.5 cursor-nesw-resize touch-none items-end justify-start p-0.5 @max-md/cad-viewport:hidden">

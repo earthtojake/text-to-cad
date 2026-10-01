@@ -64,7 +64,8 @@ const BAR_BUTTON_CLASS = "size-5 bg-transparent hover:bg-transparent dark:hover:
  *   `references`: what is selected, in the prompt grammar — the references a Quick Edit attaches
  *   (`kit/tools/quick-edit/QuickEdit.jsx`), counted in its header; the file itself always goes. A
  *   renderer that hands none has no Quick Edit: it is a STEP file's, whose picks and sketches it
- *   carries. `onClearReferences`: the renderer's clear of that selection, as a press on the
+ *   carries. The box sizes itself, for as long as it is open: a drag of its corner renders nothing
+ *   here. `onClearReferences`: the renderer's clear of that selection, as a press on the
  *   background makes it; Quick Edit's X calls it, and clears Draw's ink too.
  *   `copySelection`: the viewer's copy key (⌘C / Ctrl+C) while the renderer's own tool is up and
  *   something is selected (Draw's copies the view with its ink); null when there is nothing to copy.
@@ -120,8 +121,6 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
   // Display's settings: a popover from its button among the view's actions, not a tool — opening
   // it leaves the tool in hand as it is. Another file starts with it shut.
   const [displayOpen, setDisplayOpen] = useState(false);
-  // Quick Edit's size as the person drags it, kept from one file to the next.
-  const [quickEditSize, setQuickEditSize] = useState(null);
   useEffect(() => { setPreviewing(false); setDisplayOpen(false); }, [frame.modelKey, setPreviewing]);
   // One viewport, two render profiles over the same Display settings (`renderProfile.js`): the
   // tools view is drawn for working on the model, preview for looking at it.
@@ -287,8 +286,7 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
               {/* Hidden, not unmounted, while the view loads: a note being written outlives a reload of the model. */}
               {compact || !references ? null : <QuickEdit key={frame.modelKey} className="absolute z-30" style={QUICK_EDIT_POSITION} hidden={chromeHidden}
                 resource={frame.resource} references={references} sketch={sketch} referencePath={frame.referencePath}
-                onCopy={copyAction} onEscape={frame.escape} onClear={clearQuickEdit} disabled={viewerLoading || !scene}
-                size={quickEditSize} onResize={setQuickEditSize} />}
+                onCopy={copyAction} onEscape={frame.escape} onClear={clearQuickEdit} disabled={viewerLoading || !scene} />}
 
               </PreviewChrome>
 

@@ -29,17 +29,13 @@ export function useHostContext(bridge: Pick<Bridge, 'hostContext' | 'onHostConte
 // viewer's playback bars sit on that same line (Codex: a 45px box, 17px up).
 const TAB_BOTTOM_CENTER = '40px';
 
-// How each host updates CAD. Codex runs the plugin's pinned release offline: the marketplace's
-// upgrade moves the pin, `$setup` fetches that release, and a restart starts it. Every other host
-// starts the server through an unpinned `uvx --from cadgen`, which resolves the newest release.
+// How each host updates CAD, said in a line. Codex runs the plugin's pinned release offline: the
+// marketplace's update moves the pin, `$setup` fetches that release, and a restart starts it.
+// Every other host starts the server through an unpinned `uvx --from cadgen`, which resolves the
+// newest release.
 const UPDATE: Record<Presentation, ViewerLinks['install']> = {
-  tabs: {
-    where: { label: 'In Codex', text: 'Plugins › Manage › Marketplace › Upgrade earthtojake' },
-    command: 'codex plugin marketplace upgrade earthtojake',
-    prompt: 'Update the CAD plugin with `codex plugin marketplace upgrade earthtojake`, then run `$setup`.',
-    then: 'Then run $setup and restart Codex.',
-  },
-  inline: { then: 'Restart the app to update: CAD starts its newest release each time.' },
+  tabs: { message: "Update CAD from Codex's plugin marketplace, then run $setup and restart Codex." },
+  inline: { message: 'Restart the app to update: CAD starts its newest release each time.' },
 };
 
 // Inline, a view is a card in the chat: as tall as its width suits, within what the host allows.

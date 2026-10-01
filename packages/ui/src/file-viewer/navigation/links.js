@@ -43,7 +43,7 @@ export function releaseNotesUrl(repository, version) {
  * @param {string} [options.github]
  * @param {string} [options.discord]
  * @param {string} [options.release] This version's release notes; by default its tag on `github`.
- * @param {{ where?: { label: string, text: string }, command?: string, prompt?: string, then?: string }} [options.install]
+ * @param {{ command?: string, prompt?: string, message?: string }} [options.install]
  *   How this host updates, in place of the skills' update: see `ViewerLinks.install`.
  * @param {{ version: string, url: string, newer: boolean } | null} [options.latest]
  *   The newest release, for a host that checked, and whether it is newer than `version`.

@@ -13,11 +13,12 @@ import wordmark from "../../assets/logo-cad.svg";
  * The navbar's right end: the version, then GitHub and Discord as icons — the same three in every
  * app (`ViewerHost.links`, built by `viewerLinks` in `links.js`).
  *
- * The version opens a menu of what it is and how to update it: the command for a terminal, the
- * message for an agent, and the release notes. A host that checked for a newer release says so
- * (`links.latest`), and the version then reads "Update". Every link opens the host's way: a page
- * that can open one itself follows an ordinary link to a new tab; a page in a frame that cannot
- * hands it to `links.open` (the host's own browser). Copies go through the host's clipboard.
+ * The version opens a menu of what it is and how to update it — the command for a terminal and the
+ * message for an agent, or a line saying how where the host's update is not a command — and the
+ * release notes. A host that checked for a newer release says so (`links.latest`), and the version
+ * then reads "Update". Every link opens the host's way: a page that can open one itself follows an
+ * ordinary link to a new tab; a page in a frame that cannot hands it to `links.open` (the host's own
+ * browser). Copies go through the host's clipboard.
  *
  * @param {object} props
  * @param {import("../../host/types.js").ViewerLinks} props.links
@@ -56,16 +57,6 @@ function VersionRow({ label, version, action = null }) {
         <span className="min-w-0 text-left font-mono text-xs leading-5 text-foreground tabular-nums">{version}</span>
         {action}
       </div>
-    </div>
-  );
-}
-
-/** A step said where it is done: a path through the host's own menus. */
-function StepRow({ label, text }) {
-  return (
-    <div className="flex min-w-0 flex-col items-start gap-1.5 px-0.5 text-left">
-      <span className="text-tiny leading-none text-muted-foreground">{label}</span>
-      <span className="min-w-0 text-xs leading-5 text-foreground">{text}</span>
     </div>
   );
 }
@@ -128,12 +119,11 @@ function VersionMenu({ links, clipboard, onFollow }) {
               ) : null} />
             </div>
           ) : <VersionRow label="Current Version" version={version} />}
-          {install.where ? <StepRow label={install.where.label} text={install.where.text} /> : null}
           {install.command ? <CopyRow label="In your terminal" text={install.command} mono clipboard={clipboard}
             copyLabel="Copy install command" copiedLabel="Install command copied" /> : null}
           {install.prompt ? <CopyRow label="Or ask your agent" text={install.prompt} clipboard={clipboard}
             copyLabel="Copy agent message" copiedLabel="Agent message copied" /> : null}
-          {install.then ? <p className="max-w-72 px-0.5 text-tiny leading-4 text-muted-foreground" data-install-then="">{install.then}</p> : null}
+          {install.message ? <p className="max-w-72 px-0.5 text-tiny leading-4 text-muted-foreground" data-install-message="">{install.message}</p> : null}
           {latest && !latest.newer ? (
             <div className="flex items-center gap-1.5 px-0.5 text-tiny text-muted-foreground">
               <CircleCheck className="size-3 text-primary" aria-hidden="true" />

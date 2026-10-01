@@ -33,11 +33,11 @@ export interface ViewerLinks {
   github: string;
   discord: string;
   /**
-   * How to update, the way this host does it, each shown only when given: where in the host's own
-   * menus (`where`), a command for a terminal, the same as a message for an agent, and what
-   * finishes it (`then`: a restart, say). The defaults update the skills.
+   * How to update, the way this host does it, each shown only when given: a command for a terminal,
+   * the same as a message for an agent, and `message`: how this host updates, said in a line, for a
+   * host whose update is not a command (a marketplace, a restart). The defaults update the skills.
    */
-  install: { where?: { label: string; text: string }; command?: string; prompt?: string; then?: string };
+  install: { command?: string; prompt?: string; message?: string };
   /**
    * The newest release, for a host that checks for one, and whether it is newer than `version`:
    * the version then reads "Update". Absent (or null), nothing was checked.

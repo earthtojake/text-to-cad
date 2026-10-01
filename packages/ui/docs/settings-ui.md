@@ -475,14 +475,18 @@ since only a STEP has picks and sketches to carry; a compact host gets none, and
 preview puts it away with the tools. While the view loads it is out of sight, its note
 and its state kept.
 
-The box is 15rem wide unless the person has sized it (its bottom-left corner drags
-it wider to the left and its note taller; the size holds from file to file). Its
-header is the title, one step up the type scale ("Quick Edit"); then what goes with
-the note, in muted text: **N ref(s)**, the selection counted one by one (a reference
-naming several picks counts each; hovering lists their ids, one a line), and
-**drawing** while Draw has ink; then an X. The file always goes and is not named.
-Under the header, the note ("Describe your changes"), its border blue while it has
-the keyboard, and the buttons at its bottom-right.
+The box opens 15rem wide, its note growing with what is written up to 10rem. Its
+bottom-left corner drags it wider to the left and its note taller, for as long as the
+box is open: once it closes, however it closes, the next box opens at 15rem again, and
+so does another file's. A drag keeps the box at the corner, a frame at a time and
+never eased, and renders nothing: the size is written to the box itself, so nothing
+else in the viewer redraws under the pointer. Its header is the title, one step up
+the type scale ("Quick Edit"); then what goes with the note, in muted text: **N
+ref(s)**, the selection counted one by one (a reference naming several picks counts
+each; hovering lists their ids, one a line), and **drawing** while Draw has ink;
+then an X. The file always goes and is not named. Under the header, the note
+("Describe your changes"), its border blue while it has the keyboard, and the
+buttons at its bottom-right.
 
 While the note is empty the box follows what it would carry: it opens when something
 is picked or sketched, and closes when that goes. A written note keeps it open whatever
@@ -497,9 +501,12 @@ primary press in this view), and so does a sketch's first stroke once the pen li
 selection an agent or host makes through the live controller (`select`) opens it without
 taking the keyboard.
 
-The buttons, round icon buttons, left to right, are only those the host can carry
-out, and the rightmost is the primary one, filled, which Enter presses (Shift+Enter
-is a new line):
+The buttons, left to right, are only those the host can carry out, and the rightmost
+is the primary one, which Enter presses (Shift+Enter is a new line). They are the
+`Button` primitive in its own shape — 28px squares with its rounded corners, each an
+icon with a name and a hint — and every one is solid: the primary in the `default`
+variant, the others in `secondary`. While there is no note they are disabled, dimmed
+but still drawn:
 
 - **Copy Prompt** (copy icon), always. It copies the note as text: its references
   spelled as copied references are, and a sketch by the path it was saved at, since

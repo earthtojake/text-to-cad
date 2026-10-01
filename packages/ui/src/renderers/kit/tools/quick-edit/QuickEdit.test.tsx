@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { Profiler } from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import QuickEdit, { quickEditReferenceIds } from '../../../../../dist/renderers/kit/tools/quick-edit/QuickEdit.js';
@@ -145,6 +145,34 @@ it('keeps the note and says why when it did not go', async () => {
   await act(async () => { fireEvent.click(within(box()!).getByRole('button', { name: 'Queue' })); });
   expect(within(box()!).getByRole('alert').textContent).toBe('The chat is busy.');
   expect([field().value, clear.mock.calls.length]).toEqual(['Shorter.', 0]);
+});
+
+it('is sized by its corner while it is open, rendering nothing for the drag, and opens at the default size again', async () => {
+  let commits = 0;
+  const view = (references: readonly unknown[]) => <Profiler id="quick-edit" onRender={() => { commits += 1; }}>
+    <ViewerHostContext.Provider value={testHost()}><QuickEdit resource={resource} references={references} /></ViewerHostContext.Provider>
+  </Profiler>;
+  const { rerender } = render(view([face]));
+  const size = () => [box()!.style.width, field().style.height];
+  expect(size()).toEqual(['', '']);
+  // jsdom measures the box and its note as 0, so a drag of the corner 300px left and 100px down
+  // makes them that: drawn on the next frame, and nothing renders, then or when the pointer lets go.
+  const corner = box()!.querySelector('[data-quick-edit-resize]')!;
+  const before = commits;
+  fireEvent.pointerDown(corner, { button: 0, pointerId: 1, clientX: 400, clientY: 100 });
+  fireEvent.pointerMove(corner, { pointerId: 1, clientX: 100, clientY: 200 });
+  await waitFor(() => expect(size()).toEqual(['300px', '100px']));
+  fireEvent.pointerUp(corner, { pointerId: 1, clientX: 100, clientY: 200 });
+  expect(commits).toBe(before);
+  // The size holds for as long as the box is open.
+  fireEvent.change(field(), { target: { value: 'Wider.' } });
+  expect(size()).toEqual(['300px', '100px']);
+  // Closed, it is forgotten: the next box is 15rem wide, its note growing with what is written.
+  fireEvent.click(within(box()!).getByRole('button', { name: 'Close Quick Edit' }));
+  rerender(view([]));
+  expect(box()).toBeNull();
+  rerender(view([face]));
+  expect(size()).toEqual(['', '']);
 });
 
 it('keeps its note through a reload of the view: out of sight while it loads, and back as it was', () => {
