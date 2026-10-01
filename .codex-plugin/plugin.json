@@ -43,7 +43,7 @@
   },
   "extensions": {
     "com.openai": {
-      "onboardingSkill": "setup"
+      "onboardingSkill": "./skills/setup/SKILL.md"
     }
   }
 }
