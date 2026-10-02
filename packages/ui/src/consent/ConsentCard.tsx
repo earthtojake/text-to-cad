@@ -21,9 +21,8 @@ export function ConsentCard({ policy, onAnswer, onPolicy }: {
       <Button variant="ghost" size="icon-xs" className="-mr-1" aria-label="Close and don't share" onClick={() => onAnswer(false)}><X aria-hidden="true" /></Button>
     </div>
     <p className="text-xs text-muted-foreground">
-      text-to-cad is free and open source. Anonymous counts of how many people use it, how often, and how
-      often its tools fail show us what to fix and build next. We never collect your files, models or
-      prompts. Read our{" "}
+      text-to-cad is free and open source. Anonymous user and error counts help us fix bugs and improve
+      it. We never collect your files, models or prompts. Read our{" "}
       <a href={policy} target="_blank" rel="noreferrer" className="text-foreground underline underline-offset-2"
         onClick={event => { event.preventDefault(); onPolicy(policy); }}>Privacy Policy</a>.
     </p>
