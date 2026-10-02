@@ -520,9 +520,10 @@ on every push:
   is no Git LFS: installers clone without git-lfs and would receive pointer
   files, and claude.ai's plugin directory validates files as stored and refuses
   a plugin whose installs could differ.
-- **No tracked file over 5 MiB.** Every installer clones the whole repository,
-  so a big file costs every user on every install; heavyweight media stays out
-  of the tree.
+- **Every tracked file under 5 MiB.** Every installer clones the whole
+  repository, so a big file costs every user on every install, and claude.ai's
+  plugin directory stops validating at 5 MiB; heavyweight media stays out of
+  the tree.
 - **No skill reaching into a repo root.** `packages/` being present is not
   permission to import from it: the Skills CLI installs `skills/<name>` alone,
   so `../../../packages/` would work in a checkout and break on the first
@@ -845,5 +846,5 @@ as `.venv/`, `node_modules/`, `.vite/`, `dist/`, `tmp/`, or local credentials.
 Generated runtime changes should come from the production-output workflow, not
 manual edits inside generated runtime folders.
 
-The repository carries no Git LFS and no tracked file over 5 MiB (see the
+The repository carries no Git LFS and keeps every file under 5 MiB (see the
 shipping contract above), so heavyweight media never goes in the tree.

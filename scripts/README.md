@@ -136,7 +136,7 @@ where those files ship, so these scripts are what produces them.
 
 - `check-builds.sh [--skip-bundle-check | --tree-only]` — the shipping contract: no tracked
   symlink anywhere, no `.gitattributes` rule that rewrites files at checkout or
-  changes the archive (so no LFS), no tracked file over 5 MiB, no skill
+  changes the archive (so no LFS), every tracked file under 5 MiB, no skill
   reaching into a repo root; then `bundle.sh --check` unless the workflow
   already bundled; then every path `cadgen-runtime.sh --print-outputs` names
   exists and holds no symlink. `--tree-only` stops after the tree rules, which

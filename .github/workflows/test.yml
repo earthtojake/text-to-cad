@@ -120,7 +120,7 @@ jobs:
 
       # The shipping contract's tree rules hold for every change, docs and models
       # included, and need no runtime: no symlink, no LFS or other rewriting
-      # .gitattributes rule, no file over 5 MiB, no skill reaching into a repo root.
+      # .gitattributes rule, every file under 5 MiB, no skill reaching into a repo root.
       - name: Check the tracked tree
         run: scripts/github-workflows/check-builds.sh --tree-only
 

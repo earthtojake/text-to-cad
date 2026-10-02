@@ -95,8 +95,8 @@ check_generated_path() {
 #     checkout, and no export-ignore or export-subst, which change the archive. The repo
 #     root is the plugin, and claude.ai's plugin directory refuses one whose installs
 #     could differ from the files it validated; installers clone without git-lfs anyway;
-#   * no tracked file over 5 MiB: every installer clones the whole repository, and with
-#     no LFS to carry heavyweight media, it stays out of the tree;
+#   * every tracked file under 5 MiB: every installer clones the whole repository, with
+#     no LFS to carry heavyweight media, and claude.ai's directory stops at 5 MiB;
 #   * no skill reaching into a repo root (../../../packages/, apps/, tests/, models/):
 #     the Skills CLI installs skills/<name> alone, so the sibling is not there.
 check_tree_has_no_symlinks() {
@@ -129,9 +129,9 @@ check_no_large_files() {
   big="$(git -C "$REPO_ROOT" ls-files -s |
     awk -F'\t' '{ split($1, entry, " "); print entry[2] " " $2 }' |
     git -C "$REPO_ROOT" cat-file --batch-check='%(objectsize) %(rest)' |
-    awk -v limit=$((5 * 1024 * 1024)) '$1 + 0 > limit')"
+    awk -v limit=$((5 * 1024 * 1024)) '$1 + 0 >= limit')"
   if [ -n "$big" ]; then
-    echo "Tracked files over 5 MiB; every installer clones them, so keep them out of the tree:" >&2
+    echo "Tracked files of 5 MiB or more; every installer clones them, so keep them out of the tree:" >&2
     printf '%s\n' "$big" | sed 's/^/  /' >&2
     exit 1
   fi

@@ -49,7 +49,7 @@ in development too — install `requirements-dev.txt`, never a skill's
 `scripts/github-workflows/check-builds.sh` enforces the shipping contract on
 every push: no tracked symlink, no `.gitattributes` rule that rewrites files at
 checkout or changes the archive (so no Git LFS; claude.ai's plugin directory
-refuses them), no tracked file over 5 MiB, no skill reaching into a repo root.
+refuses them), every tracked file under 5 MiB, no skill reaching into a repo root.
 See the Releases section in `CONTRIBUTING.md` for the full flow, the resume
 path, the rehearsal, and local/manual fallbacks.
 
@@ -237,7 +237,7 @@ through `scripts/bundle/bundle.sh`.
 
 ## Git
 
-No Git LFS and no file over 5 MiB: the repository root is the plugin, and
+No Git LFS, and every file under 5 MiB: the repository root is the plugin, and
 claude.ai's plugin directory refuses files a filter rewrites at checkout, so
 heavyweight media stays out of the tree. Local hooks live in `.githooks` and
 delegate build checks through `scripts/git-hooks/pre-commit`.
