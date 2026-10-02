@@ -1,6 +1,6 @@
 ---
 name: gcode
-description: Generate, inspect, dry-run, and statically validate plain FDM `.gcode` from 3D mesh files by orchestrating real slicer CLIs. Use when Codex needs to slice `.stl`, `.obj`, unsliced `.3mf`, `.ply`, `.glb`, or `.gltf` into printer-profiled G-code, discover local slicer backends, inspect whether a mesh is slice-ready, or validate generated G-code before any printer-specific handoff.
+description: Slice 3D models into printer-ready G-code with OrcaSlicer, the open-source slicer with built-in profiles for most FDM printers (Prusa, Bambu Lab, Creality, Voron and more). Use when the user wants an `.stl`, `.3mf` or `.obj` model sliced for their printer, as a sliced `.gcode.3mf` or plain `.gcode`, headless with OrcaSlicer's command line or by opening the model in OrcaSlicer. Never contacts a printer.
 ---
 
 # G-code
@@ -9,129 +9,84 @@ Provenance: maintained in [earthtojake/text-to-cad](https://github.com/earthtoja
 Use the installed local skill files as the runtime source of truth; the
 repository link is only for provenance and release review.
 
-Use this skill for plain `.gcode` generation from mesh files. It is printer-agnostic and never uploads, starts, or packages print jobs.
+Slice with OrcaSlicer, headless (below) or by opening the model in the
+OrcaSlicer app for the user. The agent never contacts a printer: for a Bambu
+Lab printer, hand the result to `$bambu-labs`; for any other printer, give the
+user the `.gcode`.
 
-## Workflow
+## Install OrcaSlicer
 
-1. Confirm the input is a supported mesh: `.stl`, `.obj`, unsliced `.3mf`, `.ply`, `.glb`, or `.gltf`.
-2. Require an explicit printer/profile wrapper JSON. Do not invent real-printer profiles.
-3. Discover slicer backends when the backend is unknown:
+- macOS: `brew install --cask orcaslicer`. The command line is
+  `/Applications/OrcaSlicer.app/Contents/MacOS/OrcaSlicer`.
+- Windows and Linux: install a release from
+  https://github.com/OrcaSlicer/OrcaSlicer/releases. The command is
+  `orca-slicer`; on Linux, run it from the AppImage or Flatpak.
 
-```bash
-python scripts/gcode_tool.py discover
-```
+Below, `<orca>` is that command.
 
-4. Inspect the input:
+## Slice headless
 
-```bash
-python scripts/gcode_tool.py inspect --input path/to/model.stl --json
-```
+OrcaSlicer's command line (https://www.orcaslicer.com/wiki/cli/cli_mode) needs
+complete presets: it doesn't fill in a preset's parent settings, and it slices
+only with a process whose compatible printers name the printer.
+`scripts/orca_presets.py` (Python 3, no dependencies) writes them from
+OrcaSlicer's presets, searching the user's own first, then OrcaSlicer's
+built-in profiles.
 
-5. Dry-run the slicer command before executing:
+1. Find the user's printer, process and filament presets. Prefer the presets
+   the user prints with; never invent one, since a wrong bed size or
+   temperature can damage the printer.
 
-```bash
-python scripts/gcode_tool.py slice \
-  --input path/to/model.stl \
-  --output /tmp/model.gcode \
-  --profile path/to/profile.json \
-  --backend auto \
-  --dry-run
-```
+   ```bash
+   python scripts/orca_presets.py --list machine --match "MK4S"
+   python scripts/orca_presets.py --list process --match "@MK4S 0.4"
+   python scripts/orca_presets.py --list filament --match "PLA @MK4S"
+   ```
 
-6. Execute only after the dry-run command and profile are appropriate:
+2. Write the complete presets:
 
-```bash
-python scripts/gcode_tool.py slice \
-  --input path/to/model.stl \
-  --output /tmp/model.gcode \
-  --profile path/to/profile.json \
-  --backend auto \
-  --execute
-```
+   ```bash
+   python scripts/orca_presets.py --printer "Prusa MK4S 0.4 nozzle" \
+     --process "0.20mm SPEED @MK4S 0.4" --filament "Prusa Generic PLA @MK4S" \
+     --out presets
+   ```
 
-7. Validate the generated G-code:
+3. Slice. Give `--outputdir` an absolute path:
 
-```bash
-python scripts/gcode_tool.py validate \
-  --gcode /tmp/model.gcode \
-  --profile path/to/profile.json \
-  --json
-```
+   ```bash
+   <orca> model.stl \
+     --load-settings "presets/process.json;presets/printer.json" \
+     --load-filaments presets/filament-1.json \
+     --arrange 1 --slice 0 \
+     --outputdir "$PWD/out" --export-3mf model.gcode.3mf
+   ```
 
-## Profile Contract
+   This writes `out/plate_1.gcode`, the plain G-code, and
+   `out/model.gcode.3mf`, the sliced 3MF. The command line reads `.stl`,
+   `.3mf`, `.obj` and `.amf`; export STEP to STL or 3MF with `$cad` first.
+   Override one setting with `--<setting>=<value>`, using the setting's key
+   with hyphens for underscores, such as `--layer-height=0.16`.
 
-Every slice requires a wrapper profile JSON with an absolute native slicer profile path:
+## Open in OrcaSlicer
 
-```json
-{
-  "backend": "orcaslicer",
-  "native_config": "/absolute/path/to/native-slicer-profile",
-  "machine": {
-    "name": "Example Printer",
-    "bed_size_mm": [180, 180],
-    "z_height_mm": 180,
-    "motion_bounds_mm": {
-      "x": [0, 180],
-      "y": [0, 180],
-      "z": [0, 180]
-    }
-  },
-  "filament": {
-    "type": "PLA",
-    "nozzle_temp_c": 220,
-    "bed_temp_c": 65
-  }
-}
-```
+When the user would rather pick presets and slice themselves, or no preset can
+be found, open the model in the app: `open -a OrcaSlicer model.stl` on macOS,
+`Start-Process model.stl` on Windows when OrcaSlicer opens that file type, or
+`orca-slicer model.stl` on Linux. The app also reads STEP.
 
-The wrapper supplies validation bounds and backend selection. `machine.motion_bounds_mm` is optional; omit it for the default `0..bed_size` and `0..z_height` bounds, or set it from a native printer profile when start/end G-code intentionally uses safe wipe/purge positions outside the printable area. The native slicer profile remains the source of detailed process, printer, and filament behavior.
+## Check before printing
 
-For OrcaSlicer, use `native_settings` and `native_filaments` when the real profile is split across machine, process, and filament JSON files. Keep `native_config` as an absolute path to the primary native profile for compatibility:
+- `<orca> model.stl --info` prints the model's size; it has to fit the bed.
+- Check the slice's settings, which OrcaSlicer writes at the end of the G-code:
 
-```json
-{
-  "backend": "orcaslicer",
-  "native_config": "/absolute/path/to/machine-or-process.json",
-  "native_settings": [
-    "/absolute/path/to/machine.json",
-    "/absolute/path/to/process.json"
-  ],
-  "native_filaments": [
-    "/absolute/path/to/filament.json"
-  ],
-  "machine": {
-    "name": "Example Printer",
-    "bed_size_mm": [180, 180],
-    "z_height_mm": 180
-  },
-  "filament": {
-    "type": "PLA",
-    "nozzle_temp_c": 220,
-    "bed_temp_c": 65
-  }
-}
-```
+  ```bash
+  grep -E '^; (printer_model|nozzle_diameter|filament_type|nozzle_temperature|hot_plate_temp|bed_temperature) =|printing time' out/plate_1.gcode
+  ```
 
-## Backends And Inputs
+  Confirm they match the user's printer and material before anyone prints it.
 
-Preferred slicer backend order is `orcaslicer`, `prusa-slicer`, then `curaengine`. Prefer installing OrcaSlicer when no preferred backend is available; on macOS use `brew install --cask orcaslicer` and then rerun `discover`. The helper checks both `PATH` and the usual `/Applications/OrcaSlicer.app` cask location. Bambu Studio may be reported by discovery as available but is not preferred because its CLI export path has shown macOS instability.
+## Hand off
 
-Pass `.stl`, `.obj`, and unsliced `.3mf` directly to the slicer. Convert `.ply`, `.glb`, and `.gltf` to temporary STL at execution time with optional `trimesh`; if `trimesh` is unavailable, ask the user to install it or provide `.stl`, `.obj`, or unsliced `.3mf`.
-
-Reject `.step`, `.stp`, `.dxf`, `.svg`, `.urdf`, and `.sdf` in v1. `inspect` and `slice` fail with a structured `remediation` object naming the skill and command that produce a sliceable mesh; use it instead of inferring a conversion workflow:
-
-- `.step`, `.stp`: boundary-representation CAD, not a mesh. Export an STL sidecar with `$cad` (`cadgen stl build <input.step> <output>.stl` — the door takes the STEP document; a model script is refused, run `python <model>.py` first), then slice the exported `.stl` here.
-- `.dxf`, `.svg`: 2D drawings with no 2D-to-mesh conversion in this toolchain. Model the 3D solid in `$cad` as a `@step` model script and export an STL sidecar, then slice that. If the part is a flat cut rather than a print, use `$sendcutsend` instead of this skill.
-- `.urdf`, `.sdf`: robot descriptions that reference per-link mesh files. Slice the referenced `.stl`/`.obj` meshes one at a time; regenerate stale or missing ones from the owning CAD source with `$cad` first. Use `$urdf` or `$sdf` for the robot description itself.
-
-Read `references/slicer-backends.md` when backend behavior, profile expectations, or source links matter.
-
-## Validation
-
-Always validate generated G-code before handing it to printer-specific workflows. The validator checks for non-empty content, temperature commands, movement commands, extrusion moves, XYZ bounds, and unknown command warnings.
-
-Read `references/gcode-validation.md` when interpreting validation output or deciding whether a warning is acceptable.
-
-## Bambu Boundary
-
-This skill generates plain `.gcode` only. It does not create Bambu `.gcode.3mf` archives and does not contact printers. For Bambu upload/start workflows, hand off the validated plain `.gcode` to `$bambu-labs`. Let `$bambu-labs` choose the printer-specific LAN handoff, such as an A1 Mini template project or an explicitly enabled bambox project package.
+- A Bambu Lab printer: `$bambu-labs`, with the `.gcode.3mf`.
+- Any other printer: the user prints the `.gcode` from their printer's app, its
+  web interface (PrusaLink, OctoPrint, Mainsail, Fluidd) or an SD card.

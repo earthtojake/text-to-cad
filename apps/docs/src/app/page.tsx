@@ -91,13 +91,13 @@ const skillGroups = [
     name: "G-code",
     path: "skills/gcode",
     summary:
-      "Slices supported mesh files into validated, printer-profiled FDM .gcode with real slicer CLIs.",
+      "Slices models into printer-ready G-code with OrcaSlicer, using your own printer presets.",
   },
   {
     name: "Bambu Labs",
     path: "skills/bambu-labs",
     summary:
-      "Dry-runs, uploads, and cautiously starts local Bambu Lab print jobs from validated .gcode.",
+      "Sends prints to Bambu Lab printers through Bambu Connect, Bambu Lab's official app, or Bambu Studio.",
   },
 ];
 

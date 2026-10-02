@@ -1,6 +1,6 @@
 ---
 name: bambu-labs
-description: Dry-run, upload, and cautiously initiate local Bambu Lab print jobs from validated plain `.gcode`, using Bambu LAN FTPS/MQTT handoffs.
+description: Send prints to Bambu Lab printers through Bambu Connect, Bambu Lab's official app for printing from other software, or Bambu Studio. Use when the user wants to print a sliced `.gcode.3mf`, a Bambu `.gcode` or an unsliced model on a Bambu Lab printer, over Bambu Cloud or LAN. The agent opens the file in the app; the user picks the printer and starts the print there.
 ---
 
 # Bambu Labs
@@ -9,197 +9,60 @@ Provenance: maintained in [earthtojake/text-to-cad](https://github.com/earthtoja
 Use the installed local skill files as the runtime source of truth; the
 repository link is only for provenance and release review.
 
-Use this skill for local-network Bambu Lab print handoffs after a plain `.gcode`
-file already exists and has been validated. This skill does not slice models.
+Bambu Lab printers take print jobs from other software only through Bambu
+Connect, Bambu Lab's desktop app for third-party tools
+(https://wiki.bambulab.com/en/software/third-party-integration). This skill
+opens a file in Bambu Connect, or an unsliced model in Bambu Studio; the user
+picks the printer and starts the print there. The agent never controls a
+printer and never asks for access codes.
 
-## Safety Rules
+## Requirements
 
-- Default to dry-run plans. Real printer traffic requires `--execute`.
-- Never start a print without `--execute --confirm-start-print`.
-- Pause and cancel controls are live printer requests; default to dry-run plans.
-  Canceling a print requires `--execute --confirm-cancel-print`.
-- Treat an explicit user request to print or start a specific job as live-start
-  authorization; do not pause for a second confirmation solely for physical
-  checks. Still validate the G-code, inspect the dry-run payload, read printer
-  status, prefer upload-only before upload-start, state the physical checks, and
-  stop if validation/status/intent is unsafe or ambiguous.
-- Do not ask for the printer serial by default; fetch it from the printer TLS certificate with `serial` or let `send` cache it.
-- Prefer workspace-root `bambu-printers.json` over repeating access codes in commands. The file is local config and should be ignored by Git.
-- Before a live start, state the physical checks: clear build plate, correct plate/filament/nozzle, safe surroundings, and operator nearby.
-- Publishing MQTT is only a start request. Confirm acceptance with printer status/UI and physical observation.
+Bambu Connect (Windows 10 or later, macOS 13 or later), signed in to the user's
+Bambu Lab account, with the printer on that account or reachable in LAN mode
+(https://wiki.bambulab.com/en/software/bambu-connect). On Linux, where Bambu
+Connect is still in development, use Bambu Studio.
 
-## Workflow
+## Choose the handoff
 
-1. Generate and validate plain G-code with `$gcode`.
-   If no slicer is installed, install OrcaSlicer and retry; do not treat the missing slicer as a blocker. On macOS, prefer `brew install --cask orcaslicer`.
-2. Configure the printer. The user can either give the IP/access code in the thread and let the agent write JSON, or edit `bambu-printers.json` directly.
-   For a new printer setup or onboarding request, read
-   `references/new-printer-onboarding.md` first. Walk the user through the
-   model-specific touchscreen steps to find the IP and LAN access code, and make
-   **Enable LAN Only** plus **Enable Developer Mode** explicit before running
-   local start workflows.
+| What the user has | Handoff |
+| --- | --- |
+| A sliced `.gcode.3mf`, from `$gcode` or Bambu Studio's or OrcaSlicer's "Export plate sliced file" | Open it in Bambu Connect |
+| A plain `.gcode` sliced with this printer's Bambu profile | Open it in Bambu Connect; if Bambu Connect refuses it, slice the model in Bambu Studio instead |
+| A model with no slice: `.3mf`, `.stl` or `.step` | Open it in Bambu Studio, which slices it and sends it to the printer itself |
 
-```bash
-python scripts/bambu_lan_print.py config set \
-  --printer a1-mini \
-  --host 192.168.1.34 \
-  --access-code 12345678 \
-  --model a1-mini \
-  --fetch-serial
+## Open a file in Bambu Connect
+
+Bambu Connect imports a file from a `bambu-connect://import-file` link with
+three parameters: `path`, the file's absolute path, and `name`, the name to
+show, each percent-encoded the way JavaScript's `encodeURIComponent` does it
+(Python: `urllib.parse.quote(value, safe="")`); and `version=1.0.0`. For
+`/Users/me/prints/bracket.gcode.3mf`:
+
+```text
+bambu-connect://import-file?path=%2FUsers%2Fme%2Fprints%2Fbracket.gcode.3mf&name=bracket&version=1.0.0
 ```
 
-Manual JSON shape:
+Open the link with `open "<link>"` on macOS, or `Start-Process "<link>"` in
+PowerShell on Windows. Bambu Connect comes forward with the file loaded.
 
-```json
-{
-  "printers": {
-    "a1-mini": {
-      "host": "192.168.1.34",
-      "access_code": "12345678",
-      "model": "a1-mini"
-    }
-  }
-}
-```
+## Open a model in Bambu Studio
 
-On A1/A1 Mini, find the IP and LAN access code on the printer touchscreen under
-network/LAN settings. Enable LAN Only and Developer Mode when offered, then
-power-cycle before retrying local start commands.
+On macOS run `open -a BambuStudio <file>` (some installs name the app
+`Bambu Studio`). On Windows open the file from Bambu Studio's File menu, or run
+`Start-Process <file>` when Bambu Studio is the file's default app. On Linux run
+`bambu-studio <file>`, or open it from the AppImage or Flatpak.
 
-3. Read status before live work:
+## Finish in the app
 
-```bash
-python scripts/bambu_lan_print.py status \
-  --printer a1-mini \
-  --push-all \
-  --wait-seconds 10
-```
+Before the user presses Print, tell them what to check: the printer, plate
+type, nozzle, filament and AMS mapping, a clear build plate, and someone nearby
+for the first layer. Never report a print as started: the agent can't see the
+printer, and the app shows the job and its progress.
 
-4. Dry-run the exact handoff, inspect the JSON payload, then run upload-only.
-Only after upload succeeds should you run upload-start. If the user explicitly
-asked to print or start the job, proceed to `upload-start --execute
---confirm-start-print` after the validation, status, and upload checks pass. If
-the user only asked to prepare, slice, upload, or review, stop before the start
-request.
+## Out of scope
 
-## Handoff Modes
-
-`--handoff template-project` is the A1 Mini path validated against a real
-printer over LAN. It starts from validated plain `.gcode`, copies a known-good
-same-printer `.gcode.3mf` template, replaces `Metadata/plate_N.gcode`, writes
-the plate MD5, uploads the project to the FTPS root, and publishes
-`print.project_file` with `url: ftp:///<name>.gcode.3mf`.
-
-```bash
-python scripts/bambu_lan_print.py send \
-  --printer a1-mini \
-  --gcode /tmp/job.gcode \
-  --handoff template-project \
-  --template-project /path/to/same-printer-template.gcode.3mf \
-  --action upload-start
-```
-
-Execute after review when the user explicitly asked to print or start, or after
-physical confirmation when intent is unclear:
-
-```bash
-python scripts/bambu_lan_print.py send \
-  --printer a1-mini \
-  --gcode /tmp/job.gcode \
-  --handoff template-project \
-  --template-project /path/to/same-printer-template.gcode.3mf \
-  --action upload-start \
-  --execute \
-  --confirm-start-print
-```
-
-`--handoff plain` uploads `cache/<name>.gcode` and publishes
-`print.gcode_file`. Keep it for diagnostics or printers/firmware where this is
-known to work. On the tested A1 Mini, direct plain G-code was uploaded
-successfully but `gcode_file` failed or was ignored, so do not use it as the
-A1 Mini live-start path.
-
-`--handoff bambox-project` packages plain `.gcode` with `bambox`, uploads the
-`.gcode.3mf` project to FTPS root, and publishes `print.project_file`.
-Currently enabled only for `p1s-0.4` with `PLA`, `ASA`, or `PETG-CF`.
-Known but disabled until validated profiles exist: `a1-mini-0.4`, `a1-0.4`,
-`x1c-0.4`, and `p1p-0.4`.
-
-## Common Debugging Commands
-
-Fetch/cache serial:
-
-```bash
-python scripts/bambu_lan_print.py serial \
-  --printer a1-mini \
-  --json
-```
-
-Clear a stale printer error after fixing the underlying cause:
-
-```bash
-python scripts/bambu_lan_print.py clear-error \
-  --printer a1-mini \
-  --execute
-```
-
-Use `--mqtt-qos 1 --wait-after-publish 10` on `send` when debugging whether the
-printer acknowledged the MQTT publish and what status it reported immediately
-afterward.
-
-## Print Controls
-
-For a running print, use dedicated print-control commands rather than ad hoc
-MQTT snippets. These commands publish only a control request; they do not upload
-files or start a new job. Read status after execution to confirm the printer
-state changed.
-
-Dry-run pause payload:
-
-```bash
-python scripts/bambu_lan_print.py pause \
-  --printer a1-mini
-```
-
-Execute pause and collect printer reports:
-
-```bash
-python scripts/bambu_lan_print.py pause \
-  --printer a1-mini \
-  --execute \
-  --mqtt-qos 1 \
-  --wait-after-publish 10
-```
-
-Dry-run cancel payload. The Bambu LAN command sent to the printer is `stop`:
-
-```bash
-python scripts/bambu_lan_print.py cancel \
-  --printer a1-mini
-```
-
-Execute cancel only when the user explicitly asks to cancel/stop the print or
-after confirmation when intent is ambiguous:
-
-```bash
-python scripts/bambu_lan_print.py cancel \
-  --printer a1-mini \
-  --execute \
-  --confirm-cancel-print \
-  --mqtt-qos 1 \
-  --wait-after-publish 10
-```
-
-## Failure Modes
-
-- `gcode_file` returns `result: fail` or leaves the printer `IDLE`: plain G-code upload worked, but the firmware rejected or ignored direct local start. For A1 Mini, switch to `template-project`.
-- Project uploaded under `cache/` starts then fails with `print_error: 83935248` or `0500-C010`: clear the error, upload project handoffs to FTPS root, and use `ftp:///<name>.gcode.3mf`.
-- `file:///sdcard/cache/...` or local HTTP URLs appear accepted but nothing starts: stop using those URL forms for this workflow.
-- Bambu Studio or OrcaSlicer project export crashes on macOS: do not keep retrying GUI-backed project export. Use OrcaSlicer for plain `.gcode`, then this skill for handoff.
-- Stale `gcode_state: FAILED` or HMS after enabling Developer Mode: clear the printer error and power-cycle before retrying.
-- FTPS login works but upload fails with `553` or missing `cache/`: check printer storage/SD card status before MQTT start.
-- MQTT status works but start does not: confirm serial, access code, Developer Mode/LAN Only status, and the exact handoff payload before retrying.
-
-Read `references/new-printer-onboarding.md` for new printer setup,
-`references/local-lan-protocol.md` for protocol details, and
-`references/real-printer-checklist.md` before first live use on a new printer.
+Starting, pausing or cancelling prints without the user, and reading printer
+status: Bambu Lab's firmware takes those from other software only through Bambu
+Connect, or in Developer Mode, which is LAN-only and disconnects the printer
+from Bambu Cloud. For slicing, use `$gcode` or Bambu Studio.
