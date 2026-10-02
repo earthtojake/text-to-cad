@@ -12,20 +12,16 @@ repository link is only for provenance and release review.
 Bambu Lab printers take print jobs from other software only through Bambu
 Connect, Bambu Lab's desktop app for third-party tools
 (https://wiki.bambulab.com/en/software/third-party-integration). This skill
-opens a file in Bambu Connect, or an unsliced model in Bambu Studio, and the
-user chooses the printer and starts the print there. It works for printers on
-the user's Bambu account (cloud) and printers in LAN mode. The agent never
-controls a printer directly and never handles access codes.
+opens a file in Bambu Connect, or an unsliced model in Bambu Studio; the user
+picks the printer and starts the print there. The agent never controls a
+printer and never asks for access codes.
 
 ## Requirements
 
-- Bambu Connect, signed in to the user's Bambu Lab account, with the printer on
-  that account or reachable in LAN mode
-  (https://wiki.bambulab.com/en/software/bambu-connect). It runs on Windows 10
-  or later and macOS 13 or later; on Linux, where it is still in development,
-  use Bambu Studio.
-- A file sliced for the user's printer model, nozzle and filament, unless Bambu
-  Studio will slice it.
+Bambu Connect (Windows 10 or later, macOS 13 or later), signed in to the user's
+Bambu Lab account, with the printer on that account or reachable in LAN mode
+(https://wiki.bambulab.com/en/software/bambu-connect). On Linux, where Bambu
+Connect is still in development, use Bambu Studio.
 
 ## Choose the handoff
 
@@ -60,17 +56,13 @@ On macOS run `open -a BambuStudio <file>` (some installs name the app
 ## Finish in the app
 
 Before the user presses Print, tell them what to check: the printer, plate
-type, nozzle and filament, the AMS mapping, a clear build plate, and someone
-nearby for the first layer.
-
-Never report a print as started. The agent can't see the printer; Bambu Connect
-and Bambu Studio show the job and its progress.
+type, nozzle, filament and AMS mapping, a clear build plate, and someone nearby
+for the first layer. Never report a print as started: the agent can't see the
+printer, and the app shows the job and its progress.
 
 ## Out of scope
 
-- Starting, pausing or cancelling prints without the user, or reading printer
-  status. Bambu Lab's firmware takes those commands from other software only
-  through Bambu Connect, or in Developer Mode, which works only in LAN mode and
-  disconnects the printer from Bambu Cloud.
-- Slicing. Use `$gcode` for a plain `.gcode`, or Bambu Studio for a
-  `.gcode.3mf`.
+Starting, pausing or cancelling prints without the user, and reading printer
+status: Bambu Lab's firmware takes those from other software only through Bambu
+Connect, or in Developer Mode, which is LAN-only and disconnects the printer
+from Bambu Cloud. For slicing, use `$gcode` or Bambu Studio.
