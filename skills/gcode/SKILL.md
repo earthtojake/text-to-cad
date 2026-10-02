@@ -1,6 +1,6 @@
 ---
 name: gcode
-description: Slice 3D models into printer-ready G-code with OrcaSlicer, the open-source slicer with built-in profiles for most FDM printers (Prusa, Bambu Lab, Creality, Voron and more). Use when the user wants an `.stl`, `.3mf`, `.step` or `.obj` model sliced for their printer, as a sliced `.gcode.3mf` or plain `.gcode`. The agent runs OrcaSlicer's command line with the user's own printer, process and filament presets and never contacts a printer.
+description: Slice 3D models into printer-ready G-code with OrcaSlicer, the open-source slicer with built-in profiles for most FDM printers (Prusa, Bambu Lab, Creality, Voron and more). Use when the user wants an `.stl`, `.3mf` or `.obj` model sliced for their printer, as a sliced `.gcode.3mf` or plain `.gcode`, headless with OrcaSlicer's command line or by opening the model in OrcaSlicer. Never contacts a printer.
 ---
 
 # G-code
@@ -9,10 +9,10 @@ Provenance: maintained in [earthtojake/text-to-cad](https://github.com/earthtoja
 Use the installed local skill files as the runtime source of truth; the
 repository link is only for provenance and release review.
 
-Slice with OrcaSlicer's command line
-(https://www.orcaslicer.com/wiki/cli/cli_mode), using the user's own OrcaSlicer
-presets. The agent never contacts a printer: for a Bambu Lab printer, hand the
-result to `$bambu-labs`; for any other printer, give the user the `.gcode`.
+Slice with OrcaSlicer, headless (below) or by opening the model in the
+OrcaSlicer app for the user. The agent never contacts a printer: for a Bambu
+Lab printer, hand the result to `$bambu-labs`; for any other printer, give the
+user the `.gcode`.
 
 ## Install OrcaSlicer
 
@@ -22,45 +22,68 @@ result to `$bambu-labs`; for any other printer, give the user the `.gcode`.
   https://github.com/OrcaSlicer/OrcaSlicer/releases. The command is
   `orca-slicer`; on Linux, run it from the AppImage or Flatpak.
 
-Below, `<orca>` is that command; `<orca> --help` confirms it runs.
+Below, `<orca>` is that command.
 
-## Get the user's presets
+## Slice headless
 
-A slice needs three kinds of OrcaSlicer preset, each a JSON file: the printer,
-the process (layer height, walls, infill), and one filament per material. Ask
-the user to set their printer up in OrcaSlicer, which has built-in profiles for
-most printers, then export the presets with OrcaSlicer's Export Preset Bundle:
-Printer presets, Process presets and Filament presets each save a `.zip` of JSON
-files (https://www.orcaslicer.com/wiki/general_settings/import_export). Never
-invent a preset: a wrong bed size or temperature can damage the printer.
+OrcaSlicer's command line (https://www.orcaslicer.com/wiki/cli/cli_mode) needs
+complete presets: it doesn't fill in a preset's parent settings, and it slices
+only with a process whose compatible printers name the printer.
+`scripts/orca_presets.py` (Python 3, no dependencies) writes them from
+OrcaSlicer's presets, searching the user's own first, then OrcaSlicer's
+built-in profiles.
 
-## Slice
+1. Find the user's printer, process and filament presets. Prefer the presets
+   the user prints with; never invent one, since a wrong bed size or
+   temperature can damage the printer.
 
-```bash
-<orca> model.stl \
-  --load-settings "process.json;printer.json" \
-  --load-filaments filament.json \
-  --arrange 1 --slice 0 \
-  --outputdir out --export-3mf model.gcode.3mf
-```
+   ```bash
+   python scripts/orca_presets.py --list machine --match "MK4S"
+   python scripts/orca_presets.py --list process --match "@MK4S 0.4"
+   python scripts/orca_presets.py --list filament --match "PLA @MK4S"
+   ```
 
-`--slice 0` slices every plate, and `--export-3mf` writes the sliced
-`out/model.gcode.3mf`. Override one setting with `--<setting>=<value>`, using
-the setting's key with hyphens for underscores, such as `--layer-height=0.16`.
-If the slice fails, OrcaSlicer says why; report that to the user.
+2. Write the complete presets:
 
-For plain `.gcode`, take a plate's G-code out of the sliced 3MF, which is a zip:
+   ```bash
+   python scripts/orca_presets.py --printer "Prusa MK4S 0.4 nozzle" \
+     --process "0.20mm SPEED @MK4S 0.4" --filament "Prusa Generic PLA @MK4S" \
+     --out presets
+   ```
 
-```bash
-unzip -p out/model.gcode.3mf Metadata/plate_1.gcode > out/model.gcode
-```
+3. Slice. Give `--outputdir` an absolute path:
+
+   ```bash
+   <orca> model.stl \
+     --load-settings "presets/process.json;presets/printer.json" \
+     --load-filaments presets/filament-1.json \
+     --arrange 1 --slice 0 \
+     --outputdir "$PWD/out" --export-3mf model.gcode.3mf
+   ```
+
+   This writes `out/plate_1.gcode`, the plain G-code, and
+   `out/model.gcode.3mf`, the sliced 3MF. The command line reads `.stl`,
+   `.3mf`, `.obj` and `.amf`; export STEP to STL or 3MF with `$cad` first.
+   Override one setting with `--<setting>=<value>`, using the setting's key
+   with hyphens for underscores, such as `--layer-height=0.16`.
+
+## Open in OrcaSlicer
+
+When the user would rather pick presets and slice themselves, or no preset can
+be found, open the model in the app: `open -a OrcaSlicer model.stl` on macOS,
+`Start-Process model.stl` on Windows when OrcaSlicer opens that file type, or
+`orca-slicer model.stl` on Linux. The app also reads STEP.
 
 ## Check before printing
 
 - `<orca> model.stl --info` prints the model's size; it has to fit the bed.
-- The G-code starts with comments naming the printer, nozzle, filament,
-  temperatures and print time. Confirm they match the user's printer and
-  material before anyone prints it.
+- Check the slice's settings, which OrcaSlicer writes at the end of the G-code:
+
+  ```bash
+  grep -E '^; (printer_model|nozzle_diameter|filament_type|nozzle_temperature|hot_plate_temp|bed_temperature) =|printing time' out/plate_1.gcode
+  ```
+
+  Confirm they match the user's printer and material before anyone prints it.
 
 ## Hand off
 
