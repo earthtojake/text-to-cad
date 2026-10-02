@@ -11,7 +11,7 @@ export function appSettingsSections(appSettings = []) {
   return [...groups].map(([title, settings]) => ({
     id: `app-${title.toLowerCase().replace(/[^a-z0-9]+/g, "-")}`, title,
     content: settings.map(setting => <FileSheetCheckboxRow key={setting.id} label={setting.label} checked={setting.checked}
-      onCheckedChange={setting.onCheckedChange} />),
+      disabled={setting.disabled} onCheckedChange={setting.onCheckedChange} />),
   }));
 }
 

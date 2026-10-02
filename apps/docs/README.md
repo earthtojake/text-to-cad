@@ -137,7 +137,7 @@ a release of cadgen.
 | Route | What it does |
 | --- | --- |
 | `POST /v1/events` | One batch: `{schema: 1, install, session, version, source, platform, arch, client: {name, version}, presentation, events: [{name: "tool", tool, calls, errors} \| {name: "view", calls} \| {name: "file", file, kind}]}` → `204`. `file` is 16 hex characters, an HMAC of the path under a salt that never leaves the machine: distinct files can be counted, not named. Anything else is `400` and stores nothing (`src/lib/analytics/events.mjs`). |
-| `DELETE /v1/installs/:id` | Deletes every row sent under an install id → `204`. `cadgen analytics off` calls it; the random id is the only authority needed. |
+| `POST /v1/forget` | `{install}`: deletes every row sent under an install id → `204`. `cadgen analytics off` calls it; the random id is the only authority needed. The id rides in the body because Vercel's request logs keep each path beside the caller's IP. |
 | `GET /v1/prune` | The daily cron (`vercel.json`): deletes rows older than 13 months. Needs `Authorization: Bearer $CRON_SECRET`. |
 | `GET /v1/health` | → `200` |
 

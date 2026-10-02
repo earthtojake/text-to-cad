@@ -245,7 +245,8 @@ def _post(url: str, payload: dict[str, Any] | None = None, *, method: str = "POS
 
 def request_deletion(install_id: str) -> bool:
     """Ask the receiver to delete what it holds under ``install_id``: whether it said it did. Waits on the network."""
-    return _post(f"{endpoint()}/installs/{install_id}", method="DELETE")
+    # In the body, never the path: the receiver's host logs each request's path beside its IP address.
+    return _post(f"{endpoint()}/forget", {"install": install_id})
 
 
 def _token(value: Any, limit: int) -> str:

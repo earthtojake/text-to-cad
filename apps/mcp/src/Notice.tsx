@@ -34,7 +34,7 @@ export function ConsentCard({ placement, policy, onAnswer, onPolicy }: { placeme
       <div className="flex items-center justify-between gap-2">
         <h2 id="cad-consent-title" className="font-medium">Allow Analytics</h2>
         {/* Closing is an answer, No thanks: the card never comes back to ask again. */}
-        <Button variant="ghost" size="icon-xs" className="-mr-1" aria-label="Close" title="No thanks" onClick={() => onAnswer(false)}><X aria-hidden="true" /></Button>
+        <Button variant="ghost" size="icon-xs" className="-mr-1" aria-label="Close and don't share" onClick={() => onAnswer(false)}><X aria-hidden="true" /></Button>
       </div>
       <p className="text-xs text-muted-foreground">
         Help improve text-to-cad by sending anonymous usage statistics. We never collect your files, models or

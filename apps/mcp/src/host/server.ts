@@ -50,7 +50,13 @@ export interface SyncReply {
 }
 
 /** Anonymous usage analytics: `ask` until the person answers, unless a plugin listing or their environment decided. */
-export interface Consent { ask: boolean; sharing: boolean; policy: string }
+export interface Consent {
+  ask: boolean;
+  sharing: boolean;
+  /** Why: `environment` (DO_NOT_TRACK or CADGEN_ANALYTICS decided, and no click changes it), `choice`, `unasked`, `unavailable`. */
+  reason?: 'environment' | 'choice' | 'unasked' | 'unavailable';
+  policy: string;
+}
 
 export class ServerError extends Error {
   constructor(message: string) { super(message); this.name = 'ServerError'; }

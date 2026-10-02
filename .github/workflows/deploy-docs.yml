@@ -72,7 +72,7 @@ jobs:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_DOCS_PROJECT_ID: ${{ secrets.VERCEL_DOCS_PROJECT_ID }}
           # api.texttocad.dev's: CAD's analytics database and the prune cron's secret
-          # (apps/docs/README.md). Unset, the project keeps whatever values it has.
+          # (apps/docs/README.md), written into the project's production env on each deploy.
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
@@ -82,9 +82,23 @@ jobs:
               exit 1
             fi
           done
+          urls="https://www.texttocad.dev https://texttocad.dev"
+          api=()
+          # A ref with the analytics API (apps/docs/src/app/v1) needs its two secrets, writes them into the
+          # project and checks its health. An older ref -- a past release redeployed -- has neither the
+          # routes nor a deploy script that takes --env-from, and deploys as it always did.
+          if [ -d apps/docs/src/app/v1 ]; then
+            for name in DATABASE_URL CRON_SECRET; do
+              if [ -z "${!name:-}" ]; then
+                echo "Missing GitHub Actions secret: $name (api.texttocad.dev needs it)" >&2
+                exit 1
+              fi
+            done
+            urls="$urls https://api.texttocad.dev/v1/health"
+            api=(--env-from DATABASE_URL --env-from CRON_SECRET)
+          fi
           scripts/github-workflows/deploy-vercel-app.sh \
             --label "Docs app" \
             --project-id "$VERCEL_DOCS_PROJECT_ID" \
-            --public-urls "https://www.texttocad.dev https://texttocad.dev https://api.texttocad.dev/v1/health" \
-            --env-from DATABASE_URL \
-            --env-from CRON_SECRET
+            --public-urls "$urls" \
+            ${api[@]+"${api[@]}"}

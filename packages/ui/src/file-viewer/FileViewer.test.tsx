@@ -40,7 +40,7 @@ it('draws the navbar only when it has something to hold, and never for a view sh
   cleanup();
   // The host's links: without an update, GitHub (the project is open source), then Feedback — a new
   // issue titled "Feedback: ", for the person to finish, naming the version and the platform (X,
-  // Discord and the version are in Settings' header). It carries no label: the project has none for feedback.
+  // Discord and the version are in Settings' footer). It carries no label: the project has none for feedback.
   const linked = { ...host, links: viewerLinks({ version: 'v0.7.4' }), environment: { colorScheme: 'light', platform: 'darwin' } };
   open({ navigationPath: null, host: linked });
   await screen.findByText('shown');

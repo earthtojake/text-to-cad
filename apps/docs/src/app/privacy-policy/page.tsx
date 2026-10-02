@@ -41,8 +41,9 @@ export default function PrivacyPolicyPage() {
             lets us count how many different files are used without learning their names, locations or
             contents, and it means nothing on any other computer. We record the time each batch
             arrives. Nothing is sent while CAD sits unused. Analytics never include your files, models,
-            file or folder names, prompts, tool arguments or anything you type. Each request also
-            includes standard metadata: your IP address, the time and the user agent. Section 5 says when they are on
+            file or folder names, prompts, tool arguments or anything you type. Like any request over
+            the internet, each one also reaches our host with your IP address, the time and a user
+            agent (for the CAD app, just “cadgen”); see section 4 for what happens to them. Section 5 says when they are on
             and how to turn them off. The skills alone, without the CAD app, send no analytics.
           </li>
           <li>
@@ -86,8 +87,9 @@ export default function PrivacyPolicyPage() {
         <ul>
           <li>
             <strong>Vercel Inc.</strong>, which hosts step.parts, this website and api.texttocad.dev
-            and processes their requests for us, and the database provider that stores usage analytics
-            for us.
+            and processes their requests for us, and <strong>Neon</strong>, which hosts the database
+            that stores usage analytics for us. Neon never sees your IP address: only our servers
+            connect to it.
           </li>
           <li>
             <strong>Services the software contacts directly</strong>, under their own privacy
@@ -106,9 +108,10 @@ export default function PrivacyPolicyPage() {
       <LegalSection title="4. How long we keep it">
         <ul>
           <li>
-            step.parts searches and the request metadata of step.parts, api.texttocad.dev and this
-            website are kept only in our hosting provider’s request logs, which are deleted within 30
-            days.
+            Vercel, our host, records each request to step.parts, api.texttocad.dev and this website
+            in its request logs, with the IP address, time and user agent it arrived with. We use those
+            logs only to run and secure the services, and they are deleted within 30 days. step.parts
+            searches are kept only there.
           </li>
           <li>
             Website analytics are kept as aggregate page-view statistics. The visitor identifier
@@ -116,7 +119,8 @@ export default function PrivacyPolicyPage() {
           </li>
           <li>
             Usage analytics are kept for 13 months, then deleted. We do not store IP addresses with
-            them. Turning analytics off deletes everything stored under your install ID; if our server
+            them, and no request log pairs an IP address with an install ID: the ID travels inside the
+            request, which those logs do not record. Turning analytics off deletes everything stored under your install ID; if our server
             cannot be reached at that moment, the CAD app asks again until it can.
           </li>
           <li>Everything text-to-cad stores locally stays on your computer until you delete it.</li>
@@ -137,8 +141,8 @@ export default function PrivacyPolicyPage() {
             the CAD app never asks, and sends nothing.
           </li>
           <li>
-            To change your answer later, use <strong>Share anonymous usage data</strong> in the CAD viewer’s
-            Settings. To turn analytics off, you can also ask your agent to turn off CAD analytics, or run{" "}
+            To change your answer later, use <strong>Share anonymous usage data</strong> in the CAD app’s
+            Settings (on its home page, or with a 3D model open). To turn analytics off, you can also ask your agent to turn off CAD analytics, or run{" "}
             <code>uvx cadgen analytics off</code>. Turning them off deletes the install ID on your
             computer, with the secret key behind the file codes, and asks our server to delete everything
             stored under it. Turning them on again starts a new install ID and key, so nothing links the two. Setting{" "}

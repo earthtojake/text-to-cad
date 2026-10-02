@@ -8,7 +8,11 @@ export const dynamic = "force-dynamic";
 
 let store: ReturnType<typeof postgresStore> | undefined;
 const serve = (request: Request) =>
-  handle(request, (store ??= postgresStore(process.env.DATABASE_URL)), { cronSecret: process.env.CRON_SECRET });
+  handle(request, (store ??= postgresStore(process.env.DATABASE_URL)), {
+    cronSecret: process.env.CRON_SECRET,
+    // Names only: what /v1/health reports missing, so a deploy without them fails its check.
+    missing: [!process.env.DATABASE_URL && "DATABASE_URL", !process.env.CRON_SECRET && "CRON_SECRET"].filter(Boolean) as string[],
+  });
 
 export const GET = serve;
 export const POST = serve;

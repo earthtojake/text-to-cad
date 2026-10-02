@@ -25,7 +25,7 @@ import { FeedbackLink, GitHubLink, UpdateButton } from "./NavbarLinks.jsx";
  * Right: the file's own actions (the CAD viewer's one: a dismissed alert's icon, which brings its
  * card back), the toggles of any panel the file declares, the host's update —
  * a blue download button, only where the host found a newer release (`NavbarLinks.jsx`) —
- * Feedback, a new issue where the host has a tracker, then the renderer's view controls
+ * GitHub, Feedback (a new issue where the host has a tracker), then the renderer's view controls
  * (`controlsRef`: the CAD viewer's Settings and Preview). Preview takes the whole page, this row
  * with it.
  *

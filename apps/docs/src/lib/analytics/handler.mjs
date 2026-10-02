@@ -5,9 +5,9 @@
  * anything that calls it (README.md).
  *
  *   POST   /v1/events          a batch of counts (src/events.mjs) -> 204
- *   DELETE /v1/installs/:id    forget everything sent under an install id -> 204
+ *   POST   /v1/forget          {install}: forget everything sent under an install id -> 204
  *   GET    /v1/prune           the daily cron: drop rows past retention (CRON_SECRET) -> 200
- *   GET    /v1/health          -> 200
+ *   GET    /v1/health          -> 200, or 503 naming a missing setting (DATABASE_URL, CRON_SECRET)
  *
  * It stores no IP address, no request header and nothing the batch does not name; each row's one
  * time is when it arrived (`received_at`).
@@ -30,17 +30,21 @@ async function json(request) {
 }
 
 /** @param {Request} request @param {{ insert(rows: object[]): Promise<void>, forget(id: string): Promise<void>, prune(days: number): Promise<number> }} store */
-export async function handle(request, store, { cronSecret } = {}) {
+export async function handle(request, store, { cronSecret, missing = [] } = {}) {
   const { pathname } = new URL(request.url);
   const path = pathname.replace(/^\/api(?=\/|$)/, '').replace(/\/+$/, '');
   try {
-    if (path === '/v1/health' && request.method === 'GET') return reply(200, { ok: true });
+    // Unhealthy without its settings: a deploy's check fails rather than shipping an API that drops every batch
+    // or never prunes what the privacy policy says it deletes.
+    if (path === '/v1/health' && request.method === 'GET') return missing.length ? reply(503, { ok: false, missing }) : reply(200, { ok: true });
     if (path === '/v1/events' && request.method === 'POST') {
       await store.insert(rowsOf(await json(request)));
       return reply(204);
     }
-    const install = path.match(/^\/v1\/installs\/([^/]+)$/)?.[1];
-    if (install !== undefined && request.method === 'DELETE') {
+    // The id rides in the body, never the path: the host's request logs keep each path beside the
+    // caller's IP address, and must never pair the two.
+    if (path === '/v1/forget' && request.method === 'POST') {
+      const { install } = await json(request) ?? {};
       if (!isUuid(install)) return reply(400, { error: 'not an install id' });
       await store.forget(install);
       return reply(204);
@@ -52,7 +56,9 @@ export async function handle(request, store, { cronSecret } = {}) {
     return reply(404, { error: 'not found' });
   } catch (error) {
     if (error instanceof Invalid) return reply(400, { error: error.message });
-    console.error(error);
+    // Its code and kind only: a database error's detail can quote a row's values, an install id among them,
+    // and the host's logs keep each line beside the caller's IP address.
+    console.error('analytics request failed:', error?.code ?? error?.name ?? 'error');
     return reply(500, { error: 'internal error' });
   }
 }

@@ -126,6 +126,8 @@ export interface AppSetting {
   section: string;
   label: string;
   checked: boolean;
+  /** Shown, not changeable: something outside the app decided it (the label says what). */
+  disabled?: boolean;
   onCheckedChange: (checked: boolean) => void;
 }
 export interface RendererViewProps {

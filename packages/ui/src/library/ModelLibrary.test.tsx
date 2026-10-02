@@ -21,7 +21,7 @@ function library(models: LibraryModel[], extra: Partial<ModelLibrarySource> = {}
   };
 }
 
-it('heads the home with the CAD wordmark over GitHub, Feedback and Settings, and an update only when there is one; no tagline', async () => {
+it('heads the home with the TEXTTOCAD wordmark over GitHub, Feedback and Settings, and an update only when there is one; no tagline', async () => {
   const links = (latest: object | null) => ({ version: '0.7.4', release: 'r', x: 'https://x.com/earthtojake', github: 'https://github.com/earthtojake/text-to-cad', discord: 'https://discord.gg/x',
     issues: 'https://github.com/earthtojake/text-to-cad/issues/new', install: { command: 'c', prompt: 'p' }, latest });
   const clipboard = { writeText: async () => {}, readText: async () => '', writeImage: async () => {} };
@@ -29,6 +29,7 @@ it('heads the home with the CAD wordmark over GitHub, Feedback and Settings, and
   render(<ModelLibrary library={library([])} links={links({ version: '0.7.4', url: 'u', newer: false })} platform="win32" clipboard={clipboard}
     appSettings={[{ id: 'analytics', section: 'Analytics', label: 'Share anonymous usage data', checked: false, onCheckedChange: value => { changes.push(value); } }]} />);
   let nav = await screen.findByRole('navigation', { name: 'CAD links' });
+  expect(screen.getByRole('img', { name: 'text-to-cad' }).getAttribute('src')).toMatch(/texttocad/);
   expect([...nav.querySelectorAll('a, button')].map(node => node.getAttribute('aria-label'))).toEqual(['GitHub', 'Feedback', 'Settings']);
   const feedback = new URL(within(nav).getByRole('link', { name: 'Feedback' }).getAttribute('href')!).searchParams;
   expect(feedback.get('title')).toBe('Feedback: ');

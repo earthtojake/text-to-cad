@@ -6,7 +6,7 @@ import { Input } from "../primitives/input.jsx";
 import { ScrollArea as ScrollRegion } from "../primitives/scroll-area.jsx";
 import { Spinner } from "../primitives/spinner.jsx";
 import type { LibraryLayout } from "../tab-store/tabRecord.js";
-import wordmark from "../assets/logo-cad.svg";
+import wordmark from "../assets/logo-texttocad.svg";
 import { FeedbackLink, GitHubLink, MadeBy, UpdateButton } from "../file-viewer/navigation/NavbarLinks.jsx";
 import { AppSettingsSections, SettingsPopover } from "../renderers/kit/shell/SettingsPopover.jsx";
 import type { AppSetting } from "../file-viewer/types.js";
@@ -140,7 +140,7 @@ function Placeholders({ layout }: { layout: LibraryLayout }) {
 
 /**
  * The host's home: the models opened before, from every view, to open again. It has no navbar
- * over it: the CAD wordmark is centred at its top over its byline and the host's links — its update, only when
+ * over it: the TEXTTOCAD wordmark is centred at its top over its byline and the host's links — its update, only when
  * there is one, then GitHub, Feedback and Settings (the version, X and Discord, and the host's own settings) — then "Recent Files" with its search, its grid/list switch and, where
  * the host has a chooser, Open, all three there with no models yet too; at its foot, under a rule, "Made by @…" (the host's X); then the models, pinned first, as solid cards (a picture over the
  * name and when the file was edited) or as rows. A card can be pinned (its pin filled); a row can
@@ -266,7 +266,7 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   return <ScrollArea className="cad-library h-full text-ui" viewportClassName="cad-library-viewport" data-library-layout={layout}>
     <div className="cad-library-page">
     <main className="cad-library-content" aria-label="CAD models">
-      <img className="cad-library-wordmark" src={wordmark} alt="CAD" />
+      <img className="cad-library-wordmark" src={wordmark} alt="text-to-cad" />
       <p className="cad-library-byline">Build anything. <span>100% open source and free.</span></p>
       {links ? <nav className="cad-library-links" aria-label="CAD links">
         {clipboard ? <UpdateButton links={links} clipboard={clipboard} onError={onError} align="center" /> : null}

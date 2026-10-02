@@ -84,15 +84,6 @@ function IconLink({ href, label, icon: Icon, onFollow }) {
   </TooltipHint>;
 }
 
-/**
- * The update, where the host found a newer release: a blue download button whose menu says the
- * step from this version to the new one, how this host updates — the command for a terminal and
- * the message for an agent, or a line saying how where the update is not a command — and what is
- * new. Nothing where there is no update.
- * @param {{ links: import("../../host/types.js").ViewerLinks, clipboard: import("../../host/types.js").ClipboardPort,
- *   onError?: (error: Error) => void, align?: "start" | "center" | "end" }} props
- *   `align`: how the menu lines up with the button — its right end in the navbar, its centre on the home.
- */
 /** Whether `candidate` is a later release than `current` (`v` prefixes and pre-release tails ignored). */
 export function isNewer(candidate, current) {
   const parts = value => String(value || "").replace(/^v/, "").split(/[-+]/)[0].split(".").map(part => Number.parseInt(part, 10) || 0);
@@ -114,6 +105,15 @@ export function MadeBy({ links, onError }) {
   return <a href={links.x} target="_blank" rel="noreferrer" onClick={follow} className="hover:text-foreground" data-link="made-by">Made by @{handle}</a>;
 }
 
+/**
+ * The update, where the host found a newer release: a blue download button whose menu says the
+ * step from this version to the new one, how this host updates — the command for a terminal and
+ * the message for an agent, or a line saying how where the update is not a command — and what is
+ * new. Nothing where there is no update.
+ * @param {{ links: import("../../host/types.js").ViewerLinks, clipboard: import("../../host/types.js").ClipboardPort,
+ *   onError?: (error: Error) => void, align?: "start" | "center" | "end" }} props
+ *   `align`: how the menu lines up with the button — its right end in the navbar, its centre on the home.
+ */
 export function UpdateButton({ links, clipboard, onError, align = "end" }) {
   const follow = useFollow(links, onError);
   // The host says the release is newer than what it runs; the button also never offers the version

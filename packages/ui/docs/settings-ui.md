@@ -52,7 +52,7 @@ none.
   view's controls (Settings, Preview). Preview puts Feedback away with the navbar.
   The version, X, GitHub and Discord are in the Settings popover's footer: the version at its left, the links at its right. A CAD file
   declares no panel and publishes no navbar action but that icon. A host's home has no navbar:
-  its update (when there is one), GitHub, Feedback and **Settings** stand under its CAD wordmark,
+  its update (when there is one), GitHub, Feedback and **Settings** stand under its TEXTTOCAD wordmark,
   in that order. The home's Settings is the same popover, centred under its cog, with no Display
   sections: its header, the host's own settings and its footer. Across the
   home's foot, under a rule, "Made by @…" links the host's X. The update shows only for a release

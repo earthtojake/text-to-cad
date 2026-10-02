@@ -576,7 +576,9 @@ class Server:
         if isinstance(arguments.get("share"), bool):
             self.analytics.choose(arguments["share"], by="app")
         found = self.analytics.status()
-        return _data({"ask": found["reason"] == "unasked", "sharing": found["sharing"], "policy": PRIVACY_URL})
+        # `reason`: Settings shows a choice the environment made (DO_NOT_TRACK, CADGEN_ANALYTICS) as fixed.
+        return _data({"ask": found["reason"] == "unasked", "sharing": found["sharing"], "reason": found["reason"],
+                      "policy": PRIVACY_URL})
 
     def _tool_cad_analytics(self, arguments, context):
         # The agent may report the setting or turn sharing off for the person; only the person turns it on.

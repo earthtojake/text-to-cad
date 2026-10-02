@@ -66,12 +66,15 @@ test('anything outside the contract is refused and stores nothing', async () => 
 test('an install id forgets everything sent under it; pruning is the cron\'s alone', async () => {
   const store = memory();
   await send(store, 'POST', '/v1/events', BATCH);
-  assert.equal((await send(store, 'DELETE', '/v1/installs/not-an-id')).status, 400);
-  assert.equal((await send(store, 'DELETE', `/v1/installs/${INSTALL}`)).status, 204);
+  assert.equal((await send(store, 'POST', '/v1/forget', { install: 'not-an-id' })).status, 400);
+  assert.equal((await send(store, 'POST', '/v1/forget', { install: INSTALL })).status, 204);
+  assert.equal((await send(store, 'DELETE', `/v1/installs/${INSTALL}`)).status, 404); // no id in a path
   assert.deepEqual(store.rows, []);
   assert.equal((await send(store, 'GET', '/v1/prune')).status, 401);
   assert.equal((await send(store, 'GET', '/v1/prune', undefined, { authorization: 'Bearer secret' })).status, 200);
   assert.equal(store.pruned, RETENTION_DAYS);
   assert.equal((await send(store, 'GET', '/api/v1/health')).status, 200);
+  const unhealthy = await handle(new Request('https://api.texttocad.dev/v1/health'), store, { missing: ['CRON_SECRET'] });
+  assert.deepEqual([unhealthy.status, await unhealthy.json()], [503, { ok: false, missing: ['CRON_SECRET'] }]);
   assert.equal((await send(store, 'GET', '/v1/events')).status, 404);
 });

@@ -166,24 +166,35 @@ export default function App({ bridge, server, launch: initial, presentation = 't
   // Asked once, of everyone, unless their environment answered (`cadgen/analytics.py`). A view that
   // cannot ask the server asks nothing.
   const [consent, setConsent] = useState<Consent | null>(null);
-  useEffect(() => { void server.consent().then(setConsent, () => {}); }, [server]);
+  // Each read and answer takes a number, and only the latest one's reply is kept: a read sent just
+  // before a click (the click's own focus re-checks) can never bring the card back after the answer.
+  const consentTurn = useRef(0);
+  const readConsent = useCallback((share?: boolean) => {
+    const turn = ++consentTurn.current;
+    void server.consent(share).then(next => { if (turn === consentTurn.current) setConsent(next); }, () => {});
+  }, [server]);
+  useEffect(() => { readConsent(); }, [readConsent]);
   // Another view (the sidebar, another thread's tab) may have been answered meanwhile: a view still
   // asking reads the answer again when the person comes back to it.
   const asking = Boolean(consent?.ask);
   useEffect(() => {
     if (!asking) return;
-    const recheck = () => void server.consent().then(setConsent, () => {});
+    const recheck = () => readConsent();
     window.addEventListener('focus', recheck);
     return () => window.removeEventListener('focus', recheck);
-  }, [server, asking]);
+  }, [readConsent, asking]);
   const answer = useCallback((share: boolean) => {
     setConsent(previous => previous && { ...previous, ask: false, sharing: share });
-    void server.consent(share).then(setConsent, () => {});
-  }, [server]);
+    readConsent(share);
+  }, [readConsent]);
   // The same choice, changed later: Settings' Analytics section. The environment may still overrule it,
   // and the server's answer says so.
   const appSettings = useMemo<AppSetting[] | undefined>(() => consent ? [{
-    id: 'analytics', section: 'Analytics', label: 'Share anonymous usage data', checked: consent.sharing, onCheckedChange: answer,
+    id: 'analytics', section: 'Analytics', checked: consent.sharing, onCheckedChange: answer,
+    // A choice DO_NOT_TRACK or CADGEN_ANALYTICS made is shown as such, and no click changes it.
+    ...(consent.reason === 'environment'
+      ? { label: 'Share anonymous usage data (set by your environment)', disabled: true }
+      : { label: 'Share anonymous usage data' }),
   }] : undefined, [consent, answer]);
   const openLink = (url: string) => void bridge.request('ui/open-link', { url }).catch(() => {});
   // The navbar's links: the same as every app's (X, Discord, GitHub and a new issue), followed through the

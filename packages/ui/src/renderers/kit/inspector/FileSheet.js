@@ -128,10 +128,10 @@ function FileSheetToggleHeading({ title, open, onOpenChange, headingId, contentI
   );
 }
 
-export function FileSheetCheckboxRow({ label, checked, onCheckedChange, className }) {
+export function FileSheetCheckboxRow({ label, checked, onCheckedChange, className, disabled = false }) {
   return (
-    <label className={cn("flex min-h-6 cursor-pointer items-center gap-2 px-2 text-tiny text-muted-foreground", className)}>
-      <input type="checkbox" checked={checked} onChange={event => onCheckedChange(event.target.checked)} className="size-3.5 shrink-0 accent-primary" />
+    <label className={cn("flex min-h-6 items-center gap-2 px-2 text-tiny text-muted-foreground", disabled ? "cursor-default opacity-60" : "cursor-pointer", className)}>
+      <input type="checkbox" checked={checked} disabled={disabled} onChange={event => onCheckedChange(event.target.checked)} className="size-3.5 shrink-0 accent-primary" />
       <span>{label}</span>
     </label>
   );

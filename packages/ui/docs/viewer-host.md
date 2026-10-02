@@ -395,7 +395,7 @@ for someone with triage access to the repository and drops them for everyone els
 the ordinary way unless the host supplies
 `links.open` (a page in a sandboxed frame hands it to its host). `displayActions`
 passes host-owned appearance controls into the Display section beside Projection
-via `RendererViewProps`. `appSettings` (`{ id, label, checked, onCheckedChange }[]`) are the
+via `RendererViewProps`. `appSettings` (`{ id, section, label, checked, disabled?, onCheckedChange }[]`) are the
 host's own on/off settings, which the shell draws as checkbox rows in the Settings popover's last
 sections, one per `section` the settings name (the CAD app's Analytics), in the viewer's Settings
 and the home's; the host owns what each one does. The shell handles placement and hides the toolbar in

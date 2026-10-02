@@ -350,8 +350,8 @@ the version, X, GitHub and Discord are in the Settings popover's footer. This ho
 supplies the links (`src/host/viewerLinks.js`): its version, the GitHub (where new
 issues open) and Discord its build names (`VIEWER_GITHUB_URL`, `VIEWER_DISCORD_URL`),
 and what GitHub's latest-release API
-says, so the version reads "Update" when a newer release is out; links open in a new
-tab. Browser titles use "CAD | <filename>", or "CAD" when no file is selected.
+says, so the blue download button appears when a newer release is out; links open in a
+new tab. Browser titles use "CAD | <filename>", or "CAD" when no file is selected.
 Appearance is injected as an icon-bearing dropdown beside Projection in the Display
 panel's Display section, below the full-width Mode selector (`ViewerAppearance`,
 through `displayActions`). The original animated mark remains the shared LoadingIcon

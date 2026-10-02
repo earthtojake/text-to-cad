@@ -139,7 +139,7 @@ it('a hand-made install is asked once about analytics: nothing is shared before 
     await act(async () => policy.click());
     expect(bridge.request).toHaveBeenCalledWith('ui/open-link', { url: 'https://www.texttocad.dev/privacy-policy' });
     expect(server.consent).toHaveBeenCalledTimes(1);
-    await act(async () => (choice === 'Close' ? getByRole('button', { name: 'Close' }) : getByText(choice)).click());
+    await act(async () => (choice === 'Close' ? getByRole('button', { name: "Close and don't share" }) : getByText(choice)).click());
     expect(server.consent).toHaveBeenLastCalledWith(choice === 'Allow');
     expect(queryByRole('dialog', { name: 'Allow Analytics' })).toBeNull();
     cleanup();
@@ -163,4 +163,26 @@ it('a hand-made install is asked once about analytics: nothing is shared before 
   await act(async () => {});
   expect(server.consent).toHaveBeenCalledTimes(1);
   expect(queryByRole('dialog', { name: 'Allow Analytics' })).toBeNull();
+});
+
+it('an answer is never undone by a read sent just before it, and a choice the environment made is shown fixed', async () => {
+  const { bridge, server } = host({ displayMode: 'fullscreen' }, {}, true);
+  const policy = 'https://www.texttocad.dev/privacy-policy';
+  let releaseStaleRead: (value: unknown) => void = () => {};
+  const { findByRole, getByText, queryByRole } = render(<App bridge={bridge as any} server={server as any} launch={home} session={session} />);
+  await findByRole('dialog', { name: 'Allow Analytics' });
+  // The click's own focus sends a read that answers late, with the question still open.
+  server.consent.mockImplementationOnce(() => new Promise(resolve => { releaseStaleRead = resolve; }));
+  act(() => { window.dispatchEvent(new Event('focus')); });
+  await act(async () => getByText('Allow').click());
+  await act(async () => releaseStaleRead({ ask: true, sharing: false, policy }));
+  expect(queryByRole('dialog', { name: 'Allow Analytics' })).toBeNull();
+  expect(viewer.props!.appSettings![0].checked).toBe(true);
+  cleanup();
+  // DO_NOT_TRACK: the setting says so, and cannot be changed here.
+  const fixed = host({ displayMode: 'fullscreen' });
+  fixed.server.consent.mockImplementation(async () => ({ ask: false, sharing: false, reason: 'environment', policy }));
+  render(<App bridge={fixed.bridge as any} server={fixed.server as any} launch={home} session={session} />);
+  await act(async () => {});
+  expect(viewer.props!.appSettings![0]).toEqual(expect.objectContaining({ disabled: true, label: 'Share anonymous usage data (set by your environment)' }));
 });

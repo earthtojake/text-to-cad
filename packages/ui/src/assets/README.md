@@ -30,9 +30,10 @@ The script reads the pinned Git source, so later changes to the PR do not
 silently change the brand. Normal viewer and desktop builds consume these
 checked-in images and need neither Git access nor the rendering tools.
 
-# CAD mark
+# Wordmarks
 
-`logo-cad.svg` (the home page's and the version menu's wordmark) is a copy of the
-docs site's `public/brand/logo-cad.svg`, which `scripts/brand/generate-logos.mjs`
-draws, so every app draws the same mark from this package. Refresh it with
-`node scripts/brand/export-logos.mjs` rather than editing it by hand.
+`logo-texttocad.svg` (the home page's wordmark) and `logo-cad.svg` (the version
+menu's) are copies of the docs site's `public/brand/logo-texttocad.svg` and
+`public/brand/logo-cad.svg`, which `scripts/brand/generate-logos.mjs` draws, so
+every app draws the same marks from this package. Refresh them with
+`node scripts/brand/export-logos.mjs` rather than editing them by hand.

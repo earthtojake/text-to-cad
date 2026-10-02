@@ -159,8 +159,16 @@ sync_project_env() {
     )"; then
       status="000"
     fi
+    # A 2xx can still carry per-variable failures (`failed`): name their codes, never the value.
+    if [ "$status" -ge 200 ] && [ "$status" -lt 300 ] && ! node -e '
+      const reply = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8") || "{}");
+      const failed = Array.isArray(reply.failed) ? reply.failed : [];
+      if (failed.length) { console.error(failed.map(item => (item.error && item.error.code) || "failed").join(", ")); process.exit(1); }
+    ' "$response_file"; then
+      status="failed"
+    fi
     rm -f "$response_file"
-    if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
+    if [ "$status" = "failed" ] || [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
       die "$LABEL could not set environment variable $name (HTTP $status)"
     fi
     echo "$LABEL environment variable $name set for production."
