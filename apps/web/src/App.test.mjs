@@ -46,10 +46,14 @@ test('the web host keeps the URL, the history, the title and the appearance, and
   const serverCalls = [];
   // The library every CAD view shares, written over this Viewer's routes.
   const libraryCalls = [];
+  const guards = [];  // the header no page from another site can send, on each analytics answer
   const fetchBefore = globalThis.fetch;
   globalThis.fetch = async (url, init = {}) => {
     libraryCalls.push([url, init.body ? JSON.parse(init.body) : null]);
-    return new Response(JSON.stringify({ ok: true }), { headers: { 'content-type': 'application/json' } });
+    if (url === '/__cad/analytics' && init.body) guards.push(init.headers?.['x-cadgen-viewer']);
+    const reply = url !== '/__cad/analytics' ? { ok: true }
+      : init.body ? { ask: false, sharing: false, reason: 'choice', policy: 'p' } : { ask: true, sharing: false, reason: 'unasked', policy: 'p' };
+    return new Response(JSON.stringify(reply), { headers: { 'content-type': 'application/json' } });
   };
   const client = { serverInfo: async options => { serverCalls.push(options); return { identityToken: 'restarted' }; } };
   const root = createRoot(window.document.getElementById('root'));
@@ -92,6 +96,12 @@ test('the web host keeps the URL, the history, the title and the appearance, and
     assert.deepEqual(libraryCalls.filter(([url]) => url.startsWith('/__cad/analytics')),
       [['/__cad/analytics', null], ['/__cad/analytics/activity', { file: 'one.step' }]]);
     assert.equal(viewer().appSettings[0].section, 'Analytics');
+    // The card goes to the viewer (it asks once a model is on screen), and its answer is a card's: the
+    // server applies it only to an open question. Answered, it is gone.
+    await act(() => viewer().notice.props.onAnswer(false));
+    assert.deepEqual(libraryCalls.filter(([url]) => url === '/__cad/analytics').at(-1), ['/__cad/analytics', { share: false, card: true }]);
+    assert.deepEqual(guards, ['1']);
+    assert.equal(viewer().notice, null);
 
     // Showing another file is a navigation: pushed, and undone by Back.
     const historyLength = window.history.length;

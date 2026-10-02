@@ -1,4 +1,5 @@
 import { X } from "lucide-react";
+import { useId } from "react";
 import { Button } from "../primitives/button.jsx";
 
 /**
@@ -14,13 +15,15 @@ export function ConsentCard({ policy, onAnswer, onPolicy }: {
   onAnswer(share: boolean): void;
   onPolicy(url: string): void;
 }) {
-  return <div className="flex flex-col gap-2 rounded-md border bg-popover p-3 text-ui text-popover-foreground shadow-md" role="dialog" aria-labelledby="cad-consent-title">
+  const id = useId();
+  return <div className="flex flex-col gap-2 rounded-md border bg-popover p-3 text-ui text-popover-foreground shadow-md" role="dialog"
+    aria-labelledby={`${id}-title`} aria-describedby={`${id}-text`}>
     <div className="flex items-center justify-between gap-2">
-      <h2 id="cad-consent-title" className="font-medium">Allow Analytics</h2>
+      <h2 id={`${id}-title`} className="font-medium">Allow Analytics</h2>
       {/* Closing is an answer, No thanks: the card never comes back to ask again. */}
       <Button variant="ghost" size="icon-xs" className="-mr-1" aria-label="Close and don't share" onClick={() => onAnswer(false)}><X aria-hidden="true" /></Button>
     </div>
-    <p className="text-xs text-muted-foreground">
+    <p id={`${id}-text`} className="text-xs text-muted-foreground">
       text-to-cad is free and open source. Anonymous user and error counts help us fix bugs and improve
       the project. We never collect your files, models or prompts. Read our{" "}
       <a href={policy} target="_blank" rel="noreferrer" className="text-foreground underline underline-offset-2"

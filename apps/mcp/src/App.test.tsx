@@ -98,6 +98,8 @@ it('an inline host gets a card of a height it is told, which goes full size in p
     launch={{ ...home, surface: 'inline', explore: false, view: 'cad-1-a', order: { createdAt: 1, seq: 1 } }} />);
   expect(viewer.props!.host.environment.compact).toBe(true);
   expect(sized(bridge.notify)).toEqual([['ui/notifications/size-changed', { height: expect.any(Number) }]]);
+  // Its Full size button holds the top-right corner: the viewer's column there (the analytics card) starts below it.
+  expect((container.firstElementChild as HTMLElement).style.getPropertyValue('--cad-viewport-top-right-inset')).toBe('40px');
   act(() => (container.querySelector('[aria-label="Full size"]') as HTMLButtonElement).click());
   expect(bridge.request).toHaveBeenCalledWith('ui/request-display-mode', { mode: 'fullscreen' });
   act(() => bridge.change({ displayMode: 'fullscreen', safeAreaInsets: { bottom: 72 } }));
@@ -142,7 +144,7 @@ it('a hand-made install is asked once about analytics: nothing is shared before 
     expect(bridge.request).toHaveBeenCalledWith('ui/open-link', { url: 'https://www.texttocad.dev/privacy-policy' });
     expect(server.consent).toHaveBeenCalledTimes(1);
     await act(async () => (choice === 'Close' ? getByRole('button', { name: "Close and don't share" }) : getByText(choice)).click());
-    expect(server.consent).toHaveBeenLastCalledWith(choice === 'Allow');
+    expect(server.consent).toHaveBeenLastCalledWith(choice === 'Allow', 'card');
     expect(queryByRole('dialog', { name: 'Allow Analytics' })).toBeNull();
     cleanup();
   }
@@ -155,7 +157,7 @@ it('a hand-made install is asked once about analytics: nothing is shared before 
     await act(async () => getByText('Allow').click());
     expect(viewer.props!.appSettings![0].checked).toBe(true);
     await act(async () => viewer.props!.appSettings![0].onCheckedChange(false));
-    expect(server.consent).toHaveBeenLastCalledWith(false);
+    expect(server.consent).toHaveBeenLastCalledWith(false, 'settings');
     expect(viewer.props!.appSettings![0].checked).toBe(false);
     cleanup();
   }

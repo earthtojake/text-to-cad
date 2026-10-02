@@ -322,7 +322,7 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
               {/* The top-right: the host's notice once a model is on screen (`view.notice`), and Quick Edit
                   under it -- hidden, not unmounted, while the view loads: a note being written outlives a
                   reload of the model. */}
-              <ViewportTopRight notice={chromeHidden ? null : view.notice}>
+              <ViewportTopRight notice={chromeHidden ? null : view.notice} belowStrip={!toolsHidden}>
                 {compact || !references ? null : <QuickEdit key={frame.modelKey} className="self-stretch" hidden={chromeHidden}
                   resource={frame.resource} references={references} sketch={sketch} referencePath={frame.referencePath}
                   onCopy={copyAction} onEscape={frame.escape} onClear={clearQuickEdit} disabled={viewerLoading || !scene} />}

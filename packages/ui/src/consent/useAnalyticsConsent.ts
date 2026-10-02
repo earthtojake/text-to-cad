@@ -13,38 +13,48 @@ export interface AnalyticsConsent {
 }
 
 /**
- * The analytics card's and the Settings toggle's state, from the host's server (`consent()` reads,
- * `consent(share)` answers): read once; read again, while it still asks, when the person comes back
- * to the page (another view may have been answered meanwhile); and answered by a click. Each read
- * and answer takes a number and only the latest one's reply is kept, so a read sent just before a
- * click (the click's own focus) can never bring the card back. A view that cannot ask its server
- * asks nothing. A choice the environment made shows in Settings as fixed.
+ * Where an answer came from: the card, which answers only an open question (one still up in
+ * another view must not undo an answer just given there), or Settings' toggle, which changes it
+ * whenever. The host passes it on to its server.
  */
-export function useAnalyticsConsent(consent: (share?: boolean) => Promise<AnalyticsConsent>) {
+export type AnswerFrom = "card" | "settings";
+
+/**
+ * The analytics card's and the Settings toggle's state, from the host's server (`consent()` reads,
+ * `consent(share, from)` answers): read once, read again whenever the person comes back to the
+ * page (another view, the agent or the CLI may have changed it meanwhile), and answered by a click.
+ * Each read and answer takes a number and only the latest one's reply is kept, so a read sent just
+ * before a click (the click's own focus) can never bring the card back. An answer that did not
+ * arrive is read back rather than shown as kept, and a page that answered never asks again. A view
+ * that cannot ask its server asks nothing. A choice the environment made shows in Settings as fixed.
+ */
+export function useAnalyticsConsent(consent: (share?: boolean, from?: AnswerFrom) => Promise<AnalyticsConsent>) {
   const [state, setState] = useState<AnalyticsConsent | null>(null);
   const turn = useRef(0);
-  const read = useCallback((share?: boolean) => {
+  const answered = useRef(false);
+  const read = useCallback(function read(share?: boolean, from?: AnswerFrom) {
     const mine = ++turn.current;
-    void consent(share).then(next => { if (mine === turn.current) setState(next); }, () => {});
+    void consent(share, from).then(
+      next => { if (mine === turn.current) setState(next); },
+      () => { if (share !== undefined && mine === turn.current) read(); });
   }, [consent]);
   useEffect(() => { read(); }, [read]);
-  const asking = Boolean(state?.ask);
   useEffect(() => {
-    if (!asking) return;
     const recheck = () => read();
     window.addEventListener("focus", recheck);
     return () => window.removeEventListener("focus", recheck);
-  }, [read, asking]);
-  const answer = useCallback((share: boolean) => {
+  }, [read]);
+  const answer = useCallback((share: boolean, from: AnswerFrom = "card") => {
+    answered.current = true;
     setState(previous => previous && { ...previous, ask: false, sharing: share });
-    read(share);
+    read(share, from);
   }, [read]);
   // The same choice, changed later: Settings' Analytics section.
   const appSettings = useMemo<AppSetting[] | undefined>(() => state ? [{
-    id: "analytics", section: "Analytics", checked: state.sharing, onCheckedChange: answer,
+    id: "analytics", section: "Analytics", checked: state.sharing, onCheckedChange: (checked: boolean) => answer(checked, "settings"),
     ...(state.reason === "environment"
       ? { label: "Share anonymous usage data (set by your environment)", disabled: true }
       : { label: "Share anonymous usage data" }),
   }] : undefined, [state, answer]);
-  return { consent: state, answer, appSettings };
+  return { consent: state && answered.current ? { ...state, ask: false } : state, answer, appSettings };
 }

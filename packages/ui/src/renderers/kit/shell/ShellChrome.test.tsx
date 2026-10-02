@@ -351,15 +351,22 @@ it("the host's notice waits for the model, then takes the top-right with Quick E
   const notice = <div role="dialog" aria-label="Allow Analytics" />;
   const corner = () => [...document.querySelector('[data-viewport-top-right]')?.children ?? []]
     .map(child => child.hasAttribute('data-viewport-notice') ? 'notice' : child.hasAttribute('data-quick-edit') ? 'Quick Edit' : child.tagName);
+  const stage = (name: string) => act(() => { fireEvent.click(document.querySelector(`[data-harness-stage="${name}"]`)!); });
+  // On a narrow view the column starts below the tool strip's row, so the strip stays in reach.
+  const clearsStrip = () => document.querySelector('[data-viewport-top-right]')!.className.includes('@max-md/cad-viewport:top-');
   frame({ notice });
-  act(() => { fireEvent.click(document.querySelector('[data-harness-stage="finding"]')!); });
+  stage('finding');
   expect(screen.queryByRole('dialog', { name: 'Allow Analytics' })).toBeNull();
-  act(() => { fireEvent.click(document.querySelector('[data-harness-stage="idle"]')!); });
+  stage('broken');  // a load the model did not survive: only its card
+  expect(screen.queryByRole('dialog', { name: 'Allow Analytics' })).toBeNull();
+  stage('idle');
   expect(corner()).toEqual(['notice', 'Quick Edit']);
+  expect(clearsStrip()).toBe(true);
   cleanup();
-  // Shown small, the view has no Quick Edit, and the notice still asks.
+  // Shown small, the view has no Quick Edit and no strip, and the notice still asks.
   frame({ notice, appearance: { colorScheme: 'light', compact: true } });
   expect(corner()).toEqual(['notice']);
+  expect(clearsStrip()).toBe(false);
 });
 
 it('a host showing the view small gets the model alone: no tools, no view actions, no Quick Edit, no cube', () => {

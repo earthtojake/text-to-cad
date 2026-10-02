@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react';
 import { Maximize2 } from 'lucide-react';
 import type { ResourceRef } from '@text-to-cad/core/prompt';
 import { ConsentCard, useAnalyticsConsent } from '@text-to-cad/ui/consent';
@@ -67,11 +67,13 @@ function Frame({ bridge, context, insets, inline = false, expandable = true, bot
     </div>;
   }
   const expand = () => void bridge.request('ui/request-display-mode', { mode: 'fullscreen' }).catch(() => {});
-  return <div className="flex flex-col overflow-hidden" style={{ height }}>
+  const fullSize = expandable && context.availableDisplayModes?.includes('fullscreen') !== false;
+  // Its button holds the view's top-right corner: the viewer's column there (the analytics card) starts below it.
+  return <div className="flex flex-col overflow-hidden" style={{ height, ...(fullSize ? { '--cad-viewport-top-right-inset': '40px' } : {}) } as CSSProperties}>
     <div className="relative min-h-0 flex-1">
       {children}
       {overlay}
-      {expandable && context.availableDisplayModes?.includes('fullscreen') !== false
+      {fullSize
         ? <Button variant="secondary" size="icon-sm" className="absolute right-2 top-2 z-40 shadow-sm" aria-label="Full size" title="Full size" onClick={expand}>
           <Maximize2 aria-hidden="true" />
         </Button> : null}

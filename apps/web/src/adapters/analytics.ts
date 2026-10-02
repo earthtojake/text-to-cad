@@ -4,15 +4,15 @@
  * answer, and what the page did -- the model it shows, and a person touching it. The server keeps
  * the model as a code, notes all of it in memory, and sends it only with consent.
  */
-import type { AnalyticsConsent } from '@text-to-cad/ui/consent';
+import type { AnalyticsConsent, AnswerFrom } from '@text-to-cad/ui/consent';
 
 const HEADERS = { 'x-cadgen-viewer': '1', 'content-type': 'application/json' };
 
-/** Read the consent (`share` omitted), or answer it. */
-export async function consent(share?: boolean): Promise<AnalyticsConsent> {
+/** Read the consent (`share` omitted), or answer it: the card's answer counts only while the question is open. */
+export async function consent(share?: boolean, from?: AnswerFrom): Promise<AnalyticsConsent> {
   const response = share === undefined
     ? await fetch('/__cad/analytics')
-    : await fetch('/__cad/analytics', { method: 'POST', headers: HEADERS, body: JSON.stringify({ share }) });
+    : await fetch('/__cad/analytics', { method: 'POST', headers: HEADERS, body: JSON.stringify({ share, ...(from === 'card' ? { card: true } : {}) }) });
   if (!response.ok) throw new Error(`analytics consent: ${response.status}`);
   return await response.json() as AnalyticsConsent;
 }

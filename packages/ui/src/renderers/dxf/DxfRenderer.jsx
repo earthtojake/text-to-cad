@@ -176,8 +176,9 @@ function DxfSurface({ view, data }) {
           style={{ top: VIEWPORT_INSET_PX, height: VIEWPORT_TOP_BAR_PX }} data-viewport-status="">
           <ViewUpdateStatus status={DRAWING_UPDATE_STATUS} className="rounded-md bg-background/95 px-1 py-0.5 shadow-sm" />
         </div> : null}
-        {/* The host's notice, top-right, once the drawing is on screen (a rebuild keeps it there). */}
-        <ViewportTopRight notice={shown && !payload.loading && !alert ? view.notice : null} />
+        {/* The host's notice, top-right, once the drawing is on screen: a rebuild, or a failed update the
+            drawing survives, keeps it there, as the 3D views do. */}
+        <ViewportTopRight notice={shown && !payload.loading ? view.notice : null} />
         <ViewerLoadingOverlay loading={{ opening: payload.loading && !alert, progress: { label: "Reading drawing" } }}
           operationKey={file} />
         <ViewerAlertCard alert={cardAlert} hasContent={shown} dismissed={alertDismissal.dismissed} onDismiss={alertDismissal.dismiss} onReload={view.reload} file={file} />
