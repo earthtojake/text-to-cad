@@ -14,8 +14,9 @@ viewer's own HTTP routes through ``cad_http``. No call is held open (``views.py`
 
 Hosts present views in one of three ways, told apart at initialize:
 
-- *Tabs* (Codex). The host starts a process per thread and presents CAD as a
-  sidebar page, a tab per thread and a file handler. The agent opens a tab once
+- *Tabs* (Codex, and any host that declares the ``openai/ui`` client extension with
+  the ``global``, ``thread`` and ``file`` entrypoints). The host starts a process per
+  thread and presents CAD as a sidebar page, a tab per thread and a file handler. The agent opens a tab once
   (``cad_open``) and then drives it (``cad_show``).
 - *Inline* (every other MCP Apps host: Claude, VS Code, ...). Each call to a tool
   with a UI mounts a new view in the chat, and the old ones stay. So ``cad_show``
@@ -68,10 +69,13 @@ _PROTOCOL_VERSIONS = ("2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05")
 _RESOURCE_NOT_FOUND = -32002
 EXTENSIONS = sorted(SOURCE_EXTENSIONS)
 
-# Clients that present CAD as tabs (see the module docstring); every other client is shown views inline,
-# or told where the Viewer has them when it renders no MCP Apps.
+# Clients that present CAD as tabs (see the module docstring): Codex by name, since it declares nothing,
+# and any client that declares every entrypoint CAD uses. Every other client is shown views inline, or
+# told where the Viewer has them when it renders no MCP Apps.
 _TAB_HOSTS = frozenset({"codex-mcp-client"})
 _UI_EXTENSION = "io.modelcontextprotocol/ui"
+_ENTRYPOINTS_EXTENSION = "openai/ui"
+_TAB_ENTRYPOINTS = frozenset({"global", "thread", "file"})
 
 INSTRUCTIONS = (
     "CAD shows local CAD models (STEP, STL, GLB, 3MF, DXF, URDF, SDF) in a viewer tab beside the chat. "
@@ -153,12 +157,14 @@ def _stamped(launch: dict[str, Any]) -> dict[str, Any]:
 
 def _presentation(client: dict[str, Any], offered: dict[str, Any]) -> str:
     """``tabs``, ``inline`` or ``text``: how this client shows views (see the module docstring)."""
-    if client.get("name") in _TAB_HOSTS:
+    extensions = offered.get("extensions") if isinstance(offered.get("extensions"), dict) else {}
+    declared = extensions.get(_ENTRYPOINTS_EXTENSION)
+    entrypoints = declared.get("entrypoints") if isinstance(declared, dict) else None
+    if client.get("name") in _TAB_HOSTS or (isinstance(entrypoints, list) and _TAB_ENTRYPOINTS <= set(entrypoints)):
         return "tabs"
     forced = str(os.environ.get("CADGEN_MCP_PRESENTATION") or "").strip()
     if forced in ("inline", "text"):
         return forced
-    extensions = offered.get("extensions") if isinstance(offered.get("extensions"), dict) else {}
     ui = extensions.get(_UI_EXTENSION)
     return "inline" if isinstance(ui, dict) and MIME in (ui.get("mimeTypes") or []) else "text"
 

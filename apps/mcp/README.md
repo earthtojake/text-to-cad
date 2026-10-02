@@ -6,10 +6,10 @@ instead of an HTTP origin. Its server is `cadgen mcp`
 (`packages/cadgen/src/cadgen/mcp`).
 
 Hosts present it in one of two ways, which the server tells apart at
-`initialize` (Codex names itself `codex-mcp-client`; an MCP Apps host advertises
+`initialize` (Codex names itself `codex-mcp-client`, and any other host can declare the `openai/ui` extension with the `global`, `thread` and `file` entrypoints; an MCP Apps host advertises
 the `io.modelcontextprotocol/ui` extension):
 
-- **Tabs (Codex).** **CAD** in the sidebar (the home: the models opened before,
+- **Tabs (Codex, and hosts that declare its entrypoints).** **CAD** in the sidebar (the home: the models opened before,
   and Open), a **CAD** tab beside each thread, and *Open with CAD* for a model
   file. The agent opens a tab once (`cad_open`) and drives it (`cad_show`).
 - **Inline (Claude Desktop, and every other MCP Apps host).** Each `cad_show`
