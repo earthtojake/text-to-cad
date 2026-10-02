@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import contextlib
 import json
+import math
 import os
 import re
 import stat
@@ -444,7 +445,10 @@ def collect(
     stop = should_stop or (lambda: False)
     report = GcReport(dry_run=dry_run, cap=max_bytes)
     now = time.time()
-    cutoff = now - max(0.0, float(grace_seconds))
+    grace = max(0.0, float(grace_seconds))
+    # No window keeps nothing back, however recent: Windows' time.time() can trail a file's mtime
+    # by a clock step (~16 ms), and ``now - 0`` would keep what was written a moment ago.
+    cutoff = now - grace if grace else math.inf
     found = scan() if found is None else found
     report.records = len(found.entries["model"])
     report.bytes_before = report.bytes_after = found.total

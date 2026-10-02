@@ -41,6 +41,17 @@ class ComponentGcReachability(unittest.TestCase):
         self.assertFalse(has_object(tree))
         self.assertFalse(has_object(orphan))
 
+    def test_no_grace_window_keeps_nothing_however_recent(self):
+        # Windows' time.time() can trail a file's mtime by a clock step, so an object written a
+        # moment ago can look newer than "now": a zero window must still keep nothing back.
+        from cadgen.store.gc import collect
+        from cadgen.store.objects import has_object, object_path, put_object
+        orphan = put_object(b"just written")
+        written = object_path(orphan).stat().st_mtime
+        with mock.patch("cadgen.store.gc.time.time", return_value=written - 0.016):
+            collect(grace_seconds=0)
+        self.assertFalse(has_object(orphan))
+
     def test_document_only_root_retains_linked_geometry_not_external_mesh_hash(self):
         from cadgen.store.gc import collect
         from cadgen.store.index import iter_entries, remove_entry

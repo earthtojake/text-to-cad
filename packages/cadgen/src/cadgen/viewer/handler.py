@@ -33,6 +33,9 @@ MAX_REQUEST_BODY_BYTES = 256 * 1024 * 1024
 
 _ALLOWED_METHODS = ("GET", "HEAD", "POST")
 
+# How long a closing connection waits for each piece of a body its route never read (`_linger`).
+LINGER_SECONDS = 1.0
+
 
 class CadHTTPServer(ThreadingHTTPServer):
     daemon_threads = True
@@ -167,6 +170,23 @@ def make_handler_class(app):
                     return
                 remaining -= len(chunk)
 
+        def _linger(self) -> None:
+            """Read the rest of a body before a closing connection closes.
+
+            A socket closed with bytes unread is reset, not closed, and a reset
+            takes the answer just sent with it: the client of a route that
+            refused a body unread (a 413) loses the 413 -- on Windows even for
+            a small body, and anywhere once the body is big enough that the
+            client is still writing it. So what is left is read first, for as
+            long as the client keeps sending, and a client that stops is let go
+            after ``LINGER_SECONDS``: it is closing either way.
+            """
+            try:
+                self.connection.settimeout(LINGER_SECONDS)
+                self._drain_body()
+            except OSError:  # a client that stopped sending (a timeout) or went away
+                self.close_connection = True
+
         # --- dispatch ------------------------------------------------------
 
         def _raw_target(self) -> str:
@@ -236,8 +256,11 @@ def make_handler_class(app):
                 self.close_connection = True
                 raise
             finally:
-                if not request.body_was_read and not self.close_connection:
-                    self._drain_body()
+                if not request.body_was_read:
+                    if self.close_connection:
+                        self._linger()
+                    else:
+                        self._drain_body()
 
         def do_GET(self):  # noqa: N802
             self._dispatch()

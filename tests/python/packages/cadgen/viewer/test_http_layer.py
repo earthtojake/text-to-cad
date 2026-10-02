@@ -655,6 +655,21 @@ class RequestBodies(HttpLayerTestCase):
                 self.assertIn(b"413", raw.split(b"\r\n")[0])
                 self.assertIn(b"connection: close", raw.lower())
 
+    def test_a_refused_body_is_read_before_the_close_so_its_answer_arrives(self):
+        # A socket closed with bytes unread is reset, and the reset takes the 413 with it: on
+        # Windows even for a small body, anywhere for one the client is still writing.
+        body = b"x" * (1 << 20)
+        sock = socket.create_connection(("127.0.0.1", self.fixture.port), timeout=10)
+        received = b""
+        try:
+            sock.sendall(b"POST /__cad/reveal HTTP/1.1\r\nHost: 127.0.0.1\r\nx-cadgen-viewer: 1\r\n"
+                         + f"Content-Length: {len(body)}\r\n\r\n".encode() + body)
+            while chunk := sock.recv(65536):
+                received += chunk
+        finally:
+            sock.close()
+        self.assertTrue(received.startswith(b"HTTP/1.1 413"), received[:200])
+
     def test_a_chunked_body_is_refused_deliberately(self):
         # The stdlib decodes no chunked framing at all. Silently mangling a
         # /__tess_cache/batch body would demote the client's provider to
