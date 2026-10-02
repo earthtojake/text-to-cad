@@ -808,6 +808,16 @@ def serve(argv: list[str], *, prog: str = DEFAULT_PROG) -> int:
     server.app = app
     server.RequestHandlerClass = make_handler_class(app)
 
+    # Anonymous usage analytics, sent only with consent (``cadgen/analytics.py``): this process's
+    # recorder, which the page asks about and reports to (``/__cad/analytics``). It never raises,
+    # and no request waits on it.
+    from cadgen.analytics import Recorder  # noqa: PLC0415
+
+    analytics = Recorder()
+    analytics.started(client={"name": "cadgen-viewer", "version": app.viewer_version}, presentation="browser")
+    analytics.start()
+    app.analytics = analytics
+
     # Register this instance so `list` and a later launch's reuse lookup can find
     # it — after the bind, so we never advertise a port we failed to take, and
     # BEFORE the URL line, so whoever reads that line (a --detach parent above
@@ -890,6 +900,7 @@ def serve(argv: list[str], *, prog: str = DEFAULT_PROG) -> int:
     finally:
         if reloader is not None:
             reloader.stop()
+        analytics.close()  # the last send, waited for at most a couple of seconds
 
     if restart["argv"] is not None:
         # Returns only when the re-exec itself failed, and then the port is

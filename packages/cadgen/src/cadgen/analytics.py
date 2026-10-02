@@ -1,12 +1,15 @@
-"""Anonymous usage analytics for ``cadgen mcp``: how many people use CAD, how often, and on how
-many files -- counts, times and metadata, never what anything says.
+"""Anonymous usage analytics for CAD's two apps -- ``cadgen mcp`` (the CAD app in an agent app) and
+``cadgen viewer`` (the browser viewer): how many people use CAD, how often, and on how many files --
+counts, times and metadata, never what anything says. Every CAD task shows its model in one or the
+other, so between them they see CAD's use; the CLI and the library send nothing.
 
 What is sent, at most once a minute while there is something new and once more as the server
 exits, each batch stamped with the time it arrives:
 
 - who, anonymously: a random install id, and a random id for this server process;
 - what runs: cadgen's version, how it was installed, the operating system and processor, the
-  agent app's name and version, and how that app shows CAD (tabs, inline or text);
+  agent app's name and version and how that app shows CAD (tabs, inline or text) -- or, from the
+  browser viewer, ``cadgen-viewer`` and ``browser``;
 - ``tool``: how many times each CAD tool was called, and how many of those failed;
 - ``view``: how many times a CAD view was touched by a person or switched models -- time spent
   looking at a model calls no tool, and is use all the same;
@@ -25,10 +28,10 @@ Nothing is sent without the person's yes, however CAD was installed. Strongest f
 
 1. The environment: ``DO_NOT_TRACK=1`` or ``CADGEN_ANALYTICS=0`` turns it off,
    ``CADGEN_ANALYTICS=1`` on.
-2. The person's choice, kept in the state directory (``analytics.json``): the CAD app's
-   prompt or its Settings, ``cadgen analytics on|off``, or the agent's ``cad_analytics``
-   (off only).
-3. Otherwise nothing is sent, and the CAD app asks once.
+2. The person's choice, kept in the state directory (``analytics.json``) and shared by both apps:
+   either app's card or its Settings, ``cadgen analytics on|off``, or the agent's
+   ``cad_analytics`` (off only).
+3. Otherwise nothing is sent, and whichever app the person opens first asks once.
 
 A no, or closing the card, is kept like a yes and never asked again: not after a restart, not
 after an update, not when what is sent grows (``DISCLOSURE`` re-asks only a yes). Where an answer

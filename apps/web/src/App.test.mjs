@@ -86,7 +86,12 @@ test('the web host keeps the URL, the history, the title and the appearance, and
     // Once the catalog has the file, the page is named after it and it joins the library.
     await act(() => viewer().onShown('one.step'));
     assert.equal(window.document.title, 'CAD | one.step');
-    assert.deepEqual(libraryCalls, [['/__cad/recents', { action: 'open', file: 'one.step' }]]);
+    assert.deepEqual(libraryCalls.filter(([url]) => url === '/__cad/recents'), [['/__cad/recents', { action: 'open', file: 'one.step' }]]);
+    // CAD's analytics, as the CAD app's: the consent read once, its answer in Settings, and the model
+    // shown reported to this Viewer's server (which keeps it as a code, and sends it only with consent).
+    assert.deepEqual(libraryCalls.filter(([url]) => url.startsWith('/__cad/analytics')),
+      [['/__cad/analytics', null], ['/__cad/analytics/activity', { file: 'one.step' }]]);
+    assert.equal(viewer().appSettings[0].section, 'Analytics');
 
     // Showing another file is a navigation: pushed, and undone by Back.
     const historyLength = window.history.length;

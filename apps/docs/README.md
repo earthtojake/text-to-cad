@@ -12,7 +12,7 @@ The root npm workspace and lockfile resolve dependencies; no source aliases
 or consumer-owned declarations are required.
 
 **DEPENDED ON BY** — nothing in the repo imports it. It is a website, not an install;
-`cadgen mcp` sends its consented analytics to its `/v1` routes over HTTPS.
+`cadgen mcp` and `cadgen viewer` send their consented analytics to its `/v1` routes over HTTPS.
 
 The package migration is a pure refactor: the site's UI, UX, functionality, content and static
 CAD showcases remain unchanged. Normal development, checks and deployment use
@@ -129,8 +129,9 @@ with `packages/ui/src/styles/tokens.css` when the viewer's base theme changes.
 ## api.texttocad.dev: CAD's analytics
 
 The same project answers `api.texttocad.dev` (a second domain on it). Its `/v1`
-routes receive the CAD app's anonymous usage analytics (`cadgen/analytics.py` in
-`packages/cadgen`); `www.texttocad.dev/v1/...` reaches the same routes. Clients
+routes receive CAD's anonymous usage analytics (`cadgen/analytics.py` in
+`packages/cadgen`), from the CAD app (`cadgen mcp`) and the browser viewer
+(`cadgen viewer`, presentation `browser`); `www.texttocad.dev/v1/...` reaches the same routes. Clients
 know only `api.texttocad.dev`, so the receiver can move to another host without
 a release of cadgen.
 

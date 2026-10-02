@@ -5,7 +5,7 @@ create table if not exists events (
   id             bigint generated always as identity primary key,
   received_at    timestamptz not null default now(),  -- the row's one time: when its batch arrived
   install_id     uuid        not null,  -- random, made on the person's machine; deleted there on opt-out
-  session_id     uuid        not null,  -- random, one per `cadgen mcp` process
+  session_id     uuid        not null,  -- random, one per `cadgen mcp` or `cadgen viewer` process
   event          text        not null,  -- tool | view | file
   tool           text,                  -- event = tool: cad_show, cad_view, ...
   file           text,                  -- event = file: 16 hex characters, an HMAC of the path under the install's own salt
@@ -18,7 +18,7 @@ create table if not exists events (
   arch           text,
   client         text,                  -- the agent app: codex-mcp-client, claude-ai, ...
   client_version text,
-  presentation   text                   -- tabs | inline | text
+  presentation   text                   -- tabs | inline | text (the CAD app), browser (`cadgen viewer`)
 );
 alter table events add column if not exists file text;
 alter table events add column if not exists kind text;

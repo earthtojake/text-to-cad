@@ -313,6 +313,19 @@ from the default direction, whatever the camera (`{action: "thumbnail"}`).
 `cadgen.viewer.recents` keeps the library in the user's state directory, shared with
 every other Viewer and the MCP app.
 
+### Anonymous usage analytics
+
+CAD's anonymous usage analytics (`cadgen/analytics.py`) are off until the person allows
+them, and the Viewer asks as the CAD app does: once, with the shared card
+(`@text-to-cad/ui/consent`) at the top-right under the navbar, then **Share anonymous usage
+data** in Settings' Analytics section. The answer is kept in the user's state directory, so
+one answer counts for both apps. A "No thanks" or a closed card is never asked again, and
+where no answer could be kept the card never shows. `src/adapters/analytics.ts` reads and
+answers it through `/__cad/analytics`, and reports each file shown and a person touching
+the page (at most every 2 s) to `/__cad/analytics/activity`. The server holds those as
+counts and a code per file, in memory, and sends nothing without consent. Only the
+Viewer's own server serves the two routes.
+
 ### File storage and host actions
 
 The web `FileSource` is the served folder's read-only CAD catalog

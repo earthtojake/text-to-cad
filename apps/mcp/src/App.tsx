@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react';
 import { Maximize2 } from 'lucide-react';
 import type { ResourceRef } from '@text-to-cad/core/prompt';
-import type { AppSetting } from '@text-to-cad/ui/file-viewer';
+import { ConsentCard, useAnalyticsConsent } from '@text-to-cad/ui/consent';
 import { viewerLinks } from '@text-to-cad/ui/links';
 import { Button } from '@text-to-cad/ui/primitives/button';
 import { createTabStore, memoryTabRecord } from '@text-to-cad/ui/tab-store';
@@ -10,10 +10,10 @@ import type { Bridge, HostContext } from './host/bridge';
 import { createLiveRegistry, describeView } from './host/live';
 import { watchSupersession, type Presentation } from './host/presentation';
 import { chatReach } from './host/prompt';
-import type { Consent, Launch, Root, Server } from './host/server';
+import type { Launch, Root, Server } from './host/server';
 import { createViewSync } from './host/sync';
 import ModelView, { type ViewReporter } from './ModelView';
-import { Banner, ConsentCard } from './Notice';
+import { Banner } from './Notice';
 
 interface Showing { launch: Launch; sequence: number }
 
@@ -163,39 +163,9 @@ export default function App({ bridge, server, launch: initial, presentation = 't
     return () => { lifetime.abort(); stop(); window.removeEventListener('pointerdown', touched, true); window.removeEventListener('focus', touched); };
   }, [bridge, sync, superseded]);
 
-  // Asked once, of everyone, unless their environment answered (`cadgen/analytics.py`). A view that
-  // cannot ask the server asks nothing.
-  const [consent, setConsent] = useState<Consent | null>(null);
-  // Each read and answer takes a number, and only the latest one's reply is kept: a read sent just
-  // before a click (the click's own focus re-checks) can never bring the card back after the answer.
-  const consentTurn = useRef(0);
-  const readConsent = useCallback((share?: boolean) => {
-    const turn = ++consentTurn.current;
-    void server.consent(share).then(next => { if (turn === consentTurn.current) setConsent(next); }, () => {});
-  }, [server]);
-  useEffect(() => { readConsent(); }, [readConsent]);
-  // Another view (the sidebar, another thread's tab) may have been answered meanwhile: a view still
-  // asking reads the answer again when the person comes back to it.
-  const asking = Boolean(consent?.ask);
-  useEffect(() => {
-    if (!asking) return;
-    const recheck = () => readConsent();
-    window.addEventListener('focus', recheck);
-    return () => window.removeEventListener('focus', recheck);
-  }, [readConsent, asking]);
-  const answer = useCallback((share: boolean) => {
-    setConsent(previous => previous && { ...previous, ask: false, sharing: share });
-    readConsent(share);
-  }, [readConsent]);
-  // The same choice, changed later: Settings' Analytics section. The environment may still overrule it,
-  // and the server's answer says so.
-  const appSettings = useMemo<AppSetting[] | undefined>(() => consent ? [{
-    id: 'analytics', section: 'Analytics', checked: consent.sharing, onCheckedChange: answer,
-    // A choice DO_NOT_TRACK or CADGEN_ANALYTICS made is shown as such, and no click changes it.
-    ...(consent.reason === 'environment'
-      ? { label: 'Share anonymous usage data (set by your environment)', disabled: true }
-      : { label: 'Share anonymous usage data' }),
-  }] : undefined, [consent, answer]);
+  // Asked once, of everyone, unless their environment answered or no answer could be kept
+  // (`cadgen/analytics.py`): the card, and Settings' Analytics section after it.
+  const { consent, answer, appSettings } = useAnalyticsConsent(server.consent);
   const openLink = (url: string) => void bridge.request('ui/open-link', { url }).catch(() => {});
   // The navbar's links: the same as every app's (X, Discord, GitHub and a new issue), followed through the
   // host (a frame cannot open one itself). No update button: the host updates CAD (a plugin directory

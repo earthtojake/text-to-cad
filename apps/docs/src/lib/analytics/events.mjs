@@ -20,7 +20,7 @@ export const MAX_BYTES = 16 * 1024;
 const FIELDS = new Set(['schema', 'install', 'session', 'version', 'source', 'platform', 'arch', 'client', 'presentation', 'events']);
 const SOURCES = new Set(['store', 'manual']);
 const PLATFORMS = new Set(['darwin', 'linux', 'win32', 'other']);
-const PRESENTATIONS = new Set(['tabs', 'inline', 'text']);
+const PRESENTATIONS = new Set(['tabs', 'inline', 'text', 'browser']);
 const KINDS = new Set(['step', 'stl', '3mf', 'glb', 'dxf', 'urdf', 'srdf', 'sdf']);
 
 export class Invalid extends Error {}

@@ -54,6 +54,10 @@
       "types": "./dist/host/index.d.ts",
       "import": "./dist/host/index.js"
     },
+    "./consent": {
+      "types": "./dist/consent/index.d.ts",
+      "import": "./dist/consent/index.js"
+    },
     "./tab-store": {
       "types": "./dist/tab-store/index.d.ts",
       "import": "./dist/tab-store/index.js"

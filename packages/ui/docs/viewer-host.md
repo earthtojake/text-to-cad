@@ -398,8 +398,11 @@ the ordinary way unless the host supplies
 passes host-owned appearance controls into the Display section beside Projection
 via `RendererViewProps`. `appSettings` (`{ id, section, label, checked, disabled?, onCheckedChange }[]`) are the
 host's own on/off settings, which the shell draws as checkbox rows in the Settings popover's last
-sections, one per `section` the settings name (the CAD app's Analytics), in the viewer's Settings
-and the home's; the host owns what each one does. The shell handles placement and hides the toolbar in
+sections, one per `section` the settings name (Analytics, in both apps), in the viewer's Settings
+and the home's; the host owns what each one does. `@text-to-cad/ui/consent` is the analytics
+prompt both apps share: `ConsentCard` (the card, `placement` home or viewer) and
+`useAnalyticsConsent(consent)`, which turns the host's consent call into the card's state, its
+answer and the Analytics setting; the host supplies the call and where the answer is kept. The shell handles placement and hides the toolbar in
 preview; the host owns callbacks and preferences. None of these imply platform
 detection or move application-specific release/network behavior into shared UI.
 

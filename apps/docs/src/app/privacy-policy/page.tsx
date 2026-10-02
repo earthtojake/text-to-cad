@@ -4,7 +4,7 @@ import { IssuesLink, LegalPage, LegalSection } from "@/components/legal-page";
 export const metadata: Metadata = {
   title: "Privacy Policy",
   description:
-    "How Thompson Labs LLC handles personal data for text-to-cad: what is collected, including the CAD app's anonymous usage analytics, why, who receives it, how long it is kept, and your controls.",
+    "How Thompson Labs LLC handles personal data for text-to-cad: what is collected, including CAD's anonymous usage analytics, why, who receives it, how long it is kept, and your controls.",
   alternates: { canonical: "/privacy-policy" },
 };
 
@@ -29,12 +29,13 @@ export default function PrivacyPolicyPage() {
             the local runtime process your work on your computer and do not send it to us.
           </li>
           <li>
-            <strong>Usage analytics from the CAD app, when they are on:</strong> the CAD app that
-            shows models in your agent app (the plugin’s <code>cad</code> server) sends
-            api.texttocad.dev, at most once a minute while you use it: a random install ID created on
-            your computer; a random ID for each time the app starts it; the cadgen version, whether it
-            was installed from a plugin directory or by hand, your operating system and processor
-            type, and the name and version of your agent app and how it shows CAD; how many times each
+            <strong>Usage analytics from CAD, when they are on:</strong> the CAD app that shows models
+            in your agent app (the plugin’s <code>cad</code> server) and the CAD viewer in your browser
+            (<code>cadgen viewer</code>) send api.texttocad.dev, at most once a minute while you use
+            them: a random install ID created on your computer; a random ID for each time one of them
+            starts; the cadgen version, whether it was installed from a plugin directory or by hand,
+            your operating system and processor type, and the name and version of your agent app and
+            how it shows CAD (or that it is the browser viewer); how many times each
             CAD tool was called and failed, and how many times you touched a CAD view; and, once a day
             for each distinct file CAD shows, a one-way code made from where the file is with a secret
             key that never leaves your computer, and the file’s format (such as STEP or STL). The code
@@ -43,8 +44,9 @@ export default function PrivacyPolicyPage() {
             arrives. Nothing is sent while CAD sits unused. Analytics never include your files, models,
             file or folder names, prompts, tool arguments or anything you type. Like any request over
             the internet, each one also reaches our host with your IP address, the time and a user
-            agent (for the CAD app, just “cadgen”); see section 4 for what happens to them. Section 5 says when they are on
-            and how to turn them off. The skills alone, without the CAD app, send no analytics.
+            agent (for CAD, just “cadgen”); see section 4 for what happens to them. Section 5 says when
+            they are on and how to turn them off. The skills alone, without the CAD app or the CAD
+            viewer, send no analytics.
           </li>
           <li>
             <strong>step.parts searches:</strong> when you ask your agent to find a part, the
@@ -121,7 +123,7 @@ export default function PrivacyPolicyPage() {
             Usage analytics are kept for 13 months, then deleted. We do not store IP addresses with
             them, and no request log pairs an IP address with an install ID: the ID travels in the body of
             each request, which those logs do not record. Turning analytics off deletes everything stored under your install ID; if our server
-            cannot be reached at that moment, the CAD app asks again until it can.
+            cannot be reached at that moment, CAD asks again until it can.
           </li>
           <li>Everything text-to-cad stores locally stays on your computer until you delete it.</li>
         </ul>
@@ -135,19 +137,24 @@ export default function PrivacyPolicyPage() {
           </li>
           <li>
             <strong>Usage analytics are off until you allow them</strong>, however you installed
-            text-to-cad. The CAD app asks you once, and sends nothing unless you choose Allow. Your
-            answer is kept on your computer through restarts and updates. If we ever collect more than
-            this policy describes, the CAD app asks you again first. An agent app that does not show
-            the CAD app never asks, and sends nothing.
+            text-to-cad. The CAD app or the CAD viewer asks you once, and one answer counts for both;
+            nothing is sent unless you choose Allow. Your answer is kept on your computer through
+            restarts and updates. If you choose No thanks or close the card, CAD never asks again, and
+            if your answer could not be kept, CAD does not ask at all. If we ever collect more than
+            this policy describes and you had allowed analytics, CAD stops and asks you again first; a
+            no stays a no. An agent app that does not show the CAD app never asks, and sends nothing,
+            unless you open the CAD viewer.
           </li>
           <li>
-            To change your answer later, use <strong>Share anonymous usage data</strong> in the CAD app’s
-            Settings (on its home page, or with a 3D model open). To turn analytics off, you can also ask your agent to turn off CAD analytics, or run{" "}
+            To change your answer later, use <strong>Share anonymous usage data</strong> in Settings: in
+            the CAD app (on its home page, or with a 3D model open) or in the CAD viewer. To turn
+            analytics off, you can also ask your agent to turn off CAD analytics, or run{" "}
             <code>uvx cadgen analytics off</code>. Turning them off deletes the install ID on your
             computer, with the secret key behind the file codes, and asks our server to delete everything
             stored under it. Turning them on again starts a new install ID and key, so nothing links the two. Setting{" "}
-            <code>DO_NOT_TRACK=1</code> or <code>CADGEN_ANALYTICS=0</code> in your agent app’s
-            environment keeps them off there whatever else is chosen. <code>uvx cadgen analytics
+            <code>DO_NOT_TRACK=1</code> or <code>CADGEN_ANALYTICS=0</code> where CAD runs (your agent
+            app’s environment, or the shell that starts the CAD viewer) keeps them off there whatever
+            else is chosen. <code>uvx cadgen analytics
             on</code> turns them on, and <code>uvx cadgen analytics status</code> shows the setting and
             your install ID.
           </li>

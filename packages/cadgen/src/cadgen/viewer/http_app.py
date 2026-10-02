@@ -73,7 +73,8 @@ TESS_CACHE_PROBE_PATH = "/__tess_cache/probe"
 # than doing work. Interrupting a parked poll costs the client one re-poll
 # after it reloads; interrupting a compile would cost a build, which is why
 # every other route, `POST /__cad/artifact` above all, is counted.
-_UNCOUNTED_ROUTES = frozenset({"/__cad/server", "/__cad/preview", "/__cad/surfaces", "/__cad/surfaces/cancel"})
+_UNCOUNTED_ROUTES = frozenset({"/__cad/server", "/__cad/preview", "/__cad/surfaces", "/__cad/surfaces/cancel",
+                               "/__cad/analytics", "/__cad/analytics/activity"})
 
 _PACKAGE_DIR = str(Path(__file__).resolve().parent)
 
@@ -264,6 +265,10 @@ class CadApp:
         self.lock = threading.Lock()
         self.ops = create_cadgen_ops(root_path)
         self._recents = None
+        # Anonymous usage analytics (``cadgen/analytics.py``): the `cadgen viewer` process attaches
+        # its recorder here (``main.py``). An app the CAD app's tunnel builds gets none, and its
+        # page asks the CAD app's own server instead, so nothing is counted twice.
+        self.analytics = None
 
     # --- development auto-reload accounting -------------------------------
 
@@ -459,6 +464,8 @@ class CadApp:
                     self._handle_store_asset(request, response, query)
                 elif pathname == "/__cad/asset":
                     self._handle_asset(request, response, query)
+                elif pathname == "/__cad/analytics" and self.analytics is not None:
+                    response.send_json(200, self._consent())
                 else:
                     # An unrecognised /__cad/* path is a bad API call, not a
                     # page. Falling through to the SPA answered typo'd and
@@ -481,6 +488,18 @@ class CadApp:
             try:
                 if pathname == "/__cad/artifact":
                     self._handle_artifact_build(request, response, query)
+                elif pathname in ("/__cad/analytics", "/__cad/analytics/activity") and self.analytics is not None:
+                    if int(request.headers.get("content-length") or 0) > 4096:
+                        response.send_empty(413, [("connection", "close")])
+                        return
+                    payload = json.loads(request.body() or b"{}")
+                    if type(payload) is not dict:
+                        raise ValueError("an analytics request is an object")
+                    if pathname == "/__cad/analytics":
+                        response.send_json(200, self._consent(payload.get("share")))
+                    else:
+                        self._report_activity(payload)
+                        response.send_empty(204)
                 elif pathname == "/__cad/recents":
                     if int(request.headers.get("content-length") or 0) > _LIBRARY_BODY_LIMIT:
                         response.send_empty(413, [("connection", "close")])
@@ -587,6 +606,31 @@ class CadApp:
         else:
             raise ValueError(f"unknown library action {action!r}")
         response.send_json(200, {"ok": True})
+
+    # --- anonymous usage analytics -----------------------------------------
+
+    def _consent(self, share=None) -> dict:
+        """The page's analytics card and Settings toggle: whether to ask (nothing chosen, and an answer
+        could be kept), whether sharing is on and why, and, from the person's click, their answer."""
+        from cadgen.analytics import PRIVACY_URL
+
+        if isinstance(share, bool):
+            self.analytics.choose(share, by="viewer")
+        found = self.analytics.status()
+        return {"ask": found["reason"] == "unasked", "sharing": found["sharing"], "reason": found["reason"],
+                "policy": PRIVACY_URL}
+
+    def _report_activity(self, payload: dict) -> None:
+        """What the page did: a person touched it (``touched``), or it shows a model (``file``, as the
+        catalog names it). Noted in memory, and sent only with consent, a file only as its code."""
+        if payload.get("touched") is True:
+            self.analytics.viewed()
+        ref = payload.get("file")
+        if isinstance(ref, str) and ref:
+            try:
+                self.analytics.opened(self._library_path(ref))
+            except (ValueError, ForbiddenAssetError):
+                pass  # not a model this viewer lists: nothing to count
 
     # --- placeholders filled by later steps of the port -------------------
 
