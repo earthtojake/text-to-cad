@@ -25,6 +25,7 @@ MARKETPLACE_NAME = "earthtojake"
 
 CLAUDE_PLUGIN_PATH = REPO_ROOT / ".claude-plugin" / "plugin.json"
 CODEX_MCP_PATH = REPO_ROOT / "codex.mcp.json"
+CLAUDE_MCP_PATH = REPO_ROOT / "claude.mcp.json"
 CODEX_PLUGIN_PATH = REPO_ROOT / ".codex-plugin" / "plugin.json"
 MARKETPLACE_PATH = REPO_ROOT / ".claude-plugin" / "marketplace.json"
 SKILLS_ROOT = REPO_ROOT / "skills"
@@ -134,6 +135,21 @@ class PluginManifestPolicyTest(unittest.TestCase):
         args = server["args"]
         self.assertNotIn("--offline", args)
         self.assertGreaterEqual(server.get("startup_timeout_sec", 0), 300)
+        self.assertIn("--no-config", args)
+        self.assertEqual(args[-2:], ["cadgen", "mcp"])
+        version = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
+        self.assertEqual(args[args.index("--from") + 1], f"cadgen=={version}")
+
+    def test_claude_starts_the_cad_server_pinned_to_this_release(self) -> None:
+        # Claude Code starts the server the manifest names: Codex's command without its startup
+        # timeout, which Claude's config has no field for. Never a root .mcp.json, which Claude
+        # Code would also offer to anyone who opens this repository as a project.
+        self.assertEqual(load_json(CLAUDE_PLUGIN_PATH).get("mcpServers"), "./claude.mcp.json")
+        self.assertFalse((REPO_ROOT / ".mcp.json").exists())
+        servers = load_json(CLAUDE_MCP_PATH)["mcpServers"]
+        self.assertEqual(list(servers), ["cad"])
+        self.assertEqual(servers["cad"]["command"], "uvx")
+        args = servers["cad"]["args"]
         self.assertIn("--no-config", args)
         self.assertEqual(args[-2:], ["cadgen", "mcp"])
         version = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()

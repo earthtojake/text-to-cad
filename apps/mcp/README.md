@@ -6,12 +6,18 @@ instead of an HTTP origin. Its server is `cadgen mcp`
 (`packages/cadgen/src/cadgen/mcp`).
 
 Hosts present it in one of two ways, which the server tells apart at
-`initialize` (Codex names itself `codex-mcp-client`, and any other host can declare the `openai/ui` extension with the `global`, `thread` and `file` entrypoints; an MCP Apps host advertises
-the `io.modelcontextprotocol/ui` extension):
+`initialize` (Codex names itself `codex-mcp-client`; any other host can declare
+the `dev.texttocad/tabs` extension with the `global`, `thread` and `file`
+entrypoints; an MCP Apps host advertises the `io.modelcontextprotocol/ui`
+extension):
 
-- **Tabs (Codex, and hosts that declare its entrypoints).** **CAD** in the sidebar (the home: the models opened before,
-  and Open), a **CAD** tab beside each thread, and *Open with CAD* for a model
-  file. The agent opens a tab once (`cad_open`) and drives it (`cad_show`).
+- **Tabs (Codex, and hosts that declare those entrypoints).** **CAD** in the
+  sidebar (the home: the models opened before, and Open), a **CAD** tab beside
+  each thread, and *Open with CAD* for a model file. The agent opens a tab once
+  (`cad_open`) and drives it (`cad_show`). A host that declares tabs does what
+  Codex does: it starts one `cadgen mcp` process per thread, since a call that
+  names no view reaches the thread's own tab, and it says which folder the
+  thread works in, through MCP roots or Codex's per-call sandbox metadata.
 - **Inline (Claude Desktop, and every other MCP Apps host).** Each `cad_show`
   mounts a viewer card in the chat, and the host keeps the old cards. A card
   shows the model alone (a compact viewer: no tools, view actions, cube or Quick

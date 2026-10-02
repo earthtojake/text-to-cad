@@ -111,18 +111,23 @@ claude plugin marketplace add earthtojake/text-to-cad
 claude plugin install text-to-cad@earthtojake
 ```
 
+In Claude Code, the plugin also starts CAD's server. Claude Code shows no app
+views, so asking it to show a model gives you a link that opens the model in the
+CAD Viewer in your browser.
+
 In Claude Desktop, CAD shows models in the chat: ask Claude to show one and it
 appears as a viewer card you can orbit, add to your prompt, and open full size;
 Claude can read what you selected and see what you see. It runs locally through
 [uv](https://docs.astral.sh/uv/): add the server to Claude Desktop's config
 (Settings > Developer > Edit Config), then restart the app. If Claude Desktop
-cannot find `uvx`, give its full path (`which uvx`). Each start runs the newest
-release, so restarting the app updates it.
+cannot find `uvx`, give its full path (`which uvx`). The config pins a cadgen
+release, and uvx keeps the version it first downloads: to update, change it to
+the [latest release](https://pypi.org/project/cadgen/) and restart the app.
 
 ```json
 {
   "mcpServers": {
-    "cad": { "command": "uvx", "args": ["--from", "cadgen", "cadgen", "mcp"] }
+    "cad": { "command": "uvx", "args": ["--no-config", "--from", "cadgen==0.7.8", "cadgen", "mcp"] }
   }
 }
 ```

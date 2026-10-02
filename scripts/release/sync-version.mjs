@@ -21,10 +21,12 @@ const tomlTargets = [
   "packages/cadgen/pyproject.toml",
 ];
 
-// Files that pin the cadgen runtime by a requirement string rather than a version field:
-// the command the agent app runs to start CAD's MCP server.
+// Files that pin the cadgen runtime by a requirement string rather than a version field: the
+// commands the agent apps run to start CAD's MCP server, and the README's Claude Desktop config.
 export const pinTargets = [
   "codex.mcp.json",
+  "claude.mcp.json",
+  "README.md",
 ];
 
 function usage() {

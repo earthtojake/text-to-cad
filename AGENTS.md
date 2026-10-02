@@ -28,8 +28,8 @@ any branch but `release/*`. Releases are two GitHub Actions workflows:
   are bare `0.4.x` tags) + GitHub-Releases that same merged commit with the
   wheel and sdist that went to PyPI attached as release assets, plus the
   plugin ZIP that a person uploads to OpenAI's plugin portal, which has no API.
-  It also commits the plugin alone (manifest, icon, `skills/`, `LICENSE`,
-  README) onto the `claude-plugin` branch, which claude.ai's plugin directory
+  It also commits the plugin alone (manifest, icon, `claude.mcp.json`,
+  `skills/`, `LICENSE`, README) onto the `claude-plugin` branch, which claude.ai's plugin directory
   follows (`scripts/release/claude_plugin_branch.py`).
 
 When asked to publish, make, or ship a release, dispatch `Prepare Release` on

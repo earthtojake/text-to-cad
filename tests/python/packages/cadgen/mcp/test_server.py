@@ -24,7 +24,7 @@ CODEX = {"name": "codex-mcp-client", "title": "Codex", "version": "0.159.0"}
 CLAUDE = {"name": "claude-ai", "version": "0.1.0"}
 RENDERS_APPS = {"extensions": {"io.modelcontextprotocol/ui": {"mimeTypes": ["text/html;profile=mcp-app"]}}}
 OTHER_HOST = {"name": "some-desktop-app", "version": "0.1.0"}
-DECLARES_TABS = {"extensions": {**RENDERS_APPS["extensions"], "openai/ui": {"entrypoints": ["global", "thread", "file"]}}}
+DECLARES_TABS = {"extensions": {**RENDERS_APPS["extensions"], "dev.texttocad/tabs": {"entrypoints": ["global", "thread", "file"]}}}
 STL = b"solid t\nfacet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex 1 0 0\nvertex 0 1 0\nendloop\nendfacet\nendsolid t\n"
 
 
@@ -333,7 +333,7 @@ class DeclaredTabServerTest(_Session):
         self.assertIn("cad_open", tools)
 
     def test_a_partial_declaration_is_shown_inline(self) -> None:
-        partial = {"extensions": {**RENDERS_APPS["extensions"], "openai/ui": {"entrypoints": ["thread"]}}}
+        partial = {"extensions": {**RENDERS_APPS["extensions"], "dev.texttocad/tabs": {"entrypoints": ["thread"]}}}
         server = Server(launch_cwd=str(self.workspace), page=AppPage(self.tmp / "app"), recents=RecentStore(self.tmp / "state2"))
         server.handle("initialize", {"protocolVersion": "2025-06-18", "capabilities": partial, "clientInfo": OTHER_HOST}, None)
         tools = {tool["name"] for tool in server.handle("tools/list", {}, None)["tools"]}

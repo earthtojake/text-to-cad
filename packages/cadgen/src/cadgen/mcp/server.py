@@ -14,10 +14,14 @@ viewer's own HTTP routes through ``cad_http``. No call is held open (``views.py`
 
 Hosts present views in one of three ways, told apart at initialize:
 
-- *Tabs* (Codex, and any host that declares the ``openai/ui`` client extension with
-  the ``global``, ``thread`` and ``file`` entrypoints). The host starts a process per
-  thread and presents CAD as a sidebar page, a tab per thread and a file handler. The agent opens a tab once
-  (``cad_open``) and then drives it (``cad_show``).
+- *Tabs* (Codex, and any host that declares the ``dev.texttocad/tabs`` client
+  extension with the ``global``, ``thread`` and ``file`` entrypoints). The host
+  presents CAD as a sidebar page, a tab per thread and a file handler. The agent
+  opens a tab once (``cad_open``) and then drives it (``cad_show``). A host that
+  declares tabs takes on what Codex does: it starts one server process per thread,
+  since a call that names no view reaches the thread's own tab, and it says which
+  folder the thread works in, through MCP roots or Codex's per-call sandbox
+  metadata.
 - *Inline* (every other MCP Apps host: Claude, VS Code, ...). Each call to a tool
   with a UI mounts a new view in the chat, and the old ones stay. So ``cad_show``
   is that tool, each launch is stamped with an order for the views to retire
@@ -70,11 +74,11 @@ _RESOURCE_NOT_FOUND = -32002
 EXTENSIONS = sorted(SOURCE_EXTENSIONS)
 
 # Clients that present CAD as tabs (see the module docstring): Codex by name, since it declares nothing,
-# and any client that declares every entrypoint CAD uses. Every other client is shown views inline, or
-# told where the Viewer has them when it renders no MCP Apps.
+# and any client that declares every entrypoint CAD uses under cadgen's own extension. Every other
+# client is shown views inline, or told where the Viewer has them when it renders no MCP Apps.
 _TAB_HOSTS = frozenset({"codex-mcp-client"})
 _UI_EXTENSION = "io.modelcontextprotocol/ui"
-_ENTRYPOINTS_EXTENSION = "openai/ui"
+_TABS_EXTENSION = "dev.texttocad/tabs"
 _TAB_ENTRYPOINTS = frozenset({"global", "thread", "file"})
 
 INSTRUCTIONS = (
@@ -131,7 +135,8 @@ _ROOT = _object({"kind": {"type": "string", "enum": ["workspace", "global"]}, "p
 # feed of each STEP it shows.
 _WATCH = _object({"root": _ROOT, "file": {"type": ["string", "null"]},
                   "previews": {"type": "array", "items": {"type": "string"}, "maxItems": 4}}, ["root"])
-_SHOWN_PATH = {"type": "string", "description": "A CAD file: an absolute path, or relative to the project folder the chat works in."}
+_SHOWN_PATH = {"type": "string", "description": ("A CAD file's absolute path. A relative path works only when the app "
+                                                   "shares the chat's project folder.")}
 _SHOWN_VIEW = {"type": "string", "description": "The view that cad_show returned."}
 _READ_ONLY = {"readOnlyHint": True, "destructiveHint": False, "openWorldHint": False}
 # Every client's: the agent reports CAD's analytics setting, or turns sharing off when the user asks.
@@ -158,7 +163,7 @@ def _stamped(launch: dict[str, Any]) -> dict[str, Any]:
 def _presentation(client: dict[str, Any], offered: dict[str, Any]) -> str:
     """``tabs``, ``inline`` or ``text``: how this client shows views (see the module docstring)."""
     extensions = offered.get("extensions") if isinstance(offered.get("extensions"), dict) else {}
-    declared = extensions.get(_ENTRYPOINTS_EXTENSION)
+    declared = extensions.get(_TABS_EXTENSION)
     entrypoints = declared.get("entrypoints") if isinstance(declared, dict) else None
     if client.get("name") in _TAB_HOSTS or (isinstance(entrypoints, list) and _TAB_ENTRYPOINTS <= set(entrypoints)):
         return "tabs"

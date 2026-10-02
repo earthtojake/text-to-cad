@@ -126,7 +126,8 @@ where those files ship, so these scripts are what produces them.
   `tests/python/global/test_plugin_zip.py`.
 - `claude_plugin_branch.py --check | --commit [--parent REF]` — builds the
   plugin claude.ai's directory follows (`.claude-plugin/` manifest and icon,
-  `skills/`, `LICENSE`, and the README with outside links pinned to the release
+  `claude.mcp.json`, `skills/`, `LICENSE`, and the README with outside links
+  pinned to the release
   commit), checks it against the directory's file rules, and with `--commit`
   commits it on `REF` and prints the commit. Called by `release-publish.yml`,
   whose `claude-plugin` job pushes it to the `claude-plugin` branch; tested by
