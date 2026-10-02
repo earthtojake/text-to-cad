@@ -133,6 +133,8 @@ export interface AppSetting {
 export interface RendererViewProps {
   /** The host's on/off settings: the Settings popover's last sections, by the `section` each names. */
   appSettings?: readonly AppSetting[];
+  /** The host's notice (a question it asks once): the viewport's top-right once the file is on screen, Quick Edit under it. */
+  notice?: ReactNode;
   /** Optional host-owned controls inside the Display popover. */
   displayActions?: ReactNode;
   onNavigationActionsChange?: (actions: readonly FileNavigationAction[]) => void;
@@ -206,6 +208,8 @@ export interface FileViewerProps {
   displayActions?: ReactNode;
   /** The host's on/off settings, the Settings popover's last sections. */
   appSettings?: readonly AppSetting[];
+  /** The host's notice, shown at the viewport's top-right once the file is on screen (`RendererViewProps.notice`). */
+  notice?: ReactNode;
   /**
    * Override the selected path the navbar names and the explorer marks, e.g. `null` while a host
    * catalog is still resolving the requested file. It does not change the requested document.

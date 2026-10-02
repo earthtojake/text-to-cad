@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { createCadClient } from '@text-to-cad/core/client';
@@ -51,7 +51,7 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 /** One pane of the harness: a host, a workspace, host commands and a live binding, and the tab. */
-async function openDrawing(destinationKind = 'composer') {
+async function openDrawing(destinationKind = 'composer', notice: ReactNode = null) {
   const fetch = vi.fn(async (input: RequestInfo | URL) => {
     const url = new URL(String(input));
     if (url.pathname.endsWith('/__cad/catalog')) {
@@ -104,7 +104,7 @@ async function openDrawing(destinationKind = 'composer') {
   };
   function Pane() {
     const [state, setState] = useState<any>({ panel: null, renderers: {} });
-    return <section data-testid="one"><FileViewer file={FILE} host={host as any} renderers={renderers} state={state} onStateChange={setState} /></section>;
+    return <section data-testid="one"><FileViewer file={FILE} host={host as any} renderers={renderers} state={state} onStateChange={setState} notice={notice} /></section>;
   }
   render(<Pane />);
   const pane = screen.getByTestId('one');
@@ -132,6 +132,12 @@ it('the cursor says the drawing can be dragged, and says so louder while it is',
   expect(cursor()).toEqual(['cursor-grabbing']);
   fireEvent.pointerUp(canvas, { pointerId: 1, pointerType: 'mouse', button: 0, clientX: 630, clientY: 350 });
   expect(cursor()).toEqual(['cursor-grab']);
+  dispose();
+});
+
+it("the host's notice shows at the top-right once the drawing is on screen", async () => {
+  const { pane, dispose } = await openDrawing('composer', <div role="dialog" aria-label="Allow Analytics" />);
+  expect(within(pane).getByRole('dialog', { name: 'Allow Analytics' }).closest('[data-viewport-top-right]')).not.toBeNull();
   dispose();
 });
 

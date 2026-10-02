@@ -21,6 +21,7 @@ import ToolStack from "../tools/ToolStack.jsx";
 import { toolPanelClosed } from "../tools/toolStackLayout.js";
 import { ViewportAnimationBar, animationControlsHaveContent } from "../tools/playbar/ViewportAnimationBar.js";
 import QuickEdit from "../tools/quick-edit/QuickEdit.jsx";
+import { ViewportTopRight } from "./ViewportTopRight.jsx";
 import ShellViewport from "./ShellViewport.jsx";
 import ViewportContextMenu from "./ViewportContextMenu.jsx";
 
@@ -31,7 +32,6 @@ import ViewportContextMenu from "./ViewportContextMenu.jsx";
 const INSET = `${VIEWPORT_INSET_PX}px`;
 // The strip and its stack stop short of Quick Edit's button at the top-right.
 const TOOLBAR_POSITION = Object.freeze({ top: INSET, left: INSET, bottom: VIEWPORT_STACK_BOTTOM, maxWidth: "calc(100% - 3.5rem)" });
-const QUICK_EDIT_POSITION = Object.freeze({ top: INSET, right: INSET, left: INSET });
 // The view's controls in the navbar look as its own icon buttons do.
 export const NAVBAR_CONTROL_CLASS = "size-6 text-muted-foreground hover:text-foreground aria-pressed:bg-accent aria-pressed:text-accent-foreground";
 
@@ -319,10 +319,14 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
                 <FloatingToolBar tools={stripTools} />
                 <ToolStack hidden={previewing} mobile={mobile} startsClosed={startsClosed} layout={frame.toolStack} onLayoutChange={frame.changeToolStack}>{shellPanels}{toolPanels}</ToolStack>
               </div>}
-              {/* Hidden, not unmounted, while the view loads: a note being written outlives a reload of the model. */}
-              {compact || !references ? null : <QuickEdit key={frame.modelKey} className="absolute z-30" style={QUICK_EDIT_POSITION} hidden={chromeHidden}
-                resource={frame.resource} references={references} sketch={sketch} referencePath={frame.referencePath}
-                onCopy={copyAction} onEscape={frame.escape} onClear={clearQuickEdit} disabled={viewerLoading || !scene} />}
+              {/* The top-right: the host's notice once a model is on screen (`view.notice`), and Quick Edit
+                  under it -- hidden, not unmounted, while the view loads: a note being written outlives a
+                  reload of the model. */}
+              <ViewportTopRight notice={chromeHidden ? null : view.notice}>
+                {compact || !references ? null : <QuickEdit key={frame.modelKey} className="self-stretch" hidden={chromeHidden}
+                  resource={frame.resource} references={references} sketch={sketch} referencePath={frame.referencePath}
+                  onCopy={copyAction} onEscape={frame.escape} onClear={clearQuickEdit} disabled={viewerLoading || !scene} />}
+              </ViewportTopRight>
 
               </PreviewChrome>
 

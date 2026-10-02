@@ -182,10 +182,11 @@ export default function App({ bridge, server, launch: initial, presentation = 't
     return <Frame bridge={bridge} context={context} insets={insets} inline={inline} bottomCenter={bottomCenter} expandable={false}><Superseded still={still} /></Frame>;
   }
   return <Frame bridge={bridge} context={context} insets={insets} inline={inline} bottomCenter={bottomCenter}
-    overlay={lost ? <Banner message={LOST[presentation]} />
-      : consent?.ask ? <ConsentCard placement={showing.launch.page === 'home' ? 'home' : 'viewer'} policy={consent.policy} onAnswer={answer} onPolicy={openLink} /> : null}>
+    overlay={lost ? <Banner message={LOST[presentation]} /> : null}>
     <ModelView key={rootKey(launch.root)} launch={launch} root={launch.root} sequence={showing.sequence} bridge={bridge} server={server}
-      tabStore={tabStore} live={live} links={links} appSettings={appSettings} colorScheme={colorScheme} platform={initial.platform || 'darwin'} reporter={reporter} sync={sync} compact={inline} chat={chat}
+      tabStore={tabStore} live={live} links={links} appSettings={appSettings}
+      notice={consent?.ask ? <ConsentCard policy={consent.policy} onAnswer={answer} onPolicy={openLink} /> : null}
+      colorScheme={colorScheme} platform={initial.platform || 'darwin'} reporter={reporter} sync={sync} compact={inline} chat={chat}
       onLaunch={show} onHome={goHome} />
   </Frame>;
 }

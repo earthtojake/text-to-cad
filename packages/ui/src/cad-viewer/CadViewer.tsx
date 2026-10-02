@@ -55,6 +55,8 @@ export interface CadViewerProps<Model extends LibraryModel = LibraryModel> {
   displayActions?: ReactNode;
   /** The host's on/off settings: Settings' last sections, in the viewer and on the home (the CAD app's Analytics). */
   appSettings?: readonly AppSetting[];
+  /** The host's notice (the analytics question): a file's viewport, top-right, once the file is on screen; never the home. */
+  notice?: ReactNode;
   onError?(error: Error): void;
 }
 
@@ -76,7 +78,7 @@ const reportError = (error: Error) => console.error(error);
  * its library.
  */
 export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, host, tabStore, live, file, onShow, accept, onShown, rootPath,
-  library, onThumbnail, displayActions, appSettings, onError = reportError }: CadViewerProps<Model>) {
+  library, onThumbnail, displayActions, appSettings, notice, onError = reportError }: CadViewerProps<Model>) {
   const preferences = tabStore.settings;
   // One viewer renderer per file family, sharing one client and the tab's preferences; each
   // lazy-loads only its own code.
@@ -165,7 +167,7 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
   }), [library, colorScheme, layout, changeLayout, catalog.error, file, rootPath, picture, host.links, platform, host.clipboard, appSettings, onError]);
   return <>
     <FileViewer file={file || null} host={viewerHost} renderers={renderers} state={state} onStateChange={onStateChange}
-      displayActions={displayActions} appSettings={appSettings} navigationPath={navigationPath} onError={onError} presentation={presentation} />
+      displayActions={displayActions} appSettings={appSettings} notice={notice} navigationPath={navigationPath} onError={onError} presentation={presentation} />
     {drawing && !file ? <OffscreenPicture key={drawing.source.file} source={drawing.source} host={host} preferences={preferences} onDone={drawn} /> : null}
   </>;
 }

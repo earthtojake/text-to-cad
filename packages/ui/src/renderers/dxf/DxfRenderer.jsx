@@ -5,6 +5,7 @@ import ViewerAlertCard, { useAlertDismissal } from "../kit/status/ViewerAlertCar
 import ViewerLoadingOverlay from "../kit/status/ViewerLoadingOverlay.js";
 import { ViewUpdateStatus } from "../kit/status/ViewUpdateStatus.jsx";
 import { VIEWPORT_INSET_PX, VIEWPORT_TOP_BAR_PX } from "../kit/shell/viewportLayout.js";
+import { ViewportTopRight } from "../kit/shell/ViewportTopRight.jsx";
 import { attachLiveBinding } from "../kit/shell/liveBinding.js";
 import { useWhenSettled } from "../kit/shell/useWhenSettled.js";
 import { createViewPromptContext, promptDeliveryError } from "../kit/shell/promptContext.js";
@@ -175,6 +176,8 @@ function DxfSurface({ view, data }) {
           style={{ top: VIEWPORT_INSET_PX, height: VIEWPORT_TOP_BAR_PX }} data-viewport-status="">
           <ViewUpdateStatus status={DRAWING_UPDATE_STATUS} className="rounded-md bg-background/95 px-1 py-0.5 shadow-sm" />
         </div> : null}
+        {/* The host's notice, top-right, once the drawing is on screen (a rebuild keeps it there). */}
+        <ViewportTopRight notice={shown && !payload.loading && !alert ? view.notice : null} />
         <ViewerLoadingOverlay loading={{ opening: payload.loading && !alert, progress: { label: "Reading drawing" } }}
           operationKey={file} />
         <ViewerAlertCard alert={cardAlert} hasContent={shown} dismissed={alertDismissal.dismissed} onDismiss={alertDismissal.dismiss} onReload={view.reload} file={file} />

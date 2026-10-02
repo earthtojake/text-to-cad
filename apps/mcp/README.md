@@ -64,8 +64,9 @@ reference host `basic-host` does.
   `api.texttocad.dev` once a minute
   (`cadgen/analytics.py`; the receiver is the docs site's `/v1`): never a path, an argument
   or a file. Every install is asked once by the page (`cad_consent`, the
-  shared `ConsentCard` from `@text-to-cad/ui/consent` over the view, as the browser
-  viewer asks; one answer counts for both), and nothing is sent before a yes; Settings' Analytics
+  shared `ConsentCard` from `@text-to-cad/ui/consent`, the viewer's `notice`: top-right
+  once a model is on screen, Quick Edit under it, never on the home; the browser
+  viewer asks the same way, and one answer counts for both), and nothing is sent before a yes; Settings' Analytics
   section (`appSettings`) changes the answer later. A plugin directory's install
   (`cadgen mcp --install store`, stamped by `scripts/release/plugin_zip.py`) is
   only reported as such. The agent's `cad_analytics` reports the setting and

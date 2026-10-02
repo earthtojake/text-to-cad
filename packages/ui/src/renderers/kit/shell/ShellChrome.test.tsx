@@ -67,8 +67,8 @@ function navbarSlot() {
   return slot;
 }
 afterEach(() => document.querySelectorAll('[data-test-navbar]').forEach(slot => slot.remove()));
-function frame({ path = 'panel.harness', preferences = tabSettings(), state = undefined as unknown, mobile = false, onStateChange = (_: unknown) => {}, onPanelOpen = vi.fn(), onFullscreenChange = vi.fn(), openPanel = '', appearance = { colorScheme: 'light' } as object } = {}) {
-  const props = { source: { id: 'one', rootName: 'one' }, file: { path, name: path, kind: 'file' }, document: null, openPanel, panelSlot: null,
+function frame({ path = 'panel.harness', preferences = tabSettings(), state = undefined as unknown, mobile = false, onStateChange = (_: unknown) => {}, onPanelOpen = vi.fn(), onFullscreenChange = vi.fn(), openPanel = '', appearance = { colorScheme: 'light' } as object, notice = null as React.ReactNode } = {}) {
+  const props = { source: { id: 'one', rootName: 'one' }, file: { path, name: path, kind: 'file' }, document: null, openPanel, panelSlot: null, notice,
     navbarSlot: navbarSlot(), onFullscreenChange, onPanelOpen, onReady() {}, onOpenFile() {}, appearance, state, onStateChange, reload() {}, data: { services: { preferences } } };
   const element = () => <ViewerHostContext.Provider value={testHost()}><ViewerMobileContext.Provider value={mobile}>
     <HarnessRenderer {...(props as any)} /></ViewerMobileContext.Provider></ViewerHostContext.Provider>;
@@ -345,6 +345,21 @@ it('the file explorer, open over the top-left corner, puts the tools out of sigh
   cleanup();
   frame();
   expect(document.querySelector<HTMLElement>('[data-cad-tool-groups]')!.classList.contains('invisible')).toBe(false);
+});
+
+it("the host's notice waits for the model, then takes the top-right with Quick Edit stacked under it", () => {
+  const notice = <div role="dialog" aria-label="Allow Analytics" />;
+  const corner = () => [...document.querySelector('[data-viewport-top-right]')?.children ?? []]
+    .map(child => child.hasAttribute('data-viewport-notice') ? 'notice' : child.hasAttribute('data-quick-edit') ? 'Quick Edit' : child.tagName);
+  frame({ notice });
+  act(() => { fireEvent.click(document.querySelector('[data-harness-stage="finding"]')!); });
+  expect(screen.queryByRole('dialog', { name: 'Allow Analytics' })).toBeNull();
+  act(() => { fireEvent.click(document.querySelector('[data-harness-stage="idle"]')!); });
+  expect(corner()).toEqual(['notice', 'Quick Edit']);
+  cleanup();
+  // Shown small, the view has no Quick Edit, and the notice still asks.
+  frame({ notice, appearance: { colorScheme: 'light', compact: true } });
+  expect(corner()).toEqual(['notice']);
 });
 
 it('a host showing the view small gets the model alone: no tools, no view actions, no Quick Edit, no cube', () => {

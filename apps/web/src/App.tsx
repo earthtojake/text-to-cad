@@ -82,8 +82,8 @@ function RootView({ client, server, tabStore }: { client: CadClient; server: Cad
     reportActivity({ file: path });
   }, []);
   // CAD's anonymous usage analytics, the same as the CAD app's: one card, asked once of everyone
-  // (unless their environment answered, or no answer could be kept), and Settings' Analytics
-  // section after it. The answer is the person's, shared with the CAD app.
+  // (unless their environment answered, or no answer could be kept) once a model is on screen, and
+  // Settings' Analytics section after it. The answer is the person's, shared with the CAD app.
   const { consent, answer, appSettings } = useAnalyticsConsent(analyticsConsent);
   // A person touching the page is use (time spent looking at a model makes no other request): said
   // at most every couple of seconds.
@@ -102,12 +102,11 @@ function RootView({ client, server, tabStore }: { client: CadClient; server: Cad
     files: source, fileActions, clipboard: browserClipboard, promptContext, attachments, links,
     environment: { colorScheme: appearance.colorScheme, platform: keyboardPlatform() },
   }), [source, fileActions, promptContext, attachments, links, appearance.colorScheme]);
-  return <div className="flex h-svh flex-col overflow-hidden"><div className="relative min-h-0 flex-1">
+  return <div className="flex h-svh flex-col overflow-hidden"><div className="min-h-0 flex-1">
     <CadViewer client={client} host={host} tabStore={tabStore} live={live} file={file} onShow={show} onShown={shown}
       rootPath={server.rootPath || ''} onThumbnail={recordThumbnail} appSettings={appSettings}
+      notice={consent?.ask ? <ConsentCard policy={consent.policy} onAnswer={answer}
+        onPolicy={url => window.open(url, '_blank', 'noopener,noreferrer')} /> : null}
       displayActions={<ViewerAppearance colorSchemePreference={appearance.preference} resolvedColorSchemeMode={appearance.colorScheme} onColorSchemePreferenceChange={changeColorScheme} />} />
-    {/* The Viewer has no home: the card is always a viewer's, under the navbar. */}
-    {consent?.ask ? <ConsentCard placement="viewer" policy={consent.policy} onAnswer={answer}
-      onPolicy={url => window.open(url, '_blank', 'noopener,noreferrer')} /> : null}
   </div></div>;
 }

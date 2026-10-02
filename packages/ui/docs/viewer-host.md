@@ -400,7 +400,7 @@ via `RendererViewProps`. `appSettings` (`{ id, section, label, checked, disabled
 host's own on/off settings, which the shell draws as checkbox rows in the Settings popover's last
 sections, one per `section` the settings name (Analytics, in both apps), in the viewer's Settings
 and the home's; the host owns what each one does. `@text-to-cad/ui/consent` is the analytics
-prompt both apps share: `ConsentCard` (the card, `placement` home or viewer) and
+prompt both apps share: `ConsentCard` (the card) and
 `useAnalyticsConsent(consent)`, which turns the host's consent call into the card's state, its
 answer and the Analytics setting; the host supplies the call and where the answer is kept. The shell handles placement and hides the toolbar in
 preview; the host owns callbacks and preferences. None of these imply platform
@@ -413,7 +413,10 @@ time, the explorer included.
 
 The viewport's corners are the shell's, never the host's: the tool strip and its
 stack at the top-left, Quick Edit at the top-right, and the view cube at the
-bottom-left. The view's own controls (Display settings, Preview) are the
+bottom-left. A host's one question goes through the shell too: `notice` (the
+`ConsentCard`) is drawn at the top-right once the file is on screen, never while it
+loads or after it failed to, with Quick Edit stacked under it until it is answered;
+the home never shows it. The view's own controls (Display settings, Preview) are the
 renderer's, drawn into the navbar's right end after the version (`navbarSlot`). What Quick Edit offers follows the subscribed destination capability and
 the ports, never an app name: Copy Prompt always, Queue for a composer
 destination, Send where the prompt port has `send`. Native clipboard effects

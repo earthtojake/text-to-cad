@@ -12,7 +12,8 @@ vi.mock('@text-to-cad/ui/cad-viewer', async original => {
   const { useEffect } = await import('react');
   return {
     ...await original<object>(),
-    CadViewer: (props: CadViewerProps) => { viewer.props = props; useEffect(() => { viewer.mounts += 1; }, []); return null; },
+    // The host's notice (the analytics card) drawn as the real viewer would once a model is on screen.
+    CadViewer: (props: CadViewerProps) => { viewer.props = props; useEffect(() => { viewer.mounts += 1; }, []); return props.notice ?? null; },
   };
 });
 
@@ -132,8 +133,9 @@ it('a hand-made install is asked once about analytics: nothing is shared before 
   for (const choice of ['Allow', 'No thanks', 'Close']) {
     const { bridge, server } = host({ displayMode: 'fullscreen' }, {}, true);
     const { findByRole, queryByRole, getByText, getByRole } = render(<App bridge={bridge as any} server={server as any} launch={home} session={session} />);
-    // The card sits top-right: the home's corner, or a viewer's under its navbar.
-    expect((await findByRole('dialog', { name: 'Allow Analytics' })).parentElement!.dataset.placement).toBe('home');
+    // The card is the viewer's notice: asked once a model is on screen, top-right, Quick Edit under it.
+    await findByRole('dialog', { name: 'Allow Analytics' });
+    expect(viewer.props!.notice).toBeTruthy();
     const policy = getByText('Privacy Policy') as HTMLAnchorElement;
     expect([policy.href, policy.target]).toEqual(['https://www.texttocad.dev/privacy-policy', '_blank']);
     await act(async () => policy.click());
