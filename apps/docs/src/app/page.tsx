@@ -91,7 +91,7 @@ const skillGroups = [
     name: "G-code",
     path: "skills/gcode",
     summary:
-      "Slices supported mesh files into validated, printer-profiled FDM .gcode with real slicer CLIs.",
+      "Slices models into printer-ready G-code with OrcaSlicer, using your own printer presets.",
   },
   {
     name: "Bambu Labs",
