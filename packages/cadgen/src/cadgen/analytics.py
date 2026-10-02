@@ -60,6 +60,7 @@ Analytics never get in the way of CAD:
 
 from __future__ import annotations
 
+import contextlib
 import functools
 import hashlib
 import hmac
@@ -73,6 +74,8 @@ import threading
 import time
 import uuid
 from pathlib import Path
+
+from cadgen._internal.atomic_replace import temp_suffix, write_bytes_atomic
 from typing import Any, Callable
 
 LOG = logging.getLogger("cadgen.analytics")
@@ -125,18 +128,10 @@ def _read(path: Path) -> dict[str, Any]:
 
 
 def _write(path: Path, kept: dict[str, Any]) -> None:
-    # Named for this process and thread: the server's background sender and a tool call may both write.
-    temporary = path.with_name(f".{path.name}.{os.getpid()}.{threading.get_ident()}")
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        temporary.write_text(json.dumps(kept), encoding="utf-8")
-        os.replace(temporary, path)
+        write_bytes_atomic(path, json.dumps(kept).encode("utf-8"))
     except OSError:  # a state directory it cannot write leaves the choice unmade
         LOG.debug("could not keep the analytics choice in %s", path, exc_info=True)
-        try:
-            temporary.unlink()
-        except OSError:
-            pass
 
 
 def _environment() -> bool | None:
@@ -164,17 +159,27 @@ def _is_salt(value: Any) -> bool:
     return isinstance(value, str) and len(value) == 64 and all(char in "0123456789abcdef" for char in value)
 
 
+_KEEPS: set[Path] = set()  # state files whose folder took a file in this process
+
+
 def _can_keep(path: Path) -> bool:
-    """Whether an answer could be written to ``path``: the file, or its nearest existing folder, is writable."""
+    """Whether an answer could be written to ``path``, found by writing a file beside it, as the
+    answer would be: ``os.access`` calls every folder writable on Windows. A folder that took one
+    is not tried again in this process; one that refused is, every time it matters."""
+    if path in _KEEPS:
+        return True
     try:
-        if path.exists():
-            return os.access(path, os.W_OK) and os.access(path.parent, os.W_OK)
-        folder = path.parent
-        while not folder.exists() and folder != folder.parent:
-            folder = folder.parent
-        return os.access(folder, os.W_OK)
+        if path.exists() and not os.access(path, os.W_OK):
+            return False
+        path.parent.mkdir(parents=True, exist_ok=True)
+        probe = path.with_name(f"{path.name}{temp_suffix()}")
+        probe.write_bytes(b"")
     except OSError:
         return False
+    with contextlib.suppress(OSError):
+        probe.unlink()
+    _KEEPS.add(path)
+    return True
 
 
 def status(*, path: Path | None = None) -> dict[str, Any]:
