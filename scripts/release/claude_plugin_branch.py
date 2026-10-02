@@ -6,9 +6,9 @@ claude.ai's directory treats the folder it follows as the whole plugin: there th
 monorepo's thousands of files, its workflows, lockfile and binaries are policy
 holds, and every install copies all of them. So the directory follows the
 `claude-plugin` branch instead: one commit per release whose tree is only the
-plugin -- `.claude-plugin/`'s manifest and icon, `skills/`, `LICENSE`, and the
-README, with each link to a file outside that tree pointed at the release commit
-on GitHub.
+plugin -- `.claude-plugin/`'s manifest and icon, the MCP config it names,
+`skills/`, `LICENSE`, and the README, with each link to a file outside that tree
+pointed at the release commit on GitHub.
 
 The checks are the directory's file rules
 (https://claude.com/docs/plugins/pre-submission-checklist.md): a tree that breaks
@@ -33,7 +33,7 @@ import tempfile
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = ".claude-plugin/plugin.json"
-FILES = (MANIFEST, ".claude-plugin/icon.png", "LICENSE")
+FILES = (MANIFEST, ".claude-plugin/icon.png", "claude.mcp.json", "LICENSE")
 DIRECTORIES = ("skills/",)
 README = "README.md"
 LFS_POINTER = b"version https://git-lfs.github.com/spec/v1"

@@ -28,9 +28,10 @@ Hosts present views in one of three ways, told apart at initialize:
   their elders by, and a view the agent reads is named by the token its
   ``cad_show`` returned: one process may serve many chats, and no host says which.
 - *Text* (a client that renders no MCP Apps, so does not advertise the
-  ``io.modelcontextprotocol/ui`` extension: Grok, Zed, Gemini CLI, Claude Code, ...).
-  ``cad_show`` is the only tool, and it answers with a link to the model in the CAD
-  Viewer (``browser.py``), started or reused for its folder; nothing opens a browser.
+  ``io.modelcontextprotocol/ui`` extension: Grok, Zed, Gemini CLI, Claude Code in a
+  terminal, ...). ``cad_show`` is the only tool, and it answers with a link to the
+  model in the CAD Viewer (``browser.py``), started or reused for its folder;
+  nothing opens a browser.
 
 ``CADGEN_MCP_PRESENTATION=inline|text`` settles a non-Codex client that renders MCP
 Apps without advertising them (the reference host, ``basic-host``, is one).

@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "cad": {
+      "command": "uvx",
+      "args": [
+        "--no-config",
+        "--from",
+        "cadgen==0.7.8",
+        "cadgen",
+        "mcp"
+      ]
+    }
+  }
+}
