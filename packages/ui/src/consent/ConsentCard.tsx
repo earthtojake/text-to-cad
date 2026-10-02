@@ -22,7 +22,7 @@ export function ConsentCard({ policy, onAnswer, onPolicy }: {
     </div>
     <p className="text-xs text-muted-foreground">
       text-to-cad is free and open source. Anonymous user and error counts help us fix bugs and improve
-      it. We never collect your files, models or prompts. Read our{" "}
+      the project. We never collect your files, models or prompts. Read our{" "}
       <a href={policy} target="_blank" rel="noreferrer" className="text-foreground underline underline-offset-2"
         onClick={event => { event.preventDefault(); onPolicy(policy); }}>Privacy Policy</a>.
     </p>
