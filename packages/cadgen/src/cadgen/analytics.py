@@ -453,7 +453,8 @@ class Recorder:
 
     @_guarded(lambda: None)
     def called(self, tool: str, ok: bool) -> None:
-        # Noted in memory only: a flush without consent drops it (and reads nothing until then).
+        # Noted in memory only: a flush without consent drops it. Only a process's first use reads anything
+        # before a flush: the answer it began under (``_first_use``).
         if tool in UNCOUNTED:
             return
         answer = self._first_use()
