@@ -31,14 +31,16 @@ export default function PrivacyPolicyPage() {
           <li>
             <strong>Usage analytics from CAD, when they are on:</strong> the CAD app that shows models
             in your agent app (the plugin’s <code>cad</code> server) and the CAD viewer in your browser
-            (<code>cadgen viewer</code>) send api.texttocad.dev, at most once a minute while you use
+            (<code>cadgen viewer</code>) send to api.texttocad.dev, at most once a minute while you use
             them: a random install ID created on your computer; a random ID for each time one of them
             starts; the cadgen version, whether it was installed from a plugin directory or by hand,
             your operating system and processor type, and the name and version of your agent app and
             how it shows CAD (or that it is the browser viewer); how many times each
-            CAD tool was called and failed, and how many times you touched a CAD view; and, once a day
-            for each distinct file CAD shows, a one-way code made from where the file is with a secret
-            key that never leaves your computer, and the file’s format (such as STEP or STL). The code
+            CAD tool was called and failed, and how many times you touched a CAD view; and, at most
+            once a day from each running CAD app or CAD viewer, for each distinct file you work on in it
+            (Codex runs one CAD app per conversation thread), a one-way code made from where the file is
+            with a secret key that never leaves your computer, and the file’s format (such as STEP or
+            STL). The code
             lets us count how many different files are used without learning their names, locations or
             contents, and it means nothing on any other computer. We record the time each batch
             arrives. Our host also tells us which country each request comes from, which it works
@@ -126,11 +128,13 @@ export default function PrivacyPolicyPage() {
           <li>
             Usage analytics are kept for 13 months, then deleted, except the weekly and monthly totals
             of installs per country, which name no one and are kept indefinitely. We do not store IP
-            addresses with them, and no request log pairs an IP address with an install ID: the ID
-            travels in the body of each request, which those logs do not record. Turning analytics off
-            deletes everything stored under your install ID (it cannot take you out of country totals
-            already counted); if our server cannot be reached at that moment, CAD asks again until it
-            can.
+            addresses with them. Your install ID travels in the body of each request, which our host’s
+            request logs do not record, and we never combine analytics with those logs. Turning
+            analytics off deletes everything stored under your install ID (it cannot take you out of
+            country totals already counted); if our server cannot be reached at that moment, CAD asks
+            again until it can. What turning analytics off deletes, and what the 13-month limit
+            removes, can remain in our database host’s restore history for up to 30 days before it is
+            gone for good.
           </li>
           <li>Everything text-to-cad stores locally stays on your computer until you delete it.</li>
         </ul>

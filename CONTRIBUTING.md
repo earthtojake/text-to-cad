@@ -240,7 +240,7 @@ requested separately. A manual dispatch runs every job.
 | web | web, UI, core, cadgen, infrastructure | UI and web units, the UI browser specs, bundled launch, format/camera browser checks through the backend |
 | skills | skills or runtime/host contracts | repo policy; skill CLI suites only for skills, cadgen, core or infrastructure |
 | codex | codex, UI, core, cadgen, infrastructure | the CAD app's host-adapter units (jsdom) and its one-file build |
-| docs | docs, skills, cadgen, core, infrastructure | static asset contract, lint, Next build, icon verification |
+| docs | docs, skills, cadgen, core, infrastructure | `npm --prefix apps/docs run check`: static asset contract, the analytics receiver's tests (`npm test`), lint, Next build, icon verification |
 | packaging | cadgen, core, UI, web, codex, infrastructure | clean bundle, wheel contents, installed CLI behavior |
 
 Here `cadgen`, `core` and `UI` mean their package directories and tests;

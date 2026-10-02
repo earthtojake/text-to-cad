@@ -2,8 +2,8 @@
  * What `cadgen mcp` sends (`cadgen/analytics.py`, schema 1), checked field by field and turned
  * into rows. Anything outside the contract is refused, not stored: an unknown field, a tool name
  * that is not a tool's, a file code that is not 16 hex characters, a string longer than a version
- * or a client name needs. A row carries the batch's context and one event; nothing in it names a
- * person, a file or what they made.
+ * or a client name needs, a tool or a file counted twice in one batch, or a second view. A row
+ * carries the batch's context and one event; nothing in it names a person, a file or what they made.
  *
  * Events: `tool` (a CAD tool's calls and failures since the last batch), `view` (times a person
  * touched a CAD view, or it switched models) and `file` (a distinct file on screen, once a day per
@@ -30,8 +30,8 @@ const token = (value, name, limit = 64) =>
   typeof value === 'string' && value.length <= limit && TOKEN.test(value) ? value : fail(`${name} is not a short token`);
 const oneOf = (value, allowed, name) => (allowed.has(value) ? value : fail(`${name} is not one of ${[...allowed].join(', ')}`));
 const count = (value, name) => (Number.isInteger(value) && value >= 0 && value <= 1_000_000 ? value : fail(`${name} is not a count`));
-const only = (event, keys, index) => {
-  for (const key of Object.keys(event)) if (!keys.includes(key)) fail(`events[${index}] has an unknown field ${key}`);
+const only = (object, keys, name) => {
+  for (const key of Object.keys(object)) if (!keys.includes(key)) fail(`${name} has an unknown field ${key}`);
 };
 
 export function isUuid(value) {
@@ -47,6 +47,7 @@ export function rowsOf(batch) {
   if (!isUuid(batch.session)) fail('session is not a uuid');
   const client = batch.client ?? {};
   if (typeof client !== 'object' || Array.isArray(client)) fail('client is an object');
+  only(client, ['name', 'version'], 'client');
   const context = {
     install_id: batch.install,
     session_id: batch.session,
@@ -60,26 +61,32 @@ export function rowsOf(batch) {
   };
   const events = batch.events;
   if (!Array.isArray(events) || events.length === 0 || events.length > MAX_EVENTS) fail(`events is a list of 1 to ${MAX_EVENTS}`);
+  // One event per tool and per file, and one view, as cadgen sends them: a repeat is refused, never added up.
+  const seen = new Set();
+  const once = (key, message) => (seen.has(key) ? fail(message) : seen.add(key));
   return events.map((event, index) => {
     if (!event || typeof event !== 'object' || Array.isArray(event)) return fail(`events[${index}] is not an event`);
     const row = { ...context, event: event.name, tool: null, file: null, kind: null, calls: 1, errors: 0 };
     if (event.name === 'tool') {
-      only(event, ['name', 'tool', 'calls', 'errors'], index);
+      only(event, ['name', 'tool', 'calls', 'errors'], `events[${index}]`);
       const tool = typeof event.tool === 'string' && TOOL.test(event.tool) ? event.tool : fail(`events[${index}].tool is not a tool`);
+      once(`tool ${tool}`, `events[${index}].tool is already in the batch`);
       const calls = count(event.calls, `events[${index}].calls`);
-      const errors = count(event.errors ?? 0, `events[${index}].errors`);
+      const errors = event.errors === undefined ? 0 : count(event.errors, `events[${index}].errors`);
       if (calls === 0 || errors > calls) fail(`events[${index}] counts no calls, or more errors than calls`);
       return { ...row, tool, calls, errors };
     }
     if (event.name === 'view') {
-      only(event, ['name', 'calls'], index);
+      only(event, ['name', 'calls'], `events[${index}]`);
+      once('view', `events[${index}] is the batch's second view`);
       const calls = count(event.calls, `events[${index}].calls`);
       if (calls === 0) fail(`events[${index}] counts nothing`);
       return { ...row, calls };
     }
     if (event.name === 'file') {
-      only(event, ['name', 'file', 'kind'], index);
+      only(event, ['name', 'file', 'kind'], `events[${index}]`);
       const file = typeof event.file === 'string' && FILE_CODE.test(event.file) ? event.file : fail(`events[${index}].file is not a file code`);
+      once(`file ${file}`, `events[${index}].file is already in the batch`);
       return { ...row, file, kind: oneOf(event.kind, KINDS, `events[${index}].kind`) };
     }
     return fail(`events[${index}] is not an event`);

@@ -137,20 +137,24 @@ a release of cadgen.
 
 | Route | What it does |
 | --- | --- |
-| `POST /v1/events` | One batch: `{schema: 1, install, session, version, source, platform, arch, client: {name, version}, presentation, events: [{name: "tool", tool, calls, errors} \| {name: "view", calls} \| {name: "file", file, kind}]}` → `204`. `file` is 16 hex characters, an HMAC of the path under a salt that never leaves the machine: distinct files can be counted, not named. Anything else is `400` and stores nothing (`src/lib/analytics/events.mjs`). The country Vercel places the request in (`x-vercel-ip-country`, from its IP address) adds the install to `countries` once a week and once a month: totals only, never beside the batch. |
+| `POST /v1/events` | One batch: `{schema: 1, install, session, version, source, platform, arch, client: {name, version}, presentation, events: [{name: "tool", tool, calls, errors} \| {name: "view", calls} \| {name: "file", file, kind}]}` → `204`. `file` is 16 hex characters, an HMAC of the path under a salt that never leaves the machine: distinct files can be counted, not named. One event per tool and per `file`, and one `view` at most. Anything else is `400` and stores nothing (`src/lib/analytics/events.mjs`). The country Vercel places the request in (`x-vercel-ip-country`, from its IP address) adds the install to `countries` once a week and once a month: totals only, never beside the batch. |
 | `POST /v1/forget` | `{install}`: deletes every row sent under an install id → `204`. `cadgen analytics off` calls it; the random id is the only authority needed. The id rides in the body because Vercel's request logs keep each path beside the caller's IP. |
 | `GET /v1/prune` | The daily cron (`vercel.json`): deletes rows older than 13 months. Needs `Authorization: Bearer $CRON_SECRET`. |
-| `GET /v1/health` | → `200` |
+| `GET /v1/health` | → `200`, or `503` naming a missing setting (`DATABASE_URL`, `CRON_SECRET`), or the database's error code when it cannot take a batch (unreachable, or tables missing a column after a schema change that `schema.sql` was not re-run for). `Deploy Docs` checks it. |
 
 - **Nothing outside the contract is stored**: unknown fields, tool names that are
   not `cad_*`, free-text strings are refused. No IP address is stored, and the one
   header read, the country, is kept only in `countries`' weekly and monthly totals
   (`ZZ` where Vercel could not tell). Those totals are kept indefinitely and an
   opt-out leaves them: nothing in them names an install.
+- **No browser posts.** Both POSTs must be `application/json` (`415` otherwise) and
+  carry no `Origin` header (`403`): cadgen posts from Python, which sends none, and a
+  browser sends one with every POST, a form's, `sendBeacon`'s and a no-cors fetch's
+  included. There are no CORS headers.
 - **The privacy policy describes this table.** A new field is a change to
   `src/app/privacy-policy/page.tsx` in the same PR.
 - **Portable.** `src/lib/analytics/handler.mjs` is a plain `fetch(Request) →
-  Response` handler over a store (`insert`, `forget`, `prune`);
+  Response` handler over a store (`insert`, `seen`, `tally`, `forget`, `prune`, `ready`);
   `app/v1/[...route]/route.ts` is all that ties it to Next.js, and to Vercel (the
   country header). `postgres.mjs` is the store for any Postgres (`DATABASE_URL`,
   the pooled string); `schema.sql` creates its tables. The driver loads on first request, so the build and the
@@ -163,7 +167,16 @@ pooled connection string) and `CRON_SECRET` (any long random string). `Deploy
 Docs` writes those two secrets into the project's production environment
 variables on every deploy (`deploy-vercel-app.sh --env-from`), so changing one
 is `gh secret set` and a redeploy; it also checks `api.texttocad.dev/v1/health`.
-Until it answers, clients drop their batches silently.
+A schema change means running `schema.sql` again (it is idempotent) on the
+database before deploying; a deploy that went out without it fails that check.
+A Vercel Firewall rate-limit rule on `/v1/*` (answering `429`) is recommended: a
+real client sends at most once a minute per running app, so a per-IP limit well
+above that turns a flood away at no cost to real clients.
+
+A client keeps a batch it could not send (offline, or a `5xx` while the receiver is
+down) and sends it again with the next one, for as long as its app runs. It drops
+only a batch the receiver refused with a `4xx` other than `408` or `429` (those it
+retries): that batch would be refused again.
 
 What it answers: how many people use CAD (installs: one per machine and OS user,
 a new one after an opt-out and back), how often (active days and minutes, from

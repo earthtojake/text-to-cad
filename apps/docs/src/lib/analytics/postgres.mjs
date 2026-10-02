@@ -42,5 +42,12 @@ export function postgresStore(url) {
       const deleted = await query`delete from events where received_at < now() - make_interval(days => ${days})`;
       return deleted.count;
     },
+    // Health's question: does every column a batch and the totals are written to exist? Read for no rows:
+    // a schema change that schema.sql was not re-run for fails the deploy's check, as it would every batch.
+    async ready() {
+      const query = await db();
+      await query`select ${query(COLUMNS)} from events limit 0`;
+      await query`select period, starts, country, installs from countries limit 0`;
+    },
   };
 }

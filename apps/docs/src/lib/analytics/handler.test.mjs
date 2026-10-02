@@ -27,6 +27,7 @@ function memory() {
     async tally(country, periods) { tallies.push([country, ...periods]); },
     async forget(id) { for (let i = rows.length - 1; i >= 0; i -= 1) if (rows[i].install_id === id) rows.splice(i, 1); },
     async prune(days) { this.pruned = days; return 0; },
+    async ready() {},
   };
 }
 const send = (store, method, path, body, headers = {}, country = 'DE') => handle(new Request(`https://api.texttocad.dev${path}`, {
@@ -75,10 +76,24 @@ test('anything outside the contract is refused and stores nothing', async () => 
     { ...BATCH, events: [{ name: 'session_start' }] },
     { ...BATCH, client: { name: 'Café' } },
     { ...BATCH, client: { name: 'a name with spaces and a story' } },
+    { ...BATCH, client: { ...BATCH.client, path: 'secret.step' } },
     { ...BATCH, events: [] },
+    { ...BATCH, events: [...BATCH.events, BATCH.events[0]] }, // the same tool twice
+    { ...BATCH, events: [...BATCH.events, BATCH.events[1]] }, // a second view
+    { ...BATCH, events: [...BATCH.events, BATCH.events[2]] }, // the same file twice
+    { ...BATCH, events: [{ name: 'tool', tool: 'cad_show', calls: 1, errors: null }] },
   ]) assert.equal((await send(store, 'POST', '/v1/events', bad)).status, 400, JSON.stringify(bad));
   assert.equal((await send(store, 'POST', '/v1/events', '{')).status, 400);
   assert.equal((await send(store, 'POST', '/v1/events', 'x'.repeat(20_000))).status, 400);
+  assert.deepEqual([store.rows, store.tallies], [[], []]);
+});
+
+test('a browser cannot post: a request with an Origin header, or a body that is not JSON, stores nothing', async () => {
+  const store = memory();
+  const page = await send(store, 'POST', '/v1/events', BATCH, { origin: 'https://example.com' });
+  assert.deepEqual([page.status, await page.json()], [403, { error: 'not from a browser' }]);
+  const text = await send(store, 'POST', '/v1/events', BATCH, { 'content-type': 'text/plain' });
+  assert.deepEqual([text.status, await text.json()], [415, { error: 'the body must be application/json' }]);
   assert.deepEqual([store.rows, store.tallies], [[], []]);
 });
 
@@ -92,8 +107,15 @@ test('an install id forgets everything sent under it; pruning is the cron\'s alo
   assert.equal((await send(store, 'GET', '/v1/prune')).status, 401);
   assert.equal((await send(store, 'GET', '/v1/prune', undefined, { authorization: 'Bearer secret' })).status, 200);
   assert.equal(store.pruned, RETENTION_DAYS);
-  assert.equal((await send(store, 'GET', '/api/v1/health')).status, 200);
-  const unhealthy = await handle(new Request('https://api.texttocad.dev/v1/health'), store, { missing: ['CRON_SECRET'] });
-  assert.deepEqual([unhealthy.status, await unhealthy.json()], [503, { ok: false, missing: ['CRON_SECRET'] }]);
   assert.equal((await send(store, 'GET', '/v1/events')).status, 404);
+});
+
+test('health fails without a setting, or with tables a batch cannot be stored in, naming no more than a code', async () => {
+  assert.equal((await send(memory(), 'GET', '/v1/health')).status, 200);
+  const unset = await handle(new Request('https://api.texttocad.dev/v1/health'), memory(), { missing: ['CRON_SECRET'] });
+  assert.deepEqual([unset.status, await unset.json()], [503, { ok: false, missing: ['CRON_SECRET'] }]);
+  // A column schema.sql was not re-run for.
+  const stale = { ...memory(), async ready() { throw Object.assign(new Error('column "kind" does not exist'), { code: '42703' }); } };
+  const reply = await send(stale, 'GET', '/v1/health');
+  assert.deepEqual([reply.status, await reply.json()], [503, { ok: false, error: '42703' }]);
 });

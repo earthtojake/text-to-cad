@@ -8,6 +8,7 @@
  *   POST   /v1/forget          {install}: forget everything sent under an install id -> 204
  *   GET    /v1/prune           the daily cron: drop rows past retention (CRON_SECRET) -> 200
  *   GET    /v1/health          -> 200, or 503 naming a missing setting (DATABASE_URL, CRON_SECRET)
+ *                              or the database's error code when it cannot take a batch
  *
  * It stores no IP address and nothing the batch does not name; each row's one time is when it
  * arrived (`received_at`). The one thing it adds is where installs are, as totals only: the
@@ -21,20 +22,25 @@ export const RETENTION_DAYS = 395; // thirteen months: a year compared with the 
 const COUNTRY = /^[A-Z]{2}$/; // ISO 3166-1 alpha-2, as the host gives it
 const NO_COUNTRY = 'ZZ'; // where the host could not tell (CLDR's unknown region): totals still add up to the installs
 const PERIODS = ['week', 'month'];
+const JSON_TYPE = /^application\/json\s*(?:;|$)/i; // a parameter, such as `; charset=utf-8`, is still JSON
 
-// No CORS: cadgen calls from Python, never a browser, and no web page may make its visitors' browsers
-// post here.
+// No CORS headers, so no page can read a reply. A page can still make its visitors' browsers post here
+// (a form, `sendBeacon`, a no-cors fetch): `handle` refuses every POST a browser sends.
 const reply = (status, body) => new Response(body === undefined ? null : JSON.stringify(body), {
   status,
   headers: { 'cache-control': 'no-store', ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
 });
+
+// An error by its code and kind only: a database error's message can quote a row's values, an install id
+// among them, and the host's logs keep each line beside the caller's IP address.
+const codeOf = error => error?.code ?? error?.name ?? 'error';
 
 // The country totals are a side count: their failure never costs a batch, and is logged by its code alone.
 async function quietly(work, fallback) {
   try {
     return await work();
   } catch (error) {
-    console.error('analytics country totals failed:', error?.code ?? error?.name ?? 'error');
+    console.error('analytics country totals failed:', codeOf(error));
     return fallback;
   }
 }
@@ -48,17 +54,35 @@ async function json(request) {
 /**
  * @param {Request} request
  * @param {{ insert(rows: object[]): Promise<void>, seen(id: string): Promise<{ week: boolean, month: boolean }>,
- *   tally(country: string, periods: string[]): Promise<void>, forget(id: string): Promise<void>, prune(days: number): Promise<number> }} store
+ *   tally(country: string, periods: string[]): Promise<void>, forget(id: string): Promise<void>, prune(days: number): Promise<number>,
+ *   ready(): Promise<void> }} store `ready`: throws when the database cannot take a batch (health asks).
  * @param {{ cronSecret?: string, missing?: string[], country?: string | null }} [options] `missing`: settings the host
  *   lacks, by name (health says so). `country`: where the host places the request, from its IP address.
  */
 export async function handle(request, store, { cronSecret, missing = [], country } = {}) {
   const { pathname } = new URL(request.url);
-  const path = pathname.replace(/^\/api(?=\/|$)/, '').replace(/\/+$/, '');
+  const path = pathname.replace(/\/+$/, '');
   try {
-    // Unhealthy without its settings: a deploy's check fails rather than shipping an API that drops every batch
-    // or never prunes what the privacy policy says it deletes.
-    if (path === '/v1/health' && request.method === 'GET') return missing.length ? reply(503, { ok: false, missing }) : reply(200, { ok: true });
+    // Unhealthy without its settings, or with a database that cannot take a batch (unreachable, or a schema
+    // change that schema.sql was not re-run for): a deploy's check fails rather than shipping an API that
+    // drops every batch or never prunes what the privacy policy says it deletes. The database's error by its
+    // code alone.
+    if (path === '/v1/health' && request.method === 'GET') {
+      if (missing.length) return reply(503, { ok: false, missing });
+      try {
+        await store.ready();
+      } catch (error) {
+        return reply(503, { ok: false, error: codeOf(error) });
+      }
+      return reply(200, { ok: true });
+    }
+    // No browser posts here. cadgen posts from Python's urllib, which sends no Origin header, while a
+    // browser sends one with every POST, a form's, `sendBeacon`'s and a no-cors fetch's included. And only
+    // JSON is read, which a page can post to another site only after a CORS preflight nothing here approves.
+    if (request.method === 'POST') {
+      if (request.headers.has('origin')) return reply(403, { error: 'not from a browser' });
+      if (!JSON_TYPE.test(request.headers.get('content-type') ?? '')) return reply(415, { error: 'the body must be application/json' });
+    }
     if (path === '/v1/events' && request.method === 'POST') {
       const rows = rowsOf(await json(request));
       // Each install counts once a week and once a month, where its first batch of the period came
@@ -88,9 +112,7 @@ export async function handle(request, store, { cronSecret, missing = [], country
     return reply(404, { error: 'not found' });
   } catch (error) {
     if (error instanceof Invalid) return reply(400, { error: error.message });
-    // Its code and kind only: a database error's detail can quote a row's values, an install id among them,
-    // and the host's logs keep each line beside the caller's IP address.
-    console.error('analytics request failed:', error?.code ?? error?.name ?? 'error');
+    console.error('analytics request failed:', codeOf(error));
     return reply(500, { error: 'internal error' });
   }
 }

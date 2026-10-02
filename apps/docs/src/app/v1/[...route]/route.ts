@@ -19,4 +19,3 @@ const serve = (request: Request) =>
 
 export const GET = serve;
 export const POST = serve;
-export const DELETE = serve;
