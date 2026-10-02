@@ -25,14 +25,12 @@ one revolute mate. Every property is there for a test:
 | `components/df492f79c6123df5.surf` | 10,478 | the same, for the arm. |
 | `hinge_block.step.json` | 691 | **no request at all.** The harness puts it inline on the catalog entry as `sourceSidecar`, which is what the real scanner does, and the renderer compiles kinematics and animation straight from there. |
 
-Total 28,145 bytes. Nothing here is LFS-tracked: `.gitattributes` matches
-`*.step`, not `*.step.json`, and has no rule for `*.surf` or for `packages/**`
-(`git check-attr -a` on these paths prints nothing). Keep it that way — an LFS
-pointer would be rejected by name at `renderAssetClient.js`'s SURF reader, and
-CI checks out without LFS.
+Total 28,145 bytes. No Git attribute applies here (`git check-attr -a` on these
+paths prints nothing), and the repository carries no LFS. Keep it that way — an
+LFS pointer would be rejected by name at `renderAssetClient.js`'s SURF reader.
 
-The `.step` itself is **not** committed, because `*.step` is LFS and because the
-viewer never fetches it: the catalog names a store view, not the document.
+The `.step` itself is **not** committed, because the viewer never fetches it:
+the catalog names a store view, not the document.
 
 ## How the sidecar is bound
 

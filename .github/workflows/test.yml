@@ -118,6 +118,12 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: bash scripts/release/check-pr-version.sh "$BASE_REF" "$HEAD_REF" "$HEAD_SHA"
 
+      # The shipping contract's tree rules hold for every change, docs and models
+      # included, and need no runtime: no symlink, no LFS or other rewriting
+      # .gitattributes rule, no file over 5 MiB, no skill reaching into a repo root.
+      - name: Check the tracked tree
+        run: scripts/github-workflows/check-builds.sh --tree-only
+
   # The cadgen package suite, CAD Viewer backend included, on both platforms. Core
   # is in the condition because it is bundled into the runtime these tests execute.
   cadgen-linux:

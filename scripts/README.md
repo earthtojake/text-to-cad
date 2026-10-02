@@ -134,11 +134,13 @@ where those files ship, so these scripts are what produces them.
 
 `github-workflows/` — scripts a workflow runs whole.
 
-- `check-builds.sh [--skip-bundle-check]` — the shipping contract: no tracked
-  symlink anywhere, no LFS path under `skills/`, no skill reaching into a repo
-  root, no `export-ignore`/`export-subst` rule in a tracked `.gitattributes`;
-  then `bundle.sh --check` unless the workflow already bundled; then every path
-  `cadgen-runtime.sh --print-outputs` names exists and holds no symlink.
+- `check-builds.sh [--skip-bundle-check | --tree-only]` — the shipping contract: no tracked
+  symlink anywhere, no `.gitattributes` rule that rewrites files at checkout or
+  changes the archive (so no LFS), no tracked file over 5 MiB, no skill
+  reaching into a repo root; then `bundle.sh --check` unless the workflow
+  already bundled; then every path `cadgen-runtime.sh --print-outputs` names
+  exists and holds no symlink. `--tree-only` stops after the tree rules, which
+  need no runtime, so `test.yml`'s Version Check runs them for every change.
   Called by `test.yml`, `release-publish.yml`, the pre-commit hook path. The
   no-symlink rule is load-bearing: Codex `plugin add` drops symlinks silently.
 - `deploy-vercel-app.sh` — deploys one Vercel project to production and verifies

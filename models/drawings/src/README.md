@@ -3,8 +3,8 @@
 The repo's 2D `@dxf` fixtures as one cad-project: every script directly
 under `src/` is a runnable drawing model and its artifact lands in `DXF/`.
 Parts live in the sibling `models/examples/` project and assemblies in
-`models/assemblies/`. Nothing here is committed except this `src/` tree and
-`DXF/imported/` — build what you need.
+`models/assemblies/`. Nothing here is committed except this `src/` tree — build
+what you need.
 
 ```bash
 python models/drawings/src/gasket_plate.py       # one drawing
@@ -39,7 +39,6 @@ geometry rather than read back from a STEP artifact this project wrote (which
 the `$dxf` skill forbids — the freshness gate could never say "current").
 
 Build: `python src/<script>` per row; unchanged models are no-ops.
-Imported sources: `DXF/imported/*.dxf` (committed, no script).
 
 ## Why the cabinet panel drawing exists
 
@@ -72,77 +71,9 @@ numbers they carried are. That generator is in git history at
   one that fails when a fold cuts by its infinite line instead of its own
   segment.
 
-## `DXF/imported/` — committed inputs
+## Validating a drawing
 
-Raw DXF files no script regenerates, committed via Git LFS and never rebuilt.
-They cover R12 (AC1009) and R2013+ (AC1027) flavors and a spread of entity
-types.
-
-**Every file here encloses at least one closed area.** That is the selection
-rule, and it exists because the viewer renders a DXF by extruding its closed cut
-contours into a 3D flat pattern — a drawing with no area has nothing to extrude
-and nothing to show.
-
-Several of these deliberately mix closed cut profiles with open annotation
-(dimension extension lines, stray arcs), because real drawings do — layer
-intent is what separates the two, not the entity type.
-
-From [skymakerolof/dxf](https://github.com/skymakerolof/dxf) (`test/resources`,
-MIT):
-
-- `alu_extrusion_profile.dxf` — an aluminium extrusion cross-section: nine
-  nested closed LWPOLYLINE chambers, two HATCH regions, and seven DIMENSION
-  annotations across several layers and colors. The most realistic engineering
-  part in the set. Upstream name: `alu-profile.dxf`.
-- `plate_four_holes.dxf` — an OpenSCAD 2D export: a plate outline with four
-  circular holes, written as 452 individual LINE segments that chain into
-  closed loops with no dangling ends. Exercises the contour walk hard, since
-  not one entity is closed on its own. Upstream name: `openscad_export.dxf`.
-- `square_and_circle.dxf` — a square outline with an inscribed circle on
-  separate colored layers; the circle is tangent to the square, a useful
-  near-degenerate case for contour resolution. Upstream name:
-  `squareandcircle.dxf`.
-- `block_square_in_circle.dxf` — a circle plus an INSERT whose block holds a
-  closed square, and a second standalone circle. Small, and the simplest file
-  here that requires block expansion. Upstream name: `accumulatortest.dxf`.
-- `circles_ellipses_arcs.dxf` — two closed ELLIPSE entities and a CIRCLE
-  alongside two open ARCs. Closed-area ellipse coverage with open geometry
-  mixed in. Upstream name: `circlesellipsesarcs.dxf`.
-
-From [gdsestimating/dxf-parser](https://github.com/gdsestimating/dxf-parser)
-(`test/data`, MIT):
-
-- `laser_text_outlines.dxf` — the word "LaserWeb" as twelve legacy POLYLINE
-  letter outlines, including the counters inside `a`, `e` and `b`. Closed by
-  coincident first/last vertices rather than the closed flag, so it also covers
-  that distinction. A genuine laser-cut profile. Upstream name: `polylines.dxf`.
-- `overlapping_ellipses.dxf` — two full closed ELLIPSE entities that overlap.
-  Minimal ellipse coverage. Upstream name: `ellipse.dxf`.
-
-From [mozman/ezdxf](https://github.com/mozman/ezdxf) (`examples_dxf`, MIT):
-
-- `nested_hole_shapes.dxf` — eight shapes with nested holes: rectangles inside
-  rectangles, notched profiles, and pentagons, as sixteen closed LWPOLYLINE
-  boundaries with ten HATCH fills. The best coverage of holes and nesting
-  depth. Upstream name: `hatches_1.dxf`.
-
-Authored in-repo (committed because no script here can rebuild them):
-
-- `bracket_inches.dxf` — a small bracket profile authored with `$INSUNITS = 1`
-  (inches). The units fixture: the render payload reports the drawing's own
-  units and the factor to millimetres rather than rescaling its coordinates, so
-  a consumer that ignores `units` reads inches as millimetres. Its LWPOLYLINEs
-  also omit the `AcDbPolyline` subclass marker, so `ezdxf.readfile` refuses it
-  and only the `ezdxf.recover` retry opens it — which is itself the point of
-  keeping it.
-
-`DIMENSION`-entity coverage lives in `alu_extrusion_profile.dxf`. DXF `TEXT` and
-`MTEXT` entities are covered by the committed renderer fixture in
-`packages/ui/src/renderers/dxf/__fixtures__/`, not by a file here — the
-cabinet panel drawing that used to hold that coverage is now generated, as
-`src/cabinet_panel_drawing.py`.
-
-Validate any file here post-hoc with the drawing checks (there is no
+Validate any drawing post-hoc with the drawing checks (there is no
 `--validate` flag; a clean drawing reports no findings):
 
 ```python

@@ -70,8 +70,8 @@ class PluginManifestPolicyTest(unittest.TestCase):
 
     def test_codex_icons_are_plain_square_pngs_in_the_package(self) -> None:
         # Codex draws the plugin's tab, sidebar entry and chips from these; without them it draws a
-        # placeholder. Installers clone without git-lfs, so an icon under the LFS-tracked assets/
-        # would arrive as a pointer file: each must be a real PNG in the package.
+        # placeholder. Installers clone without git-lfs, so an icon kept in LFS would arrive as a
+        # pointer file: each must be a real PNG in the package.
         interface = load_json(CODEX_PLUGIN_PATH)["interface"]
         for key in ("composerIcon", "logo"):
             with self.subTest(key=key):

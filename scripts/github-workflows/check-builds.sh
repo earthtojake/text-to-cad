@@ -6,19 +6,22 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 cd "$REPO_ROOT"
 
 RUN_BUNDLE_CHECK=1
+TREE_ONLY=0
 
 usage() {
   cat <<'EOF'
 Usage:
-  scripts/github-workflows/check-builds.sh [--skip-bundle-check]
+  scripts/github-workflows/check-builds.sh [--skip-bundle-check | --tree-only]
 
-Checks the production bundle layout. The generated runtime is not committed, so by
-default this builds it first with scripts/bundle/bundle.sh --check. Use
---skip-bundle-check only after the current workflow has already run
-scripts/bundle/bundle.sh --clean in the same checkout.
+Checks the shipping contract: rules over the tracked tree, then the production
+bundle layout. The generated runtime is not committed, so by default this builds
+it first with scripts/bundle/bundle.sh --check. Use --skip-bundle-check only after
+the current workflow has already run scripts/bundle/bundle.sh --clean in the same
+checkout.
 
 Options:
   --skip-bundle-check  Do not build the runtime; check what is already there.
+  --tree-only          Check only the tracked tree; it needs no runtime, so every change runs it.
   -h, --help           Show this help.
 EOF
 }
@@ -27,6 +30,9 @@ while [ "$#" -gt 0 ]; do
   case "$1" in
     --skip-bundle-check)
       RUN_BUNDLE_CHECK=0
+      ;;
+    --tree-only)
+      TREE_ONLY=1
       ;;
     -h|--help)
       usage
@@ -84,12 +90,13 @@ check_generated_path() {
 # shipping contract is checked over the tree itself, here, on every run:
 #
 #   * no symlink anywhere (tracked): Codex drops them silently -- see above;
-#   * no LFS-tracked path under skills/: installers clone without git-lfs and get
-#     pointer files, which for a skill fixture or runtime asset is a silently broken
-#     install. models/ and assets/ stay LFS: nothing installs them, .lfsconfig keeps
-#     them as pointers;
-#   * no export-ignore/export-subst in any .gitattributes: the repo root is the plugin,
-#     and claude.ai's plugin directory refuses one whose archive differs from its clone;
+#   * no .gitattributes rule that changes a file between the repository and an install:
+#     no filter (so no Git LFS), ident or working-tree-encoding, which rewrite files at
+#     checkout, and no export-ignore or export-subst, which change the archive. The repo
+#     root is the plugin, and claude.ai's plugin directory refuses one whose installs
+#     could differ from the files it validated; installers clone without git-lfs anyway;
+#   * no tracked file over 5 MiB: every installer clones the whole repository, and with
+#     no LFS to carry heavyweight media, it stays out of the tree;
 #   * no skill reaching into a repo root (../../../packages/, apps/, tests/, models/):
 #     the Skills CLI installs skills/<name> alone, so the sibling is not there.
 check_tree_has_no_symlinks() {
@@ -103,25 +110,29 @@ check_tree_has_no_symlinks() {
   fi
 }
 
-check_skills_have_no_lfs_paths() {
-  local hits
-  hits="$(git -C "$REPO_ROOT" ls-files skills | git -C "$REPO_ROOT" check-attr --stdin filter |
-    sed -n 's/: filter: lfs$//p')"
-  if [ -n "$hits" ]; then
-    echo "LFS-tracked paths under skills/ (installers clone without git-lfs):" >&2
-    printf '%s\n' "$hits" | sed 's/^/  /' >&2
+check_gitattributes_keep_files_as_stored() {
+  local rules
+  rules="$(git -C "$REPO_ROOT" grep -nE \
+    '^[[:space:]]*[^#[:space:]].*[[:space:]](filter|ident|working-tree-encoding|export-ignore|export-subst)([[:space:]=]|$)' \
+    -- '.gitattributes' '*/.gitattributes' || true)"
+  if [ -n "$rules" ]; then
+    echo "claude.ai's plugin directory refuses a plugin whose .gitattributes rewrites files at" >&2
+    echo "checkout (filter, so Git LFS; ident; working-tree-encoding) or changes the archive" >&2
+    echo "(export-ignore, export-subst); remove these rules:" >&2
+    printf '%s\n' "$rules" | sed 's/^/  /' >&2
     exit 1
   fi
 }
 
-check_no_export_attributes() {
-  local rules
-  rules="$(git -C "$REPO_ROOT" grep -nE '^[[:space:]]*[^#[:space:]].*export-(ignore|subst)' \
-    -- '.gitattributes' '*/.gitattributes' || true)"
-  if [ -n "$rules" ]; then
-    echo "claude.ai's plugin directory refuses a plugin whose .gitattributes changes the" >&2
-    echo "archive (export-ignore/export-subst); remove these rules:" >&2
-    printf '%s\n' "$rules" | sed 's/^/  /' >&2
+check_no_large_files() {
+  local big
+  big="$(git -C "$REPO_ROOT" ls-files -s |
+    awk -F'\t' '{ split($1, entry, " "); print entry[2] " " $2 }' |
+    git -C "$REPO_ROOT" cat-file --batch-check='%(objectsize) %(rest)' |
+    awk -v limit=$((5 * 1024 * 1024)) '$1 + 0 > limit')"
+  if [ -n "$big" ]; then
+    echo "Tracked files over 5 MiB; every installer clones them, so keep them out of the tree:" >&2
+    printf '%s\n' "$big" | sed 's/^/  /' >&2
     exit 1
   fi
 }
@@ -140,9 +151,14 @@ check_skills_do_not_reach_repo_roots() {
 }
 
 check_tree_has_no_symlinks
-check_skills_have_no_lfs_paths
+check_gitattributes_keep_files_as_stored
+check_no_large_files
 check_skills_do_not_reach_repo_roots
-check_no_export_attributes
+
+if [ "$TREE_ONLY" -eq 1 ]; then
+  echo "Tracked tree is valid."
+  exit 0
+fi
 
 # The runtime has to exist before its layout can be checked, and nothing in the
 # repository carries it: either this run builds it or the workflow already did.

@@ -2,9 +2,9 @@
 models/ corpus, and nothing depends on the developer's default store.
 
 The corpus is a fixture area for humans and skills, not for the test suite: its
-outputs are generated (gitignored, absent in CI), its inputs may be LFS pointers,
-and a test that reaches into it either fails on a fresh clone or passes only
-because a developer built something earlier. Each test writes the small model it
+outputs are generated (gitignored, absent in CI), and a test that reaches into it
+either fails on a fresh clone or passes only because a developer built something
+earlier. Each test writes the small model it
 needs (a `bd.Box` is enough for every contract that is not about geometry), or
 reads a tiny fixture committed with the tests.
 

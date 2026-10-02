@@ -35,7 +35,7 @@ Push the branch to `origin` and open the pull request against
 ### Development environment
 
 Choose the setup for the environment where the tools and tests will run. Every
-environment needs Git LFS and Python 3.11 or newer. Install Node.js 22 for the
+environment needs Python 3.11 or newer. Install Node.js 22 for the
 packaged runtime, Viewer, `@text-to-cad/core`, or documentation site; Python-only work
 can defer Node until a selected test needs a generated runtime stage.
 
@@ -45,7 +45,6 @@ Use the POSIX shell. On WSL, install dependencies inside the distribution; do
 not reuse a Windows `.venv` or `node_modules` directory across the boundary.
 
 ```bash
-git lfs install
 python3.12 -m venv .venv
 ./.venv/bin/python -m pip install --upgrade pip
 ./.venv/bin/python -m pip install -r requirements-dev.txt
@@ -67,7 +66,6 @@ which runs the repository's checked-in `.sh` entry points just as Windows CI
 does.
 
 ```powershell
-git lfs install
 python -m venv .venv
 .\.venv\Scripts\python.exe -m pip install --upgrade pip
 .\.venv\Scripts\python.exe -m pip install -r requirements-dev.txt
@@ -187,7 +185,7 @@ prunes empty destination directories unless `--keep-empty-dirs` is passed.
 Automated tests are self-contained. They must not read, enumerate, build, or
 import sample models from this repository's `models/` directory. Generate the
 smallest fixture needed in a fresh temporary directory, or use a tiny fixture
-committed with the tests; do not rely on existing outputs or LFS downloads.
+committed with the tests; do not rely on existing outputs.
 Repo `tmp/` and system temporary directories are both fine. Give builds their
 own cache store and clean up their processes and files. The shared
 temporary-directory helper retains the Windows cleanup retries used by the suite.
@@ -234,7 +232,7 @@ requested separately. A manual dispatch runs every job.
 
 | Check | Runs for | Coverage |
 | --- | --- | --- |
-| Version Check | every change | canonical version, derived metadata, skill pins |
+| Version Check | every change | canonical version, derived metadata, skill pins, the shipping contract's tree rules |
 | cadgen (Linux/Windows) | cadgen, core, infrastructure | Python engine, daemon, CLI and viewer backend |
 | core-js | core, infrastructure | `@text-to-cad/core` and benchmark helper units |
 | web | web, UI, core, cadgen, infrastructure | UI and web units, the UI browser specs, bundled launch, format/camera browser checks through the backend |
@@ -516,13 +514,15 @@ on every push:
   one loses data silently: the Skills CLI dereferences them, Claude Code
   preserves them, and Codex `plugin add` drops them with no error at all,
   publishing a skill whose files are simply missing at runtime.
-- **No LFS-tracked path under `skills/`.** Installers clone without git-lfs and
-  receive pointer files. `models/` and `assets/` stay LFS: nothing installs
-  them, `.lfsconfig` excludes them from default fetches (a fresh clone is ~27 MB
-  with `models/` as pointers).
-- **No `export-ignore` or `export-subst` in `.gitattributes`.** The repository
-  root is the plugin, and claude.ai's plugin directory refuses one whose
-  archive would differ from what people install.
+- **No `.gitattributes` rule that changes a file on its way to a user.** No
+  `filter`, `ident` or `working-tree-encoding`, which rewrite files at checkout,
+  and no `export-ignore` or `export-subst`, which change the archive. So there
+  is no Git LFS: installers clone without git-lfs and would receive pointer
+  files, and claude.ai's plugin directory validates files as stored and refuses
+  a plugin whose installs could differ.
+- **No tracked file over 5 MiB.** Every installer clones the whole repository,
+  so a big file costs every user on every install; heavyweight media stays out
+  of the tree.
 - **No skill reaching into a repo root.** `packages/` being present is not
   permission to import from it: the Skills CLI installs `skills/<name>` alone,
   so `../../../packages/` would work in a checkout and break on the first
@@ -845,14 +845,5 @@ as `.venv/`, `node_modules/`, `.vite/`, `dist/`, `tmp/`, or local credentials.
 Generated runtime changes should come from the production-output workflow, not
 manual edits inside generated runtime folders.
 
-CAD exchange files, generated render/topology assets, and `assets/**` may be
-LFS-tracked. Never disable LFS filters for `git add`, commits, or other
-object-writing operations.
-
-`assets/**` holds heavyweight demo GIFs and is excluded from default LFS pulls,
-so lightweight clones do not fetch it. Hydrate it only when you need the demo
-assets locally:
-
-```bash
-git lfs pull --include="assets/**"
-```
+The repository carries no Git LFS and no tracked file over 5 MiB (see the
+shipping contract above), so heavyweight media never goes in the tree.
