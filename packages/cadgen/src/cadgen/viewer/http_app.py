@@ -496,7 +496,7 @@ class CadApp:
                     if type(payload) is not dict:
                         raise ValueError("an analytics request is an object")
                     if pathname == "/__cad/analytics":
-                        response.send_json(200, self._consent(payload.get("share")))
+                        response.send_json(200, self._consent(payload.get("share"), card=payload.get("card") is True))
                     else:
                         self._report_activity(payload)
                         response.send_empty(204)
@@ -609,12 +609,14 @@ class CadApp:
 
     # --- anonymous usage analytics -----------------------------------------
 
-    def _consent(self, share=None) -> dict:
+    def _consent(self, share=None, *, card: bool = False) -> dict:
         """The page's analytics card and Settings toggle: whether to ask (nothing chosen, and an answer
-        could be kept), whether sharing is on and why, and, from the person's click, their answer."""
+        could be kept), whether sharing is on and why, and, from the person's click, their answer. A
+        card answers only an open question, so one still up in another view never undoes an answer
+        just given (``card``); the toggle changes it whenever."""
         from cadgen.analytics import PRIVACY_URL
 
-        if isinstance(share, bool):
+        if isinstance(share, bool) and (not card or self.analytics.status()["reason"] == "unasked"):
             self.analytics.choose(share, by="viewer")
         found = self.analytics.status()
         return {"ask": found["reason"] == "unasked", "sharing": found["sharing"], "reason": found["reason"],

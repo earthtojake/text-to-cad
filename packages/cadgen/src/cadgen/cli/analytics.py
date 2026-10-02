@@ -36,14 +36,19 @@ def build_parser(prog: str = DEFAULT_PROG) -> argparse.ArgumentParser:
 def main(argv: Sequence[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:
     args = build_parser(prog).parse_args(argv)
     from cadgen.analytics import PRIVACY_URL, choose, request_deletion, status
+    from cadgen.settings import settings_path
 
-    if args.action == "on":
-        choose(True, by="cli")
-    elif args.action == "off":
-        chosen = choose(False, by="cli", forget=request_deletion)  # a person at a terminal waits for it
-        print("Analytics are off; the install id was deleted"
-              + (" and the data sent under it was deleted." if chosen.get("forgotten")
-                 else ". The data sent under it will be deleted the next time CAD can reach its server."))
+    if args.action in ("on", "off"):
+        # An off is kept before the receiver is asked to delete (a person at a terminal waits for that).
+        chosen = choose(args.action == "on", by="cli", forget=request_deletion if args.action == "off" else None)
+        if not chosen["saved"]:
+            print(f"Could not save the choice: cadgen's state directory ({settings_path().parent}) could not be written. "
+                  "Analytics are unchanged; DO_NOT_TRACK=1 in an app's environment keeps them off there.")
+            return 1
+        if args.action == "off":
+            print("Analytics are off; the install id was deleted"
+                  + (" and the data sent under it was deleted." if chosen.get("forgotten")
+                     else ". The data sent under it will be deleted the next time CAD can reach its server."))
     found = status()
     if args.action != "off":
         print(f"Analytics are {'on' if found['sharing'] else 'off'}: {_REASONS[found['reason']]}.")

@@ -45,10 +45,13 @@ class ViewerAnalyticsTest(unittest.TestCase):
         self.addCleanup(server.shutdown)
         return server.server_address[1]
 
-    def request(self, method: str, path: str, body: dict | None = None, port: int | None = None) -> tuple[int, dict | None]:
+    def request(self, method: str, path: str, body: dict | None = None, port: int | None = None,
+                guard: bool = True) -> tuple[int, dict | None]:
         connection = http.client.HTTPConnection("127.0.0.1", port or self.port, timeout=10)
         try:
-            headers = {"x-cadgen-viewer": "1", "content-type": "application/json"} if body is not None else {}
+            headers = {"content-type": "application/json"} if body is not None else {}
+            if body is not None and guard:
+                headers["x-cadgen-viewer"] = "1"
             connection.request(method, path, body=json.dumps(body) if body is not None else None, headers=headers)
             response = connection.getresponse()
             data = response.read()
@@ -65,6 +68,15 @@ class ViewerAnalyticsTest(unittest.TestCase):
         # The answer is the person's, in the state directory every CAD app reads: the CAD app's
         # server sees the same no.
         self.assertEqual(json.loads(self.state.read_text(encoding="utf-8"))["analytics"]["choice"], "off")
+        # A card still up in another view answers nothing now; the Settings toggle changes it whenever.
+        self.assertEqual(self.request("POST", "/__cad/analytics", {"share": True, "card": True})[1]["sharing"], False)
+        self.assertEqual(self.request("POST", "/__cad/analytics", {"share": True})[1]["sharing"], True)
+
+    def test_a_web_page_cannot_answer_for_the_person(self) -> None:
+        # Without the viewer's own header (no page from another site can send it), a POST changes nothing.
+        self.assertEqual(self.request("POST", "/__cad/analytics", {"share": True}, guard=False)[0], 403)
+        self.assertEqual(self.request("GET", "/__cad/analytics")[1]["ask"], True)
+        self.assertFalse(self.state.exists())
 
     def test_what_the_page_did_is_sent_only_with_consent_and_a_file_only_as_its_code(self) -> None:
         self.request("POST", "/__cad/analytics/activity", {"file": "parts/a.stl", "touched": True})

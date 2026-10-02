@@ -35,6 +35,20 @@ class _Tmp(unittest.TestCase):
         deletion.start()
         self.addCleanup(deletion.stop)
 
+    def serve(self, install: str | None, client: str = "codex-mcp-client") -> tuple[Server, list[dict]]:
+        sent: list[dict] = []
+        recorder = Recorder(install=install, path=self.path, send=lambda payload: sent.append(payload) or True)
+        (self.tmp / "app").mkdir(exist_ok=True)
+        server = Server(launch_cwd=str(self.tmp), page=AppPage(self.tmp / "app"), recents=RecentStore(self.tmp / "state"),
+                        analytics=recorder)
+        server.handle("initialize", {"protocolVersion": "2025-06-18", "capabilities": {},
+                                     "clientInfo": {"name": client, "version": "0.159.0"}}, None)
+        return server, sent
+
+    def call(self, server: Server, name: str, arguments: dict | None = None) -> dict:
+        context = RequestContext(1, {"threadId": "t"}, None)
+        return server.handle("tools/call", {"name": name, "arguments": arguments or {}}, context)
+
 
 class ConsentTest(_Tmp):
     def test_nothing_is_sent_and_no_id_made_until_the_person_says_yes(self) -> None:
@@ -58,7 +72,7 @@ class ConsentTest(_Tmp):
         first = status(path=self.path)["id"]
         self.assertTrue(first)
         self.assertEqual(choose(False, by="app", path=self.path, forget=lambda id: forgotten.append(id) or True),
-                         {"sharing": False, "forgotten": True})
+                         {"saved": True, "sharing": False, "forgotten": True})
         self.assertEqual(forgotten, [first])  # the receiver is asked to delete it
         self.assertEqual(status(path=self.path), {"sharing": False, "reason": "choice", "id": None})
         self.assertNotIn(first, self.path.read_text(encoding="utf-8"))
@@ -105,23 +119,90 @@ class NoMeansNoTest(_Tmp):
         self.assertEqual(status(path=self.tmp / "taken" / "state" / "settings.json")["reason"], "unavailable")
         self.assertEqual(status(path=self.path)["reason"], "unasked")
         self.assertEqual(list(self.tmp.glob("settings.json*")), [], "the try leaves nothing behind")
+        # The lock every write takes, unopenable (a folder in its place): as good as no folder.
+        (self.tmp / "locked").mkdir()
+        (self.tmp / "locked" / "settings.lock").mkdir()
+        self.assertEqual(status(path=self.tmp / "locked" / "settings.json")["reason"], "unavailable")
+
+
+class OneAnswerTest(_Tmp):
+    """The answer is one, shared by every app and process: none of them undoes another's."""
+
+    def section(self) -> dict:
+        return json.loads(self.path.read_text(encoding="utf-8"))["analytics"]
+
+    def test_an_answer_given_meanwhile_is_never_undone(self) -> None:
+        choose(True, by="cli", path=self.path)
+        choose(False, by="app", path=self.path)  # its id is owed a deletion
+        [owed] = self.section()["forget"]
+
+        def meanwhile(install_id: str) -> bool:  # the other app's yes, while this one waits on the receiver
+            choose(True, by="viewer", path=self.path)
+            return True
+
+        forget_pending(path=self.path, forget=meanwhile)
+        self.assertEqual((self.section()["choice"], "forget" in self.section()), ("on", False))
+        self.assertNotEqual(self.section()["id"], owed)
+        # Settings that are there but cannot be read now are neither asked about nor written over.
+        before = self.path.read_bytes()
+        with mock.patch("cadgen.settings.Path.read_text", side_effect=PermissionError("held")):
+            self.assertEqual(status(path=self.path)["reason"], "unavailable")
+            self.assertFalse(choose(False, by="app", path=self.path)["saved"])
+        self.assertEqual(self.path.read_bytes(), before)
+
+    def test_an_off_is_kept_before_the_receiver_is_asked(self) -> None:
+        choose(True, by="cli", path=self.path)
+
+        def interrupted(install_id: str) -> bool:  # Ctrl-C while the receiver is asked
+            self.assertFalse(status(path=self.path)["sharing"])
+            raise KeyboardInterrupt
+
+        with self.assertRaises(KeyboardInterrupt):
+            choose(False, by="cli", path=self.path, forget=interrupted)
+        self.assertEqual((status(path=self.path)["sharing"], len(self.section()["forget"])), (False, 1))
+
+    def test_a_batch_that_lands_after_an_opt_out_is_deleted_too(self) -> None:
+        choose(True, by="cli", path=self.path)
+        first = status(path=self.path)["id"]
+
+        def lands_late(payload: dict) -> bool:  # the other app's no reached the receiver first
+            choose(False, by="viewer", path=self.path, forget=lambda install_id: True)
+            return True
+
+        recorder = Recorder(path=self.path, send=lands_late)
+        recorder.called("cad_show", True)
+        self.assertTrue(recorder.flush())
+        self.assertEqual(self.section()["forget"], [first])  # owed a deletion again
+
+    def test_use_noted_before_a_yes_in_the_other_app_is_never_sent(self) -> None:
+        sent: list[dict] = []
+        recorder = Recorder(path=self.path, send=lambda payload: sent.append(payload) or True)
+        recorder.called("cad_show", True)  # before any answer
+        choose(True, by="viewer", path=self.path)  # the other app's yes
+        self.assertFalse(recorder.flush())
+        recorder.called("cad_show", True)
+        self.assertTrue(recorder.flush())
+        self.assertEqual(len(sent), 1)
+
+    def test_only_a_page_answers_and_a_card_only_an_open_question(self) -> None:
+        server, sent = self.serve(None, client="some-terminal-agent")
+        self.call(server, "cad_consent", {"share": True})  # a text client has no page: the agent cannot opt in
+        self.assertEqual(status(path=self.path)["reason"], "unasked")
+        server, sent = self.serve(None)
+        self.call(server, "cad_consent", {"share": True, "card": True})
+        self.call(server, "cad_consent", {"share": False, "card": True})  # a stale card still up in another view
+        self.assertTrue(status(path=self.path)["sharing"])
+        self.call(server, "cad_consent", {"share": False})  # Settings' toggle changes it whenever
+        self.assertFalse(status(path=self.path)["sharing"])
+
+    def test_the_environment_turns_it_on_too(self) -> None:
+        with mock.patch.dict("os.environ", {"CADGEN_ANALYTICS": "1"}):
+            found = status(path=self.path)
+        self.assertEqual((found["sharing"], found["reason"]), (True, "environment"))
+        self.assertTrue(found["id"])
 
 
 class ServerCountsTest(_Tmp):
-    def serve(self, install: str | None) -> tuple[Server, list[dict]]:
-        sent: list[dict] = []
-        recorder = Recorder(install=install, path=self.path, send=lambda payload: sent.append(payload) or True)
-        (self.tmp / "app").mkdir(exist_ok=True)
-        server = Server(launch_cwd=str(self.tmp), page=AppPage(self.tmp / "app"), recents=RecentStore(self.tmp / "state"),
-                        analytics=recorder)
-        server.handle("initialize", {"protocolVersion": "2025-06-18", "capabilities": {},
-                                     "clientInfo": {"name": "codex-mcp-client", "version": "0.159.0"}}, None)
-        return server, sent
-
-    def call(self, server: Server, name: str, arguments: dict | None = None) -> dict:
-        context = RequestContext(1, {"threadId": "t"}, None)
-        return server.handle("tools/call", {"name": name, "arguments": arguments or {}}, context)
-
     def test_a_yes_sends_use_files_and_metadata_and_nothing_the_person_made(self) -> None:
         server, sent = self.serve("store")
         self.assertEqual(self.call(server, "cad_consent")["structuredContent"]["ask"], True)  # a directory install is asked too
@@ -130,11 +211,11 @@ class ServerCountsTest(_Tmp):
         secret.write_text("ISO-10303-21;", encoding="utf-8")
         self.call(server, "cad_open", {"path": str(secret)})  # the agent opens one
         self.call(server, "cad_recents", {})  # the home's polling: never counted
-        # A view's syncs: plumbing, never a tool count; a touch is view activity, and the file it shows
-        # (one a person browsed to) is a file worked on.
+        # A view's syncs: plumbing, never a tool count. One nobody touched notes nothing (a view left open
+        # sends nothing); a touch is view activity, and the file it shows (one a person browsed to) a file worked on.
         for _ in range(3):
-            self.call(server, "cad_sync", {"view": "v", "surface": "thread", "model": str(self.tmp / "secret-plate.STL")})
-        self.call(server, "cad_sync", {"view": "v", "surface": "thread", "model": str(secret), "focused": True})
+            self.call(server, "cad_sync", {"view": "v", "surface": "thread", "model": str(self.tmp / "secret-idle.step")})
+        self.call(server, "cad_sync", {"view": "v", "surface": "thread", "model": str(self.tmp / "secret-plate.STL"), "focused": True})
         self.assertTrue(server.analytics.flush())
         [payload] = sent
         events = payload["events"]
@@ -167,10 +248,10 @@ class ServerCountsTest(_Tmp):
         self.assertEqual(sent, [])
 
     def test_a_batch_the_receiver_did_not_take_waits_for_the_next(self) -> None:
-        answers = [False, True]
+        answers: list = [False, True, "refused", True]
         sent: list[dict] = []
-        recorder = Recorder(path=self.path, send=lambda payload: sent.append(payload) or answers.pop(0))
         choose(True, by="cli", path=self.path)
+        recorder = Recorder(path=self.path, send=lambda payload: sent.append(payload) or answers.pop(0))
         recorder.called("cad_show", True)
         recorder.opened("/work/a.step")
         self.assertFalse(recorder.flush())  # offline: kept
@@ -179,17 +260,28 @@ class ServerCountsTest(_Tmp):
         tools = [event for event in sent[1]["events"] if event["name"] == "tool"]
         self.assertEqual(tools, [{"name": "tool", "tool": "cad_show", "calls": 2, "errors": 1}])
         self.assertEqual(len([event for event in sent[1]["events"] if event["name"] == "file"]), 1)
+        # One the receiver refused (a 4xx) is dropped: sent again, it would take what comes next down with it.
+        recorder.called("cad_view", True)
+        self.assertFalse(recorder.flush())
+        recorder.called("cad_show", True)
+        self.assertTrue(recorder.flush())
+        self.assertEqual([event["tool"] for event in sent[3]["events"]], ["cad_show"])
 
     def test_files_past_a_batchs_room_go_in_the_next(self) -> None:
         sent: list[dict] = []
-        recorder = Recorder(path=self.path, send=lambda payload: sent.append(payload) or True)
         choose(True, by="cli", path=self.path)
+        recorder = Recorder(path=self.path, send=lambda payload: sent.append(payload) or True)
         for index in range(FILES_PER_BATCH + 8):
             recorder.opened(f"/work/part-{index}.step")
         recorder.opened("/work/notes.txt")  # not a CAD file: not noted
         self.assertTrue(recorder.flush())
         self.assertTrue(recorder.flush())
         self.assertEqual([len(payload["events"]) for payload in sent], [FILES_PER_BATCH, 8])
+        # One file, however a view spelled it, is one event: the receiver refuses a repeated code.
+        recorder.opened("/work/again.step")
+        recorder.opened("/work/./again.step")
+        self.assertTrue(recorder.flush())
+        self.assertEqual(len(sent[-1]["events"]), 1)
 
     def test_a_manual_install_asks_once_and_sends_only_after_yes(self) -> None:
         server, sent = self.serve(None)
@@ -251,8 +343,8 @@ class NeverInTheWayTest(_Tmp):
 
     def test_an_exiting_server_waits_for_its_last_send_only_so_long(self) -> None:
         hang = threading.Event()
-        recorder = Recorder(path=self.path, send=lambda payload: hang.wait(30))
         choose(True, by="cli", path=self.path)
+        recorder = Recorder(path=self.path, send=lambda payload: hang.wait(30))
         recorder.started(client={"name": "codex-mcp-client"}, presentation="tabs")
         recorder.called("cad_show", True)
         began = time.monotonic()

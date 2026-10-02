@@ -574,8 +574,13 @@ class Server:
         # whether sharing is on, and, from the person's click, their answer.
         from cadgen.analytics import PRIVACY_URL
 
-        if isinstance(arguments.get("share"), bool):
-            self.analytics.choose(arguments["share"], by="app")
+        # Only a page answers: a text client has none, so the agent can never answer for the person.
+        # A card answers only an open question: one still up in another view must not undo an answer
+        # the person just gave (`card`); Settings' toggle changes it whenever.
+        share = arguments.get("share")
+        if isinstance(share, bool) and not self.text:
+            if arguments.get("card") is not True or self.analytics.status()["reason"] == "unasked":
+                self.analytics.choose(share, by="app")
         found = self.analytics.status()
         # `reason`: Settings shows a choice the environment made (DO_NOT_TRACK, CADGEN_ANALYTICS) as fixed.
         return _data({"ask": found["reason"] == "unasked", "sharing": found["sharing"], "reason": found["reason"],
@@ -586,7 +591,10 @@ class Server:
         from cadgen.analytics import PRIVACY_URL
 
         if arguments.get("action") == "off":
-            self.analytics.choose(False, by="agent")
+            if not self.analytics.choose(False, by="agent").get("saved"):
+                return _text("CAD analytics could not be turned off for good: cadgen's state directory could not be "
+                             "written. This CAD app sends nothing more until it restarts; DO_NOT_TRACK=1 in the agent "
+                             "app's environment keeps analytics off.", {"sharing": False})
             return _text("CAD analytics are off. The install id was deleted, and the data sent under it is being deleted.",
                          {"sharing": False})
         found = self.analytics.status()
@@ -739,9 +747,10 @@ class Server:
         focused = arguments.get("focused") is True
         # Use the agent's tools never see: a person touching the view, or it switching models, and
         # the file on screen (one a person browsed to through the explorer included).
+        # Noted only when a person touched it: a view left open on a model sends nothing.
         if focused:
             self.analytics.viewed()
-        self.analytics.opened(arguments.get("model"))
+            self.analytics.opened(arguments.get("model"))
         if state is not None or focused:
             self.views.report(view_id, model=arguments.get("model"), state=state, focused=focused)
         if focused and isinstance(arguments.get("model"), str):
