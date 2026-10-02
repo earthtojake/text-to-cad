@@ -5,7 +5,7 @@
       "args": [
         "--no-config",
         "--from",
-        "cadgen==0.7.8",
+        "cadgen==0.7.9",
         "cadgen",
         "mcp"
       ],
