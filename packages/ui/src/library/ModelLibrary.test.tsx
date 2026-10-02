@@ -40,7 +40,8 @@ it('heads the home with the TEXTTOCAD wordmark over GitHub, Feedback and Setting
   fireEvent.click(within(nav).getByRole('button', { name: 'Settings' }));
   const settings = await screen.findByRole('dialog', { name: 'Settings' });
   expect(within(settings).getByText('v0.7.4')).toBeTruthy();
-  expect(within(settings).getAllByRole('link').map(node => node.getAttribute('aria-label') ?? node.textContent)).toEqual(['Made by @earthtojake', 'Discord', 'GitHub']);
+  expect(within(settings).getAllByRole('link').map(node => node.getAttribute('aria-label') ?? node.textContent)).toEqual(['Release notes for v0.7.4', 'Made by @earthtojake', 'Discord', 'GitHub']);
+  expect(within(settings).getByRole('link', { name: 'Release notes for v0.7.4' }).getAttribute('href')).toBe('r');
   expect(within(settings).getByRole('link', { name: 'Made by @earthtojake' }).getAttribute('href')).toBe('https://x.com/earthtojake');
   expect(settings.querySelector('[data-settings-header] [data-settings-version]')?.textContent).toBe('v0.7.4');
   expect(within(settings).getByText('Analytics')).toBeTruthy();

@@ -54,7 +54,9 @@
  * list of rows. */
 .cad-library { width: 100%; height: 100%; background: var(--background); --cad-library-card: var(--card); --cad-library-line: var(--border); }
 .dark .cad-library { --cad-library-card: color-mix(in oklab, var(--background) 88%, white); --cad-library-line: oklch(1 0 0 / 8%); }
-.cad-library-content { box-sizing: border-box; width: 100%; max-width: 1128px; margin: 0 auto; padding: 44px 24px calc(40px + var(--cad-host-bottom-inset, 0px)); container-type: inline-size; }
+/* Below the last row: 40px, or room to scroll it clear of a host's composer floating over the bottom
+   (`--cad-host-bottom-inset`), whichever is more. Added together, a library that fits would still scroll. */
+.cad-library-content { box-sizing: border-box; width: 100%; max-width: 1128px; margin: 0 auto; padding: 44px 24px max(40px, calc(var(--cad-host-bottom-inset, 0px) + 16px)); container-type: inline-size; }
 /* TEXTTOCAD is wide (about 5.9:1): sized by its width, so a narrow sidebar shrinks it rather than cuts it. */
 .cad-library-wordmark { display: block; width: min(100%, 360px); height: auto; margin: 0 auto; user-select: none; -webkit-user-drag: none; }
 /* The byline: the claim in the text colour, the promise in the wordmark's blue (its top faces in the dark, its deeper side in the light). */

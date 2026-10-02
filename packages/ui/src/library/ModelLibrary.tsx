@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent, type ComponentType, type CSSProperties, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
 import { Box, FolderOpen, LayoutGrid, List, Pin, Search, X } from "lucide-react";
 import type { CadWorkspaceService } from "@text-to-cad/core/client";
 import { Button } from "../primitives/button.jsx";
 import { Input } from "../primitives/input.jsx";
-import { ScrollArea as ScrollRegion } from "../primitives/scroll-area.jsx";
 import { Spinner } from "../primitives/spinner.jsx";
 import type { LibraryLayout } from "../tab-store/tabRecord.js";
 import wordmark from "../assets/logo-texttocad.svg";
@@ -90,7 +89,6 @@ const message = (failure: unknown) => failure instanceof Error ? failure.message
 /** How often the home reads its list again while it is up. */
 const LIST_MS = 2_000;
 // The chrome's one scroll region (`primitives/scroll-area.jsx`), as this page uses it.
-const ScrollArea = ScrollRegion as unknown as ComponentType<{ className?: string; style?: CSSProperties; viewportClassName?: string; children: ReactNode; [data: `data-${string}`]: string }>;
 
 // A card's picture, read once the card is on screen; and a card on screen that wants one (`seen`).
 function Thumbnail<Model extends LibraryModel>({ item, load, seen, opening = false }: { item: Model; load(name: string): Promise<string | null>; seen(item: Model): void; opening?: boolean }) {
@@ -263,7 +261,8 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
       </button>
       {actions(item, false)}
     </li>)}</ul>;
-  return <ScrollArea className="cad-library h-full text-ui" viewportClassName="cad-library-viewport" data-library-layout={layout}>
+  // A page: it scrolls, with the platform's own scrollbar, only when there is more of it than fits.
+  return <div className="cad-library h-full overflow-y-auto text-ui" data-library-layout={layout}>
     <main className="cad-library-content" aria-label="CAD models">
       <img className="cad-library-wordmark" src={wordmark} alt="text-to-cad" />
       <p className="cad-library-byline">Build anything. <span>100% open source and free.</span></p>
@@ -303,5 +302,5 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
             : <p className="cad-library-empty">Open a CAD file to see it here.</p>)
             : models}
     </main>
-  </ScrollArea>;
+  </div>;
 }

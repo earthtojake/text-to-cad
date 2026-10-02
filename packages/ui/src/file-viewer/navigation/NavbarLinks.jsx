@@ -15,8 +15,9 @@ import wordmark from "../../assets/logo-cad.svg";
  * them. A newer release the host found (`links.latest`) is a blue download button — nothing at all
  * when there is none — whose menu says what is new and how this host updates (`UpdateButton`).
  * The Settings popover's footer has "Made by @…" (`MadeBy`, the host's X account) at its left and
- * Discord and GitHub (`CommunityLinks`) at its right; the version is beside its title; GitHub alone (`GitHubLink`) is also in the navbar and under the home's wordmark, before
- * Feedback (`FeedbackLink`), which opens a new issue. Settings follows them. Every link opens the
+ * Discord and GitHub (`CommunityLinks`) at its right; the version, beside its title, links its
+ * release notes. GitHub alone (`GitHubLink`) is under the home's wordmark, before Feedback
+ * (`FeedbackLink`), which opens a new issue and is in the viewer's navbar too. Settings follows them. Every link opens the
  * host's way: a page that can open one itself follows an ordinary link to a new tab; a page in a
  * frame that cannot hands it to `links.open` (the host's own browser). Copies go through the
  * host's clipboard.
@@ -49,8 +50,8 @@ export function CommunityLinks({ links, onError }) {
 }
 
 /**
- * GitHub alone, as an icon link: in the navbar before Feedback, and under the home's wordmark. It
- * says, in one glance, that the project is open source.
+ * GitHub alone, as an icon link: under the home's wordmark, before Feedback. It says, in one
+ * glance, that the project is open source.
  * @param {{ links: import("../../host/types.js").ViewerLinks, onError?: (error: Error) => void }} props
  */
 export function GitHubLink({ links, onError }) {

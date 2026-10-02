@@ -353,6 +353,8 @@ stack.
   `ScrollArea` primitive (`primitives/scroll-area.jsx`, shadcn's): thin overlay
   bars in the theme's colours, shown while the pointer is over the region. No
   native `overflow-auto` scroller in chrome; `src/designSystem.test.js` holds it.
+  The home (the model library) is a page, not chrome: it scrolls as a page does,
+  with the platform's scrollbar, and only when there is more of it than fits.
 - **Nothing opens elsewhere.** A pick shows its Reference in the stack; the
   Position tool shows its panel by being chosen. No pick or tool opens, closes
   or turns the host's explorer, on desktop or mobile.

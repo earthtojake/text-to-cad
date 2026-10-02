@@ -10,7 +10,7 @@ import { NAVBAR_CONTROLS_CLASS, NAVBAR_ROW_CLASS } from "../../lib/navbarRow.js"
 import { EntryMenuItems, useEntryMenuFocusGuard } from "./EntryMenu.jsx";
 import { entryMenu } from "./entry-menu.js";
 import { InlineName } from "./InlineName.jsx";
-import { FeedbackLink, GitHubLink, UpdateButton } from "./NavbarLinks.jsx";
+import { FeedbackLink, UpdateButton } from "./NavbarLinks.jsx";
 
 /**
  * The row above a file: ONE navbar, the same in every app, so a person finds each control in the
@@ -140,7 +140,6 @@ export function ViewerNavbar({ onBack, explorer = null, file = null, selecting =
       <div className={NAVBAR_CONTROLS_CLASS}>
         {trailing}
         {links ? <UpdateButton links={links} clipboard={clipboard} onError={onError} /> : null}
-        {links ? <GitHubLink links={links} onError={onError} /> : null}
         {links ? <FeedbackLink links={links} platform={platform} onError={onError} /> : null}
         <div ref={controlsRef} className="contents" data-navbar-controls="" />
       </div>
