@@ -3,6 +3,7 @@ metadata -- how many people, how often, on how many files -- and nothing else.""
 
 from __future__ import annotations
 
+import http.server
 import json
 import shutil
 import threading
@@ -12,7 +13,7 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from cadgen.analytics import CLOSE_SECONDS, FILES_PER_BATCH, Recorder, choose, file_code, file_salt, forget_pending, status
+from cadgen.analytics import CLOSE_SECONDS, FILES_PER_BATCH, Recorder, _post, choose, file_code, file_salt, forget_pending, status
 from cadgen.mcp.protocol import RequestContext
 from cadgen.mcp.server import Server
 from cadgen.mcp.ui import AppPage
@@ -266,6 +267,28 @@ class ServerCountsTest(_Tmp):
         recorder.called("cad_show", True)
         self.assertTrue(recorder.flush())
         self.assertEqual([event["tool"] for event in sent[3]["events"]], ["cad_show"])
+
+    def test_only_a_receiver_that_read_the_batch_refuses_it(self) -> None:
+        # A 404 (no receiver deployed there yet), a firewall's 403, a 429 or a 5xx is no refusal: the batch,
+        # or the deletion an opt-out owes, is kept and tried again. A 400 means it was read: dropped.
+        codes = iter([404, 403, 429, 503, 400])
+
+        class Answer(http.server.BaseHTTPRequestHandler):
+            def do_POST(self) -> None:
+                self.rfile.read(int(self.headers["content-length"]))
+                self.send_response(next(codes))
+                self.send_header("content-length", "0")
+                self.end_headers()
+
+            def log_message(self, *args) -> None:
+                pass
+
+        server = http.server.HTTPServer(("127.0.0.1", 0), Answer)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close)
+        self.addCleanup(server.shutdown)
+        url = f"http://127.0.0.1:{server.server_address[1]}/v1/events"
+        self.assertEqual([_post(url, {}) for _ in range(5)], ["failed", "failed", "failed", "failed", "refused"])
 
     def test_files_past_a_batchs_room_go_in_the_next(self) -> None:
         sent: list[dict] = []

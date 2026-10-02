@@ -173,10 +173,11 @@ A Vercel Firewall rate-limit rule on `/v1/*` (answering `429`) is recommended: a
 real client sends at most once a minute per running app, so a per-IP limit well
 above that turns a flood away at no cost to real clients.
 
-A client keeps a batch it could not send (offline, or a `5xx` while the receiver is
-down) and sends it again with the next one, for as long as its app runs. It drops
-only a batch the receiver refused with a `4xx` other than `408` or `429` (those it
-retries): that batch would be refused again.
+A client keeps a batch it could not send (offline, a `5xx` while the receiver is
+down, a `404` before it is deployed, a firewall's `403` or a `429`) and sends it again
+with the next one, for as long as its app runs; a deletion an opt-out owes is asked
+for again the same way. It drops only a batch the receiver read and refused (`400`,
+`413`, `415` or `422`): that batch would be refused again.
 
 What it answers: how many people use CAD (installs: one per machine and OS user,
 a new one after an opt-out and back), how often (active days and minutes, from

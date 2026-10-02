@@ -56,9 +56,9 @@ Analytics never get in the way of CAD:
 - No tool call waits on the network. Noting use is in memory; sending, and the deletion an
   opt-out asks for, run on a background thread. The one wait is the last send as the server
   exits, bounded by ``CLOSE_SECONDS``.
-- A batch the receiver did not take (offline, a slow or broken receiver) is kept for the next
-  one; it is never an error. One it refused (a 4xx) is dropped: it would be refused again, and
-  take everything after it down with it.
+- A batch the receiver did not take (offline, a slow or broken receiver, or none answering
+  there yet) is kept for the next one; it is never an error. One the receiver read and refused
+  (``REFUSED``) is dropped: it would be refused again, and take everything after it down with it.
 
 The answer is changed only under the settings lock (``settings.update_section``), so the CAD app
 and the browser viewer answering, opting out or making the install's id at once never undo one
@@ -112,6 +112,10 @@ UNCOUNTED = frozenset({"cad_sync", "cad_http", "cad_capture_reply", "cad_consent
 FILE_KINDS = {".step": "step", ".stp": "step", ".stl": "stl", ".3mf": "3mf", ".glb": "glb", ".dxf": "dxf",
               ".urdf": "urdf", ".srdf": "srdf", ".sdf": "sdf"}
 FILES_PER_BATCH = 32  # more wait for the next batch: the receiver takes 64 events at most
+# The receiver read the request and will never take it: malformed (400), too large (413), not JSON (415).
+# Anything else -- a 404 where no receiver is deployed yet, a firewall's 403, a 429, a 5xx -- is tried
+# again: dropping it would lose counts, and a deletion an opt-out owes, for good.
+REFUSED = frozenset({400, 413, 415, 422})
 FILES_PENDING = 1024  # past this, a process notes no new file until a batch goes
 # What a status is when it cannot be read: not sharing, and not asking either (a broken state
 # directory must not nag on every view).
@@ -316,8 +320,8 @@ def forget_pending(*, path: Path | None = None, forget: Callable[[str], bool] | 
 
 
 def _post(url: str, payload: dict[str, Any] | None = None, *, method: str = "POST") -> str:
-    """``ok`` (taken), ``refused`` (never to be taken: a 4xx other than 408 and 429) or ``failed``
-    (offline, slow or broken: worth trying again)."""
+    """``ok`` (taken), ``refused`` (read and never to be taken: ``REFUSED``) or ``failed`` (offline,
+    slow, broken or not there yet: worth trying again)."""
     try:
         import urllib.error
         import urllib.request
@@ -330,7 +334,7 @@ def _post(url: str, payload: dict[str, Any] | None = None, *, method: str = "POS
                 return "ok" if 200 <= response.status < 300 else "failed"
         except urllib.error.HTTPError as refusal:
             LOG.debug("analytics %s %s answered %s", method, url, refusal.code)
-            return "refused" if 400 <= refusal.code < 500 and refusal.code not in (408, 429) else "failed"
+            return "refused" if refusal.code in REFUSED else "failed"
     except Exception:  # noqa: BLE001 - analytics never fail anything
         LOG.debug("analytics %s %s failed", method, url, exc_info=True)
         return "failed"
@@ -338,7 +342,7 @@ def _post(url: str, payload: dict[str, Any] | None = None, *, method: str = "POS
 
 def request_deletion(install_id: str) -> bool:
     """Ask the receiver to delete what it holds under ``install_id``: whether that is settled (it
-    did, or it refused an id it will never hold). Waits on the network."""
+    did, or it refused an id it can never hold). Waits on the network."""
     # In the body, never the path: the receiver's host logs each request's path beside its IP address.
     return _post(f"{endpoint()}/forget", {"install": install_id}) in ("ok", "refused")
 
