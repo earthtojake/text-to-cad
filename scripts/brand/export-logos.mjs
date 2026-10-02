@@ -34,8 +34,9 @@ for (const file of ['favicon.png', 'favicon.ico']) {
   await copyFile(path.join(publicDir, file), path.join(root, 'apps/web/src/client/assets', file));
 }
 // The viewer's home page draws the TEXTTOCAD wordmark and its version menu the CAD one, both from
-// the shared UI package; the Codex plugin listing uses the C icon.
+// the shared UI package; both plugin listings (Codex, and claude.ai's directory) use the C icon.
 await copyFile(path.join(brand, 'logo-cad.svg'), path.join(root, 'packages/ui/src/assets/logo-cad.svg'));
 await copyFile(path.join(brand, 'logo-texttocad.svg'), path.join(root, 'packages/ui/src/assets/logo-texttocad.svg'));
 await copyFile(path.join(brand, 'logo-c.png'), path.join(root, '.codex-plugin/logo.png'));
-console.log('Exported C, CAD and TEXTTOCAD PNGs, the favicons, the viewer wordmarks and the Codex plugin logo.');
+await copyFile(path.join(brand, 'logo-c.png'), path.join(root, '.claude-plugin/icon.png'));
+console.log('Exported C, CAD and TEXTTOCAD PNGs, the favicons, the viewer wordmarks and the plugin icons.');

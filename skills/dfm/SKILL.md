@@ -71,7 +71,7 @@ Return a concise Markdown report in chat or the user's requested report file:
 
 | Part / feature | Evidence | Applicable rule | Result | Suggested action |
 | --- | --- | --- | --- | --- |
-| Named feature + location | Measured value, units, artifact revision, method | Source section + threshold + conditions | pass / fail / review / unverified | Specific change or missing evidence |
+| Named feature + location | Measured value, units, artifact revision, method | Source section + threshold + conditions | pass, fail, review or unverified | Specific change or missing evidence |
 
 Use **pass** only for a measured feature satisfying a cited applicable limit;
 **fail** for a measured violation; **review** for a qualitative risk; and

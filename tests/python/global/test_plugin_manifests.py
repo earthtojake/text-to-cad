@@ -82,6 +82,15 @@ class PluginManifestPolicyTest(unittest.TestCase):
                 width, height = int.from_bytes(data[16:20], "big"), int.from_bytes(data[20:24], "big")
                 self.assertTrue(width == height >= 48, f"{key} is {width}x{height}: square, 48px or more")
 
+    def test_claude_icon_meets_the_directory_rules(self) -> None:
+        # claude.ai's plugin directory takes its listing icon from .claude-plugin/icon.png: a square
+        # PNG of 512 to 2048 px under 2 MB (SVG and WebP are refused).
+        data = (REPO_ROOT / ".claude-plugin" / "icon.png").read_bytes()
+        self.assertEqual(data[:8], b"\x89PNG\r\n\x1a\n", "the Claude icon is not a PNG")
+        width, height = int.from_bytes(data[16:20], "big"), int.from_bytes(data[20:24], "big")
+        self.assertTrue(width == height and 512 <= width <= 2048, f"the Claude icon is {width}x{height}")
+        self.assertLess(len(data), 2 * 1024 * 1024, "the Claude icon is 2 MB or more")
+
     def test_marketplace_lists_the_plugin_at_the_repository_root(self) -> None:
         marketplace = load_json(MARKETPLACE_PATH)
         self.assertEqual(marketplace.get("name"), MARKETPLACE_NAME)

@@ -27,7 +27,7 @@ Use one row per issue. In `Rule source`, link the specific official page or JSON
 
 | Status | Check | Evidence | Rule source | Recommendation |
 | --- | --- | --- | --- | --- |
-| ✅ pass / ❌ fail / ❓ need more info | requirement name | file fact | Markdown link to specific rule doc/table, or `Direct file inspection` | concrete next action |
+| ✅ pass, ❌ fail or ❓ need more info | requirement name | file fact | Markdown link to specific rule doc/table, or `Direct file inspection` | concrete next action |
 
 ## Verdict
 
