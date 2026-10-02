@@ -38,7 +38,7 @@
     "termsOfServiceURL": "https://www.texttocad.dev/terms-of-service",
     "supportURL": "https://github.com/earthtojake/text-to-cad/issues/new",
     "defaultPrompt": [
-      "Model a 3D-printable phone stand for my desk.",
+      "Design a 3D-printable phone stand for my desk.",
       "Design a 50 mm aluminum L-bracket with two M5 holes.",
       "Check my bracket for CNC machining and tell me what to change."
     ],
