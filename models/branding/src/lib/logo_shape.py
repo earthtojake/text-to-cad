@@ -10,7 +10,7 @@ from cadgen import srgb
 PROFILE_PATH = Path(__file__).resolve().parents[1] / "profiles.json"
 
 
-def make_logo(text: str) -> bd.Compound:
+def make_logo(text: str, lighter: tuple[int, ...] = ()) -> bd.Compound:
     profiles = json.loads(PROFILE_PATH.read_text())
     unit = profiles["unitMm"]
     height = profiles["height"]
@@ -25,11 +25,11 @@ def make_logo(text: str) -> bd.Compound:
             points = [(x * unit, (height - y) * unit, 0) for x, y in loop[:-1]]
             wires.append(bd.Wire.make_polygon(points, close=True))
         face = bd.Face(wires[0], wires[1:])
-        # Grid-derived profiles include collinear segments; merge coplanar
-        # extrusion faces so the STEP has only meaningful model edges.
+        # Some profiles include collinear segments; merge coplanar extrusion
+        # faces so the STEP has only meaningful model edges.
         solid = bd.Solid.extrude(face, (0, 0, thickness)).clean()
         solid = solid.moved(bd.Location((index * advance, 0, 0)))
         solid.label = f"letter_{index + 1:02d}_{character}"
-        solid.color = srgb(profiles["color"])
+        solid.color = srgb(profiles["lighterColor" if index in lighter else "color"])
         letters.append(solid)
     return bd.Compound(children=letters, label=f"logo_{text.lower()}")

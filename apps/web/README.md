@@ -356,7 +356,7 @@ Appearance is injected as an icon-bearing dropdown beside Projection in the Disp
 panel's Display section, below the full-width Mode selector (`ViewerAppearance`,
 through `displayActions`). The original animated mark remains the shared LoadingIcon
 for loading states. The C and CAD marks are the UI package's; the favicons are this
-app's, generated alongside the docs brand assets. See
+app's, exported alongside the docs brand assets. See
 [the brand recipe](../../scripts/brand/README.md).
 
 The web camera action copies only the viewport PNG through guarded

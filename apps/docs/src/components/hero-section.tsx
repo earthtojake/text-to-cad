@@ -1,5 +1,5 @@
 import Image from "next/image";
-import wordmark from "../../public/brand/logo-text2cad.png";
+import wordmark from "../../public/brand/logo-texttocad.png";
 import { HeroStepRender } from "@/components/hero-step-render";
 
 export function HeroSection() {

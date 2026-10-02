@@ -1,5 +1,5 @@
 // Deterministic vector branding. Run from any directory with Node; no renderer required.
-import { mkdir, writeFile, copyFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
 
@@ -8,6 +8,10 @@ const out = path.join(root, 'apps/docs/public/brand');
 const depth = 2;
 const recession = 0.42; // Upright front and receding 45° edges, following the supplied sketch.
 const colors = { front: '#249ddd', top: '#62b7ec', side: '#1475ad', edge: '#123e59' };
+// The lighter blue that sets "TO" apart in TEXTTOCAD. It keeps the brand edge
+// color and shades its sides toward the brand blue, so it reads as the same material.
+const light = { front: '#8fd3f5', top: '#bce5f9', side: '#4b9fcd', edge: colors.edge };
+const gap = 0.5; // Between letters; each letter's extrusion tucks behind the next.
 // Most glyphs use half-unit coordinates. T centers a 1.5-unit stem.
 // All letters stay three units wide and four tall.
 const glyphs = {
@@ -15,19 +19,18 @@ const glyphs = {
   T: ['111111111111', '111111111111', '111111111111', '000111111000', '000111111000', '000111111000', '000111111000', '000111111000'],
   E: ['111111', '111111', '111000', '111111', '111111', '111000', '111111', '111111'],
 };
-// Straight 45-degree cuts on X, 2, A's top and D's right.
+// Straight 45-degree cuts on X, A's top, D's right and O's four corners.
 // Counters remain square; no glyph contains curved profile segments.
 const chamferProfiles = {
-  // Preserve the two-unit waist and square ends; only trim step corners.
-  X: [[0,0],[1,0],[1,1],[1.25,1.25],[1.75,1.25],[2,1],[2,0],[3,0],[3,1.5],[2.5,2],[3,2.5],[3,4],[2,4],[2,3],[1.75,2.75],[1.25,2.75],[1,3],[1,4],[0,4],[0,2.5],[0.5,2],[0,1.5],[0,0]],
-  2: [[0,0],[2.5,0],[3,0.5],[3,2.5],[1.5,2.5],[1.5,3],[3,3],[3,4],[0,4],[0,1.5],[1.5,1.5],[1.5,1],[0,1],[0,0]],
+  // A solid body with a 45° V-notch in each side: half a unit deep at top and bottom, 0.75 at the sides.
+  X: [[0,0],[1,0],[1.5,0.5],[2,0],[3,0],[3,1.25],[2.25,2],[3,2.75],[3,4],[2,4],[1.5,3.5],[1,4],[0,4],[0,2.75],[0.75,2],[0,1.25],[0,0]],
   A: [[0,0.5],[0.5,0],[2.5,0],[3,0.5],[3,4],[2,4],[2,3.5],[1,3.5],[1,4],[0,4],[0,0.5]],
   D: [[0,0],[2.5,0],[3,0.5],[3,3.5],[2.5,4],[0,4],[0,0]],
+  O: [[0,0.5],[0.5,0],[2.5,0],[3,0.5],[3,3.5],[2.5,4],[0.5,4],[0,3.5],[0,0.5]],
 };
-const counters = {
-  A: [[1,1],[1,2],[2,2],[2,1],[1,1]],
-  D: [[1,1],[1,3],[2,3],[2,1],[1,1]],
-};
+// A, D and O share one opening: a one-unit square centered on the letter.
+const counter = [[1,1.5],[1,2.5],[2,2.5],[2,1.5],[1,1.5]];
+const counters = { A: counter, D: counter, O: counter };
 const round = n => Number(n.toFixed(3));
 const point = ([x, y]) => `${round(x)},${round(y)}`;
 const key = (x, y) => `${x},${y}`;
@@ -127,43 +130,54 @@ function cRows(shape) {
 
 // The selected Soft relief treatment: gently lit blue faces, inset edge
 // highlights and a small contact shadow. Geometry stays identical to flat art.
+// Gradient stops per face for each palette, keyed by the flat face color they replace.
+const relief = [
+  { suffix: '', faces: colors, highlight: '#d1f1ff', front: ['#39b0e9', '#249ddd', '#1785bf'], top: ['#94d9fa', '#51ade1'], side: ['#258cc5', '#0b5887'] },
+  { suffix: '-light', faces: light, highlight: '#ebf7fd', front: ['#9ad7f6', '#8fd3f5', '#81bedd'], top: ['#d3eefb', '#b3daed'], side: ['#59a7d1', '#38779a'] },
+];
+
 function softRelief(body, id) {
   const defs = [
-    `<linearGradient id="${id}-front" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="2" y2="4"><stop stop-color="#39b0e9"/><stop offset=".5" stop-color="#249ddd"/><stop offset="1" stop-color="#1785bf"/></linearGradient>`,
-    `<linearGradient id="${id}-top" gradientUnits="userSpaceOnUse" x1="0" y1="-1" x2="3" y2="4"><stop stop-color="#94d9fa"/><stop offset="1" stop-color="#51ade1"/></linearGradient>`,
-    `<linearGradient id="${id}-side" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="4" y2="3"><stop stop-color="#258cc5"/><stop offset="1" stop-color="#0b5887"/></linearGradient>`,
+    ...relief.flatMap(({ suffix, front, top, side }) => [
+      `<linearGradient id="${id}${suffix}-front" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="2" y2="4"><stop stop-color="${front[0]}"/><stop offset=".5" stop-color="${front[1]}"/><stop offset="1" stop-color="${front[2]}"/></linearGradient>`,
+      `<linearGradient id="${id}${suffix}-top" gradientUnits="userSpaceOnUse" x1="0" y1="-1" x2="3" y2="4"><stop stop-color="${top[0]}"/><stop offset="1" stop-color="${top[1]}"/></linearGradient>`,
+      `<linearGradient id="${id}${suffix}-side" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="4" y2="3"><stop stop-color="${side[0]}"/><stop offset="1" stop-color="${side[1]}"/></linearGradient>`,
+    ].filter(() => suffix === '' || body.includes(light.front))),
     `<filter id="${id}-shadow" x="-30%" y="-40%" width="170%" height="200%" color-interpolation-filters="sRGB"><feDropShadow dx=".035" dy=".10" stdDeviation=".075" flood-color="#082f4a" flood-opacity=".22"/></filter>`,
   ];
   let index = 0;
   const shaded = body.replace(/<path([^>]*?)\/>/g, (original, attrs) => {
     const fill = attrs.match(/fill="([^"]+)"/)?.[1];
-    const face = { [colors.front]: 'front', [colors.top]: 'top', [colors.side]: 'side' }[fill];
-    if (!face) return original;
-    let result = `<path${attrs.replace(`fill="${fill}"`, `fill="url(#${id}-${face})"`)}/>`;
+    const palette = relief.find(({ faces }) => [faces.front, faces.top, faces.side].includes(fill));
+    if (!palette) return original;
+    const face = ['front', 'top', 'side'].find(f => palette.faces[f] === fill);
+    let result = `<path${attrs.replace(`fill="${fill}"`, `fill="url(#${id}${palette.suffix}-${face})"`)}/>`;
     if (face !== 'side') {
       const d = attrs.match(/ d="([^"]+)"/)[1];
       const clip = `${id}-highlight-${index++}`;
       defs.push(`<clipPath id="${clip}"><path d="${d}" clip-rule="evenodd"/></clipPath>`);
-      result += `<g clip-path="url(#${clip})"><path d="${d}" fill="none" stroke="#d1f1ff" stroke-opacity="${face === 'top' ? '.6' : '.38'}" stroke-width=".037" transform="translate(.042 .042)"/></g>`;
+      result += `<g clip-path="url(#${clip})"><path d="${d}" fill="none" stroke="${palette.highlight}" stroke-opacity="${face === 'top' ? '.6' : '.38'}" stroke-width=".037" transform="translate(.042 .042)"/></g>`;
     }
     return result;
   });
   return `<defs>${defs.join('')}</defs><g filter="url(#${id}-shadow)">${shaded}</g>`;
 }
 
-export function logoSvg(text, { standalone = false, palette = colors, edgeWidth = 0.038, cShape = 'bold', finish = 'soft-relief' } = {}) {
+// `lighter` lists letter indices drawn in the lighter blue (TEXTTOCAD's "TO").
+export function logoSvg(text, { standalone = false, palette = colors, edgeWidth = 0.038, cShape = 'bold', finish = 'soft-relief', lighter = [] } = {}) {
   const height = 4;
   let x = 0;
   const parts = [];
-  for (const c of text) {
+  [...text].forEach((c, i) => {
     const rows = c === 'C' ? cRows(cShape) : glyphs[c];
     const profile = c === 'C' && cShape !== 'bold' ? null : chamferProfiles[c];
-    parts.push(profile ? chamferLetter(profile, counters[c], x, palette, edgeWidth) : letter(rows, x, height, palette, edgeWidth));
-    x += 3 + 1.25;
-  }
+    const faces = lighter.includes(i) ? light : palette;
+    parts.push(profile ? chamferLetter(profile, counters[c], x, faces, edgeWidth) : letter(rows, x, height, faces, edgeWidth));
+    x += 3 + gap;
+  });
   // Include the shadow in exported SVG and raster bounds.
   const margin = finish === 'soft-relief' ? 0.36 : 0.16;
-  const width = x - 1.25 + depth * recession;
+  const width = x - gap + depth * recession;
   const boxHeight = height + depth * recession + margin * 2;
   const boxWidth = standalone ? boxHeight : width + margin * 2;
   const left = standalone ? (width - boxWidth) / 2 : -margin;
@@ -175,25 +189,27 @@ export function logoSvg(text, { standalone = false, palette = colors, edgeWidth 
 // CAD consumes these exact front outlines instead of maintaining a second alphabet.
 export function logoProfiles() {
   const letters = {};
-  for (const c of 'CTEX2AD') {
+  for (const c of 'CTEXADO') {
     const loops = chamferProfiles[c]
       ? [chamferProfiles[c], ...(counters[c] ? [counters[c]] : [])]
       : outline(glyphs[c], 4 / glyphs[c].length, 3 / glyphs[c][0].length)
         .split('M').filter(Boolean).map(loop => loop.replace(/Z$/, '').split('L').map(p => p.split(',').map(Number)));
     letters[c] = loops;
   }
-  return { unitMm: 10, height: 4, width: 3, depth, gap: 1.25, color: colors.front, letters };
+  return { unitMm: 10, height: 4, width: 3, depth, gap, color: colors.front, lighterColor: light.front, letters };
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   await mkdir(out, { recursive: true });
-  for (const [name, text, standalone] of [['logo-c', 'C', true], ['logo-cad', 'CAD', false], ['logo-text2cad', 'TEXT2CAD', false]]) {
-    await writeFile(path.join(out, `${name}.svg`), logoSvg(text, { standalone }));
+  for (const [name, text, options] of [
+    ['logo-c', 'C', { standalone: true }],
+    ['logo-cad', 'CAD', {}],
+    ['logo-texttocad', 'TEXTTOCAD', { lighter: [4, 5] }],
+  ]) {
+    await writeFile(path.join(out, `${name}.svg`), logoSvg(text, options));
   }
-  // The viewer's home and version menu draw the CAD wordmark from the shared UI package.
-  await copyFile(path.join(out, 'logo-cad.svg'), path.join(root, 'packages/ui/src/assets/logo-cad.svg'));
   const cadSources = path.join(root, 'models/branding/src');
   await mkdir(cadSources, { recursive: true });
   await writeFile(path.join(cadSources, 'profiles.json'), `${JSON.stringify(logoProfiles(), null, 2)}\n`);
-  console.log('Generated C, CAD and TEXT2CAD; synchronized the viewer marks and CAD profiles.');
+  console.log('Generated C, CAD and TEXTTOCAD and the CAD profiles; run export-logos.mjs for the rasters and app copies.');
 }

@@ -70,15 +70,15 @@ scripts/         # asset checks
 ## Brand and loading icon
 
 The header uses the blue CAD wordmark and favicons use C, both with soft relief shading. The homepage
-and repository README use the TEXT2CAD PNG. `/icon` provides downloadable
-C, CAD and TEXT2CAD SVGs and PNGs, followed by the original animated loading-icon
+and repository README use the TEXTTOCAD PNG. `/icon` provides downloadable
+C, CAD and TEXTTOCAD SVGs and PNGs, followed by the original animated loading-icon
 playground. The original mesh, animation and the shared UI loading assets stay
 unchanged.
 
-The vectors live in `public/brand/`. Regenerate them and the viewer's static
-copy from the repository root with `node scripts/brand/generate-logos.mjs`.
-See [the brand recipe](../../scripts/brand/README.md) for the block grid,
-projection, palette and favicon export. These are checked-in assets; ordinary
+The vectors in `public/brand/` come from `node scripts/brand/generate-logos.mjs`;
+`node scripts/brand/export-logos.mjs` then refreshes the PNGs, favicons and every
+app's copy (run both from the repository root). See [the brand recipe](../../scripts/brand/README.md)
+for the letters, projection and palette. These are checked-in assets; ordinary
 builds do not regenerate them.
 
 The loading-icon playground retains play/pause, speed, five palettes, drag to

@@ -4,7 +4,7 @@
 
 <br>
 
-<img src="apps/docs/public/brand/logo-text2cad.png" alt="TEXT2CAD" width="800">
+<img src="apps/docs/public/brand/logo-texttocad.png" alt="text-to-cad" width="800">
 
 Give your agent CAD superpowers.
 

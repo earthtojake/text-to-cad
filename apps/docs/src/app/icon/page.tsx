@@ -30,8 +30,8 @@ export default function IconPage() {
       <div className="mt-12 divide-y divide-border">
         {[
           { file: "logo-c", label: "C", width: 180, height: 240 },
-          { file: "logo-cad", label: "CAD", width: 480, height: 240 },
-          { file: "logo-text2cad", label: "TEXT2CAD", width: 880, height: 170 },
+          { file: "logo-cad", label: "CAD", width: 499, height: 240 },
+          { file: "logo-texttocad", label: "TEXTTOCAD", width: 880, height: 150 },
         ].map(({ file, label, width, height }) => (
           <section key={file} className="py-10">
             <Image src={`/brand/${file}.svg`} alt={`${label} block logo`} width={width} height={height}
