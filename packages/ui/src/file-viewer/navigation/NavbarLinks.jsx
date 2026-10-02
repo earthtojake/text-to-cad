@@ -14,9 +14,9 @@ import wordmark from "../../assets/logo-cad.svg";
  * The host's links (`ViewerHost.links`, built by `viewerLinks` in `links.js`), as the viewer shows
  * them. A newer release the host found (`links.latest`) is a blue download button — nothing at all
  * when there is none — whose menu says what is new and how this host updates (`UpdateButton`).
- * X, Discord and GitHub are icon links (`CommunityLinks`): in the Settings popover's header, beside
- * the version, and under the home's wordmark. Feedback (`FeedbackLink`) opens a new issue: in the
- * navbar, before the view's controls, and last under the home's wordmark. Every link opens the
+ * X, Discord and GitHub are icon links (`CommunityLinks`) at the right of the Settings popover's
+ * footer, the version at its left; GitHub alone (`GitHubLink`) is also in the navbar and under the home's wordmark, before
+ * Feedback (`FeedbackLink`), which opens a new issue. Settings follows them. Every link opens the
  * host's way: a page that can open one itself follows an ordinary link to a new tab; a page in a
  * frame that cannot hands it to `links.open` (the host's own browser). Copies go through the
  * host's clipboard.
@@ -47,6 +47,16 @@ export function CommunityLinks({ links, onError }) {
     <IconLink href={links.discord} label="Discord" icon={DiscordMark} onFollow={follow} />
     <IconLink href={links.github} label="GitHub" icon={GitHubMark} onFollow={follow} />
   </>;
+}
+
+/**
+ * GitHub alone, as an icon link: in the navbar before Feedback, and under the home's wordmark. It
+ * says, in one glance, that the project is open source.
+ * @param {{ links: import("../../host/types.js").ViewerLinks, onError?: (error: Error) => void }} props
+ */
+export function GitHubLink({ links, onError }) {
+  const follow = useFollow(links, onError);
+  return <IconLink href={links.github} label="GitHub" icon={GitHubMark} onFollow={follow} />;
 }
 
 /**
@@ -83,9 +93,32 @@ function IconLink({ href, label, icon: Icon, onFollow }) {
  *   onError?: (error: Error) => void, align?: "start" | "center" | "end" }} props
  *   `align`: how the menu lines up with the button — its right end in the navbar, its centre on the home.
  */
+/** Whether `candidate` is a later release than `current` (`v` prefixes and pre-release tails ignored). */
+export function isNewer(candidate, current) {
+  const parts = value => String(value || "").replace(/^v/, "").split(/[-+]/)[0].split(".").map(part => Number.parseInt(part, 10) || 0);
+  const [a, b] = [parts(candidate), parts(current)];
+  for (let index = 0; index < Math.max(a.length, b.length); index += 1) {
+    if ((a[index] || 0) !== (b[index] || 0)) return (a[index] || 0) > (b[index] || 0);
+  }
+  return false;
+}
+
+/**
+ * Who made it: "Made by @handle", the host's X account, at the foot of the home.
+ * @param {{ links: import("../../host/types.js").ViewerLinks, onError?: (error: Error) => void }} props
+ */
+export function MadeBy({ links, onError }) {
+  const follow = useFollow(links, onError);
+  const handle = String(links.x || "").replace(/\/+$/, "").split("/").pop();
+  if (!links.x || !handle) return null;
+  return <a href={links.x} target="_blank" rel="noreferrer" onClick={follow} className="hover:text-foreground" data-link="made-by">Made by @{handle}</a>;
+}
+
 export function UpdateButton({ links, clipboard, onError, align = "end" }) {
   const follow = useFollow(links, onError);
-  const update = links.version && links.latest?.newer ? links.latest : null;
+  // The host says the release is newer than what it runs; the button also never offers the version
+  // this page names as its own (a host whose runtime and page disagree would offer "0.7.6 → 0.7.6").
+  const update = links.version && links.latest?.newer && isNewer(links.latest.version, links.version) ? links.latest : null;
   if (!update) return null;
   const { version, install } = links;
   return (

@@ -158,11 +158,33 @@ def collect(root: Path) -> Package:
         if data.startswith(LFS_POINTER):
             package.errors.append(f"{source} is a Git LFS pointer, not the file; keep plugin files out of LFS")
             continue
+        if archived == MCP_CONFIG:
+            data = listed_install(package, data)
         package.files[archived] = (data, mode == "100755")
     if sources:
         package.files[MANIFEST] = (json.dumps(manifest, indent=2, ensure_ascii=False).encode("utf-8") + b"\n",
                                    False)
     return package
+
+
+def listed_install(package: Package, data: bytes) -> bytes:
+    """The server config with `cadgen mcp --install store`, so CAD's analytics can tell a directory
+    install from a manual one (their `source`). It decides nothing: every install is asked first."""
+    try:
+        config = json.loads(data)
+        servers = config["mcpServers"]
+        stamped = 0
+        for server in servers.values():
+            args = server.get("args")
+            if isinstance(args, list) and args[-2:] == ["cadgen", "mcp"]:
+                server["args"] = [*args, "--install", "store"]
+                stamped += 1
+    except (ValueError, KeyError, TypeError, AttributeError):
+        package.errors.append(f"{MCP_CONFIG} is not an mcpServers config this script can read")
+        return data
+    if stamped != 1:
+        package.errors.append(f"{MCP_CONFIG} must start exactly one `cadgen mcp` server (found {stamped})")
+    return json.dumps(config, indent=2).encode("utf-8") + b"\n"
 
 
 def check_manifest(package: Package) -> None:

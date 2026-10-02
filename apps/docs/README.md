@@ -11,7 +11,8 @@ npm dependencies. Never another app or the running cadgen Python service.
 The root npm workspace and lockfile resolve dependencies; no source aliases
 or consumer-owned declarations are required.
 
-**DEPENDED ON BY** — nothing in the repo. It is a website, not an install.
+**DEPENDED ON BY** — nothing in the repo imports it. It is a website, not an install;
+`cadgen mcp` sends its consented analytics to its `/v1` routes over HTTPS.
 
 The package migration is a pure refactor: the site's UI, UX, functionality, content and static
 CAD showcases remain unchanged. Normal development, checks and deployment use
@@ -123,3 +124,68 @@ surfaces. The app owns
 its tokens and primitives in `src/app/globals.css` and `src/components/ui/`,
 without importing another app or the CAD UI package. Keep the palette aligned
 with `packages/ui/src/styles/tokens.css` when the viewer's base theme changes.
+
+
+## api.texttocad.dev: CAD's analytics
+
+The same project answers `api.texttocad.dev` (a second domain on it). Its `/v1`
+routes receive the CAD app's anonymous usage analytics (`cadgen/analytics.py` in
+`packages/cadgen`); `www.texttocad.dev/v1/...` reaches the same routes. Clients
+know only `api.texttocad.dev`, so the receiver can move to another host without
+a release of cadgen.
+
+| Route | What it does |
+| --- | --- |
+| `POST /v1/events` | One batch: `{schema: 1, install, session, version, source, platform, arch, client: {name, version}, presentation, events: [{name: "tool", tool, calls, errors} \| {name: "view", calls} \| {name: "file", file, kind}]}` → `204`. `file` is 16 hex characters, an HMAC of the path under a salt that never leaves the machine: distinct files can be counted, not named. Anything else is `400` and stores nothing (`src/lib/analytics/events.mjs`). |
+| `DELETE /v1/installs/:id` | Deletes every row sent under an install id → `204`. `cadgen analytics off` calls it; the random id is the only authority needed. |
+| `GET /v1/prune` | The daily cron (`vercel.json`): deletes rows older than 13 months. Needs `Authorization: Bearer $CRON_SECRET`. |
+| `GET /v1/health` | → `200` |
+
+- **Nothing outside the contract is stored**: unknown fields, tool names that are
+  not `cad_*`, free-text strings are refused. No IP address or header is stored.
+- **The privacy policy describes this table.** A new field is a change to
+  `src/app/privacy-policy/page.tsx` in the same PR.
+- **Portable.** `src/lib/analytics/handler.mjs` is a plain `fetch(Request) →
+  Response` handler over a store (`insert`, `forget`, `prune`);
+  `app/v1/[...route]/route.ts` is all that ties it to Next.js. `postgres.mjs` is
+  the store for any Postgres (`DATABASE_URL`, the pooled string); `schema.sql`
+  creates its one table. The driver loads on first request, so the build and the
+  tests (`npm test`, part of `check`) need no database.
+
+Setup, once: a Postgres database (Neon today) with `schema.sql` run in it; the
+domain `api.texttocad.dev` on the docs Vercel project (a DNS-only CNAME at
+Cloudflare, like `www`); and the GitHub Actions secrets `DATABASE_URL` (the
+pooled connection string) and `CRON_SECRET` (any long random string). `Deploy
+Docs` writes those two secrets into the project's production environment
+variables on every deploy (`deploy-vercel-app.sh --env-from`), so changing one
+is `gh secret set` and a redeploy; it also checks `api.texttocad.dev/v1/health`.
+Until it answers, clients drop their batches silently.
+
+What it answers: how many people use CAD (installs: one per machine and OS user,
+a new one after an opt-out and back), how often (active days and minutes, from
+when rows arrive: a server sends at most once a minute, and only when used), and
+on how many files (distinct `file` codes per install). A server nobody used
+sends nothing.
+
+```sql
+-- daily, weekly and monthly active installs
+select count(distinct install_id) filter (where received_at > now() - interval '1 day')   as dau,
+       count(distinct install_id) filter (where received_at > now() - interval '7 days')  as wau,
+       count(distinct install_id) filter (where received_at > now() - interval '30 days') as mau
+from events;
+
+-- how often: active days and active minutes per install, last 30 days
+select install_id, count(distinct received_at::date) as active_days,
+       count(distinct date_trunc('minute', received_at)) as active_minutes
+from events where received_at > now() - interval '30 days' group by 1 order by 2 desc;
+
+-- unique files worked on per install, and by format, last 30 days
+select install_id, count(distinct file) as files from events
+where event = 'file' and received_at > now() - interval '30 days' group by 1 order by 2 desc;
+select kind, count(distinct (install_id, file)) as files from events where event = 'file' group by 1 order by 2 desc;
+
+-- tool calls and failure rate, last 30 days
+select tool, sum(calls) as calls, round(100.0 * sum(errors) / sum(calls), 1) as error_pct
+from events where event = 'tool' and received_at > now() - interval '30 days'
+group by 1 order by 2 desc;
+```

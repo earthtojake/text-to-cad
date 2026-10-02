@@ -141,7 +141,8 @@ where those files ship, so these scripts are what produces them.
   Called by `test.yml`, `release-publish.yml`, the pre-commit hook path. The
   no-symlink rule is load-bearing: Codex `plugin add` drops symlinks silently.
 - `deploy-vercel-app.sh` — deploys one Vercel project to production and verifies
-  its public URLs. Called by `deploy-docs.yml` only.
+  its public URLs; `--env-from NAME` first writes a secret the workflow holds to
+  the project's production environment variables. Called by `deploy-docs.yml` only.
 
 `install/` — local development links.
 

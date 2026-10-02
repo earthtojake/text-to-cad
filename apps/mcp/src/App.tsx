@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react';
 import { Maximize2 } from 'lucide-react';
 import type { ResourceRef } from '@text-to-cad/core/prompt';
-import type { ViewerLinks } from '@text-to-cad/ui/host';
+import type { AppSetting } from '@text-to-cad/ui/file-viewer';
 import { viewerLinks } from '@text-to-cad/ui/links';
 import { Button } from '@text-to-cad/ui/primitives/button';
 import { createTabStore, memoryTabRecord } from '@text-to-cad/ui/tab-store';
@@ -10,10 +10,10 @@ import type { Bridge, HostContext } from './host/bridge';
 import { createLiveRegistry, describeView } from './host/live';
 import { watchSupersession, type Presentation } from './host/presentation';
 import { chatReach } from './host/prompt';
-import type { Launch, Root, Server } from './host/server';
+import type { Consent, Launch, Root, Server } from './host/server';
 import { createViewSync } from './host/sync';
 import ModelView, { type ViewReporter } from './ModelView';
-import { Banner } from './Notice';
+import { Banner, ConsentCard } from './Notice';
 
 interface Showing { launch: Launch; sequence: number }
 
@@ -29,15 +29,6 @@ export function useHostContext(bridge: Pick<Bridge, 'hostContext' | 'onHostConte
 // A tab host's composer floats over the bottom of the page, its middle this far above the edge: the
 // viewer's playback bars sit on that same line (Codex: a 45px box, 17px up).
 const TAB_BOTTOM_CENTER = '40px';
-
-// How each host updates CAD, said in a line. Codex runs the plugin's pinned release: the
-// marketplace's update moves the pin, and the first start after a restart downloads that release.
-// Every other host starts the server through an unpinned `uvx --from cadgen`, which resolves the
-// newest release.
-const UPDATE: Record<Presentation, ViewerLinks['install']> = {
-  tabs: { message: "Update CAD from Codex's plugin marketplace, then restart Codex: its first start downloads the new release." },
-  inline: { message: 'Restart the app to update: CAD starts its newest release each time.' },
-};
 
 // What to do once this view's server has gone: the host started it, and only the host starts it again.
 const LOST: Record<Presentation, string> = {
@@ -172,13 +163,34 @@ export default function App({ bridge, server, launch: initial, presentation = 't
     return () => { lifetime.abort(); stop(); window.removeEventListener('pointerdown', touched, true); window.removeEventListener('focus', touched); };
   }, [bridge, sync, superseded]);
 
-  // The navbar's links: the same as every app's (X, Discord, GitHub and a new issue), followed through the host (a
-  // frame cannot open one itself), and how this host updates CAD.
-  // The newest release, asked once: an update shows as the blue download button, and nothing shows without one.
-  const [latest, setLatest] = useState<{ version: string; url: string; newer: boolean } | null>(null);
-  useEffect(() => { void server.release().then(setLatest, () => {}); }, [server]);
-  const links = useMemo(() => viewerLinks({ version, install: UPDATE[presentation], latest, open: url => bridge.request('ui/open-link', { url }).then(() => {}) }),
-    [bridge, presentation, latest]);
+  // Asked once, of everyone, unless their environment answered (`cadgen/analytics.py`). A view that
+  // cannot ask the server asks nothing.
+  const [consent, setConsent] = useState<Consent | null>(null);
+  useEffect(() => { void server.consent().then(setConsent, () => {}); }, [server]);
+  // Another view (the sidebar, another thread's tab) may have been answered meanwhile: a view still
+  // asking reads the answer again when the person comes back to it.
+  const asking = Boolean(consent?.ask);
+  useEffect(() => {
+    if (!asking) return;
+    const recheck = () => void server.consent().then(setConsent, () => {});
+    window.addEventListener('focus', recheck);
+    return () => window.removeEventListener('focus', recheck);
+  }, [server, asking]);
+  const answer = useCallback((share: boolean) => {
+    setConsent(previous => previous && { ...previous, ask: false, sharing: share });
+    void server.consent(share).then(setConsent, () => {});
+  }, [server]);
+  // The same choice, changed later: Settings' Analytics section. The environment may still overrule it,
+  // and the server's answer says so.
+  const appSettings = useMemo<AppSetting[] | undefined>(() => consent ? [{
+    id: 'analytics', section: 'Analytics', label: 'Share anonymous usage data', checked: consent.sharing, onCheckedChange: answer,
+  }] : undefined, [consent, answer]);
+  const openLink = (url: string) => void bridge.request('ui/open-link', { url }).catch(() => {});
+  // The navbar's links: the same as every app's (X, Discord, GitHub and a new issue), followed through the
+  // host (a frame cannot open one itself). No update button: the host updates CAD (a plugin directory
+  // by itself, an unpinned `uvx` on restart), and GitHub's newest release is often not yet what it serves.
+  const links = useMemo(() => viewerLinks({ version, open: url => bridge.request('ui/open-link', { url }).then(() => {}) }),
+    [bridge]);
   // A view opened on the home (the sidebar's) goes back to it; one opened on a model has no home.
   // The home's launch carried its library as it stood when the sidebar opened: going back reads it anew.
   const home = initial.page === 'home' ? { ...initial, recents: undefined } : null;
@@ -189,9 +201,10 @@ export default function App({ bridge, server, launch: initial, presentation = 't
     return <Frame bridge={bridge} context={context} insets={insets} inline={inline} bottomCenter={bottomCenter} expandable={false}><Superseded still={still} /></Frame>;
   }
   return <Frame bridge={bridge} context={context} insets={insets} inline={inline} bottomCenter={bottomCenter}
-    overlay={lost ? <Banner message={LOST[presentation]} /> : null}>
+    overlay={lost ? <Banner message={LOST[presentation]} />
+      : consent?.ask ? <ConsentCard placement={showing.launch.page === 'home' ? 'home' : 'viewer'} policy={consent.policy} onAnswer={answer} onPolicy={openLink} /> : null}>
     <ModelView key={rootKey(launch.root)} launch={launch} root={launch.root} sequence={showing.sequence} bridge={bridge} server={server}
-      tabStore={tabStore} live={live} links={links} colorScheme={colorScheme} platform={initial.platform || 'darwin'} reporter={reporter} sync={sync} compact={inline} chat={chat}
+      tabStore={tabStore} live={live} links={links} appSettings={appSettings} colorScheme={colorScheme} platform={initial.platform || 'darwin'} reporter={reporter} sync={sync} compact={inline} chat={chat}
       onLaunch={show} onHome={goHome} />
   </Frame>;
 }

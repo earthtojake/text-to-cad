@@ -46,12 +46,17 @@ none.
   renderer's one navbar action. Then a declared panel's toggle, the update — a
   blue download button, there only when
   the host found a newer release, whose menu says the step to it, how this host
-  updates and what is new — then **Feedback** (a speech bubble, a link to a new
+  updates and what is new — then **GitHub** (its mark, a link to the project: it
+  is open source), then **Feedback** (a speech bubble, a link to a new
   issue titled "Feedback: " naming the version and platform, where the host has a tracker), then the
   view's controls (Settings, Preview). Preview puts Feedback away with the navbar.
-  The version, X, GitHub and Discord are in the Settings popover's header. A CAD file
+  The version, X, GitHub and Discord are in the Settings popover's footer: the version at its left, the links at its right. A CAD file
   declares no panel and publishes no navbar action but that icon. A host's home has no navbar:
-  its update (when there is one), X, Discord, GitHub and Feedback stand under its CAD wordmark. A view shown small in a
+  its update (when there is one), GitHub, Feedback and **Settings** stand under its CAD wordmark,
+  in that order. The home's Settings is the same popover, centred under its cog, with no Display
+  sections: its header, the host's own settings and its footer. Across the
+  home's foot, under a rule, "Made by @…" links the host's X. The update shows only for a release
+  later than the version the page names, whatever the host says. A view shown small in a
   conversation (`compact`) has none either, and draws the model alone: no tools,
   view actions, cube or Quick Edit.
 - **File explorer** floats over the view's left, inset 8px like the toolbar, on a
@@ -75,9 +80,9 @@ none.
 - **View controls** at the navbar's right end: **Settings** (cog), then
   **Preview** (a fullscreen icon, two diagonal arrows), the navbar's 24px icon
   buttons with 14px icons, 4px apart, and hints below them. Settings' popover opens down from
-  its button, end-aligned: a header — "Settings", the version in gray, then
-  GitHub and Discord as icon links and its X — over the Display sections, whose
-  own heading keeps its Reset. A view shown small has no navbar, and so none of
+  its button, end-aligned: a header — "Settings" and its X — over the Display sections, whose
+  own heading keeps its Reset, then the host's sections, over a footer — the version in
+  gray at its left, X, Discord and GitHub at its right. A view shown small has no navbar, and so none of
   them.
 - **Playbar** (preview's, a file with routines only) sits at bottom-centre, on a
   line 1.75rem up (a host whose control floats over the view's bottom moves it
@@ -407,8 +412,9 @@ Escape closes the innermost popup first, the popover only on a later press.
 | Lighting | Quality, exposure, rotation, softbox size and fill |
 | Background | Color and opacity |
 | Floor | Color/opacity and placement |
+| The host's (Analytics, ...) | The host's on/off settings (`appSettings`), one section per `section` they name, one checkbox row each; only where the host gives some |
 
-Display and Surfaces are always open. Every other section is a feature gate
+Display, Surfaces and the host's sections are always open. Every other section is a feature gate
 with plus/minus: expanded means enabled, collapsed means disabled. Grid / Axes
 gates both groups; their settings stay separate in the core/CLI contract. Never
 add an "Enabled" checkbox inside a gated section. Enabling starts at defaults;

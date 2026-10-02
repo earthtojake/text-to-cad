@@ -65,7 +65,7 @@ for the full flow, the resume path, the rehearsal, and local/manual fallbacks.
 - `packages/cadgen`: the published distribution — STEP/GLB/topology generation,
   the skill CLI parsers, the CAD Viewer backend + client, and the Node/browser
   runtimes it executes.
-- `apps/docs/`: documentation site.
+- `apps/docs/`: documentation site, and `api.texttocad.dev` (the CAD app's consented analytics).
 - `tests/`: root-owned test suites for skills, packages, viewer services, and
   repo-wide policy.
 - `scripts/`: durable repo commands grouped by purpose.

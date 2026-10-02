@@ -168,6 +168,18 @@ Restart your agent if newly installed skills do not appear. For local
 development, branch from `main`, open PRs against `main`, and follow
 [CONTRIBUTING.md](CONTRIBUTING.md).
 
+### Usage analytics
+
+The CAD app (the plugin's `cad` server) can send anonymous usage counts: a
+random install ID, versions, your OS and agent app, how often each CAD tool was
+called and views were used, and a one-way code and the format of each distinct
+file shown (to count files, not identify them). Never file names, paths,
+contents or prompts. It is off until you allow it
+in the CAD app's one-time prompt; change it later with **Share anonymous usage
+data** in the viewer's Settings, `uvx cadgen analytics on|off`, or by asking your agent to
+turn it off. `DO_NOT_TRACK=1` keeps it off. See the
+[privacy policy](https://www.texttocad.dev/privacy-policy).
+
 ### Windows 11: Smart App Control
 
 The CAD kernel behind the `cad`, `dxf`, `urdf`, `srdf` and `sdf`

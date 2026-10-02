@@ -7,6 +7,7 @@ REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd -P)"
 LABEL=""
 PROJECT_ID=""
 PUBLIC_URLS=""
+ENV_NAMES=()
 
 usage() {
   cat <<'EOF'
@@ -14,15 +15,19 @@ Usage:
   scripts/github-workflows/deploy-vercel-app.sh \
     --label "Docs app" \
     --project-id PROJECT_ID \
-    --public-urls "https://example.com https://www.example.com"
+    --public-urls "https://example.com https://www.example.com" \
+    [--env-from NAME ...]
 
 Deploys one Vercel project to production from the current checkout:
 
 1. configures Vercel Authentication to protect preview deployments only
-2. runs vercel pull/build/deploy --prod with the project root taken from the
+2. for each --env-from NAME set in this environment (a GitHub Actions secret),
+   writes it to the project's production environment variables (encrypted,
+   replacing any earlier value); one left unset is skipped with a notice
+3. runs vercel pull/build/deploy --prod with the project root taken from the
    Vercel project settings
-3. verifies each public production URL responds with HTTP 2xx/3xx
-4. appends a deployment summary to GITHUB_STEP_SUMMARY when set
+4. verifies each public production URL responds with HTTP 2xx/3xx
+5. appends a deployment summary to GITHUB_STEP_SUMMARY when set
 
 Requires VERCEL_TOKEN and VERCEL_ORG_ID in the environment and the vercel CLI
 on PATH. Run from a checkout of main (or a release tag).
@@ -49,6 +54,11 @@ while [ "$#" -gt 0 ]; do
     --public-urls)
       [ "$#" -ge 2 ] || die "--public-urls requires a value"
       PUBLIC_URLS="$2"
+      shift
+      ;;
+    --env-from)
+      [ "$#" -ge 2 ] || die "--env-from requires a variable name"
+      ENV_NAMES+=("$2")
       shift
       ;;
     -h|--help)
@@ -124,7 +134,41 @@ check_public_url() {
   return 1
 }
 
+# The project's production environment variables, from secrets the workflow holds: values never
+# printed, sent as JSON built by node so no quoting in a value can break the request.
+sync_project_env() {
+  local name
+  local response_file
+  local status
+  for name in ${ENV_NAMES[@]+"${ENV_NAMES[@]}"}; do
+    if [ -z "${!name:-}" ]; then
+      echo "$LABEL environment variable $name is not set here; leaving the project's value as it is."
+      continue
+    fi
+    response_file="$(mktemp)"
+    if ! status="$(
+      ENV_NAME="$name" node -e 'process.stdout.write(JSON.stringify({key: process.env.ENV_NAME, value: process.env[process.env.ENV_NAME], type: "encrypted", target: ["production"]}))' |
+        curl --silent --show-error --location --max-time 30 \
+          --request POST \
+          --header "Authorization: Bearer $VERCEL_TOKEN" \
+          --header "Content-Type: application/json" \
+          --output "$response_file" \
+          --write-out "%{http_code}" \
+          --data-binary @- \
+          "https://api.vercel.com/v10/projects/$PROJECT_ID/env?upsert=true&teamId=$VERCEL_ORG_ID"
+    )"; then
+      status="000"
+    fi
+    rm -f "$response_file"
+    if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
+      die "$LABEL could not set environment variable $name (HTTP $status)"
+    fi
+    echo "$LABEL environment variable $name set for production."
+  done
+}
+
 configure_project_protection
+sync_project_env
 
 rm -rf .vercel
 export VERCEL_ORG_ID

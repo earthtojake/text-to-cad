@@ -55,11 +55,20 @@ reference host `basic-host` does.
   `cad_view` and `cad_screenshot` mean the view a person touched last of its thread's tabs and
   the sidebar's: a model already in the sidebar is shown there, not in a new tab. Only sidebar
   views are shared; a thread's tabs are that conversation's.
-- **One request to the network: the newest release.** The page asks the server
-  once (`cad_release`); the server asks GitHub's latest-release API at most every
-  six hours and keeps the answer in the user's state directory (`release.json`,
-  shared by every process), and a failure is no answer. A newer release is the
-  blue download button (the navbar's, and the home's under its wordmark).
+- **One request to the network: analytics, with consent.** There is no update
+  button: the host updates CAD (a plugin directory by itself, an unpinned `uvx` on
+  restart), and GitHub's newest release often runs ahead of what a directory
+  serves. The server notes its use -- tool calls (not the page's plumbing),
+  view activity from each view's sync (`focused`), and the files views show,
+  as salted one-way codes -- and, only with consent, sends it to
+  `api.texttocad.dev` once a minute
+  (`cadgen/analytics.py`; the receiver is the docs site's `/v1`): never a path, an argument
+  or a file. Every install is asked once by the page (`cad_consent`, the
+  `ConsentCard` over the view), and nothing is sent before a yes; Settings' Analytics
+  section (`appSettings`) changes the answer later. A plugin directory's install
+  (`cadgen mcp --install store`, stamped by `scripts/release/plugin_zip.py`) is
+  only reported as such. The agent's `cad_analytics` reports the setting and
+  turns it off, never on.
 - **Told how it is presented, before it greets the host.** A host that mounts
   views inline is served the page with `<meta name="cad-presentation"
   content="inline">` in its head: the page offers that host `inline` and

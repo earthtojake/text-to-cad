@@ -71,6 +71,10 @@ jobs:
           VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_DOCS_PROJECT_ID: ${{ secrets.VERCEL_DOCS_PROJECT_ID }}
+          # api.texttocad.dev's: CAD's analytics database and the prune cron's secret
+          # (apps/docs/README.md). Unset, the project keeps whatever values it has.
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
         run: |
           for name in VERCEL_TOKEN VERCEL_ORG_ID VERCEL_DOCS_PROJECT_ID; do
             if [ -z "${!name:-}" ]; then
@@ -81,4 +85,6 @@ jobs:
           scripts/github-workflows/deploy-vercel-app.sh \
             --label "Docs app" \
             --project-id "$VERCEL_DOCS_PROJECT_ID" \
-            --public-urls "https://www.texttocad.dev https://texttocad.dev"
+            --public-urls "https://www.texttocad.dev https://texttocad.dev https://api.texttocad.dev/v1/health" \
+            --env-from DATABASE_URL \
+            --env-from CRON_SECRET

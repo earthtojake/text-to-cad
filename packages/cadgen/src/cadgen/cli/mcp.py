@@ -14,20 +14,24 @@ DEFAULT_PROG = "cadgen mcp"
 
 
 def build_parser(prog: str = DEFAULT_PROG) -> argparse.ArgumentParser:
-    return argparse.ArgumentParser(
+    parser = argparse.ArgumentParser(
         prog=prog,
         description=(
             "Serve CAD's viewer to an agent host over MCP (stdio). The host starts one "
             "process per thread; there is nothing to configure."
         ),
     )
+    # Stamped into the server config of a plugin directory's package (scripts/release/plugin_zip.py):
+    # analytics report it as their `source`. It decides nothing; every install is asked.
+    parser.add_argument("--install", choices=("store",), help=argparse.SUPPRESS)
+    return parser
 
 
 def main(argv: Sequence[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:
-    build_parser(prog).parse_args(argv)
+    args = build_parser(prog).parse_args(argv)
     from cadgen.mcp.server import serve
 
-    return serve()
+    return serve(install=args.install)
 
 
 if __name__ == "__main__":

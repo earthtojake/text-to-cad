@@ -54,7 +54,13 @@
  * list of rows. */
 .cad-library { width: 100%; height: 100%; background: var(--background); --cad-library-card: var(--card); --cad-library-line: var(--border); }
 .dark .cad-library { --cad-library-card: color-mix(in oklab, var(--background) 88%, white); --cad-library-line: oklch(1 0 0 / 8%); }
-.cad-library-content { box-sizing: border-box; width: 100%; max-width: 1128px; margin: 0 auto; padding: 44px 24px calc(40px + var(--cad-host-bottom-inset, 0px)); }
+.cad-library-page { display: flex; flex-direction: column; min-height: 100svh; }
+.cad-library-content { box-sizing: border-box; flex: 1 0 auto; width: 100%; max-width: 1128px; margin: 0 auto; padding: 44px 24px 40px; }
+.cad-library-content:last-child { padding-bottom: calc(40px + var(--cad-host-bottom-inset, 0px)); }
+/* The foot: a rule across the page, the maker on the right, clear of a host's composer. */
+.cad-library-footer { display: flex; justify-content: flex-end; border-top: 1px solid var(--border); padding: 16px 24px calc(16px + var(--cad-host-bottom-inset, 0px)); font-size: 12px; line-height: 16px; color: var(--muted-foreground); }
+.cad-library-footer a { color: inherit; text-decoration: none; }
+.cad-library-footer a:hover { color: var(--foreground); }
 .cad-library-wordmark { display: block; width: auto; height: 64px; margin: 0 auto; user-select: none; -webkit-user-drag: none; }
 /* The byline: the claim in the text colour, the promise in the wordmark's blue (its top faces in the dark, its deeper side in the light). */
 .cad-library-byline { margin: 10px 0 0; text-align: center; font-size: 13px; line-height: 18px; font-weight: 500; color: var(--foreground); }

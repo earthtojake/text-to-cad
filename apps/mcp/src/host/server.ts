@@ -49,6 +49,9 @@ export interface SyncReply {
   previews?: ({ file: string; error?: string } & CadEditingPreview)[];
 }
 
+/** Anonymous usage analytics: `ask` until the person answers, unless a plugin listing or their environment decided. */
+export interface Consent { ask: boolean; sharing: boolean; policy: string }
+
 export class ServerError extends Error {
   constructor(message: string) { super(message); this.name = 'ServerError'; }
 }
@@ -70,8 +73,8 @@ export function createServer(bridge: Pick<Bridge, 'callTool'>) {
     return (result.structuredContent || {}) as T;
   }
   return {
-    /** The newest release, as GitHub says it (the server asks at most every few hours), or null. */
-    release: () => call<{ latest: { version: string; url: string; newer: boolean } | null }>('cad_release').then(value => value.latest),
+    /** Whether to ask the person about anonymous analytics; with `share`, their answer (`cadgen/analytics.py`). */
+    consent: (share?: boolean) => call<Consent>('cad_consent', share === undefined ? {} : { share }),
     launch: (model: string) => call<{ launch: Launch }>('cad_launch', { model }).then(value => value.launch),
     pickModel: () => call<{ launch?: Launch; cancelled?: boolean }>('cad_pick_model', {}, { timeoutMs: 16 * 60_000 }),
     recents: (args: { action?: 'list' | 'pin' | 'unpin' | 'remove' | 'thumbnail'; path?: string; png?: string } = {}) =>

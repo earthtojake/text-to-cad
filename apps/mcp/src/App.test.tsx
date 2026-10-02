@@ -20,7 +20,7 @@ beforeEach(() => vi.stubGlobal('IntersectionObserver', class { observe() {} unob
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); viewer.props = null; viewer.mounts = 0; });
 
 /** A host frame and CAD's server, as the page reaches them. */
-function host(initial: HostContext, hostCapabilities: Record<string, unknown> = {}) {
+function host(initial: HostContext, hostCapabilities: Record<string, unknown> = {}, ask = false) {
   const listeners = new Set<(context: HostContext) => void>();
   let context = initial;
   const bridge = {
@@ -33,9 +33,9 @@ function host(initial: HostContext, hostCapabilities: Record<string, unknown> = 
   const server = {
     events: () => new Promise(() => {}), report: vi.fn(async () => ({})), reply: vi.fn(async () => ({})),
     recents: vi.fn(async () => []), thumbnails: vi.fn(async () => ({})), http: () => new Promise(() => {}),
-    release: vi.fn(async () => ({ version: '0.7.5', url: 'https://github.com/earthtojake/text-to-cad/releases/tag/v0.7.5', newer: true })),
     launch: vi.fn(async (model: string) => ({ ...home, page: 'viewer', model })), pickModel: vi.fn(async () => ({ cancelled: true })),
     reveal: vi.fn(async () => {}),
+    consent: vi.fn(async (share?: boolean) => ({ ask: share === undefined && ask, sharing: Boolean(share), policy: 'https://www.texttocad.dev/privacy-policy' })),
   };
   return { bridge, server };
 }
@@ -74,9 +74,8 @@ it('a model opened from the home is launched by the server and leads back to it;
   expect(bridge.request).toHaveBeenCalledWith('ui/open-link', { url: 'https://github.com/earthtojake/text-to-cad' });
   // Feedback and Report Issue open a new issue on the project's tracker, the same way.
   expect(viewer.props!.host.links!.issues).toBe('https://github.com/earthtojake/text-to-cad/issues/new');
-  // The newest release, asked of the server once: the links carry it to the update button.
-  expect(server.release).toHaveBeenCalledTimes(1);
-  expect(viewer.props!.host.links!.latest).toEqual({ version: '0.7.5', url: 'https://github.com/earthtojake/text-to-cad/releases/tag/v0.7.5', newer: true });
+  // No update button: the host updates CAD, and asks GitHub nothing for it.
+  expect(viewer.props!.host.links!.latest ?? null).toBeNull();
   const { perform, platform } = viewer.props!.host.fileActions!;
   // A file on its own, in no project: its path is its only one.
   expect([platform, Object.keys(perform!).sort()]).toEqual(['darwin', ['copy-path', 'reveal']]);
@@ -127,4 +126,41 @@ it('a Quick Edit queues into a tab host\'s composer always, into an inline host\
   expect(reach('inline', { message: { text: {} } })).toEqual(['unavailable', 'send', true]);
   // Codex declares model context only sometimes and always forwards it: a tab is never asked.
   expect(reach('tabs', { message: { text: {}, image: {} } })).toEqual(['composer', 'send', true]);
+});
+
+it('a hand-made install is asked once about analytics: nothing is shared before a yes, and either answer ends the question', async () => {
+  for (const choice of ['Allow', 'No thanks', 'Close']) {
+    const { bridge, server } = host({ displayMode: 'fullscreen' }, {}, true);
+    const { findByRole, queryByRole, getByText, getByRole } = render(<App bridge={bridge as any} server={server as any} launch={home} session={session} />);
+    // The card sits top-right: the home's corner, or a viewer's under its navbar.
+    expect((await findByRole('dialog', { name: 'Allow Analytics' })).parentElement!.dataset.placement).toBe('home');
+    const policy = getByText('Privacy Policy') as HTMLAnchorElement;
+    expect([policy.href, policy.target]).toEqual(['https://www.texttocad.dev/privacy-policy', '_blank']);
+    await act(async () => policy.click());
+    expect(bridge.request).toHaveBeenCalledWith('ui/open-link', { url: 'https://www.texttocad.dev/privacy-policy' });
+    expect(server.consent).toHaveBeenCalledTimes(1);
+    await act(async () => (choice === 'Close' ? getByRole('button', { name: 'Close' }) : getByText(choice)).click());
+    expect(server.consent).toHaveBeenLastCalledWith(choice === 'Allow');
+    expect(queryByRole('dialog', { name: 'Allow Analytics' })).toBeNull();
+    cleanup();
+  }
+  // The answer is Settings' Analytics toggle from then on, and the toggle changes it.
+  {
+    const { bridge, server } = host({ displayMode: 'fullscreen' }, {}, true);
+    const { findByRole, getByText } = render(<App bridge={bridge as any} server={server as any} launch={home} session={session} />);
+    await findByRole('dialog', { name: 'Allow Analytics' });
+    expect(viewer.props!.appSettings).toEqual([expect.objectContaining({ id: 'analytics', checked: false })]);
+    await act(async () => getByText('Allow').click());
+    expect(viewer.props!.appSettings![0].checked).toBe(true);
+    await act(async () => viewer.props!.appSettings![0].onCheckedChange(false));
+    expect(server.consent).toHaveBeenLastCalledWith(false);
+    expect(viewer.props!.appSettings![0].checked).toBe(false);
+    cleanup();
+  }
+  // A person who already answered (or whose environment did) is never asked.
+  const { bridge, server } = host({ displayMode: 'fullscreen' });
+  const { queryByRole } = render(<App bridge={bridge as any} server={server as any} launch={home} session={session} />);
+  await act(async () => {});
+  expect(server.consent).toHaveBeenCalledTimes(1);
+  expect(queryByRole('dialog', { name: 'Allow Analytics' })).toBeNull();
 });

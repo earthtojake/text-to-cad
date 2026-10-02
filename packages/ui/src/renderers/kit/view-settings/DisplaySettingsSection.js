@@ -6,6 +6,7 @@ import { ALL_VIEW_FEATURES, normalizeViewFeatures, normalizeViewSettings, resolv
 import { MAX_THEME_FILL_COLORS } from "@text-to-cad/core/lib/themeSettings.js";
 import { Button } from "@text-to-cad/ui/primitives/button";
 import { DISPLAY_MODE_OPTIONS } from "./DisplayModeOptions.js";
+import { appSettingsSections } from "./appSettings.jsx";
 import {
   FileSheetColorPicker, FileSheetColorProperty,
   FileSheetControlRow, FileSheetSelectRow, FileSheetSettingsSection,
@@ -106,7 +107,7 @@ function DisplaySections({ sections }) {
 
 export function DisplaySettingsSection({
   viewSettings = {}, resolvedView, hostAppearance = "light", lightingQuality = "final", onViewSettingsPatch, onGroupEnabledChange, onModeChange, onViewReset,
-  features = ALL_VIEW_FEATURES, appearanceControl = null
+  features = ALL_VIEW_FEATURES, appearanceControl = null, appSettings = []
 }) {
   const settings = useMemo(() => normalizeViewSettings(viewSettings), [viewSettings]);
   const view = resolvedView || resolveViewSettings(settings, { appearance: hostAppearance, lightingQuality, features });
@@ -182,6 +183,8 @@ export function DisplaySettingsSection({
         <FileSheetSelectRow hideLabel label="Floor position" value={view.floor.placement} onValueChange={placement => setGroup("floor", { placement })}
           options={[{ value: "origin", label: "Model origin" }, { value: "lowest", label: "Lowest point" }]} />
       </>),
+      // The host's own on/off settings, last: the app's, not the file's view (`appSettings`).
+      ...appSettingsSections(appSettings),
   ];
   // Its panel has no heading: the first always-open section's heading row is the panel's first
   // row, and carries the panel's fold chevron after its own action (`ToolPanelCollapse`, nothing

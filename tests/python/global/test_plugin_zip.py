@@ -66,7 +66,8 @@ class PluginZipTests(unittest.TestCase):
             (root / "skills/cad-mcp-setup").mkdir(parents=True)
             (root / "skills/cad-mcp-setup/SKILL.md").write_text("---\nname: cad-mcp-setup\ndescription: Set up.\n---\nSteps.\n",
                                                         encoding="utf-8")
-            (root / "codex.mcp.json").write_text('{"mcpServers": {}}\n', encoding="utf-8")
+            server = {"command": "uvx", "args": ["--from", "cadgen==1.0.0", "cadgen", "mcp"]}
+            (root / "codex.mcp.json").write_text(json.dumps({"mcpServers": {"cad": server}}), encoding="utf-8")
             git(root, "init", "-q")
 
             def build(manifest: dict, out: Path | None = None) -> list[str]:
@@ -78,7 +79,9 @@ class PluginZipTests(unittest.TestCase):
             with zipfile.ZipFile(root / "out.zip") as archive:
                 self.assertEqual(json.loads(archive.read(".codex-plugin/plugin.json"))["mcpServers"],
                                  "./.mcp.json")
-                self.assertEqual(archive.read(".mcp.json"), b'{"mcpServers": {}}\n')
+                # A directory install says so, for analytics to report; it is asked like any other.
+                self.assertEqual(json.loads(archive.read(".mcp.json"))["mcpServers"]["cad"]["args"],
+                                 [*server["args"], "--install", "store"])
                 self.assertNotIn("codex.mcp.json", archive.namelist())
 
             # The portal refuses both: a subtitle over 30 characters (main's, until this

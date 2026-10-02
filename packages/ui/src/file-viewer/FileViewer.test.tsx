@@ -38,24 +38,24 @@ it('draws the navbar only when it has something to hold, and never for a view sh
   expect(screen.queryByRole('button', { name: 'File actions' })).toBeNull();
   expect(screen.queryByRole('button', { name: 'Show files' })).toBeNull();
   cleanup();
-  // The host's links: without an update, Feedback alone — a new issue titled "Feedback: ", for the person
-  // to finish, naming the version and the platform (X, Discord, GitHub and the version are the
-  // renderer's Settings' and the home's). It carries no label: the project has none for feedback.
+  // The host's links: without an update, GitHub (the project is open source), then Feedback — a new
+  // issue titled "Feedback: ", for the person to finish, naming the version and the platform (X,
+  // Discord and the version are in Settings' header). It carries no label: the project has none for feedback.
   const linked = { ...host, links: viewerLinks({ version: 'v0.7.4' }), environment: { colorScheme: 'light', platform: 'darwin' } };
   open({ navigationPath: null, host: linked });
   await screen.findByText('shown');
-  expect(labels()).toEqual(['Feedback']);
+  expect(labels()).toEqual(['GitHub', 'Feedback']);
   const feedback = new URL(screen.getByRole('link', { name: 'Feedback' }).getAttribute('href')!);
   expect(`${feedback.origin}${feedback.pathname}`).toBe('https://github.com/earthtojake/text-to-cad/issues/new');
   expect(feedback.searchParams.get('title')).toBe('Feedback: ');
   expect(feedback.searchParams.has('labels')).toBe(false);
   expect(feedback.searchParams.get('body')).toMatch(/^\*\*What happened, or what would you like\?\*\*\n[\s\S]*- CAD: 0\.7\.4\n- Platform: darwin$/);
   cleanup();
-  // A host with no tracker: nothing of them.
+  // A host with no tracker: no Feedback; GitHub stays.
   open({ navigationPath: null, host: { ...linked, links: viewerLinks({ version: '0.7.4', issues: '' }) } });
   await screen.findByText('shown');
   expect(navbar()).not.toBeNull();
-  expect(labels()).toEqual([]);
+  expect(labels()).toEqual(['GitHub']);
   cleanup();
   open({ host: { ...linked, environment: { colorScheme: 'light', compact: true } } });
   await screen.findByText('shown');
@@ -107,13 +107,13 @@ it('puts Feedback just before the view\'s controls, outside them, and steps the 
   render(<FileViewer file="parts/a.step" host={{ ...host, links: viewerLinks({ version: '0.7.4' }) } as any} renderers={[fullscreen]}
     state={{ panel: null, panelWidth: 220 }} onStateChange={() => {}} />);
   await screen.findByRole('button', { name: 'Preview' });
-  expect(labels()).toEqual(['Feedback', 'Settings', 'Preview']);
+  expect(labels()).toEqual(['GitHub', 'Feedback', 'Settings', 'Preview']);
   expect(labels('[data-navbar-controls]')).toEqual(['Settings', 'Preview']);
   act(() => screen.getByRole('button', { name: 'Preview' }).click());
   expect(navbar()).toBeNull();
   expect(screen.queryByRole('link', { name: 'Feedback' })).toBeNull();
   act(() => screen.getByRole('button', { name: 'Back' }).click());
-  expect(labels()).toEqual(['Feedback', 'Settings', 'Preview']);
+  expect(labels()).toEqual(['GitHub', 'Feedback', 'Settings', 'Preview']);
 });
 
 it('leads back to the host\'s home from a file, and draws no navbar over the home itself', async () => {

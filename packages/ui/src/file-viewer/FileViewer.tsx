@@ -20,7 +20,7 @@ class RenderBoundary extends Component<{ children: ReactNode; onError?: (error: 
 }
 
 /** The complete file tab. Its only knowledge of formats comes from registrations. */
-export function FileViewer({ file, host, renderers, state, onStateChange, displayActions, navigationPath, reveal, onError, presentation }: FileViewerProps) {
+export function FileViewer({ file, host, renderers, state, onStateChange, displayActions, appSettings, navigationPath, reveal, onError, presentation }: FileViewerProps) {
   const source = host.files;
   const onOpenFile = host.navigation.openFile;
   // A renderer opens files in a new view unless it says otherwise.
@@ -93,12 +93,12 @@ export function FileViewer({ file, host, renderers, state, onStateChange, displa
   const rendererBody = useMemo(() => {
     if (!shown) return null;
     const Renderer = shown.prepared.Component;
-    return <RenderBoundary key={key} onError={onError}><Renderer displayActions={displayActions} key={key} file={shown.file} source={source} document={document}
+    return <RenderBoundary key={key} onError={onError}><Renderer displayActions={displayActions} appSettings={appSettings} key={key} file={shown.file} source={source} document={document}
       openPanel={openId} panelSlot={panelSlot} navbarSlot={navbarSlot} onFullscreenChange={onFullscreenChange} onPanelOpen={setPanel} onReady={onReady}
       onNavigationActionsChange={onNavigationActionsChange}
       onOpenFile={openFromRenderer} appearance={appearance}
       state={rendererState} onStateChange={setRendererState} reload={reload} /></RenderBoundary>;
-  }, [shown, key, onError, displayActions, source, document, openId, panelSlot, navbarSlot, onFullscreenChange, setPanel, onReady,
+  }, [shown, key, onError, displayActions, appSettings, source, document, openId, panelSlot, navbarSlot, onFullscreenChange, setPanel, onReady,
     onNavigationActionsChange, openFromRenderer, appearance, rendererState, setRendererState, reload]);
 
   // A host's home stands where no file is open, as a page of its own.

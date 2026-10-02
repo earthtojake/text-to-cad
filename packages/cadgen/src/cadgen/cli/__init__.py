@@ -80,6 +80,7 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     "viewer stop": ("cadgen.cli.viewer_stop", "terminate a running CAD Viewer"),
     # CAD inside an agent host's panels. The host starts it, one process per thread.
     "mcp": ("cadgen.cli.mcp", "serve CAD to an agent host over MCP (stdio)"),
+    "analytics": ("cadgen.cli.analytics", "show or change CAD's anonymous usage analytics: status, on, off"),
 }
 
 # `cadgen==1.2.3` / `cadgen[snapshot]==1.2.3`, as written by

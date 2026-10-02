@@ -483,7 +483,7 @@ export function useRendererShell({
 
   // ---- what the frame and the renderer read ---------------------------------
   // The Display panel's content: every renderer's, built here from its display settings.
-  const display = <DisplaySettingsSection appearanceControl={view.displayActions}
+  const display = <DisplaySettingsSection appearanceControl={view.displayActions} appSettings={view.appSettings}
     features={features} viewSettings={displaySettings} hostAppearance={colorScheme} lightingQuality="preview"
     resolvedView={desiredScene.view} onViewSettingsPatch={viewSettingsStore.patch}
     onGroupEnabledChange={viewSettingsStore.setEnabled} onModeChange={viewSettingsStore.selectPreset}

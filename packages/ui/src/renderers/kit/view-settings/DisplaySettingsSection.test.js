@@ -100,3 +100,24 @@ test("a file that is not a CAD model has no Edges section and only the presets n
   later.configure({ appearance: "light" });
   assert.equal(later.getSnapshot().scene.view.edges.enabled, false);
 });
+
+test("The host's on/off settings are the last sections, named by the host; a host with none has none", () => {
+  const changes = [];
+  const store = createViewSettingsStore({});
+  const { display: settings, scene } = store.getSnapshot();
+  const view = render(DisplaySettingsSection, {
+    viewSettings: settings, resolvedView: scene.view, onViewSettingsPatch: store.patch, onGroupEnabledChange: store.setEnabled,
+    appSettings: [{ id: "analytics", section: "Analytics", label: "Share anonymous usage data", checked: true, onCheckedChange: value => changes.push(value) }],
+  });
+  const last = sections(view.tree).at(-1);
+  assert.equal(last.title, "Analytics");
+  assert.equal(typeof last.onEnabledChange, "undefined");
+  const [row] = elements(last.content);
+  assert.deepEqual([row.props.label, row.props.checked], ["Share anonymous usage data", true]);
+  row.props.onCheckedChange(false);
+  assert.deepEqual(changes, [false]);
+  view.unmount();
+  const plain = panel();
+  assert.equal(sections(plain.tree).some(section => section.title === "Analytics"), false);
+  plain.unmount();
+});

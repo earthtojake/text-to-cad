@@ -119,7 +119,18 @@ export interface FileNavigationAction {
   active?: boolean;
   onInvoke: () => void | Promise<void>;
 }
+/** An on/off setting of the host's own, in a Settings section it names (the CAD app's Analytics). */
+export interface AppSetting {
+  id: string;
+  /** The Settings section it is listed in, after the file's Display sections. */
+  section: string;
+  label: string;
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+}
 export interface RendererViewProps {
+  /** The host's on/off settings: the Settings popover's last sections, by the `section` each names. */
+  appSettings?: readonly AppSetting[];
   /** Optional host-owned controls inside the Display popover. */
   displayActions?: ReactNode;
   onNavigationActionsChange?: (actions: readonly FileNavigationAction[]) => void;
@@ -191,6 +202,8 @@ export interface FileViewerProps {
   onStateChange: (next: FileViewerState) => void;
   /** Host controls inside the CAD Display popover. */
   displayActions?: ReactNode;
+  /** The host's on/off settings, the Settings popover's last sections. */
+  appSettings?: readonly AppSetting[];
   /**
    * Override the selected path the navbar names and the explorer marks, e.g. `null` while a host
    * catalog is still resolving the requested file. It does not change the requested document.

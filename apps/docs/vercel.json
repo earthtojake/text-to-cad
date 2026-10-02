@@ -4,5 +4,11 @@
     "deploymentEnabled": false
   },
   "installCommand": "cd ../.. && npm ci --workspace @text-to-cad/core --workspace cad-skills-docs",
-  "buildCommand": "cd ../.. && npm run build:docs"
+  "buildCommand": "cd ../.. && npm run build:docs",
+  "crons": [
+    {
+      "path": "/v1/prune",
+      "schedule": "17 4 * * *"
+    }
+  ]
 }

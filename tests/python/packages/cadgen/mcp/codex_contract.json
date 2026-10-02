@@ -526,6 +526,39 @@
    "title": "Capture CAD view"
   },
   {
+   "annotations": {
+    "destructiveHint": false,
+    "idempotentHint": true,
+    "openWorldHint": true,
+    "readOnlyHint": false
+   },
+   "description": "Report whether CAD sends anonymous usage analytics (counts of tool calls, view activity and distinct files, never file names, contents or prompts), or turn them off. Call with action off only when the user asks.",
+   "icons": [
+    {
+     "mimeType": "image/svg+xml",
+     "sizes": [
+      "any"
+     ],
+     "src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9Ii0wLjg2IC0xLjIgNS41NiA1LjU2IiBmaWxsPSJjdXJyZW50Q29sb3IiPjxwYXRoIGQ9Ik0wIDBIM1YxLjVIMS41VjIuNUgzVjRIMFoiLz48cGF0aCBvcGFjaXR5PSIuNTUiIGQ9Ik0wIDBMLjg0LS44NEgzLjg0TDMgMFpNMS41IDIuNUwyLjM0IDEuNjZIMy44NEwzIDIuNVoiLz48cGF0aCBvcGFjaXR5PSIuMyIgZD0iTTMgMEwzLjg0LS44NFYuNjZMMyAxLjVaTTMgMi41TDMuODQgMS42NlYzLjE2TDMgNFpNMS41IDEuNUwyLjM0LjY2VjEuNjZMMS41IDIuNVoiLz48L3N2Zz4="
+    }
+   ],
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "action": {
+      "enum": [
+       "status",
+       "off"
+      ],
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "name": "cad_analytics",
+   "title": "CAD analytics"
+  },
+  {
    "_meta": {
     "ui": {
      "visibility": [
@@ -538,14 +571,18 @@
     "openWorldHint": false,
     "readOnlyHint": true
    },
-   "description": "The newest CAD release, and whether it is newer than this one.",
+   "description": "Whether to ask the person about anonymous usage analytics, and their answer. Only for the person's own click.",
    "inputSchema": {
     "additionalProperties": false,
-    "properties": {},
+    "properties": {
+     "share": {
+      "type": "boolean"
+     }
+    },
     "type": "object"
    },
-   "name": "cad_release",
-   "title": "CAD release"
+   "name": "cad_consent",
+   "title": "CAD analytics consent"
   },
   {
    "_meta": {

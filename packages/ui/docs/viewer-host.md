@@ -377,13 +377,15 @@ With no file open the name's place says "Select file" (words, not a control), an
 the page says "Ask the agent to show a model". Right: the renderer's navigation actions, any
 declared panel's toggle, then the update (`UpdateButton`, `NavbarLinks.jsx`): where the host
 found a newer release (`links.latest`), a blue download button whose menu says the step to it,
-how this host updates (`links.install`) and what is new; without one, nothing. Then Feedback
+how this host updates (`links.install`) and what is new; without one, nothing. Then GitHub
+(`GitHubLink`), which says the project is open source, then Feedback
 (`FeedbackLink`), where the host has a tracker (`links.issues`): a new issue titled "Feedback: ",
 for the person to finish, naming the version and `environment.platform`, just before the
 renderer's view controls and never among them. It has no label: the project has none for
 feedback, and what is said may be a bug, a request or a question. The version, X, Discord and
-GitHub (`CommunityLinks`) are the CAD renderer's Settings popover's header and the home's, under
-its wordmark, where Feedback follows them. An alert card's Report Issue opens a new issue too,
+GitHub (`CommunityLinks`) are the Settings popover's footer (`SettingsPopover`): the version at its left, the links at its right. The home has
+GitHub, Feedback and Settings under its wordmark, in that order, after the update; its Settings
+holds no Display sections, only the host's own settings. An alert card's Report Issue opens a new issue too,
 titled "Issue: " and labelled `bug`, filled in from the card (`kit/status/reportIssue.js`): its
 title, message and failure, the file's name, the version and platform, then its Details, cut from
 their end to keep the address, title and labels included, under `ISSUE_URL_MAX`. No path of the
@@ -393,7 +395,10 @@ for someone with triage access to the repository and drops them for everyone els
 the ordinary way unless the host supplies
 `links.open` (a page in a sandboxed frame hands it to its host). `displayActions`
 passes host-owned appearance controls into the Display section beside Projection
-via `RendererViewProps`. The shell handles placement and hides the toolbar in
+via `RendererViewProps`. `appSettings` (`{ id, label, checked, onCheckedChange }[]`) are the
+host's own on/off settings, which the shell draws as checkbox rows in the Settings popover's last
+sections, one per `section` the settings name (the CAD app's Analytics), in the viewer's Settings
+and the home's; the host owns what each one does. The shell handles placement and hides the toolbar in
 preview; the host owns callbacks and preferences. None of these imply platform
 detection or move application-specific release/network behavior into shared UI.
 

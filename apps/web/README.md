@@ -345,8 +345,8 @@ The Viewer has the one navbar every app shares (see
 [the host contract](../../packages/ui/docs/viewer-host.md#host-chrome-slots)): at the
 left the explorer's toggle and the open file's name with its ⋯ ("Select file" with
 none open); at the right the update (a blue download button, only when GitHub has a
-newer release), Feedback (a new issue titled "Feedback: "), then the view's controls (Settings, Preview);
-the version, X, GitHub and Discord are in the Settings popover's header. This host
+newer release), GitHub, Feedback (a new issue titled "Feedback: "), then the view's controls (Settings, Preview);
+the version, X, GitHub and Discord are in the Settings popover's footer. This host
 supplies the links (`src/host/viewerLinks.js`): its version, the GitHub (where new
 issues open) and Discord its build names (`VIEWER_GITHUB_URL`, `VIEWER_DISCORD_URL`),
 and what GitHub's latest-release API

@@ -5,6 +5,7 @@ import { FileViewer } from '../file-viewer/FileViewer.js';
 import { EmptyCadBackdrop } from '../file-viewer/empty.js';
 import { MissingFileAlert, ViewerLoadingOverlay } from '../file-viewer/presentation.js';
 import { EmptyState } from '../file-viewer/navigation/index.js';
+import type { AppSetting } from '../file-viewer/types.js';
 import type { ViewerHost } from '../host/types.js';
 import type { LiveRegistry } from '../host/liveRegistry.js';
 import { ModelLibrary, type LibraryModel, type ModelLibrarySource, type ModelPictureSource } from '../library/ModelLibrary.js';
@@ -52,6 +53,8 @@ export interface CadViewerProps<Model extends LibraryModel = LibraryModel> {
   onThumbnail?(png: Blob, file: string): Promise<unknown>;
   /** The host's controls in the Display settings (the web's appearance). */
   displayActions?: ReactNode;
+  /** The host's on/off settings: Settings' last sections, in the viewer and on the home (the CAD app's Analytics). */
+  appSettings?: readonly AppSetting[];
   onError?(error: Error): void;
 }
 
@@ -73,7 +76,7 @@ const reportError = (error: Error) => console.error(error);
  * its library.
  */
 export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, host, tabStore, live, file, onShow, accept, onShown, rootPath,
-  library, onThumbnail, displayActions, onError = reportError }: CadViewerProps<Model>) {
+  library, onThumbnail, displayActions, appSettings, onError = reportError }: CadViewerProps<Model>) {
   const preferences = tabStore.settings;
   // One viewer renderer per file family, sharing one client and the tab's preferences; each
   // lazy-loads only its own code.
@@ -153,16 +156,16 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
   const changeLayout = useCallback((next: LibraryLayout) => preferences.update({ library: { layout: next } }), [preferences]);
   const presentation = useMemo(() => ({
     home: library ? <ModelLibrary library={library} layout={layout} onLayoutChange={changeLayout} picture={picture}
-      links={host.links} platform={platform} clipboard={host.clipboard} onError={onError} /> : undefined,
+      links={host.links} platform={platform} clipboard={host.clipboard} appSettings={appSettings} onError={onError} /> : undefined,
     empty: <EmptyState icon={Box} title="Ask the agent to show a model" />,
     loading: <div className="relative h-full"><ViewerLoadingOverlay viewerLoading /></div>,
     error: () => <div className="relative h-full">{catalog.error
       ? <EmptyState icon={FolderX} title="Could not read this folder" description={catalog.error} tone="warn" />
       : <EmptyCadBackdrop colorScheme={colorScheme}><MissingFileAlert missingFileRef={file} rootPath={rootPath} /></EmptyCadBackdrop>}</div>,
-  }), [library, colorScheme, layout, changeLayout, catalog.error, file, rootPath, picture, host.links, platform, host.clipboard, onError]);
+  }), [library, colorScheme, layout, changeLayout, catalog.error, file, rootPath, picture, host.links, platform, host.clipboard, appSettings, onError]);
   return <>
     <FileViewer file={file || null} host={viewerHost} renderers={renderers} state={state} onStateChange={onStateChange}
-      displayActions={displayActions} navigationPath={navigationPath} onError={onError} presentation={presentation} />
+      displayActions={displayActions} appSettings={appSettings} navigationPath={navigationPath} onError={onError} presentation={presentation} />
     {drawing && !file ? <OffscreenPicture key={drawing.source.file} source={drawing.source} host={host} preferences={preferences} onDone={drawn} /> : null}
   </>;
 }

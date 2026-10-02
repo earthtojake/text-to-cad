@@ -130,6 +130,16 @@ _WATCH = _object({"root": _ROOT, "file": {"type": ["string", "null"]},
 _SHOWN_PATH = {"type": "string", "description": "A CAD file: an absolute path, or relative to the project folder the chat works in."}
 _SHOWN_VIEW = {"type": "string", "description": "The view that cad_show returned."}
 _READ_ONLY = {"readOnlyHint": True, "destructiveHint": False, "openWorldHint": False}
+# Every client's: the agent reports CAD's analytics setting, or turns sharing off when the user asks.
+_ANALYTICS_TOOL = {
+    "name": "cad_analytics", "title": "CAD analytics", "icons": [ICON],
+    "annotations": {"readOnlyHint": False, "destructiveHint": False, "idempotentHint": True, "openWorldHint": True},
+    "description": ("Report whether CAD sends anonymous usage analytics (counts of tool calls, view activity and "
+                    "distinct files, never file names, contents or prompts), or turn them off. Call with action off "
+                    "only when the user asks."),
+    "inputSchema": {"type": "object", "properties": {"action": {"type": "string", "enum": ["status", "off"]}},
+                    "additionalProperties": False},
+}
 
 
 def _stamped(launch: dict[str, Any]) -> dict[str, Any]:
@@ -169,7 +179,7 @@ def _data(structured: dict[str, Any]) -> dict[str, Any]:
 
 class Server:
     def __init__(self, *, launch_cwd: str | None, page: AppPage | None = None, recents=None, tunnel=None, viewer_url=None,
-                 sidebar_views=None) -> None:
+                 sidebar_views=None, analytics=None) -> None:
         excluded = tuple(path for path in (os.environ.get("PLUGIN_ROOT"), os.path.expanduser("~")) if path)
         self.workspace = ThreadWorkspace(launch_cwd, excluded=excluded)
         self.page = page or AppPage()
@@ -186,6 +196,7 @@ class Server:
         self._client_roots = False
         self._connection: Connection | None = None
         self._order = itertools.count(1)
+        self._analytics = analytics
 
     # -- lazily built parts ----------------------------------------------------
 
@@ -206,6 +217,17 @@ class Server:
             # Beside the model library: the person's state, shared by every process of theirs.
             self._sidebar_views = SidebarViews(Path(self.recents.root).parent / "sidebar-views")
         return self._sidebar_views
+
+    @property
+    def analytics(self):
+        """Anonymous counts of this process's tool calls, sent only with consent (``cadgen/analytics.py``)."""
+        if self._analytics is None:
+            from cadgen.analytics import Recorder
+
+            # Beside the model library (the state directory, by default): shared by every process.
+            path = Path(self._recents.root).parent / "analytics.json" if self._recents is not None else None
+            self._analytics = Recorder(path=path)
+        return self._analytics
 
     @property
     def picker(self):
@@ -280,6 +302,7 @@ class Server:
         extensions = sorted(offered["extensions"]) if isinstance(offered.get("extensions"), dict) else []
         LOG.info("client %s %s: %s views (extensions: %s)", client.get("name"), client.get("version"), presentation,
                  ", ".join(extensions) or "none")
+        self.analytics.started(client=client, presentation=presentation)
         capabilities: dict[str, Any] = {"tools": {"listChanged": False}, "resources": {"listChanged": False}}
         if self.tabs:
             # Ask the host to say, on each agent call, which folder the thread works in.
@@ -337,6 +360,7 @@ class Server:
             {"name": "cad_screenshot", "title": "Capture CAD view", "icons": [ICON], "annotations": _READ_ONLY,
              "description": "Capture a PNG of exactly what an open CAD viewer in this thread shows right now.",
              "inputSchema": _object({"view": _VIEW})},
+            _ANALYTICS_TOOL,
             *self._page_tools(),
         ]
 
@@ -356,6 +380,7 @@ class Server:
             {"name": "cad_screenshot", "title": "Capture CAD view", "icons": [ICON], "annotations": _READ_ONLY,
              "description": "Capture a PNG of exactly what a CAD viewer in this chat shows right now.",
              "inputSchema": _object({"view": _SHOWN_VIEW}, ["view"])},
+            _ANALYTICS_TOOL,
             *self._page_tools(),
         ]
 
@@ -367,6 +392,7 @@ class Server:
                              "Viewer in the user's browser; this app cannot show CAD views itself. The Viewer refreshes "
                              "when the file changes, so share a model's link once, not after every rebuild."),
              "inputSchema": _object({"path": _SHOWN_PATH}, ["path"])},
+            _ANALYTICS_TOOL,
         ]
 
     def _page_tools(self) -> list[dict[str, Any]]:
@@ -377,7 +403,9 @@ class Server:
                     "annotations": _READ_ONLY, "_meta": {"ui": {"visibility": ["app"]}}}
 
         return [
-            app("cad_release", "CAD release", "The newest CAD release, and whether it is newer than this one.", _object()),
+            app("cad_consent", "CAD analytics consent",
+                "Whether to ask the person about anonymous usage analytics, and their answer. Only for the person's own click.",
+                _object({"share": {"type": "boolean"}})),
             app("cad_launch", "Open model", "The launch for opening a model in this view.",
                 _object({"model": {"type": "string"}}, ["model"])),
             app("cad_pick_model", "Open Model", "Choose a model with the desktop's file chooser. Only for an explicit Open Model action.",
@@ -413,11 +441,15 @@ class Server:
             raise RpcError(INVALID_PARAMS, f"unknown tool {name!r}")
         self.workspace.learn(context.meta)
         started = time.monotonic()
+        ok = False
         try:
-            return handler(arguments, context)
+            result = handler(arguments, context)
+            ok = not (isinstance(result, dict) and result.get("isError"))
+            return result
         except ToolFailed as failure:
             return _text(str(failure), error=True)
         finally:
+            self.analytics.called(name, ok)
             if name not in ("cad_sync", "cad_http"):
                 LOG.info("%s %.0fms", name, (time.monotonic() - started) * 1000)
 
@@ -463,6 +495,8 @@ class Server:
         return launch
 
     def _remember(self, model: str) -> None:
+        """A model opened on screen: the library's recents, and analytics' count of distinct files."""
+        self.analytics.opened(model)
         try:
             self.recents.opened(model)
         except Exception:  # opening never depends on the store
@@ -534,15 +568,32 @@ class Server:
             return _data({"cancelled": True})
         return _data({"launch": self._launch(self._model_path(chosen))})
 
-    def _tool_cad_release(self, arguments, context):
-        # The update button's: GitHub's latest release, asked at most every few hours and shared
-        # through the state directory. The one request to the network this server makes.
-        from cadgen import __version__
-        from cadgen.viewer.recents import state_dir
+    def _tool_cad_consent(self, arguments, context):
+        # The page's analytics prompt and its Settings toggle: whether to ask (nothing chosen yet),
+        # whether sharing is on, and, from the person's click, their answer.
+        from cadgen.analytics import PRIVACY_URL
 
-        from .releases import latest_release
+        if isinstance(arguments.get("share"), bool):
+            self.analytics.choose(arguments["share"], by="app")
+        found = self.analytics.status()
+        return _data({"ask": found["reason"] == "unasked", "sharing": found["sharing"], "policy": PRIVACY_URL})
 
-        return _data({"latest": latest_release(__version__, cache=state_dir() / "release.json")})
+    def _tool_cad_analytics(self, arguments, context):
+        # The agent may report the setting or turn sharing off for the person; only the person turns it on.
+        from cadgen.analytics import PRIVACY_URL
+
+        if arguments.get("action") == "off":
+            self.analytics.choose(False, by="agent")
+            return _text("CAD analytics are off. The install id was deleted, and the data sent under it is being deleted.",
+                         {"sharing": False})
+        found = self.analytics.status()
+        why = {"environment": "set by the environment (DO_NOT_TRACK or CADGEN_ANALYTICS)",
+               "choice": "the user's choice", "unasked": "off until the user answers the CAD app's prompt"}.get(
+                   found["reason"], "off: the setting could not be read")
+        state = "on" if found["sharing"] else "off"
+        return _text(f"CAD's anonymous usage analytics are {state} ({why}). They count tool calls, view activity and "
+                     f"distinct files (as one-way codes), never file names, contents or prompts. The user turns them on in the CAD app's Settings or with `cadgen analytics on`. Policy: {PRIVACY_URL}",
+                     {"sharing": found["sharing"], "reason": found["reason"]})
 
     # the agent's tools ----------------------------------------------------------
 
@@ -683,6 +734,11 @@ class Server:
             return _data({"events": []})
         state = arguments.get("state") if isinstance(arguments.get("state"), dict) else None
         focused = arguments.get("focused") is True
+        # Use the agent's tools never see: a person touching the view, or it switching models, and
+        # the file on screen (one a person browsed to through the explorer included).
+        if focused:
+            self.analytics.viewed()
+        self.analytics.opened(arguments.get("model"))
         if state is not None or focused:
             self.views.report(view_id, model=arguments.get("model"), state=state, focused=focused)
         if focused and isinstance(arguments.get("model"), str):
@@ -779,7 +835,7 @@ class Server:
         return _data({"recents": [entry.public() for entry in store.list()]})
 
 
-def serve(argv: list[str] | None = None) -> int:
+def serve(argv: list[str] | None = None, *, install: str | None = None) -> int:
     """Serve MCP on this process's standard streams until the host closes them."""
     logging.basicConfig(stream=sys.stderr, level=logging.INFO, format="cadgen mcp: %(message)s")
     protocol_out = claim_stdout()
@@ -787,8 +843,15 @@ def serve(argv: list[str] | None = None) -> int:
         launch_cwd = os.getcwd()
     except OSError:
         launch_cwd = None
-    server = Server(launch_cwd=launch_cwd)
+    from cadgen.analytics import Recorder
+
+    analytics = Recorder(install=install)
+    analytics.start()
+    server = Server(launch_cwd=launch_cwd, analytics=analytics)
     connection = Connection(sys.stdin.buffer, protocol_out, server.handle, on_notification=server.notified, workers=64)
     server.attach(connection)
-    connection.serve()
+    try:
+        connection.serve()
+    finally:
+        analytics.close()
     return 0
