@@ -1,6 +1,6 @@
--- CAD's anonymous analytics: one row per event of a batch (src/lib/analytics/events.mjs). No IP
--- address, no request header, nothing that names a person, a file or a model. Safe to run again:
--- it creates what is missing and adds the columns a later schema introduced.
+-- CAD's anonymous analytics: one row per event of a batch (src/lib/analytics/events.mjs), and where
+-- installs are, as totals. No IP address, nothing that names a person, a file or a model. Safe to
+-- run again: it creates what is missing and adds the columns a later schema introduced.
 create table if not exists events (
   id             bigint generated always as identity primary key,
   received_at    timestamptz not null default now(),  -- the row's one time: when its batch arrived
@@ -23,4 +23,19 @@ create table if not exists events (
 alter table events add column if not exists file text;
 alter table events add column if not exists kind text;
 create index if not exists events_received_at on events (received_at);
-create index if not exists events_install_id on events (install_id);
+-- An install's rows, in time: what it forgets, and whether it has sent anything this week or month.
+create index if not exists events_install on events (install_id, received_at);
+drop index if exists events_install_id;
+
+-- How many installs sent analytics from each country, each week and each month: totals only, never
+-- an install. The country is the host's (Vercel's `x-vercel-ip-country`, from the request's IP
+-- address, which is not kept); an install counts once a period, where its first batch of the
+-- period came from. Nothing here names an install, and nothing in `events` names a country. Kept
+-- indefinitely, and an opt-out leaves them: no total can be traced to anyone.
+create table if not exists countries (
+  period   text    not null check (period in ('week', 'month')),
+  starts   date    not null,  -- the period's first day in UTC: a Monday (ISO week) or the 1st
+  country  text    not null,  -- ISO 3166-1 alpha-2; ZZ where the host could not tell
+  installs integer not null,
+  primary key (period, starts, country)
+);

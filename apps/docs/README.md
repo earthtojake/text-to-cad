@@ -137,20 +137,23 @@ a release of cadgen.
 
 | Route | What it does |
 | --- | --- |
-| `POST /v1/events` | One batch: `{schema: 1, install, session, version, source, platform, arch, client: {name, version}, presentation, events: [{name: "tool", tool, calls, errors} \| {name: "view", calls} \| {name: "file", file, kind}]}` → `204`. `file` is 16 hex characters, an HMAC of the path under a salt that never leaves the machine: distinct files can be counted, not named. Anything else is `400` and stores nothing (`src/lib/analytics/events.mjs`). |
+| `POST /v1/events` | One batch: `{schema: 1, install, session, version, source, platform, arch, client: {name, version}, presentation, events: [{name: "tool", tool, calls, errors} \| {name: "view", calls} \| {name: "file", file, kind}]}` → `204`. `file` is 16 hex characters, an HMAC of the path under a salt that never leaves the machine: distinct files can be counted, not named. Anything else is `400` and stores nothing (`src/lib/analytics/events.mjs`). The country Vercel places the request in (`x-vercel-ip-country`, from its IP address) adds the install to `countries` once a week and once a month: totals only, never beside the batch. |
 | `POST /v1/forget` | `{install}`: deletes every row sent under an install id → `204`. `cadgen analytics off` calls it; the random id is the only authority needed. The id rides in the body because Vercel's request logs keep each path beside the caller's IP. |
 | `GET /v1/prune` | The daily cron (`vercel.json`): deletes rows older than 13 months. Needs `Authorization: Bearer $CRON_SECRET`. |
 | `GET /v1/health` | → `200` |
 
 - **Nothing outside the contract is stored**: unknown fields, tool names that are
-  not `cad_*`, free-text strings are refused. No IP address or header is stored.
+  not `cad_*`, free-text strings are refused. No IP address is stored, and the one
+  header read, the country, is kept only in `countries`' weekly and monthly totals
+  (`ZZ` where Vercel could not tell). Those totals are kept indefinitely and an
+  opt-out leaves them: nothing in them names an install.
 - **The privacy policy describes this table.** A new field is a change to
   `src/app/privacy-policy/page.tsx` in the same PR.
 - **Portable.** `src/lib/analytics/handler.mjs` is a plain `fetch(Request) →
   Response` handler over a store (`insert`, `forget`, `prune`);
-  `app/v1/[...route]/route.ts` is all that ties it to Next.js. `postgres.mjs` is
-  the store for any Postgres (`DATABASE_URL`, the pooled string); `schema.sql`
-  creates its one table. The driver loads on first request, so the build and the
+  `app/v1/[...route]/route.ts` is all that ties it to Next.js, and to Vercel (the
+  country header). `postgres.mjs` is the store for any Postgres (`DATABASE_URL`,
+  the pooled string); `schema.sql` creates its tables. The driver loads on first request, so the build and the
   tests (`npm test`, part of `check`) need no database.
 
 Setup, once: a Postgres database (Neon today) with `schema.sql` run in it; the
@@ -165,8 +168,9 @@ Until it answers, clients drop their batches silently.
 What it answers: how many people use CAD (installs: one per machine and OS user,
 a new one after an opt-out and back), how often (active days and minutes, from
 when rows arrive: a server sends at most once a minute, and only when used), and
-on how many files (distinct `file` codes per install). A server nobody used
-sends nothing.
+on how many files (distinct `file` codes per install), and where (installs per
+country, each ISO week and calendar month, in UTC). A server nobody used sends
+nothing.
 
 ```sql
 -- daily, weekly and monthly active installs
@@ -189,4 +193,9 @@ select kind, count(distinct (install_id, file)) as files from events where event
 select tool, sum(calls) as calls, round(100.0 * sum(errors) / sum(calls), 1) as error_pct
 from events where event = 'tool' and received_at > now() - interval '30 days'
 group by 1 order by 2 desc;
+
+-- where: installs per country this month, and each country's weeks over time
+select country, installs from countries
+where period = 'month' and starts = date_trunc('month', now() at time zone 'UTC')::date order by 2 desc;
+select starts, country, installs from countries where period = 'week' order by 1 desc, 3 desc;
 ```

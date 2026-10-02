@@ -173,8 +173,9 @@ development, branch from `main`, open PRs against `main`, and follow
 The CAD app (the plugin's `cad` server) and the browser viewer (`cadgen viewer`) can send anonymous usage counts: a
 random install ID, versions, your OS and agent app, how often each CAD tool was
 called and views were used, and a one-way code and the format of each distinct
-file shown (to count files, not identify them). Never file names, paths,
-contents or prompts. It is off until you allow it
+file shown (to count files, not identify them). Our server also counts installs
+per country, from each request's IP address, as weekly and monthly totals only.
+Never file names, paths, contents or prompts. It is off until you allow it
 in either app's one-time prompt (one answer counts for both); change it later with
 **Share anonymous usage data** in either app's Settings, `uvx cadgen analytics on|off`, or by asking your agent to
 turn it off. `DO_NOT_TRACK=1` keeps it off. See the

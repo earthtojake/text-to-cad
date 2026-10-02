@@ -41,7 +41,10 @@ export default function PrivacyPolicyPage() {
             key that never leaves your computer, and the file’s format (such as STEP or STL). The code
             lets us count how many different files are used without learning their names, locations or
             contents, and it means nothing on any other computer. We record the time each batch
-            arrives. Nothing is sent while CAD sits unused. Analytics never include your files, models,
+            arrives. Our host also tells us which country each request comes from, which it works
+            out from your IP address; we keep only weekly and monthly totals of how many installs
+            sent analytics from each country, never with your install ID or anything else of yours.
+            Nothing is sent while CAD sits unused. Analytics never include your files, models,
             file or folder names, prompts, tool arguments or anything you type. Like any request over
             the internet, each one also reaches our host with your IP address, the time and a user
             agent (for CAD, just “cadgen”); see section 4 for what happens to them. Section 5 says when
@@ -75,8 +78,9 @@ export default function PrivacyPolicyPage() {
           <li>Page-view statistics: only to understand, in aggregate, how this website is used.</li>
           <li>
             Usage analytics: only to understand, in aggregate, how many people use text-to-cad and how
-            often, how many files they work on and in which formats, which CAD features are used, which
-            agent apps and operating systems to support, and how often tools fail.
+            often, how many files they work on and in which formats, where in the world it is used,
+            which CAD features are used, which agent apps and operating systems to support, and how
+            often tools fail.
           </li>
         </ul>
         <p>
@@ -120,10 +124,13 @@ export default function PrivacyPolicyPage() {
             Vercel derives from a request is discarded after 24 hours.
           </li>
           <li>
-            Usage analytics are kept for 13 months, then deleted. We do not store IP addresses with
-            them, and no request log pairs an IP address with an install ID: the ID travels in the body of
-            each request, which those logs do not record. Turning analytics off deletes everything stored under your install ID; if our server
-            cannot be reached at that moment, CAD asks again until it can.
+            Usage analytics are kept for 13 months, then deleted, except the weekly and monthly totals
+            of installs per country, which name no one and are kept indefinitely. We do not store IP
+            addresses with them, and no request log pairs an IP address with an install ID: the ID
+            travels in the body of each request, which those logs do not record. Turning analytics off
+            deletes everything stored under your install ID (it cannot take you out of country totals
+            already counted); if our server cannot be reached at that moment, CAD asks again until it
+            can.
           </li>
           <li>Everything text-to-cad stores locally stays on your computer until you delete it.</li>
         </ul>

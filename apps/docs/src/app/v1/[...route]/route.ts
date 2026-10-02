@@ -12,6 +12,9 @@ const serve = (request: Request) =>
     cronSecret: process.env.CRON_SECRET,
     // Names only: what /v1/health reports missing, so a deploy without them fails its check.
     missing: [!process.env.DATABASE_URL && "DATABASE_URL", !process.env.CRON_SECRET && "CRON_SECRET"].filter(Boolean) as string[],
+    // Where Vercel's edge places the request, from its IP address: counted into the countries'
+    // totals, never kept with a batch.
+    country: request.headers.get("x-vercel-ip-country"),
   });
 
 export const GET = serve;

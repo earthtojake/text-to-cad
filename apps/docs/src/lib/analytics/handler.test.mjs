@@ -15,18 +15,23 @@ const BATCH = {
   ],
 };
 
+// A store in memory, all in one week: an install has been seen this week and month once it has rows.
 function memory() {
   const rows = [];
+  const tallies = [];
   return {
     rows,
+    tallies,
     async insert(batch) { rows.push(...batch); },
+    async seen(id) { const any = rows.some(row => row.install_id === id); return { week: any, month: any }; },
+    async tally(country, periods) { tallies.push([country, ...periods]); },
     async forget(id) { for (let i = rows.length - 1; i >= 0; i -= 1) if (rows[i].install_id === id) rows.splice(i, 1); },
     async prune(days) { this.pruned = days; return 0; },
   };
 }
-const send = (store, method, path, body, headers = {}) => handle(new Request(`https://api.texttocad.dev${path}`, {
+const send = (store, method, path, body, headers = {}, country = 'DE') => handle(new Request(`https://api.texttocad.dev${path}`, {
   method, headers: { 'content-type': 'application/json', ...headers }, body: body === undefined ? undefined : typeof body === 'string' ? body : JSON.stringify(body),
-}), store, { cronSecret: 'secret' });
+}), store, { cronSecret: 'secret', country });
 
 test('a batch becomes one row per event, carrying its context and nothing else', async () => {
   const store = memory();
@@ -40,6 +45,20 @@ test('a batch becomes one row per event, carrying its context and nothing else',
     ['file', null, '3f9a1c0be47d2a55', 'step', 1, 0],
   ]);
   assert.deepEqual(Object.keys(store.rows[0]).sort(), ['arch', 'calls', 'client', 'client_version', 'errors', 'event', 'file', 'install_id', 'kind', 'platform', 'presentation', 'session_id', 'source', 'tool', 'version']);
+});
+
+test('where installs are is kept as totals: each counts once a week and a month, never beside its rows', async () => {
+  const store = memory();
+  await send(store, 'POST', '/v1/events', BATCH);
+  await send(store, 'POST', '/v1/events', BATCH); // the same install again: already counted
+  const other = { ...BATCH, install: '5d7a3d6e-91c2-4f0e-8b7a-0f6c1e2d3a4b' };
+  await send(store, 'POST', '/v1/events', other, {}, 'not a country'); // the host could not tell
+  assert.deepEqual(store.tallies, [['DE', 'week', 'month'], ['ZZ', 'week', 'month']]);
+  assert.ok(store.rows.every(row => !('country' in row)));
+  // A side count: when the totals fail, the batch is still stored.
+  const broken = { ...memory(), async tally() { throw Object.assign(new Error('relation "countries" does not exist'), { code: '42P01' }); } };
+  assert.equal((await send(broken, 'POST', '/v1/events', BATCH)).status, 204);
+  assert.equal(broken.rows.length, BATCH.events.length);
 });
 
 test('anything outside the contract is refused and stores nothing', async () => {
@@ -60,7 +79,7 @@ test('anything outside the contract is refused and stores nothing', async () => 
   ]) assert.equal((await send(store, 'POST', '/v1/events', bad)).status, 400, JSON.stringify(bad));
   assert.equal((await send(store, 'POST', '/v1/events', '{')).status, 400);
   assert.equal((await send(store, 'POST', '/v1/events', 'x'.repeat(20_000))).status, 400);
-  assert.deepEqual(store.rows, []);
+  assert.deepEqual([store.rows, store.tallies], [[], []]);
 });
 
 test('an install id forgets everything sent under it; pruning is the cron\'s alone', async () => {
