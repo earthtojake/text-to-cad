@@ -645,8 +645,7 @@ so it does not follow `main`: there the monorepo's files, workflows, lockfile
 and binaries would all be held for a reviewer, and every install would copy
 them. It follows the `claude-plugin` branch, which `Publish Release` writes on
 each release: one commit whose tree is `.claude-plugin/plugin.json` and
-`icon.png`, `claude.mcp.json` (the CAD server the manifest names), `skills/`,
-`LICENSE` and `README.md`, with each README link to a
+`icon.png`, `skills/`, `LICENSE` and `README.md`, with each README link to a
 file outside that tree pointed at the release commit on GitHub. A release whose
 plugin did not change adds no commit. The directory scans each new commit and
 publishes it by the listing's publish setting.

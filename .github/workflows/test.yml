@@ -80,7 +80,6 @@ jobs:
               - '.claude-plugin/**'
               - '.codex-plugin/**'
               - 'codex.mcp.json'
-              - 'claude.mcp.json'
               - 'package.json'
               - 'package-lock.json'
               - '.gitattributes'
