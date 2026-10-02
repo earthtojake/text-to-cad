@@ -5,11 +5,12 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { siteConfig } from "@/lib/site";
 import "./globals.css";
 
+// A new name for a new picture: the platforms that unfurl links cache a preview by its URL.
 const socialPreview = {
-  url: "/social-preview-gear.png",
+  url: "/social-preview.png",
   width: 1200,
   height: 630,
-  alt: "text-to-cad homepage showing a planetary gear CAD model",
+  alt: "text-to-cad: Give your agent CAD superpowers. 100% open source and free. A planetary gear assembly rendered from its STEP file.",
 };
 
 const themeScript = `
@@ -56,6 +57,8 @@ export const metadata: Metadata = {
   },
   description: siteConfig.description,
   keywords: siteConfig.keywords,
+  authors: [{ name: siteConfig.author.name, url: siteConfig.author.url }],
+  creator: siteConfig.author.name,
   alternates: {
     canonical: "/",
   },
@@ -66,11 +69,13 @@ export const metadata: Metadata = {
     siteName: siteConfig.name,
     images: [socialPreview],
     type: "website",
+    locale: "en_US",
   },
   twitter: {
     card: "summary_large_image",
     title: siteConfig.title,
     description: siteConfig.description,
+    creator: siteConfig.author.handle,
     images: [socialPreview],
   },
   icons: {

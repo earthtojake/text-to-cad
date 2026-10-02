@@ -3,6 +3,7 @@ import { CopyButton } from "@/components/copy-button";
 import { HeroSection } from "@/components/hero-section";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
+import { absoluteUrl, siteConfig } from "@/lib/site";
 
 const skillsInstallCommand = "npx skills add earthtojake/text-to-cad";
 
@@ -194,10 +195,42 @@ function SkillLink({ skill }: { skill: (typeof skillGroups)[number] }) {
   );
 }
 
+// What search engines read about the project: the site, and the free, open-source software it is.
+const structuredData = {
+  "@context": "https://schema.org",
+  "@graph": [
+    {
+      "@type": "WebSite",
+      "@id": absoluteUrl("/#website"),
+      name: siteConfig.name,
+      url: absoluteUrl("/"),
+      description: siteConfig.description,
+    },
+    {
+      "@type": "SoftwareApplication",
+      name: siteConfig.name,
+      url: absoluteUrl("/"),
+      description: siteConfig.description,
+      applicationCategory: "DesignApplication",
+      operatingSystem: "macOS, Windows, Linux",
+      offers: { "@type": "Offer", price: "0", priceCurrency: "USD" },
+      license: "https://opensource.org/licenses/MIT",
+      image: absoluteUrl("/social-preview.png"),
+      sameAs: [siteConfig.repository],
+      author: { "@type": "Person", name: siteConfig.author.name, url: siteConfig.author.url },
+    },
+  ],
+};
+
 export default function Home() {
   return (
     <main className="min-h-screen bg-background text-foreground">
-      <SiteHeader />
+      <script
+        type="application/ld+json"
+        // JSON, with `<` escaped so nothing in it can close the script tag.
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(structuredData).replace(/</g, "\\u003c") }}
+      />
+      <SiteHeader heroWordmark />
 
       <div className="mx-auto w-full max-w-[1200px] px-4 py-6 sm:px-6">
         <div className="min-w-0 space-y-2">

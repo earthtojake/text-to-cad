@@ -6,8 +6,9 @@ export function HeroSection() {
   return (
     <section className="space-y-8">
       <div className="space-y-6 pt-4 sm:pt-6">
-        <h1 className="sr-only">text.to.cad</h1>
+        <h1 className="sr-only">text-to-cad: Give your agent CAD superpowers</h1>
         <Image
+          id="hero-wordmark"
           src={wordmark}
           alt=""
           priority

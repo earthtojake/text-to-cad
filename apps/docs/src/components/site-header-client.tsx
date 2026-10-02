@@ -1,8 +1,8 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useState } from "react";
 import Link from "next/link";
+import { useEffect, useState } from "react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Button } from "@/components/ui/button";
 import {
@@ -10,6 +10,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { cn } from "@/lib/utils";
 
 const NAV_SECTIONS = [
   { id: "installation", label: "Install" },
@@ -73,15 +74,31 @@ function VersionLink({ version }: { version: string }) {
 }
 
 export function SiteHeaderClient({
+  heroWordmark,
   githubStars,
   discordUrl,
   version,
 }: {
+  heroWordmark: boolean;
   githubStars: number | null;
   discordUrl: string;
   version: string;
 }) {
   const [activeSection, setActiveSection] = useState<string>("installation");
+  // The hero's wordmark in sight (below this header). A phone's navbar has no section links, so once
+  // the wordmark is out of sight -- scrolled away, or a page without one -- the CAD logo takes the
+  // corner, a way back home.
+  const [wordmarkInSight, setWordmarkInSight] = useState(heroWordmark);
+
+  useEffect(() => {
+    const wordmark = heroWordmark ? document.getElementById("hero-wordmark") : null;
+    if (!wordmark) return;
+    const observer = new IntersectionObserver(([entry]) => setWordmarkInSight(entry.isIntersecting), {
+      rootMargin: "-56px 0px 0px 0px", // this sticky header's height: under it is out of sight
+    });
+    observer.observe(wordmark);
+    return () => observer.disconnect();
+  }, [heroWordmark]);
 
   useEffect(() => {
     let frame = 0;
@@ -130,19 +147,22 @@ export function SiteHeaderClient({
         <Link
           href="/"
           aria-label="text-to-cad home"
-          className="flex shrink-0 items-center text-foreground transition hover:text-primary"
+          aria-hidden={wordmarkInSight || undefined}
+          tabIndex={wordmarkInSight ? -1 : undefined}
+          className={cn(
+            "flex shrink-0 items-center transition-opacity duration-200 sm:hidden",
+            wordmarkInSight && "pointer-events-none opacity-0"
+          )}
         >
           <Image
             src="/brand/logo-cad.svg"
             alt=""
             width={52}
             height={22}
-            priority
             unoptimized
             className="h-[22px] w-auto shrink-0"
           />
         </Link>
-
         <nav
           aria-label="Primary"
           className="hidden items-center gap-1 sm:flex"
