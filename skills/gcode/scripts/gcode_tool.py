@@ -74,11 +74,6 @@ BACKEND_APP_GLOBS = {
     "orcaslicer": ["OrcaSlicer*.app/Contents/MacOS/OrcaSlicer"],
     "prusa-slicer": ["PrusaSlicer*.app/Contents/MacOS/PrusaSlicer"],
 }
-BACKEND_ENV_VARS = {
-    "orcaslicer": "ORCASLICER_BIN",
-    "prusa-slicer": "PRUSASLICER_BIN",
-    "curaengine": "CURAENGINE_BIN",
-}
 BAMBU_EXECUTABLES = ["bambu-studio", "BambuStudio"]
 SUPPORTED_GCODE_COMMANDS = {
     "G0",
@@ -188,8 +183,20 @@ def find_app_executable(backend: str) -> str | None:
     return None
 
 
+def backend_env_override(backend: str) -> str:
+    # Each name is spelled out: claude.ai's plugin scan reads an environment variable
+    # named only at run time as a possible credential.
+    if backend == "orcaslicer":
+        return os.environ.get("ORCASLICER_BIN", "").strip()
+    if backend == "prusa-slicer":
+        return os.environ.get("PRUSASLICER_BIN", "").strip()
+    if backend == "curaengine":
+        return os.environ.get("CURAENGINE_BIN", "").strip()
+    return ""
+
+
 def find_backend_executable(backend: str, *, search_path: str | None = None) -> str | None:
-    env_value = os.environ.get(BACKEND_ENV_VARS[backend], "").strip()
+    env_value = backend_env_override(backend)
     if env_value:
         return env_value
     return find_executable(BACKEND_EXECUTABLES[backend], search_path=search_path) or find_app_executable(backend)

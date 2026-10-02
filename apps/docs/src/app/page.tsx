@@ -97,7 +97,7 @@ const skillGroups = [
     name: "Bambu Labs",
     path: "skills/bambu-labs",
     summary:
-      "Dry-runs, uploads, and cautiously starts local Bambu Lab print jobs from validated .gcode.",
+      "Sends prints to Bambu Lab printers through Bambu Connect, Bambu Lab's official app, or Bambu Studio.",
   },
 ];
 

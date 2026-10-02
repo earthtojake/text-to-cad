@@ -79,6 +79,5 @@ Always run a dry-run first and inspect the emitted command before `--execute`.
 ## Source Links
 
 - FullControl procedural G-code context: https://github.com/FullControlXYZ/fullcontrol
-- bambox Bambu packaging reference only: https://pypi.org/project/bambox/
 - trimesh mesh format support: https://trimesh.org/formats.html
 - CuraEngine slicing background: https://github.com/Ultimaker/CuraEngine/wiki/Slicing

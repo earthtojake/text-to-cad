@@ -134,4 +134,4 @@ Read `references/gcode-validation.md` when interpreting validation output or dec
 
 ## Bambu Boundary
 
-This skill generates plain `.gcode` only. It does not create Bambu `.gcode.3mf` archives and does not contact printers. For Bambu upload/start workflows, hand off the validated plain `.gcode` to `$bambu-labs`. Let `$bambu-labs` choose the printer-specific LAN handoff, such as an A1 Mini template project or an explicitly enabled bambox project package.
+This skill generates plain `.gcode` only. It does not create Bambu `.gcode.3mf` archives and does not contact printers. To print on a Bambu Lab printer, hand the validated `.gcode` to `$bambu-labs`, which opens it in Bambu Connect; a `.gcode.3mf` sliced in Bambu Studio or OrcaSlicer is the more reliable input.
