@@ -519,8 +519,10 @@ on every push:
 - **No LFS-tracked path under `skills/`.** Installers clone without git-lfs and
   receive pointer files. `models/` and `assets/` stay LFS: nothing installs
   them, `.lfsconfig` excludes them from default fetches (a fresh clone is ~27 MB
-  with `models/` as pointers), and `.gitattributes` export-ignores `models/`
-  from archives.
+  with `models/` as pointers).
+- **No `export-ignore` or `export-subst` in `.gitattributes`.** The repository
+  root is the plugin, and claude.ai's plugin directory refuses one whose
+  archive would differ from what people install.
 - **No skill reaching into a repo root.** `packages/` being present is not
   permission to import from it: the Skills CLI installs `skills/<name>` alone,
   so `../../../packages/` would work in a checkout and break on the first

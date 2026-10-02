@@ -46,10 +46,10 @@ checkout's editable install reports that same version, so the pin is satisfied
 in development too — install `requirements-dev.txt`, never a skill's
 `requirements.txt` on its own (that fetches the previous release from PyPI).
 `models/` stays on `main` as LFS pointers (`.lfsconfig` excludes it from
-default fetches; `.gitattributes` export-ignores it from archives); nothing
-installs it. `scripts/github-workflows/check-builds.sh` enforces the shipping
-contract on every push: no tracked symlink, no LFS path under `skills/`, no
-skill reaching into a repo root. See the Releases section in `CONTRIBUTING.md`
+default fetches); nothing installs it. `scripts/github-workflows/check-builds.sh`
+enforces the shipping contract on every push: no tracked symlink, no LFS path
+under `skills/`, no skill reaching into a repo root, no `export-ignore` or
+`export-subst` in `.gitattributes` (claude.ai's plugin directory rejects them). See the Releases section in `CONTRIBUTING.md`
 for the full flow, the resume path, the rehearsal, and local/manual fallbacks.
 
 ## Repo Map

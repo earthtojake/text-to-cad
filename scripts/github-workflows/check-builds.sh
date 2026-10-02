@@ -87,7 +87,9 @@ check_generated_path() {
 #   * no LFS-tracked path under skills/: installers clone without git-lfs and get
 #     pointer files, which for a skill fixture or runtime asset is a silently broken
 #     install. models/ and assets/ stay LFS: nothing installs them, .lfsconfig keeps
-#     them as pointers, and .gitattributes export-ignores models/ from archives;
+#     them as pointers;
+#   * no export-ignore/export-subst in any .gitattributes: the repo root is the plugin,
+#     and claude.ai's plugin directory refuses one whose archive differs from its clone;
 #   * no skill reaching into a repo root (../../../packages/, apps/, tests/, models/):
 #     the Skills CLI installs skills/<name> alone, so the sibling is not there.
 check_tree_has_no_symlinks() {
@@ -112,6 +114,18 @@ check_skills_have_no_lfs_paths() {
   fi
 }
 
+check_no_export_attributes() {
+  local rules
+  rules="$(git -C "$REPO_ROOT" ls-files -z -- '.gitattributes' '*/.gitattributes' \
+    | xargs -0 -r -I{} grep -HnE '^[^#]*export-(ignore|subst)' "$REPO_ROOT/{}" || true)"
+  if [ -n "$rules" ]; then
+    echo "claude.ai's plugin directory refuses a plugin whose .gitattributes changes the" >&2
+    echo "archive (export-ignore/export-subst); remove these rules:" >&2
+    printf '%s\n' "$rules" | sed 's/^/  /' >&2
+    exit 1
+  fi
+}
+
 check_skills_do_not_reach_repo_roots() {
   local refs
   refs="$(
@@ -128,6 +142,7 @@ check_skills_do_not_reach_repo_roots() {
 check_tree_has_no_symlinks
 check_skills_have_no_lfs_paths
 check_skills_do_not_reach_repo_roots
+check_no_export_attributes
 
 # The runtime has to exist before its layout can be checked, and nothing in the
 # repository carries it: either this run builds it or the workflow already did.

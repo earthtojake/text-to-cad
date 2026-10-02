@@ -24,6 +24,6 @@ apps/docs/public/hero/** !filter !diff !merge -text
 # (CI checks out without LFS, so this one fixture must be real text).
 tests/fixtures/cad/import-smoke.step !filter !diff !merge text
 
-# The fixture corpus is LFS and never installed; archives (tarball installers,
-# GitHub source downloads) omit it. Clones keep it as pointers via .lfsconfig.
-models/ export-ignore
+# No archive-changing rules here: the repository root is the plugin, and claude.ai's
+# directory refuses a plugin whose archive differs from its clone. models/ ships as
+# small LFS pointers either way (.lfsconfig).
