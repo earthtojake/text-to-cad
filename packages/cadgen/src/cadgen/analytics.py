@@ -143,6 +143,7 @@ def _read(path: Path) -> dict[str, Any] | None:
 
 
 _UNKEPT: set[Path] = set()  # settings a write failed for in this process: it asks about them no more
+_UNREAD = object()  # a process's first batch, before its first use: the answer it began under is not read yet
 
 
 def _update(path: Path, change: Callable[[dict[str, Any]], dict[str, Any]]) -> dict[str, Any] | None:
@@ -393,7 +394,7 @@ class Recorder:
         self._views = 0
         self._files: dict[str, str] = {}  # absolute path -> kind; paths never leave this process
         self._sent: set[str] = set()  # "day:code" of files sent today: each goes once a day
-        self._basis = self._decision()  # the answer in force when what is noted now began to be noted
+        self._basis: Any = _UNREAD  # the answer in force when what is noted now began to be noted
         self._off = False  # a no this process could not keep: nothing more is sent from it
         self._timer: threading.Event | None = None
         self._describe()
@@ -409,6 +410,17 @@ class Recorder:
     def _decision(self) -> Any:
         """When the answer in force now was given: which answer it is (``None``: none, or none readable)."""
         return (_read(self.path or settings_path()) or {}).get("decidedAt")
+
+    def _first_use(self) -> Any:
+        """The answer the first batch began under, read as its first use is noted -- not at start, where
+        ``cadgen mcp`` reads nothing of the person's until a tool needs it -- and ``_UNREAD`` once known.
+        Every later batch begins under the answer the flush before it read."""
+        return self._decision() if self._basis is _UNREAD else _UNREAD
+
+    def _begin(self, answer: Any) -> None:
+        """Under the lock, before noting a use: the first batch's answer, unless a flush or choice set one."""
+        if self._basis is _UNREAD:
+            self._basis = answer
 
     @_guarded(lambda: dict(UNAVAILABLE))
     def status(self) -> dict[str, Any]:
@@ -444,7 +456,9 @@ class Recorder:
         # Noted in memory only: a flush without consent drops it (and reads nothing until then).
         if tool in UNCOUNTED:
             return
+        answer = self._first_use()
         with self._lock:
+            self._begin(answer)
             calls = self._counts.setdefault(tool, [0, 0])
             calls[0] += 1
             calls[1] += 0 if ok else 1
@@ -452,7 +466,9 @@ class Recorder:
     @_guarded(lambda: None)
     def viewed(self) -> None:
         """A person touched a CAD view, or it switched models."""
+        answer = self._first_use()
         with self._lock:
+            self._begin(answer)
             self._views += 1
 
     @_guarded(lambda: None)
@@ -464,7 +480,9 @@ class Recorder:
         if kind is None:
             return
         path = os.path.abspath(path)  # one file, however a view spelled it: one code, once (the receiver refuses repeats)
+        answer = self._first_use()
         with self._lock:
+            self._begin(answer)
             if path in self._files or len(self._files) < FILES_PENDING:
                 self._files[path] = kind
 
@@ -488,8 +506,8 @@ class Recorder:
             if not found["sharing"] or salt is None:
                 return False
             # Noted under an earlier answer -- before a yes given in the other app (this one's own clears what
-            # it noted): never sent. Which answer, not whether it came later: Windows' clock moves in 16 ms
-            # steps, so a yes and the batch it lands in can share a time.
+            # it noted) -- or under one never read: never sent. Which answer, not whether it came later:
+            # Windows' clock moves in 16 ms steps, so a yes and the batch it lands in can share a time.
             if decided != basis:
                 return False
             self._sent = {entry for entry in self._sent if entry.startswith(f"{day}:")}
