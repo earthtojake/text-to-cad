@@ -29,7 +29,7 @@ class ViewerAnalyticsTest(unittest.TestCase):
         environment = mock.patch.dict(os.environ, {"CADGEN_STATE_DIR": str(self.tmp / "state"), "DO_NOT_TRACK": "", "CADGEN_ANALYTICS": ""})
         environment.start()
         self.addCleanup(environment.stop)
-        self.state = self.tmp / "state" / "analytics.json"
+        self.state = self.tmp / "state" / "settings.json"
         self.sent: list[dict] = []
         self.app = create_cad_app(root=str(self.root), host="127.0.0.1", port=0)
         self.app.analytics = Recorder(path=self.state, send=lambda payload: self.sent.append(payload) or True)
@@ -64,7 +64,7 @@ class ViewerAnalyticsTest(unittest.TestCase):
         self.assertEqual(self.request("GET", "/__cad/analytics")[1]["ask"], False)
         # The answer is the person's, in the state directory every CAD app reads: the CAD app's
         # server sees the same no.
-        self.assertEqual(json.loads(self.state.read_text(encoding="utf-8"))["choice"], "off")
+        self.assertEqual(json.loads(self.state.read_text(encoding="utf-8"))["analytics"]["choice"], "off")
 
     def test_what_the_page_did_is_sent_only_with_consent_and_a_file_only_as_its_code(self) -> None:
         self.request("POST", "/__cad/analytics/activity", {"file": "parts/a.stl", "touched": True})

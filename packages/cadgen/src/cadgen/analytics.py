@@ -28,7 +28,8 @@ Nothing is sent without the person's yes, however CAD was installed. Strongest f
 
 1. The environment: ``DO_NOT_TRACK=1`` or ``CADGEN_ANALYTICS=0`` turns it off,
    ``CADGEN_ANALYTICS=1`` on.
-2. The person's choice, kept in the state directory (``analytics.json``) and shared by both apps:
+2. The person's choice, kept as the ``analytics`` section of their settings (``cadgen/settings.py``:
+   ``settings.json`` in the state directory) and shared by both apps:
    either app's card or its Settings, ``cadgen analytics on|off``, or the agent's
    ``cad_analytics`` (off only).
 3. Otherwise nothing is sent, and whichever app the person opens first asks once.
@@ -75,7 +76,8 @@ import time
 import uuid
 from pathlib import Path
 
-from cadgen._internal.atomic_replace import temp_suffix, write_bytes_atomic
+from cadgen._internal.atomic_replace import temp_suffix
+from cadgen.settings import read_section, settings_path, write_section
 from typing import Any, Callable
 
 LOG = logging.getLogger("cadgen.analytics")
@@ -107,29 +109,22 @@ UNAVAILABLE = {"sharing": False, "reason": "unavailable", "id": None}
 _OFF, _ON = ("0", "off", "false", "no"), ("1", "on", "true", "yes")
 
 
-def state_path() -> Path:
-    from cadgen.viewer.recents import state_dir
-
-    return state_dir() / "analytics.json"
-
-
 def endpoint() -> str:
     """The receiver: ``CADGEN_ANALYTICS_URL`` (for a local receiver) when it is http(s), else ours."""
     override = str(os.environ.get("CADGEN_ANALYTICS_URL") or "").strip().rstrip("/")
     return override if override.startswith(("https://", "http://")) else ENDPOINT
 
 
+SECTION = "analytics"  # this module's part of the settings file
+
+
 def _read(path: Path) -> dict[str, Any]:
-    try:
-        kept = json.loads(path.read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        return {}
-    return kept if isinstance(kept, dict) else {}
+    return read_section(SECTION, path=path)
 
 
 def _write(path: Path, kept: dict[str, Any]) -> None:
     try:
-        write_bytes_atomic(path, json.dumps(kept).encode("utf-8"))
+        write_section(SECTION, kept, path=path)
     except OSError:  # a state directory it cannot write leaves the choice unmade
         LOG.debug("could not keep the analytics choice in %s", path, exc_info=True)
 
@@ -189,7 +184,7 @@ def status(*, path: Path | None = None) -> dict[str, Any]:
     ``unavailable`` (nothing is sent, and nobody is asked: no answer could be kept).
     Sharing makes the install's id and file salt where they are missing.
     """
-    path = path or state_path()
+    path = path or settings_path()
     kept = _read(path)
     forced = _environment()
     if forced is not None:
@@ -209,7 +204,7 @@ def status(*, path: Path | None = None) -> dict[str, Any]:
 
 def file_salt(path: Path | None = None) -> bytes | None:
     """This install's file salt: made with its id, never sent, gone when sharing is turned off."""
-    value = _read(path or state_path()).get("salt")
+    value = _read(path or settings_path()).get("salt")
     return bytes.fromhex(value) if _is_salt(value) else None
 
 
@@ -225,7 +220,7 @@ def choose(share: bool, *, by: str, path: Path | None = None,
     whether it said it did). Without ``forget`` -- the server's way, which never waits on the
     network (``Recorder.choose``) -- or until the receiver answers, the id waits as ``forget``,
     used for nothing else, and every flush asks again (``forget_pending``)."""
-    path = path or state_path()
+    path = path or settings_path()
     kept = _read(path)
     previous = kept.get("id") if isinstance(kept.get("id"), str) else None
     pending = _pending(kept)
@@ -244,7 +239,7 @@ def choose(share: bool, *, by: str, path: Path | None = None,
 
 def forget_pending(*, path: Path | None = None, forget: Callable[[str], bool] | None = None) -> None:
     """Ask the receiver again to delete what it holds under ids turned off while it was not asked or not reached."""
-    path = path or state_path()
+    path = path or settings_path()
     pending = _pending(_read(path))
     if not pending:
         return

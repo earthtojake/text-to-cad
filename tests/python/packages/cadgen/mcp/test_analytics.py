@@ -25,7 +25,7 @@ class _Tmp(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
-        self.path = self.tmp / "analytics.json"
+        self.path = self.tmp / "settings.json"
         environment = mock.patch.dict("os.environ", QUIET)
         environment.start()
         self.addCleanup(environment.stop)
@@ -68,12 +68,12 @@ class ConsentTest(_Tmp):
         choose(True, by="cli", path=self.path)
         offline = status(path=self.path)["id"]
         self.assertEqual(choose(False, by="app", path=self.path, forget=lambda id: False)["forgotten"], False)
-        self.assertEqual(json.loads(self.path.read_text(encoding="utf-8"))["forget"], [offline])
+        self.assertEqual(json.loads(self.path.read_text(encoding="utf-8"))["analytics"]["forget"], [offline])
         self.assertEqual(status(path=self.path)["id"], None)
         heard = []
         forget_pending(path=self.path, forget=lambda id: heard.append(id) or True)
         self.assertEqual(heard, [offline])
-        self.assertNotIn("forget", json.loads(self.path.read_text(encoding="utf-8")))
+        self.assertNotIn("forget", json.loads(self.path.read_text(encoding="utf-8"))["analytics"])
         choose(True, by="cli", path=self.path)
         # A yes to less than is sent now is asked again; a no is never asked again.
         with mock.patch("cadgen.analytics.DISCLOSURE", 2):
@@ -102,9 +102,9 @@ class NoMeansNoTest(_Tmp):
     def test_where_no_answer_could_be_kept_nobody_is_asked(self) -> None:
         # A file where the state folder would go: no folder can be made, on any platform or user.
         (self.tmp / "taken").write_text("", encoding="utf-8")
-        self.assertEqual(status(path=self.tmp / "taken" / "state" / "analytics.json")["reason"], "unavailable")
+        self.assertEqual(status(path=self.tmp / "taken" / "state" / "settings.json")["reason"], "unavailable")
         self.assertEqual(status(path=self.path)["reason"], "unasked")
-        self.assertEqual(list(self.tmp.glob("analytics.json*")), [], "the try leaves nothing behind")
+        self.assertEqual(list(self.tmp.glob("settings.json*")), [], "the try leaves nothing behind")
 
 
 class ServerCountsTest(_Tmp):

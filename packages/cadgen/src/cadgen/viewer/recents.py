@@ -25,7 +25,6 @@ again -- then its canonical one.
 
 from __future__ import annotations
 
-import contextlib
 import hashlib
 import json
 import os
@@ -37,6 +36,7 @@ from pathlib import Path
 from typing import Any, Iterator
 
 from cadgen._internal.atomic_replace import write_bytes_atomic
+from cadgen._internal.file_lock import exclusive
 
 SCHEMA = 1
 LIMIT = 200
@@ -198,25 +198,5 @@ class RecentStore:
                 folded.append({"v": SCHEMA, "t": entry.pictured or entry.opened, "op": "picture", "path": entry.path, "thumbnail": entry.thumbnail})
         write_bytes_atomic(self.log, "".join(json.dumps(event, separators=(",", ":")) + "\n" for event in folded).encode("utf-8"))
 
-    @contextlib.contextmanager
     def _locked(self):
-        lock_path = self.root / "recents.lock"
-        with open(lock_path, "a+b") as handle:
-            if sys.platform == "win32":
-                import msvcrt
-
-                handle.seek(0)
-                msvcrt.locking(handle.fileno(), msvcrt.LK_LOCK, 1)
-                try:
-                    yield
-                finally:
-                    handle.seek(0)
-                    msvcrt.locking(handle.fileno(), msvcrt.LK_UNLCK, 1)
-            else:
-                import fcntl
-
-                fcntl.flock(handle.fileno(), fcntl.LOCK_EX)
-                try:
-                    yield
-                finally:
-                    fcntl.flock(handle.fileno(), fcntl.LOCK_UN)
+        return exclusive(self.root / "recents.lock")

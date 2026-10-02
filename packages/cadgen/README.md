@@ -356,6 +356,11 @@ src/cadgen/
   step_scene.py          # read_step and read_scene
   assembly.py            # label utilities and softly deprecated AssemblyHelper
   results.py             # the typed Results every verb returns (stdlib-only)
+  settings.py            # the person's settings: settings.json in the state
+                         #   directory, a section per feature, shared by
+                         #   every app and version of cadgen
+  analytics.py           # the CAD apps' anonymous usage counts, with consent
+                         #   (its answer: settings.json's `analytics` section)
   store/                 # the store (STORE.md): objects, index, records, trees,
                          #   closure, gate, materialize, publish, lazy, gc, view
   cli/                   # generated command shells, one per <format> <verb>

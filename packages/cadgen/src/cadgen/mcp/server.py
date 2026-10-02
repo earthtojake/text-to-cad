@@ -223,9 +223,10 @@ class Server:
         """Anonymous counts of this process's tool calls, sent only with consent (``cadgen/analytics.py``)."""
         if self._analytics is None:
             from cadgen.analytics import Recorder
+            from cadgen.settings import FILE
 
-            # Beside the model library (the state directory, by default): shared by every process.
-            path = Path(self._recents.root).parent / "analytics.json" if self._recents is not None else None
+            # The settings beside the model library (the state directory, by default): shared by every process.
+            path = Path(self._recents.root).parent / FILE if self._recents is not None else None
             self._analytics = Recorder(path=path)
         return self._analytics
 
