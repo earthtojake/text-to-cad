@@ -116,8 +116,8 @@ check_skills_have_no_lfs_paths() {
 
 check_no_export_attributes() {
   local rules
-  rules="$(git -C "$REPO_ROOT" ls-files -z -- '.gitattributes' '*/.gitattributes' \
-    | xargs -0 -r -I{} grep -HnE '^[^#]*export-(ignore|subst)' "$REPO_ROOT/{}" || true)"
+  rules="$(git -C "$REPO_ROOT" grep -nE '^[[:space:]]*[^#[:space:]].*export-(ignore|subst)' \
+    -- '.gitattributes' '*/.gitattributes' || true)"
   if [ -n "$rules" ]; then
     echo "claude.ai's plugin directory refuses a plugin whose .gitattributes changes the" >&2
     echo "archive (export-ignore/export-subst); remove these rules:" >&2

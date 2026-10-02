@@ -509,7 +509,7 @@ package (`.claude-plugin/` and `.codex-plugin/` hold the manifests; the plugin's
 skills are `skills/` directly), so whatever is on `main` is what agent
 installers copy.
 
-Three consequences are enforced by `scripts/github-workflows/check-builds.sh`
+Four consequences are enforced by `scripts/github-workflows/check-builds.sh`
 on every push:
 
 - **No tracked symlink, anywhere.** The installers disagree about symlinks and
