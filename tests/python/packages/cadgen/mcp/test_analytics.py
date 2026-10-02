@@ -101,7 +101,7 @@ class NoMeansNoTest(_Tmp):
 
     def test_where_no_answer_could_be_kept_nobody_is_asked(self) -> None:
         # A file where the state folder would go: no folder can be made, on any platform or user.
-        (self.tmp / "taken").write_text("")
+        (self.tmp / "taken").write_text("", encoding="utf-8")
         self.assertEqual(status(path=self.tmp / "taken" / "state" / "analytics.json")["reason"], "unavailable")
         self.assertEqual(status(path=self.path)["reason"], "unasked")
         self.assertEqual(list(self.tmp.glob("analytics.json*")), [], "the try leaves nothing behind")
