@@ -6,7 +6,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 import { cn } from "@text-to-cad/ui/utils";
 
-import { DiscordMark, GitHubMark, XMark } from "./brandMarks.jsx";
+import { DiscordMark, GitHubMark } from "./brandMarks.jsx";
 import { issueUrl } from "./links.js";
 import wordmark from "../../assets/logo-cad.svg";
 
@@ -14,8 +14,8 @@ import wordmark from "../../assets/logo-cad.svg";
  * The host's links (`ViewerHost.links`, built by `viewerLinks` in `links.js`), as the viewer shows
  * them. A newer release the host found (`links.latest`) is a blue download button — nothing at all
  * when there is none — whose menu says what is new and how this host updates (`UpdateButton`).
- * X, Discord and GitHub are icon links (`CommunityLinks`) at the right of the Settings popover's
- * footer, the version at its left; GitHub alone (`GitHubLink`) is also in the navbar and under the home's wordmark, before
+ * The Settings popover's footer has "Made by @…" (`MadeBy`, the host's X account) at its left and
+ * Discord and GitHub (`CommunityLinks`) at its right; the version is beside its title; GitHub alone (`GitHubLink`) is also in the navbar and under the home's wordmark, before
  * Feedback (`FeedbackLink`), which opens a new issue. Settings follows them. Every link opens the
  * host's way: a page that can open one itself follows an ordinary link to a new tab; a page in a
  * frame that cannot hands it to `links.open` (the host's own browser). Copies go through the
@@ -37,13 +37,12 @@ export function useFollow(links, onError) {
 }
 
 /**
- * X, Discord and GitHub, as icon links, in that order.
+ * Discord and GitHub, as icon links, in that order (X is "Made by @…", `MadeBy`).
  * @param {{ links: import("../../host/types.js").ViewerLinks, onError?: (error: Error) => void }} props
  */
 export function CommunityLinks({ links, onError }) {
   const follow = useFollow(links, onError);
   return <>
-    <IconLink href={links.x} label="X" icon={XMark} onFollow={follow} />
     <IconLink href={links.discord} label="Discord" icon={DiscordMark} onFollow={follow} />
     <IconLink href={links.github} label="GitHub" icon={GitHubMark} onFollow={follow} />
   </>;
@@ -95,7 +94,7 @@ export function isNewer(candidate, current) {
 }
 
 /**
- * Who made it: "Made by @handle", the host's X account, at the foot of the home.
+ * Who made it: "Made by @handle", the host's X account, at the left of the Settings popover's footer.
  * @param {{ links: import("../../host/types.js").ViewerLinks, onError?: (error: Error) => void }} props
  */
 export function MadeBy({ links, onError }) {

@@ -382,8 +382,9 @@ how this host updates (`links.install`) and what is new; without one, nothing. T
 (`FeedbackLink`), where the host has a tracker (`links.issues`): a new issue titled "Feedback: ",
 for the person to finish, naming the version and `environment.platform`, just before the
 renderer's view controls and never among them. It has no label: the project has none for
-feedback, and what is said may be a bug, a request or a question. The version, X, Discord and
-GitHub (`CommunityLinks`) are the Settings popover's footer (`SettingsPopover`): the version at its left, the links at its right. The home has
+feedback, and what is said may be a bug, a request or a question. The Settings popover
+(`SettingsPopover`) shows the version beside its title, and its footer has "Made by @…" (`MadeBy`, the
+host's X account) at its left and Discord and GitHub (`CommunityLinks`) at its right. The home has
 GitHub, Feedback and Settings under its wordmark, in that order, after the update; its Settings
 holds no Display sections, only the host's own settings. An alert card's Report Issue opens a new issue too,
 titled "Issue: " and labelled `bug`, filled in from the card (`kit/status/reportIssue.js`): its

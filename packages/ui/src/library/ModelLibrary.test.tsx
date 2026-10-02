@@ -35,13 +35,14 @@ it('heads the home with the TEXTTOCAD wordmark over GitHub, Feedback and Setting
   expect(feedback.get('title')).toBe('Feedback: ');
   expect(feedback.get('body')).toContain('- CAD: 0.7.4\n- Platform: win32');
   expect(screen.queryByText('Build things')).toBeNull();
-  // Its foot: who made it, the host's X.
-  expect(screen.getByRole('link', { name: 'Made by @earthtojake' }).getAttribute('href')).toBe('https://x.com/earthtojake');
-  // Settings: the version, X, Discord and GitHub, and the host's own settings; no Display settings.
+  // Settings: the version beside its title, the host's own settings (no Display settings), and a footer:
+  // "Made by @…" (the host's X) at the left, Discord and GitHub at the right.
   fireEvent.click(within(nav).getByRole('button', { name: 'Settings' }));
   const settings = await screen.findByRole('dialog', { name: 'Settings' });
   expect(within(settings).getByText('v0.7.4')).toBeTruthy();
-  expect(within(settings).getAllByRole('link').map(node => node.getAttribute('aria-label'))).toEqual(['X', 'Discord', 'GitHub']);
+  expect(within(settings).getAllByRole('link').map(node => node.getAttribute('aria-label') ?? node.textContent)).toEqual(['Made by @earthtojake', 'Discord', 'GitHub']);
+  expect(within(settings).getByRole('link', { name: 'Made by @earthtojake' }).getAttribute('href')).toBe('https://x.com/earthtojake');
+  expect(settings.querySelector('[data-settings-header] [data-settings-version]')?.textContent).toBe('v0.7.4');
   expect(within(settings).getByText('Analytics')).toBeTruthy();
   expect(within(settings).queryByText('Display')).toBeNull();
   fireEvent.click(within(settings).getByRole('checkbox', { name: 'Share anonymous usage data' }));

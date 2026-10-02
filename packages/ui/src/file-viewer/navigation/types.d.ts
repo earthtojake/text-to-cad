@@ -271,7 +271,7 @@ export const UpdateButton: ComponentType<{
   align?: "start" | "center" | "end";
 }>;
 
-/** X, Discord and GitHub, as icon links, in that order. */
+/** Discord and GitHub, as icon links, in that order (X is the Settings footer's "Made by @…"). */
 export const CommunityLinks: ComponentType<{
   links: import("../../host/types.js").ViewerLinks;
   onError?: (error: Error) => void;

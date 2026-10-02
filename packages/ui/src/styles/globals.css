@@ -54,17 +54,7 @@
  * list of rows. */
 .cad-library { width: 100%; height: 100%; background: var(--background); --cad-library-card: var(--card); --cad-library-line: var(--border); }
 .dark .cad-library { --cad-library-card: color-mix(in oklab, var(--background) 88%, white); --cad-library-line: oklch(1 0 0 / 8%); }
-/* The page is at least as tall as the scroller (a size container: 100cqh is its height), not the frame:
-   a host's top inset pads the frame, and the page must not overflow by it. The footer sits at the
-   bottom of a short page and below the last row of a long one. */
-.cad-library-viewport { container-type: size; }
-.cad-library-page { display: flex; flex-direction: column; min-height: 100cqh; }
-.cad-library-content { box-sizing: border-box; flex: 1 0 auto; width: 100%; max-width: 1128px; margin: 0 auto; padding: 44px 24px 40px; container-type: inline-size; }
-.cad-library-content:last-child { padding-bottom: calc(40px + var(--cad-host-bottom-inset, 0px)); }
-/* The foot: a rule across the page, the maker on the right, clear of a host's composer. */
-.cad-library-footer { display: flex; justify-content: flex-end; border-top: 1px solid var(--border); padding: 16px 24px calc(16px + var(--cad-host-bottom-inset, 0px)); font-size: 12px; line-height: 16px; color: var(--muted-foreground); }
-.cad-library-footer a { color: inherit; text-decoration: none; }
-.cad-library-footer a:hover { color: var(--foreground); }
+.cad-library-content { box-sizing: border-box; width: 100%; max-width: 1128px; margin: 0 auto; padding: 44px 24px calc(40px + var(--cad-host-bottom-inset, 0px)); container-type: inline-size; }
 /* TEXTTOCAD is wide (about 5.9:1): sized by its width, so a narrow sidebar shrinks it rather than cuts it. */
 .cad-library-wordmark { display: block; width: min(100%, 360px); height: auto; margin: 0 auto; user-select: none; -webkit-user-drag: none; }
 /* The byline: the claim in the text colour, the promise in the wordmark's blue (its top faces in the dark, its deeper side in the light). */
