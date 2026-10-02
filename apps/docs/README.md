@@ -162,11 +162,12 @@ a release of cadgen.
 
 Setup, once: a Postgres database (Neon today) with `schema.sql` run in it; the
 domain `api.texttocad.dev` on the docs Vercel project (a DNS-only CNAME at
-Cloudflare, like `www`); and the GitHub Actions secrets `DATABASE_URL` (the
-pooled connection string) and `CRON_SECRET` (any long random string). `Deploy
-Docs` writes those two secrets into the project's production environment
-variables on every deploy (`deploy-vercel-app.sh --env-from`), so changing one
-is `gh secret set` and a redeploy; it also checks `api.texttocad.dev/v1/health`.
+Cloudflare, like `www`); and two of the project's own production environment
+variables, set as Sensitive in the Vercel dashboard: `DATABASE_URL` (the pooled
+connection string) and `CRON_SECRET` (any long random string; Vercel sends it to
+the prune cron as `Authorization: Bearer …`). Nothing in GitHub holds them. A
+changed value takes effect with the next deploy, and `Deploy Docs` checks
+`api.texttocad.dev/v1/health`, which answers `503` while either is missing.
 A schema change means running `schema.sql` again (it is idempotent) on the
 database before deploying; a deploy that went out without it fails that check.
 A Vercel Firewall rate-limit rule on `/v1/*` (answering `429`) is recommended: a
