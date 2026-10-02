@@ -38,9 +38,9 @@
     "termsOfServiceURL": "https://www.texttocad.dev/terms-of-service",
     "supportURL": "https://github.com/earthtojake/text-to-cad/issues/new",
     "defaultPrompt": [
-      "Design a 50 mm aluminum L-bracket with two M5 holes and export it as a STEP file.",
-      "Model a 3D-printable phone stand for my desk and export it as an STL.",
-      "Run a DFM check on my bracket for CNC machining and tell me what to change."
+      "Model a 3D-printable phone stand for my desk.",
+      "Design a 50 mm aluminum L-bracket with two M5 holes.",
+      "Check my bracket for CNC machining and tell me what to change."
     ],
     "brandColor": "#249DDD"
   },

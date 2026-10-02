@@ -119,8 +119,8 @@ export default function PrivacyPolicyPage() {
           </li>
           <li>
             Usage analytics are kept for 13 months, then deleted. We do not store IP addresses with
-            them, and no request log pairs an IP address with an install ID: the ID travels inside the
-            request, which those logs do not record. Turning analytics off deletes everything stored under your install ID; if our server
+            them, and no request log pairs an IP address with an install ID: the ID travels in the body of
+            each request, which those logs do not record. Turning analytics off deletes everything stored under your install ID; if our server
             cannot be reached at that moment, the CAD app asks again until it can.
           </li>
           <li>Everything text-to-cad stores locally stays on your computer until you delete it.</li>

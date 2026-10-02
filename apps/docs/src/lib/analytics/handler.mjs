@@ -29,7 +29,11 @@ async function json(request) {
   try { return JSON.parse(text); } catch { throw new Invalid('the body is not JSON'); }
 }
 
-/** @param {Request} request @param {{ insert(rows: object[]): Promise<void>, forget(id: string): Promise<void>, prune(days: number): Promise<number> }} store */
+/**
+ * @param {Request} request
+ * @param {{ insert(rows: object[]): Promise<void>, forget(id: string): Promise<void>, prune(days: number): Promise<number> }} store
+ * @param {{ cronSecret?: string, missing?: string[] }} [options] `missing`: settings the host lacks, by name (health says so).
+ */
 export async function handle(request, store, { cronSecret, missing = [] } = {}) {
   const { pathname } = new URL(request.url);
   const path = pathname.replace(/^\/api(?=\/|$)/, '').replace(/\/+$/, '');
