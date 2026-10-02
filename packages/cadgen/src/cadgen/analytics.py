@@ -30,6 +30,10 @@ Nothing is sent without the person's yes, however CAD was installed. Strongest f
    (off only).
 3. Otherwise nothing is sent, and the CAD app asks once.
 
+A no, or closing the card, is kept like a yes and never asked again: not after a restart, not
+after an update, not when what is sent grows (``DISCLOSURE`` re-asks only a yes). Where an answer
+could not be kept -- a state directory nothing can write -- the CAD app does not ask at all.
+
 How CAD was installed (``cadgen mcp --install store``, a plugin directory's) is only
 reported, as ``source``: it decides nothing.
 
@@ -157,10 +161,24 @@ def _is_salt(value: Any) -> bool:
     return isinstance(value, str) and len(value) == 64 and all(char in "0123456789abcdef" for char in value)
 
 
+def _can_keep(path: Path) -> bool:
+    """Whether an answer could be written to ``path``: the file, or its nearest existing folder, is writable."""
+    try:
+        if path.exists():
+            return os.access(path, os.W_OK) and os.access(path.parent, os.W_OK)
+        folder = path.parent
+        while not folder.exists() and folder != folder.parent:
+            folder = folder.parent
+        return os.access(folder, os.W_OK)
+    except OSError:
+        return False
+
+
 def status(*, path: Path | None = None) -> dict[str, Any]:
     """``{sharing, reason, id}``: whether counts are sent, why, and under which install id.
 
-    ``reason`` is ``environment``, ``choice`` or ``unasked`` (nothing is sent, and the CAD app asks).
+    ``reason`` is ``environment``, ``choice``, ``unasked`` (nothing is sent, and the CAD app asks) or
+    ``unavailable`` (nothing is sent, and nobody is asked: no answer could be kept).
     Sharing makes the install's id and file salt where they are missing.
     """
     path = path or state_path()
@@ -170,8 +188,10 @@ def status(*, path: Path | None = None) -> dict[str, Any]:
         sharing, reason = forced, "environment"
     elif kept.get("choice") == "off" or (kept.get("choice") == "on" and _disclosure(kept) >= DISCLOSURE):
         sharing, reason = kept["choice"] == "on", "choice"
-    else:
+    elif _can_keep(path):
         sharing, reason = False, "unasked"
+    else:  # an answer would be lost, and the card would ask again on every view
+        sharing, reason = False, "unavailable"
     install_id = kept.get("id") if isinstance(kept.get("id"), str) else None
     if sharing and (install_id is None or not _is_salt(kept.get("salt"))):
         install_id = install_id or str(uuid.uuid4())

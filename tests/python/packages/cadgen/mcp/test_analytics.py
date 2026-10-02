@@ -87,6 +87,27 @@ class ConsentTest(_Tmp):
                 self.assertFalse(status(path=self.path)["sharing"])
 
 
+class NoMeansNoTest(_Tmp):
+    """A no -- or closing the card -- is kept, and the CAD app never asks again."""
+
+    def test_a_no_survives_restarts_updates_and_a_larger_disclosure(self) -> None:
+        choose(False, by="app", path=self.path)  # No thanks, or the card's X
+        no = {"sharing": False, "reason": "choice", "id": None}
+        self.assertEqual(status(path=self.path), no)  # a restart: read from the state directory again
+        with mock.patch("cadgen.analytics.SCHEMA", 2):  # an update that changes what a batch looks like
+            self.assertEqual(status(path=self.path), no)
+        with mock.patch("cadgen.analytics.DISCLOSURE", 99):  # an update that sends more: re-asks only a yes
+            self.assertEqual(status(path=self.path), no)
+
+    def test_where_no_answer_could_be_kept_nobody_is_asked(self) -> None:
+        locked = self.tmp / "locked"
+        locked.mkdir()
+        locked.chmod(0o500)
+        self.addCleanup(locked.chmod, 0o700)
+        self.assertEqual(status(path=locked / "state" / "analytics.json")["reason"], "unavailable")
+        self.assertEqual(status(path=self.path)["reason"], "unasked")
+
+
 class ServerCountsTest(_Tmp):
     def serve(self, install: str | None) -> tuple[Server, list[dict]]:
         sent: list[dict] = []
