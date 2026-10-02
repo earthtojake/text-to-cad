@@ -5,10 +5,12 @@ product and `models/` as the shared fixture/artifact area.
 
 ## Branch First
 
-`main` is the only long-lived branch: the source tree, what installers clone,
-and what releases are cut from. Branch from `main` and open PRs against `main`;
-never push it directly. There is no development symlink layout — every path in
-the tree is the real file.
+`main` is the only branch you develop on: the source tree, what installers
+clone, and what releases are cut from. Branch from `main` and open PRs against
+`main`; never push it directly. There is no development symlink layout — every
+path in the tree is the real file. `claude-plugin`, the plugin claude.ai's
+directory follows, is written only by `Publish Release` (see below); never
+commit to it.
 
 ## Release Workflow
 
@@ -26,6 +28,9 @@ any branch but `release/*`. Releases are two GitHub Actions workflows:
   are bare `0.4.x` tags) + GitHub-Releases that same merged commit with the
   wheel and sdist that went to PyPI attached as release assets, plus the
   plugin ZIP that a person uploads to OpenAI's plugin portal, which has no API.
+  It also commits the plugin alone (manifest, icon, `skills/`, `LICENSE`,
+  README) onto the `claude-plugin` branch, which claude.ai's plugin directory
+  follows (`scripts/release/claude_plugin_branch.py`).
 
 When asked to publish, make, or ship a release, dispatch `Prepare Release` on
 `main`. Never pick the semver bump yourself: if the request does not name patch,

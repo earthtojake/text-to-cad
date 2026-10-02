@@ -121,6 +121,13 @@ jobs:
           path: ${{ runner.temp }}/plugin/
           if-no-files-found: error
 
+      # The plugin as claude.ai's directory takes it (manifest, icon, skills, LICENSE,
+      # README), checked against the directory's file rules ahead of every irreversible
+      # step; on main, claude-plugin below commits this same tree to the branch.
+      - name: Check the Claude plugin tree
+        if: steps.gate.outputs.should_publish == 'true'
+        run: python3 scripts/release/claude_plugin_branch.py --check
+
       - name: Set up dependencies
         if: steps.gate.outputs.should_publish == 'true'
         uses: ./.github/actions/setup-deps
@@ -245,6 +252,7 @@ jobs:
           echo "Rehearsal complete on $GITHUB_REF_NAME at $GITHUB_SHA."
           echo "Would have uploaded: $(ls packages/cadgen/dist)"
           echo "Would have deployed the docs site from $GITHUB_SHA."
+          echo "Would have committed the Claude plugin tree to the claude-plugin branch."
           # --dry-run computes the tag and the release it would create without
           # pushing anything; the version check inside it runs for real.
           args=(--target HEAD --dry-run --publish)
@@ -261,6 +269,45 @@ jobs:
     with:
       ref: ${{ needs.publish.outputs.release_sha }}
     secrets: inherit
+
+  # claude.ai's plugin directory follows the `claude-plugin` branch: one commit per
+  # release whose tree is only the plugin, so the directory never scans or installs the
+  # rest of the monorepo. Publish Release is the branch's only writer.
+  claude-plugin:
+    name: Claude plugin branch
+    needs: publish
+    if: ${{ needs.publish.outputs.should_publish == 'true' && needs.publish.outputs.is_main == 'true' }}
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out release commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.publish.outputs.release_sha }}
+          persist-credentials: false
+
+      - name: Commit the plugin onto claude-plugin and push it
+        env:
+          PUBLISH_PUSH_TOKEN: ${{ secrets.PUBLISH_PUSH_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          GIT_AUTHOR_NAME: github-actions[bot]
+          GIT_AUTHOR_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+          GIT_COMMITTER_NAME: github-actions[bot]
+          GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
+        run: |
+          remote="https://x-access-token:${PUBLISH_PUSH_TOKEN:-$GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if git fetch --quiet "$remote" +refs/heads/claude-plugin:refs/remotes/origin/claude-plugin; then
+            parent="$(git rev-parse refs/remotes/origin/claude-plugin)"
+          else
+            parent=""
+            echo "No claude-plugin branch yet; this release creates it."
+          fi
+          commit="$(python3 scripts/release/claude_plugin_branch.py --commit --parent "$parent")"
+          if [ "$commit" = "$parent" ]; then
+            echo "claude-plugin already holds this release's plugin."
+          else
+            git push "$remote" "$commit:refs/heads/claude-plugin"
+          fi
 
   tag-release:
     name: Tag and GitHub Release
