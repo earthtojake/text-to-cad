@@ -23,6 +23,8 @@ from cadgen.mcp.ui import AppPage
 CODEX = {"name": "codex-mcp-client", "title": "Codex", "version": "0.159.0"}
 CLAUDE = {"name": "claude-ai", "version": "0.1.0"}
 RENDERS_APPS = {"extensions": {"io.modelcontextprotocol/ui": {"mimeTypes": ["text/html;profile=mcp-app"]}}}
+OTHER_HOST = {"name": "some-desktop-app", "version": "0.1.0"}
+DECLARES_TABS = {"extensions": {**RENDERS_APPS["extensions"], "openai/ui": {"entrypoints": ["global", "thread", "file"]}}}
 STL = b"solid t\nfacet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex 1 0 0\nvertex 0 1 0\nendloop\nendfacet\nendsolid t\n"
 
 
@@ -315,6 +317,27 @@ class SidebarAcrossThreadsTest(_Session):
         for published in (self.tmp / "state" / "sidebar-views").glob("*.json"):
             os.utime(published, (stale, stale))
         self.assertEqual(self.call("cad_show", {"path": "parts/bracket.stl"})["structuredContent"], {"delivered": 0})
+
+
+class DeclaredTabServerTest(_Session):
+    """Any host that declares Codex's entrypoints gets tabs, whatever it is called."""
+
+    client = OTHER_HOST
+    offered = DECLARES_TABS
+
+    def test_a_host_that_declares_the_entrypoints_gets_the_tab_surfaces(self) -> None:
+        tools = {tool["name"]: tool for tool in self.server.handle("tools/list", {}, None)["tools"]}
+        entrypoints = {name: tool["_meta"]["openai/ui"]["entrypoints"][0]["type"] for name, tool in tools.items()
+                       if "entrypoints" in tool.get("_meta", {}).get("openai/ui", {})}
+        self.assertEqual(entrypoints, {"cad_home": "global", "cad_tab": "thread", "cad_file": "file"})
+        self.assertIn("cad_open", tools)
+
+    def test_a_partial_declaration_is_shown_inline(self) -> None:
+        partial = {"extensions": {**RENDERS_APPS["extensions"], "openai/ui": {"entrypoints": ["thread"]}}}
+        server = Server(launch_cwd=str(self.workspace), page=AppPage(self.tmp / "app"), recents=RecentStore(self.tmp / "state2"))
+        server.handle("initialize", {"protocolVersion": "2025-06-18", "capabilities": partial, "clientInfo": OTHER_HOST}, None)
+        tools = {tool["name"] for tool in server.handle("tools/list", {}, None)["tools"]}
+        self.assertNotIn("cad_open", tools)
 
 
 class InlineServerTest(_Session):
