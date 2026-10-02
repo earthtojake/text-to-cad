@@ -137,7 +137,12 @@ few shared slots) compares the revision it is told with the client's
 `catalogRevision`, and reads the catalog again only when they differ.
 
 `/__cad/asset` applies root containment, hidden-path rules and the served-asset
-extension filter. Model scripts are excluded. Absolute references returned by
+extension filter. Model scripts are excluded. It and `/__cad/store` serve a
+project's files as data, never as pages: each response carries
+`x-content-type-options: nosniff` and `content-security-policy: default-src 'none';
+sandbox`, so a file opened straight in the browser (a robot description's XML can
+carry an XHTML `<script>`) runs no script and has an origin of its own. The
+renderers fetch the bytes, which neither header affects. Absolute references returned by
 the catalog are valid only when they resolve inside the root. Artifact status
 and compile routes apply the same containment rule, so compilation cannot be
 used to reach an outside file indirectly through the store.

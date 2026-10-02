@@ -224,6 +224,14 @@ def catalog_revision(entries) -> str:
     return hashlib.sha256(json.dumps(entries, sort_keys=True, default=str).encode("utf-8")).hexdigest()[:24]
 
 
+# A project's files are served as data, never as pages. Opened straight in the browser, one is a
+# sandboxed document that runs no script and has an origin of its own -- a robot description's XML
+# can carry an XHTML <script>, which would otherwise run as the viewer, its routes and their guard
+# header in reach -- and ``nosniff`` keeps a browser from reading it as anything but its type. The
+# viewer's renderers fetch these bytes, and neither header applies to a fetch.
+RAW_FILE_HEADERS = (("x-content-type-options", "nosniff"), ("content-security-policy", "default-src 'none'; sandbox"))
+
+
 class CadApp:
     """``handle(request, response)`` writes exactly one response.
 
@@ -704,14 +712,14 @@ class CadApp:
             response.send_json(404, {"error": "Not found"})
             return
         if isinstance(payload, bytes):
-            response.send_bytes(200, payload, content_type)
+            response.send_bytes(200, payload, content_type, RAW_FILE_HEADERS)
             return
         try:
             stat_result = os.stat(payload)
         except (OSError, ValueError):
             response.send_json(404, {"error": "Not found"})
             return
-        response.stream_file(str(payload), stat_result, content_type)
+        response.stream_file(str(payload), stat_result, content_type, RAW_FILE_HEADERS)
 
     def _handle_drawing(self, request, response, query):
         """A ``.dxf`` flattened to 2D primitives (``drawings.py`` owns both rules).
@@ -744,7 +752,7 @@ class CadApp:
             response.send_json(404, {"error": "Not found"})
             return
         content_type = self.backend.content_type_for_path(candidate) or "application/octet-stream"
-        response.stream_file(candidate, stat_result, content_type)
+        response.stream_file(candidate, stat_result, content_type, RAW_FILE_HEADERS)
 
     def _handle_tess_get(self, request, response):
         """403 refused name, 404 miss, 200 hit.

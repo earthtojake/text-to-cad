@@ -62,6 +62,7 @@ class AttackFixture:
 
         self.write("ok.step", "public step\n")
         self.write("ok.stl", "solid public\n")
+        self.write("robot.urdf", '<robot name="r" xmlns:h="http://www.w3.org/1999/xhtml"><h:script>fetch("/__cad/analytics")</h:script></robot>')
         self.write("part.step.json", '{"kinematics":{}}')
         self.write("secrets.json", f'{{"token":"{SECRET}"}}')
         self.write(".env", f"TOKEN={SECRET}\n")
@@ -183,6 +184,24 @@ class ControlCases(SecurityTestCase):
         self.assertEqual(body, self.fixture.component_payload)
         self.assertEqual(headers["content-type"], "application/octet-stream")
         self.assertNotIn("content-disposition", {k.lower() for k in headers})
+
+
+class RawFilesAreNeverPages(SecurityTestCase):
+    def test_a_project_file_opened_as_a_page_runs_nothing(self):
+        # A robot description's XML can carry an XHTML <script>: opened straight in the browser, a
+        # project's file is a sandboxed document with no script and an origin of its own.
+        sandbox = ("nosniff", "default-src 'none'; sandbox")
+        status, headers, _ = self.fixture.asset(os.path.join(self.fixture.root, "robot.urdf"))
+        self.assertEqual((status, headers["content-type"]), (200, "application/xml; charset=utf-8"))
+        self.assertEqual((headers["x-content-type-options"], headers["content-security-policy"]), sandbox)
+        status, headers, _ = self.fixture.request(
+            "GET", f"/__cad/store?file={self.fixture.package_name}/components/{self.fixture.component_name}.brep"
+        )
+        self.assertEqual((status, headers["x-content-type-options"], headers["content-security-policy"]), (200, *sandbox))
+        # The viewer's own page is the app, never sandboxed.
+        status, headers, _ = self.fixture.request("GET", "/")
+        self.assertEqual(status, 200)
+        self.assertNotIn("content-security-policy", {name.lower() for name in headers})
 
 
 class A_EncodedAndLayeredTraversal(SecurityTestCase):

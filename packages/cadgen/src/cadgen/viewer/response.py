@@ -7,7 +7,8 @@ responses but not others. The header set on the wire is part of the contract:
 
 * ``send_json`` / ``send_bytes`` / ``stream_file`` carry ``cache-control:
   no-store`` and an explicit ``content-length``; ``content-type`` appears only
-  when truthy.
+  when truthy. ``send_bytes`` and ``stream_file`` add the caller's
+  ``extra_headers`` (the raw-file routes' sandbox, ``http_app.RAW_FILE_HEADERS``).
 * ``send_empty`` (the tess 403/404/204 and the method-not-allowed 405) carries
   ONLY ``content-length: 0`` — no content-type, no cache-control.
 * NO ``Access-Control-*`` header is ever emitted, on any route, at any status.
@@ -118,13 +119,15 @@ class Response:
         )
         self._write(body)
 
-    def send_bytes(self, status: int, data: bytes, content_type: str = "") -> None:
+    def send_bytes(self, status: int, data: bytes, content_type: str = "",
+                   extra_headers: Iterable[tuple[str, Any]] = ()) -> None:
         headers: list[tuple[str, Any]] = [
             ("cache-control", "no-store"),
             ("content-length", len(data)),
         ]
         if content_type:
             headers.append(("content-type", content_type))
+        headers.extend(extra_headers)
         self._begin(status, headers)
         self._write(data)
 
@@ -144,7 +147,8 @@ class Response:
         """Status plus ``content-length: 0`` and nothing else."""
         self._begin(status, [*extra_headers, ("content-length", 0)])
 
-    def stream_file(self, file_path, stat_result: os.stat_result, content_type: str = "") -> None:
+    def stream_file(self, file_path, stat_result: os.stat_result, content_type: str = "",
+                    extra_headers: Iterable[tuple[str, Any]] = ()) -> None:
         """Always 200, chunked, never buffered whole.
 
         A 500MB GLB must not become 500MB of RSS, and 200 concurrent asset GETs
@@ -158,6 +162,7 @@ class Response:
         ]
         if content_type:
             headers.append(("content-type", content_type))
+        headers.extend(extra_headers)
         self._begin(200, headers)
         if self._head_only:
             return
