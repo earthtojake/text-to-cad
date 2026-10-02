@@ -286,7 +286,7 @@ def choose(share: bool, *, by: str, path: Path | None = None,
     unanswered request leaves sharing off with the deletion still owed. ``saved`` is false when the
     settings could not be written: the choice is then not kept, and nothing else changed."""
     path = path or settings_path()
-    # When, exactly: what another process noted before this is never sent (``Recorder.flush``).
+    # When, and so which answer this is: what another process noted under an earlier one is never sent (``Recorder.flush``).
     choice = {"choice": "on" if share else "off", "disclosure": DISCLOSURE, "by": by, "decidedAt": time.time()}
 
     def keep(section: dict[str, Any]) -> dict[str, Any]:
@@ -393,7 +393,7 @@ class Recorder:
         self._views = 0
         self._files: dict[str, str] = {}  # absolute path -> kind; paths never leave this process
         self._sent: set[str] = set()  # "day:code" of files sent today: each goes once a day
-        self._since = time.time()  # when what is noted now began to be noted
+        self._basis = self._decision()  # the answer in force when what is noted now began to be noted
         self._off = False  # a no this process could not keep: nothing more is sent from it
         self._timer: threading.Event | None = None
         self._describe()
@@ -405,6 +405,11 @@ class Recorder:
         self._context.update(version=_token(__version__, 32) or "unknown", platform=_platform_name(),
                              arch=_token(_platform.machine().lower(), 16))
 
+    @_guarded(lambda: None)
+    def _decision(self) -> Any:
+        """When the answer in force now was given: which answer it is (``None``: none, or none readable)."""
+        return (_read(self.path or settings_path()) or {}).get("decidedAt")
+
     @_guarded(lambda: dict(UNAVAILABLE))
     def status(self) -> dict[str, Any]:
         return dict(UNAVAILABLE) if self._off else status(path=self.path)
@@ -414,11 +419,12 @@ class Recorder:
         """The person's click or the agent's off: kept now, and any deletion it owes asked for in the
         background. A no that could not be kept still holds for this process: it sends nothing more."""
         chosen = choose(share, by=by, path=self.path)  # forget=None: the id waits as pending
+        decision = self._decision()
         with self._lock:  # nothing noted before a choice is sent after it
             self._counts.clear()
             self._views = 0
             self._files.clear()
-            self._since = time.time()
+            self._basis = decision
         if not share:
             self._off = self._off or not chosen["saved"]
             self._background(lambda: forget_pending(path=self.path))
@@ -476,13 +482,15 @@ class Recorder:
         decided = kept.get("decidedAt")
         day = _day()
         with self._lock:
-            counts, views, files, since = self._counts, self._views, self._files, self._since
-            self._counts, self._views, self._files, self._since = {}, 0, {}, time.time()
+            counts, views, files, basis = self._counts, self._views, self._files, self._basis
+            self._counts, self._views, self._files, self._basis = {}, 0, {}, decided
             context = dict(self._context)
             if not found["sharing"] or salt is None:
                 return False
-            # Noted before a yes given in the other app (this one's own clears what it noted): never sent.
-            if isinstance(decided, (int, float)) and decided > since:
+            # Noted under an earlier answer -- before a yes given in the other app (this one's own clears what
+            # it noted): never sent. Which answer, not whether it came later: Windows' clock moves in 16 ms
+            # steps, so a yes and the batch it lands in can share a time.
+            if decided != basis:
                 return False
             self._sent = {entry for entry in self._sent if entry.startswith(f"{day}:")}
             fresh = list({code: (path, kind, code) for path, kind in files.items()

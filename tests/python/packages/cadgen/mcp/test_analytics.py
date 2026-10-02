@@ -177,12 +177,14 @@ class OneAnswerTest(_Tmp):
 
     def test_use_noted_before_a_yes_in_the_other_app_is_never_sent(self) -> None:
         sent: list[dict] = []
-        recorder = Recorder(path=self.path, send=lambda payload: sent.append(payload) or True)
-        recorder.called("cad_show", True)  # before any answer
-        choose(True, by="viewer", path=self.path)  # the other app's yes
-        self.assertFalse(recorder.flush())
-        recorder.called("cad_show", True)
-        self.assertTrue(recorder.flush())
+        # One reading for every clock call: Windows' clock moves in 16 ms steps, so a quick yes shares the batch's time.
+        with mock.patch("cadgen.analytics.time.time", return_value=1_790_000_000.0):
+            recorder = Recorder(path=self.path, send=lambda payload: sent.append(payload) or True)
+            recorder.called("cad_show", True)  # before any answer
+            choose(True, by="viewer", path=self.path)  # the other app's yes
+            self.assertFalse(recorder.flush())
+            recorder.called("cad_show", True)
+            self.assertTrue(recorder.flush())
         self.assertEqual(len(sent), 1)
 
     def test_only_a_page_answers_and_a_card_only_an_open_question(self) -> None:
