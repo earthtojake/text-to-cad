@@ -49,7 +49,7 @@ test("a tree or Position opens capped at half the stack on desktop and the whole
   assert.equal(toolPanelDefaultHeight("position", 601), 301);
   assert.equal(toolPanelDefaultHeight("tree", 600, true), 600);
   assert.equal(toolPanelDefaultHeight("position", 600, true), 600);
-  assert.equal(TOOL_PANEL_REFERENCE_HEIGHT, 200, "a heading, its Copy and about seven compact rows");
+  assert.equal(TOOL_PANEL_REFERENCE_HEIGHT, 144, "a heading, its Copy and four compact rows");
   assert.equal(toolPanelDefaultHeight("reference", 600), TOOL_PANEL_REFERENCE_HEIGHT);
   assert.equal(toolPanelDefaultHeight("reference", 600, true), TOOL_PANEL_REFERENCE_HEIGHT);
   assert.equal(toolPanelDefaultHeight("tree", 0), TOOL_PANEL_REFERENCE_HEIGHT, "an unmeasured stack falls back to a height");

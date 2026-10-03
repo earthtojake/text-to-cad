@@ -98,7 +98,7 @@ it('the chrome is inset from the viewer, every panel opens one width, the tree a
   expect(TOOL_PANEL_WIDTH).toBe(164);
   expect([width('Harness tree'), width('Harness reference')]).toEqual([TOOL_PANEL_WIDTH, TOOL_PANEL_WIDTH]);
   expect(panel('Harness tree')!.style.maxHeight).toBe(`${STACK_HEIGHT / 2}px`);
-  expect(TOOL_PANEL_REFERENCE_HEIGHT).toBe(200);
+  expect(TOOL_PANEL_REFERENCE_HEIGHT).toBe(144);
   expect(panel('Harness reference')!.style.maxHeight).toBe(`${TOOL_PANEL_REFERENCE_HEIGHT}px`);
   expect(layout(preferences)).toEqual({ panels: {}, collapsed: {}, closed: {} });
   // Two kinds of panel: the tree and the Reference are each the person's to size, by one grip in
@@ -133,12 +133,12 @@ it("each resizable panel is sized by its corner alone, apart from every other: w
   expect(preferences.writes).toBe(1);
   expect(layout(preferences).panels).toEqual({ tree: { width: TOOL_PANEL_WIDTH + 100, height: STACK_HEIGHT / 2 - 100 } });
   // The Reference, by its own corner: its size, and the tree's as it was.
-  drag(screen.getByRole('separator', { name: 'Resize harness reference' }), [40, -92]);
+  drag(screen.getByRole('separator', { name: 'Resize harness reference' }), [40, -60]);
   expect(preferences.writes).toBe(2);
   expect(layout(preferences).panels).toEqual({ tree: { width: TOOL_PANEL_WIDTH + 100, height: STACK_HEIGHT / 2 - 100 },
-    reference: { width: TOOL_PANEL_WIDTH + 40, height: TOOL_PANEL_REFERENCE_HEIGHT - 92 } });
+    reference: { width: TOOL_PANEL_WIDTH + 40, height: TOOL_PANEL_REFERENCE_HEIGHT - 60 } });
   expect([width('Harness tree'), width('Harness reference'), panel('Harness reference')!.style.maxHeight])
-    .toEqual([TOOL_PANEL_WIDTH + 100, TOOL_PANEL_WIDTH + 40, `${TOOL_PANEL_REFERENCE_HEIGHT - 92}px`]);
+    .toEqual([TOOL_PANEL_WIDTH + 100, TOOL_PANEL_WIDTH + 40, `${TOOL_PANEL_REFERENCE_HEIGHT - 60}px`]);
   // From the keyboard, one axis a key: Left/Right the width, Up/Down the cap; Home and End both, to their bounds.
   fireEvent.keyDown(treeCorner, { key: 'ArrowLeft' });
   fireEvent.keyDown(treeCorner, { key: 'ArrowDown' });
@@ -147,10 +147,10 @@ it("each resizable panel is sized by its corner alone, apart from every other: w
   expect(layout(preferences).panels.tree).toEqual({ width: TOOL_PANEL_WIDTH, height: 64 });
   fireEvent.keyDown(treeCorner, { key: 'End' });
   expect(layout(preferences).panels.tree).toEqual({ width: VIEWER.width / 2, height: STACK_HEIGHT });
-  expect(layout(preferences).panels.reference).toEqual({ width: TOOL_PANEL_WIDTH + 40, height: TOOL_PANEL_REFERENCE_HEIGHT - 92 });
+  expect(layout(preferences).panels.reference).toEqual({ width: TOOL_PANEL_WIDTH + 40, height: TOOL_PANEL_REFERENCE_HEIGHT - 60 });
   remount();
   expect([width('Harness tree'), panel('Harness tree')!.style.maxHeight]).toEqual([VIEWER.width / 2, `${STACK_HEIGHT}px`]);
-  expect([width('Harness reference'), panel('Harness reference')!.style.maxHeight]).toEqual([TOOL_PANEL_WIDTH + 40, `${TOOL_PANEL_REFERENCE_HEIGHT - 92}px`]);
+  expect([width('Harness reference'), panel('Harness reference')!.style.maxHeight]).toEqual([TOOL_PANEL_WIDTH + 40, `${TOOL_PANEL_REFERENCE_HEIGHT - 60}px`]);
 
   // Position, by its corner too: its width and height in one write, the others as they were.
   preferences.update({ toolStack: { panels: {}, collapsed: {}, closed: {} } });

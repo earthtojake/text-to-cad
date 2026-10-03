@@ -197,7 +197,7 @@ state), each its content's height, with `fit` saying how it gives way on a short
 rest still does not fit. Every panel is `TOOL_PANEL_WIDTH` wide (164px, a six-tool strip's);
 `resizable` — the tree, the Reference and Position — makes a panel the person's to size on its
 own, from the grip in its bottom-right corner alone (`kit/tools/ResizeGrip.jsx`, Quick Edit's),
-kept under its `id` (`tree` and `position` open at half the stack, `reference` at 200px); a
+kept under its `id` (`tree` and `position` open at half the stack, `reference` at 144px); a
 panel with a heading may fold to it, kept by `id` too. The tree is `closable`: its X closes it,
 and the tool that names it as its `panel` (Select) carries a corner mark until a press on it,
 while it is up, opens the tree again; the person's closing or opening is kept by `id` as well,
@@ -967,9 +967,9 @@ A STEP's panels in the tool stack (`components/workbench/StepPanels.js`), in ord
 - **Reference** (Select, with a selection): headed by the reference being read
   (`StepReferenceSection.js`'s `useStepReference`: its label, else its part as the tree
   names it and its kind — `base · face 3`; with several, a picker with `i/N`) and an X
-  that clears the selection; its rows are the browsed reference's alone, compact and in the
-  UI font. A resizable panel of its own, apart from the tree: it opens at the one width and a
-  200px cap, and its corner grip sizes it.
+  that clears the selection; its rows are the browsed reference's key measurements alone,
+  compact and in the UI font. A resizable panel of its own, apart from the tree: it opens at
+  the one width and a 144px cap, and its corner grip sizes it.
 - **Position** (Position): named poses, joint values and Reset, when the file has
   kinematics.
 
@@ -1125,15 +1125,17 @@ unselectable. Selection reveals expand the required ancestors and scroll once
 per selection or explicit reveal command. Later expansion, recognition updates
 and manual scrolling must not pull the view back to that row.
 
-The Reference pane is read-only, sized on its own (it opens at every panel's width, capped at 200px, and its corner grip sizes it),
+The Reference pane is read-only, sized on its own (it opens at every panel's width, capped at 144px, and its corner grip sizes it),
 independently scrollable, and pinned at the panel's foot, under every section. Its
 static heading has a Copy action (the reference on show, file-prefixed as Copy Reference copies it) and an X to clear the selection; neither the pane nor its
 fields collapse. A compact dropdown browses the selected references directly
 without modifying the selection. New selections show their newest reference.
-Selection totals remain above the current reference's name, type, wrapping
-canonical ID, dimensions, coordinates and source material. Rows share an 8px
-gutter, an 80px label column and 11px text, with thin separators between totals,
-reference facts and material. The pane's rows have no copy or dimension-preview
+Under the browsed reference's name, its rows are its key measurements alone
+(`StepReferenceSection.js`): a face's area and a round face's radii, an edge's
+length, radii and an arc's sweep, a part's size and volume, a subassembly's part
+count, size and volume — no type, canonical ID, centre, normal, component or
+source material row. Rows share a 64px label column, an 8px gutter and 11px
+text. The pane's rows have no copy or dimension-preview
 buttons: copying is the heading's Copy, the full-row **Copy** at the panel's foot
 (**Copy All** with several references, with the ⌘C / Ctrl+C hint; shown only for a
 resolved selection) and the tree and viewport menus, and measurement previews are
@@ -1469,7 +1471,7 @@ in which case every link is kept. An SRDF shows its paired URDF's tree.
 The section reuses the Features tree's pieces rather than cloning them: the 28px
 row primitive, `Filter…` (`TreeFilterInput`, `primitives/tree-filter`), the
 ranked flat search of `kit/inspector/modelTreeSearch.js` (`useTreeSearch`), and the
-Reference panel under it (the stack's next panel, sized on its own from the same 200px
+Reference panel under it (the stack's next panel, sized on its own from the same 144px
 cap, the same panel the Features tree has). Its X closes Links, as Features', and Select
 opens it again. The search index also reads a row's `searchAliases`, so a
 link is found by its joint name and the hit shows that joint in place of its
@@ -1554,8 +1556,8 @@ preset and disables Clip/Explode, preserving camera viewpoint/zoom, selection
 and the pose.
 The groups and gate behavior are specified in [View presets](render-mode.md).
 Photographic lighting and stage code stay lazy; the lightweight grouped settings
-panel is always available. Authored materials remain read-only in the Model
-reference section, with no material override or undo state.
+panel is always available. Authored materials are read-only, with no material
+override or undo state.
 
 The host-supplied render session owns its tessellation cache and worker leases.
 The file view's display slice is the sole view-settings authority; the camera is the

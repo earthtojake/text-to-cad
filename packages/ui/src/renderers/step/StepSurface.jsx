@@ -3242,7 +3242,6 @@ function StepSurfaceBody({ view, data }) {
     loadingGeometry: Boolean(pendingTopologyPick),
     positionRuntime: motion.positionControls,
     selectedMeshData: selectedDisplayMeshData,
-    selectedSourceAppearance,
     client,
     geometryInspection: { revision: artifactRevision,
       references: !viewerLoading && !stepUpdateInProgress ? isAssemblyView ? assemblyStepTreeTopologyReferences : selectedSelectorRuntime?.references || EMPTY_LIST : EMPTY_LIST,

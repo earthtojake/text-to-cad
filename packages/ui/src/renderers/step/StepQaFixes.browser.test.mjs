@@ -72,8 +72,8 @@ test('a single-part STEP names a picked face after its part, never after the XCA
   await page.waitForFunction(() => /\.f\d+$/.test(window.cadHarness.a.controller.readState().selectedReferenceIds.join()));
   const face = (await view.state()).selectedReferenceIds[0].split('|').at(-1);
   const ordinal = face.replace(/^.*\.f/, '');
-  assert.match((await reference.innerText()).replace(/\s+/g, ' '), new RegExp(`^hinge_base · face ${ordinal} Type Face`),
-    'the heading is the part, named after the file, and the kind');
+  assert.match((await reference.innerText()).replace(/\s+/g, ' '), new RegExp(`^hinge_base · face ${ordinal} Area `),
+    'the heading is the part, named after the file, and the kind, over the face\'s area');
   // A second face: the picker's name and every one of its entries read the same way.
   await page.keyboard.down('Shift');
   await page.mouse.click(...at([10, 0, 0]));

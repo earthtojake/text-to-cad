@@ -273,9 +273,10 @@ stack.
   has a *cap* the content grows up to and then scrolls inside: the tree and
   Position open capped at half the stack's own height (the area under the
   strip, not the viewer) on desktop, and at the whole column on a phone. The
-  Reference opens shorter, capped at 200px on both (`TOOL_PANEL_REFERENCE_HEIGHT`:
-  its heading, its Copy and about seven compact rows between them — a part's
-  or a face's first facts; the rest scrolls, or a drag of its corner shows it).
+  Reference opens shorter, capped at 144px on both (`TOOL_PANEL_REFERENCE_HEIGHT`:
+  its heading, its Copy and four compact rows between them — a reference's key
+  measurements, an arc's four the most; a longer one, a robot link's facts,
+  scrolls, or a drag of its corner shows it).
   A cap is never a floor. Setting one panel's cap changes no other's.
 - **One grip, on a resizable panel only.** A resizable panel is sized from its
   bottom-right corner alone, by the grip Quick Edit's box has
@@ -511,7 +512,7 @@ animation are separate capabilities; the absence of one never leaves empty
 controls for another.
 
 The Reference panel is read-only, and a resizable panel of its own under the
-tree: it opens at the one width, capped at 200px, and its corner grip sizes it
+tree: it opens at the one width, capped at 144px, and its corner grip sizes it
 apart from the tree. Its rows are compact (2px above and below) and
 in the panel's one face: labels and values alike are the UI font at `text-tiny`,
 numbers in tabular figures — no monospace. A value too long for its cell wraps
@@ -519,7 +520,14 @@ between words, or (a row of numbers, such as a link's inertia) truncates with
 its whole as a hint; a number never wraps inside itself. Its heading, flush with
 the rows' labels, names the reference: its own label when it has one (a part's or subassembly's
 name, a named face), otherwise its part and kind ("base · face 3") — never the
-raw id, which is the **ID** row. With several references the heading is a
+raw id, which is no row either. In a STEP its rows are the reference's key
+measurements, nothing else: a face's area, and a round face's diameter and
+radius (a torus's two radii); an edge's length, or a round one's diameter,
+radius and circumference or arc length, with an arc's sweep; a part's size and
+volume; a subassembly's part count, size and volume. What it is (its kind and
+part) is the heading's to say, what a person copies for an agent (the reference,
+with its file) the Copy's, and where it sits and points the view's: there is no
+Type, ID, Center, Normal, Component or Material row. With several references the heading is a
 picker over them with a muted "i/N" beside the name — quiet on hover in either
 theme (no fill; only its chevron comes up), and nothing about it moves; that picker is all a
 multi-selection adds, and the rows are always the browsed reference's alone (no

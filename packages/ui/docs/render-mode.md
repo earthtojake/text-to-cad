@@ -136,9 +136,9 @@ them as public display values.
 
 The photographic rig stays lazy. Enabling Lighting creates the photographic
 softbox environment; Floor or Background alone retain neutral lighting and do
-not create a photographic environment. Material information remains read-only
-and is shown in the Model reference section. Color overrides are presentation
-settings, not edits to the model or its material assignments.
+not create a photographic environment. Authored materials are read-only. Color
+overrides are presentation settings, not edits to the model or its material
+assignments.
 
 | Lighting quality | Screen error | Shadow map | Environment | Capture scale |
 | --- | --- | --- | --- | --- |

@@ -363,8 +363,11 @@ test('Select picks parts and faces, a selection lives only under Select, and the
   await page.mouse.click(...at([6, 6, 5]));
   await page.waitForFunction(() => window.cadHarness.a.controller.readState().selectedPartIds.length === 1);
   assert.deepEqual((await view.state()).selectedPartIds, ['o1.1']);
-  // Headed by the part's name; the id is a row, what a copy carries.
-  assert.match((await reference.innerText()).replace(/\s+/g, ' '), /^base .*Type Component.*ID o1\.1.*Size 20 × 20 × 10 mm.*Color #3A6EA5/);
+  // Headed by the part's name, over its key measurements and its Copy: no id, type, position or
+  // material rows (what a copy carries is the Copy's).
+  const partText = (await reference.innerText()).replace(/\s+/g, ' ');
+  assert.match(partText, /^base Size 20 × 20 × 10 mm (?:Volume [\d,.]+ mm³ )?Copy/);
+  assert.doesNotMatch(partText, /\bType\b|\bID\b|o1\.1|Center|Material|Color/);
   assert.equal(await reference.locator('[data-reference-count]').count(), 0, 'one reference has no i/N');
   // Compact rows in the panel's one face: every value is the UI font at the panel's size, never
   // monospace. The Reference opens at every panel's width and its own default cap, shorter than the
@@ -381,7 +384,9 @@ test('Select picks parts and faces, a selection lives only under Select, and the
   assert.doesNotMatch(faces[0], /mono/i);
   assert.match(faces[0], /\| 11px$/);
   const rowHeights = await reference.locator('[data-info-row]').evaluateAll(rows => rows.map(row => row.getBoundingClientRect().height));
-  assert.ok(rowHeights.length >= 4 && rowHeights.every(height => height <= 19 * 2), `compact rows, a line or two each: ${rowHeights}`);
+  assert.ok(rowHeights.length >= 1 && rowHeights.every(height => height <= 19 * 2), `compact rows, a line or two each: ${rowHeights}`);
+  assert.equal(await reference.locator('[data-tool-panel-body]').evaluate(node => node.scrollHeight <= node.clientHeight), true,
+    'the name, the key measurements and the Copy fit the cap it opens with: nothing to scroll to');
   // The Reference is the next panel of the stack, under Features, both at the one width until a person sizes either.
   assert.deepEqual(await view.stack(), ['Features', 'Reference details']);
   const [features, pinned] = await Promise.all([pane.getByRole('region', { name: 'Features', exact: true }).boundingBox(), reference.boundingBox()]);
@@ -406,7 +411,7 @@ test('Select picks parts and faces, a selection lives only under Select, and the
   assert.match((await picker.innerText()).replace(/\s+/g, ' '), /^arm 2\/2$/);
   // Its text is flush with the rows' labels.
   const [nameBox, labelBox] = await Promise.all([picker.locator('[data-reference-label] > span').first().boundingBox(),
-    reference.getByText('Type', { exact: true }).boundingBox()]);
+    reference.getByText('Size', { exact: true }).boundingBox()]);
   assert.ok(Math.abs(nameBox.x - labelBox.x) <= 1, `the picker's text aligns with the row labels: ${nameBox.x} vs ${labelBox.x}`);
   // Hovering it is quiet in either theme — no fill — and moves nothing in the heading.
   for (const dark of [false, true]) {
@@ -499,9 +504,10 @@ test('under Faces or Edges, one press on a part whose faces are not loaded loads
   assert.deepEqual(await page.evaluate(() => window.__sawLoading.slice(0, 1)), [0], 'the Features panel said it was loading, before anything was picked');
   assert.equal(await pane.getByRole('region', { name: 'Features', exact: true }).getByText('Loading…').count(), 0, 'and stops once the face is picked');
   assert.equal(await pane.locator('[data-cad-toolbar] [role=status]').count(), 0, 'nothing under the strip says so');
-  // Named by its part as the tree names it and its kind, never by its raw id; the id is a row.
-  assert.match((await reference.innerText()).replace(/\s+/g, ' '), new RegExp(`^base · face ${face.replace(/^.*\.f/, '')} Type Face · Planar ID ${face.replace(/\./g, '\\.')}`),
-    'the Reference names the face under the pointer');
+  // Named by its part as the tree names it and its kind, never by its raw id, which is no row either.
+  const faceText = (await reference.innerText()).replace(/\s+/g, ' ');
+  assert.match(faceText, new RegExp(`^base · face ${face.replace(/^.*\.f/, '')} Area [\\d,.]+ mm² Copy`), 'the Reference names the face under the pointer, over its area');
+  assert.doesNotMatch(faceText, new RegExp(`\\bType\\b|\\bID\\b|${face.replace(/\./g, '\\.')}|Center|Normal|Material`));
   assert.deepEqual((await view.state()).selectedPartIds, [], 'the mode never falls back to the part');
   // Edges likewise, on the arm, whose topology is still not loaded (the panel says so again):
   // its top edge over the +x face.
@@ -511,7 +517,9 @@ test('under Faces or Edges, one press on a part whose faces are not loaded loads
   await page.waitForFunction(() => /^topology\|o1\.2\|edge\|o1\.2\.e\d+$/.test(window.cadHarness.a.controller.readState().selectedReferenceIds.join()));
   assert.ok(await page.evaluate(() => window.__sawLoading.length) > sawBefore, 'only the pressed part had loaded');
   const edge = (await selected())[0].split('|').at(-1);
-  assert.match((await reference.innerText()).replace(/\s+/g, ' '), new RegExp(`^arm · edge ${edge.replace(/^.*\.e/, '')} Type Edge.*ID ${edge.replace(/\./g, '\\.')}`));
+  const edgeText = (await reference.innerText()).replace(/\s+/g, ' ');
+  assert.match(edgeText, new RegExp(`^arm · edge ${edge.replace(/^.*\.e/, '')} Length [\\d,.]+ mm Copy`), 'its length, the one measurement a straight edge has');
+  assert.doesNotMatch(edgeText, new RegExp(`\\bType\\b|\\bID\\b|${edge.replace(/\./g, '\\.')}`));
   // An update of the model keeps the mode, and drops what was picked in the revision before it.
   await view.update();
   assert.equal(await view.tool('Select').locator('[data-select-mode]').getAttribute('data-select-mode'), 'edges');

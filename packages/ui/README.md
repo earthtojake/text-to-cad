@@ -296,9 +296,8 @@ remain authoritative, preparation is replaceable, and captures await presentatio
 The camera is part of the file's view: a refresh restores the one the file on screen
 was left at, and opening a file — again after leaving it, too — fits it.
 
-Authored material color, finish and opacity are read-only in every style; the
-Model reference section shows their properties. There is no Materials editor or
-persisted material override. See [View styles](docs/render-mode.md) and
+Authored material color, finish and opacity are read-only in every style. There
+is no Materials editor or persisted material override. See [View styles](docs/render-mode.md) and
 [progressive detail](docs/lod.md).
 
 The navbar names the file and offers its ⋯ menu, and Settings, whose Share Feedback opens a

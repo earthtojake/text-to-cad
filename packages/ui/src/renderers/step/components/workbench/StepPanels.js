@@ -42,7 +42,7 @@ function useLatestActions(actions) {
 export function useStepPanels({
   client, selectActive, positionActive, selectedEntry, viewerLoading,
   geometryInspection = null, stepTreeRoot, isAssemblyView = false,
-  selectedMeshData = null, selectedSourceAppearance = null,
+  selectedMeshData = null,
   selectedPartIds = EMPTY, selectedReferenceIds = EMPTY, selectedReferences = EMPTY,
   hiddenPartIds = EMPTY, focusedNodeIds = EMPTY, selectableNodeIds = null,
   expandedTreeNodeIds = EMPTY, onToggleTreeNode,
@@ -78,6 +78,9 @@ export function useStepPanels({
     ])],
   }), [selectedReferences, selectedPartIds, modelParts]);
   const measurements = useMemo(() => stepGeometryMeasurements(measuredSelection, modelReferences, modelParts), [measuredSelection, modelReferences, modelParts]);
+  // A part's or a subassembly's own size, from the boxes of the parts it is made of: the browsed
+  // one's in a multi-selection, where the selection's size is all of them together.
+  const partsSize = useCallback(ids => stepGeometryMeasurements({ partIds: ids }, EMPTY, modelParts).size, [modelParts]);
   // A face or edge is named after its part as the tree names that part.
   const partNames = useMemo(() => {
     const names = new Map();
@@ -86,7 +89,7 @@ export function useStepPanels({
     return names;
   }, [stepTreeRoot]);
   const partName = useCallback(id => partNames.get(String(id || '')) || '', [partNames]);
-  const reference = useStepReference({ references: selectedReferences, meshData: selectedMeshData, sourceAppearance: selectedSourceAppearance, measurements, partName });
+  const reference = useStepReference({ references: selectedReferences, meshData: selectedMeshData, measurements, partsSize, partName });
   // What every tree row is handed, the same object until something in it changes: the host's
   // actions behind stable identities, its menus and state as they are.
   const toggleTreeNode = useLatestCallback(onToggleTreeNode), selectTreeNode = useLatestCallback(onSelectTreeNode);
