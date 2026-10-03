@@ -77,7 +77,7 @@ path, the rehearsal, and local/manual fallbacks.
 - `packages/cadgen`: the published distribution — STEP/GLB/topology generation,
   the skill CLI parsers, the CAD Viewer backend + client, and the Node/browser
   runtimes it executes.
-- `apps/docs/`: documentation site, and `api.texttocad.dev` (the CAD app's consented analytics).
+- `apps/docs/`: documentation site, and `api.texttocad.dev` (cadgen's version feed and the CAD app's consented analytics).
 - `tests/`: root-owned test suites for skills, packages, viewer services, and
   repo-wide policy.
 - `scripts/`: durable repo commands grouped by purpose.
@@ -124,7 +124,7 @@ path, the rehearsal, and local/manual fallbacks.
   the first snapshot fetches its headless browser, so no skill has a browser step. cadgen carries
   the JavaScript it executes too (Node builders, the snapshot browser bundle,
   the CAD Viewer client), so a skill ships no runtime of its own. Not every
-  skill needs cadgen (bambu-labs, cad-mcp-setup, dfam-check, dfm, gcode,
+  skill needs cadgen (bambu-labs, cad-setup, dfam-check, dfm, gcode,
   sendcutsend, step-parts are cadgen-free); do not add the dependency to a skill that never invokes it.
 - Keep samples and manual CAD/robot-description validation artifacts under
   `models/`. Automated tests must not read, build or import that sample corpus:

@@ -257,18 +257,8 @@ export const ViewerNavbar: ComponentType<{
   links?: import("../../host/types.js").ViewerLinks;
   /** The host's `environment.platform`, which Feedback's issue names. */
   platform?: string;
-  clipboard: import("../../host/types.js").ClipboardPort;
   onError?: (error: Error) => void;
   className?: string;
-}>;
-
-/** A newer release, as a blue download button whose menu says how to update; nothing without one. */
-export const UpdateButton: ComponentType<{
-  links: import("../../host/types.js").ViewerLinks;
-  clipboard: import("../../host/types.js").ClipboardPort;
-  onError?: (error: Error) => void;
-  /** How the menu lines up with the button: `end` in the navbar, `center` under the home's wordmark. */
-  align?: "start" | "center" | "end";
 }>;
 
 /** Discord and GitHub, as icon links, in that order (X is the Settings footer's "Made by @…"). */

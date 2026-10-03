@@ -12,7 +12,10 @@
         "cadgen",
         "mcp"
       ],
-      "startup_timeout_sec": 300
+      "startup_timeout_sec": 300,
+      "env": {
+        "CADGEN_INSTALL_CHANNEL": "github"
+      }
     }
   }
 }

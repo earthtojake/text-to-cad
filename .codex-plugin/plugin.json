@@ -46,7 +46,7 @@
   },
   "extensions": {
     "com.openai": {
-      "onboardingSkill": "./skills/cad-mcp-setup/SKILL.md"
+      "onboardingSkill": "./skills/cad-setup/SKILL.md"
     }
   }
 }

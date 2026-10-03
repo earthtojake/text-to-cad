@@ -1,10 +1,11 @@
 /**
- * api.texttocad.dev: the receiver CAD's anonymous analytics are sent to, served by this site
- * (`app/v1/[...route]/route.ts`; the domain is this project's too). A plain fetch handler over a
- * `store`, so the host it runs on and the database behind it can change without a release of
- * anything that calls it (README.md).
+ * api.texttocad.dev: what cadgen talks to -- the version feed its daily check reads, and the receiver
+ * CAD's anonymous analytics are sent to -- served by this site (`app/v1/[...route]/route.ts`; the
+ * domain is this project's too). A plain fetch handler over a `store`, so the host it runs on and the
+ * database behind it can change without a release of anything that calls it (README.md).
  *
- *   POST   /v1/events          a batch of counts (src/events.mjs) -> 204
+ *   GET    /v1/versions        the version feed (versions.mjs) -> 200, the same for everyone
+ *   POST   /v1/events          a batch of counts (events.mjs) -> 204
  *   POST   /v1/forget          {install}: forget everything sent under an install id -> 204
  *   GET    /v1/prune           the daily cron: drop rows past retention (CRON_SECRET) -> 200
  *   GET    /v1/health          -> 200, or 503 naming a missing setting (DATABASE_URL, CRON_SECRET)
@@ -26,9 +27,9 @@ const JSON_TYPE = /^application\/json\s*(?:;|$)/i; // a parameter, such as `; ch
 
 // No CORS headers, so no page can read a reply. A page can still make its visitors' browsers post here
 // (a form, `sendBeacon`, a no-cors fetch): `handle` refuses every POST a browser sends.
-const reply = (status, body) => new Response(body === undefined ? null : JSON.stringify(body), {
+const reply = (status, body, cache = 'no-store') => new Response(body === undefined ? null : JSON.stringify(body), {
   status,
-  headers: { 'cache-control': 'no-store', ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
+  headers: { 'cache-control': cache, ...(body === undefined ? {} : { 'content-type': 'application/json' }) },
 });
 
 // An error by its code and kind only: a database error's message can quote a row's values, an install id
@@ -56,10 +57,11 @@ async function json(request) {
  * @param {{ insert(rows: object[]): Promise<void>, seen(id: string): Promise<{ week: boolean, month: boolean }>,
  *   tally(country: string, periods: string[]): Promise<void>, forget(id: string): Promise<void>, prune(days: number): Promise<number>,
  *   ready(): Promise<void> }} store `ready`: throws when the database cannot take a batch (health asks).
- * @param {{ cronSecret?: string, missing?: string[], country?: string | null }} [options] `missing`: settings the host
- *   lacks, by name (health says so). `country`: where the host places the request, from its IP address.
+ * @param {{ cronSecret?: string, missing?: string[], country?: string | null, versions?: object }} [options] `missing`:
+ *   settings the host lacks, by name (health says so). `country`: where the host places the request, from its IP
+ *   address. `versions`: the version feed (versions.mjs).
  */
-export async function handle(request, store, { cronSecret, missing = [], country } = {}) {
+export async function handle(request, store, { cronSecret, missing = [], country, versions } = {}) {
   const { pathname } = new URL(request.url);
   const path = pathname.replace(/\/+$/, '');
   try {
@@ -67,6 +69,12 @@ export async function handle(request, store, { cronSecret, missing = [], country
     // change that schema.sql was not re-run for): a deploy's check fails rather than shipping an API that
     // drops every batch or never prunes what the privacy policy says it deletes. The database's error by its
     // code alone.
+    // One feed for everyone, never a reply to anything a request says: the edge keeps it until the next
+    // deploy, which is the next release or a changed minimum. It reads no database, so it answers even
+    // when the analytics cannot.
+    if (path === '/v1/versions' && request.method === 'GET' && versions) {
+      return reply(200, versions, 'public, s-maxage=86400');
+    }
     if (path === '/v1/health' && request.method === 'GET') {
       if (missing.length) return reply(503, { ok: false, missing });
       try {

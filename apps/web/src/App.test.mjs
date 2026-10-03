@@ -27,7 +27,7 @@ await build({
     plugin.onLoad({ filter: /.*/, namespace: 'host-test' }, args => {
       if (args.path.endsWith('/cad-viewer')) return { contents: `let current; export function CadViewer(props){current=props; return null;} export const snapshot=()=>current; export const createCatalogFileSource=(client,{id,rootName})=>({id,rootName});`, loader: 'js' };
       if (args.path.endsWith('useViewerAutoReload.js')) return { contents: 'let reloadOptions;export const autoReloadOptions=()=>reloadOptions;export const useViewerAutoReload=(_server,options)=>{reloadOptions=options;return false;};', loader: 'js' };
-      if (args.path.endsWith('viewerLinks.js')) return { contents: `const links={version:'0.7.4',release:'r',x:'x',github:'g',discord:'d',issues:'i',install:{command:'c',prompt:'p'}}; export const useViewerLinks=()=>links;`, loader: 'js' };
+      if (args.path.endsWith('viewerLinks.js')) return { contents: `const links={version:'0.7.4',release:'r',x:'x',github:'g',discord:'d',issues:'i'}; export const useViewerLinks=()=>links;`, loader: 'js' };
       return { contents: 'export default function ViewerAppearance(){return null}', loader: 'js' };
     });
   } }],
@@ -46,12 +46,14 @@ test('the web host keeps the URL, the history, the title and the appearance, and
   const serverCalls = [];
   // The library every CAD view shares, written over this Viewer's routes.
   const libraryCalls = [];
-  const guards = [];  // the header no page from another site can send, on each analytics answer
+  const guards = [];  // the header no page from another site can send, on each answer to a card
+  const notice = { latest: '0.9.0', version: '0.8.1', text: 'text-to-cad 0.9.0 is available (you have 0.8.1)', prompt: 'Update text-to-cad to 0.9.0.' };
   const fetchBefore = globalThis.fetch;
   globalThis.fetch = async (url, init = {}) => {
     libraryCalls.push([url, init.body ? JSON.parse(init.body) : null]);
-    if (url === '/__cad/analytics' && init.body) guards.push(init.headers?.['x-cadgen-viewer']);
-    const reply = url !== '/__cad/analytics' ? { ok: true }
+    if (['/__cad/analytics', '/__cad/version'].includes(url) && init.body) guards.push(init.headers?.['x-cadgen-viewer']);
+    const reply = url === '/__cad/version' ? { notice: init.body ? null : notice }
+      : url !== '/__cad/analytics' ? { ok: true }
       : init.body ? { ask: false, sharing: false, reason: 'choice', policy: 'p' } : { ask: true, sharing: false, reason: 'unasked', policy: 'p' };
     return new Response(JSON.stringify(reply), { headers: { 'content-type': 'application/json' } });
   };
@@ -100,7 +102,13 @@ test('the web host keeps the URL, the history, the title and the appearance, and
     // server applies it only to an open question. Answered, it is gone.
     await act(() => viewer().notice.props.onAnswer(false));
     assert.deepEqual(libraryCalls.filter(([url]) => url === '/__cad/analytics').at(-1), ['/__cad/analytics', { share: false, card: true }]);
-    assert.deepEqual(guards, ['1']);
+    // Then the update card, as the CAD app's: a page in a browser cannot reach the agent's chat, so it
+    // only copies the prompt. Closing it keeps the answer, and that release is not offered again.
+    assert.equal(viewer().notice.props.notice.latest, '0.9.0');
+    assert.equal(viewer().notice.props.send, undefined);
+    await act(() => viewer().notice.props.onClose());
+    assert.deepEqual(libraryCalls.filter(([url]) => url === '/__cad/version'), [['/__cad/version', null], ['/__cad/version', { dismiss: '0.9.0' }]]);
+    assert.deepEqual(guards, ['1', '1']);
     assert.equal(viewer().notice, null);
 
     // Showing another file is a navigation: pushed, and undone by Back.

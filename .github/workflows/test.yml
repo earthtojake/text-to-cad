@@ -83,6 +83,7 @@ jobs:
               - 'gemini-extension.json'
               - 'codex.mcp.json'
               - 'claude.mcp.json'
+              - 'cursor.mcp.json'
               - 'package.json'
               - 'package-lock.json'
               - '.gitattributes'

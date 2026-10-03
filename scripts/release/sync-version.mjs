@@ -45,6 +45,7 @@ function skillLaunchTargets() {
 export const pinTargets = [
   "codex.mcp.json",
   "claude.mcp.json",
+  "cursor.mcp.json",
   "gemini-extension.json",
   "README.md",
   ...skillLaunchTargets(),

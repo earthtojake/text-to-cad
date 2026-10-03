@@ -28,6 +28,17 @@ DECLARES_TABS = {"extensions": {**RENDERS_APPS["extensions"], "dev.texttocad/tab
 STL = b"solid t\nfacet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex 1 0 0\nvertex 0 1 0\nendloop\nendfacet\nendsolid t\n"
 
 
+def offer_an_update(test: unittest.TestCase) -> None:
+    """A feed read today that offers 99.0.0 to an install from GitHub (`cadgen/updates.py`)."""
+    state = Path(tempfile.mkdtemp())
+    test.addCleanup(shutil.rmtree, state, ignore_errors=True)
+    patched = mock.patch.dict(os.environ, {"CADGEN_STATE_DIR": str(state), "CADGEN_INSTALL_CHANNEL": "github", "CI": "",
+                                           "CADGEN_UPDATE_CHECK": ""})
+    patched.start()
+    test.addCleanup(patched.stop)
+    (state / "versions.json").write_text(json.dumps({"checked": time.time(), "feed": {"latest": "99.0.0"}}), encoding="utf-8")
+
+
 class _Connection:
     closed = False
 
@@ -105,6 +116,13 @@ class TabServerTest(_Session):
         self.assertEqual(tools["cad_open"]["_meta"]["ui"]["resourceUri"], uri)
         read = self.server.handle("resources/read", {"uri": uri}, None)["contents"][0]
         self.assertEqual((read["mimeType"], read["text"]), ("text/html;profile=mcp-app", "<!doctype html><title>CAD</title>"))
+
+    def test_the_page_asks_about_a_newer_release_and_the_persons_click_sets_it_aside(self) -> None:
+        offer_an_update(self)
+        notice = self.call("cad_version")["structuredContent"]["notice"]
+        self.assertEqual(notice["prompt"], "Update text-to-cad to 99.0.0 (installed from GitHub).")
+        self.assertIsNone(self.call("cad_version", {"dismiss": "99.0.0"})["structuredContent"]["notice"])
+        self.assertIsNone(self.call("cad_version")["structuredContent"]["notice"])
 
     def test_a_thread_browses_its_workspace_and_a_model_with_no_project_is_shown_on_its_own(self) -> None:
         opened = self.launch("cad_open", {"path": "parts/bracket.stl"})
@@ -433,6 +451,12 @@ class TextServerTest(_Session):
         self.assertNotIn("Showing", shown["content"][0]["text"])
         self.assertEqual(TextServerTest.served[-1], str(self.workspace))
         self.assertEqual(self.server.recents.list()[0].path, str(self.workspace / "parts" / "bracket.stl"))
+
+    def test_a_newer_release_comes_with_the_first_cad_show_and_only_the_first(self) -> None:
+        offer_an_update(self)
+        first = self.call("cad_show", {"path": "parts/bracket.stl"})["content"]
+        self.assertIn('ask your agent: "Update text-to-cad to 99.0.0 (installed from GitHub)."', first[-1]["text"])
+        self.assertEqual(len(self.call("cad_show", {"path": "parts/bracket.stl"})["content"]), 1)
 
     def test_a_viewer_that_will_not_start_leaves_the_command_to_run(self) -> None:
         from cadgen.mcp.browser import ViewerUnavailable

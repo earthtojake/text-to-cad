@@ -19,7 +19,7 @@
 export { EmptyState } from "./EmptyState.jsx";
 export { EntryMenuItems, useEntryMenuFocusGuard } from "./EntryMenu.jsx";
 export { FileExplorer } from "./FileExplorer.jsx";
-export { CommunityLinks, FeedbackLink, UpdateButton } from "./NavbarLinks.jsx";
+export { CommunityLinks, FeedbackLink } from "./NavbarLinks.jsx";
 export { ViewerNavbar, PanelToggle, PANEL_TOGGLE_CLASSES } from "./ViewerNavbar.jsx";
 export { DiscordMark, GitHubMark } from "./brandMarks.jsx";
 export {

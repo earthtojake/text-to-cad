@@ -117,6 +117,8 @@ def read_skill_pin(skill_path) -> str | None:
 # the command's own (`_COMMANDS`). The daemon derives what it may import from here
 # (`daemon_tool_modules`), so a door cannot be warm on one side and unknown on the other.
 _WARM_COMMANDS = ("step build", "step compile", "stl build", "3mf build", "glb build")
+# The servers: a host or a client starts them, and their standard streams are its own.
+_SERVERS = frozenset({"mcp", "daemon"})
 _DAEMON_TOOLS = {command: command.replace(" ", "-") for command in _WARM_COMMANDS}
 
 
@@ -276,6 +278,20 @@ def main(argv: list[str] | None = None) -> int:
         sys.stderr.write(f"cadgen: unknown command {noun!r}\n\n" + _usage())
         return 2
 
+    if command in _SERVERS:
+        return _run(command, entry[0], rest)
+    # A newer text-to-cad is said on stderr, at most once a day (`cadgen/updates.py`); the feed,
+    # when it is due, is read beside the command rather than before it.
+    from cadgen import updates
+
+    check = updates.begin()
+    try:
+        return _run(command, entry[0], rest)
+    finally:
+        updates.end(check)
+
+
+def _run(command: str, module_name: str, rest: list[str]) -> int:
     # Before the command's module is imported: the daemon exists to avoid paying the
     # multi-second OCP/build123d import, so the handoff cannot wait until afterwards.
     daemon_tool = _DAEMON_TOOLS.get(command)
@@ -284,7 +300,6 @@ def main(argv: list[str] | None = None) -> int:
         if exit_code is not None:
             return exit_code
 
-    module_name, _ = entry
     module = importlib.import_module(module_name)
 
     # Tell the parser which front door it was reached through, so

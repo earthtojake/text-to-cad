@@ -21,8 +21,8 @@ export interface AttachmentStore {
   save(image: Blob, name: string): Promise<string>;
 }
 /**
- * What the navbar's right end links to — the running version (its release notes, and how to
- * update), the source and the community — and how a link is followed. Build it with
+ * What the navbar's right end links to — the running version (its release notes), the source and
+ * the community — and how a link is followed. Build it with
  * `viewerLinks` (`@text-to-cad/ui/links`), which fills in the defaults.
  */
 export interface ViewerLinks {
@@ -40,17 +40,6 @@ export interface ViewerLinks {
    * `bug` label. Empty: none of them is offered.
    */
   issues: string;
-  /**
-   * How to update, the way this host does it, each shown only when given: a command for a terminal,
-   * the same as a message for an agent, and `message`: how this host updates, said in a line, for a
-   * host whose update is not a command (a marketplace, a restart). The defaults update the skills.
-   */
-  install: { command?: string; prompt?: string; message?: string };
-  /**
-   * The newest release, for a host that checks for one, and whether it is newer than `version`:
-   * the version then reads "Update". Absent (or null), nothing was checked.
-   */
-  latest?: { version: string; url: string; newer: boolean } | null;
   /**
    * Follow a link. A host whose page cannot open one itself (a page in a sandboxed frame) supplies
    * this; without it a link opens the ordinary way, in a new tab.

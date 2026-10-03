@@ -14,7 +14,10 @@
         "cadgen==0.7.11",
         "cadgen",
         "mcp"
-      ]
+      ],
+      "env": {
+        "CADGEN_INSTALL_CHANNEL": "github"
+      }
     }
   }
 }

@@ -375,9 +375,7 @@ host's files can be browsed (`files.list`), then the open file's name and its â‹
 which is the explorer's own entry menu for that file (no right-click on the name).
 With no file open the name's place says "Select file" (words, not a control), and
 the page says "Ask the agent to show a model". Right: the renderer's navigation actions, any
-declared panel's toggle, then the update (`UpdateButton`, `NavbarLinks.jsx`): where the host
-found a newer release (`links.latest`), a blue download button whose menu says the step to it,
-how this host updates (`links.install`) and what is new; without one, nothing. Then GitHub
+declared panel's toggle, then GitHub
 (`GitHubLink`), which says the project is open source, then Feedback
 (`FeedbackLink`), where the host has a tracker (`links.issues`): a new issue titled "Feedback: ",
 for the person to finish, naming the version and `environment.platform`, just before the
@@ -385,7 +383,7 @@ renderer's view controls and never among them. It has no label: the project has 
 feedback, and what is said may be a bug, a request or a question. The Settings popover
 (`SettingsPopover`) shows the version beside its title, and its footer has "Made by @â€¦" (`MadeBy`, the
 host's X account) at its left and Discord and GitHub (`CommunityLinks`) at its right. The home has
-GitHub, Feedback and Settings under its wordmark, in that order, after the update; its Settings
+GitHub, Feedback and Settings under its wordmark, in that order; its Settings
 holds no Display sections, only the host's own settings. An alert card's Report Issue opens a new issue too,
 titled "Issue: " and labelled `bug`, filled in from the card (`kit/status/reportIssue.js`): its
 title, message and failure, the file's name, the version and platform, then its Details, cut from
@@ -402,7 +400,12 @@ sections, one per `section` the settings name (Analytics, in both apps), in the 
 and the home's; the host owns what each one does. `@text-to-cad/ui/consent` is the analytics
 prompt both apps share: `ConsentCard` (the card) and
 `useAnalyticsConsent(consent)`, which turns the host's consent call into the card's state, its
-answer and the Analytics setting; the host supplies the call and where the answer is kept. The shell handles placement and hides the toolbar in
+answer and the Analytics setting; the host supplies the call and where the answer is kept.
+`@text-to-cad/ui/update` is the update notice both apps share, from cadgen's version check:
+`UpdateCard` and `useUpdateNotice(call)`, which reads the host's call and keeps the person's
+answer (they sent or copied the prompt, or closed the card) through it. The card sends its prompt
+to the agent's chat through the host's `send`, where the host can, and otherwise copies it through
+`copy`; the host decides which it supplies. The shell handles placement and hides the toolbar in
 preview; the host owns callbacks and preferences. None of these imply platform
 detection or move application-specific release/network behavior into shared UI.
 
@@ -413,10 +416,10 @@ time, the explorer included.
 
 The viewport's corners are the shell's, never the host's: the tool strip and its
 stack at the top-left, Quick Edit at the top-right, and the view cube at the
-bottom-left. A host's one question goes through the shell too: `notice` (the
-`ConsentCard`) is drawn at the top-right once the file is on screen, never while it
-loads or after it failed to, with Quick Edit stacked under it until it is answered;
-the home never shows it. The view's own controls (Display settings, Preview) are the
+bottom-left. A host's one notice goes through the shell too: `notice` (the
+`ConsentCard`, and once it is answered the `UpdateCard`) is drawn at the top-right once the
+file is on screen, never while it loads or after it failed to, with Quick Edit stacked under
+it until it is answered; the home never shows it. The view's own controls (Display settings, Preview) are the
 renderer's, drawn into the navbar's right end after the version (`navbarSlot`). What Quick Edit offers follows the subscribed destination capability and
 the ports, never an app name: Copy Prompt always, Queue for a composer
 destination, Send where the prompt port has `send`. Native clipboard effects

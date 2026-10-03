@@ -76,7 +76,11 @@ the [latest release](https://pypi.org/project/cadgen/) and restart the app.
 ```json
 {
   "mcpServers": {
-    "cad": { "command": "uvx", "args": ["--no-config", "--managed-python", "--python", "3.13", "--from", "cadgen==0.7.11", "cadgen", "mcp"] }
+    "cad": {
+      "command": "uvx",
+      "args": ["--no-config", "--managed-python", "--python", "3.13", "--from", "cadgen==0.7.11", "cadgen", "mcp"],
+      "env": {"CADGEN_INSTALL_CHANNEL": "github"}
+    }
   }
 }
 ```
@@ -97,7 +101,7 @@ In the Codex app the plugin also brings the CAD viewer: **CAD** in the sidebar
 drives, and *Open with CAD* for model files. It runs locally through
 [uv](https://docs.astral.sh/uv/), which must be installed: after installing the plugin,
 restart the app, and its first start downloads the pinned runtime. The plugin's
-`$cad-mcp-setup` skill checks for uv and points you to its installer. To update, upgrade the `earthtojake` marketplace
+`$cad-setup` skill checks for uv and points you to its installer. To update, upgrade the `earthtojake` marketplace
 (Plugins › Manage › Marketplace, or `codex plugin marketplace upgrade earthtojake`)
 and restart the app: its first start downloads the new runtime. The marketplace was renamed from `text-to-cad`
 to `earthtojake`; if you added it before, remove the old one first
@@ -106,11 +110,12 @@ to `earthtojake`; if you added it before, remove the old one first
 ### Cursor
 
 ```bash
-git clone --depth 1 https://github.com/earthtojake/text-to-cad ~/.cursor/plugins/local/text-to-cad
+git clone --depth 1 --branch plugin https://github.com/earthtojake/text-to-cad ~/.cursor/plugins/local/text-to-cad
 ```
 
 Cursor reads `.cursor-plugin/plugin.json`: restart Cursor after cloning, and run
-`git pull` in that folder to update. Cursor also loads plugins installed with
+`git pull` in that folder to update. The `plugin` branch holds only the plugin,
+one commit per release. Cursor also loads plugins installed with
 Claude Code, so skip this if you installed the Claude Code plugin. Teams can
 import the repository instead, under **Dashboard → Plugins & MCPs → Team
 Marketplaces**.
@@ -159,16 +164,30 @@ releases do add skills.
 
 Neither command removes a skill that was retired upstream; drop one with
 `npx skills remove <skill>` if you need to. The retired `cad-viewer` skill is
-now covered by the CAD, DXF and robot-description skills; remove old standalone
-installs with `npx skills remove cad-viewer`.
+now covered by the CAD, DXF and robot-description skills, and `cad-mcp-setup`
+became `cad-setup`; remove old standalone installs with
+`npx skills remove cad-viewer cad-mcp-setup`.
 
 No plugin for your agent yet?
 [Request one](https://github.com/earthtojake/text-to-cad/issues/new?title=Plugin%20request%3A%20).
 
+### Updates
+
+When a newer release is out, text-to-cad says so once per release: a card in
+CAD's viewer, where **Send to agent** posts "Update text-to-cad to 0.9.0." to
+your chat (the browser viewer's card copies it instead), or a line in your
+agent's command output. Your agent then follows the `cad-setup` skill's steps
+for your app. Copies from a plugin directory or the Cursor Marketplace are
+updated by their store, so they hear nothing unless the store falls far behind.
+
+To find out, cadgen fetches `api.texttocad.dev/v1/versions` at most once a day:
+one anonymous request, with no ID, path or anything about you, and never in CI.
+`CADGEN_UPDATE_CHECK=0` turns it off.
+
 ### Usage analytics
 
 The CAD app (the plugin's `cad` server) and the browser viewer (`cadgen viewer`) can send anonymous usage counts: a
-random install ID, versions, your OS and agent app, how often each CAD tool was
+random install ID, versions, where you installed it from, your OS and agent app, how often each CAD tool was
 called and views were used, and a one-way code and the format of each distinct
 file shown (to count files, not identify them). Our server also counts installs
 per country, from each request's IP address, as weekly and monthly totals only.

@@ -597,6 +597,32 @@
     "openWorldHint": false,
     "readOnlyHint": true
    },
+   "description": "Whether a newer text-to-cad is out, and the release the person's click on the update card set aside.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "dismiss": {
+      "type": "string"
+     }
+    },
+    "type": "object"
+   },
+   "name": "cad_version",
+   "title": "CAD updates"
+  },
+  {
+   "_meta": {
+    "ui": {
+     "visibility": [
+      "app"
+     ]
+    }
+   },
+   "annotations": {
+    "destructiveHint": false,
+    "openWorldHint": false,
+    "readOnlyHint": true
+   },
    "description": "The launch for opening a model in this view.",
    "inputSchema": {
     "additionalProperties": false,
