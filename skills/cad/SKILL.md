@@ -31,18 +31,19 @@ Use the corresponding robot-description skill for URDF, SRDF or SDF.
 
 ## Setup and paths
 
-Install this skill's `requirements.txt` with the active project interpreter.
-Snapshots also need Chromium:
+Run cadgen through [uv](https://docs.astral.sh/uv/), so this skill's commands share
+one installation, and its warm build daemon, with the CAD app's server:
 
-```bash
-python -m pip install -r /path/to/installed/cad/requirements.txt
-python -m playwright install chromium
-```
+- `cadgen` below means `uvx --no-config --managed-python --python 3.13 --from cadgen==0.7.11 cadgen`
+- `python` below means `uvx --no-config --managed-python --python 3.13 --from cadgen==0.7.11 python`
 
-Treat `python` in examples as the active interpreter. `cadgen doctor <skill-dir>`
-checks the skill's package pin and CAD kernel; use it for installation or OCP
-load errors. `python -m cadgen.cli` is the PATH-independent equivalent of
-`cadgen`. Use the relevant subcommand's `--help` for additional flags.
+The first run downloads that installation and the first snapshot its headless
+browser; later runs reuse both.
+
+`cadgen doctor <skill-dir>` reports the installation in use and checks that it is
+the one this skill pins, and that the CAD kernel loads; use it for installation or
+kernel load errors. Use the relevant
+subcommand's `--help` for additional flags.
 
 Run project commands from the CAD project root. CLI input/output paths and
 `read_scene`/`read_step` paths are working-directory-relative; decorator `out=`

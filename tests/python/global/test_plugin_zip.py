@@ -58,13 +58,13 @@ class PluginZipTests(unittest.TestCase):
             "skills": "./skills/", "mcpServers": "./codex.mcp.json",
             "interface": {"displayName": "Demo", "shortDescription": "Demo things", "longDescription": "Demo.",
                           "developerName": "Demo", "category": "Productivity", "capabilities": []},
-            "extensions": {"com.openai": {"onboardingSkill": "./skills/cad-mcp-setup/SKILL.md"}},
+            "extensions": {"com.openai": {"onboardingSkill": "./skills/cad-setup/SKILL.md"}},
         }
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / ".codex-plugin").mkdir()
-            (root / "skills/cad-mcp-setup").mkdir(parents=True)
-            (root / "skills/cad-mcp-setup/SKILL.md").write_text("---\nname: cad-mcp-setup\ndescription: Set up.\n---\nSteps.\n",
+            (root / "skills/cad-setup").mkdir(parents=True)
+            (root / "skills/cad-setup/SKILL.md").write_text("---\nname: cad-setup\ndescription: Set up.\n---\nSteps.\n",
                                                         encoding="utf-8")
             server = {"command": "uvx", "args": ["--from", "cadgen==1.0.0", "cadgen", "mcp"]}
             (root / "codex.mcp.json").write_text(json.dumps({"mcpServers": {"cad": server}}), encoding="utf-8")
@@ -79,9 +79,10 @@ class PluginZipTests(unittest.TestCase):
             with zipfile.ZipFile(root / "out.zip") as archive:
                 self.assertEqual(json.loads(archive.read(".codex-plugin/plugin.json"))["mcpServers"],
                                  "./.mcp.json")
-                # A directory install says so, for analytics to report; it is asked like any other.
-                self.assertEqual(json.loads(archive.read(".mcp.json"))["mcpServers"]["cad"]["args"],
-                                 [*server["args"], "--install", "store"])
+                # The package names its channel, OpenAI's directory: cadgen's version check leaves the copy
+                # to the directory, which updates it, and analytics report it.
+                self.assertEqual(json.loads(archive.read(".mcp.json"))["mcpServers"]["cad"],
+                                 {**server, "env": {"CADGEN_INSTALL_CHANNEL": "openai-directory"}})
                 self.assertNotIn("codex.mcp.json", archive.namelist())
 
             # The portal refuses both: a subtitle over 30 characters (main's, until this

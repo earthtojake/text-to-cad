@@ -209,6 +209,7 @@ class Server:
         self._connection: Connection | None = None
         self._order = itertools.count(1)
         self._analytics = analytics
+        self._update_told = False
 
     # -- lazily built parts ----------------------------------------------------
 
@@ -419,6 +420,9 @@ class Server:
             app("cad_consent", "CAD analytics consent",
                 "Whether to ask the person about anonymous usage analytics, and their answer. Only for the person's own click.",
                 _object({"share": {"type": "boolean"}})),
+            app("cad_version", "CAD updates",
+                "Whether a newer text-to-cad is out, and the release the person's click on the update card set aside.",
+                _object({"dismiss": {"type": "string"}})),
             app("cad_launch", "Open model", "The launch for opening a model in this view.",
                 _object({"model": {"type": "string"}}, ["model"])),
             app("cad_pick_model", "Open Model", "Choose a model with the desktop's file chooser. Only for an explicit Open Model action.",
@@ -598,6 +602,16 @@ class Server:
         return _data({"ask": found["reason"] == "unasked", "sharing": found["sharing"], "reason": found["reason"],
                       "policy": PRIVACY_URL})
 
+    def _tool_cad_version(self, arguments, context):
+        # The page's update card (`cadgen/updates.py`): whether a newer text-to-cad is out, and, from the
+        # person's click on it (they sent, copied or closed it), the release not to offer again.
+        # Only a page answers: a text client has none.
+        from cadgen import updates
+
+        if isinstance(arguments.get("dismiss"), str) and not self.text:
+            updates.dismiss(arguments["dismiss"])
+        return _data({"notice": updates.notice()})
+
     def _tool_cad_analytics(self, arguments, context):
         # The agent may report the setting or turn sharing off for the person; only the person turns it on.
         from cadgen.analytics import PRIVACY_URL
@@ -679,9 +693,22 @@ class Server:
                              f"`cd \"{folder}\" && cadgen viewer --host 127.0.0.1 --json --detach` and open the url it prints "
                              f"with ?file={relative} added.") from failure
         link = model_link(url, folder, model)
-        return _text(f"This app cannot show CAD views, so {os.path.basename(model)} is in the CAD Viewer: {link}\n"
-                     "The Viewer refreshes when the file changes: share this link once, not after every rebuild.",
-                     {"url": link, "model": model})
+        return self._told(_text(f"This app cannot show CAD views, so {os.path.basename(model)} is in the CAD Viewer: {link}\n"
+                                "The Viewer refreshes when the file changes: share this link once, not after every rebuild.",
+                                {"url": link, "model": model}))
+
+    def _told(self, result: dict[str, Any]) -> dict[str, Any]:
+        """A text-only app has no card for the update notice (``cadgen/updates.py``): this process's
+        first result that can carry it does, as a line for the agent to pass on."""
+        if self._update_told:
+            return result
+        from cadgen import updates
+
+        found = updates.notice(fetch=False)  # an agent's call never waits on the feed: the server read it at start
+        if found is not None:
+            self._update_told = True
+            result["content"].append({"type": "text", "text": updates.line(found)})
+        return result
 
     def _shown(self, view_id: Any) -> Any:
         """The inline view the agent names by the token its cad_show returned."""
@@ -859,7 +886,7 @@ class Server:
         return _data({"recents": [entry.public() for entry in store.list()]})
 
 
-def serve(argv: list[str] | None = None, *, install: str | None = None) -> int:
+def serve(argv: list[str] | None = None) -> int:
     """Serve MCP on this process's standard streams until the host closes them."""
     logging.basicConfig(stream=sys.stderr, level=logging.INFO, format="cadgen mcp: %(message)s")
     protocol_out = claim_stdout()
@@ -867,10 +894,12 @@ def serve(argv: list[str] | None = None, *, install: str | None = None) -> int:
         launch_cwd = os.getcwd()
     except OSError:
         launch_cwd = None
+    from cadgen import updates
     from cadgen.analytics import Recorder
 
-    analytics = Recorder(install=install)
+    analytics = Recorder()
     analytics.start()
+    updates.refresh()
     server = Server(launch_cwd=launch_cwd, analytics=analytics)
     connection = Connection(sys.stdin.buffer, protocol_out, server.handle, on_notification=server.notified, workers=64)
     server.attach(connection)

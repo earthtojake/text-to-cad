@@ -10,7 +10,7 @@ import { NAVBAR_CONTROLS_CLASS, NAVBAR_ROW_CLASS } from "../../lib/navbarRow.js"
 import { EntryMenuItems, useEntryMenuFocusGuard } from "./EntryMenu.jsx";
 import { entryMenu } from "./entry-menu.js";
 import { InlineName } from "./InlineName.jsx";
-import { FeedbackLink, UpdateButton } from "./NavbarLinks.jsx";
+import { FeedbackLink } from "./NavbarLinks.jsx";
 
 /**
  * The row above a file: ONE navbar, the same in every app, so a person finds each control in the
@@ -114,11 +114,10 @@ function FileActions({ entry, capabilities, platform, onAction }) {
  * @param {(element: HTMLDivElement | null) => void} [props.controlsRef] The box the renderer draws its view controls into.
  * @param {import("../../host/types.js").ViewerLinks} [props.links]
  * @param {string} [props.platform] The host's `environment.platform`, which Feedback's issue names.
- * @param {import("../../host/types.js").ClipboardPort} props.clipboard
  * @param {(error: Error) => void} [props.onError]
  * @param {string} [props.className]
  */
-export function ViewerNavbar({ onBack, explorer = null, file = null, selecting = false, status = null, trailing = null, controlsRef, links, platform, clipboard, onError, className }) {
+export function ViewerNavbar({ onBack, explorer = null, file = null, selecting = false, status = null, trailing = null, controlsRef, links, platform, onError, className }) {
   const name = file ? file.path.split("/").pop() || file.path : "";
   return (
     <header className={cn(NAVBAR_ROW_CLASS, "border-border bg-background text-foreground", className)} data-viewer-navbar="">
@@ -139,7 +138,6 @@ export function ViewerNavbar({ onBack, explorer = null, file = null, selecting =
       </nav>
       <div className={NAVBAR_CONTROLS_CLASS}>
         {trailing}
-        {links ? <UpdateButton links={links} clipboard={clipboard} onError={onError} /> : null}
         {links ? <FeedbackLink links={links} platform={platform} onError={onError} /> : null}
         <div ref={controlsRef} className="contents" data-navbar-controls="" />
       </div>

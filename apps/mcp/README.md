@@ -61,22 +61,35 @@ reference host `basic-host` does.
   `cad_view` and `cad_screenshot` mean the view a person touched last of its thread's tabs and
   the sidebar's: a model already in the sidebar is shown there, not in a new tab. Only sidebar
   views are shared; a thread's tabs are that conversation's.
-- **One request to the network: analytics, with consent.** There is no update
-  button: the host updates CAD (a plugin directory by itself, an unpinned `uvx` on
-  restart), and GitHub's newest release often runs ahead of what a directory
-  serves. The server notes its use -- tool calls (not the page's plumbing),
-  view activity from each view's sync (`focused`), and the files views show,
-  as salted one-way codes -- and, only with consent, sends it to
-  `api.texttocad.dev` once a minute
-  (`cadgen/analytics.py`; the receiver is the docs site's `/v1`): never a path, an argument
-  or a file. Every install is asked once by the page (`cad_consent`, the
-  shared `ConsentCard` from `@text-to-cad/ui/consent`, the viewer's `notice`: top-right
-  once a model is on screen, Quick Edit under it, never on the home; the browser
-  viewer asks the same way, and one answer counts for both), and nothing is sent before a yes; Settings' Analytics
-  section (`appSettings`) changes the answer later. A plugin directory's install
-  (`cadgen mcp --install store`, stamped by `scripts/release/plugin_zip.py`) is
-  only reported as such. The agent's `cad_analytics` reports the setting and
-  turns it off, never on.
+- **Two requests to the network: the version check, and analytics with consent.**
+  Both go to `api.texttocad.dev` (the docs site's `/v1`). Once a day at most, cadgen
+  reads the version feed (`cadgen/updates.py`): one anonymous GET, with no id and
+  nothing about the person (`CADGEN_UPDATE_CHECK=0` turns it off; never in CI or from
+  a source tree). When this install is behind, the page shows the shared
+  `UpdateCard` (`@text-to-cad/ui/update`, read through `cad_version`) in the viewer's
+  `notice` once the analytics card is answered: "text-to-cad 0.9.0 is available (you
+  have 0.8.1)", and a prompt worded like the install message, "Update text-to-cad to
+  0.9.0 from https://github.com/earthtojake/text-to-cad".
+  **Send to agent** posts it as the person's message (`ui/message`) where the host
+  takes messages (`chatReach`); elsewhere **Copy prompt** copies it. The agent does
+  the update, with the `cad-setup` skill's steps; nothing here updates anything.
+  A text client gets the same line with its first `cad_show` result. Where the
+  install came from is its channel, `CADGEN_INSTALL_CHANNEL` in the server's
+  environment, written by each package's build (`cadgen/_internal/channel.py`): a
+  store's copy (the Claude or OpenAI directory, the Cursor Marketplace) is left to
+  its store unless it falls below the store's minimum in the feed, and a release
+  the person answered the card for is not offered again. The analytics: the server
+  notes its use -- tool calls (not the page's plumbing), view activity from each
+  view's sync (`focused`), and the files views show, as salted one-way codes --
+  and, only with consent, sends it once a minute (`cadgen/analytics.py`): never a
+  path, an argument or a file. Every install is asked once by the page
+  (`cad_consent`, the shared `ConsentCard` from `@text-to-cad/ui/consent`, the
+  viewer's `notice`: top-right once a model is on screen, Quick Edit under it,
+  never on the home; the browser viewer asks the same way, and one answer counts
+  for both), and nothing is sent before a yes; Settings' Analytics section
+  (`appSettings`) changes the answer later. The channel is reported with the
+  counts; it decides nothing there. The agent's `cad_analytics` reports the
+  setting and turns it off, never on.
 - **Told how it is presented, before it greets the host.** A host that mounts
   views inline is served the page with `<meta name="cad-presentation"
   content="inline">` in its head: the page offers that host `inline` and
@@ -164,11 +177,12 @@ home's and the explorer's lists scroll clear of it (`--cad-host-bottom-inset`).
 ```bash
 npm run build:mcp                             # packages, then this app
 npm --prefix apps/mcp run test               # jsdom units
-scripts/install/codex-dev-plugin.sh --restart   # run it in the Codex app
-scripts/install/claude-dev-server.sh            # run it in Claude Desktop (then restart it)
+scripts/install/dev_install.py codex --restart  # run it in the Codex app
+scripts/install/dev_install.py claude-desktop   # run it in Claude Desktop (then restart it)
 ```
 
 `scripts/test/test-js.sh --select mcp` is what CI runs: the tests, then the
-build. A checkout's `cadgen mcp` serves `apps/mcp/dist` when it exists
+build. Every host `dev_install.py` takes is in CONTRIBUTING.md ("Test In Agent
+Apps"). A checkout's `cadgen mcp` serves `apps/mcp/dist` when it exists
 (`CADGEN_MCP_APP_DIR` overrides it); a wheel serves `cadgen/_runtime/mcp`,
 built by `scripts/bundle/bundle.sh`.

@@ -158,7 +158,7 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
   const changeLayout = useCallback((next: LibraryLayout) => preferences.update({ library: { layout: next } }), [preferences]);
   const presentation = useMemo(() => ({
     home: library ? <ModelLibrary library={library} layout={layout} onLayoutChange={changeLayout} picture={picture}
-      links={host.links} platform={platform} clipboard={host.clipboard} appSettings={appSettings} onError={onError} /> : undefined,
+      links={host.links} platform={platform} appSettings={appSettings} onError={onError} /> : undefined,
     empty: <EmptyState icon={Box} title="Ask the agent to show a model" />,
     loading: <div className="relative h-full"><ViewerLoadingOverlay viewerLoading /></div>,
     error: () => <div className="relative h-full">{catalog.error

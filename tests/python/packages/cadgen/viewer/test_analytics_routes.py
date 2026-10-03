@@ -1,4 +1,5 @@
-"""The browser viewer's part in CAD's analytics: the same card, the same saved answer, and what its page did."""
+"""The browser viewer's cards: CAD's analytics -- the same card, the same saved answer, and what its
+page did -- and the update notice the CAD app shows too."""
 
 from __future__ import annotations
 
@@ -8,10 +9,12 @@ import os
 import shutil
 import tempfile
 import threading
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
 
+import cadgen
 from cadgen.analytics import Recorder, file_code, file_salt
 from cadgen.viewer import handler as handler_module
 from cadgen.viewer.http_app import create_cad_app
@@ -90,6 +93,17 @@ class ViewerAnalyticsTest(unittest.TestCase):
         code = file_code(file_salt(self.state), str(self.root / "parts" / "a.stl"))
         self.assertEqual(payload["events"], [{"name": "view", "calls": 1}, {"name": "file", "file": code, "kind": "stl"}])
         self.assertNotIn("a.stl", json.dumps(payload))
+
+    def test_the_update_card_asks_and_the_persons_click_sets_the_release_aside(self) -> None:
+        # The CAD app's notice (`cadgen/updates.py`), from the same feed; this page copies its prompt.
+        (self.tmp / "state").mkdir(exist_ok=True)
+        (self.tmp / "state" / "versions.json").write_text(json.dumps({"checked": time.time(), "feed": {"latest": "99.0.0"}}),
+                                                          encoding="utf-8")
+        with mock.patch.dict(os.environ, {"CADGEN_INSTALL_CHANNEL": "github", "CI": "", "CADGEN_UPDATE_CHECK": ""}):
+            status, answer = self.request("GET", "/__cad/version")
+            self.assertEqual((status, answer["notice"]["text"]), (200, f"text-to-cad 99.0.0 is available (you have {cadgen.__version__})"))
+            self.assertEqual(self.request("POST", "/__cad/version", {"dismiss": "99.0.0"}), (200, {"notice": None}))
+            self.assertEqual(self.request("GET", "/__cad/version")[1], {"notice": None})
 
     def test_an_app_with_no_recorder_serves_no_analytics(self) -> None:
         # The CAD app's tunnel builds apps of its own: its page asks the CAD app's server instead.

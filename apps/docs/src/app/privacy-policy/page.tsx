@@ -4,13 +4,13 @@ import { IssuesLink, LegalPage, LegalSection } from "@/components/legal-page";
 export const metadata: Metadata = {
   title: "Privacy Policy",
   description:
-    "How Thompson Labs LLC handles personal data for text-to-cad: what is collected, including CAD's anonymous usage analytics, why, who receives it, how long it is kept, and your controls.",
+    "How Thompson Labs LLC handles personal data for text-to-cad: what is collected, including CAD's anonymous usage analytics and its daily version check, why, who receives it, how long it is kept, and your controls.",
   alternates: { canonical: "/privacy-policy" },
 };
 
 export default function PrivacyPolicyPage() {
   return (
-    <LegalPage title="Privacy Policy" updated="October 2, 2026">
+    <LegalPage title="Privacy Policy" updated="October 3, 2026">
       <LegalSection>
         <p>
           This policy describes how Thompson Labs LLC (“we”, “us”) handles personal data for
@@ -33,8 +33,8 @@ export default function PrivacyPolicyPage() {
             in your agent app (the plugin’s <code>cad</code> server) and the CAD viewer in your browser
             (<code>cadgen viewer</code>) send to api.texttocad.dev, at most once a minute while you use
             them: a random install ID created on your computer; a random ID for each time one of them
-            starts; the cadgen version, whether it was installed from a plugin directory or by hand,
-            your operating system and processor type, and the name and version of your agent app and
+            starts; the cadgen version, where it was installed from (a plugin directory, the Cursor
+            Marketplace, GitHub, or a development install), your operating system and processor type, and the name and version of your agent app and
             how it shows CAD (or that it is the browser viewer); how many times each
             CAD tool was called and failed, and how many times you touched a CAD view; and, at most
             once a day from each running CAD app or CAD viewer, for each distinct file you work on in it
@@ -52,6 +52,14 @@ export default function PrivacyPolicyPage() {
             agent (for CAD, just “cadgen”); see section 4 for what happens to them. Section 5 says when
             they are on and how to turn them off. The skills alone, without the CAD app or the CAD
             viewer, send no analytics.
+          </li>
+          <li>
+            <strong>The version check:</strong> at most once a day, cadgen (the CAD app, the CAD viewer
+            or a <code>cadgen</code> command) asks api.texttocad.dev which text-to-cad release is the
+            newest, so it can tell you when there is an update. The request carries no ID and nothing
+            about you or your work; like any request, it reaches our host with your IP address, the
+            time and a user agent (“cadgen”). It is never made in CI, and section 5 says how to turn it
+            off.
           </li>
           <li>
             <strong>step.parts searches:</strong> when you ask your agent to find a part, the
@@ -78,6 +86,7 @@ export default function PrivacyPolicyPage() {
             and this website.
           </li>
           <li>Page-view statistics: only to understand, in aggregate, how this website is used.</li>
+          <li>Version checks: only to answer them; we keep nothing from them beyond our host’s request logs.</li>
           <li>
             Usage analytics: only to understand, in aggregate, how many people use text-to-cad and how
             often, how many files they work on and in which formats, where in the world it is used,
@@ -102,9 +111,7 @@ export default function PrivacyPolicyPage() {
           <li>
             <strong>Services the software contacts directly</strong>, under their own privacy
             policies. The agent app installs the pinned cadgen runtime from the Python Package Index
-            (PyPI) the first time it starts after an install or an update. The browser CAD viewer
-            (<code>cadgen viewer</code>) asks GitHub for the latest release at most every few hours, to
-            offer updates; the CAD app in your agent app does not. Skills reach the
+            (PyPI) the first time it starts after an install or an update. Skills reach the
             services you ask your agent to use, such as a fabrication service’s public specifications
             or your own printer on your local network. These requests send no personal data of ours;
             each service sees the request’s IP address, time and user agent.
@@ -143,8 +150,8 @@ export default function PrivacyPolicyPage() {
       <LegalSection title="5. Your choices and controls">
         <ul>
           <li>
-            The plugin works without contacting us. step.parts receives a request only when you ask
-            your agent to search for or download a part.
+            The plugin works without contacting us, apart from the daily version check. step.parts
+            receives a request only when you ask your agent to search for or download a part.
           </li>
           <li>
             <strong>Usage analytics are off until you allow them</strong>, however you installed
@@ -168,6 +175,10 @@ export default function PrivacyPolicyPage() {
             else is chosen. <code>uvx cadgen analytics
             on</code> turns them on, and <code>uvx cadgen analytics status</code> shows the setting and
             your install ID.
+          </li>
+          <li>
+            Setting <code>CADGEN_UPDATE_CHECK=0</code> where cadgen runs turns the daily version check
+            off; CAD then never says when there is an update.
           </li>
           <li>
             You can uninstall the plugin at any time. Deleting cadgen’s cache and state folders

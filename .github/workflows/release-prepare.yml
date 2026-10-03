@@ -1,8 +1,8 @@
 name: Prepare Release
 
 # Half one of a release: the version bump, as a PR. Bumps VERSION, stamps the derived
-# package/plugin metadata (sync-version.mjs) and every skill's cadgen pin
-# (pin-cadgen-requirements.sh), opens `release/X.Y.Z` against the target branch and
+# package/plugin metadata and every cadgen pin -- the plugin server configs and each
+# skill's launch command (sync-version.mjs) -- opens `release/X.Y.Z` against the target branch and
 # merges it. That merge is what fires the other half, Publish Release
 # (release-publish.yml), which builds, tests, uploads and tags the merged commit.
 #
@@ -109,7 +109,6 @@ jobs:
             scripts/release/bump-version.sh "$BUMP"
           fi
           node scripts/release/sync-version.mjs
-          scripts/release/pin-cadgen-requirements.sh
           version="$(tr -d '[:space:]' < VERSION)"
           echo "version=$version" >> "$GITHUB_OUTPUT"
           if git diff --quiet; then

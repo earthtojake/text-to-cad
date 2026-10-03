@@ -60,15 +60,16 @@ dependencies = [
   # neither is optional.
   "matplotlib",
   "pillow",
+  # Snapshots render in a headless browser that Playwright drives. A dependency of every
+  # install, not an extra: the CAD plugin's server and every skill run one requirement,
+  # `cadgen==<version>`, so they share one installation and one warm daemon, and a second
+  # requirement (`cadgen[snapshot]`) would be a second installation. Pinned exactly: each
+  # Playwright release fetches its own browser build, so a range would download a new
+  # browser whenever it moved. The browser itself is fetched on the first snapshot
+  # (snapshot_core.install_browser), not by the install.
+  "playwright==1.63.0",
   "shapely",
 ]
-
-# Extras gate DEPENDENCIES, not files: the JavaScript runtime ships to everyone because it
-# is small and because a skill cannot know in advance which command a user will reach for.
-# Playwright is different -- it is a large install plus a browser download -- so rendering
-# is opt-in.
-[project.optional-dependencies]
-snapshot = ["playwright"]
 
 [project.urls]
 Homepage = "https://github.com/earthtojake/text-to-cad"

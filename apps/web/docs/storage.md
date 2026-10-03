@@ -64,9 +64,5 @@ importing a renderer never chooses a browser storage backend.
 
 ## localStorage
 
-One key, and it is not viewer state: `cad-viewer:latest-release:v1:<api url>`
-caches the latest-release check ([viewerLinks.js](../src/host/viewerLinks.js))
-so every tab does not ask GitHub again. It is a network cache with a time to
-live, shared by every tab, and it says nothing about what any tab shows. Nothing
-else goes in localStorage: a value that depends on a file, a root, a tab or a
+Nothing goes in localStorage: a value that depends on a file, a root, a tab or a
 person's choice belongs in the tab record.
