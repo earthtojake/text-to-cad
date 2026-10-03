@@ -8,6 +8,7 @@ import {
   createHttpTessellationCacheProvider,
   decodeComponentTessellation,
   decodeTessellationCacheBatch,
+  edgeClassesFromSurfIndex,
   encodeComponentTessellation,
   encodeTessellationCacheBatch,
   float64Hex,
@@ -219,6 +220,50 @@ test("empty imported components round-trip through the cache without changing as
     assert.deepEqual(assembly.bounds, solidMesh.bounds, "only real geometry frames the view");
     assert.deepEqual(assembly.assemblyRoot.bounds, solidMesh.bounds);
   }
+});
+
+test("a wire-only imported component is measured by its edges and frames nothing", () => {
+  // A STEP product holding only wires (a sketch, a reference curve) has no
+  // faces, so no loops measure it: its edge curves do.
+  const index = { shapes: [{ ord: 1, kind: "shape", volume: null }], faces: [], edges: [
+    { ord: 1, class: "feature", curve: { kind: "line", origin: [0, 0, 0], dir: [0, 0, 1], range: [0, 50] } },
+    { ord: 2, class: "feature", curve: {
+      kind: "circle", radius: 10, origin: [0, 0, 50], xdir: [1, 0, 0], ydir: [0, 1, 0], zdir: [0, 0, 1],
+      range: [0, 2 * Math.PI],
+    } },
+  ] };
+  const near = (actual, expected) => actual.every((value, d) => Math.abs(value - expected[d]) < 1e-4);
+  const component = tessellateComponent(index, new Float32Array(0));
+  assert.equal(component.indices.length, 0);
+  assert.deepEqual(component.edges.map((edge) => edge.ord), [1, 2]);
+  assert.ok(Math.abs(component.scale - Math.hypot(20, 50)) < 1e-6, "the wires' size, not the floor");
+  assert.ok(near(component.bounds.min, [-10, -10, 0]) && near(component.bounds.max, [10, 10, 50]),
+    "the drawn edges are the bounds");
+  const decoded = decodeComponentTessellation(encodeComponentTessellation(component, {
+    surfaceInput: D,
+    surfaceObject: O,
+    edgeClasses: edgeClassesFromSurfIndex(index),
+  }));
+  assert.ok(decoded, "a wire-only product is a valid complete cache payload");
+  assert.deepEqual(decoded.component, component);
+
+  const wireMesh = buildMeshDataFromSurf(index, null, { component });
+  assert.ok(wireMesh.cadEdgePositions.length > 0, "its edges reach the mesh data");
+  const solidMesh = buildMeshDataFromSurf({ faces: [], edges: [] }, null, {
+    component: componentFixture(),
+  });
+  const assembly = buildComposedPackageMeshData({ assembly: { root: {
+    id: "root", nodeType: "assembly", children: [
+      { id: "wire", nodeType: "part", children: [] },
+      { id: "solid", nodeType: "part", children: [] },
+    ],
+  } }, occurrences: [
+    { id: "wire", component: "wire", transform: [1, 0, 0, 1000, 0, 1, 0, 0, 0, 0, 1, 0, 0, 0, 0, 1] },
+    { id: "solid", component: "solid" },
+  ] }, new Map([["wire", wireMesh], ["solid", solidMesh]]));
+  assert.deepEqual(assembly.parts.map((part) => part.occurrenceId), ["wire", "solid"]);
+  assert.equal(assembly.parts[0].bounds, null, "nothing draws a part without triangles");
+  assert.deepEqual(assembly.bounds, solidMesh.bounds, "so it cannot move the camera");
 });
 
 test("decode rejects expected and embedded identity mismatches as cache misses", () => {

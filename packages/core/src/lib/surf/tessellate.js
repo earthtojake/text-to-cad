@@ -1813,22 +1813,6 @@ export function polylineEdge(curve, floats, scale, options = {}) {
 // per-vertex face ordinal channel (picking / selection tint) and per-class
 // edge segment lists.
 export function tessellateComponent(index, floats, options = {}) {
-  // Imported STEP assemblies can retain empty product entries. They have no
-  // samples from which to measure a box, but still need a valid cache payload.
-  if (index.faces.length === 0 && index.edges.length === 0) {
-    return {
-      positions: new Float32Array(0),
-      normals: new Float32Array(0),
-      faceOrds: new Float32Array(0),
-      indices: new Uint32Array(0),
-      sideOrds: new Uint32Array(0),
-      faceRanges: [],
-      edges: [],
-      bounds: { min: [0, 0, 0], max: [0, 0, 0] },
-      scale: 1e-6,
-      ...(options.collectBoundaryDebug ? { boundaryDebug: [], sharedEdges: new Map() } : {}),
-    };
-  }
   // Component scale: bbox diagonal from a cheap pass over loop samples.
   let min = [Infinity, Infinity, Infinity];
   let max = [-Infinity, -Infinity, -Infinity];
@@ -1851,7 +1835,24 @@ export function tessellateComponent(index, floats, options = {}) {
       }
     }
   }
-  const scale = Math.max(length3(sub(max, min)), 1e-6);
+  // A component with no faces has no loops: an imported STEP product that holds
+  // only wires is measured by its edge curves instead.
+  if (!(min[0] <= max[0])) {
+    for (const edge of index.edges) {
+      if (!edge.curve) continue;
+      const [t0, t1] = edge.curve.range;
+      for (const t of [t0, (t0 + t1) / 2, t1]) {
+        const p = evaluateCurve3(edge.curve, floats, t);
+        for (let d = 0; d < 3; d += 1) {
+          if (p[d] < min[d]) min[d] = p[d];
+          if (p[d] > max[d]) max[d] = p[d];
+        }
+      }
+    }
+  }
+  // Nothing to measure (an empty product entry) leaves the box empty: the floor.
+  const extent = length3(sub(max, min));
+  const scale = Number.isFinite(extent) ? Math.max(extent, 1e-6) : 1e-6;
 
   // ONE polyline per model edge, sampled from its exact 3D curve. Every
   // adjacent face's boundary conforms to it (and the display overlay reuses
@@ -1974,6 +1975,24 @@ export function tessellateComponent(index, floats, options = {}) {
       visibilityClass: edge.class,
       polyline,
     });
+  }
+  // No triangles (wires only, or no face that meshed): its edges are the bounds.
+  // With no edges either (an empty product entry), a point at its own origin
+  // keeps the box finite for the cache header and every reader.
+  if (!positions.length) {
+    for (const { polyline } of edges) {
+      for (let i = 0; i < polyline.length; i += 3) {
+        for (let d = 0; d < 3; d += 1) {
+          const value = polyline[i + d];
+          if (value < min[d]) min[d] = value;
+          if (value > max[d]) max[d] = value;
+        }
+      }
+    }
+    if (!(min[0] <= max[0])) {
+      min = [0, 0, 0];
+      max = [0, 0, 0];
+    }
   }
 
   return {
