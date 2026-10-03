@@ -7,9 +7,9 @@
     "displayName": "CAD"
   },
   "metadata": {
-    "description": "Give your agent CAD superpowers."
+    "description": "Design 3D models"
   },
-  "description": "Give your agent CAD superpowers.",
+  "description": "Design 3D models",
   "version": "0.7.10",
   "plugins": [
     {

@@ -75,6 +75,17 @@ class PluginManifestPolicyTest(unittest.TestCase):
         }
         self.assertEqual(len(set(descriptions.values())), 1, descriptions)
 
+    def test_plugin_short_descriptions_match(self) -> None:
+        # The one-line tagline a host shows beside the name: Codex's shortDescription and the
+        # Claude marketplace's description. Cursor's manifest has no such field.
+        marketplace = load_json(MARKETPLACE_PATH)
+        shorts = {
+            "codex": load_json(CODEX_PLUGIN_PATH)["interface"].get("shortDescription"),
+            "marketplace": marketplace.get("description"),
+            "marketplace metadata": marketplace.get("metadata", {}).get("description"),
+        }
+        self.assertEqual(set(shorts.values()), {"Design 3D models"}, shorts)
+
     def test_plugin_manifests_point_at_the_canonical_skills_directory(self) -> None:
         for path in (CLAUDE_PLUGIN_PATH, CODEX_PLUGIN_PATH, CURSOR_PLUGIN_PATH):
             manifest = load_json(path)
