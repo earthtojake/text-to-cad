@@ -5,11 +5,14 @@ import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { absoluteUrl, siteConfig } from "@/lib/site";
 
-const skillsInstallCommand = "npx skills add earthtojake/text-to-cad";
+// The quickest start: a message for the agent, which reads the README's install steps and takes
+// the one for its own app. The README's Get Started says the same.
+const agentInstallMessage =
+  "Install text-to-cad for this agent app from https://github.com/earthtojake/text-to-cad: follow the Install section of its README, using this app's plugin if it has one and the Skills CLI if not.";
 
-// The plugin is the preferred install: the skills and CAD's viewer together. Cursor and Grok Build
-// also load the plugin Claude Code installed, so each of those is for an app used without it.
-const pluginInstallCommands = [
+// Installing by hand, each its own sub-section: the plugin for each agent app (the skills and CAD's
+// viewer together), then the Skills CLI for an agent without one.
+const installs = [
   {
     agent: "Claude Code",
     command:
@@ -17,11 +20,13 @@ const pluginInstallCommands = [
   },
   {
     agent: "Codex",
+    note: "Requires Codex 0.142.0 or newer.",
     command:
       "codex plugin marketplace add earthtojake/text-to-cad\ncodex plugin add text-to-cad@earthtojake",
   },
   {
     agent: "Cursor",
+    note: "Cursor also loads the Claude Code plugin: install one or the other.",
     command:
       "git clone --depth 1 https://github.com/earthtojake/text-to-cad ~/.cursor/plugins/local/text-to-cad",
   },
@@ -29,11 +34,17 @@ const pluginInstallCommands = [
   // installs straight from the repo rather than adding a marketplace first.
   {
     agent: "Grok Build",
+    note: "Grok Build also loads the Claude Code plugin: install one or the other.",
     command: "grok plugin install earthtojake/text-to-cad --trust\ngrok plugin enable text-to-cad",
   },
   {
     agent: "Gemini CLI",
     command: "gemini extensions install https://github.com/earthtojake/text-to-cad",
+  },
+  {
+    agent: "Skills CLI",
+    note: "For an agent without a plugin: the skills alone.",
+    command: "npx skills add earthtojake/text-to-cad",
   },
 ];
 
@@ -114,54 +125,33 @@ const skillGroups = [
 const COMMAND_BOX_CLASS =
   "min-w-0 w-full overflow-hidden rounded-lg border border-border bg-card shadow-xs";
 
-function InstallCommand({
-  item,
-}: {
-  item: (typeof pluginInstallCommands)[number];
-}) {
+function AgentMessage() {
   return (
     <div className={COMMAND_BOX_CLASS}>
-      <div className="border-b border-border px-3 py-2 text-xs font-medium text-muted-foreground">
-        {item.agent}
-      </div>
       <div className="flex min-h-[54px] min-w-0 max-w-full items-stretch">
-        <code className="flex min-w-0 flex-1 items-center overflow-x-auto whitespace-pre font-mono px-3 py-2 text-sm leading-6 text-foreground">
-          {item.command}
-        </code>
-        <CopyButton
-          text={item.command}
-          label={`Copy ${item.agent} install command`}
-          prominent
-          compact
-        />
+        <p className="flex min-w-0 flex-1 items-center px-3 py-2 text-sm leading-6 text-foreground">
+          {agentInstallMessage}
+        </p>
+        <CopyButton text={agentInstallMessage} label="Copy the message for your agent" prominent compact />
       </div>
     </div>
   );
 }
 
-function InstallCommands() {
+function Install({ item }: { item: (typeof installs)[number] }) {
   return (
-    <div className="grid min-w-0 gap-2">
-      {pluginInstallCommands.map((item) => (
-        <InstallCommand key={item.agent} item={item} />
-      ))}
-    </div>
-  );
-}
-
-function SkillsInstallCommand({ prominent = false }: { prominent?: boolean }) {
-  return (
-    <div className={COMMAND_BOX_CLASS}>
-      <div className="flex min-h-[54px] min-w-0 max-w-full items-stretch">
-        <code className="flex min-w-0 flex-1 items-center overflow-x-auto whitespace-pre font-mono px-3 py-2 text-sm leading-6 text-foreground">
-          {skillsInstallCommand}
-        </code>
-        <CopyButton
-          text={skillsInstallCommand}
-          label="Copy Skills CLI install command"
-          prominent={prominent}
-          compact
-        />
+    <div className="min-w-0 space-y-2">
+      <div>
+        <h3 className="text-sm font-medium text-foreground">{item.agent}</h3>
+        {item.note ? <p className="mt-1 text-sm leading-6 text-muted-foreground">{item.note}</p> : null}
+      </div>
+      <div className={COMMAND_BOX_CLASS}>
+        <div className="flex min-h-[54px] min-w-0 max-w-full items-stretch">
+          <code className="flex min-w-0 flex-1 items-center overflow-x-auto whitespace-pre font-mono px-3 py-2 text-sm leading-6 text-foreground">
+            {item.command}
+          </code>
+          <CopyButton text={item.command} label={`Copy the ${item.agent} install command`} compact />
+        </div>
       </div>
     </div>
   );
@@ -246,27 +236,13 @@ export default function Home() {
         <div className="min-w-0 space-y-2">
           <HeroSection />
 
-          <section id="installation" aria-labelledby="installation-title" className="scroll-mt-20 space-y-3 py-6">
+          <section id="get-started" aria-labelledby="get-started-title" className="scroll-mt-20 space-y-3 py-6">
             <SectionIntro
-              id="installation-title"
-              title="Install"
-              description="Install the plugin for your agent app. It brings the skills and CAD's viewer, a local server that runs through uv."
+              id="get-started-title"
+              title="Get Started"
+              description="Copy this message to your agent. It finds the install for its app and sets it up."
             />
-            <InstallCommands />
-            <p className="text-sm leading-6 text-muted-foreground">
-              Restart your agent if newly installed skills do not appear. Cursor and Grok Build
-              also load the Claude Code plugin, so install one or the other. The Codex plugin
-              requires Codex 0.142.0 or newer.
-            </p>
-            <div className="space-y-3 pt-3">
-              <div>
-                <h3 className="text-sm font-medium text-foreground">Skills CLI</h3>
-                <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                  For an agent without a plugin, install the skills alone.
-                </p>
-              </div>
-              <SkillsInstallCommand />
-            </div>
+            <AgentMessage />
           </section>
 
           <section
@@ -314,6 +290,16 @@ export default function Home() {
             </div>
           </section>
 
+          <section id="installation" aria-labelledby="installation-title" className="scroll-mt-20 space-y-6 py-6">
+            <SectionIntro
+              id="installation-title"
+              title="Install"
+              description="Or install it yourself. The plugin brings the skills and CAD's viewer, a local server that runs through uv, which must be installed. Restart your agent if newly installed skills do not appear."
+            />
+            {installs.map((item) => (
+              <Install key={item.agent} item={item} />
+            ))}
+          </section>
         </div>
       </div>
 

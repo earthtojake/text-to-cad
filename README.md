@@ -27,6 +27,17 @@ workflows for generating 3D models as STEP, GLB, STL or 3MF files. It also does
 design for manufacturing checks, generates engineering drawings, and connects to
 popular 3D printing, sheet metal and CNC fabrication services.
 
+## 🚀 Get Started
+
+Copy this message to your agent:
+
+```text
+Install text-to-cad for this agent app from https://github.com/earthtojake/text-to-cad: follow the Install section of its README, using this app's plugin if it has one and the Skills CLI if not.
+```
+
+It finds the install for its app under [Install](#-install) and sets it up. To
+install it yourself, see the same section.
+
 ## 🧰 Skills
 
 Install the library to give agents focused workflows for CAD, fabrication,
@@ -47,30 +58,32 @@ robot description files, simulation, and local review.
 | G-code       | Slices models into printer-ready G-code with OrcaSlicer, using your own printer presets.                                                           | [skills/gcode](skills/gcode/SKILL.md)               |
 | Bambu Labs   | Sends prints to Bambu Lab printers through Bambu Connect, Bambu Lab's official app, or Bambu Studio.                                               | [skills/bambu-labs](skills/bambu-labs/SKILL.md)     |
 
-## 💻 Installation
+## 💻 Install
 
 Install the plugin for your agent app. It brings the skills and CAD's viewer, a
 local server (`cadgen mcp`) that runs through [uv](https://docs.astral.sh/uv/),
 which must be installed. For an agent without a plugin, install the skills alone
 with the [Skills CLI](#skills-cli). Install one or the other in an app, not both:
-two copies means every skill twice.
+two copies means every skill twice. Restart your agent if newly installed skills
+do not appear.
 
-### Plugins
+### Claude Code
 
 ```bash
-# Claude Code
 claude plugin marketplace add earthtojake/text-to-cad
 claude plugin install text-to-cad@earthtojake
 ```
 
-In Claude Code, the plugin also starts CAD's server. Where Claude Code can show
-app views, CAD shows models as viewer cards in the conversation; otherwise, as
-in a terminal, asking it to show a model gives you a link that opens the model
-in the CAD Viewer in your browser.
+The plugin also starts CAD's server. Where Claude Code can show app views, CAD
+shows models as viewer cards in the conversation; otherwise, as in a terminal,
+asking it to show a model gives you a link that opens the model in the CAD
+Viewer in your browser.
 
-In Claude Desktop, CAD shows models in the chat: ask Claude to show one and it
-appears as a viewer card you can orbit, add to your prompt, and open full size;
-Claude can read what you selected and see what you see. It runs locally through
+### Claude Desktop
+
+CAD shows models in the chat: ask Claude to show one and it appears as a viewer
+card you can orbit, add to your prompt, and open full size; Claude can read what
+you selected and see what you see. It runs locally through
 [uv](https://docs.astral.sh/uv/): add the server to Claude Desktop's config
 (Settings > Developer > Edit Config), then restart the app. If Claude Desktop
 cannot find `uvx`, give its full path (`which uvx`). The config pins a cadgen
@@ -85,15 +98,16 @@ the [latest release](https://pypi.org/project/cadgen/) and restart the app.
 }
 ```
 
+### Codex
+
 ```bash
-# Codex (requires Codex 0.142.0 or newer)
 codex plugin marketplace add earthtojake/text-to-cad
 codex plugin add text-to-cad@earthtojake
 ```
 
-Codex resolves this repository-root plugin only from 0.142.0 onward. On older
-versions the plugin is skipped silently and never appears in `codex plugin list`;
-upgrade with `npm install -g @openai/codex@latest`.
+Requires Codex 0.142.0 or newer: older versions skip this repository-root plugin
+silently, and it never appears in `codex plugin list`. Upgrade with
+`npm install -g @openai/codex@latest`.
 
 In the Codex app the plugin also brings the CAD viewer: **CAD** in the sidebar
 (recent models, and Open), a **CAD** tab beside each thread that the agent
@@ -106,8 +120,9 @@ and restart the app: its first start downloads the new runtime. The marketplace 
 to `earthtojake`; if you added it before, remove the old one first
 (`codex plugin marketplace remove text-to-cad`).
 
+### Cursor
+
 ```bash
-# Cursor
 git clone --depth 1 https://github.com/earthtojake/text-to-cad ~/.cursor/plugins/local/text-to-cad
 ```
 
@@ -117,8 +132,9 @@ Claude Code, so skip this if you installed the Claude Code plugin. Teams can
 import the repository instead, under **Dashboard → Plugins & MCPs → Team
 Marketplaces**.
 
+### Grok Build
+
 ```bash
-# Grok Build
 grok plugin install earthtojake/text-to-cad --trust
 grok plugin enable text-to-cad
 ```
@@ -127,16 +143,15 @@ Grok Build reads the Claude plugin manifest, and also loads plugins installed
 with Claude Code: install one or the other. Grok shows tool results as text, so
 asking it to show a model gives you a CAD Viewer link.
 
+### Gemini CLI
+
 ```bash
-# Gemini CLI
 gemini extensions install https://github.com/earthtojake/text-to-cad
 ```
 
 Gemini CLI installs the latest release as an extension, with the skills and CAD's
 server; `gemini extensions update text-to-cad` updates it. Like Grok, it shows
 tool results as text, so asking it to show a model gives you a CAD Viewer link.
-
-Restart your agent if newly installed skills do not appear.
 
 ### Skills CLI
 
@@ -160,9 +175,6 @@ Neither command removes a skill that was retired upstream; drop one with
 `npx skills remove <skill>` if you need to. The retired `cad-viewer` skill is
 now covered by the CAD, DXF and robot-description skills; remove old standalone
 installs with `npx skills remove cad-viewer`.
-
-For local development, branch from `main`, open PRs against `main`, and follow
-[CONTRIBUTING.md](CONTRIBUTING.md).
 
 ### Usage analytics
 

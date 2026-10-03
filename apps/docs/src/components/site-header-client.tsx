@@ -13,8 +13,9 @@ import {
 import { cn } from "@/lib/utils";
 
 const NAV_SECTIONS = [
-  { id: "installation", label: "Install" },
+  { id: "get-started", label: "Get Started" },
   { id: "skills", label: "Skills" },
+  { id: "installation", label: "Install" },
 ] as const;
 
 const GITHUB_REPO_URL = "https://github.com/earthtojake/text-to-cad";
@@ -83,7 +84,7 @@ export function SiteHeaderClient({
   discordUrl: string;
   version: string;
 }) {
-  const [activeSection, setActiveSection] = useState<string>("installation");
+  const [activeSection, setActiveSection] = useState<string>(NAV_SECTIONS[0].id);
   // The hero's wordmark in sight (below this header). A phone's navbar has no section links, so once
   // the wordmark is out of sight -- scrolled away, or a page without one -- the CAD logo takes the
   // corner, a way back home.
@@ -108,7 +109,7 @@ export function SiteHeaderClient({
         setActiveSection("");
         return;
       }
-      let active = "installation";
+      let active: string = NAV_SECTIONS[0].id;
       for (const section of sections) {
         if (section && section.getBoundingClientRect().top <= 96) {
           active = section.id;
