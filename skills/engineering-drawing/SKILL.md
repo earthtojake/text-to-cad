@@ -22,6 +22,16 @@ operating system opens. No DXF is written, nothing is paired or linked, and
 there is no CLI: the script is the interface. `$dxf` makes cut layouts and flat
 patterns, which are toolpaths, not documents; the two are different jobs.
 
+## Setup
+
+Run cadgen through [uv](https://docs.astral.sh/uv/), so this skill's commands share
+one installation, and its warm build daemon, with the CAD app's server:
+
+- `cadgen` below means `uvx --no-config --managed-python --python 3.13 --from cadgen==0.7.11 cadgen`
+- `python` below means `uvx --no-config --managed-python --python 3.13 --from cadgen==0.7.11 python`
+
+The first run downloads that installation; later runs reuse it.
+
 ## Workflow
 
 1. Get the part. `cadgen.read_step(Path(__file__).parent / "../STEP/part.step")`

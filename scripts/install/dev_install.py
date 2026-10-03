@@ -3,8 +3,11 @@
 
 Each host gets the development plugin, text-to-cad@earthtojake-dev: this checkout's skills, and
 CAD's server run by this checkout's .venv (`cadgen mcp`), serving a copy of this checkout's
-apps/mcp build. Claude Desktop's chat takes servers, not plugins, so it gets that server alone.
-Run it again after a change; --uninstall takes the install out. For an agent without plugins,
+apps/mcp build. The skills' launch command is rewritten to that same .venv, so the server and the
+agent's scripts share this checkout's installation and warm daemon -- and every worktree has its
+own. With --wheel, the checkout's wheel is built as the release builds it and everything runs it
+through uvx instead: the shape users get. Claude Desktop's chat takes servers, not plugins, so it
+gets that server alone. Run it again after a change; --uninstall takes the install out. For an agent without plugins,
 install the skills alone from the checkout with the Skills CLI: `npx skills add . -g -a <agent>`.
 
 One copy per app: a host that already loads another copy (the published plugin, this one through
@@ -18,6 +21,7 @@ covers all three.
     scripts/install/dev_install.py grok                # Grok Build, without Claude Code
     scripts/install/dev_install.py gemini              # Gemini CLI
     scripts/install/dev_install.py claude-desktop      # Claude Desktop's chat: the server alone
+    scripts/install/dev_install.py <host> --wheel        # this checkout's wheel, run through uvx
     scripts/install/dev_install.py <host> --uninstall
 
 The page is a copy taken at install, as an installed wheel serves its own: a page that changed
@@ -45,6 +49,9 @@ import tempfile
 import time
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+# cadgen._internal.launch.LAUNCHER, repeated because this script runs on any Python 3 and must
+# not import cadgen, whose floor is newer; test_dev_install holds the two equal.
+LAUNCHER = ("uvx", "--no-config", "--managed-python", "--python", "3.13", "--from")
 MARKETPLACE = "earthtojake-dev"
 PLUGIN_HOSTS = ("claude", "codex", "cursor", "grok", "gemini")
 HOSTS = (*PLUGIN_HOSTS, "claude-desktop")
@@ -80,16 +87,29 @@ def server_entry(host: str, python: str, page_dir: Path) -> dict:
     return entry
 
 
-def assemble(host: str, plugin_dir: Path, version: str, server: dict, root: Path = REPO_ROOT) -> dict:
+def launch(tool: str, version: str) -> str:
+    """The skills' launch command for ``tool`` (``cadgen`` or ``python``), as the release stamps it."""
+    return " ".join((*LAUNCHER, f"cadgen=={version}", tool))
+
+
+def assemble(host: str, plugin_dir: Path, version: str, server: dict, root: Path = REPO_ROOT,
+             commands: dict | None = None) -> dict:
     """Write the plugin `host` loads into `plugin_dir` and return its manifest.
 
-    The skills are copied, the host's manifest takes `version` (each install its own, so a host
-    that caches by version takes this build) and names `server` alone: in a server config beside
-    it, or, for Gemini, which keeps servers in the manifest itself, inline.
+    The skills are copied, their launch command pointed at ``commands`` (``{"cadgen": ...,
+    "python": ...}``: the runtime the server uses), the host's manifest takes `version` (each
+    install its own, so a host that caches by version takes this build) and names `server` alone:
+    in a server config beside it, or, for Gemini, which keeps servers in the manifest itself, inline.
     """
     if plugin_dir.exists():
         shutil.rmtree(plugin_dir)
     shutil.copytree(root / "skills", plugin_dir / "skills", ignore=IGNORED)
+    released = (root / "VERSION").read_text(encoding="utf-8").strip()
+    for skill in plugin_dir.glob("skills/*/SKILL.md"):
+        text = skill.read_text(encoding="utf-8")
+        for tool, command in (commands or {}).items():
+            text = text.replace(launch(tool, released), command)
+        skill.write_text(text, encoding="utf-8")
     if host == "gemini":
         manifest = json.loads((root / "gemini-extension.json").read_text(encoding="utf-8"))
         manifest["version"] = version
@@ -226,6 +246,44 @@ def copy_page(host: str, build: bool, version: str, prune: bool = True) -> Path:
     return page_dir
 
 
+def build_wheel(host: str, bundle: bool) -> Path:
+    """This checkout's wheel, built as the release builds it, at a path of its own per build.
+
+    uv keeps one installation per requirement, so a wheel at a new path is a new installation --
+    and a warm daemon of its own -- never the previous build's, nor another worktree's.
+    """
+    uv = cli("uv", "; install uv: https://docs.astral.sh/uv/")
+    if bundle:
+        subprocess.run([str(REPO_ROOT / "scripts" / "bundle" / "bundle.sh")], cwd=REPO_ROOT, check=True)
+    wheels = dev_root(host) / "wheels"
+    out = wheels / time.strftime("%Y%m%d%H%M%S")
+    run(uv, "build", "--wheel", "--out-dir", str(out), str(REPO_ROOT / "packages" / "cadgen"))
+    built = sorted(out.glob("cadgen-*.whl"))
+    if not built:
+        raise Refused(f"uv build wrote no cadgen wheel to {out}.")
+    # A server already running keeps the installation it started from; only new starts read the
+    # wheel, and they read this one.
+    for old in wheels.iterdir():
+        if old != out:
+            shutil.rmtree(old, ignore_errors=True)
+    return built[0]
+
+
+def runtime(host: str, args: argparse.Namespace, version: str) -> tuple[dict, dict, Path | None]:
+    """``(server, skill commands, page copy)`` for this install: the .venv, or with --wheel the wheel."""
+    if args.wheel:
+        wheel = build_wheel(host, args.build)
+        server = {"command": LAUNCHER[0], "args": [*LAUNCHER[1:], str(wheel), "cadgen", "mcp"]}
+        if host == "codex":
+            server["startup_timeout_sec"] = CODEX_STARTUP_SECONDS
+        prefix = " ".join((*LAUNCHER, str(wheel)))
+        return server, {"cadgen": f"{prefix} cadgen", "python": f"{prefix} python"}, None
+    python = interpreter()
+    # Codex keeps an earlier install's server running until it restarts, so its page stays too.
+    page_dir = copy_page(host, args.build, version, prune=host != "codex")
+    return server_entry(host, python, page_dir), {"cadgen": f"{python} -m cadgen.cli", "python": python}, page_dir
+
+
 def dev_version() -> str:
     return f"{(REPO_ROOT / 'VERSION').read_text(encoding='utf-8').strip()}-dev.{time.strftime('%Y%m%d%H%M%S')}"
 
@@ -319,11 +377,9 @@ def install_codex(args: argparse.Namespace) -> str:
         raise Refused(f"Another CAD plugin is installed: {', '.join(others)}\n"
                       "Remove it first (codex plugin remove <id>); two copies means every skill twice.")
     refuse_other_copies("codex")
-    python = interpreter()
     version = dev_version()
-    # Codex keeps an earlier install's server running until it restarts, so its page stays too.
-    page_dir = copy_page("codex", args.build, version, prune=False)
-    assemble("codex", root / "plugins" / name, version, server_entry("codex", python, page_dir))
+    server, commands, page_dir = runtime("codex", args, version)
+    assemble("codex", root / "plugins" / name, version, server, commands=commands)
     write_json(root / ".agents" / "plugins" / "marketplace.json", {
         "name": MARKETPLACE, "interface": {"displayName": "CAD (this checkout)"},
         "plugins": [{"name": name, "source": {"source": "local", "path": f"./plugins/{name}"},
@@ -339,7 +395,7 @@ def install_codex(args: argparse.Namespace) -> str:
                 break
             time.sleep(0.2)
         # No server of an earlier install survives the restart, so neither need its page.
-        for old in (root / "app").iterdir():
+        for old in (root / "app").iterdir() if (root / "app").is_dir() else ():
             if old != page_dir:
                 shutil.rmtree(old, ignore_errors=True)
         subprocess.run(["open", "-a", "ChatGPT"], check=True)
@@ -361,10 +417,9 @@ def install_claude(args: argparse.Namespace) -> str:
         shutil.rmtree(root, ignore_errors=True)
         return f"Removed {dev_id}."
     refuse_other_copies("claude")
-    python = interpreter()
     version = dev_version()
-    page_dir = copy_page("claude", args.build, version)
-    assemble("claude", root / "plugins" / name, version, server_entry("claude", python, page_dir))
+    server, commands, _ = runtime("claude", args, version)
+    assemble("claude", root / "plugins" / name, version, server, commands=commands)
     write_json(root / ".claude-plugin" / "marketplace.json", {
         "name": MARKETPLACE, "owner": {"name": "this checkout"},
         "description": f"{name} from {REPO_ROOT}, for development",
@@ -387,12 +442,11 @@ def install_cursor(args: argparse.Namespace) -> str:
         shutil.rmtree(dev_root("cursor"), ignore_errors=True)
         return f"Removed {target}."
     refuse_other_copies("cursor")
-    python = interpreter()
     version = dev_version()
-    page_dir = copy_page("cursor", args.build, version)
+    server, commands, _ = runtime("cursor", args, version)
     # Cursor follows no symlink out of its plugins folder, so the plugin is a real copy there.
     staged = dev_root("cursor") / "plugins" / name
-    assemble("cursor", staged, version, server_entry("cursor", python, page_dir))
+    assemble("cursor", staged, version, server, commands=commands)
     (staged / OWNER_MARK).write_text(f"{REPO_ROOT}\n", encoding="utf-8")
     shutil.rmtree(target, ignore_errors=True)
     shutil.copytree(staged, target)
@@ -410,10 +464,9 @@ def install_grok(args: argparse.Namespace) -> str:
         shutil.rmtree(root, ignore_errors=True)
         return f"Removed {name} from Grok Build."
     refuse_other_copies("grok")
-    python = interpreter()
     version = dev_version()
-    page_dir = copy_page("grok", args.build, version)
-    assemble("grok", plugin_dir, version, server_entry("grok", python, page_dir))
+    server, commands, _ = runtime("grok", args, version)
+    assemble("grok", plugin_dir, version, server, commands=commands)
     if str(plugin_dir) in grok_installed():
         run(grok, "plugin", "uninstall", name)
     run(grok, "plugin", "install", str(plugin_dir), "--trust")
@@ -436,10 +489,9 @@ def install_gemini(args: argparse.Namespace) -> str:
         raise Refused(f"Gemini CLI already has {name} from {', '.join(others)}; uninstall it first "
                       f"(gemini extensions uninstall {name}): two copies means every skill twice.")
     refuse_other_copies("gemini")
-    python = interpreter()
     version = dev_version()
-    page_dir = copy_page("gemini", args.build, version)
-    assemble("gemini", plugin_dir, version, server_entry("gemini", python, page_dir))
+    server, commands, _ = runtime("gemini", args, version)
+    assemble("gemini", plugin_dir, version, server, commands=commands)
     if not linked:
         # A link reads the folder in place, so a later install only rewrites it. Gemini asks whether
         # to trust the folder even with --consent; this is the folder we just wrote.
@@ -472,9 +524,7 @@ def install_claude_desktop(args: argparse.Namespace) -> str:
     if others:
         raise Refused(f"{path} already runs CAD's server as {', '.join(others)}; remove that entry first: "
                       "two servers means every tool twice.")
-    python = interpreter()
-    page_dir = copy_page("claude-desktop", args.build, time.strftime("%Y%m%d%H%M%S"))
-    servers[DESKTOP_SERVER] = server_entry("claude-desktop", python, page_dir)
+    servers[DESKTOP_SERVER] = runtime("claude-desktop", args, time.strftime("%Y%m%d%H%M%S"))[0]
     write_json(path, config)
     return (f"Added {DESKTOP_SERVER} to {path}. Restart Claude Desktop (or Developer > Reload MCP "
             "Configuration) to load it.")
@@ -488,6 +538,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--uninstall", action="store_true", help="take this host's install out")
     parser.add_argument("--no-build", dest="build", action="store_false", help="serve the page already built")
     parser.add_argument("--restart", action="store_true", help="codex: quit and reopen the app")
+    parser.add_argument("--wheel", action="store_true", help="build this checkout's wheel and run it through uvx")
     args = parser.parse_args(argv)
     if args.restart and args.host != "codex":
         parser.error("--restart is for codex")

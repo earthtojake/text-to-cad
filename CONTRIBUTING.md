@@ -99,11 +99,10 @@ dist-info by design — it is release-grained, so dev code is always newer than
 its number — and nothing behavioral consults it, but stale metadata makes the
 reported number drift further from the code than it has to.
 
-Install `requirements-dev.txt`, not a skill's `requirements.txt`: the skill
-files pin `cadgen==<VERSION>` (the release PR stamps them, and they are what an
-installer resolves from PyPI). The editable install reports that same version,
-so the pin is satisfied in a checkout — but `pip install -r skills/<s>/requirements.txt`
-on its own would fetch the previous RELEASE from PyPI over your working copy.
+Skills run cadgen through their launch command, `uvx ... --from cadgen==<VERSION>`,
+which installs the RELEASE from PyPI. To run your working copy, use the checkout's
+`.venv` (`requirements-dev.txt`), or `scripts/install/dev_install.py`, which points a
+dev install's server and skills at it (see [Test In Agent Apps](#test-in-agent-apps)).
 
 `packages/cadgen/src/cadgen/_runtime/` is BUILT, not committed — the whole
 directory is gitignored, and the wheel is the only place those files ship. A
@@ -158,7 +157,13 @@ npx skills add . -g -a <agent>
 A plugin host gets `text-to-cad@earthtojake-dev`: this checkout's skills, and
 `cadgen mcp` run by this checkout's `.venv` (`CADGEN_PYTHON` overrides it), serving
 a copy of the `apps/mcp` page built for that install (`--no-build` reuses the last
-build). Install again to see a skill or page edit. A page that changed under a
+build). The copied skills' launch command is rewritten to that same `.venv`, so the
+server and the agent's scripts share this checkout's installation and warm daemon;
+each worktree is an installation of its own (the daemon is named after it), so
+several can be installed side by side, one per app. With `--wheel`, the checkout's
+wheel is built as the release builds it (`bundle.sh`, then `uv build`) and the
+server and skills run it through `uvx --from <wheel>`: exactly what users get,
+each build its own installation. Install again to see a skill or page edit. A page that changed under a
 running app would change its URI, and hosts drop the frames already showing it,
 which is why each install serves its own copy. A running server keeps the
 Python it started with, so restart the app after a Python-only change.
@@ -318,10 +323,10 @@ must not put `skills/`, the repository root, or a sibling skill directory on
 `sys.path`, `PYTHONPATH`, `NODE_PATH`, or any similar lookup path. Skills are
 independent of *each other*.
 
-They are not independent of `cadgen`. Each skill's `requirements.txt` names that
-distribution, and a skill's `scripts/<tool>` is a thin entrypoint whose parser and
-behaviour live in `cadgen.cli` — so what a published skill needs is an install, not
-a copy. Skills used to vendor cadgen and its Node builders into
+They are not independent of `cadgen`. Each cadgen skill's SKILL.md runs that
+distribution through the launch command, and a skill's `scripts/<tool>` is a thin
+entrypoint whose parser and behaviour live in `cadgen.cli` — so what a published skill
+needs is an install, not a copy. Skills used to vendor cadgen and its Node builders into
 `skills/*/scripts/packages/`; six copies of one runtime is what that cost, and it
 is gone. cadgen now carries the JavaScript it executes as well as the Python.
 
@@ -423,12 +428,12 @@ editing build inputs to refresh all packaged outputs.
 
 The self-contained browser suite creates tiny inputs and owns its project,
 viewer and cache. It never reads the sample-model corpus. Install the npm
-Playwright Chromium for UI/web tests and Python Playwright Chromium for
-snapshot tests; their revisions can differ:
+Playwright Chromium for UI/web tests and Python Playwright's headless shell for
+snapshot tests (a snapshot also fetches it on first use); their revisions can differ:
 
 ```bash
 npx --no-install playwright install chromium
-.venv/bin/python -m playwright install chromium
+.venv/bin/python -m playwright install --only-shell chromium
 scripts/bundle/bundle.sh
 scripts/test/test-viewer-browser.sh
 scripts/test/test-viewer-browser.sh --only camera
@@ -493,10 +498,10 @@ on every push:
   `npx skills add`. `tests/python/global/test_skill_self_containment.py` and
   `test_package_boundaries.py` hold the same law.
 
-Skill `requirements.txt` files pin `cadgen==<VERSION>` in the tree. The release
-PR stamps them with the bump, and `scripts/release/check-version.sh` asserts
-every pin equals `VERSION` — so a bare `cadgen` line or a stale pin fails the
-`Version Check` job.
+Every cadgen pin in the tree — the plugin server configs and each skill's launch
+command — names `VERSION`. The release PR stamps them with the bump
+(`sync-version.mjs`), and `scripts/release/check-version.sh` asserts every skill
+pin equals `VERSION` — so a stale pin fails the `Version Check` job.
 
 The `Test` workflow runs on pushes to `main` and PRs against it: it runs
 `scripts/bundle/bundle.sh --clean` to produce the runtime, checks the layout
@@ -565,8 +570,8 @@ X.Y.Z instead of a bump), `target` (the branch the PR is opened against —
 `main`, or `build-test` to rehearse) and `dry_run`. Choose the bump
 deliberately for every release; if a release request does not specify one,
 confirm it rather than assuming. It bumps `VERSION`, stamps the derived
-metadata (`sync-version.mjs`) and every skill's `cadgen==` pin
-(`pin-cadgen-requirements.sh`), commits on `release/<version>`, opens the PR,
+metadata and every `cadgen==` pin (`sync-version.mjs`: the plugin server configs
+and each skill's launch command), commits on `release/<version>`, opens the PR,
 merges it through the API (the PAT, as before — no "allow auto-merge" setting
 is involved) and deletes the branch. The merged commit is THE release commit.
 
@@ -736,7 +741,6 @@ For local release preparation, use the same scripts the workflow calls:
 git fetch --tags origin
 scripts/release/bump-version.sh patch
 node scripts/release/sync-version.mjs
-scripts/release/pin-cadgen-requirements.sh
 scripts/release/check-version.sh --incremented-from "refs/tags/$(source scripts/release/release-tags.sh && latest_release_tag)"
 node scripts/release/sync-version.mjs --check
 ```

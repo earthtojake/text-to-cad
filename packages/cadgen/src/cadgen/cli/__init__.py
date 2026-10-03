@@ -83,32 +83,26 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     "analytics": ("cadgen.cli.analytics", "show or change CAD's anonymous usage analytics: status, on, off"),
 }
 
-# `cadgen==1.2.3` / `cadgen[snapshot]==1.2.3`, as written by
-# scripts/release/pin-cadgen-requirements.sh. Only the `==` form is a pin; a bare
-# `cadgen` line has nothing to enforce.
-_PIN_RE = re.compile(r"^cadgen(?:\[[a-z0-9_,.-]+\])?\s*==\s*(?P<pin>[^\s;#]+)")
+# A skill's pin is the version in the launch command its SKILL.md teaches
+# (`uvx ... --from cadgen==1.2.3 cadgen`), stamped by the release.
+_PIN_RE = re.compile(r"--from\s+cadgen==(?P<pin>[^\s`'\"]+)")
 
 
-def read_requirements_pin(requirements_path) -> str | None:
-    """The exact ``cadgen==<version>`` a requirements.txt pins, or ``None``.
+def read_skill_pin(skill_path) -> str | None:
+    """The cadgen version a SKILL.md's launch command pins, or ``None``.
 
-    ``None`` covers the non-cases uniformly: file absent/unreadable, or cadgen named
-    without a pin. The caller decides what a mismatch means (``cadgen doctor`` reports
-    it and exits 3). A source checkout's editable install
-    reports the repository's VERSION, which is what the checked-in pins name, so the
-    pin matches there too. String comparison rather than
-    PEP 440 on purpose: pins are written mechanically as exact ``==`` by
-    scripts/release/pin-cadgen-requirements.sh.
+    ``None`` covers the non-cases uniformly: file absent or unreadable, or no launch command
+    with a pin (a development install rewrites it to the checkout's interpreter). The caller
+    decides what a mismatch means (``cadgen doctor`` reports it and exits 3). String comparison
+    rather than PEP 440 on purpose: the release stamps the pin mechanically.
     """
     try:
-        with open(requirements_path, encoding="utf-8") as handle:
-            lines = handle.read().splitlines()
+        with open(skill_path, encoding="utf-8") as handle:
+            text = handle.read()
     except OSError:
         return None
-    return next(
-        (match.group("pin") for match in map(_PIN_RE.match, (line.strip() for line in lines)) if match),
-        None,
-    )
+    match = _PIN_RE.search(text)
+    return match.group("pin") if match else None
 
 
 # Commands the warm daemon can serve, mapped to its tool names. The daemon exists to

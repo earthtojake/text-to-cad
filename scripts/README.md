@@ -11,7 +11,6 @@ step; nothing else belongs here (one-off helpers go in `tmp/`).
 | Run code tests | `scripts/test/test.sh` |
 | Run docs checks | `scripts/test/test-docs.sh` |
 | Check the release version and skill pins | `scripts/release/check-version.sh` |
-| Stamp every skill's `cadgen==` pin from `VERSION` | `scripts/release/pin-cadgen-requirements.sh` |
 | Check the shipping contract | `scripts/github-workflows/check-builds.sh` |
 | Install this checkout into an agent app to test it | `scripts/install/dev_install.py <host>` |
 
@@ -101,9 +100,6 @@ where those files ship, so these scripts are what produces them.
 - `bump-version.sh major|minor|patch | --set-version X.Y.Z [--dry-run]` — writes
   `VERSION`; `--check-incremented-from REF` compares against a ref. Called by
   `release-prepare.yml` and `check-version.sh`.
-- `pin-cadgen-requirements.sh [--check]` — stamps `cadgen==VERSION` into every
-  skill's `requirements.txt`. Called by `release-prepare.yml`; tested by
-  `tests/python/global/test_pin_cadgen_requirements.py`.
 - `sync-version.mjs [--check]` — stamps the derived versions (package, plugin,
   lockfile and `pyproject.toml` metadata) from `VERSION`. Called by `bundle.sh`,
   `test.yml`, `release-prepare.yml`.
@@ -149,12 +145,13 @@ where those files ship, so these scripts are what produces them.
 
 `install/` — local testing.
 
-- `dev_install.py <host> [--uninstall] [--no-build] [--restart]` — installs this
+- `dev_install.py <host> [--uninstall] [--no-build] [--restart] [--wheel]` — installs this
   checkout into an agent app: the development plugin `text-to-cad@earthtojake-dev`
   for `claude` (which Cursor and Grok Build load too), `codex`, `cursor`, `grok`
   and `gemini` (skills copied, server run by `.venv`, serving a copy of the page
-  taken at install, assembled under `tmp/<host>-dev`); the server alone for
-  `claude-desktop`. Refuses a host where another copy of the plugin, or this
+  taken at install, assembled under `tmp/<host>-dev`), with the skills' launch
+  command rewritten to that same runtime; `--wheel` builds the checkout's wheel and
+  runs both through `uvx --from <wheel>`; the server alone for `claude-desktop`. Refuses a host where another copy of the plugin, or this
   repository's skills installed loose, would load. Developer step in
   `CONTRIBUTING.md` ("Test In Agent Apps"); its assembly and loose-skill check are
   tested by `tests/python/global/test_dev_install.py`.
