@@ -98,6 +98,8 @@ path, the rehearsal, and local/manual fallbacks.
   package — enforced by `tests/python/global/test_package_boundaries.py`.
   Repo-development guidance for it goes in `CONTRIBUTING.md`.
 
+- The README and the docs site's homepage (its copy: `apps/docs/src/lib/content.ts`)
+  are one copy: change them together. `apps/docs/README.md` says where they may differ.
 - Keep root guidance short. Put domain workflows, CLI details, and validation
   policy in the relevant `skills/<skill>/SKILL.md` or `references/` file.
 - Keep relevant Markdown docs current when changing behavior, commands, or repo
