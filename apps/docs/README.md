@@ -129,11 +129,12 @@ Other Agents (the Skills CLI) for the rest, and Request Plugin, a new GitHub
 issue. Contributing closes the page. Install boxes and explanatory text fill the
 content width. Command text remains monospace.
 
-The homepage and the repository README are one copy, changed together: the
-plugin's description, the install message, each install's command and note, the
-skills and Contributing say the same in both. They differ only where the medium
-does: the site's hero and agents carousel, and the README's fuller notes under
-each install. The page's copy lives in `src/lib/content.ts`, which `/llms.txt`
+The homepage and the repository README share their structure and are changed
+together: the plugin's description, the install message, each install's command,
+the skills and Contributing. The site is for people; the README is for people and
+for agents installing text-to-cad, so it says more: a line for those agents (which
+`/llms.txt` carries too) and fuller notes under each install. The site has the
+hero and the agents carousel. The page's copy lives in `src/lib/content.ts`, which `/llms.txt`
 (`src/app/llms.txt/route.ts`, the homepage as markdown for agents) renders too.
 `tests/python/global/test_plugin_manifests.py` holds the description, the install
 message and every install command to one text. The unboxed wordmark and one prominent tagline

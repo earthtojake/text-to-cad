@@ -41,6 +41,11 @@ Send this message to your agent and it will install text-to-cad for you.
 Install text-to-cad from https://github.com/earthtojake/text-to-cad
 ```
 
+**Agents installing text-to-cad:** check that uv is installed (`uv --version`; if
+it is missing, point the user to [uv's installer](https://docs.astral.sh/uv/getting-started/installation/)).
+Then run the commands under your app's heading below, or [Other Agents](#other-agents)
+if it has none, and tell the user to restart the app.
+
 Or install it yourself. The plugin for your agent app brings the skills and CAD's
 viewer, a local server (`cadgen mcp`) that runs through
 [uv](https://docs.astral.sh/uv/), which must be installed. For an agent without a
@@ -134,11 +139,12 @@ asking it to show a model gives you a CAD Viewer link.
 ### Gemini
 
 ```bash
-gemini extensions install https://github.com/earthtojake/text-to-cad
+gemini extensions install https://github.com/earthtojake/text-to-cad --consent --auto-update
 ```
 
 Gemini installs the latest release as an extension, with the skills and CAD's
-server; `gemini extensions update text-to-cad` updates it. Like Grok, it shows
+server, and keeps it up to date (`--auto-update`; `--consent` answers its security
+prompt). `gemini extensions update text-to-cad` updates it now. Like Grok, it shows
 tool results as text, so asking it to show a model gives you a CAD Viewer link.
 
 ### Other Agents
@@ -150,6 +156,10 @@ with the Skills CLI:
 ```bash
 npx skills add earthtojake/text-to-cad
 ```
+
+The command asks which agents to install for, and where. An agent installing
+without a person at the prompts names itself, installs for the user, and skips the
+questions: `npx skills add earthtojake/text-to-cad -g -a <agent> -y`.
 
 The skills install from `main`, and each one runs cadgen through
 [uv](https://docs.astral.sh/uv/) with the same pinned command the plugin's server
