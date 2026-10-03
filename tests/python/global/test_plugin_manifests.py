@@ -64,8 +64,8 @@ class PluginManifestPolicyTest(unittest.TestCase):
             )
 
     def test_plugin_manifests_describe_the_plugin_identically(self) -> None:
-        # Each host lists the plugin by its manifest's description, and the README's and the docs
-        # site's Overview say it too; they are one text, so an edit to one must reach them all.
+        # Each host lists the plugin by its manifest's description, and the README's intro and the
+        # docs site's Overview say it too; they are one text, so an edit to one must reach them all.
         codex = load_json(CODEX_PLUGIN_PATH)
         marketplace = load_json(MARKETPLACE_PATH)
         descriptions = {
@@ -77,10 +77,23 @@ class PluginManifestPolicyTest(unittest.TestCase):
             "marketplace": next(e for e in marketplace["plugins"] if e.get("name") == PLUGIN_NAME).get("description"),
         }
         readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
-        descriptions["readme overview"] = " ".join(readme.split("## 📖 Overview\n\n", 1)[1].split("\n\n", 1)[0].split())
-        page = (REPO_ROOT / "apps" / "docs" / "src" / "app" / "page.tsx").read_text(encoding="utf-8")
+        descriptions["readme intro"] = " ".join(readme.split("\n# text-to-cad\n\n", 1)[1].split("\n\n", 1)[0].split())
+        page = (REPO_ROOT / "apps" / "docs" / "src" / "lib" / "content.ts").read_text(encoding="utf-8")
         descriptions["docs overview"] = re.search(r'const pluginDescription =\s*"([^"]+)"', page).group(1)
         self.assertEqual(len(set(descriptions.values())), 1, descriptions)
+
+    def test_the_readme_and_the_docs_site_install_alike(self) -> None:
+        # The README and the docs site's homepage are one copy (apps/docs/README.md): the message an
+        # agent is sent and every install command say the same, word for word, in both.
+        readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+        page = (REPO_ROOT / "apps" / "docs" / "src" / "lib" / "content.ts").read_text(encoding="utf-8")
+        message = re.search(r'const agentInstallMessage = "([^"]+)"', page).group(1)
+        self.assertIn(f"```text\n{message}\n```", readme)
+        commands = [command.replace("\\n", "\n") for command in re.findall(r'\bcommand:\s*"([^"]+)"', page)]
+        self.assertGreaterEqual(len(commands), 6)
+        for command in commands:
+            with self.subTest(command=command.splitlines()[0]):
+                self.assertIn(command, readme)
 
     def test_plugin_manifests_link_the_same_pages(self) -> None:
         # The listing links every directory shows: homepage, docs, support, privacy policy and terms.

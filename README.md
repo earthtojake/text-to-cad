@@ -22,8 +22,6 @@ Give your agent CAD superpowers.
 
 # text-to-cad
 
-## 📖 Overview
-
 The text-to-cad plugin gives your agent local workflows for generating 3D models
 as STEP, GLB, STL or 3MF files. It also does design for manufacturing checks,
 generates engineering drawings, and connects to popular 3D printing, sheet metal
@@ -34,6 +32,8 @@ It is supported by all popular agents that support plugins or the
 Gemini and Grok.
 
 ## 💻 Install
+
+### Ask your agent (recommended)
 
 Send this message to your agent and it will install text-to-cad for you.
 
@@ -215,6 +215,5 @@ robot description files, simulation, and local review.
 
 ## 🛠️ Contributing
 
-Branch from `main` and open PRs against `main`.
-For local contribution workflow, skill linking, and validation guidance, see
-[CONTRIBUTING.md](CONTRIBUTING.md).
+Branch from `main` and open PRs against `main`. For the local workflow, testing in
+agent apps and validation, see [CONTRIBUTING.md](CONTRIBUTING.md).

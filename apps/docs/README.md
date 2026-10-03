@@ -126,8 +126,17 @@ and the README's Overview say word for word (`test_plugin_manifests.py` holds
 them to one text). Install
 leads with the message to send to an agent, then a sub-section per agent app,
 Other Agents (the Skills CLI) for the rest, and Request Plugin, a new GitHub
-issue. Install boxes and explanatory text fill the content width. Command text
-remains monospace. The unboxed wordmark and one prominent tagline
+issue. Contributing closes the page. Install boxes and explanatory text fill the
+content width. Command text remains monospace.
+
+The homepage and the repository README are one copy, changed together: the
+plugin's description, the install message, each install's command and note, the
+skills and Contributing say the same in both. They differ only where the medium
+does: the site's hero and agents carousel, and the README's fuller notes under
+each install. The page's copy lives in `src/lib/content.ts`, which `/llms.txt`
+(`src/app/llms.txt/route.ts`, the homepage as markdown for agents) renders too.
+`tests/python/global/test_plugin_manifests.py` holds the description, the install
+message and every install command to one text. The unboxed wordmark and one prominent tagline
 sit above the independently framed CAD demo. “100% open source and free.” follows
 “Give your agent CAD superpowers.” in blue, using a lighter brand shade on dark
 surfaces. The app owns

@@ -5,163 +5,17 @@ import { HeroSection } from "@/components/hero-section";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { Button } from "@/components/ui/button";
+import {
+  agentInstallByline,
+  agentInstallMessage,
+  agents,
+  installs,
+  pluginDescription,
+  pluginRequestUrl,
+  skillGroups,
+  support,
+} from "@/lib/content";
 import { absoluteUrl, siteConfig } from "@/lib/site";
-
-// What the plugin is: its long description, as every plugin manifest says it.
-const pluginDescription =
-  "The text-to-cad plugin gives your agent local workflows for generating 3D models as STEP, GLB, STL or 3MF files. It also does design for manufacturing checks, generates engineering drawings, and connects to popular 3D printing, sheet metal and CNC fabrication services.";
-
-// The install: a message for the agent, which finds the install for its own app in the repository
-// (the README's Install, which says the same).
-const agentInstallMessage = "Install text-to-cad from https://github.com/earthtojake/text-to-cad";
-
-// Installing by hand, each its own sub-section of Install: the plugin for each agent app (the skills
-// and CAD's viewer together), then the skills alone, with the Skills CLI, for any other agent.
-const installs = [
-  {
-    id: "claude-code",
-    agent: "Claude Code",
-    command:
-      "claude plugin marketplace add earthtojake/text-to-cad\nclaude plugin install text-to-cad@earthtojake",
-  },
-  {
-    id: "codex",
-    agent: "Codex",
-    note: "Requires Codex 0.142.0 or newer.",
-    command:
-      "codex plugin marketplace add earthtojake/text-to-cad\ncodex plugin add text-to-cad@earthtojake",
-  },
-  {
-    id: "cursor",
-    agent: "Cursor",
-    note: "Cursor also loads the Claude Code plugin: install one or the other.",
-    command:
-      "git clone --depth 1 https://github.com/earthtojake/text-to-cad ~/.cursor/plugins/local/text-to-cad",
-  },
-  // Grok Build reads the Claude plugin manifest -- there is no separate Grok manifest -- and
-  // installs straight from the repo rather than adding a marketplace first.
-  {
-    id: "grok-build",
-    agent: "Grok Build",
-    note: "Grok Build also loads the Claude Code plugin: install one or the other.",
-    command: "grok plugin install earthtojake/text-to-cad --trust\ngrok plugin enable text-to-cad",
-  },
-  {
-    id: "gemini",
-    agent: "Gemini",
-    command: "gemini extensions install https://github.com/earthtojake/text-to-cad",
-  },
-  {
-    id: "other-agents",
-    agent: "Other Agents",
-    note: "For an agent without plugin support: the skills give you everything you need for core CAD workflows and let you view CAD files in a localhost web app.",
-    command: "npx skills add earthtojake/text-to-cad",
-  },
-];
-
-// The agents text-to-cad installs into, as skills.sh shows them (its logos, in public/agents/), and
-// Grok (Lobe Icons' glyph, MIT, in skills.sh's tile). A logo leads to its install: its plugin's
-// where the agent has one, the skills alone (Other Agents) where it has none.
-const agents = [
-  { name: "Claude Code", logo: "claude-code", install: "claude-code" },
-  { name: "Codex", logo: "codex", install: "codex" },
-  { name: "Cursor", logo: "cursor", install: "cursor" },
-  { name: "Gemini", logo: "gemini", install: "gemini" },
-  { name: "Grok", logo: "grok", install: "grok-build" },
-  { name: "GitHub Copilot", logo: "copilot", install: "other-agents" },
-  { name: "Windsurf", logo: "windsurf", install: "other-agents" },
-  { name: "Cline", logo: "cline", install: "other-agents" },
-  { name: "AMP", logo: "amp", install: "other-agents" },
-  { name: "Antigravity", logo: "antigravity", install: "other-agents" },
-  { name: "OpenClaw", logo: "openclaw", install: "other-agents" },
-  { name: "Droid", logo: "droid", install: "other-agents" },
-  { name: "Goose", logo: "goose", install: "other-agents" },
-  { name: "Kilo", logo: "kilo", install: "other-agents" },
-  { name: "Kiro CLI", logo: "kiro-cli", install: "other-agents" },
-  { name: "Nous Research", logo: "nous-research", install: "other-agents" },
-  { name: "OpenCode", logo: "opencode", install: "other-agents" },
-  { name: "Roo", logo: "roo", install: "other-agents" },
-  { name: "Trae", logo: "trae", install: "other-agents" },
-  { name: "VS Code", logo: "vscode", install: "other-agents" },
-  { name: "Zed", logo: "zed", install: "other-agents" },
-];
-
-// A plugin for an agent that has none: a new issue, titled for the person to name it.
-const pluginRequestUrl = `${siteConfig.repository}/issues/new?title=${encodeURIComponent("Plugin request: ")}`;
-
-const skillGroups = [
-  {
-    name: "CAD",
-    path: "skills/cad",
-    summary:
-      "Creates and edits CAD models from plain-language or image requests, with STEP as the main output along with options to export to STL, 3MF and GLB.",
-  },
-  {
-    name: "step.parts",
-    path: "skills/step-parts",
-    summary:
-      "Finds off-the-shelf STEP parts like screws, bearings, motors, and connectors.",
-  },
-  {
-    name: "Engineering Drawing",
-    path: "skills/engineering-drawing",
-    summary:
-      "Dimensioned engineering drawings from a part, as a PDF: views, hidden lines, dimensions, hole callouts, title block.",
-  },
-  {
-    name: "DXF",
-    path: "skills/dxf",
-    summary:
-      "Creates 2D DXF drawings like profiles, templates, gaskets, and cut layouts from Python sources or CAD geometry.",
-  },
-  {
-    name: "URDF",
-    path: "skills/urdf",
-    summary:
-      "Writes robot structure files with links, joints, limits, inertials, and meshes.",
-  },
-  {
-    name: "SRDF",
-    path: "skills/srdf",
-    summary:
-      "Adds MoveIt planning groups, end effectors, poses, and collision rules to a URDF.",
-  },
-  {
-    name: "SDF",
-    path: "skills/sdf",
-    summary:
-      "Creates simulator models and worlds with frames, physics, sensors, and lights.",
-  },
-  {
-    name: "SendCutSend",
-    path: "skills/sendcutsend",
-    summary: "Checks DXF and STEP files before upload to SendCutSend.",
-  },
-  {
-    name: "DfAM Check",
-    path: "skills/dfam-check",
-    summary:
-      "Measures mesh printability per process: wall thickness, overhangs, support volume, and build orientation.",
-  },
-  {
-    name: "DFM",
-    path: "skills/dfm",
-    summary:
-      "Reviews a part for sheet metal, CNC machining, or injection molding, with measured evidence and the cited rule behind every finding.",
-  },
-  {
-    name: "G-code",
-    path: "skills/gcode",
-    summary:
-      "Slices models into printer-ready G-code with OrcaSlicer, using your own printer presets.",
-  },
-  {
-    name: "Bambu Labs",
-    path: "skills/bambu-labs",
-    summary:
-      "Sends prints to Bambu Lab printers through Bambu Connect, Bambu Lab's official app, or Bambu Studio.",
-  },
-];
 
 const COMMAND_BOX_CLASS =
   "min-w-0 w-full overflow-hidden rounded-lg border border-border bg-card shadow-xs";
@@ -312,36 +166,33 @@ export default function Home() {
         <div className="min-w-0 space-y-2">
           <HeroSection />
 
+          {/* Right under the hero, so a phone shows the agents on load. */}
+          <section id="agents" aria-labelledby="agents-title" className="scroll-mt-20 space-y-3 py-6">
+            <SectionIntro id="agents-title" title="Available for these agents" />
+            <AgentCarousel />
+          </section>
+
           <section id="overview" aria-labelledby="overview-title" className="scroll-mt-20 space-y-3 py-6">
-            <SectionIntro id="overview-title" title="Overview" />
-            {/* First, so a phone shows the agents on load, under the hero. */}
-            <div>
-              <h3 className="text-base font-semibold text-foreground">Available for these agents</h3>
-              <AgentCarousel />
-            </div>
-            <p className="text-sm leading-6 text-muted-foreground">{pluginDescription}</p>
+            <SectionIntro id="overview-title" title="Overview" description={pluginDescription} />
             <p className="text-sm leading-6 text-muted-foreground">
-              It is supported by all popular agents that support plugins or the{" "}
-              <a href="https://skills.sh" target="_blank" rel="noreferrer" className="text-foreground underline underline-offset-4">
-                skills
+              {support.before}{" "}
+              <a href={support.link.href} target="_blank" rel="noreferrer" className="text-foreground underline underline-offset-4">
+                {support.link.text}
               </a>{" "}
-              framework, including Claude Code, Codex, Cursor, Gemini and Grok.
+              {support.after}
             </p>
           </section>
 
           <section id="installation" aria-labelledby="installation-title" className="scroll-mt-20 space-y-3 py-6">
-            <SectionIntro
-              id="installation-title"
-              title="Install"
-              description="Send this message to your agent and it will install text-to-cad for you."
-            />
-            <AgentMessage />
+            <SectionIntro id="installation-title" title="Install" />
+            <div className="space-y-3">
+              <div>
+                <h3 className="text-base font-semibold text-foreground">Ask your agent (recommended)</h3>
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">{agentInstallByline}</p>
+              </div>
+              <AgentMessage />
+            </div>
             <div className="space-y-6 pt-6">
-              <p className="text-sm leading-6 text-muted-foreground">
-                Or install it yourself. The plugin brings the skills and CAD&apos;s viewer, a local server that
-                runs through uv, which must be installed. Restart your agent if newly installed skills do not
-                appear.
-              </p>
               {installs.map((item) => (
                 <Install key={item.agent} item={item} />
               ))}
@@ -399,6 +250,20 @@ export default function Home() {
             </div>
           </section>
 
+
+          <section id="contributing" aria-labelledby="contributing-title" className="scroll-mt-20 space-y-3 py-6">
+            <SectionIntro id="contributing-title" title="Contributing" />
+            <p className="text-sm leading-6 text-muted-foreground">
+              Branch from <code className="font-mono text-foreground">main</code> and open PRs against{" "}
+              <code className="font-mono text-foreground">main</code>. For the local workflow, testing in agent apps
+              and validation, see{" "}
+              <a href={`${siteConfig.repository}/blob/main/CONTRIBUTING.md`} target="_blank" rel="noreferrer"
+                className="text-foreground underline underline-offset-4">
+                CONTRIBUTING.md
+              </a>
+              .
+            </p>
+          </section>
         </div>
       </div>
 

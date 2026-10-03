@@ -16,6 +16,7 @@ const NAV_SECTIONS = [
   { id: "overview", label: "Overview" },
   { id: "installation", label: "Install" },
   { id: "skills", label: "Skills" },
+  { id: "contributing", label: "Contributing" },
 ] as const;
 
 const GITHUB_REPO_URL = "https://github.com/earthtojake/text-to-cad";
