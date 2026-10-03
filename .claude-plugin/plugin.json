@@ -7,6 +7,10 @@
     "url": "https://github.com/earthtojake"
   },
   "homepage": "https://www.texttocad.dev",
+  "documentationUrl": "https://www.texttocad.dev",
+  "supportUrl": "https://github.com/earthtojake/text-to-cad/issues/new",
+  "privacyPolicyUrl": "https://www.texttocad.dev/privacy-policy",
+  "termsOfServiceUrl": "https://www.texttocad.dev/terms-of-service",
   "repository": "https://github.com/earthtojake/text-to-cad",
   "license": "MIT",
   "keywords": [
