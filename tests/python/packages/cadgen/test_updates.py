@@ -58,20 +58,20 @@ class UpdatesTest(unittest.TestCase):
             with self.subTest(where=where, version=version):
                 self.assertEqual(updates.offer(feed, version, where), offered)
 
-    def test_the_notice_reads_the_same_everywhere_and_names_the_channel(self) -> None:
+    def test_the_notice_reads_the_same_everywhere_like_the_install_message(self) -> None:
         self.read_today(FEED)
         found = updates.notice()
+        prompt = "Update text-to-cad to 0.9.0 from https://github.com/earthtojake/text-to-cad"
         self.assertEqual(found, {"latest": "0.9.0", "version": "0.8.1",
-                                 "text": "text-to-cad 0.9.0 is available (you have 0.8.1)",
-                                 "prompt": "Update text-to-cad to 0.9.0 (installed from GitHub)."})
-        self.assertEqual(updates.line(found), 'text-to-cad 0.9.0 is available (you have 0.8.1). '
-                                              'To update, ask your agent: "Update text-to-cad to 0.9.0 (installed from GitHub)."')
+                                 "text": "text-to-cad 0.9.0 is available (you have 0.8.1)", "prompt": prompt})
+        self.assertEqual(updates.line(found), f'text-to-cad 0.9.0 is available (you have 0.8.1). To update, ask your agent: "{prompt}"')
+        # The same words from a store's copy below its minimum, and from a skill's command, which names no channel.
         with mock.patch.dict(os.environ, {"CADGEN_INSTALL_CHANNEL": "claude-directory"}), \
                 mock.patch.object(cadgen, "__version__", "0.8.0"):
-            self.assertEqual(updates.notice()["prompt"], "Update text-to-cad to 0.9.0 (installed from claude-directory).")
+            self.assertEqual(updates.notice()["prompt"], prompt)
         with mock.patch.dict(os.environ, {"CADGEN_INSTALL_CHANNEL": ""}), \
                 mock.patch("cadgen._internal.channel._source_tree", return_value=False):
-            self.assertEqual(updates.notice()["prompt"], "Update text-to-cad to 0.9.0.")  # a skill's command: no package named one
+            self.assertEqual(updates.notice()["prompt"], prompt)
 
     def test_the_feed_is_read_at_most_once_a_day_and_kept_when_unreachable(self) -> None:
         asked: list[str] = []
@@ -121,7 +121,7 @@ class UpdatesTest(unittest.TestCase):
                 self.assertEqual(cadgen_main(["analytics"]), 0)
             return err.getvalue()
 
-        self.assertIn('ask your agent: "Update text-to-cad to 0.9.0 (installed from GitHub)."', run())
+        self.assertIn('ask your agent: "Update text-to-cad to 0.9.0 from https://github.com/earthtojake/text-to-cad"', run())
         self.assertEqual(run(), "")
 
 

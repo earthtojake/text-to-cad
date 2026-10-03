@@ -18,8 +18,8 @@ What it offers depends on where the install came from (its channel, ``cadgen/_in
 - installed from GitHub, or a channel nothing named: ``latest``, whenever it is behind.
 
 The notice is the same wherever it shows: ``text-to-cad 0.9.0 is available (you have 0.8.1)``, and
-a prompt for the person's agent, ``Update text-to-cad to 0.9.0 (installed from GitHub).``, which
-names the channel when the install's package did (a store's as its package spells it). The agent does the update; nothing here does.
+a prompt for the person's agent worded like the install message, ``Update text-to-cad to 0.9.0 from
+https://github.com/earthtojake/text-to-cad``: the agent takes the steps for its own app from there. The agent does the update; nothing here does.
 The CAD app's card sends that prompt to the chat where the host takes messages, and copies it
 elsewhere; the CAD Viewer's card copies it. A text-only app gets the line with its first
 ``cad_show`` result, and a ``cadgen`` command prints it on stderr, at most once a day.
@@ -47,11 +47,12 @@ from typing import Any, Callable, TextIO
 
 from cadgen._internal.api import api_url
 from cadgen._internal.atomic_replace import write_bytes_atomic
-from cadgen._internal.channel import DEV, channel, is_channel, is_store, label
+from cadgen._internal.channel import DEV, channel, is_channel, is_store
 from cadgen.settings import read_section, settings_path, update_section
 
 LOG = logging.getLogger("cadgen.updates")
 
+REPOSITORY = "https://github.com/earthtojake/text-to-cad"  # where the install message sends the agent too
 FILE = "versions.json"  # the feed as last read, in the state directory
 SECTION = "updates"  # the person's answers to the card, in settings.json
 CHECK_SECONDS = 24 * 60 * 60  # how old the feed may get before it is read again; the CLI's line, how often
@@ -174,10 +175,9 @@ def notice(*, fetch: bool = True, now: float | None = None, path: Path | None = 
         latest = offer(feed(fetch=fetch, now=now, path=path, get=get), __version__, where)
         if latest is None or _dismissed(settings) == latest:
             return None
-        source = label(where)
         return {"latest": latest, "version": __version__,
                 "text": f"text-to-cad {latest} is available (you have {__version__})",
-                "prompt": f"Update text-to-cad to {latest}" + (f" (installed from {source})" if source else "") + "."}
+                "prompt": f"Update text-to-cad to {latest} from {REPOSITORY}"}
     except Exception:  # noqa: BLE001 - a notice never fails what shows it
         LOG.debug("the version check failed", exc_info=True)
         return None

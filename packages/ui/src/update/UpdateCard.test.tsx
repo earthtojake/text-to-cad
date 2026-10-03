@@ -3,7 +3,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { UpdateCard, useUpdateNotice, type UpdateCall } from './index.js';
 
 const NOTICE = { latest: '0.9.0', version: '0.8.1', text: 'text-to-cad 0.9.0 is available (you have 0.8.1)',
-  prompt: 'Update text-to-cad to 0.9.0 (installed from GitHub).' };
+  prompt: 'Update text-to-cad to 0.9.0 from https://github.com/earthtojake/text-to-cad' };
 
 function Host({ call, send, copy = vi.fn(async () => {}) }: { call: UpdateCall; send?: (prompt: string) => Promise<void>; copy?: (prompt: string) => Promise<void> }) {
   const { notice, answer, close } = useUpdateNotice(call);
