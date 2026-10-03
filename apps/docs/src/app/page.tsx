@@ -15,8 +15,8 @@ const pluginDescription =
 // (the README's Install, which says the same).
 const agentInstallMessage = "Install text-to-cad from https://github.com/earthtojake/text-to-cad";
 
-// Installing by hand, under Manual, each its own sub-section: the plugin for each agent app (the
-// skills and CAD's viewer together), then the skills alone, with the Skills CLI, for any other agent.
+// Installing by hand, each its own sub-section of Install: the plugin for each agent app (the skills
+// and CAD's viewer together), then the skills alone, with the Skills CLI, for any other agent.
 const installs = [
   {
     id: "claude-code",
@@ -54,14 +54,14 @@ const installs = [
   {
     id: "other-agents",
     agent: "Other Agents",
-    note: "For an agent without a plugin: the skills alone.",
+    note: "For an agent without plugin support: the skills give you everything you need for core CAD workflows and let you view CAD files in a localhost web app.",
     command: "npx skills add earthtojake/text-to-cad",
   },
 ];
 
 // The agents text-to-cad installs into, as skills.sh shows them (its logos, in public/agents/), and
-// Grok (Lobe Icons' glyph, MIT, in skills.sh's tile). A logo leads to its install under Manual: its
-// plugin's where the agent has one, the skills alone (Other Agents) where it has none.
+// Grok (Lobe Icons' glyph, MIT, in skills.sh's tile). A logo leads to its install: its plugin's
+// where the agent has one, the skills alone (Other Agents) where it has none.
 const agents = [
   { name: "Claude Code", logo: "claude-code", install: "claude-code" },
   { name: "Codex", logo: "codex", install: "codex" },
@@ -173,7 +173,7 @@ function AgentMessage() {
         <p className="flex min-w-0 flex-1 items-center px-3 py-2 text-sm leading-6 text-foreground">
           {agentInstallMessage}
         </p>
-        <CopyButton text={agentInstallMessage} label="Copy the message for your agent" prominent compact />
+        <CopyButton text={agentInstallMessage} label="Copy the message for your agent" prominent />
       </div>
     </div>
   );
@@ -203,15 +203,12 @@ function AgentCarousel() {
     </ul>
   );
   return (
-    <div className="space-y-3 pt-3">
-      <h3 className="font-mono text-sm font-medium uppercase text-foreground">Available for these agents</h3>
-      <div className="overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_8%,black_92%,transparent)] motion-reduce:overflow-x-auto">
+    <div className="overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_8%,black_92%,transparent)] motion-reduce:overflow-x-auto">
         <div className="flex w-max animate-[agents-carousel_110s_linear_infinite] bg-background hover:[animation-play-state:paused] motion-reduce:animate-none">
           {logos(0)}
           {logos(1)}
         </div>
       </div>
-    </div>
   );
 }
 
@@ -219,7 +216,7 @@ function Install({ item }: { item: (typeof installs)[number] }) {
   return (
     <div id={item.id} className="min-w-0 scroll-mt-20 space-y-2">
       <div>
-        <h4 className="text-sm font-medium text-foreground">{item.agent}</h4>
+        <h3 className="text-base font-semibold text-foreground">{item.agent}</h3>
         {item.note ? <p className="mt-1 text-sm leading-6 text-muted-foreground">{item.note}</p> : null}
       </div>
       <div className={COMMAND_BOX_CLASS}>
@@ -227,7 +224,7 @@ function Install({ item }: { item: (typeof installs)[number] }) {
           <code className="flex min-w-0 flex-1 items-center overflow-x-auto whitespace-pre font-mono px-3 py-2 text-sm leading-6 text-foreground">
             {item.command}
           </code>
-          <CopyButton text={item.command} label={`Copy the ${item.agent} install command`} compact />
+          <CopyButton text={item.command} label={`Copy the ${item.agent} install command`} />
         </div>
       </div>
     </div>
@@ -241,7 +238,7 @@ function SectionIntro({
 }: {
   id?: string;
   title: string;
-  description: string;
+  description?: string;
 }) {
   return (
     <div>
@@ -251,9 +248,11 @@ function SectionIntro({
       >
         {title}
       </h2>
-      <p className="mt-2 text-sm leading-6 text-muted-foreground">
-        {description}
-      </p>
+      {description ? (
+        <p className="mt-2 text-sm leading-6 text-muted-foreground">
+          {description}
+        </p>
+      ) : null}
     </div>
   );
 }
@@ -313,30 +312,35 @@ export default function Home() {
         <div className="min-w-0 space-y-2">
           <HeroSection />
 
+          <section id="agents" aria-labelledby="agents-title" className="scroll-mt-20 space-y-3 py-6">
+            <SectionIntro id="agents-title" title="Available for these agents" />
+            <AgentCarousel />
+          </section>
+
           <section id="overview" aria-labelledby="overview-title" className="scroll-mt-20 space-y-3 py-6">
             <SectionIntro id="overview-title" title="Overview" description={pluginDescription} />
             <p className="text-sm leading-6 text-muted-foreground">
-              text-to-cad is available for all popular agents that support plugins and skills, including
-              Claude Code, Codex, Cursor, Gemini and Grok.
+              It is supported by all popular agents that support plugins or the{" "}
+              <a href="https://skills.sh" target="_blank" rel="noreferrer" className="text-foreground underline underline-offset-4">
+                skills
+              </a>{" "}
+              framework, including Claude Code, Codex, Cursor, Gemini and Grok.
             </p>
-            <AgentCarousel />
           </section>
 
           <section id="installation" aria-labelledby="installation-title" className="scroll-mt-20 space-y-3 py-6">
             <SectionIntro
               id="installation-title"
               title="Install"
-              description="Send this message to your agent and it will install text-to-cad automatically."
+              description="Send this message to your agent and it will install text-to-cad for you."
             />
             <AgentMessage />
             <div className="space-y-6 pt-6">
-              <div>
-                <h3 className="text-base font-semibold text-foreground">Manual</h3>
-                <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                  The plugin brings the skills and CAD&apos;s viewer, a local server that runs through uv,
-                  which must be installed. Restart your agent if newly installed skills do not appear.
-                </p>
-              </div>
+              <p className="text-sm leading-6 text-muted-foreground">
+                Or install it yourself. The plugin brings the skills and CAD&apos;s viewer, a local server that
+                runs through uv, which must be installed. Restart your agent if newly installed skills do not
+                appear.
+              </p>
               {installs.map((item) => (
                 <Install key={item.agent} item={item} />
               ))}
