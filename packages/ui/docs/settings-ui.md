@@ -261,7 +261,9 @@ stack.
 - **One width.** Every panel opens at `TOOL_PANEL_WIDTH`: 164px, a strip of
   six tools (six 24px buttons, 2px gaps, 4px padding and a 1px border),
   whatever tools the file's own strip has — a file with three tools has the
-  same panels as one with seven. A fixed panel is exactly that wide. A
+  same panels as one with seven. A fixed panel is exactly that wide, but for
+  Display's, 256px, the width its settings are laid out for (two controls a row,
+  the popover's they were). A
   resizable panel is only ever made wider, up to half the viewer; widening one
   changes nothing about any other panel. The panels hang left-aligned
   under the strip, each at its own width. Content truncates to fit; it never
@@ -356,8 +358,9 @@ stack.
   toolbar and the stack's panels, which stay up beside the model, share
   `FLOATING_CHROME_SURFACE_CLASS` — the background at 45.5% and barely blurred
   (2px), so the model behind them is easy to make out; every menu and popover
-  over the viewport shares `FLOATING_SURFACE_CLASS` (the background at 75%,
-  blurred), so its text never competes with the model.
+  over the viewport, and Display's panel, settings read while it is up, share
+  `FLOATING_SURFACE_CLASS` (the background at 75%, blurred), so their text never
+  competes with the model.
 - **Scrolling.** Every scroll region in the viewer's chrome — a panel's body,
   the stack's column, the file tree, a menu, the alert card — is the
   `ScrollArea` primitive (`primitives/scroll-area.jsx`, shadcn's): thin overlay
@@ -406,9 +409,10 @@ the strip's last button opens it and, pressed again, closes it, and so does the 
 the end of its first heading. Opening it leaves the tool in hand as it is: a
 selection, a Draw session or Position stay. A press on the model (to orbit and judge a
 setting), Escape and setting changes leave it up: the stack's panels are never
-Escape's. It is a fixed panel of the one width that gives way like a details panel,
-its sections scrolling inside it. Another file opens with it closed. Preview puts it
-away with the stack, and gives it back as it was when preview ends.
+Escape's. It is a fixed panel, 256px wide (its settings are laid out two a row, as they
+were in a popover of that width), on the menus' surface, and it gives way like a details
+panel, its sections scrolling inside it. Another file opens with it closed. Preview puts
+it away with the stack, and gives it back as it was when preview ends.
 
 One scroller (the panel's body), shared section primitives, no sticky headings
 and no nested cards. Nested dropdowns and color pickers own their dismissal:

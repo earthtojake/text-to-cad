@@ -32,8 +32,10 @@ import ViewportContextMenu from "./ViewportContextMenu.jsx";
 const INSET = `${VIEWPORT_INSET_PX}px`;
 // The strip and its stack stop short of Quick Edit's button at the top-right.
 const TOOLBAR_POSITION = Object.freeze({ top: INSET, left: INSET, bottom: VIEWPORT_STACK_BOTTOM, maxWidth: "calc(100% - 3.5rem)" });
-// Display: the strip's last button, and the id of the panel it opens at the foot of the stack.
+// Display: the strip's last button, and the id of the panel it opens at the foot of the stack, as
+// wide as its settings are laid out for (two controls a row): the popover's they were.
 const DISPLAY = "display";
+const DISPLAY_PANEL_WIDTH = 256;
 // The view's controls in the navbar look as its own icon buttons do.
 export const NAVBAR_CONTROL_CLASS = "size-6 text-muted-foreground hover:text-foreground aria-pressed:bg-accent aria-pressed:text-accent-foreground";
 
@@ -199,9 +201,10 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
     </ToolPanel> : null}
   </>;
   // Display's panel, at the foot of the stack while its button is pressed: its sections give way
-  // like a details panel's and scroll inside it, its first heading carries Reset and the X.
+  // like a details panel's and scroll inside it, its first heading carries Reset and the X. Its
+  // settings are read while it is up, on the menus' surface, so their text never competes with the model.
   const displayPanel = displayOpen ? <ToolPanel id={DISPLAY} label="Display settings" fit="details" collapsible={false}
-    onClose={() => setDisplayOpen(false)}>{frame.display}</ToolPanel> : null;
+    width={DISPLAY_PANEL_WIDTH} surface="menu" onClose={() => setDisplayOpen(false)}>{frame.display}</ToolPanel> : null;
 
   const hasContent = Boolean(scene) && !viewerLoading;
   // A load the model did not survive: an alert that cannot be put away (a failed update that

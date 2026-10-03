@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useLayoutEffect, use
 import { Check, ChevronDown, ChevronUp, X } from "lucide-react";
 import { cn } from "@text-to-cad/ui/utils";
 import { ScrollArea } from "@text-to-cad/ui/primitives/scroll-area";
-import { FLOATING_CHROME_SURFACE_CLASS } from "./floatingSurface.js";
+import { FLOATING_CHROME_SURFACE_CLASS, FLOATING_SURFACE_CLASS } from "./floatingSurface.js";
 import ResizeGrip from "./ResizeGrip.jsx";
 import { ToolStackContext } from "./ToolStack.jsx";
 import { TOOL_PANEL_WIDTH, clampToolPanelHeight, clampToolPanelWidth } from "./toolStackLayout.js";
@@ -119,13 +119,17 @@ export function ToolPanelClose({ className }) {
  *   actions?: import("react").ReactNode,
  *   header?: import("react").ReactNode, footer?: import("react").ReactNode, collapsible?: boolean, closable?: boolean, onClose?: (() => void) | null, closeLabel?: string,
  *   fit?: "fixed" | "tree" | "details", resizable?: boolean, hidden?: boolean, defaultCollapsed?: boolean,
- *   children?: import("react").ReactNode }} props
+ *   width?: number, surface?: "chrome" | "menu", children?: import("react").ReactNode }} props
  *   `label` names the panel for assistive technology ("Clip controls"), with a heading or
  *   without; the chevron, the X and the grip take their names from it, unless the X says
  *   what it does itself (`closeLabel`, "Clear selection").
+ *   `width`: the width a panel opens at, for one whose content is laid out wider than the one
+ *   width (Display's settings, two controls a row). `surface`: `"menu"` puts the panel on the
+ *   menus' surface (`FLOATING_SURFACE_CLASS`), for settings read while they are up whose text
+ *   must not compete with the model (Display's); otherwise the stack's own.
  */
 export default function ToolPanel({ id, title = null, name = "", label, summary = null, actions = null, header = null, footer = null, collapsible = true, closable = false, onClose = null, closeLabel = "",
-  fit = "fixed", resizable = false, hidden = false, defaultCollapsed = false, children }) {
+  fit = "fixed", resizable = false, hidden = false, defaultCollapsed = false, width: openWidth = TOOL_PANEL_WIDTH, surface = "chrome", children }) {
   const stack = useContext(ToolStackContext);
   const kept = Boolean(stack && id);
   // Folded: the person's, kept by the stack across files; a panel drawn alone keeps its own.
@@ -154,7 +158,7 @@ export default function ToolPanel({ id, title = null, name = "", label, summary 
   const size = sized ? { ...(kept ? stack.size(id) : ownSize), ...draft } : {};
   const clampWidth = value => clampToolPanelWidth(value, stack?.viewerWidth || window.innerWidth);
   const clampHeight = value => clampToolPanelHeight(value, stack?.room() || Infinity);
-  const width = size.width ? clampWidth(size.width) : TOOL_PANEL_WIDTH;
+  const width = size.width ? clampWidth(size.width) : openWidth;
   const cap = sized ? size.height ?? stack?.defaultHeight(id) ?? null : null;
   // One gesture's outcome, written once: a width, a cap, or both.
   const settle = change => {
@@ -239,7 +243,8 @@ export default function ToolPanel({ id, title = null, name = "", label, summary 
   const dragging = draft !== null;
   return <section ref={section} aria-label={label} hidden={hidden || closed} data-tool-panel={fit} data-tool-panel-id={id || undefined}
     data-collapsed={collapsed ? "" : undefined} data-closed={closed ? "" : undefined} data-resizable={sized ? "" : undefined}
-    className={cn("pointer-events-auto relative flex max-w-full flex-col rounded-md text-tiny", FLOATING_CHROME_SURFACE_CLASS, collapsed ? "shrink-0" : FIT[fit])}
+    className={cn("pointer-events-auto relative flex max-w-full flex-col rounded-md text-tiny", surface === "menu" ? FLOATING_SURFACE_CLASS : FLOATING_CHROME_SURFACE_CLASS,
+      collapsed ? "shrink-0" : FIT[fit])}
     style={{ width, maxHeight: collapsed || cap === null ? undefined : `${cap}px`, minHeight }}>
     <ToolPanelContext.Provider value={panel}>
       {heading}

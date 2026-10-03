@@ -426,10 +426,10 @@ it("Display is the strip's last button, the Render mode's sphere: it opens its p
   expect(shown()).toEqual([...stack, 'Display settings']);
   expect(['Display', 'Draw', 'Keep'].map(name => tool(name).getAttribute('aria-pressed'))).toEqual(['true', 'true', 'true']);
   expect(viewportProps.current.drawingEnabled).toBe(true);
-  // A panel of the one width that gives way like a details panel, and does not fold: its first row
-  // is the Display section's heading, Reset then the X.
+  // As wide as its settings are laid out for (the popover's 256px), giving way like a details panel,
+  // and it does not fold: its first row is the Display section's heading, Reset then the X.
   const display = panel('Display settings')!;
-  expect([display.getAttribute('data-tool-panel'), width('Display settings')]).toEqual(['details', TOOL_PANEL_WIDTH]);
+  expect([display.getAttribute('data-tool-panel'), width('Display settings')]).toEqual(['details', 256]);
   expect(within(display).queryByRole('button', { name: /^(?:Collapse|Expand) display/ })).toBeNull();
   const heading = display.querySelector('[data-settings-section="display"] [data-settings-section-heading]')!;
   expect([...heading.querySelectorAll('button[aria-label]')].map(button => button.getAttribute('aria-label'))).toEqual(['Reset', 'Close display settings']);
@@ -462,7 +462,7 @@ it("Display is the strip's last button, the Render mode's sphere: it opens its p
   expect(tool('Display').getAttribute('aria-pressed')).toBe('false');
 });
 
-it("two surfaces: the strip and the stack, Display's panel included, share the light chrome surface, and a menu over the viewport has the more opaque one", async () => {
+it("two surfaces: the strip and the stack's panels share the light chrome surface, and Display's settings and a menu over the viewport the more opaque one", async () => {
   const user = userEvent.setup();
   frame();
   expect(FLOATING_CHROME_SURFACE_CLASS).not.toBe(FLOATING_SURFACE_CLASS);
@@ -470,7 +470,9 @@ it("two surfaces: the strip and the stack, Display's panel included, share the l
   const has = (element: Element, surface: string) => surface.split(' ').every(name => classes(element).includes(name));
   expect(has(screen.getByRole('group', { name: 'Interaction tools' }), FLOATING_CHROME_SURFACE_CLASS)).toBe(true);
   await user.click(tool('Display'));
-  for (const label of ['Harness tree', 'Harness reference', 'Display settings']) expect(has(panel(label)!, FLOATING_CHROME_SURFACE_CLASS), label).toBe(true);
+  for (const label of ['Harness tree', 'Harness reference']) expect(has(panel(label)!, FLOATING_CHROME_SURFACE_CLASS), label).toBe(true);
+  // Display's settings are read while they are up: their text must not compete with the model.
+  expect([has(panel('Display settings')!, FLOATING_SURFACE_CLASS), has(panel('Display settings')!, FLOATING_CHROME_SURFACE_CLASS)]).toEqual([true, false]);
   await user.click(screen.getByRole('button', { name: 'Preview' }));
   await user.click(screen.getByRole('button', { name: 'Playback settings' }));
   expect(has(screen.getByRole('menu'), FLOATING_SURFACE_CLASS)).toBe(true);
