@@ -1,4 +1,5 @@
-"""Daemon channels have one close owner even when cancellation races cleanup."""
+"""Daemon channels have one close owner even when cancellation races cleanup, and no one
+peer's handshake holds up a listener's other peers."""
 
 from __future__ import annotations
 
@@ -126,18 +127,24 @@ class ChannelCloseOwnershipTest(unittest.TestCase):
 
 
 class _PendingListener:
-    """Windows-like listener: closing queued handles does not wake pending accept."""
+    """Windows-like listener: closing queued handles does not wake pending accept.
 
-    def __init__(self, connection=None):
+    ``accepted`` peers are returned at once, before the accept that waits.
+    """
+
+    def __init__(self, connection=None, *, accepted=()):
         self.entered = threading.Event()
         self.release = threading.Event()
         self.connection = connection
+        self.accepted = list(accepted)
         self.close_calls = 0
         self.accept_calls = 0
         self.close_thread = None
 
     def accept(self):
         self.accept_calls += 1
+        if self.accepted:
+            return self.accepted.pop(0)
         self.entered.set()
         if not self.release.wait(2):
             raise TimeoutError("pending accept was not woken")
@@ -203,13 +210,15 @@ class ServerShutdownTest(unittest.TestCase):
             self.assertEqual(pending.close_calls, 1)
             self.assertEqual(pending.close_thread, thread.ident)
             wake.assert_called_once()
-            factory.assert_called_once_with("private-pipe", family="AF_PIPE", authkey=b"secret", backlog=4)
+            # No key for the stdlib Listener: its accept() would authenticate inline.
+            factory.assert_called_once_with("private-pipe", family="AF_PIPE", backlog=4)
 
-    def test_authenticated_channel_returning_across_close_is_discarded(self):
+    def test_connection_returning_across_close_is_discarded_unauthenticated(self):
         connection = mock.Mock()
         pending = _PendingListener(connection)
         with mock.patch.object(transport.mpc, "Listener", return_value=pending), \
-                mock.patch.object(transport, "_wake_listener", side_effect=lambda *_: pending.release.set()):
+                mock.patch.object(transport, "_wake_listener", side_effect=lambda *_: pending.release.set()), \
+                mock.patch.object(transport, "_authenticate") as authenticate:
             listener = transport.Server("private", b"secret")
             thread, results, errors = self.accept_in_thread(listener)
             try:
@@ -222,21 +231,30 @@ class ServerShutdownTest(unittest.TestCase):
             self.assertEqual(errors, [])
             self.assertEqual(results, [None])
             connection.close.assert_called_once_with()
+            authenticate.assert_not_called()
 
     def test_rejected_authentication_repairs_the_owned_key_and_keeps_accepting(self):
-        connection = mock.Mock()
+        stranger, connection = mock.Mock(), mock.Mock()
         native = mock.Mock()
-        native.accept.side_effect = [transport.mpc.AuthenticationError("stale"), connection]
+        native.accept.side_effect = [stranger, connection]
         repair = mock.Mock()
-        with mock.patch.object(transport.mpc, "Listener", return_value=native):
+
+        def authenticate(peer, authkey, timeout):
+            self.assertEqual((authkey, timeout), (b"secret", transport.HANDSHAKE_TIMEOUT_SECONDS))
+            if peer is stranger:
+                raise transport.mpc.AuthenticationError("stale")
+
+        with mock.patch.object(transport.mpc, "Listener", return_value=native), \
+                mock.patch.object(transport, "_authenticate", side_effect=authenticate):
             listener = transport.Server(
                 "private",
                 b"secret",
                 on_authentication_error=repair,
             )
             channel = listener.accept()
-        self.assertIsNotNone(channel)
+        self.assertIs(channel._conn, connection)
         repair.assert_called_once_with()
+        stranger.close.assert_called_once_with()
         channel.close()
 
     def test_close_without_accept_is_immediate_and_repeated_accept_stays_closed(self):
@@ -252,25 +270,38 @@ class ServerShutdownTest(unittest.TestCase):
             self.assertEqual(pending.close_calls, 1)
             wake.assert_not_called()
 
-    def test_close_does_not_wait_for_an_existing_stalled_authentication(self):
-        pending = _PendingListener(mock.Mock())
+    def test_close_does_not_wait_for_a_stalled_handshake(self):
+        peer = mock.Mock()
+        dropped = threading.Event()
+        peer.close.side_effect = lambda: dropped.set()
+        pending = _PendingListener(accepted=[peer])
+        stalled, answer = threading.Event(), threading.Event()
+
+        def authenticate(*_):
+            stalled.set()
+            if not answer.wait(2):
+                raise TimeoutError("the stalled peer was never released")
+
         with mock.patch.object(transport.mpc, "Listener", return_value=pending), \
-                mock.patch.object(transport, "_wake_listener"):
+                mock.patch.object(transport, "_wake_listener", side_effect=lambda *_: pending.release.set()), \
+                mock.patch.object(transport, "_authenticate", side_effect=authenticate):
             listener = transport.Server("private", b"secret")
             thread, results, errors = self.accept_in_thread(listener)
             try:
-                self.assertTrue(pending.entered.wait(1))
+                self.assertTrue(stalled.wait(1))
+                self.assertTrue(pending.entered.wait(1), "accept waited on the stalled handshake")
                 listener.close()
-                self.assertTrue(thread.is_alive(), "the existing peer has not disconnected yet")
-                self.assertEqual(pending.close_calls, 0)
-            finally:
-                pending.release.set()
                 thread.join(2)
-            self.assertFalse(thread.is_alive())
-            self.assertEqual(errors, [])
-            self.assertEqual(results, [None])
-            pending.connection.close.assert_called_once_with()
-            self.assertEqual(pending.close_calls, 1)
+                self.assertFalse(thread.is_alive(), "close waited on the stalled handshake")
+                self.assertEqual(errors, [])
+                self.assertEqual(results, [None])
+                self.assertEqual(pending.close_calls, 1)
+                peer.close.assert_not_called()
+            finally:
+                answer.set()
+            # Authenticated after close: dropped, never handed out.
+            self.assertTrue(dropped.wait(2))
+            peer.close.assert_called_once_with()
 
     def test_interrupted_accept_preserves_exception_and_releases_native_ownership(self):
         pending = mock.Mock()
@@ -378,12 +409,20 @@ class ServerShutdownTest(unittest.TestCase):
             win_error.assert_called_once_with(5)
             self.assertEqual(pending.close_calls, 1)
 
-    def real_listener(self):
+    def real_listener(self, **options):
         address = transport.private_address(transport.identity_digest(uuid.uuid4().hex))
-        listener = transport.Server(address, b"test-key")
+        listener = transport.Server(address, b"test-key", **options)
         self.addCleanup(transport.clear_address, address)
         self.addCleanup(listener.close)
         return listener
+
+    def silent_peer(self, listener):
+        """A peer that connects, receives its challenge and never answers it."""
+        peer = Channel(transport.mpc.Client(listener.address, family=transport._family()))
+        self.addCleanup(peer.close)
+        challenge = peer.recv(10)
+        self.assertTrue(challenge and challenge.startswith(b"#CHALLENGE#"), challenge)
+        return peer
 
     def test_real_pending_accept_exits_without_an_application_channel(self):
         listener = self.real_listener()
@@ -427,6 +466,68 @@ class ServerShutdownTest(unittest.TestCase):
         finally:
             listener.close()
             thread.join(2)
+
+    def test_real_peer_that_never_answers_does_not_hold_up_the_next(self):
+        # The daemon's accept thread once waited 28 minutes in the handshake of a viewer
+        # connection whose challenge another viewer thread had read off a reused file
+        # descriptor; every other client queued behind it. The silent peer's timeout is
+        # a minute here, so the next client is served while it is still pending.
+        listener = self.real_listener(handshake_timeout=60)
+        thread, results, errors = self.accept_in_thread(listener)
+        self.silent_peer(listener)
+        connected, failed = [], []
+
+        def connect():
+            try:
+                connected.append(transport.connect(listener.address, b"test-key"))
+            except BaseException as exc:
+                failed.append(exc)
+
+        client = threading.Thread(target=connect, daemon=True)
+        client.start()
+        client.join(10)
+        self.assertFalse(client.is_alive(), "a silent peer's handshake held up the next client's")
+        thread.join(10)
+        self.assertFalse(thread.is_alive())
+        self.assertEqual((errors, failed), ([], []))
+        with connected[0] as sender, results[0] as accepted:
+            sender.send(b"served")
+            self.assertEqual(accepted.recv(10), b"served")
+
+    def test_real_peer_that_never_answers_is_dropped_after_the_handshake_timeout(self):
+        listener = self.real_listener(handshake_timeout=0.2)
+        thread, results, errors = self.accept_in_thread(listener)
+        silent = self.silent_peer(listener)
+        self.assertEqual(silent.recv(10), b"", "the listener kept a peer that never answered")
+        listener.close()
+        thread.join(10)
+        self.assertFalse(thread.is_alive())
+        self.assertEqual((results, errors), ([None], []))
+
+    def test_real_peer_that_answers_late_is_handed_out_by_a_later_accept(self):
+        listener = self.real_listener()
+        native_accept = listener._listener.accept
+        native_waits = threading.Semaphore(0)
+
+        def accept():
+            native_waits.release()
+            return native_accept()
+
+        with mock.patch.object(listener._listener, "accept", side_effect=accept):
+            thread, results, errors = self.accept_in_thread(listener)
+            late = transport.mpc.Client(listener.address, family=transport._family())
+            self.addCleanup(late.close)
+            # The accept that took it, then the next: accept() stopped waiting for it.
+            self.assertTrue(native_waits.acquire(timeout=10))
+            self.assertTrue(native_waits.acquire(timeout=10))
+            transport.mpc.answer_challenge(late, b"test-key")
+            transport.mpc.deliver_challenge(late, b"test-key")
+            thread.join(10)
+        self.assertFalse(thread.is_alive(), "the late peer was never handed out")
+        self.assertEqual(errors, [])
+        with results[0] as accepted:
+            late.send_bytes(b"late")
+            self.assertEqual(accepted.recv(10), b"late")
 
     def test_real_rejected_stale_key_is_republished_and_retried(self):
         with tempfile.TemporaryDirectory(prefix="cadgen-auth-repair-") as tmp:

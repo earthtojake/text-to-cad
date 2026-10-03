@@ -1111,6 +1111,16 @@ replaces the file. This is the one lock cadgen keeps — a singleton for
 the daemon, never a build lock (§7): twenty clients starting at once used to
 start twenty daemons that unlinked each other's live sockets.
 
+**A client that never answers holds up no one.** Each connection proves the
+authkey, and the daemon proves it back, on a thread of its own
+(`cadgen.daemon.transport.Server`). Accepting waits a tenth of a second for that
+before it takes the next connection; one that finishes later is handed over
+then, and one that has not finished in ten seconds is dropped — its client
+reads a daemon closing while it connects, and connects again. The handshake
+used to run on the accept thread with no deadline, so one connection whose
+challenge never reached its reader (another viewer thread had read it off a
+reused file descriptor) held every later request until the viewer exited.
+
 The **store root is a field on every request** (`store_root`), applied per
 job in the worker, never inherited from whichever build spawned the daemon:
 one daemon serves any number of isolated stores. The daemon holds no store
