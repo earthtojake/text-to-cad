@@ -196,7 +196,11 @@ path, the rehearsal, and local/manual fallbacks.
   inside the worktree only when Python dependencies are needed for the workflow.
 - In Codex or Claude Code worktrees, prefer the skill instructions and scripts
   under the current worktree's `skills/` directory over globally installed
-  skill symlinks from another checkout.
+  skills or plugins from another checkout.
+- Test skills and the plugin in an agent app with
+  `scripts/install/dev_install.py <host>` (`CONTRIBUTING.md`, "Test In Agent
+  Apps"). One copy of the plugin per app: never the development install beside
+  the published plugin, or beside skill links.
 - Install dependencies only for the workflow being changed.
 - Do not commit `.venv/`, `node_modules/`, caches, `tmp/`, local credentials, or
   printer config.

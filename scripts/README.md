@@ -13,10 +13,7 @@ step; nothing else belongs here (one-off helpers go in `tmp/`).
 | Check the release version and skill pins | `scripts/release/check-version.sh` |
 | Stamp every skill's `cadgen==` pin from `VERSION` | `scripts/release/pin-cadgen-requirements.sh` |
 | Check the shipping contract | `scripts/github-workflows/check-builds.sh` |
-| Install local skills into agents | `scripts/install/install-skills.sh --agent codex` |
-| Uninstall local skill links | `scripts/install/uninstall-skills.sh --agent codex` |
-| Run this checkout as the CAD plugin in the Codex app | `scripts/install/codex-dev-plugin.sh --restart` |
-| Run this checkout's CAD server in Claude Desktop | `scripts/install/claude-dev-server.sh` |
+| Install this checkout into an agent app to test it | `scripts/install/dev_install.py <host>` |
 
 ## Index
 
@@ -69,10 +66,6 @@ where those files ship, so these scripts are what produces them.
   test file under its full dotted path so an import failure names the file, and
   runs the files `--jobs` at a time in their own interpreters. A file still
   running after 15 minutes is hung: it prints every thread's stack and fails.
-- `time-python.sh [N]` — times every Python test module on its own and prints
-  them sorted by wall clock (results under `tmp/timing/`); `time_module.py` is
-  its helper. Manual only: the first step of a bloat check. `--print-weights` is
-  the same measurement taken from a run that was happening anyway.
 - `test-global.sh` — `tests/python/global`, the repo-wide policy suite. Like
   `test-python.sh`, it builds the `--node` and `--browser` runtime stages and this
   machine's file tracer first when they are absent: the suites read them and a
@@ -154,19 +147,17 @@ where those files ship, so these scripts are what produces them.
 - `deploy-vercel-app.sh` — deploys one Vercel project to production and verifies
   its public URLs. Called by `deploy-docs.yml` only.
 
-`install/` — local development links.
+`install/` — local testing.
 
-- `install-skills.sh`, `uninstall-skills.sh` — symlink `skills/*` into an agent's
-  skill directory (`--agent codex|claude|...`, `--all`, `--dry-run`). Developer
-  step in `CONTRIBUTING.md`.
-- `codex-dev-plugin.sh` — builds `apps/mcp` and installs this checkout into the
-  Codex app as `text-to-cad@earthtojake-dev` (skills copied, server run by `.venv`,
-  serving a copy of the page taken at install); `--restart` reopens the app,
-  `--uninstall` removes it. Developer step in `CONTRIBUTING.md` ("CAD In Agent Hosts").
-- `claude-dev-server.sh` — builds `apps/mcp` and adds this checkout's `cadgen mcp`
-  to Claude Desktop's config as `cad-dev` (serving a copy of the page);
-  `--uninstall` removes it. Developer step in `CONTRIBUTING.md` ("CAD In Agent
-  Hosts").
+- `dev_install.py <host> [--uninstall] [--no-build] [--restart]` — installs this
+  checkout into an agent app: the development plugin `text-to-cad@earthtojake-dev`
+  for `codex`, `claude` (which Cursor and Grok Build load too), `cursor` and
+  `grok` (skills copied, server run by `.venv`, serving a copy of the page taken
+  at install, assembled under `tmp/<host>-dev`); the server alone for
+  `claude-desktop`; live skill links for `gemini` and `agents`. Refuses a host
+  where another copy of the plugin would load. Developer step in
+  `CONTRIBUTING.md` ("Test In Agent Apps"); its assembly and skill links are
+  tested by `tests/python/global/test_dev_install.py`.
 
 `git-hooks/pre-commit` — the body `.githooks/pre-commit` runs: `bundle.sh --check`
 when staged paths touch `packages`, `apps`, `skills` or `scripts/bundle`. It is
@@ -174,8 +165,13 @@ kept now that nothing is committed, because the question it asks is still worth
 asking locally and is cheap once `tmp/`'s pinned esbuild toolchain exists: does
 this edit still BUILD? It no longer has anything to say about the index.
 
-`utils/list-skills.sh` — prints every `skills/*/SKILL.md` directory. Used by the
-install scripts and `test-python.sh`.
+`build/library.mjs` — the esbuild library build `packages/core` and
+`packages/ui` share; each package's `scripts/build.mjs` calls it.
+
+`brand/` — the logo generators: `generate-logos.mjs` draws the brand SVGs and the
+models' profiles, `export-logos.mjs` exports every other logo file from them.
+Run by hand when the brand changes; ordinary builds use the committed files. See
+[the brand recipe](brand/README.md).
 
 `bench/` — manual edit, warm-build and viewer performance commands. See
 [benchmark usage](bench/cadgen-performance/README.md). Reports and profiler
@@ -188,7 +184,7 @@ manual; their `*.test.mjs` helper units run in `test-js.sh`.
 | -------- | --------------- | ------- |
 | `test.yml` | pushes to `main`; PRs to `main`; manual dispatch | One job per thing that has to work, each conditional on the paths that can break it (`CONTRIBUTING.md` documents the graph): `Version Check` always; the cadgen package suite on Linux and Windows; `core-js` (`@text-to-cad/core`), `web` (shared UI and the web app), skills and docs on Linux; `packaging` bundles from clean (nothing under `_runtime/` is committed, so this is where it comes from), checks the layout, inspects the wheel and runs the installed-mode tests. Superseded PR runs are cancelled. |
 | `release-prepare.yml` (`Prepare Release`) | manual dispatch | The version bump as a PR: bumps `VERSION`, stamps metadata and skill pins, opens `release/X.Y.Z` against `target` (default `main`; `build-test` rehearses) and merges it. The merge is what runs `Publish Release`. |
-| `release-publish.yml` (`Publish Release`) | pushes to `main` and `build-test`; manual dispatch (resume/republish the head) | Gate (VERSION past the latest tag, or untagged), bundle, tests, wheel build, an `unzip -l` assertion that the shipping wheel carries `_runtime`, install test, distribution artifact, and the checked OpenAI plugin ZIP (built first, from the untouched release commit) and Claude plugin tree; then — on `main` only — PyPI upload, docs deploy, `v<VERSION>` tag and GitHub Release carrying the wheel, sdist and plugin ZIP, and the Claude plugin committed onto the `claude-plugin` branch. On `build-test` it prints what it would have tagged and stops. |
+| `release-publish.yml` (`Publish Release`) | pushes to `main` and `build-test`; manual dispatch (resume/republish the head) | Gate (VERSION past the latest tag, or untagged), bundle, tests, wheel build, an `unzip -l` assertion that the shipping wheel carries `_runtime`, install test, distribution artifact, and the checked OpenAI plugin ZIP (built first, from the untouched release commit) and plugin tree; then — on `main` only — PyPI upload, docs deploy, `v<VERSION>` tag and GitHub Release carrying the wheel, sdist and plugin ZIP, and the plugin committed onto the `plugin` branch (and `claude-plugin`, until claude.ai's listing moves). On `build-test` it prints what it would have tagged and stops. |
 | `deploy-docs.yml` (`Deploy Docs`) | manual dispatch; called by `release-publish.yml` | Deploys the docs app to Vercel production from a ref (default `main`): configures Vercel Authentication for preview deployments only, runs `vercel pull/build/deploy --prod`, and verifies the public production URLs. |
 
 `Prepare Release` bumps, `Publish Release` ships, `Deploy Docs`

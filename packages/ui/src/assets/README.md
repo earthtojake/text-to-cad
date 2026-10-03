@@ -18,17 +18,9 @@ prefers reduced motion, when the document is hidden, or when the icon's
 `environment.reducedMotion` (the desktop's Reduce motion setting). No additional
 WebGL context or animation loop runs in the application.
 
-To regenerate, run `npm ci` at the repository root, then install Chromium for Playwright and
-the repo's Python (`.venv`; its Pillow encodes AVIF and WebP). Then, from the repository root:
-
-```sh
-git fetch upstream pull/374/head
-node scripts/brand/render-loading-icon.mjs
-```
-
-The script reads the pinned Git source, so later changes to the PR do not
-silently change the brand. Normal viewer and desktop builds consume these
-checked-in images and need neither Git access nor the rendering tools.
+Both images were rendered once from that pinned source commit, so later changes
+to the PR do not change the brand. Viewer and desktop builds consume these
+checked-in images and need neither Git access nor rendering tools.
 
 # Wordmarks
 

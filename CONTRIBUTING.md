@@ -129,56 +129,53 @@ The robot validators used to be the exception, running on bare `python3` while
 their logic lived under `skills/`; that logic is `cadgen.{urdf,sdf,srdf}_*` now,
 so they need cadgen like everything else.
 
-## Link Skills Into Your Agent
+## Test In Agent Apps
 
-For local development, symlink this checkout's supported skill directories into
-your agent. Do not copy skill directories into your agent: symlinks keep edits
-in this checkout visible immediately.
-
-Use the installer from the repository root:
+Test the skills the way users get them: as the plugin, with CAD's server. One
+script installs this checkout into an agent app, and running it again replaces
+that install with the current checkout:
 
 ```bash
-scripts/install/install-skills.sh --agent codex
+scripts/install/dev_install.py claude
 ```
 
-To see supported agents and resolved destination directories:
+| Host | What it installs |
+| ---- | ---------------- |
+| `codex` | the Codex app's plugin; `--restart` quits and reopens the app |
+| `claude` | Claude Code's plugin, which Cursor and Grok Build also load |
+| `cursor` | a local Cursor plugin, for Cursor without Claude Code |
+| `grok` | Grok Build's plugin, for Grok without Claude Code |
+| `claude-desktop` | a `cad-dev` server in Claude Desktop's chat, which takes servers, not plugins |
+| `gemini`, `agents` | live skill links, for agents without plugins (`~/.gemini/skills`, `~/.config/agents/skills`) |
 
-```bash
-scripts/install/install-skills.sh --list-agents
-```
+A plugin host gets `text-to-cad@earthtojake-dev`: this checkout's skills, and
+`cadgen mcp` run by this checkout's `.venv` (`CADGEN_PYTHON` overrides it), serving
+a copy of the `apps/mcp` page built for that install (`--no-build` reuses the last
+build). Install again to see a skill or page edit. A page that changed under a
+running app would change its URI, and hosts drop the frames already showing it,
+which is why each install serves its own copy. A running server keeps the
+Python it started with, so restart the app after a Python-only change.
+`--uninstall` removes a host's install.
 
-The installer discovers each directory under `skills/` that contains
-`SKILL.md`, creates one symlink per skill, and leaves existing non-symlink paths
-untouched.
+Keep one copy of the plugin per app. The script refuses to install where another
+copy would load beside it, such as the published plugin, or this one already
+installed through another host: two copies means every skill twice. Uninstall
+the published plugin before testing, and reinstall it afterwards.
 
-Supported local-development agent destinations:
+Where the server's output goes:
 
-| Agent flag  | Destination                                       |
-| ----------- | ------------------------------------------------- |
-| `codex`     | `${CODEX_HOME:-$HOME/.codex}/skills`              |
-| `claude`    | `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills`      |
-| `gemini`    | `$HOME/.gemini/skills`                            |
-| `universal` | `${XDG_CONFIG_HOME:-$HOME/.config}/agents/skills` |
-| `project`   | `.agents/skills` in this repository               |
+- Codex: its log database, `~/.codex/logs_2.sqlite` (lines starting `MCP server stderr`)
+- Claude Code: `claude mcp list` shows whether the server connected
+- Claude Desktop: `~/Library/Logs/Claude/mcp-server-cad-dev.log`; the app's
+  developer tools (Developer Mode, then Cmd+Option+I) inspect a card's frame
+- Cursor: `mcp-server-plugin-*` logs under `~/Library/Application Support/Cursor/logs/`
 
-`claude-code`, `gemini-cli`, `agents`, and `repo` are accepted aliases. Use
-`--all` to install into every destination above, or repeat `--agent` for a
-smaller set:
-
-```bash
-scripts/install/install-skills.sh --agent codex --agent claude
-```
-
-Restart or reload the agent after linking so it rescans available skills.
-
-To remove this checkout's skill links while testing provider behavior:
-
-```bash
-scripts/install/uninstall-skills.sh --agent codex
-```
-
-The uninstaller removes only symlinks that point back at this checkout and
-prunes empty destination directories unless `--keep-empty-dirs` is passed.
+What the CAD app is and how hosts present it is in
+[apps/mcp/README.md](apps/mcp/README.md). No agent app can be driven by a test,
+so the standard path is also checked in the MCP Apps reference host
+(`basic-host` from `modelcontextprotocol/ext-apps`): it speaks Streamable HTTP,
+so a local bridge to the stdio server is needed, and it does not advertise the UI
+extension, so start the server with `CADGEN_MCP_PRESENTATION=inline`.
 
 ## Test From This Repository
 
@@ -468,49 +465,6 @@ scripts/bundle/bundle.sh --check
 asserts required Node/browser outputs; wheel validation checks the complete
 packaged viewer too. Per-stage `cadgen-runtime.sh` flags are for debugging;
 normal iteration goes through `bundle.sh`.
-
-## CAD In Agent Hosts (Codex, Claude Desktop)
-
-The viewer agent hosts render is `apps/mcp` served by `cadgen mcp`; what it
-does, the two ways hosts present it, and the rules it keeps are in
-[apps/mcp/README.md](apps/mcp/README.md). To run this checkout's build in the
-Codex app:
-
-```bash
-scripts/install/codex-dev-plugin.sh --restart
-```
-
-It builds `apps/mcp`, assembles a plugin under `tmp/codex-dev` (this
-checkout's skills, and a server run by this checkout's `.venv`), installs it as
-`text-to-cad@earthtojake-dev` and restarts the app. It refuses while another CAD plugin
-is installed; `--uninstall` removes it. The plugin serves a copy of the page
-taken at install, never `apps/mcp/dist` itself: a rebuild would change the
-page's URI under the running app, and Codex drops the frames showing the old
-one. So reinstall to see a page edit. A running server keeps the Python it
-started with, so restart the app after a Python-only change. The server's
-stderr lands in Codex's log database (`~/.codex/logs_2.sqlite`, lines starting
-`MCP server stderr`).
-
-To run it in Claude Desktop:
-
-```bash
-scripts/install/claude-dev-server.sh
-```
-
-It builds `apps/mcp` and adds a `cad-dev` server to Claude Desktop's
-`claude_desktop_config.json` (every other entry is kept): this checkout's
-`.venv` running `cadgen mcp` over a copy of the page, for the same reason as
-above. Claude Desktop reads the file when it starts, so quit and reopen it (or
-use Developer > Reload MCP Configuration), then ask Claude to show a model with
-CAD. `--uninstall` removes the entry. The server's stderr lands in
-`~/Library/Logs/Claude/mcp-server-cad-dev.log`; the app's developer tools
-(Developer Mode, then Cmd+Option+I) inspect the card's frame.
-
-Neither app can be driven by a test, so the standard path is also checked in
-the MCP Apps reference host (`basic-host` from `modelcontextprotocol/ext-apps`):
-it speaks Streamable HTTP, so a local bridge to the stdio server is needed, and it
-does not advertise the UI extension, so start the server with
-`CADGEN_MCP_PRESENTATION=inline`.
 
 ## Branch Layout
 
