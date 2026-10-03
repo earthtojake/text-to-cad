@@ -1,0 +1,26 @@
+{
+  "$schema": "https://skills.sh/schemas/skills.sh.schema.json",
+  "notGrouped": "bottom",
+  "groupings": [
+    {
+      "title": "Modeling",
+      "description": "Parametric CAD, 2D drawings and off-the-shelf parts.",
+      "skills": ["cad", "dxf", "engineering-drawing", "step-parts"]
+    },
+    {
+      "title": "Robotics",
+      "description": "Robot descriptions for ROS, MoveIt2 and Gazebo.",
+      "skills": ["urdf", "srdf", "sdf"]
+    },
+    {
+      "title": "Fabrication",
+      "description": "Manufacturability checks, slicing, printing and ordering parts.",
+      "skills": ["dfm", "dfam-check", "gcode", "bambu-labs", "sendcutsend"]
+    },
+    {
+      "title": "Setup",
+      "description": "Connect the CAD viewer to your agent app.",
+      "skills": ["cad-mcp-setup"]
+    }
+  ]
+}

@@ -1,6 +1,7 @@
 ---
 name: cad-mcp-setup
 description: Check that the CAD app can start after the CAD plugin is installed or updated, in Codex, Claude Code, Claude Desktop or another agent app - confirm uv is installed, point the user to uv's official installation guide when it is not, and tell them how CAD appears in their app and when to restart it. Use right after the CAD plugin is installed or updated, or when CAD's viewer did not start.
+license: MIT
 ---
 
 # Set up CAD

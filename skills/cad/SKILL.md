@@ -1,6 +1,7 @@
 ---
 name: cad
 description: Create/edit parametric CAD models, organize CAD projects, export STEP/STL/3MF/GLB files, resolve prompt references, and measure geometry with cadgen. Open and visually review existing STEP/STP, STL, 3MF and GLB files in CAD Viewer.
+license: MIT
 ---
 
 # CAD modeling and inspection

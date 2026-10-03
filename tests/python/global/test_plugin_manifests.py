@@ -175,6 +175,15 @@ class PluginManifestPolicyTest(unittest.TestCase):
                 f"missing skill manifest: skills/{path.name}/SKILL.md",
             )
 
+    def test_skills_sh_groups_every_skill_once(self) -> None:
+        # skills.sh lists skills it has seen installed, removed ones included, and puts any
+        # skill no group names under "Other skills" with them. A new skill left out of
+        # skills.sh.json would land beside the removed ones.
+        groups = load_json(REPO_ROOT / "skills.sh.json")["groupings"]
+        listed = [skill for group in groups for skill in group["skills"]]
+        shipped = sorted(path.parent.name for path in SKILLS_ROOT.glob("*/SKILL.md"))
+        self.assertEqual(sorted(listed), shipped)
+
 
 if __name__ == "__main__":
     unittest.main()
