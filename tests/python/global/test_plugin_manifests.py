@@ -15,6 +15,7 @@ owns stamping every derived version from the canonical `VERSION` file, and
 from __future__ import annotations
 
 import json
+import re
 import unittest
 from pathlib import Path
 
@@ -63,8 +64,8 @@ class PluginManifestPolicyTest(unittest.TestCase):
             )
 
     def test_plugin_manifests_describe_the_plugin_identically(self) -> None:
-        # Each host lists the plugin by its manifest's description; they are one text, so an edit
-        # to one must reach them all.
+        # Each host lists the plugin by its manifest's description, and the README's and the docs
+        # site's Overview say it too; they are one text, so an edit to one must reach them all.
         codex = load_json(CODEX_PLUGIN_PATH)
         marketplace = load_json(MARKETPLACE_PATH)
         descriptions = {
@@ -75,6 +76,10 @@ class PluginManifestPolicyTest(unittest.TestCase):
             "gemini": load_json(GEMINI_EXTENSION_PATH).get("description"),
             "marketplace": next(e for e in marketplace["plugins"] if e.get("name") == PLUGIN_NAME).get("description"),
         }
+        readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+        descriptions["readme overview"] = " ".join(readme.split("## 📖 Overview\n\n", 1)[1].split("\n\n", 1)[0].split())
+        page = (REPO_ROOT / "apps" / "docs" / "src" / "app" / "page.tsx").read_text(encoding="utf-8")
+        descriptions["docs overview"] = re.search(r'const pluginDescription =\s*"([^"]+)"', page).group(1)
         self.assertEqual(len(set(descriptions.values())), 1, descriptions)
 
     def test_plugin_manifests_link_the_same_pages(self) -> None:

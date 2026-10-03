@@ -13,6 +13,7 @@ import {
 import { cn } from "@/lib/utils";
 
 const NAV_SECTIONS = [
+  { id: "overview", label: "Overview" },
   { id: "installation", label: "Install" },
   { id: "skills", label: "Skills" },
 ] as const;
