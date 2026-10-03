@@ -312,13 +312,14 @@ export default function Home() {
         <div className="min-w-0 space-y-2">
           <HeroSection />
 
-          <section id="agents" aria-labelledby="agents-title" className="scroll-mt-20 space-y-3 py-6">
-            <SectionIntro id="agents-title" title="Available for these agents" />
-            <AgentCarousel />
-          </section>
-
           <section id="overview" aria-labelledby="overview-title" className="scroll-mt-20 space-y-3 py-6">
-            <SectionIntro id="overview-title" title="Overview" description={pluginDescription} />
+            <SectionIntro id="overview-title" title="Overview" />
+            {/* First, so a phone shows the agents on load, under the hero. */}
+            <div>
+              <h3 className="text-base font-semibold text-foreground">Available for these agents</h3>
+              <AgentCarousel />
+            </div>
+            <p className="text-sm leading-6 text-muted-foreground">{pluginDescription}</p>
             <p className="text-sm leading-6 text-muted-foreground">
               It is supported by all popular agents that support plugins or the{" "}
               <a href="https://skills.sh" target="_blank" rel="noreferrer" className="text-foreground underline underline-offset-4">
