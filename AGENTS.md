@@ -68,6 +68,7 @@ path, the rehearsal, and local/manual fallbacks.
 - `models/`: sample and durable CAD/robot-description fixtures.
 - `apps/web/`: the CAD Viewer's React client (its backend is `cadgen.viewer`).
 - `apps/mcp/`: the CAD app agent hosts render: tabs in Codex, cards in Claude Desktop (its server is `cadgen mcp`).
+- `apps/desktop/`: a git submodule pinning [elastic](https://github.com/amywork777/elastic), the desktop agent app the CAD desktop app is built from. Core app changes go to elastic; CAD stays here as the plugin. `git submodule update --init apps/desktop` fetches it; plain clones and plugin installs leave it empty.
 - `packages/core`: `@text-to-cad/core`, shared CAD/runtime/client code without React.
 - `packages/ui`: `@text-to-cad/ui`, the shared FileViewer, renderers, controls and styles.
 - `packages/cadgen`: the published distribution — STEP/GLB/topology generation,
