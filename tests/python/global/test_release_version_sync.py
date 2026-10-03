@@ -19,8 +19,9 @@ property rather than as that one package's name.
 from __future__ import annotations
 
 import json
-
+import shutil
 import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -102,6 +103,27 @@ class VersionSyncMirrorTests(unittest.TestCase):
                         declared,
                         f"{target['path']} would ship a stale version for {name or 'the root package'}",
                     )
+
+    def test_a_file_with_a_version_and_a_pin_takes_both(self) -> None:
+        """The Gemini extension is a JSON target and a pin target: stamping one must keep the other."""
+        targets = json.loads(_node(
+            "const { jsonTargets, pinTargets } = await import(%s);\n"
+            "console.log(JSON.stringify([...jsonTargets.map((t) => t.path), ...pinTargets]));"
+            % json.dumps(SYNC_SCRIPT.as_uri())))
+        self.assertIn("gemini-extension.json", targets)
+        with tempfile.TemporaryDirectory() as scratch:
+            root = Path(scratch).resolve()  # the script runs main() only when argv[1] is its real path
+            for relative in {*targets, "packages/cadgen/pyproject.toml", "scripts/release/sync-version.mjs"}:
+                if repo_path(relative).is_file():
+                    (root / relative).parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(repo_path(relative), root / relative)
+            (root / "VERSION").write_text("9.9.9\n", encoding="utf-8")
+            result = subprocess.run(["node", str(root / "scripts/release/sync-version.mjs")],
+                                    capture_output=True, text=True, timeout=120)
+            self.assertEqual(0, result.returncode, result.stdout + result.stderr)
+            manifest = json.loads((root / "gemini-extension.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["version"], "9.9.9")
+            self.assertIn("cadgen==9.9.9", manifest["mcpServers"]["cad"]["args"])
 
     def test_derived_metadata_is_synced_at_the_current_version(self) -> None:
         """The gate the release workflows run, at the version in VERSION."""

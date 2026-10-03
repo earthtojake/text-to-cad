@@ -32,7 +32,8 @@ class PluginTreeTests(unittest.TestCase):
         tree, errors, _manifest = branch.build(REPO_ROOT)
         self.assertEqual(errors, [])
         self.assertEqual({path.split("/")[0] for path in tree},
-                         {".claude-plugin", ".cursor-plugin", "claude.mcp.json", "skills", "LICENSE", "README.md"})
+                         {".claude-plugin", ".cursor-plugin", "gemini-extension.json", "claude.mcp.json", "skills",
+                          "LICENSE", "README.md"})
         self.assertEqual({path for path in tree if path.startswith(".claude-plugin/")},
                          {".claude-plugin/plugin.json", ".claude-plugin/icon.png"})
         self.assertEqual({path for path in tree if path.startswith(".cursor-plugin/")}, {".cursor-plugin/plugin.json"})
@@ -69,6 +70,7 @@ class PluginTreeTests(unittest.TestCase):
             manifest = {"name": "demo", "version": "1.0.0", "repository": "https://github.com/o/demo"}
             files = {".claude-plugin/plugin.json": json.dumps(manifest), ".claude-plugin/icon.png": PNG,
                      ".claude-plugin/marketplace.json": "{}", ".cursor-plugin/plugin.json": "{}",
+                     "gemini-extension.json": "{}",
                      "claude.mcp.json": "{}", "LICENSE": "MIT\n",
                      "skills/s/SKILL.md": "one\n",
                      "README.md": "[s](skills/s/SKILL.md) [c](CONTRIBUTING.md)\n", "CONTRIBUTING.md": "x\n",
@@ -84,7 +86,7 @@ class PluginTreeTests(unittest.TestCase):
             first = branch.commit(root, tree, None, "demo 1.0.0")
             self.assertEqual(git(root, "ls-tree", "-r", "--name-only", first).split(),
                              [".claude-plugin/icon.png", ".claude-plugin/plugin.json", ".cursor-plugin/plugin.json",
-                              "LICENSE", "README.md", "claude.mcp.json", "skills/s/SKILL.md"])
+                              "LICENSE", "README.md", "claude.mcp.json", "gemini-extension.json", "skills/s/SKILL.md"])
             self.assertIn(f"[c](https://github.com/o/demo/blob/{git(root, 'rev-parse', 'HEAD')}/CONTRIBUTING.md)",
                           git(root, "show", f"{first}:README.md"))
             self.assertEqual(branch.commit(root, tree, first, "demo 1.0.0"), first)

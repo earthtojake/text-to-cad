@@ -15,7 +15,6 @@ import { cn } from "@/lib/utils";
 const NAV_SECTIONS = [
   { id: "installation", label: "Install" },
   { id: "skills", label: "Skills" },
-  { id: "plugins", label: "Plugins" },
 ] as const;
 
 const GITHUB_REPO_URL = "https://github.com/earthtojake/text-to-cad";
@@ -117,7 +116,7 @@ export function SiteHeaderClient({
       }
       // The final section may not be tall enough to reach the header.
       if (window.scrollY > 0 && window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 2) {
-        active = "plugins";
+        active = NAV_SECTIONS[NAV_SECTIONS.length - 1].id;
       }
       setActiveSection(active);
     };

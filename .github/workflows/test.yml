@@ -80,6 +80,7 @@ jobs:
               - '.claude-plugin/**'
               - '.codex-plugin/**'
               - '.cursor-plugin/**'
+              - 'gemini-extension.json'
               - 'codex.mcp.json'
               - 'claude.mcp.json'
               - 'package.json'

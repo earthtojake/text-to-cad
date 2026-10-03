@@ -117,9 +117,9 @@ where those files ship, so these scripts are what produces them.
   `.mcp.json`) and checks it against the portal's documented package rules.
   Called by `release-publish.yml`; tested by
   `tests/python/global/test_plugin_zip.py`.
-- `plugin_branch.py --check | --commit [--parent REF]` — builds the plugin the
-  directories follow (`.claude-plugin/` manifest and icon, `.cursor-plugin/`
-  manifest, `claude.mcp.json`, `skills/`, `LICENSE`, and the README with outside
+- `plugin_branch.py --check | --commit [--parent REF]` — builds the plugin
+  claude.ai's directory follows (`.claude-plugin/` manifest and icon, the Cursor
+  and Gemini manifests, `claude.mcp.json`, `skills/`, `LICENSE`, and the README with outside
   links pinned to the release commit), checks it against claude.ai's file
   rules, and with `--commit` commits it on `REF` and prints the commit. Called
   by `release-publish.yml`, whose `plugin-branch` job pushes it to the `plugin`
@@ -151,12 +151,12 @@ where those files ship, so these scripts are what produces them.
 
 - `dev_install.py <host> [--uninstall] [--no-build] [--restart]` — installs this
   checkout into an agent app: the development plugin `text-to-cad@earthtojake-dev`
-  for `codex`, `claude` (which Cursor and Grok Build load too), `cursor` and
-  `grok` (skills copied, server run by `.venv`, serving a copy of the page taken
-  at install, assembled under `tmp/<host>-dev`); the server alone for
-  `claude-desktop`; live skill links for `gemini` and `agents`. Refuses a host
-  where another copy of the plugin would load. Developer step in
-  `CONTRIBUTING.md` ("Test In Agent Apps"); its assembly and skill links are
+  for `claude` (which Cursor and Grok Build load too), `codex`, `cursor`, `grok`
+  and `gemini` (skills copied, server run by `.venv`, serving a copy of the page
+  taken at install, assembled under `tmp/<host>-dev`); the server alone for
+  `claude-desktop`. Refuses a host where another copy of the plugin, or this
+  repository's skills installed loose, would load. Developer step in
+  `CONTRIBUTING.md` ("Test In Agent Apps"); its assembly and loose-skill check are
   tested by `tests/python/global/test_dev_install.py`.
 
 `git-hooks/pre-commit` — the body `.githooks/pre-commit` runs: `bundle.sh --check`

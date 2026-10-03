@@ -28,6 +28,7 @@ CODEX_MCP_PATH = REPO_ROOT / "codex.mcp.json"
 CLAUDE_MCP_PATH = REPO_ROOT / "claude.mcp.json"
 CODEX_PLUGIN_PATH = REPO_ROOT / ".codex-plugin" / "plugin.json"
 CURSOR_PLUGIN_PATH = REPO_ROOT / ".cursor-plugin" / "plugin.json"
+GEMINI_EXTENSION_PATH = REPO_ROOT / "gemini-extension.json"
 MARKETPLACE_PATH = REPO_ROOT / ".claude-plugin" / "marketplace.json"
 SKILLS_ROOT = REPO_ROOT / "skills"
 
@@ -71,6 +72,7 @@ class PluginManifestPolicyTest(unittest.TestCase):
             "codex": codex.get("description"),
             "codex interface": codex["interface"].get("longDescription"),
             "cursor": load_json(CURSOR_PLUGIN_PATH).get("description"),
+            "gemini": load_json(GEMINI_EXTENSION_PATH).get("description"),
             "marketplace": next(e for e in marketplace["plugins"] if e.get("name") == PLUGIN_NAME).get("description"),
         }
         self.assertEqual(len(set(descriptions.values())), 1, descriptions)
@@ -207,6 +209,17 @@ class PluginManifestPolicyTest(unittest.TestCase):
         logo = manifest.get("logo", "")
         self.assertFalse(logo.startswith(("/", "..")) or "://" in logo, logo)
         self.assertEqual(logo, ".claude-plugin/icon.png")
+
+    def test_gemini_extension_names_the_plugin_and_starts_claudes_server(self) -> None:
+        # Gemini CLI reads gemini-extension.json at the root (and its skills/), and runs servers
+        # from the manifest itself: Claude's server, pinned to this release, under the same name.
+        manifest = load_json(GEMINI_EXTENSION_PATH)
+        self.assertEqual(manifest.get("name"), PLUGIN_NAME)
+        self.assertEqual(manifest.get("mcpServers"), load_json(CLAUDE_MCP_PATH)["mcpServers"])
+        # Gemini loads the extension's GEMINI.md (or contextFileName) as the user's context; the
+        # repository's own guidance (AGENTS.md) must not become it.
+        self.assertNotIn("contextFileName", manifest)
+        self.assertFalse((REPO_ROOT / "GEMINI.md").exists())
 
     def test_no_stale_plugin_subdirectory_package_remains(self) -> None:
         # The generated `plugins/cad/skills` copy is what the repo-root move
