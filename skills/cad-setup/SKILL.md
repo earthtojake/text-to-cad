@@ -54,14 +54,12 @@ agent app's own update commands, and only when the user asked for the update.
 ## Update
 
 CAD says when a newer release is out, once per release: a card in its viewer, a
-line with a tool result, or a line in a command's output. Its prompt is
-"Update text-to-cad to 0.9.0.", naming where the install came from when CAD knows:
-"installed from GitHub", or a store's channel, `claude-directory` (the Claude
-directory), `openai-directory` (the OpenAI directory) or `cursor-marketplace`
-(the Cursor Marketplace).
+line with a tool result, or a line in a command's output. Its prompt is worded like
+the install message: "Update text-to-cad to 0.9.0 from
+https://github.com/earthtojake/text-to-cad".
 
-1. **Find how text-to-cad was installed.** Take it from the prompt when it says.
-   Otherwise ask the agent app, with its own list command:
+1. **Find how text-to-cad was installed**, by asking the agent app with its own
+   list command:
 
    | App | Command | Installed from GitHub when | A store's copy when |
    | --- | --- | --- | --- |
@@ -93,9 +91,10 @@ directory), `openai-directory` (the OpenAI directory) or `cursor-marketplace`
 3. **A store's copy** (the Claude directory, the OpenAI directory, the Cursor
    Marketplace) is updated by its store, once the release passes the store's
    review: there is nothing to run. CAD stays quiet about a store's copy unless
-   the store falls far behind, so when the prompt names a store, the user's copy
-   is one the project asks to replace now. Ask before disabling or uninstalling
-   anything, then install from GitHub instead:
+   the store falls far behind, so when CAD itself offered the update, the user's
+   copy is one the project asks to replace now; when the user asked on their own,
+   say the store will update it and offer the switch. Ask before disabling or
+   uninstalling anything, then install from GitHub instead:
 
    - Claude Code: `claude plugin marketplace add earthtojake/text-to-cad`, then
      `claude plugin install text-to-cad@earthtojake`. Claude Code loads that copy

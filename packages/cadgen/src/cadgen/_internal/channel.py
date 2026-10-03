@@ -55,10 +55,3 @@ def is_store(where: str) -> bool:
     """Whether ``where`` is a store's copy: any channel a package named but ``github`` and ``dev``."""
     return where not in (GITHUB, DEV, UNKNOWN)
 
-
-def label(where: str) -> str | None:
-    """Where an install came from, as a prompt says it: ``GitHub``, a store's channel as its package
-    named it, or ``None`` when nothing named one."""
-    if where == GITHUB:
-        return "GitHub"
-    return where if is_store(where) else None

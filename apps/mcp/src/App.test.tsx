@@ -193,7 +193,7 @@ it('an answer is never undone by a read sent just before it, and a choice the en
 
 it('a newer release is offered once the analytics question is answered: sent to the chat where the host takes messages, copied elsewhere', async () => {
   const notice = { latest: '0.9.0', version: '0.8.1', text: 'text-to-cad 0.9.0 is available (you have 0.8.1)',
-    prompt: 'Update text-to-cad to 0.9.0 (installed from GitHub).' };
+    prompt: 'Update text-to-cad to 0.9.0 from https://github.com/earthtojake/text-to-cad' };
   {
     const { bridge, server } = host({ displayMode: 'fullscreen' }, { message: {} }, true, notice);
     const { findByRole, getByText, getByRole, queryByRole } = render(<App bridge={bridge as any} server={server as any} launch={home} session={session} />);

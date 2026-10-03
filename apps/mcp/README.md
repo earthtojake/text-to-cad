@@ -68,7 +68,8 @@ reference host `basic-host` does.
   a source tree). When this install is behind, the page shows the shared
   `UpdateCard` (`@text-to-cad/ui/update`, read through `cad_version`) in the viewer's
   `notice` once the analytics card is answered: "text-to-cad 0.9.0 is available (you
-  have 0.8.1)", and a prompt, "Update text-to-cad to 0.9.0 (installed from GitHub).".
+  have 0.8.1)", and a prompt worded like the install message, "Update text-to-cad to
+  0.9.0 from https://github.com/earthtojake/text-to-cad".
   **Send to agent** posts it as the person's message (`ui/message`) where the host
   takes messages (`chatReach`); elsewhere **Copy prompt** copies it. The agent does
   the update, with the `cad-setup` skill's steps; nothing here updates anything.
