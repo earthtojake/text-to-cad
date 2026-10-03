@@ -575,11 +575,11 @@ export function buildComposedPackageMeshData(descriptor, componentMeshDataByCid,
       triangleCount: meshPartNumericValue(sourcePart, "triangleCount")
     }));
 
-    // An empty component's finite cache box is a placeholder, not geometry.
-    // Retain its occurrence without extending the assembly's camera bounds.
-    const bounds = sourceVertices.length || componentMeshData?.cadEdgePositions?.length
-      ? boundsForTransformedBox(componentMeshData?.bounds, matrix)
-      : null;
+    // Only triangles are drawn (resolvePartsToRender skips a part without them,
+    // edges and all), so a component with none, an empty product entry or wires
+    // only, keeps its occurrence but extends no camera bounds.
+    const drawn = sourceVertices.length >= 3 && (componentMeshData?.indices?.length || 0) >= 3;
+    const bounds = drawn ? boundsForTransformedBox(componentMeshData?.bounds, matrix) : null;
     // An XCAF label entry (`=>[0:1:1:2]`) is no name: the occurrence then goes by its id.
     const displayName = String(stepProductName(occurrence?.name) || occurrenceId || cid || meshPartId(sourceParts[0])).trim();
     const part = {

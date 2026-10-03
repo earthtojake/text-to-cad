@@ -222,8 +222,10 @@ Snapshot jobs flush and dispose their own cache after their complete source is
 loaded. Decoded component meshes retain their existing page-wide
 content-addressed LRU; a cache view does not retain an additional geometry copy.
 
-Empty imported STEP product entries keep their occurrence identity. A SURF
-with no faces or edges tessellates to empty arrays, a zero-size box at the
-origin and a positive minimum scale, so the same v4 validation applies. That
-box is only cache metadata: composition gives an empty occurrence no bounds,
-so it cannot change the assembly's framing or hide the real parts.
+Imported STEP products without faces keep their occurrence identity. A SURF
+that holds only wires has no loops to measure, so its scale and box come from
+its edge curves. A SURF with no faces or edges tessellates to empty arrays, a
+zero-size box at the origin and a positive minimum scale. Either way the same
+v4 validation applies. That box is only cache metadata: only triangles are
+drawn, so composition gives an occurrence without them no bounds, and it
+cannot change the assembly's framing or hide the real parts.
