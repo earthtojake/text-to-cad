@@ -79,6 +79,7 @@ jobs:
               - 'VERSION'
               - '.claude-plugin/**'
               - '.codex-plugin/**'
+              - '.cursor-plugin/**'
               - 'codex.mcp.json'
               - 'claude.mcp.json'
               - 'package.json'

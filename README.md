@@ -72,9 +72,7 @@ releases do add skills.
 Neither command removes a skill that was retired upstream; drop one with
 `npx skills remove <skill>` if you need to. The retired `cad-viewer` skill is
 now covered by the CAD, DXF and robot-description skills; remove old standalone
-installs with `npx skills remove cad-viewer`. For local development symlinks,
-remove the old `cad-viewer` link manually: the install/uninstall scripts discover
-only skills still present in the checkout.
+installs with `npx skills remove cad-viewer`.
 
 (`npx skills install …` still works — it is an undocumented alias for `add`.)
 

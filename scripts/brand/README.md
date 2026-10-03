@@ -66,6 +66,5 @@ blues; Soft relief is a rendering treatment.
 
 ## Loading icon
 
-`render-loading-icon.mjs` remains the independent recipe for the original
-animated loading mark. Changing brand vectors must not replace those assets;
-see `packages/ui/src/assets/README.md` for its provenance.
+The animated loading mark is separate from these vectors: changing them must not
+replace its images. See `packages/ui/src/assets/README.md` for its provenance.
