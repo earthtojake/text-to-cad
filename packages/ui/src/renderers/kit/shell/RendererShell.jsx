@@ -84,7 +84,7 @@ function NavbarControl({ label, disabled = false, onClick, children }) {
  *   `references`: what is selected, in the prompt grammar — the references a Quick Edit attaches
  *   (`kit/tools/quick-edit/QuickEdit.jsx`), counted in its header; the file itself always goes. A
  *   renderer that hands none has no Quick Edit: only a view whose picks and sketches a note can
- *   carry offers one. The box sizes itself, for as long as it is open: a drag of its corner renders nothing
+ *   carry offers one, and only while the person has left it on (the host's `view.features`). The box sizes itself, for as long as it is open: a drag of its corner renders nothing
  *   here. `onClearReferences`: the renderer's clear of that selection, as a press on the
  *   background makes it; Quick Edit's X calls it, and clears Draw's ink too.
  *   `copySelection`: the viewer's copy key (⌘C / Ctrl+C) while the renderer's own tool is up and
@@ -218,6 +218,9 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
   // A host showing the view small (inline in a conversation: `appearance.compact`) gets the model
   // alone, not the tools, Quick Edit, the view actions or the cube; shown full size, all return.
   const compact = Boolean(view.appearance?.compact);
+  // Quick Edit is the person's to turn off (Settings' Features): off, it is not there at all — no
+  // box, so nothing a pick or a sketch opens and no keyboard it takes.
+  const quickEdit = view.features?.quickEdit !== false;
   const toolsHidden = chromeHidden || compact;
   const copyAction = () => {
     if (previewing) return false;
@@ -335,7 +338,7 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
                   under it -- hidden, not unmounted, while the view loads: a note being written outlives a
                   reload of the model. */}
               <ViewportTopRight notice={chromeHidden ? null : view.notice} belowStrip={!toolsHidden}>
-                {compact || !references ? null : <QuickEdit key={frame.modelKey} className="self-stretch" hidden={chromeHidden}
+                {compact || !references || !quickEdit ? null : <QuickEdit key={frame.modelKey} className="self-stretch" hidden={chromeHidden}
                   resource={frame.resource} references={references} sketch={sketch} referencePath={frame.referencePath}
                   onCopy={copyAction} onEscape={frame.escape} onClear={clearQuickEdit} disabled={viewerLoading || !scene} />}
               </ViewportTopRight>

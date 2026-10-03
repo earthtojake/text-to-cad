@@ -37,7 +37,10 @@ function host(initial: HostContext, hostCapabilities: Record<string, unknown> = 
     launch: vi.fn(async (model: string) => ({ ...home, page: 'viewer', model })), pickModel: vi.fn(async () => ({ cancelled: true })),
     reveal: vi.fn(async () => {}),
     consent: vi.fn(async (share?: boolean) => ({ ask: share === undefined && ask, sharing: Boolean(share), policy: 'https://www.texttocad.dev/privacy-policy' })),
+    // The person's features as the server keeps them (`cad_features`).
+    features: vi.fn(async (change?: object) => { kept = { ...kept, ...change }; return kept; }),
   };
+  let kept = { quickEdit: true };
   return { bridge, server };
 }
 const session: Session = { protocol: 3, build: 'b', version: 'test', platform: 'darwin', workspace: [] };
@@ -153,7 +156,8 @@ it('a hand-made install is asked once about analytics: nothing is shared before 
     const { bridge, server } = host({ displayMode: 'fullscreen' }, {}, true);
     const { findByRole, getByText } = render(<App bridge={bridge as any} server={server as any} launch={home} session={session} />);
     await findByRole('dialog', { name: 'Allow Analytics' });
-    expect(viewer.props!.appSettings).toEqual([expect.objectContaining({ id: 'analytics', checked: false })]);
+    expect(viewer.props!.appSettings).toEqual([expect.objectContaining({ id: 'analytics', checked: false }),
+      expect.objectContaining({ id: 'quickEdit', section: 'Features', checked: true })]);
     await act(async () => getByText('Allow').click());
     expect(viewer.props!.appSettings![0].checked).toBe(true);
     await act(async () => viewer.props!.appSettings![0].onCheckedChange(false));
@@ -189,4 +193,25 @@ it('an answer is never undone by a read sent just before it, and a choice the en
   render(<App bridge={fixed.bridge as any} server={fixed.server as any} launch={home} session={session} />);
   await act(async () => {});
   expect(viewer.props!.appSettings![0]).toEqual(expect.objectContaining({ disabled: true, label: 'Share anonymous usage data (set by your environment)' }));
+});
+
+it("Settings' Features: Quick edit is read from the server, turned off there for every view, and handed to the viewer", async () => {
+  const { bridge, server } = host({ displayMode: 'fullscreen' });
+  render(<App bridge={bridge as any} server={server as any} launch={home} session={session} />);
+  await act(async () => {});
+  expect(server.features.mock.calls).toEqual([[undefined]]);
+  expect(viewer.props!.features).toEqual({ quickEdit: true });
+  // Settings: Analytics, then Features.
+  expect(viewer.props!.appSettings!.map(setting => [setting.section, setting.label, setting.checked]))
+    .toEqual([['Analytics', 'Share anonymous usage data', false], ['Features', 'Quick edit', true]]);
+  await act(async () => viewer.props!.appSettings!.find(setting => setting.id === 'quickEdit')!.onCheckedChange(false));
+  expect(server.features).toHaveBeenLastCalledWith({ quickEdit: false });
+  expect(viewer.props!.features).toEqual({ quickEdit: false });
+  cleanup();
+  // Another view of the person's opens with it off: the server kept it.
+  const again = host({ displayMode: 'fullscreen' });
+  again.server.features.mockImplementation(async () => ({ quickEdit: false }));
+  render(<App bridge={again.bridge as any} server={again.server as any} launch={home} session={session} />);
+  await act(async () => {});
+  expect(viewer.props!.features).toEqual({ quickEdit: false });
 });

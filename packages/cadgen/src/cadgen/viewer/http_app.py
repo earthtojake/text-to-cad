@@ -482,6 +482,10 @@ class CadApp:
                     self._handle_asset(request, response, query)
                 elif pathname == "/__cad/analytics" and self.analytics is not None:
                     response.send_json(200, self._consent())
+                elif pathname == "/__cad/features":
+                    from cadgen import features
+
+                    response.send_json(200, features.read())
                 else:
                     # An unrecognised /__cad/* path is a bad API call, not a
                     # page. Falling through to the SPA answered typo'd and
@@ -516,6 +520,14 @@ class CadApp:
                     else:
                         self._report_activity(payload)
                         response.send_empty(204)
+                elif pathname == "/__cad/features":
+                    # Settings' Features: the person's choices, one for every CAD view (``cadgen/features.py``).
+                    from cadgen import features
+
+                    if int(request.headers.get("content-length") or 0) > 4096:
+                        response.send_empty(413, [("connection", "close")])
+                        return
+                    response.send_json(200, features.change(json.loads(request.body() or b"{}")))
                 elif pathname == "/__cad/recents":
                     if int(request.headers.get("content-length") or 0) > _LIBRARY_BODY_LIMIT:
                         response.send_empty(413, [("connection", "close")])

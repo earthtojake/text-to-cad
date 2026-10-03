@@ -207,8 +207,8 @@ Hosts must resolve/validate accepted attachments and consume failed encoders;
 they do not transfer Promise or Blob values across native IPC.
 
 Quick Edit is the shared, host-neutral note to the agent
-([the design system](settings-ui.md#quick-edit)), and its buttons are what the
-host can carry out. **Copy Prompt** is always there: the message goes through
+([the design system](settings-ui.md#quick-edit)), there while the person has it on
+(`features.quickEdit`, above), and its buttons are what the host can carry out. **Copy Prompt** is always there: the message goes through
 `ClipboardPort.writeText`, which takes a `Promise<string>` so the write starts
 inside the gesture while a sketch is still being saved; its references are
 spelled as copied references are (below), and a sketch is saved through
@@ -414,7 +414,17 @@ via `RendererViewProps`. `appSettings` (`{ id, section, label, checked, disabled
 a `CadViewer` prop) are the host's own on/off settings: they are Settings' sections, one per
 `section` the settings name (Analytics, in both apps), drawn as checkbox rows, the same in the
 viewer's navbar and on the home; nothing of them reaches a renderer, and Display holds none. The
-host owns what each one does and where it is kept. `@text-to-cad/ui/consent` is the analytics
+host owns what each one does and where it is kept. `@text-to-cad/ui/features` is Settings'
+Features, which both apps share: `useFeatures(features)` turns the host's call — `features()`
+reads them, `features(change)` changes some and answers them all — into the features the person
+left on (`ViewerFeatures`: `quickEdit`, each on until they turn it off) and their Settings rows.
+The host hands the first to `CadViewer` as `features` (on to FileViewer and
+`RendererViewProps.features`: the shell offers no Quick Edit while it is off) and the second
+with its `appSettings`, and keeps the choice where it keeps the analytics answer: the web
+Viewer through its server's `/__cad/features`, the CAD app through `cad_features`, both in the
+person's settings (`cadgen/features.py`), so it holds in every view, tab and app, across
+reloads — a page's own storage would not, the web Viewer's origin changing with its port.
+`@text-to-cad/ui/consent` is the analytics
 prompt both apps share: `ConsentCard` (the card) and
 `useAnalyticsConsent(consent)`, which turns the host's consent call into the card's state, its
 answer and the Analytics setting; the host supplies the call and where the answer is kept. The shell handles placement and hides the toolbar in

@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { createHttpAttachmentStore, type CadClient } from '@text-to-cad/core/client';
 import { unavailablePromptContext, type ResourceRef } from '@text-to-cad/core/prompt';
 import { CadViewer, createCadFileActions, createCatalogFileSource, normalizeCatalogPath, pathUnderRoot, referencePath, rootPath } from '@text-to-cad/ui/cad-viewer';
-import type { AppSetting } from '@text-to-cad/ui/file-viewer';
+import type { AppSetting, ViewerFeatures } from '@text-to-cad/ui/file-viewer';
 import type { ViewerHost, ViewerLinks } from '@text-to-cad/ui/host';
 import type { ModelLibrarySource } from '@text-to-cad/ui/library';
 import type { TabStore } from '@text-to-cad/ui/tab-store';
@@ -26,7 +26,7 @@ export interface ViewReporter {
  * data — the root it browses, whether it browses at all, what a Quick Edit can do in the chat —
  * never by where the view is.
  */
-export default function ModelView({ launch, root: launchedRoot, sequence, bridge, server, tabStore, live, links, colorScheme, platform, reporter, sync, onLaunch, onHome, compact = false, chat, appSettings, notice }: {
+export default function ModelView({ launch, root: launchedRoot, sequence, bridge, server, tabStore, live, links, colorScheme, platform, reporter, sync, onLaunch, onHome, compact = false, chat, appSettings, features, notice }: {
   launch: Launch; root: Root; sequence: number; bridge: Bridge; server: Server; tabStore: TabStore; live: LiveRegistry; links: ViewerLinks;
   colorScheme: 'light' | 'dark'; platform: string; reporter: ViewReporter;
   /** The view's one call each second: it carries what this root's client would otherwise poll for. */
@@ -39,8 +39,10 @@ export default function ModelView({ launch, root: launchedRoot, sequence, bridge
   compact?: boolean;
   /** What the chat takes from a Quick Edit: context for the next message, a message now, or neither (Copy Prompt alone). */
   chat: ChatReach;
-  /** This app's on/off settings, in Settings' Analytics section. */
+  /** This app's on/off settings: Settings' Analytics and Features sections. */
   appSettings?: readonly AppSetting[];
+  /** The features the person left on (Settings' Features): Quick edit. */
+  features?: ViewerFeatures;
   /** The analytics question, which the viewer asks once a model is on screen. */
   notice?: ReactNode;
 }) {
@@ -141,6 +143,6 @@ export default function ModelView({ launch, root: launchedRoot, sequence, bridge
   return <CadViewer client={client} host={host} tabStore={tabStore} live={live} file={file} onShow={show}
     // A filesystem's catalog holds only the file on screen: a file a renderer links to is shown as named.
     accept={global ? path => normalizeCatalogPath(path) || null : undefined}
-    rootPath={root.path} library={library} appSettings={appSettings} notice={notice}
+    rootPath={root.path} library={library} appSettings={appSettings} features={features} notice={notice}
     onThumbnail={async (png, pictured) => server.recents({ action: 'thumbnail', path: rootPath(root.path, pictured), png: encodeBase64(new Uint8Array(await png.arrayBuffer())) })} />;
 }

@@ -73,7 +73,10 @@ reference host `basic-host` does.
   shared `ConsentCard` from `@text-to-cad/ui/consent`, the viewer's `notice`: top-right
   once a model is on screen, Quick Edit under it, never on the home; the browser
   viewer asks the same way, and one answer counts for both), and nothing is sent before a yes; Settings' Analytics
-  section (`appSettings`) changes the answer later. A plugin directory's install
+  section (`appSettings`) changes the answer later. Settings' Features (Quick edit, on until
+  the person turns it off) is read and changed the same way, through `cad_features`, and kept
+  beside the analytics answer (`cadgen/features.py`): one choice for the sidebar, every
+  thread's tab, every inline card and the browser viewer. A plugin directory's install
   (`cadgen mcp --install store`, stamped by `scripts/release/plugin_zip.py`) is
   only reported as such. The agent's `cad_analytics` reports the setting and
   turns it off, never on.

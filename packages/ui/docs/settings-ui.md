@@ -471,8 +471,12 @@ the same wherever it is reached — the cog at the navbar's right end, over ever
 after it failed to as well), and the cog under the home's wordmark. Between its header
 and its footer are the host's own settings (`appSettings`), a section for each `section`
 they name, in the order they come, each always open with a checkbox row per setting:
-Analytics, in both apps. A host with none shows the header and footer alone. Nothing of
-a file is in it: a file's view is its Display panel's.
+**Analytics** (Share anonymous usage data), then **Features** — **Quick edit**, on until
+the person turns it off ([Quick Edit](#quick-edit)) — in both apps. A host with none shows
+the header and footer alone. Nothing of a file is in it: a file's view is its Display
+panel's. Every row is the person's, not a view's or a tab's: the host keeps it where every
+view of theirs reads it (both apps: their settings, `settings.json` in cadgen's state
+directory), and a view reads it again whenever the person comes back to the page.
 
 ## Position and references
 
@@ -541,7 +545,10 @@ floating surface. It is there only while it has something to carry or a note to 
 nothing stands in for it otherwise, not even a button. It is a STEP file's alone,
 since only a STEP has picks and sketches to carry; a compact host gets none, and
 preview puts it away with the tools. While the view loads it is out of sight, its note
-and its state kept.
+and its state kept. A person can turn it off in [Settings](#settings)' Features (**Quick
+edit**, on until they do; `view.features.quickEdit`): it is then not there at all, in any
+of their views — no box, so nothing a pick or a sketch opens and no keyboard it takes —
+until they turn it on again.
 
 The box opens 15rem wide, its note growing with what is written up to 10rem. Its
 bottom-left corner — the grip every resizable box over the viewport has

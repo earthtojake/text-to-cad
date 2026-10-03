@@ -410,6 +410,7 @@ class Server:
 
     def _page_tools(self) -> list[dict[str, Any]]:
         """The tools only the page calls."""
+        from cadgen.features import DEFAULTS as FEATURES
 
         def app(name: str, title: str, description: str, schema: dict[str, Any]) -> dict[str, Any]:
             return {"name": name, "title": title, "description": description, "inputSchema": schema,
@@ -419,6 +420,9 @@ class Server:
             app("cad_consent", "CAD analytics consent",
                 "Whether to ask the person about anonymous usage analytics, and their answer. Only for the person's own click.",
                 _object({"share": {"type": "boolean"}})),
+            app("cad_features", "CAD features",
+                "The CAD views' features a person can turn off in Settings, and their choice. Only for the person's own click.",
+                _object({name: {"type": "boolean"} for name in sorted(FEATURES)})),
             app("cad_launch", "Open model", "The launch for opening a model in this view.",
                 _object({"model": {"type": "string"}}, ["model"])),
             app("cad_pick_model", "Open Model", "Choose a model with the desktop's file chooser. Only for an explicit Open Model action.",
@@ -597,6 +601,18 @@ class Server:
         # `reason`: Settings shows a choice the environment made (DO_NOT_TRACK, CADGEN_ANALYTICS) as fixed.
         return _data({"ask": found["reason"] == "unasked", "sharing": found["sharing"], "reason": found["reason"],
                       "policy": PRIVACY_URL})
+
+    def _tool_cad_features(self, arguments, context):
+        # Settings' Features: every feature as the person left it (``cadgen/features.py``), and,
+        # from their click, their choice. Only a page sets one: a text client has none.
+        from cadgen import features
+
+        if not self.text and arguments:
+            try:
+                return _data(features.change(arguments))
+            except (OSError, ValueError) as error:
+                raise ToolFailed(f"CAD could not keep that setting: {error}") from error
+        return _data(features.read())
 
     def _tool_cad_analytics(self, arguments, context):
         # The agent may report the setting or turn sharing off for the person; only the person turns it on.

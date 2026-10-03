@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSPro
 import { Maximize2 } from 'lucide-react';
 import type { ResourceRef } from '@text-to-cad/core/prompt';
 import { ConsentCard, useAnalyticsConsent } from '@text-to-cad/ui/consent';
+import { useFeatures } from '@text-to-cad/ui/features';
 import { viewerLinks } from '@text-to-cad/ui/links';
 import { Button } from '@text-to-cad/ui/primitives/button';
 import { createTabStore, memoryTabRecord } from '@text-to-cad/ui/tab-store';
@@ -168,7 +169,11 @@ export default function App({ bridge, server, launch: initial, presentation = 't
 
   // Asked once, of everyone, unless their environment answered or no answer could be kept
   // (`cadgen/analytics.py`): the card, and Settings' Analytics section after it.
-  const { consent, answer, appSettings } = useAnalyticsConsent(server.consent);
+  const { consent, answer, appSettings: analyticsSettings } = useAnalyticsConsent(server.consent);
+  // Settings' Features (Quick edit), on until the person turns one off: kept by the server beside
+  // the analytics answer, one choice for the sidebar, every thread's tab and the browser viewer.
+  const { features, appSettings: featureSettings } = useFeatures(server.features);
+  const appSettings = useMemo(() => [...analyticsSettings ?? [], ...featureSettings ?? []], [analyticsSettings, featureSettings]);
   const openLink = (url: string) => void bridge.request('ui/open-link', { url }).catch(() => {});
   // The navbar's links: the same as every app's (X, Discord, GitHub and a new issue), followed through the
   // host (a frame cannot open one itself). No update button: the host updates CAD (a plugin directory
@@ -187,7 +192,7 @@ export default function App({ bridge, server, launch: initial, presentation = 't
   return <Frame bridge={bridge} context={context} insets={insets} inline={inline} bottomCenter={bottomCenter}
     overlay={lost ? <Banner message={LOST[presentation]} /> : null}>
     <ModelView key={rootKey(launch.root)} launch={launch} root={launch.root} sequence={showing.sequence} bridge={bridge} server={server}
-      tabStore={tabStore} live={live} links={links} appSettings={appSettings}
+      tabStore={tabStore} live={live} links={links} appSettings={appSettings} features={features}
       notice={consent?.ask ? <ConsentCard policy={consent.policy} onAnswer={answer} onPolicy={openLink} /> : null}
       colorScheme={colorScheme} platform={initial.platform || 'darwin'} reporter={reporter} sync={sync} compact={inline} chat={chat}
       onLaunch={show} onHome={goHome} />

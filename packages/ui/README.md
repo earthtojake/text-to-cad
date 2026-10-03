@@ -135,7 +135,7 @@ const renderers = [createStepRenderer({ client, preferences }), createDxfRendere
 
 Public entry points include `/host`, `/file-viewer`, `/tab-store`, `/navigation`, `/renderers/step`,
 `/renderers/dxf`, `/renderers/glb`, `/renderers/mesh`, `/renderers/robot`, `/renderers/workspace`, `/file-viewer/presentation`, `/file-viewer/empty`,
-`/cad-viewer`, `/catalog`, `/links`, `/library`, `/consent` (the analytics card and its state), `/drawing`, `/loading-icon`, `/utils`, `/primitives/*`,
+`/cad-viewer`, `/catalog`, `/links`, `/library`, `/consent` (the analytics card and its state), `/features` (Settings' Features: `useFeatures`), `/drawing`, `/loading-icon`, `/utils`, `/primitives/*`,
 `/tokens.css`, and `/styles.css`. `/catalog` (a CAD catalog as a `FileSource`, the file menu's
 copies and reveal, and the paths a root names a file by) and `/links` (the navbar's link
 defaults) are pure modules, with no React, for a host's adapters and their unit tests.

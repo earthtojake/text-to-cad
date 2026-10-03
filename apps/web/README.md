@@ -329,6 +329,12 @@ the page (at most every 2 s) to `/__cad/analytics/activity`. The server holds th
 counts and a code per file, in memory, and sends nothing without consent. Only the
 Viewer's own server serves the two routes.
 
+Settings' Features (**Quick edit**, on until the person turns it off) is read and changed
+the same way: `src/adapters/features.ts`, through `/__cad/features` (`cadgen/features.py`).
+The server keeps the choice in the person's settings, beside the analytics answer, so it is
+one choice with the CAD app's and holds whatever port this Viewer is served on, which the
+page's own storage would not.
+
 ### File storage and host actions
 
 The web `FileSource` is the served folder's read-only CAD catalog

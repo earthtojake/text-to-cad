@@ -162,3 +162,12 @@ test("Settings is the person's, one popover in the viewer's navbar and on the ho
   // Each row is the host's own setting, changed through the host.
   expect(changes).toEqual(['analytics:true', 'analytics:true']);
 });
+
+test('the features the person left on reach every file the viewer shows', () => {
+  const client = catalogClient();
+  const host = { files: createCatalogFileSource(client as never, { id: 'a', rootName: 'root' }), clipboard: { writeText: async () => {}, readText: async () => '', writeImage: async () => {} },
+    promptContext: unavailablePromptContext, environment: { colorScheme: 'light' as const } };
+  render(<CadViewer client={client as never} host={host} tabStore={createTabStore(memoryTabRecord())} live={createLiveRegistry()} file="parts/a.step"
+    rootPath="/models" features={{ quickEdit: false }} onShow={() => {}} />);
+  expect(viewer.props!.features).toEqual({ quickEdit: false });
+});

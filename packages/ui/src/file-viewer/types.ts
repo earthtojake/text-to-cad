@@ -130,9 +130,19 @@ export interface AppSetting {
   disabled?: boolean;
   onCheckedChange: (checked: boolean) => void;
 }
+/**
+ * The viewer's features a person can turn off in Settings' Features section, as the host keeps
+ * them: each is on unless the host says it is off.
+ */
+export interface ViewerFeatures {
+  /** Quick Edit: the note to the agent at the viewport's top-right, and every way it opens. */
+  quickEdit?: boolean;
+}
 export interface RendererViewProps {
   /** The host's notice (a question it asks once): the viewport's top-right once the file is on screen, Quick Edit under it. */
   notice?: ReactNode;
+  /** The features the person has left on (Settings' Features): what is off is not offered at all. */
+  features?: ViewerFeatures;
   /** Optional host-owned controls inside the Display panel (the web's appearance). */
   displayActions?: ReactNode;
   onNavigationActionsChange?: (actions: readonly FileNavigationAction[]) => void;
@@ -209,6 +219,8 @@ export interface FileViewerProps {
    * the host composer's (`CadViewer`'s is the Settings popover the home has too).
    */
   settings?: ReactNode;
+  /** The features the person has left on (Settings' Features), for every renderer (`RendererViewProps.features`). */
+  features?: ViewerFeatures;
   /** The host's notice, shown at the viewport's top-right once the file is on screen (`RendererViewProps.notice`). */
   notice?: ReactNode;
   /**

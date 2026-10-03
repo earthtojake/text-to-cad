@@ -69,8 +69,8 @@ function navbarSlot() {
   return slot;
 }
 afterEach(() => document.querySelectorAll('[data-test-navbar]').forEach(slot => slot.remove()));
-function frame({ path = 'panel.harness', preferences = tabSettings(), state = undefined as unknown, mobile = false, onStateChange = (_: unknown) => {}, onPanelOpen = vi.fn(), onFullscreenChange = vi.fn(), openPanel = '', appearance = { colorScheme: 'light' } as object, notice = null as React.ReactNode } = {}) {
-  const props = { source: { id: 'one', rootName: 'one' }, file: { path, name: path, kind: 'file' }, document: null, openPanel, panelSlot: null, notice,
+function frame({ path = 'panel.harness', preferences = tabSettings(), state = undefined as unknown, mobile = false, onStateChange = (_: unknown) => {}, onPanelOpen = vi.fn(), onFullscreenChange = vi.fn(), openPanel = '', appearance = { colorScheme: 'light' } as object, notice = null as React.ReactNode, features = undefined as object | undefined } = {}) {
+  const props = { source: { id: 'one', rootName: 'one' }, file: { path, name: path, kind: 'file' }, document: null, openPanel, panelSlot: null, notice, features,
     navbarSlot: navbarSlot(), onFullscreenChange, onPanelOpen, onReady() {}, onOpenFile() {}, appearance, state, onStateChange, reload() {}, data: { services: { preferences } } };
   const element = () => <ViewerHostContext.Provider value={testHost()}><ViewerMobileContext.Provider value={mobile}>
     <HarnessRenderer {...(props as any)} /></ViewerMobileContext.Provider></ViewerHostContext.Provider>;
@@ -376,6 +376,24 @@ it("the host's notice waits for the model, then takes the top-right with Quick E
   frame({ notice, appearance: { colorScheme: 'light', compact: true } });
   expect(corner()).toEqual(['notice']);
   expect(clearsStrip()).toBe(false);
+});
+
+it("Quick edit turned off in Settings takes Quick Edit away: nothing a pick or a sketch could open, and the host's notice alone at the top-right", () => {
+  const notice = <div role="dialog" aria-label="Allow Analytics" />;
+  const corner = () => [...document.querySelector('[data-viewport-top-right]')?.children ?? []]
+    .map(child => child.hasAttribute('data-viewport-notice') ? 'notice' : child.hasAttribute('data-quick-edit') ? 'Quick Edit' : child.tagName);
+  // On, as it starts and as a host that says nothing leaves it: Quick Edit waits under the notice.
+  frame({ notice, features: { quickEdit: true } });
+  expect(corner()).toEqual(['notice', 'Quick Edit']);
+  cleanup();
+  // Off: no Quick Edit at all, whatever is picked or drawn; the tools are as they were.
+  frame({ notice, features: { quickEdit: false } });
+  expect(corner()).toEqual(['notice']);
+  expect(document.querySelector('[data-quick-edit]')).toBeNull();
+  expect(strip()).toEqual(['Select', 'Draw', 'Keep', 'Pose', 'Display']);
+  cleanup();
+  frame({ features: { quickEdit: false } });
+  expect(document.querySelector('[data-viewport-top-right]')).toBeNull();
 });
 
 it('a host showing the view small gets the model alone: no tools, no view actions, no Quick Edit, no cube', () => {

@@ -373,6 +373,8 @@ src/cadgen/
                          #   every app and version of cadgen
   analytics.py           # the CAD apps' anonymous usage counts, with consent
                          #   (its answer: settings.json's `analytics` section)
+  features.py            # the CAD views' features a person can turn off
+                         #   (Quick edit: settings.json's `features` section)
   store/                 # the store (STORE.md): objects, index, records, trees,
                          #   closure, gate, materialize, publish, lazy, gc, view
   cli/                   # generated command shells, one per <format> <verb>
