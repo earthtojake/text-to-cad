@@ -69,7 +69,9 @@ const LOAD_STAGES = Object.freeze({
   broken: {
     load: { alert: { severity: "error", summary: "Load failed", title: "Couldn’t load the harness model",
       message: "The harness file could not be loaded.", reload: true } }
-  }
+  },
+  // Not loading, and no scene to work on yet: the chrome is up, and idle.
+  unready: { load: {}, scene: false }
 });
 
 /** One triangle, as the kit's scene contract (`kit/scene.js`) sees it. */
@@ -146,7 +148,7 @@ function HarnessSurface({ view, data }) {
   const [shownRevision, setShownRevision] = useState("");
   // What the frame put down when the person reached for the model.
   const [putDown, setPutDown] = useState("");
-  const { load: stageLoad } = LOAD_STAGES[stage] || LOAD_STAGES.idle;
+  const { load: stageLoad, scene: stageScene = true } = LOAD_STAGES[stage] || LOAD_STAGES.idle;
   const live = useMemo(() => (shownRevision
     ? { ...LIVE, resource: () => ({ ...resource, revision: shownRevision }) }
     : LIVE), [resource, shownRevision]);
@@ -155,7 +157,7 @@ function HarnessSurface({ view, data }) {
   const withPanel = view.file.path.startsWith("panel");
   const shell = useRendererShell({
     view, services: shellServices, resource, modelKey: view.file.path, revisionKey: "harness",
-    features: EDGELESS_VIEW_FEATURES, toolModes: withPanel ? PANEL_TOOL_MODES : HARNESS_TOOL_MODES, scene,
+    features: EDGELESS_VIEW_FEATURES, toolModes: withPanel ? PANEL_TOOL_MODES : HARNESS_TOOL_MODES, scene: stageScene ? scene : null,
     load: { busy: false, ...stageLoad },
     live, onCameraSettled, runtimeLifecycle,
     // A renderer whose references are its own vocabulary assembles its own snapshot.

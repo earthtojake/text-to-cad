@@ -9,6 +9,7 @@ import type { AppSetting } from '../file-viewer/types.js';
 import type { ViewerHost } from '../host/types.js';
 import type { LiveRegistry } from '../host/liveRegistry.js';
 import { ModelLibrary, type LibraryModel, type ModelLibrarySource, type ModelPictureSource } from '../library/ModelLibrary.js';
+import { SettingsPopover } from '../renderers/kit/shell/SettingsPopover.jsx';
 import { useModelThumbnail } from '../library/thumbnails.js';
 import { OffscreenPicture, cadRenderers } from './OffscreenPicture.js';
 import type { LibraryLayout } from '../tab-store/tabRecord.js';
@@ -54,9 +55,9 @@ export interface CadViewerProps<Model extends LibraryModel = LibraryModel> {
   library?: ModelLibrarySource<Model>;
   /** Keep the library's picture of the file on screen, once it has settled. */
   onThumbnail?(png: Blob, file: string): Promise<unknown>;
-  /** The host's controls in the Display settings (the web's appearance). */
+  /** The host's controls in the Display panel (the web's appearance). */
   displayActions?: ReactNode;
-  /** The host's on/off settings: Settings' last sections, in the viewer and on the home (the CAD app's Analytics). */
+  /** The host's on/off settings: Settings' sections, the same in the viewer's navbar and on the home (Analytics). */
   appSettings?: readonly AppSetting[];
   /** The host's notice (the analytics question): a file's viewport, top-right, once the file is on screen; never the home. */
   notice?: ReactNode;
@@ -167,6 +168,10 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
   useEffect(() => { if (file) drawn(false); }, [file, drawn]);
 
   const { colorScheme, platform } = host.environment;
+  // Settings, one popover in the viewer's navbar (over every file) and on the home: the person's
+  // settings, never a file's.
+  const settingsControl = useMemo(() => host.links || appSettings?.length
+    ? <SettingsPopover links={host.links} appSettings={appSettings} /> : null, [host.links, appSettings]);
   const layout = settings.library.layout;
   const changeLayout = useCallback((next: LibraryLayout) => preferences.update({ library: { layout: next } }), [preferences]);
   const presentation = useMemo(() => ({
@@ -180,7 +185,7 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
   }), [library, colorScheme, layout, changeLayout, catalog.error, file, rootPath, picture, host.links, platform, host.clipboard, appSettings, onError]);
   return <>
     <FileViewer file={file || null} host={viewerHost} renderers={renderers} state={state} onStateChange={onStateChange}
-      displayActions={displayActions} appSettings={appSettings} notice={notice} navigationPath={navigationPath} onError={onError} presentation={presentation} />
+      displayActions={displayActions} settings={settingsControl} notice={notice} navigationPath={navigationPath} onError={onError} presentation={presentation} />
     {drawing && !file ? <OffscreenPicture key={drawing.source.file} source={drawing.source} host={host} preferences={preferences} onDone={drawn} /> : null}
   </>;
 }

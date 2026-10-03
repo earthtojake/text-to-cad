@@ -196,16 +196,15 @@ async function open(options = {}) {
       await pane.getByRole('button', { name: 'Exit preview', exact: true }).click();
       await pane.getByRole('button', { name: 'Preview', exact: true }).waitFor();
     },
-    // Display is not a tool: its Settings button sits beside Preview at the navbar's right end.
-    tool: name => name === 'Display' ? pane.getByRole('button', { name: 'Settings', exact: true })
-      : pane.locator(name === 'Reset' ? '[data-cad-camera-controls]' : '[data-cad-toolbar]').getByRole('button', { name, exact: true }),
+    // Display is the strip's last button, though not a tool: it opens its panel and takes nothing up.
+    tool: name => pane.locator(name === 'Reset' ? '[data-cad-camera-controls]' : '[data-cad-toolbar]').getByRole('button', { name, exact: true }),
     tools: () => pane.locator('[data-cad-toolbar]').getByRole('button')
       .evaluateAll(buttons => buttons.map(button => `${button.getAttribute('aria-label')}:${button.getAttribute('aria-pressed')}`)),
     // The nav row's panel toggles, in order, each with whether its panel is the open one. A STEP
     // declares none of its own: the file tree's is the only one.
     panels: () => pane.locator('[data-file-panel]')
       .evaluateAll(buttons => buttons.map(button => `${button.getAttribute('aria-label')}:${button.getAttribute('aria-pressed')}`)),
-    toggle: id => id === 'cad-display' ? pane.getByRole('button', { name: 'Settings', exact: true }) : pane.locator(`[data-file-panel="${id}"]`),
+    toggle: id => id === 'cad-display' ? pane.locator('[data-cad-toolbar]').getByRole('button', { name: 'Display', exact: true }) : pane.locator(`[data-file-panel="${id}"]`),
     // The tool stack's panels on screen, top to bottom, by their accessible names.
     stack: () => pane.locator('[data-cad-tool-stack] [data-tool-panel]').evaluateAll(panels => panels
       .filter(panel => panel.getClientRects().length > 0).map(panel => panel.getAttribute('aria-label'))),
@@ -217,8 +216,8 @@ async function open(options = {}) {
       await page.locator('[role=menu][aria-label="Select mode"]').getByRole('menuitemradio', { name, exact: true }).click();
       await page.locator('[role=menu]').waitFor({ state: 'detached' });
     },
-    // Display's settings: a popover, portaled out of the viewer.
-    displayPanel: () => page.locator('[data-display-popover]'),
+    // Display's settings: a panel at the foot of the tool stack.
+    displayPanel: () => pane.locator('[data-tool-panel-id="display"]'),
     rows: () => pane.locator('[aria-label="Modeling tree"]').getByRole('button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))
       .filter(label => label?.startsWith('Select ') || label?.startsWith('Expand ') || label?.startsWith('Collapse '))),
     frame: () => frame(pane),
@@ -236,8 +235,8 @@ async function open(options = {}) {
 test('a STEP opens in Select with the tools its sidecar earns and Display last, its Features in the tool stack, and paints both authored colours', async () => {
   const view = await open();
   const { page, pane, errors } = view;
-  assert.deepEqual(await view.tools(), ['Select:true', 'Position:false', 'Draw:false', 'Measure:false', 'Explode:false', 'Clip:false'],
-    'Position because the sidecar bound; no Animate: its routine plays in preview. Display is a settings popover, not a tool');
+  assert.deepEqual(await view.tools(), ['Select:true', 'Position:false', 'Draw:false', 'Measure:false', 'Explode:false', 'Clip:false', 'Display:false'],
+    'Position because the sidecar bound; no Animate: its routine plays in preview. Display last, its panel shut');
   // The nav row has no panel of the file's: its controls are the tool stack's. The file tree's
   // toggle is the only one, and a file opened directly opens with nothing beside it.
   assert.deepEqual(await view.panels(), ['Show files:false']);
@@ -611,7 +610,7 @@ test('hiding a part takes it off the screen, and the viewport menus offer what t
   }
   // The tree is Select's: under another tool it is off screen, and Select brings it back to act
   // from — Isolate, which has no selection of its own to make.
-  assert.deepEqual(await view.tools(), ['Select:false', 'Position:false', 'Draw:true', 'Measure:false', 'Explode:false', 'Clip:false']);
+  assert.deepEqual(await view.tools(), ['Select:false', 'Position:false', 'Draw:true', 'Measure:false', 'Explode:false', 'Clip:false', 'Display:false']);
   assert.equal(await pane.getByRole('button', { name: 'Select arm', exact: true }).isVisible(), false);
   await view.tool('Select').click();
   // A menu goes when the camera moves, and the last pan is still coasting: it opens at rest.
@@ -619,7 +618,7 @@ test('hiding a part takes it off the screen, and the viewport menus offer what t
   await page.getByRole('menuitem', { name: 'Isolate', exact: true }).click();
   await page.getByRole('menu').waitFor({ state: 'detached' });
   await page.waitForFunction(() => window.cadHarness.a.controller.readState().isolatedPartIds.join() === 'o1.2');
-  assert.deepEqual(await view.tools(), ['Select:true', 'Position:false', 'Draw:false', 'Measure:false', 'Explode:false', 'Clip:false']);
+  assert.deepEqual(await view.tools(), ['Select:true', 'Position:false', 'Draw:false', 'Measure:false', 'Explode:false', 'Clip:false', 'Display:false']);
   await page.keyboard.press('Escape');
   assert.deepEqual(errors, []);
 });
@@ -671,7 +670,7 @@ const MIN_REDRAWN = { render: 30_000, xray: 30_000, 'hidden-line': 30_000, wiref
 test('every Display preset reaches the drawn frame, on the live canvas', async () => {
   const view = await open();
   const { page, errors } = view;
-  // Display is a popover from its button among the view's actions, on top of the cube.
+  // Display is a panel at the foot of the stack, from the strip's last button.
   await view.toggle('cad-display').click();
   const panel = view.displayPanel();
   await panel.waitFor();
@@ -684,7 +683,7 @@ test('every Display preset reaches the drawn frame, on the live canvas', async (
     if (!await panel.isVisible()) await view.tool('Display').click();
     await panel.getByRole('combobox', { name: 'Mode', exact: true }).click();
     await page.getByRole('option', { name: label, exact: true }).click();
-    assert.equal(await panel.isVisible(), true, 'choosing a preset keeps the popover');
+    assert.equal(await panel.isVisible(), true, 'choosing a preset keeps the panel');
     await page.waitForFunction(wanted => {
       const state = window.cadHarness.a.controller.readState();
       return state.display.mode === wanted && !state.loading;
@@ -838,12 +837,14 @@ test('preview opens paused, its playbar plays and pauses the routine without mov
   assert.equal(await view.tool('Animate').count(), 0);
   assert.equal(await pane.locator('[data-animation-transport]').count(), 0);
   const boxes = names => Promise.all(names.map(name => pane.getByRole('button', { name, exact: true }).boundingBox()));
-  const navbarControls = await boxes(['Settings', 'Preview']);
+  const [preview] = await boxes(['Preview']);
   await view.enterPreview();
-  // Preview has the page to itself: the navbar goes, and its corner holds Playback settings and the
-  // way out exactly where Settings and Preview sat in it.
+  // Preview has the page to itself: the navbar goes, and its corner holds the way out exactly where
+  // Preview sat in it, and Playback settings just before it, where an app's Settings sits.
   await pane.locator('[data-viewer-navbar]').waitFor({ state: 'hidden' });
-  assert.deepEqual(await boxes(['Playback settings', 'Exit preview']), navbarControls);
+  const [playback, exit] = await boxes(['Playback settings', 'Exit preview']);
+  assert.deepEqual(exit, preview);
+  assert.deepEqual([playback.y, playback.width, playback.height, exit.x - playback.x - playback.width], [preview.y, preview.width, preview.height, 4]);
   // The tools are put away, and the playbar is under the model.
   assert.equal(await pane.getByRole('group', { name: 'Interaction tools' }).isVisible(), false);
   const bar = pane.getByRole('toolbar', { name: 'Animation playback' });

@@ -151,7 +151,7 @@ it('a DXF has no panels of its own, no tools and no preview', async () => {
   const inPane = within(pane);
   expect(inPane.queryByRole('group', { name: 'Interaction tools' })).toBeNull();
   for (const name of ['Orbit', 'Draw', 'Select', 'Measure', 'Position', 'Animate', 'Preview',
-    'Switch to 2D view', 'Switch to 3D view', 'Display settings', 'Zoom in', 'Zoom out', 'Reset Zoom', 'Zoom to fit', 'Zoom controls']) {
+    'Switch to 2D view', 'Switch to 3D view', 'Display', 'Display settings', 'Zoom in', 'Zoom out', 'Reset Zoom', 'Zoom to fit', 'Zoom controls']) {
     expect(inPane.queryByRole('button', { name }), name).toBeNull();
   }
   expect(inPane.queryAllByRole('tab')).toHaveLength(0);

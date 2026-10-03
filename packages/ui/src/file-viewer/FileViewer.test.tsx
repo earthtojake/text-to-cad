@@ -93,21 +93,21 @@ it('an update is a blue download button whose menu says the step to it, how this
   expect(within(menu).queryByText('In your terminal')).toBeNull();
 });
 
-it('puts Feedback just before the view\'s controls, outside them, and steps the navbar aside while the renderer shows its file fullscreen', async () => {
-  // A renderer with the CAD viewer's controls in the navbar, whose Preview is fullscreen.
+it('puts Feedback and the host\'s Settings just before the view\'s controls, outside them, and steps the navbar aside while the renderer shows its file fullscreen', async () => {
+  // A renderer with the CAD viewer's control in the navbar, its Preview, which is fullscreen.
   const fullscreen = defineFileRenderer({
     id: 'full', priority: 2, matches: () => true, prepare: async () => ({ data: null }),
     load: async () => ({ default: ({ onFullscreenChange, navbarSlot }: any) => <>
-      {navbarSlot ? createPortal(<><button type="button" aria-label="Settings" />
-        <button type="button" aria-label="Preview" onClick={() => onFullscreenChange(true)} /></>, navbarSlot) : null}
+      {navbarSlot ? createPortal(<button type="button" aria-label="Preview" onClick={() => onFullscreenChange(true)} />, navbarSlot) : null}
       <button type="button" onClick={() => onFullscreenChange(false)}>Back</button>
     </> }),
   });
+  // The host's Settings (`CadViewer`'s popover), drawn over every file: no renderer draws it.
   render(<FileViewer file="parts/a.step" host={{ ...host, links: viewerLinks({ version: '0.7.4' }) } as any} renderers={[fullscreen]}
-    state={{ panel: null, panelWidth: 220 }} onStateChange={() => {}} />);
+    state={{ panel: null, panelWidth: 220 }} onStateChange={() => {}} settings={<button type="button" aria-label="Settings" />} />);
   await screen.findByRole('button', { name: 'Preview' });
   expect(labels()).toEqual(['Feedback', 'Settings', 'Preview']);
-  expect(labels('[data-navbar-controls]')).toEqual(['Settings', 'Preview']);
+  expect(labels('[data-navbar-controls]')).toEqual(['Preview']);
   act(() => screen.getByRole('button', { name: 'Preview' }).click());
   expect(navbar()).toBeNull();
   expect(screen.queryByRole('link', { name: 'Feedback' })).toBeNull();

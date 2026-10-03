@@ -409,7 +409,7 @@ export function useRendererShell({
     onCopy: () => copyActionRef.current?.() || false,
     escapeActive: Boolean(escape.active || previewing),
     onEscape(event) {
-      // A popup opened in THIS viewer (a menu, a Select, the Display popover) owns Escape before
+      // A popup opened in THIS viewer (a menu, a Select, a colour picker) owns Escape before
       // preview; another viewer's popup is not this one's business.
       if (hasOpenPopup(viewerElement.current)) return;
       if (previewing) { setPreviewing(false); return; }
@@ -492,7 +492,7 @@ export function useRendererShell({
 
   // ---- what the frame and the renderer read ---------------------------------
   // The Display panel's content: every renderer's, built here from its display settings.
-  const display = <DisplaySettingsSection appearanceControl={view.displayActions} appSettings={view.appSettings}
+  const display = <DisplaySettingsSection appearanceControl={view.displayActions}
     features={features} viewSettings={displaySettings} hostAppearance={colorScheme} lightingQuality="preview"
     resolvedView={desiredScene.view} onViewSettingsPatch={viewSettingsStore.patch}
     onGroupEnabledChange={viewSettingsStore.setEnabled} onModeChange={viewSettingsStore.selectPreset}

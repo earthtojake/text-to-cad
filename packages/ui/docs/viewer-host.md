@@ -102,8 +102,8 @@ render loops. These actions use existing host capabilities for effects. What a
 person tells the agent about a CAD file is [Quick Edit](#prompt-handoff)'s.
 
 A renderer with controls of its own for the view draws them into
-`RendererViewProps.navbarSlot`, at the navbar's right end after the host's links (the CAD
-viewer's Display settings and Preview); it is null where no navbar is drawn. A
+`RendererViewProps.navbarSlot`, at the navbar's right end after the host's Settings (the CAD
+viewer's Preview); it is null where no navbar is drawn. A
 renderer that shows its file fullscreen (the CAD viewer's Preview) says so through
 `onFullscreenChange(true)`, and `false` when it stops: the navbar, the explorer
 and any declared panel step aside while it lasts. The host's `captureRequest`
@@ -393,11 +393,14 @@ how this host updates (`links.install`) and what is new; without one, nothing. T
 (`FeedbackLink`), where the host has a tracker (`links.issues`): a new issue titled "Feedback: ",
 for the person to finish, naming the version and `environment.platform`, just before the
 renderer's view controls and never among them. It has no label: the project has none for
-feedback, and what is said may be a bug, a request or a question. The Settings popover
-(`SettingsPopover`) shows the version beside its title, and its footer has "Made by @…" (`MadeBy`, the
-host's X account) at its left and Discord and GitHub (`CommunityLinks`) at its right. The home has
-GitHub, Feedback and Settings under its wordmark, in that order, after the update; its Settings
-holds no Display sections, only the host's own settings. An alert card's Report Issue opens a new issue too,
+feedback, and what is said may be a bug, a request or a question. Then Settings, the person's:
+FileViewer draws the control its composer hands it (`FileViewerProps.settings`) over every
+file, after Feedback and before the renderer's view controls, and `CadViewer` hands it the
+Settings popover (`SettingsPopover`, `kit/shell/SettingsPopover.jsx`) the home has too — one
+component, the same sections in both. It shows the version beside its title, the host's own
+settings (`appSettings`, below) under it, and a footer with "Made by @…" (`MadeBy`, the host's X
+account) at its left and Discord and GitHub (`CommunityLinks`) at its right. The home has
+GitHub, Feedback and Settings under its wordmark, in that order, after the update. An alert card's Report Issue opens a new issue too,
 titled "Issue: " and labelled `bug`, filled in from the card (`kit/status/reportIssue.js`): its
 title, message and failure, the file's name, the version and platform, then its Details, cut from
 their end to keep the address, title and labels included, under `ISSUE_URL_MAX`. No path of the
@@ -407,10 +410,11 @@ for someone with triage access to the repository and drops them for everyone els
 the ordinary way unless the host supplies
 `links.open` (a page in a sandboxed frame hands it to its host). `displayActions`
 passes host-owned appearance controls into the Display section beside Projection
-via `RendererViewProps`. `appSettings` (`{ id, section, label, checked, disabled?, onCheckedChange }[]`) are the
-host's own on/off settings, which the shell draws as checkbox rows in the Settings popover's last
-sections, one per `section` the settings name (Analytics, in both apps), in the viewer's Settings
-and the home's; the host owns what each one does. `@text-to-cad/ui/consent` is the analytics
+via `RendererViewProps`. `appSettings` (`{ id, section, label, checked, disabled?, onCheckedChange }[]`,
+a `CadViewer` prop) are the host's own on/off settings: they are Settings' sections, one per
+`section` the settings name (Analytics, in both apps), drawn as checkbox rows, the same in the
+viewer's navbar and on the home; nothing of them reaches a renderer, and Display holds none. The
+host owns what each one does and where it is kept. `@text-to-cad/ui/consent` is the analytics
 prompt both apps share: `ConsentCard` (the card) and
 `useAnalyticsConsent(consent)`, which turns the host's consent call into the card's state, its
 answer and the Analytics setting; the host supplies the call and where the answer is kept. The shell handles placement and hides the toolbar in
@@ -427,8 +431,9 @@ stack at the top-left, Quick Edit at the top-right, and the view cube at the
 bottom-left. A host's one question goes through the shell too: `notice` (the
 `ConsentCard`) is drawn at the top-right once the file is on screen, never while it
 loads or after it failed to, with Quick Edit stacked under it until it is answered;
-the home never shows it. The view's own controls (Display settings, Preview) are the
-renderer's, drawn into the navbar's right end after the version (`navbarSlot`). What Quick Edit offers follows the subscribed destination capability and
+the home never shows it. The view's own control (Preview) is the renderer's, drawn into the
+navbar's right end after Settings (`navbarSlot`); Display is the last button of the tool strip.
+What Quick Edit offers follows the subscribed destination capability and
 the ports, never an app name: Copy Prompt always, Queue for a composer
 destination, Send where the prompt port has `send`. Native clipboard effects
 remain in the host implementation.

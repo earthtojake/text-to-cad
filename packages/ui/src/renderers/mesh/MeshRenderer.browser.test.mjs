@@ -105,14 +105,16 @@ async function open(t, file) {
 }
 
 const ready = pane => pane.locator('[aria-busy="false"] > div > canvas').first().waitFor();
-// A mesh has no interaction tools; Display is the settings button beside Preview.
+// A mesh has no interaction tools: its strip is Display alone.
 const noTools = async (pane) => {
-  assert.equal(await pane.getByRole('group', { name: 'Interaction tools' }).count(), 0, 'a mesh has no tools, so no strip');
-  assert.equal(await pane.getByRole('button', { name: 'Settings', exact: true }).count(), 1, 'its Display settings are the button beside Preview');
+  assert.deepEqual(await pane.getByRole('group', { name: 'Interaction tools' }).getByRole('button')
+    .evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))), ['Display'], 'a mesh has no tools: Display alone');
   for (const name of ['Orbit', 'Draw', 'Select', 'Measure', 'Position', 'Animate']) {
     assert.equal(await pane.getByRole('button', { name, exact: true }).count(), 0, name);
   }
 };
+const displayButton = pane => pane.getByRole('group', { name: 'Interaction tools' }).getByRole('button', { name: 'Display', exact: true });
+const displayPanel = pane => pane.locator('[data-tool-panel-id="display"]');
 // The viewport's own pixels, without any chrome over them: what a host capture returns.
 async function capture(page) {
   const encoded = await page.evaluate(async () => {
@@ -175,12 +177,12 @@ test('an STL opens as one mesh with no tools: display settings, orbit, host comm
   // A mesh has no panel of its own: its only settings are Display's, and Display is never
   // where a file opens. So it opens with the column shut and the model given the room.
   assert.deepEqual(await panels(pane), ['Show files:false']);
-  assert.equal(await pane.locator('[data-tool-panel]').count(), 0, 'nothing in the tool stack until Display is taken up');
-  await pane.getByRole('button', { name: 'Settings', exact: true }).click();
-  await pane.page().locator('[data-display-popover]').waitFor();
+  assert.equal(await pane.locator('[data-tool-panel]').count(), 0, 'nothing in the tool stack until Display is pressed');
+  await displayButton(pane).click();
+  await displayPanel(pane).waitFor();
   assert.deepEqual(await panels(pane), ['Show files:false']);
   assert.equal(await pane.getByRole('tab').count(), 0, 'a panel has no tabs inside it');
-  const displayMenu = pane.page().locator('[data-display-popover]');
+  const displayMenu = displayPanel(pane);
   assert.match(await displayMenu.getByRole('combobox', { name: 'Mode', exact: true }).innerText(), /Solid/);
   const options = async label => {
     await displayMenu.getByRole('combobox', { name: label, exact: true }).click();
@@ -196,8 +198,8 @@ test('an STL opens as one mesh with no tools: display settings, orbit, host comm
   for (const section of ['Grid / Axes', 'Lighting', 'Background', 'Floor']) assert.equal(await displayMenu.getByRole('heading', { name: section, exact: true }).count(), 1, section);
   assert.deepEqual(await options('Projection'), ['Orthographic', 'Perspective']);
   assert.equal(await displayMenu.getByRole('button', { name: 'Reset', exact: true }).count(), 1);
-  await pane.getByRole('button', { name: 'Settings', exact: true }).click();
-  await pane.page().locator('[data-display-popover]').waitFor({ state: 'detached' });
+  await displayButton(pane).click();
+  await displayPanel(pane).waitFor({ state: 'detached' });
   // The column closing reaches the scene as a resize; let that frame land before comparing pictures.
   await page.waitForFunction(() => document.querySelector('[data-testid="one"] [aria-busy] > div > canvas').width >= 790);
   await settle(page);
@@ -320,10 +322,10 @@ test('a 3MF is one mesh per object with its source colour; an uncoloured one tak
   await noTools(pane);
   // A 3MF's panels are a mesh's: Display alone, shut as it opens, and the same panel an STL has.
   assert.deepEqual(await panels(pane), ['Show files:false']);
-  await pane.getByRole('button', { name: 'Settings', exact: true }).click();
-  await pane.page().locator('[data-display-popover]').waitFor();
-  await pane.getByRole('button', { name: 'Settings', exact: true }).click();
-  await pane.page().locator('[data-display-popover]').waitFor({ state: 'detached' });
+  await displayButton(pane).click();
+  await displayPanel(pane).waitFor();
+  await displayButton(pane).click();
+  await displayPanel(pane).waitFor({ state: 'detached' });
   await page.waitForFunction(() => document.querySelector('[data-testid="one"] [aria-busy] > div > canvas').width >= 790);
   await settle(page);
 
@@ -370,7 +372,7 @@ test('a corrupt mesh raises the viewer\'s load alert and an empty one says there
   assert.match(await alert.innerText(), /Couldn’t load the model/);
   assert.match(await alert.innerText(), /broken\.stl/);
   // Nothing on screen is the file's to work on: the card alone, with no tools or view actions.
-  for (const name of ['Settings', 'Preview']) {
+  for (const name of ['Display', 'Preview']) {
     assert.equal(await broken.pane.getByRole('button', { name, exact: true }).count(), 0, `no ${name} over a failed load`);
   }
   assert.equal(await alert.getByRole('button', { name: 'Retry', exact: true }).count(), 1);

@@ -244,18 +244,18 @@ and native service adapters. Shared renderers own all model interaction. STEP an
 robots open in Select, whose Features (Links for a robot) panel hangs under the
 toolbar with the rest of the tool stack; Position's panel replaces it while Position
 is the tool. The navbar has no panel of the file's: the explorer's is its one toggle.
-STEP and robot files have a
-top-left toolbar; GLB, STL and 3MF have none. Every 3D file has Display settings
-and Preview among the view's controls in the navbar's right end, the view cube at
-the bottom-left, and Quick Edit at the top-right. DXF is a 2D canvas with pan, zoom, snapshot and
-Quick Edit, without a 3D toolbar or tool stack.
+Every 3D file has a top-left toolbar whose last button is Display (the Render mode's
+sphere), which opens the Display panel at the foot of the tool stack; GLB, STL and 3MF
+have Display alone. Every 3D file also has Preview, the view's control at the navbar's
+right end, the view cube at the bottom-left, and Quick Edit at the top-right. DXF is a
+2D canvas with pan, zoom, snapshot and Quick Edit, without a 3D toolbar or tool stack.
 
 The file explorer floats over the view's left and never resizes it. Below 720px of
 FileViewer width it is a floating sheet over the viewer and the tree panel of the
 tool stack starts closed (Select, pressed, opens it). Preview is the shared shell's button among the view
 actions: it keeps the navbar and the explorer, hides the toolbar, tool stack and
 Quick Edit, orbits by default, plays routines (on entry only with Autoplay on)
-and offers Playback and Display settings; the host passes no preview props.
+and offers Playback settings; the host passes no preview props.
 The file on screen keeps its view in the tab — its camera, Display settings
 (explode and clip included) and pose — so a refresh restores it; leaving the file for
 another, or for another root, drops it, and opening it again frames it anew (see
@@ -361,8 +361,9 @@ The Viewer has the one navbar every app shares (see
 [the host contract](../../packages/ui/docs/viewer-host.md#host-chrome-slots)): at the
 left the explorer's toggle and the open file's name with its ⋯ ("Select file" with
 none open); at the right the update (a blue download button, only when GitHub has a
-newer release), GitHub, Feedback (a new issue titled "Feedback: "), then the view's controls (Settings, Preview);
-the version is beside the Settings popover's title, and its footer has "Made by @…" (X), Discord and GitHub. This host
+newer release), Feedback (a new issue titled "Feedback: "), Settings (the person's settings, here
+Analytics: the same popover as the CAD app's home), then the view's control (Preview); the version
+is beside the Settings popover's title, and its footer has "Made by @…" (X), Discord and GitHub. This host
 supplies the links (`src/host/viewerLinks.js`): its version, the GitHub (where new
 issues open) and Discord its build names (`VIEWER_GITHUB_URL`, `VIEWER_DISCORD_URL`),
 and what GitHub's latest-release API

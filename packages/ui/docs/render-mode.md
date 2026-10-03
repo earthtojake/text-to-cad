@@ -77,10 +77,10 @@ pickers include opacity, with an opaque checkerboard behind the color swatch:
 0% is transparent, 100% opaque. The background's fractional alpha reaches the
 actual canvas and PNG, not just the preview.
 
-The Display popover's first section, **Display**, holds Mode, the host's
+The Display panel's first section, **Display**, holds Mode, the host's
 Appearance and Projection; **Surfaces** follows; both are always open. Grid and
 Axes are one gated section, **Grid / Axes**, over two independent groups. The
-popover order is Display, Surfaces, Edges, Grid / Axes, Lighting, Background,
+panel's order is Display, Surfaces, Edges, Grid / Axes, Lighting, Background,
 Floor. Preset changes never reorder controls. Clip and Explode are not Display
 sections: they are STEP toolbar tools with their own panels, and their settings
 live in this same store (`clip`, `exploded`). A tool opens neutral — Explode at

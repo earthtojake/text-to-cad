@@ -1,12 +1,11 @@
 import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
-import { ToolPanelCollapse } from "../tools/ToolPanel.jsx";
+import { ToolPanelClose } from "../tools/ToolPanel.jsx";
 import { useMemo, useRef } from "react";
 import { Blend, Expand, Plus, RotateCcw, RotateCw, Sun, SunDim, X } from "lucide-react";
 import { ALL_VIEW_FEATURES, normalizeViewFeatures, normalizeViewSettings, resolveViewSettings, viewSettingsAreCustom } from "@text-to-cad/core/common/viewSettings.js";
 import { MAX_THEME_FILL_COLORS } from "@text-to-cad/core/lib/themeSettings.js";
 import { Button } from "@text-to-cad/ui/primitives/button";
 import { DISPLAY_MODE_OPTIONS } from "./DisplayModeOptions.js";
-import { appSettingsSections } from "./appSettings.jsx";
 import {
   FileSheetColorPicker, FileSheetColorProperty,
   FileSheetControlRow, FileSheetSelectRow, FileSheetSettingsSection,
@@ -110,7 +109,7 @@ function DisplaySections({ sections }) {
 
 export function DisplaySettingsSection({
   viewSettings = {}, resolvedView, hostAppearance = "light", lightingQuality = "final", onViewSettingsPatch, onGroupEnabledChange, onModeChange, onViewReset,
-  features = ALL_VIEW_FEATURES, appearanceControl = null, appSettings = []
+  features = ALL_VIEW_FEATURES, appearanceControl = null
 }) {
   const settings = useMemo(() => normalizeViewSettings(viewSettings), [viewSettings]);
   const view = resolvedView || resolveViewSettings(settings, { appearance: hostAppearance, lightingQuality, features });
@@ -190,14 +189,11 @@ export function DisplaySettingsSection({
             options={FLOOR_FINISH_OPTIONS} />
         </FileSheetFieldGrid>
       </>),
-      // The host's own on/off settings, last: the app's, not the file's view (`appSettings`).
-      ...appSettingsSections(appSettings),
   ];
   // Its panel has no heading: the first always-open section's heading row is the panel's first
-  // row, and carries the panel's fold chevron after its own action (`ToolPanelCollapse`, nothing
-  // outside a panel).
+  // row, and carries the panel's X after its own action (`ToolPanelClose`, nothing outside a panel).
   const lead = sections.findIndex(item => item && typeof item.onEnabledChange !== "function");
-  if (lead >= 0) sections[lead] = { ...sections[lead], headingAction: <>{sections[lead].headingAction}<ToolPanelCollapse /></> };
+  if (lead >= 0) sections[lead] = { ...sections[lead], headingAction: <>{sections[lead].headingAction}<ToolPanelClose /></> };
   return <div className="[&_[data-settings-section-heading]_.text-xs]:text-tiny">
     <DisplaySections sections={sections} />
   </div>;

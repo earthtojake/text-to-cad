@@ -242,7 +242,7 @@ export type NavbarFile = {
 /**
  * The one navbar, over a file (a host's home has none). Left: the way back to the host's home, the
  * explorer's toggle, the open file's name and its ⋯. Right: `trailing` (the file's actions, its
- * panels' toggles), then the host's links.
+ * panels' toggles), the host's links, the host's `settings`, then the renderer's view controls.
  */
 export const ViewerNavbar: ComponentType<{
   onBack?: () => void;
@@ -252,7 +252,9 @@ export const ViewerNavbar: ComponentType<{
   selecting?: boolean;
   status?: ReactNode;
   trailing?: ReactNode;
-  /** The box the renderer draws its view controls into, before the host's version. */
+  /** The host's Settings (the same popover as on its home), just before the renderer's view controls. */
+  settings?: ReactNode;
+  /** The box the renderer draws its view controls into, at the row's right end. */
   controlsRef?: (element: HTMLDivElement | null) => void;
   links?: import("../../host/types.js").ViewerLinks;
   /** The host's `environment.platform`, which Feedback's issue names. */

@@ -7,7 +7,7 @@ import { Spinner } from "../primitives/spinner.jsx";
 import type { LibraryLayout } from "../tab-store/tabRecord.js";
 import wordmark from "../assets/logo-texttocad.svg";
 import { FeedbackLink, GitHubLink, UpdateButton } from "../file-viewer/navigation/NavbarLinks.jsx";
-import { AppSettingsSections, SettingsPopover } from "../renderers/kit/shell/SettingsPopover.jsx";
+import { SettingsPopover } from "../renderers/kit/shell/SettingsPopover.jsx";
 import type { AppSetting } from "../file-viewer/types.js";
 import type { ClipboardPort, ViewerLinks } from "../host/types.js";
 
@@ -270,9 +270,7 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
         {clipboard ? <UpdateButton links={links} clipboard={clipboard} onError={onError} align="center" /> : null}
         <GitHubLink links={links} onError={onError} />
         <FeedbackLink links={links} platform={platform} onError={onError} />
-        <SettingsPopover links={links} align="center">
-          {appSettings?.length ? <AppSettingsSections appSettings={appSettings} /> : null}
-        </SettingsPopover>
+        <SettingsPopover links={links} appSettings={appSettings} align="center" />
       </nav> : null}
       <div className="cad-library-toolbar">
         <h1 className="cad-library-heading">Recent Files</h1>
