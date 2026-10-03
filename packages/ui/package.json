@@ -62,6 +62,10 @@
       "types": "./dist/features/index.d.ts",
       "import": "./dist/features/index.js"
     },
+    "./update": {
+      "types": "./dist/update/index.d.ts",
+      "import": "./dist/update/index.js"
+    },
     "./tab-store": {
       "types": "./dist/tab-store/index.d.ts",
       "import": "./dist/tab-store/index.js"

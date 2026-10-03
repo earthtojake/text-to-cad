@@ -6,10 +6,15 @@ claude.ai's directory treats the folder it follows as the whole plugin: there th
 monorepo's thousands of files, its workflows, lockfile and binaries are policy
 holds, and every install copies all of them. So the directory follows the
 `plugin` branch instead: one commit per release whose tree is only the plugin --
-the Claude, Cursor and Gemini manifests and the icon, the MCP config they name,
+the Claude, Cursor and Gemini manifests and the icon, the MCP configs they name,
 `skills/`, `LICENSE`, and the README, with each link to a file outside that tree
 pointed at the release commit on GitHub. Every other store installs from `main`
 or the GitHub Release (CONTRIBUTING.md, "The plugin branch").
+
+Each MCP config names the channel its installs come from (`CHANNELS`, cadgen's
+`CADGEN_INSTALL_CHANNEL`): the Claude config here is claude.ai's directory, and the
+Cursor config a Cursor install by hand, which clones this branch. On `main` the same
+configs name `github`, and the Cursor one the Cursor Marketplace, which reads `main`.
 
 The checks are claude.ai's file rules, the strictest of the directories
 (https://claude.com/docs/plugins/pre-submission-checklist.md): a tree that breaks
@@ -35,7 +40,8 @@ import tempfile
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = ".claude-plugin/plugin.json"
 FILES = (MANIFEST, ".claude-plugin/icon.png", ".cursor-plugin/plugin.json", "gemini-extension.json", "claude.mcp.json",
-         "LICENSE")
+         "cursor.mcp.json", "LICENSE")
+CHANNELS = {"claude.mcp.json": "claude-directory", "cursor.mcp.json": "github"}
 DIRECTORIES = ("skills/",)
 README = "README.md"
 LFS_POINTER = b"version https://git-lfs.github.com/spec/v1"
@@ -99,6 +105,21 @@ def readme_for_tree(text: str, tree: set[str], repository: set[str], url: str, c
     return LINK.sub(point, text)
 
 
+def with_channel(path: str, data: bytes, channel: str, errors: list[str]) -> bytes:
+    """An MCP config whose one `cadgen mcp` server names `channel` as its install channel."""
+    try:
+        config = json.loads(data)
+        servers = [server for server in config["mcpServers"].values() if server["args"][-2:] == ["cadgen", "mcp"]]
+    except (ValueError, KeyError, TypeError, AttributeError):
+        errors.append(f"{path} is not an mcpServers config this script can read")
+        return data
+    if len(servers) != 1:
+        errors.append(f"{path} must start exactly one `cadgen mcp` server (found {len(servers)})")
+        return data
+    servers[0]["env"] = {**servers[0].get("env", {}), "CADGEN_INSTALL_CHANNEL": channel}
+    return json.dumps(config, indent=2, ensure_ascii=False).encode("utf-8") + b"\n"
+
+
 def rule_errors(tree: dict[str, tuple[str, bytes]]) -> list[str]:
     """What in the tree claude.ai's directory would hold for a reviewer or refuse."""
     errors = []
@@ -128,6 +149,9 @@ def build(root: Path) -> tuple[dict[str, tuple[str, bytes]], list[str], dict]:
         return {}, errors + [f"{README} is not tracked"], {}
     blobs = read_blobs(root, sorted({blob for _, blob in [*chosen.values(), entries[README]]}))
     tree = {path: (mode, blobs[blob]) for path, (mode, blob) in chosen.items()}
+    for path, channel in CHANNELS.items():
+        if path in tree:
+            tree[path] = (tree[path][0], with_channel(path, tree[path][1], channel, errors))
     try:
         manifest = json.loads(tree[MANIFEST][1]) if MANIFEST in tree else {}
     except ValueError as error:

@@ -21,14 +21,13 @@ function library(models: LibraryModel[], extra: Partial<ModelLibrarySource> = {}
   };
 }
 
-it('heads the home with the TEXTTOCAD wordmark over GitHub and Settings, and an update only when there is one; no tagline', async () => {
-  const links = (latest: object | null) => ({ version: '0.7.4', release: 'r', x: 'https://x.com/earthtojake', github: 'https://github.com/earthtojake/text-to-cad', discord: 'https://discord.gg/x',
-    issues: 'https://github.com/earthtojake/text-to-cad/issues/new', install: { command: 'c', prompt: 'p' }, latest });
-  const clipboard = { writeText: async () => {}, readText: async () => '', writeImage: async () => {} };
+it('heads the home with the TEXTTOCAD wordmark over GitHub and Settings; no tagline', async () => {
+  const links = { version: '0.7.4', release: 'r', x: 'https://x.com/earthtojake', github: 'https://github.com/earthtojake/text-to-cad', discord: 'https://discord.gg/x',
+    issues: 'https://github.com/earthtojake/text-to-cad/issues/new' };
   const changes: boolean[] = [];
-  render(<ModelLibrary library={library([])} links={links({ version: '0.7.4', url: 'u', newer: false })} platform="win32" clipboard={clipboard}
+  render(<ModelLibrary library={library([])} links={links} platform="win32"
     appSettings={[{ id: 'analytics', section: 'Analytics', label: 'Share anonymous usage data', checked: false, onCheckedChange: value => { changes.push(value); } }]} />);
-  let nav = await screen.findByRole('navigation', { name: 'CAD links' });
+  const nav = await screen.findByRole('navigation', { name: 'CAD links' });
   expect(screen.getByRole('img', { name: 'text-to-cad' }).getAttribute('src')).toMatch(/texttocad/);
   expect([...nav.querySelectorAll('a, button')].map(node => node.getAttribute('aria-label'))).toEqual(['GitHub', 'Settings']);
   expect(screen.queryByText('Build things')).toBeNull();
@@ -55,17 +54,8 @@ it('heads the home with the TEXTTOCAD wordmark over GitHub and Settings, and an 
   fireEvent.click(within(settings).getByRole('checkbox', { name: 'Share anonymous usage data' }));
   expect(changes).toEqual([true]);
   cleanup();
-  render(<ModelLibrary library={library([])} links={links({ version: '0.7.5', url: 'u', newer: true })} clipboard={clipboard} />);
-  nav = await screen.findByRole('navigation', { name: 'CAD links' });
-  expect([...nav.querySelectorAll('a, button')].map(node => node.getAttribute('aria-label'))).toEqual(['Update to 0.7.5', 'GitHub', 'Settings']);
-  cleanup();
-  // A host whose runtime calls a release newer that is the very version the page names offers nothing.
-  render(<ModelLibrary library={library([])} links={{ ...links({ version: '0.7.4', url: 'u', newer: true }) }} clipboard={clipboard} />);
-  nav = await screen.findByRole('navigation', { name: 'CAD links' });
-  expect([...nav.querySelectorAll('a, button')].map(node => node.getAttribute('aria-label'))).toEqual(['GitHub', 'Settings']);
-  cleanup();
   // A host with no tracker has no Feedback.
-  render(<ModelLibrary library={library([])} links={{ ...links(null), issues: '' }} clipboard={clipboard} />);
+  render(<ModelLibrary library={library([])} links={{ ...links, issues: '' }} />);
   fireEvent.click(within(await screen.findByRole('navigation', { name: 'CAD links' })).getByRole('button', { name: 'Settings' }));
   expect((await screen.findByRole('dialog', { name: 'Settings' })).querySelector('[data-settings-section]')).toBeNull();
 });

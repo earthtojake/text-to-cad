@@ -9,8 +9,10 @@ import { createWebFileActions } from './adapters/fileActions';
 import { recordOpened, recordThumbnail } from './adapters/library';
 import { consent as analyticsConsent, reportActivity } from './adapters/analytics';
 import { features as viewerFeatures } from './adapters/features';
+import { version } from './adapters/version';
 import { ConsentCard, useAnalyticsConsent } from '@text-to-cad/ui/consent';
 import { useFeatures } from '@text-to-cad/ui/features';
+import { UpdateCard, useUpdateNotice } from '@text-to-cad/ui/update';
 import { browserClipboard, browserClipboardSupportsImages } from './host/clipboard';
 import { createWebPromptContext } from './host/promptContext';
 import { useViewerLinks } from './host/viewerLinks.js';
@@ -91,6 +93,9 @@ function RootView({ client, server, tabStore }: { client: CadClient; server: Cad
   // server beside the analytics answer, one choice with the CAD app's, whatever port this is.
   const { features, appSettings: featureSettings } = useFeatures(viewerFeatures);
   const appSettings = useMemo(() => [...analyticsSettings ?? [], ...featureSettings ?? []], [analyticsSettings, featureSettings]);
+  // A newer text-to-cad, once per release and after that card, as the CAD app says it
+  // (`cadgen/updates.py`): a page in a browser cannot reach the agent's chat, so its prompt is copied.
+  const update = useUpdateNotice(version);
   // A person touching the page is use (time spent looking at a model makes no other request): said
   // at most every couple of seconds.
   useEffect(() => {
@@ -112,7 +117,9 @@ function RootView({ client, server, tabStore }: { client: CadClient; server: Cad
     <CadViewer client={client} host={host} tabStore={tabStore} live={live} file={file} onShow={show} onShown={shown}
       rootPath={server.rootPath || ''} onThumbnail={recordThumbnail} appSettings={appSettings} features={features}
       notice={consent?.ask ? <ConsentCard policy={consent.policy} onAnswer={answer}
-        onPolicy={url => window.open(url, '_blank', 'noopener,noreferrer')} /> : null}
+        onPolicy={url => window.open(url, '_blank', 'noopener,noreferrer')} />
+        : update.notice ? <UpdateCard notice={update.notice} copy={prompt => browserClipboard.writeText(prompt)}
+          onAnswer={update.answer} onClose={update.close} /> : null}
       displayActions={<ViewerAppearance colorSchemePreference={appearance.preference} resolvedColorSchemeMode={appearance.colorScheme} onColorSchemePreferenceChange={changeColorScheme} />} />
   </div></div>;
 }

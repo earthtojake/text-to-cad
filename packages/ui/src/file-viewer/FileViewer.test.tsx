@@ -1,7 +1,6 @@
-import { act, cleanup, render, screen, within } from '@testing-library/react';
+import { act, cleanup, render, screen } from '@testing-library/react';
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
-import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { unavailablePromptContext } from '@text-to-cad/core/prompt';
 import { FileViewer, defineFileRenderer } from '../../dist/file-viewer/index.js';
@@ -50,38 +49,6 @@ it('draws the navbar only when it has something to hold, and never for a view sh
   open({ host: { ...linked, environment: { colorScheme: 'light', compact: true } } });
   await screen.findByText('shown');
   expect(navbar()).toBeNull();
-});
-
-it('an update is a blue download button whose menu says the step to it, how this host updates and what is new; nothing without one', async () => {
-  const user = userEvent.setup();
-  const notes = 'https://github.com/earthtojake/text-to-cad/releases/tag/v0.7.5';
-  const followed: string[] = [];
-  const updateMenu = async (latest: object | null, install?: object) => {
-    open({ navigationPath: null, host: { ...host, links: viewerLinks({ version: '0.7.4', latest, install, open: async (url: string) => { followed.push(url); } }) } });
-    await screen.findByText('shown');
-    const button = screen.queryByRole('button', { name: 'Update to 0.7.5' });
-    if (!button) return null;
-    await user.click(button);
-    return screen.findByRole('menu');
-  };
-  // Up to date, or never checked: nothing.
-  expect(await updateMenu({ version: '0.7.4', url: notes, newer: false })).toBeNull();
-  cleanup();
-  expect(await updateMenu(null)).toBeNull();
-  cleanup();
-  // A newer release: the step to it, the skills' update by default, and what is new, followed the host's way.
-  let menu = (await updateMenu({ version: '0.7.5', url: notes, newer: true }))!;
-  expect(menu.querySelector('[data-version-update]')?.textContent).toBe('Update availablev0.7.4 → v0.7.5');
-  expect(within(menu).getByText('npx skills add earthtojake/text-to-cad')).toBeTruthy();
-  expect(within(menu).getByText('Or ask your agent')).toBeTruthy();
-  await user.click(within(menu).getByRole('menuitem', { name: 'What’s new in v0.7.5' }));
-  expect(followed).toEqual([notes]);
-  cleanup();
-  // A host whose update is not a command says how in a line, and nothing else.
-  const message = 'Update CAD from the plugin marketplace, then restart the app.';
-  menu = (await updateMenu({ version: '0.7.5', url: notes, newer: true }, { message }))!;
-  expect(menu.querySelector('[data-install-message]')?.textContent).toBe(message);
-  expect(within(menu).queryByText('In your terminal')).toBeNull();
 });
 
 it('puts the host\'s Settings just before the view\'s controls, outside them, with no Feedback of its own, and steps the navbar aside while the renderer shows its file fullscreen', async () => {

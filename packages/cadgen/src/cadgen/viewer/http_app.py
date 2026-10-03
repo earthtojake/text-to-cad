@@ -74,7 +74,7 @@ TESS_CACHE_PROBE_PATH = "/__tess_cache/probe"
 # after it reloads; interrupting a compile would cost a build, which is why
 # every other route, `POST /__cad/artifact` above all, is counted.
 _UNCOUNTED_ROUTES = frozenset({"/__cad/server", "/__cad/preview", "/__cad/surfaces", "/__cad/surfaces/cancel",
-                               "/__cad/analytics", "/__cad/analytics/activity"})
+                               "/__cad/analytics", "/__cad/analytics/activity", "/__cad/version"})
 
 _PACKAGE_DIR = str(Path(__file__).resolve().parent)
 
@@ -486,6 +486,8 @@ class CadApp:
                     from cadgen import features
 
                     response.send_json(200, features.read())
+                elif pathname == "/__cad/version":
+                    response.send_json(200, self._version())
                 else:
                     # An unrecognised /__cad/* path is a bad API call, not a
                     # page. Falling through to the SPA answered typo'd and
@@ -528,6 +530,14 @@ class CadApp:
                         response.send_empty(413, [("connection", "close")])
                         return
                     response.send_json(200, features.change(json.loads(request.body() or b"{}")))
+                elif pathname == "/__cad/version":
+                    if int(request.headers.get("content-length") or 0) > 4096:
+                        response.send_empty(413, [("connection", "close")])
+                        return
+                    payload = json.loads(request.body() or b"{}")
+                    if type(payload) is not dict:
+                        raise ValueError("an update card's answer is an object")
+                    response.send_json(200, self._version(payload.get("dismiss")))
                 elif pathname == "/__cad/recents":
                     if int(request.headers.get("content-length") or 0) > _LIBRARY_BODY_LIMIT:
                         response.send_empty(413, [("connection", "close")])
@@ -649,6 +659,15 @@ class CadApp:
         found = self.analytics.status()
         return {"ask": found["reason"] == "unasked", "sharing": found["sharing"], "reason": found["reason"],
                 "policy": PRIVACY_URL}
+
+    def _version(self, dismiss=None) -> dict:
+        """The page's update card (``cadgen/updates.py``): whether a newer text-to-cad is out, and,
+        from the person's click on it (they copied or closed it), the release not to offer again."""
+        from cadgen import updates
+
+        if isinstance(dismiss, str):
+            updates.dismiss(dismiss)
+        return {"notice": updates.notice()}
 
     def _report_activity(self, payload: dict) -> None:
         """What the page did: a person touched it (``touched``), or it shows a model (``file``, as the

@@ -1,0 +1,4 @@
+interface:
+  display_name: "CAD setup"
+  short_description: "Check that CAD's viewer can start."
+  default_prompt: "Use $cad-setup to check that the CAD plugin can start: confirm uv is installed and tell me when to restart Codex."

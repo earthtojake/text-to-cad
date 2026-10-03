@@ -21,17 +21,14 @@ def build_parser(prog: str = DEFAULT_PROG) -> argparse.ArgumentParser:
             "process per thread; there is nothing to configure."
         ),
     )
-    # Stamped into the server config of a plugin directory's package (scripts/release/plugin_zip.py):
-    # analytics report it as their `source`. It decides nothing; every install is asked.
-    parser.add_argument("--install", choices=("store",), help=argparse.SUPPRESS)
     return parser
 
 
 def main(argv: Sequence[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:
-    args = build_parser(prog).parse_args(argv)
+    build_parser(prog).parse_args(argv)
     from cadgen.mcp.server import serve
 
-    return serve(install=args.install)
+    return serve()
 
 
 if __name__ == "__main__":

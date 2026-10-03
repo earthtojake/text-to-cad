@@ -159,7 +159,7 @@ def collect(root: Path) -> Package:
             package.errors.append(f"{source} is a Git LFS pointer, not the file; keep plugin files out of LFS")
             continue
         if archived == MCP_CONFIG:
-            data = listed_install(package, data)
+            data = with_channel(package, data)
         package.files[archived] = (data, mode == "100755")
     if sources:
         package.files[MANIFEST] = (json.dumps(manifest, indent=2, ensure_ascii=False).encode("utf-8") + b"\n",
@@ -167,23 +167,20 @@ def collect(root: Path) -> Package:
     return package
 
 
-def listed_install(package: Package, data: bytes) -> bytes:
-    """The server config with `cadgen mcp --install store`, so CAD's analytics can tell a directory
-    install from a manual one (their `source`). It decides nothing: every install is asked first."""
+def with_channel(package: Package, data: bytes) -> bytes:
+    """The server config naming OpenAI's directory as the install's channel (cadgen's
+    `CADGEN_INSTALL_CHANNEL`): this package goes only there. Analytics report it, and cadgen's
+    version check leaves the copy to the directory, which updates it."""
     try:
         config = json.loads(data)
-        servers = config["mcpServers"]
-        stamped = 0
-        for server in servers.values():
-            args = server.get("args")
-            if isinstance(args, list) and args[-2:] == ["cadgen", "mcp"]:
-                server["args"] = [*args, "--install", "store"]
-                stamped += 1
+        servers = [server for server in config["mcpServers"].values() if server["args"][-2:] == ["cadgen", "mcp"]]
     except (ValueError, KeyError, TypeError, AttributeError):
         package.errors.append(f"{MCP_CONFIG} is not an mcpServers config this script can read")
         return data
-    if stamped != 1:
-        package.errors.append(f"{MCP_CONFIG} must start exactly one `cadgen mcp` server (found {stamped})")
+    if len(servers) != 1:
+        package.errors.append(f"{MCP_CONFIG} must start exactly one `cadgen mcp` server (found {len(servers)})")
+        return data
+    servers[0]["env"] = {**servers[0].get("env", {}), "CADGEN_INSTALL_CHANNEL": "openai-directory"}
     return json.dumps(config, indent=2).encode("utf-8") + b"\n"
 
 

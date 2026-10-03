@@ -42,7 +42,7 @@ export const installs = [
     agent: "Cursor",
     note: "Cursor also loads the Claude Code plugin: install one or the other.",
     command:
-      "git clone --depth 1 https://github.com/earthtojake/text-to-cad ~/.cursor/plugins/local/text-to-cad",
+      "git clone --depth 1 --branch plugin https://github.com/earthtojake/text-to-cad ~/.cursor/plugins/local/text-to-cad",
   },
   // Grok Build reads the Claude plugin manifest -- there is no separate Grok manifest -- and
   // installs straight from the repo rather than adding a marketplace first.

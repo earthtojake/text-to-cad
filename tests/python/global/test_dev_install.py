@@ -37,7 +37,7 @@ class DevPluginTests(unittest.TestCase):
                     if isinstance(servers, str):
                         servers = json.loads((plugin / servers).read_text(encoding="utf-8"))["mcpServers"]
                     self.assertEqual(servers, {"cad": server})
-                    self.assertEqual(server["env"], {"CADGEN_MCP_APP_DIR": "/pages/1"})
+                    self.assertEqual(server["env"], {"CADGEN_INSTALL_CHANNEL": "dev", "CADGEN_MCP_APP_DIR": "/pages/1"})
                     self.assertEqual(sorted(path.parent.name for path in plugin.glob("skills/*/SKILL.md")), skills)
                     self.assertFalse(list(plugin.rglob("__pycache__")))
                     for icon in (manifest.get("logo"), manifest.get("interface", {}).get("logo")):

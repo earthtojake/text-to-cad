@@ -3,12 +3,14 @@ import { Maximize2 } from 'lucide-react';
 import type { ResourceRef } from '@text-to-cad/core/prompt';
 import { ConsentCard, useAnalyticsConsent } from '@text-to-cad/ui/consent';
 import { useFeatures } from '@text-to-cad/ui/features';
+import { UpdateCard, useUpdateNotice } from '@text-to-cad/ui/update';
 import { viewerLinks } from '@text-to-cad/ui/links';
 import { Button } from '@text-to-cad/ui/primitives/button';
 import { createTabStore, memoryTabRecord } from '@text-to-cad/ui/tab-store';
 import { version } from '../package.json';
 import type { Bridge, HostContext } from './host/bridge';
 import { fitCapture } from './host/capture';
+import { frameClipboard } from './host/clipboard';
 import { createLiveRegistry, describeView } from './host/live';
 import { watchSupersession, type Presentation } from './host/presentation';
 import { chatReach } from './host/prompt';
@@ -174,10 +176,15 @@ export default function App({ bridge, server, launch: initial, presentation = 't
   // the analytics answer, one choice for the sidebar, every thread's tab and the browser viewer.
   const { features, appSettings: featureSettings } = useFeatures(server.features);
   const appSettings = useMemo(() => [...analyticsSettings ?? [], ...featureSettings ?? []], [analyticsSettings, featureSettings]);
+  // A newer text-to-cad, once per release (`cadgen/updates.py`), after the analytics card: its prompt
+  // goes to the chat where the host takes messages, so the agent updates CAD; elsewhere it is copied.
+  const update = useUpdateNotice(server.version);
+  const sendPrompt = chat.send
+    ? (prompt: string) => bridge.request('ui/message', { role: 'user', content: [{ type: 'text', text: prompt }] }, { timeoutMs: 30_000 }).then(() => {})
+    : undefined;
   const openLink = (url: string) => void bridge.request('ui/open-link', { url }).catch(() => {});
   // The navbar's links: the same as every app's (X, Discord, GitHub and a new issue), followed through the
-  // host (a frame cannot open one itself). No update button: the host updates CAD (a plugin directory
-  // by itself, an unpinned `uvx` on restart), and GitHub's newest release is often not yet what it serves.
+  // host (a frame cannot open one itself).
   const links = useMemo(() => viewerLinks({ version, open: url => bridge.request('ui/open-link', { url }).then(() => {}) }),
     [bridge]);
   // A view opened on the home (the sidebar's) goes back to it; one opened on a model has no home.
@@ -193,7 +200,9 @@ export default function App({ bridge, server, launch: initial, presentation = 't
     overlay={lost ? <Banner message={LOST[presentation]} /> : null}>
     <ModelView key={rootKey(launch.root)} launch={launch} root={launch.root} sequence={showing.sequence} bridge={bridge} server={server}
       tabStore={tabStore} live={live} links={links} appSettings={appSettings} features={features}
-      notice={consent?.ask ? <ConsentCard policy={consent.policy} onAnswer={answer} onPolicy={openLink} /> : null}
+      notice={consent?.ask ? <ConsentCard policy={consent.policy} onAnswer={answer} onPolicy={openLink} />
+        : update.notice ? <UpdateCard notice={update.notice} send={sendPrompt} copy={prompt => frameClipboard.writeText(prompt)}
+          onAnswer={update.answer} onClose={update.close} /> : null}
       colorScheme={colorScheme} platform={initial.platform || 'darwin'} reporter={reporter} sync={sync} compact={inline} chat={chat}
       onLaunch={show} onHome={goHome} />
   </Frame>;

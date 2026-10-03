@@ -1,6 +1,7 @@
 import { act, cleanup, render } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { CadViewerProps } from '@text-to-cad/ui/cad-viewer';
+import type { UpdateNotice } from '@text-to-cad/ui/update';
 import App from './App';
 import type { HostContext } from './host/bridge';
 import type { Launch, Session } from './host/server';
@@ -21,7 +22,7 @@ beforeEach(() => vi.stubGlobal('IntersectionObserver', class { observe() {} unob
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); viewer.props = null; viewer.mounts = 0; });
 
 /** A host frame and CAD's server, as the page reaches them. */
-function host(initial: HostContext, hostCapabilities: Record<string, unknown> = {}, ask = false) {
+function host(initial: HostContext, hostCapabilities: Record<string, unknown> = {}, ask = false, notice: UpdateNotice | null = null) {
   const listeners = new Set<(context: HostContext) => void>();
   let context = initial;
   const bridge = {
@@ -39,6 +40,7 @@ function host(initial: HostContext, hostCapabilities: Record<string, unknown> = 
     consent: vi.fn(async (share?: boolean) => ({ ask: share === undefined && ask, sharing: Boolean(share), policy: 'https://www.texttocad.dev/privacy-policy' })),
     // The person's features as the server keeps them (`cad_features`).
     features: vi.fn(async (change?: object) => { kept = { ...kept, ...change }; return kept; }),
+    version: vi.fn(async (dismiss?: string) => ({ notice: dismiss === undefined ? notice : null })),
   };
   let kept = { quickEdit: true };
   return { bridge, server };
@@ -78,8 +80,6 @@ it('a model opened from the home is launched by the server and leads back to it;
   expect(bridge.request).toHaveBeenCalledWith('ui/open-link', { url: 'https://github.com/earthtojake/text-to-cad' });
   // Feedback and Report Issue open a new issue on the project's tracker, the same way.
   expect(viewer.props!.host.links!.issues).toBe('https://github.com/earthtojake/text-to-cad/issues/new');
-  // No update button: the host updates CAD, and asks GitHub nothing for it.
-  expect(viewer.props!.host.links!.latest ?? null).toBeNull();
   const { perform, platform } = viewer.props!.host.fileActions!;
   // A file on its own, in no project: its path is its only one.
   expect([platform, Object.keys(perform!).sort()]).toEqual(['darwin', ['copy-path', 'reveal']]);
@@ -214,4 +214,30 @@ it("Settings' Features: Quick edit is read from the server, turned off there for
   render(<App bridge={again.bridge as any} server={again.server as any} launch={home} session={session} />);
   await act(async () => {});
   expect(viewer.props!.features).toEqual({ quickEdit: false });
+});
+
+it('a newer release is offered once the analytics question is answered: sent to the chat where the host takes messages, copied elsewhere', async () => {
+  const notice = { latest: '0.9.0', version: '0.8.1', text: 'text-to-cad 0.9.0 is available (you have 0.8.1)',
+    prompt: 'Update text-to-cad to 0.9.0 (installed from GitHub).' };
+  {
+    const { bridge, server } = host({ displayMode: 'fullscreen' }, { message: {} }, true, notice);
+    const { findByRole, getByText, getByRole, queryByRole } = render(<App bridge={bridge as any} server={server as any} launch={home} session={session} />);
+    await findByRole('dialog', { name: 'Allow Analytics' });
+    expect(queryByRole('dialog', { name: 'Update available' })).toBeNull();
+    await act(async () => getByText('No thanks').click());
+    await act(async () => getByRole('button', { name: 'Send to agent' }).click());
+    expect(bridge.request).toHaveBeenCalledWith('ui/message', { role: 'user', content: [{ type: 'text', text: notice.prompt }] }, { timeoutMs: 30_000 });
+    expect(server.version).toHaveBeenLastCalledWith('0.9.0');
+    expect(queryByRole('dialog', { name: 'Update available' })).toBeNull();
+    cleanup();
+  }
+  const writeText = vi.fn(async () => {});
+  Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+  const { bridge, server } = host({ displayMode: 'fullscreen' }, {}, false, notice);
+  const { findByRole } = render(<App bridge={bridge as any} server={server as any} launch={home} session={session} />);
+  const copy = await findByRole('button', { name: 'Copy prompt' });
+  await act(async () => copy.click());
+  expect(writeText).toHaveBeenCalledWith(notice.prompt);
+  expect(server.version).toHaveBeenLastCalledWith('0.9.0');
+  expect(bridge.request).not.toHaveBeenCalledWith('ui/message', expect.anything(), expect.anything());
 });

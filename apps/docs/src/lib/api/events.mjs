@@ -1,5 +1,5 @@
 /**
- * What `cadgen mcp` sends (`cadgen/analytics.py`, schema 1), checked field by field and turned
+ * What `cadgen mcp` sends (`cadgen/analytics.py`, schema 2), checked field by field and turned
  * into rows. Anything outside the contract is refused, not stored: an unknown field, a tool name
  * that is not a tool's, a file code that is not 16 hex characters, a string longer than a version
  * or a client name needs, a tool or a file counted twice in one batch, or a second view. A row
@@ -17,8 +17,9 @@ const FILE_CODE = /^[0-9a-f]{16}$/;
 const MAX_EVENTS = 64;
 export const MAX_BYTES = 16 * 1024;
 
-const FIELDS = new Set(['schema', 'install', 'session', 'version', 'source', 'platform', 'arch', 'client', 'presentation', 'events']);
-const SOURCES = new Set(['store', 'manual']);
+const FIELDS = new Set(['schema', 'install', 'session', 'version', 'channel', 'platform', 'arch', 'client', 'presentation', 'events']);
+// Where the install came from, as its package named it (`cadgen/_internal/channel.py`).
+const CHANNELS = new Set(['claude-directory', 'openai-directory', 'cursor-marketplace', 'github', 'dev', 'unknown']);
 const PLATFORMS = new Set(['darwin', 'linux', 'win32', 'other']);
 const PRESENTATIONS = new Set(['tabs', 'inline', 'text', 'browser']);
 const KINDS = new Set(['step', 'stl', '3mf', 'glb', 'dxf', 'urdf', 'srdf', 'sdf']);
@@ -42,7 +43,7 @@ export function isUuid(value) {
 export function rowsOf(batch) {
   if (!batch || typeof batch !== 'object' || Array.isArray(batch)) fail('a batch is an object');
   for (const key of Object.keys(batch)) if (!FIELDS.has(key)) fail(`unknown field ${key}`);
-  if (batch.schema !== 1) fail('schema must be 1');
+  if (batch.schema !== 2) fail('schema must be 2');
   if (!isUuid(batch.install)) fail('install is not a uuid');
   if (!isUuid(batch.session)) fail('session is not a uuid');
   const client = batch.client ?? {};
@@ -52,7 +53,7 @@ export function rowsOf(batch) {
     install_id: batch.install,
     session_id: batch.session,
     version: token(batch.version, 'version', 32),
-    source: oneOf(batch.source, SOURCES, 'source'),
+    channel: oneOf(batch.channel, CHANNELS, 'channel'),
     platform: oneOf(batch.platform, PLATFORMS, 'platform'),
     arch: batch.arch === undefined ? null : token(batch.arch, 'arch', 16),
     client: client.name === undefined ? null : token(client.name, 'client.name'),

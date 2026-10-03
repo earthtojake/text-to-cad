@@ -7,9 +7,10 @@ What is sent, at most once a minute while there is something new and once more a
 exits, each batch stamped with the time it arrives:
 
 - who, anonymously: a random install id, and a random id for this server process;
-- what runs: cadgen's version, how it was installed, the operating system and processor, the
-  agent app's name and version and how that app shows CAD (tabs, inline or text) -- or, from the
-  browser viewer, ``cadgen-viewer`` and ``browser``;
+- what runs: cadgen's version, where it was installed from (its channel, ``cadgen/_internal/channel.py``:
+  a plugin directory, the Cursor Marketplace, GitHub, a development install, or ``unknown``), the
+  operating system and processor, the agent app's name and version and how that app shows CAD
+  (tabs, inline or text) -- or, from the browser viewer, ``cadgen-viewer`` and ``browser``;
 - ``tool``: how many times each CAD tool was called, and how many of those failed;
 - ``view``: how many times a CAD view was touched by a person or switched models -- time spent
   looking at a model calls no tool, and is use all the same;
@@ -22,8 +23,8 @@ exits, each batch stamped with the time it arrives:
 
 Never a path, a file name, a model, an argument, a prompt or anything typed. A batch with
 nothing used in it is never sent: a server the host started and nobody used counts for
-nothing. The receiver (``ENDPOINT``) is ours, so the service behind it can change without a
-release.
+nothing. The receiver (``cadgen/_internal/api.py``) is ours, so the service behind it can change
+without a release.
 
 Nothing is sent without the person's yes, however CAD was installed. Strongest first:
 
@@ -39,8 +40,7 @@ A no, or closing the card, is kept like a yes and never asked again: not after a
 after an update, not when what is sent grows (``DISCLOSURE`` re-asks only a yes). Where an answer
 could not be kept -- a state directory nothing can write -- the CAD app does not ask at all.
 
-How CAD was installed (``cadgen mcp --install store``, a plugin directory's) is only
-reported, as ``source``: it decides nothing.
+Where CAD was installed from is only reported, as ``channel``: it decides nothing here.
 
 The install id and the file salt exist only while sharing is on: turning it off deletes both
 here and asks the receiver to delete what it holds under the id -- again and again until it
@@ -85,15 +85,15 @@ from pathlib import Path
 
 from typing import Any, Callable
 
+from cadgen._internal.api import api_url
 from cadgen._internal.atomic_replace import temp_suffix
 from cadgen._internal.file_lock import exclusive
 from cadgen.settings import LOCK, read_section, settings_path, update_section
 
 LOG = logging.getLogger("cadgen.analytics")
 
-ENDPOINT = "https://api.texttocad.dev/v1"
 PRIVACY_URL = "https://www.texttocad.dev/privacy-policy"
-SCHEMA = 1
+SCHEMA = 2  # 2: the install's channel replaced how it was installed (`source`)
 # What a yes agreed to: the fields and events this module sends. Raise it when that grows, and the
 # CAD app asks again everyone whose yes was to less; a no stays a no. Restarts and updates that
 # send nothing new keep the answer: it lives in the person's state directory, not the install.
@@ -103,11 +103,10 @@ FLUSH_SECONDS = 60
 # shorter wait would give up on a batch a cold receiver was still storing, and send it twice.
 TIMEOUT_SECONDS = 10
 CLOSE_SECONDS = 2  # the most an exiting server waits for its last send
-INSTALLS = ("store",)  # what `cadgen mcp --install` may name, reported as `source`; a manual install names none
 # The page's plumbing: a view's once-a-second sync, its viewer requests, its capture replies and
 # the home's re-reads of its library every couple of seconds say nothing about use and would
 # drown what does. A view's own activity is noted from its sync instead (``viewed``, ``opened``).
-UNCOUNTED = frozenset({"cad_sync", "cad_http", "cad_capture_reply", "cad_consent", "cad_features", "cad_recents"})
+UNCOUNTED = frozenset({"cad_sync", "cad_http", "cad_capture_reply", "cad_consent", "cad_features", "cad_version", "cad_recents"})
 # A file's format, by extension: what the viewer opens (``cadgen.viewer.scanner.SOURCE_EXTENSIONS``).
 FILE_KINDS = {".step": "step", ".stp": "step", ".stl": "stl", ".3mf": "3mf", ".glb": "glb", ".dxf": "dxf",
               ".urdf": "urdf", ".srdf": "srdf", ".sdf": "sdf"}
@@ -122,12 +121,6 @@ FILES_PENDING = 1024  # past this, a process notes no new file until a batch goe
 UNAVAILABLE = {"sharing": False, "reason": "unavailable", "id": None}
 
 _OFF, _ON = ("0", "off", "false", "no"), ("1", "on", "true", "yes")
-
-
-def endpoint() -> str:
-    """The receiver: ``CADGEN_ANALYTICS_URL`` (for a local receiver) when it is http(s), else ours."""
-    override = str(os.environ.get("CADGEN_ANALYTICS_URL") or "").strip().rstrip("/")
-    return override if override.startswith(("https://", "http://")) else ENDPOINT
 
 
 SECTION = "analytics"  # this module's part of the settings file
@@ -345,7 +338,7 @@ def request_deletion(install_id: str) -> bool:
     """Ask the receiver to delete what it holds under ``install_id``: whether that is settled (it
     did, or it refused an id it can never hold). Waits on the network."""
     # In the body, never the path: the receiver's host logs each request's path beside its IP address.
-    return _post(f"{endpoint()}/forget", {"install": install_id}) in ("ok", "refused")
+    return _post(f"{api_url()}/forget", {"install": install_id}) in ("ok", "refused")
 
 
 def _token(value: Any, limit: int) -> str:
@@ -381,15 +374,14 @@ class Recorder:
     while sharing is on. Every method is guarded (see the module docstring): it never raises, and
     none but ``close`` waits on the network."""
 
-    def __init__(self, *, install: str | None = None, path: Path | None = None,
-                 send: Callable[[dict[str, Any]], Any] | None = None, interval: float = FLUSH_SECONDS) -> None:
-        self.install = install if install in INSTALLS else None
+    def __init__(self, *, path: Path | None = None, send: Callable[[dict[str, Any]], Any] | None = None,
+                 interval: float = FLUSH_SECONDS) -> None:
         self.path = path
-        self._send = send or (lambda payload: _post(f"{endpoint()}/events", payload))
+        self._send = send or (lambda payload: _post(f"{api_url()}/events", payload))
         self._interval = interval
         self._lock = threading.Lock()
         self._session = str(uuid.uuid4())
-        self._context: dict[str, Any] = {"version": "unknown", "source": self.install or "manual", "platform": "other"}
+        self._context: dict[str, Any] = {"version": "unknown", "channel": "unknown", "platform": "other"}
         self._counts: dict[str, list[int]] = {}  # tool -> [calls, errors]
         self._views = 0
         self._files: dict[str, str] = {}  # absolute path -> kind; paths never leave this process
@@ -402,9 +394,10 @@ class Recorder:
     @_guarded(lambda: None)
     def _describe(self) -> None:
         from cadgen import __version__
+        from cadgen._internal.channel import channel
 
-        self._context.update(version=_token(__version__, 32) or "unknown", platform=_platform_name(),
-                             arch=_token(_platform.machine().lower(), 16))
+        self._context.update(version=_token(__version__, 32) or "unknown", channel=channel(),
+                             platform=_platform_name(), arch=_token(_platform.machine().lower(), 16))
 
     @_guarded(lambda: None)
     def _decision(self) -> Any:

@@ -25,5 +25,5 @@
   ],
   "logo": ".claude-plugin/icon.png",
   "skills": "./skills/",
-  "mcpServers": "./claude.mcp.json"
+  "mcpServers": "./cursor.mcp.json"
 }

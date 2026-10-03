@@ -6,10 +6,10 @@ import { Input } from "../primitives/input.jsx";
 import { Spinner } from "../primitives/spinner.jsx";
 import type { LibraryLayout } from "../tab-store/tabRecord.js";
 import wordmark from "../assets/logo-texttocad.svg";
-import { GitHubLink, UpdateButton } from "../file-viewer/navigation/NavbarLinks.jsx";
+import { GitHubLink } from "../file-viewer/navigation/NavbarLinks.jsx";
 import { SettingsPopover } from "../renderers/kit/shell/SettingsPopover.jsx";
 import type { AppSetting } from "../file-viewer/types.js";
-import type { ClipboardPort, ViewerLinks } from "../host/types.js";
+import type { ViewerLinks } from "../host/types.js";
 
 /** A model someone opened: kept by the host, which also says where it is shown from. */
 export interface LibraryModel {
@@ -151,7 +151,7 @@ function Placeholders({ layout }: { layout: LibraryLayout }) {
  * (`wantsPicture`) is handed to `picture`, where the viewer draws one out of sight — one card at a
  * time, each once while the page is up — and the list is read again once one is kept.
  */
-export function ModelLibrary<Model extends LibraryModel>({ library, layout = "grid", onLayoutChange, failure = "", picture, links, platform, clipboard, appSettings, onError }: {
+export function ModelLibrary<Model extends LibraryModel>({ library, layout = "grid", onLayoutChange, failure = "", picture, links, platform, appSettings, onError }: {
   library: ModelLibrarySource<Model>;
   /** Grid or list; the host keeps the choice (the tab's settings). */
   layout?: LibraryLayout;
@@ -160,11 +160,10 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   failure?: string;
   /** Draw and keep a model's picture; true once it is kept. */
   picture?(model: Model): Promise<boolean>;
-  /** The host's links, under the wordmark, and the clipboard their copies go through. */
+  /** The host's links, under the wordmark. */
   links?: ViewerLinks;
   /** The host's `environment.platform`, which Feedback's issue names. */
   platform?: string;
-  clipboard?: ClipboardPort;
   /** The host's own on/off settings, in the home's Settings. */
   appSettings?: readonly AppSetting[];
   onError?(error: Error): void;
@@ -267,7 +266,6 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
       <img className="cad-library-wordmark" src={wordmark} alt="text-to-cad" />
       <p className="cad-library-byline">Build anything. <span>100% open source and free.</span></p>
       {links ? <nav className="cad-library-links" aria-label="CAD links">
-        {clipboard ? <UpdateButton links={links} clipboard={clipboard} onError={onError} align="center" /> : null}
         <GitHubLink links={links} onError={onError} />
         <SettingsPopover links={links} appSettings={appSettings} platform={platform} align="center" />
       </nav> : null}

@@ -58,45 +58,20 @@ def _daemon_name() -> str | None:
 
 
 def _editable_source() -> str | None:
-    """The directory this cadgen was EDITABLE-installed from, or ``None``.
+    """The directory this cadgen was EDITABLE-installed from, or ``None``
+    (``cadgen._internal.editable``).
 
     ``pip install -e <dir>`` writes the project's version into the distribution's
-    metadata at install time and records the source directory beside it
-    (``direct_url.json``, PEP 610). The import path then points at that live
+    metadata at install time, and the import path then points at the live
     directory, but the recorded version is a SNAPSHOT: nothing re-reads the
     project's metadata afterwards, so a source tree whose version has since been
     bumped keeps reporting the version it was installed at. That is not a wrong
     reading of the version -- it is what this interpreter really has installed --
     and it is why the mismatch above it may need a different command.
-
-    Anything unreadable, unparseable or non-editable answers ``None``: a report
-    that cannot tell says the ordinary thing rather than guessing.
     """
-    import json
-    from importlib.metadata import PackageNotFoundError, distribution
+    from cadgen._internal.editable import editable_source
 
-    try:
-        recorded = distribution("cadgen").read_text("direct_url.json")
-    except (PackageNotFoundError, OSError):
-        return None
-    try:
-        direct = json.loads(recorded or "")
-    except ValueError:
-        return None
-    if not isinstance(direct, dict):
-        return None
-    directory = direct.get("dir_info")
-    if not isinstance(directory, dict) or not directory.get("editable"):
-        return None
-    url = str(direct.get("url") or "")
-    if not url.startswith("file://"):
-        return None
-    # url2pathname, not a prefix strip: a Windows record is file:///C:/... and
-    # the path component of that is "/C:/...".
-    from urllib.parse import unquote, urlparse
-    from urllib.request import url2pathname
-
-    return url2pathname(unquote(urlparse(url).path))
+    return editable_source()
 
 
 KERNEL_OK = "ok"

@@ -27,6 +27,7 @@ MARKETPLACE_NAME = "earthtojake"
 CLAUDE_PLUGIN_PATH = REPO_ROOT / ".claude-plugin" / "plugin.json"
 CODEX_MCP_PATH = REPO_ROOT / "codex.mcp.json"
 CLAUDE_MCP_PATH = REPO_ROOT / "claude.mcp.json"
+CURSOR_MCP_PATH = REPO_ROOT / "cursor.mcp.json"
 CODEX_PLUGIN_PATH = REPO_ROOT / ".codex-plugin" / "plugin.json"
 CURSOR_PLUGIN_PATH = REPO_ROOT / ".cursor-plugin" / "plugin.json"
 GEMINI_EXTENSION_PATH = REPO_ROOT / "gemini-extension.json"
@@ -187,8 +188,8 @@ class PluginManifestPolicyTest(unittest.TestCase):
         manifest = load_json(CODEX_PLUGIN_PATH)
         self.assertEqual(manifest.get("mcpServers"), "./codex.mcp.json")
         # Codex resolves the onboarding skill as a path from the plugin root, to its SKILL.md.
-        self.assertEqual(manifest.get("extensions", {}).get("com.openai", {}).get("onboardingSkill"), "./skills/cad-mcp-setup/SKILL.md")
-        self.assertTrue((SKILLS_ROOT / "cad-mcp-setup" / "SKILL.md").is_file())
+        self.assertEqual(manifest.get("extensions", {}).get("com.openai", {}).get("onboardingSkill"), "./skills/cad-setup/SKILL.md")
+        self.assertTrue((SKILLS_ROOT / "cad-setup" / "SKILL.md").is_file())
         servers = load_json(CODEX_MCP_PATH)["mcpServers"]
         self.assertEqual(list(servers), ["cad"])
         server = servers["cad"]
@@ -219,11 +220,14 @@ class PluginManifestPolicyTest(unittest.TestCase):
         self.assertEqual(args[args.index("--from") + 1], f"cadgen=={version}")
 
     def test_cursor_starts_claudes_server_and_shows_its_icon(self) -> None:
-        # Cursor reads only .cursor-plugin/plugin.json. Its MCP config format is Claude's, so it
-        # starts the same pinned server rather than a third copy of the command. Its logo must be a
-        # relative path inside the plugin tree: Cursor resolves it to that commit's raw file.
+        # Cursor reads only .cursor-plugin/plugin.json. Its MCP config format is Claude's, and it starts
+        # the same pinned server from a config of its own, which names the Cursor Marketplace as its
+        # channel: the marketplace reads main. Its logo must be a relative path inside the plugin
+        # tree: Cursor resolves it to that commit's raw file.
         manifest = load_json(CURSOR_PLUGIN_PATH)
-        self.assertEqual(manifest.get("mcpServers"), "./claude.mcp.json")
+        self.assertEqual(manifest.get("mcpServers"), "./cursor.mcp.json")
+        cursor, claude = load_json(CURSOR_MCP_PATH)["mcpServers"]["cad"], load_json(CLAUDE_MCP_PATH)["mcpServers"]["cad"]
+        self.assertEqual({**cursor, "env": None}, {**claude, "env": None})
         logo = manifest.get("logo", "")
         self.assertFalse(logo.startswith(("/", "..")) or "://" in logo, logo)
         self.assertEqual(logo, ".claude-plugin/icon.png")
@@ -249,12 +253,24 @@ class PluginManifestPolicyTest(unittest.TestCase):
 
         version = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
         expected = [*LAUNCHER[1:], f"cadgen=={version}", "cadgen", "mcp"]
-        for path in (CLAUDE_MCP_PATH, CODEX_MCP_PATH, GEMINI_EXTENSION_PATH):
+        for path in (CLAUDE_MCP_PATH, CODEX_MCP_PATH, CURSOR_MCP_PATH, GEMINI_EXTENSION_PATH):
             with self.subTest(path=path.name):
                 server = load_json(path)["mcpServers"]["cad"]
                 self.assertEqual((server["command"], server["args"]), (LAUNCHER[0], expected))
         readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
         self.assertIn('"args": [' + ", ".join(json.dumps(arg) for arg in expected) + "]", readme)
+
+    def test_every_package_on_main_names_its_install_channel(self) -> None:
+        # Where an install came from is written into the package itself, in its server's environment
+        # (cadgen's CADGEN_INSTALL_CHANNEL), never worked out at runtime. Everything installed from
+        # main by hand is `github`; the Cursor Marketplace reads main, so its own config says so. The
+        # plugin branch's Claude config (claude.ai's directory) and the OpenAI ZIP stamp their own.
+        channels = {path.name: load_json(path)["mcpServers"]["cad"]["env"]["CADGEN_INSTALL_CHANNEL"]
+                    for path in (CLAUDE_MCP_PATH, CODEX_MCP_PATH, CURSOR_MCP_PATH, GEMINI_EXTENSION_PATH)}
+        self.assertEqual(channels, {"claude.mcp.json": "github", "codex.mcp.json": "github",
+                                    "cursor.mcp.json": "cursor-marketplace", "gemini-extension.json": "github"})
+        readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+        self.assertIn('"env": {"CADGEN_INSTALL_CHANNEL": "github"}', readme)
 
     def test_no_stale_plugin_subdirectory_package_remains(self) -> None:
         # The generated `plugins/cad/skills` copy is what the repo-root move

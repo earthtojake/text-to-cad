@@ -167,7 +167,11 @@ each build its own installation. Install again to see a skill or page edit. A pa
 running app would change its URI, and hosts drop the frames already showing it,
 which is why each install serves its own copy. A running server keeps the
 Python it started with, so restart the app after a Python-only change.
-`--uninstall` removes a host's install.
+`--uninstall` removes a host's install. Its server names its install channel
+`dev` (`CADGEN_INSTALL_CHANNEL`), and a checkout's editable cadgen counts as one
+too: neither is ever offered an update. To see the update card, run a server with
+`CADGEN_INSTALL_CHANNEL=github` and a `versions.json` in its state directory
+(`CADGEN_STATE_DIR`) naming a newer `latest`.
 
 Keep one copy of the plugin per app. The script refuses to install where another
 copy would load beside it: the published plugin, this one installed through
@@ -623,16 +627,17 @@ is involved) and deletes the branch. The merged commit is THE release commit.
 
 `main` is an installable plugin for every host: its root holds every manifest
 (`.claude-plugin/`, `.codex-plugin/`, `.cursor-plugin/`, `gemini-extension.json`)
-and MCP config (`claude.mcp.json`, `codex.mcp.json`), and the README's install
-commands use it. claude.ai's plugin directory treats the folder it follows as
+and MCP config (`claude.mcp.json`, `codex.mcp.json`, `cursor.mcp.json`), and the
+README's install commands use it. claude.ai's plugin directory treats the folder it follows as
 the whole plugin, though, so it follows the `plugin` branch instead: on `main`
 the monorepo's files, workflows, lockfile and binaries would all be held for a
 reviewer, and every install would copy them. `Publish Release` writes `plugin` on
 each release: one commit whose tree is `.claude-plugin/plugin.json` and
 `icon.png`, `.cursor-plugin/plugin.json`, `gemini-extension.json`,
-`claude.mcp.json` (the CAD server the manifests name), `skills/`, `LICENSE` and
-`README.md`, with each README link to a file outside that tree pointed at the
-release commit on GitHub. A release whose plugin did not change adds no commit.
+`claude.mcp.json` and `cursor.mcp.json` (the CAD server the manifests name),
+`skills/`, `LICENSE` and `README.md`, with each README link to a file outside
+that tree pointed at the release commit on GitHub. A Cursor install by hand
+clones this branch too (the README's `git clone --branch plugin`). A release whose plugin did not change adds no commit.
 The tree is checked against claude.ai's file rules
 (<https://claude.com/docs/plugins/pre-submission-checklist>) by
 `tests/python/global/test_plugin_branch.py` on every pull request and again
@@ -648,6 +653,23 @@ What each store and installer reads:
 | Claude Code, Codex, Grok Build | `main`, unless the command names a ref (`owner/repo@ref` for Codex and Grok) |
 | Gemini CLI | the latest GitHub Release: with no Gemini archive among its assets, it takes the release's source tarball, so a new manifest reaches Gemini with the next release. A release with a single asset would be taken as the extension, so keep shipping the wheel and sdist beside the ZIP |
 | Skills CLI and skills.sh | `main` |
+
+Each package says where its installs come from, its install channel:
+`CADGEN_INSTALL_CHANNEL` in the CAD server's `env`. cadgen reports it with
+analytics and decides by it whether to say an update is out
+(`cadgen/updates.py`): a store's copy is left to its store. Nothing works it out
+at runtime, so a package that ships somewhere new names its own value, and
+`test_plugin_manifests.py`, `test_plugin_branch.py` and `test_plugin_zip.py` hold
+each one:
+
+| Package | Channel | Written by |
+| ------- | ------- | ---------- |
+| `main`'s Claude, Codex and Gemini configs, and the README's Claude Desktop config | `github` | the checked-in files |
+| `main`'s `cursor.mcp.json`, which the Cursor Marketplace reads | `cursor-marketplace` | the checked-in file |
+| the `plugin` branch's `claude.mcp.json`, which claude.ai's directory follows | `claude-directory` | `plugin_branch.py` |
+| the `plugin` branch's `cursor.mcp.json`, which a Cursor install by hand clones | `github` | `plugin_branch.py` |
+| the OpenAI ZIP's `.mcp.json` | `openai-directory` | `plugin_zip.py` |
+| a development install | `dev` | `dev_install.py` |
 
 **Dev note — retire `claude-plugin`.** The portal refuses a tracked-branch change
 while a reviewer has the plugin. Once the claude.ai listing is out of review,
@@ -667,7 +689,9 @@ each folder with its own entry: `.codex-plugin/` (manifest and icons), `skills/`
 first ZIP, one top-level `cad/` folder with no directory entry of its own, as
 holding no plugin.) The portal requires `mcpServers` to resolve to a root
 `.mcp.json`, so a server config the checkout keeps under another name is
-archived as `.mcp.json`, and the archived manifest points there.
+archived as `.mcp.json`, and the archived manifest points there. That config
+names `openai-directory` as its install channel, in the server's `env`; the
+portal's acceptance of `env` is confirmed at the first upload that carries it.
 
 For each release, a person with the access below:
 
@@ -694,6 +718,19 @@ with the final-submission listing limits, such as 30 characters for the name and
 subtitle. A missing `interface.logo` or `interface.composerIcon` is a warning,
 not an error, but the portal refuses the upload without them. The portal's own
 skill and policy scans still run after upload.
+
+### The version feed
+
+cadgen's daily version check reads `api.texttocad.dev/v1/versions`
+(`apps/docs/src/lib/api/versions.mjs`): `latest` is the docs app's version,
+which the release PR stamps from `VERSION`, and `Publish Release` deploys the
+docs after the PyPI upload, so the feed names a release only once it can be
+installed. `minimum` holds, per store channel, the oldest release that store's
+copies may run before cadgen tells them to install from GitHub
+(`apps/docs/src/lib/api/minimum.json`, empty until a store falls behind). To
+raise one, edit that file on `main` and dispatch `Deploy Docs`; no release is
+needed. A change to the analytics schema (`schema.sql`) is run on the database
+before the deploy that ships it (`apps/docs/README.md`).
 
 ### Resuming and republishing
 

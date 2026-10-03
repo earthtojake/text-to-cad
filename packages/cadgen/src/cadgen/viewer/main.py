@@ -827,6 +827,11 @@ def serve(argv: list[str], *, prog: str = DEFAULT_PROG) -> int:
     analytics.started(client={"name": "cadgen-viewer", "version": app.viewer_version}, presentation="browser")
     analytics.start()
     app.analytics = analytics
+    # Whether a newer text-to-cad is out (``cadgen/updates.py``, ``/__cad/version``): the feed is read
+    # now when it is due, so the page's first question is answered from it.
+    from cadgen import updates  # noqa: PLC0415
+
+    updates.refresh()
 
     # Register this instance so `list` and a later launch's reuse lookup can find
     # it — after the bind, so we never advertise a port we failed to take, and

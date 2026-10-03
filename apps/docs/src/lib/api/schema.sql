@@ -1,4 +1,4 @@
--- CAD's anonymous analytics: one row per event of a batch (src/lib/analytics/events.mjs), and where
+-- CAD's anonymous analytics: one row per event of a batch (src/lib/api/events.mjs), and where
 -- installs are, as totals. No IP address, nothing that names a person, a file or a model. Safe to
 -- run again: it creates what is missing and adds the columns a later schema introduced.
 create table if not exists events (
@@ -13,13 +13,24 @@ create table if not exists events (
   calls          integer     not null,  -- tool: calls; view: touches; file: 1
   errors         integer     not null,  -- tool: failed calls
   version        text        not null,  -- cadgen's
-  source         text        not null,  -- store (a plugin directory install) | manual
+  channel        text        not null,  -- where the install came from: claude-directory | openai-directory | cursor-marketplace | github | dev | unknown
   platform       text        not null,  -- darwin | linux | win32 | other
   arch           text,
   client         text,                  -- the agent app: codex-mcp-client, claude-ai, ...
   client_version text,
   presentation   text                   -- tabs | inline | text (the CAD app), browser (`cadgen viewer`)
 );
+-- Schema 2 names where an install came from (`channel`), where schema 1 said how it was installed
+-- (`source`: store | manual). The column is renamed, and what schema 1 sent, which names no channel,
+-- is unknown.
+do $$
+begin
+  if exists (select 1 from information_schema.columns
+             where table_schema = current_schema() and table_name = 'events' and column_name = 'source') then
+    alter table events rename column source to channel;
+    update events set channel = 'unknown';
+  end if;
+end $$;
 alter table events add column if not exists file text;
 alter table events add column if not exists kind text;
 create index if not exists events_received_at on events (received_at);

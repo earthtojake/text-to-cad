@@ -8,7 +8,7 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "node --test src/lib/analytics/*.test.mjs",
+    "test": "node --test src/lib/api/*.test.mjs",
     "check": "node scripts/check-hero-step-assets.mjs && npm test && npm run lint && npm run build && npm run icon:verify",
     "predev": "npm run icon:generate",
     "prebuild": "npm run icon:generate",

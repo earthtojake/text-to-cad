@@ -1,12 +1,14 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { handle, RETENTION_DAYS } from './handler.mjs';
+import { STORES, versions } from './versions.mjs';
 
 const INSTALL = '8c347ec3-1342-4db5-a19a-491cbc8c59be';
 const SESSION = '0b1e6f1a-6a52-4c39-9d43-2f5e0f0b9d11';
 // What cadgen/analytics.py sends.
 const BATCH = {
-  schema: 1, install: INSTALL, session: SESSION, version: '0.7.6', source: 'store', platform: 'darwin', arch: 'arm64',
+  schema: 2, install: INSTALL, session: SESSION, version: '0.7.6', channel: 'claude-directory', platform: 'darwin', arch: 'arm64',
   client: { name: 'codex-mcp-client', version: '0.159.0' }, presentation: 'tabs',
   events: [
     { name: 'tool', tool: 'cad_show', calls: 3, errors: 1 },
@@ -45,7 +47,7 @@ test('a batch becomes one row per event, carrying its context and nothing else',
     ['view', null, null, null, 7, 0],
     ['file', null, '3f9a1c0be47d2a55', 'step', 1, 0],
   ]);
-  assert.deepEqual(Object.keys(store.rows[0]).sort(), ['arch', 'calls', 'client', 'client_version', 'errors', 'event', 'file', 'install_id', 'kind', 'platform', 'presentation', 'session_id', 'source', 'tool', 'version']);
+  assert.deepEqual(Object.keys(store.rows[0]).sort(), ['arch', 'calls', 'channel', 'client', 'client_version', 'errors', 'event', 'file', 'install_id', 'kind', 'platform', 'presentation', 'session_id', 'tool', 'version']);
 });
 
 test('where installs are is kept as totals: each counts once a week and a month, never beside its rows', async () => {
@@ -82,6 +84,8 @@ test('anything outside the contract is refused and stores nothing', async () => 
     { ...BATCH, events: [...BATCH.events, BATCH.events[1]] }, // a second view
     { ...BATCH, events: [...BATCH.events, BATCH.events[2]] }, // the same file twice
     { ...BATCH, events: [{ name: 'tool', tool: 'cad_show', calls: 1, errors: null }] },
+    { ...BATCH, channel: 'store' },
+    { ...BATCH, schema: 1 },
   ]) assert.equal((await send(store, 'POST', '/v1/events', bad)).status, 400, JSON.stringify(bad));
   assert.equal((await send(store, 'POST', '/v1/events', '{')).status, 400);
   assert.equal((await send(store, 'POST', '/v1/events', 'x'.repeat(20_000))).status, 400);
@@ -118,4 +122,22 @@ test('health fails without a setting, or with tables a batch cannot be stored in
   const stale = { ...memory(), async ready() { throw Object.assign(new Error('column "kind" does not exist'), { code: '42703' }); } };
   const reply = await send(stale, 'GET', '/v1/health');
   assert.deepEqual([reply.status, await reply.json()], [503, { ok: false, error: '42703' }]);
+});
+
+test('the version feed is the same for everyone, kept at the edge, and answers without a database', async () => {
+  const feed = { latest: '0.9.0', minimum: { 'claude-directory': '0.8.2' } };
+  const down = { ...memory(), async ready() { throw new Error('unreachable'); } };
+  const reply = await handle(new Request('https://api.texttocad.dev/v1/versions'), down, { versions: feed, missing: ['DATABASE_URL'] });
+  assert.deepEqual([reply.status, await reply.json()], [200, feed]);
+  assert.equal(reply.headers.get('cache-control'), 'public, s-maxage=86400');
+});
+
+test("this release's feed names it, and a store's minimum is a release no later", () => {
+  const release = value => /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(value) ? value.split('.').map(Number) : null;
+  const order = (a, b) => a.map((part, index) => part - b[index]).find(difference => difference !== 0) ?? 0;
+  assert.equal(versions.latest, readFileSync(new URL('../../../../../VERSION', import.meta.url), 'utf8').trim());
+  for (const [store, minimum] of Object.entries(versions.minimum)) {
+    assert.ok(STORES.includes(store), `${store} is not a store`);
+    assert.ok(release(minimum) && order(release(minimum), release(versions.latest)) <= 0, `${store}: ${minimum}`);
+  }
 });
