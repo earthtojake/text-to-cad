@@ -112,11 +112,17 @@ actions use muted shades of the logo's pastel blue through shadcn semantic
 tokens: #2c7197 in light mode and #30779d in dark mode, with #f5fbff labels.
 Text contrast is 5.14:1 and 4.73:1 respectively; the solid darker hover shades
 also exceed 4.5:1. Focus rings use a deeper brand blue on white and the logo's
-pale highlight on charcoal. All installation Copy buttons use the same blue
-primary action style. Install uses the same heading scale as Skills. The header lists Install, Skills
-and Plugins, with Install active by default and the active link following the
-visible section. Install has one Skills CLI command; Plugins contains only
-provider-native installation commands and guidance. Install boxes and explanatory text fill the content width.
+pale highlight on charcoal. The install message's Copy button uses the blue
+primary action style; the manual installs' are plain. Overview, Install and Skills
+share one heading scale, and the header lists them, the active link following the
+visible section. Overview carries the plugin's description, which every manifest
+and the README's Overview say word for word (`test_plugin_manifests.py` holds
+them to one text), and the agents' logos scrolling as skills.sh's do: skills.sh's
+logo set in `public/agents/`, with Grok's glyph from Lobe Icons (MIT) in the same
+tile, each tile blended into the page's background. A logo leads to its install.
+Install leads with the message to send to an agent, then Manual: one sub-section
+per agent app, Other Agents (the Skills CLI) for the rest, and Request Plugin, a
+new GitHub issue. Install boxes and explanatory text fill the content width.
 Command text remains monospace. The unboxed wordmark and one prominent tagline
 sit above the independently framed CAD demo. “100% open source and free.” follows
 “Give your agent CAD superpowers.” in blue, using a lighter brand shade on dark

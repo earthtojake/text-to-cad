@@ -1,29 +1,38 @@
 import { ExternalLink } from "lucide-react";
+import Image from "next/image";
 import { CopyButton } from "@/components/copy-button";
 import { HeroSection } from "@/components/hero-section";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
+import { Button } from "@/components/ui/button";
 import { absoluteUrl, siteConfig } from "@/lib/site";
+
+// What the plugin is: its long description, as every plugin manifest says it.
+const pluginDescription =
+  "The text-to-cad plugin gives your agent local workflows for generating 3D models as STEP, GLB, STL or 3MF files. It also does design for manufacturing checks, generates engineering drawings, and connects to popular 3D printing, sheet metal and CNC fabrication services.";
 
 // The install: a message for the agent, which finds the install for its own app in the repository
 // (the README's Install, which says the same).
-const agentInstallMessage = "Install text-to-cad for this agent from https://github.com/earthtojake/text-to-cad";
+const agentInstallMessage = "Install text-to-cad from https://github.com/earthtojake/text-to-cad";
 
 // Installing by hand, under Manual, each its own sub-section: the plugin for each agent app (the
-// skills and CAD's viewer together), then the Skills CLI for an agent without one.
+// skills and CAD's viewer together), then the skills alone, with the Skills CLI, for any other agent.
 const installs = [
   {
+    id: "claude-code",
     agent: "Claude Code",
     command:
       "claude plugin marketplace add earthtojake/text-to-cad\nclaude plugin install text-to-cad@earthtojake",
   },
   {
+    id: "codex",
     agent: "Codex",
     note: "Requires Codex 0.142.0 or newer.",
     command:
       "codex plugin marketplace add earthtojake/text-to-cad\ncodex plugin add text-to-cad@earthtojake",
   },
   {
+    id: "cursor",
     agent: "Cursor",
     note: "Cursor also loads the Claude Code plugin: install one or the other.",
     command:
@@ -32,20 +41,53 @@ const installs = [
   // Grok Build reads the Claude plugin manifest -- there is no separate Grok manifest -- and
   // installs straight from the repo rather than adding a marketplace first.
   {
+    id: "grok-build",
     agent: "Grok Build",
     note: "Grok Build also loads the Claude Code plugin: install one or the other.",
     command: "grok plugin install earthtojake/text-to-cad --trust\ngrok plugin enable text-to-cad",
   },
   {
-    agent: "Gemini CLI",
+    id: "gemini",
+    agent: "Gemini",
     command: "gemini extensions install https://github.com/earthtojake/text-to-cad",
   },
   {
-    agent: "Skills CLI",
+    id: "other-agents",
+    agent: "Other Agents",
     note: "For an agent without a plugin: the skills alone.",
     command: "npx skills add earthtojake/text-to-cad",
   },
 ];
+
+// The agents text-to-cad installs into, as skills.sh shows them (its logos, in public/agents/), and
+// Grok (Lobe Icons' glyph, MIT, in skills.sh's tile). A logo leads to its install under Manual: its
+// plugin's where the agent has one, the skills alone (Other Agents) where it has none.
+const agents = [
+  { name: "Claude Code", logo: "claude-code", install: "claude-code" },
+  { name: "Codex", logo: "codex", install: "codex" },
+  { name: "Cursor", logo: "cursor", install: "cursor" },
+  { name: "Gemini", logo: "gemini", install: "gemini" },
+  { name: "Grok", logo: "grok", install: "grok-build" },
+  { name: "GitHub Copilot", logo: "copilot", install: "other-agents" },
+  { name: "Windsurf", logo: "windsurf", install: "other-agents" },
+  { name: "Cline", logo: "cline", install: "other-agents" },
+  { name: "AMP", logo: "amp", install: "other-agents" },
+  { name: "Antigravity", logo: "antigravity", install: "other-agents" },
+  { name: "OpenClaw", logo: "openclaw", install: "other-agents" },
+  { name: "Droid", logo: "droid", install: "other-agents" },
+  { name: "Goose", logo: "goose", install: "other-agents" },
+  { name: "Kilo", logo: "kilo", install: "other-agents" },
+  { name: "Kiro CLI", logo: "kiro-cli", install: "other-agents" },
+  { name: "Nous Research", logo: "nous-research", install: "other-agents" },
+  { name: "OpenCode", logo: "opencode", install: "other-agents" },
+  { name: "Roo", logo: "roo", install: "other-agents" },
+  { name: "Trae", logo: "trae", install: "other-agents" },
+  { name: "VS Code", logo: "vscode", install: "other-agents" },
+  { name: "Zed", logo: "zed", install: "other-agents" },
+];
+
+// A plugin for an agent that has none: a new issue, titled for the person to name it.
+const pluginRequestUrl = `${siteConfig.repository}/issues/new?title=${encodeURIComponent("Plugin request: ")}`;
 
 const skillGroups = [
   {
@@ -137,9 +179,45 @@ function AgentMessage() {
   );
 }
 
+// The agents' logos, scrolling as skills.sh's do: two copies side by side, moved one copy's width
+// and over again, paused under the pointer, and still for anyone who asks for less motion. Each
+// tile is a black square: it takes the page's own colour, lightened into the dark theme and, inverted,
+// darkened into the light one. The track keeps the page's background behind it to blend with.
+function AgentCarousel() {
+  const logos = (copy: number) => (
+    <ul className={copy ? "flex shrink-0 motion-reduce:hidden" : "flex shrink-0"} aria-hidden={copy ? true : undefined}>
+      {agents.map((agent) => (
+        <li key={agent.logo}>
+          <a href={`#${agent.install}`} title={`Install text-to-cad for ${agent.name}`} tabIndex={copy ? -1 : undefined}>
+            <Image
+              src={`/agents/${agent.logo}.svg`}
+              alt={agent.name}
+              width={100}
+              height={100}
+              unoptimized
+              className="h-[72px] w-auto invert mix-blend-darken lg:h-[88px] dark:invert-0 dark:mix-blend-lighten"
+            />
+          </a>
+        </li>
+      ))}
+    </ul>
+  );
+  return (
+    <div className="space-y-3 pt-3">
+      <h3 className="font-mono text-sm font-medium uppercase text-foreground">Available for these agents</h3>
+      <div className="overflow-hidden [mask-image:linear-gradient(to_right,transparent,black_8%,black_92%,transparent)] motion-reduce:overflow-x-auto">
+        <div className="flex w-max animate-[agents-carousel_110s_linear_infinite] bg-background hover:[animation-play-state:paused] motion-reduce:animate-none">
+          {logos(0)}
+          {logos(1)}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Install({ item }: { item: (typeof installs)[number] }) {
   return (
-    <div className="min-w-0 space-y-2">
+    <div id={item.id} className="min-w-0 scroll-mt-20 space-y-2">
       <div>
         <h4 className="text-sm font-medium text-foreground">{item.agent}</h4>
         {item.note ? <p className="mt-1 text-sm leading-6 text-muted-foreground">{item.note}</p> : null}
@@ -235,6 +313,15 @@ export default function Home() {
         <div className="min-w-0 space-y-2">
           <HeroSection />
 
+          <section id="overview" aria-labelledby="overview-title" className="scroll-mt-20 space-y-3 py-6">
+            <SectionIntro id="overview-title" title="Overview" description={pluginDescription} />
+            <p className="text-sm leading-6 text-muted-foreground">
+              text-to-cad is available for all popular agents that support plugins and skills, including
+              Claude Code, Codex, Cursor, Gemini and Grok.
+            </p>
+            <AgentCarousel />
+          </section>
+
           <section id="installation" aria-labelledby="installation-title" className="scroll-mt-20 space-y-3 py-6">
             <SectionIntro
               id="installation-title"
@@ -253,6 +340,12 @@ export default function Home() {
               {installs.map((item) => (
                 <Install key={item.agent} item={item} />
               ))}
+              <div className="flex flex-wrap items-center gap-3">
+                <p className="text-sm leading-6 text-muted-foreground">No plugin for your agent yet?</p>
+                <Button asChild variant="outline" size="sm">
+                  <a href={pluginRequestUrl} target="_blank" rel="noreferrer">Request Plugin</a>
+                </Button>
+              </div>
             </div>
           </section>
 

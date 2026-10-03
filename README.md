@@ -22,17 +22,22 @@ Give your agent CAD superpowers.
 
 # text-to-cad
 
-Give your agent CAD superpowers. The text-to-cad plugin gives your agent local
-workflows for generating 3D models as STEP, GLB, STL or 3MF files. It also does
-design for manufacturing checks, generates engineering drawings, and connects to
-popular 3D printing, sheet metal and CNC fabrication services.
+## 📖 Overview
+
+The text-to-cad plugin gives your agent local workflows for generating 3D models
+as STEP, GLB, STL or 3MF files. It also does design for manufacturing checks,
+generates engineering drawings, and connects to popular 3D printing, sheet metal
+and CNC fabrication services.
+
+text-to-cad is available for all popular agents that support plugins and skills,
+including Claude Code, Codex, Cursor, Gemini and Grok.
 
 ## 💻 Install
 
 Send this message to your agent and it will install text-to-cad automatically.
 
 ```text
-Install text-to-cad for this agent from https://github.com/earthtojake/text-to-cad
+Install text-to-cad from https://github.com/earthtojake/text-to-cad
 ```
 
 ### Manual
@@ -40,7 +45,7 @@ Install text-to-cad for this agent from https://github.com/earthtojake/text-to-c
 Install the plugin for your agent app. It brings the skills and CAD's viewer, a
 local server (`cadgen mcp`) that runs through [uv](https://docs.astral.sh/uv/),
 which must be installed. For an agent without a plugin, install the skills alone
-with the [Skills CLI](#skills-cli). Install one or the other in an app, not both:
+(see [Other Agents](#other-agents)). Install one or the other in an app, not both:
 two copies means every skill twice. Restart your agent if newly installed skills
 do not appear.
 
@@ -120,19 +125,19 @@ Grok Build reads the Claude plugin manifest, and also loads plugins installed
 with Claude Code: install one or the other. Grok shows tool results as text, so
 asking it to show a model gives you a CAD Viewer link.
 
-#### Gemini CLI
+#### Gemini
 
 ```bash
 gemini extensions install https://github.com/earthtojake/text-to-cad
 ```
 
-Gemini CLI installs the latest release as an extension, with the skills and CAD's
+Gemini installs the latest release as an extension, with the skills and CAD's
 server; `gemini extensions update text-to-cad` updates it. Like Grok, it shows
 tool results as text, so asking it to show a model gives you a CAD Viewer link.
 
-#### Skills CLI
+#### Other Agents
 
-For an agent without a plugin, install the skills alone:
+For an agent without a plugin, install the skills alone with the Skills CLI:
 
 ```bash
 npx skills add earthtojake/text-to-cad
@@ -152,6 +157,9 @@ Neither command removes a skill that was retired upstream; drop one with
 `npx skills remove <skill>` if you need to. The retired `cad-viewer` skill is
 now covered by the CAD, DXF and robot-description skills; remove old standalone
 installs with `npx skills remove cad-viewer`.
+
+No plugin for your agent yet?
+[Request one](https://github.com/earthtojake/text-to-cad/issues/new?title=Plugin%20request%3A%20).
 
 ### Usage analytics
 
