@@ -85,9 +85,9 @@ export function SiteHeaderClient({
   version: string;
 }) {
   const [activeSection, setActiveSection] = useState<string>(NAV_SECTIONS[0].id);
-  // The hero's wordmark in sight (below this header). A phone's navbar has no section links, so once
-  // the wordmark is out of sight -- scrolled away, or a page without one -- the CAD logo takes the
-  // corner, a way back home.
+  // The hero's wordmark in sight (below this header). On a desktop, once it is out of sight --
+  // scrolled away, or a page without one -- the CAD logo slides into the header's corner, before the
+  // section links: the brand still in view, and a way back home. A phone shows the logo throughout.
   const [wordmarkInSight, setWordmarkInSight] = useState(heroWordmark);
 
   useEffect(() => {
@@ -147,11 +147,11 @@ export function SiteHeaderClient({
         <Link
           href="/"
           aria-label="text-to-cad home"
-          aria-hidden={wordmarkInSight || undefined}
-          tabIndex={wordmarkInSight ? -1 : undefined}
           className={cn(
-            "flex shrink-0 items-center transition-opacity duration-200 sm:hidden",
-            wordmarkInSight && "pointer-events-none opacity-0"
+            "flex w-[46px] shrink-0 items-center overflow-hidden transition-[width,margin,opacity,visibility] duration-300 ease-out",
+            // On a desktop, out of the row while the wordmark shows: no width, the row's gap taken back,
+            // and out of the tab order. A phone, with no section links to fill the corner, always shows it.
+            wordmarkInSight && "sm:invisible sm:-mr-3 sm:w-0 sm:opacity-0"
           )}
         >
           <Image

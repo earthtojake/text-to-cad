@@ -71,7 +71,9 @@ scripts/         # asset checks
 ## Brand and loading icon
 
 The header uses the blue CAD wordmark and favicons use C, both with soft relief shading. The homepage
-and repository README use the TEXTTOCAD PNG. `/icon` provides downloadable
+and repository README use the TEXTTOCAD PNG. A phone's header always shows the CAD wordmark at its
+left; a desktop's slides it in before the section links once the homepage's TEXTTOCAD has scrolled
+out of sight (a page without one shows it throughout). `/icon` provides downloadable
 C, CAD and TEXTTOCAD SVGs and PNGs, followed by the original animated loading-icon
 playground. The original mesh, animation and the shared UI loading assets stay
 unchanged.
@@ -115,12 +117,13 @@ also exceed 4.5:1. Focus rings use a deeper brand blue on white and the logo's
 pale highlight on charcoal. Every Copy button is one size; the install message's
 uses the blue primary action style, the others are plain. Every section title
 shares one heading scale, and the header lists Overview, Install and Skills, the
-active link following the visible section. Under the hero, Available for these
-agents scrolls the agents' logos as skills.sh's do: skills.sh's logo set in
-`public/agents/`, with Grok's glyph from Lobe Icons (MIT) in the same tile, each
-tile blended into the page's background. A logo leads to its install. Overview
-carries the plugin's description, which every manifest and the README's Overview
-say word for word (`test_plugin_manifests.py` holds them to one text). Install
+active link following the visible section. Overview opens with Available for
+these agents, first so a phone shows it on load: the agents' logos scrolling as
+skills.sh's do, skills.sh's logo set in `public/agents/` with Grok's glyph from
+Lobe Icons (MIT) in the same tile, each tile blended into the page's background.
+A logo leads to its install. Then the plugin's description, which every manifest
+and the README's Overview say word for word (`test_plugin_manifests.py` holds
+them to one text). Install
 leads with the message to send to an agent, then a sub-section per agent app,
 Other Agents (the Skills CLI) for the rest, and Request Plugin, a new GitHub
 issue. Install boxes and explanatory text fill the content width. Command text
