@@ -5,13 +5,12 @@ import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { absoluteUrl, siteConfig } from "@/lib/site";
 
-// The quickest start: a message for the agent, which reads the README's install steps and takes
-// the one for its own app. The README's Get Started says the same.
-const agentInstallMessage =
-  "Install text-to-cad for this agent app from https://github.com/earthtojake/text-to-cad: follow the Install section of its README, using this app's plugin if it has one and the Skills CLI if not.";
+// The install: a message for the agent, which finds the install for its own app in the repository
+// (the README's Install, which says the same).
+const agentInstallMessage = "Install text-to-cad for this agent from https://github.com/earthtojake/text-to-cad";
 
-// Installing by hand, each its own sub-section: the plugin for each agent app (the skills and CAD's
-// viewer together), then the Skills CLI for an agent without one.
+// Installing by hand, under Manual, each its own sub-section: the plugin for each agent app (the
+// skills and CAD's viewer together), then the Skills CLI for an agent without one.
 const installs = [
   {
     agent: "Claude Code",
@@ -142,7 +141,7 @@ function Install({ item }: { item: (typeof installs)[number] }) {
   return (
     <div className="min-w-0 space-y-2">
       <div>
-        <h3 className="text-sm font-medium text-foreground">{item.agent}</h3>
+        <h4 className="text-sm font-medium text-foreground">{item.agent}</h4>
         {item.note ? <p className="mt-1 text-sm leading-6 text-muted-foreground">{item.note}</p> : null}
       </div>
       <div className={COMMAND_BOX_CLASS}>
@@ -236,13 +235,25 @@ export default function Home() {
         <div className="min-w-0 space-y-2">
           <HeroSection />
 
-          <section id="get-started" aria-labelledby="get-started-title" className="scroll-mt-20 space-y-3 py-6">
+          <section id="installation" aria-labelledby="installation-title" className="scroll-mt-20 space-y-3 py-6">
             <SectionIntro
-              id="get-started-title"
-              title="Get Started"
-              description="Copy this message to your agent. It finds the install for its app and sets it up."
+              id="installation-title"
+              title="Install"
+              description="Send this message to your agent and it will install text-to-cad automatically."
             />
             <AgentMessage />
+            <div className="space-y-6 pt-6">
+              <div>
+                <h3 className="text-base font-semibold text-foreground">Manual</h3>
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                  The plugin brings the skills and CAD&apos;s viewer, a local server that runs through uv,
+                  which must be installed. Restart your agent if newly installed skills do not appear.
+                </p>
+              </div>
+              {installs.map((item) => (
+                <Install key={item.agent} item={item} />
+              ))}
+            </div>
           </section>
 
           <section
@@ -290,16 +301,6 @@ export default function Home() {
             </div>
           </section>
 
-          <section id="installation" aria-labelledby="installation-title" className="scroll-mt-20 space-y-6 py-6">
-            <SectionIntro
-              id="installation-title"
-              title="Install"
-              description="Or install it yourself. The plugin brings the skills and CAD's viewer, a local server that runs through uv, which must be installed. Restart your agent if newly installed skills do not appear."
-            />
-            {installs.map((item) => (
-              <Install key={item.agent} item={item} />
-            ))}
-          </section>
         </div>
       </div>
 

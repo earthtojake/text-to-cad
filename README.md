@@ -27,38 +27,15 @@ workflows for generating 3D models as STEP, GLB, STL or 3MF files. It also does
 design for manufacturing checks, generates engineering drawings, and connects to
 popular 3D printing, sheet metal and CNC fabrication services.
 
-## 🚀 Get Started
+## 💻 Install
 
-Copy this message to your agent:
+Send this message to your agent and it will install text-to-cad automatically.
 
 ```text
-Install text-to-cad for this agent app from https://github.com/earthtojake/text-to-cad: follow the Install section of its README, using this app's plugin if it has one and the Skills CLI if not.
+Install text-to-cad for this agent from https://github.com/earthtojake/text-to-cad
 ```
 
-It finds the install for its app under [Install](#-install) and sets it up. To
-install it yourself, see the same section.
-
-## 🧰 Skills
-
-Install the library to give agents focused workflows for CAD, fabrication,
-robot description files, simulation, and local review.
-
-| Skill        | Summary                                                                                                                                            | Source                                              |
-| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
-| CAD          | Creates and edits CAD models from plain-language or image requests, with STEP as the main output along with options to export to STL, 3MF and GLB. | [skills/cad](skills/cad/SKILL.md)                   |
-| step.parts   | Finds off-the-shelf STEP parts like screws, bearings, motors, and connectors.                                                                      | [skills/step-parts](skills/step-parts/SKILL.md)     |
-| Engineering Drawing | Dimensioned engineering drawings from a part, as a PDF: views, hidden lines, dimensions, hole callouts, title block. | [skills/engineering-drawing](skills/engineering-drawing/SKILL.md) |
-| DXF          | Creates 2D DXF drawings like profiles, templates, gaskets, and cut layouts from Python sources or CAD geometry.                                    | [skills/dxf](skills/dxf/SKILL.md)                   |
-| URDF         | Writes robot structure files with links, joints, limits, inertials, and meshes.                                                                    | [skills/urdf](skills/urdf/SKILL.md)                 |
-| SRDF         | Adds MoveIt planning groups, end effectors, poses, and collision rules to a URDF.                                                                  | [skills/srdf](skills/srdf/SKILL.md)                 |
-| SDF          | Creates simulator models and worlds with frames, physics, sensors, and lights.                                                                     | [skills/sdf](skills/sdf/SKILL.md)                   |
-| SendCutSend  | Checks DXF and STEP files before upload to SendCutSend.                                                                                            | [skills/sendcutsend](skills/sendcutsend/SKILL.md)   |
-| DfAM Check   | Measures mesh printability per process: wall thickness, overhangs, support volume, and build orientation.                                          | [skills/dfam-check](skills/dfam-check/SKILL.md)     |
-| DFM | Reviews a part for sheet metal, CNC machining, or injection molding, with measured evidence and the cited rule behind every finding; measures draft, undercuts and projected area from a mesh. | [skills/dfm](skills/dfm/SKILL.md) |
-| G-code       | Slices models into printer-ready G-code with OrcaSlicer, using your own printer presets.                                                           | [skills/gcode](skills/gcode/SKILL.md)               |
-| Bambu Labs   | Sends prints to Bambu Lab printers through Bambu Connect, Bambu Lab's official app, or Bambu Studio.                                               | [skills/bambu-labs](skills/bambu-labs/SKILL.md)     |
-
-## 💻 Install
+### Manual
 
 Install the plugin for your agent app. It brings the skills and CAD's viewer, a
 local server (`cadgen mcp`) that runs through [uv](https://docs.astral.sh/uv/),
@@ -67,7 +44,7 @@ with the [Skills CLI](#skills-cli). Install one or the other in an app, not both
 two copies means every skill twice. Restart your agent if newly installed skills
 do not appear.
 
-### Claude Code
+#### Claude Code
 
 ```bash
 claude plugin marketplace add earthtojake/text-to-cad
@@ -79,7 +56,7 @@ shows models as viewer cards in the conversation; otherwise, as in a terminal,
 asking it to show a model gives you a link that opens the model in the CAD
 Viewer in your browser.
 
-### Claude Desktop
+#### Claude Desktop
 
 CAD shows models in the chat: ask Claude to show one and it appears as a viewer
 card you can orbit, add to your prompt, and open full size; Claude can read what
@@ -98,7 +75,7 @@ the [latest release](https://pypi.org/project/cadgen/) and restart the app.
 }
 ```
 
-### Codex
+#### Codex
 
 ```bash
 codex plugin marketplace add earthtojake/text-to-cad
@@ -120,7 +97,7 @@ and restart the app: its first start downloads the new runtime. The marketplace 
 to `earthtojake`; if you added it before, remove the old one first
 (`codex plugin marketplace remove text-to-cad`).
 
-### Cursor
+#### Cursor
 
 ```bash
 git clone --depth 1 https://github.com/earthtojake/text-to-cad ~/.cursor/plugins/local/text-to-cad
@@ -132,7 +109,7 @@ Claude Code, so skip this if you installed the Claude Code plugin. Teams can
 import the repository instead, under **Dashboard → Plugins & MCPs → Team
 Marketplaces**.
 
-### Grok Build
+#### Grok Build
 
 ```bash
 grok plugin install earthtojake/text-to-cad --trust
@@ -143,7 +120,7 @@ Grok Build reads the Claude plugin manifest, and also loads plugins installed
 with Claude Code: install one or the other. Grok shows tool results as text, so
 asking it to show a model gives you a CAD Viewer link.
 
-### Gemini CLI
+#### Gemini CLI
 
 ```bash
 gemini extensions install https://github.com/earthtojake/text-to-cad
@@ -153,7 +130,7 @@ Gemini CLI installs the latest release as an extension, with the skills and CAD'
 server; `gemini extensions update text-to-cad` updates it. Like Grok, it shows
 tool results as text, so asking it to show a model gives you a CAD Viewer link.
 
-### Skills CLI
+#### Skills CLI
 
 For an agent without a plugin, install the skills alone:
 
@@ -206,6 +183,26 @@ Control settings; once off it can only be turned back on by reinstalling
 Windows) or run the CAD skills under WSL, where it does not apply. The wheel
 is built by the cadquery-ocp project, so signing it is not something this
 repository can do.
+
+## 🧰 Skills
+
+Install the library to give agents focused workflows for CAD, fabrication,
+robot description files, simulation, and local review.
+
+| Skill        | Summary                                                                                                                                            | Source                                              |
+| ------------ | -------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------- |
+| CAD          | Creates and edits CAD models from plain-language or image requests, with STEP as the main output along with options to export to STL, 3MF and GLB. | [skills/cad](skills/cad/SKILL.md)                   |
+| step.parts   | Finds off-the-shelf STEP parts like screws, bearings, motors, and connectors.                                                                      | [skills/step-parts](skills/step-parts/SKILL.md)     |
+| Engineering Drawing | Dimensioned engineering drawings from a part, as a PDF: views, hidden lines, dimensions, hole callouts, title block. | [skills/engineering-drawing](skills/engineering-drawing/SKILL.md) |
+| DXF          | Creates 2D DXF drawings like profiles, templates, gaskets, and cut layouts from Python sources or CAD geometry.                                    | [skills/dxf](skills/dxf/SKILL.md)                   |
+| URDF         | Writes robot structure files with links, joints, limits, inertials, and meshes.                                                                    | [skills/urdf](skills/urdf/SKILL.md)                 |
+| SRDF         | Adds MoveIt planning groups, end effectors, poses, and collision rules to a URDF.                                                                  | [skills/srdf](skills/srdf/SKILL.md)                 |
+| SDF          | Creates simulator models and worlds with frames, physics, sensors, and lights.                                                                     | [skills/sdf](skills/sdf/SKILL.md)                   |
+| SendCutSend  | Checks DXF and STEP files before upload to SendCutSend.                                                                                            | [skills/sendcutsend](skills/sendcutsend/SKILL.md)   |
+| DfAM Check   | Measures mesh printability per process: wall thickness, overhangs, support volume, and build orientation.                                          | [skills/dfam-check](skills/dfam-check/SKILL.md)     |
+| DFM | Reviews a part for sheet metal, CNC machining, or injection molding, with measured evidence and the cited rule behind every finding; measures draft, undercuts and projected area from a mesh. | [skills/dfm](skills/dfm/SKILL.md) |
+| G-code       | Slices models into printer-ready G-code with OrcaSlicer, using your own printer presets.                                                           | [skills/gcode](skills/gcode/SKILL.md)               |
+| Bambu Labs   | Sends prints to Bambu Lab printers through Bambu Connect, Bambu Lab's official app, or Bambu Studio.                                               | [skills/bambu-labs](skills/bambu-labs/SKILL.md)     |
 
 ## 🛠️ Contributing
 
