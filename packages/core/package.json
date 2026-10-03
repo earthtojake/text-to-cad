@@ -40,7 +40,7 @@
     "three-mesh-bvh": "0.9.15"
   },
   "devDependencies": {
-    "@types/node": "22.20.1",
+    "@types/node": "26.6.3",
     "@types/three": "^0.186.0",
     "esbuild": "0.28.2",
     "playwright": "^1.63.0",
