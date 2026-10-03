@@ -12,12 +12,18 @@ repository link is only for provenance and release review.
 
 ## Setup
 
-This skill's commands are thin entrypoints over the `cadgen` distribution, which
-carries the Python build runtime and the JavaScript it executes. Install it once:
+Run cadgen through [uv](https://docs.astral.sh/uv/), so this skill's commands share
+one installation, and its warm build daemon, with the CAD app's server:
 
-```bash
-python -m pip install -r requirements.txt
-```
+- `cadgen` below means `uvx --no-config --managed-python --python 3.13 --from cadgen==0.7.11 cadgen`
+- `python` below means `uvx --no-config --managed-python --python 3.13 --from cadgen==0.7.11 python`
+
+The first run downloads that installation and the first snapshot its headless
+browser; later runs reuse both.
+
+`cadgen doctor <skill-dir>` reports the installation in use and checks that it is
+the one this skill pins, and that the CAD kernel loads; use it for installation or
+kernel load errors.
 
 Drawings are build123d geometry, so a drawing build loads the CAD kernel like a
 STEP build does (~2.5s cold; the warm daemon absorbs it on re-runs).

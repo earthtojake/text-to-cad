@@ -38,8 +38,8 @@ export CADGEN_VIEWER_DIST="$RUNTIME"
 
 log="$(mktemp)"
 serve_root="$(mktemp -d)"
-# This is the interpreter that plays the role of "the one that installed
-# skills/cad/requirements.txt" -- the server is a module of that cadgen.
+# This is the interpreter that plays the role of "the one the CAD skill's
+# launch command runs" -- the server is a module of that cadgen.
 #
 # Resolution FALLS BACK instead of demanding a repo venv, because there are two
 # venv-less callers and both are ordinary:

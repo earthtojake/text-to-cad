@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { readFileSync, realpathSync, writeFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, realpathSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -23,15 +23,31 @@ const tomlTargets = [
   "packages/cadgen/pyproject.toml",
 ];
 
+// Every skill that runs cadgen teaches the launch command (`uvx ... --from cadgen==<version>`)
+// in its SKILL.md, pinned like the server's so the two share one installation.
+function skillLaunchTargets() {
+  const skills = path.join(repoRoot, "skills");
+  if (!existsSync(skills)) {
+    return [];
+  }
+  return readdirSync(skills, { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => `skills/${entry.name}/SKILL.md`)
+    .filter((relative) => existsSync(path.join(repoRoot, relative)))
+    .filter((relative) => readFileSync(path.join(repoRoot, relative), "utf8").includes("--from cadgen=="))
+    .sort();
+}
+
 // Files that pin the cadgen runtime by a requirement string rather than a version field: the
-// commands the agent apps run to start CAD's MCP server, and the README's Claude Desktop config.
-// A file may also be a JSON target (the Gemini extension carries both); its pin is stamped on top
-// of that change, not over it.
+// commands the agent apps run to start CAD's MCP server, the README's Claude Desktop config,
+// and every cadgen skill's launch command. A file may also be a JSON target (the Gemini
+// extension carries both); its pin is stamped on top of that change, not over it.
 export const pinTargets = [
   "codex.mcp.json",
   "claude.mcp.json",
   "gemini-extension.json",
   "README.md",
+  ...skillLaunchTargets(),
 ];
 
 function usage() {

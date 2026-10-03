@@ -239,6 +239,23 @@ class PluginManifestPolicyTest(unittest.TestCase):
         self.assertNotIn("contextFileName", manifest)
         self.assertFalse((REPO_ROOT / "GEMINI.md").exists())
 
+    def test_every_server_runs_the_one_launch_command(self) -> None:
+        # The plugins' servers and the skills run cadgen as one command (cadgen._internal.launch),
+        # so they share one installation and one warm daemon: no config may spell it differently.
+        import sys
+
+        sys.path.insert(0, str(REPO_ROOT / "packages" / "cadgen" / "src"))
+        from cadgen._internal.launch import LAUNCHER
+
+        version = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
+        expected = [*LAUNCHER[1:], f"cadgen=={version}", "cadgen", "mcp"]
+        for path in (CLAUDE_MCP_PATH, CODEX_MCP_PATH, GEMINI_EXTENSION_PATH):
+            with self.subTest(path=path.name):
+                server = load_json(path)["mcpServers"]["cad"]
+                self.assertEqual((server["command"], server["args"]), (LAUNCHER[0], expected))
+        readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+        self.assertIn('"args": [' + ", ".join(json.dumps(arg) for arg in expected) + "]", readme)
+
     def test_no_stale_plugin_subdirectory_package_remains(self) -> None:
         # The generated `plugins/cad/skills` copy is what the repo-root move
         # removed. If it reappears, the duplicate would silently go stale.

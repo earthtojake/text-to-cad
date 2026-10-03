@@ -21,8 +21,8 @@ Usage:
   scripts/release/bump-version.sh --check-incremented-from REF
 
 Writes the canonical release version to VERSION. Nothing else: the release PR
-commits it, scripts/release/sync-version.mjs stamps the derived metadata and
-scripts/release/pin-cadgen-requirements.sh the skill pins, and Publish Release
+commits it, scripts/release/sync-version.mjs stamps the derived metadata and the
+cadgen pins (plugin server configs, skill launch commands), and Publish Release
 tags the merge. Prepare Release is the normal caller; running it by hand is the
 local fallback for that same PR.
 

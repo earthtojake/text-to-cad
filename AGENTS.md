@@ -46,11 +46,15 @@ user explicitly asks to test the pipeline.
 The standalone `Deploy Docs` workflow redeploys the docs site from a ref
 (default `main`, or a release tag) without running a release.
 
-Skill `requirements.txt` files pin `cadgen==<VERSION>` on `main` itself;
-`scripts/release/check-version.sh` asserts every pin equals `VERSION`. A
-checkout's editable install reports that same version, so the pin is satisfied
-in development too — install `requirements-dev.txt`, never a skill's
-`requirements.txt` on its own (that fetches the previous release from PyPI).
+cadgen runs as ONE launch command everywhere, `uvx --no-config --managed-python
+--python 3.13 --from cadgen==<VERSION> <tool>` (`cadgen._internal.launch`): the
+plugin server configs and every cadgen skill's SKILL.md carry it, the release
+stamps every pin (`sync-version.mjs`), and `scripts/release/check-version.sh`
+and the tests assert they all equal `VERSION`. uv keeps one installation per
+requirement and cadgen names its warm daemon after that installation, so the
+server, every thread and every skill command share one daemon. In a checkout,
+install `requirements-dev.txt` (the editable cadgen) and test in agent apps with
+`scripts/install/dev_install.py`, which points both at the checkout.
 `models/` stays on `main` as plain files; nothing installs it.
 `scripts/github-workflows/check-builds.sh` enforces the shipping contract on
 every push: no tracked symlink, no `.gitattributes` rule that rewrites files at
@@ -112,11 +116,12 @@ path, the rehearsal, and local/manual fallbacks.
   sibling skill directory to `sys.path`, `PYTHONPATH`, `NODE_PATH`, or any other
   runtime lookup path. Skills are independent of each other, not of everything.
 - Shared runtime comes from the **`cadgen` distribution**. A skill that uses it
-  names it in its `requirements.txt`, pinned to `VERSION` (the release PR
-  stamps every pin; the editable install in `requirements-dev.txt` satisfies
-  it in a checkout). Skills do not vendor it: a skill script is a thin entrypoint whose
-  parser and behaviour live in `cadgen.cli`, and which fails with the
-  `pip install -r requirements.txt` hint when cadgen is missing. cadgen carries
+  defines `cadgen` and `python` in its SKILL.md as the launch command above,
+  pinned to `VERSION` (the release stamps every pin); no skill installs cadgen
+  any other way (no `requirements.txt` naming it), because a second installation
+  is a second daemon. Skills do not vendor it: a skill script is a thin entrypoint whose
+  parser and behaviour live in `cadgen.cli`. Playwright is a cadgen dependency and
+  the first snapshot fetches its headless browser, so no skill has a browser step. cadgen carries
   the JavaScript it executes too (Node builders, the snapshot browser bundle,
   the CAD Viewer client), so a skill ships no runtime of its own. Not every
   skill needs cadgen (bambu-labs, cad-mcp-setup, dfam-check, dfm, gcode,
