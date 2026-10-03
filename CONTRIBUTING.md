@@ -580,9 +580,9 @@ Where the built things live instead:
   layout OpenAI's plugin submission portal takes. It is built from the release
   commit and attached to the GitHub Release beside the wheel. See [Submitting
   the plugin to OpenAI](#submitting-the-plugin-to-openai).
-- **The `claude-plugin` branch** is the plugin alone, the folder claude.ai's
-  plugin directory follows. See [Listing the plugin on
-  claude.ai](#listing-the-plugin-on-claudeai).
+- **The `plugin` branch** is the plugin alone, the folder the plugin
+  directories follow and Cursor and Grok Build can install. See [The plugin
+  branch](#the-plugin-branch).
 - **A checkout** builds its own: run `scripts/bundle/bundle.sh` once after
   cloning (and after pulling changes to `packages/core`); a missing runtime
   fails with a message that says so.
@@ -618,8 +618,8 @@ is involved) and deletes the branch. The merged commit is THE release commit.
    release commit and checks it against the portal's package rules, so a
    package the portal would refuse stops the release before anything
    irreversible. The ZIP is kept as a workflow artifact
-   (`cad-openai-plugin-<version>`). `scripts/release/claude_plugin_branch.py
-   --check` does the same for the tree claude.ai's directory gets.
+   (`cad-openai-plugin-<version>`). `scripts/release/plugin_branch.py
+   --check` does the same for the tree the plugin directories get.
 2. `bundle.sh --clean` — which is where cadgen's whole runtime comes into
    existence, Node builders, snapshot bundle and Viewer client alike, because
    the release commit carries none of it — then `check-builds.sh`, the docs and
@@ -634,28 +634,43 @@ is involved) and deletes the branch. The merged commit is THE release commit.
    `Deploy Docs`, then the `v<VERSION>` tag and the GitHub Release, with the
    wheel and sdist from that same artifact and the plugin ZIP attached as
    release assets (PyPI stays the install channel; the release page is the
-   provenance copy), and the plugin tree committed onto `claude-plugin`.
+   provenance copy), and the plugin tree committed onto `plugin`.
    Nothing is committed or pushed to `main` after the release PR merge: the tag
    points at the source commit, and `git describe` on `main` is meaningful.
 
-### Listing the plugin on claude.ai
+### The plugin branch
 
-claude.ai's plugin directory treats the folder it follows as the whole plugin,
-so it does not follow `main`: there the monorepo's files, workflows, lockfile
-and binaries would all be held for a reviewer, and every install would copy
-them. It follows the `claude-plugin` branch, which `Publish Release` writes on
-each release: one commit whose tree is `.claude-plugin/plugin.json` and
-`icon.png`, `claude.mcp.json` (the CAD server the manifest names), `skills/`,
-`LICENSE` and `README.md`, with each README link to a
-file outside that tree pointed at the release commit on GitHub. A release whose
-plugin did not change adds no commit. The directory scans each new commit and
-publishes it by the listing's publish setting.
+`main` is an installable plugin for every host: its root holds every manifest
+(`.claude-plugin/`, `.codex-plugin/`, `.cursor-plugin/`) and MCP config
+(`claude.mcp.json`, `codex.mcp.json`), and the README's install commands clone
+it. Plugin directories treat the folder they follow as the whole plugin, though,
+so they follow the `plugin` branch instead: on `main` the monorepo's files,
+workflows, lockfile and binaries would all be held for a reviewer, and every
+install would copy them. `Publish Release` writes `plugin` on each release: one
+commit whose tree is `.claude-plugin/plugin.json` and `icon.png`,
+`.cursor-plugin/plugin.json`, `claude.mcp.json` (the CAD server both manifests
+name), `skills/`, `LICENSE` and `README.md`, with each README link to a file
+outside that tree pointed at the release commit on GitHub. A release whose
+plugin did not change adds no commit. The tree is checked against claude.ai's
+file rules (<https://claude.com/docs/plugins/pre-submission-checklist>), the
+strictest of the directories, by `tests/python/global/test_plugin_branch.py` on
+every pull request and again before each release.
 
-In the developer portal at <https://claude.ai/directory/manage>, the listing's
-**Branch or tag** is `claude-plugin`. The tree is checked against the
-directory's file rules (<https://claude.com/docs/plugins/pre-submission-checklist>)
-by `tests/python/global/test_claude_plugin_branch.py` on every pull request and
-again before each release.
+- **claude.ai:** in the developer portal at <https://claude.ai/directory/manage>,
+  the listing's **Branch or tag** is still `claude-plugin`, the branch's old
+  name, so `Publish Release` pushes the same commit there too. The directory
+  scans each new commit and publishes it by the listing's publish setting.
+- **Cursor:** reads `.cursor-plugin/plugin.json`. Submit the repository at
+  <https://cursor.com/marketplace/publish>; teams can import it from
+  **Dashboard → Plugins & MCPs → Team Marketplaces**.
+- **Grok Build:** reads the Claude manifest
+  (`grok plugin install earthtojake/text-to-cad@plugin`).
+
+**Dev note — retire `claude-plugin`.** The portal refuses a tracked-branch change
+while a reviewer has the plugin. Once the claude.ai listing is out of review,
+set its **Branch or tag** to `plugin` on the Settings tab, then remove the
+`claude-plugin` push from `release-publish.yml`'s `plugin-branch` job and delete
+the `claude-plugin` branch.
 
 ### Submitting the plugin to OpenAI
 

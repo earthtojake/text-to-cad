@@ -121,12 +121,12 @@ jobs:
           path: ${{ runner.temp }}/plugin/
           if-no-files-found: error
 
-      # The plugin as claude.ai's directory takes it (manifest, icon, skills, LICENSE,
-      # README), checked against the directory's file rules ahead of every irreversible
-      # step; on main, claude-plugin below commits this same tree to the branch.
-      - name: Check the Claude plugin tree
+      # The plugin as the directories take it (manifests, icon, skills, LICENSE, README),
+      # checked against claude.ai's file rules ahead of every irreversible step; on main,
+      # plugin-branch below commits this same tree to the branch.
+      - name: Check the plugin tree
         if: steps.gate.outputs.should_publish == 'true'
-        run: python3 scripts/release/claude_plugin_branch.py --check
+        run: python3 scripts/release/plugin_branch.py --check
 
       - name: Set up dependencies
         if: steps.gate.outputs.should_publish == 'true'
@@ -252,7 +252,7 @@ jobs:
           echo "Rehearsal complete on $GITHUB_REF_NAME at $GITHUB_SHA."
           echo "Would have uploaded: $(ls packages/cadgen/dist)"
           echo "Would have deployed the docs site from $GITHUB_SHA."
-          echo "Would have committed the Claude plugin tree to the claude-plugin branch."
+          echo "Would have committed the plugin tree to the plugin branch."
           # --dry-run computes the tag and the release it would create without
           # pushing anything; the version check inside it runs for real.
           args=(--target HEAD --dry-run --publish)
@@ -270,11 +270,16 @@ jobs:
       ref: ${{ needs.publish.outputs.release_sha }}
     secrets: inherit
 
-  # claude.ai's plugin directory follows the `claude-plugin` branch: one commit per
-  # release whose tree is only the plugin, so the directory never scans or installs the
-  # rest of the monorepo. Publish Release is the branch's only writer.
-  claude-plugin:
-    name: Claude plugin branch
+  # The plugin directories follow the `plugin` branch: one commit per release whose tree
+  # is only the plugin, so they never scan or install the rest of the monorepo. Cursor
+  # and Grok Build install it; Publish Release is the branch's only writer.
+  #
+  # TODO: claude.ai's listing still tracks `claude-plugin`, the branch's old name, and
+  # the portal refuses a tracked-branch change while a reviewer has the plugin. Until the
+  # listing's Settings tab is switched to `plugin`, the same commit goes to both; then
+  # drop the `claude-plugin` push and delete that branch (CONTRIBUTING.md, Releases).
+  plugin-branch:
+    name: Plugin branch
     needs: publish
     if: ${{ needs.publish.outputs.should_publish == 'true' && needs.publish.outputs.is_main == 'true' }}
     runs-on: ubuntu-latest
@@ -286,7 +291,7 @@ jobs:
           ref: ${{ needs.publish.outputs.release_sha }}
           persist-credentials: false
 
-      - name: Commit the plugin onto claude-plugin and push it
+      - name: Commit the plugin onto plugin (and claude-plugin) and push it
         env:
           PUBLISH_PUSH_TOKEN: ${{ secrets.PUBLISH_PUSH_TOKEN }}
           GH_TOKEN: ${{ github.token }}
@@ -296,18 +301,18 @@ jobs:
           GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
         run: |
           remote="https://x-access-token:${PUBLISH_PUSH_TOKEN:-$GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
-          if git fetch --quiet "$remote" +refs/heads/claude-plugin:refs/remotes/origin/claude-plugin; then
-            parent="$(git rev-parse refs/remotes/origin/claude-plugin)"
-          else
-            parent=""
-            echo "No claude-plugin branch yet; this release creates it."
-          fi
-          commit="$(python3 scripts/release/claude_plugin_branch.py --commit --parent "$parent")"
-          if [ "$commit" = "$parent" ]; then
-            echo "claude-plugin already holds this release's plugin."
-          else
-            git push "$remote" "$commit:refs/heads/claude-plugin"
-          fi
+          parent=""
+          # The first release after the rename builds on claude-plugin, so both names share history.
+          for branch in plugin claude-plugin; do
+            if git fetch --quiet "$remote" "+refs/heads/$branch:refs/remotes/origin/$branch"; then
+              parent="$(git rev-parse "refs/remotes/origin/$branch")"
+              break
+            fi
+          done
+          [ -n "$parent" ] || echo "No plugin branch yet; this release creates it."
+          commit="$(python3 scripts/release/plugin_branch.py --commit --parent "$parent")"
+          # A push that changes nothing is a no-op, so an unchanged plugin still leaves both names on it.
+          git push "$remote" "$commit:refs/heads/plugin" "$commit:refs/heads/claude-plugin"
 
   tag-release:
     name: Tag and GitHub Release

@@ -80,8 +80,10 @@ only skills still present in the checkout.
 
 ### Plugins
 
-Provider-native plugin installs are also available for Codex, Claude Code, and
-Grok Build:
+Provider-native plugin installs are also available for Codex, Claude Code,
+Cursor and Grok Build. Each installs from `main`, whose root carries every
+host's manifest. The `plugin` branch is the same plugin without the rest of the
+repository, updated on each release; the plugin directories follow it.
 
 ```bash
 # Codex (requires Codex 0.142.0 or newer)
@@ -132,8 +134,19 @@ the [latest release](https://pypi.org/project/cadgen/) and restart the app.
 }
 ```
 
-Grok Build uses the existing `.claude-plugin/marketplace.json`; there is no
-separate Grok plugin manifest.
+```bash
+# Cursor
+git clone --depth 1 https://github.com/earthtojake/text-to-cad ~/.cursor/plugins/local/text-to-cad
+```
+
+Cursor reads `.cursor-plugin/plugin.json`: restart Cursor after cloning, and
+`git pull` in that folder to update. Add `--branch plugin` to clone only the
+plugin. Teams can instead import the repository under **Dashboard → Plugins &
+MCPs → Team Marketplaces**. Like the other plugins it starts CAD's server, which
+runs locally through [uv](https://docs.astral.sh/uv/).
+
+Grok Build reads the Claude plugin manifest; there is no separate Grok plugin
+manifest. Append `@plugin` to the source to install only the plugin.
 
 ```bash
 # Grok Build

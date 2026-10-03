@@ -1,6 +1,6 @@
-"""The plugin claude.ai's directory follows: scripts/release/claude_plugin_branch.py.
+"""The plugin the directories follow: scripts/release/plugin_branch.py.
 
-Publish Release commits this tree onto the `claude-plugin` branch, so a tree the
+Publish Release commits this tree onto the `plugin` branch, so a tree claude.ai's
 directory would hold or refuse has to fail here, on the pull request that causes
 it, rather than at release time.
 """
@@ -16,7 +16,7 @@ import unittest
 
 from tests.python.support.paths import REPO_ROOT
 
-spec = importlib.util.spec_from_file_location("claude_plugin_branch", REPO_ROOT / "scripts/release/claude_plugin_branch.py")
+spec = importlib.util.spec_from_file_location("plugin_branch", REPO_ROOT / "scripts/release/plugin_branch.py")
 branch = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(branch)
 
@@ -27,13 +27,15 @@ def git(root: Path, *args: str) -> str:
     return subprocess.run(["git", "-C", str(root), *args], check=True, capture_output=True, text=True).stdout.strip()
 
 
-class ClaudePluginTreeTests(unittest.TestCase):
+class PluginTreeTests(unittest.TestCase):
     def test_this_repository_builds_a_tree_of_only_the_plugin(self) -> None:
         tree, errors, _manifest = branch.build(REPO_ROOT)
         self.assertEqual(errors, [])
-        self.assertEqual({path.split("/")[0] for path in tree}, {".claude-plugin", "claude.mcp.json", "skills", "LICENSE", "README.md"})
+        self.assertEqual({path.split("/")[0] for path in tree},
+                         {".claude-plugin", ".cursor-plugin", "claude.mcp.json", "skills", "LICENSE", "README.md"})
         self.assertEqual({path for path in tree if path.startswith(".claude-plugin/")},
                          {".claude-plugin/plugin.json", ".claude-plugin/icon.png"})
+        self.assertEqual({path for path in tree if path.startswith(".cursor-plugin/")}, {".cursor-plugin/plugin.json"})
 
     def test_readme_links_outside_the_tree_point_at_the_commit(self) -> None:
         text = ('[cad](skills/cad/SKILL.md) [dir](skills/cad/) [license](LICENSE) [web](https://x.dev) [top](#install)\n'
@@ -66,7 +68,8 @@ class ClaudePluginTreeTests(unittest.TestCase):
             git(root, "config", "user.email", "test@example.com")
             manifest = {"name": "demo", "version": "1.0.0", "repository": "https://github.com/o/demo"}
             files = {".claude-plugin/plugin.json": json.dumps(manifest), ".claude-plugin/icon.png": PNG,
-                     ".claude-plugin/marketplace.json": "{}", "claude.mcp.json": "{}", "LICENSE": "MIT\n",
+                     ".claude-plugin/marketplace.json": "{}", ".cursor-plugin/plugin.json": "{}",
+                     "claude.mcp.json": "{}", "LICENSE": "MIT\n",
                      "skills/s/SKILL.md": "one\n",
                      "README.md": "[s](skills/s/SKILL.md) [c](CONTRIBUTING.md)\n", "CONTRIBUTING.md": "x\n",
                      "apps/web.js": "x\n"}
@@ -80,8 +83,8 @@ class ClaudePluginTreeTests(unittest.TestCase):
             self.assertEqual(errors, [])
             first = branch.commit(root, tree, None, "demo 1.0.0")
             self.assertEqual(git(root, "ls-tree", "-r", "--name-only", first).split(),
-                             [".claude-plugin/icon.png", ".claude-plugin/plugin.json", "LICENSE", "README.md",
-                              "claude.mcp.json", "skills/s/SKILL.md"])
+                             [".claude-plugin/icon.png", ".claude-plugin/plugin.json", ".cursor-plugin/plugin.json",
+                              "LICENSE", "README.md", "claude.mcp.json", "skills/s/SKILL.md"])
             self.assertIn(f"[c](https://github.com/o/demo/blob/{git(root, 'rev-parse', 'HEAD')}/CONTRIBUTING.md)",
                           git(root, "show", f"{first}:README.md"))
             self.assertEqual(branch.commit(root, tree, first, "demo 1.0.0"), first)

@@ -27,6 +27,7 @@ CLAUDE_PLUGIN_PATH = REPO_ROOT / ".claude-plugin" / "plugin.json"
 CODEX_MCP_PATH = REPO_ROOT / "codex.mcp.json"
 CLAUDE_MCP_PATH = REPO_ROOT / "claude.mcp.json"
 CODEX_PLUGIN_PATH = REPO_ROOT / ".codex-plugin" / "plugin.json"
+CURSOR_PLUGIN_PATH = REPO_ROOT / ".cursor-plugin" / "plugin.json"
 MARKETPLACE_PATH = REPO_ROOT / ".claude-plugin" / "marketplace.json"
 SKILLS_ROOT = REPO_ROOT / "skills"
 
@@ -44,15 +45,15 @@ def load_json(path: Path) -> dict:
 
 
 class PluginManifestPolicyTest(unittest.TestCase):
-    def test_both_provider_plugin_manifests_exist_at_the_repo_root(self) -> None:
-        for path in (CLAUDE_PLUGIN_PATH, CODEX_PLUGIN_PATH):
+    def test_every_provider_plugin_manifest_exists_at_the_repo_root(self) -> None:
+        for path in (CLAUDE_PLUGIN_PATH, CODEX_PLUGIN_PATH, CURSOR_PLUGIN_PATH):
             self.assertTrue(
                 path.is_file(),
                 f"missing plugin manifest: {path.relative_to(REPO_ROOT)}",
             )
 
     def test_plugin_manifests_name_the_plugin_consistently(self) -> None:
-        for path in (CLAUDE_PLUGIN_PATH, CODEX_PLUGIN_PATH):
+        for path in (CLAUDE_PLUGIN_PATH, CODEX_PLUGIN_PATH, CURSOR_PLUGIN_PATH):
             manifest = load_json(path)
             self.assertEqual(
                 manifest.get("name"),
@@ -61,7 +62,7 @@ class PluginManifestPolicyTest(unittest.TestCase):
             )
 
     def test_plugin_manifests_point_at_the_canonical_skills_directory(self) -> None:
-        for path in (CLAUDE_PLUGIN_PATH, CODEX_PLUGIN_PATH):
+        for path in (CLAUDE_PLUGIN_PATH, CODEX_PLUGIN_PATH, CURSOR_PLUGIN_PATH):
             manifest = load_json(path)
             self.assertIn(
                 manifest.get("skills"),
@@ -155,6 +156,16 @@ class PluginManifestPolicyTest(unittest.TestCase):
         self.assertEqual(args[-2:], ["cadgen", "mcp"])
         version = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
         self.assertEqual(args[args.index("--from") + 1], f"cadgen=={version}")
+
+    def test_cursor_starts_claudes_server_and_shows_its_icon(self) -> None:
+        # Cursor reads only .cursor-plugin/plugin.json. Its MCP config format is Claude's, so it
+        # starts the same pinned server rather than a third copy of the command. Its logo must be a
+        # relative path inside the plugin tree: Cursor resolves it to that commit's raw file.
+        manifest = load_json(CURSOR_PLUGIN_PATH)
+        self.assertEqual(manifest.get("mcpServers"), "./claude.mcp.json")
+        logo = manifest.get("logo", "")
+        self.assertFalse(logo.startswith(("/", "..")) or "://" in logo, logo)
+        self.assertEqual(logo, ".claude-plugin/icon.png")
 
     def test_no_stale_plugin_subdirectory_package_remains(self) -> None:
         # The generated `plugins/cad/skills` copy is what the repo-root move

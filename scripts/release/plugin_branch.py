@@ -1,23 +1,24 @@
 #!/usr/bin/env python3
-"""Build the plugin that claude.ai's plugin directory follows, check it, and commit it.
+"""Build the plugin that plugin directories follow, check it, and commit it.
 
 The repository root is the plugin for every installer that clones it, but
 claude.ai's directory treats the folder it follows as the whole plugin: there the
 monorepo's thousands of files, its workflows, lockfile and binaries are policy
-holds, and every install copies all of them. So the directory follows the
-`claude-plugin` branch instead: one commit per release whose tree is only the
-plugin -- `.claude-plugin/`'s manifest and icon, the MCP config it names,
+holds, and every install copies all of them. So the directories follow the
+`plugin` branch instead: one commit per release whose tree is only the plugin --
+the Claude and Cursor manifests and the icon, the MCP config they name,
 `skills/`, `LICENSE`, and the README, with each link to a file outside that tree
-pointed at the release commit on GitHub.
+pointed at the release commit on GitHub. Grok Build installs the same branch
+through the Claude manifest.
 
-The checks are the directory's file rules
+The checks are claude.ai's file rules, the strictest of the directories
 (https://claude.com/docs/plugins/pre-submission-checklist.md): a tree that breaks
 one is held for a reviewer, or never validates. Publish Release runs `--check`
-before anything irreversible and, on main, commits the tree onto `claude-plugin`
-and pushes it. Never commit to that branch by hand.
+before anything irreversible and, on main, commits the tree onto `plugin` and
+pushes it. Never commit to that branch by hand.
 
-    scripts/release/claude_plugin_branch.py --check
-    scripts/release/claude_plugin_branch.py --commit [--parent REF]   # prints the commit
+    scripts/release/plugin_branch.py --check
+    scripts/release/plugin_branch.py --commit [--parent REF]   # prints the commit
 """
 
 from __future__ import annotations
@@ -33,7 +34,7 @@ import tempfile
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = ".claude-plugin/plugin.json"
-FILES = (MANIFEST, ".claude-plugin/icon.png", "claude.mcp.json", "LICENSE")
+FILES = (MANIFEST, ".claude-plugin/icon.png", ".cursor-plugin/plugin.json", "claude.mcp.json", "LICENSE")
 DIRECTORIES = ("skills/",)
 README = "README.md"
 LFS_POINTER = b"version https://git-lfs.github.com/spec/v1"
@@ -160,7 +161,7 @@ def main(argv: list[str] | None = None) -> int:
     action = parser.add_mutually_exclusive_group(required=True)
     action.add_argument("--check", action="store_true", help="build the tree and check it")
     action.add_argument("--commit", action="store_true", help="build, check, commit, and print the commit")
-    parser.add_argument("--parent", default="", help="the claude-plugin commit to build on (none: a first commit)")
+    parser.add_argument("--parent", default="", help="the plugin branch commit to build on (none: a first commit)")
     parser.add_argument("--root", type=Path, default=REPO_ROOT, help=argparse.SUPPRESS)
     args = parser.parse_args(argv)
 
@@ -170,7 +171,7 @@ def main(argv: list[str] | None = None) -> int:
     if errors:
         return 1
     size = sum(len(data) for _, data in tree.values())
-    print(f"Claude plugin tree: {len(tree)} files, {size // 1024} KiB.", file=sys.stderr)
+    print(f"Plugin tree: {len(tree)} files, {size // 1024} KiB.", file=sys.stderr)
     if args.commit:
         source = git(args.root, "rev-parse", "HEAD").decode().strip()
         message = f"{manifest.get('name')} {manifest.get('version')}\n\nThe plugin from {source}, built by Publish Release."
