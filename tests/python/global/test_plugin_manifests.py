@@ -61,6 +61,20 @@ class PluginManifestPolicyTest(unittest.TestCase):
                 f"{path.relative_to(REPO_ROOT)} must declare name {PLUGIN_NAME!r}",
             )
 
+    def test_plugin_manifests_describe_the_plugin_identically(self) -> None:
+        # Each host lists the plugin by its manifest's description; they are one text, so an edit
+        # to one must reach them all.
+        codex = load_json(CODEX_PLUGIN_PATH)
+        marketplace = load_json(MARKETPLACE_PATH)
+        descriptions = {
+            "claude": load_json(CLAUDE_PLUGIN_PATH).get("description"),
+            "codex": codex.get("description"),
+            "codex interface": codex["interface"].get("longDescription"),
+            "cursor": load_json(CURSOR_PLUGIN_PATH).get("description"),
+            "marketplace": next(e for e in marketplace["plugins"] if e.get("name") == PLUGIN_NAME).get("description"),
+        }
+        self.assertEqual(len(set(descriptions.values())), 1, descriptions)
+
     def test_plugin_manifests_point_at_the_canonical_skills_directory(self) -> None:
         for path in (CLAUDE_PLUGIN_PATH, CODEX_PLUGIN_PATH, CURSOR_PLUGIN_PATH):
             manifest = load_json(path)
