@@ -75,6 +75,22 @@ class PluginManifestPolicyTest(unittest.TestCase):
         }
         self.assertEqual(len(set(descriptions.values())), 1, descriptions)
 
+    def test_plugin_manifests_link_the_same_pages(self) -> None:
+        # The listing links every directory shows: homepage, docs, support, privacy policy and terms.
+        # Claude and Cursor spell them as top-level fields, Codex under `interface`.
+        claude, cursor = load_json(CLAUDE_PLUGIN_PATH), load_json(CURSOR_PLUGIN_PATH)
+        codex = load_json(CODEX_PLUGIN_PATH)["interface"]
+        for claude_key, codex_key in (("homepage", "websiteURL"), ("supportUrl", "supportURL"),
+                                      ("privacyPolicyUrl", "privacyPolicyURL"),
+                                      ("termsOfServiceUrl", "termsOfServiceURL")):
+            with self.subTest(claude_key):
+                self.assertTrue(claude.get(claude_key, "").startswith("https://"), claude_key)
+                self.assertEqual(cursor.get(claude_key), claude[claude_key])
+                self.assertEqual(codex.get(codex_key), claude[claude_key])
+        for key in ("documentationUrl", "repository", "author", "license"):
+            with self.subTest(key):
+                self.assertEqual(cursor.get(key), claude.get(key))
+
     def test_plugin_short_descriptions_match(self) -> None:
         # The one-line tagline a host shows beside the name: Codex's shortDescription and the
         # Claude marketplace's description. Cursor's manifest has no such field.
