@@ -58,11 +58,11 @@ built-in profiles.
      --load-settings "presets/process.json;presets/printer.json" \
      --load-filaments presets/filament-1.json \
      --arrange 1 --slice 0 \
-     --outputdir "$PWD/out" --export-3mf model.gcode.3mf
+     --outputdir /absolute/path/to/out --export-3mf model.gcode.3mf
    ```
 
-   This writes `out/plate_1.gcode`, the plain G-code, and
-   `out/model.gcode.3mf`, the sliced 3MF. The command line reads `.stl`,
+   This writes `plate_1.gcode`, the plain G-code, and `model.gcode.3mf`, the
+   sliced 3MF, into that folder. The command line reads `.stl`,
    `.3mf`, `.obj` and `.amf`; export STEP to STL or 3MF with `$cad` first.
    Override one setting with `--<setting>=<value>`, using the setting's key
    with hyphens for underscores, such as `--layer-height=0.16`.
