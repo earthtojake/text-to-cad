@@ -13,9 +13,8 @@ import {
 import { cn } from "@/lib/utils";
 
 const NAV_SECTIONS = [
-  { id: "get-started", label: "Get Started" },
-  { id: "skills", label: "Skills" },
   { id: "installation", label: "Install" },
+  { id: "skills", label: "Skills" },
 ] as const;
 
 const GITHUB_REPO_URL = "https://github.com/earthtojake/text-to-cad";
