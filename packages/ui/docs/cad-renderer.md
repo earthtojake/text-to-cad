@@ -166,6 +166,7 @@ const shell = useRendererShell({
   resource, modelKey, revisionKey,
   features,             // ViewFeatures: the Display sections this family opts into
   toolModes,            // createToolModes({ defaultMode, modes }), or omitted: no tools of its own
+  previewable,          // true for a 3D view: it offers Preview; omitted (a 2D view): no Preview, and a request keeps the normal view
   scene,                // KitScene | null
   load,                 // { busy, updating?, progress?, alert? }: the renderer's document load
   animation,            // playbar runtime with its own `clock` (and `onRelease`), or null: plays in preview alone
@@ -181,7 +182,8 @@ shell.requestFrame();            // a frame that keeps the shadow maps: a highli
 shell.syncSceneBounds();         // the scene moved its bounds (a pose): the stage follows, no render
 shell.scheduleStateSave();       // a slice changed: write the view soon, and on unmount
 shell.playback; shell.setPlayback(patch); // the file's Playback settings: orbit and its speed, Autoplay, the routine's chosen Speed and Loop
-// The shell adds Display (last on the strip, and its panel), Preview, and preview's Playback settings and playbar.
+// The shell adds Display (last on the strip, and its panel), Preview (a `previewable` view's), and preview's
+// Playback settings and playbar.
 const tools = [shell.tools.own({ id, label, icon }), shell.tools.draw].filter(Boolean); // [] for camera-only formats: Display alone
 // toolPanels: the renderer's ToolPanels, shown or `hidden` by the tool they belong to
 return <RendererShell shell={shell} tools={tools} toolPanels={<>{selectPanels}{keptPanels}</>}
@@ -1403,7 +1405,9 @@ Zoom to Fit and live `resetCamera`. Cube shortcuts preserve zoom and pan.
 
 Preview is one `previewing` state the shell owns (`usePreviewState` in
 `useRendererShell.js`); a renderer whose own gates run before the shell's hook holds
-it and passes it in as `preview`, as STEP does. The Preview button among the
+it and passes it in as `preview`, as STEP does. It is a 3D view's: a renderer that
+offers it declares `previewable` (STEP, GLB, the meshes and robots do), and one that
+does not has no Preview button and stays in its normal view whatever sets the state. The Preview button among the
 view's controls in the navbar sets it, and Escape or Exit preview — the minimize icon at the
 view's top-right — clears it; no host prop reaches it.
 While previewing, the frame drops the toolbar, the tool stack and its resize handles,

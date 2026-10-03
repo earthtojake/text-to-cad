@@ -58,6 +58,8 @@ export const SHELL_TOOL = Object.freeze({ DRAW: "draw" });
 
 const SESSION_SAVE_DELAY_MS = 180;
 const EMPTY = Object.freeze({});
+// What asking for Preview does in a view that does not offer it: nothing.
+const NO_PREVIEW = () => {};
 
 /**
  * Everything a file-family renderer needs from its host that is not about its
@@ -96,6 +98,10 @@ const EMPTY = Object.freeze({});
  *   the renderer made it itself (see `viewSettings.applied`).
  * @param {ReturnType<typeof import("../tools/toolModes.js").createToolModes> | null} [options.toolModes]  Omitted
  *   by a renderer with no tools: the shell then has no active tool and a saved tab records none.
+ * @param {boolean} [options.previewable]  The renderer's view is 3D and offers Preview: the model fullscreen,
+ *   orbiting, its tools put away. Each renderer of a 3D view declares it; without it (a 2D view) there is no
+ *   Preview at all — no control in the navbar, not a disabled one — and anything that asks for Preview leaves
+ *   the normal view on screen (`previewing` stays false, `setPreviewing` does nothing).
  * @param {{ previewing: boolean, set: (previewing: boolean) => void }} [options.preview]  Preview mode
  *   (`usePreviewState`), when the renderer holds that state itself: a renderer whose own gates
  *   (picking, recognition, tool effects) run before this hook cannot wait for it. Every gate reads this one
@@ -156,7 +162,7 @@ const EMPTY = Object.freeze({});
  * @param {string} [options.sceneScaleMode]
  */
 export function useRendererShell({
-  view, services, resource, modelKey, revisionKey = "", features, toolModes = null, tool = null, preview = null, scene, load,
+  view, services, resource, modelKey, revisionKey = "", features, toolModes = null, tool = null, previewable = false, preview = null, scene, load,
   viewSettings = null, viewerRef: providedViewerRef = null,
   animation = null, live = EMPTY, promptReferences = null, promptContext = createViewPromptContext,
   escape = EMPTY, rendererState = null,
@@ -172,7 +178,10 @@ export function useRendererShell({
   const { onStateChange, appearance } = view;
   const colorScheme = appearance?.colorScheme === "dark" ? "dark" : "light";
   const ownPreview = usePreviewState();
-  const { previewing, set: setPreviewing } = preview || ownPreview;
+  const previewState = preview || ownPreview;
+  // Preview is a 3D view's alone: one whose renderer did not declare it never enters it, whatever asks.
+  const previewing = previewable && previewState.previewing;
+  const setPreviewing = previewable ? previewState.set : NO_PREVIEW;
 
   // ---- the file's view --------------------------------------------------------
   const [restored] = useState(() => readFileView(view.state));
@@ -513,7 +522,7 @@ export function useRendererShell({
 
   return {
     // Renderer-facing.
-    toolMode, selectTool, selectDefaultTool, tools, idle, previewing, setPreviewing,
+    toolMode, selectTool, selectDefaultTool, tools, idle, previewable, previewing, setPreviewing,
     // Preview's Playback settings, the file's own: orbit and its speed, Autoplay, and the routine's chosen speed and loop.
     autoplay, setAutoplay, playback, setPlayback,
     // Deliver a prompt context through the host, reporting a failure as the viewport's alert.

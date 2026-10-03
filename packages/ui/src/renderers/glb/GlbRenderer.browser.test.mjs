@@ -174,6 +174,8 @@ test('a static GLB opens on its native scene with no tools: display settings, or
   // orbits, pans and zooms, with no strip over it.
   await noTools(pane);
   assert.equal(await pane.locator('[data-quick-edit]').count(), 0, 'Quick Edit is a STEP file\'s: a GLB has nothing to pick');
+  assert.equal(await pane.locator('[data-viewer-navbar]').getByRole('button', { name: 'Preview', exact: true }).count(), 1,
+    'a GLB is 3D: its navbar offers Preview');
 
   // A GLB has no panel of its own: its only settings are Display's, and Display is never
   // where a file opens. So it opens with the column shut and the model given the room.

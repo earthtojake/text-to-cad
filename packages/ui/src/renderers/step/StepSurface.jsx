@@ -1507,7 +1507,7 @@ function StepSurfaceBody({ view, data }) {
   // and what this renderer's load IS depends on the resolved view above it. Nothing about
   // hook order says otherwise — there is one function, and no early return in it.
   const shell = useRendererShell({
-    preview,
+    previewable: true, preview,
     view, services, resource: promptResource, modelKey: selectedKey, revisionKey: presentationRevisionKey,
     features: viewFeatures, toolModes: CAD_TOOL_MODES, tool: { mode: tabToolMode, set: setTabToolMode },
     scene: viewportScene,

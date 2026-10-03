@@ -309,10 +309,11 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
                 </div>
               </div>
 
-              {/* The view's control, at the navbar's right end, after the host's Settings: Preview.
+              {/* The view's control, at the navbar's right end, after the host's Settings: Preview, for a
+                  view that offers it (a 3D one: `useRendererShell`'s `previewable`); another has none.
                   Not while the model loads or after it failed to, not in a host that shows the
                   view small, and not in Preview, which has the page to itself. */}
-              {view.navbarSlot && !toolsHidden && !previewing ? createPortal(
+              {view.navbarSlot && shell.previewable && !toolsHidden && !previewing ? createPortal(
                 <NavbarControl label="Preview" disabled={shell.idle} onClick={enterPreview}><Maximize2 className="size-3.5" aria-hidden="true" /></NavbarControl>,
                 view.navbarSlot) : null}
               {/* Preview: fullscreen, the navbar and the tools put away and the model orbiting, its

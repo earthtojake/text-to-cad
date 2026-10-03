@@ -295,6 +295,29 @@ it('while the model loads the viewer shows none of its own chrome, and all of it
   expect(['Select', 'Draw', 'Display', 'Preview'].map(idle)).toEqual([false, false, false, false]);
 });
 
+it("Preview is a 3D view's, as its renderer declares: a view that does not declare it has no Preview, not a disabled one, and a request for Preview leaves it as it is", () => {
+  const onFullscreenChange = vi.fn();
+  // Preview asked for from outside the navbar, as a link or a host request would.
+  const ask = () => act(() => { fireEvent.click(document.querySelector('[data-harness-ask-preview]')!); });
+  // A 3D view (the harness's, declared `previewable`): the navbar offers Preview, and a request enters it.
+  frame({ onFullscreenChange });
+  expect(barButtons()).toEqual(['Preview']);
+  ask();
+  expect([viewportProps.current.previewMode, onFullscreenChange.mock.calls]).toEqual([true, [[true]]]);
+  cleanup();
+  document.querySelectorAll('[data-test-navbar]').forEach(slot => slot.remove());
+  onFullscreenChange.mockClear();
+  // A view whose renderer does not declare it (`flat.harness`, a 2D view's stand-in): nothing at the
+  // navbar's right end, and the same request leaves the normal view on screen, its tools up.
+  frame({ path: 'flat.harness', onFullscreenChange });
+  expect(barButtons()).toEqual([]);
+  expect(screen.queryByRole('button', { name: 'Preview' })).toBeNull();
+  ask();
+  expect([viewportProps.current.previewMode, onFullscreenChange.mock.calls]).toEqual([false, []]);
+  expect(document.querySelector('[data-preview-chrome]')!.hasAttribute('inert')).toBe(false);
+  expect(strip()).toEqual(['Draw', 'Display']);
+});
+
 it('a load the model did not survive leaves only the card saying so, and a failed update it survives keeps the chrome', () => {
   frame();
   const stage = (name: string) => act(() => { fireEvent.click(document.querySelector(`[data-harness-stage="${name}"]`)!); });

@@ -20,7 +20,7 @@ function MeshSurface({ view, data }) {
 
   const shell = useRendererShell({
     view, services: document.services, resource: document.resource, modelKey: document.modelKey, revisionKey: loaded.revision,
-    features: EDGELESS_VIEW_FEATURES, scene,
+    features: EDGELESS_VIEW_FEATURES, previewable: true, scene,
     load: { busy: loaded.busy && !scene, updating: loaded.busy && Boolean(scene), progress: loaded.progress, alert: loadAlert },
     live: LIVE
   });

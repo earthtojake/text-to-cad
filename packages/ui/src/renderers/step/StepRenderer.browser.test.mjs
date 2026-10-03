@@ -242,6 +242,8 @@ test('a STEP opens in Select with the tools its sidecar earns and Display last, 
   assert.deepEqual(await view.panels(), ['Show files:false']);
   assert.equal(await pane.locator('[data-file-panel-container]').count(), 0, 'no panel column beside the file');
   assert.equal(await view.displayPanel().count(), 0, 'Display is never where a file opens');
+  assert.equal(await pane.locator('[data-viewer-navbar]').getByRole('button', { name: 'Preview', exact: true }).count(), 1,
+    'a STEP is 3D: its navbar offers Preview');
   // Select is the tool, so the stack shows its Features — an assembly's tree starts open — with no
   // tabs, and nothing of Position's.
   assert.deepEqual(await view.stack(), ['Features']);

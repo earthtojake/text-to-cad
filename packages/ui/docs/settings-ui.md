@@ -78,8 +78,8 @@ none.
   axes drawn in its lower corner never touch the edge, in a 6rem area: enlarged
   face/edge/corner hit areas and neutral hover and XYZ guides. Preview omits it.
 - **Settings and Preview** at the navbar's right end: **Settings** (cog), the host's,
-  over every file, then **Preview** (a fullscreen icon, two diagonal arrows), the
-  view's own control, the navbar's 24px icon buttons with 14px icons, 4px apart, and
+  over every file, then, for a 3D file, **Preview** (a fullscreen icon, two diagonal
+  arrows), the view's own control, the navbar's 24px icon buttons with 14px icons, 4px apart, and
   hints below them. Settings' popover opens down from its button, end-aligned: a header —
   "Settings", the version in gray beside it, and its X — over the host's sections (see
   [Settings](#settings)), over a footer — "Made by @…" (the host's X account) at its left,
@@ -631,7 +631,10 @@ Zoom to Fit recenters and frames the whole original model at the current angle;
 Zoom to Selection frames the selection and is unavailable without one. Both are
 STEP context-menu items; the live `resetCamera` command takes the same fit path.
 
-**Preview** is available for every 3D file, animated or not, and is the shell's
+**Preview** is available for every 3D file, animated or not, and for nothing
+else: a renderer declares it (`useRendererShell`'s `previewable`: STEP, GLB, STL/3MF,
+URDF/SRDF/SDF), and a view whose renderer does not (a DXF, 2D) has no Preview button,
+not a disabled one, and never enters it, whatever asks. It is the shell's
 own state (`previewing`); hosts neither start nor observe it, beyond giving the
 page over to it. Its button is the fullscreen icon, the last of the navbar's
 controls ("Preview"). It is fullscreen: the renderer says so

@@ -155,9 +155,11 @@ function HarnessSurface({ view, data }) {
 
   // `panel*.harness` stands in for a file whose tool stack is full (below); it opens in Select.
   const withPanel = view.file.path.startsWith("panel");
+  // `flat*.harness` stands in for a view that is not 3D, a drawing's: its renderer does not declare Preview.
+  const previewable = !view.file.path.startsWith("flat");
   const shell = useRendererShell({
     view, services: shellServices, resource, modelKey: view.file.path, revisionKey: "harness",
-    features: EDGELESS_VIEW_FEATURES, toolModes: withPanel ? PANEL_TOOL_MODES : HARNESS_TOOL_MODES, scene: stageScene ? scene : null,
+    features: EDGELESS_VIEW_FEATURES, toolModes: withPanel ? PANEL_TOOL_MODES : HARNESS_TOOL_MODES, previewable, scene: stageScene ? scene : null,
     load: { busy: false, ...stageLoad },
     live, onCameraSettled, runtimeLifecycle,
     // A renderer whose references are its own vocabulary assembles its own snapshot.
@@ -230,6 +232,9 @@ function HarnessSurface({ view, data }) {
       ))}
       <button type="button" className="pointer-events-auto" data-harness-shown-revision
         onClick={() => setShownRevision(current => (current ? "" : "shown-revision"))}>shown</button>
+      {/* Preview asked for from outside the navbar, as a link or a host request would. */}
+      <button type="button" className="pointer-events-auto" data-harness-ask-preview
+        onClick={() => shell.setPreviewing(true)}>preview</button>
     </div>}/>;
 }
 

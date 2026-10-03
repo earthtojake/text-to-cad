@@ -77,7 +77,14 @@ beside the orbit speed and playback.
 ## Preview and renderer navigation actions
 
 Preview is the shared shell's own state (`previewing`); there is no host prop
-for it and a host cannot start or observe it. It is fullscreen
+for it and a host cannot start or observe it. It is a 3D view's alone, and each
+renderer says whether its view is one: it declares `previewable` to the shell
+(`useRendererShell`), as STEP, GLB, STL/3MF and URDF/SRDF/SDF do. A view that does
+not — a DXF's 2D drawing, which draws its own surface without the shell — has no
+Preview at all, no control and not a disabled one, and nothing that asks for
+Preview (a link or a host request, should either come to) takes it there: it keeps
+the normal view. The CAD app's Full size, inline, is the host's display mode, not
+Preview: it shows the normal view, of any file. It is fullscreen
 (`onFullscreenChange`, below): the navbar, with everything in it, the explorer and the
 panel column step aside while it lasts. It never uses the browser Fullscreen API. The shell saves the tools view's camera, fits a preview camera and restores
 the tools view's exact pose on exit; nothing of preview is persisted. Orbit
@@ -103,7 +110,7 @@ person tells the agent about a CAD file is [Quick Edit](#prompt-handoff)'s.
 
 A renderer with controls of its own for the view draws them into
 `RendererViewProps.navbarSlot`, at the navbar's right end after the host's Settings (the CAD
-viewer's Preview); it is null where no navbar is drawn. A
+viewer's Preview, for a 3D view); it is null where no navbar is drawn. A
 renderer that shows its file fullscreen (the CAD viewer's Preview) says so through
 `onFullscreenChange(true)`, and `false` when it stops: the navbar, the explorer
 and any declared panel step aside while it lasts. The host's `captureRequest`
@@ -441,8 +448,8 @@ stack at the top-left, Quick Edit at the top-right, and the view cube at the
 bottom-left. A host's one question goes through the shell too: `notice` (the
 `ConsentCard`) is drawn at the top-right once the file is on screen, never while it
 loads or after it failed to, with Quick Edit stacked under it until it is answered;
-the home never shows it. The view's own control (Preview) is the renderer's, drawn into the
-navbar's right end after Settings (`navbarSlot`); Display is the last button of the tool strip.
+the home never shows it. The view's own control (Preview, a 3D view's) is the renderer's, drawn
+into the navbar's right end after Settings (`navbarSlot`); Display is the last button of the tool strip.
 What Quick Edit offers follows the subscribed destination capability and
 the ports, never an app name: Copy Prompt always, Queue for a composer
 destination, Send where the prompt port has `send`. Native clipboard effects

@@ -204,7 +204,23 @@ unchanged after a runtime replacement does not.
 
 ## Where the controls live
 
-Display settings are a popover from its button among the view's controls in the
-navbar's right end, present for every 3D file, never a sidebar panel. A file's own Settings panel holds its model tree and Position
-(see [settings-ui.md](./settings-ui.md#sidebars-and-mobile)); nothing in it is a
-display setting.
+Display settings are the Display panel, at the foot of the tool stack, which the
+last button of the tool strip (Display, the Render mode's sphere) opens and closes:
+present for every 3D file, never a navbar popover or a sidebar panel. A file's
+model tree, its Reference and Position are panels of the same stack (see
+[settings-ui.md](./settings-ui.md#the-tool-stack)); nothing in them is a display
+setting.
+
+Preview, the view's one control in the navbar, is offered by a 3D view alone,
+as its renderer declares to the shell (`useRendererShell`'s `previewable`):
+
+| Renderer | Files | Preview |
+| --- | --- | --- |
+| `step` | STEP, STP | Yes |
+| `glb` | GLB | Yes |
+| `mesh` | STL, 3MF | Yes |
+| `robot` | URDF, SRDF, SDF | Yes |
+| `dxf` | DXF | No: a 2D drawing, on a surface of its own, without the shell |
+
+A view without it has no Preview control, not a disabled one, and a request for
+Preview leaves its normal view as it is.

@@ -155,6 +155,8 @@ it('a DXF has no panels of its own, no tools and no preview', async () => {
     expect(inPane.queryByRole('button', { name }), name).toBeNull();
   }
   expect(inPane.queryAllByRole('tab')).toHaveLength(0);
+  // A drawing is 2D: its view puts no control of its own in the navbar, Preview's place.
+  expect(pane.querySelector('[data-viewer-navbar] [data-navbar-controls]')!.childElementCount).toBe(0);
   // A composer gets no snapshot from a drawing, and a drawing has nothing to pick: no Quick Edit,
   // which is a STEP file's.
   expect(inPane.queryByRole('button', { name: 'Take snapshot' })).toBeNull();

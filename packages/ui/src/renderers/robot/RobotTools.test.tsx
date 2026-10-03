@@ -194,6 +194,13 @@ it('robot Select defaults match Links and Position remains an explicit tool', as
   robot.client.dispose();
 });
 
+it('a robot is a 3D view: its navbar offers Preview', async () => {
+  const robot = await openRobot();
+  const navbar = robot.pane.querySelector<HTMLElement>('[data-viewer-navbar]')!;
+  expect(within(navbar).getAllByRole('button', { name: 'Preview' })).toHaveLength(1);
+  robot.client.dispose();
+});
+
 it('robot Links and Position are each their tool\'s panel, and no pick or tool opens or turns the host\'s column', async () => {
   const robot = await openRobot();
   expect(robot.stack()).toEqual(['Links']);
