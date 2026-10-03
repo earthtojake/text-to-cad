@@ -16,6 +16,7 @@ models/
 ├── examples/         standalone demo PARTS, one script each
 ├── assemblies/       demo ASSEMBLIES, one src/<assembly>/ group each
 ├── drawings/         2D `@dxf` drawings, one script each
+├── electronics/      a `@pcb` board, its case and a `@harness` cable
 ├── f1/ f14d/ hypercar/ moonwatch/ motorbike/ qdd_actuator/ radial/ w16/
 ├── tendon_hand/      tendon-driven research hand (source-only)
 ├── falcon_heavy/     SpaceX public-source reconstruction
@@ -73,6 +74,11 @@ For manual edge-case checks and debugging, use [tests/](tests/README.md). Automa
   (`planetary_gear_assembly`, `mars_rover_concept`).
 - [drawings/](drawings/src/README.md): 2D `@dxf` drawings as one cad-project,
   one script each, artifacts in `DXF/`.
+- [electronics/](electronics/src/README.md): a circuit board, its case and a
+  cable as one cad-project: an autorouted `@pcb` board (KiCad project, JLCPCB
+  Gerbers/BOM/placement and its 3D in `PCB/` and `STEP/`), the `@step` case
+  that composes the board, and a `@harness` cable read from the board's
+  netlist (`HARNESS/`).
 
 Automated suites own their own fixtures and never read this tree — the viewer
 launch and browser gates, for instance, generate or commit their STEP fixture

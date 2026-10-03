@@ -63,6 +63,10 @@ class CadSource:
     generator_metadata: GeneratorMetadata | None = None
     step_path: Path | None = None
     dxf_path: Path | None = None
+    # A @pcb board's .kicad_pcb; its .kicad_sch and .kicad_pro sit beside it.
+    pcb_path: Path | None = None
+    # A @harness model's one document, its .harness.yml.
+    harness_path: Path | None = None
     mesh_tolerance: float | None = None
     mesh_angular_tolerance: float | None = None
     color: tuple[float, float, float, float] | None = None
@@ -84,6 +88,12 @@ class CadSource:
                 paths.append(self.step_path)
             if self.dxf_path is not None:
                 paths.append(self.dxf_path)
+            if self.pcb_path is not None:
+                from cadgen.metadata import PCB_PROJECT_SUFFIXES
+
+                paths.extend(self.pcb_path.with_suffix(suffix) for suffix in PCB_PROJECT_SUFFIXES)
+            if self.harness_path is not None:
+                paths.append(self.harness_path)
         return tuple(path.resolve() for path in paths)
 
 
@@ -176,6 +186,8 @@ def find_source_by_path(path: Path, root: Path | None = None) -> CadSource | Non
             source.step_path,
             source.script_path,
             source.dxf_path,
+            source.pcb_path,
+            source.harness_path,
             *source.generated_paths,
         ]
         if any(candidate is not None and candidate.resolve() == resolved_path for candidate in paths):
@@ -215,6 +227,31 @@ def cad_ref_from_dxf_path(path: Path) -> str:
         relative = PurePosixPath(resolved.as_posix())
     if relative.suffix.lower() != ".dxf":
         raise CadSourceError(f"{_display_path(path)} is not a CAD DXF output path")
+    return relative.as_posix()
+
+
+def cad_ref_from_pcb_path(path: Path) -> str:
+    # Board refs keep the `.kicad_pcb` suffix, as drawings keep `.dxf`: a board and a
+    # part of one stem in one folder never collide on cad_ref.
+    resolved = path.resolve()
+    try:
+        relative = resolved.relative_to(Path.cwd().resolve())
+    except ValueError:
+        relative = PurePosixPath(resolved.as_posix())
+    if relative.suffix.lower() != ".kicad_pcb":
+        raise CadSourceError(f"{_display_path(path)} is not a KiCad board output path")
+    return relative.as_posix()
+
+
+def cad_ref_from_harness_path(path: Path) -> str:
+    # Harness refs keep the `.harness.yml` suffix, as drawings keep `.dxf`.
+    resolved = path.resolve()
+    try:
+        relative = resolved.relative_to(Path.cwd().resolve())
+    except ValueError:
+        relative = PurePosixPath(resolved.as_posix())
+    if not relative.name.lower().endswith(".harness.yml"):
+        raise CadSourceError(f"{_display_path(path)} is not a harness document output path")
     return relative.as_posix()
 
 
@@ -440,6 +477,46 @@ def _dxf_generator_source(resolved_script_path: Path, metadata: GeneratorMetadat
     )
 
 
+def _pcb_generator_source(resolved_script_path: Path, metadata: GeneratorMetadata) -> CadSource:
+    from cadgen.metadata import resolve_model_output_path
+
+    pcb_path = resolve_model_output_path(
+        resolved_script_path, fmt="pcb", explicit_out=metadata.pcb_out_target, function=metadata.entry_function
+    )
+    return CadSource(
+        source_ref=_model_source_ref(resolved_script_path, metadata),
+        cad_ref=cad_ref_from_pcb_path(pcb_path),
+        source_path=resolved_script_path,
+        source="generated",
+        origin_path=resolved_script_path,
+        script_path=resolved_script_path,
+        generator_metadata=metadata,
+        step_path=None,
+        dxf_path=None,
+        pcb_path=pcb_path,
+        mesh_tolerance=None,
+        mesh_angular_tolerance=None,
+    )
+
+
+def _harness_generator_source(resolved_script_path: Path, metadata: GeneratorMetadata) -> CadSource:
+    from cadgen.metadata import resolve_model_output_path
+
+    harness_path = resolve_model_output_path(
+        resolved_script_path, fmt="harness", explicit_out=metadata.out_target, function=metadata.entry_function
+    )
+    return CadSource(
+        source_ref=_model_source_ref(resolved_script_path, metadata),
+        cad_ref=cad_ref_from_harness_path(harness_path),
+        source_path=resolved_script_path,
+        source="generated",
+        origin_path=resolved_script_path,
+        script_path=resolved_script_path,
+        generator_metadata=metadata,
+        harness_path=harness_path,
+    )
+
+
 def _read_python_source(
     script_path: Path, *, function: str | None = None, allow_dxf_only: bool = False
 ) -> CadSource | None:
@@ -449,10 +526,22 @@ def _read_python_source(
         return None
     if metadata.format == "dxf":
         return _dxf_generator_source(resolved_script_path, metadata)
+    if metadata.format == "pcb":
+        return _pcb_generator_source(resolved_script_path, metadata)
+    if metadata.format == "harness":
+        return _harness_generator_source(resolved_script_path, metadata)
     from cadgen.metadata import resolve_model_output_path
 
     step_path = resolve_model_output_path(
         resolved_script_path, fmt="step", explicit_out=metadata.out_target, function=metadata.entry_function
+    )
+    # A board with a 3D export: a geometry model that ALSO writes its KiCad project.
+    pcb_path = (
+        resolve_model_output_path(
+            resolved_script_path, fmt="pcb", explicit_out=metadata.pcb_out_target, function=metadata.entry_function
+        )
+        if metadata.board
+        else None
     )
     return CadSource(
         source_ref=_model_source_ref(resolved_script_path, metadata),
@@ -464,6 +553,7 @@ def _read_python_source(
         generator_metadata=metadata,
         step_path=step_path,
         dxf_path=None,
+        pcb_path=pcb_path,
         mesh_tolerance=metadata.mesh_tolerance,
         mesh_angular_tolerance=metadata.mesh_angular_tolerance,
     )

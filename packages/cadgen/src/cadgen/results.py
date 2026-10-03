@@ -186,6 +186,26 @@ class MeshExportResult:
 
 
 @dataclass(frozen=True)
+class FabExportFile:
+    """One manufacturing file a board door wrote."""
+
+    path: Path
+    #: ``gerber``, ``bom`` or ``pos``.
+    fmt: str
+
+
+@dataclass(frozen=True)
+class FabExportResult:
+    """The outcome of one ``gerber``/``bom``/``pos`` door's ``build``."""
+
+    ok: bool
+    files: tuple[FabExportFile, ...] = ()
+
+    def human_lines(self) -> list[str]:
+        return [f"wrote {entry.fmt.upper()}: {_display(entry.path)}" for entry in self.files]
+
+
+@dataclass(frozen=True)
 class SnapshotFile:
     """One file a snapshot run wrote: a still, or a video of an animation clip."""
 

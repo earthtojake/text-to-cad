@@ -420,6 +420,24 @@ class FileTraceTests(unittest.TestCase):
         self.assertEqual(files, {data: _sha256_file(data), table: _sha256_file(table)})
         self.assertEqual(folders, set())
 
+    def test_an_applications_data_claimed_in_a_machine_folder_is_an_input(self) -> None:
+        # KiCad's libraries live in /usr/share/kicad on Linux, a folder the machine owns:
+        # once claimed, what a build reads there is an input like any other.
+        from cadgen._internal import filetrace
+        from cadgen._internal.source_hash import _sha256_file
+
+        machine = self.root / "usr"
+        library = self._file("usr/share/kicad/symbols/Device.kicad_sym", "(kicad_symbol_lib)")
+        other = self._file("usr/share/zoneinfo/UTC", "TZif")
+        with mock.patch.object(filetrace, "_machine_roots", return_value=(machine.resolve(),)), \
+                mock.patch.object(filetrace, "_CLAIMED", set()):
+            with filetrace.capture() as trace:
+                library.read_text(encoding="utf-8")
+                other.read_text(encoding="utf-8")
+            self.assertEqual(trace.inputs()[0], {})
+            filetrace.claim_inputs(library.parent)
+            self.assertEqual(trace.inputs()[0], {library.resolve(): _sha256_file(library)})
+
     def test_a_file_opened_only_in_native_code_is_traced(self) -> None:
         import build123d
 

@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import posixpath
 
-__all__ = ["content_type_for_static_asset", "content_type_for_path", "extension_of"]
+__all__ = ["COMPOUND_EXTENSIONS", "content_type_for_static_asset", "content_type_for_path", "extension_of"]
 
 # Static dist/SPA assets. Unknown extension -> "" and the caller sets NO
 # content-type header at all (not octet-stream).
@@ -42,19 +42,32 @@ _ASSET_CONTENT_TYPES = {
     ".step": "application/step",
     ".stp": "application/step",
     ".dxf": "application/dxf",
+    ".kicad_pcb": "text/plain; charset=utf-8",
+    ".kicad_sch": "text/plain; charset=utf-8",
+    ".harness.yml": "application/yaml; charset=utf-8",
     ".urdf": "application/xml; charset=utf-8",
     ".srdf": "application/xml; charset=utf-8",
     ".sdf": "application/xml; charset=utf-8",
 }
 
 
+# A document whose type is two suffixes: `cable.harness.yml` is a wiring harness, while a
+# plain `.yml` is no CAD file at all. Each is ONE extension to everything below.
+COMPOUND_EXTENSIONS = (".harness.yml",)
+
+
 def extension_of(file_path) -> str:
-    """``path.extname(...).toLowerCase()``.
+    """``path.extname(...).toLowerCase()`` -- except that a name ending in one of
+    :data:`COMPOUND_EXTENSIONS` answers all of it (``.harness.yml``, not ``.yml``).
 
     Node's semantics, which ``os.path.splitext`` does not share for leading-dot
     names: ``extname(".step")`` is ``""`` while ``splitext`` answers ``".step"``.
     """
     name = posixpath.basename(str(file_path or "").replace("\\", "/"))
+    lowered = name.lower()
+    for compound in COMPOUND_EXTENSIONS:
+        if lowered.endswith(compound) and len(lowered) > len(compound):
+            return compound
     dot = name.rfind(".")
     if dot <= 0:
         return ""

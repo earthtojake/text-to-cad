@@ -66,7 +66,9 @@ _TIMED_OUT = object()
 # CADGEN_FFMPEG is the same kind of per-client choice: `snapshot --video` encodes
 # with the ffmpeg the CALLER has, and a warm worker's ambient PATH is whatever
 # shell happened to start the daemon. CADGEN_STORE_MAX is the cap the daemon's
-# idle housekeeping holds the client's store to (STORE.md §8).
+# idle housekeeping holds the client's store to (STORE.md §8). The programs a
+# board or a harness build runs are the same kind of choice: the KiCad, the
+# Freerouting and the Java to run it, the WireViz (and ngspice) the caller named.
 FORWARDED_ENV_VARS = (
     "CADGEN_CACHE_DIR",
     "XDG_CACHE_HOME",
@@ -74,6 +76,12 @@ FORWARDED_ENV_VARS = (
     "PYTHONPATH",
     "CADGEN_FFMPEG",
     "CADGEN_STORE_MAX",
+    "CADGEN_KICAD_CLI",
+    "CADGEN_FREEROUTING",
+    "CADGEN_JAVA",
+    "JAVA_HOME",
+    "CADGEN_WIREVIZ",
+    "CADGEN_NGSPICE",
 )
 
 # The client's own ffmpeg, looked up once per process. Resolved HERE rather than

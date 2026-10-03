@@ -10,14 +10,22 @@ platform.
 
 **PURPOSE** — the engine and its command surface: model execution, the
 store, document assembly, kinematics, exports, validation, inspection,
-snapshots, the warm daemon and its build pool, the CAD Viewer
+snapshots, circuit boards (a `@pcb` model written as a KiCad project and
+checked, plotted and exported by KiCad's own `kicad-cli`), wiring harnesses (a
+`@harness` model written as a WireViz document, checked against the boards it
+joins, drawn and listed by WireViz's own `wireviz`), the warm daemon and
+its build pool, the CAD Viewer
 (`cadgen viewer`: a local HTTP server over the built client, one directory per
 instance), and CAD beside an agent's chat (`cadgen mcp`: an MCP App server that
 an agent host starts, over the viewer's own routes: tabs in Codex, viewer cards
 in the chat for every other MCP Apps host).
 
 **MAY DEPEND ON** — the Python ecosystem it declares (OCP/build123d lazily,
-never at namespace-import time) and the bundled runtime.
+never at namespace-import time) and the bundled runtime. Boards need KiCad 10
+installed: cadgen runs its `kicad-cli` and reads its libraries, never imports
+it, and everything else works without it. A harness's drawing and bill of
+materials need WireViz and Graphviz installed, run the same way (WireViz is
+GPL-3.0 and never imported); writing and checking a harness needs neither.
 Never app code, never JavaScript source at runtime.
 
 **DEPENDED ON BY** — every skill (as a pinned installed distribution). The
@@ -33,7 +41,7 @@ document and this one disagree, the mechanism document is right.
 | Document | What it is for | Go there when |
 |---|---|---|
 | [`STORE.md`](STORE.md) | The store's contract: layout, the two-sides law, tree/record shapes, the gate, invariants, link-vs-component, concurrency, GC, the daemon, lazy children, editing previews, debugging. Sectioned, with a table of contents | changing anything that writes to or reads from `~/.cache/cadgen`, or any build, door or reader that depends on it |
-| [`SNAPSHOTS.md`](SNAPSHOTS.md) | Snapshots: display presets, what a mesh, robot or drawing snapshot draws (the CAD Viewer's own scene for it), requests and OUT, sizes, and `--debug --json` — every measured browser stage, what each one covers, and which durations must not be added together | changing what a snapshot draws or accepts, or reading snapshot timings |
+| [`SNAPSHOTS.md`](SNAPSHOTS.md) | Snapshots: display presets, what a mesh, robot, drawing, KiCad or harness snapshot draws (the CAD Viewer's own scene for it), requests and OUT, sizes, and `--debug --json` — every measured browser stage, what each one covers, and which durations must not be added together | changing what a snapshot draws or accepts, or reading snapshot timings |
 
 ## The design laws
 
@@ -42,8 +50,8 @@ when it works. Each carries a pressure-test to apply before writing code.
 
 ### 1. Generated files are totally independent of their source code
 
-A generated file (STEP, DXF, STL, GLB, 3MF) and its sidecar
-(`<name>.step.json`) stand alone, forever.
+A generated file (STEP, DXF, STL, GLB, 3MF, a KiCad project, a WireViz harness)
+and its sidecar (`<name>.step.json`) stand alone, forever.
 
 *Pressure-test*: a generated file must be fully readable — viewer,
 snapshot, `read_scene` — by reading ONLY the generated file(s), the sidecar, and
@@ -267,8 +275,8 @@ to its source, a repo script, or a repo workflow does not.
 
 ### 16. Decorator inputs never change the geometry
 
-A `@step`/`@dxf`/`@stl`/`@glb`/`@threemf` decorator's arguments never change
-the geometry a model produces. They decide where the files land (`out=`),
+A `@step`/`@dxf`/`@stl`/`@glb`/`@threemf`/`@pcb` decorator's arguments never
+change the geometry a model produces. They decide where the files land (`out=`),
 how they are written (the mesh tolerances), and what the sidecar declares
 (`kinematics=`, `materials=`, `animation=`). The geometry is the function's return value and nothing
 else: a `Compound` placing children is packaged as occurrences, a single
@@ -345,12 +353,25 @@ cadgen build; the geometry it returns, and the answer to every `==` and
 ```
 src/cadgen/
   <format>.py            # public namespaces: step, stl, threemf, glb, dxf,
-                         #   urdf, srdf, sdf — each binds its verbs
-  authoring.py           # @step/@dxf/@stl/@glb/@threemf decorators; a call
-                         #   builds at top level and composes (a lazy child)
-                         #   inside a body; a model's outputs are what they
-                         #   declare — a mesh decorator alone is a model that
-                         #   writes no STEP
+                         #   urdf, srdf, sdf, pcb, harness — each binds
+                         #   its verbs
+  authoring.py           # @step/@dxf/@stl/@glb/@threemf/@pcb/@harness and
+                         #   their manufacturing exports (a board's gerber=,
+                         #   bom=, pos=; a harness's bom=); a call builds at top
+                         #   level and composes (a lazy child) inside a body;
+                         #   a model's outputs are what they declare — a mesh
+                         #   decorator alone is a model that writes no STEP,
+                         #   and a board with a 3D export is a geometry model
+  kicad/                 # boards: the s-expression reader/writer, KiCad's
+                         #   libraries, the board model (design), the KiCad
+                         #   10 project writers, every kicad-cli run (check,
+                         #   plot, solid, fab), simulation (spice, ngspice,
+                         #   sim) and autorouting (specctra, route: the
+                         #   Freerouting program, GPL-3.0, never shipped)
+  wireviz/               # harnesses: the harness model and its checks
+                         #   (design), colour codes, the WireViz YAML
+                         #   writer (document), and every wireviz run
+                         #   (plot, bom)
   kinematics.py          # typed mates vocabulary (revolute/slider/
                          #   cylindrical/fastened, couple, normalize)
   step_scene.py          # read_step and read_scene
@@ -394,7 +415,9 @@ src/cadgen/
 
 Verbs by format: `step` compile · build · snapshot;
 `stl`/`3mf`/`glb` build · snapshot; `dxf` snapshot; `urdf`/`sdf`
-validate · snapshot; `srdf` validate. `cadgen snapshot` routes any suffix.
+validate · snapshot; `srdf` validate; `pcb` validate · snapshot · gerber
+· bom · pos; `harness` snapshot · bom.
+`cadgen snapshot` routes any suffix.
 `cadgen store|daemon|doctor` are status commands, `cadgen viewer
 [list|stop]` the CAD Viewer's launcher and instance manager, and `cadgen mcp`
 the server an agent host starts — all deliberately outside the mirror pattern. `cadgen step compile` is internal tooling: skills never

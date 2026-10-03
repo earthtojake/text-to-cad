@@ -110,7 +110,8 @@ INSTALLS = ("store",)  # what `cadgen mcp --install` may name, reported as `sour
 UNCOUNTED = frozenset({"cad_sync", "cad_http", "cad_capture_reply", "cad_consent", "cad_recents"})
 # A file's format, by extension: what the viewer opens (``cadgen.viewer.scanner.SOURCE_EXTENSIONS``).
 FILE_KINDS = {".step": "step", ".stp": "step", ".stl": "stl", ".3mf": "3mf", ".glb": "glb", ".dxf": "dxf",
-              ".urdf": "urdf", ".srdf": "srdf", ".sdf": "sdf"}
+              ".urdf": "urdf", ".srdf": "srdf", ".sdf": "sdf", ".kicad_pcb": "kicad_pcb", ".kicad_sch": "kicad_sch",
+              ".harness.yml": "harness"}
 FILES_PER_BATCH = 32  # more wait for the next batch: the receiver takes 64 events at most
 # The receiver read the request and will never take it: malformed (400), too large (413), not JSON (415).
 # Anything else -- a 404 where no receiver is deployed yet, a firewall's 403, a 429, a 5xx -- is tried
@@ -477,7 +478,9 @@ class Recorder:
         """A CAD view has this file on screen: noted by path here, sent only as its code."""
         if not isinstance(path, str) or not path:
             return
-        kind = FILE_KINDS.get(os.path.splitext(path)[1].lower())
+        lowered = path.lower()
+        # One compound suffix: `cable.harness.yml` is a harness, a plain `.yml` nothing.
+        kind = FILE_KINDS.get(".harness.yml" if lowered.endswith(".harness.yml") else os.path.splitext(lowered)[1])
         if kind is None:
             return
         path = os.path.abspath(path)  # one file, however a view spelled it: one code, once (the receiver refuses repeats)

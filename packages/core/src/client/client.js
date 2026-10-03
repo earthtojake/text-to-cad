@@ -224,6 +224,14 @@ export function createCadClient({ origin = '', workspaceId = '', fetch: fetchImp
       if (!file) return Promise.reject(new Error('Missing file'));
       return request('/__cad/drawing', { file, signal, timeoutMs: 10_000, operation: 'drawing' });
     },
+    plotPayload(file, { signal } = {}) {
+      // A document drawn by its own tool, on the SERVER: a KiCad board or schematic is
+      // `kicad-cli`'s SVG plot, one SVG per sheet. Derived data cached by the document's bytes,
+      // so a reopen is a round trip — but a COLD plot runs the tool, and KiCad's DRC and plot
+      // of a large board take tens of seconds, hence a bound far past the house 10 s.
+      if (!file) return Promise.reject(new Error('Missing file'));
+      return request('/__cad/plot', { file, signal, timeoutMs: 180_000, operation: 'plotting' });
+    },
     requestSurfaces(body, { signal } = {}) {
       return request('/__cad/surfaces', {
         body, signal, method: 'POST', operation: 'surfaces',

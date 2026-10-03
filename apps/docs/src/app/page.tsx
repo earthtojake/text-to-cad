@@ -53,6 +53,18 @@ const skillGroups = [
       "Creates 2D DXF drawings like profiles, templates, gaskets, and cut layouts from Python sources or CAD geometry.",
   },
   {
+    name: "PCB",
+    path: "skills/pcb",
+    summary:
+      "Designs circuit boards in Python as KiCad projects that KiCad checks on every build: schematic, routed board, Gerbers, BOM, 3D for the enclosure.",
+  },
+  {
+    name: "Harness",
+    path: "skills/harness",
+    summary:
+      "Designs wiring harnesses in Python as WireViz documents checked against the boards they plug into: pinouts, wire colours, gauges, lengths, BOM.",
+  },
+  {
     name: "URDF",
     path: "skills/urdf",
     summary:

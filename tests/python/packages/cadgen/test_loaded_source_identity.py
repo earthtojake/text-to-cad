@@ -85,6 +85,7 @@ class LoadedSourceIdentity(unittest.TestCase):
             source_ref=str(self.script),
             generator_metadata=SimpleNamespace(entry_function="model"),
             step_path=self.root / "unused.step",
+            pcb_path=None,  # not a board: a STEP model's spec names no KiCad project
         )
         logger = SimpleNamespace(timed=lambda *a, **k: contextlib.nullcontext())
         with (

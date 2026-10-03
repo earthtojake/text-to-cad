@@ -234,6 +234,8 @@ requested separately. A manual dispatch runs every job.
 | --- | --- | --- |
 | Version Check | every change | canonical version, derived metadata, skill pins, the shipping contract's tree rules |
 | cadgen (Linux/Windows) | cadgen, core, infrastructure | Python engine, daemon, CLI and viewer backend |
+| KiCad boards | cadgen, core, infrastructure | `scripts/test/test-kicad.sh`: boards built end to end through KiCad 10 (from its Ubuntu PPA): fills, ERC/DRC, plots, Gerbers, 3D, simulation, and autorouting through a pinned Freerouting jar (SHA-256 checked) on Java 25. Not a required check |
+| WireViz harnesses | cadgen, core, infrastructure | `scripts/test/test-harness.sh`: harnesses through a real WireViz (pip) and Graphviz (apt): their drawings and bills of materials. Not a required check |
 | core-js | core, infrastructure | `@text-to-cad/core` and benchmark helper units |
 | web | web, UI, core, cadgen, infrastructure | UI and web units, the UI browser specs, bundled launch, format/camera browser checks through the backend |
 | skills | skills or runtime/host contracts | repo policy; skill CLI suites only for skills, cadgen, core or infrastructure |
@@ -253,6 +255,17 @@ check, so it lands together with a matching branch-protection update.
 Every job has a timeout of about twice its slowest recent run, so a hang fails
 in minutes. Within a Python suite, a test file still running after 15 minutes
 prints every thread's stack and fails by name.
+
+Tests that need KiCad live in `tests/python/packages/kicad/`, apart from the
+cadgen suite, because that suite runs where KiCad is not installed (its Windows
+job among them); everything else about boards (the SDK, the writers, the
+decorators) is tested there without KiCad, against a tiny project-local library
+(`tests/python/support/kicad_library.py`).
+
+Tests that need WireViz live in `tests/python/packages/harness/` for the same
+reason; the harness SDK, its checks, its document writer and a full `python
+cable.py` build are tested in the cadgen suite without it (WireViz only draws
+and lists a document a build has already written).
 
 A web-only edit does not run the Python engine. A UI edit exercises the web
 host. Core changes reach every consumer. Policy checks for a host edit do not

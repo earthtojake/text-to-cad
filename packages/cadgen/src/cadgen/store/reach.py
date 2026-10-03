@@ -498,7 +498,7 @@ def _is_main_guard(node: ast.stmt) -> bool:
 
 
 # cadgen's model decorators, as ``cadgen.metadata`` recognises them.
-_MODEL_DECORATORS = frozenset({"step", "dxf", "stl", "glb", "threemf"})
+_MODEL_DECORATORS = frozenset({"step", "dxf", "pcb", "harness", "stl", "glb", "threemf"})
 _PLACEHOLDER = "<literal>"
 
 

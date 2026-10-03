@@ -7,6 +7,7 @@ import { createTabStore, memoryTabRecord, useTabViewerState } from '@text-to-cad
 import type { TabRecordStorage } from '@text-to-cad/ui/tab-store';
 import { createStepRenderer } from '@text-to-cad/ui/renderers/step';
 import { createDxfRenderer } from '@text-to-cad/ui/renderers/dxf';
+import { createPlotRenderer } from '@text-to-cad/ui/renderers/plot';
 import { createGlbRenderer } from '@text-to-cad/ui/renderers/glb';
 import { createMeshRenderer } from '@text-to-cad/ui/renderers/mesh';
 import { createRobotRenderer } from '@text-to-cad/ui/renderers/robot';
@@ -74,7 +75,7 @@ function workspace(id: string) {
   // One live binding per pane: whichever renderer the file selects binds the mounted view.
   const services = { client, preferences, commands, live };
   // `harness` is test scaffolding for the shell's own tools; it ships nowhere.
-  const renderers = [createStepRenderer(services), createDxfRenderer(services), createGlbRenderer(services), createMeshRenderer(services), createRobotRenderer(services), createHarnessRenderer(services)];
+  const renderers = [createStepRenderer(services), createDxfRenderer(services), createPlotRenderer(services), createGlbRenderer(services), createMeshRenderer(services), createRobotRenderer(services), createHarnessRenderer(services)];
   return { client, source, host, renderers, commands, capture, selectReference, get controller() { return controller; } };
 }
 const a = workspace('one'), b = workspace('two');

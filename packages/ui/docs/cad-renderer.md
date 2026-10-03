@@ -19,7 +19,8 @@ modules around it (see the end of [Shell](#shell)). Applications use the registr
 `src/renderers/kit` is the format-blind half of the viewer: small modules a
 renderer composes, none of which asks what it is showing. There is one renderer
 per file family, each a vertical slice over the kit: `src/renderers/dxf`
-([DXF renderer](#dxf-renderer)), `src/renderers/glb` ([GLB renderer](#glb-renderer)),
+([DXF renderer](#dxf-renderer)), `src/renderers/plot` (KiCad boards and schematics, wiring
+harnesses, [Plot renderer](#plot-renderer)), `src/renderers/glb` ([GLB renderer](#glb-renderer)),
 `src/renderers/mesh` (STL and 3MF, [Mesh renderer](#mesh-renderer)),
 `src/renderers/robot` (URDF, SRDF and SDF, [Robot renderer](#robot-renderer)) and
 `src/renderers/step` (STEP and STP, [STEP renderer](#step-and-source-separation)). The kit imports itself, shared UI
@@ -35,6 +36,7 @@ the reverse.
 | `look/` | `stageEffects` (lighting rig scaled to the model, floor, glow and shadow catcher, grid and origin axes), the Render studio boundary (`renderStudioChunk`, `studioEnvironmentCache` and its worker). `chromeBackdrop` and `useChromeBackdropColor` (the frame colour around a scene). The surface LOOK is data the viewport resolves and a scene applies to its own materials: `@text-to-cad/core/lib/viewer/surfaceLook.js` (`createSurfaceLook(THREE, root).apply(look)`) does it for any authored material tree. The viewport resolves it with core's `resolveSceneSurfaceLook` (`common/sceneSettings.js`), the resolver the snapshot CLI dresses the same scenes with. |
 | `view-settings/` | The settings model and store (`viewSettingsStore`, `useViewSettings`, `viewerDisplaySettings`, `renderState`), applying a change to a viewport (`useAppliedViewSettings`, `viewUpdateCoordinator`, `viewUpdateGate`, `viewUpdatePlan`), and the Display tool's content (`DisplaySettingsSection`, `DisplayModeOptions`; the shell draws it as a stack panel while Display is the tool). |
 | `tools/` | `FloatingToolBar` (the dumb strip), `toolModes` (the tool-mode state machine), `ToolModeMenu` (a tool's exclusive modes: one button in its panel's header row and its dropdown), `ToolPopover` (an ordinary dropdown from its button, on a `side` and `align`ed start or end: preview's Playback settings, upward from the playbar), `ToolStack` (the bounded column under the strip, which scrolls only when what cannot give way still does not fit), `ToolPanel` (one panel of it: `fit` says how it gives way when the viewer is short, `resizable` makes it the person's to size by the grip in its bottom-right corner alone, moving only it, and a panel with a heading can fold to it; `closable` is the tree's, whose X — `ToolPanelClose`, in its filter row — closes it until a press on the tool it belongs to brings it back; `ToolPanelCollapse` is the chevron for a foldable panel whose first row is its content's; its `footer`, a `ToolPanelFooterButton`, is a full-row action under the body that never scrolls: the Reference's Copy, Drawing's Copy), `ResizeGrip` (the one resize grip of a box over the viewport, in a bottom corner: a resizable panel's at its bottom-right, Quick Edit's at its bottom-left), `toolStackLayout` (every panel's width, the resizable panels' sizes, the folded panels and the closed tree: defaults, bounds and their stored record), `floatingSurface` (the two surfaces, defined together: the strip's and every menu's over the viewport, and the stack panels' more transparent one), and the format-blind tools: `draw/` (overlay, view lock, `useDrawingViewLock`), `PreviewChrome` (preview's controls and their visibility), `PlaybackMenu` (preview's Playback settings: Animation — Routine, Speed, Loop, Autoplay — then Orbit and its speed), `preview/` (orbit preferences), `playbar/` (`ViewportAnimationBar`, `animationClock`, `usePlaybackFrames`, `playbackPreferences`: the file's Playback settings — orbit and its speed, Autoplay, the routine's chosen Speed and Loop), `pose/` (the handle overlay, canvas, drag mathematics), `select/` (`usePointerPick`: taps and hover through a scene's own `pick`), `quick-edit/` (`QuickEdit`, the note to the agent, and `quickEditPrompt`, the context it builds and the text it copies). Screenshot capture is `@text-to-cad/core/lib/viewer/screenshotCapture.js`. |
+| `plane/` | A flat picture on a canvas, for the renderers that are not on the shell (DXF, plot): `usePlaneView` (fit on open and on resize until the person moves the view; drag to pan, wheel or pinch to zoom about the pointer, double-click to fit; a resize keeps a chosen view in the terms it was chosen in; one `requestAnimationFrame` per change, painted by the renderer's own `paint(ctx, frame)`; a frame handle that survives StrictMode's remount; `capture`, the canvas as a PNG), `planeTransform` (the view a file keeps: three numbers, and only once moved) and `themeColors` (the app's `--background` and `--foreground`, read at draw time). The view maths is core's `lib/drawing2d/transform.js`. |
 | `inspector/` | `FileSheet` and its row and section primitives, `modelTreeSearch` (`useTreeSearch`, the ranked flat search every tree shares), `VirtualRows` (a long tree's rows, windowed), `referenceRows` (`InfoRow`, `MonoValue`, `CoordValue`), `kinematicsControls` (the `Pose` row that heads every Position section, with its Reset). The tree row and filter box are `primitives/tree-row` and `primitives/tree-filter`. |
 | `status/` | `LoadingIndicator` and `ViewerLoadingOverlay`, `ViewerAlertCard` (the card over the viewport for every alert, and `useAlertDismissal`: a card put away, and its icon in the navbar that brings it back) and `reportIssue` (`alertIssueUrl`: its Report Issue's new issue), `MissingFileAlert`, `ViewUpdateStatus`, `loadingState` (`viewerLoadingState`), `loadAlerts` (`failureAlert`, `noGeometryAlert`). |
 | `shell/` | The host glue every renderer needs that is not about its scene: see [Shell](#shell). |
@@ -218,8 +220,8 @@ returns the live catalog entry of the prepared file, the prompt `resource`, the
 `useDeclinedSelectReference` consumes a host's request to select a reference in
 a file that has none without changing the view. A renderer is then its
 scene hook, its tool list and its tool panels, if it has any
-(`glb/GlbRenderer.jsx`, `mesh/MeshRenderer.jsx`, `robot/RobotRenderer.jsx`). The DXF renderer uses the workspace module without the
-shell: it has no scene, so it reaches the same catalog entry and commands directly.
+(`glb/GlbRenderer.jsx`, `mesh/MeshRenderer.jsx`, `robot/RobotRenderer.jsx`). The DXF and plot renderers use the workspace module
+without the shell: they have no scene, so they reach the same catalog entry and commands directly.
 
 The shell's behaviour has one real-browser test,
 `kit/shell/RendererShell.browser.test.mjs` (deferred files, warm reopen, isolated
@@ -305,7 +307,8 @@ the viewer was inventing from the file; a drawing is not that.
   primitive's inner rings are its holes; merging two overlapping regions of one colour
   into a single path would turn their overlap into a hole as well. Fills go down
   before strokes, which is the one ordering that never hides an edge.
-- **Interaction** (`dxf/useDrawingView.js`): fit on open and on resize until the
+- **Interaction** (the kit's `plane/usePlaneView.js`, which `dxf/useDrawingView.js`
+  paints the drawing through): fit on open and on resize until the
   person moves the view, drag to pan (any primary press, one finger), wheel or pinch to
   zoom about the pointer, double-click to fit again. The view lives in a REF and the
   canvas repaints through one `requestAnimationFrame` when something changed; a pan
@@ -343,6 +346,65 @@ the viewer was inventing from the file; a drawing is not that.
   flip, the red circle, the unfilled island, the hairline at 800%, zoom about the
   pointer, pan, re-fit, the resize rule, and that the file explorer is the navbar's only
   panel, with no tab, tool strip or preview.
+
+## Plot renderer
+
+`createPlotRenderer` (`@text-to-cad/ui/renderers/plot`, id `plot`) shows a document as the
+picture its own tool draws of it: a KiCad board (`.kicad_pcb`) or schematic (`.kicad_sch`)
+as KiCad plots it, and a wiring harness (`<name>.harness.yml`; a plain `.yml` is no CAD
+file) as WireViz draws it. It is a straight render, as a DXF is: not on the shell, no
+three.js, no viewport, no panel, no Display settings, no layer toggles, no tools, no
+toolbar, no preview. A board's 3D is the STEP or GLB its model exports, which are files of
+their own.
+
+- **The picture is KiCad's.** `client.plotPayload(file)` is one `GET /__cad/plot`
+  (`apps/web/docs/backend.md`): `kicad-cli` plots the document to SVG on the server — a
+  board as one sheet, its layers back to front on KiCad's board background and any
+  unrouted connection as a ratsnest line; a schematic as one sheet per page, root first.
+  A harness is one sheet, WireViz's Graphviz diagram on WireViz's page colour. Sheets are
+  millimetres, y down, each on its own `background`. **This renderer never parses KiCad's
+  or WireViz's files**, and its colours are the tool's own.
+- **Layout and drawing are core's** (`@text-to-cad/core/lib/plot2d`), so the snapshot
+  bundle draws the same picture: `layoutPlot` stacks the sheets top to bottom, each
+  centred on the widest, 4% of the widest apart; `drawPlot` fills each visible sheet's
+  rectangle with its background and then draws images placed in page space;
+  `loadSheetImages` decodes each SVG once, as an image. The view maths is drawing2d's: the
+  page is its model space with y negated (`layout.modelBounds`), so fit, pan and zoom are
+  the DXF pane's, through the same kit (`kit/plane/`).
+- **Crisp, and cheap to pan** (`plot/plotRasters.js`). The browser rasterises an SVG at
+  the scale it lands at, too slowly to do every frame: a large board's plot is tens of
+  megabytes and a second to draw. So the pane draws the SVGs into a PATCH — the view and a
+  margin, at its exact device scale, on the pane's pixel grid — and paints every frame from
+  patches: a pan moves one by whole device pixels; a zoom scales what it has until the view
+  has rested 120 ms, then the view is drawn again at its own scale. The first frame is drawn
+  at once. Three patches are kept, the least recently shown first out. The pane's
+  `data-plot-settled` says whether the frame on screen is final, and a capture draws first.
+- **Kind is words.** The payload's `kind` names the document — "Reading board", "Updating
+  schematic…", "Harness: cable.harness.yml", alert titles and the declined-command sentences,
+  which name the tool (`plot/plotWords.js`) — and changes nothing that is drawn. Until the
+  payload arrives the file's suffix says.
+- **The surround** is the theme's `--background`, read at draw time; a theme flip repaints
+  it and nothing else, since every sheet keeps its own background.
+- **Host commands, state, navbar** are the DXF pane's: `resetCamera` fits, `capture` is the
+  canvas as a PNG, `thumbnail` draws the SVGs fitted on a canvas of its own, `readState`
+  reports `camera: null` and an empty `display`; `select`, `clearSelection`, `setCamera`,
+  `setDisplaySettings` and `setRenderMode` are declined in words; the view is the file view's
+  camera once moved; the navbar has the file tree's toggle and nothing of the plot's.
+- **Failures.** A non-200 is the ordinary actionable card with the SERVER's sentence — a
+  machine without KiCad (or WireViz and Graphviz) is told how to install it, an unreadable
+  document why; a payload from a cadgen that disagrees about `schemaVersion` gets the version
+  alert.
+- **`cadgen pcb snapshot`** and **`cadgen harness snapshot`** (and `cadgen snapshot` for the
+  same suffixes) draw the same payload with the same `drawPlot`, fitted to the image
+  (`common/headlessPlotRender.js`).
+- **Fixtures and tests**: `plot/__fixtures__` holds hand-made payloads in KiCad's and
+  WireViz's shape.
+  `PlotRenderer.browser.test.mjs` asserts on pixels — the fit, the board's background, a
+  track's thickness and its sharp edge at 400%, a schematic's stacked sheets, the theme's
+  surround, a harness's Graphviz sheet, an untainted capture, a library card's picture, the
+  view kept on reopening, the missing-KiCad card; `PlotRenderer.test.tsx` the states, the
+  declined commands (a harness's in WireViz's name) and the StrictMode remount;
+  `plotRasters.test.js` the patches.
 
 ## GLB renderer
 
@@ -597,7 +659,7 @@ files, each `{ version, camera, display, playback, renderer }` (`kit/shell/fileV
 | `camera` | The renderer's own: a scene's pose, lens and projection (a perspective snapshot, scoped to the model on read), restored in place of the open-time fit — null, or not a camera, fits; a drawing's plane transform. |
 | `display` | The Display settings, Clip and Explode included. |
 | `playback` | Preview's Playback settings, every one of them (`kit/tools/playbar/playbackPreferences.js`): `orbit` on or off (on by default) and `orbitSpeed` (1), `autoplay` (off), and `speed` and `loop` once chosen — unset, the routine's authored values apply. Kept between leaving and re-entering preview, and across a reload of the tab; entering preview orbits only if the file's orbit is on. |
-| `renderer` | The renderer's slices, each `{ signature, value }`, restored only while the signature the renderer declares for the file on screen still matches. STEP (`workbench/stepViewSlices.js`): `tree` (expanded nodes, hidden parts, isolated assemblies) and `largeFile` against the geometry, `pose` against the sidecar. Robot: `pose` (joint values) against the description's revision. GLB, mesh: none. DXF: nothing beyond its camera. |
+| `renderer` | The renderer's slices, each `{ signature, value }`, restored only while the signature the renderer declares for the file on screen still matches. STEP (`workbench/stepViewSlices.js`): `tree` (expanded nodes, hidden parts, isolated assemblies) and `largeFile` against the geometry, `pose` against the sidecar. Robot: `pose` (joint values) against the description's revision. GLB, mesh: none. DXF, plot: nothing beyond their camera. |
 
 | Not kept | Every open starts it afresh |
 | --- | --- |
@@ -1279,7 +1341,7 @@ effects pass reports whether a style, visibility or highlight changed
 
 Draw is the shared [drawing editor](drawing.md) (Excalidraw) laid transparently
 over the viewport. It is a STEP tool and appears on no other format: a GLB, an
-STL, a 3MF, a DXF and a robot description do not offer it. (The tool itself is
+STL, a 3MF, a DXF, a KiCad board or schematic, a wiring harness and a robot description do not offer it. (The tool itself is
 the SHELL's — `kit/tools/draw`, `shell.tools.draw` — and STEP is the renderer that
 puts it on its strip; `renderers/shell-harness` also mounts it, for tests.) The
 chunk loads on the first use of the tool, and the
@@ -1344,8 +1406,8 @@ have.
 
 The host's `captureRequest` command captures the view (with Draw's ink, when there is
 some): to a composer destination it goes through the prompt-context port
-(`promptContext.deliver`) with the references it depicts. The DXF renderer, which is
-not on the shell, answers it with its canvas through the same port.
+(`promptContext.deliver`) with the references it depicts. The DXF and plot renderers,
+which are not on the shell, answer it with their canvas through the same port.
 
 ### Preview and camera
 

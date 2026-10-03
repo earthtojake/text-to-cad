@@ -24,6 +24,7 @@ import {
 import { resolveAnimationFrame } from "./animationClock.js";
 import { framePlanElapsedSec, resolveFramePlan } from "./framePlan.js";
 import { runHeadlessDrawingJob } from "./headlessDrawingRender.js";
+import { runHeadlessPlotJob } from "./headlessPlotRender.js";
 import { loadSourceAnimation } from "./renderModule.js";
 import {
   createHttpTessellationCacheProvider,
@@ -167,12 +168,22 @@ function jobIsDrawing(job) {
   return String(job?.resolved?.kind || "").toLowerCase() === "dxf";
 }
 
+/** A `plot` job: a document its own tool drew (a KiCad board or schematic), not a scene. */
+function jobIsPlot(job) {
+  return String(job?.resolved?.kind || "").toLowerCase() === "plot";
+}
+
 export async function runHeadlessRenderJob(job) {
   // A drawing never enters the mesh pipeline: there is no source to fetch, no
   // model to build and no viewport to fit. It is painted on a 2D canvas with
   // the code the viewer's DXF pane paints with (./headlessDrawingRender.js).
   if (jobIsDrawing(job)) {
     return runHeadlessDrawingJob(job);
+  }
+  // Nor does a plot: its sheets are SVGs the browser draws on a 2D canvas, with the code the
+  // viewer's plot pane draws with (./headlessPlotRender.js).
+  if (jobIsPlot(job)) {
+    return runHeadlessPlotJob(job);
   }
   const family = headlessSceneFamily(job);
   if (family) {
@@ -269,6 +280,9 @@ export async function prepareHeadlessRenderSequence(job) {
   disposeHeadlessRenderSequence();
   if (jobIsDrawing(job)) {
     throw new Error("a video renders an animation clip; a DXF is a flat 2D drawing with no clips");
+  }
+  if (jobIsPlot(job)) {
+    throw new Error("a video renders an animation clip; a plot is a flat picture its own tool drew, with no clips");
   }
   if (headlessSceneFamily(job)) {
     throw new Error(`a video renders a STEP model's animation clip; a ${String(job?.resolved?.kind || job?.kind).toUpperCase()} has none`);

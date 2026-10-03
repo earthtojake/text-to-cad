@@ -21,7 +21,7 @@ const FIELDS = new Set(['schema', 'install', 'session', 'version', 'source', 'pl
 const SOURCES = new Set(['store', 'manual']);
 const PLATFORMS = new Set(['darwin', 'linux', 'win32', 'other']);
 const PRESENTATIONS = new Set(['tabs', 'inline', 'text', 'browser']);
-const KINDS = new Set(['step', 'stl', '3mf', 'glb', 'dxf', 'urdf', 'srdf', 'sdf']);
+const KINDS = new Set(['step', 'stl', '3mf', 'glb', 'dxf', 'urdf', 'srdf', 'sdf', 'kicad_pcb', 'kicad_sch', 'harness']);
 
 export class Invalid extends Error {}
 

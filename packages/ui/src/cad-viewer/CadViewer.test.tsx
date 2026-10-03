@@ -46,7 +46,7 @@ test('the CAD viewer follows its catalog, and shows what the viewer asks for thr
   const { rerender } = render(view('parts/a.step'));
   const props = () => viewer.props!;
   // One renderer per file family, every one reading the tab's settings.
-  expect(props().renderers.map(renderer => renderer.id)).toEqual(['step', 'dxf', 'glb', 'mesh', 'robot']);
+  expect(props().renderers.map(renderer => renderer.id)).toEqual(['step', 'dxf', 'plot', 'glb', 'mesh', 'robot']);
   // While the catalog resolves the requested file, the navbar names nothing...
   expect(props().navigationPath).toBeNull();
   await act(async () => client.publish([{ file: '/models/parts/a.step', rootRelativeFile: 'parts/a.step' }, { file: 'b.step' }]));

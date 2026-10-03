@@ -37,22 +37,27 @@ DRAWING_ROUTE_PATH = "/__cad/drawing"
 DRAWING_SUFFIX = ".dxf"
 
 
-def resolve_drawing_path(root_path: str, file_ref, *, lazy: bool = False) -> str | None:
-    """The absolute ``.dxf`` this ref names, or ``None`` for a 404.
+def resolve_drawing_path(
+    root_path: str,
+    file_ref,
+    *,
+    lazy: bool = False,
+    suffixes: tuple[str, ...] = (DRAWING_SUFFIX,),
+    route: str = DRAWING_ROUTE_PATH,
+    noun: str = "DXF drawings",
+) -> str | None:
+    """The absolute document this ref names, or ``None`` for a 404.
 
     Raises ``ValueError`` for a ref this route will not take and
-    ``ForbiddenAssetError`` for one that leaves the root.
+    ``ForbiddenAssetError`` for one that leaves the root. The KiCad route
+    (``kicad.py``) uses the same rule with its own suffixes.
     """
     normalized = normalized_file_ref(file_ref)
+    wanted = " or ".join(suffixes)
     if not normalized:
-        raise ValueError(
-            f"GET {DRAWING_ROUTE_PATH} needs ?file=<a .dxf inside the served directory>"
-        )
-    if not normalized.lower().endswith(DRAWING_SUFFIX):
-        raise ValueError(
-            f"{DRAWING_ROUTE_PATH} renders DXF drawings; "
-            f"{node_basename(normalized)} is not a {DRAWING_SUFFIX} file"
-        )
+        raise ValueError(f"GET {route} needs ?file=<a {wanted} inside the served directory>")
+    if not normalized.lower().endswith(tuple(suffixes)):
+        raise ValueError(f"{route} renders {noun}; {node_basename(normalized)} is not a {wanted} file")
     root = os.path.abspath(str(root_path or ""))
     # abspath collapses the dot segments BEFORE the check, so the string that
     # is verified is the string that is opened.

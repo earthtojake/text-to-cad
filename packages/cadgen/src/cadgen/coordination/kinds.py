@@ -61,6 +61,31 @@ DRAWING_PACKAGE = ArtifactKind(
     },
 )
 
+# A generated board: the products are its KiCad project files. Writing them is quick;
+# KiCad's own fill and checks (kicad-cli) are the phase a person waits on.
+PHASE_CHECK_BOARD = "check-board"
+
+PCB_PACKAGE = ArtifactKind(
+    name="pcb-package",
+    phases=(PHASE_GENERATE, PHASE_CHECK_BOARD, PHASE_WRITE, PHASE_FINALIZE),
+    labels={
+        PHASE_CHECK_BOARD: "Checking with KiCad",
+        PHASE_WRITE: "Writing KiCad project",
+    },
+)
+
+# A generated harness: the product is its one WireViz document (`.harness.yml`), and with
+# bom= its bill of materials, which WireViz lists. cadgen's own checks run in the generate
+# phase; nothing else takes long enough to report.
+HARNESS_PACKAGE = ArtifactKind(
+    name="harness-package",
+    phases=(PHASE_GENERATE, PHASE_WRITE, PHASE_FINALIZE),
+    labels={
+        PHASE_GENERATE: "Building harness",
+        PHASE_WRITE: "Writing harness",
+    },
+)
+
 # A snapshot render. Not a reported artifact -- it writes no status record, because it
 # produces an image, not an output another process might read half-built.
 # It is a kind anyway so its CLI reports through the same phase model as everything else;

@@ -1,0 +1,8 @@
+/PCB/*
+!/PCB/imported/
+/STEP/*
+!/STEP/imported/
+/HARNESS/*
+!/HARNESS/imported/
+/tmp/
+__pycache__/

@@ -52,6 +52,7 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+from cadgen.viewer.content_types import extension_of
 from cadgen.viewer.scanner import SOURCE_EXTENSIONS, catalog_lists
 
 from .protocol import INVALID_PARAMS, METHOD_NOT_FOUND, Connection, RequestContext, RpcError, claim_stdout
@@ -82,8 +83,11 @@ _UI_EXTENSION = "io.modelcontextprotocol/ui"
 _TABS_EXTENSION = "dev.texttocad/tabs"
 _TAB_ENTRYPOINTS = frozenset({"global", "thread", "file"})
 
+# What a viewer shows, as every surface below names it.
+_FORMATS = "STEP, STL, GLB, 3MF, DXF, URDF, SDF, KiCad boards and schematics, WireViz harnesses"
+
 INSTRUCTIONS = (
-    "CAD shows local CAD models (STEP, STL, GLB, 3MF, DXF, URDF, SDF) in a viewer tab beside the chat. "
+    f"CAD shows local CAD models ({_FORMATS}) in a viewer tab beside the chat. "
     "To show a model, call cad_show: it switches an open viewer and never opens a tab. "
     "Only when cad_show reports no open viewer, call cad_open, once. "
     "Viewers refresh when files change, so never reopen after a rebuild. "
@@ -91,7 +95,7 @@ INSTRUCTIONS = (
 )
 
 INLINE_INSTRUCTIONS = (
-    "CAD shows local CAD models (STEP, STL, GLB, 3MF, DXF, URDF, SDF) in interactive viewers in the chat. "
+    f"CAD shows local CAD models ({_FORMATS}) in interactive viewers in the chat. "
     "Call cad_show to show one: each call adds a viewer and pauses the earlier ones. "
     "Viewers refresh when their files change, so never show a model again after a rebuild. "
     "cad_view reports what the user is looking at and has selected in a viewer, and cad_screenshot returns "
@@ -99,7 +103,7 @@ INLINE_INSTRUCTIONS = (
 )
 
 TEXT_INSTRUCTIONS = (
-    "CAD opens local CAD models (STEP, STL, GLB, 3MF, DXF, URDF, SDF) in the CAD Viewer in the user's browser: "
+    f"CAD opens local CAD models ({_FORMATS}) in the CAD Viewer in the user's browser: "
     "this app cannot show CAD views itself. Call cad_show with a model to get its link and share it. "
     "The Viewer refreshes when the file changes, so share a model's link once, not after every rebuild."
 )
@@ -381,7 +385,7 @@ class Server:
         shows = {"ui": {"resourceUri": self.page.uri}}
         return [
             {"name": "cad_show", "title": "Show in CAD", "icons": [ICON], "annotations": _READ_ONLY, "_meta": shows,
-             "description": ("Show a local CAD model (STEP, STL, GLB, 3MF, DXF, URDF, SDF) in an interactive viewer in the "
+             "description": (f"Show a local CAD model ({_FORMATS}) in an interactive viewer in the "
                              "chat. Each call adds a viewer and pauses the earlier ones. A viewer refreshes by itself when "
                              "its file changes, so show a model once, not after every rebuild. The result names the view: "
                              "pass it to cad_view or cad_screenshot."),
@@ -401,7 +405,7 @@ class Server:
         """No page to open or read: cad_show hands over a link to the model in the CAD Viewer."""
         return [
             {"name": "cad_show", "title": "Show in CAD", "icons": [ICON], "annotations": _READ_ONLY,
-             "description": ("Get a link that opens a local CAD model (STEP, STL, GLB, 3MF, DXF, URDF, SDF) in the CAD "
+             "description": (f"Get a link that opens a local CAD model ({_FORMATS}) in the CAD "
                              "Viewer in the user's browser; this app cannot show CAD views itself. The Viewer refreshes "
                              "when the file changes, so share a model's link once, not after every rebuild."),
              "inputSchema": _object({"path": _SHOWN_PATH}, ["path"])},
@@ -528,7 +532,7 @@ class Server:
         path = os.path.abspath(path)
         if not os.path.isfile(path):
             raise ToolFailed(f"No file at {path}.")
-        if os.path.splitext(path)[1].lower() not in SOURCE_EXTENSIONS:
+        if extension_of(path) not in SOURCE_EXTENSIONS:
             raise ToolFailed(f"CAD opens {', '.join(EXTENSIONS)} files; {os.path.basename(path)} is not one.")
         return path
 

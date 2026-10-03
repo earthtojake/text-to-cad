@@ -13,7 +13,7 @@ import { useWorkspaceDocument } from "../workspace/useWorkspaceDocument.js";
 import { drawingLoadAlert, useDrawingPayload } from "./useDrawingPayload.js";
 import { useDrawingView } from "./useDrawingView.js";
 import { readFileView, writeFileView } from "../kit/shell/fileView.js";
-import { drawingTransformCamera, readDrawingTransform } from "./drawingTransform.js";
+import { planeTransformCamera, readPlaneTransform } from "../kit/plane/planeTransform.js";
 
 /**
  * A `.dxf` is a straight render: the drawing, on a canvas, and nothing else but Quick Edit,
@@ -53,15 +53,15 @@ function DxfSurface({ view, data }) {
   // ---- the view this file was left at ---------------------------------------
   // The file's view (`kit/shell/fileView.js`) with the drawing's transform as its camera and
   // nothing else: a drawing has no Display settings and no slices of its own.
-  const [restored] = useState(() => readDrawingTransform(readFileView(view.state).camera));
-  const storedRef = useRef(JSON.stringify(writeFileView({ camera: drawingTransformCamera(restored, Boolean(restored)) })));
+  const [restored] = useState(() => readPlaneTransform(readFileView(view.state).camera));
+  const storedRef = useRef(JSON.stringify(writeFileView({ camera: planeTransformCamera(restored, Boolean(restored)) })));
   const saveTimer = useRef(0);
   const stateChangeRef = useRef(onStateChange);
   stateChangeRef.current = onStateChange;
   // A view that is still the fit stores nothing — `null` is "fit me", and it is
   // what a drawing dropped back to the fit must write, not a stale transform.
   const rememberView = useCallback((transform) => {
-    const record = writeFileView({ camera: drawingTransformCamera(transform, Boolean(transform)) });
+    const record = writeFileView({ camera: planeTransformCamera(transform, Boolean(transform)) });
     const serialized = JSON.stringify(record);
     if (serialized === storedRef.current) return;
     storedRef.current = serialized;

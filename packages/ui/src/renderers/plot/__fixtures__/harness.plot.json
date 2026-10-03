@@ -1,0 +1,15 @@
+{
+ "schemaVersion": 1,
+ "kind": "harness",
+ "wirevizVersion": "0.4.1",
+ "sheets": [
+  {
+   "name": "cable",
+   "svg": "<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"no\"?>\n<svg width=\"216pt\" height=\"108pt\" viewBox=\"0.00 0.00 216.00 108.00\" xmlns=\"http://www.w3.org/2000/svg\" xmlns:xlink=\"http://www.w3.org/1999/xlink\">\n<g id=\"graph0\" class=\"graph\" transform=\"scale(1 1) rotate(0) translate(4 104)\">\n<polygon fill=\"#ffffff\" stroke=\"none\" points=\"-4,4 -4,-104 212,-104 212,4 -4,4\"/>\n<g id=\"node1\" class=\"node\"><polygon fill=\"#ffffff\" stroke=\"#000000\" points=\"2,-80 40,-80 40,-20 2,-20 2,-80\"/></g>\n<g id=\"edge1\" class=\"edge\"><path fill=\"none\" stroke=\"#ff0000\" stroke-width=\"6\" d=\"M20,-50 L188,-50\"/></g>\n</g>\n</svg>\n",
+   "width": 76.2,
+   "height": 38.1,
+   "background": "#ffffff"
+  }
+ ],
+ "unrouted": null
+}

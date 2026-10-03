@@ -59,6 +59,20 @@ export interface CadDrawingPayload {
   }[];
   [key: string]: unknown;
 }
+/**
+ * What `GET /__cad/plot` answers: a document drawn by its own tool (a KiCad board or schematic,
+ * plotted by `kicad-cli`), one SVG per sheet. SVG user units are millimetres, y DOWN, the
+ * viewBox `0 0 width height`; each sheet is drawn on its own `background`. `kind` names what
+ * drew it, for wording only. See `apps/web/docs/backend.md`.
+ */
+export interface CadPlotPayload {
+  schemaVersion: number;
+  kind: string;
+  /** A board's unconnected pairs, already drawn in its SVG as a ratsnest; null for a schematic. */
+  unrouted: number | null;
+  sheets: { name: string; svg: string; width: number; height: number; background: string }[];
+  [key: string]: unknown;
+}
 /** Byte tickets own their buffer exclusively: workers may detach it. URL tickets are approved by the provider. */
 export type CadWorkerResourceTicket =
   | { kind: 'url'; url: string; headers?: Record<string, string>; cache?: RequestCache; maxBytes?: number }
@@ -133,6 +147,8 @@ export interface CadWorkspaceService {
   requestArtifact(file: string, options?: CadRequestOptions & {force?: boolean}): Promise<CadArtifactResult>;
   /** A `.dxf` flattened to 2D render primitives on the server; the client never parses DXF. */
   drawing(file: string, options?: CadRequestOptions): Promise<CadDrawingPayload>;
+  /** A KiCad board or schematic as the SVG sheets its tool plots, on the server. */
+  plotPayload(file: string, options?: CadRequestOptions): Promise<CadPlotPayload>;
   readonly resources: CadResourceProvider;
   resolveSurfaceComponents(view: CadRuntimeView, requested: CadSurfaceComponentRequest[], options?: CadRequestOptions): Promise<Map<string, CadSurfaceTicket>>;
   observeEditingPreview(file: string, onUpdate: (preview: CadEditingPreview) => void, onError: (error: unknown) => void, options?: CadPreviewObserverOptions): () => void;

@@ -9,7 +9,8 @@ create table if not exists events (
   event          text        not null,  -- tool | view | file
   tool           text,                  -- event = tool: cad_show, cad_view, ...
   file           text,                  -- event = file: 16 hex characters, an HMAC of the path under the install's own salt
-  kind           text,                  -- event = file: step | stl | 3mf | glb | dxf | urdf | srdf | sdf
+  kind           text,                  -- event = file: step | stl | 3mf | glb | dxf | urdf | srdf | sdf |
+                                        --   kicad_pcb | kicad_sch | harness
   calls          integer     not null,  -- tool: calls; view: touches; file: 1
   errors         integer     not null,  -- tool: failed calls
   version        text        not null,  -- cadgen's

@@ -1,0 +1,15 @@
+{
+ "schemaVersion": 1,
+ "kicadVersion": "10.0.6",
+ "kind": "board",
+ "unrouted": 1,
+ "sheets": [
+  {
+   "name": "blinky",
+   "svg": "<?xml version=\"1.0\" standalone=\"no\"?>\n<svg xmlns=\"http://www.w3.org/2000/svg\" version=\"1.1\" width=\"40mm\" height=\"30mm\" viewBox=\"0 0 40 30\">\n<g style=\"fill:none;stroke-linecap:round;stroke-linejoin:round\">\n<path d=\"M5 15 L35 15\" style=\"stroke:#C83434;stroke-width:1\" />\n<rect x=\"2\" y=\"2\" width=\"10\" height=\"6\" style=\"stroke:#F2EDA1;stroke-width:0.15\" />\n<path d=\"M20 20 L35 27\" style=\"stroke:#C2C2C2;stroke-width:0.1\" />\n</g>\n</svg>\n",
+   "width": 40,
+   "height": 30,
+   "background": "#001023"
+  }
+ ]
+}

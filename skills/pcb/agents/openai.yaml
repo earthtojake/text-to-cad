@@ -1,0 +1,4 @@
+interface:
+  display_name: "PCB"
+  short_description: "Design circuit boards in Python as checked KiCad projects."
+  default_prompt: "Use $pcb to design or edit a printed circuit board as a Python @pcb model, build it into a KiCad 10 project checked by KiCad's ERC and DRC, add Gerbers, BOM and placement files or a 3D export when needed, and launch CAD Viewer to show the board and its schematic."
