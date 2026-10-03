@@ -310,6 +310,16 @@ describe('a Quick Edit in the chat', () => {
     expect(updates[2].params.content).toHaveLength(1);
   });
 
+  it('says to copy the prompt where a tab host does not take context, instead of the bare JSON-RPC error', async () => {
+    const port = createChatPromptContext({
+      hostContext: {}, onHostContext: () => () => {},
+      request: async () => { throw new HostError('Method not found', -32601); },
+    } as any, { resolvePath, reach: { queue: true, send: false, sendImages: false } });
+    const result = await port.deliver(edit());
+    expect(result.status).toBe('failed');
+    expect((result as { message: string }).message).toMatch(/Copy Prompt/);
+  });
+
   it('sends a message into the chat, its sketch as an image, or saved and named where the host refuses the image', async () => {
     const sent: any[] = [];
     let refuse = false;

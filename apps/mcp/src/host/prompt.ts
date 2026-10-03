@@ -9,6 +9,7 @@ const MAX_ITEMS = 24;
 const MAX_IMAGE_BYTES = 20 * 1024 * 1024;
 // JSON-RPC's "invalid params": what a host answers a message whose content it does not take.
 const INVALID_PARAMS = -32602;
+const METHOD_NOT_FOUND = -32601;
 
 type Attachment = Extract<PromptPart, { kind: 'attachment' }>;
 /** One block of a message or of the composer's model context: text or an image, titled for the context popover. */
@@ -106,7 +107,15 @@ export function createChatPromptContext(bridge: Pick<Bridge, 'request' | 'onHost
           queued = next;
         });
         queueing = update.catch(() => {});
-        await update;
+        try { await update; }
+        catch (error) {
+          // A tab host is not asked whether it takes context (Codex forwards it undeclared), so one
+          // that does not answers "Method not found": say what to do instead of the bare JSON-RPC error.
+          if (error instanceof HostError && error.code === METHOD_NOT_FOUND) {
+            return { status: 'failed', message: "This app's chat doesn't take added context yet. Use Copy Prompt and paste it instead." };
+          }
+          throw error;
+        }
         return { status: 'added', partIds: context.parts.map(part => part.id) };
       });
     },
