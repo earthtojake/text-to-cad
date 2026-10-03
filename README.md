@@ -129,7 +129,7 @@ the [latest release](https://pypi.org/project/cadgen/) and restart the app.
 ```json
 {
   "mcpServers": {
-    "cad": { "command": "uvx", "args": ["--no-config", "--from", "cadgen==0.7.10", "cadgen", "mcp"] }
+    "cad": { "command": "uvx", "args": ["--no-config", "--from", "cadgen==0.7.11", "cadgen", "mcp"] }
   }
 }
 ```
