@@ -1,6 +1,6 @@
 {
   "name": "text-to-cad-workspace",
-  "version": "0.7.9",
+  "version": "0.7.10",
   "private": true,
   "type": "module",
   "workspaces": [
