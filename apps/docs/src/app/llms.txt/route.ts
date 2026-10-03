@@ -3,6 +3,7 @@
 import {
   agentInstallByline,
   agentInstallMessage,
+  agentInstallSteps,
   installs,
   pluginDescription,
   skillGroups,
@@ -29,6 +30,8 @@ export function GET() {
     "```text",
     agentInstallMessage,
     "```",
+    "",
+    agentInstallSteps,
     "",
     ...installs.flatMap((item) => [
       `### ${item.agent}`,

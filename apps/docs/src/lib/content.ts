@@ -20,6 +20,9 @@ export const support = {
 // (the README's Install, which says the same).
 export const agentInstallByline = "Send this message to your agent and it will install text-to-cad for you.";
 export const agentInstallMessage = "Install text-to-cad from https://github.com/earthtojake/text-to-cad";
+// What an agent sent that message is told (README and /llms.txt; the page is for people).
+export const agentInstallSteps =
+  "Agents installing text-to-cad: check that uv is installed (`uv --version`; if it is missing, point the user to https://docs.astral.sh/uv/getting-started/installation/). Then run the commands under your app's heading below, or Other Agents if it has none, and tell the user to restart the app. An agent installing the skills alone without a person at the prompts runs `npx skills add earthtojake/text-to-cad -g -a <agent> -y`.";
 
 // Installing by hand, each its own sub-section of Install: the plugin for each agent app (the skills
 // and CAD's viewer together), then the skills alone, with the Skills CLI, for any other agent.
@@ -55,7 +58,7 @@ export const installs = [
   {
     id: "gemini",
     agent: "Gemini",
-    command: "gemini extensions install https://github.com/earthtojake/text-to-cad",
+    command: "gemini extensions install https://github.com/earthtojake/text-to-cad --consent --auto-update",
   },
   {
     id: "other-agents",
