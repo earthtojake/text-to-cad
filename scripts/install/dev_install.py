@@ -26,7 +26,7 @@ keeps the code it started with.
 
 Environment:
     CADGEN_PYTHON           the interpreter that runs the server (default: the checkout's .venv)
-    CODEX_CLI               the codex CLI (default: `codex` on PATH, else the one in ChatGPT.app)
+    CODEX_CLI               the codex CLI (default: the newer of `codex` on PATH and the Codex app's)
     CLAUDE_DESKTOP_CONFIG   Claude Desktop's config file (default: its own, per platform)
 """
 
@@ -182,11 +182,26 @@ def cli(name: str) -> str:
 
 
 def codex_cli() -> str:
-    found = os.environ.get("CODEX_CLI") or shutil.which("codex") \
-        or "/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex"
-    if not os.access(found, os.X_OK):
-        raise Refused(f"No codex CLI at {found}; set CODEX_CLI.")
-    return found
+    """CODEX_CLI, else the newer of `codex` on PATH and the one the Codex app bundles.
+
+    Both write the same ~/.codex, which the app, the terminal CLI and the IDE extension share,
+    so the install must come from a CLI at least as new as the app that reads it.
+    """
+    if os.environ.get("CODEX_CLI"):
+        candidates = [os.environ["CODEX_CLI"]]
+    else:
+        candidates = [path for path in (shutil.which("codex"), "/Applications/ChatGPT.app/Contents/Resources/codex-cli/bin/codex")
+                      if path and os.access(path, os.X_OK)]
+    versions = {}
+    for path in candidates:
+        try:
+            output = subprocess.run([path, "--version"], capture_output=True, text=True, check=True).stdout
+            versions[path] = tuple(int(part) for part in output.split()[-1].split(".")[:3])
+        except (OSError, subprocess.CalledProcessError, ValueError, IndexError):
+            continue
+    if not versions:
+        raise Refused("No working codex CLI; install Codex or set CODEX_CLI.")
+    return max(versions, key=versions.get)
 
 
 def interpreter() -> str:
