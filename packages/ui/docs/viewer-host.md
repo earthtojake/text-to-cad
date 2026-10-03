@@ -388,19 +388,19 @@ With no file open the name's place says "Select file" (words, not a control), an
 the page says "Ask the agent to show a model". Right: the renderer's navigation actions, any
 declared panel's toggle, then the update (`UpdateButton`, `NavbarLinks.jsx`): where the host
 found a newer release (`links.latest`), a blue download button whose menu says the step to it,
-how this host updates (`links.install`) and what is new; without one, nothing. Then GitHub
-(`GitHubLink`), which says the project is open source, then Feedback
-(`FeedbackLink`), where the host has a tracker (`links.issues`): a new issue titled "Feedback: ",
-for the person to finish, naming the version and `environment.platform`, just before the
-renderer's view controls and never among them. It has no label: the project has none for
-feedback, and what is said may be a bug, a request or a question. Then Settings, the person's:
-FileViewer draws the control its composer hands it (`FileViewerProps.settings`) over every
-file, after Feedback and before the renderer's view controls, and `CadViewer` hands it the
-Settings popover (`SettingsPopover`, `kit/shell/SettingsPopover.jsx`) the home has too — one
-component, the same sections in both. It shows the version beside its title, the host's own
-settings (`appSettings`, below) under it, and a footer with "Made by @…" (`MadeBy`, the host's X
-account) at its left and Discord and GitHub (`CommunityLinks`) at its right. The home has
-GitHub, Feedback and Settings under its wordmark, in that order, after the update. An alert card's Report Issue opens a new issue too,
+how this host updates (`links.install`) and what is new; without one, nothing. Then Settings,
+the person's: FileViewer draws the control its composer hands it (`FileViewerProps.settings`)
+over every file, just before the renderer's view controls and never among them, and `CadViewer`
+hands it the Settings popover (`SettingsPopover`, `kit/shell/SettingsPopover.jsx`) the home has
+too — one component, the same sections in both. It shows the version beside its title, the
+host's own settings (`appSettings`, below) under it, then Share Feedback where the host has a
+tracker (`links.issues`): a button that opens a new issue titled "Feedback: " (`feedbackUrl`,
+`NavbarLinks.jsx`), for the person to finish, naming the version and `environment.platform`
+(`CadViewer` hands the popover the platform). It has no label: the project has none for
+feedback, and what is said may be a bug, a request or a question. Its footer has "Made by @…"
+(`MadeBy`, the host's X account) at its left and Discord and GitHub (`CommunityLinks`) at its
+right. The home has GitHub (`GitHubLink`), which says the project is open source, and Settings
+under its wordmark, in that order, after the update. An alert card's Report Issue opens a new issue too,
 titled "Issue: " and labelled `bug`, filled in from the card (`kit/status/reportIssue.js`): its
 title, message and failure, the file's name, the version and platform, then its Details, cut from
 their end to keep the address, title and labels included, under `ISSUE_URL_MAX`. No path of the

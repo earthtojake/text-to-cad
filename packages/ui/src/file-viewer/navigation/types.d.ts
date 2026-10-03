@@ -257,8 +257,6 @@ export const ViewerNavbar: ComponentType<{
   /** The box the renderer draws its view controls into, at the row's right end. */
   controlsRef?: (element: HTMLDivElement | null) => void;
   links?: import("../../host/types.js").ViewerLinks;
-  /** The host's `environment.platform`, which Feedback's issue names. */
-  platform?: string;
   clipboard: import("../../host/types.js").ClipboardPort;
   onError?: (error: Error) => void;
   className?: string;
@@ -279,12 +277,6 @@ export const CommunityLinks: ComponentType<{
   onError?: (error: Error) => void;
 }>;
 
-/** Feedback: an icon link to a new issue (`links.issues`) titled "Feedback: ", naming the version and `platform`; nothing without one. */
-export const FeedbackLink: ComponentType<{
-  links: import("../../host/types.js").ViewerLinks;
-  platform?: string;
-  onError?: (error: Error) => void;
-}>;
 
 /** One panel's toggle in the navbar; `active` is its panel being open. */
 export const PanelToggle: ComponentType<{

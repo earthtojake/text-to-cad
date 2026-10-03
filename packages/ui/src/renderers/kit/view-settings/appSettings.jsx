@@ -15,11 +15,15 @@ export function appSettingsSections(appSettings = []) {
   }));
 }
 
-/** The host's settings as the Settings popover shows them, in the viewer and on the home alike. */
-export function AppSettingsSections({ appSettings }) {
+/**
+ * The host's settings as the Settings popover shows them, in the viewer and on the home alike, and
+ * after them the popover's own sections (`children`), one rule between each.
+ */
+export function AppSettingsSections({ appSettings, children = null }) {
   return <div className="[&_[data-settings-section-heading]_.text-xs]:text-tiny" data-settings-sections="">
     {appSettingsSections(appSettings).map(section => <FileSheetSettingsSection key={section.id} sectionId={section.id} title={section.title}>
       {section.content}
     </FileSheetSettingsSection>)}
+    {children}
   </div>;
 }

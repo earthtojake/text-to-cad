@@ -142,13 +142,13 @@ test("Settings is the person's, one popover in the viewer's navbar and on the ho
     promptContext: unavailablePromptContext, environment: { colorScheme: 'light' as const }, links: viewerLinks({ version: '0.7.4' }) };
   render(<CadViewer client={client as never} host={host} tabStore={createTabStore(memoryTabRecord())} live={createLiveRegistry()} file="parts/a.step"
     rootPath="/models" library={library} appSettings={appSettings} onShow={() => {}} />);
-  // What each Settings shows once opened: its sections, each its title and its rows.
+  // What each Settings shows once opened: its sections, each its title and its rows (a setting, or a link).
   const opened = async (element: ReactElement) => {
     const view = render(element);
     fireEvent.click(view.getAllByRole('button', { name: 'Settings' }).at(-1)!);
     const dialog = await screen.findByRole('dialog', { name: 'Settings' });
     const sections = [...dialog.querySelectorAll('[data-settings-section]')].map(section => [section.querySelector('h2')!.textContent,
-      [...section.querySelectorAll('label')].map(row => row.textContent)]);
+      [...section.querySelectorAll('label, a')].map(row => row.getAttribute('href') ?? row.textContent)]);
     fireEvent.click(dialog.querySelector<HTMLElement>('[data-settings-section] input')!);
     view.unmount();
     return sections;
@@ -157,7 +157,8 @@ test("Settings is the person's, one popover in the viewer's navbar and on the ho
   const navbar = await opened(viewer.props!.settings as ReactElement);
   // The home's, under its wordmark.
   const home = await opened(viewer.props!.presentation!.home as ReactElement);
-  expect(navbar).toEqual([['Analytics', ['Share anonymous usage data']], ['Other', ['Another setting']]]);
+  expect(navbar).toEqual([['Analytics', ['Share anonymous usage data']], ['Other', ['Another setting']],
+    ['Share Feedback', [expect.stringMatching(/^https:\/\/github\.com\/earthtojake\/text-to-cad\/issues\/new\?title=Feedback/)]]]);
   expect(home).toEqual(navbar);
   // Each row is the host's own setting, changed through the host.
   expect(changes).toEqual(['analytics:true', 'analytics:true']);

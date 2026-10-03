@@ -10,7 +10,7 @@ import { NAVBAR_CONTROLS_CLASS, NAVBAR_ROW_CLASS } from "../../lib/navbarRow.js"
 import { EntryMenuItems, useEntryMenuFocusGuard } from "./EntryMenu.jsx";
 import { entryMenu } from "./entry-menu.js";
 import { InlineName } from "./InlineName.jsx";
-import { FeedbackLink, UpdateButton } from "./NavbarLinks.jsx";
+import { UpdateButton } from "./NavbarLinks.jsx";
 
 /**
  * The row above a file: ONE navbar, the same in every app, so a person finds each control in the
@@ -25,9 +25,9 @@ import { FeedbackLink, UpdateButton } from "./NavbarLinks.jsx";
  * Right: the file's own actions (the CAD viewer's one: a dismissed alert's icon, which brings its
  * card back), the toggles of any panel the file declares, the host's update —
  * a blue download button, only where the host found a newer release (`NavbarLinks.jsx`) —
- * Feedback (a new issue where the host has a tracker), the host's Settings (`settings`, the same
- * popover as on its home, over every file), then the renderer's view controls (`controlsRef`: the
- * CAD viewer's Preview). Preview takes the whole page, this row with it.
+ * the host's Settings (`settings`, the same popover as on its home, over every file: Share
+ * Feedback is in it), then the renderer's view controls (`controlsRef`: the CAD viewer's Preview).
+ * Preview takes the whole page, this row with it.
  *
  * Nothing here is drawn for its own sake: a control appears only where it does something.
  */
@@ -114,12 +114,11 @@ function FileActions({ entry, capabilities, platform, onAction }) {
  * @param {import("react").ReactNode} [props.settings] The host's Settings, before the renderer's view controls.
  * @param {(element: HTMLDivElement | null) => void} [props.controlsRef] The box the renderer draws its view controls into.
  * @param {import("../../host/types.js").ViewerLinks} [props.links]
- * @param {string} [props.platform] The host's `environment.platform`, which Feedback's issue names.
  * @param {import("../../host/types.js").ClipboardPort} props.clipboard
  * @param {(error: Error) => void} [props.onError]
  * @param {string} [props.className]
  */
-export function ViewerNavbar({ onBack, explorer = null, file = null, selecting = false, status = null, trailing = null, settings = null, controlsRef, links, platform, clipboard, onError, className }) {
+export function ViewerNavbar({ onBack, explorer = null, file = null, selecting = false, status = null, trailing = null, settings = null, controlsRef, links, clipboard, onError, className }) {
   const name = file ? file.path.split("/").pop() || file.path : "";
   return (
     <header className={cn(NAVBAR_ROW_CLASS, "border-border bg-background text-foreground", className)} data-viewer-navbar="">
@@ -141,7 +140,6 @@ export function ViewerNavbar({ onBack, explorer = null, file = null, selecting =
       <div className={NAVBAR_CONTROLS_CLASS}>
         {trailing}
         {links ? <UpdateButton links={links} clipboard={clipboard} onError={onError} /> : null}
-        {links ? <FeedbackLink links={links} platform={platform} onError={onError} /> : null}
         {settings}
         <div ref={controlsRef} className="contents" data-navbar-controls="" />
       </div>

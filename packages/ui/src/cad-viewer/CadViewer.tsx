@@ -173,7 +173,7 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
   // Settings, one popover in the viewer's navbar (over every file) and on the home: the person's
   // settings, never a file's.
   const settingsControl = useMemo(() => host.links || appSettings?.length
-    ? <SettingsPopover links={host.links} appSettings={appSettings} /> : null, [host.links, appSettings]);
+    ? <SettingsPopover links={host.links} appSettings={appSettings} platform={platform} /> : null, [host.links, appSettings, platform]);
   const layout = settings.library.layout;
   const changeLayout = useCallback((next: LibraryLayout) => preferences.update({ library: { layout: next } }), [preferences]);
   const presentation = useMemo(() => ({

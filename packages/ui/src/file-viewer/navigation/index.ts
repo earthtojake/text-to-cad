@@ -31,7 +31,6 @@ export const FileExplorer = runtime.FileExplorer as typeof Contract.FileExplorer
 export const ViewerNavbar = runtime.ViewerNavbar as typeof Contract.ViewerNavbar;
 export const UpdateButton = runtime.UpdateButton as typeof Contract.UpdateButton;
 export const CommunityLinks = runtime.CommunityLinks as typeof Contract.CommunityLinks;
-export const FeedbackLink = runtime.FeedbackLink as typeof Contract.FeedbackLink;
 export const PanelToggle = runtime.PanelToggle as typeof Contract.PanelToggle;
 export const FileIcon = runtime.FileIcon as typeof Contract.FileIcon;
 export const FolderIcon = runtime.FolderIcon as typeof Contract.FolderIcon;

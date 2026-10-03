@@ -47,16 +47,14 @@ none.
   renderer's one navbar action. Then a declared panel's toggle, the update — a
   blue download button, there only when
   the host found a newer release, whose menu says the step to it, how this host
-  updates and what is new — then **GitHub** (its mark, a link to the project: it
-  is open source), then **Feedback** (a speech bubble, a link to a new
-  issue titled "Feedback: " naming the version and platform, where the host has a tracker), then
-  **Settings** (the person's, over every file: see [Settings](#settings)), then the view's control
-  (Preview). Preview puts Feedback away with the navbar.
+  updates and what is new — then **Settings** (the person's, over every file: see
+  [Settings](#settings); Share Feedback is in it), then the view's control (Preview).
   The version is beside the Settings popover's title; "Made by @…" (X), Discord and GitHub are its footer. A CAD file
   declares no panel and publishes no navbar action but that icon. A host's home has no navbar:
-  its update (when there is one), GitHub, Feedback and **Settings** stand under its TEXTTOCAD wordmark,
-  in that order. The home's Settings is the same popover, centred under its cog, and holds the same
-  sections. The home has no footer of its own.
+  its update (when there is one), GitHub (its mark, a link to the project: it is open source)
+  and **Settings** stand under its TEXTTOCAD wordmark, in that order. The home's Settings is the
+  same popover, centred under its cog, and holds the same sections. The home has no footer of
+  its own.
   The update shows only for a release
   later than the version the page names, whatever the host says. A view shown small in a
   conversation (`compact`) has none either, and draws the model alone: no tools,
@@ -472,9 +470,13 @@ after it failed to as well), and the cog under the home's wordmark. Between its 
 and its footer are the host's own settings (`appSettings`), a section for each `section`
 they name, in the order they come, each always open with a checkbox row per setting:
 **Analytics** (Share anonymous usage data), then **Features** — **Quick edit**, on until
-the person turns it off ([Quick Edit](#quick-edit)) — in both apps. A host with none shows
-the header and footer alone. Nothing of a file is in it: a file's view is its Display
-panel's. Every row is the person's, not a view's or a tab's: the host keeps it where every
+the person turns it off ([Quick Edit](#quick-edit)) — in both apps. Then, where the host has
+a tracker (`links.issues`), the popover's own last section, **Share Feedback**: one full-row
+button, the speech bubble and **Open a GitHub issue**, a link to a new issue titled
+"Feedback: " for the person to finish, naming the version and the platform, with no label
+(what is said may be a bug, a request or a question). Last because it is an action, not a
+setting, and it sits by the footer's community links. A host with none of these shows the
+header and footer alone. Nothing of a file is in it: a file's view is its Display panel's. Every row is the person's, not a view's or a tab's: the host keeps it where every
 view of theirs reads it (both apps: their settings, `settings.json` in cadgen's state
 directory), and a view reads it again whenever the person comes back to the page.
 

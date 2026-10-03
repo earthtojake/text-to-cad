@@ -38,22 +38,13 @@ it('draws the navbar only when it has something to hold, and never for a view sh
   expect(screen.queryByRole('button', { name: 'File actions' })).toBeNull();
   expect(screen.queryByRole('button', { name: 'Show files' })).toBeNull();
   cleanup();
-  // The host's links: without an update, Feedback — a new issue titled "Feedback: ", for the person
-  // to finish, naming the version and the platform (GitHub is under the home's wordmark; X, Discord
-  // and GitHub are in Settings' footer, the version in its header). It carries no label: the project has none for feedback.
+  // The host's links, without an update: the row is drawn, and its right end holds nothing of the
+  // links themselves — Feedback is Settings' Share Feedback, GitHub is under the home's wordmark, and
+  // X, Discord and GitHub are Settings' footer, the version its header.
   const linked = { ...host, links: viewerLinks({ version: 'v0.7.4' }), environment: { colorScheme: 'light', platform: 'darwin' } };
   open({ navigationPath: null, host: linked });
   await screen.findByText('shown');
-  expect(labels()).toEqual(['Feedback']);
-  const feedback = new URL(screen.getByRole('link', { name: 'Feedback' }).getAttribute('href')!);
-  expect(`${feedback.origin}${feedback.pathname}`).toBe('https://github.com/earthtojake/text-to-cad/issues/new');
-  expect(feedback.searchParams.get('title')).toBe('Feedback: ');
-  expect(feedback.searchParams.has('labels')).toBe(false);
-  expect(feedback.searchParams.get('body')).toMatch(/^\*\*What happened, or what would you like\?\*\*\n[\s\S]*- CAD: 0\.7\.4\n- Platform: darwin$/);
-  cleanup();
-  // A host with no tracker: no Feedback, and no link at all.
-  open({ navigationPath: null, host: { ...linked, links: viewerLinks({ version: '0.7.4', issues: '' }) } });
-  await screen.findByText('shown');
+  expect(navbar()).not.toBeNull();
   expect(labels()).toEqual([]);
   cleanup();
   open({ host: { ...linked, environment: { colorScheme: 'light', compact: true } } });
@@ -93,7 +84,7 @@ it('an update is a blue download button whose menu says the step to it, how this
   expect(within(menu).queryByText('In your terminal')).toBeNull();
 });
 
-it('puts Feedback and the host\'s Settings just before the view\'s controls, outside them, and steps the navbar aside while the renderer shows its file fullscreen', async () => {
+it('puts the host\'s Settings just before the view\'s controls, outside them, with no Feedback of its own, and steps the navbar aside while the renderer shows its file fullscreen', async () => {
   // A renderer with the CAD viewer's control in the navbar, its Preview, which is fullscreen.
   const fullscreen = defineFileRenderer({
     id: 'full', priority: 2, matches: () => true, prepare: async () => ({ data: null }),
@@ -106,13 +97,13 @@ it('puts Feedback and the host\'s Settings just before the view\'s controls, out
   render(<FileViewer file="parts/a.step" host={{ ...host, links: viewerLinks({ version: '0.7.4' }) } as any} renderers={[fullscreen]}
     state={{ panel: null, panelWidth: 220 }} onStateChange={() => {}} settings={<button type="button" aria-label="Settings" />} />);
   await screen.findByRole('button', { name: 'Preview' });
-  expect(labels()).toEqual(['Feedback', 'Settings', 'Preview']);
+  // Feedback is Settings' Share Feedback now: the navbar has no link of its own for it.
+  expect(labels()).toEqual(['Settings', 'Preview']);
   expect(labels('[data-navbar-controls]')).toEqual(['Preview']);
   act(() => screen.getByRole('button', { name: 'Preview' }).click());
   expect(navbar()).toBeNull();
-  expect(screen.queryByRole('link', { name: 'Feedback' })).toBeNull();
   act(() => screen.getByRole('button', { name: 'Back' }).click());
-  expect(labels()).toEqual(['Feedback', 'Settings', 'Preview']);
+  expect(labels()).toEqual(['Settings', 'Preview']);
 });
 
 it('leads back to the host\'s home from a file, and draws no navbar over the home itself', async () => {

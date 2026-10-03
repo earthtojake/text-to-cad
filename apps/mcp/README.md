@@ -167,8 +167,8 @@ reference host `basic-host` does.
 the one the web Viewer shows) over one launch's root, with this host's ports — its
 tunnel (which also carries a copied prompt's sketch to the server: `attachments`), its
 chat, its file menu (copy path, copy relative path under a project,
-Reveal through `cad_reveal`), the navbar's links (Feedback's and an alert's Report Issue's
-new issue among them), followed through `ui/open-link`,
+Reveal through `cad_reveal`), the navbar's and Settings' links (Settings' Share Feedback and an
+alert's Report Issue open a new issue), followed through `ui/open-link`,
 and, on the sidebar, its library, with Open: the desktop's file chooser, where any file can be chosen.
 With no model there it is the home, and a model opened from it has the navbar's back
 arrow to it. A view keeps its tab record in memory (`App.tsx`): the model on screen keeps

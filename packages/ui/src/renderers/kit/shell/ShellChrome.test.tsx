@@ -312,7 +312,7 @@ it('a load the model did not survive leaves only the card saying so, and a faile
 });
 
 it("a dismissed alert's own icon, leftmost of the navbar's right-hand controls, brings its card back; it goes with the card's return, and when the alert clears", async () => {
-  // The harness under the real FileViewer, whose navbar holds the host's Feedback and the view's controls.
+  // The harness under the real FileViewer, whose navbar holds the host's Settings and the view's control.
   const host = testHost({ links: viewerLinks({ version: '0.7.5' }), environment: { colorScheme: 'light', platform: 'darwin' },
     files: { id: 'one', rootName: 'one', stat: async (path: string) => ({ path, name: path, kind: 'file', extension: 'harness', size: 1 }) } });
   render(<FileViewer file="one.harness" host={host as any} renderers={[createHarnessRenderer({ preferences: tabSettings() })]}
@@ -322,28 +322,28 @@ it("a dismissed alert's own icon, leftmost of the navbar's right-hand controls, 
     .map(node => node.getAttribute('aria-label'));
   const card = () => screen.queryByRole('alert');
   const stage = (name: string) => act(() => { fireEvent.click(document.querySelector(`[data-harness-stage="${name}"]`)!); });
-  expect(right()).toEqual(['Feedback', 'Settings', 'Preview']);
+  expect(right()).toEqual(['Settings', 'Preview']);
   stage('failed');
   expect(card()!.textContent).toContain('Harness update failed');
-  expect(right()).toEqual(['Feedback', 'Settings', 'Preview'], 'the card is up: no icon');
+  expect(right()).toEqual(['Settings', 'Preview'], 'the card is up: no icon');
   // Put away: the card's own icon, in the error's colour, named after the alert, before everything else at the right.
   fireEvent.click(within(card()!).getByRole('button', { name: 'Dismiss' }));
   expect(card()).toBeNull();
-  expect(right()).toEqual(['Harness update failed', 'Feedback', 'Settings', 'Preview']);
+  expect(right()).toEqual(['Harness update failed', 'Settings', 'Preview']);
   const icon = screen.getByRole('button', { name: 'Harness update failed' });
   expect(icon.querySelector('svg')!.getAttribute('class')).toMatch(/\blucide-circle-alert\b.*\btext-destructive\b/);
   // Pressed, it brings the card back and goes.
   fireEvent.click(icon);
   expect(card()!.textContent).toContain('Harness update failed');
-  expect(right()).toEqual(['Feedback', 'Settings', 'Preview']);
+  expect(right()).toEqual(['Settings', 'Preview']);
   // Put away again, and then the alert clears: no card, and no icon; raised again, the card shows.
   fireEvent.click(within(card()!).getByRole('button', { name: 'Dismiss' }));
   expect(right()[0]).toBe('Harness update failed');
   stage('idle');
-  expect([card(), right()]).toEqual([null, ['Feedback', 'Settings', 'Preview']]);
+  expect([card(), right()]).toEqual([null, ['Settings', 'Preview']]);
   stage('failed');
   expect(card()).not.toBeNull();
-  expect(right()).toEqual(['Feedback', 'Settings', 'Preview']);
+  expect(right()).toEqual(['Settings', 'Preview']);
 });
 
 it('the file explorer, open over the top-left corner, puts the tools out of sight, kept as they are', () => {

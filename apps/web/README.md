@@ -367,9 +367,10 @@ The Viewer has the one navbar every app shares (see
 [the host contract](../../packages/ui/docs/viewer-host.md#host-chrome-slots)): at the
 left the explorer's toggle and the open file's name with its ⋯ ("Select file" with
 none open); at the right the update (a blue download button, only when GitHub has a
-newer release), Feedback (a new issue titled "Feedback: "), Settings (the person's settings, here
-Analytics: the same popover as the CAD app's home), then the view's control (Preview); the version
-is beside the Settings popover's title, and its footer has "Made by @…" (X), Discord and GitHub. This host
+newer release), Settings (the person's settings — Analytics, Features, then Share Feedback, a new
+issue titled "Feedback: " — the same popover as the CAD app's home), then the view's control
+(Preview); the version is beside the Settings popover's title, and its footer has "Made by @…"
+(X), Discord and GitHub. This host
 supplies the links (`src/host/viewerLinks.js`): its version, the GitHub (where new
 issues open) and Discord its build names (`VIEWER_GITHUB_URL`, `VIEWER_DISCORD_URL`),
 and what GitHub's latest-release API
