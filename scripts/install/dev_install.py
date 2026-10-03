@@ -1,22 +1,23 @@
 #!/usr/bin/env python3
-"""Install this checkout into an agent app, to test the skills and the plugin locally.
+"""Install this checkout into an agent app, to test the plugin locally.
 
-A plugin host gets the development plugin, text-to-cad@earthtojake-dev: this checkout's skills,
-and CAD's server run by this checkout's .venv (`cadgen mcp`), serving a copy of this checkout's
+Each host gets the development plugin, text-to-cad@earthtojake-dev: this checkout's skills, and
+CAD's server run by this checkout's .venv (`cadgen mcp`), serving a copy of this checkout's
 apps/mcp build. Claude Desktop's chat takes servers, not plugins, so it gets that server alone.
-Agents without plugins get live links to the skills. Run it again after a change; --uninstall
-takes the install out.
+Run it again after a change; --uninstall takes the install out. For an agent without plugins,
+install the skills alone from the checkout with the Skills CLI: `npx skills add . -g -a <agent>`.
 
-One copy per app: a host that already loads another copy of the plugin (the published one, or
-this one through another host) is refused, because two copies means every skill twice. Cursor
-and Grok Build both load the plugins Claude Code installed, so `claude` covers all three.
+One copy per app: a host that already loads another copy (the published plugin, this one through
+another host, or this repository's skills installed loose) is refused, because two copies means
+every skill twice. Cursor and Grok Build both load the plugins Claude Code installed, so `claude`
+covers all three.
 
-    scripts/install/dev_install.py codex [--restart]   # the Codex app
     scripts/install/dev_install.py claude              # Claude Code (and so Cursor and Grok Build)
+    scripts/install/dev_install.py codex [--restart]   # the Codex app, CLI and IDE extension
     scripts/install/dev_install.py cursor              # Cursor, without Claude Code
     scripts/install/dev_install.py grok                # Grok Build, without Claude Code
+    scripts/install/dev_install.py gemini              # Gemini CLI
     scripts/install/dev_install.py claude-desktop      # Claude Desktop's chat: the server alone
-    scripts/install/dev_install.py gemini|agents       # skill links, for agents without plugins
     scripts/install/dev_install.py <host> --uninstall
 
 The page is a copy taken at install, as an installed wheel serves its own: a page that changed
@@ -27,6 +28,7 @@ keeps the code it started with.
 Environment:
     CADGEN_PYTHON           the interpreter that runs the server (default: the checkout's .venv)
     CODEX_CLI               the codex CLI (default: the newer of `codex` on PATH and the Codex app's)
+    GEMINI_CLI              the gemini CLI (default: `gemini` on PATH)
     CLAUDE_DESKTOP_CONFIG   Claude Desktop's config file (default: its own, per platform)
 """
 
@@ -44,13 +46,14 @@ import time
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MARKETPLACE = "earthtojake-dev"
-PLUGIN_HOSTS = ("codex", "claude", "cursor", "grok")
-SKILL_HOSTS = ("gemini", "agents")
-HOSTS = (*PLUGIN_HOSTS, "claude-desktop", *SKILL_HOSTS)
+PLUGIN_HOSTS = ("claude", "codex", "cursor", "grok", "gemini")
+HOSTS = (*PLUGIN_HOSTS, "claude-desktop")
 DESKTOP_SERVER = "cad-dev"
 CURSOR_PLUGINS = Path.home() / ".cursor" / "plugins" / "local"
 # Written into the Cursor plugin folder, so --uninstall and a reinstall only ever touch our own.
 OWNER_MARK = ".text-to-cad-dev"
+# Every SKILL.md of this repository's says where it is maintained; a loose skill saying so is ours.
+PROVENANCE = "earthtojake/text-to-cad"
 IGNORED = shutil.ignore_patterns("__pycache__", "*.pyc", ".DS_Store")
 # A Codex thread waits this long for the server's first start, which may build the page's data.
 CODEX_STARTUP_SECONDS = 30
@@ -63,10 +66,6 @@ class Refused(Exception):
 
 def plugin_name(root: Path = REPO_ROOT) -> str:
     return json.loads((root / ".claude-plugin" / "plugin.json").read_text(encoding="utf-8"))["name"]
-
-
-def skill_names(root: Path = REPO_ROOT) -> list[str]:
-    return sorted(path.parent.name for path in (root / "skills").glob("*/SKILL.md"))
 
 
 def dev_root(host: str, root: Path = REPO_ROOT) -> Path:
@@ -85,11 +84,18 @@ def assemble(host: str, plugin_dir: Path, version: str, server: dict, root: Path
     """Write the plugin `host` loads into `plugin_dir` and return its manifest.
 
     The skills are copied, the host's manifest takes `version` (each install its own, so a host
-    that caches by version takes this build) and names a server config holding `server` alone.
+    that caches by version takes this build) and names `server` alone: in a server config beside
+    it, or, for Gemini, which keeps servers in the manifest itself, inline.
     """
     if plugin_dir.exists():
         shutil.rmtree(plugin_dir)
     shutil.copytree(root / "skills", plugin_dir / "skills", ignore=IGNORED)
+    if host == "gemini":
+        manifest = json.loads((root / "gemini-extension.json").read_text(encoding="utf-8"))
+        manifest["version"] = version
+        manifest["mcpServers"] = {"cad": server}
+        write_json(plugin_dir / "gemini-extension.json", manifest)
+        return manifest
     manifest_dir = {"codex": ".codex-plugin", "cursor": ".cursor-plugin"}.get(host, ".claude-plugin")
     servers_file = "codex.mcp.json" if host == "codex" else "claude.mcp.json"
     manifest = json.loads((root / manifest_dir / "plugin.json").read_text(encoding="utf-8"))
@@ -110,51 +116,31 @@ def assemble(host: str, plugin_dir: Path, version: str, server: dict, root: Path
     return manifest
 
 
-def link_skills(destination: Path, root: Path = REPO_ROOT) -> list[str]:
-    """Link each of this checkout's skills into `destination`; drop links to retired ones.
-
-    A path that is not a link into this checkout's skills is someone else's and left alone.
-    Returns what it did, one line each.
-    """
-    skills_root = (root / "skills").resolve()
-    destination.mkdir(parents=True, exist_ok=True)
-    done = []
-    for path in sorted(destination.iterdir()):
-        target = ours(path, skills_root)
-        if target is not None and not (target / "SKILL.md").is_file():
-            path.unlink()
-            done.append(f"removed {path.name} (retired)")
-    for name in skill_names(root):
-        link = destination / name
-        if link.is_symlink() or link.exists():
-            if ours(link, skills_root) is None:
-                done.append(f"skipped {name}: {link} is not this checkout's link")
-            continue
-        link.symlink_to(skills_root / name, target_is_directory=True)
-        done.append(f"linked {name}")
-    return done
+def loose_skills(folders: list[Path]) -> list[Path]:
+    """This repository's skills installed loose in `folders` (by the Skills CLI, or linked by hand)."""
+    found = []
+    for folder in folders:
+        for skill in sorted(folder.glob("*/SKILL.md")) if folder.is_dir() else []:
+            try:
+                if PROVENANCE in skill.read_text(encoding="utf-8", errors="replace"):
+                    found.append(skill.parent)
+            except OSError:
+                continue
+    return found
 
 
-def unlink_skills(destination: Path, root: Path = REPO_ROOT) -> list[str]:
-    skills_root = (root / "skills").resolve()
-    done = []
-    if destination.is_dir():
-        for path in sorted(destination.iterdir()):
-            if ours(path, skills_root) is not None:
-                path.unlink()
-                done.append(f"removed {path.name}")
-        if not any(destination.iterdir()):
-            destination.rmdir()
-    return done
-
-
-def ours(path: Path, skills_root: Path) -> Path | None:
-    """The skill folder `path` links to, when it is a link into `skills_root`."""
-    if not path.is_symlink():
-        return None
-    target = Path(os.readlink(path))
-    target = Path(os.path.normpath(target if target.is_absolute() else path.parent / target))
-    return target if Path(os.path.realpath(target.parent)) == skills_root else None
+def skill_folders(host: str) -> list[Path]:
+    """The user-level skill folders `host` loads skills from, as each app was seen to."""
+    home = Path.home()
+    claude = Path(os.environ.get("CLAUDE_CONFIG_DIR") or home / ".claude")
+    return {
+        # Cursor and Grok Build load Claude Code's plugins, so a Claude Code install reaches theirs too.
+        "claude": [claude / "skills", home / ".cursor" / "skills", home / ".grok" / "skills"],
+        "codex": [Path(os.environ.get("CODEX_HOME") or home / ".codex") / "skills"],
+        "cursor": [home / ".cursor" / "skills"],
+        "grok": [home / ".grok" / "skills", claude / "skills"],
+        "gemini": [home / ".gemini" / "skills", home / ".agents" / "skills"],
+    }[host]
 
 
 def write_json(path: Path, value: dict) -> None:
@@ -169,15 +155,17 @@ def write_json(path: Path, value: dict) -> None:
     os.replace(temporary, path)
 
 
-def run(*command: str, capture: bool = False) -> str:
-    result = subprocess.run(command, check=True, text=True, stdout=subprocess.PIPE if capture else None)
+def run(*command: str, capture: bool = False, answer: str | None = None) -> str:
+    """Run a CLI; with `capture`, return what it printed and keep its chatter off the terminal."""
+    pipe = subprocess.PIPE if capture else None
+    result = subprocess.run(command, check=True, text=True, input=answer, stdout=pipe, stderr=pipe)
     return result.stdout if capture else ""
 
 
-def cli(name: str) -> str:
-    found = shutil.which(name)
+def cli(name: str, hint: str = "") -> str:
+    found = os.environ.get(f"{name.upper()}_CLI") or shutil.which(name)
     if not found:
-        raise Refused(f"No `{name}` on PATH.")
+        raise Refused(f"No `{name}` on PATH{hint}.")
     return found
 
 
@@ -258,6 +246,19 @@ def grok_installed() -> list[str]:
     return [plugin.get("source") or plugin.get("path", "") for plugin in plugins if plugin.get("name") == plugin_name()]
 
 
+def gemini_installed(gemini: str) -> list[str]:
+    """Where each of Gemini CLI's installs of this extension came from (`Source:` in its list)."""
+    sources, current = [], None
+    # Gemini prints the list on stderr.
+    listing = subprocess.run([gemini, "extensions", "list"], capture_output=True, text=True, check=True)
+    for line in (listing.stdout + listing.stderr).splitlines():
+        if line[:1] in ("✓", "✗"):
+            current = line[1:].strip().split(" ")[0]
+        elif current == plugin_name() and line.strip().startswith("Source:"):
+            sources.append(line.split("Source:", 1)[1].rsplit(" (Type:", 1)[0].strip())
+    return sources
+
+
 def cursor_installed() -> list[Path]:
     """Cursor's local plugin folders that hold this plugin."""
     found = []
@@ -273,9 +274,9 @@ def cursor_installed() -> list[Path]:
 
 
 def refuse_other_copies(host: str) -> None:
-    """Refuse when an app this host feeds already loads another copy of the plugin."""
+    """Refuse when an app this host feeds already loads another copy of the plugin or its skills."""
     dev_id = f"{plugin_name()}@{MARKETPLACE}"
-    others = []
+    others = [f"loose skills: {path}" for path in loose_skills(skill_folders(host))]
     if host in ("claude", "cursor", "grok"):
         # Cursor and Grok Build load Claude Code's plugins as well as their own.
         others += [f"Claude Code: {plugin_id}" for plugin_id in claude_installed()
@@ -288,7 +289,8 @@ def refuse_other_copies(host: str) -> None:
                    if not (host == "grok" and Path(source) == dev_root("grok") / "plugins" / plugin_name())]
     if others:
         raise Refused("Another copy of the plugin is installed where this one would load:\n  "
-                      + "\n  ".join(others) + "\nUninstall it first: two copies means every skill twice.")
+                      + "\n  ".join(others) + "\nUninstall it first: two copies means every skill twice "
+                      "(`npx skills remove -g <skill>` for loose skills).")
 
 
 def install_codex(args: argparse.Namespace) -> str:
@@ -316,6 +318,7 @@ def install_codex(args: argparse.Namespace) -> str:
     if others:
         raise Refused(f"Another CAD plugin is installed: {', '.join(others)}\n"
                       "Remove it first (codex plugin remove <id>); two copies means every skill twice.")
+    refuse_other_copies("codex")
     python = interpreter()
     version = dev_version()
     # Codex keeps an earlier install's server running until it restarts, so its page stays too.
@@ -417,6 +420,33 @@ def install_grok(args: argparse.Namespace) -> str:
     return f"Installed {name} {version} in Grok Build; start a new session to load it."
 
 
+def install_gemini(args: argparse.Namespace) -> str:
+    gemini = cli("gemini", "; install Gemini CLI (npm install -g @google/gemini-cli) or set GEMINI_CLI")
+    name = plugin_name()
+    # Gemini expects the extension's folder to bear its name.
+    plugin_dir = dev_root("gemini") / "plugins" / name
+    linked = str(plugin_dir) in gemini_installed(gemini)
+    if args.uninstall:
+        if linked:
+            run(gemini, "extensions", "uninstall", name)
+        shutil.rmtree(dev_root("gemini"), ignore_errors=True)
+        return f"Removed {name} from Gemini CLI."
+    others = [source for source in gemini_installed(gemini) if source != str(plugin_dir)]
+    if others:
+        raise Refused(f"Gemini CLI already has {name} from {', '.join(others)}; uninstall it first "
+                      f"(gemini extensions uninstall {name}): two copies means every skill twice.")
+    refuse_other_copies("gemini")
+    python = interpreter()
+    version = dev_version()
+    page_dir = copy_page("gemini", args.build, version)
+    assemble("gemini", plugin_dir, version, server_entry("gemini", python, page_dir))
+    if not linked:
+        # A link reads the folder in place, so a later install only rewrites it. Gemini asks whether
+        # to trust the folder even with --consent; this is the folder we just wrote.
+        run(gemini, "extensions", "link", str(plugin_dir), "--consent", answer="y\n")
+    return f"Installed {name} {version} in Gemini CLI; start a new session to load it."
+
+
 def desktop_config() -> Path:
     if os.environ.get("CLAUDE_DESKTOP_CONFIG"):
         return Path(os.environ["CLAUDE_DESKTOP_CONFIG"])
@@ -450,12 +480,6 @@ def install_claude_desktop(args: argparse.Namespace) -> str:
             "Configuration) to load it.")
 
 
-def skills_destination(host: str) -> Path:
-    if host == "gemini":
-        return Path.home() / ".gemini" / "skills"
-    return Path(os.environ.get("XDG_CONFIG_HOME") or Path.home() / ".config") / "agents" / "skills"
-
-
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0],
                                      formatter_class=argparse.RawDescriptionHelpFormatter,
@@ -467,16 +491,9 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.restart and args.host != "codex":
         parser.error("--restart is for codex")
+    install = {"claude": install_claude, "codex": install_codex, "cursor": install_cursor, "grok": install_grok,
+               "gemini": install_gemini, "claude-desktop": install_claude_desktop}[args.host]
     try:
-        if args.host in SKILL_HOSTS:
-            destination = skills_destination(args.host)
-            for line in (unlink_skills if args.uninstall else link_skills)(destination):
-                print(line)
-            print(f"{'Unlinked' if args.uninstall else 'Linked'} this checkout's skills in {destination}; "
-                  "restart the agent to rescan them.")
-            return 0
-        install = {"codex": install_codex, "claude": install_claude, "cursor": install_cursor,
-                   "grok": install_grok, "claude-desktop": install_claude_desktop}[args.host]
         print(install(args))
         return 0
     except Refused as refusal:

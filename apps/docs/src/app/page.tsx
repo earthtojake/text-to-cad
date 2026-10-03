@@ -7,23 +7,33 @@ import { absoluteUrl, siteConfig } from "@/lib/site";
 
 const skillsInstallCommand = "npx skills add earthtojake/text-to-cad";
 
+// The plugin is the preferred install: the skills and CAD's viewer together. Cursor and Grok Build
+// also load the plugin Claude Code installed, so each of those is for an app used without it.
 const pluginInstallCommands = [
+  {
+    agent: "Claude Code",
+    command:
+      "claude plugin marketplace add earthtojake/text-to-cad\nclaude plugin install text-to-cad@earthtojake",
+  },
   {
     agent: "Codex",
     command:
       "codex plugin marketplace add earthtojake/text-to-cad\ncodex plugin add text-to-cad@earthtojake",
   },
   {
-    agent: "Claude Code",
+    agent: "Cursor",
     command:
-      "claude plugin marketplace add earthtojake/text-to-cad\nclaude plugin install text-to-cad@earthtojake",
+      "git clone --depth 1 https://github.com/earthtojake/text-to-cad ~/.cursor/plugins/local/text-to-cad",
   },
-  // Grok Build reads the same .claude-plugin/marketplace.json as Claude Code -- there is no
-  // separate Grok manifest -- and installs straight from the repo rather than adding a
-  // marketplace first, so it is one command, not two.
+  // Grok Build reads the Claude plugin manifest -- there is no separate Grok manifest -- and
+  // installs straight from the repo rather than adding a marketplace first.
   {
     agent: "Grok Build",
-    command: "grok plugin install earthtojake/text-to-cad --trust",
+    command: "grok plugin install earthtojake/text-to-cad --trust\ngrok plugin enable text-to-cad",
+  },
+  {
+    agent: "Gemini CLI",
+    command: "gemini extensions install https://github.com/earthtojake/text-to-cad",
   },
 ];
 
@@ -236,12 +246,26 @@ export default function Home() {
         <div className="min-w-0 space-y-2">
           <HeroSection />
 
-          <section id="installation" aria-labelledby="installation-title" className="scroll-mt-20 py-6">
-            <div className="w-full space-y-3">
-              <h2 id="installation-title" className="text-heading font-semibold tracking-tight text-foreground">
-                Install
-              </h2>
-              <SkillsInstallCommand prominent />
+          <section id="installation" aria-labelledby="installation-title" className="scroll-mt-20 space-y-3 py-6">
+            <SectionIntro
+              id="installation-title"
+              title="Install"
+              description="Install the plugin for your agent app. It brings the skills and CAD's viewer, a local server that runs through uv."
+            />
+            <InstallCommands />
+            <p className="text-sm leading-6 text-muted-foreground">
+              Restart your agent if newly installed skills do not appear. Cursor and Grok Build
+              also load the Claude Code plugin, so install one or the other. The Codex plugin
+              requires Codex 0.142.0 or newer.
+            </p>
+            <div className="space-y-3 pt-3">
+              <div>
+                <h3 className="text-sm font-medium text-foreground">Skills CLI</h3>
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                  For an agent without a plugin, install the skills alone.
+                </p>
+              </div>
+              <SkillsInstallCommand />
             </div>
           </section>
 
@@ -290,22 +314,6 @@ export default function Home() {
             </div>
           </section>
 
-          <section
-            id="plugins"
-            aria-labelledby="plugins-title"
-            className="scroll-mt-20 space-y-3 py-6"
-          >
-            <SectionIntro
-              id="plugins-title"
-              title="Plugins"
-              description="Provider-native plugins are an alternative to installing with the Skills CLI."
-            />
-            <InstallCommands />
-            <p className="text-sm leading-6 text-muted-foreground">
-              Restart your agent if newly installed skills do not appear. The Codex
-              plugin requires Codex 0.142.0 or newer; older versions skip it silently.
-            </p>
-          </section>
         </div>
       </div>
 

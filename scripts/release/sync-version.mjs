@@ -15,6 +15,7 @@ export const jsonTargets = [
   { path: ".claude-plugin/plugin.json", fields: [["version"]] },
   { path: ".codex-plugin/plugin.json", fields: [["version"]] },
   { path: ".cursor-plugin/plugin.json", fields: [["version"]] },
+  { path: "gemini-extension.json", fields: [["version"]] },
   { path: ".claude-plugin/marketplace.json", fields: [["version"]], pluginEntries: ["text-to-cad"] },
 ];
 
@@ -24,9 +25,12 @@ const tomlTargets = [
 
 // Files that pin the cadgen runtime by a requirement string rather than a version field: the
 // commands the agent apps run to start CAD's MCP server, and the README's Claude Desktop config.
+// A file may also be a JSON target (the Gemini extension carries both); its pin is stamped on top
+// of that change, not over it.
 export const pinTargets = [
   "codex.mcp.json",
   "claude.mcp.json",
+  "gemini-extension.json",
   "README.md",
 ];
 
@@ -178,8 +182,7 @@ function syncTomlTarget(relativePath, version) {
   };
 }
 
-function syncPinTarget(relativePath, version) {
-  const text = readRequiredText(relativePath);
+function syncPinTarget(relativePath, version, text = readRequiredText(relativePath)) {
   const pin = /(cadgen(?:\[[a-z0-9_,.-]+\])?==)([^"\s]+)/g;
   const matches = [...text.matchAll(pin)];
   if (matches.length === 0) {
@@ -258,8 +261,12 @@ function main() {
     }
   }
   for (const target of pinTargets) {
-    const change = syncPinTarget(target, version);
-    if (change) {
+    const pending = changes.find((change) => change.path === target);
+    const change = syncPinTarget(target, version, pending?.text);
+    if (change && pending) {
+      pending.text = change.text;
+      pending.labels.push(...change.labels);
+    } else if (change) {
       changes.push(change);
     }
   }

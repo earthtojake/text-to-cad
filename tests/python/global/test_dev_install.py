@@ -21,9 +21,10 @@ spec.loader.exec_module(dev_install)
 
 class DevPluginTests(unittest.TestCase):
     def test_every_plugin_host_gets_the_skills_and_this_checkouts_server(self) -> None:
-        manifests = {"codex": ".codex-plugin/plugin.json", "claude": ".claude-plugin/plugin.json",
-                     "cursor": ".cursor-plugin/plugin.json", "grok": ".claude-plugin/plugin.json"}
-        skills = dev_install.skill_names()
+        manifests = {"claude": ".claude-plugin/plugin.json", "codex": ".codex-plugin/plugin.json",
+                     "cursor": ".cursor-plugin/plugin.json", "grok": ".claude-plugin/plugin.json",
+                     "gemini": "gemini-extension.json"}
+        skills = sorted(path.parent.name for path in (REPO_ROOT / "skills").glob("*/SKILL.md"))
         with tempfile.TemporaryDirectory() as scratch:
             for host in dev_install.PLUGIN_HOSTS:
                 with self.subTest(host=host):
@@ -32,8 +33,10 @@ class DevPluginTests(unittest.TestCase):
                     dev_install.assemble(host, plugin, "1.2.3-dev.1", server)
                     manifest = json.loads((plugin / manifests[host]).read_text(encoding="utf-8"))
                     self.assertEqual((manifest["name"], manifest["version"]), (dev_install.plugin_name(), "1.2.3-dev.1"))
-                    self.assertEqual(json.loads((plugin / manifest["mcpServers"]).read_text(encoding="utf-8")),
-                                     {"mcpServers": {"cad": server}})
+                    servers = manifest["mcpServers"]  # Gemini keeps them inline; the rest name a file
+                    if isinstance(servers, str):
+                        servers = json.loads((plugin / servers).read_text(encoding="utf-8"))["mcpServers"]
+                    self.assertEqual(servers, {"cad": server})
                     self.assertEqual(server["env"], {"CADGEN_MCP_APP_DIR": "/pages/1"})
                     self.assertEqual(sorted(path.parent.name for path in plugin.glob("skills/*/SKILL.md")), skills)
                     self.assertFalse(list(plugin.rglob("__pycache__")))
@@ -41,25 +44,17 @@ class DevPluginTests(unittest.TestCase):
                         if icon:
                             self.assertTrue((plugin / icon).is_file(), icon)
 
-
-class SkillLinkTests(unittest.TestCase):
-    def test_links_are_this_checkouts_own_and_nothing_else_is_touched(self) -> None:
+    def test_this_repositorys_skills_installed_loose_are_found_and_others_are_not(self) -> None:
         with tempfile.TemporaryDirectory() as scratch:
-            root, destination = Path(scratch) / "checkout", Path(scratch) / "agent" / "skills"
-            for name in ("alpha", "beta"):
-                (root / "skills" / name).mkdir(parents=True)
-                (root / "skills" / name / "SKILL.md").write_text("---\nname: x\n---\n", encoding="utf-8")
-            destination.mkdir(parents=True)
-            (destination / "theirs").mkdir()
-            (destination / "retired").symlink_to(root / "skills" / "retired", target_is_directory=True)
-
-            done = dev_install.link_skills(destination, root)
-            self.assertEqual(done, ["removed retired (retired)", "linked alpha", "linked beta"])
-            self.assertEqual((destination / "alpha").resolve(), (root / "skills" / "alpha").resolve())
-            self.assertEqual(dev_install.link_skills(destination, root), [])
-
-            self.assertEqual(dev_install.unlink_skills(destination, root), ["removed alpha", "removed beta"])
-            self.assertEqual([path.name for path in destination.iterdir()], ["theirs"])
+            folder = Path(scratch) / "skills"
+            for name, body in (("cad", (REPO_ROOT / "skills/cad/SKILL.md").read_text(encoding="utf-8")),
+                               ("theirs", "---\nname: theirs\ndescription: x\n---\nNot ours.\n")):
+                (folder / name).mkdir(parents=True)
+                (folder / name / "SKILL.md").write_text(body, encoding="utf-8")
+            self.assertEqual(dev_install.loose_skills([folder, Path(scratch) / "absent"]), [folder / "cad"])
+        # The check reads each skill's provenance line, so every skill must keep one.
+        for skill in (REPO_ROOT / "skills").glob("*/SKILL.md"):
+            self.assertIn(dev_install.PROVENANCE, skill.read_text(encoding="utf-8"), skill)
 
 
 if __name__ == "__main__":

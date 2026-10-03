@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""Build the plugin that plugin directories follow, check it, and commit it.
+"""Build the plugin that claude.ai's plugin directory follows, check it, and commit it.
 
 The repository root is the plugin for every installer that clones it, but
 claude.ai's directory treats the folder it follows as the whole plugin: there the
 monorepo's thousands of files, its workflows, lockfile and binaries are policy
-holds, and every install copies all of them. So the directories follow the
+holds, and every install copies all of them. So the directory follows the
 `plugin` branch instead: one commit per release whose tree is only the plugin --
-the Claude and Cursor manifests and the icon, the MCP config they name,
+the Claude, Cursor and Gemini manifests and the icon, the MCP config they name,
 `skills/`, `LICENSE`, and the README, with each link to a file outside that tree
-pointed at the release commit on GitHub. Grok Build installs the same branch
-through the Claude manifest.
+pointed at the release commit on GitHub. Every other store installs from `main`
+or the GitHub Release (CONTRIBUTING.md, "The plugin branch").
 
 The checks are claude.ai's file rules, the strictest of the directories
 (https://claude.com/docs/plugins/pre-submission-checklist.md): a tree that breaks
@@ -34,7 +34,8 @@ import tempfile
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = ".claude-plugin/plugin.json"
-FILES = (MANIFEST, ".claude-plugin/icon.png", ".cursor-plugin/plugin.json", "claude.mcp.json", "LICENSE")
+FILES = (MANIFEST, ".claude-plugin/icon.png", ".cursor-plugin/plugin.json", "gemini-extension.json", "claude.mcp.json",
+         "LICENSE")
 DIRECTORIES = ("skills/",)
 README = "README.md"
 LFS_POINTER = b"version https://git-lfs.github.com/spec/v1"

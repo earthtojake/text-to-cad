@@ -141,12 +141,19 @@ scripts/install/dev_install.py claude
 
 | Host | What it installs |
 | ---- | ---------------- |
-| `codex` | the Codex app's plugin; `--restart` quits and reopens the app |
 | `claude` | Claude Code's plugin, which Cursor and Grok Build also load |
+| `codex` | the Codex plugin, shared by the app, the CLI and the IDE extension; `--restart` quits and reopens the app |
 | `cursor` | a local Cursor plugin, for Cursor without Claude Code |
 | `grok` | Grok Build's plugin, for Grok without Claude Code |
+| `gemini` | a linked Gemini CLI extension |
 | `claude-desktop` | a `cad-dev` server in Claude Desktop's chat, which takes servers, not plugins |
-| `gemini`, `agents` | live skill links, for agents without plugins (`~/.gemini/skills`, `~/.config/agents/skills`) |
+
+For an agent without plugins, install the skills alone from the checkout with the
+Skills CLI, the way users get them, and run it again after a change:
+
+```bash
+npx skills add . -g -a <agent>
+```
 
 A plugin host gets `text-to-cad@earthtojake-dev`: this checkout's skills, and
 `cadgen mcp` run by this checkout's `.venv` (`CADGEN_PYTHON` overrides it), serving
@@ -158,9 +165,10 @@ Python it started with, so restart the app after a Python-only change.
 `--uninstall` removes a host's install.
 
 Keep one copy of the plugin per app. The script refuses to install where another
-copy would load beside it, such as the published plugin, or this one already
-installed through another host: two copies means every skill twice. Uninstall
-the published plugin before testing, and reinstall it afterwards.
+copy would load beside it: the published plugin, this one installed through
+another host, or this repository's skills installed loose where the app reads
+skills. Two copies means every skill twice. Uninstall the published plugin
+before testing, and reinstall it afterwards.
 
 Where the server's output goes:
 
@@ -169,6 +177,7 @@ Where the server's output goes:
 - Claude Desktop: `~/Library/Logs/Claude/mcp-server-cad-dev.log`; the app's
   developer tools (Developer Mode, then Cmd+Option+I) inspect a card's frame
 - Cursor: `mcp-server-plugin-*` logs under `~/Library/Application Support/Cursor/logs/`
+- Gemini CLI: `gemini mcp list` shows whether the server connected
 
 What the CAD app is and how hosts present it is in
 [apps/mcp/README.md](apps/mcp/README.md). No agent app can be driven by a test,
@@ -548,9 +557,8 @@ Where the built things live instead:
   layout OpenAI's plugin submission portal takes. It is built from the release
   commit and attached to the GitHub Release beside the wheel. See [Submitting
   the plugin to OpenAI](#submitting-the-plugin-to-openai).
-- **The `plugin` branch** is the plugin alone, the folder the plugin
-  directories follow and Cursor and Grok Build can install. See [The plugin
-  branch](#the-plugin-branch).
+- **The `plugin` branch** is the plugin alone, the folder claude.ai's plugin
+  directory follows. See [The plugin branch](#the-plugin-branch).
 - **A checkout** builds its own: run `scripts/bundle/bundle.sh` once after
   cloning (and after pulling changes to `packages/core`); a missing runtime
   fails with a message that says so.
@@ -587,7 +595,7 @@ is involved) and deletes the branch. The merged commit is THE release commit.
    package the portal would refuse stops the release before anything
    irreversible. The ZIP is kept as a workflow artifact
    (`cad-openai-plugin-<version>`). `scripts/release/plugin_branch.py
-   --check` does the same for the tree the plugin directories get.
+   --check` does the same for the tree claude.ai's directory gets.
 2. `bundle.sh --clean` — which is where cadgen's whole runtime comes into
    existence, Node builders, snapshot bundle and Viewer client alike, because
    the release commit carries none of it — then `check-builds.sh`, the docs and
@@ -609,30 +617,32 @@ is involved) and deletes the branch. The merged commit is THE release commit.
 ### The plugin branch
 
 `main` is an installable plugin for every host: its root holds every manifest
-(`.claude-plugin/`, `.codex-plugin/`, `.cursor-plugin/`) and MCP config
-(`claude.mcp.json`, `codex.mcp.json`), and the README's install commands clone
-it. Plugin directories treat the folder they follow as the whole plugin, though,
-so they follow the `plugin` branch instead: on `main` the monorepo's files,
-workflows, lockfile and binaries would all be held for a reviewer, and every
-install would copy them. `Publish Release` writes `plugin` on each release: one
-commit whose tree is `.claude-plugin/plugin.json` and `icon.png`,
-`.cursor-plugin/plugin.json`, `claude.mcp.json` (the CAD server both manifests
-name), `skills/`, `LICENSE` and `README.md`, with each README link to a file
-outside that tree pointed at the release commit on GitHub. A release whose
-plugin did not change adds no commit. The tree is checked against claude.ai's
-file rules (<https://claude.com/docs/plugins/pre-submission-checklist>), the
-strictest of the directories, by `tests/python/global/test_plugin_branch.py` on
-every pull request and again before each release.
+(`.claude-plugin/`, `.codex-plugin/`, `.cursor-plugin/`, `gemini-extension.json`)
+and MCP config (`claude.mcp.json`, `codex.mcp.json`), and the README's install
+commands use it. claude.ai's plugin directory treats the folder it follows as
+the whole plugin, though, so it follows the `plugin` branch instead: on `main`
+the monorepo's files, workflows, lockfile and binaries would all be held for a
+reviewer, and every install would copy them. `Publish Release` writes `plugin` on
+each release: one commit whose tree is `.claude-plugin/plugin.json` and
+`icon.png`, `.cursor-plugin/plugin.json`, `gemini-extension.json`,
+`claude.mcp.json` (the CAD server the manifests name), `skills/`, `LICENSE` and
+`README.md`, with each README link to a file outside that tree pointed at the
+release commit on GitHub. A release whose plugin did not change adds no commit.
+The tree is checked against claude.ai's file rules
+(<https://claude.com/docs/plugins/pre-submission-checklist>) by
+`tests/python/global/test_plugin_branch.py` on every pull request and again
+before each release.
 
-- **claude.ai:** in the developer portal at <https://claude.ai/directory/manage>,
-  the listing's **Branch or tag** is still `claude-plugin`, the branch's old
-  name, so `Publish Release` pushes the same commit there too. The directory
-  scans each new commit and publishes it by the listing's publish setting.
-- **Cursor:** reads `.cursor-plugin/plugin.json`. Submit the repository at
-  <https://cursor.com/marketplace/publish>; teams can import it from
-  **Dashboard → Plugins & MCPs → Team Marketplaces**.
-- **Grok Build:** reads the Claude manifest
-  (`grok plugin install earthtojake/text-to-cad@plugin`).
+What each store and installer reads:
+
+| Where | Reads |
+| ----- | ----- |
+| claude.ai's directory | the branch the listing tracks: still `claude-plugin`, the old name, so `Publish Release` pushes the same commit there too |
+| Cursor Marketplace | the repository's default branch, `main`: its submission takes a repository, not a branch |
+| OpenAI's plugin portal | the plugin ZIP a person uploads from the GitHub Release |
+| Claude Code, Codex, Grok Build | `main`, unless the command names a ref (`owner/repo@ref` for Codex and Grok) |
+| Gemini CLI | the latest GitHub Release: with no Gemini archive among its assets, it takes the release's source tarball, so a new manifest reaches Gemini with the next release. A release with a single asset would be taken as the extension, so keep shipping the wheel and sdist beside the ZIP |
+| Skills CLI and skills.sh | `main` |
 
 **Dev note — retire `claude-plugin`.** The portal refuses a tracked-branch change
 while a reviewer has the plugin. Once the claude.ai listing is out of review,
