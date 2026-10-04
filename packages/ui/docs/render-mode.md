@@ -190,9 +190,11 @@ camera depth fitting, avoiding the origin-placement near-plane gap. Its color
 and opacity are independent of Background.
 Light Render defaults to a pure white background and retains the slightly gray
 floor (`#e7e7e5`); explicit background colors still override the preset.
-External STEP pose and animation passes, and the exploded view, publish current
-placed bounds before drawing. Depth and lighting follow moving parts without
-changing camera framing or the floor's footprint.
+External STEP pose and animation passes publish current placed bounds before
+drawing, and so does the exploded view wherever it comes to rest (a slider move,
+the end of its ease) and at most every 100 ms while it eases in or out. Depth and
+lighting follow moving parts without changing camera framing or the floor's
+footprint.
 
 All presets share surface-under-cursor zoom, zero-pose framing and the fit
 padding: 1.1 across, and 1.1 down on a square or narrower viewport, easing to
