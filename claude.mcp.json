@@ -10,10 +10,11 @@
         "--from",
         "cadgen==0.7.11",
         "cadgen",
-        "mcp",
-        "--channel",
-        "claude-github"
-      ]
+        "mcp"
+      ],
+      "env": {
+        "CADGEN_INSTALL_CHANNEL": "claude-github"
+      }
     }
   }
 }

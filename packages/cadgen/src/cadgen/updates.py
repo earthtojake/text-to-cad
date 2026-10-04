@@ -12,8 +12,8 @@ set) or for a copy that is not told. The feed as last read is kept in the state 
 Only a copy nothing else updates is told (``told``: ``cadgen/_internal/channel.py``): a plugin the
 person installed and updates by hand, and a process no plugin started, such as the CAD Viewer of a
 skills-only install. A plugin that something else keeps up to date -- a store, once a release
-passes its review, or the app that installed it -- says so in its startup command
-(``--auto-updated``) and is never told; nor is a development install.
+passes its review, or the app that installed it -- says so in its startup config
+(``CADGEN_AUTO_UPDATED=1``) and is never told; nor is a development install.
 
 The notice is the same wherever it shows: ``A new version v0.9.0 of text-to-cad is available
 (currently on v0.8.1)``, and a prompt for the person's agent worded like the install message,

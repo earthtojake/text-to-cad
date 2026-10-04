@@ -48,10 +48,11 @@ class UpdatesTest(unittest.TestCase):
                 self.assertIsNone(updates.offer(feed, version, True))
         self.assertIsNone(updates.offer(feed, "0.1.0", False))  # never, however far behind
 
-    def test_who_is_told_is_what_the_plugins_startup_command_says(self) -> None:
-        # A plugin names its channel, and `--auto-updated` where its store or the app that installed
-        # it keeps the copy up to date: cadgen decides by that, never by the channel's name. A Viewer
-        # a skill opens names nothing, a skills-only install; a development install is never told.
+    def test_who_is_told_is_what_the_plugins_startup_config_says(self) -> None:
+        # A plugin's server environment names its channel, and CADGEN_AUTO_UPDATED=1 where its store
+        # or the app that installed it keeps the copy up to date: cadgen decides by that, never by the
+        # channel's name. A Viewer a skill opens names nothing, a skills-only install; a development
+        # install is never told.
         from cadgen._internal.channel import told
 
         for values, expected in (
@@ -120,26 +121,6 @@ class UpdatesTest(unittest.TestCase):
                 asked: list[str] = []
                 self.assertIsNone(updates.notice(now=time.time() + 2 * updates.CHECK_SECONDS, get=asked.append))
                 self.assertEqual(asked, [])
-
-    def test_the_plugins_channel_reaches_every_process_its_server_starts(self) -> None:
-        # Each plugin's startup command names its channel, and whether something keeps it up to date
-        # (`cadgen mcp --channel ID [--auto-updated]`); the server hands both on in its environment,
-        # which the CAD Viewer and the daemon it starts inherit.
-        from cadgen._internal.channel import channel
-        from cadgen.cli import mcp
-
-        self.read_today(FEED)
-        with mock.patch.dict(os.environ, {}), mock.patch("cadgen.mcp.server.serve", return_value=0) as serve:
-            self.assertEqual(mcp.main(["--channel", "claude-directory", "--auto-updated"]), 0)
-            self.assertEqual((channel(), os.environ["CADGEN_AUTO_UPDATED"]), ("claude-directory", "1"))
-            self.assertIsNone(updates.notice())
-            self.assertEqual(mcp.main(["--channel", "claude-github"]), 0)  # what it says, nothing inherited
-            self.assertEqual((channel(), os.environ["CADGEN_AUTO_UPDATED"]), ("claude-github", ""))
-            self.assertEqual(updates.notice()["latest"], "0.9.0")
-            self.assertEqual(serve.call_count, 2)
-        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as refused:
-            mcp.main(["--channel", "Not A Channel"])
-        self.assertEqual(refused.exception.code, 2)
 
     def test_no_command_says_it_or_reads_the_feed(self) -> None:
         # A skill's command cannot tell which plugin, if any, it came with: the CAD app and the CAD

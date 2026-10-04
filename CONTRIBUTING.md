@@ -168,11 +168,10 @@ running app would change its URI, and hosts drop the frames already showing it,
 which is why each install serves its own copy. A running server keeps the
 Python it started with, so restart the app after a Python-only change.
 `--uninstall` removes a host's install. Its server names its install channel
-`dev` (`--channel dev`), and a checkout's editable cadgen counts as one too:
-neither is ever offered an update. To see the update button, run a server with
-`--channel claude-github` (a Viewer with `CADGEN_INSTALL_CHANNEL=claude-github`)
-and a `versions.json` in its state directory (`CADGEN_STATE_DIR`) naming a newer
-`latest`.
+`dev` (`CADGEN_INSTALL_CHANNEL`), and a checkout's editable cadgen counts as one
+too: neither is ever offered an update. To see the update button, run a server or
+a Viewer with `CADGEN_INSTALL_CHANNEL=claude-github` and a `versions.json` in its
+state directory (`CADGEN_STATE_DIR`) naming a newer `latest`.
 
 Keep one copy of the plugin per app. The script refuses to install where another
 copy would load beside it: the published plugin, this one installed through
@@ -655,30 +654,34 @@ What each store and installer reads:
 | Gemini CLI | the latest GitHub Release: with no Gemini archive among its assets, it takes the release's source tarball, so a new manifest reaches Gemini with the next release. A release with a single asset would be taken as the extension, so keep shipping the wheel and sdist beside the ZIP |
 | Skills CLI and skills.sh | `main` |
 
-Each plugin's CAD server startup command says where its installs come from, its
-install channel (`--channel`), and adds `--auto-updated` where something other
-than the person keeps the copy up to date: the store that reviewed it, or the app
-that installed it. The server hands both on to the processes it starts (the
-Viewer, the daemon). cadgen reports the channel with analytics and says a new
-release is out only to a copy that is not auto-updated (`cadgen/_internal/channel.py`,
-`cadgen/updates.py`); it never decides by a channel's name, since its core may not
-know a host. Nothing works them out at runtime, so a plugin that ships somewhere
-new writes its own, and the analytics receiver (`apps/docs/src/lib/api/events.mjs`)
-learns its channel; `test_plugin_manifests.py`, `test_plugin_branch.py` and
-`test_plugin_zip.py` hold each one:
+Each plugin's CAD server startup config says where its installs come from, its
+install channel, in the server's environment (`CADGEN_INSTALL_CHANNEL`), and adds
+`CADGEN_AUTO_UPDATED=1` where something other than the person keeps the copy up to
+date: the store that reviewed it, or the app that installed it. The processes the
+server starts (the Viewer, the daemon) inherit both. cadgen reports the channel
+with analytics and says a new release is out only to a copy that is not
+auto-updated (`cadgen/_internal/channel.py`, `cadgen/updates.py`); it never
+decides by a channel's name, since its core may not know a host. They are
+environment, never flags: `main`'s configs pin the last release, and a cadgen
+ignores a variable it does not know but refuses a flag, so a new setting would
+stop every server installed from `main` until the next release. Nothing works
+them out at runtime, so a plugin that ships somewhere new writes its own, and the
+analytics receiver (`apps/docs/src/lib/api/events.mjs`) learns its channel;
+`test_plugin_manifests.py`, `test_plugin_branch.py` and `test_plugin_zip.py`
+hold each one:
 
-| Package | Startup command says | Told of a release | Written by |
-| ------- | -------------------- | ----------------- | ---------- |
-| `main`'s `claude.mcp.json` (Claude Code, Grok Build, and Cursor through Claude Code's plugins) | `--channel claude-github` | yes | the checked-in file |
-| `main`'s `codex.mcp.json` | `--channel codex-github` | yes | the checked-in file |
-| `main`'s `gemini-extension.json` | `--channel gemini-github --auto-updated` | no: Gemini updates it | the checked-in file |
-| the README's Claude Desktop config | `--channel claude-desktop` | yes | the README |
-| `main`'s `cursor.mcp.json`, which the Cursor Marketplace reads | `--channel cursor-marketplace --auto-updated` | no: its store updates it | the checked-in file |
-| the `plugin` branch's `claude.mcp.json`, which claude.ai's directory follows | `--channel claude-directory --auto-updated` | no: its store updates it | `plugin_branch.py` |
-| the `plugin` branch's `cursor.mcp.json`, which a Cursor install by hand clones | `--channel cursor-github` | yes | `plugin_branch.py` |
-| the OpenAI ZIP's `.mcp.json` | `--channel openai-directory --auto-updated` | no: its store updates it | `plugin_zip.py` |
-| a development install | `--channel dev` | no | `dev_install.py` |
-| a process no plugin's server started: a skill's command, the Viewer a skill opens | nothing (`unknown`) | the Viewer: a skills-only install | nothing |
+| Package | Server environment | Told of a release | Written by |
+| ------- | ------------------ | ----------------- | ---------- |
+| `main`'s `claude.mcp.json` (Claude Code, Grok Build, and Cursor through Claude Code's plugins) | `claude-github` | yes | the checked-in file |
+| `main`'s `codex.mcp.json` | `codex-github` | yes | the checked-in file |
+| `main`'s `gemini-extension.json` | `gemini-github`, auto-updated | no: Gemini updates it | the checked-in file |
+| the README's Claude Desktop config | `claude-desktop` | yes | the README |
+| `main`'s `cursor.mcp.json`, which the Cursor Marketplace reads | `cursor-marketplace`, auto-updated | no: its store updates it | the checked-in file |
+| the `plugin` branch's `claude.mcp.json`, which claude.ai's directory follows | `claude-directory`, auto-updated | no: its store updates it | `plugin_branch.py` |
+| the `plugin` branch's `cursor.mcp.json`, which a Cursor install by hand clones | `cursor-github` | yes | `plugin_branch.py` |
+| the OpenAI ZIP's `.mcp.json` | `openai-directory`, auto-updated | no: its store updates it | `plugin_zip.py` |
+| a development install | `dev` | no | `dev_install.py` |
+| a process no plugin's server started: a skill's command, the Viewer a skill opens | none (`unknown`) | the Viewer: a skills-only install | nothing |
 
 A skill's own `cadgen` command never says a release is out: the same skill files
 ship in every plugin, so it cannot tell which one it came with. The CAD app and
@@ -703,8 +706,9 @@ first ZIP, one top-level `cad/` folder with no directory entry of its own, as
 holding no plugin.) The portal requires `mcpServers` to resolve to a root
 `.mcp.json`, so a server config the checkout keeps under another name is
 archived as `.mcp.json`, and the archived manifest points there. That config
-names `openai-directory` as its install channel, as its server's `--channel`,
-with `--auto-updated`: the directory updates its copies.
+names `openai-directory` as its install channel, auto-updated, in the server's
+`env`; the portal's acceptance of `env` is confirmed at the first upload that
+carries it.
 
 For each release, a person with the access below:
 

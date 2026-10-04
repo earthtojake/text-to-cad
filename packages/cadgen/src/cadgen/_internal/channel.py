@@ -1,11 +1,13 @@
 """Where this install of text-to-cad came from: its channel, and whether something keeps it up to date.
 
-Each plugin says both where it starts the CAD server: ``cadgen mcp --channel <id>``, plus
-``--auto-updated`` when something other than the person keeps that copy up to date (the store
-that reviewed it, or the app that installed it). The build that makes the plugin writes them into
-its startup command; nothing works them out from folders, ids or a host's internals. The server
-hands both to the processes it starts (the CAD Viewer, the build daemon and its workers) as
-``CADGEN_INSTALL_CHANNEL`` and ``CADGEN_AUTO_UPDATED``, so they know them too.
+Each plugin says both in its CAD server's startup config, as the server's environment:
+``CADGEN_INSTALL_CHANNEL=<id>``, plus ``CADGEN_AUTO_UPDATED=1`` when something other than the person
+keeps that copy up to date (the store that reviewed it, or the app that installed it). The build
+that makes the plugin writes them; nothing works them out from folders, ids or a host's
+internals. The processes the server starts (the CAD Viewer, the build daemon and its workers)
+inherit them. They are environment, not flags, because a plugin's config pins a release of
+cadgen that may predate a setting: a cadgen ignores an environment variable it does not know,
+where a flag it does not know would stop the server.
 
 cadgen reads a channel as a token and nothing more: analytics report it, and nothing decides by
 its name but ``dev``, a development install (and an editable install of a source tree). A process
@@ -16,7 +18,7 @@ one channel.
 
 Whether a copy hears of a new release (``cadgen/updates.py``) is ``told``: not when something
 keeps it up to date, nor for a development install. So a plugin that ships somewhere new needs no
-release of cadgen: its startup command says it all.
+release of cadgen: its startup config says it all.
 """
 
 from __future__ import annotations

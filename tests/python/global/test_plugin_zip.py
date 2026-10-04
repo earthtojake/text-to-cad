@@ -79,10 +79,10 @@ class PluginZipTests(unittest.TestCase):
             with zipfile.ZipFile(root / "out.zip") as archive:
                 self.assertEqual(json.loads(archive.read(".codex-plugin/plugin.json"))["mcpServers"],
                                  "./.mcp.json")
-                # The package names its channel, OpenAI's directory, as its server's `--channel`, which
-                # analytics report; `--auto-updated` leaves the copy to the directory, which updates it.
+                # The package names its channel, OpenAI's directory, in its server's environment, which
+                # analytics report; CADGEN_AUTO_UPDATED leaves the copy to the directory, which updates it.
                 self.assertEqual(json.loads(archive.read(".mcp.json"))["mcpServers"]["cad"],
-                                 {**server, "args": [*server["args"], "--channel", "openai-directory", "--auto-updated"]})
+                                 {**server, "env": {"CADGEN_INSTALL_CHANNEL": "openai-directory", "CADGEN_AUTO_UPDATED": "1"}})
                 self.assertNotIn("codex.mcp.json", archive.namelist())
 
             # The portal refuses both: a subtitle over 30 characters (main's, until this

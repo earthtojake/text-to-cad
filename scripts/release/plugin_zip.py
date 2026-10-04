@@ -167,28 +167,21 @@ def collect(root: Path) -> Package:
     return package
 
 
-def cadgen_mcp(args: object) -> int | None:
-    """Where `cadgen mcp` ends in a server's args, or None when the server is not CAD's."""
-    if not isinstance(args, list):
-        return None
-    return next((index for index in range(1, len(args)) if args[index - 1:index + 1] == ["cadgen", "mcp"]), None)
-
-
 def with_channel(package: Package, data: bytes) -> bytes:
-    """The server config naming OpenAI's directory as the install's channel (its server's
-    `--channel`, cadgen's `_internal/channel.py`): this package goes only there. Analytics report
-    it, and `--auto-updated` leaves the copy to the directory, which updates it."""
+    """The server config naming OpenAI's directory as the install's channel, in its server's
+    environment (cadgen's `_internal/channel.py`): this package goes only there. Analytics report
+    it, and `CADGEN_AUTO_UPDATED` leaves the copy to the directory, which updates it."""
     try:
         config = json.loads(data)
-        servers = [server for server in config["mcpServers"].values() if cadgen_mcp(server.get("args")) is not None]
+        servers = [server for server in config["mcpServers"].values() if server["args"][-2:] == ["cadgen", "mcp"]]
     except (ValueError, KeyError, TypeError, AttributeError):
         package.errors.append(f"{MCP_CONFIG} is not an mcpServers config this script can read")
         return data
     if len(servers) != 1:
         package.errors.append(f"{MCP_CONFIG} must start exactly one `cadgen mcp` server (found {len(servers)})")
         return data
-    args = servers[0]["args"]
-    servers[0]["args"] = [*args[:cadgen_mcp(args) + 1], "--channel", "openai-directory", "--auto-updated"]
+    servers[0]["env"] = {**servers[0].get("env", {}), "CADGEN_INSTALL_CHANNEL": "openai-directory",
+                         "CADGEN_AUTO_UPDATED": "1"}
     return json.dumps(config, indent=2).encode("utf-8") + b"\n"
 
 

@@ -11,12 +11,12 @@ the Claude, Cursor and Gemini manifests and the icon, the MCP configs they name,
 pointed at the release commit on GitHub. Every other store installs from `main`
 or the GitHub Release (CONTRIBUTING.md, "The plugin branch").
 
-Each MCP config names the channel its installs come from, as its server's `--channel`,
-and `--auto-updated` where a store keeps the copy up to date (`CHANNELS`; cadgen's
-`_internal/channel.py`): the Claude config here is claude.ai's directory, which updates
-its copies, and the Cursor config a Cursor install by hand, which clones this branch. On
-`main` the Claude config names `claude-github`, and the Cursor one the Cursor
-Marketplace, which reads `main`.
+Each MCP config names the channel its installs come from in its server's environment,
+`CADGEN_INSTALL_CHANNEL`, and `CADGEN_AUTO_UPDATED=1` where a store keeps the copy up to
+date (`CHANNELS`; cadgen's `_internal/channel.py`): the Claude config here is claude.ai's
+directory, which updates its copies, and the Cursor config a Cursor install by hand,
+which clones this branch. On `main` the Claude config names `claude-github`, and the
+Cursor one the Cursor Marketplace, which reads `main`.
 
 The checks are claude.ai's file rules, the strictest of the directories
 (https://claude.com/docs/plugins/pre-submission-checklist.md): a tree that breaks
@@ -43,7 +43,7 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 MANIFEST = ".claude-plugin/plugin.json"
 FILES = (MANIFEST, ".claude-plugin/icon.png", ".cursor-plugin/plugin.json", "gemini-extension.json", "claude.mcp.json",
          "cursor.mcp.json", "LICENSE")
-# Each config's channel, and whether a store keeps its copies up to date (`--auto-updated`).
+# Each config's channel, and whether a store keeps its copies up to date (`CADGEN_AUTO_UPDATED`).
 CHANNELS = {"claude.mcp.json": ("claude-directory", True), "cursor.mcp.json": ("cursor-github", False)}
 DIRECTORIES = ("skills/",)
 README = "README.md"
@@ -108,27 +108,21 @@ def readme_for_tree(text: str, tree: set[str], repository: set[str], url: str, c
     return LINK.sub(point, text)
 
 
-def cadgen_mcp(args: object) -> int | None:
-    """Where `cadgen mcp` ends in a server's args, or None when the server is not CAD's."""
-    if not isinstance(args, list):
-        return None
-    return next((index for index in range(1, len(args)) if args[index - 1:index + 1] == ["cadgen", "mcp"]), None)
-
-
 def with_channel(path: str, data: bytes, channel: str, auto_updated: bool, errors: list[str]) -> bytes:
     """An MCP config whose one `cadgen mcp` server names `channel` as its install channel, and
     says whether something else keeps the copy up to date."""
     try:
         config = json.loads(data)
-        servers = [server for server in config["mcpServers"].values() if cadgen_mcp(server.get("args")) is not None]
+        servers = [server for server in config["mcpServers"].values() if server["args"][-2:] == ["cadgen", "mcp"]]
     except (ValueError, KeyError, TypeError, AttributeError):
         errors.append(f"{path} is not an mcpServers config this script can read")
         return data
     if len(servers) != 1:
         errors.append(f"{path} must start exactly one `cadgen mcp` server (found {len(servers)})")
         return data
-    args = servers[0]["args"]
-    servers[0]["args"] = [*args[:cadgen_mcp(args) + 1], "--channel", channel, *(["--auto-updated"] if auto_updated else [])]
+    env = {**servers[0].get("env", {}), "CADGEN_INSTALL_CHANNEL": channel}
+    env.pop("CADGEN_AUTO_UPDATED", None)
+    servers[0]["env"] = {**env, **({"CADGEN_AUTO_UPDATED": "1"} if auto_updated else {})}
     return json.dumps(config, indent=2, ensure_ascii=False).encode("utf-8") + b"\n"
 
 

@@ -37,7 +37,7 @@ class DevPluginTests(unittest.TestCase):
                     if isinstance(servers, str):
                         servers = json.loads((plugin / servers).read_text(encoding="utf-8"))["mcpServers"]
                     self.assertEqual(servers, {"cad": server})
-                    self.assertEqual((server["args"][-2:], server["env"]), (["--channel", "dev"], {"CADGEN_MCP_APP_DIR": "/pages/1"}))
+                    self.assertEqual(server["env"], {"CADGEN_INSTALL_CHANNEL": "dev", "CADGEN_MCP_APP_DIR": "/pages/1"})
                     self.assertEqual(sorted(path.parent.name for path in plugin.glob("skills/*/SKILL.md")), skills)
                     self.assertFalse(list(plugin.rglob("__pycache__")))
                     for icon in (manifest.get("logo"), manifest.get("interface", {}).get("logo")):
@@ -66,7 +66,8 @@ class DevPluginTests(unittest.TestCase):
         wheel = Path("/w/tmp/codex-dev/wheels/1/cadgen-1.2.3-py3-none-any.whl")
         with mock.patch.object(dev_install, "build_wheel", return_value=wheel):
             server, commands, page = dev_install.runtime("codex", argparse.Namespace(wheel=True, build=False), "v")
-        self.assertEqual(server["args"], [*dev_install.LAUNCHER[1:], str(wheel), "cadgen", "mcp", "--channel", "dev"])
+        self.assertEqual((server["args"], server["env"]),
+                         ([*dev_install.LAUNCHER[1:], str(wheel), "cadgen", "mcp"], {"CADGEN_INSTALL_CHANNEL": "dev"}))
         self.assertEqual(commands["cadgen"], " ".join((*dev_install.LAUNCHER, str(wheel), "cadgen")))
         self.assertIsNone(page, "a wheel serves the page it was built with")
 
