@@ -33,13 +33,13 @@ const root = path.resolve(args.dir || ".");
 // One fixture per LOAD PATH: an exact-surface STEP package, a mesh, a 2D drawing,
 // a robot description.
 const fixtures = [
-  // `tools` is the file's own tool strip (a mesh and a drawing have none: a tool that does not
-  // apply is hidden, not disabled); `threeD` has the view's Settings and Preview in the navbar.
-  { format: "stl", file: "smoke.stl", parts: false, tools: [], threeD: true },
-  { format: "step", file: "assembly.step", parts: true, tools: ["Select", "Draw", "Measure"], threeD: true },
+  // `tools` is the file's own tool strip, Display last on every 3D view (a drawing has none: a
+  // tool that does not apply is hidden, not disabled); `threeD` has Preview in the navbar.
+  { format: "stl", file: "smoke.stl", parts: false, tools: ["Display"], threeD: true },
+  { format: "step", file: "assembly.step", parts: true, tools: ["Select", "Draw", "Measure", "Display"], threeD: true },
   // A drawing is line work, not shaded surfaces: its outline covers a fraction of what a solid does.
   { format: "dxf", file: "smoke.dxf", parts: false, tools: [], threeD: false, minCoverage: 0.003 },
-  { format: "urdf", file: "smoke.urdf", parts: false, tools: ["Select", "Position"], threeD: true },
+  { format: "urdf", file: "smoke.urdf", parts: false, tools: ["Select", "Position", "Display"], threeD: true },
 ];
 // Small enough that software WebGL and the PNG encode stay cheap on CI, large enough for the
 // layout to be the desktop one.
@@ -284,14 +284,18 @@ async function formatGate() {
         buttons.map((button) => button.getAttribute("aria-label")));
       for (const label of fixture.tools) if (!strip.includes(label)) failures.push(`${fixture.format}: missing ${label} (strip: ${strip.join(", ")})`);
       if (!fixture.tools.length && strip.length) failures.push(`${fixture.format}: a tool strip on a file with no tools (${strip.join(", ")})`);
+      if (fixture.tools.length && strip.at(-1) !== "Display") failures.push(`${fixture.format}: Display is not the strip's last tool (strip: ${strip.join(", ")})`);
       if (!fixture.tools.includes("Measure") && strip.includes("Measure")) {
         failures.push(`${fixture.format}: Measure is offered on a view that cannot measure (must be hidden, not disabled)`);
       }
-      // A 3D view's controls, at the navbar's right end: Settings, then Preview. A drawing has none.
+      // The view's own controls, at the navbar's right end: Preview on a 3D view, none on a drawing.
+      // Settings is the person's, not the view's: one on every file, drawing included.
       const controls = await page.locator("[data-navbar-controls] button").evaluateAll((buttons) =>
         buttons.map((button) => button.getAttribute("aria-label")));
-      const expected = fixture.threeD ? ["Settings", "Preview"] : [];
+      const expected = fixture.threeD ? ["Preview"] : [];
       if (JSON.stringify(controls) !== JSON.stringify(expected)) failures.push(`${fixture.format}: navbar controls are ${JSON.stringify(controls)}`);
+      const settings = await page.getByRole("button", { name: "Settings", exact: true }).count();
+      if (settings !== 1) failures.push(`${fixture.format}: ${settings} Settings buttons (one on every file)`);
       const menu = await canvasMenuItems(page, canvas);
       if (fixture.parts) {
         for (const item of framing) if (!menu.includes(item)) failures.push(`${fixture.format}: menu missing ${item}`);
@@ -312,20 +316,21 @@ async function formatGate() {
 }
 
 // Inspect and Render are the Display settings' Solid and Render presets, chosen from the Mode
-// dropdown of the popover the navbar's Settings opens.
+// dropdown of the panel the strip's Display tool opens (a second press closes it).
 const VIEWING_PRESET = { Inspect: "Solid", Render: "Render" };
 async function selectViewingMode(page, current, next) {
-  const popover = page.locator("[data-display-popover]");
-  if (!(await popover.count())) await page.locator("[data-navbar-controls]").getByRole("button", { name: "Settings", exact: true }).click();
-  const mode = popover.getByRole("combobox", { name: "Mode", exact: true });
+  const display = page.locator('[role="group"][aria-label="Interaction tools"]').getByRole("button", { name: "Display", exact: true });
+  const panel = page.locator('[data-tool-panel-id="display"]');
+  if (!(await panel.count())) await display.click();
+  const mode = panel.getByRole("combobox", { name: "Mode", exact: true });
   await mode.waitFor();
   if ((await mode.innerText()).trim() !== VIEWING_PRESET[current]) fail(`viewing mode: expected ${current} before switching to ${next}`);
   await mode.click();
   await page.getByRole("option", { name: VIEWING_PRESET[next], exact: true }).click();
-  await page.waitForFunction((label) => document.querySelector('[data-display-popover] [role="combobox"][aria-label="Mode"]')?.textContent.trim() === label,
+  await page.waitForFunction((label) => document.querySelector('[data-tool-panel-id="display"] [role="combobox"][aria-label="Mode"]')?.textContent.trim() === label,
     VIEWING_PRESET[next]);
-  await page.keyboard.press("Escape");
-  await popover.waitFor({ state: "detached" });
+  await display.click();
+  await panel.waitFor({ state: "detached" });
 }
 
 // --- camera grounding -----------------------------------------------------
