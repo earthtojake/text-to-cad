@@ -518,6 +518,7 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
         # evidence. Note the log line too -- `cadgen daemon status` cannot show a
         # worker that is gone.
         healthy = False
+        stderr_tail.append(f"\n{exc}\n")
         _log(f"{tool}: worker {worker.pid} died mid-job: {exc}")
         with contextlib.suppress(OSError), send_lock:
             _send(conn, {"workerDied": {"pid": worker.pid, "detail": str(exc),
