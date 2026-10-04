@@ -193,15 +193,16 @@ that total or to the complete CLI process time. Use this attribution to choose
 a targeted profile; a small model's stage proportions do not establish where
 a larger assembly spends its time.
 
-Photographic snapshots use the same floor placement as the Viewer. The
-translucent floor defaults to the document's Z=0 plane. To place it at the
-model's lowest point instead:
+Photographic snapshots use the same floor placement as the Viewer. Render's
+translucent floor stands at the model's lowest point. To place it at the
+document's Z=0 plane instead:
 
 ```bash
-cadgen step snapshot part.step review.png --display '{"mode":"render","floor":{"placement":"lowest"}}'
+cadgen step snapshot part.step review.png --display '{"mode":"render","floor":{"placement":"origin"}}'
 ```
 
-`display.floor.placement` accepts `origin` (the default) or `lowest`; it moves
-only the floor, never the model or lighting. `display.floor.finish` accepts
+`display.floor.placement` accepts `lowest` (Render's default) or `origin` (where
+a floor turned on in another preset starts); it moves only the floor, never the
+model or lighting. `display.floor.finish` accepts
 `matte` (the default) or `glossy`, the Viewer's Floor finish: a glossy floor also
 reflects the model. `display.floor.enabled: false` removes the floor.

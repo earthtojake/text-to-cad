@@ -147,6 +147,12 @@ export function normalizeViewSettings(input = {}) {
   return result;
 }
 
+// Where Render's floor stands: at the model's lowest point, under it, rather than the document's
+// Z=0 plane ("origin", Model origin), which a person may still choose and which then reads as
+// Custom. A floor turned on in another preset starts at the origin. The Render recipe's own
+// backdrop default (`sceneSettings.js`) is this too: one value for the Viewer and the snapshot.
+export const RENDER_FLOOR_PLACEMENT = "lowest";
+
 function defaults(appearance, lightingQuality) {
   const dark = appearance === "dark";
   return {
@@ -221,6 +227,7 @@ export function resolveViewSettings(input = {}, { appearance = "light", lighting
   if (source.mode === "render") {
     result.camera.projection = "perspective";
     for (const name of ["lighting", "background", "floor"]) result[name].enabled = true;
+    result.floor.placement = RENDER_FLOOR_PLACEMENT;
     for (const name of ["edges", "grid", "axes"]) result[name].enabled = false;
   } else if (source.mode === "xray") {
     result.surfaces.opacity = 0.22;

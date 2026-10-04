@@ -61,7 +61,7 @@ Projection remains editable in every preset, including orthographic Render.
 | Edges | Visible/all, color | No CAD edges |
 | Lighting | Quality, exposure, rotation, softbox size, fill | Neutral CAD lighting/reflections |
 | Background | Color and opacity | Natural light/dark workbench background |
-| Floor | Origin/lowest point, Matte/Glossy finish, color and opacity | No floor |
+| Floor | Lowest point/model origin, Matte/Glossy finish, color and opacity | No floor |
 | Grid | Color and opacity | No grid |
 | Axes | Color and opacity (same default color as Grid) | No origin axes |
 
@@ -165,7 +165,10 @@ enabled cut stays live. Explicit neutral boundaries
 still avoid unnecessary caps. See [responsive View updates](view-updates.md)
 for scheduling, resource caching, loading presentation and capture readiness.
 
-Floor defaults to model origin (Z=0), 60% opacity, with Lowest point available.
+Render's floor stands at the model's lowest point, at 60% opacity; Model origin (the
+document's Z=0 plane) is a choice away and reads as Custom, as Glossy does. A floor
+turned on in another preset starts at model origin. A snapshot's Render floor stands
+where the viewer's does: both resolve it from the same preset (`RENDER_FLOOR_PLACEMENT`).
 While Render's lighting is on it carries a studio's soft grounding shadow, as deep
 as the floor is opaque: darkest where the model touches it, the key light's cast
 shadow softening and fading away from the model. The viewer re-renders its

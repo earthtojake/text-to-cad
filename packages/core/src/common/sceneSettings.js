@@ -15,7 +15,7 @@ import {
   cloneThemePresetSettings,
   normalizeThemeSettings
 } from "./themeSettings.js";
-import { resolveViewSettings } from "./viewSettings.js";
+import { RENDER_FLOOR_PLACEMENT, resolveViewSettings } from "./viewSettings.js";
 
 const SCENE_APPEARANCE = Object.freeze({
   SYSTEM: "system",
@@ -126,12 +126,13 @@ export const DEFAULT_RENDER_LIGHTING = Object.freeze({
   fill: 0.25
 });
 
-// Keep the authored origin as the default reference; opacity lets geometry
-// below that plane remain visible. "lowest" follows the current model bounds.
+// Render's floor stands at the model's lowest point, following the current model bounds, as the
+// Display preset's does (`RENDER_FLOOR_PLACEMENT`); "origin" keeps it at the authored Z=0 plane,
+// where its opacity lets geometry below that plane remain visible.
 export const DEFAULT_RENDER_BACKDROP = Object.freeze({
   transparent: false,
   ground: true,
-  groundPlacement: "origin",
+  groundPlacement: RENDER_FLOOR_PLACEMENT,
   groundOpacity: 0.6,
   groundFinish: "matte"
 });

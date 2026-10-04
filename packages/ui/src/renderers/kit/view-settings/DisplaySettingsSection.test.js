@@ -69,6 +69,19 @@ test("Floor finish sits right of Floor position on one two-column row, Matte unt
   view.unmount();
 });
 
+test("Render's Floor position is Lowest point until Model origin is chosen, which is Custom", () => {
+  const view = panel({ mode: "render" });
+  const floor = sections(view.tree).find(section => section.title === "Floor");
+  const position = elements(floor.content).find(node => node.props?.label === "Floor position");
+  assert.equal(position.props.value, "lowest");
+  assert.deepEqual(position.props.options.map(option => [option.value, option.label]), [["origin", "Model origin"], ["lowest", "Lowest point"]]);
+  assert.equal(viewSettingsAreCustom(view.settings()), false);
+  position.props.onValueChange("origin");
+  assert.deepEqual(view.settings().floor, { placement: "origin" });
+  assert.equal(viewSettingsAreCustom(view.settings()), true);
+  view.unmount();
+});
+
 test("projection and tools update independent groups; only the view change is Custom", () => {
   const view = panel({ mode: "solid" });
   // Explode is a STEP tool with its own panel, and writes the same store.

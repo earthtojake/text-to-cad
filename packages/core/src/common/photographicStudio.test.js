@@ -112,16 +112,16 @@ test("photographic studio applies one scale-stable key, Neutral exposure, and or
   assert.equal(value.requestCount, 1);
 });
 
-test("floor defaults to the model origin and can follow the lowest point", () => {
+test("floor defaults to the lowest point and can stand at the model origin", () => {
   const value = runtime();
   for (const minZ of [-40, 0, 40]) {
     value.modelBounds = { min: [-10, -10, minZ], max: [10, 10, minZ + 20] };
     const originalBounds = structuredClone(value.modelBounds);
-    // Origin placement changes neither authored geometry nor illumination.
+    // The floor under the model: either placement changes neither authored geometry nor illumination.
     const state = applyPhotographicStudio(THREE, value, {});
     const keyPosition = state.keyLight.position.clone();
     const keyIntensity = state.keyLight.intensity;
-    assert.equal(state.ground.position.z, 0);
+    assert.equal(state.ground.position.z, minZ);
     assert.equal(state.ground.material.transparent, true);
     assert.equal(state.ground.material.opacity, 0.6);
     assert.equal(state.ground.material.side, THREE.DoubleSide);
@@ -144,7 +144,7 @@ test("floor defaults to the model origin and can follow the lowest point", () =>
     assert.equal(state.ground.material.depthWrite, false);
     assert.equal(state.ground.material.polygonOffset, true);
     applyPhotographicStudio(THREE, value, {});
-    assert.equal(state.ground.position.z, 0);
+    assert.equal(state.ground.position.z, minZ);
   }
   disposePhotographicStudio(value);
 });

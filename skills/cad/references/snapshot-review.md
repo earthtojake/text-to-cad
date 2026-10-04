@@ -104,8 +104,9 @@ transparent and 1 for opaque.
 | `floor` | `placement`: `lowest` or `origin`; `finish`: `matte` or `glossy`; hex `color`; `opacity`: 0–1 |
 | `grid`, `axes` | hex `color`; `opacity`: 0–1 |
 
-Render's floor defaults to the document's Z=0 plane. `placement: "lowest"` moves
-it to the model's minimum Z, moving neither geometry nor lighting. `--camera` or a top-level/output
+Render's floor defaults to the model's lowest point (`placement: "lowest"`, its
+minimum Z), as in the Viewer. `placement: "origin"` moves it to the document's Z=0
+plane, moving neither geometry nor lighting. `--camera` or a top-level/output
 `camera` controls pose and framing (`preset`, `position`, `target`, `up`,
 `direction`, `zoom`, `orthographicHalfHeight`); projection and focal length belong
 only in `display.camera`. `clip` and `exploded` remain independent inspection tools

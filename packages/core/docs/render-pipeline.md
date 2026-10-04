@@ -53,7 +53,7 @@ Every preset has the same independent groups:
   edges: { enabled: false, visibility: "visible", color: "#253443" },
   lighting: { quality: "final", exposure: 0, rotation: 0, size: 1, fill: 0.25 },
   background: { color: "#ffffff", opacity: 1 },
-  floor: { placement: "origin", color: "#e7e7e5", opacity: 0.6 },
+  floor: { placement: "lowest", color: "#e7e7e5", opacity: 0.6 },
   grid: { enabled: false, color: "#cbd5e1", opacity: 0.16 },
   axes: { enabled: false, color: "#6b7280", opacity: 0.28 }
 }
@@ -117,10 +117,12 @@ internal compatibility resolver for older low-level consumers.
 Background opacity follows the ordinary alpha convention: 0 is transparent and
 1 is opaque. Fractional alpha is carried by the renderer clear color with
 `scene.background = null`, so viewer checkerboards and PNG captures agree.
-The floor is independent of background alpha. It defaults to authored Z=0;
-`placement: "lowest"` follows the current model minimum without moving geometry
-or lighting. Its double-sided plane uses one transparency pass, keeping geometry
-below the origin visible. Depth fitting includes the actual floor elevation;
+The floor is independent of background alpha. Render's stands at the model's
+lowest point (`placement: "lowest"`, `RENDER_FLOOR_PLACEMENT`, the Render recipe's
+backdrop default too), following the current model minimum without moving geometry
+or lighting; `placement: "origin"` keeps it at authored Z=0, and a floor turned on
+in another preset starts there. Its double-sided plane uses one transparency pass,
+keeping geometry below the origin visible. Depth fitting includes the actual floor elevation;
 orthographic views can use a signed near plane when the floor crosses the eye.
 
 Lighting quality is `preview` or `final`, mapping to standard/high scene policy.
