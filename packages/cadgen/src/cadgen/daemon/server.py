@@ -544,6 +544,7 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
         ended = "cancelled" if left.is_set() else "crashed"
         if ended == "crashed":
             telemetry.worker_died(exc.exit_status)
+        stderr_tail.append(f"\n{exc}\n")
         _log(f"{tool}: worker {worker.pid} died mid-job: {exc}")
         with contextlib.suppress(OSError), send_lock:
             _send(conn, {"workerDied": {"pid": worker.pid, "detail": str(exc),
