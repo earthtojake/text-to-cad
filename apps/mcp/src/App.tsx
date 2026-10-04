@@ -15,14 +15,13 @@ import { frameClipboard } from './host/clipboard';
 import { createLiveRegistry, describeView } from './host/live';
 import { watchSupersession, type Presentation } from './host/presentation';
 import { chatReach } from './host/prompt';
-import type { Launch, Root, Server } from './host/server';
+import type { Launch, Server } from './host/server';
 import { createViewSync } from './host/sync';
 import ModelView, { type ViewReporter } from './ModelView';
 import { Banner } from './Notice';
 
 interface Showing { launch: Launch; sequence: number }
 
-const rootKey = (root: Root) => `${root.kind}:${root.path}`;
 // The host's sandbox need not be a secure context, where randomUUID is missing.
 const newViewId = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
 const unresolved = () => { throw new Error('No model is showing.'); };
@@ -170,9 +169,9 @@ export default function App({ bridge, server, launch: initial, presentation = 't
   }, [bridge, sync, superseded]);
 
   // Asked once, of everyone, unless their environment answered or no answer could be kept
-  // (`cadgen/analytics.py`): the card, and Settings' Analytics section after it.
+  // (`cadgen/analytics.py`): the card, and the app menu's toggle after it.
   const { consent, answer, appSettings: analyticsSettings } = useAnalyticsConsent(server.consent);
-  // Settings' Features (Quick edit), on until the person turns one off: kept by the server beside
+  // The app menu's features (Quick edit), on until the person turns one off: kept by the server beside
   // the analytics answer, one choice for the sidebar, every thread's tab and the browser viewer.
   const { features, appSettings: featureSettings } = useFeatures(server.features);
   const appSettings = useMemo(() => [...analyticsSettings ?? [], ...featureSettings ?? []], [analyticsSettings, featureSettings]);
@@ -188,10 +187,6 @@ export default function App({ bridge, server, launch: initial, presentation = 't
   // host (a frame cannot open one itself).
   const links = useMemo(() => viewerLinks({ version, open: url => bridge.request('ui/open-link', { url }).then(() => {}) }),
     [bridge]);
-  // A view opened on the home (the sidebar's) goes back to it; one opened on a model has no home.
-  // The home's launch carried its library as it stood when the sidebar opened: going back reads it anew.
-  const home = initial.page === 'home' ? { ...initial, recents: undefined } : null;
-  const goHome = home ? () => setShowing(previous => ({ launch: home, sequence: previous.sequence + 1 })) : undefined;
   const show = (launch: Launch) => setShowing(previous => ({ launch, sequence: previous.sequence + 1 }));
   const { launch } = showing;
   if (superseded) {
@@ -199,13 +194,13 @@ export default function App({ bridge, server, launch: initial, presentation = 't
   }
   return <Frame bridge={bridge} context={context} insets={insets} inline={inline} bottomCenter={bottomCenter}
     overlay={lost ? <Banner message={LOST[presentation]} /> : null}>
-    <ModelView key={rootKey(launch.root)} launch={launch} root={launch.root} sequence={showing.sequence} bridge={bridge} server={server}
+    <ModelView launch={launch} sequence={showing.sequence} bridge={bridge} server={server}
       tabStore={tabStore} live={live} links={links} appSettings={appSettings} features={features}
       notice={consent?.ask ? <ConsentCard policy={consent.policy} onAnswer={answer} onPolicy={openLink} /> : null}
       update={updateNotice ? <UpdateButton notice={updateNotice} send={sendPrompt} copy={prompt => frameClipboard.writeText(prompt)}
         onLink={openLink} /> : null}
       fullSize={inline && context.availableDisplayModes?.includes('fullscreen') !== false ? <FullSizeButton bridge={bridge} /> : null}
       colorScheme={colorScheme} platform={initial.platform || 'darwin'} reporter={reporter} sync={sync} chat={chat}
-      onLaunch={show} onHome={goHome} />
+      onLaunch={show} />
   </Frame>;
 }

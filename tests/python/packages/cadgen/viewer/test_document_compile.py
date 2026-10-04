@@ -19,7 +19,6 @@ import time
 import unittest
 from pathlib import Path
 
-from cadgen.viewer.backend import ForbiddenAssetError
 from cadgen.viewer.cadgen_ops import CadgenOps
 from cadgen.viewer.compiles import DocumentCompiler
 
@@ -86,7 +85,10 @@ class CompileTestCase(unittest.TestCase):
         return DocumentCompiler(submit=self.submit)
 
     def ops(self) -> CadgenOps:
-        return CadgenOps(str(self.root), client=self.compiler())
+        return CadgenOps(client=self.compiler())
+
+    def path(self, name: str) -> str:
+        return str(self.root / name)
 
     def step(self, name: str) -> str:
         path = self.root / name
@@ -174,17 +176,16 @@ def _scope(candidate: str) -> str:
 class OpsWiring(CompileTestCase):
     def test_an_unowned_entry_is_ready_without_a_job(self):
         ops = self.ops()
-        self.assertEqual(ops.artifact_status("model.stl"), {"state": "compiled"})
-        self.assertEqual(ops.build_artifact("model.stl"), {"ok": True, "state": "compiled"})
+        self.assertEqual(ops.artifact_status(self.path("model.stl")), {"state": "compiled"})
+        self.assertEqual(ops.build_artifact(self.path("model.stl")), {"ok": True, "state": "compiled"})
         self.assertEqual(self.submit.calls, [])
 
     def test_a_document_with_no_tree_is_offered_a_compile_with_exactly_three_keys(self):
         # No `blocked`: it is set from a `busy` snapshot no producer can emit, and an
         # unreachable flag that flips the client from BUILD to ATTACH is a trap.
         ops = self.ops()
-        self.step("ok.step")
         self.assertEqual(
-            ops.artifact_status("ok.step"),
+            ops.artifact_status(self.step("ok.step")),
             {"state": "not-compiled", "reason": "missing_glb", "compile": True},
         )
 
@@ -192,11 +193,11 @@ class OpsWiring(CompileTestCase):
         # The request is never held for the job: a host relaying requests through a few
         # shared slots would lose one for the compile's length.
         ops = self.ops()
-        self.step("slow.step")
+        slow = self.step("slow.step")
         self.submit.gate = threading.Event()
-        self.assertEqual(ops.build_artifact("slow.step"), {"ok": True, "state": "compiling"})
-        self.assertEqual(ops.artifact_status("slow.step")["state"], "compiling")
-        self.assertEqual(ops.build_artifact("slow.step"), {"ok": True, "state": "compiling"})
+        self.assertEqual(ops.build_artifact(slow), {"ok": True, "state": "compiling"})
+        self.assertEqual(ops.artifact_status(slow)["state"], "compiling")
+        self.assertEqual(ops.build_artifact(slow), {"ok": True, "state": "compiling"})
         self.submit.gate.set()
         self.settle(ops, "slow.step")
         self.assertEqual(len(self.submit.calls), 1)
@@ -204,27 +205,27 @@ class OpsWiring(CompileTestCase):
     def test_a_failed_compile_is_the_status_routes_answer_with_the_bare_message_until_the_bytes_change(self):
         ops = self.ops()
         candidate = self.step("crash.step")
-        self.assertEqual(ops.build_artifact("crash.step"), {"ok": True, "state": "compiling"})
+        self.assertEqual(ops.build_artifact(candidate), {"ok": True, "state": "compiling"})
         self.settle(ops, "crash.step")
         self.assertEqual(
-            ops.artifact_status("crash.step"),
+            ops.artifact_status(candidate),
             {"state": "failed", "error": "failed to read STEP file: not a STEP", "errorType": "RuntimeError"},
         )
         # New bytes are a new document: the compile is offered again.
         Path(candidate).write_bytes(b"ISO-10303-21;crash, rewritten and longer")
-        self.assertEqual(ops.artifact_status("crash.step")["state"], "not-compiled")
+        self.assertEqual(ops.artifact_status(candidate)["state"], "not-compiled")
 
     def test_an_in_flight_compile_with_no_progress_record_yet_is_indeterminate_generating(self):
         ops = self.ops()
-        self.step("slow.step")
+        slow = self.step("slow.step")
         self.submit.gate = threading.Event()
-        thread = threading.Thread(target=lambda: ops.build_artifact("slow.step"))
+        thread = threading.Thread(target=lambda: ops.build_artifact(slow))
         thread.start()
         try:
             deadline = time.monotonic() + 5
             status = None
             while time.monotonic() < deadline:
-                status = ops.artifact_status("slow.step")
+                status = ops.artifact_status(slow)
                 if status.get("state") == "compiling":
                     break
                 time.sleep(0.02)
@@ -234,27 +235,14 @@ class OpsWiring(CompileTestCase):
             thread.join(timeout=5)
 
 
-class ContainmentHappensBeforeTheJob(CompileTestCase):
-    def test_an_absolute_outside_ref_never_reaches_the_pool(self):
-        outside = Path(self.tmp.name, "outside.step")
-        outside.write_bytes(b"ISO-10303-21;outside")
+class OnlyAnAbsolutePathReachesTheJob(CompileTestCase):
+    def test_a_relative_ref_never_reaches_the_pool(self):
+        self.step("inside.step")
         ops = self.ops()
-        with self.assertRaises(ForbiddenAssetError):
-            ops.build_artifact(str(outside))
+        for ref in ("inside.step", "../folder/inside.step"):
+            with self.subTest(ref=ref), self.assertRaises(ValueError):
+                ops.build_artifact(ref)
         self.assertEqual(self.submit.calls, [])
-
-    def test_a_relative_ref_that_walks_out_never_reaches_the_pool(self):
-        ops = self.ops()
-        with self.assertRaises(ForbiddenAssetError):
-            ops.build_artifact("../outside.step")
-        self.assertEqual(self.submit.calls, [])
-
-    def test_an_absolute_in_root_ref_is_still_compiled(self):
-        ops = self.ops()
-        candidate = self.step("inside.step")
-        self.assertTrue(ops.build_artifact(candidate)["ok"])
-        self.settle(ops, "inside.step")
-        self.assertEqual(len(self.submit.calls), 1)
 
 
 if __name__ == "__main__":

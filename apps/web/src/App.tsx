@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
-import { CadViewer, createCatalogFileSource } from '@text-to-cad/ui/cad-viewer';
+import { CadViewer, createCadFileSource, normalizePath } from '@text-to-cad/ui/cad-viewer';
+import type { ModelLibrarySource } from '@text-to-cad/ui/library';
 import { createLiveRegistry, type ViewerHost } from '@text-to-cad/ui/host';
 import type { TabStore, Appearance } from '@text-to-cad/ui/tab-store';
 import { createHttpAttachmentStore, type CadServerInfo } from '@text-to-cad/core/client';
 import type { createCadClient } from '@text-to-cad/core/client';
 import { useViewerAutoReload } from './host/useViewerAutoReload.js';
 import { createWebFileActions } from './adapters/fileActions';
-import { recordOpened, recordThumbnail } from './adapters/library';
+import { changeRecents, listRecents, pickModel, recordOpened, recordThumbnail, thumbnailUrl } from './adapters/library';
 import { consent as analyticsConsent, reportActivity } from './adapters/analytics';
 import { features as viewerFeatures } from './adapters/features';
 import { version } from './adapters/version';
@@ -17,7 +18,7 @@ import { browserClipboard, browserClipboardSupportsImages } from './host/clipboa
 import { createWebPromptContext } from './host/promptContext';
 import { useViewerLinks } from './host/viewerLinks.js';
 import ViewerAppearance from './client/components/workbench/ViewerAppearance.jsx';
-import { normalizeCadFileQueryParam, readCadParam, readDefaultCadParam, writeCadParam } from './client/workbench/sidebar.js';
+import { readDefaultFileParam, readFileParam, resolveFileParam, writeFileParam } from './client/workbench/fileParam.js';
 import { applyColorSchemeToDocument, resolveColorSchemeMode } from './client/ui/colorScheme.js';
 
 export type CadClient = ReturnType<typeof createCadClient>;
@@ -41,57 +42,65 @@ export function useTabAppearance(tabStore: TabStore): { preference: Appearance; 
   return { preference: settings.appearance, colorScheme: resolveColorSchemeMode(settings.appearance, { prefersDark }) as 'light' | 'dark' };
 }
 
-/** The file the URL names, or this build's default: `?file=` is root-relative. */
-const requestedFile = () => readCadParam() || readDefaultCadParam() || '';
-
-export default function App(props: { client: CadClient; server: CadServerInfo; tabStore: TabStore }) {
-  return <RootView key={props.server.rootId} {...props} />;
-}
-
-/** A root change creates a new session; the tab store, and everything in it, is the tab's across roots. */
-function RootView({ client, server, tabStore }: { client: CadClient; server: CadServerInfo; tabStore: TabStore }) {
+/**
+ * The CAD Viewer's page: one file at a time, by the absolute path its URL names (`?file=`), or the
+ * home — the models opened before, and Open — where it names none. The browser's own history is
+ * the way back: showing a file or the home is a new entry.
+ */
+export default function App({ client, server, tabStore }: { client: CadClient; server: CadServerInfo; tabStore: TabStore }) {
   useViewerAutoReload(server, { fetchServerInfo: () => client.serverInfo({ fresh: true }).then(info => ({ ok: true, identityToken: String(info.identityToken || '') }), () => ({ ok: false })) });
-  // The served folder's catalog, browsed in place.
-  const source = useMemo(() => createCatalogFileSource(client, { id: server.rootId, rootName: 'This directory' }), [client, server]);
-  const promptContext = useMemo(() => createWebPromptContext(source.id, server.rootPath || '', browserClipboard, browserClipboardSupportsImages()), [source.id, server.rootPath]);
+  const source = useMemo(() => createCadFileSource(client), [client]);
+  const promptContext = useMemo(() => createWebPromptContext(browserClipboard, browserClipboardSupportsImages()), []);
   const fileActions = useMemo(() => createWebFileActions(server, { clipboard: browserClipboard }), [server]);
   // A copied Quick Edit's sketch, saved by the server beside it on this machine.
   const attachments = useMemo(() => createHttpAttachmentStore({ origin: client.origin }), [client]);
   // The view on screen, for the library's pictures of what was opened.
   const live = useMemo(() => createLiveRegistry(), []);
   const links = useViewerLinks();
-  const [file, setFile] = useState(requestedFile);
-  const appearance = useTabAppearance(tabStore);
-  const changeColorScheme = useCallback((value: string) => tabStore.settings.update({ appearance: value as Appearance }), [tabStore]);
-  useEffect(() => { applyColorSchemeToDocument(appearance.colorScheme, document.documentElement); }, [appearance.colorScheme]);
+  // The file the URL names (a developer's relative path resolved where this viewer started), or the
+  // build's default; the URL then names it in full.
+  const requested = useCallback(() => resolveFileParam(readFileParam() || readDefaultFileParam() || '', server.start), [server.start]);
+  const [file, setFile] = useState(requested);
+  useEffect(() => { if (file && readFileParam() !== file) writeFileParam(file, { history: 'replace' }); }, []);
   useEffect(() => {
-    const sync = () => setFile(requestedFile());
+    const sync = () => setFile(requested());
     window.addEventListener('popstate', sync);
     return () => window.removeEventListener('popstate', sync);
-  }, []);
+  }, [requested]);
   const shownFile = useRef(file);
   shownFile.current = file;
-  /** Show a file by its path ('' is none), whether or not the catalog has read it yet: the viewer resolves it. */
+  /** Show a file by its absolute path, or the home (''): a new step in the browser's history. */
   const show = useCallback((next: string) => {
-    const path = normalizeCadFileQueryParam(next);
+    const path = normalizePath(next);
     if (path === shownFile.current) return;
-    writeCadParam(path, { history: 'push' });
+    writeFileParam(path, { history: 'push' });
     setFile(path);
   }, []);
-  // Once the catalog has the file: the page is named after it, the URL names it (a default file
-  // too), and it joins the library every CAD view shares.
+  // Once the catalog has the file: the page is named after it, and it joins the library every CAD view shares.
   const shown = useCallback((path: string | null) => {
     document.title = path ? `CAD | ${path.split('/').pop()}` : 'CAD';
     if (!path) return;
-    if (!readCadParam()) writeCadParam(path, { history: 'replace' });
     void recordOpened(path).catch(() => {});
     reportActivity({ file: path });
   }, []);
+  // The home: the library every CAD view shares, and Open with the desktop's chooser where the
+  // server's computer has one. A card without a picture has its model drawn out of sight.
+  const library = useMemo<ModelLibrarySource>(() => ({
+    list: listRecents,
+    change: (action, entry) => changeRecents({ action, path: entry.path }),
+    thumbnail: name => Promise.resolve(thumbnailUrl(name)),
+    open: async entry => { show(entry.path); },
+    ...(server.pick ? { pick: async () => { const picked = await pickModel(); if (picked) show(picked); } } : {}),
+    pictureFrom: entry => ({ client, file: normalizePath(entry.path), keep: png => recordThumbnail(png, entry.path) }),
+  }), [client, server.pick, show]);
+  const appearance = useTabAppearance(tabStore);
+  const changeColorScheme = useCallback((value: string) => tabStore.settings.update({ appearance: value as Appearance }), [tabStore]);
+  useEffect(() => { applyColorSchemeToDocument(appearance.colorScheme, document.documentElement); }, [appearance.colorScheme]);
   // CAD's anonymous usage analytics, the same as the CAD app's: one card, asked once of everyone
   // (unless their environment answered, or no answer could be kept) once a model is on screen, and
-  // Settings' Analytics section after it. The answer is the person's, shared with the CAD app.
+  // the app menu's toggle after it. The answer is the person's, shared with the CAD app.
   const { consent, answer, appSettings: analyticsSettings } = useAnalyticsConsent(analyticsConsent);
-  // Settings' Features (Quick edit), on until the person turns one off: kept by this Viewer's
+  // The app menu's features (Quick edit), on until the person turns one off: kept by this Viewer's
   // server beside the analytics answer, one choice with the CAD app's, whatever port this is.
   const { features, appSettings: featureSettings } = useFeatures(viewerFeatures);
   const appSettings = useMemo(() => [...analyticsSettings ?? [], ...featureSettings ?? []], [analyticsSettings, featureSettings]);
@@ -118,7 +127,7 @@ function RootView({ client, server, tabStore }: { client: CadClient; server: Cad
   }), [source, fileActions, promptContext, attachments, links, appearance.colorScheme]);
   return <div className="flex h-svh flex-col overflow-hidden"><div className="min-h-0 flex-1">
     <CadViewer client={client} host={host} tabStore={tabStore} live={live} file={file} onShow={show} onShown={shown}
-      rootPath={server.rootPath || ''} onThumbnail={recordThumbnail} appSettings={appSettings} features={features}
+      library={library} onThumbnail={recordThumbnail} appSettings={appSettings} features={features}
       notice={consent?.ask ? <ConsentCard policy={consent.policy} onAnswer={answer} onPolicy={openTab} /> : null}
       update={updateNotice ? <UpdateButton notice={updateNotice} copy={prompt => browserClipboard.writeText(prompt)} onLink={openTab} /> : null}
       displayActions={<ViewerAppearance colorSchemePreference={appearance.preference} resolvedColorSchemeMode={appearance.colorScheme} onColorSchemePreferenceChange={changeColorScheme} />} />

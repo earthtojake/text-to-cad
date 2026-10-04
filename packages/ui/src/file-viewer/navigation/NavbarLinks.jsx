@@ -1,15 +1,14 @@
 import { Button } from "@text-to-cad/ui/primitives/button";
 import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 
-import { DiscordMark, GitHubMark } from "./brandMarks.jsx";
+import { GitHubMark } from "./brandMarks.jsx";
 import { issueUrl } from "./links.js";
 
 /**
  * The host's links (`ViewerHost.links`, built by `viewerLinks` in `links.js`), as the viewer shows
- * them. The Settings popover's footer has "Made by @…" (`MadeBy`, the host's X account) at its left and
- * Discord and GitHub (`CommunityLinks`) at its right; the version, beside its title, links its
- * release notes; its Feedback opens a new issue (`feedbackUrl`). GitHub alone (`GitHubLink`)
- * is under the home's wordmark, before Settings. Every link opens the
+ * them. The app menu (`AppMenu.jsx`) holds Send feedback (`feedbackUrl`), GitHub and Discord, and
+ * in its footer the version (its release notes) and "Made by @…" (`MadeBy`, the host's X account).
+ * GitHub alone (`GitHubLink`) is under the home's wordmark, before its cog. Every link opens the
  * host's way: a page that can open one itself follows an ordinary link to a new tab; a page in a
  * frame that cannot hands it to `links.open` (the host's own browser).
  */
@@ -26,18 +25,6 @@ export function useFollow(links, onError) {
     const url = event.currentTarget.href;
     void Promise.resolve().then(() => links.open(url)).catch((error) => onError?.(error instanceof Error ? error : new Error(String(error))));
   };
-}
-
-/**
- * Discord and GitHub, as icon links, in that order (X is "Made by @…", `MadeBy`).
- * @param {{ links: import("../../host/types.js").ViewerLinks, onError?: (error: Error) => void }} props
- */
-export function CommunityLinks({ links, onError }) {
-  const follow = useFollow(links, onError);
-  return <>
-    <IconLink href={links.discord} label="Discord" icon={DiscordMark} onFollow={follow} />
-    <IconLink href={links.github} label="GitHub" icon={GitHubMark} onFollow={follow} />
-  </>;
 }
 
 /**
@@ -74,7 +61,7 @@ function IconLink({ href, label, icon: Icon, onFollow }) {
 }
 
 /**
- * Who made it: "Made by @handle", the host's X account, at the left of the Settings popover's footer.
+ * Who made it: "Made by @handle", the host's X account, in the app menu's footer.
  * @param {{ links: import("../../host/types.js").ViewerLinks, onError?: (error: Error) => void }} props
  */
 export function MadeBy({ links, onError }) {

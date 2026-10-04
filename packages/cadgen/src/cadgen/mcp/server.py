@@ -2,15 +2,16 @@
 
 Nothing heavy happens until a tool needs it: initialize and tools/list read no
 store, start no daemon and import no CAD kernel. Everything the views share --
-the workspace, the open views, what was last shown -- is plain process memory.
+the open views, what was last shown -- is plain process memory.
 
 One page serves every surface. The tool that opens a surface returns a
-*launch* -- which page, which model, which root to browse -- and the page renders
-it; nothing in the page guesses where it is. Once open, a view makes ONE call each
-second, ``cad_sync``: it says what it shows (its model, its selection, whether a
-person just touched it) and what it watches (its root's catalog, a STEP's build
-feed), and gets back the agent's requests and what changed. It reaches the
-viewer's own HTTP routes through ``cad_http``. No call is held open (``views.py``).
+*launch* -- a model by its absolute path, or the home -- and the page renders it;
+a view browses from its model's folder, so nothing says where it may browse. Once
+open, a view makes ONE call each second, ``cad_sync``: it says what it shows (its
+model, its selection, whether a person just touched it) and what it watches (its
+model's catalog entry, a STEP's build feed), and gets back the agent's requests
+and what changed. It reaches the viewer's own HTTP routes through ``cad_http``.
+No call is held open (``views.py``). Agents name models by absolute path only.
 
 Hosts present views in one of three ways, told apart at initialize:
 
@@ -19,21 +20,17 @@ Hosts present views in one of three ways, told apart at initialize:
   presents CAD as a sidebar page, a tab per thread and a file handler. The agent
   opens a tab once (``cad_open``) and then drives it (``cad_show``). A host that
   declares tabs takes on what Codex does: it starts one server process per thread,
-  since a call that names no view reaches the thread's own tab, and it says which
-  folder the thread works in, through MCP roots or Codex's per-call sandbox
-  metadata.
+  since a call that names no view reaches the thread's own tab.
 - *Inline* (every other MCP Apps host: Claude, VS Code, ...). Each call to a tool
   with a UI mounts a new view in the chat, and the old ones stay. So ``cad_show``
   is that tool, each launch is stamped with an order for the views to retire
   their elders by, and a view the agent reads is named by the token its
   ``cad_show`` returned: one process may serve many chats, and no host says which.
-  A host that lists roots names its chats' folders together (Claude Desktop lists
-  every open Code session's), and a card browses the innermost around its model.
 - *Text* (a client that renders no MCP Apps, so does not advertise the
   ``io.modelcontextprotocol/ui`` extension: Grok, Zed, Gemini CLI, Claude Code in a
   terminal, ...). ``cad_show`` is the only tool, and it answers with a link to the
-  model in the CAD Viewer (``browser.py``), started or reused for its folder;
-  nothing opens a browser.
+  model in the CAD Viewer (``browser.py``), the one this machine runs, started
+  if none is; nothing opens a browser.
 
 ``CADGEN_MCP_PRESENTATION=inline|text`` settles a non-Codex client that renders MCP
 Apps without advertising them (the reference host, ``basic-host``, is one).
@@ -48,16 +45,15 @@ import logging
 import os
 import sys
 import itertools
-import threading
 import time
 import uuid
 from pathlib import Path
 from typing import Any
+from urllib.parse import unquote, urlparse
 
-from cadgen.viewer.scanner import SOURCE_EXTENSIONS, catalog_lists
+from cadgen.viewer.scanner import SOURCE_EXTENSIONS
 
 from .protocol import INVALID_PARAMS, METHOD_NOT_FOUND, Connection, RequestContext, RpcError, claim_stdout
-from .roots import WORKSPACE, Root, ThreadWorkspace, file_uri_path, filesystem_of, home_filesystem
 from .ui import MIME, RESOURCE_META, AppPage
 from .sidebar_views import SidebarView
 from .views import NoAnswer, ViewRegistry
@@ -66,12 +62,11 @@ LOG = logging.getLogger("cadgen.mcp")
 
 NAME = "cad"
 TITLE = "CAD"
-# The launch/view protocol between this server and its page. 2: every launch names a root, the
-# home's included, and the page reveals files (`cad_reveal`). 3: only the sidebar has a home, and
-# a launch browses only the thread's project. 4: a view makes one call a second (`cad_sync`), and
-# every launch carries what the page needs to start (the server's version and platform; the
-# home's, its recents), so it starts on the launch alone.
-PROTOCOL = 4
+# The launch/view protocol between this server and its page: a launch names a model by its absolute
+# path (`page: viewer`) or the home (`page: home`, its recents with it), and carries what the page
+# needs to start on it alone (the server's version and platform); a view makes one call a second
+# (`cad_sync`) and reaches the viewer's routes through `cad_http`, by absolute path.
+PROTOCOL = 5
 _PROTOCOL_VERSIONS = ("2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05")
 _RESOURCE_NOT_FOUND = -32002
 EXTENSIONS = sorted(SOURCE_EXTENSIONS)
@@ -86,7 +81,7 @@ _TAB_ENTRYPOINTS = frozenset({"global", "thread", "file"})
 
 INSTRUCTIONS = (
     "CAD shows local CAD models (STEP, STL, GLB, 3MF, DXF, URDF, SDF) in a viewer tab beside the chat. "
-    "To show a model, call cad_show: it switches an open viewer and never opens a tab. "
+    "To show a model, call cad_show with its absolute path: it switches an open viewer and never opens a tab. "
     "Only when cad_show reports no open viewer, call cad_open, once. "
     "Viewers refresh when files change, so never reopen after a rebuild. "
     "cad_view reports what the user is looking at and has selected; cad_screenshot returns what they see."
@@ -94,7 +89,7 @@ INSTRUCTIONS = (
 
 INLINE_INSTRUCTIONS = (
     "CAD shows local CAD models (STEP, STL, GLB, 3MF, DXF, URDF, SDF) in interactive viewers in the chat. "
-    "Call cad_show to show one: each call adds a viewer and pauses the earlier ones. "
+    "Call cad_show with a model's absolute path to show it: each call adds a viewer and pauses the earlier ones. "
     "Viewers refresh when their files change, so never show a model again after a rebuild. "
     "cad_view reports what the user is looking at and has selected in a viewer, and cad_screenshot returns "
     "what they see; both take the view that cad_show returned."
@@ -102,7 +97,7 @@ INLINE_INSTRUCTIONS = (
 
 TEXT_INSTRUCTIONS = (
     "CAD opens local CAD models (STEP, STL, GLB, 3MF, DXF, URDF, SDF) in the CAD Viewer in the user's browser: "
-    "this app cannot show CAD views itself. Call cad_show with a model to get its link and share it. "
+    "this app cannot show CAD views itself. Call cad_show with a model's absolute path to get its link and share it. "
     "The Viewer refreshes when the file changes, so share a model's link once, not after every rebuild."
 )
 
@@ -131,15 +126,10 @@ def _object(properties: dict[str, Any] | None = None, required: list[str] | None
     return schema
 
 
-_PATH = {"type": "string", "description": "A CAD file: an absolute path, or relative to the thread's workspace."}
+_PATH = {"type": "string", "description": "A CAD file's absolute path."}
 _VIEW = {"type": "string", "description": "A view id from cad_view; defaults to the most recently used viewer."}
-_ROOT = _object({"kind": {"type": "string", "enum": ["workspace", "global"]}, "path": {"type": "string"}}, ["kind", "path"])
-# What a view watches: its root's catalog (with the file it shows hydrated first), and the build
-# feed of each STEP it shows.
-_WATCH = _object({"root": _ROOT, "file": {"type": ["string", "null"]},
-                  "previews": {"type": "array", "items": {"type": "string"}, "maxItems": 4}}, ["root"])
-_SHOWN_PATH = {"type": "string", "description": ("A CAD file's absolute path. A relative path works only when the app "
-                                                   "shares the chat's project folder.")}
+# What a view watches: its model's catalog entry, and the build feed of each STEP it shows.
+_WATCH = _object({"file": {"type": ["string", "null"]}, "previews": {"type": "array", "items": {"type": "string"}, "maxItems": 4}})
 _SHOWN_VIEW = {"type": "string", "description": "The view that cad_show returned."}
 _READ_ONLY = {"readOnlyHint": True, "destructiveHint": False, "openWorldHint": False}
 # Every client's: the agent reports CAD's analytics setting, or turns sharing off when the user asks.
@@ -155,11 +145,14 @@ _ANALYTICS_TOOL = {
 
 
 def _stamped(launch: dict[str, Any]) -> dict[str, Any]:
-    """A launch with what the page needs to start on it alone: this server's version and platform."""
+    """A launch with what the page needs to start on it alone: this server's version and platform,
+    and whether this computer has a file chooser for the home's Open."""
     from cadgen import __version__
+    from cadgen._internal.picker import available
 
     launch["version"] = __version__
     launch["platform"] = sys.platform if sys.platform in ("darwin", "win32") else "linux"
+    launch["pick"] = available()
     return launch
 
 
@@ -191,11 +184,19 @@ def _data(structured: dict[str, Any]) -> dict[str, Any]:
     return {"content": [], "structuredContent": structured}
 
 
+def file_uri_path(value: Any) -> str | None:
+    """The local path a ``file:`` URI names (``file:///C:/x`` is ``C:/x`` on Windows), else None."""
+    if not isinstance(value, str) or not value.startswith("file:"):
+        return None
+    path = unquote(urlparse(value).path)
+    if os.name == "nt" and len(path) > 2 and path[0] == "/" and path[2] == ":":
+        path = path[1:]
+    return path or None
+
+
 class Server:
-    def __init__(self, *, launch_cwd: str | None, page: AppPage | None = None, recents=None, tunnel=None, viewer_url=None,
+    def __init__(self, *, page: AppPage | None = None, recents=None, tunnel=None, viewer_url=None,
                  sidebar_views=None, analytics=None) -> None:
-        excluded = tuple(path for path in (os.environ.get("PLUGIN_ROOT"), os.path.expanduser("~")) if path)
-        self.workspace = ThreadWorkspace(launch_cwd, excluded=excluded)
         self.page = page or AppPage()
         self.views = ViewRegistry()
         self._recents = recents
@@ -207,8 +208,6 @@ class Server:
         self.tabs = False  # decided at initialize: see the module docstring
         self.text = False
         self._viewer_url = viewer_url
-        self._client_roots = False
-        self._connection: Connection | None = None
         self._order = itertools.count(1)
         self._analytics = analytics
         self._update_told = False
@@ -248,7 +247,7 @@ class Server:
     @property
     def picker(self):
         if self._picker is None:
-            from .picker import FilePicker
+            from cadgen._internal.picker import FilePicker
 
             self._picker = FilePicker()
         return self._picker
@@ -262,27 +261,6 @@ class Server:
         return self._tunnel
 
     # -- the protocol ----------------------------------------------------------
-
-    def attach(self, connection: Connection) -> None:
-        """The connection this server answers on, for the requests it makes of the host."""
-        self._connection = connection
-
-    def notified(self, method: str, params: dict[str, Any]) -> None:
-        if method in ("notifications/initialized", "notifications/roots/list_changed") and self._client_roots:
-            threading.Thread(target=self._refresh_roots, name="cadgen-mcp-roots", daemon=True).start()
-
-    def _refresh_roots(self) -> None:
-        """Adopt the folders a client that offers roots says the chat works in."""
-        if self._connection is None:
-            return
-        try:
-            result = self._connection.request("roots/list", {}, timeout=10)
-        except Exception:  # a host that offers roots and then fails to list them leaves the launch folder
-            LOG.info("the host did not list its roots")
-            return
-        roots = result.get("roots") if isinstance(result, dict) else None
-        if isinstance(roots, list):
-            self.workspace.adopt([root.get("uri") for root in roots if isinstance(root, dict)])
 
     def handle(self, method: str, params: dict[str, Any], context: RequestContext) -> Any:
         if method == "initialize":
@@ -311,7 +289,6 @@ class Server:
         offered = params.get("capabilities") if isinstance(params.get("capabilities"), dict) else {}
         presentation = _presentation(client, offered)
         self.tabs, self.text = presentation == "tabs", presentation == "text"
-        self._client_roots = isinstance(offered.get("roots"), dict)
         if presentation == "inline":
             self.page = self.page.presenting("inline")
         self._tools = None
@@ -320,9 +297,6 @@ class Server:
                  ", ".join(extensions) or "none")
         self.analytics.started(client=client, presentation=presentation)
         capabilities: dict[str, Any] = {"tools": {"listChanged": False}, "resources": {"listChanged": False}}
-        if self.tabs:
-            # Ask the host to say, on each agent call, which folder the thread works in.
-            capabilities["experimental"] = {"codex/sandbox-state-meta": {}}
         requested = params.get("protocolVersion")
         return {
             "protocolVersion": requested if requested in _PROTOCOL_VERSIONS else _PROTOCOL_VERSIONS[1],
@@ -388,7 +362,7 @@ class Server:
                              "chat. Each call adds a viewer and pauses the earlier ones. A viewer refreshes by itself when "
                              "its file changes, so show a model once, not after every rebuild. The result names the view: "
                              "pass it to cad_view or cad_screenshot."),
-             "inputSchema": _object({"path": _SHOWN_PATH}, ["path"])},
+             "inputSchema": _object({"path": _PATH}, ["path"])},
             {"name": "cad_view", "title": "Read CAD view", "icons": [ICON], "annotations": _READ_ONLY,
              "description": ("Describe a CAD viewer in this chat: its model and revision, what the user has selected (as "
                              "references you can quote back), and the camera."),
@@ -407,7 +381,7 @@ class Server:
              "description": ("Get a link that opens a local CAD model (STEP, STL, GLB, 3MF, DXF, URDF, SDF) in the CAD "
                              "Viewer in the user's browser; this app cannot show CAD views itself. The Viewer refreshes "
                              "when the file changes, so share a model's link once, not after every rebuild."),
-             "inputSchema": _object({"path": _SHOWN_PATH}, ["path"])},
+             "inputSchema": _object({"path": _PATH}, ["path"])},
             _ANALYTICS_TOOL,
         ]
 
@@ -440,16 +414,16 @@ class Server:
             app("cad_capture_reply", "Answer CAD", "Answer the server's request for a capture.",
                 _object({"requestId": {"type": "string"}, "png": {"type": "string"}, "error": {"type": "string"}}, ["requestId"])),
             app("cad_http", "CAD viewer request", "One request to the CAD viewer's routes, bodies base64.",
-                _object({"root": _ROOT, "method": {"type": "string"}, "url": {"type": "string"},
+                _object({"method": {"type": "string"}, "url": {"type": "string"},
                          "headers": {"type": "object", "additionalProperties": {"type": "string"}},
-                         "body": {"type": "string"}}, ["root", "method", "url"])),
+                         "body": {"type": "string"}}, ["method", "url"])),
             app("cad_recents", "CAD recents", "Read or change recently opened models.",
                 _object({"action": {"type": "string", "enum": ["list", "pin", "unpin", "remove", "thumbnail", "thumbnails"]},
                          "path": {"type": "string"}, "png": {"type": "string"},
                          "names": {"type": "array", "items": {"type": "string"}}})),
             app("cad_reveal", "Reveal in file manager",
-                "Show a file of the view's root in the desktop's file manager. Only for an explicit Reveal action.",
-                _object({"root": _ROOT, "path": {"type": "string"}}, ["root", "path"])),
+                "Show a file, by its absolute path, in the desktop's file manager. Only for an explicit Reveal action.",
+                _object({"path": {"type": "string"}}, ["path"])),
         ]
 
     # -- calls -----------------------------------------------------------------
@@ -462,7 +436,6 @@ class Server:
         handler = getattr(self, f"_tool_{name}", None) if isinstance(name, str) and name.startswith("cad_") else None
         if handler is None:
             raise RpcError(INVALID_PARAMS, f"unknown tool {name!r}")
-        self.workspace.learn(context.meta)
         started = time.monotonic()
         ok = False
         try:
@@ -478,36 +451,26 @@ class Server:
 
     # launches -----------------------------------------------------------------
 
-    def _project_of(self, model: str) -> str | None:
-        """The innermost workspace folder whose catalog lists ``model``, if any.
-
-        A model the agent writes under ``build/`` or a hidden folder is still the thread's, but the
-        workspace's catalog never shows it, so it has no project around it to browse. A process that
-        serves many chats holds all their folders, one perhaps inside another as a worktree is inside
-        its checkout, and no call says whose it is: the innermost around the model is its project.
-        """
-        return next((folder for folder in self.workspace.holding(model) if catalog_lists(folder, model)), None)
-
-    def _root_for(self, model: str) -> Root:
-        project = self._project_of(model)
-        return Root("workspace", project) if project else filesystem_of(model)
-
-    def _home_root(self) -> Root:
-        """Where a view with no model sits: the thread's workspace, else the filesystem of the user's home."""
-        return self.workspace.root() or home_filesystem()
-
-    def _launch(self, model: str | None, *, surface: str | None = None, explore: bool = True,
-                root: Root | None = None) -> dict[str, Any]:
-        root = root or (self._root_for(model) if model is not None else self._home_root())
-        # Only a project is browsed, in a tab and an inline card alike: a workspace folder around the
-        # model. A model with no project around it is shown on its own.
-        launch: dict[str, Any] = {"protocol": PROTOCOL, "page": "viewer", "model": model, "root": root.public(),
-                                  "explore": explore and root.kind == WORKSPACE}
+    def _launch(self, model: str, *, surface: str | None = None) -> dict[str, Any]:
+        """The launch that shows ``model`` (absolute): the view browses from its folder."""
+        launch: dict[str, Any] = {"protocol": PROTOCOL, "page": "viewer", "model": model}
         if surface:
             launch["surface"] = surface
-        if model is not None:
-            self._model = model
-            self._remember(model)
+        self._model = model
+        self._remember(model)
+        return _stamped(launch)
+
+    def _home(self, *, surface: str | None = None) -> dict[str, Any]:
+        """The launch that shows the home: the models opened before, which come with it so its cards
+        draw at once, and Open with the desktop's chooser."""
+        try:
+            recents = [entry.public() for entry in self.recents.list()]
+        except Exception:  # the home opens whatever the store says
+            LOG.exception("could not read recents")
+            recents = []
+        launch: dict[str, Any] = {"protocol": PROTOCOL, "page": "home", "model": None, "recents": recents}
+        if surface:
+            launch["surface"] = surface
         return _stamped(launch)
 
     def _mounted(self, launch: dict[str, Any]) -> dict[str, Any]:
@@ -527,20 +490,12 @@ class Server:
             LOG.exception("could not record %s in recents", model)
 
     def _model_path(self, value: Any) -> str:
-        """An existing CAD file, absolute, from what a caller named."""
+        """An existing CAD file, from the absolute path a caller named."""
         if not isinstance(value, str) or not value.strip():
-            raise ToolFailed("Name a CAD file by its path.")
+            raise ToolFailed("Name a CAD file by its absolute path.")
         path = file_uri_path(value) or os.path.expanduser(value.strip())
         if not os.path.isabs(path):
-            folders = self.workspace.paths
-            if not folders:
-                raise ToolFailed(f"{value} is relative, and this thread has no workspace folder; give an absolute path.")
-            # A tab's thread names its folder on every call. An inline view's process may serve many
-            # chats with folders of their own, and no call says whose it is: the one folder with the file.
-            having = folders[:1] if self.tabs else [folder for folder in folders if os.path.isfile(os.path.join(folder, path))]
-            if len(having) > 1:
-                raise ToolFailed(f"{value} is in more than one folder open here ({', '.join(having)}); give its absolute path.")
-            path = os.path.join(having[0] if having else folders[0], path)
+            raise ToolFailed(f"{value} is not an absolute path: name the model by its absolute path.")
         path = os.path.abspath(path)
         if not os.path.isfile(path):
             raise ToolFailed(f"No file at {path}.")
@@ -549,23 +504,14 @@ class Server:
         return path
 
     def _tool_cad_home(self, arguments, context):
-        # The sidebar's home: the library, and Open with the desktop's chooser. It browses no folder,
-        # so its root is the filesystem, whose catalog holds nothing until a model is shown. The
-        # library comes with it, so the home draws its cards without asking first.
-        try:
-            recents = [entry.public() for entry in self.recents.list()]
-        except Exception:  # the home opens whatever the store says
-            LOG.exception("could not read recents")
-            recents = []
-        return _text("CAD is open.", {"launch": _stamped({"protocol": PROTOCOL, "page": "home", "surface": "sidebar",
-                                                           "model": None, "root": home_filesystem().public(), "explore": False,
-                                                           "recents": recents})})
+        return _text("CAD is open.", {"launch": self._home(surface="sidebar")})
 
     def _tool_cad_tab(self, arguments, context):
         current = next((view.model for view in self.views.live(context.meta.get("threadId")) if view.model), None) or self._model
         if current is not None and not os.path.isfile(current):
             current = None
-        return _text("CAD is open.", {"launch": self._launch(current, surface="tab")})
+        launch = self._launch(current, surface="tab") if current else self._home(surface="tab")
+        return _text("CAD is open.", {"launch": launch})
 
     def _tool_cad_file(self, arguments, context):
         resource = context.meta.get("openai/resource")
@@ -574,9 +520,8 @@ class Server:
             file = arguments.get("file")
             path = file_uri_path(file.get("resourceUri")) if isinstance(file, dict) else None
         model = self._model_path(path)
-        # Shown on its own: the one file, read without the catalog of any folder.
-        launch = self._launch(model, surface="file", explore=False, root=filesystem_of(model))
-        return _text(f"{os.path.basename(model)} is open in CAD.", {"launch": launch})
+        # The host's own file tree is this surface's navigation: the page shows the file alone.
+        return _text(f"{os.path.basename(model)} is open in CAD.", {"launch": self._launch(model, surface="file")})
 
     def _tool_cad_open(self, arguments, context):
         model = self._model_path(arguments.get("path"))
@@ -587,7 +532,7 @@ class Server:
         return _data({"launch": self._launch(self._model_path(arguments.get("model")))})
 
     def _tool_cad_pick_model(self, arguments, context):
-        from .picker import PickerFailed
+        from cadgen._internal.picker import PickerFailed
 
         try:
             chosen = self.picker.choose()
@@ -697,23 +642,17 @@ class Server:
         return _text(f"Showing {model} in CAD.", {"delivered": 1, "view": view.id})
 
     def _show_in_browser(self, model: str) -> dict[str, Any]:
-        """The model's link in the CAD Viewer serving its folder, started if none is."""
-        from urllib.parse import quote
-
+        """The model's link in the CAD Viewer this machine runs, started if none is."""
         from .browser import ViewerUnavailable, model_link, viewer_url
 
-        # The Viewer serves one folder and walks all of it: the project, else the model's own folder.
-        folder = self._project_of(model) or os.path.dirname(model)
         self._model = model
         self._remember(model)
         try:
-            url = (self._viewer_url or viewer_url)(folder)
+            url = (self._viewer_url or viewer_url)()
         except ViewerUnavailable as failure:
-            relative = quote(os.path.relpath(model, folder).replace(os.sep, "/"), safe="/")
             raise ToolFailed(f"This app cannot show CAD views, and the CAD Viewer did not start ({failure}). Run "
-                             f"`cd \"{folder}\" && cadgen viewer --host 127.0.0.1 --json --detach` and open the url it prints "
-                             f"with ?file={relative} added.") from failure
-        link = model_link(url, folder, model)
+                             f"`cadgen viewer --host 127.0.0.1 --json --detach` and open {model_link('<the url it prints>', model)}.") from failure
+        link = model_link(url, model)
         # Text alone: an app that shows a result's structured content shows it in place of the text
         # (Claude Code does), and the agent would get neither this guidance nor the update line.
         return self._told(_text(f"This app cannot show CAD views, so {os.path.basename(model)} is in the CAD Viewer: {link}\n"
@@ -799,8 +738,8 @@ class Server:
 
         Up: the view's model, its state when it changed (what ``cad_view`` reads), ``focused``
         when a person just touched it, and ``closed`` once a newer view took its place. Down: the
-        agent's requests for it (``show``, ``capture``), and for what it watches -- its root's
-        catalog and the build feed of any STEP it shows -- the catalog's revision (the view
+        agent's requests for it (``show``, ``capture``), and for what it watches -- its model's
+        catalog entry and the build feed of any STEP it shows -- the entry's revision (the view
         reads the catalog again only when that moves) and each feed's current status.
         """
         view_id = self._register(arguments, context)
@@ -824,19 +763,17 @@ class Server:
             self._model = arguments["model"]
         answer: dict[str, Any] = {}
         watch = arguments.get("watch")
-        if isinstance(watch, dict) and isinstance(watch.get("root"), dict):
-            # What the view watches never costs it the agent's requests: a root refused or a
-            # catalog that will not read is said here, and the events still go.
+        if isinstance(watch, dict) and isinstance(watch.get("file"), str):
+            # What the view watches never costs it the agent's requests: a catalog that will not
+            # read is said here, and the events still go.
             try:
-                root = self.workspace.accept(watch["root"])
-                file = watch.get("file") if isinstance(watch.get("file"), str) else None
-                answer["catalog"] = {"revision": self.tunnel.catalog_revision(root, file)}
+                answer["catalog"] = {"revision": self.tunnel.catalog_revision(watch["file"])}
             except Exception as error:  # noqa: BLE001 - the view shows the catalog's own failure on its next read
                 answer["catalog"] = {"error": str(error) or type(error).__name__}
             else:
                 files = [item for item in watch.get("previews") or [] if isinstance(item, str)][:4]
                 if files:
-                    answer["previews"] = [{"file": item, **self.tunnel.preview(root, item)} for item in files]
+                    answer["previews"] = [{"file": item, **self.tunnel.preview(item)} for item in files]
         if sidebar:
             # Every thread's agent can reach the sidebar (``sidebar_views.py``): it says what it shows
             # there, and takes what was left for it.
@@ -855,32 +792,22 @@ class Server:
         return _data({"accepted": bool(accepted)})
 
     def _tool_cad_http(self, arguments, context):
-        root = arguments.get("root")
-        if not isinstance(root, dict):
-            raise ToolFailed("a request needs the root it browses")
         try:
-            accepted = self.workspace.accept(root)
             body = base64.b64decode(arguments.get("body") or "", validate=True)
         except (ValueError, binascii.Error) as error:
             raise ToolFailed(str(error)) from error
         headers = arguments.get("headers") if isinstance(arguments.get("headers"), dict) else {}
-        return _data(self.tunnel.serve(accepted, method=str(arguments.get("method") or "GET"),
-                                       url=str(arguments.get("url") or ""), headers=headers, body=body))
+        return _data(self.tunnel.serve(method=str(arguments.get("method") or "GET"), url=str(arguments.get("url") or ""),
+                                       headers=headers, body=body))
 
     def _tool_cad_reveal(self, arguments, context):
-        """Reveal a file of a root this thread may browse, exactly as the CAD Viewer reveals one (``cadgen.viewer.reveal``)."""
+        """Reveal a file, exactly as the CAD Viewer reveals one (``cadgen.viewer.reveal``)."""
         import subprocess
 
-        from cadgen.viewer.backend import ForbiddenAssetError
         from cadgen.viewer.reveal import reveal_path
 
-        root = arguments.get("root")
-        if not isinstance(root, dict):
-            raise ToolFailed("a reveal needs the root the file is under")
         try:
-            reveal_path(self.workspace.accept(root).path, arguments.get("path"))
-        except ForbiddenAssetError as error:
-            raise ToolFailed("That file is not under this view's folder.") from error
+            reveal_path(arguments.get("path"))
         except FileNotFoundError as error:
             raise ToolFailed("That file is no longer there.") from error
         except (ValueError, OSError, subprocess.SubprocessError) as error:
@@ -918,19 +845,14 @@ def serve(argv: list[str] | None = None) -> int:
     """Serve MCP on this process's standard streams until the host closes them."""
     logging.basicConfig(stream=sys.stderr, level=logging.INFO, format="cadgen mcp: %(message)s")
     protocol_out = claim_stdout()
-    try:
-        launch_cwd = os.getcwd()
-    except OSError:
-        launch_cwd = None
     from cadgen import updates
     from cadgen.analytics import Recorder
 
     analytics = Recorder()
     analytics.start()
     updates.refresh()
-    server = Server(launch_cwd=launch_cwd, analytics=analytics)
-    connection = Connection(sys.stdin.buffer, protocol_out, server.handle, on_notification=server.notified, workers=64)
-    server.attach(connection)
+    server = Server(analytics=analytics)
+    connection = Connection(sys.stdin.buffer, protocol_out, server.handle, workers=64)
     try:
         connection.serve()
     finally:

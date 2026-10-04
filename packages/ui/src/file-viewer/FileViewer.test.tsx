@@ -1,7 +1,7 @@
 import { act, cleanup, render, screen } from '@testing-library/react';
-import { useState } from 'react';
-import { createPortal } from 'react-dom';
+import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import { isMissingFileError } from '@text-to-cad/core/client';
 import { unavailablePromptContext } from '@text-to-cad/core/prompt';
 import { FileViewer, defineFileRenderer } from '../../dist/file-viewer/index.js';
 import { viewerLinks } from '../../dist/file-viewer/navigation/links.js';
@@ -9,108 +9,130 @@ import { viewerLinks } from '../../dist/file-viewer/navigation/links.js';
 beforeEach(() => vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} }));
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
+const FILE = '/models/parts/a.step';
 const renderer = defineFileRenderer({
   id: 'plain', priority: 1, matches: () => true,
   load: async () => ({ default: () => <p>shown</p> }),
   prepare: async () => ({ data: null }),
 });
-// A host that shows one file and browses nothing: a source with no listing, as an agent host's file view has.
+// A host that shows one file and browses nothing, has no home and can do nothing with the file.
 const host = {
-  files: { id: 'one', rootName: 'one', stat: async (path: string) => ({ path, name: path, kind: 'file' as const, extension: 'step', size: 1 }) },
+  files: { id: 'one', stat: async (path: string) => ({ path, name: path.split('/').pop()!, kind: 'file' as const, extension: 'step', size: 1 }) },
   clipboard: { writeText: async () => {}, readText: async () => '', writeImage: async () => {} },
-  promptContext: unavailablePromptContext, environment: { colorScheme: 'light' as const }, navigation: { openFile() {} },
+  promptContext: unavailablePromptContext, environment: { colorScheme: 'light' as const }, navigation: { openFile(_path: string) {} },
 };
-const open = (props: { navigationPath?: string | null; host?: object; file?: string | null; presentation?: object }) =>
-  render(<FileViewer file="parts/a.step" host={host as any} renderers={[renderer]} state={{ panel: null, panelWidth: 220 }} onStateChange={() => {}} {...props as any} />);
+const open = (props: { host?: object; file?: string | null; presentation?: object }) =>
+  render(<FileViewer file={FILE} host={host as any} renderers={[renderer]} state={{ panel: null, panelWidth: 220 }} onStateChange={() => {}} {...props as any} />);
 const navbar = () => document.querySelector('[data-viewer-navbar]');
+const fileName = () => document.querySelector<HTMLElement>('[data-file-name]')!;
 const labels = (selector = '[data-viewer-navbar]') => [...document.querySelectorAll(`${selector} a, ${selector} button`)].map(node => node.getAttribute('aria-label'));
 
-it('draws the navbar only when it has something to hold, and never for a view shown small', async () => {
-  open({ navigationPath: null });
+it('draws the navbar over every file, named by its name, and never over the home or a view shown small', async () => {
+  open({});
+  await screen.findByText('shown');
+  // The name, as words where nothing can be browsed; no logo with no home, no ⋯ where the host can do nothing.
+  expect([fileName().textContent, fileName().tagName]).toEqual(['a.step', 'SPAN']);
+  expect(labels()).toEqual([]);
+  cleanup();
+  open({ host: { ...host, environment: { colorScheme: 'light', compact: true } } });
   await screen.findByText('shown');
   expect(navbar()).toBeNull();
   cleanup();
-  // The open file's name, with no ⋯ where the host can do nothing with it.
-  open({});
-  await screen.findByText('shown');
-  expect(document.querySelector('[data-file-name]')?.textContent).toBe('a.step');
-  expect(screen.queryByRole('button', { name: 'File actions' })).toBeNull();
-  expect(screen.queryByRole('button', { name: 'Show files' })).toBeNull();
-  cleanup();
-  // The host's links, without an update: the row is drawn, and its right end holds nothing of the
-  // links themselves — Feedback is Settings', GitHub is under the home's wordmark, and
-  // X, Discord and GitHub are Settings' footer, the version its header.
-  const linked = { ...host, links: viewerLinks({ version: 'v0.7.4' }), environment: { colorScheme: 'light', platform: 'darwin' } };
-  open({ navigationPath: null, host: linked });
-  await screen.findByText('shown');
-  expect(navbar()).not.toBeNull();
-  expect(labels()).toEqual([]);
-  cleanup();
-  open({ host: { ...linked, environment: { colorScheme: 'light', compact: true } } });
-  await screen.findByText('shown');
+  // The home is the host's own page, which holds its links itself.
+  open({ host: { ...host, navigation: { openFile() {}, home() {} } }, file: null, presentation: { home: <p>home</p> } });
+  await screen.findByText('home');
   expect(navbar()).toBeNull();
 });
 
-it('puts the host\'s update button first and its Settings just before the view\'s controls, outside them, with no Feedback of its own, and steps the navbar aside while the renderer shows its file fullscreen', async () => {
-  // A renderer with the CAD viewer's control in the navbar, its Preview, which is fullscreen.
+it('keeps the right of the navbar for the host\'s update button and Full size alone, and steps the navbar aside while the renderer shows its file fullscreen', async () => {
+  // A renderer that shows its file fullscreen (the CAD viewer's Preview, a control of its own view).
   const fullscreen = defineFileRenderer({
     id: 'full', priority: 2, matches: () => true, prepare: async () => ({ data: null }),
-    load: async () => ({ default: ({ onFullscreenChange, navbarSlot }: any) => <>
-      {navbarSlot ? createPortal(<button type="button" aria-label="Preview" onClick={() => onFullscreenChange(true)} />, navbarSlot) : null}
+    load: async () => ({ default: ({ onFullscreenChange }: any) => <>
+      <button type="button" onClick={() => onFullscreenChange(true)}>Preview</button>
       <button type="button" onClick={() => onFullscreenChange(false)}>Back</button>
     </> }),
   });
-  // The host's update button, Settings and (shown small) Full size, drawn over every file: no renderer draws them.
-  render(<FileViewer file="parts/a.step" host={{ ...host, links: viewerLinks({ version: '0.7.4' }) } as any} renderers={[fullscreen]}
-    state={{ panel: null, panelWidth: 220 }} onStateChange={() => {}} settings={<button type="button" aria-label="Settings" />}
+  render(<FileViewer file={FILE} host={host as any} renderers={[fullscreen]} state={{ panel: null, panelWidth: 220 }} onStateChange={() => {}}
     update={<button type="button" aria-label="Update to 0.7.5" />} fullSize={<button type="button" aria-label="Full size" />} />);
   await screen.findByRole('button', { name: 'Preview' });
-  // Feedback is Settings' now: the navbar has no link of its own for it. Full size is last, after the view controls.
-  expect(labels()).toEqual(['Update to 0.7.5', 'Settings', 'Preview', 'Full size']);
-  expect(labels('[data-navbar-controls]')).toEqual(['Preview']);
+  expect(labels()).toEqual(['Update to 0.7.5', 'Full size']);
   act(() => screen.getByRole('button', { name: 'Preview' }).click());
   expect(navbar()).toBeNull();
   act(() => screen.getByRole('button', { name: 'Back' }).click());
-  expect(labels()).toEqual(['Update to 0.7.5', 'Settings', 'Preview', 'Full size']);
+  expect(labels()).toEqual(['Update to 0.7.5', 'Full size']);
 });
 
-it('leads back to the host\'s home from a file, and draws no navbar over the home itself', async () => {
+it('opens the app menu from the logo: Back to files where the host has a home, the person\'s settings and the host\'s links; its ⋯ offers what the host can do with the file', async () => {
+  const user = userEvent.setup();
   const home = vi.fn();
-  const homed = { ...host, links: viewerLinks({ version: '0.7.4' }), navigation: { openFile() {}, home } };
-  open({ host: homed });
+  const quickEdit = vi.fn();
+  const perform = { 'copy-path': vi.fn(), reveal: vi.fn() };
+  const links = viewerLinks({ version: '0.7.4', github: 'https://github.com/earthtojake/text-to-cad', discord: 'https://discord.gg/x' });
+  open({ host: { ...host, links, navigation: { openFile() {}, home }, fileActions: { platform: 'win32', perform } },
+    appSettings: [{ id: 'quick-edit', label: 'Quick edit', checked: true, onCheckedChange: quickEdit }] } as any);
   await screen.findByText('shown');
-  act(() => screen.getByRole('button', { name: 'Back' }).click());
+  expect(labels()).toEqual(['Menu', 'File actions']);
+  await user.click(screen.getByRole('button', { name: 'Menu' }));
+  const menu = document.querySelector('[data-app-menu]')!;
+  expect([...menu.querySelectorAll('[role^="menuitem"]')].map(item => item.textContent)).toEqual(['Back to files', 'Quick edit', 'Send feedback', 'GitHub', 'Discord']);
+  expect(menu.querySelector('[data-menu-footer]')?.textContent).toContain('v0.7.4');
+  // A setting turns without closing the menu; Back to files goes home.
+  await user.click(screen.getByRole('menuitemcheckbox', { name: 'Quick edit' }));
+  expect([quickEdit.mock.calls, Boolean(document.querySelector('[data-app-menu]'))]).toEqual([[[false]], true]);
+  await user.click(screen.getByRole('menuitem', { name: 'Back to files' }));
   expect(home).toHaveBeenCalledOnce();
+  await user.click(screen.getByRole('button', { name: 'File actions' }));
+  expect(screen.getAllByRole('menuitem').map(item => item.textContent)).toEqual(['Copy path', 'Show in Explorer']);
+  await user.click(screen.getByRole('menuitem', { name: 'Show in Explorer' }));
+  expect(perform.reveal).toHaveBeenCalledWith({ path: FILE, kind: 'file' });
   cleanup();
-  open({ host: homed, file: null, presentation: { home: <p>home</p> } });
-  await screen.findByText('home');
-  expect(navbar()).toBeNull();
-  cleanup();
-  // No home, no way back to one.
-  open({ host: { ...host, links: viewerLinks({ version: '0.7.4' }) } });
+  // A host with no home still has the menu, without Back to files; one that can only copy offers only that.
+  open({ host: { ...host, links, fileActions: { perform: { 'copy-path': perform['copy-path'] } } } });
   await screen.findByText('shown');
-  expect(screen.queryByRole('button', { name: 'Back' })).toBeNull();
+  await user.click(screen.getByRole('button', { name: 'Menu' }));
+  expect(screen.queryByRole('menuitem', { name: 'Back to files' })).toBeNull();
+  await user.keyboard('{Escape}');
+  await user.click(screen.getByRole('button', { name: 'File actions' }));
+  expect(screen.getAllByRole('menuitem').map(item => item.textContent)).toEqual(['Copy path']);
 });
 
-it('with no file open and no home, the navbar asks for one, and the explorer opens only when asked', async () => {
-  const browsing = { ...host, links: viewerLinks({ version: '0.7.4' }), files: { ...host.files, list: async () => [] } };
-  // The tab's state is the host's: here, kept as a host keeps it.
-  function Tab() {
-    const [state, setState] = useState<{ panel: string | null; panelWidth: number }>({ panel: null, panelWidth: 220 });
-    return <FileViewer file={null} host={browsing as any} renderers={[renderer]} state={state as any} onStateChange={setState as any}
-      presentation={{ empty: <p>nothing open</p> }} />;
-  }
-  render(<Tab />);
-  expect(await screen.findByText('nothing open')).toBeTruthy();
-  expect(document.querySelector('[data-file-explorer]')).toBeNull();
-  // Words in the name's place, not a control: the toggle beside them opens the explorer.
-  expect(screen.getByText('Select file').closest('button')).toBeNull();
-  act(() => screen.getByRole('button', { name: 'Show files' }).click());
-  expect(document.querySelector('[data-file-explorer]')).toBeTruthy();
+it('opens the explorer from the file\'s name where the host\'s files can be browsed, and a pick there is shown through the host', async () => {
+  const user = userEvent.setup();
+  const opened: string[] = [];
+  const browsing = { ...host, navigation: { openFile: (path: string) => { opened.push(path); } }, files: { ...host.files,
+    list: async (folder: string) => folder === '/models/parts' ? [{ path: FILE, name: 'a.step', kind: 'file' }, { path: '/models/parts/b.step', name: 'b.step', kind: 'file' }] : [],
+    search: async () => ({ paths: [], truncated: false }) } };
+  open({ host: browsing });
+  await screen.findByText('shown');
+  expect(fileName().tagName).toBe('BUTTON');
+  await user.click(fileName());
+  await screen.findByText('b.step');
+  // It opens in the file's folder: the pick is the host's to show, and the explorer goes.
+  await user.click(document.querySelector<HTMLElement>('[data-file-explorer] [data-path="/models/parts/b.step"]')!);
+  expect([opened, document.querySelector('[data-file-explorer]')]).toEqual([['/models/parts/b.step'], null]);
   cleanup();
-  // With no files to browse there is nothing to select: the navbar holds only the links.
-  open({ host: { ...host, links: viewerLinks({ version: '0.7.4' }) }, file: null, presentation: { empty: <p>nothing open</p> } });
-  expect(await screen.findByText('nothing open')).toBeTruthy();
-  expect(navbar()).not.toBeNull();
-  expect(screen.queryByText('Select file')).toBeNull();
+  // A source that lists but cannot search has no explorer: its name is a name.
+  open({ host: { ...host, files: { ...host.files, list: browsing.files.list } } });
+  await screen.findByText('shown');
+  expect(fileName().tagName).toBe('SPAN');
+});
+
+it('says why a file will not open, and that it does not exist when it is missing', async () => {
+  const missing = Object.assign(new Error('File does not exist: /models/gone.step'), { code: 'cad-file-missing' });
+  expect(isMissingFileError(missing)).toBe(true);
+  const failing = (error: Error) => ({ ...host, files: { id: 'one', stat: async () => { throw error; } } });
+  const failures: unknown[] = [];
+  const presentation = { error: (failure: unknown) => { failures.push(failure); return <p>failed</p>; } };
+  open({ host: failing(missing), presentation });
+  await screen.findByText('failed');
+  cleanup();
+  open({ host: failing(new Error('The disk is gone')), presentation });
+  await screen.findByText('failed');
+  expect(failures.at(0)).toEqual({ message: 'File does not exist: /models/gone.step', missing: true });
+  expect(failures.at(-1)).toEqual({ message: 'The disk is gone', missing: false });
+  cleanup();
+  // A host with no page of its own for it gets the viewer's.
+  open({ host: failing(new Error('The disk is gone')) });
+  expect(await screen.findByText('Could not open that file')).toBeTruthy();
 });

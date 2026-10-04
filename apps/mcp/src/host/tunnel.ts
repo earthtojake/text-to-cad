@@ -1,6 +1,6 @@
 import { createCadClient } from '@text-to-cad/core/client';
 import type { CadClientOptions } from '@text-to-cad/core/client';
-import type { HttpReply, Root, Server } from './server';
+import type { HttpReply, Server } from './server';
 
 /**
  * The origin the CAD client builds its URLs against. The page's own address is the host's
@@ -96,11 +96,11 @@ function wholeOfParts(first: TunnelReply, ask: (range: string) => Promise<Tunnel
 }
 
 /**
- * A `fetch` over `cad_http`, scoped to one root. It is a distinct function (never a patched
+ * A `fetch` over `cad_http`. It is a distinct function (never a patched
  * `window.fetch`), so the CAD client hands workers bytes rather than URLs they could not reach.
  * A GET asks for its first `TUNNEL_REPLY_MAX_BYTES` and gets the rest in parts (`wholeOfParts`).
  */
-export function createTunnelFetch(server: Pick<Server, 'http'>, root: Pick<Root, 'kind' | 'path'>): typeof fetch {
+export function createTunnelFetch(server: Pick<Server, 'http'>): typeof fetch {
   return async (input, init) => {
     const request = new Request(input, init);
     const method = request.method.toUpperCase();
@@ -109,7 +109,7 @@ export function createTunnelFetch(server: Pick<Server, 'http'>, root: Pick<Root,
     request.headers.forEach((value, name) => { headers[name] = value; });
     const send = async (range?: string): Promise<TunnelReply> => {
       try {
-        return await server.http({ root: { kind: root.kind, path: root.path }, method, url: request.url, headers: range ? { ...headers, range } : headers, body }, { signal: request.signal });
+        return await server.http({ method, url: request.url, headers: range ? { ...headers, range } : headers, body }, { signal: request.signal });
       } catch (error) {
         if (request.signal.aborted) throw request.signal.reason ?? error;
         // What fetch itself throws for a request that never got a response.

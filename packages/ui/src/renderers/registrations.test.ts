@@ -33,8 +33,7 @@ describe("viewer renderer registrations", () => {
     expect([dxf.id, step.id]).toEqual(["dxf", "step"]);
     expect(selectRenderer([step, dxf], file("plate.dxf", "cad"))).toBe(dxf);
     expect(selectRenderer([step, dxf], file("part.step", "cad"))).toBe(step);
-    // A DXF is a straight render: it declares no panels, so the navbar offers no toggle
-    // but the file tree's, which is the only panel a drawing tab can open.
+    // A DXF is a straight render: it declares no panels, so the navbar offers no panel toggle.
     expect("panels" in dxf).toBe(false);
     // Preview is each viewer's own mode, never a flag a registration offers a host.
     expect(["fullscreen", "preview", "previewing"].some(key => key in dxf || key in step)).toBe(false);

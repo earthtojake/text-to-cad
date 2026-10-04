@@ -24,8 +24,8 @@ checked-in images and need neither Git access nor rendering tools.
 
 # Wordmarks
 
-`logo-texttocad.svg` (the home page's wordmark) and `logo-cad.svg` (the version
-menu's) are copies of the docs site's `public/brand/logo-texttocad.svg` and
-`public/brand/logo-cad.svg`, which `scripts/brand/generate-logos.mjs` draws, so
+`logo-texttocad.svg` (the home page's wordmark), `logo-cad.svg` (the version
+menu's) and `logo-c.svg` (the navbar's home button) are copies of the docs site's
+`public/brand/` marks of the same names, which `scripts/brand/generate-logos.mjs` draws, so
 every app draws the same marks from this package. Refresh them with
 `node scripts/brand/export-logos.mjs` rather than editing them by hand.

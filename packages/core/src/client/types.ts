@@ -2,8 +2,8 @@ import type { TessellationCache } from '../lib/surf/cacheTypes.js';
 export type { TessellationCache, TessellationCacheEntry, TessellationCacheProvider, TessellatedComponent, TessellationOptions } from '../lib/surf/cacheTypes.js';
 export type CadJson = null | boolean | number | string | CadJson[] | { [key: string]: CadJson };
 export interface CadEntry {
+  /** The file's absolute path, `/`-separated. */
   file: string;
-  rootRelativeFile?: string;
   kind?: string;
   format?: string;
   sourceFormat?: string;
@@ -14,22 +14,26 @@ export interface CadEntry {
   [key: string]: unknown;
 }
 export interface CadServerInfo {
-  rootId: string;
   autoReload?: boolean;
   identityToken?: string;
-  rootPath?: string;
-  rootDir?: string;
+  /** The folder the server was started in, where a developer's relative `?file=` resolves. */
+  start?: string;
+  /** Whether this computer has a file chooser for the home's Open. */
+  pick?: boolean;
   backend?: string;
   [key: string]: unknown;
 }
-export interface CadCatalog { entries: CadEntry[]; rootId?: string; [key: string]: unknown }
+export interface CadCatalog { entries: CadEntry[]; [key: string]: unknown }
+/** One folder's subfolders and CAD files (`GET /__cad/folder`). */
+export interface CadFolder { path: string; entries: { name: string; kind: 'directory' | 'file' }[]; truncated: boolean }
+/** The CAD files nested under a folder whose path below it holds the query (`GET /__cad/search`). */
+export interface CadSearch { path: string; results: string[]; truncated: boolean }
 export interface CadCatalogSnapshot {
   entries: CadEntry[];
   revision: number;
   hydrated: boolean;
   refreshing: boolean;
   error: string;
-  rootId: string;
   /** The server's digest of the last catalog applied ('' before one is): what a change watcher compares. */
   catalogRevision: string;
 }
@@ -129,6 +133,8 @@ export interface CadWorkspaceService {
   refresh(options?: CadRequestOptions & {file?: string;markRefreshing?: boolean}): Promise<CadCatalog>;
   resolveEntry(path: string, options?: CadRequestOptions): Promise<CadEntry>;
   serverInfo(options?: CadRequestOptions & { fresh?: boolean }): Promise<CadServerInfo>;
+  folder(path: string, options?: CadRequestOptions): Promise<CadFolder>;
+  search(path: string, query: string, options?: CadRequestOptions): Promise<CadSearch>;
   requestArtifactStatus(file: string, options?: CadRequestOptions): Promise<CadArtifactResult>;
   requestArtifact(file: string, options?: CadRequestOptions & {force?: boolean}): Promise<CadArtifactResult>;
   /** A `.dxf` flattened to 2D render primitives on the server; the client never parses DXF. */

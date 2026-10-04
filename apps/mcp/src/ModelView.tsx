@@ -1,17 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { createHttpAttachmentStore, type CadClient } from '@text-to-cad/core/client';
+import { createHttpAttachmentStore } from '@text-to-cad/core/client';
 import { unavailablePromptContext, type ResourceRef } from '@text-to-cad/core/prompt';
-import { CadViewer, createCadFileActions, createCatalogFileSource, normalizeCatalogPath, pathUnderRoot, referencePath, rootPath } from '@text-to-cad/ui/cad-viewer';
+import { CadViewer, createCadFileActions, createCadFileSource, normalizePath } from '@text-to-cad/ui/cad-viewer';
 import type { AppSetting, ViewerFeatures } from '@text-to-cad/ui/file-viewer';
 import type { ViewerHost, ViewerLinks } from '@text-to-cad/ui/host';
 import type { ModelLibrarySource } from '@text-to-cad/ui/library';
 import type { TabStore } from '@text-to-cad/ui/tab-store';
 import type { Bridge } from './host/bridge';
 import { frameClipboard } from './host/clipboard';
-import { createFilesystemSource } from './host/files';
 import type { LiveRegistry } from './host/live';
 import { createChatPromptContext, type ChatReach } from './host/prompt';
-import type { Launch, Root, Server } from './host/server';
+import type { Launch, Server } from './host/server';
 import type { ViewSync } from './host/sync';
 import { createTunnelClient, createTunnelFetch, encodeBase64, TUNNEL_ORIGIN } from './host/tunnel';
 
@@ -20,26 +19,28 @@ export interface ViewReporter {
   showing(model: string | null, resolvePath: (resource: ResourceRef) => string): void;
 }
 
+// A reference names a file by its absolute path, a URL as it is.
+const resolvePath = (resource: ResourceRef) => resource.kind === 'url' ? resource.url : resource.path;
+
 /**
- * One root's view: the shared CAD viewer over this host — the model a launch names, or with none,
- * the home (the library, and the root's explorer where the launch browses). Everything differs by
- * data — the root it browses, whether it browses at all, what a Quick Edit can do in the chat —
- * never by where the view is.
+ * One view: the shared CAD viewer over this host — the model a launch names, by its absolute path,
+ * or with none, the home (the library, and Open). A view browses from its model's folder. Everything
+ * differs by data — what a Quick Edit can do in the chat, whether the view has a home — never by
+ * where the view is. Codex's file handler (`surface: file`) shows its file alone: the host's own file
+ * tree is its navigation.
  */
-export default function ModelView({ launch, root: launchedRoot, sequence, bridge, server, tabStore, live, links, colorScheme, platform, reporter, sync, onLaunch, onHome, chat, appSettings, features, notice, update, fullSize }: {
-  launch: Launch; root: Root; sequence: number; bridge: Bridge; server: Server; tabStore: TabStore; live: LiveRegistry; links: ViewerLinks;
+export default function ModelView({ launch, sequence, bridge, server, tabStore, live, links, colorScheme, platform, reporter, sync, onLaunch, chat, appSettings, features, notice, update, fullSize }: {
+  launch: Launch; sequence: number; bridge: Bridge; server: Server; tabStore: TabStore; live: LiveRegistry; links: ViewerLinks;
   colorScheme: 'light' | 'dark'; platform: string; reporter: ViewReporter;
-  /** The view's one call each second: it carries what this root's client would otherwise poll for. */
+  /** The view's one call each second: it carries what this view's client would otherwise poll for. */
   sync: ViewSync;
-  /** Show what the server launched: a model, possibly under another root. */
+  /** Show what the server launched: a model, or the home. */
   onLaunch(launch: Launch): void;
-  /** Show this view's home: a view opened on one (the sidebar's) has it; one opened on a model has none. */
-  onHome?(): void;
   /** What the chat takes from a Quick Edit: context for the next message, a message now, or neither (Copy Prompt alone). */
   chat: ChatReach;
-  /** This app's on/off settings: Settings' Analytics and Features sections. */
+  /** This app's on/off settings, in the app menu: analytics and Quick edit. */
   appSettings?: readonly AppSetting[];
-  /** The features the person left on (Settings' Features): Quick edit. */
+  /** The features the person left on (in the app menu): Quick edit. */
   features?: ViewerFeatures;
   /** The analytics question, which the viewer asks once a model is on screen. */
   notice?: ReactNode;
@@ -48,62 +49,45 @@ export default function ModelView({ launch, root: launchedRoot, sequence, bridge
   /** Inline, the card's way to full size, where the host can show it so: last in the navbar and on the home. */
   fullSize?: ReactNode;
 }) {
-  // Every launch carries its own root object; the same folder must keep its client and catalog.
-  const root = useMemo(() => launchedRoot, [launchedRoot.kind, launchedRoot.path]);
-  const tunnel = useMemo(() => createTunnelFetch(server, root), [server, root]);
-  // The client polls nothing: the view's sync says when the catalog moved, and carries the build
-  // feed of a STEP on screen (a call the view makes each second anyway).
+  const tunnel = useMemo(() => createTunnelFetch(server), [server]);
+  // The client polls nothing: the view's sync says when the file's catalog entry moved, and carries
+  // the build feed of a STEP on screen (a call the view makes each second anyway).
   const client = useMemo(() => createTunnelClient(tunnel, {
     pollIntervalMs: 0, editingPreviewFeed: sync.observePreview,
   }), [tunnel, sync]);
   useEffect(() => () => client.dispose(), [client]);
-  const sourceId = `local-fs:${root.path}`;
-  const global = root.kind === 'global';
-  // The file on screen, as the root names it; '' is the home.
-  const launched = () => (launch.model && pathUnderRoot(root.path, launch.model)) || '';
+  // Codex's file handler shows its file alone: the host's own file tree is its navigation, so it
+  // has neither the home nor the explorer (a source that cannot list or search offers none).
+  const homed = launch.surface !== 'file';
+  const source = useMemo(() => {
+    const { list, search, ...alone } = createCadFileSource(client);
+    return homed ? { ...alone, list, search } : alone;
+  }, [client, homed]);
+  // The file on screen, by its absolute path; '' is the home.
+  const launched = () => normalizePath(launch.model || '');
   const [file, setFile] = useState(launched);
   const showing = useRef(file);
   showing.current = file;
-  // A project browses its catalog; a model with no project around it is shown on its own.
-  const source = useMemo(() => global
-    ? createFilesystemSource(client, root, { id: sourceId })
-    : createCatalogFileSource(client, { id: sourceId, rootName: root.name, browse: launch.explore }), [client, root, sourceId, launch.explore, global]);
-  const resolvePath = useCallback((resource: ResourceRef) => referencePath(resource, { workspaceId: sourceId, root: root.path }), [root, sourceId]);
   // A copied prompt's sketch is saved by the server, which is on this machine.
   const attachments = useMemo(() => createHttpAttachmentStore({ origin: TUNNEL_ORIGIN, fetch: tunnel }), [tunnel]);
   const chatContext = useMemo(() => chat.queue || chat.send ? createChatPromptContext(bridge, { resolvePath, reach: chat, attachments }) : null,
-    [chat.queue, chat.send, chat.sendImages, bridge, resolvePath, attachments]);
+    [chat.queue, chat.send, chat.sendImages, bridge, attachments]);
   useEffect(() => () => chatContext?.dispose(), [chatContext]);
   const promptContext = chatContext ?? unavailablePromptContext;
-  // The file menu: its paths, and Reveal in the desktop's file manager (the server is on this machine).
-  const fileActions = useMemo(() => createCadFileActions({
-    root: root.path, platform, clipboard: frameClipboard,
-    // A path relative to a whole filesystem is its absolute path, less the first slash.
-    relative: !global,
-    reveal: path => server.reveal(root, path),
-  }), [root, platform, server, global]);
+  // The file menu: its path, and Reveal in the desktop's file manager (the server is on this machine).
+  const fileActions = useMemo(() => createCadFileActions({ platform, clipboard: frameClipboard, reveal: path => server.reveal(path) }), [platform, server]);
 
-  useEffect(() => { setFile(launched()); }, [launch, root, sequence]);
+  useEffect(() => { setFile(launched()); }, [launch, sequence]);
   useEffect(() => sync.watch({
-    root, file: () => showing.current || null, revision: () => client.getSnapshot().catalogRevision,
+    file: () => showing.current || null, revision: () => client.getSnapshot().catalogRevision,
     refresh: next => client.refresh({ ...(next ? { file: next } : {}), markRefreshing: false }),
-  }), [sync, client, root]);
-  const model = file ? rootPath(root.path, file) : null;
-  useEffect(() => { reporter.showing(model, resolvePath); }, [reporter, model, resolvePath]);
+  }), [sync, client]);
+  useEffect(() => { reporter.showing(file || null, resolvePath); }, [reporter, file]);
 
   const opened = useRef(onLaunch);
   opened.current = onLaunch;
-  // A card without a picture has its model drawn from its whole filesystem, whose lazy root reads
-  // only that file, since the library spans every root: one client per filesystem, polling nothing.
-  const pictureClients = useRef(new Map<string, CadClient>());
-  useEffect(() => () => {
-    for (const pictureClient of pictureClients.current.values()) pictureClient.dispose();
-    pictureClients.current.clear();
-  }, []);
-  // The home's library, where the view has a home: the models opened before, from every view and
-  // the web viewer; Open picks one from disk with the desktop's chooser. Opening switches this same
-  // view to the model.
-  const homed = Boolean(onHome);
+  // Every other view has the home: the models opened before, from every view and the web viewer,
+  // and Open with the desktop's chooser where there is one.
   // The home's first list came with its launch: the cards draw at once, and later reads ask.
   const seeded = useRef(launch.recents ?? null);
   const library = useMemo<ModelLibrarySource | undefined>(() => homed ? {
@@ -115,36 +99,24 @@ export default function ModelView({ launch, root: launchedRoot, sequence, bridge
     change: (action, entry) => server.recents({ action, path: entry.path }),
     thumbnail: name => server.thumbnails([name]).then(found => found[name] ? `data:image/png;base64,${found[name]}` : null),
     open: entry => server.launch(entry.path).then(next => opened.current(next)),
-    pick: () => server.pickModel().then(result => { if (result.launch) opened.current(result.launch); }),
-    pictureFrom: entry => {
-      const anchor = /^[A-Za-z]:[\\/]/.test(entry.path) ? `${entry.path.slice(0, 2)}\\` : entry.path.startsWith('/') ? '/' : null;
-      const file = anchor && pathUnderRoot(anchor, entry.path);
-      if (!anchor || !file) return null;
-      let pictureClient = pictureClients.current.get(anchor);
-      if (!pictureClient) {
-        pictureClient = createTunnelClient(createTunnelFetch(server, { kind: 'global', path: anchor }), { pollIntervalMs: 0, shouldPoll: () => false });
-        pictureClients.current.set(anchor, pictureClient);
-      }
-      return { client: pictureClient, file, keep: png => png.arrayBuffer().then(bytes => server.recents({ action: 'thumbnail', path: entry.path, png: encodeBase64(new Uint8Array(bytes)) })) };
-    },
-  } : undefined, [server, homed]);
-  const home = useRef(onHome);
-  home.current = onHome;
-  // Showing another file: from the home, the server launches it (and remembers it, and says which
-  // root it is under); from a model, it is this root's, shown in place.
+    ...(launch.pick ? { pick: () => server.pickModel().then(result => { if (result.launch) opened.current(result.launch); }) } : {}),
+    // A card without a picture has its model drawn out of sight by this view's own client.
+    pictureFrom: entry => ({ client, file: normalizePath(entry.path),
+      keep: png => png.arrayBuffer().then(bytes => server.recents({ action: 'thumbnail', path: entry.path, png: encodeBase64(new Uint8Array(bytes)) })) }),
+  } : undefined, [server, homed, launch.pick, client]);
+  // Showing another file: from the home, the server launches it (and remembers it); from a model,
+  // it is shown in place. '' is the home.
   const show = useCallback((next: string) => {
-    if (!next) { home.current?.(); return; }
-    if (!showing.current) { void server.launch(rootPath(root.path, next)).then(launchedModel => opened.current(launchedModel), error => console.error(error)); return; }
+    if (!next) { setFile(''); return; }
+    if (!showing.current) { void server.launch(next).then(launchedModel => opened.current(launchedModel), error => console.error(error)); return; }
     setFile(next);
-  }, [server, root]);
+  }, [server]);
   const host = useMemo<Omit<ViewerHost, 'navigation'>>(() => ({
     files: source, fileActions, clipboard: frameClipboard, promptContext, attachments, links,
     environment: { colorScheme, platform },
   }), [source, fileActions, promptContext, attachments, links, colorScheme, platform]);
 
   return <CadViewer client={client} host={host} tabStore={tabStore} live={live} file={file} onShow={show}
-    // A filesystem's catalog holds only the file on screen: a file a renderer links to is shown as named.
-    accept={global ? path => normalizeCatalogPath(path) || null : undefined}
-    rootPath={root.path} library={library} appSettings={appSettings} features={features} notice={notice} update={update} fullSize={fullSize}
-    onThumbnail={async (png, pictured) => server.recents({ action: 'thumbnail', path: rootPath(root.path, pictured), png: encodeBase64(new Uint8Array(await png.arrayBuffer())) })} />;
+    library={library} appSettings={appSettings} features={features} notice={notice} update={update} fullSize={fullSize}
+    onThumbnail={async (png, pictured) => server.recents({ action: 'thumbnail', path: pictured, png: encodeBase64(new Uint8Array(await png.arrayBuffer())) })} />;
 }

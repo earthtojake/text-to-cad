@@ -7,26 +7,27 @@ settings, in both apps. Build from the shared pieces — the
 [ToolPopover](../src/renderers/kit/tools/ToolPopover.jsx),
 [ToolStack](../src/renderers/kit/tools/ToolStack.jsx),
 [ToolPanel](../src/renderers/kit/tools/ToolPanel.jsx),
-[the floating surface](../src/renderers/kit/tools/floatingSurface.js) and the
+[the floating surface](../src/lib/floatingSurface.js) and the
 [FileSheet primitives](../src/renderers/kit/inspector/FileSheet.js) — and extend
 them rather than recreating their layout in a renderer. Environmental effects
 belong to apps through the [host contract](viewer-host.md).
 
 ## Ownership and layout
 
-FileViewer owns the navbar — the host's [Settings](#settings) in it included, which
-`CadViewer` hands it — the file explorer (the host's file tree), the column a
-file's declared panels open in, and which panel is open. RendererShell owns the scene's chrome: the toolbar, the
-tool stack under it, Quick Edit, the view cube, the view's controls it draws into the
-navbar (Display, Preview), the playbar and preview mode. Renderers supply their tools, their document state and their tool
+FileViewer owns the navbar — the logo's app menu ([Settings](#settings)) included, built from
+the host's `links` and the `appSettings` `CadViewer` hands it — the file explorer (a popover
+under the file's name), the column a file's declared panels open in, and which panel is
+open. RendererShell owns the scene's chrome: the toolbar, the tool stack under it, Quick Edit,
+the view cube with the view's controls (Display, Preview) on top of it, the playbar and
+preview mode. Renderers supply their tools, their document state and their tool
 panels; the shell never inspects a format's parts, joints or topology. A CAD
-file's controls are never a panel of the host's: no pick or tool opens, closes or
-turns the explorer.
+file's controls are never a panel of the host's: no pick or tool opens or closes
+the column or the explorer.
 
 | The host (web, desktop) supplies | The shared UI decides |
 | --- | --- |
-| Where the tab record lives (`TabRecordStorage`: the web's sessionStorage, the desktop's per-tab store) | The record: its settings (the tree, the tool stack's layout, the appearance) and the view of the file on screen (its camera, Display settings, Playback settings and renderer slices), what is written when, and what is never stored (`@text-to-cad/ui/tab-store`, `kit/shell/fileView.js`) |
-| `navigation.home`, `links` (its version, GitHub, Discord, where a new issue opens, how a link opens), `appSettings` (the person's own settings) and `displayActions` (an appearance control) | The navbar's order and look, Settings (one popover in the viewer and on the home), the version's menu, the panel toggles and what a new issue says |
+| Where the tab record lives (`TabRecordStorage`: the web's sessionStorage, the CAD app's memory) | The record: its settings (the panel column's width, the tool stack's layout, the appearance, the home's layout) and the view of the file on screen (its camera, Display settings, Playback settings and renderer slices), what is written when, and what is never stored (`@text-to-cad/ui/tab-store`, `kit/shell/fileView.js`) |
+| `navigation.home`, `links` (its version, GitHub, Discord, where a new issue opens, how a link opens), `appSettings` (the person's own settings) and `displayActions` (an appearance control) | The navbar's order and look, the app menu (one menu in the viewer and on the home), the panel toggles and what a new issue says |
 | `host.files`, `fileActions`, `navigation`, `clipboard`, `promptContext`, `attachments` | When a copy, capture or open happens and what it carries |
 | `host.environment`: color scheme, keyboard `platform`, `reducedMotion` | How the chrome honours them |
 | `onError`, for errors the viewer hands up | Preview, tooltips, keyboard scope, the tool stack, the camera |
@@ -34,68 +35,79 @@ turns the explorer.
 Hosts pass no preview, chrome-visibility or notification props; there are
 none.
 
-- **Navbar.** One row, the same in every app, over every file. Left: a back arrow
-  to the host's home where it has one (the size of the row's icon buttons), the file
-  explorer's toggle where there are files to browse, then the open file's name and
-  its ⋯ — the explorer's own menu for that file; the name has no right-click menu
-  and there are no crumbs. The name sits the row's 4px gap after the button before
-  it, with no margin of its own. With no file open, the words "Select file" (not a
-  control) stand in the name's place beside the explorer's toggle. Right, first,
-  while a person has put an alert card away: the card's own icon (a circle with
-  an exclamation mark, red for an error and amber for a warning, named and hinted
-  by the alert's title), which brings the card back and goes with it — the
-  renderer's one navbar action. Then a declared panel's toggle, the update — a
-  blue download button, there only when
-  the host found a newer release, whose menu says the step to it, how this host
-  updates and what is new — then **Settings** (the person's, over every file: see
-  [Settings](#settings); Feedback is in it), then the view's controls (Display, Preview).
-  The version is beside the Settings popover's title; "Made by @…" (X), Discord and GitHub are its footer. A CAD file
-  declares no panel and publishes no navbar action but that icon. A host's home has no navbar:
-  its update (when there is one), GitHub (its mark, a link to the project: it is open source)
-  and **Settings** stand under its TEXTTOCAD wordmark, in that order. The home's Settings is the
-  same popover, centred under its cog, and holds the same sections. The home has no footer of
-  its own.
+- **Navbar.** One row, the same in every app, over every file. Left: the text-to-cad "C"
+  logo, named Menu, the size of the row's icon buttons, with no chevron, which opens the
+  **app menu** (see [Settings](#settings)) — a host with no home has it too — then the open
+  file's name and its ⋯. Each of the three that is a control (`NAV_ITEM_CLASS`) is
+  transparent at rest, takes the same accent background while the pointer is on it and
+  while its menu is open, has a pointer cursor and no tooltip: it says what it is. The name
+  is that control where it opens the explorer (below), where the host's files can be
+  browsed; where they cannot it is plain text. The ⋯
+  is the file menu: Copy path, and Reveal in Finder / Show in Explorer / Show in file
+  manager, each only where the host can do it, and no ⋯ where it can do none. The name has
+  no right-click menu and there are no crumbs. It sits the row's 4px gap after the item
+  before it, with no margin of its own. Right, only what a host or a file adds, so usually
+  nothing: first, the update — a blue download button, there only when the host
+  found a newer release, whose menu says the step to it, how this host updates and what
+  is new. Then, while a person has put an alert card away: the card's own icon (a circle
+  with an exclamation mark, red for an error and amber for a warning, named and hinted by
+  the alert's title), which brings the card back and goes with it — the renderer's one
+  navbar action. Then a declared panel's toggle, and last, where the host shows the view
+  small (inline in a conversation, where the view is the whole viewer), its **Full size**.
+  A CAD file declares no panel and publishes no navbar action but that icon, so its navbar
+  has no panel toggle. The navbar holds no settings and no view controls: the person's
+  settings are the app menu's, and Display and Preview sit on top of the view cube. A
+  host's home has no navbar:
+  its update (when there is one), GitHub (its mark, a link to the project: it is open source),
+  the cog — which opens the same app menu, centred under it, without Back to files — and,
+  where the host shows the view small, **Full size** stand under its
+  TEXTTOCAD wordmark, in that order, above its Recent Files: the models opened before,
+  pinned first, as cards or rows, with Open where the host has a file chooser.
   The update shows only for a release
-  later than the version the page names, whatever the host says. A view drawn as a
-  picture (`compact`, the home's thumbnails) has none either, and draws the model alone:
-  no tools, view actions, cube or Quick Edit. A view shown small in a conversation is the
-  whole viewer, with the host's Full size last in its navbar.
-- **File explorer** floats over the view's left, inset 8px like the toolbar, on a
-  solid background above the tools, as tall as its rows up to its height cap and
-  the view's height less the inset at either end: past that its list scrolls. The
-  tool strip and the stack stay drawn under it. Its bottom-right corner sizes it
-  as a resizable panel of the stack is sized (the same grip): its width and its
-  height cap, kept by the tab for its next opening. Opening it never resizes the
-  view; a pick closes it, as does a press anywhere outside it, the navbar included
-  (its own toggle closes it too).
+  later than the version the page names, whatever the host says. A file that will not open
+  shows a page under the navbar: "File does not exist" and the file's path, or "Could not
+  open that file" and the reason, each with **Go home** where the host has a home. A view
+  drawn as a picture (`compact`, the home's thumbnails) has no navbar either, and draws the
+  model alone: no tools, view actions, cube or Quick Edit.
+- **File explorer** is a popover under the file's name (`FolderExplorer.jsx`), aligned to
+  the name's left edge, 18rem wide and never resized, as tall as its rows up to 28rem or
+  the room below it: past that its list scrolls. It floats over the view and the tool
+  stack, so opening it resizes and moves nothing. It starts in the open file's folder and
+  lists one folder at a time — its subfolders, then its CAD files — under a breadcrumb of
+  the last three folders, whose "…" lists the folders above to jump to; there is no up
+  arrow, and the open file is highlighted. "Filter files..." under the breadcrumb searches
+  every file nested under the folder (the server's bounded search, debounced 150ms, each
+  keystroke cancelling the search before it); a search that stopped early says "Stopped
+  early. Keep typing to narrow the search." Up and Down move between the filter and the
+  rows. A pick opens the file and closes it, as do Escape and a press anywhere outside it.
 - **Toolbar** at top-left, 8px in — the gap between it and the stack under it.
 - **Tool stack** beneath the toolbar: the panels of the tool in hand and of the
   effects a person keeps (see [The tool stack](#the-tool-stack)). The column is
-  exactly the height the stack may take: it stops 8px above the cube, so it never
-  runs under it, and while the panels fit only a panel's inner
-  body scrolls.
+  exactly the height the stack may take: it stops 8px above the view's controls on top
+  of the cube, so it never runs under them or the cube, and while the panels fit only a
+  panel's inner body scrolls.
 - **Quick Edit** at top-right, 8px in, a STEP file's: the box of the note a person
   writes to their agent, there only while something is picked or drawn (see
   [Quick Edit](#quick-edit)). The rest of the right side of the view is clear.
 - **View cube** at bottom-left, 2px from the left and 8px off the bottom so the
   axes drawn in its lower corner never touch the edge, in a 6rem area: enlarged
   face/edge/corner hit areas and neutral hover and XYZ guides. Preview omits it.
-- **Settings, Display and Preview** at the navbar's right end: **Settings** (cog), the host's,
-  over every file, then, for a 3D file, the view's own controls: **Display** (the
-  perspective box: see [Display settings](#display-settings-and-section-primitives)) and
-  **Preview** (a fullscreen icon, two diagonal arrows) — the navbar's 24px icon buttons with
-  14px icons, 4px apart, and hints below them. Settings' popover opens down from its button,
-  end-aligned, 224px wide: a header — "Settings", the version in gray beside it, and its X —
-  over the host's sections (see [Settings](#settings)), over a footer — "Made by @…" (the
-  host's X account) at its left, Discord and GitHub at its right. A view shown small has no
-  navbar, and so none of them.
+- **Display and Preview** on top of the view cube, in the bottom-left corner: for a 3D
+  file, the view's own controls — **Display** (the perspective box: see
+  [Display settings](#display-settings-and-section-primitives)) and **Preview** (a
+  fullscreen icon, two diagonal arrows). They are 24px icon buttons with 14px icons, 2px
+  apart, in a 24px row as wide as the cube, directly on top of it
+  (`data-viewport-actions`, `VIEWPORT_ACTION_HEIGHT_PX`), with hints above them. Display's
+  dropdown opens up from its button, start-aligned, and never taller than the viewer below
+  the tool strip. A view that is not 3D has neither, and neither does a view drawn as a
+  picture, one that is loading or failed to load, or preview, which has the page to itself.
 - **Playbar** (preview's, a file with routines only) sits at bottom-centre, on a
   line 1.75rem up (a host whose control floats over the view's bottom moves it
   with `--cad-viewport-bottom-center`), and nothing else does; a static file has
   nothing at the bottom.
 - **Model update status** sits at top-centre of the viewport, vertically centred
   in the same 34px row as the top-left toolbar in every host.
-  It is renderer chrome, independent of the host's navigation status slot.
+  It is renderer chrome: the navbar carries no status.
   On mobile it is a tappable progress icon whose popover names what is loading.
 
 ## Tools and lifecycle
@@ -109,8 +121,8 @@ none.
 
 There is no separator or activity dot. There is no Animate tool: routines play in
 [preview](#camera-animation-and-preview). Display is not a tool: every 3D view has
-its **Display** button among the view's controls in the navbar, between Settings and
-Preview (see [Display settings](#display-settings-and-section-primitives)). A file
+its **Display** button on top of the view cube, before Preview (see
+[Display settings](#display-settings-and-section-primitives)). A file
 with no tools has no strip at all.
 
 **A tool the file cannot offer is not on the strip**: never shown disabled.
@@ -288,9 +300,10 @@ stack.
   write, when the pointer lets go (or per key), never per pointer move. A
   folded panel has no grip: there is no height to set.
 - **Never past the viewer.** The column is the viewer's height less the 8px
-  inset above the strip, the strip, and at its foot the cube with its view
-  actions and an 8px gap above them (`VIEWPORT_STACK_BOTTOM`, `calc(6rem +
-  36px)`): it never runs under the cube. When the panels need more, the tree gives way first and
+  inset above the strip, the strip, and at its foot the cube with the view's
+  controls on top of it and an 8px gap above them (`VIEWPORT_STACK_BOTTOM`,
+  `calc(6rem + 40px)`: the cube's 6rem, its 8px off the bottom, the controls' 24px and
+  the gap): it never runs under the cube or its controls. When the panels need more, the tree gives way first and
   scrolls inside itself, down to 128px or its content, whichever is less; then a
   details panel (Reference, Position, Measurements)
   gives way, down to 96px or its content; a small panel (Explode, Clip, Drawing)
@@ -351,63 +364,64 @@ stack.
   record) puts every panel back at the one width and its default cap, and the
   tree as each file starts it. Every size is written back once, when the pointer
   lets go (or per key), never per pointer move.
-- **Surfaces.** Two, defined once (`floatingSurface.js`), with one border: the
+- **Surfaces.** Two, defined once (`lib/floatingSurface.js`), with one border: the
   toolbar and the stack's panels, which stay up beside the model, share
   `FLOATING_CHROME_SURFACE_CLASS` — the background at 45.5% and barely blurred
   (2px), so the model behind them is easy to make out; every menu and popover
-  over the viewport, Settings and Display included, share
+  over the viewport, the app menu and Display included, share
   `FLOATING_SURFACE_CLASS` (the background at 75%, blurred), so their text never
   competes with the model.
 - **Scrolling.** Every scroll region in the viewer's chrome — a panel's body,
-  the stack's column, the file tree, a menu, the alert card — is the
+  the stack's column, the explorer, a menu, the alert card — is the
   `ScrollArea` primitive (`primitives/scroll-area.jsx`, shadcn's): thin overlay
   bars in the theme's colours, shown while the pointer is over the region. No
   native `overflow-auto` scroller in chrome; `src/designSystem.test.js` holds it.
   The home (the model library) is a page, not chrome: it scrolls as a page does,
   with the platform's scrollbar, and only when there is more of it than fits.
 - **Nothing opens elsewhere.** A pick shows its Reference in the stack; the
-  Position tool shows its panel by being chosen. No pick or tool opens, closes
-  or turns the host's explorer, on desktop or mobile.
+  Position tool shows its panel by being chosen. No pick or tool opens or closes
+  the explorer or the host's panel column, on desktop or mobile.
 
 Tree rows inset their backgrounds 4px from the panel edges, and the filter row
 shares that inset. A tree in the stack (Features, Links) is dense (`TreeRowSurface`'s
 `dense`): 24px rows in the panels' 11px text, 12px kind icons, a 16px disclosure
 column with a small chevron, and 12px of indent per level; its filter row is a
-heading's 28px, the box 20px tall and close to the row's walls. The host's file
-tree keeps 28px rows. An assembly row's actions, shown on hover and kept while they
-are on, are **Isolate** then the **Hide/Reveal** eye; a part file has no
+heading's 28px, the box 20px tall and close to the row's walls. An assembly row's
+actions, shown on hover and kept while they are on, are **Isolate** then the **Hide/Reveal** eye; a part file has no
 Isolate. They float over the row's right end rather than taking width from it:
 the name runs the row's full width and, while an action shows, fades out half a
 rem before them (a mask, `ROW_NAME_UNDER_ACTIONS`), so nothing is drawn behind the
 buttons and the row keeps its own colour.
-Model and link filters share `TreeFilterInput`.
+Model, link and explorer filters share `TreeFilterInput`; the explorer's rows are not
+dense: 28px, in 12px text.
 
 **Mobile** is below 720px of FileViewer width — the one viewer breakpoint
 (`useViewerMobile`); chrome never uses window breakpoints. The tool stack is
 the same stack, but Select's tree (Features, Links) starts closed in every
-file, Select marked, so the model has the screen until the person presses Select. The host's panels (the explorer at the
-left, a declared panel at the right) become non-modal floating sheets over the
-viewer (280px, inset 8px) that never resize or move the scene or shift the page; a
-sheet has a compact X, outside dismissal and Escape, and a pick in the explorer
-closes it. The navbar is the same row; the shortcut hint is hidden. Touch works for every tool: one finger orbits, two pan and
+file, Select marked, so the model has the screen until the person presses Select. A
+declared panel (at the right) becomes a non-modal floating sheet over the viewer
+(280px, inset 8px) that never resizes or moves the scene or shifts the page; it has a
+compact X, outside dismissal and Escape. The explorer is the same popover, never wider
+than the window less 1rem. The navbar is the same row; the shortcut hint is hidden.
+Touch works for every tool: one finger orbits, two pan and
 zoom, a tap picks; a pinch, a cancelled pointer or a camera drag is never a
 pick.
 
-**The file explorer** (the host's) is 220px by default, 140px at least and 480px
-at most, sized by its right edge; a declared panel's column shares those bounds,
-sized by its left. A drag past the minimum stops at it; only a drag below half the
-minimum closes the panel, and the keyboard never does. The next open starts at
-220px.
+**The panel column** (a declared panel's, at the viewer's right) is 220px by default,
+140px at least and 480px at most, sized by its left edge. A drag past the minimum
+stops at it; only a drag below half the minimum closes the panel, and the keyboard
+never does. The next open starts at 220px.
 
 ## Display settings and section primitives
 
 Display is not a tool. It is a 3D view's dropdown (`kit/shell/DisplayPopover.jsx`) from its
-button in the navbar, between Settings and Preview: the perspective box
+button on top of the view cube, before Preview: the perspective box
 (`PerspectiveProjectionIcon`), hinted "Display", pressed while the dropdown is open. A view
 that is not 3D (a DXF) has no Display button, not a disabled one. It opens an ordinary
-popover down from the button, end-aligned, 304px wide — the width its settings are laid
+popover up from the button, start-aligned, 304px wide — the width its settings are laid
 out for, two a row, with Projection's "Orthographic" in full beside the host's appearance
-control — and never taller than the room below it. Opening it leaves the tool in hand as
+control — and never taller than the viewer below the tool strip: its sections scroll
+inside it. Opening it leaves the tool in hand as
 it is: a selection, a Draw session or Position stay. It goes with Escape, a press outside
 it (on the model, say), its button again, or the X at the end of its first heading
 ("Display", its Reset, then its X); setting changes leave it up. It is idle while the file
@@ -428,7 +442,7 @@ Escape closes the innermost popup first, the dropdown only on a later press.
 | Background | Color and opacity |
 | Floor | Color/opacity; position and finish side by side |
 
-Display holds the file's view alone: the host's settings are [Settings](#settings)'.
+Display holds the file's view alone: the person's settings are the [app menu](#settings)'s.
 Display and Surfaces are always open. Every other section is a feature gate
 with plus/minus: expanded means enabled, collapsed means disabled. Grid / Axes
 gates both groups; their settings stay separate in the core/CLI contract. Never
@@ -467,24 +481,31 @@ icon is unambiguous, and always keep the accessible name.
 
 ## Settings
 
-Settings is the person's, never a file's: one popover (`kit/shell/SettingsPopover.jsx`),
-the same wherever it is reached — the cog at the navbar's right end, over every file
-(FileViewer draws the one `CadViewer` hands it as `settings`, while a model loads and
-after it failed to as well), and the cog under the home's wordmark. Between its header
-and its footer are the host's own settings (`appSettings`), a section for each `section`
-they name, in the order they come, each always open with a checkbox row per setting:
-**Analytics** (Share anonymous usage data), then **Features** — **Quick edit**, on until
-the person turns it off ([Quick Edit](#quick-edit)) — in both apps. Then, where the host has
-a tracker (`links.issues`), the popover's own last section, **Feedback**: one full-row
-button, the speech bubble and **Open Issue**, a link to a new issue titled
-"Feedback: " for the person to finish, naming the version and the platform, with no label
-(what is said may be a bug, a request or a question). Last because it is an action, not a
-setting, and it sits by the footer's community links. A host with none of these shows the
-header and footer alone. It is 224px wide, as narrow as reads cleanly: no section title
-wraps and "Share anonymous usage data" keeps one line. Nothing of a file is in it: a file's
-view is [Display](#display-settings-and-section-primitives)'s. Every row is the person's, not a view's or a tab's: the host keeps it where every
-view of theirs reads it (both apps: their settings, `settings.json` in cadgen's state
-directory), and a view reads it again whenever the person comes back to the page.
+Settings are the person's, never a file's, and live in the app menu: one dropdown
+(`file-viewer/navigation/AppMenu.jsx`) on the floating surface, 15rem wide, the same
+wherever it is reached — the navbar's logo, over every file (FileViewer builds it from the
+host's `links`, the `appSettings` `CadViewer` hands it and `environment.platform`, while a
+model loads and after it failed to as well), and the cog under the home's wordmark. Its
+rows, a rule between each group, are only what the host supplies:
+
+- **Back to files**, where the menu is opened from a file and the host has a home
+  (`navigation.home`): it shows the home in this view. The home's own menu has none.
+- The host's own on/off settings (`appSettings`), a checkbox item each, in the order they
+  come, checked at the right; a press turns one without closing the menu. **Share
+  anonymous usage data** and **Quick edit** — on until the person turns it off
+  ([Quick Edit](#quick-edit)) — in both apps.
+- **Send feedback**, where the host has a tracker (`links.issues`): a link to a new issue
+  titled "Feedback: " for the person to finish, naming the version and the platform, with
+  no label (what is said may be a bug, a request or a question). Then **GitHub** and
+  **Discord**.
+- Last, in gray, a footer: "v<version> · Made by @<handle>" — the version a link to its
+  release notes, the handle one to the host's X account.
+
+Nothing of a file is in it: a file's view is
+[Display](#display-settings-and-section-primitives)'s. Every setting is the person's, not a
+view's or a tab's: the host keeps it where every view of theirs reads it (both apps: their
+settings, `settings.json` in cadgen's state directory), and a view reads it again whenever
+the person comes back to the page.
 
 ## Position and references
 
@@ -537,7 +558,7 @@ heading has no Copy of its own. Copy stays in row menus and the copy shortcut, a
 the panel ends in a full-row **Copy** (**Copy All** with several references) that
 shows the shortcut. What goes to an agent goes through [Quick Edit](#quick-edit), which a
 pick opens and which carries the selected references with the file. Every copied
-reference carries its file prefix.
+reference names its file by absolute path.
 
 Viewport picks reach individual faces and edges even where the tree groups them
 into a feature. In an assembly, faces and edges load per part, when first
@@ -560,7 +581,7 @@ floating surface. It is there only while it has something to carry or a note to 
 nothing stands in for it otherwise, not even a button. It is a STEP file's alone,
 since only a STEP has picks and sketches to carry; a compact host gets none, and
 preview puts it away with the tools. While the view loads it is out of sight, its note
-and its state kept. A person can turn it off in [Settings](#settings)' Features (**Quick
+and its state kept. A person can turn it off in the [app menu](#settings) (**Quick
 edit**, on until they do; `view.features.quickEdit`): it is then not there at all, in any
 of their views — no box, so nothing a pick or a sketch opens and no keyboard it takes —
 until they turn it on again.
@@ -621,7 +642,7 @@ Cube face, edge and corner clicks turn the view and keep pan and zoom; dragging
 the cube orbits. Reloading the page restores the camera the file on screen was left
 at, and its Display settings, Explode/Clip, the pose, hidden and isolated parts and
 the tree's expansion come back with it. Only the model on screen keeps that view:
-leaving it — for another file, the home or another root — drops it, so opening a file,
+leaving it — for another file or the home — drops it, so opening a file,
 for the first time or again, fits it at the defaults. An update of the model on
 screen keeps its Display settings, Explode/Clip, hidden and isolated parts and its
 tree, and the pose while its joints are unchanged. The tool, the selection and
@@ -637,17 +658,19 @@ else: a renderer declares it (`useRendererShell`'s `previewable`: STEP, GLB, STL
 URDF/SRDF/SDF), and a view whose renderer does not (a DXF, 2D) has no Preview button,
 not a disabled one, and never enters it, whatever asks. It is the shell's
 own state (`previewing`); hosts neither start nor observe it, beyond giving the
-page over to it. Its button is the fullscreen icon, the last of the navbar's
-controls ("Preview"). It is fullscreen: the renderer says so
-(`onFullscreenChange`), and the navbar, the explorer and any declared panel step
-aside while it lasts, Settings and Display with them; the toolbar, the tool stack and
-its resize grips, Quick Edit, joint handles, cube and context menu are gone. Its
-way out is the view's own: an X ("Exit preview") at the view's top-right, exactly
-where Preview sat in the navbar (the corner is a row of the navbar's own geometry,
-`lib/navbarRow.js`), transparent over the model, which fades with the playbar; Escape leaves it too. It
+page over to it. Its button is the fullscreen icon, after Display on top of the view cube
+("Preview"). It is fullscreen: the renderer says so
+(`onFullscreenChange`), and the navbar (its menu and the explorer with it) and any declared
+panel step aside while it lasts, Display and Preview with them; the toolbar, the tool stack
+and its resize grips, Quick Edit, joint handles, cube and context menu are gone. Its
+way out is the view's own: an X ("Exit preview") in the corner box over the cube's corner
+(the cube itself is hidden), the very box Display and Preview sit in outside preview
+(`PreviewChrome`'s `cornerStyle`), so each lands exactly where its counterpart was: the X
+where Preview was. It is transparent over the model and fades with the playbar; Escape
+leaves it too. It
 starts orbiting, unless the file's Playback settings turned its orbit off. **Playback
 settings** (a cog; `PlaybackMenu`) sits in that corner before the X, where Display
-sits outside preview, and opens down. It holds, for a file with routines, **Animation** — the Routine (with more than one), Speed, Loop and
+sits outside preview, and opens up. It holds, for a file with routines, **Animation** — the Routine (with more than one), Speed, Loop and
 Autoplay — then **Orbit**: on or off, and its speed. Under the model, an
 animated file shows its playbar (play/pause and the scrubber); a static one shows
 nothing there. These controls and the corner share one one-second idle deadline and a
@@ -689,12 +712,12 @@ never changes a Display setting.
 Escape and Copy belong to one viewer: the one with focus, or the one last
 pressed in while focus is on the page. Editable targets keep their own keys.
 
-- **Escape**, innermost first: an open popup in this viewer (a menu, a Select,
-  a color picker, Settings, Display) closes itself; then preview exits;
+- **Escape**, innermost first: an open popup in this viewer (a menu, the app menu
+  included, a Select, a color picker, Display, the explorer) closes itself; then preview exits;
   then Draw's canvas spends its own Escape; then the renderer's (STEP: an
   unfinished measurement, then the Measure tool, then the selection, then
-  isolation; robots: the selection). The tool stack's panels and the host's
-  explorer are never Escape's to close (a phone's sheet is dismissed like any sheet).
+  isolation; robots: the selection). The tool stack's panels are never Escape's to
+  close (a phone's sheet is dismissed like any sheet).
 - **A panel's grip** (its bottom-right corner) is a separator in the tab
   order: Left/Right nudge its width and Up/Down its cap by 16px, and Home and
   End take both to their bounds.
@@ -715,10 +738,12 @@ pressed in while focus is on the page. Editable targets keep their own keys.
 
 Every hint is a `TooltipHint`: compact text, one surface and arrow, a 400ms
 delay. No native `title` anywhere in chrome. Prefer one or two words; show a
-full technical name only when it is truncated (`overflowOnly`). Quick Edit's button,
-Playback settings, the strip's buttons and the navbar's controls
-(Settings, Display, Preview) are hinted by name, the strip's above its buttons and the navbar's
-below theirs; there is no hint on Exit, X,
+full technical name only when it is truncated (`overflowOnly`). Quick Edit's buttons, the
+strip's buttons, the navbar's right-hand controls (the update, an alert's icon, a panel's
+toggle, Full size) and the view's controls on top of the cube (Display, Preview, and
+preview's Exit preview) are hinted by name — the strip's and the view's controls' hints
+above their buttons, the others' below; there is no hint on the navbar's left (the logo,
+the file's name and the ⋯ say what they are), on Playback settings, X,
 the transport, drawing tools or labelled text buttons (Quick Edit's alone say what
 they do). A disabled, selected or expanded control has none; pressing or leaving cancels a
 pending one. A hint appears on focus only for keyboard navigation (a Tab), never
@@ -732,7 +757,7 @@ where the host has a tracker, opens a new issue titled "Issue: ", labelled `bug`
 in from the card; errors handed to the host's `onError` are the host's to show. A card the
 model survives (a failed update, a warning beside the model) has an X, **Dismiss**: it puts
 the card away for as long as that alert stands, and its icon, first of the navbar's
-right-hand controls, brings it back. The dismissal goes once the alert changes or clears, or
+right-hand controls after the update button, brings it back. The dismissal goes once the alert changes or clears, or
 another file opens; with the card back, so does the icon. Preview has no navbar, and so no
 icon.
 

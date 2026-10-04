@@ -30,8 +30,8 @@ Changing expansion updates the queue without restarting an active component that
 is still requested. Switching between occurrences of that same component also
 keeps its work. Removing the last requested occurrence cancels both pending
 surface loading and worker work; queued components that are no longer requested
-are skipped. Taking the Features tree off screen (closing the file's panel,
-opening the file tree in its place, or entering preview), changing geometry or resource scope, and
+are skipped. Taking the Features tree off screen (choosing another tool, or entering
+preview), changing geometry or resource scope, and
 unmounting cancel the entire inspector's pending work. Cancelled jobs cannot
 publish late results or populate the completed cache.
 
@@ -45,20 +45,20 @@ whole, not only the feature rows subsequently opened. Recognition neither expand
 other parts nor blocks the initial structural tree. The stable top row counts
 presented top-level features; it does not display global recognition progress.
 Selection, isolation and reveal rules remain in the
-[Model tree contract](cad-renderer.md#step-panel).
+[Model tree contract](cad-renderer.md#step-panels).
 
 ## Cache identity and lifetime
 
 The completed cache key combines:
 
-- The resource provider's root/generation scope.
+- The resource provider's workspace/generation scope.
 - `MODELING_RECOGNITION_VERSION`.
 - Exact surface input and object identities, or a provider-scoped immutable SURF
   URL for older static packages.
 
 Do not key recognition by filename, display label or assembly occurrence. On a
 warm reopen, accepted component identities can avoid surface requests altogether,
-but only after root, provider generation, entry revision and runtime descriptor
+but only after workspace, provider generation, entry revision and runtime descriptor
 match. Changed geometry or scope must never reuse the previous binding.
 
 The least-recently-used cache holds at most **512 components / 8 MiB** of accounted

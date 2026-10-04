@@ -1,10 +1,10 @@
-"""Open's file chooser: the operating system's own, run as a child process.
+"""The home's Open: the operating system's own file chooser, run as a child process.
 
-A host's form for choosing a file draws only inside a chat turn, and the page
-that has Open sits beside a chat with none, so the server asks the desktop
-directly. It never draws anything itself, and never runs a shell. Every file
-can be chosen -- none is greyed out -- and the server says which kinds CAD opens
-when one it cannot is picked.
+A page cannot ask for a path -- a browser hands over a file's bytes, never where it
+is, and an app's form draws only inside a chat turn -- so the server that runs the
+page, the CAD app's or the CAD Viewer's, asks the desktop directly. It never draws
+anything itself, and never runs a shell. Every file can be chosen -- none is greyed
+out -- and the server says which kinds CAD opens when one it cannot is picked.
 """
 
 from __future__ import annotations
@@ -74,6 +74,15 @@ def _command() -> tuple[list[str], dict[str, str], bool]:
         if shutil.which("kdialog"):
             return ["kdialog", "--title", "Open", "--getopenfilename", os.path.expanduser("~")], {}, False
     raise PickerFailed("This computer has no file chooser CAD can open (macOS needs osascript, Windows PowerShell, Linux zenity or kdialog on a desktop).")
+
+
+def available() -> bool:
+    """Whether this computer has a chooser to open: the home shows Open only where it does."""
+    try:
+        _command()
+    except PickerFailed:
+        return False
+    return True
 
 
 class FilePicker:

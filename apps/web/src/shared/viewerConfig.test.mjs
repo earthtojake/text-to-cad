@@ -7,18 +7,12 @@ import {
   DEFAULT_VIEWER_GITHUB_URL,
   normalizeViewerReleaseVersion,
   viewerReleaseTagName,
-  normalizeViewerDefaultFile,
   normalizeViewerDiscordUrl,
   normalizeViewerGithubUrl,
   viewerGithubIssueUrl,
   viewerGithubReleaseUrl,
   viewerGithubRepositoryUrl
 } from "./viewerConfig.mjs";
-
-test("normalizeViewerDefaultFile keeps scan-relative file paths", () => {
-  assert.equal(normalizeViewerDefaultFile("/STEP/sample_part.step/"), "STEP/sample_part.step");
-  assert.equal(normalizeViewerDefaultFile("STEP\\sample_part.step"), "STEP/sample_part.step");
-});
 
 test("normalizeViewerGithubUrl defaults to the CAD Viewer repository link", () => {
   assert.equal(normalizeViewerGithubUrl(""), DEFAULT_VIEWER_GITHUB_URL);

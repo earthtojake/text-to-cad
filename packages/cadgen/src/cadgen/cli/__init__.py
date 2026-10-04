@@ -72,12 +72,11 @@ _COMMANDS: dict[str, tuple[str, str]] = {
     # without it `cadgen daemon status` falls through to one-word `daemon` and the
     # supervisor treats "status" as a stray argument.
     "daemon status": ("cadgen.cli.daemon_status", "show the warm daemon's workers"),
-    # The CAD Viewer. One-word `viewer` serves the cwd (what the cad-viewer skill
-    # teaches); the two-word entries are the instance manager, split into their own
-    # modules for the same dispatch reason `daemon status` is.
-    "viewer": ("cadgen.cli.viewer", "serve the current directory in the CAD Viewer"),
-    "viewer list": ("cadgen.cli.viewer_list", "show running CAD Viewers and what each serves"),
-    "viewer stop": ("cadgen.cli.viewer_stop", "terminate a running CAD Viewer"),
+    # The CAD Viewer. One-word `viewer` starts or reuses this machine's viewer (what the
+    # CAD skills teach); `viewer stop` asks it to exit, split into its own module for the
+    # same dispatch reason `daemon status` is.
+    "viewer": ("cadgen.cli.viewer", "start, or reuse, this machine's CAD Viewer"),
+    "viewer stop": ("cadgen.cli.viewer_stop", "ask the CAD Viewer on a port to exit"),
     # CAD inside an agent host's panels. The host starts it, one process per thread.
     "mcp": ("cadgen.cli.mcp", "serve CAD to an agent host over MCP (stdio)"),
     "analytics": ("cadgen.cli.analytics", "show or change CAD's anonymous usage analytics: status, on, off"),

@@ -122,18 +122,17 @@ for decorator examples, mesh tolerances and animated GLB.
 
 ## Prompt references and inspection
 
-A reference such as `STEP/assembly.step#o1.2.f7` identifies geometry in a
-particular saved document. Its file part is the document as CAD Viewer copied it:
-the path relative to the viewer's root (the folder it serves; for `cad_show`, the
-thread's project folder), or the full path when the model has no project around
-it, always with the file's real name and extension. A relative path resolves from
-the working directory, so from the viewer's root pass it to `read_scene` as is:
+A reference such as `/work/robot/STEP/assembly.step#o1.2.f7` identifies geometry
+in a particular saved document. Its file part is the document's absolute path as
+the CAD viewer copied it, with the file's real name and extension (in quotes when it
+holds a space or `#`). Open that path with `read_scene`, and pass the whole reference
+to `resolve()`:
 
 ```python
 from cadgen import read_scene
 
-scene = read_scene("STEP/assembly.step")
-selection = scene.resolve("STEP/assembly.step#o1.2.f7")
+scene = read_scene("/work/robot/STEP/assembly.step")
+selection = scene.resolve("/work/robot/STEP/assembly.step#o1.2.f7")
 face = selection.shape()  # owned native geometry, in document world coordinates
 print(selection.ref, face.area)
 ```
@@ -187,22 +186,21 @@ snapshot skip or failure using the cases in the snapshot reference.
 Show the user each file you create or change, and any they ask to see. Snapshots and
 validation don't replace this.
 
-- If your tools include `cad_show` (your host may prefix it), use it, and follow its
-  description for when to call it again. `cad_view` reads what the user selected;
-  `cad_screenshot` shows you what they see. Neither is a review of your own work.
-- Otherwise run the CAD Viewer from the models directory (usually `models/`, not an
-  artifact's output folder):
+- If your tools include `cad_show` (your host may prefix it), use it with the file's
+  absolute path, and follow its description for when to call it again. `cad_view` reads
+  what the user selected; `cad_screenshot` shows you what they see. Neither is a review
+  of your own work.
+- Otherwise run the CAD Viewer, from any folder:
 
   ```bash
-  cd /absolute/path/to/model-workspace && cadgen viewer --host 127.0.0.1 --json --detach
+  cadgen viewer --host 127.0.0.1 --json --detach
   ```
 
   `--detach` returns once the viewer answers requests and leaves it running in the
   background: always pass it, since a foreground viewer never exits (and piping its
-  output through `tail` can hide the URL for good). It starts or reuses the viewer.
-  Read `url` from its one JSON line (never guess the port); for each file under that
-  directory return `url?file=<URL-encoded relative path>`, or `url` alone to review the
-  directory. If it fails to launch, say so.
+  output through `tail` can hide the URL for good). It starts this machine's one viewer,
+  or reuses it. Read `url` from its one JSON line (never guess the port), and for each
+  file return `url?file=<its URL-encoded absolute path>`. If it fails to launch, say so.
 
 Generate changed artifacts first: the viewer never runs model scripts. Existing
 STEP files compile on open when needed. Topology selection and measurement

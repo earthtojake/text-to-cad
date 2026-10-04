@@ -95,12 +95,12 @@ before(async () => {
     if (url.pathname === '/harness.js') { response.setHeader('Content-Type', 'text/javascript'); response.end(bundle); }
     else if (url.pathname === '/styles.css') { response.setHeader('Content-Type', 'text/css'); response.end(css); }
     else if (url.pathname.endsWith('/__cad/catalog')) {
-      const entry = file => ({ kind: file.split('.').pop(), file, rootRelativeFile: file, url: `/${file}`, hash: `${root}-${file}-${revision}`, bytes: FILES[file].length });
+      const entry = file => ({ kind: file.split('.').pop(), file: `/models/${file}`, url: `/${file}`, hash: `${root}-${file}-${revision}`, bytes: FILES[file].length });
       response.setHeader('Content-Type', 'application/json');
-      response.end(JSON.stringify({ rootId: root, entries: Object.keys(FILES).filter(file => !file.startsWith('meshes/'))
+      response.end(JSON.stringify({ entries: Object.keys(FILES).filter(file => !file.startsWith('meshes/'))
         .map(file => (file === 'arm.srdf' ? { ...entry(file), relations: { urdf: entry('arm.urdf') } } : entry(file))) }));
     } else if (url.pathname.endsWith('/__cad/server')) {
-      response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify({ rootId: root, rootPath: '/models', backend: 'cadgen' }));
+      response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify({ backend: 'cadgen' }));
     } else if (FILES[name] ?? FILES[url.pathname.slice(1)]) { response.end(FILES[name] ?? FILES[url.pathname.slice(1)]); }
     else if (/\.(woff2|ttf|stl|glb)$/.test(url.pathname)) { response.statusCode = 404; response.end(); }
     else { response.setHeader('Content-Type', 'text/html'); response.end(`<!doctype html><html><head><title>Host</title><link rel="stylesheet" href="/styles.css">${HARNESS_SIZE}</head><body><div id="root"></div><script type="module" src="/harness.js"></script></body></html>`); }
@@ -172,8 +172,8 @@ async function open(t, file, { panel = true } = {}) {
     // The nav row's panel toggles, in order, each with whether its panel is the open one.
     panels: () => pane.locator('[data-file-panel]')
       .evaluateAll(buttons => buttons.map(button => `${button.getAttribute('aria-label')}:${button.getAttribute('aria-pressed')}`)),
-    toggle: id => id === 'cad-display' ? pane.locator('[data-viewer-navbar]').getByRole('button', { name: 'Display', exact: true }) : pane.locator(`[data-file-panel="${id}"]`),
-    // Display's settings: a dropdown from the navbar, portaled out of the viewer.
+    toggle: id => id === 'cad-display' ? pane.locator('[data-viewport-actions]').getByRole('button', { name: 'Display', exact: true }) : pane.locator(`[data-file-panel="${id}"]`),
+    // Display's settings: a dropdown from on top of the cube, portaled out of the viewer.
     displayPanel: () => page.locator('[data-display-popover]'),
     // The tool stack's panels on screen, top to bottom, by their accessible names.
     stack: () => pane.locator('[data-cad-tool-stack] [data-tool-panel]').evaluateAll(panels => panels
@@ -226,9 +226,9 @@ test('a robot can enter Position with sidebar controls: knobs drag joints, the c
   assert.equal(await robot.tool('Draw').count(), 0, 'Draw is a STEP tool; a robot description has none');
   assert.equal(await robot.tool('Preview').count(), 0, 'Preview is no toolbar tool');
   assert.equal(await pane.getByRole('button', { name: 'Preview', exact: true }).count(), 1, 'it is the viewer’s corner button, for a robot as for any 3D file');
-  // The nav row has the file tree's toggle alone: a robot declares no panel of its own. Display
-  // is the navbar's button beside Preview, shut as the file opens.
-  assert.deepEqual(await robot.panels(), ['Show files:false']);
+  // The nav row has no panel toggle: a robot declares no panel of its own. Display is the
+  // navbar's button beside Preview, shut as the file opens.
+  assert.deepEqual(await robot.panels(), []);
   assert.equal(await robot.displayPanel().count(), 0, 'Display is never where a file opens');
   assert.equal(await pane.getByRole('tab').count(), 0, 'no tabs');
   assert.deepEqual(await robot.stack(), ['Position controls']);
@@ -509,7 +509,7 @@ test('Select picks links at once; a selection lives only under Select; Links sho
   await page.mouse.down(); await page.mouse.up();
   await robot.settle();
   assert.deepEqual(await robot.pressedRows(), ['Select upper_arm'], 'selected by the next frame');
-  assert.deepEqual(await robot.panels(), ['Show files:false'], 'a pick opens nothing in the host\'s column');
+  assert.equal(await pane.locator('[data-file-panel-container]').count(), 0, 'a pick opens nothing in the host\'s column');
   assert.deepEqual((await page.evaluate(() => window.cadHarness.a.controller.readState())).selectedLinks, ['upper_arm']);
   // The shared camera bar provides zoom framing for robots too.
   assert.equal(await pane.getByRole('button', { name: 'Zoom controls', exact: true }).count(), 0);
@@ -542,10 +542,11 @@ test('Select picks links at once; a selection lives only under Select; Links sho
   await robot.pressed(['Select antenna', 'Select visor']);
   assert.deepEqual((await page.evaluate(() => window.cadHarness.a.controller.readState())).selectedPartIds.sort(), ['head:v1/object/0', 'head:v1/object/1']);
 
-  // What names something else can be followed: a parent link selects it, a mesh path opens it.
+  // What names something else can be followed: a parent link selects it, a mesh path opens it,
+  // by its absolute path beside the description.
   await pane.getByRole('button', { name: 'Select head', exact: true }).click();
   await reference.getByRole('button', { name: 'meshes/head.glb' }).click();
-  assert.deepEqual(await page.evaluate(() => window.cadHarness.opened), ['meshes/head.glb']);
+  assert.deepEqual(await page.evaluate(() => window.cadHarness.opened), ['/models/meshes/head.glb']);
   await reference.getByRole('button', { name: 'base', exact: true }).first().click();
   await robot.pressed(['Select base']);
   // The filter finds a link by the joint that carries it.
@@ -578,7 +579,7 @@ test('a reload of the tab brings the pose back, and nothing of the tool or the D
   await robot.displayPanel().waitFor();
   await page.evaluate(() => window.cadHarness.mounted(false));
   await page.waitForFunction(() => Object.values(window.cadHarness.state.renderers || {}).some(record => record?.renderer?.pose?.value?.jointValues?.nod === 12));
-  const record = await page.evaluate(() => window.cadHarness.state.renderers[JSON.stringify(['arm.urdf', 'robot'])]);
+  const record = await page.evaluate(() => window.cadHarness.state.renderers[JSON.stringify(['/models/arm.urdf', 'robot'])]);
   assert.deepEqual([record.renderer.pose.value.jointValues.shoulder, record.renderer.pose.value.jointValues.lift], [25, 0.2]);
   assert.deepEqual(Object.keys(record.renderer), ['pose'], 'one slice: the pose, and no selection or tree');
   assert.equal('tool' in record, false, 'the view keeps no tool');
@@ -588,7 +589,6 @@ test('a reload of the tab brings the pose back, and nothing of the tool or the D
   await robot.linksPanel().waitFor();
   assert.deepEqual(await robot.toolNames(), ['Select:true', 'Position:false']);
   assert.equal(await robot.displayPanel().count(), 0, 'it comes back with Display shut');
-  assert.deepEqual(await robot.panels(), ['Show files:false']);
   await robot.openPosition();
   await robot.jointField('shoulder').waitFor();
   assert.deepEqual([await robot.jointField('shoulder').inputValue(), await robot.jointField('lift', 'm').inputValue(), await robot.jointField('nod').inputValue()], ['25°', '0.2 m', '12°']);
@@ -617,7 +617,7 @@ test('an SDF is the same robot with a section of its own; a snapshot depicts the
   assert.deepEqual(await robot.toolNames(), ['Select:false', 'Position:true']);
   // The same panels as any robot, whatever the format on disk: SDF is a panel of Select's, under
   // Links (what the description says about itself sits with its links), folded until opened.
-  assert.deepEqual(await robot.panels(), ['Show files:false']);
+  assert.deepEqual(await robot.panels(), []);
   assert.deepEqual(await robot.stack(), ['Position controls']);
   await robot.tool('Select').click();
   assert.deepEqual(await robot.stack(), ['Links', 'SDF']);
@@ -649,7 +649,7 @@ test('an SDF is the same robot with a section of its own; a snapshot depicts the
   await page.evaluate(() => window.cadHarness.capture());
   await page.waitForFunction(() => window.cadHarness.captures.length === 1);
   const captured = await page.evaluate(() => window.cadHarness.captures[0]);
-  assert.deepEqual([captured.file, captured.type, captured.references.length], ['swing.sdf', 'image/png', 1], 'one context, of the file');
+  assert.deepEqual([captured.file, captured.type, captured.references.length], ['/models/swing.sdf', 'image/png', 1], 'one context, of the file');
 
   assert.deepEqual(robot.errors, []);
 });

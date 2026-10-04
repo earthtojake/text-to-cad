@@ -11,8 +11,8 @@ platform.
 **PURPOSE** — the engine and its command surface: model execution, the
 store, document assembly, kinematics, exports, validation, inspection,
 snapshots, the warm daemon and its build pool, the CAD Viewer
-(`cadgen viewer`: a local HTTP server over the built client, one directory per
-instance), and CAD beside an agent's chat (`cadgen mcp`: an MCP App server that
+(`cadgen viewer`: a local HTTP server over the built client, on port 3245 or the
+port `--port` names, serving every CAD file by its absolute path), and CAD beside an agent's chat (`cadgen mcp`: an MCP App server that
 an agent host starts, over the viewer's own routes: tabs in Codex, viewer cards
 in the chat for every other MCP Apps host).
 
@@ -392,9 +392,11 @@ src/cadgen/
                          #   cli_from_function, doors (documents by bytes),
                          #   source_sidecar, step_assemble/step_reemit
   viewer/                # the CAD Viewer's server: launcher (main),
-                         #   routes (http_app), catalog (scanner; its rows
-                         #   started when a watched build saves: warm), the model
-                         #   library every CAD view shares (recents), status
+                         #   routes (http_app), files by absolute path
+                         #   (backend), a file's catalog row (scanner; started
+                         #   when a watched build saves: warm), the explorer's
+                         #   reads (folders), the model library every CAD view
+                         #   shares (recents), status
                          #   (artifact_status: not compiled / compiling /
                          #   compiled / failed), build_progress (the daemon's
                          #   job ledger, read over its socket)
@@ -414,7 +416,7 @@ Verbs by format: `step` compile · build · snapshot;
 `stl`/`3mf`/`glb` build · snapshot; `dxf` snapshot; `urdf`/`sdf`
 validate · snapshot; `srdf` validate. `cadgen snapshot` routes any suffix.
 `cadgen store|daemon|doctor` are status commands, `cadgen viewer
-[list|stop]` the CAD Viewer's launcher and instance manager, and `cadgen mcp`
+[stop]` the CAD Viewer's launcher, and `cadgen mcp`
 the server an agent host starts — all deliberately outside the mirror pattern. `cadgen step compile` is internal tooling: skills never
 teach it — doors compile a document's missing tree on demand.
 

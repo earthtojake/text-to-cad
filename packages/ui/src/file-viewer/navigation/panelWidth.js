@@ -15,17 +15,3 @@ export function clampPanelWidth(width) {
   }
   return Math.round(Math.max(PANEL_MIN_WIDTH, Math.min(PANEL_MAX_WIDTH, numeric)));
 }
-
-// The explorer's height cap, from its corner: never under its filter row and a few rows. A stored
-// cap is kept whatever the view it was chosen in; what is drawn is bounded by the view at hand.
-export const PANEL_MIN_HEIGHT = 96;
-const PANEL_MAX_STORED_HEIGHT = 4000;
-
-/** A height cap a caller has, clamped into range, or `undefined`: none set, as tall as its rows. */
-export function clampPanelHeight(height) {
-  const numeric = Number(height);
-  if (height === undefined || height === null || !Number.isFinite(numeric) || numeric <= 0) {
-    return undefined;
-  }
-  return Math.round(Math.max(PANEL_MIN_HEIGHT, Math.min(PANEL_MAX_STORED_HEIGHT, numeric)));
-}

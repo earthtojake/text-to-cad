@@ -1,18 +1,17 @@
 import { createPromptDeliveryLedger, formatPromptContextText, validatePromptContext } from '@text-to-cad/core/prompt';
 import type { PromptContextPort, PromptDeliveryResult, PromptDestinationState, ResourceRef } from '@text-to-cad/core/prompt';
-import { referencePath } from '@text-to-cad/ui/catalog';
 import type { WebClipboard } from './clipboard';
 
 /** Prepare portable clipboard content without claiming an external composer pasted it. */
-export function createWebPromptContext(workspaceId: string, rootPath: string, clipboard: WebClipboard, supportsImages = typeof clipboard.writeImage === 'function'): PromptContextPort {
+export function createWebPromptContext(clipboard: WebClipboard, supportsImages = typeof clipboard.writeImage === 'function'): PromptContextPort {
   const capabilities: NonNullable<PromptDestinationState['capabilities']> = {
     attachments: supportsImages ? 'png' : 'none', maxParts: 128, maxAttachmentBytes: 20 * 1024 * 1024,
     mixedTextAndImage: supportsImages && clipboard.writeContent ? 'representations' : 'unsupported',
   };
   const state: PromptDestinationState = Object.freeze({ kind: 'clipboard', available: true, capabilities });
   const ledger = createPromptDeliveryLedger({ busyMessage: 'Wait for pending clipboard operations before copying more.' });
-  // A reference names the file by its complete path under the served folder, as every app's does.
-  const resolvePath = (resource: ResourceRef) => referencePath(resource, { workspaceId, root: rootPath });
+  // A reference names the file by its absolute path, as every app's does.
+  const resolvePath = (resource: ResourceRef) => resource.kind === 'url' ? resource.url : resource.path;
   return {
     getSnapshot: () => state,
     subscribe: () => () => {},

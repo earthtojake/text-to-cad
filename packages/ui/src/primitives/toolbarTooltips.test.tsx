@@ -1,7 +1,7 @@
 import React from 'react';
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
-import { Files } from 'lucide-react';
+import { PanelRight } from 'lucide-react';
 import { ToolbarButton } from '../../dist/primitives/toolbar-button.js';
 import { PanelToggle } from '../../dist/file-viewer/navigation/ViewerNavbar.js';
 import FloatingToolBar from '../../dist/renderers/kit/tools/FloatingToolBar.js';
@@ -50,13 +50,13 @@ it('a tool is hinted only after a deliberate hover, with the same delay from one
 
 it('the nav row, the strip and the view\'s actions share one hint with no native title; a click that focuses a trigger pins nothing, a Tab onto it names it', () => {
   render(<>
-    <PanelToggle icon={Files} label="Show files" active={false} onClick={() => {}} id="tree" />
+    <PanelToggle icon={PanelRight} label="Details" active={false} onClick={() => {}} id="details" />
     {strip()}
     <ToolbarButton label="Display">D</ToolbarButton>
     <ToolbarButton label="Preview">P</ToolbarButton>
   </>);
   const classes: string[] = [];
-  for (const [name, hint] of [['Show files', 'Files'], ['Draw', 'Draw'], ['Display', 'Display'], ['Preview', 'Preview']]) {
+  for (const [name, hint] of [['Details', 'Details'], ['Draw', 'Draw'], ['Display', 'Display'], ['Preview', 'Preview']]) {
     const button = screen.getByRole('button', { name });
     expect(button.hasAttribute('title')).toBe(false);
     enter(button);

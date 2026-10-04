@@ -12,84 +12,32 @@ export interface FileMetadata extends FileEntry {
   mediaType?: string;
   revision?: string;
 }
-export interface TextDocument {
-  content: string;
-  revision?: string;
-  truncated?: boolean;
-  readOnly?: boolean;
-}
-/** A source owns the URL; each successful read supplies a distinct release lease. */
-export interface ManagedFileAsset { url: string; bytes?: Uint8Array<ArrayBuffer>; mime?: string; release: () => void }
-export type FileFailureCode = "denied" | "not-found" | "already-exists" | "unsupported" | "conflict" | "error";
-export type FileChange =
-  | { kind: "content" | "metadata"; path: string; revision?: string }
-  | { kind: "added" | "deleted"; path: string; entryKind: FileEntry["kind"] }
-  | { kind: "moved"; from: string; to: string; entryKind: FileEntry["kind"] };
+export type FileChange = { kind: "content" | "metadata"; path: string; revision?: string };
 export interface FileChanges { sourceId: string; changes: readonly FileChange[] }
-export type FileMutationResult =
-  | { status: "committed"; path: string; change: FileChange }
-  | { status: "cancelled" }
-  | { status: "failed"; code: FileFailureCode; message: string };
-export type WriteResult =
-  | { status: "saved"; document: TextDocument }
-  | { status: "conflict"; message?: string; actualRevision?: string }
-  | { status: "cancelled" }
-  | { status: "error"; code?: FileFailureCode; message: string };
-export type ExternalEntryAction = Exclude<EntryAction, "open" | "rename" | "new-file" | "new-folder" | "trash" | "duplicate">;
 export interface FileActions {
   platform?: Platform;
-  perform?: Partial<Record<ExternalEntryAction, (entry: Pick<FileEntry, "path" | "kind">) => void | Promise<void>>>;
+  perform?: Partial<Record<EntryAction, (entry: Pick<FileEntry, "path" | "kind">) => void | Promise<void>>>;
 }
+/**
+ * The files a view reads, by absolute path (`/`-separated): one file's metadata, one folder's
+ * subfolders and files, and a search under a folder that says when it stopped early.
+ */
 export interface FileSource {
-  /** Stable workspace/root identity. Connection ports must never be used here. */
+  /** Stable identity: what a document's key and a reference's workspace are named by. */
   id: string;
-  rootName: string;
-  /**
-   * The name a copied reference gives `path`, one of this source's paths. Without it a
-   * reference names the file by `path` itself, relative to this source's root; a root whose
-   * relative paths mean nothing outside the viewer (a whole filesystem) gives the absolute path.
-   */
-  referencePath?: (path: string) => string;
   stat: (path: string, options: { signal: AbortSignal }) => Promise<FileMetadata>;
   list?: (directory: string, options: { signal: AbortSignal }) => Promise<readonly FileEntry[]>;
-  paths?: (options: { signal: AbortSignal }) => Promise<readonly string[]>;
-  readText?: (path: string, options: { signal: AbortSignal }) => Promise<TextDocument>;
-  readAsset?: (path: string, options: { signal: AbortSignal }) => Promise<ManagedFileAsset>;
-  /** Revision validation precedes an atomic replacement. Cancellation after dispatch cannot undo a commit. */
-  writeText?: (path: string, options: { content: string; expectedRevision?: string; signal: AbortSignal }) => Promise<WriteResult>;
-  rename?: (path: string, options: { name: string; signal: AbortSignal }) => Promise<FileMutationResult>;
-  create?: (directory: string, options: { kind: FileEntry["kind"]; name: string; signal: AbortSignal }) => Promise<FileMutationResult>;
-  duplicate?: (path: string, options: { signal: AbortSignal }) => Promise<FileMutationResult>;
-  trash?: (path: string, options: { signal: AbortSignal }) => Promise<FileMutationResult>;
+  search?: (directory: string, query: string, options: { signal: AbortSignal }) => Promise<{ paths: readonly string[]; truncated: boolean }>;
   subscribe?: (listener: (change: FileChanges) => void) => () => void;
 }
-export type DocumentSaveResult = WriteResult | { status: "unavailable" } | { status: "stale"; committed?: boolean };
 export interface FileViewerState {
   panel: string | null;
   panelWidth: number;
-  /** The explorer's height cap, as its corner left it; absent, it is as tall as its rows, up to the view. */
-  panelHeight?: number;
-  expandedDirectories?: readonly string[];
   /**
    * Each file's view under `JSON.stringify([file path, renderer id])`: what the host's tab store
-   * holds for this root (`@text-to-cad/ui/tab-store`), and where a renderer's `onStateChange` lands.
+   * holds (`@text-to-cad/ui/tab-store`), and where a renderer's `onStateChange` lands.
    */
   renderers?: Record<string, JsonValue>;
-}
-export interface DocumentSession {
-  /** Changes only for another source/file or an explicit/external reload. */
-  key: string;
-  value: string;
-  revision?: string;
-  readOnly: boolean;
-  dirty: boolean;
-  saving: boolean;
-  stale: boolean;
-  error: string | null;
-  setValue: (value: string) => void;
-  save: () => Promise<DocumentSaveResult>;
-  reload: () => void;
-  keepMine: () => void;
 }
 export interface PrepareContext {
   file: FileMetadata;
@@ -100,7 +48,6 @@ export interface PrepareContext {
 }
 export interface PreparedDocument<T> {
   data: T;
-  text?: TextDocument;
   dispose?: () => void;
   /**
    * The document follows its file by itself: a rewritten file reaches the open renderer as an update
@@ -124,8 +71,6 @@ export interface FileNavigationAction {
 /** An on/off setting of the host's own, in a Settings section it names (the CAD apps' Analytics). */
 export interface AppSetting {
   id: string;
-  /** The Settings section it is listed in: Settings shows the same sections in the viewer and on the home. */
-  section: string;
   label: string;
   checked: boolean;
   /** Shown, not changeable: something outside the app decided it (the label says what). */
@@ -133,7 +78,7 @@ export interface AppSetting {
   onCheckedChange: (checked: boolean) => void;
 }
 /**
- * The viewer's features a person can turn off in Settings' Features section, as the host keeps
+ * The viewer's features a person can turn off in the app menu, as the host keeps
  * them: each is on unless the host says it is off.
  */
 export interface ViewerFeatures {
@@ -143,36 +88,30 @@ export interface ViewerFeatures {
 export interface RendererViewProps {
   /** The host's notice (a question it asks once): the viewport's top-right once the file is on screen, Quick Edit under it. */
   notice?: ReactNode;
-  /** The features the person has left on (Settings' Features): what is off is not offered at all. */
+  /** The features the person has left on (in the app menu): what is off is not offered at all. */
   features?: ViewerFeatures;
   /** Optional host-owned controls inside the Display panel (the web's appearance). */
   displayActions?: ReactNode;
   onNavigationActionsChange?: (actions: readonly FileNavigationAction[]) => void;
   file: FileMetadata;
   source: FileSource;
-  document: DocumentSession | null;
   /**
-   * The open panel id, for a renderer that declares `panels` of its own (the desktop markdown's
-   * source view). The CAD renderers declare none and read none of `panelSlot` or `onPanelOpen`:
-   * their controls are tool-stack panels, never the host's column. Their frame reads `openPanel`
-   * only to put its tools out of sight while the explorer (`"tree"`) is open over them.
+   * The open panel id, for a renderer that declares `panels` of its own. The CAD renderers declare
+   * none and read none of `panelSlot` or `onPanelOpen`: their controls are tool-stack panels, never
+   * the host's column.
    */
   openPanel: string;
   /** The column's box for a declared `"slot"` panel to draw into. */
   panelSlot: HTMLElement | null;
   /**
-   * The navbar's box for the renderer's own view controls, at its right end after the host's
-   * Settings (the CAD viewer's Display and Preview); null where no navbar is drawn.
-   */
-  navbarSlot: HTMLElement | null;
-  /**
    * The renderer shows its file fullscreen (the CAD viewer's Preview), or no longer does: the
-   * navbar, the explorer and any declared panel step aside while it lasts.
+   * navbar and any declared panel step aside while it lasts.
    */
   onFullscreenChange: (fullscreen: boolean) => void;
   onPanelOpen: (id: string) => void;
   onReady: (ready: boolean) => void;
-  onOpenFile: (path: string, options?: { target: "current" | "new" }) => void;
+  /** Show another file, by its absolute path, in this view (a robot's mesh). */
+  onOpenFile: (path: string) => void;
   appearance: { colorScheme: "light" | "dark" };
   /** The file's saved view as it stood when this renderer opened it; later saves do not come back. */
   state: JsonValue | undefined;
@@ -196,7 +135,6 @@ export interface PreparedRenderer {
   Component: ComponentType<RendererViewProps>;
   /** The definition's panels over this document's prepared data. */
   panels?: (context: PanelContext) => FilePanel[];
-  text?: TextDocument;
   dispose?: () => void;
   /** See `PreparedDocument.live`. */
   live?: boolean;
@@ -209,7 +147,8 @@ export interface RendererRegistration {
   prepare: (context: PrepareContext) => Promise<PreparedRenderer>;
 }
 export interface FileViewerProps {
-  file: string | FileMetadata | null;
+  /** The file on screen, by its absolute path; null shows the host's home. */
+  file: string | null;
   host: ViewerHost;
   renderers: readonly RendererRegistration[];
   state: FileViewerState;
@@ -217,10 +156,10 @@ export interface FileViewerProps {
   /** Host controls inside the CAD Display panel. */
   displayActions?: ReactNode;
   /**
-   * The navbar's Settings, at its right end before the renderer's view controls, over every file:
-   * the host composer's (`CadViewer`'s is the Settings popover the home has too).
+   * The person's on/off settings, in the app menu the navbar's logo opens over every file (the
+   * home's cog opens the same menu), with the host's links (`host.links`).
    */
-  settings?: ReactNode;
+  appSettings?: readonly AppSetting[];
   /**
    * The host's update button (`@text-to-cad/ui/update`'s `UpdateButton`), first among the navbar's
    * controls, while the host's install is behind; nothing otherwise.
@@ -228,25 +167,16 @@ export interface FileViewerProps {
   update?: ReactNode;
   /** The host's Full size button, last in the navbar, where the host shows the view small (inline in a conversation). */
   fullSize?: ReactNode;
-  /** The features the person has left on (Settings' Features), for every renderer (`RendererViewProps.features`). */
+  /** The features the person has left on (in the app menu), for every renderer (`RendererViewProps.features`). */
   features?: ViewerFeatures;
   /** The host's notice, shown at the viewport's top-right once the file is on screen (`RendererViewProps.notice`). */
   notice?: ReactNode;
-  /**
-   * Override the selected path the navbar names and the explorer marks, e.g. `null` while a host
-   * catalog is still resolving the requested file. It does not change the requested document.
-   */
-  navigationPath?: string | null;
-  reveal?: { path: string; directory: boolean; nonce?: number } | null;
   onError?: (error: Error) => void;
   presentation?: {
-    empty?: ReactNode;
-    /**
-     * A host's home, shown for a tab with no file in place of `empty`: a page of its own, with no
-     * navbar over it (it holds the host's links itself).
-     */
+    /** The host's home, shown with no file: a page of its own, with no navbar over it (it holds the host's links itself). */
     home?: ReactNode;
     loading?: ReactNode;
-    error?: (message: string) => ReactNode;
+    /** A file that will not open: `missing` when it does not exist. */
+    error?: (failure: { message: string; missing: boolean }) => ReactNode;
   };
 }

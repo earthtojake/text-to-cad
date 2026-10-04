@@ -9,10 +9,11 @@
 #
 # The command below is that command: `cadgen viewer --host 127.0.0.1 --json --detach`, spelled
 # `python -m cadgen.viewer` so the interpreter is explicit. Keep it identical to the one
-# in skills/cad/SKILL.md; keep its launch options aligned with this test. Launching is
-# unconditional (the server rolls to a free port and prints the real URL/port), so this
-# script chooses no port: it reads the port from the --json line, exactly as an agent
-# does. It serves the client the WHEEL ships -- cadgen/_runtime/viewer, written by
+# in skills/cad/SKILL.md; keep its launch options aligned with this test. One addition:
+# `--port` with a port nobody holds, because the default (3245) is the developer's own
+# viewer on a workstation, and a launch there would reuse it -- or, running other code,
+# replace it. The URL is still read from the --json line, exactly as an agent does. It
+# serves the client the WHEEL ships -- cadgen/_runtime/viewer, written by
 # scripts/bundle/bundle.sh -- pinned through CADGEN_VIEWER_DIST so a checkout's own
 # apps/web/dist cannot stand in for it. Run bundle.sh first, exactly as test.yml does.
 set -euo pipefail
@@ -110,49 +111,49 @@ unset CADGEN_BROKER CADGEN_BROKER_KEY CADGEN_BROKER_STATS CADGEN_ROOT_ID
 # Isolated store: content keying would otherwise resolve the fixture against
 # the developer's real cache and skip the import this smoke test exists to run.
 export CADGEN_CACHE_DIR="$(mktemp -d)"
-# The instance registry lives in the process temp directory, outside the store.
-# Keep reuse/list/stop checks independent of other viewers on this machine.
-registry_tmp="$("$PYTHON" -c 'import tempfile; print(tempfile.mkdtemp(prefix="cv-"))')"
-export TMPDIR="$registry_tmp" TEMP="$registry_tmp" TMP="$registry_tmp"
-export CADGEN_DAEMON_STATE_DIR="$registry_tmp/daemon"
-PORT=""
+# A private state directory (the detached viewer's log, the analytics answer) and
+# temporary directory: nothing here touches the developer's own.
+private_tmp="$("$PYTHON" -c 'import tempfile; print(tempfile.mkdtemp(prefix="cv-"))')"
+export TMPDIR="$private_tmp" TEMP="$private_tmp" TMP="$private_tmp"
+export CADGEN_STATE_DIR="$private_tmp/state"
+export CADGEN_DAEMON_STATE_DIR="$private_tmp/daemon"
+PORT="$("$PYTHON" -c 'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1]); s.close()')"
+STARTED=""
 cleanup() {
-  if [ -n "$PORT" ]; then
+  if [ -n "$STARTED" ]; then
     "$PYTHON" -m cadgen.viewer stop --port "$PORT" >/dev/null 2>&1 || true
   fi
-  rm -rf "$serve_root" "$CADGEN_CACHE_DIR" "$registry_tmp"
+  rm -rf "$serve_root" "$CADGEN_CACHE_DIR" "$private_tmp"
   rm -f "$log"
 }
 trap cleanup EXIT
 
-# The launcher has no directory flag: the cwd IS the served directory, so the
-# launch cd's there first — exactly as SKILL.md instructs. --detach makes the
-# command RETURN once the server announces itself: the server keeps running in
-# the background, writing to a log beside its registry entry, and $log holds
-# only what the launcher itself said. A launcher that never returned would hang
-# here rather than fail, so the documented command is bounded where the
-# platform can bound it.
+# A file is named by its absolute path, so the folder a launch runs in only decides
+# where a developer's relative links resolve. --detach makes the command RETURN once
+# the server announces itself: the server keeps running in the background, writing
+# to the viewer log in the state directory, and $log holds only what the launcher
+# itself said. A launcher that never returned would hang here rather than fail, so
+# the documented command is bounded where the platform can bound it.
 bounded=()
 if command -v timeout >/dev/null 2>&1; then
   bounded=(timeout 120)
 fi
-if ! launch_json="$(cd "$serve_root" && ${bounded[@]+"${bounded[@]}"} "$PYTHON" -m cadgen.viewer --host "$HOST" --json --detach 2>"$log")"; then
+if ! launch_json="$(cd "$serve_root" && ${bounded[@]+"${bounded[@]}"} "$PYTHON" -m cadgen.viewer --host "$HOST" --port "$PORT" --json --detach 2>"$log")"; then
   echo "FAIL: the detached launch did not return success" >&2
   sed 's/^/    /' "$log" >&2
   exit 1
 fi
 
-# The port is an OUTPUT of launch: read it from the {url,port,action} JSON line,
-# which --json makes the whole of stdout.
-PORT="$(printf '%s\n' "$launch_json" | sed -n 's/^{.*"port":\([0-9]*\).*}$/\1/p')"
-if [ -z "$PORT" ] || ! printf '%s' "$launch_json" | grep -q '"action":"started"'; then
+# The {url,port,action} JSON line is the whole of stdout under --json.
+if ! printf '%s' "$launch_json" | grep -q "^{\"url\":\"http://$HOST:$PORT/\",\"port\":$PORT,\"action\":\"started\"}\$"; then
   echo "FAIL: no {url,port,action:started} JSON line on stdout: $launch_json" >&2
   sed 's/^/    /' "$log" >&2
   exit 1
 fi
+STARTED=1
 # What the detached server itself writes, for the failure messages below.
 server_log() {
-  cat "$registry_tmp"/cadgen-viewer-info/viewer-*.log 2>/dev/null || true
+  cat "$CADGEN_STATE_DIR/viewer.log" 2>/dev/null || true
 }
 
 # The launcher writes the {url,port,action} line only after the socket is bound and
@@ -185,11 +186,12 @@ if [ "$api" != "200" ]; then
   exit 1
 fi
 
-# Launch idempotence: relaunching from the same directory at the same version must
-# REUSE the running viewer (same port, action:"reused"), not spawn a second instance.
-reuse_json="$(cd "$serve_root" && "$PYTHON" -m cadgen.viewer --host "$HOST" --json --detach)"
+# Launch idempotence: relaunching at the same version -- from ANOTHER folder, since one
+# viewer serves every file -- must REUSE the running viewer (same port, action:"reused"),
+# not spawn a second instance.
+reuse_json="$(cd "$private_tmp" && "$PYTHON" -m cadgen.viewer --host "$HOST" --port "$PORT" --json --detach)"
 if ! printf '%s' "$reuse_json" | grep -q '"action":"reused"'; then
-  echo "FAIL: relaunching the same root did not reuse the running viewer: $reuse_json" >&2
+  echo "FAIL: relaunching did not reuse the running viewer: $reuse_json" >&2
   exit 1
 fi
 if ! printf '%s' "$reuse_json" | grep -q "\"port\":$PORT"; then
@@ -197,7 +199,7 @@ if ! printf '%s' "$reuse_json" | grep -q "\"port\":$PORT"; then
   exit 1
 fi
 
-# End-to-end display FROM THE BUNDLE: a raw STEP in the served root goes
+# End-to-end display FROM THE BUNDLE: a raw STEP, named by its absolute path, goes
 # not-compiled -> POST (cadgen's compile entry point, a job in the pool)
 # -> compiled geometry -> a real browser load that derives and fetches its
 # display surface. Its small STEP fixture belongs to this test rather than the
@@ -211,7 +213,12 @@ if ! head -1 "$FIXTURE" | grep -q "ISO-10303-21"; then
   exit 1
 fi
 cp "$FIXTURE" "$serve_root/smoke.step"
-step_url="http://$HOST:$PORT/__cad/artifact?file=smoke.step"
+smoke_ref="$("$PYTHON" -c 'import sys, urllib.parse; print(urllib.parse.quote(sys.argv[1], safe=""))' "$serve_root/smoke.step")"
+if [ "$(curl -s -o /dev/null -m 10 -w '%{http_code}' "http://$HOST:$PORT/__cad/artifact?file=smoke.step")" != "400" ]; then
+  echo "FAIL: a relative ?file= was not refused (400)" >&2
+  exit 1
+fi
+step_url="http://$HOST:$PORT/__cad/artifact?file=$smoke_ref"
 status_json="$(curl -s -m 10 "$step_url")"
 if ! printf '%s' "$status_json" | grep -q '"not-compiled"'; then
   echo "FAIL: raw STEP did not report not-compiled: $status_json" >&2
@@ -248,8 +255,9 @@ if ! ls "$CADGEN_CACHE_DIR"/index/document/* > /dev/null 2>&1; then
   echo "FAIL: compile reported compiled but the store indexes no document" >&2
   exit 1
 fi
-if ! printf '%s' "$status_json" | grep -q '"ref":"/__cad/store?'; then
-  echo "FAIL: compiled STEP did not publish its immutable store ref: $status_json" >&2
+catalog_json="$(curl -s -m 10 "http://$HOST:$PORT/__cad/catalog?file=$smoke_ref")"
+if ! printf '%s' "$catalog_json" | grep -q '"url":"/__cad/store?file='; then
+  echo "FAIL: the compiled STEP's catalog row did not name its immutable tree: $catalog_json" >&2
   exit 1
 fi
 
@@ -258,7 +266,7 @@ fi
 # no SURF or TESS entries, so the bundled client must request exact surface
 # derivation, fetch the pinned SURF bytes, tessellate them, and clear its loading
 # overlay. CI installs Playwright's Chromium with requirements-dev.txt.
-"$PYTHON" - "http://$HOST:$PORT/?file=smoke.step" "$(cat "$REPO_ROOT/VERSION")" <<'PY'
+"$PYTHON" - "http://$HOST:$PORT/?file=$smoke_ref" "$(cat "$REPO_ROOT/VERSION")" <<'PY'
 import sys
 import time
 from urllib.parse import parse_qs, urlparse
@@ -334,16 +342,16 @@ with sync_playwright() as playwright:
         browser.close()
 PY
 
-# The instance-manager side of the same entrypoint: list must show this server,
-# stop must end it.
-if ! "$PYTHON" -m cadgen.viewer list | grep -q "port $PORT"; then
-  echo "FAIL: 'cadgen viewer list' did not report the running viewer" >&2
-  exit 1
-fi
-if ! "$PYTHON" -m cadgen.viewer stop --port "$PORT" | grep -q "Stopped CAD Viewer"; then
+# The other verb of the same entrypoint: stop must end it, and free its port.
+if ! "$PYTHON" -m cadgen.viewer stop --port "$PORT" | grep -q "Stopped CAD Viewer on port $PORT"; then
   echo "FAIL: 'cadgen viewer stop --port $PORT' did not stop the viewer" >&2
   exit 1
 fi
+STARTED=""
+if curl -s -o /dev/null -m 3 "http://$HOST:$PORT/__cad/server"; then
+  echo "FAIL: port $PORT still answers after 'cadgen viewer stop'" >&2
+  exit 1
+fi
 
-echo "    served / and /__cad/server on rolled port $PORT; cadgen step compile + bundled display e2e OK; reuse/list/stop OK"
+echo "    served / and /__cad/server on port $PORT; cadgen step compile + bundled display e2e OK; reuse/stop OK"
 echo "==> CAD Viewer launch smoke test passed"

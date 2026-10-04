@@ -42,7 +42,7 @@ class _Tmp(unittest.TestCase):
         with mock.patch.dict("os.environ", {"CADGEN_INSTALL_CHANNEL": channel}):
             recorder = Recorder(path=self.path, send=lambda payload: sent.append(payload) or True)
         (self.tmp / "app").mkdir(exist_ok=True)
-        server = Server(launch_cwd=str(self.tmp), page=AppPage(self.tmp / "app"), recents=RecentStore(self.tmp / "state"),
+        server = Server(page=AppPage(self.tmp / "app"), recents=RecentStore(self.tmp / "state"),
                         analytics=recorder)
         server.handle("initialize", {"protocolVersion": "2025-06-18", "capabilities": {},
                                      "clientInfo": {"name": client, "version": "0.159.0"}}, None)

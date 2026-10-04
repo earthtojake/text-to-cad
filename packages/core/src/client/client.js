@@ -28,28 +28,34 @@ function abortError() {
   return new DOMException('The operation was aborted.', 'AbortError');
 }
 
-const normalizedFile = (file) => String(file || '').replace(/\\/g, '/').replace(/^\/+/, '');
-const entryKey = (entry) => normalizedFile(entry.rootRelativeFile || entry.file);
-const matchesFile = (entry, file) => [entry.rootRelativeFile, entry.file].some((value) => normalizedFile(value) === normalizedFile(file));
+// A file is named by its absolute path, `/`-separated on every platform.
+const normalizedFile = (file) => String(file || '').replace(/\\/g, '/');
+const entryKey = (entry) => normalizedFile(entry.file);
+
+/** Whether `error` says the file a view asked for is not there (`resolveEntry`). */
+export function isMissingFileError(error) {
+  return error?.code === 'cad-file-missing';
+}
 
 /**
- * An explicit connection to one served root. Construction never starts requests.
+ * An explicit connection to a CAD Viewer, which serves files by absolute path. Its catalog holds
+ * the files on screen, each read as it is asked for. Construction never starts requests.
  * @param {import("./types.js").CadClientOptions} options
  * @returns {import("./types.js").CadClient}
  */
-export function createCadClient({ origin = '', workspaceId = '', fetch: fetchImpl = globalThis.fetch, pollIntervalMs = 2000, shouldPoll = () => true, resources: resourceProvider, editingPreviewFeed = null, maxBatchBytes } = {}) {
+export function createCadClient({ origin = '', workspaceId = 'local', fetch: fetchImpl = globalThis.fetch, pollIntervalMs = 2000, shouldPoll = () => true, resources: resourceProvider, editingPreviewFeed = null, maxBatchBytes } = {}) {
   origin = normalizeViewerOrigin(origin);
   let disposed = false;
   const resourceLifetime = new AbortController();
   const resources = scopeCadResources(resourceProvider || createHttpCadResourceProvider({ origin, fetch: fetchImpl }), resourceLifetime.signal);
-  let snapshot = { entries: [], revision: 0, hydrated: false, refreshing: false, error: '', rootId: workspaceId, catalogRevision: '' };
+  let snapshot = { entries: [], revision: 0, hydrated: false, refreshing: false, error: '', catalogRevision: '' };
   const listeners = new Set();
   const requests = new Set();
   const sessions = new Set();
   let pollTimer = null;
   let refreshSequence = 0;
-  let publishedCatalogSequence = 0;
-  const entrySequences = new Map();
+  // The newest answer applied for each file: an older one that lands later changes nothing.
+  const publishedSequences = new Map();
   const activeFiles = new Map();
   let preferredFile = '';
   const pendingRefreshes = new Map();
@@ -87,34 +93,26 @@ export function createCadClient({ origin = '', workspaceId = '', fetch: fetchImp
   }
 
   function publishCatalog(catalog, { sequence = ++refreshSequence, file = '' } = {}) {
-    let incoming = applyViewerOriginToEntries(catalog?.entries, origin);
-    if (sequence < publishedCatalogSequence) {
-      // Two views can hydrate different files concurrently. A late response
-      // cannot replace the newer directory listing, but its requested entry
-      // is still useful if no newer response hydrated that same file.
-      const selected = file && incoming.find((entry) => matchesFile(entry, file));
-      if (!selected || selected.catalogPending || !snapshot.entries.some((entry) => entryKey(entry) === entryKey(selected))
-        || sequence < (entrySequences.get(entryKey(selected)) || 0)) return;
-      incoming = snapshot.entries.map((entry) => entryKey(entry) === entryKey(selected) ? selected : entry);
-    } else publishedCatalogSequence = sequence;
+    const asked = normalizedFile(file);
+    if (sequence < (publishedSequences.get(asked) || 0)) return;
+    publishedSequences.set(asked, sequence);
+    const incoming = applyViewerOriginToEntries(catalog?.entries, origin);
+    const answered = new Set(incoming.map(entryKey));
+    // The catalog is the files on screen: an answer brings one, and keeps the others shown.
+    const shown = new Set([...activeFiles.keys(), preferredFile].map(normalizedFile));
     const previous = new Map(snapshot.entries.map((entry) => [entryKey(entry), entry]));
-    const entries = incoming.map((entry) => {
-      const key = entryKey(entry);
-      const before = previous.get(key);
-      // Partial catalogs intentionally carry path-only placeholders for other
-      // files. They must not erase a view another request already resolved.
-      if (entry.catalogPending && before && !before.catalogPending) return before;
-      if (!entry.catalogPending) entrySequences.set(key, Math.max(sequence, entrySequences.get(key) || 0));
-      return before && JSON.stringify(before) === JSON.stringify(entry) ? before : entry;
-    });
-    const presentKeys = new Set(entries.map(entryKey));
-    for (const key of entrySequences.keys()) if (!presentKeys.has(key)) entrySequences.delete(key);
-    const rootId = workspaceId || catalog?.rootId || snapshot.rootId;
+    const entries = [
+      ...snapshot.entries.filter((entry) => !answered.has(entryKey(entry)) && shown.has(entryKey(entry))),
+      ...incoming.map((entry) => {
+        const before = previous.get(entryKey(entry));
+        return before && JSON.stringify(before) === JSON.stringify(entry) ? before : entry;
+      }),
+    ];
     // The server's digest of the catalog just applied: a host that watches for change compares it.
     const catalogRevision = typeof catalog?.revision === 'string' ? catalog.revision : snapshot.catalogRevision;
     const changed = entries.length !== snapshot.entries.length || entries.some((entry, index) => entry !== snapshot.entries[index]);
-    if (changed || !snapshot.hydrated || snapshot.refreshing || snapshot.error || rootId !== snapshot.rootId || catalogRevision !== snapshot.catalogRevision) {
-      publish({ entries: changed ? entries : snapshot.entries, rootId, hydrated: true, refreshing: false, error: '', catalogRevision });
+    if (changed || !snapshot.hydrated || snapshot.refreshing || snapshot.error || catalogRevision !== snapshot.catalogRevision) {
+      publish({ entries: changed ? entries : snapshot.entries, hydrated: true, refreshing: false, error: '', catalogRevision });
     }
   }
 
@@ -153,8 +151,7 @@ export function createCadClient({ origin = '', workspaceId = '', fetch: fetchImp
       // Keep the original interval cadence; a slow request is shared by refresh.
       schedulePoll();
       if (!shouldPoll()) return;
-      // Hydrate the files currently displayed, as main's URL-aware poll did.
-      // A directory-only poll can otherwise keep returning placeholders forever.
+      // Read again the files on screen.
       const files = activeFiles.size ? [...activeFiles.keys()] : [preferredFile];
       for (const file of files) {
         if (disposed || !listeners.size) break;
@@ -166,7 +163,7 @@ export function createCadClient({ origin = '', workspaceId = '', fetch: fetchImp
   const client = {
     origin,
     resources,
-    get workspaceId() { return workspaceId || snapshot.rootId; },
+    get workspaceId() { return workspaceId; },
     getSnapshot: () => snapshot,
     subscribe(listener) {
       if (disposed) throw new Error('This CAD client has been disposed.');
@@ -180,28 +177,34 @@ export function createCadClient({ origin = '', workspaceId = '', fetch: fetchImp
     refresh,
     async resolveEntry(path, { signal } = {}) {
       preferredFile = path;
-      const match = (entries) => entries.find((entry) => matchesFile(entry, path));
+      const match = (entries) => entries.find((entry) => entryKey(entry) === normalizedFile(path));
       let entry = match(snapshot.entries);
-      if (!entry || entry.catalogPending) {
+      if (!entry) {
         await refresh({ file: path, signal });
         entry = match(snapshot.entries);
       }
       if (signal?.aborted || disposed) throw abortError();
-      if (!entry) throw new Error(`CAD file was not found in this workspace: ${path}`);
-      if (entry.catalogPending) throw new Error(`CAD file metadata is unavailable: ${path}`);
+      if (!entry) throw Object.assign(new Error(`File does not exist: ${path}`), { code: 'cad-file-missing' });
       return entry;
     },
     async serverInfo({ signal, fresh = false } = {}) {
       if (!server || fresh) {
         const next = await request('/__cad/server', { signal, operation: 'server' });
-        if (server && (server.identityToken !== next.identityToken || server.rootId !== next.rootId)) {
+        if (server && server.identityToken !== next.identityToken) {
           resources.invalidate();
           publish({});
         }
         server = next;
       }
-      if (!snapshot.rootId && server?.rootId) publish({ rootId: server.rootId });
       return server;
+    },
+    // One folder's subfolders and CAD files, and the CAD files nested under a folder whose path
+    // below it holds `query` (bounded by the server, which says when it stopped early).
+    folder(path, { signal } = {}) {
+      return request('/__cad/folder', { params: { path }, signal, timeoutMs: 10_000, operation: 'folder' });
+    },
+    search(path, query, { signal } = {}) {
+      return request('/__cad/search', { params: { path, q: query }, signal, timeoutMs: 10_000, operation: 'search' });
     },
     requestArtifactStatus(file, { signal } = {}) {
       if (!file) return Promise.reject(new Error('Missing file'));

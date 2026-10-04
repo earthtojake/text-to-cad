@@ -176,15 +176,12 @@ function RobotSurface({ view, data }) {
   const pickSelection = selection.pick;
   const handlePick = useCallback((hit, modifiers) => { pickSelection(hit, modifiers); if (hit) toSelect(); }, [pickSelection, toSelect]);
 
-  // A mesh the description names, as the path the host opens. It resolves against the
+  // A mesh the description names, by the absolute path the host opens. It resolves against the
   // opened file exactly as the mesh loader does (an SRDF's URDF is always beside it); a
-  // `package://` reference, or one that leaves the served root, has no path here.
+  // `package://` reference has no path here.
   const modelKey = document.modelKey;
-  const hostPath = String(document.entry?.rootRelativeFile || "").trim() || modelKey;
-  const meshPath = useCallback((filename) => {
-    const path = resolveLocalAssetFileRef(hostPath, filename);
-    return path && !path.startsWith("/") && !path.startsWith("../") ? path : "";
-  }, [hostPath]);
+  const hostPath = String(document.entry?.file || "").trim() || modelKey;
+  const meshPath = useCallback((filename) => resolveLocalAssetFileRef(hostPath, filename), [hostPath]);
   const groupNamesByLink = useMemo(() => (robot?.description?.srdf ? srdfGroupNamesByLink(robot.description) : null), [robot]);
 
   // Whether the pose is not the opening one, for the dot on the Position icon: a boolean read off

@@ -24,19 +24,19 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import re
 import stat
 import sys
 import threading
 import time
-from hashlib import sha256
 from pathlib import Path
 
 from . import reload as dev_reload
-from .backend import ForbiddenAssetError, LocalAssetBackend, normalized_file_ref
-from .cadgen_ops import create_cadgen_ops
-from .content_types import content_type_for_static_asset
+from .backend import absolute_path, asset_path
+from .cadgen_ops import CadgenOps
+from .content_types import content_type_for_path, content_type_for_static_asset, extension_of
 from .encoding import UriError, strict_decode_uri_component
-from .scanner import catalog_lists, path_is_inside
+from .scanner import CAD_CATALOG_SCHEMA_VERSION, SOURCE_EXTENSIONS, catalog_entry, to_posix_path
 from .store_paths import virtual_store_asset
 from .tess_cache import (
     TESS_CACHE_METADATA_MAX_BYTES, parse_tess_cache_admission,
@@ -45,7 +45,6 @@ from .tess_cache import (
 
 __all__ = [
     "CadApp",
-    "ForbiddenAssetError",
     "POST_GUARD_HEADER",
     "LOCAL_SERVER_FEATURES",
     "hostname_only",
@@ -53,13 +52,17 @@ __all__ = [
     "read_viewer_version",
     "newest_mtime_ns",
     "identity_token",
+    "os_user",
     "create_cad_app",
 ]
 
 POST_GUARD_HEADER = "x-cadgen-viewer"
-LOCAL_SERVER_FEATURES = ["path-directory", "reveal-path"]
+LOCAL_SERVER_FEATURES = ["reveal-path"]
 # A thumbnail travels as base64 in the change's JSON: 512 KiB of PNG, and room for the rest.
 _LIBRARY_BODY_LIMIT = 768 * 1024
+# A thumbnail's name is its content's (``recents.RecentStore.thumbnail``): nothing else is read.
+_THUMBNAIL_NAME = re.compile(r"[0-9a-f]{32}\.png")
+_CAD_EXTENSIONS = ", ".join(sorted(SOURCE_EXTENSIONS))
 _LOOPBACK_NAMES = frozenset({"127.0.0.1", "localhost", "::1"})
 
 TESS_CACHE_ROUTE_PREFIX = "/__tess_cache/"
@@ -211,6 +214,16 @@ def identity_token(dist_dir: str) -> str:
     return f"{read_viewer_version()}:{digest.hexdigest()}"
 
 
+def os_user():
+    """This process's OS user, as ``/__cad/server`` names it (``user``): the uid on POSIX, the
+    account name on Windows. A launch reuses, replaces or stops only a viewer that names its own."""
+    if hasattr(os, "getuid"):
+        return os.getuid()
+    import getpass
+
+    return getpass.getuser()
+
+
 def _is_ascii_digits(value: str) -> bool:
     """JS ``/^\\d+$/``: ASCII only.
 
@@ -232,31 +245,38 @@ def catalog_revision(entries) -> str:
 RAW_FILE_HEADERS = (("x-content-type-options", "nosniff"), ("content-security-policy", "default-src 'none'; sandbox"))
 
 
+def _working_folder() -> str:
+    """The folder this process runs in, or the home folder once that one has been deleted."""
+    try:
+        return os.getcwd()
+    except OSError:
+        return os.path.expanduser("~")
+
+
 class CadApp:
     """``handle(request, response)`` writes exactly one response.
 
     Unlike the Node app there is no "not mine" return: the Python server always
     serves the client itself, and the dev proxy forwards only the two API
     prefixes, so nothing else can be waiting behind this.
+
+    One app serves every file on this machine, by absolute path (``backend``). ``start`` is the
+    folder it was started in (the working folder by default): the page resolves a developer's
+    relative ``?file=`` against it, and it bounds nothing.
     """
 
-    def __init__(self, *, root: str, host: str, port: int, dist_dir: str = "", lazy: bool = False):
+    def __init__(self, *, host: str, port: int, dist_dir: str = "", start: str | None = None):
+        from cadgen._internal.picker import available
+
         from .surfaces import SurfaceSubscribers
         from .warm import CatalogWarmer
 
         self.surface_subscribers = SurfaceSubscribers()
-        self.backend = LocalAssetBackend(root, lazy=lazy)
-        root_path = self.backend.root_path
-        self.root_path = root_path
-        # What a build saves, its catalog rows computed before a read asks (``warm.py``).
-        self.catalog_warm = CatalogWarmer(root_path, lazy=lazy)
-        self.root_name = self.backend.root_name
-        # A connection port is ephemeral; persisted view state follows the
-        # canonical directory this server exposes.  Hash the realpath so
-        # symlink spellings share an identity without adding another machine
-        # path to every catalog response.
-        canonical_root = os.path.normcase(os.path.realpath(root_path))
-        self.root_id = f"local-fs:{sha256(os.fsencode(canonical_root)).hexdigest()}"
+        # What a watched build saves, its catalog row computed before a read asks (``warm.py``).
+        self.catalog_warm = CatalogWarmer()
+        self.start = to_posix_path(os.path.abspath(start if start is not None else _working_folder()))
+        # Whether this computer has a file chooser for the home's Open (``POST /__cad/pick``).
+        self.pick = available()
         self.host = host
         self.port = port
         # dist_dir is compared as a string prefix, so resolve it ONCE here and
@@ -273,9 +293,14 @@ class CadApp:
         self._request_lock = threading.Lock()
         self._busy_requests = 0
         self.started_at = time.time()
-        self.lock = threading.Lock()
-        self.ops = create_cadgen_ops(root_path)
+        self.ops = CadgenOps()
         self._recents = None
+        self._picker = None
+        self._picking = threading.Lock()
+        # What ``POST /__cad/shutdown`` calls, after it answers: the `cadgen viewer` process's own
+        # shutdown (``main.py``). An app with none -- the CAD app's tunnel builds them -- has no
+        # such route.
+        self.on_shutdown = None
         # Anonymous usage analytics (``cadgen/analytics.py``): the `cadgen viewer` process attaches
         # its recorder here (``main.py``). An app the CAD app's tunnel builds gets none, and its
         # page asks the CAD app's own server instead, so nothing is counted twice.
@@ -312,11 +337,11 @@ class CadApp:
             "serverFeatures": LOCAL_SERVER_FEATURES,
             "backend": "local-fs",
             "platform": sys.platform,
-            "rootId": self.root_id,
-            # path.resolve(), NOT realpath: the launcher's registry and the
-            # client both compare the spelling the operator gave.
-            "rootPath": self.root_path,
-            "rootName": self.root_name,
+            # Whose viewer this is: a launch reuses, replaces or stops only its own user's.
+            "user": os_user(),
+            # Where a developer's relative ?file= resolves, in the page. Not a boundary.
+            "start": self.start,
+            "pick": self.pick,
             "port": self.port,
             "pid": os.getpid(),
             # The viewer is a static visualization tool: it never runs
@@ -327,21 +352,21 @@ class CadApp:
             "url": f"http://{self.host}:{self.port}",
         }
 
-    def read_catalog(self, preferred_file=None) -> dict:
-        """The backend catalog plus this connection's stable root identity, and its revision: a
-        digest of the entries, which a client that only watches for change compares instead of
-        reading the catalog again."""
-        catalog = self.backend.read_catalog(preferred_file)
-        return {**catalog, "rootId": self.root_id, "revision": catalog_revision(catalog.get("entries", []))}
+    def read_catalog(self, file=None) -> dict:
+        """The catalog of ``file``, an absolute path: its row, or none when it has none (or no file
+        is named), and its revision -- a digest of the entries, which a client that only watches for
+        change compares instead of reading the catalog again."""
+        entry = catalog_entry(absolute_path(file)) if file else None
+        entries = [entry] if entry else []
+        return {"schemaVersion": CAD_CATALOG_SCHEMA_VERSION, "entries": entries, "revision": catalog_revision(entries)}
 
-    def build_status(self, file_ref, *, after=None) -> dict:
-        """What a build of ``file_ref`` is doing (``GET /__cad/preview``, ``preview.py``). The files
-        its builds have saved have their catalog rows started on a thread meanwhile (``warm.py``),
-        so the catalog read that follows the build finds them."""
+    def build_status(self, file, *, after=None) -> dict:
+        """What a build of ``file`` (a STEP's absolute path) is doing (``GET /__cad/preview``,
+        ``preview.py``). The file its builds have saved has its catalog row started on a thread
+        meanwhile (``warm.py``), so the catalog read that follows the build finds it."""
         from .preview import preview_update
 
-        return preview_update(self.backend.root_path, file_ref, after=after, lazy=self.backend.lazy,
-                              on_saved=self.catalog_warm.saved)
+        return preview_update(file, after=after, on_saved=self.catalog_warm.saved)
 
     # --- gates ------------------------------------------------------------
 
@@ -469,9 +494,17 @@ class CadApp:
                 if pathname == "/__cad/server":
                     response.send_json(200, self.server_info())
                 elif pathname == "/__cad/catalog":
-                    self._handle_catalog(request, response)
+                    response.send_json(200, self.read_catalog(query.get("file")))
+                elif pathname in ("/__cad/folder", "/__cad/search"):
+                    self._handle_folder(response, pathname, query)
+                elif pathname == "/__cad/recents":
+                    response.send_json(200, self._recents_payload())
+                elif pathname == "/__cad/thumbnail":
+                    self._handle_thumbnail(response, query)
                 elif pathname == "/__cad/artifact":
-                    self._handle_artifact_status(request, response, query)
+                    # Always 200, even for state 'failed': the status of an artifact is information,
+                    # not an outcome, so a client polling for a badge reads it out of the body.
+                    response.send_json(200, self.ops.artifact_status(query.get("file") or ""))
                 elif pathname == "/__cad/preview":
                     response.send_json(200, self.build_status(query.get("file") or "", after=query.get("after")))
                 elif pathname == "/__cad/drawing":
@@ -494,8 +527,6 @@ class CadApp:
                     # retired routes with index.html at 200, so a client doing
                     # res.json() got an HTML parse error instead of a status.
                     response.send_json(404, {"error": "Not found"})
-            except ForbiddenAssetError:
-                response.send_json(403, {"error": "Forbidden"})
             except Exception as error:  # noqa: BLE001
                 response.send_json(400, {"error": str(error)})
             return
@@ -534,7 +565,14 @@ class CadApp:
                     if int(request.headers.get("content-length") or 0) > _LIBRARY_BODY_LIMIT:
                         response.send_empty(413, [("connection", "close")])
                         return
-                    self._handle_library_change(request, response)
+                    response.send_json(200, self._change_recents(json.loads(request.body())))
+                elif pathname == "/__cad/pick":
+                    self._handle_pick(response)
+                elif pathname == "/__cad/shutdown" and self.on_shutdown is not None:
+                    # A newer launch replacing this viewer, or `cadgen viewer stop`: answered, then
+                    # the server stops and gives its port up (``main.py``).
+                    response.send_json(202, {"ok": True})
+                    self.on_shutdown()
                 elif pathname == "/__cad/reveal":
                     from .reveal import reveal_path
                     if int(request.headers.get("content-length") or 0) > 8192:
@@ -543,7 +581,11 @@ class CadApp:
                     payload = json.loads(request.body())
                     if type(payload) is not dict or set(payload) != {"path"}:
                         raise ValueError("Reveal requires a path")
-                    reveal_path(self.backend.root_path, payload["path"])
+                    try:
+                        reveal_path(payload["path"])
+                    except FileNotFoundError:
+                        response.send_json(404, {"ok": False, "error": "That file is no longer there."})
+                        return
                     response.send_empty(204)
                 elif pathname == "/__cad/clipboard":
                     from .clipboard import MAX_PNG_BYTES, copy_png
@@ -583,8 +625,6 @@ class CadApp:
                     self._handle_tess_post(request, response)
                 else:
                     response.send_empty(405, [("allow", "POST")])
-            except ForbiddenAssetError:
-                response.send_json(403, {"error": "Forbidden"})
             except Exception as error:  # noqa: BLE001
                 # Note the asymmetry with the GET funnel: this one carries
                 # ok:false and that one does not.
@@ -595,7 +635,7 @@ class CadApp:
         # dispatch ever runs.
         response.send_empty(405, [("allow", "GET, HEAD, POST")])
 
-    # --- the model library -------------------------------------------------
+    # --- the model library, the explorer and the home's Open -------------
 
     @property
     def recents(self):
@@ -606,36 +646,86 @@ class CadApp:
             self._recents = RecentStore()
         return self._recents
 
-    def _library_path(self, ref) -> str:
-        """The absolute path of a model in this Viewer's catalog, from the ``file`` a page sends."""
-        normalized = normalized_file_ref(ref)
-        if not normalized:
-            raise ValueError("name the model by its file")
-        root = self.backend.root_path
-        path = os.path.abspath(normalized if os.path.isabs(normalized) else os.path.join(root, normalized))
-        if not (path == root or path_is_inside(path, root)):
-            raise ForbiddenAssetError()
-        if not catalog_lists(root, path):
-            raise ValueError("that is not a model this viewer lists")
-        return path
+    @property
+    def picker(self):
+        """The desktop's file chooser (``cadgen._internal.picker``), one for this app."""
+        if self._picker is None:
+            from cadgen._internal.picker import FilePicker
 
-    def _handle_library_change(self, request, response):
-        """Record a model this Viewer opened, or keep its picture, for every CAD view's library."""
+            self._picker = FilePicker()
+        return self._picker
+
+    def _recents_payload(self) -> dict:
+        return {"recents": [entry.public() for entry in self.recents.list()]}
+
+    def _change_recents(self, payload) -> dict:
+        """A change to the library -- ``{action, path, png?}``, the model by its absolute path --
+        answered with the library as it now is: what the CAD app's ``cad_recents`` does."""
         from .recents import thumbnail_png
 
-        payload = json.loads(request.body())
         if type(payload) is not dict:
-            raise ValueError("a library change is {action, file}")
-        action, path = payload.get("action"), self._library_path(payload.get("file"))
+            raise ValueError("a recents change is {action, path}")
+        action, path = payload.get("action"), absolute_path(payload.get("path"))
         if action == "open":
-            if not os.path.isfile(path):
-                raise ValueError("no such model")
+            if extension_of(path) not in SOURCE_EXTENSIONS or not os.path.isfile(path):
+                raise ValueError(f"no CAD file at {path}")
             self.recents.opened(path)
+        elif action in ("pin", "unpin"):
+            self.recents.pin(path, action == "pin")
+        elif action == "remove":
+            self.recents.remove(path)
         elif action == "thumbnail":
             self.recents.thumbnail(path, thumbnail_png(payload.get("png")))
         else:
-            raise ValueError(f"unknown library action {action!r}")
-        response.send_json(200, {"ok": True})
+            raise ValueError(f"unknown recents action {action!r}")
+        return self._recents_payload()
+
+    def _handle_thumbnail(self, response, query):
+        """A library picture, by the content name the library gives it."""
+        name = query.get("name") or ""
+        png = self.recents.read_thumbnail(name) if _THUMBNAIL_NAME.fullmatch(name) else None
+        if png is None:
+            response.send_json(404, {"error": "Not found"})
+            return
+        response.send_bytes(200, png, "image/png", RAW_FILE_HEADERS)
+
+    def _handle_folder(self, response, pathname, query):
+        """The explorer's reads (``folders.py``): one folder's entries (``/__cad/folder``), or the
+        CAD files under it whose path holds ``q`` (``/__cad/search``). A path that is not absolute
+        is ``folders``' ValueError: a 400, through the GET funnel."""
+        from .folders import list_folder, search_folder
+
+        path = query.get("path")
+        try:
+            answer = search_folder(path, query.get("q")) if pathname == "/__cad/search" else list_folder(path)
+        except FileNotFoundError:
+            response.send_json(404, {"error": f"No folder at {path}"})
+            return
+        except PermissionError:
+            response.send_json(403, {"error": f"{path} cannot be read"})
+            return
+        response.send_json(200, answer)
+
+    def _handle_pick(self, response):
+        """The home's Open: the desktop's own chooser, held open for as long as the person takes."""
+        from cadgen._internal.picker import PickerFailed
+
+        if not self._picking.acquire(blocking=False):
+            response.send_json(409, {"error": "A file chooser is already open."})
+            return
+        try:
+            chosen = self.picker.choose()
+        except PickerFailed as failure:
+            response.send_json(500, {"error": str(failure)})
+            return
+        finally:
+            self._picking.release()
+        if chosen is None:
+            response.send_json(200, {"cancelled": True})
+        elif extension_of(chosen) not in SOURCE_EXTENSIONS:
+            response.send_json(400, {"error": f"CAD opens {_CAD_EXTENSIONS} files; {os.path.basename(chosen)} is not one."})
+        else:
+            response.send_json(200, {"path": to_posix_path(os.path.abspath(chosen))})
 
     # --- anonymous usage analytics -----------------------------------------
 
@@ -659,45 +749,18 @@ class CadApp:
         return {"notice": updates.notice()}
 
     def _report_activity(self, payload: dict) -> None:
-        """What the page did: a person touched it (``touched``), or it shows a model (``file``, as the
-        catalog names it). Noted in memory, and sent only with consent, a file only as its code."""
+        """What the page did: a person touched it (``touched``), or it shows a model (``file``, by
+        its absolute path). Noted in memory, and sent only with consent, a file only as its code."""
         if payload.get("touched") is True:
             self.analytics.viewed()
         ref = payload.get("file")
-        if isinstance(ref, str) and ref:
+        if ref:
             try:
-                self.analytics.opened(self._library_path(ref))
-            except (ValueError, ForbiddenAssetError):
-                pass  # not a model this viewer lists: nothing to count
+                self.analytics.opened(absolute_path(ref))
+            except ValueError:
+                pass  # not a file named by its absolute path: nothing to count
 
-    # --- placeholders filled by later steps of the port -------------------
-
-    def _handle_catalog(self, request, response):
-        response.send_json(200, self.read_catalog(request.query.get("file")))
-
-    def _entry_ref_for_status(self, file_ref, catalog=None) -> str:
-        """The catalog URL for this ref, or ``""``.
-
-        A full catalog scan unless the caller hands one in, and the client polls
-        the status route every 400ms during a build. The scanner's content-hash
-        memo is what keeps it off the hot path; without that this would re-read
-        every model in the root per tick.
-        """
-        if catalog is None:
-            catalog = self.read_catalog(file_ref)
-        entry = self.backend.catalog_entry_for_file_ref(catalog, file_ref)
-        return str((entry or {}).get("url") or "")
-
-    def _handle_artifact_status(self, request, response, query):
-        """Always 200, even for state 'error'.
-
-        The status of an artifact is information, not an outcome: a client
-        polling for a badge should read the state out of the body, not out of
-        an HTTP failure it has to special-case.
-        """
-        file_ref = query.get("file") or ""
-        status = self.ops.artifact_status(file_ref)
-        response.send_json(200, {**status, "ref": self._entry_ref_for_status(file_ref)})
+    # --- routes ----------------------------------------------------------
 
     def _handle_artifact_build(self, request, response, query):
         """Start the document's compile and answer at once.
@@ -762,14 +825,14 @@ class CadApp:
         """
         from .drawings import drawing_payload_response
 
-        status, body = drawing_payload_response(self.backend.root_path, query.get("file") or "", lazy=self.backend.lazy)
+        status, body = drawing_payload_response(query.get("file") or "")
         if isinstance(body, bytes):
             response.send_bytes(status, body, "application/json; charset=utf-8")
             return
         response.send_json(status, body)
 
     def _handle_asset(self, request, response, query):
-        candidate = self.backend.asset_path_for_file_ref(query.get("file") or "")
+        candidate = asset_path(query.get("file") or "")
         stat_result = None
         if candidate:
             try:
@@ -779,7 +842,7 @@ class CadApp:
         if not candidate or stat_result is None or not stat.S_ISREG(stat_result.st_mode):
             response.send_json(404, {"error": "Not found"})
             return
-        content_type = self.backend.content_type_for_path(candidate) or "application/octet-stream"
+        content_type = content_type_for_path(candidate)
         response.stream_file(candidate, stat_result, content_type, RAW_FILE_HEADERS)
 
     def _handle_tess_get(self, request, response):
@@ -831,5 +894,5 @@ class CadApp:
         response.send_bytes(200, container, "application/octet-stream")
 
 
-def create_cad_app(*, root: str, host: str, port: int, dist_dir: str = "", lazy: bool = False) -> CadApp:
-    return CadApp(root=root, host=host, port=port, dist_dir=dist_dir, lazy=lazy)
+def create_cad_app(*, host: str, port: int, dist_dir: str = "", start: str | None = None) -> CadApp:
+    return CadApp(host=host, port=port, dist_dir=dist_dir, start=start)

@@ -117,7 +117,7 @@ class CoalescedPreviewRequests(unittest.TestCase):
         # Editing status remains an event/object read, even after completion.
         with mock.patch("cadgen.store.records.read_record", side_effect=AssertionError("model record read")), \
              mock.patch("cadgen.store.records.model_for_output", side_effect=AssertionError("output record read")):
-            return preview_status(str(self.root), str(self.output), jobs=self.ledger.snapshot())
+            return preview_status(str(self.output), jobs=self.ledger.snapshot())
 
     def published(self, request_id, kind):
         """The tree a request published for the output, as the ledger holds it: ``previews`` or ``savedResults``."""

@@ -13,7 +13,7 @@ import { createMeshRenderer } from '../renderers/mesh/index.js';
 import { createRobotRenderer } from '../renderers/robot/index.js';
 import { createStepRenderer } from '../renderers/step/index.js';
 import type { CadPreferenceSource } from '../renderers/workspace/index.js';
-import { createCatalogFileSource } from './catalog.js';
+import { createCadFileSource } from './catalog.js';
 
 /** The five CAD renderers over one client, reading the tab's preferences, bound to one live registry. */
 export function cadRenderers(client: CadWorkspaceService, preferences: CadPreferenceSource, live: LiveRegistry['binding']) {
@@ -50,7 +50,7 @@ export function OffscreenPicture({ source, host, preferences, onDone }: {
 }) {
   const live = useMemo(() => createLiveRegistry(), []);
   const renderers = useMemo(() => cadRenderers(source.client, preferences, live.binding), [source.client, preferences, live]);
-  const files = useMemo(() => createCatalogFileSource(source.client, { id: `picture:${source.file}`, rootName: '', browse: false }), [source]);
+  const files = useMemo(() => createCadFileSource(source.client, { id: `picture:${source.file}` }), [source]);
   const viewerHost = useMemo<ViewerHost>(() => ({
     files, clipboard: host.clipboard, promptContext: unavailablePromptContext, navigation: { openFile() {} },
     environment: { ...host.environment, compact: true },

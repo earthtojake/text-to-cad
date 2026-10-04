@@ -3,9 +3,7 @@ export function fileKey(entry) {
 }
 
 export function cadFileParamForEntry(entry) {
-  const file = fileKey(entry);
-  const rootRelativeFile = String(entry?.rootRelativeFile || "").trim();
-  return rootRelativeFile || file;
+  return fileKey(entry);
 }
 
 export function cadPathForEntry(entry) {

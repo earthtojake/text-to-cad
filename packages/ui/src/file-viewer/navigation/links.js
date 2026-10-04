@@ -1,5 +1,5 @@
 /**
- * What the navbar's right end links to, in every app: the running version (its release notes), the
+ * What the app menu links to, in every app: the running version (its release notes), the
  * source, the community and a new issue. `@text-to-cad/ui/links` — pure, with no imports, so a
  * host's own build configuration and its unit tests read the same defaults the navbar draws. A
  * newer release is not a link: cadgen says so, in the update card (`@text-to-cad/ui/update`).

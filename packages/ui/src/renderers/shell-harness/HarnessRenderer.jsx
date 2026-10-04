@@ -154,9 +154,9 @@ function HarnessSurface({ view, data }) {
     : LIVE), [resource, shownRevision]);
 
   // `panel*.harness` stands in for a file whose tool stack is full (below); it opens in Select.
-  const withPanel = view.file.path.startsWith("panel");
+  const withPanel = view.file.name.startsWith("panel");
   // `flat*.harness` stands in for a view that is not 3D, a drawing's: its renderer does not declare Preview.
-  const previewable = !view.file.path.startsWith("flat");
+  const previewable = !view.file.name.startsWith("flat");
   const shell = useRendererShell({
     view, services: shellServices, resource, modelKey: view.file.path, revisionKey: "harness",
     features: EDGELESS_VIEW_FEATURES, toolModes: withPanel ? PANEL_TOOL_MODES : HARNESS_TOOL_MODES, previewable, scene: stageScene ? scene : null,
@@ -170,7 +170,7 @@ function HarnessSurface({ view, data }) {
     ]),
     promptReferences: () => [{ note: `${stage}@${shownRevision || resource.revision}` }],
     // A file named for it stands in for a scene drawn with hairlines.
-    preserveInteractionPixelRatio: view.file.path.startsWith("hairline")
+    preserveInteractionPixelRatio: view.file.name.startsWith("hairline")
   });
 
   // Shift means "nothing to offer here", which must open no menu at all.
@@ -187,10 +187,10 @@ function HarnessSurface({ view, data }) {
   const [kept, setKept] = useState(false);
   const [posing, setPosing] = useState(false);
   // `panel-short.harness` turns the heights round: a tree of two rows and a Reference of many.
-  const short = view.file.path.startsWith("panel-short");
+  const short = view.file.name.startsWith("panel-short");
   const [treeRows, referenceRows] = short ? [2, 40] : [120, 8];
   // `panel-part.harness` stands in for a single part, whose tree starts closed.
-  const part = view.file.path.startsWith("panel-part");
+  const part = view.file.name.startsWith("panel-part");
   const selectTool = shell.tools.own({ id: SELECT_TOOL, label: "Select", icon: <span aria-hidden="true">S</span>,
     panel: { id: "tree", label: "Harness tree", startsClosed: part } });
   const keepTool = { id: "keep", label: "Keep", icon: <span aria-hidden="true">K</span>, active: kept, disabled: shell.idle,

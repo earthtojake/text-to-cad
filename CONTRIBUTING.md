@@ -423,23 +423,26 @@ Vite and Next consume their `dist` exports. `npm ci` without a
 workspace filter installs the whole workspace.
 
 Create this worktree's `.venv` with `requirements-dev.txt` when Python is
-needed. For web development, invoke Vite from the directory you want served:
+needed. For web development, invoke Vite from a folder of models (a relative
+`?file=` resolves against it):
 
 ```bash
-cd <the directory to serve>
+cd <a folder of models>
 VIEWER_PYTHON=<checkout>/.venv/bin/python \
   npm --prefix <checkout>/apps/web run dev -- --host 127.0.0.1
 ```
 
-Vite owns its API-only Python backend. `VIEWER_PYTHON` must name an interpreter
-that satisfies cadgen's Python floor and imports this checkout. The backend's
-stable `rootId` identifies a normalized real filesystem root across port
-changes. The web app owns URL/history and browser preferences. FileViewer
-state is scoped by root, file and renderer; each CAD render session owns its
+Vite owns its API-only Python backend (`--new`: a port of its own). `VIEWER_PYTHON`
+must name an interpreter that satisfies cadgen's Python floor and imports this
+checkout. The backend opens any file by its absolute path. The web app owns
+URL/history and browser preferences. FileViewer
+state is scoped by file and renderer; each CAD render session owns its
 cache provider and worker lease.
 
-The standalone launcher is `cadgen viewer`. A source checkout can serve the
-local web build; `CADGEN_VIEWER_DIST`, `CADGEN_NODE_BUILDERS_DIR` and
+The standalone launcher is `cadgen viewer`: on port 3245, or the port `--port N`
+names, as any web server; on that port a viewer of the same code is reused and one
+of other code replaced. A source
+checkout can serve the local web build; `CADGEN_VIEWER_DIST`, `CADGEN_NODE_BUILDERS_DIR` and
 `CADGEN_BROWSER_RUNTIME_DIR` are explicit asset overrides. A wheel resolves its
 own bundled assets without the repository. Run `scripts/bundle/bundle.sh` after
 editing build inputs to refresh all packaged outputs.
@@ -887,24 +890,24 @@ Repo-owned Python tests live under `tests/python/`, grouped by tested surface:
 suite is `tests/python/packages/cadgen/viewer/`, part of the cadgen package suite.
 
 For fast CAD Viewer source iteration, build the shared packages, then invoke
-the web app in dev mode from the directory you want to serve (outside
-`apps/web`). The app consumes source with HMR while shared packages resolve to
-their compiled exports:
+the web app in dev mode from a folder of models (outside `apps/web`). The app
+consumes source with HMR while shared packages resolve to their compiled exports:
 
 ```bash
-cd <the directory to serve>
+cd <a folder of models>
 VIEWER_PYTHON=<checkout>/.venv/bin/python \
   npm --prefix <checkout>/apps/web run dev -- --host 127.0.0.1
 ```
 
-The spawned backend serves one root, fixed at startup. Its resolver accepts an
-explicit `directoryRoot` from its caller first, then `INIT_CWD`, then the
-process working directory, skipping the latter two when they are inside
-`apps/web`. Vite's fallback is `<checkout>/apps`. npm sets `INIT_CWD` to the
-invocation directory, so `--prefix` selects the app while retaining your chosen
-root. The page is the bare origin and `?file=` names an artifact relative to
-that root, for example `http://127.0.0.1:5173/?file=STEP/part.step` when the
-served directory contains `STEP/part.step`.
+The spawned backend opens any file by its absolute path; the folder it starts
+in is only where a relative `?file=` resolves. Its resolver accepts an explicit
+`directoryRoot` from its caller first, then `INIT_CWD`, then the process working
+directory, skipping the latter two when they are inside `apps/web`. Vite's
+fallback is `<checkout>/apps`. npm sets `INIT_CWD` to the invocation directory,
+so `--prefix` selects the app while keeping your folder. The page is the bare
+origin and `?file=` names a file, for example
+`http://127.0.0.1:5173/?file=/abs/models/STEP/part.step`, or
+`?file=STEP/part.step` from `/abs/models`.
 
 Vite defaults to port 5173 and fails if it is taken; select another with
 `--port`. See [the app's launcher contract](apps/web/README.md#launching) for

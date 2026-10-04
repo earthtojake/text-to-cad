@@ -197,20 +197,19 @@ view and owns its abort signal and worker leases. A host whose transport
 caps one reply passes `maxBatchBytes`: no batched read asks for more, nor ever
 more than the server's own bound; a longer body is the transport's to carry in
 parts, and the client sees it whole. Switching views preserves
-admitted cache writes, while disposing the client releases them. Root identity
-comes from the server's stable
-`rootId`, not its port. Multiple roots render concurrently without replacing
-one another's provider. Request failures retain operation, URL, method, kind
-and HTTP status for host-owned error presentation.
+admitted cache writes, while disposing the client releases them. Request
+failures retain operation, URL, method, kind and HTTP status for host-owned
+error presentation.
 `serverInfo()` caches stable metadata; `serverInfo({ fresh: true })` performs
 a new request so development restart polling observes identity changes and
 connection failures.
 
-`resolveEntry(file)` hydrates path-only catalog placeholders before returning.
-Pass the displayed file to `createRenderSession({ file })` so polling refreshes
-its metadata. Partial replies preserve other resolved entries; newer complete
-entries and directory removals still invalidate them. A cancelled or older
-request cannot overwrite a newer file revision.
+Files are named by absolute path. The catalog holds the files on screen:
+`resolveEntry(file)` reads one (a file the server lacks is an
+`isMissingFileError`), and `createRenderSession({ file })` keeps the displayed
+file's entry current as polling refreshes it. A cancelled or older request
+cannot overwrite a newer file revision. `folder(path)` lists one folder and
+`search(path, query)` finds the CAD files under it, for the explorer.
 
 `CadWorkspaceService` exposes typed surface resolution, preview observation and
 a scoped `resources` provider. Its HTTP adapter owns the protocol; renderers

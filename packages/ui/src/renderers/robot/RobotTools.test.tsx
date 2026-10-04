@@ -30,7 +30,7 @@ const ARM_URDF = `<?xml version="1.0"?>
   <joint name="camera_mount" type="fixed"><parent link="base"/><child link="camera"/><origin xyz="0.15 -0.15 0.13"/></joint>
 </robot>
 `;
-const FILE = 'arm.urdf';
+const FILE = '/models/arm.urdf';
 
 // ---- the WebGL stand-ins ------------------------------------------------------------------------
 const picks = vi.hoisted(() => ({ latest: null as null | { enabled: boolean; scene: any; onPick: (hit: unknown, modifiers: { multiSelect: boolean }) => void } }));
@@ -79,11 +79,11 @@ async function openRobot() {
   const fetch = vi.fn(async (input: RequestInfo | URL) => {
     const url = new URL(String(input));
     if (url.pathname.endsWith('/__cad/catalog')) {
-      return json({ rootId: 'one', entries: [{ kind: 'urdf', file: FILE, rootRelativeFile: FILE, url: `/${FILE}?v=${served.revision}`,
+      return json({ entries: [{ kind: 'urdf', file: FILE, url: `/arm.urdf?v=${served.revision}`,
         hash: `one-arm-${served.revision}`, bytes: served.urdf.length }] });
     }
-    if (url.pathname.endsWith('/__cad/server')) return json({ rootId: 'one', rootPath: '/models', backend: 'cadgen' });
-    if (url.pathname.endsWith(`/${FILE}`)) return new Response(served.urdf);
+    if (url.pathname.endsWith('/__cad/server')) return json({ backend: 'cadgen' });
+    if (url.pathname.endsWith('/arm.urdf')) return new Response(served.urdf);
     return new Response('', { status: 404 });
   });
   const client = createCadClient({ origin: 'http://viewer.test/one', workspaceId: 'one', pollIntervalMs: 0, fetch: fetch as typeof globalThis.fetch });
@@ -92,9 +92,8 @@ async function openRobot() {
   const destination = { kind: 'composer', available: true };
   const host = {
     files: {
-      id: 'one', rootName: 'one',
-      stat: async (path: string) => ({ path, name: path, kind: 'file', size: ARM_URDF.length, extension: 'urdf' }),
-      list: async () => [{ path: FILE, name: FILE, kind: 'file' }],
+      id: 'one',
+      stat: async (path: string) => ({ path, name: path.split('/').pop(), kind: 'file', size: ARM_URDF.length, extension: 'urdf' }),
     },
     navigation: { openFile: noop },
     environment: { colorScheme: 'light' },
@@ -165,9 +164,9 @@ it('robot Select defaults match Links and Position remains an explicit tool', as
   expect(robot.stack()).toEqual(['Position controls']);
   expect(robot.knobs()).toBe(1);
 
-  // Display is not a tool: its dropdown, from the navbar, opens over Position and leaves it the
-  // tool, with its knobs and panel; Escape puts it away.
-  fireEvent.click(within(robot.pane.querySelector<HTMLElement>('[data-viewer-navbar]')!).getByRole('button', { name: 'Display' }));
+  // Display is not a tool: its dropdown, from on top of the cube, opens over Position and leaves it
+  // the tool, with its knobs and panel; Escape puts it away.
+  fireEvent.click(within(robot.pane.querySelector<HTMLElement>('[data-viewport-actions]')!).getByRole('button', { name: 'Display' }));
   await waitFor(() => expect(document.querySelector('[data-display-popover]')).not.toBeNull());
   expect(robot.toolNames()).toEqual(['Select:false', 'Position:true']);
   expect(robot.stack()).toEqual(['Position controls']);
@@ -195,10 +194,10 @@ it('robot Select defaults match Links and Position remains an explicit tool', as
   robot.client.dispose();
 });
 
-it('a robot is a 3D view: its navbar offers Display and Preview', async () => {
+it('a robot is a 3D view: Display and Preview sit on top of its cube', async () => {
   const robot = await openRobot();
-  const navbar = robot.pane.querySelector<HTMLElement>('[data-viewer-navbar]')!;
-  expect([...navbar.querySelectorAll('[data-navbar-controls] button')].map(button => button.getAttribute('aria-label'))).toEqual(['Display', 'Preview']);
+  const actions = robot.pane.querySelector<HTMLElement>('[data-viewport-actions]')!;
+  expect([...actions.querySelectorAll('button')].map(button => button.getAttribute('aria-label'))).toEqual(['Display', 'Preview']);
   robot.client.dispose();
 });
 
@@ -216,20 +215,15 @@ it('robot Links and Position are each their tool\'s panel, and no pick or tool o
   expect(robot.jointField('shoulder').closest('[hidden]')).toBeNull();
   expect(robot.jointField('shoulder').value).toBe('30°');
 
-  // With the file tree open, a link picked in the viewport and the Position tool leave it open:
-  // their panels are the stack's, never the host's column.
+  // A link picked in the viewport and the Position tool open nothing in the host's column: their
+  // panels are the stack's. A robot declares no panel, so the navbar has no toggle for one.
   robot.open('Select');
-  expect(robot.panels()).toEqual(['Show files:false']);
-  fireEvent.click(robot.pane.querySelector('[data-file-panel="tree"]')!);
-  await waitFor(() => expect(within(robot.pane).getByPlaceholderText('Filter files…')).toBeTruthy());
-  expect(robot.panels()).toEqual(['Hide files:true']);
   robot.tapUpperArm();
   await waitFor(() => expect(robot.pressedRows()).toHaveLength(1));
-  expect(robot.panels()).toEqual(['Hide files:true']);
   expect(robot.stack()).toEqual(['Links', 'Reference details']);
   robot.open('Position');
-  expect(robot.panels()).toEqual(['Hide files:true']);
   expect(robot.stack()).toEqual(['Position controls']);
+  expect([robot.panels(), robot.pane.querySelector('[data-file-panel-container]')]).toEqual([[], null]);
   robot.client.dispose();
 });
 

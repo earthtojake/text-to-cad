@@ -13,22 +13,21 @@ import {
   resolveSelectorSelection,
 } from "./hostReference.js";
 
-test("referenceFromCopyText: the full file, the selector without its #, the text as copied", () => {
-  assert.deepEqual(referenceFromCopyText("models/STEP/bracket.step#o1.2", "models/STEP/bracket.step"), {
-    file: "models/STEP/bracket.step",
+test("referenceFromCopyText: the file by its absolute path, the selector without its #, the text as copied", () => {
+  assert.deepEqual(referenceFromCopyText("/models/STEP/bracket.step#o1.2", "/models/STEP/bracket.step"), {
+    file: "/models/STEP/bracket.step",
     selector: "o1.2",
-    text: "models/STEP/bracket.step#o1.2",
+    text: "/models/STEP/bracket.step#o1.2",
   });
-  assert.deepEqual(referenceFromCopyText("#f45,e3", "a.step"), { file: "a.step", selector: "f45,e3", text: "#f45,e3" });
-  // A host that names its files absolutely: the served-root path is still the file.
-  assert.deepEqual(referenceFromCopyText("/work/STEP/bracket.step#label.f45", "work/STEP/bracket.step"), {
-    file: "work/STEP/bracket.step",
+  assert.deepEqual(referenceFromCopyText("#f45,e3", "/models/a.step"), { file: "/models/a.step", selector: "f45,e3", text: "#f45,e3" });
+  assert.deepEqual(referenceFromCopyText("C:/models/bracket.step#label.f45", "C:/models/bracket.step"), {
+    file: "C:/models/bracket.step",
     selector: "label.f45",
-    text: "/work/STEP/bracket.step#label.f45",
+    text: "C:/models/bracket.step#label.f45",
   });
   // A whole-file line has no selector; a path with no `#` is one too.
-  assert.deepEqual(referenceFromCopyText("bracket.step#", "bracket.step"), { file: "bracket.step", selector: "", text: "bracket.step#" });
-  assert.deepEqual(referenceFromCopyText("STEP/bracket.step", "STEP/bracket.step"), { file: "STEP/bracket.step", selector: "", text: "STEP/bracket.step" });
+  assert.deepEqual(referenceFromCopyText("/models/bracket.step#", "/models/bracket.step"), { file: "/models/bracket.step", selector: "", text: "/models/bracket.step#" });
+  assert.deepEqual(referenceFromCopyText("/models/bracket.step", "/models/bracket.step"), { file: "/models/bracket.step", selector: "", text: "/models/bracket.step" });
 });
 
 test("referencesFromCopyText: one per line, blanks dropped", () => {

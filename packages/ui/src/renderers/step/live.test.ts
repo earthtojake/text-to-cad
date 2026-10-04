@@ -3,7 +3,7 @@ import { attachLiveBinding } from '../kit/shell/liveBinding';
 import type { CadLiveController, CadLiveState } from './live';
 
 const state = (): Omit<CadLiveState, 'active'> => ({
-  resource: { kind: 'workspace-file', workspaceId: 'root', path: 'model.step', revision: 'r1' },
+  resource: { kind: 'workspace-file', workspaceId: 'local', path: '/models/model.step', revision: 'r1' },
   revision: 'r1', loading: false, selection: [], selectedPartIds: [], selectedReferenceIds: [],
   hiddenPartIds: [], isolatedPartIds: [], camera: null, display: { mode: 'solid' }, renderMode: 'inspect',
 });
@@ -132,7 +132,7 @@ describe('live CAD viewer binding', () => {
     const view = harness();
     view.commands.capture.mockImplementation(() => new Promise<Blob>(resolve => { encode = resolve; }));
     const pending = view.controller.capture();
-    view.update({ ...state(), resource: { kind: 'workspace-file', workspaceId: 'root', path: 'other.step', revision: 'r1' } });
+    view.update({ ...state(), resource: { kind: 'workspace-file', workspaceId: 'local', path: '/models/other.step', revision: 'r1' } });
     encode(new Blob(['png']));
     await expect(pending).rejects.toThrow('revision changed');
   });

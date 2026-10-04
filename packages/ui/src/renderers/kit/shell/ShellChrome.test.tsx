@@ -24,9 +24,8 @@ import { ViewerHostContext } from '../../../../dist/host/context.js';
 import { testHost } from '../../../../dist/host/testing/host.js';
 import { ViewerMobileContext } from '../../../../dist/file-viewer/responsive.js';
 import { TOOL_PANEL_REFERENCE_HEIGHT, TOOL_PANEL_WIDTH } from '../../../../dist/renderers/kit/tools/toolStackLayout.js';
-import { FLOATING_CHROME_SURFACE_CLASS, FLOATING_SURFACE_CLASS } from '../../../../dist/renderers/kit/tools/floatingSurface.js';
+import { FLOATING_CHROME_SURFACE_CLASS, FLOATING_SURFACE_CLASS } from '../../../../dist/lib/floatingSurface.js';
 import { PerspectiveProjectionIcon } from '../../../../dist/renderers/kit/camera/ProjectionModeIcons.js';
-import { SettingsPopover } from '../../../../dist/renderers/kit/shell/SettingsPopover.js';
 
 // jsdom lays nothing out, so the few sizes the stack reads are given: a viewer 1280 × 800 whose
 // stack column (under the strip) is 600px tall, and each panel as big as its own style says.
@@ -61,17 +60,9 @@ function tabSettings(initial: object = {}) {
   return store;
 }
 type Settings = ReturnType<typeof tabSettings>;
-// The navbar FileViewer hands a renderer: where the view's controls go.
-function navbarSlot() {
-  const slot = document.createElement('div');
-  slot.setAttribute('data-test-navbar', '');
-  document.body.append(slot);
-  return slot;
-}
-afterEach(() => document.querySelectorAll('[data-test-navbar]').forEach(slot => slot.remove()));
-function frame({ path = 'panel.harness', preferences = tabSettings(), state = undefined as unknown, mobile = false, onStateChange = (_: unknown) => {}, onPanelOpen = vi.fn(), onFullscreenChange = vi.fn(), openPanel = '', appearance = { colorScheme: 'light' } as object, notice = null as React.ReactNode, features = undefined as object | undefined } = {}) {
-  const props = { source: { id: 'one', rootName: 'one' }, file: { path, name: path, kind: 'file' }, document: null, openPanel, panelSlot: null, notice, features,
-    navbarSlot: navbarSlot(), onFullscreenChange, onPanelOpen, onReady() {}, onOpenFile() {}, appearance, state, onStateChange, reload() {}, data: { services: { preferences } } };
+function frame({ name = 'panel.harness', preferences = tabSettings(), state = undefined as unknown, mobile = false, onStateChange = (_: unknown) => {}, onPanelOpen = vi.fn(), onFullscreenChange = vi.fn(), openPanel = '', appearance = { colorScheme: 'light' } as object, notice = null as React.ReactNode, features = undefined as object | undefined } = {}) {
+  const props = { source: { id: 'one' }, file: { path: `/models/${name}`, name, kind: 'file' }, document: null, openPanel, panelSlot: null, notice, features,
+    onFullscreenChange, onPanelOpen, onReady() {}, onOpenFile() {}, appearance, state, onStateChange, reload() {}, data: { services: { preferences } } };
   const element = () => <ViewerHostContext.Provider value={testHost()}><ViewerMobileContext.Provider value={mobile}>
     <HarnessRenderer {...(props as any)} /></ViewerMobileContext.Provider></ViewerHostContext.Provider>;
   const view = render(element());
@@ -91,9 +82,9 @@ function drag(handle: Element, [dx, dy]: [number, number], { release = true } = 
 
 it('the chrome is inset from the viewer, every panel opens one width, the tree at half the stack and the Reference shorter, and nothing is stored until a person sizes one', () => {
   const { preferences } = frame();
-  // The strip and the stack under it, 8px in from the viewer's top and left, stopping 8px above
-  // the cube in the bottom-left corner (itself 8px off the bottom).
-  expect(document.querySelector<HTMLElement>('[data-cad-tool-groups]')!.style).toMatchObject({ top: '8px', left: '8px', bottom: 'calc(16px + 6rem)' });
+  // The strip and the stack under it, 8px in from the viewer's top and left, stopping 8px above the
+  // view's controls (24px tall) on top of the cube in the bottom-left corner (itself 8px off the bottom).
+  expect(document.querySelector<HTMLElement>('[data-cad-tool-groups]')!.style).toMatchObject({ top: '8px', left: '8px', bottom: 'calc(40px + 6rem)' });
   expect(shown()).toEqual(['Harness tree', 'Harness reference']);
   expect(TOOL_PANEL_WIDTH).toBe(164);
   expect([width('Harness tree'), width('Harness reference')]).toEqual([TOOL_PANEL_WIDTH, TOOL_PANEL_WIDTH]);
@@ -247,31 +238,32 @@ it("a single part's tree starts closed, Select marked, and an assembly's open; o
   const preferences = tabSettings();
   const mark = () => tool('Select').querySelector('[data-tool-panel-closed]');
   // `panel-part.harness` is a single part's, `panel.harness` an assembly's.
-  const part = frame({ path: 'panel-part.harness', preferences });
+  const part = frame({ name: 'panel-part.harness', preferences });
   expect([shown(), Boolean(mark())]).toEqual([['Harness reference'], true]);
   part.unmount();
-  const assembly = frame({ path: 'panel.harness', preferences });
+  const assembly = frame({ name: 'panel.harness', preferences });
   expect([shown(), Boolean(mark())]).toEqual([['Harness tree', 'Harness reference'], false]);
   expect(preferences.writes).toBe(0);
   // Closed in the assembly: closed in a part, and in the next assembly too.
   fireEvent.click(within(panel('Harness tree')!).getByRole('button', { name: 'Close harness tree' }));
   expect(layout(preferences).closed).toEqual({ tree: true });
   assembly.unmount();
-  const closedPart = frame({ path: 'panel-part.harness', preferences });
+  const closedPart = frame({ name: 'panel-part.harness', preferences });
   expect([shown(), Boolean(mark())]).toEqual([['Harness reference'], true]);
   // Opened in a part: open in the next part, and in an assembly.
   fireEvent.click(tool('Select'));
   expect(layout(preferences).closed).toEqual({ tree: false });
   closedPart.unmount();
-  const openedPart = frame({ path: 'panel-part.harness', preferences });
+  const openedPart = frame({ name: 'panel-part.harness', preferences });
   expect([shown(), Boolean(mark())]).toEqual([['Harness tree', 'Harness reference'], false]);
   openedPart.unmount();
-  frame({ path: 'panel.harness', preferences });
+  frame({ name: 'panel.harness', preferences });
   expect([shown(), Boolean(mark())]).toEqual([['Harness tree', 'Harness reference'], false]);
 });
 
 const displayPopover = () => document.querySelector<HTMLElement>('[data-display-popover]');
-const barButtons = () => [...document.querySelector('[data-test-navbar]')!.querySelectorAll('button')].map(button => button.getAttribute('aria-label'));
+// The view's controls, on top of the cube.
+const barButtons = () => [...document.querySelector('[data-viewport-actions]')?.querySelectorAll('button') ?? []].map(button => button.getAttribute('aria-label'));
 const strip = () => [...screen.getByRole('group', { name: 'Interaction tools' }).querySelectorAll('button')].map(button => button.getAttribute('aria-label'));
 
 it('while the model loads the viewer shows none of its own chrome, and all of it returns with the model', () => {
@@ -300,17 +292,16 @@ it("Display and Preview are a 3D view's, as its renderer declares: a view that d
   const onFullscreenChange = vi.fn();
   // Preview asked for from outside the navbar, as a link or a host request would.
   const ask = () => act(() => { fireEvent.click(document.querySelector('[data-harness-ask-preview]')!); });
-  // A 3D view (the harness's, declared `previewable`): the navbar offers Display and Preview, and a request enters Preview.
+  // A 3D view (the harness's, declared `previewable`): Display and Preview on top of its cube, and a request enters Preview.
   frame({ onFullscreenChange });
   expect(barButtons()).toEqual(['Display', 'Preview']);
   ask();
   expect([viewportProps.current.previewMode, onFullscreenChange.mock.calls]).toEqual([true, [[true]]]);
   cleanup();
-  document.querySelectorAll('[data-test-navbar]').forEach(slot => slot.remove());
   onFullscreenChange.mockClear();
-  // A view whose renderer does not declare it (`flat.harness`, a 2D view's stand-in): nothing at the
-  // navbar's right end, and the same request leaves the normal view on screen, its tools up.
-  frame({ path: 'flat.harness', onFullscreenChange });
+  // A view whose renderer does not declare it (`flat.harness`, a 2D view's stand-in): nothing on top
+  // of its cube, and the same request leaves the normal view on screen, its tools up.
+  frame({ name: 'flat.harness', onFullscreenChange });
   expect(barButtons()).toEqual([]);
   for (const name of ['Display', 'Preview']) expect(screen.queryByRole('button', { name })).toBeNull();
   ask();
@@ -335,40 +326,38 @@ it('a load the model did not survive leaves only the card saying so, and a faile
   expect(viewportProps.current.viewCube).toBe(true);
 });
 
-it("a dismissed alert's own icon, leftmost of the navbar's right-hand controls, brings its card back; it goes with the card's return, and when the alert clears", async () => {
-  // The harness under the real FileViewer, whose navbar holds the host's Settings and the view's control.
+it("a dismissed alert's own icon, at the navbar's right, brings its card back; it goes with the card's return, and when the alert clears", async () => {
+  // The harness under the real FileViewer, whose navbar's right holds nothing of its own.
   const host = testHost({ links: viewerLinks({ version: '0.7.5' }), environment: { colorScheme: 'light', platform: 'darwin' },
-    files: { id: 'one', rootName: 'one', stat: async (path: string) => ({ path, name: path, kind: 'file', extension: 'harness', size: 1 }) } });
-  render(<FileViewer file="one.harness" host={host as any} renderers={[createHarnessRenderer({ preferences: tabSettings() })]}
-    state={{ panel: null, panelWidth: 220 }} onStateChange={() => {}} settings={<SettingsPopover links={host.links} />} />);
+    files: { id: 'one', stat: async (path: string) => ({ path, name: path.split('/').pop()!, kind: 'file', extension: 'harness', size: 1 }) } });
+  render(<FileViewer file="/models/one.harness" host={host as any} renderers={[createHarnessRenderer({ preferences: tabSettings() })]}
+    state={{ panel: null, panelWidth: 220 }} onStateChange={() => {}} />);
   await screen.findByRole('button', { name: 'Preview' });
-  const right = () => [...document.querySelector('[data-viewer-navbar] [data-navbar-controls]')!.parentElement!.querySelectorAll('a, button')]
-    .map(node => node.getAttribute('aria-label'));
+  const right = () => [...document.querySelector('[data-viewer-navbar] > div')!.querySelectorAll('a, button')].map(node => node.getAttribute('aria-label'));
   const card = () => screen.queryByRole('alert');
   const stage = (name: string) => act(() => { fireEvent.click(document.querySelector(`[data-harness-stage="${name}"]`)!); });
-  // Left to right: the host's Settings, then the view's Display and Preview.
-  expect(right()).toEqual(['Settings', 'Display', 'Preview']);
+  expect(right()).toEqual([]);
   stage('failed');
   expect(card()!.textContent).toContain('Harness update failed');
-  expect(right()).toEqual(['Settings', 'Display', 'Preview'], 'the card is up: no icon');
-  // Put away: the card's own icon, in the error's colour, named after the alert, before everything else at the right.
+  expect(right()).toEqual([], 'the card is up: no icon');
+  // Put away: the card's own icon, in the error's colour, named after the alert, at the right.
   fireEvent.click(within(card()!).getByRole('button', { name: 'Dismiss' }));
   expect(card()).toBeNull();
-  expect(right()).toEqual(['Harness update failed', 'Settings', 'Display', 'Preview']);
+  expect(right()).toEqual(['Harness update failed']);
   const icon = screen.getByRole('button', { name: 'Harness update failed' });
   expect(icon.querySelector('svg')!.getAttribute('class')).toMatch(/\blucide-circle-alert\b.*\btext-destructive\b/);
   // Pressed, it brings the card back and goes.
   fireEvent.click(icon);
   expect(card()!.textContent).toContain('Harness update failed');
-  expect(right()).toEqual(['Settings', 'Display', 'Preview']);
+  expect(right()).toEqual([]);
   // Put away again, and then the alert clears: no card, and no icon; raised again, the card shows.
   fireEvent.click(within(card()!).getByRole('button', { name: 'Dismiss' }));
   expect(right()[0]).toBe('Harness update failed');
   stage('idle');
-  expect([card(), right()]).toEqual([null, ['Settings', 'Display', 'Preview']]);
+  expect([card(), right()]).toEqual([null, []]);
   stage('failed');
   expect(card()).not.toBeNull();
-  expect(right()).toEqual(['Settings', 'Display', 'Preview']);
+  expect(right()).toEqual([]);
 });
 
 it('the file explorer, open over the top-left corner, leaves the tools drawn under it', () => {
@@ -427,10 +416,10 @@ it('a host showing the view small gets the model alone: no tools, no view action
   expect(viewportProps.current.viewCube).toBe(false);
 });
 
-it("Display is the navbar's dropdown between Settings and Preview, the perspective box: opened over Draw it leaves Draw in hand with its panel, and the stack as it was", async () => {
+it("Display is the dropdown on top of the cube, before Preview, the perspective box: opened over Draw it leaves Draw in hand with its panel, and the stack as it was", async () => {
   const user = userEvent.setup();
   const { remount } = frame();
-  // The view's controls at the navbar's right end, Display then Preview; nothing of Display on the strip.
+  // The view's controls on top of the cube, Display then Preview; nothing of Display on the strip.
   expect(barButtons()).toEqual(['Display', 'Preview']);
   expect(strip()).toEqual(['Select', 'Draw', 'Keep', 'Pose']);
   const display = screen.getByRole('button', { name: 'Display' });
@@ -501,7 +490,7 @@ it("two surfaces: the strip and the stack share the light chrome surface, and Di
   expect(has(screen.getByRole('menu'), FLOATING_SURFACE_CLASS)).toBe(true);
 });
 
-it("Preview is fullscreen: the strip, the stack and the navbar's controls step aside, never opening the host's column; its corner's way out brings back the tool in hand with its panel", async () => {
+it("Preview is fullscreen: the strip, the stack and the view's controls step aside, never opening the host's column; its corner's way out brings back the tool in hand with its panel", async () => {
   const user = userEvent.setup();
   const onPanelOpen = vi.fn();
   const onFullscreenChange = vi.fn();
@@ -582,7 +571,7 @@ it("preview's Playback settings are the file's: kept between previews, written t
   await user.click(screen.getByRole('button', { name: 'Preview' }));
   expect(await choices()).toEqual(['false', 'Orbit speed: 2×']);
   reopened.unmount();
-  frame({ path: 'other.harness' });
+  frame({ name: 'other.harness' });
   await user.click(screen.getByRole('button', { name: 'Preview' }));
   expect(await choices()).toEqual(['true', 'Orbit speed: 1×']);
 });

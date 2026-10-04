@@ -1,12 +1,11 @@
 /**
- * Subsequence matching for the shared file tree's `Filter files…` box.
+ * Subsequence matching for the Model tree's filter (`modelTreeSearch.js`).
  *
- * Not a general fuzzy matcher: the corpus is file paths, and the only thing a
- * person typing into that box wants is for `srexfs` to find
- * `src/main/explorer/fs.ts` in the desktop app. So the score rewards exactly what makes that
- * work — matches on a path segment's first character, runs of consecutive
- * characters, and a match late in the path (the filename) over one early in it
- * (a directory nobody was thinking about).
+ * Not a general fuzzy matcher: the corpus is names and paths, and the only thing a
+ * person typing into a filter wants is for `srexfs` to find `src/main/explorer/fs.ts`.
+ * So the score rewards exactly what makes that work — matches on a segment's first
+ * character, runs of consecutive characters, and a match late in the path (the
+ * name) over one early in it (a folder nobody was thinking about).
  *
  * Pure, and exported, because it is the part with edge cases worth a test.
  */

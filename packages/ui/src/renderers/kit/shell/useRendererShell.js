@@ -101,7 +101,7 @@ const NO_PREVIEW = () => {};
  *   by a renderer with no tools: the shell then has no active tool and a saved tab records none.
  * @param {boolean} [options.previewable]  The renderer's view is 3D and offers Preview: the model fullscreen,
  *   orbiting, its tools put away. Each renderer of a 3D view declares it; without it (a 2D view) there is no
- *   Preview at all — no control in the navbar, not a disabled one — and anything that asks for Preview leaves
+ *   Preview at all — no control on top of the cube, not a disabled one — and anything that asks for Preview leaves
  *   the normal view on screen (`previewing` stays false, `setPreviewing` does nothing).
  * @param {{ previewing: boolean, set: (previewing: boolean) => void }} [options.preview]  Preview mode
  *   (`usePreviewState`), when the renderer holds that state itself: a renderer whose own gates
@@ -398,9 +398,6 @@ export function useRendererShell({
     if (!viewerRef.current?.captureScreenshotBlob) return Promise.reject(new Error("The viewer is not ready"));
     return viewerRef.current.captureScreenshotBlob();
   }, []);
-  // How a copied reference names a file of this view's source (`FileSource.referencePath`).
-  const source = view.source;
-  const referencePath = useCallback(path => (source?.referencePath ? source.referencePath(path) : path), [source]);
   const captureKey = services.captureRequest?.key ?? null;
   const appliedCaptureKey = useRef(null);
   useEffect(() => {
@@ -547,7 +544,7 @@ export function useRendererShell({
       copyActionRef, copyDrawing, copyShortcut: host.environment.platform === "darwin" ? "⌘C" : "Ctrl+C",
       // Quick Edit's: the file it is about, how a copied prompt spells its paths, its sketch, and
       // the renderer's own Escape, which an empty Quick Edit passes on.
-      resource, referencePath, captureView, escape: escapeView,
+      resource, captureView, escape: escapeView,
       drawToolActive, drawing, animation, display
     }
   };

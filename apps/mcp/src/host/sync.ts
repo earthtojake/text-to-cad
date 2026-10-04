@@ -1,5 +1,5 @@
 import type { CadEditingPreview } from '@text-to-cad/core/client';
-import type { Launch, Root, Server, ViewEvent } from './server';
+import type { Launch, Server, ViewEvent } from './server';
 import { encodeBase64 } from './tunnel';
 
 /** How often a view syncs with nothing happening (the server's `views.POLL_SECONDS`). */
@@ -23,10 +23,9 @@ export interface ViewSyncHandlers {
   connection?(connected: boolean): void;
 }
 
-/** What the mounted model view watches, through its client: its root's catalog. */
+/** What the mounted model view watches, through its client: its file's catalog entry. */
 export interface ViewSyncWatch {
-  root: Pick<Root, 'kind' | 'path'>;
-  /** The file on screen, as the root names it; null on the home. */
+  /** The file on screen, by its absolute path; null on the home, which watches nothing. */
   file(): string | null;
   /** The server's revision of the catalog the client last applied ('' before one). */
   revision(): string;
@@ -52,7 +51,7 @@ export interface ViewSync {
 /**
  * A view's ONE call to the server, each second (`cad_sync`). Up go what it shows (its model; its
  * state whenever that changed, which is what the agent reads; that a person just touched it) and
- * what it watches (its root's catalog, any STEP's build feed). Back come the agent's requests for
+ * what it watches (its file's catalog entry, any STEP's build feed). Back come the agent's requests for
  * it, the catalog's revision — the view reads the catalog again only when it moves — and each
  * feed's status. Nothing is held open: a host relays every call through a few slots all its views
  * share, and a held one would keep the others' model loads waiting. A sync that brought news (an
@@ -124,7 +123,8 @@ export function createViewSync(server: Pick<Server, 'sync' | 'reply'>,
         while (!signal.aborted && !closed) {
           // Every view watches, seen or not: a tab in the background is current when it is shown.
           const watch = watched;
-          const files = watch ? [...previews.keys()] : [];
+          const watchedFile = watch?.file() ?? null;
+          const files = watchedFile ? [...previews.keys()] : [];
           const state = changedState();
           const touched = focused;
           focused = false;
@@ -133,7 +133,7 @@ export function createViewSync(server: Pick<Server, 'sync' | 'reply'>,
               view: view.id, surface: view.surface, model: view.model(),
               ...(touched ? { focused: true } : {}),
               ...(state ? { state } : {}),
-              ...(watch ? { watch: { root: { kind: watch.root.kind, path: watch.root.path }, file: watch.file(), ...(files.length ? { previews: files } : {}) } } : {}),
+              ...(watchedFile ? { watch: { file: watchedFile, ...(files.length ? { previews: files } : {}) } } : {}),
             }, { signal });
             if (failures >= LOST_AFTER) handlers.connection?.(true);
             failures = 0;

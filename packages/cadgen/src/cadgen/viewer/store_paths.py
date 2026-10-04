@@ -37,7 +37,7 @@ __all__ = [
 
 # The source sidecar sits beside the model at ``<name>.step.json`` and carries
 # the model's DECLARATIONS. Never test a path with ``endswith(SOURCE_SIDECAR_SUFFIX)``
-# alone -- it is ``.json``, and serving every JSON file under a served root would
+# alone -- it is ``.json``, and serving every JSON file the asset route is named would
 # hand out configs and secrets. Use SOURCE_SIDECAR_NAMES where a path is all you have.
 SOURCE_SIDECAR_SUFFIX = source_sidecar.SOURCE_SIDECAR_SUFFIX
 SOURCE_SIDECAR_NAMES = (".step.json", ".stp.json")

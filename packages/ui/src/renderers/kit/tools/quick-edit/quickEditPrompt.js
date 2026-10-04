@@ -24,13 +24,12 @@ export function createQuickEditContext({ resource, references = [], text, sketch
 }
 
 /**
- * A Quick Edit as the person copies it: its references spelled as a copied reference is
- * (`referencePath`, the host's — a path under the viewer's root, or a whole filesystem's absolute
- * path), and its sketch by the path it was saved at, since text cannot carry a picture.
+ * A Quick Edit as the person copies it: its references by their files' absolute paths, and its
+ * sketch by the path it was saved at, since text cannot carry a picture.
  */
-export function copiedQuickEdit(context, { referencePath = path => path, sketchPath = null } = {}) {
+export function copiedQuickEdit(context, { sketchPath = null } = {}) {
   return formatPromptMessage(context, {
-    resolvePath: resource => (resource.kind === "url" ? resource.url : referencePath(resource.path)),
+    resolvePath: resource => (resource.kind === "url" ? resource.url : resource.path),
     attachmentPath: () => sketchPath,
   });
 }

@@ -29,7 +29,7 @@ class FeaturesToolTest(unittest.TestCase):
         (self.tmp / "app").mkdir()
 
     def serve(self, client: str = "codex-mcp-client") -> Server:
-        server = Server(launch_cwd=str(self.tmp), page=AppPage(self.tmp / "app"), recents=RecentStore(self.tmp / "state"),
+        server = Server(page=AppPage(self.tmp / "app"), recents=RecentStore(self.tmp / "state"),
                         analytics=Recorder(path=self.tmp / "analytics.json", send=lambda payload: True))
         server.handle("initialize", {"protocolVersion": "2025-06-18", "capabilities": {},
                                      "clientInfo": {"name": client, "version": "0.159.0"}}, None)

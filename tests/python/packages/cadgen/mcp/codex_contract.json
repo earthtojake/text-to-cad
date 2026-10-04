@@ -1,9 +1,6 @@
 {
  "initialize": {
   "capabilities": {
-   "experimental": {
-    "codex/sandbox-state-meta": {}
-   },
    "resources": {
     "listChanged": false
    },
@@ -11,7 +8,7 @@
     "listChanged": false
    }
   },
-  "instructions": "CAD shows local CAD models (STEP, STL, GLB, 3MF, DXF, URDF, SDF) in a viewer tab beside the chat. To show a model, call cad_show: it switches an open viewer and never opens a tab. Only when cad_show reports no open viewer, call cad_open, once. Viewers refresh when files change, so never reopen after a rebuild. cad_view reports what the user is looking at and has selected; cad_screenshot returns what they see.",
+  "instructions": "CAD shows local CAD models (STEP, STL, GLB, 3MF, DXF, URDF, SDF) in a viewer tab beside the chat. To show a model, call cad_show with its absolute path: it switches an open viewer and never opens a tab. Only when cad_show reports no open viewer, call cad_open, once. Viewers refresh when files change, so never reopen after a rebuild. cad_view reports what the user is looking at and has selected; cad_screenshot returns what they see.",
   "protocolVersion": "2025-06-18",
   "serverInfo": {
    "icons": [
@@ -38,16 +35,11 @@
    ],
    "structuredContent": {
     "launch": {
-     "explore": false,
      "model": "<tmp>/project/parts/bracket.stl",
      "page": "viewer",
+     "pick": "<pick>",
      "platform": "<platform>",
-     "protocol": 4,
-     "root": {
-      "kind": "global",
-      "name": "/",
-      "path": "/"
-     },
+     "protocol": 5,
      "surface": "file",
      "version": "<version>"
     }
@@ -62,17 +54,12 @@
    ],
    "structuredContent": {
     "launch": {
-     "explore": false,
      "model": null,
      "page": "home",
+     "pick": "<pick>",
      "platform": "<platform>",
-     "protocol": 4,
+     "protocol": 5,
      "recents": [],
-     "root": {
-      "kind": "global",
-      "name": "/",
-      "path": "/"
-     },
      "surface": "sidebar",
      "version": "<version>"
     }
@@ -82,34 +69,11 @@
    "content": [],
    "structuredContent": {
     "launch": {
-     "explore": true,
      "model": "<tmp>/project/parts/bracket.stl",
      "page": "viewer",
+     "pick": "<pick>",
      "platform": "<platform>",
-     "protocol": 4,
-     "root": {
-      "kind": "workspace",
-      "name": "project",
-      "path": "<tmp>/project"
-     },
-     "version": "<version>"
-    }
-   }
-  },
-  "cad_launch_elsewhere": {
-   "content": [],
-   "structuredContent": {
-    "launch": {
-     "explore": false,
-     "model": "<tmp>/downloads/loose.stl",
-     "page": "viewer",
-     "platform": "<platform>",
-     "protocol": 4,
-     "root": {
-      "kind": "global",
-      "name": "/",
-      "path": "/"
-     },
+     "protocol": 5,
      "version": "<version>"
     }
    }
@@ -123,16 +87,11 @@
    ],
    "structuredContent": {
     "launch": {
-     "explore": true,
      "model": "<tmp>/project/parts/bracket.stl",
      "page": "viewer",
+     "pick": "<pick>",
      "platform": "<platform>",
-     "protocol": 4,
-     "root": {
-      "kind": "workspace",
-      "name": "project",
-      "path": "<tmp>/project"
-     },
+     "protocol": 5,
      "surface": "agent",
      "version": "<version>"
     }
@@ -167,16 +126,11 @@
    ],
    "structuredContent": {
     "launch": {
-     "explore": true,
      "model": "<tmp>/project/parts/bracket.stl",
      "page": "viewer",
+     "pick": "<pick>",
      "platform": "<platform>",
-     "protocol": 4,
-     "root": {
-      "kind": "workspace",
-      "name": "project",
-      "path": "<tmp>/project"
-     },
+     "protocol": 5,
      "surface": "tab",
      "version": "<version>"
     }
@@ -424,7 +378,7 @@
     "additionalProperties": false,
     "properties": {
      "path": {
-      "description": "A CAD file: an absolute path, or relative to the thread's workspace.",
+      "description": "A CAD file's absolute path.",
       "type": "string"
      }
     },
@@ -456,7 +410,7 @@
     "additionalProperties": false,
     "properties": {
      "path": {
-      "description": "A CAD file: an absolute path, or relative to the thread's workspace.",
+      "description": "A CAD file's absolute path.",
       "type": "string"
      },
      "view": {
@@ -736,31 +690,8 @@
         },
         "maxItems": 4,
         "type": "array"
-       },
-       "root": {
-        "additionalProperties": false,
-        "properties": {
-         "kind": {
-          "enum": [
-           "workspace",
-           "global"
-          ],
-          "type": "string"
-         },
-         "path": {
-          "type": "string"
-         }
-        },
-        "required": [
-         "kind",
-         "path"
-        ],
-        "type": "object"
        }
       },
-      "required": [
-       "root"
-      ],
       "type": "object"
      }
     },
@@ -837,32 +768,11 @@
      "method": {
       "type": "string"
      },
-     "root": {
-      "additionalProperties": false,
-      "properties": {
-       "kind": {
-        "enum": [
-         "workspace",
-         "global"
-        ],
-        "type": "string"
-       },
-       "path": {
-        "type": "string"
-       }
-      },
-      "required": [
-       "kind",
-       "path"
-      ],
-      "type": "object"
-     },
      "url": {
       "type": "string"
      }
     },
     "required": [
-     "root",
      "method",
      "url"
     ],
@@ -930,36 +840,15 @@
     "openWorldHint": false,
     "readOnlyHint": true
    },
-   "description": "Show a file of the view's root in the desktop's file manager. Only for an explicit Reveal action.",
+   "description": "Show a file, by its absolute path, in the desktop's file manager. Only for an explicit Reveal action.",
    "inputSchema": {
     "additionalProperties": false,
     "properties": {
      "path": {
       "type": "string"
-     },
-     "root": {
-      "additionalProperties": false,
-      "properties": {
-       "kind": {
-        "enum": [
-         "workspace",
-         "global"
-        ],
-        "type": "string"
-       },
-       "path": {
-        "type": "string"
-       }
-      },
-      "required": [
-       "kind",
-       "path"
-      ],
-      "type": "object"
      }
     },
     "required": [
-     "root",
      "path"
     ],
     "type": "object"

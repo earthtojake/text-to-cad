@@ -3,7 +3,7 @@ import test from "node:test";
 
 import { fuzzyFilter, fuzzyMatch } from "./fuzzy.js";
 
-/** The file tree's `Filter files…` box, and what makes it find the right path. */
+/** Fuzzy matching, which the model tree's filter ranks by (`modelTreeSearch.js`), and what makes it find the right path. */
 
 test("finds a path from the initials of its segments", () => {
   assert.notEqual(fuzzyMatch("srexfs", "src/main/explorer/fs.ts"), null);

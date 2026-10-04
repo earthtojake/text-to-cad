@@ -8,7 +8,7 @@ import { createServer } from 'node:http';
 import { build } from 'esbuild';
 import { chromium } from 'playwright';
 
-// A drawing pane that changes size in ONE layout step (the file tree opening, a window
+// A drawing pane that changes size in ONE layout step (a panel column opening, a window
 // snap) must paint the drawing at its new size in the very frame that layout lands in.
 // Setting a canvas's width or height wipes it, so a pane that resizes its canvas as it
 // is observed and paints on the NEXT animation frame shows an empty pane for a frame.
@@ -41,9 +41,9 @@ async function serveHarness(t) {
     else if (url.pathname.endsWith('/__cad/drawing')) { response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify(SAMPLE)); }
     else if (url.pathname.endsWith('/__cad/catalog')) {
       response.setHeader('Content-Type', 'application/json');
-      response.end(JSON.stringify({ rootId: root, entries: [{ kind: 'dxf', file: 'sample.dxf', rootRelativeFile: 'sample.dxf', url: '/sample.dxf', hash: `${root}-sample.dxf`, bytes: 4096 }] }));
+      response.end(JSON.stringify({ entries: [{ kind: 'dxf', file: '/models/sample.dxf', url: '/sample.dxf', hash: `${root}-sample.dxf`, bytes: 4096 }] }));
     } else if (url.pathname.endsWith('/__cad/server')) {
-      response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify({ rootId: root, rootPath: '/models', backend: 'cadgen' }));
+      response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify({ backend: 'cadgen' }));
     } else { response.setHeader('Content-Type', 'text/html'); response.end(`<!doctype html><html><head><link rel="stylesheet" href="/styles.css">${HARNESS_SIZE}</head><body><div id="root"></div><script type="module" src="/harness.js"></script></body></html>`); }
   });
   await new Promise((resolve, reject) => { server.once('error', reject); server.listen(0, '127.0.0.1', resolve); });
@@ -152,13 +152,15 @@ test('a drawing pane resized in one step paints the drawing at its new size in t
   const [widened] = await page.evaluate(() => window.__dxfProbe.records);
   assertPaintedAtNewSize(widened, ratio, await settledPicture(page), 'one-step widening');
 
-  // 3. The file explorer opens OVER the drawing: the pane keeps its size, so nothing is resized.
+  // 3. The file explorer, which the file's name opens, floats OVER the drawing: the pane keeps its
+  // size, so nothing is resized.
   await page.evaluate(() => window.__dxfProbe.mark());
-  await pane.locator('[data-file-panel][aria-label="Show files"]').click();
-  await pane.locator('[data-file-explorer]').waitFor();
+  await pane.locator('[data-file-name]').click();
+  await page.locator('[data-file-explorer]').waitFor();
   await frames(page, 2);
   assert.deepEqual(await page.evaluate(() => window.__dxfProbe.records), [], 'opening the explorer resized nothing');
-  await pane.locator('[data-file-panel][aria-label="Hide files"]').click();
+  await page.keyboard.press('Escape');
+  await page.locator('[data-file-explorer]').waitFor({ state: 'detached' });
 
   // 4. A drag resizes once per frame: every frame is painted at its own size, once.
   await page.evaluate(() => window.__dxfProbe.mark());

@@ -268,18 +268,10 @@ class NaturalSort(unittest.TestCase):
         # Arbitrary precision, not float or int64.
         self.assertLess(key("a" + "9" * 80), key("a" + "1" + "0" * 80))
 
-    def test_sort_catalog_entries_is_non_mutating_and_coerces(self) -> None:
-        entries = [{"file": "b"}, {"file": None}, {"file": "a"}, {}, {"file": 0}]
-        original = list(entries)
-        result = natural_sort.sort_catalog_entries(entries)
-        self.assertEqual(entries, original)
-        self.assertEqual([e.get("file") for e in result[:3]], [None, None, 0])
-        self.assertEqual([e.get("file") for e in result[3:]], ["a", "b"])
-
 
 class ShippedCollationTable(unittest.TestCase):
     def test_the_shipped_table_is_the_one_the_fixture_was_built_from(self) -> None:
-        # A stale collation.json would serve a different catalog order with no
+        # A stale collation.json would serve a different explorer order with no
         # other symptom. This is the only thing that catches it.
         self.assertTrue(natural_sort.COLLATION_PATH.is_file())
         ours = sorted(GOLDEN["sortCorpus"], key=natural_sort.collation_key)

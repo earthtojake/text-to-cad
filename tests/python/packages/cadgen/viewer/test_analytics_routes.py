@@ -34,7 +34,7 @@ class ViewerAnalyticsTest(unittest.TestCase):
         self.addCleanup(environment.stop)
         self.state = self.tmp / "state" / "settings.json"
         self.sent: list[dict] = []
-        self.app = create_cad_app(root=str(self.root), host="127.0.0.1", port=0)
+        self.app = create_cad_app(host="127.0.0.1", port=0, start=str(self.root))
         self.app.analytics = Recorder(path=self.state, send=lambda payload: self.sent.append(payload) or True)
         self.app.analytics.started(client={"name": "cadgen-viewer", "version": "0"}, presentation="browser")
         self.port = self.serve(self.app)
@@ -82,11 +82,12 @@ class ViewerAnalyticsTest(unittest.TestCase):
         self.assertFalse(self.state.exists())
 
     def test_what_the_page_did_is_sent_only_with_consent_and_a_file_only_as_its_code(self) -> None:
-        self.request("POST", "/__cad/analytics/activity", {"file": "parts/a.stl", "touched": True})
+        model = str(self.root / "parts" / "a.stl")
+        self.request("POST", "/__cad/analytics/activity", {"file": model, "touched": True})
         self.assertFalse(self.app.analytics.flush())  # not asked yet: nothing goes
         self.request("POST", "/__cad/analytics", {"share": True})
-        self.assertEqual(self.request("POST", "/__cad/analytics/activity", {"file": "parts/a.stl", "touched": True})[0], 204)
-        self.request("POST", "/__cad/analytics/activity", {"file": "../outside.stl"})  # not this viewer's: not counted
+        self.assertEqual(self.request("POST", "/__cad/analytics/activity", {"file": model, "touched": True})[0], 204)
+        self.request("POST", "/__cad/analytics/activity", {"file": "parts/b.stl"})  # not named by its absolute path: not counted
         self.assertTrue(self.app.analytics.flush())
         [payload] = self.sent
         self.assertEqual((payload["presentation"], payload["client"]["name"]), ("browser", "cadgen-viewer"))
@@ -111,7 +112,7 @@ class ViewerAnalyticsTest(unittest.TestCase):
 
     def test_an_app_with_no_recorder_serves_no_analytics(self) -> None:
         # The CAD app's tunnel builds apps of its own: its page asks the CAD app's server instead.
-        port = self.serve(create_cad_app(root=str(self.root), host="127.0.0.1", port=0))
+        port = self.serve(create_cad_app(host="127.0.0.1", port=0))
         self.assertEqual(self.request("GET", "/__cad/analytics", port=port)[0], 404)
         self.assertEqual(self.request("POST", "/__cad/analytics/activity", {"touched": True}, port=port)[0], 405)
 

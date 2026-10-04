@@ -11,7 +11,9 @@ export function validatePromptReference(reference) {
   const { resource, target } = reference;
   if (resource.kind === 'workspace-file') {
     requireValue(typeof resource.workspaceId === 'string' && resource.workspaceId.length > 0, 'workspace identity is required');
-    requireValue(typeof resource.path === 'string' && resource.path.length > 0 && !resource.path.startsWith('/') && !/^[A-Za-z]:/.test(resource.path) && !/[\\\0]/.test(resource.path) && resource.path.split('/').every(part => part && part !== '.' && part !== '..'), 'file paths must be normalized and root-relative');
+    // A file is named by its absolute path, `/`-separated (`/a/b.step`, `C:/a/b.step`).
+    requireValue(typeof resource.path === 'string' && /^(?:[A-Za-z]:)?\//.test(resource.path) && !/[\\\0]/.test(resource.path)
+      && resource.path.replace(/^(?:[A-Za-z]:)?\//, '').split('/').every(part => part && part !== '.' && part !== '..'), 'file paths must be normalized and absolute');
   } else {
     requireValue(resource.kind === 'url' && typeof resource.url === 'string', 'unknown resource kind');
     let url; try { url = new URL(resource.url); } catch { /* Report the contract error below. */ }

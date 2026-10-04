@@ -71,10 +71,10 @@ before(async () => {
     else if (url.pathname === '/styles.css') { response.setHeader('Content-Type', 'text/css'); response.end(css); }
     else if (url.pathname.endsWith('/__cad/catalog')) {
       response.setHeader('Content-Type', 'application/json');
-      response.end(JSON.stringify({ rootId: root, entries: Object.entries(FILES).map(([file, data]) => (
-        { kind: file.split('.').pop(), file, rootRelativeFile: file, url: `/${file}`, hash: `${root}-${file}`, bytes: data.length })) }));
+      response.end(JSON.stringify({ entries: Object.entries(FILES).map(([file, data]) => (
+        { kind: file.split('.').pop(), file: `/models/${file}`, url: `/${file}`, hash: `${root}-${file}`, bytes: data.length })) }));
     } else if (url.pathname.endsWith('/__cad/server')) {
-      response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify({ rootId: root, rootPath: '/models', backend: 'cadgen' }));
+      response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify({ backend: 'cadgen' }));
     } else if (FILES[name]) { response.setHeader('Content-Type', 'application/octet-stream'); response.end(FILES[name]); }
     else { response.setHeader('Content-Type', 'text/html'); response.end(`<!doctype html><html><head><title>Host title</title><link rel="stylesheet" href="/styles.css">${HARNESS_SIZE}</head><body><div id="root"></div><script type="module" src="/harness.js"></script></body></html>`); }
   });
@@ -113,7 +113,7 @@ const noTools = async (pane) => {
     assert.equal(await pane.getByRole('button', { name, exact: true }).count(), 0, name);
   }
 };
-const displayButton = pane => pane.locator('[data-viewer-navbar]').getByRole('button', { name: 'Display', exact: true });
+const displayButton = pane => pane.locator('[data-viewport-actions]').getByRole('button', { name: 'Display', exact: true });
 // Display's settings: a dropdown, portaled out of the viewer.
 const displayPanel = pane => pane.page().locator('[data-display-popover]');
 // The viewport's own pixels, without any chrome over them: what a host capture returns.
@@ -174,16 +174,16 @@ test('an STL opens as one mesh with no tools: display settings, orbit, host comm
   // simply orbits, pans and zooms, with no strip over it.
   await noTools(pane);
   assert.equal(await pane.locator('[data-quick-edit]').count(), 0, 'Quick Edit is a STEP file\'s: a mesh has nothing to pick');
-  assert.equal(await pane.locator('[data-viewer-navbar]').getByRole('button', { name: 'Preview', exact: true }).count(), 1,
-    'an STL is 3D: its navbar offers Preview');
+  assert.equal(await pane.locator('[data-viewport-actions]').getByRole('button', { name: 'Preview', exact: true }).count(), 1,
+    'an STL is 3D: Preview sits on top of its cube');
 
   // A mesh has no panel of its own: its only settings are Display's, and Display is never
-  // where a file opens. So it opens with the column shut and the model given the room.
-  assert.deepEqual(await panels(pane), ['Show files:false']);
+  // where a file opens. So the navbar has no panel toggle, and the model has the room.
+  assert.deepEqual(await panels(pane), []);
   assert.equal(await pane.locator('[data-tool-panel]').count(), 0, 'nothing in the tool stack');
   await displayButton(pane).click();
   await displayPanel(pane).waitFor();
-  assert.deepEqual(await panels(pane), ['Show files:false']);
+  assert.deepEqual(await panels(pane), []);
   assert.equal(await displayPanel(pane).getByRole('tab').count(), 0, 'Display has no tabs inside it');
   assert.equal(await pane.locator('[data-tool-panel]').count(), 0, 'and nothing joins the tool stack');
   const displayMenu = displayPanel(pane);
@@ -281,7 +281,7 @@ test('an STL opens as one mesh with no tools: display settings, orbit, host comm
   });
   assert.deepEqual(camera.position.map(Math.round), [90, -70, 60]);
   const state = await page.evaluate(() => window.cadHarness.a.controller.readState());
-  assert.deepEqual([state.resource.path, state.revision, state.loading, state.selection], ['part.stl', 'one-part.stl', false, []]);
+  assert.deepEqual([state.resource.path, state.revision, state.loading, state.selection], ['/models/part.stl', 'one-part.stl', false, []]);
   const declined = await page.evaluate(() => window.cadHarness.a.controller.select({ selectors: ['o1.f1'] }).then(() => '', error => error.message));
   assert.match(declined, /A mesh file has nothing to select/);
   assert.match(await page.evaluate(() => window.cadHarness.a.controller.clearSelection().then(() => '', error => error.message)), /no selection to clear/);
@@ -294,14 +294,14 @@ test('an STL opens as one mesh with no tools: display settings, orbit, host comm
   await page.evaluate(() => window.cadHarness.capture());
   await page.waitForFunction(() => window.cadHarness.captures.length === 1);
   const captured = await page.evaluate(() => window.cadHarness.captures[0]);
-  assert.deepEqual([captured.file, captured.type, captured.references.length], ['part.stl', 'image/png', 1]);
+  assert.deepEqual([captured.file, captured.type, captured.references.length], ['/models/part.stl', 'image/png', 1]);
   assert.deepEqual(captured.references[0].target, { kind: 'whole-resource' });
 
   // Camera and Display settings belong to this file under this renderer's id, and survive a remount.
   await display(page, { surfaces: { colorMode: 'single', color: '#00c040' }, grid: { enabled: true }, floor: { enabled: true } });
-  await page.waitForFunction(() => window.cadHarness.state.renderers?.[JSON.stringify(['part.stl', 'mesh'])]?.display?.surfaces?.colorMode === 'single');
+  await page.waitForFunction(() => window.cadHarness.state.renderers?.[JSON.stringify(['/models/part.stl', 'mesh'])]?.display?.surfaces?.colorMode === 'single');
   const stored = await page.evaluate(() => window.cadHarness.state.renderers);
-  assert.deepEqual(Object.keys(stored), [JSON.stringify(['part.stl', 'mesh'])], 'keyed by [path, renderer id]');
+  assert.deepEqual(Object.keys(stored), [JSON.stringify(['/models/part.stl', 'mesh'])], 'keyed by [absolute path, renderer id]');
   const left = await page.evaluate(() => window.cadHarness.a.controller.readState());
   await page.evaluate(() => window.cadHarness.mounted(false));
   await pane.locator('canvas').first().waitFor({ state: 'detached' });
@@ -325,7 +325,7 @@ test('a 3MF is one mesh per object with its source colour; an uncoloured one tak
   await page.waitForFunction(() => window.cadHarness.a.controller?.readState().loading === false);
   await noTools(pane);
   // A 3MF's controls are a mesh's: no strip, and Display shut as it opens, the same dropdown an STL has.
-  assert.deepEqual(await panels(pane), ['Show files:false']);
+  assert.deepEqual(await panels(pane), []);
   await displayButton(pane).click();
   await displayPanel(pane).waitFor();
   await displayButton(pane).click();

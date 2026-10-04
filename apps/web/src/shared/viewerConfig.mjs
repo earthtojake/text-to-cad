@@ -5,11 +5,6 @@ import { TEXT_TO_CAD_LINKS, releaseVersion } from "@text-to-cad/ui/links";
 export const DEFAULT_VIEWER_GITHUB_URL = TEXT_TO_CAD_LINKS.github;
 export const DEFAULT_VIEWER_DISCORD_URL = TEXT_TO_CAD_LINKS.discord;
 
-export function normalizeViewerDefaultFile(value = "") {
-  const rawValue = String(value ?? "").trim();
-  return rawValue.replace(/\\/g, "/").replace(/^\/+/, "").replace(/\/+$/, "");
-}
-
 export function normalizeViewerGithubUrl(value = "", fallback = DEFAULT_VIEWER_GITHUB_URL) {
   return normalizeHttpUrlCandidate(value) || normalizeHttpUrlCandidate(fallback);
 }

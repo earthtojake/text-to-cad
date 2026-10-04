@@ -209,14 +209,14 @@ unchanged after a runtime replacement does not.
 
 ## Where the controls live
 
-Display settings are a dropdown from the Display button in the navbar's right end
-(the perspective box, between Settings and Preview: `kit/shell/DisplayPopover.jsx`),
-present for every 3D file, never a panel of the tool stack or a sidebar panel. A
+Display settings are a dropdown from the Display button on top of the view cube
+(the perspective box, before Preview: `kit/shell/DisplayPopover.jsx`), which opens up from
+it, present for every 3D file, never a panel of the tool stack or of the host's panel column. A
 file's model tree, its Reference and Position are panels of the tool stack (see
 [settings-ui.md](./settings-ui.md#the-tool-stack)); nothing in them is a display
 setting.
 
-Display and Preview, the view's controls in the navbar, are offered by a 3D view
+Display and Preview, the view's controls on top of its cube, are offered by a 3D view
 alone, as its renderer declares to the shell (`useRendererShell`'s `previewable`):
 
 | Renderer | Files | Display and Preview |

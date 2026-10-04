@@ -1,42 +1,44 @@
-"""Single-port CAD Viewer server and instance manager: ``cadgen viewer``.
+"""The CAD Viewer server: ``cadgen viewer``.
 
-Launching is UNCONDITIONAL, Jupyter-style: running ``cadgen viewer`` from a
-directory always ends with the URL of a live, correct Viewer for that directory.
-If an identity-probed instance already serves ``realpath(cwd)`` at this identity
-token (version plus the runtime content digest — see ``identity_token``),
-its URL is printed with ``action:"reused"`` and nothing is spawned (``--new``
-skips the lookup); otherwise the server binds the first free port from 3245
-upward and prints ``action:"started"``. An EXPLICIT ``--port`` stays strict — it
-exits 1 when taken — because then the port was the ask. The printed URL (and the
-``--json {url,port,action}`` line) is the contract; the port is an output of
-launch, never something the caller reasons about.
+A viewer serves every CAD file on the machine by absolute path, on one port: 3245
+by default, or the one ``--port N`` names, as any web server does. The page opens
+``?file=/abs/part.step`` and browses from that file's folder. Launching is
+UNCONDITIONAL, Jupyter-style: running ``cadgen viewer`` from anywhere ends with
+the URL of a live, correct Viewer. Before it binds, the launcher asks the port
+who holds it (``GET /__cad/server``):
+
+* nothing — it starts there and prints ``action:"started"``;
+* this user's viewer at this identity token (version plus the runtime content
+  digest — see ``identity_token``) — its URL is printed with
+  ``action:"reused"`` and nothing is spawned;
+* this user's viewer running other code — it is asked to exit
+  (``POST /__cad/shutdown``), and once the port is free this launch starts
+  there (``action:"started"``): the newest code wins;
+* anything else — another program, another user's viewer — a refusal that
+  names ``--port``. The bind decides that: the question only finds this
+  user's viewers.
+
+The printed URL (and the ``--json {url,port,action}`` line) is the contract.
+``--new`` is the one way past all of it: an OS-assigned free port, never asked
+about, never reused — for a development server and for tests.
 
 A launch that STARTS a server is that server and stays in the foreground; a
 launch that reuses one prints and exits. ``--detach`` makes both return: the
-server runs in the background (its own session, output to a log beside its
-registry entry) and the launcher exits once it has announced itself — the
-spelling for agents and scripts, which wait for a command to finish.
+server runs in the background (its own session, its output to one log in the
+state directory, ``viewer.log``, found without asking anyone) and the launcher
+exits once it has announced itself — the spelling for agents and scripts,
+which wait for a command to finish. ``cadgen viewer stop [--port N]`` asks the
+viewer on a port to exit.
 
-Also the instance manager: ``cadgen viewer list [--json]`` shows every running
-Viewer (identity-probed, stale entries reaped) and ``cadgen viewer stop --port
-<n>`` / ``--pid <n>`` terminates one. These live here rather than in a separate
-tool because the registry the server writes is the only source of truth. Dev
-never registers (``--no-registry``): the registry is installed instances only.
+``--api-only`` serves the two API prefixes and nothing else, because Vite owns
+the client — this is what lets ``npm run dev`` work on a checkout that has never
+been built; ``npm run dev`` runs it with ``--new``.
 
-Three flags exist for the dev server and nowhere else: ``--ephemeral`` (bind any
-free port), ``--no-registry`` (stay out of reuse), and ``--api-only`` (serve the
-two API prefixes and nothing else, because Vite owns the client — this is what
-lets ``npm run dev`` work on a checkout that has never been built).
+A Viewer has no directory. The folder a server is started in is where the page
+resolves a developer's relative ``?file=`` (``serverInfo.start``), and nothing
+more: it bounds nothing, and a launch from another folder reuses the server all
+the same. Launch is::
 
-A Viewer serves ONE directory: the one it is launched from. There is no flag
-for it — the cwd IS the served directory, so the caller chooses what to serve
-by choosing where to run. The page is always the bare origin; ``?file=``
-selects a file inside that directory. To serve a second directory, just launch
-again from it.
-
-Launch is::
-
-    cd <the directory to serve>
     cadgen viewer            # or: python -m cadgen.viewer
 
 There is no interpreter discovery, and deliberately so: an earlier backend
@@ -56,8 +58,11 @@ import signal
 import socket
 import subprocess
 import sys
+import tempfile
 import threading
 import time
+import urllib.error
+import urllib.request
 
 # --- interpreter floor ---------------------------------------------------
 #
@@ -117,18 +122,18 @@ if _UNSUPPORTED_PYTHON:
 
 from cadgen import assets  # noqa: E402
 
-from . import registry  # noqa: E402
 from . import reload as dev_reload  # noqa: E402
 from .handler import CadHTTPServer, make_handler_class  # noqa: E402
-from .http_app import create_cad_app, identity_token, newest_mtime_ns  # noqa: E402
+from .http_app import POST_GUARD_HEADER, create_cad_app, identity_token, newest_mtime_ns, os_user  # noqa: E402
 
 DEFAULT_PROG = "cadgen viewer"
 DEFAULT_VIEWER_HOST = "127.0.0.1"
 DEFAULT_VIEWER_PORT = 3245
-# How far past the default the launcher will roll looking for a free port
-# before giving up. Far beyond any plausible number of live Viewers.
-PORT_ROLL_LIMIT = 100
-STOP_WAIT_SECONDS = 3.0
+# How long the launcher waits for the port's holder to say who it is. A viewer answers
+# `/__cad/server` in a millisecond; the margin is for one busy with a large drawing.
+PROBE_SECONDS = 1.0
+# How long a viewer asked to exit (`POST /__cad/shutdown`) has to give up its port.
+SHUTDOWN_WAIT_SECONDS = 5.0
 
 # EADDRINUSE/EACCES are the only "taken" signals. Windows raises WSAEADDRINUSE /
 # WSAEACCES, which Python maps onto these same errnos.
@@ -162,29 +167,25 @@ def _compact_json(payload) -> str:
 
 
 # argparse prefixes this with "usage: " itself.
-USAGE = """{prog} [--host HOST] [--port N | --ephemeral] [--new] [--json] [--detach]
-       {pad} [--dist DIR] [--api-only] [--no-registry]
-       {prog} list [--json]
-       {prog} stop (--port N | --pid N)"""
+USAGE = """{prog} [--host HOST] [--port N | --new] [--json] [--detach]
+       {pad} [--dist DIR] [--api-only]
+       {prog} stop [--port N]"""
 
-DESCRIPTION = """Serve ONE directory of CAD artifacts: the directory you run it from. There is
-no flag for it — cd there first. The page is the bare origin; `?file=` selects
-an artifact inside that directory.
+DESCRIPTION = """The CAD Viewer: one local server for every CAD file on this machine, opened by
+absolute path (`?file=/abs/part.step`), on port 3245 or the one --port names. A
+launch reuses this user's viewer on that port, or replaces one running other code;
+the folder a viewer starts in is only where a developer's relative `?file=` links
+resolve.
 """
 
 _HELP = {
     "host": "bind address (default: 127.0.0.1)",
-    "port": (
-        "strict: this port or fail. Default rolls from 3245 upward and reuses a "
-        "live viewer already serving this directory."
-    ),
-    "ephemeral": "bind an OS-assigned port; never reuse, never register",
-    "new": "start a fresh instance instead of reusing a live one",
+    "port": "the port to serve on (default: 3245); this user's viewer on it is reused or replaced",
+    "new": "bind an OS-assigned free port, and neither reuse nor replace anything",
     "json": "announce the instance as one JSON line on stdout",
     "detach": "run the server in the background: print its URL, then return",
     "dist": "built client to serve (default: the bundled client; env CADGEN_VIEWER_DIST)",
     "api_only": "serve only /__cad and /__tess_cache (a dev server owns the client)",
-    "no_registry": "do not record this instance for `list`/`stop`/reuse",
 }
 
 
@@ -192,8 +193,8 @@ def _port_number(raw: str) -> int:
     """A TCP port, or an argparse error naming what was wrong.
 
     ``0`` is refused rather than read as "any port": that spelling is
-    ``--ephemeral``, and a launcher that quietly turned ``--port 0`` into a
-    strict 3245 (as the old hand-rolled parser did) was a trap.
+    ``--new``, and a launcher that quietly turned ``--port 0`` into a
+    strict 3245 (as an old hand-rolled parser did) was a trap.
     """
     try:
         value = int(raw, 10)
@@ -212,7 +213,7 @@ class _Parser(argparse.ArgumentParser):
     fine. argparse refuses too, but names every stray token in one line —
     ``--dir /tmp`` would read as two problems. The FIRST unknown is the useful
     one, so ``parse`` below reports exactly that. This also catches the retired
-    ``--root <dir>``: the served directory is the cwd now.
+    ``--root <dir>``: a viewer has no directory.
     """
 
     def error(self, message: str) -> None:  # noqa: D401 - argparse's contract
@@ -236,17 +237,13 @@ def build_parser(prog: str = DEFAULT_PROG) -> argparse.ArgumentParser:
         allow_abbrev=False,
     )
     parser.add_argument("--host", default=DEFAULT_VIEWER_HOST, help=_HELP["host"])
-    # Explicit --port means "this port or fail"; the default (None) means "any
-    # free port from the base" and enables the reuse lookup + roll.
     binding = parser.add_mutually_exclusive_group()
     binding.add_argument("--port", type=_port_number, default=None, metavar="N", help=_HELP["port"])
-    binding.add_argument("--ephemeral", action="store_true", help=_HELP["ephemeral"])
-    parser.add_argument("--new", dest="fresh", action="store_true", help=_HELP["new"])
+    binding.add_argument("--new", action="store_true", help=_HELP["new"])
     parser.add_argument("--json", action="store_true", help=_HELP["json"])
     parser.add_argument("--detach", action="store_true", help=_HELP["detach"])
     parser.add_argument("--dist", default="", metavar="DIR", help=_HELP["dist"])
     parser.add_argument("--api-only", dest="api_only", action="store_true", help=_HELP["api_only"])
-    parser.add_argument("--no-registry", dest="no_registry", action="store_true", help=_HELP["no_registry"])
     return parser
 
 
@@ -255,35 +252,14 @@ def parse_args(argv: list[str], *, prog: str = DEFAULT_PROG) -> dict:
     namespace = build_parser(prog).parse(list(argv))
     return {
         "host": namespace.host,
-        "port": namespace.port if namespace.port is not None else DEFAULT_VIEWER_PORT,
-        "port_explicit": namespace.port is not None,
+        # --new binds port 0: whatever the OS hands out.
+        "port": 0 if namespace.new else (namespace.port or DEFAULT_VIEWER_PORT),
+        "new": namespace.new,
         "dist": namespace.dist or "",
         "json": namespace.json,
         "detach": namespace.detach,
-        "fresh": namespace.fresh,
-        # Additive flags, all three for dev (see the client's vite.config.mjs).
-        "ephemeral": namespace.ephemeral,
-        "no_registry": namespace.no_registry,
         "api_only": namespace.api_only,
     }
-
-
-def served_directory() -> str:
-    """The directory this Viewer serves: the cwd, full stop.
-
-    No flag, no environment variable, no special cases. Serving the app's own
-    directory is a legitimate thing to ask for — it is how you look at the
-    Viewer's own fixtures — so nothing here has opinions about where you stand.
-    Callers choose what to serve by choosing where to launch; the cad-viewer
-    skill instructs exactly that (cd into the model workspace first).
-
-    ``os.getcwd()`` can fail: a cwd deleted underneath the shell raises
-    ``FileNotFoundError``. That is surfaced as a clean refusal by ``main`` —
-    booting a viewer for a directory that no longer exists would answer every
-    request with a 404 that looks like a missing model rather than a missing
-    directory.
-    """
-    return os.path.abspath(os.getcwd())
 
 
 def resolve_dist_dir(explicit: str) -> str:
@@ -305,16 +281,11 @@ def port_is_free(host: str, port: int) -> bool:
     """True when this process can BIND host:port.
 
     The same operation the server is about to perform, so the probe cannot
-    disagree with reality. This used to probe by CONNECTING, with only
-    ECONNREFUSED counting as free; on Windows a connect to a closed port
-    routinely fails some other way (Hyper-V/WSL port exclusions, loopback
-    filtering, refusals arriving as timeouts), so free ports read as occupied.
-    A definite EADDRINUSE (or EACCES, Windows's answer for its excluded ranges)
-    keeps the friendly rerun-without---port message; any OTHER failure counts as
-    free, because this probe exists only for that message — the server's own
-    bind stays authoritative.
+    disagree with reality. A definite EADDRINUSE (or EACCES, Windows's answer
+    for its excluded ranges) is taken; any OTHER failure counts as free,
+    because the server's own bind stays authoritative.
     """
-    probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    probe = socket.socket(socket.AF_INET6 if ":" in host else socket.AF_INET, socket.SOCK_STREAM)
     try:
         if not sys.platform.startswith("win"):
             probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -350,135 +321,99 @@ def warn_when_dist_is_stale(dist_dir: str) -> None:
         _err("dist/ is older than the client sources — rebuild with `npm run build`\n")
 
 
-def _realpath_or(candidate) -> str:
+# --- the port's holder ---------------------------------------------------
+
+
+def _loopback(host: str) -> str:
+    """Where a server bound to ``host`` is reached: a wildcard bind on loopback."""
+    return DEFAULT_VIEWER_HOST if host in ("", "0.0.0.0", "::") else host
+
+
+def _url(host: str, port: int, path: str) -> str:
+    host = _loopback(host)
+    return f"http://{f'[{host}]' if ':' in host else host}:{port}{path}"
+
+
+def probe(host: str, port: int, timeout: float = PROBE_SECONDS) -> dict | None:
+    """What answers ``GET /__cad/server`` on ``port``, or ``None`` when nothing answers it with an
+    object: nothing listening, or a program that is not a viewer (the bind finds those)."""
     try:
-        return os.path.realpath(str(candidate or ""), strict=True)
-    except OSError:
-        return str(candidate or "")
+        with urllib.request.urlopen(_url(host, port, "/__cad/server"), timeout=timeout) as response:  # noqa: S310 - loopback
+            payload = json.loads(response.read().decode("utf-8"))
+    except (urllib.error.URLError, OSError, ValueError):
+        return None
+    return payload if isinstance(payload, dict) else None
 
 
-def find_reusable(directory: str, token: str) -> dict | None:
-    """The reuse key: realpath(root) x identity token, over identity-probed entries.
-
-    Never port, never pid — keying on the port was the old source-blind reuse
-    bug, and pid-liveness is the probe's job. Dev instances never register, so
-    nothing here can hand back a Vite proxy target.
-
-    The token covers the cadgen Python runtime and exact built client (see
-    ``identity_token`` in http_app.py). The entry's token was recorded when
-    that instance STARTED, so an instance running last week's code fails the
-    match after a ``git pull`` or rebuild, and a fresh launch starts instead of
-    reusing stale resident code.
-    """
-    root_real = _realpath_or(directory)
-    for entry in registry.live_entries():  # probes pids, reaps stale files
-        if _realpath_or(entry.get("root")) == root_real and str(entry.get("token") or "") == str(
-            token or ""
-        ):
-            return entry
-    return None
+def is_own_viewer(info: dict | None) -> bool:
+    """Whether ``info`` (a ``probe``) is a CAD Viewer this OS user runs: the only kind a launch
+    reuses, replaces or stops."""
+    return bool(info) and info.get("app") == "cad-viewer" and info.get("user") == os_user()
 
 
-# --- list / stop ---------------------------------------------------------
-
-
-def _format_age(started_at) -> str:
-    if not started_at:
-        return ""
-    seconds = max(0, int(time.time() - started_at))
-    if seconds >= 3600:
-        return f"  up {seconds // 3600}h{(seconds % 3600) // 60:02d}m"
-    return f"  up {seconds // 60}m"
-
-
-def _format_entry(entry: dict) -> str:
-    url = f"http://{entry.get('host') or '127.0.0.1'}:{entry.get('port')}/"
-    return (
-        f"  port {entry.get('port')}  pid {entry.get('pid')}  "
-        f"viewer {entry.get('version') or '?'}{_format_age(entry.get('startedAt'))}\n"
-        f"    {url}\n"
-        f"    serving  {entry.get('root') or '?'}\n"
-        f"    code     {entry.get('packageDir') or '?'}"
-        + (f"\n    log      {entry['log']}" if entry.get("log") else "")
+def request_shutdown(host: str, port: int, *, wait: float = SHUTDOWN_WAIT_SECONDS) -> bool:
+    """Ask the viewer on ``port`` to exit (``POST /__cad/shutdown``), then wait, at most ``wait``
+    seconds, for the port to be free. Whether it is."""
+    request = urllib.request.Request(
+        _url(host, port, "/__cad/shutdown"), data=b"", method="POST", headers={POST_GUARD_HEADER: "1"}
     )
+    try:
+        with urllib.request.urlopen(request, timeout=PROBE_SECONDS) as response:  # noqa: S310 - loopback
+            if response.status != 202:
+                return False
+    except (urllib.error.URLError, OSError, ValueError):
+        return False
+    deadline = time.monotonic() + wait
+    while not port_is_free(host, port):  # the very bind a launch on ``host`` performs
+        if time.monotonic() >= deadline:
+            return False
+        time.sleep(0.05)
+    return True
 
 
-def build_list_parser(prog: str = f"{DEFAULT_PROG} list") -> argparse.ArgumentParser:
-    parser = _Parser(prog=prog, description="Show running CAD Viewers and what each serves.", allow_abbrev=False)
-    parser.add_argument("--json", action="store_true", help="print the registry entries as JSON")
-    return parser
+def _take_port(host: str, port: int, token: str) -> tuple[str, dict | None]:
+    """What this launch does about ``port``: ``("reuse", info)`` for this user's viewer at this
+    identity; ``("bind", None)`` when it binds the port itself -- nothing holds it, the holder is
+    not this user's viewer (the bind refuses those), or this user's viewer running other code has
+    just exited; ``("stuck", info)`` for one of those that would not exit."""
+    info = probe(host, port)
+    if not is_own_viewer(info):
+        return "bind", None
+    if str(info.get("identityToken") or "") == str(token or ""):
+        return "reuse", info
+    # This user's viewer, running other code: the newest wins.
+    return ("bind", None) if request_shutdown(host, port) else ("stuck", info)
 
 
-def list_command(argv: list[str], *, prog: str = f"{DEFAULT_PROG} list") -> int:
-    """What CAD Viewers are running, and whose code answers each port.
-
-    A viewer serves one directory fixed at startup, so instances differ both by
-    what they serve and by WHICH INSTALL'S CODE holds the port.
-    """
-    as_json = build_list_parser(prog).parse(list(argv)).json
-    entries = registry.live_entries()  # also reaps anything that fails its identity probe
-    if as_json:
-        _out(f"{_compact_json(entries)}\n")
-        return 0
-    if not entries:
-        _out("No CAD Viewer is running.\n")
-        return 0
-    _out(f"{len(entries)} CAD Viewer{'' if len(entries) == 1 else 's'} running:\n")
-    for entry in entries:
-        _out(f"{_format_entry(entry)}\n")
-    return 0
+# --- stop ----------------------------------------------------------------
 
 
 def build_stop_parser(prog: str = f"{DEFAULT_PROG} stop") -> argparse.ArgumentParser:
-    parser = _Parser(prog=prog, description="Terminate a running CAD Viewer.", allow_abbrev=False)
-    which = parser.add_mutually_exclusive_group()
-    which.add_argument("--port", type=int, default=None, metavar="N", help="the viewer answering this port")
-    which.add_argument("--pid", type=int, default=None, metavar="N", help="the viewer with this process id")
+    parser = _Parser(prog=prog, description="Ask the CAD Viewer on a port to exit.", allow_abbrev=False)
+    parser.add_argument("--port", type=_port_number, default=DEFAULT_VIEWER_PORT, metavar="N",
+                        help="the port it serves on (default: 3245)")
     return parser
 
 
 def stop_command(argv: list[str], *, prog: str = f"{DEFAULT_PROG} stop") -> int:
-    """Terminate a running CAD Viewer.
+    """Ask the CAD Viewer on ``--port`` (3245) to exit, and wait for its port to be free.
 
-    Only ever signals a process the registry can still identify: ``live_entries``
-    probes each recorded port and requires the answering pid to match.
+    Only a viewer this OS user runs, as it says itself (``/__cad/server``): another program, or
+    another user's viewer, is never asked.
     """
-    selected = build_stop_parser(prog).parse(list(argv))
-    port = selected.port
-    pid = selected.pid
-    if not port and not pid:
-        _err("Specify which viewer to stop: --port <n> or --pid <n>.\n")
-        return 2
-    entries = registry.live_entries()
-    described = f"port {port}" if port else f"pid {pid}"
-    target = None
-    for entry in entries:
-        if (entry.get("port") == int(port)) if port else (entry.get("pid") == int(pid)):
-            target = entry
-            break
-    if not target:
-        _err(f"No running CAD Viewer for {described}.\n")
+    port = build_stop_parser(prog).parse(list(argv)).port
+    info = probe(DEFAULT_VIEWER_HOST, port)
+    if not info or info.get("app") != "cad-viewer":
+        _err(f"No CAD Viewer is running on port {port}.\n")
         return 1
-    try:
-        os.kill(int(target["pid"]), signal.SIGTERM)
-    except OSError as error:
-        _err(f"Could not stop pid {target['pid']}: {error}\n")
+    if not is_own_viewer(info):
+        _err(f"The CAD Viewer on port {port} is another user's.\n")
         return 1
-    deadline = time.monotonic() + STOP_WAIT_SECONDS
-    while time.monotonic() < deadline:
-        if not registry.probe(target, 0.25):
-            # Unregister from the CALLER side. On Windows os.kill(SIGTERM) maps
-            # to TerminateProcess: no signal handler runs and no atexit fires,
-            # so this is the only thing that removes the entry. A stop that
-            # worked leaves nothing to diagnose, so the log goes with it; every
-            # other way out keeps it (registry.prune_logs).
-            registry.unregister(target["pid"])
-            registry.remove_log(target)
-            _out(f"Stopped CAD Viewer on port {target['port']} (pid {target['pid']}).\n")
-            return 0
-        time.sleep(0.1)
-    _err(f"CAD Viewer pid {target['pid']} did not exit within {int(STOP_WAIT_SECONDS)}s.\n")
-    return 1
+    if not request_shutdown(DEFAULT_VIEWER_HOST, port):
+        _err(f"The CAD Viewer on port {port} (pid {info.get('pid')}) did not exit within {SHUTDOWN_WAIT_SECONDS:.0f}s.\n")
+        return 1
+    _out(f"Stopped CAD Viewer on port {port} (pid {info.get('pid')}).\n")
+    return 0
 
 
 # --- serve ---------------------------------------------------------------
@@ -508,27 +443,6 @@ def _prewarm_daemon() -> None:
         pass
 
 
-def _bind(host: str, port: int, args: dict) -> CadHTTPServer:
-    """Bind, rolling by BINDING rather than pre-probing.
-
-    The bind is the only check that cannot disagree with reality, and a lost
-    race just moves to the next candidate. Explicit ``--port`` gets a single
-    attempt; ``--ephemeral`` binds port 0 and reports what the OS gave.
-    """
-    placeholder = _LateApp()
-    if args["ephemeral"]:
-        return CadHTTPServer((host, 0), make_handler_class(placeholder), placeholder)
-    last_candidate = port if args["port_explicit"] else port + PORT_ROLL_LIMIT
-    while True:
-        try:
-            return CadHTTPServer((host, port), make_handler_class(placeholder), placeholder)
-        except OSError as error:
-            taken = error.errno in _PORT_TAKEN_ERRNOS
-            if not taken or args["port_explicit"] or port >= last_candidate:
-                raise
-            port += 1
-
-
 def _harden_streams() -> None:
     """Degrade an unencodable character to an escape instead of raising.
 
@@ -554,17 +468,15 @@ def _harden_streams() -> None:
 
 
 def main(argv: list[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:
-    """``python -m cadgen.viewer``: serve, or ``list``/``stop`` when argv[0] says so.
+    """``python -m cadgen.viewer``: serve, or ``stop`` when argv[0] says so.
 
-    Only argv[0] is inspected, so ``--json list`` is a SERVE invocation with an
-    unknown arg, not a list. The ``cadgen`` front door reaches the three verbs
-    through ``cadgen.cli.viewer``, ``viewer_list`` and ``viewer_stop`` instead,
-    which call :func:`serve`, :func:`list_command` and :func:`stop_command`.
+    Only argv[0] is inspected, so ``--json stop`` is a SERVE invocation with an
+    unknown arg, not a stop. The ``cadgen`` front door reaches the two verbs
+    through ``cadgen.cli.viewer`` and ``viewer_stop`` instead, which call
+    :func:`serve` and :func:`stop_command`.
     """
     _harden_streams()
     argv = list(sys.argv[1:] if argv is None else argv)
-    if argv and argv[0] == "list":
-        return list_command(argv[1:], prog=f"{prog} list")
     if argv and argv[0] == "stop":
         return stop_command(argv[1:], prog=f"{prog} stop")
     return serve(argv, prog=prog)
@@ -576,6 +488,19 @@ def main(argv: list[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:
 # takes well under a second; this bounds a wedged child, not a normal one.
 DETACH_READY_TIMEOUT_SECONDS = 120.0
 _DETACH_POLL_SECONDS = 0.02
+
+
+def log_path() -> str:
+    """Where a detached viewer's output goes: one file in the state directory (the temporary
+    directory where that cannot be made), so it is found without asking anyone."""
+    from .recents import state_dir  # noqa: PLC0415 - the state directory's one definition
+
+    try:
+        directory = state_dir()
+        directory.mkdir(parents=True, exist_ok=True)
+        return str(directory / "viewer.log")
+    except OSError:
+        return os.path.join(tempfile.gettempdir(), "cadgen-viewer.log")
 
 
 def _announcement(line: str) -> dict | None:
@@ -599,30 +524,6 @@ def _read_lines(path: str) -> list[str]:
         return []
 
 
-def _remove(path: str) -> None:
-    try:
-        os.unlink(path)
-    except OSError:
-        pass  # best-effort
-
-
-def _detached_log() -> str:
-    """The log a ``--detach`` launcher handed this server, or ``""``.
-
-    Taken from ``CADGEN_VIEWER_LOG`` only when this process's stdout really IS
-    that file: a variable inherited by accident must not let a foreground
-    server claim a log — which a clean ``stop`` then deletes — that is not its
-    own. A development restart keeps both, so it still names the same log.
-    """
-    path = os.environ.get(registry.LOG_ENV, "")
-    if not path:
-        return ""
-    try:
-        return path if os.path.samestat(os.fstat(1), os.stat(path)) else ""
-    except (OSError, ValueError):
-        return ""
-
-
 def launch_detached(argv: list[str], *, as_json: bool, prog: str = DEFAULT_PROG) -> int:
     """``--detach``: start the same launch as a background process, relay its
     announcement, and RETURN.
@@ -632,22 +533,18 @@ def launch_detached(argv: list[str], *, as_json: bool, prog: str = DEFAULT_PROG)
     for ``npm run dev``, wrong for an agent's shell, which waits for the
     command to finish (and for ``… | tail -1``, which waits for an EOF that
     never comes). With it, both outcomes behave alike: a reused instance and a
-    started one each print their lines and exit 0.
+    started one each print their lines and exit 0. A reuse that the launcher
+    found itself never gets here (``serve``).
 
     The child is the ordinary foreground launch — the same arguments minus
     ``--detach``, plus ``--json`` — in its own session (its own process group
     on Windows), so closing the terminal or the agent's shell does not take it
-    down. Its stdout and stderr go to a log file beside its registry entry,
-    never to a pipe: this process exits, and a server writing into a pipe
-    nobody reads would fail on its next line. The log is created here, under a
-    name that never changes (``registry.create_log``), and handed to the child
-    in ``CADGEN_VIEWER_LOG`` so its registry entry names it — whether or not
-    this launcher is still alive when the server comes up. It outlives the
-    server: a clean ``stop`` removes it, and a crash leaves it to read.
-    Readiness is the child's own announcement, which it writes only once it is
-    bound, attached and registered, so the URL printed here answers its first
-    request and ``list``/``stop``/reuse already see the instance. A launch that
-    does not end in a started server removes the log: its lines are relayed.
+    down. Its stdout and stderr go to the viewer log (``log_path``), started
+    afresh, never to a pipe: this process exits, and a server writing into a
+    pipe nobody reads would fail on its next line. The log outlives the server,
+    so a crash can be read afterwards, until the next detached start. Readiness
+    is the child's own announcement, which it writes only once it is bound and
+    attached, so the URL printed here answers its first request.
     """
     child_argv = [item for item in argv if item != "--detach"]
     if "--json" not in child_argv:
@@ -657,24 +554,18 @@ def launch_detached(argv: list[str], *, as_json: bool, prog: str = DEFAULT_PROG)
         popen_options["creationflags"] = subprocess.DETACHED_PROCESS | subprocess.CREATE_NEW_PROCESS_GROUP
     else:
         popen_options["start_new_session"] = True
+    log_file = log_path()
     try:
-        descriptor, log_file = registry.create_log()
-    except OSError as error:
-        _err(f"CAD Viewer could not start in the background: {error}\n")
-        return 1
-    try:
-        with open(descriptor, "wb") as log:
+        with open(log_file, "wb") as log:
             child = subprocess.Popen(  # noqa: S603 - our own interpreter, our own module
                 [sys.executable, "-m", "cadgen.viewer", *child_argv],
                 stdin=subprocess.DEVNULL,
                 stdout=log,
                 stderr=subprocess.STDOUT,
                 close_fds=True,
-                env={**os.environ, registry.LOG_ENV: log_file},
                 **popen_options,
             )
     except OSError as error:
-        _remove(log_file)
         _err(f"CAD Viewer could not start in the background: {error}\n")
         return 1
 
@@ -697,7 +588,6 @@ def launch_detached(argv: list[str], *, as_json: bool, prog: str = DEFAULT_PROG)
         time.sleep(_DETACH_POLL_SECONDS)
 
     if announced is None:
-        _remove(log_file)
         for line in lines:
             _err(f"{line}\n")
         # The child's own refusal code (1, or 2 for its argument grammar) is
@@ -717,7 +607,6 @@ def launch_detached(argv: list[str], *, as_json: bool, prog: str = DEFAULT_PROG)
         )
     else:
         child.wait()
-        _remove(log_file)
     if as_json:
         _out(f"{_compact_json({key: announced[key] for key in ('url', 'port', 'action')})}\n")
     return 0
@@ -729,26 +618,7 @@ def serve(argv: list[str], *, prog: str = DEFAULT_PROG) -> int:
     # argument with exit 2, both before anything below runs. A launcher that
     # answered --help by starting a server read as broken.
     args = parse_args(argv, prog=prog)
-
-    if args["detach"]:
-        if args["no_registry"]:
-            # A detached server has no terminal to Ctrl-C: `list` and `stop` are
-            # the only way anyone finds or ends it, and both read the registry.
-            _err(
-                f"{prog}: --detach cannot be combined with --no-registry: a detached "
-                f"Viewer is found and stopped through `{prog} list` / `{prog} stop`\n"
-            )
-            return 2
-        return launch_detached(argv, as_json=args["json"], prog=prog)
-
-    try:
-        directory = served_directory()
-    except OSError as error:
-        # A cwd deleted underneath the shell. Booting a viewer for a directory
-        # that no longer exists would answer every request with a 404 that
-        # looks like a missing model rather than a missing directory.
-        _err(f"CAD Viewer cannot serve the current directory — it no longer exists ({error}).\n")
-        return 1
+    host, port = args["host"], args["port"]
 
     # --api-only exempts the check because in dev the CLIENT COMES FROM VITE:
     # this process serves only /__cad and /__tess_cache, and requiring a built
@@ -766,47 +636,43 @@ def serve(argv: list[str], *, prog: str = DEFAULT_PROG) -> int:
         )
         return 1
 
-    # Reuse only the exact runtime requested now. Resolving dist before this
-    # lookup is load-bearing: --dist must never hand back a server that is
-    # serving a different client, and a removed default dist is not a usable
-    # resident merely because its registry entry is still alive.
-    if not args["fresh"] and not args["port_explicit"] and not args["ephemeral"]:
-        held = find_reusable(directory, identity_token(dist_dir))
-        if held:
-            url = f"http://{held.get('host') or DEFAULT_VIEWER_HOST}:{held['port']}/"
+    # Ask the port who holds it, with the exact runtime requested now. Resolving dist before this
+    # is load-bearing: --dist must never hand back a server serving a different client, and a
+    # removed default dist is not a usable resident merely because its server is still alive.
+    if not args["new"]:
+        action, held = _take_port(host, port, identity_token(dist_dir))
+        if action == "stuck":
+            _err(
+                f"The CAD Viewer on port {port} (pid {held.get('pid')}) runs other code and did not exit; "
+                f"stop it with `{prog} stop --port {port}`, or start this one with --port N.\n"
+            )
+            return 1
+        if action == "reuse":
+            url = f"http://{host}:{port}/"
             # The same stream rule as a start: under --json, stdout is the one
             # JSON line in BOTH outcomes, so no reader needs "the last line".
             say = _err if args["json"] else _out
-            say(f"Reusing CAD Viewer at {url} (serving {held.get('root')}, pid {held['pid']})\n")
+            say(f"Reusing CAD Viewer at {url} (pid {held.get('pid')}, started in {held.get('start')})\n")
             say(f"CAD Viewer URL: {url}\n")
             if args["json"]:
-                _out(f"{_compact_json({'url': url, 'port': held['port'], 'action': 'reused'})}\n")
+                _out(f"{_compact_json({'url': url, 'port': port, 'action': 'reused'})}\n")
             return 0
 
-    host = args["host"]
-    port = args["port"]
-    if args["port_explicit"]:
-        # An explicit port is a demand, not a preference: refuse when taken, and
-        # say who has it so the collision is diagnosable.
-        if not port_is_free(host, port):
-            holder = registry.find_by_port(port)
-            if holder:
-                _err(
-                    f"Port {port} on {host} is already serving a CAD Viewer: "
-                    f"pid {holder.get('pid')}, viewer {holder.get('version') or '?'}, "
-                    f"from {holder.get('packageDir') or '?'}.\n"
-                    f"Stop it with `{prog} stop --port {port}`, "
-                    f"or rerun without --port to take any free port.\n"
-                )
-            else:
-                _err(f"Port {port} on {host} is already in use. Rerun without --port to take any free port.\n")
-            return 1
+    if args["detach"]:
+        return launch_detached(argv, as_json=args["json"], prog=prog)
 
     warn_when_dist_is_stale(dist_dir)
 
     try:
-        server = _bind(host, port, args)
+        placeholder = _LateApp()
+        server = CadHTTPServer((host, port), make_handler_class(placeholder), placeholder)
     except OSError as error:
+        if error.errno in _PORT_TAKEN_ERRNOS:
+            _err(
+                f"Port {port} is in use by another program (or another user's CAD Viewer); "
+                f"start the viewer with --port N.\n"
+            )
+            return 1
         _err(f"{error}\n")
         return 1
     port = server.server_address[1]
@@ -814,7 +680,7 @@ def serve(argv: list[str], *, prog: str = DEFAULT_PROG) -> int:
     # Attach the real app in the same breath as the successful bind: the socket
     # is listening but serve_forever has not accepted anything, so no request
     # can be dropped in the gap, and serverInfo names the port actually taken.
-    app = create_cad_app(root=directory, host=host, port=port, dist_dir=dist_dir)
+    app = create_cad_app(host=host, port=port, dist_dir=dist_dir)
     server.app = app
     server.RequestHandlerClass = make_handler_class(app)
 
@@ -833,28 +699,18 @@ def serve(argv: list[str], *, prog: str = DEFAULT_PROG) -> int:
 
     updates.refresh()
 
-    # Register this instance so `list` and a later launch's reuse lookup can find
-    # it — after the bind, so we never advertise a port we failed to take, and
-    # BEFORE the URL line, so whoever reads that line (a --detach parent above
-    # all) can rely on `list`/`stop`/reuse seeing the instance it names. Dev
-    # skips it: a registered dev backend would be REUSED by a later real launch
-    # on the same root, handing an agent a URL served by Vite's proxy target.
-    if not args["no_registry"]:
-        # The token is the one the app computed AT ITS OWN START (CadApp
-        # holds it), never re-read from disk here: a re-read would let a
-        # stale resident claim freshness after a pull.
-        registry.register(
-            host=host,
-            port=port,
-            root=directory,
-            viewer_version=app.viewer_version,
-            token=app.identity_token,
-            log=_detached_log(),
-        )
+    def shutdown(_signum=None, _frame=None):
+        # shutdown() blocks until serve_forever returns, and calling it from a
+        # signal handler running ON the serving thread deadlocks. Dispatch it.
+        threading.Thread(target=server.shutdown, daemon=True).start()
+        # Hard-exit fallback: a launch waiting for the port waits a few seconds,
+        # and an in-flight stream must not outlive that.
+        timer = threading.Timer(0.5, os._exit, (0,))
+        timer.daemon = True
+        timer.start()
 
-        import atexit  # noqa: PLC0415
-
-        atexit.register(registry.unregister)
+    # `POST /__cad/shutdown`: a newer launch replacing this one, or `stop`.
+    app.on_shutdown = shutdown
 
     url = f"http://{host}:{port}/"
     started = "Starting CAD Viewer API" if args["api_only"] else "Starting CAD Viewer"
@@ -862,32 +718,17 @@ def serve(argv: list[str], *, prog: str = DEFAULT_PROG) -> int:
     # else; the narration goes to stderr. Without --json the narration is the
     # stdout contract (the URL line is what launch scripts read).
     say = _err if args["json"] else _out
-    say(f"{started} at {url} (serving {directory})\n")
+    say(f"{started} at {url} from {app.start}\n")
     say(f"CAD Viewer URL: {url}\n")
     if args["json"]:
         _out(f"{_compact_json({'url': url, 'port': port, 'action': 'started'})}\n")
 
-    # List the served tree once in the background, so the first catalog request
-    # finds the scanner's directory listings warm instead of paying the cold
-    # walk while the browser waits. After the announcement, never before it:
-    # the URL line is the readiness signal and waits for nothing.
-    threading.Thread(target=app.backend.warm_listings, name="cadgen-viewer-warm", daemon=True).start()
-    # And start the build daemon, whose workers import build123d while nobody waits:
-    # the session's first build, or the viewer's first STEP import, otherwise pays for
-    # it. The viewer never builds anything itself; this only warms what will.
+    # Start the build daemon, whose workers import build123d while nobody waits: the
+    # session's first build, or the viewer's first STEP import, otherwise pays for it.
+    # After the announcement, never before it: the URL line is the readiness signal
+    # and waits for nothing. The viewer never builds anything itself; this only warms
+    # what will.
     threading.Thread(target=_prewarm_daemon, name="cadgen-viewer-prewarm", daemon=True).start()
-
-    def shutdown(_signum=None, _frame=None):
-        if not args["no_registry"]:
-            registry.unregister()
-        # shutdown() blocks until serve_forever returns, and calling it from a
-        # signal handler running ON the serving thread deadlocks. Dispatch it.
-        threading.Thread(target=server.shutdown, daemon=True).start()
-        # Hard-exit fallback: `stop` gives the process 3s, and an in-flight
-        # stream must not outlive that.
-        timer = threading.Timer(0.5, os._exit, (0,))
-        timer.daemon = True
-        timer.start()
 
     signal.signal(signal.SIGINT, shutdown)
     signal.signal(signal.SIGTERM, shutdown)
@@ -919,41 +760,32 @@ def serve(argv: list[str], *, prog: str = DEFAULT_PROG) -> int:
     finally:
         if reloader is not None:
             reloader.stop()
+        if restart["argv"] is None:
+            server.server_close()  # the port is free now: a launch waiting for it starts at once
         analytics.close()  # the last send, waited for at most a couple of seconds
 
     if restart["argv"] is not None:
         # Returns only when the re-exec itself failed, and then the port is
         # already given up: say so and exit non-zero rather than pretending to
         # still serve.
-        _restart_in_place(server, app, restart["argv"], no_registry=args["no_registry"], prog=prog)
-        if not args["no_registry"]:
-            registry.unregister()
+        _restart_in_place(server, app, restart["argv"], prog=prog)
         return 1
-    if not args["no_registry"]:
-        registry.unregister()
     return 0
 
 
-def _restart_in_place(server, app, argv: list[str], *, no_registry: bool, prog: str) -> None:
+def _restart_in_place(server, app, argv: list[str], *, prog: str) -> None:
     """Free the port, then become the new code. Returns only if that failed.
 
     ``serve_forever`` has already stopped accepting, but its handler threads are
     daemons: the reloader only fires when nothing is counted in flight, and this
     drain covers the sliver between that check and the close. Then the listening
     socket is closed BEFORE the new image binds — a clean close-then-bind is
-    enough because the restart pins the port explicitly, so the new process
-    refuses loudly rather than silently landing somewhere else.
+    enough because the restart pins the port explicitly, and finds it free.
     """
     deadline = time.monotonic() + 2.0
     while app.busy_requests() and time.monotonic() < deadline:
         time.sleep(0.02)
     server.server_close()
-    if sys.platform.startswith("win") and not no_registry:
-        # Windows gets a NEW pid (see reload.execute_restart), so this entry
-        # would outlive its process; the restarted server registers its own. On
-        # POSIX the pid survives the exec and the entry is still correct, so it
-        # is left in place and simply written over.
-        registry.unregister()
     try:
         dev_reload.execute_restart(argv)
     except OSError as error:

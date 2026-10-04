@@ -2,33 +2,32 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createPromptContext, createPromptDeliveryLedger, referencePart, textPart, validatePromptContext, formatPromptContextText, formatPromptMessage, formatPromptReference, promptReferenceIds } from './index.js';
 
-const reference = { resource: { kind: 'workspace-file', workspaceId: 'root', path: 'STEP/my part.step', revision: 'v1' }, target: { kind: 'cad-selector', selectors: ['o1.2.f45'] } };
+const reference = { resource: { kind: 'workspace-file', workspaceId: 'root', path: '/work/STEP/my part.step', revision: 'v1' }, target: { kind: 'cad-selector', selectors: ['o1.2.f45'] } };
 test('one context retains image/reference relationships and formats canonical references', () => {
   const capture = Promise.resolve(new Blob(['png'], { type: 'image/png' }));
   const context = createPromptContext([referencePart(reference, 'face'), { id: 'image', kind: 'attachment', name: 'view.png', mimeType: 'image/png', content: capture, about: ['face'] }, textPart('Increase the clearance.')]);
   assert.equal(validatePromptContext(context), context);
   assert.equal(context.parts[1].content, capture);
-  assert.equal(formatPromptContextText(context), '"STEP/my part.step"#o1.2.f45\nIncrease the clearance.');
+  assert.equal(formatPromptContextText(context), '"/work/STEP/my part.step"#o1.2.f45\nIncrease the clearance.');
   assert.notEqual(createPromptContext([textPart('next')]).operationId, context.operationId);
 });
 test('a message says what the person wrote, then the file, its references and a picture saved as a file', () => {
   const file = { resource: reference.resource, target: { kind: 'whole-resource' } };
   const sketch = { id: 'sketch', kind: 'attachment', name: 'part-sketch.png', mimeType: 'image/png', content: new Blob(), about: ['file'], label: 'Sketch' };
   const context = createPromptContext([textPart('Round this edge.\n'), referencePart(file, 'file'), referencePart(reference, 'face'), sketch]);
-  const resolvePath = r => `/work/${r.path}`;
+  const resolvePath = r => r.path;
   assert.equal(formatPromptMessage(context, { resolvePath, attachmentPath: part => `/tmp/${part.name}` }),
     'Round this edge.\n\nFile: "/work/STEP/my part.step"\nReferences:\n"/work/STEP/my part.step"#o1.2.f45\nSketch: /tmp/part-sketch.png');
   // A picture sent beside the text is not named in it.
   assert.equal(formatPromptMessage(createPromptContext([textPart('Why?'), referencePart(file, 'file'), sketch]), { resolvePath }), 'Why?\n\nFile: "/work/STEP/my part.step"');
 });
 test('code targets preserve explicit ranges rather than borrowing the CAD fragment grammar', () => {
-  const code = { resource: { kind: 'workspace-file', workspaceId: 'root', path: 'src/bracket.py' }, target: { kind: 'text-range', start: { line: 4, character: 2 }, end: { line: 6, character: 0 } } };
-  assert.equal(formatPromptReference(code), 'src/bracket.py:5:3-7:1');
-  assert.equal(formatPromptReference(code, { resolvePath: r => `/project/${r.path}` }), '/project/src/bracket.py:5:3-7:1');
+  const code = { resource: { kind: 'workspace-file', workspaceId: 'root', path: '/work/src/bracket.py' }, target: { kind: 'text-range', start: { line: 4, character: 2 }, end: { line: 6, character: 0 } } };
+  assert.equal(formatPromptReference(code), '/work/src/bracket.py:5:3-7:1');
 });
 test('a reference names its ids as a person reads them: each selector, a range from 1, or its label', () => {
   assert.deepEqual(promptReferenceIds({ ...reference, target: { kind: 'cad-selector', selectors: ['o1.f2', 'o1.e3'] } }), ['o1.f2', 'o1.e3']);
-  const range = { resource: { kind: 'workspace-file', workspaceId: 'root', path: 'a.py' }, target: { kind: 'text-range', start: { line: 0, character: 4 }, end: { line: 2, character: 0 } } };
+  const range = { resource: { kind: 'workspace-file', workspaceId: 'root', path: '/work/a.py' }, target: { kind: 'text-range', start: { line: 0, character: 4 }, end: { line: 2, character: 0 } } };
   assert.deepEqual(promptReferenceIds(range), ['1:5–3:1']);
   assert.deepEqual(promptReferenceIds({ ...range, label: 'def plate' }), ['def plate']);
   assert.deepEqual(promptReferenceIds({ ...range, target: { kind: 'whole-resource' } }), []);
@@ -38,7 +37,7 @@ test('invalid bundles fail before delivery, including dangling relationships and
   assert.throws(() => createPromptContext([textPart('a'), textPart('b')]), /unique/);
   assert.throws(() => createPromptContext([{ id: 'i', kind: 'attachment', name: 'a.pdf', mimeType: 'application/pdf', content: new Blob(), about: ['missing'] }]), /absent reference/);
   assert.throws(() => referencePart({ ...reference, target: { kind: 'guess' } }), /unknown reference/);
-  assert.throws(() => referencePart({ ...reference, resource: { ...reference.resource, path: '../outside.step' } }), /root-relative/);
+  for (const path of ['STEP/relative.step', '/work/../outside.step', 'C:\\work\\a.step']) assert.throws(() => referencePart({ ...reference, resource: { ...reference.resource, path } }), /absolute/);
   assert.throws(() => referencePart({ ...reference, target: { kind: 'cad-selector', selectors: ['#not valid'] } }), /invalid CAD/);
 });
 test('a delivery ledger delivers each operation once, bounds work in flight, and forgets what failed', async () => {

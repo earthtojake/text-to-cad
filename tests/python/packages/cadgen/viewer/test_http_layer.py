@@ -18,14 +18,17 @@ import threading
 import unittest
 from pathlib import Path
 from unittest import mock
+from urllib.parse import quote
 
+from cadgen._internal.picker import FilePicker, PickerFailed
 from cadgen.viewer import handler as handler_module
 from cadgen.viewer import reload as reload_module
 from cadgen.viewer.http_app import create_cad_app, host_is_allowed, hostname_only
 
 
 class ServerFixture:
-    """A CadApp on an ephemeral loopback port, torn down on exit."""
+    """A CadApp on an ephemeral loopback port, started in ``root`` (a folder of the fixture's own),
+    torn down on exit."""
 
     def __init__(self, *, host="127.0.0.1", with_dist=True):
         self.tmp = tempfile.TemporaryDirectory()
@@ -41,7 +44,7 @@ class ServerFixture:
             Path(self.dist, "assets", "app.js").write_bytes(b"export const x = 1;\n")
             Path(self.dist, "favicon.ico").write_bytes(b"\x00\x00\x01\x00")
             Path(self.dist, "weird.xyz").write_text("unknown extension", encoding="utf-8")
-        self.app = create_cad_app(root=self.root, host=host, port=0, dist_dir=self.dist)
+        self.app = create_cad_app(host=host, port=0, dist_dir=self.dist, start=self.root)
         self.server = handler_module.serve(self.app, host, 0)
         self.port = self.server.server_address[1]
         self.app.port = self.port
@@ -167,68 +170,6 @@ class BindAsksNoReverseDns(unittest.TestCase):
         server.server_close()
 
 
-class SelectedFirstCatalog(unittest.TestCase):
-    def setUp(self):
-        self.fixture = ServerFixture()
-        self.addCleanup(self.fixture.close)
-
-    def test_selected_row_is_complete_and_other_rows_are_navigation_only(self):
-        Path(self.fixture.root, "selected.stl").write_bytes(b"selected")
-        Path(self.fixture.root, "other.stl").write_bytes(b"other")
-        with mock.patch.object(self.fixture.app.backend, "_start_catalog_hydration"):
-            status, _, body = self.fixture.request(
-                "GET", "/__cad/catalog?file=selected.stl"
-            )
-        self.assertEqual(status, 200)
-        entries = json.loads(body)["entries"]
-        selected = next(entry for entry in entries if entry["rootRelativeFile"] == "selected.stl")
-        pending = next(entry for entry in entries if entry["rootRelativeFile"] == "other.stl")
-        self.assertEqual(selected["bytes"], len(b"selected"))
-        self.assertTrue(selected["hash"])
-        self.assertEqual(set(pending), {"file", "rootRelativeFile", "catalogPending"})
-        self.assertTrue(pending["catalogPending"])
-
-    def test_homepage_fully_reads_only_the_first_discovered_row(self):
-        Path(self.fixture.root, "a.stl").write_bytes(b"first")
-        Path(self.fixture.root, "b.stl").write_bytes(b"second")
-        with mock.patch.object(self.fixture.app.backend, "_start_catalog_hydration"):
-            status, _, body = self.fixture.request("GET", "/__cad/catalog")
-        self.assertEqual(status, 200)
-        entries = json.loads(body)["entries"]
-        first = next(entry for entry in entries if entry["rootRelativeFile"] == "a.stl")
-        second = next(entry for entry in entries if entry["rootRelativeFile"] == "b.stl")
-        self.assertEqual(first["bytes"], len(b"first"))
-        self.assertEqual(set(second), {"file", "rootRelativeFile", "catalogPending"})
-
-    def test_a_current_complete_snapshot_is_reused_without_another_hydration(self):
-        Path(self.fixture.root, "a.stl").write_bytes(b"first")
-        Path(self.fixture.root, "b.stl").write_bytes(b"second")
-        snapshot = self.fixture.app.backend._full_catalog_snapshot()
-        self.assertIsNotNone(snapshot)
-        self.fixture.app.backend._catalog_snapshot = snapshot
-        with mock.patch.object(self.fixture.app.backend, "_start_catalog_hydration") as hydrate:
-            status, _, body = self.fixture.request("GET", "/__cad/catalog?file=a.stl")
-        self.assertEqual(status, 200)
-        self.assertTrue(all(not entry.get("catalogPending") for entry in json.loads(body)["entries"]))
-        hydrate.assert_not_called()
-
-    def test_a_changed_asset_is_pending_instead_of_serving_a_stale_snapshot(self):
-        Path(self.fixture.root, "a.stl").write_bytes(b"first")
-        Path(self.fixture.root, "b.stl").write_bytes(b"second")
-        snapshot = self.fixture.app.backend._full_catalog_snapshot()
-        self.assertIsNotNone(snapshot)
-        self.fixture.app.backend._catalog_snapshot = snapshot
-        Path(self.fixture.root, "b.stl").write_bytes(b"changed bytes")
-        with mock.patch.object(self.fixture.app.backend, "_start_catalog_hydration"):
-            status, _, body = self.fixture.request("GET", "/__cad/catalog?file=a.stl")
-        self.assertEqual(status, 200)
-        changed = next(
-            entry for entry in json.loads(body)["entries"]
-            if entry["rootRelativeFile"] == "b.stl"
-        )
-        self.assertEqual(set(changed), {"file", "rootRelativeFile", "catalogPending"})
-
-
 class PostGuard(HttpLayerTestCase):
     def test_missing_header_is_refused_with_the_exact_message(self):
         status, _, body = self.fixture.request("POST", "/__cad/artifact")
@@ -261,8 +202,6 @@ class PostGuard(HttpLayerTestCase):
 
 class ServerInfo(HttpLayerTestCase):
     def test_payload(self):
-        import json
-
         status, headers, body = self.fixture.request("GET", "/__cad/server")
         self.assertEqual(status, 200)
         info = json.loads(body)
@@ -271,13 +210,15 @@ class ServerInfo(HttpLayerTestCase):
         self.assertEqual(info["serverMode"], "serve")
         self.assertIn("identityToken", info)
         self.assertIs(info["autoReload"], reload_module.running_from_source_checkout())
-        self.assertEqual(info["serverFeatures"], ["path-directory", "reveal-path"])
-        self.assertRegex(info["rootId"], r"^local-fs:[0-9a-f]{64}$")
+        self.assertEqual(info["serverFeatures"], ["reveal-path"])
         self.assertEqual(info["stepArtifactGenerationAvailable"], False)
         self.assertEqual(info["pid"], os.getpid())
         self.assertEqual(info["port"], self.fixture.port)
-        self.assertEqual(info["rootPath"], self.fixture.root)
-        self.assertEqual(info["rootName"], "models")
+        # Where a developer's relative links resolve, spelled with "/". A viewer has no root.
+        self.assertEqual(info["start"], self.fixture.root.replace(os.sep, "/"))
+        self.assertIsInstance(info["pick"], bool)
+        for retired in ("rootId", "rootPath", "rootName"):
+            self.assertNotIn(retired, info)
         self.assertFalse(info["url"].endswith("/"), "serverInfo.url carries NO trailing slash")
         self.assertEqual(headers["cache-control"], "no-store")
 
@@ -286,8 +227,8 @@ class ServerInfo(HttpLayerTestCase):
         text = body.decode("utf-8")
         order = [
             '"app"', '"viewerVersion"', '"identityToken"', '"autoReload"',
-            '"serverMode"', '"serverFeatures"', '"backend"',
-            '"rootId"', '"rootPath"', '"rootName"', '"port"', '"pid"',
+            '"serverMode"', '"serverFeatures"', '"backend"', '"platform"',
+            '"start"', '"pick"', '"port"', '"pid"',
             '"stepArtifactGenerationAvailable"',
             '"packageDir"', '"startedAt"', '"url"',
         ]
@@ -299,38 +240,116 @@ class ServerInfo(HttpLayerTestCase):
         self.assertNotIn(b", ", body)
         self.assertNotIn(b'": ', body)
 
-    def test_root_identity_follows_realpath_and_not_port(self):
-        second = create_cad_app(
-            root=self.fixture.root,
-            host="127.0.0.1",
-            port=self.fixture.port + 1,
-            dist_dir=self.fixture.dist,
-        )
-        self.assertEqual(second.root_id, self.fixture.app.root_id)
-
-        alias = Path(self.fixture.tmp.name, "models-alias")
+    @unittest.skipIf(os.name == "nt", "Windows refuses to delete a process's working folder")
+    def test_a_viewer_started_in_a_deleted_folder_resolves_links_from_home(self):
+        gone = tempfile.mkdtemp()
+        held = os.getcwd()
+        os.chdir(gone)
         try:
-            alias.symlink_to(self.fixture.root, target_is_directory=True)
-        except OSError as exc:
-            self.skipTest(f"directory symlinks unavailable: {exc}")
-        through_alias = create_cad_app(
-            root=str(alias),
-            host="127.0.0.1",
-            port=self.fixture.port + 2,
-            dist_dir=self.fixture.dist,
-        )
-        self.assertEqual(through_alias.root_id, self.fixture.app.root_id)
-
-    def test_catalog_carries_the_same_stable_root_identity(self):
-        import json
-
-        _, _, server_body = self.fixture.request("GET", "/__cad/server")
-        _, _, catalog_body = self.fixture.request("GET", "/__cad/catalog")
-        self.assertEqual(json.loads(catalog_body)["rootId"], json.loads(server_body)["rootId"])
+            os.rmdir(gone)
+            app = create_cad_app(host="127.0.0.1", port=0)
+        finally:
+            os.chdir(held)
+        self.assertEqual(app.start, os.path.expanduser("~").replace(os.sep, "/"))
 
     def test_the_file_param_the_client_sends_is_ignored(self):
         status, _, _ = self.fixture.request("GET", "/__cad/server?file=/anything.step")
         self.assertEqual(status, 200)
+
+
+class Catalog(HttpLayerTestCase):
+    """A catalog is one file's, named by its absolute path wherever it is: nothing walks a folder."""
+
+    def catalog(self, file=None):
+        status, _, body = self.fixture.request(
+            "GET", "/__cad/catalog" + ("" if file is None else f"?file={quote(str(file), safe='')}"))
+        return status, json.loads(body)
+
+    def test_a_named_file_is_its_one_row_and_no_file_has_none(self):
+        # Under a hidden folder, outside the folder the viewer started in: named, so listed.
+        part = Path(self.fixture.tmp.name, ".work", "part.stl")
+        part.parent.mkdir(exist_ok=True)
+        part.write_bytes(b"solid p\nendsolid p\n")
+        status, catalog = self.catalog(part)
+        self.assertEqual(status, 200)
+        self.assertEqual(set(catalog), {"schemaVersion", "entries", "revision"})
+        [entry] = catalog["entries"]
+        self.assertEqual(entry["file"], str(part).replace(os.sep, "/"))
+        self.assertEqual(list(entry), ["file", "kind", "url", "hash", "bytes"])
+        # The row's URL is how its bytes are read.
+        self.assertEqual(self.fixture.request("GET", entry["url"])[::2], (200, part.read_bytes()))
+        part.write_bytes(b"solid moved\nendsolid moved\n")
+        self.assertNotEqual(self.catalog(part)[1]["revision"], catalog["revision"])
+        for missing in (None, "", str(part.with_name("gone.stl")), str(part.with_suffix(".txt"))):
+            with self.subTest(file=missing):
+                self.assertEqual(self.catalog(missing)[1]["entries"], [])
+
+    def test_a_file_that_is_not_named_by_its_absolute_path_is_a_400(self):
+        status, body = self.catalog("part.stl")
+        self.assertEqual(status, 400)
+        self.assertIn("absolute path", body["error"])
+
+
+class ExplorerRoutes(HttpLayerTestCase):
+    """The explorer's two reads (``folders.py``) over HTTP: a folder by its absolute path."""
+
+    def read(self, route, path, **query):
+        target = f"/__cad/{route}?path={quote(str(path), safe='')}" + "".join(f"&{k}={quote(v)}" for k, v in query.items())
+        status, _, body = self.fixture.request("GET", target)
+        return status, json.loads(body)
+
+    def test_a_folder_lists_and_searches_and_says_why_it_cannot(self):
+        folder = Path(self.fixture.tmp.name, "explore")
+        (folder / "arm").mkdir(parents=True, exist_ok=True)
+        (folder / "arm" / "link.step").write_bytes(b"x")
+        self.assertEqual(self.read("folder", folder), (200, {"path": str(folder).replace(os.sep, "/"), "entries": [
+            {"name": "arm", "kind": "directory"}], "truncated": False}))
+        self.assertEqual(self.read("search", folder, q="LINK")[1]["results"],
+                         [str(folder / "arm" / "link.step").replace(os.sep, "/")])
+        for route in ("folder", "search"):
+            with self.subTest(route=route):
+                self.assertEqual(self.read(route, "explore")[0], 400)
+                self.assertEqual(self.read(route, folder / "missing")[0], 404)
+                self.assertEqual(self.read(route, folder / "arm" / "link.step")[0], 404)
+        with mock.patch("cadgen.viewer.folders.list_folder", side_effect=PermissionError("denied")):
+            self.assertEqual(self.read("folder", folder)[0], 403)
+
+
+class Pick(HttpLayerTestCase):
+    """The home's Open: the desktop's chooser, held for the page (and never opened by a test)."""
+
+    def pick(self, **behaviour):
+        with mock.patch.object(FilePicker, "choose", **behaviour):
+            status, _, body = self.fixture.request("POST", "/__cad/pick", headers={"x-cadgen-viewer": "1"})
+        return status, json.loads(body)
+
+    def test_a_cad_file_is_its_path_and_anything_else_says_why(self):
+        chosen = os.path.join(self.fixture.root, "part.step")
+        self.assertEqual(self.pick(return_value=chosen), (200, {"path": chosen.replace(os.sep, "/")}))
+        self.assertEqual(self.pick(return_value=None), (200, {"cancelled": True}))
+        status, answer = self.pick(return_value=os.path.join(self.fixture.root, "notes.txt"))
+        self.assertEqual(status, 400)
+        self.assertIn("notes.txt is not one", answer["error"])
+        self.assertEqual(self.pick(side_effect=PickerFailed("no chooser here")), (500, {"error": "no chooser here"}))
+        self.assertEqual(self.fixture.request("POST", "/__cad/pick")[0], 403, "a page from another site cannot open it")
+
+    def test_a_second_open_while_one_is_up_is_a_conflict(self):
+        opened, release, answers = threading.Event(), threading.Event(), []
+
+        def choose():
+            opened.set()
+            release.wait(10)
+
+        with mock.patch.object(FilePicker, "choose", side_effect=choose):
+            first = threading.Thread(target=lambda: answers.append(
+                self.fixture.request("POST", "/__cad/pick", headers={"x-cadgen-viewer": "1"})[0]))
+            first.start()
+            self.assertTrue(opened.wait(10))
+            second = self.fixture.request("POST", "/__cad/pick", headers={"x-cadgen-viewer": "1"})
+            release.set()
+            first.join(10)
+        self.assertEqual((second[0], json.loads(second[2])), (409, {"error": "A file chooser is already open."}))
+        self.assertEqual(answers, [200])
 
 
 class ArtifactBuildPayload(HttpLayerTestCase):

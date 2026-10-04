@@ -106,10 +106,9 @@ UNCLASSIFIED = {
     "store",
     "daemon",
     "daemon status",
-    # The viewer launcher owns its parser: the launch contract (reuse-or-start,
-    # port roll, the --json announce line) is not a function signature to mirror.
+    # The viewer launcher owns its parser: the launch contract (reuse, replace or
+    # start on its one port, the --json announce line) is not a function signature to mirror.
     "viewer",
-    "viewer list",
     "viewer stop",
 }
 

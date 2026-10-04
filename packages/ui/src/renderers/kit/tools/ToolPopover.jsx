@@ -1,12 +1,12 @@
 import { useEffect, useState } from "react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@text-to-cad/ui/primitives/dropdown-menu";
 import { cn } from "@text-to-cad/ui/utils";
-import { FLOATING_SURFACE_CLASS } from "./floatingSurface.js";
+import { FLOATING_SURFACE_CLASS } from "../../../lib/floatingSurface.js";
 
 /**
  * A settings popover under its own button: an ordinary dropdown, start-aligned unless `align`
- * says otherwise — preview mode's Playback settings (`PlaybackMenu.jsx`, end-aligned at the
- * playbar's right end). It is always temporary. No tool on the strip has one: a tool's
+ * says otherwise — preview mode's Playback settings (`PlaybackMenu.jsx`, opening up from on top of
+ * the cube's corner). It is always temporary. No tool on the strip has one: a tool's
  * settings are its panel in the tool stack.
  *
  * It closes with no exit animation. A menu on its way out is still mounted, and its outside-

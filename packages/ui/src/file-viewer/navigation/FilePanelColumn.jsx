@@ -6,10 +6,8 @@ import { hasOpenPopup } from "../../lib/popups.js";
 
 /**
  * The column a file's own declared panels open in, at the view's right: one border, one width,
- * one handle, for whatever a renderer declares (`panels.js`). The file tree is not one of them:
- * it is the explorer, which floats over the view's left (`FileExplorer.jsx`). One panel is open
- * at a time, the explorer included, so this column and the explorer are never both up. Below the
- * viewer breakpoint the column is a floating sheet over the body instead.
+ * one handle, for whatever a renderer declares (`panels.js`). One panel is open at a time. Below
+ * the viewer breakpoint the column is a floating sheet over the body instead.
  *
  * No title bar of the column's own. Each panel's own top row is its header, and the navbar's
  * toggle is how it closes. A collapsed panel is not rendered at all, so the toggle for it exists in
@@ -24,8 +22,8 @@ import { hasOpenPopup } from "../../lib/popups.js";
  * `aria-valuemin`/`max` on the handle below are the real numbers rather than a
  * second opinion. The mobile sheet has its own width.
  */
-import { PANEL_DEFAULT_WIDTH, PANEL_MAX_WIDTH, PANEL_MIN_HEIGHT, PANEL_MIN_WIDTH, clampPanelHeight, clampPanelWidth } from "./panelWidth.js";
-export { PANEL_DEFAULT_WIDTH, PANEL_MAX_WIDTH, PANEL_MIN_HEIGHT, PANEL_MIN_WIDTH, clampPanelHeight, clampPanelWidth };
+import { PANEL_DEFAULT_WIDTH, PANEL_MAX_WIDTH, PANEL_MIN_WIDTH, clampPanelWidth } from "./panelWidth.js";
+export { PANEL_DEFAULT_WIDTH, PANEL_MAX_WIDTH, PANEL_MIN_WIDTH, clampPanelWidth };
 // The mobile sheet floats over the viewer rather than taking width from it, so it keeps room for
 // a few levels of nesting.
 const PANEL_SHEET_WIDTH = 280;
