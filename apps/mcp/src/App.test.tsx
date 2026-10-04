@@ -14,7 +14,7 @@ vi.mock('@text-to-cad/ui/cad-viewer', async original => {
   return {
     ...await original<object>(),
     // The host's notice (the analytics card) drawn as the real viewer would once a model is on screen.
-    CadViewer: (props: CadViewerProps) => { viewer.props = props; useEffect(() => { viewer.mounts += 1; }, []); return props.notice ?? null; },
+    CadViewer: (props: CadViewerProps) => { viewer.props = props; useEffect(() => { viewer.mounts += 1; }, []); return <>{props.update ?? null}{props.notice ?? null}</>; },
   };
 });
 
@@ -40,7 +40,7 @@ function host(initial: HostContext, hostCapabilities: Record<string, unknown> = 
     consent: vi.fn(async (share?: boolean) => ({ ask: share === undefined && ask, sharing: Boolean(share), policy: 'https://www.texttocad.dev/privacy-policy' })),
     // The person's features as the server keeps them (`cad_features`).
     features: vi.fn(async (change?: object) => { kept = { ...kept, ...change }; return kept; }),
-    version: vi.fn(async (dismiss?: string) => ({ notice: dismiss === undefined ? notice : null })),
+    version: vi.fn(async () => ({ notice })),
   };
   let kept = { quickEdit: true };
   return { bridge, server };
@@ -216,30 +216,35 @@ it("Settings' Features: Quick edit is read from the server, turned off there for
   expect(viewer.props!.features).toEqual({ quickEdit: false });
 });
 
-it('a newer release is offered once the analytics question is answered: sent to the chat where the host takes messages, copied elsewhere, the full instructions a link away', async () => {
+it('a newer release is the blue update button: its card sends the prompt to the chat where the host takes messages, copies it elsewhere, the full instructions a link away', async () => {
   const notice = { latest: '0.9.0', version: '0.8.1', text: 'A new version v0.9.0 of text-to-cad is available (currently on v0.8.1)',
     prompt: 'Update text-to-cad to 0.9.0 from https://github.com/earthtojake/text-to-cad', instructions: 'https://www.texttocad.dev/install' };
   {
     const { bridge, server } = host({ displayMode: 'fullscreen' }, { message: {} }, true, notice);
-    const { findByRole, getByText, getByRole, queryByRole } = render(<App bridge={bridge as any} server={server as any} launch={home} session={session} />);
+    const { findByRole, getByRole, queryByRole } = render(<App bridge={bridge as any} server={server as any} launch={home} session={session} />);
+    // The button is the navbar's, not the analytics question's corner: both are up at once.
     await findByRole('dialog', { name: 'Allow Analytics' });
-    expect(queryByRole('dialog', { name: 'Update available' })).toBeNull();
-    await act(async () => getByText('No thanks').click());
+    const update = await findByRole('button', { name: 'Update to 0.9.0' });
+    await act(async () => update.click());
+    await findByRole('dialog', { name: 'Update available' });
     await act(async () => getByRole('link', { name: 'Manual installation' }).click());
     expect(bridge.request).toHaveBeenCalledWith('ui/open-link', { url: notice.instructions });
     await act(async () => getByRole('button', { name: 'Send to agent' }).click());
     expect(bridge.request).toHaveBeenCalledWith('ui/message', { role: 'user', content: [{ type: 'text', text: notice.prompt }] }, { timeoutMs: 30_000 });
-    expect(server.version).toHaveBeenLastCalledWith('0.9.0');
     expect(queryByRole('dialog', { name: 'Update available' })).toBeNull();
+    expect(getByRole('button', { name: 'Update to 0.9.0' })).toBeTruthy();
+    expect(server.version.mock.calls).toEqual([[]]); // read, and nothing kept
     cleanup();
   }
   const writeText = vi.fn(async () => {});
   Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
   const { bridge, server } = host({ displayMode: 'fullscreen' }, {}, false, notice);
   const { findByRole } = render(<App bridge={bridge as any} server={server as any} launch={home} session={session} />);
+  // Looked up outside act: act holds React's updates until it returns, and the lookup waits on them.
+  const update = await findByRole('button', { name: 'Update to 0.9.0' });
+  await act(async () => update.click());
   const copy = await findByRole('button', { name: 'Copy prompt' });
   await act(async () => copy.click());
   expect(writeText).toHaveBeenCalledWith(notice.prompt);
-  expect(server.version).toHaveBeenLastCalledWith('0.9.0');
   expect(bridge.request).not.toHaveBeenCalledWith('ui/message', expect.anything(), expect.anything());
 });

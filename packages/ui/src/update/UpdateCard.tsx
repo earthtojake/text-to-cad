@@ -1,29 +1,29 @@
 import { ArrowUp, Check, Copy, X } from "lucide-react";
-import { useId, useState } from "react";
+import { useState } from "react";
 import { Button } from "../primitives/button.jsx";
 import { TooltipHint } from "../primitives/tooltip.jsx";
 import type { UpdateNotice } from "./useUpdateNotice.js";
 
 /**
- * A newer text-to-cad, said once per release, with the prompt that has the person's agent update
- * it. Its buttons are Quick Edit's, each with its icon: where the host takes messages, Send to agent
- * (the send arrow) posts the prompt to the chat, with Copy prompt beside it as a secondary icon;
- * elsewhere, or when sending fails, Copy prompt is the one button, in words with its icon first.
- * Sending or copying it, or closing the card, is the person's answer (`onAnswer`, `onClose`).
- * Manual installation is the way round an agent that cannot do it: a real link to a new tab, which
- * `onLink` is how this host follows, and no answer, so the card stays. A host hands it to the viewer
- * as its `notice`, after the analytics card has been answered.
+ * A newer text-to-cad, with the prompt that has the person's agent update it: what the update button
+ * (`UpdateButton`) opens. Its buttons are Quick Edit's, each with its icon: where the host takes
+ * messages, Send to agent (the send arrow) posts the prompt to the chat, with Copy prompt beside it as
+ * a secondary icon; elsewhere, or when sending fails, Copy prompt is the one button, in words with its
+ * icon first. Manual installation is the way round an agent that cannot do it: a real link to a new
+ * tab, which `onLink` is how this host follows. Nothing here is an answer to keep: the X closes the
+ * card, as a prompt sent does, and the button stays until the update lands.
  */
-export function UpdateCard({ notice, send, copy, onLink, onAnswer, onClose }: {
+export function UpdateCard({ id, notice, send, copy, onLink, onClose }: {
+  /** The ids of its title and text (`${id}-title`, `${id}-text`), which label what holds it. */
+  id: string;
   notice: UpdateNotice;
   /** Posts the prompt to the chat, where the host can. */
   send?: (prompt: string) => Promise<void>;
   copy(prompt: string): Promise<void>;
   onLink(url: string): void;
-  onAnswer(): void;
+  /** Closes the card: its X, and a prompt sent. */
   onClose(): void;
 }) {
-  const id = useId();
   const [state, setState] = useState<{ busy?: boolean; copied?: boolean; unsent?: boolean; message?: string }>({});
   const sends = Boolean(send) && !state.unsent;
   const sendPrompt = async () => {
@@ -39,14 +39,12 @@ export function UpdateCard({ notice, send, copy, onLink, onAnswer, onClose }: {
     setState(previous => ({ ...previous, busy: true }));
     try {
       await copy(notice.prompt);
-      onAnswer();
       setState(previous => ({ unsent: previous.unsent, copied: true, message: "Copied. Paste it into your agent's chat." }));
     } catch {
       setState(previous => ({ unsent: previous.unsent, message: "It could not be copied. Select the prompt above and copy it." }));
     }
   };
-  return <div className="flex flex-col gap-2 rounded-md border bg-popover p-3 text-ui text-popover-foreground shadow-md" role="dialog"
-    aria-labelledby={`${id}-title`} aria-describedby={`${id}-text`}>
+  return <div className="flex flex-col gap-2 rounded-md border bg-popover p-3 text-ui text-popover-foreground shadow-md" data-update-card="">
     <div className="flex items-center justify-between gap-2">
       <h2 id={`${id}-title`} className="font-medium">Update available</h2>
       <Button variant="ghost" size="icon-xs" className="-mr-1" aria-label="Close" onClick={onClose}><X aria-hidden="true" /></Button>

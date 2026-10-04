@@ -392,8 +392,8 @@ has none (it holds the links itself, under its title). Left: a back arrow to the
 host's files can be browsed (`files.list`), then the open file's name and its ⋯ menu,
 which is the explorer's own entry menu for that file (no right-click on the name).
 With no file open the name's place says "Select file" (words, not a control), and
-the page says "Ask the agent to show a model". Right: the renderer's navigation actions, any
-declared panel's toggle, then Settings,
+the page says "Ask the agent to show a model". Right: the host's update button first (`update`,
+while its install is behind), the renderer's navigation actions, any declared panel's toggle, then Settings,
 the person's: FileViewer draws the control its composer hands it (`FileViewerProps.settings`)
 over every file, just before the renderer's view controls and never among them, and `CadViewer`
 hands it the Settings popover (`SettingsPopover`, `kit/shell/SettingsPopover.jsx`) the home has
@@ -433,13 +433,16 @@ reloads — a page's own storage would not, the web Viewer's origin changing wit
 prompt both apps share: `ConsentCard` (the card) and
 `useAnalyticsConsent(consent)`, which turns the host's consent call into the card's state, its
 answer and the Analytics setting; the host supplies the call and where the answer is kept.
-`@text-to-cad/ui/update` is the update notice both apps share, from cadgen's version check:
-`UpdateCard` and `useUpdateNotice(call)`, which reads the host's call and keeps the person's
-answer (they sent or copied the prompt, or closed the card) through it. The card sends its prompt
+`@text-to-cad/ui/update` is the update button both apps share, from cadgen's version check:
+`UpdateButton`, the blue button a host hands the viewer as its `update` (`CadViewerProps.update`,
+first among the navbar's controls over every file and first in the home's row), which opens
+`UpdateCard` in a popover, and `useUpdateNotice(call)`, which reads the host's call, again when the
+page regains focus. Nothing it does is an answer the server keeps: the button stays while the
+install is behind and goes once the update lands. The card sends its prompt
 to the agent's chat through the host's `send`, where the host can, with a Copy prompt icon beside it
 (`copy`), and otherwise copies it through `copy` alone; the host decides which it supplies. Its
 Manual installation link, the notice's `instructions`, opens through the host's `onLink`, as the
-`ConsentCard`'s privacy policy does through `onPolicy`; following it is no answer. The shell
+`ConsentCard`'s privacy policy does through `onPolicy`. The shell
 handles placement and hides the toolbar in
 preview; the host owns callbacks and preferences. None of these imply platform
 detection or move application-specific release/network behavior into shared UI.
@@ -452,7 +455,7 @@ time, the explorer included.
 The viewport's corners are the shell's, never the host's: the tool strip and its
 stack at the top-left, Quick Edit at the top-right, and the view cube at the
 bottom-left. A host's one notice goes through the shell too: `notice` (the
-`ConsentCard`, and once it is answered the `UpdateCard`) is drawn at the top-right once the
+`ConsentCard`) is drawn at the top-right once the
 file is on screen, never while it loads or after it failed to, with Quick Edit stacked under
 it until it is answered; the home never shows it. The view's own controls (Display and Preview, a 3D view's) are the
 renderer's, drawn into the navbar's right end after Settings (`navbarSlot`).

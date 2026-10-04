@@ -183,12 +183,12 @@ No plugin for your agent yet?
 
 ### Updates
 
-When a newer release is out, a copy you installed yourself says so once per
-release: a card in CAD's viewer, where **Send to agent** posts "Update text-to-cad
-to 0.9.0 from https://github.com/earthtojake/text-to-cad" to your chat, worded
-like the install message (the browser viewer's card copies it instead), or a line
-in your agent's command output. Your agent then follows the `cad-setup` skill's
-steps for your app. The card also links to the
+When a newer release is out, a copy you installed yourself says so: a blue update
+button, first in CAD's navbar and on its home, whose **Send to agent** posts
+"Update text-to-cad to 0.9.0 from https://github.com/earthtojake/text-to-cad" to
+your chat, worded like the install message (the browser viewer's copies it
+instead), or a line in your agent's command output. Your agent then follows the
+`cad-setup` skill's steps for your app. The button also links to the
 [full install instructions](https://www.texttocad.dev/install), in case your agent
 can't do it. Copies from a plugin directory or the Cursor Marketplace never show
 it: their store updates them.

@@ -80,8 +80,8 @@ export function createServer(bridge: Pick<Bridge, 'callTool'>) {
     consent: (share?: boolean, from?: AnswerFrom) => call<AnalyticsConsent>('cad_consent', share === undefined ? {} : { share, ...(from === 'card' ? { card: true } : {}) }),
     /** Settings' Features as the person left them; with `change`, their change of some (`cadgen/features.py`). */
     features: (change?: Partial<ViewerFeatures>) => call<ViewerFeatures>('cad_features', change ?? {}),
-    /** Whether a newer text-to-cad is out; with `dismiss`, the release the person answered the card for (`cadgen/updates.py`). */
-    version: (dismiss?: string) => call<{ notice: UpdateNotice | null }>('cad_version', dismiss === undefined ? {} : { dismiss }),
+    /** Whether a newer text-to-cad is out (`cadgen/updates.py`): the update button's notice, or null. */
+    version: () => call<{ notice: UpdateNotice | null }>('cad_version', {}),
     launch: (model: string) => call<{ launch: Launch }>('cad_launch', { model }).then(value => value.launch),
     pickModel: () => call<{ launch?: Launch; cancelled?: boolean }>('cad_pick_model', {}, { timeoutMs: 16 * 60_000 }),
     recents: (args: { action?: 'list' | 'pin' | 'unpin' | 'remove' | 'thumbnail'; path?: string; png?: string } = {}) =>

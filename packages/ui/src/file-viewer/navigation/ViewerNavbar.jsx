@@ -21,8 +21,9 @@ import { InlineName } from "./InlineName.jsx";
  * are not a control: the explorer's toggle beside them is. The name is not a menu of its own, and
  * has no right-click: the ⋯ is the one door.
  *
- * Right: the file's own actions (the CAD viewer's one: a dismissed alert's icon, which brings its
- * card back), the toggles of any panel the file declares, the host's Settings (`settings`, the
+ * Right: the host's update button, first, while its install is behind (`update`, the blue
+ * `UpdateButton` from `@text-to-cad/ui/update`); the file's own actions (the CAD viewer's one: a
+ * dismissed alert's icon, which brings its card back), the toggles of any panel the file declares, the host's Settings (`settings`, the
  * same popover as on its home, over every file: Feedback is
  * in it), then the renderer's view controls (`controlsRef`: the CAD viewer's Display and Preview).
  * Preview takes the whole page, this row with it.
@@ -110,10 +111,11 @@ function FileActions({ entry, capabilities, platform, onAction }) {
  * @param {import("react").ReactNode} [props.status] After the name: the unsaved-changes dot.
  * @param {import("react").ReactNode} [props.trailing] The file's actions and its panels' toggles.
  * @param {import("react").ReactNode} [props.settings] The host's Settings, before the renderer's view controls.
+ * @param {import("react").ReactNode} [props.update] The host's update button, first among the controls.
  * @param {(element: HTMLDivElement | null) => void} [props.controlsRef] The box the renderer draws its view controls into.
  * @param {string} [props.className]
  */
-export function ViewerNavbar({ onBack, explorer = null, file = null, selecting = false, status = null, trailing = null, settings = null, controlsRef, className }) {
+export function ViewerNavbar({ onBack, explorer = null, file = null, selecting = false, status = null, trailing = null, settings = null, update = null, controlsRef, className }) {
   const name = file ? file.path.split("/").pop() || file.path : "";
   return (
     <header className={cn(NAVBAR_ROW_CLASS, "border-border bg-background text-foreground", className)} data-viewer-navbar="">
@@ -133,6 +135,7 @@ export function ViewerNavbar({ onBack, explorer = null, file = null, selecting =
         </span> : selecting && explorer ? <span className="truncate text-muted-foreground" data-select-file="">Select file</span> : status}
       </nav>
       <div className={NAVBAR_CONTROLS_CLASS}>
+        {update}
         {trailing}
         {settings}
         <div ref={controlsRef} className="contents" data-navbar-controls="" />

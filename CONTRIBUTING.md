@@ -169,7 +169,7 @@ which is why each install serves its own copy. A running server keeps the
 Python it started with, so restart the app after a Python-only change.
 `--uninstall` removes a host's install. Its server names its install channel
 `dev` (`CADGEN_INSTALL_CHANNEL`), and a checkout's editable cadgen counts as one
-too: neither is ever offered an update. To see the update card, run a server with
+too: neither is ever offered an update. To see the update button, run a server with
 `CADGEN_INSTALL_CHANNEL=github` and a `versions.json` in its state directory
 (`CADGEN_STATE_DIR`) naming a newer `latest`.
 

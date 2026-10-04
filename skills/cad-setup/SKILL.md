@@ -53,8 +53,8 @@ agent app's own update commands, and only when the user asked for the update.
 
 ## Update
 
-CAD says when a newer release is out, once per release, to a copy installed by
-hand (from GitHub, or with the Skills CLI): a card in its viewer, a line with a tool
+CAD says when a newer release is out, to a copy installed by hand (from GitHub,
+or with the Skills CLI): a blue update button in its viewer, a line with a tool
 result, or a line in a command's output. Its prompt is worded like the install
 message: "Update text-to-cad to 0.9.0 from
 https://github.com/earthtojake/text-to-cad".

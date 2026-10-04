@@ -3,7 +3,7 @@ import { Maximize2 } from 'lucide-react';
 import type { ResourceRef } from '@text-to-cad/core/prompt';
 import { ConsentCard, useAnalyticsConsent } from '@text-to-cad/ui/consent';
 import { useFeatures } from '@text-to-cad/ui/features';
-import { UpdateCard, useUpdateNotice } from '@text-to-cad/ui/update';
+import { UpdateButton, useUpdateNotice } from '@text-to-cad/ui/update';
 import { viewerLinks } from '@text-to-cad/ui/links';
 import { Button } from '@text-to-cad/ui/primitives/button';
 import { createTabStore, memoryTabRecord } from '@text-to-cad/ui/tab-store';
@@ -176,9 +176,10 @@ export default function App({ bridge, server, launch: initial, presentation = 't
   // the analytics answer, one choice for the sidebar, every thread's tab and the browser viewer.
   const { features, appSettings: featureSettings } = useFeatures(server.features);
   const appSettings = useMemo(() => [...analyticsSettings ?? [], ...featureSettings ?? []], [analyticsSettings, featureSettings]);
-  // A newer text-to-cad, once per release (`cadgen/updates.py`), after the analytics card: its prompt
-  // goes to the chat where the host takes messages, so the agent updates CAD; elsewhere it is copied.
-  const update = useUpdateNotice(server.version);
+  // A newer text-to-cad (`cadgen/updates.py`): the blue update button, first in the navbar and on the
+  // home while this install is behind. Its prompt goes to the chat where the host takes messages, so
+  // the agent updates CAD; elsewhere it is copied.
+  const updateNotice = useUpdateNotice(server.version);
   const sendPrompt = chat.send
     ? (prompt: string) => bridge.request('ui/message', { role: 'user', content: [{ type: 'text', text: prompt }] }, { timeoutMs: 30_000 }).then(() => {})
     : undefined;
@@ -200,9 +201,9 @@ export default function App({ bridge, server, launch: initial, presentation = 't
     overlay={lost ? <Banner message={LOST[presentation]} /> : null}>
     <ModelView key={rootKey(launch.root)} launch={launch} root={launch.root} sequence={showing.sequence} bridge={bridge} server={server}
       tabStore={tabStore} live={live} links={links} appSettings={appSettings} features={features}
-      notice={consent?.ask ? <ConsentCard policy={consent.policy} onAnswer={answer} onPolicy={openLink} />
-        : update.notice ? <UpdateCard notice={update.notice} send={sendPrompt} copy={prompt => frameClipboard.writeText(prompt)}
-          onLink={openLink} onAnswer={update.answer} onClose={update.close} /> : null}
+      notice={consent?.ask ? <ConsentCard policy={consent.policy} onAnswer={answer} onPolicy={openLink} /> : null}
+      update={updateNotice ? <UpdateButton notice={updateNotice} send={sendPrompt} copy={prompt => frameClipboard.writeText(prompt)}
+        onLink={openLink} /> : null}
       colorScheme={colorScheme} platform={initial.platform || 'darwin'} reporter={reporter} sync={sync} compact={inline} chat={chat}
       onLaunch={show} onHome={goHome} />
   </Frame>;

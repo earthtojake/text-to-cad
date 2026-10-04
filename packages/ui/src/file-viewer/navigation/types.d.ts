@@ -254,6 +254,8 @@ export const ViewerNavbar: ComponentType<{
   trailing?: ReactNode;
   /** The host's Settings (the same popover as on its home), just before the renderer's view controls. */
   settings?: ReactNode;
+  /** The host's update button, first among the controls, while its install is behind. */
+  update?: ReactNode;
   /** The box the renderer draws its view controls into, at the row's right end. */
   controlsRef?: (element: HTMLDivElement | null) => void;
   className?: string;

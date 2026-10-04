@@ -63,6 +63,11 @@ export interface CadViewerProps<Model extends LibraryModel = LibraryModel> {
   features?: ViewerFeatures;
   /** The host's notice (the analytics question): a file's viewport, top-right, once the file is on screen; never the home. */
   notice?: ReactNode;
+  /**
+   * The host's update button (`@text-to-cad/ui/update`'s `UpdateButton`), while its install is behind:
+   * first among the navbar's controls over every file, and first in the home's row.
+   */
+  update?: ReactNode;
   onError?(error: Error): void;
 }
 
@@ -84,7 +89,7 @@ const reportError = (error: Error) => console.error(error);
  * its library.
  */
 export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, host, tabStore, live, file, onShow, accept, onShown, rootPath,
-  library, onThumbnail, displayActions, appSettings, features, notice, onError = reportError }: CadViewerProps<Model>) {
+  library, onThumbnail, displayActions, appSettings, features, notice, update, onError = reportError }: CadViewerProps<Model>) {
   const preferences = tabStore.settings;
   // One viewer renderer per file family, sharing one client and the tab's preferences; each
   // lazy-loads only its own code.
@@ -178,16 +183,16 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
   const changeLayout = useCallback((next: LibraryLayout) => preferences.update({ library: { layout: next } }), [preferences]);
   const presentation = useMemo(() => ({
     home: library ? <ModelLibrary library={library} layout={layout} onLayoutChange={changeLayout} picture={picture}
-      links={host.links} platform={platform} appSettings={appSettings} onError={onError} /> : undefined,
+      links={host.links} platform={platform} appSettings={appSettings} update={update} onError={onError} /> : undefined,
     empty: <EmptyState icon={Box} title="Ask the agent to show a model" />,
     loading: <div className="relative h-full"><ViewerLoadingOverlay viewerLoading /></div>,
     error: () => <div className="relative h-full">{catalog.error
       ? <EmptyState icon={FolderX} title="Could not read this folder" description={catalog.error} tone="warn" />
       : <EmptyCadBackdrop colorScheme={colorScheme}><MissingFileAlert missingFileRef={file} rootPath={rootPath} /></EmptyCadBackdrop>}</div>,
-  }), [library, colorScheme, layout, changeLayout, catalog.error, file, rootPath, picture, host.links, platform, host.clipboard, appSettings, onError]);
+  }), [library, colorScheme, layout, changeLayout, catalog.error, file, rootPath, picture, host.links, platform, host.clipboard, appSettings, update, onError]);
   return <>
     <FileViewer file={file || null} host={viewerHost} renderers={renderers} state={state} onStateChange={onStateChange}
-      displayActions={displayActions} settings={settingsControl} features={features} notice={notice} navigationPath={navigationPath} onError={onError} presentation={presentation} />
+      displayActions={displayActions} settings={settingsControl} update={update} features={features} notice={notice} navigationPath={navigationPath} onError={onError} presentation={presentation} />
     {drawing && !file ? <OffscreenPicture key={drawing.source.file} source={drawing.source} host={host} preferences={preferences} onDone={drawn} /> : null}
   </>;
 }

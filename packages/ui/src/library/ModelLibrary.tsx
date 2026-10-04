@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react";
 import { Box, FolderOpen, LayoutGrid, List, Pin, Search, X } from "lucide-react";
 import type { CadWorkspaceService } from "@text-to-cad/core/client";
 import { Button } from "../primitives/button.jsx";
@@ -151,7 +151,7 @@ function Placeholders({ layout }: { layout: LibraryLayout }) {
  * (`wantsPicture`) is handed to `picture`, where the viewer draws one out of sight — one card at a
  * time, each once while the page is up — and the list is read again once one is kept.
  */
-export function ModelLibrary<Model extends LibraryModel>({ library, layout = "grid", onLayoutChange, failure = "", picture, links, platform, appSettings, onError }: {
+export function ModelLibrary<Model extends LibraryModel>({ library, layout = "grid", onLayoutChange, failure = "", picture, links, platform, appSettings, update, onError }: {
   library: ModelLibrarySource<Model>;
   /** Grid or list; the host keeps the choice (the tab's settings). */
   layout?: LibraryLayout;
@@ -166,6 +166,8 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   platform?: string;
   /** The host's own on/off settings, in the home's Settings. */
   appSettings?: readonly AppSetting[];
+  /** The host's update button, first in the row under the wordmark, while its install is behind. */
+  update?: ReactNode;
   onError?(error: Error): void;
 }) {
   const [items, setItems] = useState<readonly Model[] | null>(null);
@@ -266,6 +268,7 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
       <img className="cad-library-wordmark" src={wordmark} alt="text-to-cad" />
       <p className="cad-library-byline">Build anything. <span>100% open source and free.</span></p>
       {links ? <nav className="cad-library-links" aria-label="CAD links">
+        {update}
         <GitHubLink links={links} onError={onError} />
         <SettingsPopover links={links} appSettings={appSettings} platform={platform} align="center" />
       </nav> : null}

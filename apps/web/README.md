@@ -372,7 +372,7 @@ issue titled "Feedback: " — the same popover as the CAD app's home), then the 
 (X), Discord and GitHub. This host
 supplies the links (`src/host/viewerLinks.js`): its version, the GitHub (where new
 issues open) and Discord its build names (`VIEWER_GITHUB_URL`, `VIEWER_DISCORD_URL`);
-links open in a new tab. A newer text-to-cad is the update card's, as in the CAD app: cadgen's
+links open in a new tab. A newer text-to-cad is the blue update button's, first in the navbar as in the CAD app: cadgen's
 daily version check, read from `/__cad/version`, and its prompt copied for the person to paste
 into their agent's chat (`src/adapters/version.ts`); its full install instructions open in a new tab. Browser titles use "CAD | <filename>", or "CAD" when no file is selected.
 Appearance is injected as an icon-bearing dropdown beside Projection in Display's

@@ -51,7 +51,7 @@ it('draws the navbar only when it has something to hold, and never for a view sh
   expect(navbar()).toBeNull();
 });
 
-it('puts the host\'s Settings just before the view\'s controls, outside them, with no Feedback of its own, and steps the navbar aside while the renderer shows its file fullscreen', async () => {
+it('puts the host\'s update button first and its Settings just before the view\'s controls, outside them, with no Feedback of its own, and steps the navbar aside while the renderer shows its file fullscreen', async () => {
   // A renderer with the CAD viewer's control in the navbar, its Preview, which is fullscreen.
   const fullscreen = defineFileRenderer({
     id: 'full', priority: 2, matches: () => true, prepare: async () => ({ data: null }),
@@ -60,17 +60,18 @@ it('puts the host\'s Settings just before the view\'s controls, outside them, wi
       <button type="button" onClick={() => onFullscreenChange(false)}>Back</button>
     </> }),
   });
-  // The host's Settings (`CadViewer`'s popover), drawn over every file: no renderer draws it.
+  // The host's update button and Settings (`CadViewer`'s), drawn over every file: no renderer draws them.
   render(<FileViewer file="parts/a.step" host={{ ...host, links: viewerLinks({ version: '0.7.4' }) } as any} renderers={[fullscreen]}
-    state={{ panel: null, panelWidth: 220 }} onStateChange={() => {}} settings={<button type="button" aria-label="Settings" />} />);
+    state={{ panel: null, panelWidth: 220 }} onStateChange={() => {}} settings={<button type="button" aria-label="Settings" />}
+    update={<button type="button" aria-label="Update to 0.7.5" />} />);
   await screen.findByRole('button', { name: 'Preview' });
   // Feedback is Settings' now: the navbar has no link of its own for it.
-  expect(labels()).toEqual(['Settings', 'Preview']);
+  expect(labels()).toEqual(['Update to 0.7.5', 'Settings', 'Preview']);
   expect(labels('[data-navbar-controls]')).toEqual(['Preview']);
   act(() => screen.getByRole('button', { name: 'Preview' }).click());
   expect(navbar()).toBeNull();
   act(() => screen.getByRole('button', { name: 'Back' }).click());
-  expect(labels()).toEqual(['Settings', 'Preview']);
+  expect(labels()).toEqual(['Update to 0.7.5', 'Settings', 'Preview']);
 });
 
 it('leads back to the host\'s home from a file, and draws no navbar over the home itself', async () => {

@@ -94,16 +94,17 @@ class ViewerAnalyticsTest(unittest.TestCase):
         self.assertEqual(payload["events"], [{"name": "view", "calls": 1}, {"name": "file", "file": code, "kind": "stl"}])
         self.assertNotIn("a.stl", json.dumps(payload))
 
-    def test_the_update_card_asks_and_the_persons_click_sets_the_release_aside(self) -> None:
-        # The CAD app's notice (`cadgen/updates.py`), from the same feed; this page copies its prompt.
+    def test_the_update_button_reads_whether_a_newer_release_is_out(self) -> None:
+        # The CAD app's notice (`cadgen/updates.py`), from the same feed; this page copies its prompt,
+        # and nothing it does is kept: there is no answer to post.
         (self.tmp / "state").mkdir(exist_ok=True)
         (self.tmp / "state" / "versions.json").write_text(json.dumps({"checked": time.time(), "feed": {"latest": "99.0.0"}}),
                                                           encoding="utf-8")
         with mock.patch.dict(os.environ, {"CADGEN_INSTALL_CHANNEL": "github", "CI": "", "CADGEN_UPDATE_CHECK": ""}):
             status, answer = self.request("GET", "/__cad/version")
             self.assertEqual((status, answer["notice"]["text"]), (200, f"A new version v99.0.0 of text-to-cad is available (currently on v{cadgen.__version__})"))
-            self.assertEqual(self.request("POST", "/__cad/version", {"dismiss": "99.0.0"}), (200, {"notice": None}))
-            self.assertEqual(self.request("GET", "/__cad/version")[1], {"notice": None})
+            self.assertEqual(self.request("GET", "/__cad/version")[1], answer)
+            self.assertNotEqual(self.request("POST", "/__cad/version", {})[0], 200)
 
     def test_an_app_with_no_recorder_serves_no_analytics(self) -> None:
         # The CAD app's tunnel builds apps of its own: its page asks the CAD app's server instead.

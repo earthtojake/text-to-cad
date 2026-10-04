@@ -219,6 +219,11 @@ export interface FileViewerProps {
    * the host composer's (`CadViewer`'s is the Settings popover the home has too).
    */
   settings?: ReactNode;
+  /**
+   * The host's update button (`@text-to-cad/ui/update`'s `UpdateButton`), first among the navbar's
+   * controls, while the host's install is behind; nothing otherwise.
+   */
+  update?: ReactNode;
   /** The features the person has left on (Settings' Features), for every renderer (`RendererViewProps.features`). */
   features?: ViewerFeatures;
   /** The host's notice, shown at the viewport's top-right once the file is on screen (`RendererViewProps.notice`). */

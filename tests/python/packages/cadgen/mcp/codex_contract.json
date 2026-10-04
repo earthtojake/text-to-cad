@@ -623,14 +623,10 @@
     "openWorldHint": false,
     "readOnlyHint": true
    },
-   "description": "Whether a newer text-to-cad is out, and the release the person's click on the update card set aside.",
+   "description": "Whether a newer text-to-cad is out: the update button's notice, or null.",
    "inputSchema": {
     "additionalProperties": false,
-    "properties": {
-     "dismiss": {
-      "type": "string"
-     }
-    },
+    "properties": {},
     "type": "object"
    },
    "name": "cad_version",

@@ -21,7 +21,7 @@ function library(models: LibraryModel[], extra: Partial<ModelLibrarySource> = {}
   };
 }
 
-it('heads the home with the TEXTTOCAD wordmark over GitHub and Settings; no tagline', async () => {
+it('heads the home with the TEXTTOCAD wordmark over GitHub and Settings, the host\'s update button first when there is one; no tagline', async () => {
   const links = { version: '0.7.4', release: 'r', x: 'https://x.com/earthtojake', github: 'https://github.com/earthtojake/text-to-cad', discord: 'https://discord.gg/x',
     issues: 'https://github.com/earthtojake/text-to-cad/issues/new' };
   const changes: boolean[] = [];
@@ -58,6 +58,11 @@ it('heads the home with the TEXTTOCAD wordmark over GitHub and Settings; no tagl
   render(<ModelLibrary library={library([])} links={{ ...links, issues: '' }} />);
   fireEvent.click(within(await screen.findByRole('navigation', { name: 'CAD links' })).getByRole('button', { name: 'Settings' }));
   expect((await screen.findByRole('dialog', { name: 'Settings' })).querySelector('[data-settings-section]')).toBeNull();
+  cleanup();
+  // The host's update button, first in the row, while its install is behind.
+  render(<ModelLibrary library={library([])} links={links} update={<button type="button" aria-label="Update to 0.7.5" />} />);
+  const row = await screen.findByRole('navigation', { name: 'CAD links' });
+  expect([...row.querySelectorAll('a, button')].map(node => node.getAttribute('aria-label'))).toEqual(['Update to 0.7.5', 'GitHub', 'Settings']);
 });
 
 it('offers Open only where the host has a chooser, and opens and pins through the host', async () => {

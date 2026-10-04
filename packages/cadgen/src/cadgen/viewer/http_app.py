@@ -530,14 +530,6 @@ class CadApp:
                         response.send_empty(413, [("connection", "close")])
                         return
                     response.send_json(200, features.change(json.loads(request.body() or b"{}")))
-                elif pathname == "/__cad/version":
-                    if int(request.headers.get("content-length") or 0) > 4096:
-                        response.send_empty(413, [("connection", "close")])
-                        return
-                    payload = json.loads(request.body() or b"{}")
-                    if type(payload) is not dict:
-                        raise ValueError("an update card's answer is an object")
-                    response.send_json(200, self._version(payload.get("dismiss")))
                 elif pathname == "/__cad/recents":
                     if int(request.headers.get("content-length") or 0) > _LIBRARY_BODY_LIMIT:
                         response.send_empty(413, [("connection", "close")])
@@ -660,13 +652,10 @@ class CadApp:
         return {"ask": found["reason"] == "unasked", "sharing": found["sharing"], "reason": found["reason"],
                 "policy": PRIVACY_URL}
 
-    def _version(self, dismiss=None) -> dict:
-        """The page's update card (``cadgen/updates.py``): whether a newer text-to-cad is out, and,
-        from the person's click on it (they copied or closed it), the release not to offer again."""
+    def _version(self) -> dict:
+        """The page's update button (``cadgen/updates.py``): whether a newer text-to-cad is out."""
         from cadgen import updates
 
-        if isinstance(dismiss, str):
-            updates.dismiss(dismiss)
         return {"notice": updates.notice()}
 
     def _report_activity(self, payload: dict) -> None:

@@ -122,12 +122,11 @@ class TabServerTest(_Session):
         read = self.server.handle("resources/read", {"uri": uri}, None)["contents"][0]
         self.assertEqual((read["mimeType"], read["text"]), ("text/html;profile=mcp-app", "<!doctype html><title>CAD</title>"))
 
-    def test_the_page_asks_about_a_newer_release_and_the_persons_click_sets_it_aside(self) -> None:
+    def test_the_page_reads_whether_a_newer_release_is_out_and_nothing_is_kept(self) -> None:
         offer_an_update(self)
-        notice = self.call("cad_version")["structuredContent"]["notice"]
-        self.assertEqual(notice["prompt"], "Update text-to-cad to 99.0.0 from https://github.com/earthtojake/text-to-cad")
-        self.assertIsNone(self.call("cad_version", {"dismiss": "99.0.0"})["structuredContent"]["notice"])
-        self.assertIsNone(self.call("cad_version")["structuredContent"]["notice"])
+        for _ in range(2):  # the update button stays while this install is behind
+            notice = self.call("cad_version")["structuredContent"]["notice"]
+            self.assertEqual(notice["prompt"], "Update text-to-cad to 99.0.0 from https://github.com/earthtojake/text-to-cad")
 
     def test_a_thread_browses_its_workspace_and_a_model_with_no_project_is_shown_on_its_own(self) -> None:
         opened = self.launch("cad_open", {"path": "parts/bracket.stl"})

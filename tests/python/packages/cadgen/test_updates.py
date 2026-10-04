@@ -93,12 +93,14 @@ class UpdatesTest(unittest.TestCase):
             with self.subTest(broken=broken):
                 self.assertIsNone(updates.parse_feed(broken))
 
-    def test_a_release_set_aside_is_not_offered_again_but_the_next_is(self) -> None:
+    def test_the_newest_release_is_offered_until_the_install_has_it(self) -> None:
+        # Nothing the person does with the update button is kept: the notice stays while behind.
         self.read_today(FEED)
-        self.assertTrue(updates.dismiss("0.9.0"))
-        self.assertIsNone(updates.notice())
+        self.assertEqual([updates.notice()["latest"], updates.notice()["latest"]], ["0.9.0", "0.9.0"])
         self.read_today({"latest": "0.9.1"})
         self.assertEqual(updates.notice()["latest"], "0.9.1")
+        with mock.patch.object(cadgen, "__version__", "0.9.1"):
+            self.assertIsNone(updates.notice())
 
     def test_nothing_is_checked_when_turned_off_in_ci_from_a_source_tree_or_for_a_stores_copy(self) -> None:
         self.read_today(FEED)

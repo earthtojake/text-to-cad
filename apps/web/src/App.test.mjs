@@ -46,16 +46,16 @@ test('the web host keeps the URL, the history, the title and the appearance, and
   const serverCalls = [];
   // The library every CAD view shares, written over this Viewer's routes.
   const libraryCalls = [];
-  const guards = [];  // the header no page from another site can send, on each answer to a card and features change
+  const guards = [];  // the header no page from another site can send, on each analytics answer and features change
   // The person's features as this Viewer's server keeps them (in their settings: `/__cad/features`).
   let kept = { quickEdit: true };
   const notice = { latest: '0.9.0', version: '0.8.1', text: 'A new version v0.9.0 of text-to-cad is available (currently on v0.8.1)', prompt: 'Update text-to-cad to 0.9.0 from https://github.com/earthtojake/text-to-cad', instructions: 'https://www.texttocad.dev/install' };
   const fetchBefore = globalThis.fetch;
   globalThis.fetch = async (url, init = {}) => {
     libraryCalls.push([url, init.body ? JSON.parse(init.body) : null]);
-    if (['/__cad/analytics', '/__cad/features', '/__cad/version'].includes(url) && init.body) guards.push(init.headers?.['x-cadgen-viewer']);
+    if (['/__cad/analytics', '/__cad/features'].includes(url) && init.body) guards.push(init.headers?.['x-cadgen-viewer']);
     if (url === '/__cad/features' && init.body) kept = { ...kept, ...JSON.parse(init.body) };
-    const reply = url === '/__cad/features' ? kept : url === '/__cad/version' ? { notice: init.body ? null : notice }
+    const reply = url === '/__cad/features' ? kept : url === '/__cad/version' ? { notice }
       : url !== '/__cad/analytics' ? { ok: true }
       : init.body ? { ask: false, sharing: false, reason: 'choice', policy: 'p' } : { ask: true, sharing: false, reason: 'unasked', policy: 'p' };
     return new Response(JSON.stringify(reply), { headers: { 'content-type': 'application/json' } });
@@ -107,21 +107,21 @@ test('the web host keeps the URL, the history, the title and the appearance, and
     // server applies it only to an open question. Answered, it is gone.
     await act(() => viewer().notice.props.onAnswer(false));
     assert.deepEqual(libraryCalls.filter(([url]) => url === '/__cad/analytics').at(-1), ['/__cad/analytics', { share: false, card: true }]);
-    // Then the update card, as the CAD app's: a page in a browser cannot reach the agent's chat, so it
-    // only copies the prompt. Closing it keeps the answer, and that release is not offered again.
-    assert.equal(viewer().notice.props.notice.latest, '0.9.0');
-    assert.equal(viewer().notice.props.send, undefined);
-    // Its link to the full install instructions opens a new tab.
+    assert.equal(viewer().notice, null);
+    // A newer release is the update button, as in the CAD app: first in the navbar while this install is
+    // behind. A page in a browser cannot reach the agent's chat, so its card only copies the prompt, and
+    // nothing it does is kept: the server is only read.
+    assert.equal(viewer().update.props.notice.latest, '0.9.0');
+    assert.equal(viewer().update.props.send, undefined);
+    // Its link to manual installation opens a new tab.
     const opened = [];
     const openBefore = window.open;
     window.open = (...args) => { opened.push(args); return null; };
-    viewer().notice.props.onLink(notice.instructions);
+    viewer().update.props.onLink(notice.instructions);
     window.open = openBefore;
     assert.deepEqual(opened, [[notice.instructions, '_blank', 'noopener,noreferrer']]);
-    await act(() => viewer().notice.props.onClose());
-    assert.deepEqual(libraryCalls.filter(([url]) => url === '/__cad/version'), [['/__cad/version', null], ['/__cad/version', { dismiss: '0.9.0' }]]);
-    assert.deepEqual(guards, ['1', '1']);
-    assert.equal(viewer().notice, null);
+    assert.deepEqual(libraryCalls.filter(([url]) => url === '/__cad/version'), [['/__cad/version', null]]);
+    assert.deepEqual(guards, ['1']);
     // Quick edit, on until the person turns it off: read from this Viewer's server once, and the
     // choice kept there (in their settings, whatever port this is), never in the browser's storage.
     assert.deepEqual(libraryCalls.filter(([url]) => url === '/__cad/features'), [['/__cad/features', null]]);

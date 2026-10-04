@@ -26,7 +26,7 @@ export interface ViewReporter {
  * data — the root it browses, whether it browses at all, what a Quick Edit can do in the chat —
  * never by where the view is.
  */
-export default function ModelView({ launch, root: launchedRoot, sequence, bridge, server, tabStore, live, links, colorScheme, platform, reporter, sync, onLaunch, onHome, compact = false, chat, appSettings, features, notice }: {
+export default function ModelView({ launch, root: launchedRoot, sequence, bridge, server, tabStore, live, links, colorScheme, platform, reporter, sync, onLaunch, onHome, compact = false, chat, appSettings, features, notice, update }: {
   launch: Launch; root: Root; sequence: number; bridge: Bridge; server: Server; tabStore: TabStore; live: LiveRegistry; links: ViewerLinks;
   colorScheme: 'light' | 'dark'; platform: string; reporter: ViewReporter;
   /** The view's one call each second: it carries what this root's client would otherwise poll for. */
@@ -45,6 +45,8 @@ export default function ModelView({ launch, root: launchedRoot, sequence, bridge
   features?: ViewerFeatures;
   /** The analytics question, which the viewer asks once a model is on screen. */
   notice?: ReactNode;
+  /** The update button, first in the navbar and on the home, while this install is behind. */
+  update?: ReactNode;
 }) {
   // Every launch carries its own root object; the same folder must keep its client and catalog.
   const root = useMemo(() => launchedRoot, [launchedRoot.kind, launchedRoot.path]);
@@ -143,6 +145,6 @@ export default function ModelView({ launch, root: launchedRoot, sequence, bridge
   return <CadViewer client={client} host={host} tabStore={tabStore} live={live} file={file} onShow={show}
     // A filesystem's catalog holds only the file on screen: a file a renderer links to is shown as named.
     accept={global ? path => normalizeCatalogPath(path) || null : undefined}
-    rootPath={root.path} library={library} appSettings={appSettings} features={features} notice={notice}
+    rootPath={root.path} library={library} appSettings={appSettings} features={features} notice={notice} update={update}
     onThumbnail={async (png, pictured) => server.recents({ action: 'thumbnail', path: rootPath(root.path, pictured), png: encodeBase64(new Uint8Array(await png.arrayBuffer())) })} />;
 }

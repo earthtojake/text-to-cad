@@ -425,8 +425,8 @@ class Server:
                 "The CAD views' features a person can turn off in Settings, and their choice. Only for the person's own click.",
                 _object({name: {"type": "boolean"} for name in sorted(FEATURES)})),
             app("cad_version", "CAD updates",
-                "Whether a newer text-to-cad is out, and the release the person's click on the update card set aside.",
-                _object({"dismiss": {"type": "string"}})),
+                "Whether a newer text-to-cad is out: the update button's notice, or null.",
+                _object({})),
             app("cad_launch", "Open model", "The launch for opening a model in this view.",
                 _object({"model": {"type": "string"}}, ["model"])),
             app("cad_pick_model", "Open Model", "Choose a model with the desktop's file chooser. Only for an explicit Open Model action.",
@@ -619,13 +619,10 @@ class Server:
         return _data(features.read())
 
     def _tool_cad_version(self, arguments, context):
-        # The page's update card (`cadgen/updates.py`): whether a newer text-to-cad is out, and, from the
-        # person's click on it (they sent, copied or closed it), the release not to offer again.
-        # Only a page answers: a text client has none.
+        # The page's update button (`cadgen/updates.py`): whether a newer text-to-cad is out. Nothing the
+        # person does with it is kept: it stays while this install is behind.
         from cadgen import updates
 
-        if isinstance(arguments.get("dismiss"), str) and not self.text:
-            updates.dismiss(arguments["dismiss"])
         return _data({"notice": updates.notice()})
 
     def _tool_cad_analytics(self, arguments, context):

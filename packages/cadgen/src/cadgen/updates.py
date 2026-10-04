@@ -21,15 +21,12 @@ The notice is the same wherever it shows: ``A new version v0.9.0 of text-to-cad 
 (currently on v0.8.1)``, and a prompt for the person's agent worded like the install message,
 ``Update text-to-cad to 0.9.0 from https://github.com/earthtojake/text-to-cad``: the agent takes
 the steps for its own app from there. The agent does the update; nothing here does. The CAD app's
-card sends that prompt to the chat where the host takes messages, and copies it elsewhere; the CAD
-Viewer's card copies it. Each card also links to manual installation (``INSTRUCTIONS``, the docs
-site's ``/install``), should the agent not manage. A text-only app gets the same as one line
+blue update button, first in its navbar and on its home, opens a card that sends that prompt to the
+chat where the host takes messages, and copies it elsewhere; the CAD Viewer's copies it. The card also
+links to manual installation (``INSTRUCTIONS``, the docs site's ``/install``), should the agent not
+manage. The button stays while the install is behind: nothing the person does with it is kept. A text-only app gets the same as one line
 (``line``) with its first ``cad_show`` result, and a ``cadgen`` command prints it on stderr, at
 most once a day.
-
-The person's answer to a card -- they sent, copied or closed it -- is kept as theirs (the
-``updates`` section of ``settings.json``, ``cadgen/settings.py``): that release is not offered
-again, anywhere. The next one is.
 
 None of it ever gets in the way: nothing here raises, a request waits at most
 ``TIMEOUT_SECONDS``, and each day's attempt is spent before it is made, so a feed that cannot be
@@ -51,14 +48,12 @@ from typing import Any, Callable, TextIO
 from cadgen._internal.api import api_url
 from cadgen._internal.atomic_replace import write_bytes_atomic
 from cadgen._internal.channel import DEV, channel, is_store
-from cadgen.settings import read_section, settings_path, update_section
 
 LOG = logging.getLogger("cadgen.updates")
 
 REPOSITORY = "https://github.com/earthtojake/text-to-cad"  # where the install message sends the agent too
 INSTRUCTIONS = "https://www.texttocad.dev/install"  # the full install instructions: the docs site's Install section
 FILE = "versions.json"  # the feed as last read, in the state directory
-SECTION = "updates"  # the person's answers to the card, in settings.json
 CHECK_SECONDS = 24 * 60 * 60  # how old the feed may get before it is read again; the CLI's line, how often
 TIMEOUT_SECONDS = 5
 WAIT_SECONDS = 2  # the most a command's end waits for a check it started
@@ -161,9 +156,9 @@ def offer(found: dict[str, Any] | None, version: str, where: str) -> str | None:
 
 
 def notice(*, fetch: bool = True, now: float | None = None, path: Path | None = None,
-           settings: Path | None = None, get: Callable[[str], Any] | None = None) -> dict[str, str] | None:
+           get: Callable[[str], Any] | None = None) -> dict[str, str] | None:
     """``{latest, version, text, prompt, instructions}``: what to tell the person, or ``None`` when
-    there is nothing to say -- or no checking, or the person set that release aside."""
+    there is nothing to say, or no checking."""
     try:
         if not checking():
             return None
@@ -171,7 +166,7 @@ def notice(*, fetch: bool = True, now: float | None = None, path: Path | None = 
 
         where = channel()
         latest = offer(feed(fetch=fetch, now=now, path=path, get=get), __version__, where)
-        if latest is None or _dismissed(settings) == latest:
+        if latest is None:
             return None
         return {"latest": latest, "version": __version__,
                 "text": f"A new version v{latest} of text-to-cad is available (currently on v{__version__})",
@@ -186,25 +181,6 @@ def line(found: dict[str, str]) -> str:
     link in place of its buttons."""
     return (f'{found["text"]}. Ask your agent to update to the latest version ("{found["prompt"]}"), '
             f'or install manually ({found["instructions"]}).')
-
-
-def dismiss(version: Any, *, settings: Path | None = None) -> bool:
-    """The person sent, copied or closed the card for ``version``: it is not offered again. Whether that was kept."""
-    if _release(version) is None:
-        return False
-    try:
-        update_section(SECTION, lambda section: {**section, "dismissed": version}, path=settings or settings_path())
-    except OSError:
-        LOG.debug("could not keep the update card's answer", exc_info=True)
-        return False
-    return True
-
-
-def _dismissed(settings: Path | None) -> Any:
-    try:
-        return read_section(SECTION, path=settings or settings_path()).get("dismissed")
-    except OSError:
-        return None
 
 
 def _quietly() -> None:
