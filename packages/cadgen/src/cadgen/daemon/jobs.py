@@ -113,6 +113,23 @@ class JobLedger:
         self._retain = float(retain_seconds)
         self._clock = clock
         self.epoch = uuid.uuid4().hex
+        # What each subject declared the last time its declarations could be read.
+        self._last_declared: dict[str, list[str]] = {}
+        self._last_declared_guard = threading.Lock()
+
+    def _declared_outputs(self, subject: str, tool: str) -> list[str]:
+        """:func:`declared_outputs`, or, when the script no longer imports (an edit broke a
+        helper), what it declared the last time it did: the job is still listed against the
+        documents its script writes, so its failure reaches whoever shows them. Never a
+        guess at the source: only what the script itself declared, in this process."""
+        outputs = declared_outputs(subject, tool)
+        if not subject:
+            return outputs
+        with self._last_declared_guard:
+            if outputs:
+                self._last_declared[subject] = list(outputs)
+                return outputs
+            return list(self._last_declared.get(subject, ()))
 
     # --- lifecycle -------------------------------------------------------------
 
@@ -131,7 +148,7 @@ class JobLedger:
             "tool": str(tool),
             "editingProducer": bool(editing_producer),
             "subject": subject,
-            "outputs": [] if tool == "artifact" else declared_outputs(subject, str(tool)),
+            "outputs": [] if tool == "artifact" else self._declared_outputs(subject, str(tool)),
             "argv": [str(a) for a in (argv or [])],
             "state": "submitted",
             "phase": None,
@@ -224,7 +241,7 @@ class JobLedger:
                     "id": f"{self.epoch}:job-{sequence}", "epoch": self.epoch,
                     "sequence": sequence, "storeRoot": "", "announced": True,
                     "tool": "run", "subject": model,
-                    "outputs": declared_outputs(model, "run"), "argv": [], "state": "submitted",
+                    "outputs": self._declared_outputs(model, "run"), "argv": [], "state": "submitted",
                     "phase": None, "detail": "", "done": None, "total": None, "startedAt": now,
                     "updatedAt": now, "finishedAt": None, "exit": None, "error": None,
                 }

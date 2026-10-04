@@ -101,6 +101,42 @@ class DeclaredOutputs(unittest.TestCase):
             (root / "a" / "src" / "lib" / "dims.py").write_text("SIZE = 'a2'\n", encoding="utf-8")
             self.assertEqual(["a_a2.step"], declared("a"))
 
+    def test_a_script_that_stops_importing_is_listed_against_what_it_declared_last(self):
+        # An edit that breaks a helper fails the build at import, which is also where its
+        # declarations are read: the job is still listed against the document the script
+        # writes, so the viewer showing that document gets the failure, not silence.
+        from cadgen.viewer.build_progress import build_progress_snapshot
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            self.addCleanup(_forget_project_modules, root)
+            (root / "lib").mkdir()
+            (root / "lib" / "__init__.py").write_text("", encoding="utf-8")
+            (root / "lib" / "dims.py").write_text("SIZE = 2\n", encoding="utf-8")
+            script = root / "part.py"
+            script.write_text(
+                "from cadgen import step\nfrom cadgen import build123d as bd\nfrom lib.dims import SIZE\n\n"
+                "@step\ndef part():\n    return bd.Box(SIZE, SIZE, SIZE)\n",
+                encoding="utf-8",
+            )
+            output = str(script.with_suffix(".step").resolve())
+            clock = Clock()
+            ledger = JobLedger(clock=clock)
+            built = ledger.start(tool="run", subject=str(script))
+            self.assertEqual([output], built["outputs"])
+            ledger.finish(built, 0)
+
+            (root / "lib" / "dims.py").write_text("SIZE = undefined_name\n", encoding="utf-8")
+            clock.now += 1
+            broken = ledger.start(tool="run", subject=str(script))
+            self.assertEqual([output], broken["outputs"])
+            ledger.finish(broken, 1, error="NameError: name 'undefined_name' is not defined")
+            status = build_progress_snapshot(output, jobs=ledger.snapshot())
+            self.assertEqual("NameError: name 'undefined_name' is not defined", status["failed"]["error"])
+
+            # A daemon that never read the script has nothing to list it against.
+            self.assertEqual([], JobLedger(clock=Clock()).start(tool="run", subject=str(script))["outputs"])
+
 
 def _forget_project_modules(root: Path) -> None:
     """Drop what a test's projects left in this process: their modules, sys.path roots."""

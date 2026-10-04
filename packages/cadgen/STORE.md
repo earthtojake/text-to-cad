@@ -1094,10 +1094,11 @@ are not cancelled merely because a newer editing request exists.
   moved into place, the record cross-validates the outputs by sha (gate
   clause 5), and the publish rule decides same-model outcomes. Progress is
   not on disk at all: the daemon keeps a ledger of every job it runs (state,
-  phase n/total, the job's declared output paths) and serves it with `daemon
-  status`; the CAD Viewer matches jobs to the documents it shows by output
-  path — a CLI build, a parent's child build and its own compile read alike —
-  and nothing reads any of it to decide freshness. With `CADGEN_DAEMON=0`
+  phase n/total, the job's declared output paths — for a script that no longer
+  imports, what it declared the last time this daemon could read it) and
+  serves it with `daemon status`; the CAD Viewer matches jobs to the
+  documents it shows by output path — a CLI build, a parent's child build and
+  its own compile read alike — and nothing reads any of it to decide freshness. With `CADGEN_DAEMON=0`
   there is no ledger, and concurrent builds are unbrokered
   — safe by the two invariants above, wasteful, and a debugging mode.
 
