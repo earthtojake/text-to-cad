@@ -280,11 +280,10 @@ tree asks for the tree, so the tree stays up while a person walks it; any other 
 gets nothing. No panel is saved in a file's record.
 The binding [viewer design system](docs/settings-ui.md) defines tool lifecycle,
 the tool stack, mobile layout, section density, keyboard scope, tooltips
-and preview. RendererShell owns the top-left toolbar — Display its last button, which opens
-the Display panel at the foot of the tool stack — Quick Edit at the top-right, the bottom-left
-cube, and the view's control it draws into the navbar's right end (`navbarSlot`): Preview,
-after the host's Settings (the person's settings, the same popover as on the home, Share
-Feedback in it). Preview is
+and preview. RendererShell owns the top-left toolbar, Quick Edit at the top-right, the
+bottom-left cube, and a 3D view's controls it draws into the navbar's right end
+(`navbarSlot`): Display (its settings, a dropdown), then Preview, after the host's Settings
+(the person's settings, the same popover as on the home, Feedback in it). Preview is
 the shell's own mode, where routines play and the model orbits, and takes the whole
 page, the navbar with it. Keep app-specific effects in the
 [host contract](docs/viewer-host.md), not in renderer components.
@@ -300,7 +299,7 @@ Authored material color, finish and opacity are read-only in every style. There
 is no Materials editor or persisted material override. See [View styles](docs/render-mode.md) and
 [progressive detail](docs/lod.md).
 
-The navbar names the file and offers its ⋯ menu, and Settings, whose Share Feedback opens a
+The navbar names the file and offers its ⋯ menu, and Settings, whose Feedback opens a
 new issue titled "Feedback: " where the host has a tracker; a renderer's loading and update status is its
 own, in its viewport. An error appears as a card over the viewport; a failed update the
 model survives can be dismissed, leaving the previous version to inspect, and the card's own

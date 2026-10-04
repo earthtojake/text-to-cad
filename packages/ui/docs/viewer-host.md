@@ -110,7 +110,7 @@ person tells the agent about a CAD file is [Quick Edit](#prompt-handoff)'s.
 
 A renderer with controls of its own for the view draws them into
 `RendererViewProps.navbarSlot`, at the navbar's right end after the host's Settings (the CAD
-viewer's Preview, for a 3D view); it is null where no navbar is drawn. A
+viewer's Display and Preview, for a 3D view); it is null where no navbar is drawn. A
 renderer that shows its file fullscreen (the CAD viewer's Preview) says so through
 `onFullscreenChange(true)`, and `false` when it stops: the navbar, the explorer
 and any declared panel step aside while it lasts. The host's `captureRequest`
@@ -400,8 +400,8 @@ the person's: FileViewer draws the control its composer hands it (`FileViewerPro
 over every file, just before the renderer's view controls and never among them, and `CadViewer`
 hands it the Settings popover (`SettingsPopover`, `kit/shell/SettingsPopover.jsx`) the home has
 too — one component, the same sections in both. It shows the version beside its title, the
-host's own settings (`appSettings`, below) under it, then Share Feedback where the host has a
-tracker (`links.issues`): a button that opens a new issue titled "Feedback: " (`feedbackUrl`,
+host's own settings (`appSettings`, below) under it, then Feedback where the host has a
+tracker (`links.issues`): a button, Open Issue, that opens a new issue titled "Feedback: " (`feedbackUrl`,
 `NavbarLinks.jsx`), for the person to finish, naming the version and `environment.platform`
 (`CadViewer` hands the popover the platform). It has no label: the project has none for
 feedback, and what is said may be a bug, a request or a question. Its footer has "Made by @…"
@@ -448,8 +448,8 @@ stack at the top-left, Quick Edit at the top-right, and the view cube at the
 bottom-left. A host's one question goes through the shell too: `notice` (the
 `ConsentCard`) is drawn at the top-right once the file is on screen, never while it
 loads or after it failed to, with Quick Edit stacked under it until it is answered;
-the home never shows it. The view's own control (Preview, a 3D view's) is the renderer's, drawn
-into the navbar's right end after Settings (`navbarSlot`); Display is the last button of the tool strip.
+the home never shows it. The view's own controls (Display and Preview, a 3D view's) are the
+renderer's, drawn into the navbar's right end after Settings (`navbarSlot`).
 What Quick Edit offers follows the subscribed destination capability and
 the ports, never an app name: Copy Prompt always, Queue for a composer
 destination, Send where the prompt port has `send`. Native clipboard effects

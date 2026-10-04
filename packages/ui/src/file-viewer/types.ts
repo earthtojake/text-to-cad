@@ -160,7 +160,7 @@ export interface RendererViewProps {
   panelSlot: HTMLElement | null;
   /**
    * The navbar's box for the renderer's own view controls, at its right end after the host's
-   * Settings (the CAD viewer's Preview); null where no navbar is drawn.
+   * Settings (the CAD viewer's Display and Preview); null where no navbar is drawn.
    */
   navbarSlot: HTMLElement | null;
   /**

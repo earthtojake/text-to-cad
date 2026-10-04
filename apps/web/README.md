@@ -244,11 +244,11 @@ and native service adapters. Shared renderers own all model interaction. STEP an
 robots open in Select, whose Features (Links for a robot) panel hangs under the
 toolbar with the rest of the tool stack; Position's panel replaces it while Position
 is the tool. The navbar has no panel of the file's: the explorer's is its one toggle.
-Every 3D file has a top-left toolbar whose last button is Display (the Render mode's
-sphere), which opens the Display panel at the foot of the tool stack; GLB, STL and 3MF
-have Display alone. Every 3D file also has Preview, the view's control at the navbar's
-right end, the view cube at the bottom-left, and Quick Edit at the top-right. DXF is a
-2D canvas with pan, zoom, snapshot and Quick Edit, without a 3D toolbar or tool stack.
+STEP and robot files have a top-left toolbar; GLB, STL and 3MF have none. Every 3D
+file has Display (its settings, a dropdown) and Preview among the view's controls at
+the navbar's right end, the view cube at the bottom-left, and Quick Edit at the
+top-right. DXF is a 2D canvas with pan, zoom, snapshot and Quick Edit, without a 3D
+toolbar or tool stack.
 
 The file explorer floats over the view's left and never resizes it. Below 720px of
 FileViewer width it is a floating sheet over the viewer and the tree panel of the
@@ -367,17 +367,17 @@ The Viewer has the one navbar every app shares (see
 [the host contract](../../packages/ui/docs/viewer-host.md#host-chrome-slots)): at the
 left the explorer's toggle and the open file's name with its ⋯ ("Select file" with
 none open); at the right the update (a blue download button, only when GitHub has a
-newer release), Settings (the person's settings — Analytics, Features, then Share Feedback, a new
-issue titled "Feedback: " — the same popover as the CAD app's home), then the view's control
-(Preview); the version is beside the Settings popover's title, and its footer has "Made by @…"
+newer release), Settings (the person's settings — Analytics, Features, then Feedback, a new
+issue titled "Feedback: " — the same popover as the CAD app's home), then the view's controls
+(Display, Preview); the version is beside the Settings popover's title, and its footer has "Made by @…"
 (X), Discord and GitHub. This host
 supplies the links (`src/host/viewerLinks.js`): its version, the GitHub (where new
 issues open) and Discord its build names (`VIEWER_GITHUB_URL`, `VIEWER_DISCORD_URL`),
 and what GitHub's latest-release API
 says, so the blue download button appears when a newer release is out; links open in a
 new tab. Browser titles use "CAD | <filename>", or "CAD" when no file is selected.
-Appearance is injected as an icon-bearing dropdown beside Projection in the Display
-panel's Display section, below the full-width Mode selector (`ViewerAppearance`,
+Appearance is injected as an icon-bearing dropdown beside Projection in Display's
+Display section, below the full-width Mode selector (`ViewerAppearance`,
 through `displayActions`). The original animated mark remains the shared LoadingIcon
 for loading states. The C and CAD marks are the UI package's; the favicons are this
 app's, exported alongside the docs brand assets. See

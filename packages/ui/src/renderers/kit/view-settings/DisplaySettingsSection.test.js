@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { createElement } from "react";
 import { EDGELESS_VIEW_FEATURES, resolveViewSettings, viewSettingsAreCustom } from "@text-to-cad/core/common/viewSettings.js";
 import { elements, render } from "../../../../scripts/reactHarness.mjs";
 import { DISPLAY_MODE_OPTIONS } from "./DisplayModeOptions.js";
@@ -118,12 +119,19 @@ test("a file that is not a CAD model has no Edges section and only the presets n
   assert.equal(later.getSnapshot().scene.view.edges.enabled, false);
 });
 
-test("Display holds the file's view alone, its first heading ending in its panel's X; the host's settings are Settings', not Display's", () => {
+test("Display holds the file's view alone, its first heading ending in the X its dropdown hands it; the host's settings are Settings', not Display's", () => {
   const view = panel();
   assert.deepEqual(sections(view.tree).map(section => section.title), ["Display", "Surfaces", "Edges", "Grid / Axes", "Lighting", "Background", "Floor"]);
-  // Reset, then the X that closes the panel it is drawn in (`ToolPanelClose`): the panel has no heading of its own.
-  const actions = elements(sections(view.tree)[0].headingAction);
-  assert.ok(actions.some(node => node.props?.["aria-label"] === "Reset"));
-  assert.equal(actions.findLast(node => typeof node.type === "function")?.type.name, "ToolPanelClose");
+  const named = tree => elements(sections(tree)[0].headingAction).map(node => node.props?.["aria-label"]).filter(Boolean);
+  // Drawn alone, its first heading has its Reset and nothing else.
+  assert.deepEqual(named(view.tree), ["Reset"]);
   view.unmount();
+  // In its dropdown, Reset then the dropdown's X (`close`: `DisplayPopoverClose`): the dropdown has no heading of its own.
+  const store = createViewSettingsStore({});
+  const { display: settings, scene } = store.getSnapshot();
+  const close = createElement("button", { "aria-label": "Close display settings" });
+  const dropdown = render(DisplaySettingsSection, { viewSettings: settings, resolvedView: scene.view,
+    onViewSettingsPatch: store.patch, onGroupEnabledChange: store.setEnabled, close });
+  assert.deepEqual(named(dropdown.tree), ["Reset", "Close display settings"]);
+  dropdown.unmount();
 });

@@ -132,10 +132,10 @@ test('a shell renderer restores isolated view state on a remount', async (t) => 
   });
   await page.goto(`${origin}/`);
   const first = page.getByTestId('one');
-  // Display's settings are a panel at the foot of the tool stack, opened by the strip's last button:
-  // a file never opens with it, and it is not a tool.
-  const displayButton = pane => pane.locator('[data-cad-toolbar]').getByRole('button', { name: 'Display', exact: true });
-  const display = first.locator('[data-tool-panel-id="display"]');
+  // Display's settings are a dropdown from its button in the navbar (`DisplayPopover.jsx`),
+  // portaled out of the pane: a file never opens with it, and it is not a tool.
+  const displayButton = pane => pane.locator('[data-viewer-navbar]').getByRole('button', { name: 'Display', exact: true });
+  const display = page.locator('[data-display-popover]');
   const cameraZoom = id => page.evaluate(pane => window.cadHarness[pane].controller?.readState().camera?.zoom ?? null, id);
   await displayButton(first).waitFor().catch(async (error) => { throw new Error(`${error.message}; page errors: ${errors.join('; ')}; body: ${await page.locator("body").innerText()}; requests: ${requests.join(", ")}`); });
   await page.waitForFunction(() => Object.keys(window.cadHarness.state.renderers || {}).length > 0);
@@ -174,7 +174,7 @@ test('a shell renderer restores isolated view state on a remount', async (t) => 
   assert.deepEqual(Object.keys(before.renderers), [JSON.stringify(['part.stl', 'mesh'])], 'one record per file, keyed [path, renderer id]');
   for (const saved of Object.values(before.renderers)) assert.ok(Math.abs(saved.camera.zoom - 1.1) < 1e-6, `the camera is persisted: ${JSON.stringify(saved.camera)}`);
   await page.evaluate(() => window.cadHarness.mounted(true));
-  // Whether the panel is open is transient, not file state.
+  // Whether Display is open is transient, not file state.
   await displayButton(first).waitFor();
   assert.equal(await display.count(), 0, 'the remounted file opens with its Display settings shut');
   assert.equal(await displayButton(first).getAttribute('aria-pressed'), 'false');
@@ -577,8 +577,8 @@ test('a renderer says more about its load than a download: finding the file, edi
   assert.equal(await card.count(), 0, 'and raises nothing');
 
   // THE CUBE IS THE BOTTOM-LEFT CORNER'S, far enough off the bottom that its axes stay inside the
-  // view, and the tool stack stops above it. Display is the strip's; the view's control, Preview,
-  // is the navbar's. The right of the view is Quick Edit's, and the bottom middle the host's (a
+  // view, and the tool stack stops above it. The view's controls, Display then Preview, are the
+  // navbar's. The right of the view is Quick Edit's, and the bottom middle the host's (a
   // composer, on some) and preview's playbar.
   const frameBox = await canvasElement.boundingBox();
   const cubeBox = await pane.getByLabel('View cube', { exact: true }).boundingBox();
@@ -587,8 +587,9 @@ test('a renderer says more about its load than a download: finding the file, edi
   assert.ok(offBottom >= 6 && offBottom < 16, `the view cube sits just off the bottom-left corner: ${offBottom}px`);
   assert.ok(cubeBox.x < frameBox.x + 20, 'the view cube stays against the left edge');
   assert.ok(stackBox.y + stackBox.height <= cubeBox.y, 'the tool stack stops above the cube');
-  assert.equal(await pane.locator('[data-viewer-navbar]').getByRole('button', { name: 'Preview', exact: true }).count(), 1, 'Preview is in the navbar');
-  assert.equal(await pane.locator('[data-cad-toolbar]').getByRole('button', { name: 'Display', exact: true }).count(), 1, 'Display is on the strip');
+  assert.deepEqual(await pane.locator('[data-viewer-navbar] [data-navbar-controls] button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
+    ['Display', 'Preview'], 'Display then Preview, in the navbar');
+  assert.equal(await pane.locator('[data-cad-toolbar]').getByRole('button', { name: 'Display', exact: true }).count(), 0, 'nothing of Display on the strip');
 
   // FINDING: the wait before the file is even located covers the viewport, and says
   // so as such rather than as a phase of reading it.

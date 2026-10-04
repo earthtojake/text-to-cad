@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useLayoutEffect, use
 import { Check, ChevronDown, ChevronUp, X } from "lucide-react";
 import { cn } from "@text-to-cad/ui/utils";
 import { ScrollArea } from "@text-to-cad/ui/primitives/scroll-area";
-import { FLOATING_CHROME_SURFACE_CLASS, FLOATING_SURFACE_CLASS } from "./floatingSurface.js";
+import { FLOATING_CHROME_SURFACE_CLASS } from "./floatingSurface.js";
 import ResizeGrip from "./ResizeGrip.jsx";
 import { ToolStackContext } from "./ToolStack.jsx";
 import { TOOL_PANEL_WIDTH, clampToolPanelHeight, clampToolPanelWidth } from "./toolStackLayout.js";
@@ -26,7 +26,7 @@ const FIT = Object.freeze({
 const FLOOR = Object.freeze({ tree: 128, details: 96 });
 const KEY_NUDGE_PX = 16;
 /**
- * Every panel's heading text: the size and weight of the Display panel's section headings
+ * Every panel's heading text: the size and weight of Display's section headings
  * (`FILE_SHEET_SECTION_HEADING_CLASSES`, 11px), so every heading in the stack reads alike.
  */
 export const TOOL_PANEL_HEADING_TEXT_CLASS = "text-tiny font-normal leading-4 text-foreground";
@@ -69,15 +69,14 @@ function CollapseButton({ panel, className }) {
 }
 
 /**
- * The X that closes the panel it is drawn in, for a panel whose first row is its content's own:
- * a tree's filter row (a `closable` panel: it goes, kept as it is, until the tool it belongs to
- * brings it back — `RendererShell.jsx`, a press on that tool while it is up), or Display's first
- * heading (a panel with `onClose` and no heading of its own). Drawn at that row's trailing end,
- * inside such a `ToolPanel`; nothing outside one.
+ * The X that closes the panel it is drawn in, for a closable panel whose first row is its
+ * content's own: a tree's filter row. Drawn at that row's trailing end, inside a `closable`
+ * `ToolPanel`; nothing outside one. The panel goes, kept as it is, until the tool it belongs to
+ * brings it back (`RendererShell.jsx`: a press on that tool while it is up).
  */
 export function ToolPanelClose({ className }) {
   const panel = useContext(ToolPanelContext);
-  return panel?.close ? <button type="button" aria-label={panel.closeLabel || `Close ${panel.label.toLowerCase()}`} data-tool-panel-close=""
+  return panel?.close ? <button type="button" aria-label={`Close ${panel.label.toLowerCase()}`} data-tool-panel-close=""
     className={cn(TOOL_PANEL_BUTTON_CLASS, className)} onClick={panel.close}>
     <X className="size-3" aria-hidden="true" />
   </button> : null;
@@ -102,8 +101,7 @@ export function ToolPanelClose({ className }) {
  * for a panel with nothing to fold away (a row of buttons, or one with an X instead). A panel's
  * first row is, in order: its heading (`title`, with a `summary`, the chevron and an X when it has
  * something to remove); its `header` (a tree's filter, which carries a `ToolPanelClose`); or its
- * content's own first row, which carries the X of a panel with `onClose` and no `title`
- * (`ToolPanelClose`: Display's). A folding panel without a heading or a header shows its `name`
+ * content's own first row. A folding panel without a heading or a header shows its `name`
  * beside the chevron, and has no grip while folded: there is no height to set. Which panels are
  * folded is the person's (`ToolStack.jsx`), by `id`, across files.
  *
@@ -119,17 +117,13 @@ export function ToolPanelClose({ className }) {
  *   actions?: import("react").ReactNode,
  *   header?: import("react").ReactNode, footer?: import("react").ReactNode, collapsible?: boolean, closable?: boolean, onClose?: (() => void) | null, closeLabel?: string,
  *   fit?: "fixed" | "tree" | "details", resizable?: boolean, hidden?: boolean, defaultCollapsed?: boolean,
- *   width?: number, surface?: "chrome" | "menu", children?: import("react").ReactNode }} props
+ *   children?: import("react").ReactNode }} props
  *   `label` names the panel for assistive technology ("Clip controls"), with a heading or
  *   without; the chevron, the X and the grip take their names from it, unless the X says
  *   what it does itself (`closeLabel`, "Clear selection").
- *   `width`: the width a panel opens at, for one whose content is laid out wider than the one
- *   width (Display's settings, two controls a row). `surface`: `"menu"` puts the panel on the
- *   menus' surface (`FLOATING_SURFACE_CLASS`), for settings read while they are up whose text
- *   must not compete with the model (Display's); otherwise the stack's own.
  */
 export default function ToolPanel({ id, title = null, name = "", label, summary = null, actions = null, header = null, footer = null, collapsible = true, closable = false, onClose = null, closeLabel = "",
-  fit = "fixed", resizable = false, hidden = false, defaultCollapsed = false, width: openWidth = TOOL_PANEL_WIDTH, surface = "chrome", children }) {
+  fit = "fixed", resizable = false, hidden = false, defaultCollapsed = false, children }) {
   const stack = useContext(ToolStackContext);
   const kept = Boolean(stack && id);
   // Folded: the person's, kept by the stack across files; a panel drawn alone keeps its own.
@@ -142,12 +136,9 @@ export default function ToolPanel({ id, title = null, name = "", label, summary 
   const [ownClosed, setOwnClosed] = useState(false);
   const closed = closable && (kept ? stack.closed(id) : ownClosed);
   const close = useCallback(() => { if (kept) stack.settle(id, { closed: true }); else setOwnClosed(true); }, [kept, stack, id]);
-  // The X the content's own first row carries (`ToolPanelClose`): a closable panel's, which the
-  // stack keeps closed, or the `onClose` of a panel with no heading to draw it in.
-  const contentClose = closable ? close : !title && onClose ? onClose : null;
-  const panel = useMemo(() => collapsible || contentClose ? {
-    label, closeLabel, ...(collapsible ? { collapsed, toggle } : {}), ...(contentClose ? { close: contentClose } : {})
-  } : null, [collapsible, contentClose, collapsed, toggle, label, closeLabel]);
+  const panel = useMemo(() => collapsible || closable ? {
+    label, ...(collapsible ? { collapsed, toggle } : {}), ...(closable ? { close } : {})
+  } : null, [collapsible, closable, collapsed, toggle, label, close]);
   const folding = collapsible ? panel : null;
 
   // The size: dragged (`draft`), then as the person left it, then the defaults — every panel's
@@ -158,7 +149,7 @@ export default function ToolPanel({ id, title = null, name = "", label, summary 
   const size = sized ? { ...(kept ? stack.size(id) : ownSize), ...draft } : {};
   const clampWidth = value => clampToolPanelWidth(value, stack?.viewerWidth || window.innerWidth);
   const clampHeight = value => clampToolPanelHeight(value, stack?.room() || Infinity);
-  const width = size.width ? clampWidth(size.width) : openWidth;
+  const width = size.width ? clampWidth(size.width) : TOOL_PANEL_WIDTH;
   const cap = sized ? size.height ?? stack?.defaultHeight(id) ?? null : null;
   // One gesture's outcome, written once: a width, a cap, or both.
   const settle = change => {
@@ -243,8 +234,7 @@ export default function ToolPanel({ id, title = null, name = "", label, summary 
   const dragging = draft !== null;
   return <section ref={section} aria-label={label} hidden={hidden || closed} data-tool-panel={fit} data-tool-panel-id={id || undefined}
     data-collapsed={collapsed ? "" : undefined} data-closed={closed ? "" : undefined} data-resizable={sized ? "" : undefined}
-    className={cn("pointer-events-auto relative flex max-w-full flex-col rounded-md text-tiny", surface === "menu" ? FLOATING_SURFACE_CLASS : FLOATING_CHROME_SURFACE_CLASS,
-      collapsed ? "shrink-0" : FIT[fit])}
+    className={cn("pointer-events-auto relative flex max-w-full flex-col rounded-md text-tiny", FLOATING_CHROME_SURFACE_CLASS, collapsed ? "shrink-0" : FIT[fit])}
     style={{ width, maxHeight: collapsed || cap === null ? undefined : `${cap}px`, minHeight }}>
     <ToolPanelContext.Provider value={panel}>
       {heading}

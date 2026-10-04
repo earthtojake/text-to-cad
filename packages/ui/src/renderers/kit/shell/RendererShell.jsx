@@ -12,7 +12,8 @@ import ViewerAlertCard, { alertDismissible, useAlertDismissal } from "../status/
 import { MODEL_UPDATE_STATUS, ViewUpdateStatus } from "../status/ViewUpdateStatus.jsx";
 import ViewerLoadingOverlay from "../status/ViewerLoadingOverlay.js";
 import { VIEWER_RENDER_PROFILE, renderProfileKeepsPixelRatio, sceneForRenderProfile } from "../viewport/renderProfile.js";
-import { RenderModeIcon } from "../view-settings/DisplayModeOptions.js";
+import { NAVBAR_CONTROL_CLASS } from "../../../lib/navbarRow.js";
+import DisplayPopover from "./DisplayPopover.jsx";
 import { DrawingToolbar } from "../../../drawing/toolbar.jsx";
 import ToolPanel, { ToolPanelFooterButton } from "../tools/ToolPanel.jsx";
 import PlaybackMenu from "../tools/PlaybackMenu.jsx";
@@ -32,12 +33,6 @@ import ViewportContextMenu from "./ViewportContextMenu.jsx";
 const INSET = `${VIEWPORT_INSET_PX}px`;
 // The strip and its stack stop short of Quick Edit's button at the top-right.
 const TOOLBAR_POSITION = Object.freeze({ top: INSET, left: INSET, bottom: VIEWPORT_STACK_BOTTOM, maxWidth: "calc(100% - 3.5rem)" });
-// Display: the strip's last button, and the id of the panel it opens at the foot of the stack, as
-// wide as its settings are laid out for (two controls a row): the popover's they were.
-const DISPLAY = "display";
-const DISPLAY_PANEL_WIDTH = 256;
-// The view's controls in the navbar look as its own icon buttons do.
-export const NAVBAR_CONTROL_CLASS = "size-6 text-muted-foreground hover:text-foreground aria-pressed:bg-accent aria-pressed:text-accent-foreground";
 
 /** One of the view's controls in the navbar: an icon button with its name on hover. */
 function NavbarControl({ label, disabled = false, onClick, children }) {
@@ -50,10 +45,10 @@ function NavbarControl({ label, disabled = false, onClick, children }) {
 
 /**
  * The frame every file-family renderer draws itself in: the viewport box with the tool strip at
- * its top-left corner — the renderer's tools, then Display — and the tool stack under it, Quick
- * Edit at the top-right, the cube in the bottom-left corner, the view's control in the navbar's
- * right end (Preview, in the renderer's `navbarSlot`), the loading, update and alert overlays, and
- * preview mode's controls. The same
+ * its top-left corner and the tool stack under it, Quick Edit at the top-right, the cube in the
+ * bottom-left corner, a 3D view's controls in the navbar's right end (Display's settings and
+ * Preview, in the renderer's `navbarSlot`), the loading, update and alert overlays, and preview
+ * mode's controls. The same
  * structure, classes and data attributes for every renderer: hosts, stylesheets and tests key on
  * them. A file's controls are never a sidebar: they are panels in the tool stack, shown by the
  * tool they belong to. Nothing sits at the bottom centre but preview's playbar.
@@ -70,8 +65,8 @@ function NavbarControl({ label, disabled = false, onClick, children }) {
  *   onCanvasPointerDown?: ((event: import("react").PointerEvent) => void) | null,
  *   viewportOverlay?: import("react").ReactNode | ((viewport: { runtimeRef: object, hostRef: object,
  *     mountRef: object, viewerReadyTick: number, commitScene: () => boolean }) => import("react").ReactNode) }} props
- *   `tools`: left to right, from `shell.tools`; the frame adds Display after them, so a file whose
- *   viewport only orbits, pans and zooms (an EMPTY list) has Display alone on its strip. A tool the
+ *   `tools`: left to right, from `shell.tools`; an EMPTY list draws no strip at all, which is what
+ *   a file whose viewport only orbits, pans and zooms hands over. A tool the
  *   file cannot offer is left out, never handed over disabled. A tool that names a `closable`
  *   panel of its own (`panel: { id, label, startsClosed }`: Select's tree, which a single part
  *   opens with closed) is marked while that panel is closed, and a press on it while it is up
@@ -79,8 +74,7 @@ function NavbarControl({ label, disabled = false, onClick, children }) {
  *   `toolPanels`: the tool stack's panels, top to bottom — each a `ToolPanel`
  *   (`kit/tools/ToolPanel.jsx`), shown or `hidden` by the renderer as its tools say: what
  *   the tool in hand shows (Select's tree and Reference, Position's joints), then the
- *   effects a person keeps. Display's panel, the frame's own, follows them. The stack is one
- *   column the viewer's height, gone in preview.
+ *   effects a person keeps. The stack is one column the viewer's height, gone in preview.
  *   `playback`: the playbar runtime, when the renderer hands the shell one of its own rather
  *   than through `useRendererShell`'s `animation`. Routines play in preview alone.
  *   `references`: what is selected, in the prompt grammar — the references a Quick Edit attaches
@@ -140,12 +134,12 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
   // otherwise: orbit on or off is the file's, kept from one preview to the next.
   const orbitPlaying = shell.playback.orbit;
   const setOrbitPlaying = value => shell.setPlayback({ orbit: typeof value === "function" ? value(shell.playback.orbit) : value });
-  // Display's settings: a panel at the foot of the stack, opened and closed by the strip's last
-  // button (or the panel's X). A panel, not a tool: it never takes the pointer, and opening it
-  // leaves the tool in hand as it is. Preview puts it away with the stack, and gives it back as it
-  // was; another file starts with it closed.
+  // Display's settings: a dropdown from its button in the navbar, not a tool — opening it leaves the
+  // tool in hand as it is. Preview, which has the page to itself, puts it away; another file starts
+  // with it shut.
   const [displayOpen, setDisplayOpen] = useState(false);
   useEffect(() => { setPreviewing(false); setDisplayOpen(false); }, [frame.modelKey, setPreviewing]);
+  useEffect(() => { if (previewing) setDisplayOpen(false); }, [previewing]);
   // One viewport, two render profiles over the same Display settings (`renderProfile.js`): the
   // tools view is drawn for working on the model, preview for looking at it.
   const renderProfile = previewing ? VIEWER_RENDER_PROFILE.PREVIEW : VIEWER_RENDER_PROFILE.TOOLS;
@@ -180,16 +174,12 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
   // One object while those starts stay the same: the stack's panels read it.
   const panelStarts = JSON.stringify(tools.filter(tool => tool.panel).map(tool => [tool.panel.id, Boolean(tool.panel.startsClosed)]));
   const startsClosed = useMemo(() => Object.fromEntries(JSON.parse(panelStarts)), [panelStarts]);
-  const stripTools = [...tools.map(tool => {
+  const stripTools = tools.map(tool => {
     if (!tool.panel || !toolPanelClosed(frame.toolStack, tool.panel.id, { mobile, startsClosed: startsClosed[tool.panel.id] })) return tool;
     const reopen = () => frame.changeToolStack(current => ({ closed: { ...current.closed, [tool.panel.id]: false } }));
     return { ...tool, panelClosed: true, description: tool.description || `${tool.panel.label} closed`,
       onSelect: () => { if (tool.active) reopen(); tool.onSelect(); } };
-  }),
-  // Display, last on every strip: the Render mode's icon (a shaded sphere: how the model looks).
-  // Pressed while its panel is open, it closes it, as a kept effect's button closes its panel.
-  { id: DISPLAY, label: "Display", icon: <RenderModeIcon className="size-3.5" aria-hidden="true" />,
-    active: !previewing && displayOpen, disabled: shell.idle, onSelect: () => setDisplayOpen(open => !open) }];
+  });
   // The shell's own tool's panel leads the stack while its tool is up: Draw's tools, color and
   // history. The renderer's follow.
   // Draw's controls, and once there is ink, Copy Drawing (the view with its ink) at their foot.
@@ -200,11 +190,6 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
       <DrawingToolbar drawing={frame.drawing} layout="panel" className="p-1" />
     </ToolPanel> : null}
   </>;
-  // Display's panel, at the foot of the stack while its button is pressed: its sections give way
-  // like a details panel's and scroll inside it, its first heading carries Reset and the X. Its
-  // settings are read while it is up, on the menus' surface, so their text never competes with the model.
-  const displayPanel = displayOpen ? <ToolPanel id={DISPLAY} label="Display settings" fit="details" collapsible={false}
-    width={DISPLAY_PANEL_WIDTH} surface="menu" onClose={() => setDisplayOpen(false)}>{frame.display}</ToolPanel> : null;
 
   const hasContent = Boolean(scene) && !viewerLoading;
   // A load the model did not survive: an alert that cannot be put away (a failed update that
@@ -309,15 +294,16 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
                 </div>
               </div>
 
-              {/* The view's control, at the navbar's right end, after the host's Settings: Preview, for a
-                  view that offers it (a 3D one: `useRendererShell`'s `previewable`); another has none.
-                  Not while the model loads or after it failed to, not in a host that shows the
-                  view small, and not in Preview, which has the page to itself. */}
-              {view.navbarSlot && shell.previewable && !toolsHidden && !previewing ? createPortal(
-                <NavbarControl label="Preview" disabled={shell.idle} onClick={enterPreview}><Maximize2 className="size-3.5" aria-hidden="true" /></NavbarControl>,
-                view.navbarSlot) : null}
+              {/* The view's controls, at the navbar's right end, after the host's Settings: Display's
+                  settings, then Preview, for a 3D view (`useRendererShell`'s `previewable`); another
+                  has neither. Not while the model loads or after it failed to, not in a host that
+                  shows the view small, and not in Preview, which has the page to itself. */}
+              {view.navbarSlot && shell.previewable && !toolsHidden && !previewing ? createPortal(<>
+                <DisplayPopover open={displayOpen} onOpenChange={setDisplayOpen} disabled={shell.idle}>{frame.display}</DisplayPopover>
+                <NavbarControl label="Preview" disabled={shell.idle} onClick={enterPreview}><Maximize2 className="size-3.5" aria-hidden="true" /></NavbarControl>
+              </>, view.navbarSlot) : null}
               {/* Preview: fullscreen, the navbar and the tools put away and the model orbiting, its
-                  routines playing. At the top-right, where Settings sits outside it, Playback
+                  routines playing. At the top-right, where Display and Preview sit outside it, Playback
                   settings (the routine's and the orbit's) then its way out; under the model, a
                   file with routines has its playbar, and a static file nothing at all. */}
               <PreviewChrome active={previewing} surface={frame.hostElement}
@@ -336,7 +322,7 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
               {toolsHidden ? null : <div className={cn("group/tool-stack pointer-events-none absolute z-20 flex flex-col items-start gap-2", view.openPanel === FILE_PANEL_TREE && "invisible")} style={TOOLBAR_POSITION}
                 data-mobile={mobile ? "" : undefined} data-cad-tool-groups="">
                 <FloatingToolBar tools={stripTools} />
-                <ToolStack hidden={previewing} mobile={mobile} startsClosed={startsClosed} layout={frame.toolStack} onLayoutChange={frame.changeToolStack}>{shellPanels}{toolPanels}{displayPanel}</ToolStack>
+                <ToolStack hidden={previewing} mobile={mobile} startsClosed={startsClosed} layout={frame.toolStack} onLayoutChange={frame.changeToolStack}>{shellPanels}{toolPanels}</ToolStack>
               </div>}
               {/* The top-right: the host's notice once a model is on screen (`view.notice`), and Quick Edit
                   under it -- hidden, not unmounted, while the view loads: a note being written outlives a

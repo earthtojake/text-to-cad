@@ -91,16 +91,17 @@ async function open(t, file, { record = null } = {}) {
 
 const ready = pane => pane.locator('[aria-busy="false"] > div > canvas').first().waitFor();
 
-// A GLB has no interaction tools: its strip is Display alone.
+// A GLB has no interaction tools, so no strip; its Display settings are the navbar's button beside Preview.
 const noTools = async (pane) => {
-  assert.deepEqual(await pane.getByRole('group', { name: 'Interaction tools' }).getByRole('button')
-    .evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))), ['Display'], 'a static GLB has no tools: Display alone');
+  assert.equal(await pane.getByRole('group', { name: 'Interaction tools' }).count(), 0, 'a static GLB has no tools, so no strip');
+  assert.equal(await displayButton(pane).count(), 1, 'its Display settings are the navbar\'s button beside Preview');
   for (const name of ['Orbit', 'Draw', 'Select', 'Measure', 'Position', 'Animate']) {
     assert.equal(await pane.getByRole('button', { name, exact: true }).count(), 0, name);
   }
 };
-const displayButton = pane => pane.getByRole('group', { name: 'Interaction tools' }).getByRole('button', { name: 'Display', exact: true });
-const displayPanel = pane => pane.locator('[data-tool-panel-id="display"]');
+const displayButton = pane => pane.locator('[data-viewer-navbar]').getByRole('button', { name: 'Display', exact: true });
+// Display's settings: a dropdown, portaled out of the viewer.
+const displayPanel = pane => pane.page().locator('[data-display-popover]');
 // The viewport's own pixels, without any chrome over them: what a host capture returns.
 async function capture(page) {
   const encoded = await page.evaluate(async () => {
@@ -185,7 +186,7 @@ test('a static GLB opens on its native scene with no tools: display settings, or
   await displayPanel(pane).waitFor();
   assert.deepEqual(await panels(pane), ['Show files:false']);
   const displayMenu = displayPanel(pane);
-  assert.equal(await displayMenu.getByRole('tab').count(), 0, 'the panel has no tabs inside it');
+  assert.equal(await displayMenu.getByRole('tab').count(), 0, 'Display has no tabs inside it');
   assert.deepEqual(await displayMenu.getByRole('combobox', { name: 'Mode', exact: true }).innerText(), 'Solid');
   await displayMenu.getByRole('combobox', { name: 'Mode', exact: true }).click();
   assert.deepEqual(await page.getByRole('option').allInnerTexts(), ['Solid', 'Render', 'Grid'], 'a GLB has no edges to draw: Solid and Render only');

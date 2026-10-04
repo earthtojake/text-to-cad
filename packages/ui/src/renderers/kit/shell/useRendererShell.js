@@ -16,6 +16,7 @@ import { DisplaySettingsSection } from "../view-settings/DisplaySettingsSection.
 import { useAppliedViewSettings } from "../view-settings/useAppliedViewSettings.js";
 import { useViewSettings } from "../view-settings/useViewSettings.js";
 import { cameraForViewSettings, viewerDisplaySettingsForCamera } from "../view-settings/viewerDisplaySettings.js";
+import { DisplayPopoverClose } from "./DisplayPopover.jsx";
 import { attachLiveBinding } from "./liveBinding.js";
 import { shellLoadReport } from "./loadReport.js";
 import { createViewPromptContext, promptDeliveryError } from "./promptContext.js";
@@ -71,7 +72,7 @@ const NO_PREVIEW = () => {};
  *    slices of view state — written soon after a change and once more on unmount, and
  *    read back before the first paint, the camera restored in place of the open-time fit;
  *  - Display settings: store, resolution against the renderer's FEATURES, the
- *    queued application to the viewport, and the Display panel's content;
+ *    queued application to the viewport, and the content of Display's dropdown;
  *  - tools: the mode state machine and Draw's session, or none at all for a
  *    renderer whose viewport is the camera's alone;
  *  - the host contract: prompt snapshots, clipboard screenshots,
@@ -418,7 +419,7 @@ export function useRendererShell({
     onCopy: () => copyActionRef.current?.() || false,
     escapeActive: Boolean(escape.active || previewing),
     onEscape(event) {
-      // A popup opened in THIS viewer (a menu, a Select, a colour picker) owns Escape before
+      // A popup opened in THIS viewer (a menu, a Select, a colour picker, Display) owns Escape before
       // preview; another viewer's popup is not this one's business.
       if (hasOpenPopup(viewerElement.current)) return;
       if (previewing) { setPreviewing(false); return; }
@@ -500,12 +501,13 @@ export function useRendererShell({
   }, [liveBinding, commandNames, whenSettled]);
 
   // ---- what the frame and the renderer read ---------------------------------
-  // The Display panel's content: every renderer's, built here from its display settings.
+  // The content of Display's dropdown (`DisplayPopover.jsx`): every renderer's, built here from its
+  // display settings, its first heading ending in the dropdown's X.
   const display = <DisplaySettingsSection appearanceControl={view.displayActions}
     features={features} viewSettings={displaySettings} hostAppearance={colorScheme} lightingQuality="preview"
     resolvedView={desiredScene.view} onViewSettingsPatch={viewSettingsStore.patch}
     onGroupEnabledChange={viewSettingsStore.setEnabled} onModeChange={viewSettingsStore.selectPreset}
-    onViewReset={viewSettingsStore.reset} />;
+    onViewReset={viewSettingsStore.reset} close={<DisplayPopoverClose />} />;
   const stripTool = ({ id, label, icon, ...rest }) => ({
     id, label, icon, active: !previewing && toolMode === id, disabled: idle, onSelect: () => selectTool(id), ...rest
   });

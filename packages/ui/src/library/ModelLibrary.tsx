@@ -139,7 +139,7 @@ function Placeholders({ layout }: { layout: LibraryLayout }) {
 /**
  * The host's home: the models opened before, from every view, to open again. It has no navbar
  * over it: the TEXTTOCAD wordmark is centred at its top over its byline and the host's links — its update, only when
- * there is one, then GitHub and Settings (the version, X and Discord, the host's own settings and Share Feedback) — then "Recent Files" with its search, its grid/list switch and, where
+ * there is one, then GitHub and Settings (the version, X and Discord, the host's own settings and Feedback) — then "Recent Files" with its search, its grid/list switch and, where
  * the host has a chooser, Open, all three there with no models yet too; then the models, pinned first, as solid cards (a picture over the
  * name and when the file was edited) or as rows. A card can be pinned (its pin filled); a row can
  * also be removed. With none yet, one empty card opens the host's chooser. It is drawn on the
@@ -162,7 +162,7 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   picture?(model: Model): Promise<boolean>;
   /** The host's links, under the wordmark, and the clipboard their copies go through. */
   links?: ViewerLinks;
-  /** The host's `environment.platform`, which Share Feedback's issue names. */
+  /** The host's `environment.platform`, which Feedback's issue names. */
   platform?: string;
   clipboard?: ClipboardPort;
   /** The host's own on/off settings, in the home's Settings. */

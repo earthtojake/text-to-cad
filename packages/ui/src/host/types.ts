@@ -34,7 +34,7 @@ export interface ViewerLinks {
   github: string;
   discord: string;
   /**
-   * Where a person opens a new issue (GitHub's `issues/new`): Settings' Share Feedback (in the viewer
+   * Where a person opens a new issue (GitHub's `issues/new`): Settings' Feedback (in the viewer
    * and on the home) and an alert's Report Issue fill one in for them to finish, through GitHub's `title`, `labels`
    * and `body` parameters: a title begun ("Feedback: ", "Issue: ") and, for Report Issue, the
    * `bug` label. Empty: none of them is offered.

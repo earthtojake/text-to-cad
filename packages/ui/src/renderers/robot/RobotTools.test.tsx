@@ -155,7 +155,7 @@ async function openRobot() {
 
 it('robot Select defaults match Links and Position remains an explicit tool', async () => {
   const robot = await openRobot();
-  expect(robot.toolNames()).toEqual(['Select:true', 'Position:false', 'Display:false']);
+  expect(robot.toolNames()).toEqual(['Select:true', 'Position:false']);
   expect(robot.stack()).toEqual(['Links']);
   expect(robot.tool('Select').querySelectorAll('svg.lucide-mouse-pointer-2')).toHaveLength(1);
   expect(robot.knobs()).toBe(0);
@@ -165,15 +165,16 @@ it('robot Select defaults match Links and Position remains an explicit tool', as
   expect(robot.stack()).toEqual(['Position controls']);
   expect(robot.knobs()).toBe(1);
 
-  // Display is the strip's last button, not a tool: its panel joins the stack under Position's and
-  // leaves Position the tool, with its knobs and panel; a second press closes it.
-  robot.open('Display');
-  expect(robot.toolNames()).toEqual(['Select:false', 'Position:true', 'Display:true']);
-  expect(robot.stack()).toEqual(['Position controls', 'Display settings']);
-  expect(robot.knobs()).toBe(1);
-  robot.open('Display');
-  expect(robot.toolNames()).toEqual(['Select:false', 'Position:true', 'Display:false']);
+  // Display is not a tool: its dropdown, from the navbar, opens over Position and leaves it the
+  // tool, with its knobs and panel; Escape puts it away.
+  fireEvent.click(within(robot.pane.querySelector<HTMLElement>('[data-viewer-navbar]')!).getByRole('button', { name: 'Display' }));
+  await waitFor(() => expect(document.querySelector('[data-display-popover]')).not.toBeNull());
+  expect(robot.toolNames()).toEqual(['Select:false', 'Position:true']);
   expect(robot.stack()).toEqual(['Position controls']);
+  expect(robot.knobs()).toBe(1);
+  fireEvent.keyDown(document.activeElement || document.body, { key: 'Escape' });
+  await waitFor(() => expect(document.querySelector('[data-display-popover]')).toBeNull());
+  expect(robot.toolNames()).toEqual(['Select:false', 'Position:true']);
 
   // The Position tool's icon carries a dot while the robot is posed off its default, until Reset.
   expect(robot.posedMark()).toBe(0);
@@ -184,7 +185,7 @@ it('robot Select defaults match Links and Position remains an explicit tool', as
 
   // Its X puts Position down, back to Select.
   fireEvent.click(robot.position().getByRole('button', { name: 'Close position' }));
-  expect(robot.toolNames()).toEqual(['Select:true', 'Position:false', 'Display:false']);
+  expect(robot.toolNames()).toEqual(['Select:true', 'Position:false']);
   expect(robot.stack()).toEqual(['Links']);
   expect(robot.knobs()).toBe(0);
   // Select is the default tool: pressing it again leaves it the tool.
@@ -194,10 +195,10 @@ it('robot Select defaults match Links and Position remains an explicit tool', as
   robot.client.dispose();
 });
 
-it('a robot is a 3D view: its navbar offers Preview', async () => {
+it('a robot is a 3D view: its navbar offers Display and Preview', async () => {
   const robot = await openRobot();
   const navbar = robot.pane.querySelector<HTMLElement>('[data-viewer-navbar]')!;
-  expect(within(navbar).getAllByRole('button', { name: 'Preview' })).toHaveLength(1);
+  expect([...navbar.querySelectorAll('[data-navbar-controls] button')].map(button => button.getAttribute('aria-label'))).toEqual(['Display', 'Preview']);
   robot.client.dispose();
 });
 
@@ -246,7 +247,7 @@ it("robot Links closes by its X and Select brings it back: marked while it is cl
   // From Position, Select is only taken up: the tree stays closed.
   robot.open('Position');
   robot.open('Select');
-  expect(robot.toolNames()).toEqual(['Select:true', 'Position:false', 'Display:false']);
+  expect(robot.toolNames()).toEqual(['Select:true', 'Position:false']);
   expect(robot.stack()).toEqual([]);
   expect(mark()).not.toBeNull();
   // Pressed while it is the tool, it opens Links again, as it was.
@@ -283,7 +284,7 @@ it('a new revision of the robot keeps its pose while its joints and named poses 
   await robot.publish(ARM_URDF.replace('<robot name="arm">', '<robot name="arm"><!-- saved again -->'));
   await waitFor(() => expect(scene()).not.toBe(before));
   expect(robot.jointField('shoulder').value).toBe('25°');
-  expect(robot.toolNames()).toEqual(['Select:false', 'Position:true', 'Display:false']);
+  expect(robot.toolNames()).toEqual(['Select:false', 'Position:true']);
 
   // The shoulder's range changed: the robot opens at its opening pose, though 25° would still fit.
   const kept = scene();

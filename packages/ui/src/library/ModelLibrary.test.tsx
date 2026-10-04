@@ -32,16 +32,16 @@ it('heads the home with the TEXTTOCAD wordmark over GitHub and Settings, and an 
   expect(screen.getByRole('img', { name: 'text-to-cad' }).getAttribute('src')).toMatch(/texttocad/);
   expect([...nav.querySelectorAll('a, button')].map(node => node.getAttribute('aria-label'))).toEqual(['GitHub', 'Settings']);
   expect(screen.queryByText('Build things')).toBeNull();
-  // Settings: the version beside its title, the host's own settings (no Display settings), Share
+  // Settings: the version beside its title, the host's own settings (no Display settings),
   // Feedback, and a footer: "Made by @…" (the host's X) at the left, Discord and GitHub at the right.
   fireEvent.click(within(nav).getByRole('button', { name: 'Settings' }));
   const settings = await screen.findByRole('dialog', { name: 'Settings' });
   expect(within(settings).getByText('v0.7.4')).toBeTruthy();
-  expect([...settings.querySelectorAll('[data-settings-section] h2')].map(heading => heading.textContent)).toEqual(['Analytics', 'Share Feedback']);
+  expect([...settings.querySelectorAll('[data-settings-section] h2')].map(heading => heading.textContent)).toEqual(['Analytics', 'Feedback']);
   expect(within(settings).getAllByRole('link').map(node => node.getAttribute('aria-label') ?? node.textContent))
-    .toEqual(['Release notes for v0.7.4', 'Open a GitHub issue', 'Made by @earthtojake', 'Discord', 'GitHub']);
-  // Share Feedback: a new issue on the project's tracker, begun "Feedback: ", naming the version and platform.
-  const feedback = new URL(within(settings).getByRole('link', { name: 'Open a GitHub issue' }).getAttribute('href')!);
+    .toEqual(['Release notes for v0.7.4', 'Open Issue', 'Made by @earthtojake', 'Discord', 'GitHub']);
+  // Feedback's Open Issue: a new issue on the project's tracker, begun "Feedback: ", naming the version and platform.
+  const feedback = new URL(within(settings).getByRole('link', { name: 'Open Issue' }).getAttribute('href')!);
   expect(`${feedback.origin}${feedback.pathname}`).toBe('https://github.com/earthtojake/text-to-cad/issues/new');
   expect(feedback.searchParams.get('title')).toBe('Feedback: ');
   // For the person to finish, naming the version and the platform; no label: the project has none for feedback.
@@ -64,7 +64,7 @@ it('heads the home with the TEXTTOCAD wordmark over GitHub and Settings, and an 
   nav = await screen.findByRole('navigation', { name: 'CAD links' });
   expect([...nav.querySelectorAll('a, button')].map(node => node.getAttribute('aria-label'))).toEqual(['GitHub', 'Settings']);
   cleanup();
-  // A host with no tracker has no Share Feedback.
+  // A host with no tracker has no Feedback.
   render(<ModelLibrary library={library([])} links={{ ...links(null), issues: '' }} clipboard={clipboard} />);
   fireEvent.click(within(await screen.findByRole('navigation', { name: 'CAD links' })).getByRole('button', { name: 'Settings' }));
   expect((await screen.findByRole('dialog', { name: 'Settings' })).querySelector('[data-settings-section]')).toBeNull();

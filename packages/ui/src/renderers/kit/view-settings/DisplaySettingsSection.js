@@ -1,5 +1,4 @@
 import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
-import { ToolPanelClose } from "../tools/ToolPanel.jsx";
 import { useMemo, useRef } from "react";
 import { Blend, Expand, Plus, RotateCcw, RotateCw, Sun, SunDim, X } from "lucide-react";
 import { ALL_VIEW_FEATURES, normalizeViewFeatures, normalizeViewSettings, resolveViewSettings, viewSettingsAreCustom } from "@text-to-cad/core/common/viewSettings.js";
@@ -82,7 +81,7 @@ function NumberProperty({ label, Icon, value, min, max, unit = "", digits = 2, o
 }
 
 /**
- * Display's sections, stacked in its panel's one scroller (the tool stack's panel body). A
+ * Display's sections, stacked in its dropdown's one scroller (`DisplayPopover.jsx`). A
  * section with `onEnabledChange` is a feature gate (expanded IS enabled); the others are always
  * open. A press on an open gate's title scrolls it into view within the scroller's natural range,
  * never adding space to force it to the top, and never disables it.
@@ -90,7 +89,7 @@ function NumberProperty({ label, Icon, value, min, max, unit = "", digits = 2, o
 function DisplaySections({ sections }) {
   const list = useRef(null);
   const reveal = id => {
-    const element = list.current?.closest("[data-tool-panel-body]") || list.current;
+    const element = list.current?.closest('[data-slot="scroll-area-viewport"]') || list.current;
     const target = list.current?.querySelector(`[data-settings-section="${CSS.escape(id)}"] [data-settings-section-body]`);
     if (!target) return;
     const top = element.scrollTop + target.getBoundingClientRect().top - element.getBoundingClientRect().top
@@ -109,7 +108,7 @@ function DisplaySections({ sections }) {
 
 export function DisplaySettingsSection({
   viewSettings = {}, resolvedView, hostAppearance = "light", lightingQuality = "final", onViewSettingsPatch, onGroupEnabledChange, onModeChange, onViewReset,
-  features = ALL_VIEW_FEATURES, appearanceControl = null
+  features = ALL_VIEW_FEATURES, appearanceControl = null, close = null
 }) {
   const settings = useMemo(() => normalizeViewSettings(viewSettings), [viewSettings]);
   const view = resolvedView || resolveViewSettings(settings, { appearance: hostAppearance, lightingQuality, features });
@@ -190,10 +189,10 @@ export function DisplaySettingsSection({
         </FileSheetFieldGrid>
       </>),
   ];
-  // Its panel has no heading: the first always-open section's heading row is the panel's first
-  // row, and carries the panel's X after its own action (`ToolPanelClose`, nothing outside a panel).
+  // Its dropdown has no heading: the first always-open section's heading row is its first row, and
+  // carries the dropdown's X (`close`: `DisplayPopoverClose`) after its own action.
   const lead = sections.findIndex(item => item && typeof item.onEnabledChange !== "function");
-  if (lead >= 0) sections[lead] = { ...sections[lead], headingAction: <>{sections[lead].headingAction}<ToolPanelClose /></> };
+  if (lead >= 0 && close) sections[lead] = { ...sections[lead], headingAction: <>{sections[lead].headingAction}{close}</> };
   return <div className="[&_[data-settings-section-heading]_.text-xs]:text-tiny">
     <DisplaySections sections={sections} />
   </div>;

@@ -16,7 +16,7 @@ import wordmark from "../../assets/logo-cad.svg";
  * when there is none — whose menu says what is new and how this host updates (`UpdateButton`).
  * The Settings popover's footer has "Made by @…" (`MadeBy`, the host's X account) at its left and
  * Discord and GitHub (`CommunityLinks`) at its right; the version, beside its title, links its
- * release notes; its Share Feedback opens a new issue (`feedbackUrl`). GitHub alone (`GitHubLink`)
+ * release notes; its Feedback opens a new issue (`feedbackUrl`). GitHub alone (`GitHubLink`)
  * is under the home's wordmark, before Settings. Every link opens the
  * host's way: a page that can open one itself follows an ordinary link to a new tab; a page in a
  * frame that cannot hands it to `links.open` (the host's own browser). Copies go through the
@@ -60,7 +60,7 @@ export function GitHubLink({ links, onError }) {
 }
 
 /**
- * Share Feedback's address: a new issue on the host's tracker (`links.issues`) titled "Feedback: ",
+ * Feedback's address: a new issue on the host's tracker (`links.issues`) titled "Feedback: ",
  * blank for the person to finish but for where it came from — the version and the platform. It
  * carries no label: what a person says there may be a bug, a request or a question, and the project
  * has no label for all of them. "" where the host has no tracker.

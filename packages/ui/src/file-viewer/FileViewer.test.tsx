@@ -39,7 +39,7 @@ it('draws the navbar only when it has something to hold, and never for a view sh
   expect(screen.queryByRole('button', { name: 'Show files' })).toBeNull();
   cleanup();
   // The host's links, without an update: the row is drawn, and its right end holds nothing of the
-  // links themselves — Feedback is Settings' Share Feedback, GitHub is under the home's wordmark, and
+  // links themselves — Feedback is Settings', GitHub is under the home's wordmark, and
   // X, Discord and GitHub are Settings' footer, the version its header.
   const linked = { ...host, links: viewerLinks({ version: 'v0.7.4' }), environment: { colorScheme: 'light', platform: 'darwin' } };
   open({ navigationPath: null, host: linked });
@@ -97,7 +97,7 @@ it('puts the host\'s Settings just before the view\'s controls, outside them, wi
   render(<FileViewer file="parts/a.step" host={{ ...host, links: viewerLinks({ version: '0.7.4' }) } as any} renderers={[fullscreen]}
     state={{ panel: null, panelWidth: 220 }} onStateChange={() => {}} settings={<button type="button" aria-label="Settings" />} />);
   await screen.findByRole('button', { name: 'Preview' });
-  // Feedback is Settings' Share Feedback now: the navbar has no link of its own for it.
+  // Feedback is Settings' now: the navbar has no link of its own for it.
   expect(labels()).toEqual(['Settings', 'Preview']);
   expect(labels('[data-navbar-controls]')).toEqual(['Preview']);
   act(() => screen.getByRole('button', { name: 'Preview' }).click());

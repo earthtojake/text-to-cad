@@ -13,7 +13,7 @@ const previewChromeIdleMs = () => Number(globalThis.window?.__cadPreviewChromeId
  * everything a person edits with — is hidden and inert while `active`. Preview is fullscreen: the
  * navbar steps aside with the view's controls in it, and the view holds its own at its top-right
  * (`corner`: Playback settings and the way out), transparent over the model, on a row of the
- * navbar's own geometry: each lands where its counterpart (Settings, Preview) sat. The corner and the
+ * navbar's own geometry: each lands where its counterpart (Display, Preview) sat. The corner and the
  * `playbar` under the model share one idle deadline and a 150ms fade: movement over `surface`
  * wakes them, and hovering them (`data-preview-hover-hold`) or an open menu keeps them up.
  *

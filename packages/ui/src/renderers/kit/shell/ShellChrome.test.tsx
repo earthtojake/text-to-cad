@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 
-// The shell's chrome — the strip, the tool stack, Display's panel, the view's actions and preview —
+// The shell's chrome — the strip, the tool stack, the view's actions, Display's dropdown and preview —
 // under the smallest renderer that mounts it (`renderers/shell-harness`), with the WebGL viewport
 // replaced by an empty box: nothing asserted here is drawn by it. What the viewport is handed is
 // recorded, so a test can read what the shell asked of it.
@@ -25,7 +25,7 @@ import { testHost } from '../../../../dist/host/testing/host.js';
 import { ViewerMobileContext } from '../../../../dist/file-viewer/responsive.js';
 import { TOOL_PANEL_REFERENCE_HEIGHT, TOOL_PANEL_WIDTH } from '../../../../dist/renderers/kit/tools/toolStackLayout.js';
 import { FLOATING_CHROME_SURFACE_CLASS, FLOATING_SURFACE_CLASS } from '../../../../dist/renderers/kit/tools/floatingSurface.js';
-import { RenderModeIcon } from '../../../../dist/renderers/kit/view-settings/DisplayModeOptions.js';
+import { PerspectiveProjectionIcon } from '../../../../dist/renderers/kit/camera/ProjectionModeIcons.js';
 import { SettingsPopover } from '../../../../dist/renderers/kit/shell/SettingsPopover.js';
 
 // jsdom lays nothing out, so the few sizes the stack reads are given: a viewer 1280 × 800 whose
@@ -270,6 +270,7 @@ it("a single part's tree starts closed, Select marked, and an assembly's open; o
   expect([shown(), Boolean(mark())]).toEqual([['Harness tree', 'Harness reference'], false]);
 });
 
+const displayPopover = () => document.querySelector<HTMLElement>('[data-display-popover]');
 const barButtons = () => [...document.querySelector('[data-test-navbar]')!.querySelectorAll('button')].map(button => button.getAttribute('aria-label'));
 const strip = () => [...screen.getByRole('group', { name: 'Interaction tools' }).querySelectorAll('button')].map(button => button.getAttribute('aria-label'));
 
@@ -277,7 +278,7 @@ it('while the model loads the viewer shows none of its own chrome, and all of it
   frame();
   const stage = (name: string) => act(() => { fireEvent.click(document.querySelector(`[data-harness-stage="${name}"]`)!); });
   expect(screen.getByRole('group', { name: 'Interaction tools' })).toBeTruthy();
-  expect(barButtons()).toEqual(['Preview']);
+  expect(barButtons()).toEqual(['Display', 'Preview']);
   stage('finding');
   expect(screen.queryByRole('group', { name: 'Interaction tools' })).toBeNull();
   expect(document.querySelector('[data-cad-tool-stack]')).toBeNull();
@@ -285,23 +286,23 @@ it('while the model loads the viewer shows none of its own chrome, and all of it
   expect(viewportProps.current.isLoading).toBe(true);
   stage('idle');
   expect(screen.getByRole('group', { name: 'Interaction tools' })).toBeTruthy();
-  expect(barButtons()).toEqual(['Preview']);
-  // With nothing to work on yet, the strip is idle together, Display with the tools, and so is Preview.
+  expect(barButtons()).toEqual(['Display', 'Preview']);
+  // With nothing to work on yet, the strip is idle together, and so are Display and Preview.
   stage('unready');
-  expect(strip()).toEqual(['Select', 'Draw', 'Keep', 'Pose', 'Display']);
-  const idle = (name: string) => (name === 'Preview' ? screen.getByRole('button', { name }) : tool(name)).hasAttribute('disabled');
+  expect(strip()).toEqual(['Select', 'Draw', 'Keep', 'Pose']);
+  const idle = (name: string) => (['Display', 'Preview'].includes(name) ? screen.getByRole('button', { name }) : tool(name)).hasAttribute('disabled');
   expect(['Select', 'Draw', 'Display', 'Preview'].map(idle)).toEqual([true, true, true, true]);
   stage('idle');
   expect(['Select', 'Draw', 'Display', 'Preview'].map(idle)).toEqual([false, false, false, false]);
 });
 
-it("Preview is a 3D view's, as its renderer declares: a view that does not declare it has no Preview, not a disabled one, and a request for Preview leaves it as it is", () => {
+it("Display and Preview are a 3D view's, as its renderer declares: a view that does not declare it has neither, not disabled ones, and a request for Preview leaves it as it is", () => {
   const onFullscreenChange = vi.fn();
   // Preview asked for from outside the navbar, as a link or a host request would.
   const ask = () => act(() => { fireEvent.click(document.querySelector('[data-harness-ask-preview]')!); });
-  // A 3D view (the harness's, declared `previewable`): the navbar offers Preview, and a request enters it.
+  // A 3D view (the harness's, declared `previewable`): the navbar offers Display and Preview, and a request enters Preview.
   frame({ onFullscreenChange });
-  expect(barButtons()).toEqual(['Preview']);
+  expect(barButtons()).toEqual(['Display', 'Preview']);
   ask();
   expect([viewportProps.current.previewMode, onFullscreenChange.mock.calls]).toEqual([true, [[true]]]);
   cleanup();
@@ -311,11 +312,11 @@ it("Preview is a 3D view's, as its renderer declares: a view that does not decla
   // navbar's right end, and the same request leaves the normal view on screen, its tools up.
   frame({ path: 'flat.harness', onFullscreenChange });
   expect(barButtons()).toEqual([]);
-  expect(screen.queryByRole('button', { name: 'Preview' })).toBeNull();
+  for (const name of ['Display', 'Preview']) expect(screen.queryByRole('button', { name })).toBeNull();
   ask();
   expect([viewportProps.current.previewMode, onFullscreenChange.mock.calls]).toEqual([false, []]);
   expect(document.querySelector('[data-preview-chrome]')!.hasAttribute('inert')).toBe(false);
-  expect(strip()).toEqual(['Draw', 'Display']);
+  expect(strip()).toEqual(['Draw']);
 });
 
 it('a load the model did not survive leaves only the card saying so, and a failed update it survives keeps the chrome', () => {
@@ -330,7 +331,7 @@ it('a load the model did not survive leaves only the card saying so, and a faile
   expect(viewportProps.current.viewCube).toBe(false);
   stage('failed');
   expect(screen.getByRole('group', { name: 'Interaction tools' })).toBeTruthy();
-  expect(barButtons()).toEqual(['Preview']);
+  expect(barButtons()).toEqual(['Display', 'Preview']);
   expect(viewportProps.current.viewCube).toBe(true);
 });
 
@@ -345,28 +346,29 @@ it("a dismissed alert's own icon, leftmost of the navbar's right-hand controls, 
     .map(node => node.getAttribute('aria-label'));
   const card = () => screen.queryByRole('alert');
   const stage = (name: string) => act(() => { fireEvent.click(document.querySelector(`[data-harness-stage="${name}"]`)!); });
-  expect(right()).toEqual(['Settings', 'Preview']);
+  // Left to right: the host's Settings, then the view's Display and Preview.
+  expect(right()).toEqual(['Settings', 'Display', 'Preview']);
   stage('failed');
   expect(card()!.textContent).toContain('Harness update failed');
-  expect(right()).toEqual(['Settings', 'Preview'], 'the card is up: no icon');
+  expect(right()).toEqual(['Settings', 'Display', 'Preview'], 'the card is up: no icon');
   // Put away: the card's own icon, in the error's colour, named after the alert, before everything else at the right.
   fireEvent.click(within(card()!).getByRole('button', { name: 'Dismiss' }));
   expect(card()).toBeNull();
-  expect(right()).toEqual(['Harness update failed', 'Settings', 'Preview']);
+  expect(right()).toEqual(['Harness update failed', 'Settings', 'Display', 'Preview']);
   const icon = screen.getByRole('button', { name: 'Harness update failed' });
   expect(icon.querySelector('svg')!.getAttribute('class')).toMatch(/\blucide-circle-alert\b.*\btext-destructive\b/);
   // Pressed, it brings the card back and goes.
   fireEvent.click(icon);
   expect(card()!.textContent).toContain('Harness update failed');
-  expect(right()).toEqual(['Settings', 'Preview']);
+  expect(right()).toEqual(['Settings', 'Display', 'Preview']);
   // Put away again, and then the alert clears: no card, and no icon; raised again, the card shows.
   fireEvent.click(within(card()!).getByRole('button', { name: 'Dismiss' }));
   expect(right()[0]).toBe('Harness update failed');
   stage('idle');
-  expect([card(), right()]).toEqual([null, ['Settings', 'Preview']]);
+  expect([card(), right()]).toEqual([null, ['Settings', 'Display', 'Preview']]);
   stage('failed');
   expect(card()).not.toBeNull();
-  expect(right()).toEqual(['Settings', 'Preview']);
+  expect(right()).toEqual(['Settings', 'Display', 'Preview']);
 });
 
 it('the file explorer, open over the top-left corner, puts the tools out of sight, kept as they are', () => {
@@ -413,7 +415,7 @@ it("Quick edit turned off in Settings takes Quick Edit away: nothing a pick or a
   frame({ notice, features: { quickEdit: false } });
   expect(corner()).toEqual(['notice']);
   expect(document.querySelector('[data-quick-edit]')).toBeNull();
-  expect(strip()).toEqual(['Select', 'Draw', 'Keep', 'Pose', 'Display']);
+  expect(strip()).toEqual(['Select', 'Draw', 'Keep', 'Pose']);
   cleanup();
   frame({ features: { quickEdit: false } });
   expect(document.querySelector('[data-viewport-top-right]')).toBeNull();
@@ -428,15 +430,16 @@ it('a host showing the view small gets the model alone: no tools, no view action
   expect(viewportProps.current.viewCube).toBe(false);
 });
 
-it("Display is the strip's last button, the Render mode's sphere: it opens its panel at the foot of the stack and closes it again, and never takes the tool in hand", async () => {
+it("Display is the navbar's dropdown between Settings and Preview, the perspective box: opened over Draw it leaves Draw in hand with its panel, and the stack as it was", async () => {
   const user = userEvent.setup();
   const { remount } = frame();
-  // After the file's own tools, on every strip; not among the navbar's controls.
-  expect(strip()).toEqual(['Select', 'Draw', 'Keep', 'Pose', 'Display']);
-  expect(barButtons()).toEqual(['Preview']);
-  // Its icon is the Render mode's, the same drawing the Mode menu shows for Render.
-  const sphere = render(<RenderModeIcon />).container.querySelector('svg')!;
-  expect(tool('Display').querySelector('svg')!.innerHTML).toBe(sphere.innerHTML);
+  // The view's controls at the navbar's right end, Display then Preview; nothing of Display on the strip.
+  expect(barButtons()).toEqual(['Display', 'Preview']);
+  expect(strip()).toEqual(['Select', 'Draw', 'Keep', 'Pose']);
+  const display = screen.getByRole('button', { name: 'Display' });
+  // Its icon is the perspective box, the drawing the Projection menu shows for Perspective.
+  const box = render(<PerspectiveProjectionIcon />).container.querySelector('svg')!;
+  expect(display.querySelector('svg')!.innerHTML).toBe(box.innerHTML);
   await user.click(tool('Keep'));
   await user.click(tool('Draw'));
   expect(tool('Draw').getAttribute('aria-pressed')).toBe('true');
@@ -444,58 +447,58 @@ it("Display is the strip's last button, the Render mode's sphere: it opens its p
   const stack = shown();
   expect(stack).toEqual(['Drawing controls', 'Harness tree', 'Harness reference', 'Kept controls']);
   expect(within(panel('Drawing controls')!).queryByRole('button', { name: /^(?:Collapse|Expand) / })).toBeNull();
-  await user.click(tool('Display'));
-  // Its panel joins the stack at its foot; the tool in hand, its panel and the kept effect stay.
-  expect(shown()).toEqual([...stack, 'Display settings']);
-  expect(['Display', 'Draw', 'Keep'].map(name => tool(name).getAttribute('aria-pressed'))).toEqual(['true', 'true', 'true']);
-  expect(viewportProps.current.drawingEnabled).toBe(true);
-  // As wide as its settings are laid out for (the popover's 256px), giving way like a details panel,
-  // and it does not fold: its first row is the Display section's heading, Reset then the X.
-  const display = panel('Display settings')!;
-  expect([display.getAttribute('data-tool-panel'), width('Display settings')]).toEqual(['details', 256]);
-  expect(within(display).queryByRole('button', { name: /^(?:Collapse|Expand) display/ })).toBeNull();
-  const heading = display.querySelector('[data-settings-section="display"] [data-settings-section-heading]')!;
-  expect([...heading.querySelectorAll('button[aria-label]')].map(button => button.getAttribute('aria-label'))).toEqual(['Reset', 'Close display settings']);
-  // The file's view alone: none of the host's settings.
-  expect([...display.querySelectorAll('[data-settings-section]')].map(section => section.getAttribute('data-settings-section')))
-    .toEqual(['display', 'surfaces', 'grid-axes', 'lighting', 'background', 'floor']);
-  // A press on the model and Escape leave it up: the stack's panels are never Escape's.
-  await user.pointer({ keys: '[MouseLeft]', target: document.querySelector('[data-mock-viewport] canvas')! });
-  act(() => document.querySelector<HTMLElement>('[data-slot="cad-file-view"]')!.focus());
-  await user.keyboard('{Escape}');
-  expect(shown()).toEqual([...stack, 'Display settings']);
-  // Its X closes it, and so does a second press; Draw is still the tool throughout.
-  await user.click(within(display).getByRole('button', { name: 'Close display settings' }));
+  await user.click(display);
+  expect(displayPopover()!.getAttribute('aria-label')).toBe('Display settings');
+  expect(display.getAttribute('aria-pressed')).toBe('true');
+  // Nothing joins the stack, and the tool in hand, its panel and the kept effect stay.
   expect(shown()).toEqual(stack);
-  expect(tool('Display').getAttribute('aria-pressed')).toBe('false');
-  await user.click(tool('Display'));
-  await user.click(tool('Display'));
+  expect([tool('Draw').getAttribute('aria-pressed'), tool('Keep').getAttribute('aria-pressed')]).toEqual(['true', 'true']);
+  expect(viewportProps.current.drawingEnabled).toBe(true);
+  // Nothing about it is a panel of the stack: its first row is the Display section's heading,
+  // Reset then the X, and it holds the file's view alone, none of the host's settings.
+  expect(displayPopover()!.closest('[data-tool-panel]')).toBeNull();
+  const heading = displayPopover()!.querySelector('[data-settings-section="display"] [data-settings-section-heading]')!;
+  expect([...heading.querySelectorAll('button[aria-label]')].map(button => button.getAttribute('aria-label'))).toEqual(['Reset', 'Close display settings']);
+  expect([...displayPopover()!.querySelectorAll('[data-settings-section]')].map(section => section.getAttribute('data-settings-section')))
+    .toEqual(['display', 'surfaces', 'grid-axes', 'lighting', 'background', 'floor']);
+  // Its X puts it away, and so does its button; Draw is still the tool.
+  await user.click(within(displayPopover()!).getByRole('button', { name: 'Close display settings' }));
+  expect(displayPopover()).toBeNull();
+  expect(display.getAttribute('aria-pressed')).toBe('false');
+  await user.click(display);
+  await user.click(display);
+  expect(displayPopover()).toBeNull();
+  // Escape puts it away and leaves the stack's panels and the tool alone.
+  await user.click(display);
+  await user.keyboard('{Escape}');
+  expect(displayPopover()).toBeNull();
   expect(shown()).toEqual(stack);
   expect(tool('Draw').getAttribute('aria-pressed')).toBe('true');
-  // From the keyboard, as any button of the strip: Enter opens it, Space closes it.
-  act(() => tool('Display').focus());
-  await user.keyboard('{Enter}');
-  expect(shown()).toContain('Display settings');
-  await user.keyboard(' ');
-  expect(shown()).not.toContain('Display settings');
-  // Another opening of the file starts with it closed.
-  await user.click(tool('Display'));
+  // A press outside it — on the model — puts it away too, and the kept effect stays.
+  await user.click(display);
+  await user.pointer({ keys: '[MouseLeft]', target: document.querySelector('[data-mock-viewport] canvas')! });
+  expect(displayPopover()).toBeNull();
+  expect(tool('Keep').getAttribute('aria-pressed')).toBe('true');
+  // Another opening of the file starts with it shut.
+  await user.click(display);
+  expect(displayPopover()).not.toBeNull();
   remount();
-  expect(shown()).not.toContain('Display settings');
-  expect(tool('Display').getAttribute('aria-pressed')).toBe('false');
+  expect(displayPopover()).toBeNull();
+  expect(screen.getByRole('button', { name: 'Display' }).getAttribute('aria-pressed')).toBe('false');
 });
 
-it("two surfaces: the strip and the stack's panels share the light chrome surface, and Display's settings and a menu over the viewport the more opaque one", async () => {
+it("two surfaces: the strip and the stack share the light chrome surface, and Display's dropdown and a menu over the viewport the more opaque one", async () => {
   const user = userEvent.setup();
   frame();
   expect(FLOATING_CHROME_SURFACE_CLASS).not.toBe(FLOATING_SURFACE_CLASS);
   const classes = (element: Element) => element.className.split(/\s+/);
   const has = (element: Element, surface: string) => surface.split(' ').every(name => classes(element).includes(name));
   expect(has(screen.getByRole('group', { name: 'Interaction tools' }), FLOATING_CHROME_SURFACE_CLASS)).toBe(true);
-  await user.click(tool('Display'));
   for (const label of ['Harness tree', 'Harness reference']) expect(has(panel(label)!, FLOATING_CHROME_SURFACE_CLASS), label).toBe(true);
   // Display's settings are read while they are up: their text must not compete with the model.
-  expect([has(panel('Display settings')!, FLOATING_SURFACE_CLASS), has(panel('Display settings')!, FLOATING_CHROME_SURFACE_CLASS)]).toEqual([true, false]);
+  await user.click(screen.getByRole('button', { name: 'Display' }));
+  expect(has(displayPopover()!, FLOATING_SURFACE_CLASS)).toBe(true);
+  await user.keyboard('{Escape}');
   await user.click(screen.getByRole('button', { name: 'Preview' }));
   await user.click(screen.getByRole('button', { name: 'Playback settings' }));
   expect(has(screen.getByRole('menu'), FLOATING_SURFACE_CLASS)).toBe(true);
@@ -508,12 +511,12 @@ it("Preview is fullscreen: the strip, the stack and the navbar's controls step a
   frame({ onPanelOpen, onFullscreenChange });
   await user.click(tool('Pose'));
   expect(shown()).toContain('Harness position');
-  await user.click(tool('Display'));
+  await user.click(screen.getByRole('button', { name: 'Display' }));
   await user.click(screen.getByRole('button', { name: 'Preview' }));
   const chrome = document.querySelector<HTMLElement>('[data-preview-chrome]')!;
   expect([chrome.hidden, chrome.hasAttribute('inert')]).toEqual([true, true]);
   expect(chrome.contains(document.querySelector('[data-cad-tool-stack]'))).toBe(true);
-  expect(chrome.contains(panel('Display settings'))).toBe(true);
+  expect(displayPopover()).toBeNull();
   // The page steps aside (the host hides its navbar), and the way out is the view's own corner.
   expect(onFullscreenChange.mock.calls).toEqual([[true]]);
   expect(barButtons()).toEqual([]);
@@ -523,11 +526,17 @@ it("Preview is fullscreen: the strip, the stack and the navbar's controls step a
   expect(onFullscreenChange.mock.calls).toEqual([[true], [false]]);
   expect(chrome.hidden).toBe(false);
   expect(viewportProps.current.previewMode).toBe(false);
-  expect(barButtons()).toEqual(['Preview']);
-  // The stack comes back as it was: the tool in hand with its panel, and Display's panel.
-  expect(shown()).toEqual(expect.arrayContaining(['Harness position', 'Display settings']));
+  expect(barButtons()).toEqual(['Display', 'Preview']);
+  // The stack comes back as it was, the tool in hand with its panel; Display, put away, stays shut,
+  // even where Preview was asked for without a press outside it.
+  expect(shown()).toContain('Harness position');
   expect(tool('Pose').getAttribute('aria-pressed')).toBe('true');
-  expect(tool('Display').getAttribute('aria-pressed')).toBe('true');
+  expect([displayPopover(), screen.getByRole('button', { name: 'Display' }).getAttribute('aria-pressed')]).toEqual([null, 'false']);
+  await user.click(screen.getByRole('button', { name: 'Display' }));
+  act(() => { fireEvent.click(document.querySelector('[data-harness-ask-preview]')!); });
+  expect([viewportProps.current.previewMode, displayPopover()]).toEqual([true, null]);
+  await user.click(within(document.querySelector<HTMLElement>('[data-preview-corner]')!).getByRole('button', { name: 'Exit preview' }));
+  expect([displayPopover(), screen.getByRole('button', { name: 'Display' }).getAttribute('aria-pressed')]).toEqual([null, 'false']);
   // Escape is the viewer's: whatever it closes, it is never the host's column (only its toggle does that).
   act(() => document.querySelector<HTMLElement>('[data-slot="cad-file-view"]')!.focus());
   await user.keyboard('{Escape}');
@@ -581,41 +590,41 @@ it("preview's Playback settings are the file's: kept between previews, written t
   expect(await choices()).toEqual(['true', 'Orbit speed: 1×']);
 });
 
-it('the Display panel keeps its controls together: a dropdown or a color editor inside it closes first and alone, a preset keeps the panel, and Escape never closes it', async () => {
+it('the Display dropdown keeps its controls together: a dropdown or a color editor inside it goes first, and without taking the dropdown; a preset keeps it open', async () => {
   override(Element.prototype, 'scrollIntoView', { value() {} });
   // An open listbox makes the page under it inert to the pointer (`pointer-events: none`); a press
   // there still reaches the listbox's outside-press layer, as it does in a browser.
   const user = userEvent.setup({ pointerEventsCheck: 0 });
   frame();
-  await user.click(tool('Display'));
-  const display = panel('Display settings')!;
-  expect(display.querySelectorAll('[data-settings-sections]').length).toBe(1);
-  const mode = within(display).getByRole('combobox', { name: 'Mode' });
+  await user.click(screen.getByRole('button', { name: 'Display' }));
+  const popover = displayPopover()!;
+  expect(popover.querySelectorAll('[data-settings-sections]').length).toBe(1);
+  const mode = within(popover).getByRole('combobox', { name: 'Mode' });
   // (Found before a listbox opens: an open one hides the rest of the page from the accessibility tree.)
-  const heading = within(display).getByRole('heading', { name: 'Display' });
+  const heading = within(popover).getByRole('heading', { name: 'Display' });
   for (const dismiss of ['Escape', 'trigger', 'heading']) {
     await user.click(mode);
     expect(screen.getByRole('listbox')).toBeTruthy();
     if (dismiss === 'Escape') await user.keyboard('{Escape}');
     else await user.click(dismiss === 'trigger' ? mode : heading);
     expect(screen.queryByRole('listbox'), dismiss).toBeNull();
-    expect(panel('Display settings'), `dismissing the dropdown with ${dismiss} keeps the panel`).toBe(display);
+    expect(displayPopover(), `dismissing the dropdown with ${dismiss} keeps Display open`).toBe(popover);
   }
   await user.click(mode);
   await user.click(screen.getByRole('option', { name: 'Render' }));
-  expect(panel('Display settings')).toBe(display);
+  expect(displayPopover()).toBe(popover);
   expect(mode.textContent).toContain('Render');
   await user.click(mode);
   await user.click(screen.getByRole('option', { name: 'Solid' }));
-  // Solid draws no grid: its colour is there once Grid / Axes is on; Escape closes the colour editor, and the panel stays.
-  expect(within(display).queryByRole('button', { name: 'Grid color' })).toBeNull();
-  await user.click(within(display).getByRole('button', { name: 'Enable Grid / Axes' }));
-  await user.click(within(display).getByRole('button', { name: 'Grid color' }));
+  // Solid draws no grid: its colour is there once Grid / Axes is on; Escape closes the colour editor, then Display.
+  expect(within(popover).queryByRole('button', { name: 'Grid color' })).toBeNull();
+  await user.click(within(popover).getByRole('button', { name: 'Enable Grid / Axes' }));
+  await user.click(within(popover).getByRole('button', { name: 'Grid color' }));
   expect(screen.getByRole('spinbutton', { name: 'Color opacity' })).toBeTruthy();
   await user.keyboard('{Escape}');
   expect(screen.queryByRole('spinbutton', { name: 'Color opacity' })).toBeNull();
-  expect(panel('Display settings')).toBe(display);
+  expect(displayPopover()).toBe(popover);
   await user.keyboard('{Escape}');
-  expect(panel('Display settings')).toBe(display);
-  expect(tool('Display').getAttribute('aria-pressed')).toBe('true');
+  expect(displayPopover()).toBeNull();
+  expect(screen.getByRole('button', { name: 'Display' }).getAttribute('aria-pressed')).toBe('false');
 });

@@ -77,7 +77,7 @@ pickers include opacity, with an opaque checkerboard behind the color swatch:
 0% is transparent, 100% opaque. The background's fractional alpha reaches the
 actual canvas and PNG, not just the preview.
 
-The Display panel's first section, **Display**, holds Mode, the host's
+Display's first section, **Display**, holds Mode, the host's
 Appearance and Projection; **Surfaces** follows; both are always open. Grid and
 Axes are one gated section, **Grid / Axes**, over two independent groups. The
 panel's order is Display, Surfaces, Edges, Grid / Axes, Lighting, Background,
@@ -206,17 +206,17 @@ unchanged after a runtime replacement does not.
 
 ## Where the controls live
 
-Display settings are the Display panel, at the foot of the tool stack, which the
-last button of the tool strip (Display, the Render mode's sphere) opens and closes:
-present for every 3D file, never a navbar popover or a sidebar panel. A file's
-model tree, its Reference and Position are panels of the same stack (see
+Display settings are a dropdown from the Display button in the navbar's right end
+(the perspective box, between Settings and Preview: `kit/shell/DisplayPopover.jsx`),
+present for every 3D file, never a panel of the tool stack or a sidebar panel. A
+file's model tree, its Reference and Position are panels of the tool stack (see
 [settings-ui.md](./settings-ui.md#the-tool-stack)); nothing in them is a display
 setting.
 
-Preview, the view's one control in the navbar, is offered by a 3D view alone,
-as its renderer declares to the shell (`useRendererShell`'s `previewable`):
+Display and Preview, the view's controls in the navbar, are offered by a 3D view
+alone, as its renderer declares to the shell (`useRendererShell`'s `previewable`):
 
-| Renderer | Files | Preview |
+| Renderer | Files | Display and Preview |
 | --- | --- | --- |
 | `step` | STEP, STP | Yes |
 | `glb` | GLB | Yes |
@@ -224,5 +224,5 @@ as its renderer declares to the shell (`useRendererShell`'s `previewable`):
 | `robot` | URDF, SRDF, SDF | Yes |
 | `dxf` | DXF | No: a 2D drawing, on a surface of its own, without the shell |
 
-A view without it has no Preview control, not a disabled one, and a request for
-Preview leaves its normal view as it is.
+A view without them has no Display or Preview control, not a disabled one, and a
+request for Preview leaves its normal view as it is.

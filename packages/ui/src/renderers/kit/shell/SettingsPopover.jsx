@@ -19,9 +19,9 @@ const NONE = Object.freeze([]);
  * "Settings", the version this host runs in gray beside it (a link to its release notes), and the
  * close X at its right end; its footer, under a rule, "Made by @…" (the host's X account) at the
  * left and Discord and GitHub as icon links at the right; between them, the host's settings
- * (`appSettings`), a section for each `section` they name, then Share Feedback, where the host has a
- * tracker: one button, a new issue titled "Feedback: " naming the version and the `platform`
- * (`feedbackUrl`). Nothing of a file: a file's view is its Display panel's. It goes as any popover
+ * (`appSettings`), a section for each `section` they name, then Feedback, where the host has a
+ * tracker: one button, Open Issue, a new issue titled "Feedback: " naming the version and the
+ * `platform` (`feedbackUrl`). Nothing of a file: a file's view is Display's. It goes as any popover
  * does: Escape, its button, its X, or a press anywhere
  * outside it. It is never taller than the room below it: its sections scroll inside it, between
  * the header and the footer. It closes with no exit animation, so a quick second press always
@@ -29,7 +29,7 @@ const NONE = Object.freeze([]);
  * @param {{ links?: import("../../../host/types.js").ViewerLinks,
  *   appSettings?: readonly import("../../../file-viewer/types.js").AppSetting[],
  *   platform?: string, align?: "start" | "center" | "end" }} props
- *   `platform`: the host's `environment.platform`, which Share Feedback's issue names. `align`: how
+ *   `platform`: the host's `environment.platform`, which Feedback's issue names. `align`: how
  *   it lines up with the cog — its right end in the navbar, its centre on the home.
  */
 export function SettingsPopover({ links, appSettings = NONE, platform, align = "end" }) {
@@ -47,7 +47,7 @@ export function SettingsPopover({ links, appSettings = NONE, platform, align = "
     </TooltipHint>
     <PopoverContent side="bottom" align={align} sideOffset={6} collisionPadding={8}
       aria-label="Settings" data-settings-popover=""
-      className={cn(FLOATING_SURFACE_CLASS, "flex w-64 max-h-[var(--radix-popover-content-available-height)] flex-col overflow-hidden p-0 text-tiny data-[state=closed]:animate-none!")}>
+      className={cn(FLOATING_SURFACE_CLASS, "flex w-56 max-h-[var(--radix-popover-content-available-height)] flex-col overflow-hidden p-0 text-tiny data-[state=closed]:animate-none!")}>
       <div className={cn("flex h-8 shrink-0 items-center gap-1.5 pl-2.5 pr-1", sections ? "border-b border-border" : "")} data-settings-header="">
         <h2 className="text-xs font-semibold text-foreground">Settings</h2>
         {links?.version ? (links.release
@@ -59,11 +59,11 @@ export function SettingsPopover({ links, appSettings = NONE, platform, align = "
         </PopoverClose>
       </div>
       {sections ? <ScrollArea className="min-h-0 flex-1"><AppSettingsSections appSettings={appSettings}>
-        {feedback ? <FileSheetSettingsSection sectionId="share-feedback" title="Share Feedback">
+        {feedback ? <FileSheetSettingsSection sectionId="feedback" title="Feedback">
           <FileSheetButtonRow>
             <Button asChild type="button" variant="outline" size="sm" className="h-7 gap-1.5 px-2 text-tiny font-normal">
               <a href={feedback} target="_blank" rel="noreferrer" onClick={follow} data-link="feedback">
-                <MessageCircle className="size-3.5" aria-hidden="true" />Open a GitHub issue
+                <MessageCircle className="size-3.5" aria-hidden="true" />Open Issue
               </a>
             </Button>
           </FileSheetButtonRow>
