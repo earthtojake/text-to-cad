@@ -30,8 +30,12 @@ def find_paired_urdf(robot_name: str, srdf_dir: Path) -> tuple[Path | None, list
     """Resolve the URDF paired with an SRDF: the same-directory URDF whose
     root <robot name> matches. Returns (paired path or None, all matches)."""
     matches: list[Path] = []
-    for candidate in sorted(srdf_dir.glob("*" + URDF_SUFFIX)):
-        if _urdf_root_name(candidate) == robot_name:
+    for candidate in sorted(srdf_dir.iterdir()):
+        if (
+            candidate.suffix.lower() == URDF_SUFFIX
+            and candidate.is_file()
+            and _urdf_root_name(candidate) == robot_name
+        ):
             matches.append(candidate)
     return (matches[0] if len(matches) == 1 else None), matches
 
