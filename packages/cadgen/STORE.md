@@ -1263,8 +1263,10 @@ Every build goes through one interface, `cadgen.daemon.executors.submit(model)
   spawn. Spares load build123d/OCP as well as the lazy tool parsers before
   announcing readiness; importing the supervisor never loads the kernel.
   A worker starts in the system temp folder but keeps it off its import path
-  (`python -P`), so a build imports exactly what `python script.py` would
-  (law 7) and no import lists that folder. Other programs fill it and keep
+  (`python -P`, as every process cadgen starts does: the daemon, the store's
+  gc, a transient build, the Viewer), so a build imports exactly what
+  `python script.py` would (law 7), nothing another program or user left in
+  that folder stands in for cadgen, and no import lists it. Other programs fill it and keep
   changing it; on the path, it was listed again by every import that missed it
   once it had changed, tens of thousands of entries a time, by every worker of
   a burst at once.

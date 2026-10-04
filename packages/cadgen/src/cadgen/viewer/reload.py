@@ -221,7 +221,7 @@ def execute_restart(argv, *, executable: str = "", platform: str = "") -> None:
     interpreter = executable or sys.executable
     if not interpreter:
         raise OSError("no interpreter to re-execute (sys.executable is empty)")
-    command = [interpreter, "-m", "cadgen.viewer", *list(argv)]
+    command = [interpreter, "-P", "-m", "cadgen.viewer", *list(argv)]
     if (platform or sys.platform).startswith("win"):
         # Flush BEFORE spawning: parent and child write the same descriptors,
         # and anything still sitting in this process's buffers would otherwise

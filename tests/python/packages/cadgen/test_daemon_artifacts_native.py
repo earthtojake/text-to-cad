@@ -228,7 +228,7 @@ raise SystemExit(artifacts._main())
         original_popen, processes = subprocess.Popen, []
 
         def start(argv, **kwargs):
-            self.assertEqual(argv, [sys.executable, "-m", "cadgen.daemon.artifacts"])
+            self.assertEqual(argv, [sys.executable, "-P", "-m", "cadgen.daemon.artifacts"])
             process = original_popen([sys.executable, "-c", script], **kwargs)
             processes.append(process)
             self.addCleanup(self.stop_process, process)

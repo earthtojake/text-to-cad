@@ -717,7 +717,7 @@ raise SystemExit(artifacts._main())
         spawned = []
 
         def start(argv, **kwargs):
-            self.assertEqual(argv, [sys.executable, "-m", "cadgen.daemon.artifacts"])
+            self.assertEqual(argv, [sys.executable, "-P", "-m", "cadgen.daemon.artifacts"])
             spawned.append(dict(kwargs["env"]))
             return real_popen([sys.executable, "-c", script], **kwargs)
 

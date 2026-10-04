@@ -557,7 +557,7 @@ def launch_detached(argv: list[str], *, as_json: bool, prog: str = DEFAULT_PROG)
     try:
         with open(log_file, "wb") as log:
             child = subprocess.Popen(  # noqa: S603 - our own interpreter, our own module
-                [sys.executable, "-m", "cadgen.viewer", *child_argv],
+                [sys.executable, "-P", "-m", "cadgen.viewer", *child_argv],
                 stdin=subprocess.DEVNULL,
                 stdout=log,
                 stderr=subprocess.STDOUT,

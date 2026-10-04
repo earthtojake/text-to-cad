@@ -16,7 +16,7 @@ import subprocess
 import sys
 from urllib.parse import quote
 
-LAUNCH = (sys.executable, "-m", "cadgen.cli", "viewer", "--host", "127.0.0.1", "--json", "--detach")
+LAUNCH = (sys.executable, "-P", "-m", "cadgen.cli", "viewer", "--host", "127.0.0.1", "--json", "--detach")
 LAUNCH_SECONDS = 30.0
 
 
