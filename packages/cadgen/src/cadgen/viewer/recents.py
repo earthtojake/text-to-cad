@@ -181,8 +181,13 @@ class RecentStore:
         self.root.mkdir(parents=True, exist_ok=True)
         line = json.dumps({"v": SCHEMA, "t": time.time(), **event}, separators=(",", ":")) + "\n"
         with self._locked():
-            with open(self.log, "a", encoding="utf-8") as handle:
-                handle.write(line)
+            with open(self.log, "a+b") as handle:
+                handle.seek(0, os.SEEK_END)
+                if handle.tell():
+                    handle.seek(-1, os.SEEK_END)
+                    if handle.read(1) != b"\n":
+                        handle.write(b"\n")
+                handle.write(line.encode("utf-8"))
             self._compact_if_long()
             if sweep:
                 self._sweep_thumbnails()
