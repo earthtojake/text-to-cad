@@ -1,4 +1,4 @@
-import { ExternalLink } from "lucide-react";
+import { ChevronRight, ExternalLink } from "lucide-react";
 import Image from "next/image";
 import { CopyButton } from "@/components/copy-button";
 import { HeroSection } from "@/components/hero-section";
@@ -9,6 +9,7 @@ import {
   agentInstallByline,
   agentInstallMessage,
   agents,
+  installYourself,
   installs,
   pluginDescription,
   pluginRequestUrl,
@@ -66,6 +67,21 @@ function AgentCarousel() {
   );
 }
 
+function Command({ text, label }: { text: string; label: string }) {
+  return (
+    <div className={COMMAND_BOX_CLASS}>
+      <div className="flex min-h-[54px] min-w-0 max-w-full items-stretch">
+        <code className="flex min-w-0 flex-1 items-center overflow-x-auto whitespace-pre font-mono px-3 py-2 text-sm leading-6 text-foreground">
+          {text}
+        </code>
+        <CopyButton text={text} label={label} />
+      </div>
+    </div>
+  );
+}
+
+// An install, and under it, folded away, how to update it and how to reinstall it: where the CAD
+// app's update button sends a person who updates by hand (/install).
 function Install({ item }: { item: (typeof installs)[number] }) {
   return (
     <div id={item.id} className="min-w-0 scroll-mt-20 space-y-2">
@@ -73,14 +89,29 @@ function Install({ item }: { item: (typeof installs)[number] }) {
         <h3 className="text-base font-semibold text-foreground">{item.agent}</h3>
         {item.note ? <p className="mt-1 text-sm leading-6 text-muted-foreground">{item.note}</p> : null}
       </div>
-      <div className={COMMAND_BOX_CLASS}>
-        <div className="flex min-h-[54px] min-w-0 max-w-full items-stretch">
-          <code className="flex min-w-0 flex-1 items-center overflow-x-auto whitespace-pre font-mono px-3 py-2 text-sm leading-6 text-foreground">
-            {item.command}
-          </code>
-          <CopyButton text={item.command} label={`Copy the ${item.agent} install command`} />
+      <Command text={item.command} label={`Copy the ${item.agent} install command`} />
+      <details className="group">
+        <summary className="inline-flex cursor-pointer list-none items-center gap-1 rounded-sm text-sm leading-6 text-muted-foreground transition hover:text-foreground [&::-webkit-details-marker]:hidden">
+          <ChevronRight className="size-4 shrink-0 transition-transform group-open:rotate-90" aria-hidden="true" />
+          Update or reinstall
+        </summary>
+        <div className="mt-2 space-y-2">
+          {item.update ? (
+            <>
+              <p className="text-sm leading-6 text-muted-foreground">Update, then restart the app:</p>
+              <Command text={item.update} label={`Copy the ${item.agent} update command`} />
+            </>
+          ) : (
+            <p className="text-sm leading-6 text-muted-foreground">Run the install command again to update or reinstall, then restart the app.</p>
+          )}
+          {item.remove ? (
+            <>
+              <p className="text-sm leading-6 text-muted-foreground">Reinstall: remove it, then install it again:</p>
+              <Command text={item.remove} label={`Copy the ${item.agent} remove command`} />
+            </>
+          ) : null}
         </div>
-      </div>
+      </details>
     </div>
   );
 }
@@ -191,6 +222,13 @@ export default function Home() {
                 <p className="mt-1 text-sm leading-6 text-muted-foreground">{agentInstallByline}</p>
               </div>
               <AgentMessage />
+              <p className="text-sm leading-6 text-muted-foreground">
+                {installYourself.before}{" "}
+                <a href={installYourself.link.href} target="_blank" rel="noreferrer" className="text-foreground underline underline-offset-4">
+                  {installYourself.link.text}
+                </a>{" "}
+                {installYourself.after}
+              </p>
             </div>
             <div className="space-y-6 pt-6">
               {installs.map((item) => (

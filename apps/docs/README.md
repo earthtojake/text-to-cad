@@ -127,22 +127,24 @@ Lobe Icons (MIT) in the same tile, each tile blended into the page's background.
 A logo leads to its install. Then the plugin's description, which every manifest
 and the README's Overview say word for word (`test_plugin_manifests.py` holds
 them to one text). Install
-leads with the message to send to an agent, then a sub-section per agent app,
-Other Agents (the Skills CLI) for the rest, and Request Plugin, a new GitHub
-issue. Contributing closes the page. Install boxes and explanatory text fill the
+leads with the message to send to an agent and a line on installing it yourself
+(uv, the app's commands, a restart), then a sub-section per agent app, its update
+and remove commands folded under Update or reinstall, Other Agents (the Skills
+CLI) for the rest, and Request Plugin, a new GitHub issue. Contributing closes the page. Install boxes and explanatory text fill the
 content width. Command text remains monospace.
 
 The homepage and the repository README share their structure and are changed
-together: the plugin's description, the install message, each install's command,
-the skills and Contributing. The site is for people; the README is for people and
-for agents installing text-to-cad, so it says more: a line for those agents (which
-`/llms.txt` carries too) and fuller notes under each install. The site has the
+together: the plugin's description, the install message, installing it yourself,
+each install's commands (to install, update and remove it), the skills and
+Contributing. Both speak to whoever installs text-to-cad, a person or their agent,
+and the README says more: numbered steps to install it yourself and fuller notes
+under each install. The site has the
 hero and the agents carousel. The page's copy lives in `src/lib/content.ts`, which `/llms.txt`
 (`src/app/llms.txt/route.ts`, the homepage as markdown for agents) renders too.
 `/install` redirects to the Install section (`/#install`, `next.config.ts`): the stable address
 of the full install instructions, which the CAD app's update button links to.
 `tests/python/global/test_plugin_manifests.py` holds the description, the install
-message and every install command to one text. The unboxed wordmark and one prominent tagline
+message and every install, update and remove command to one text. The unboxed wordmark and one prominent tagline
 sit above the independently framed CAD demo. “100% open source and free.” follows
 “Give your agent CAD superpowers.” in blue, using a lighter brand shade on dark
 surfaces. The app owns

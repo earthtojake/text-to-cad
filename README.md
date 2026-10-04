@@ -41,18 +41,23 @@ Send this message to your agent and it will install text-to-cad for you.
 Install text-to-cad from https://github.com/earthtojake/text-to-cad
 ```
 
-**Agents installing text-to-cad:** check that uv is installed (`uv --version`; if
-it is missing, point the user to [uv's installer](https://docs.astral.sh/uv/getting-started/installation/)).
-Then run the commands under your app's heading below, or [Other Agents](#other-agents)
-if it has none, and tell the user to restart the app.
+Or install it yourself:
 
-Or install it yourself. The plugin for your agent app brings the skills and CAD's
-viewer, a local server (`cadgen mcp`) that runs through
-[uv](https://docs.astral.sh/uv/), which must be installed. For an agent without a
-plugin, install the skills alone (see [Other Agents](#other-agents)). Install one
-or the other in an app, not both: two copies means every skill twice. Restart your
-agent if newly installed skills do not appear. Updating the plugin updates CAD: the
-new release's cadgen is downloaded the first time it runs, and the skills and the
+1. CAD runs through [uv](https://docs.astral.sh/uv/): check that it is installed
+   (`uv --version`), and if it is missing, install it with
+   [uv's installer](https://docs.astral.sh/uv/getting-started/installation/).
+2. Run the commands under your agent app's heading below, or under
+   [Other Agents](#other-agents) if it has none.
+3. Restart the app. Its first start downloads CAD's runtime, so it needs a network
+   connection.
+
+The plugin for your agent app brings the skills and CAD's viewer, a local server
+(`cadgen mcp`). For an agent without a plugin, install the skills alone. Install
+one or the other in an app, not both: two copies means every skill twice.
+
+Each app's heading also says how to update text-to-cad, and how to reinstall it:
+remove it, then install it again. Updating the plugin updates CAD: the new
+release's cadgen is downloaded the first time it runs, and the skills and the
 server share it. Earlier releases stay in uv's cache until you run `uv cache prune`.
 
 ### Claude Code
@@ -67,16 +72,27 @@ shows models as viewer cards in the conversation; otherwise, as in a terminal,
 asking it to show a model gives you a link that opens the model in the CAD
 Viewer in your browser.
 
+To update, run these, then restart Claude Code:
+
+```bash
+claude plugin marketplace update earthtojake
+claude plugin update text-to-cad@earthtojake
+```
+
+To reinstall, remove it with these, then run the install commands again:
+
+```bash
+claude plugin uninstall text-to-cad@earthtojake
+claude plugin marketplace remove earthtojake
+```
+
 ### Claude Desktop
 
 CAD shows models in the chat: ask Claude to show one and it appears as a viewer
 card you can orbit, add to your prompt, and open full size; Claude can read what
-you selected and see what you see. It runs locally through
-[uv](https://docs.astral.sh/uv/): add the server to Claude Desktop's config
-(Settings > Developer > Edit Config), then restart the app. If Claude Desktop
-cannot find `uvx`, give its full path (`which uvx`). The config pins a cadgen
-release, and uvx keeps the version it first downloads: to update, change it to
-the [latest release](https://pypi.org/project/cadgen/) and restart the app.
+you selected and see what you see. It runs locally through uv: add the server to
+Claude Desktop's config (Settings > Developer > Edit Config), then restart the
+app. If Claude Desktop cannot find `uvx`, give its full path (`which uvx`).
 
 ```json
 {
@@ -89,6 +105,10 @@ the [latest release](https://pypi.org/project/cadgen/) and restart the app.
   }
 }
 ```
+
+The config pins a cadgen release in `args`, and uvx keeps the version it first
+downloads. To update, change that version to the
+[latest release](https://pypi.org/project/cadgen/), then restart Claude Desktop.
 
 ### Codex
 
@@ -103,14 +123,25 @@ silently, and it never appears in `codex plugin list`. Upgrade with
 
 In the Codex app the plugin also brings the CAD viewer: **CAD** in the sidebar
 (recent models, and Open), a **CAD** tab beside each thread that the agent
-drives, and *Open with CAD* for model files. It runs locally through
-[uv](https://docs.astral.sh/uv/), which must be installed: after installing the plugin,
-restart the app, and its first start downloads the pinned runtime. The plugin's
-`$cad-setup` skill checks for uv and points you to its installer. To update, upgrade the `earthtojake` marketplace
-(Plugins › Manage › Marketplace, or `codex plugin marketplace upgrade earthtojake`)
-and restart the app: its first start downloads the new runtime. The marketplace was renamed from `text-to-cad`
-to `earthtojake`; if you added it before, remove the old one first
-(`codex plugin marketplace remove text-to-cad`).
+drives, and *Open with CAD* for model files. The plugin's `$cad-setup` skill
+checks for uv and points to its installer.
+
+To update, upgrade the `earthtojake` marketplace (or use Plugins › Manage ›
+Marketplace), then restart Codex:
+
+```bash
+codex plugin marketplace upgrade earthtojake
+```
+
+To reinstall, remove it with these, then run the install commands again:
+
+```bash
+codex plugin remove text-to-cad@earthtojake
+codex plugin marketplace remove earthtojake
+```
+
+The marketplace was renamed from `text-to-cad` to `earthtojake`; if you added it
+before, remove the old one first (`codex plugin marketplace remove text-to-cad`).
 
 ### Cursor
 
@@ -118,12 +149,23 @@ to `earthtojake`; if you added it before, remove the old one first
 git clone --depth 1 --branch plugin https://github.com/earthtojake/text-to-cad ~/.cursor/plugins/local/text-to-cad
 ```
 
-Cursor reads `.cursor-plugin/plugin.json`: restart Cursor after cloning, and run
-`git pull` in that folder to update. The `plugin` branch holds only the plugin,
-one commit per release. Cursor also loads plugins installed with
-Claude Code, so skip this if you installed the Claude Code plugin. Teams can
-import the repository instead, under **Dashboard → Plugins & MCPs → Team
-Marketplaces**.
+Cursor reads `.cursor-plugin/plugin.json`: restart Cursor after cloning. The
+`plugin` branch holds only the plugin, one commit per release. Cursor also loads
+plugins installed with Claude Code, so skip this if you installed the Claude Code
+plugin. Teams can import the repository instead, under **Dashboard → Plugins &
+MCPs → Team Marketplaces**.
+
+To update, pull the latest release, then restart Cursor:
+
+```bash
+git -C ~/.cursor/plugins/local/text-to-cad pull
+```
+
+To reinstall, delete the folder, then run the install command again:
+
+```bash
+rm -rf ~/.cursor/plugins/local/text-to-cad
+```
 
 ### Grok Build
 
@@ -136,6 +178,18 @@ Grok Build reads the Claude plugin manifest, and also loads plugins installed
 with Claude Code: install one or the other. Grok shows tool results as text, so
 asking it to show a model gives you a CAD Viewer link.
 
+To update, run this, then restart Grok Build:
+
+```bash
+grok plugin update text-to-cad
+```
+
+To reinstall, remove it with this, then run the install commands again:
+
+```bash
+grok plugin uninstall text-to-cad
+```
+
 ### Gemini
 
 ```bash
@@ -144,8 +198,20 @@ gemini extensions install https://github.com/earthtojake/text-to-cad --consent -
 
 Gemini installs the latest release as an extension, with the skills and CAD's
 server, and keeps it up to date (`--auto-update`; `--consent` answers its security
-prompt). `gemini extensions update text-to-cad` updates it now. Like Grok, it shows
-tool results as text, so asking it to show a model gives you a CAD Viewer link.
+prompt). Like Grok, it shows tool results as text, so asking it to show a model
+gives you a CAD Viewer link.
+
+To update now, run this, then restart Gemini:
+
+```bash
+gemini extensions update text-to-cad
+```
+
+To reinstall, remove it with this, then run the install command again:
+
+```bash
+gemini extensions uninstall text-to-cad
+```
 
 ### Other Agents
 
@@ -157,20 +223,20 @@ with the Skills CLI:
 npx skills add earthtojake/text-to-cad
 ```
 
-The command asks which agents to install for, and where. An agent installing
-without a person at the prompts names itself, installs for the user, and skips the
-questions: `npx skills add earthtojake/text-to-cad -g -a <agent> -y`.
+The command asks which agents to install for, and where. To skip the questions,
+name the agent and install for your user:
+`npx skills add earthtojake/text-to-cad -g -a <agent> -y`.
 
-The skills install from `main`, and each one runs cadgen through
-[uv](https://docs.astral.sh/uv/) with the same pinned command the plugin's server
-uses, so uv must be installed. Without the plugin there is no CAD server, so the
-skills open models in the CAD Viewer in your browser.
+The skills install from `main`, and each one runs cadgen through uv with the same
+pinned command the plugin's server uses, so uv must be installed. Without the
+plugin there is no CAD server, so the skills open models in the CAD Viewer in
+your browser.
 
-**Use the same command to update.** `add` re-fetches the package and overwrites
-what is already installed, so it both refreshes existing skills and installs any
-skill added in a newer release. `npx skills update` only refreshes skills already
-in your lockfile, so it silently misses new ones — which matters here, because
-releases do add skills.
+**To update or reinstall, run the same command again**, then restart the app.
+`add` re-fetches the package and overwrites what is already installed, so it both
+refreshes existing skills and installs any skill added in a newer release.
+`npx skills update` only refreshes skills already in your lockfile, so it silently
+misses new ones — which matters here, because releases do add skills.
 
 Neither command removes a skill that was retired upstream; drop one with
 `npx skills remove <skill>` if you need to. The retired `cad-viewer` skill is
@@ -183,15 +249,18 @@ No plugin for your agent yet?
 
 ### Updates
 
+To update, ask your agent to update text-to-cad, or run the update commands under
+your app's heading, then restart the app.
+
 When a newer release is out, a copy you installed yourself says so: a blue update
 button, first in CAD's navbar and on its home, whose **Send to agent** posts
 "Update text-to-cad to 0.9.0 from https://github.com/earthtojake/text-to-cad" to
 your chat, worded like the install message (the browser viewer's copies it
 instead), or a line in your agent's command output. Your agent then follows the
 `cad-setup` skill's steps for your app. The button also links to the
-[full install instructions](https://www.texttocad.dev/install), in case your agent
-can't do it. Copies from a plugin directory or the Cursor Marketplace never show
-it: their store updates them.
+[install instructions](https://www.texttocad.dev/install), to update by hand.
+Copies from a plugin directory or the Cursor Marketplace never show it: their
+store updates them.
 
 To find out, cadgen fetches `api.texttocad.dev/v1/versions` at most once a day:
 one anonymous request, with no ID, path or anything about you, never in CI and

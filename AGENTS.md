@@ -106,8 +106,9 @@ path, the rehearsal, and local/manual fallbacks.
   Repo-development guidance for it goes in `CONTRIBUTING.md`.
 
 - The README and the docs site's homepage (its copy: `apps/docs/src/lib/content.ts`)
-  share their structure, install message and install commands: change them together.
-  The README says more, for agents installing text-to-cad (`apps/docs/README.md`).
+  share their structure, install message and commands: change them together.
+  The README says more: the steps to install it yourself, and fuller notes under each install
+  (`apps/docs/README.md`).
 - Keep root guidance short. Put domain workflows, CLI details, and validation
   policy in the relevant `skills/<skill>/SKILL.md` or `references/` file.
 - Keep relevant Markdown docs current when changing behavior, commands, or repo

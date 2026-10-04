@@ -3,7 +3,7 @@
 import {
   agentInstallByline,
   agentInstallMessage,
-  agentInstallSteps,
+  installYourself,
   installs,
   pluginDescription,
   skillGroups,
@@ -31,7 +31,7 @@ export function GET() {
     agentInstallMessage,
     "```",
     "",
-    agentInstallSteps,
+    `${installYourself.before} [${installYourself.link.text}](${installYourself.link.href}) ${installYourself.after}`,
     "",
     ...installs.flatMap((item) => [
       `### ${item.agent}`,
@@ -41,6 +41,12 @@ export function GET() {
       item.command,
       "```",
       "",
+      ...(item.update
+        ? ["Update, then restart the app:", "", "```bash", item.update, "```", ""]
+        : ["Run the install command again to update or reinstall, then restart the app.", ""]),
+      ...(item.remove
+        ? ["Reinstall: remove it, then install it again:", "", "```bash", item.remove, "```", ""]
+        : []),
     ]),
     `The README has each install's full notes: ${siteConfig.repository}#readme`,
     "",

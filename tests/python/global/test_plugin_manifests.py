@@ -85,13 +85,14 @@ class PluginManifestPolicyTest(unittest.TestCase):
 
     def test_the_readme_and_the_docs_site_install_alike(self) -> None:
         # The README and the docs site's homepage are one copy (apps/docs/README.md): the message an
-        # agent is sent and every install command say the same, word for word, in both.
+        # agent is sent and every install, update and remove command say the same, word for word, in both.
         readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
         page = (REPO_ROOT / "apps" / "docs" / "src" / "lib" / "content.ts").read_text(encoding="utf-8")
         message = re.search(r'const agentInstallMessage = "([^"]+)"', page).group(1)
         self.assertIn(f"```text\n{message}\n```", readme)
-        commands = [command.replace("\\n", "\n") for command in re.findall(r'\bcommand:\s*"([^"]+)"', page)]
-        self.assertGreaterEqual(len(commands), 6)
+        commands = [command.replace("\\n", "\n")
+                    for command in re.findall(r'\b(?:command|update|remove):\s*"([^"]+)"', page)]
+        self.assertGreaterEqual(len(commands), 16)
         for command in commands:
             with self.subTest(command=command.splitlines()[0]):
                 self.assertIn(command, readme)
