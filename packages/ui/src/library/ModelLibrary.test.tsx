@@ -1,5 +1,4 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import { afterEach, expect, it, vi } from 'vitest';
 // The built module: its Settings is the renderer kit's, whose JSX lives in .js files this runner does not compile.
 import { ModelLibrary, editedLabel } from '../../dist/library/ModelLibrary.js';
@@ -22,45 +21,22 @@ function library(models: LibraryModel[], extra: Partial<ModelLibrarySource> = {}
   };
 }
 
-it('heads the home with the TEXTTOCAD wordmark over GitHub and the cog that opens the app menu, the host\'s update button first when there is one; no tagline', async () => {
-  vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
-  const user = userEvent.setup();
+it('heads the home with the TEXTTOCAD wordmark over GitHub, Discord and X, the host\'s update button first when there is one; no tagline', async () => {
   const links = { version: '0.7.4', release: 'r', x: 'https://x.com/earthtojake', github: 'https://github.com/earthtojake/text-to-cad', discord: 'https://discord.gg/x',
     issues: 'https://github.com/earthtojake/text-to-cad/issues/new' };
-  const changes: boolean[] = [];
-  render(<ModelLibrary library={library([])} links={links} platform="win32"
-    appSettings={[{ id: 'analytics', label: 'Share anonymous usage data', checked: false, onCheckedChange: value => { changes.push(value); } }]} />);
+  render(<ModelLibrary library={library([])} links={links} />);
   const nav = await screen.findByRole('navigation', { name: 'CAD links' });
   expect(screen.getByRole('img', { name: 'text-to-cad' }).getAttribute('src')).toMatch(/texttocad/);
-  expect([...nav.querySelectorAll('a, button')].map(node => node.getAttribute('aria-label'))).toEqual(['GitHub', 'Settings']);
+  // Links, not a menu: the person's settings are the app menu's, from a file's navbar.
+  expect([...nav.querySelectorAll('a, button')].map(node => [node.getAttribute('aria-label'), node.getAttribute('href')]))
+    .toEqual([['GitHub', links.github], ['Discord', links.discord], ['X', links.x]]);
   expect(screen.queryByText('Build things')).toBeNull();
-  // The app menu, as the navbar's logo opens it but for Back to files (the home is not a file): the
-  // host's own settings, Send feedback, GitHub and Discord, then the version and "Made by @…".
-  await user.click(within(nav).getByRole('button', { name: 'Settings' }));
-  const menu = await screen.findByRole('menu', { name: 'Settings' });
-  expect([...menu.querySelectorAll('[role^="menuitem"]')].map(item => item.textContent)).toEqual(['Share anonymous usage data', 'Send feedback', 'GitHub', 'Discord']);
-  // Send feedback: a new issue on the project's tracker, begun "Feedback: ", for the person to finish,
-  // naming the version and the platform; no label: the project has none for feedback.
-  const feedback = new URL(within(menu).getByRole('menuitem', { name: 'Send feedback' }).getAttribute('href')!);
-  expect([`${feedback.origin}${feedback.pathname}`, feedback.searchParams.get('title'), feedback.searchParams.get('labels')])
-    .toEqual(['https://github.com/earthtojake/text-to-cad/issues/new', 'Feedback: ', null]);
-  expect(feedback.searchParams.get('body')).toMatch(/^\*\*What happened, or what would you like\?\*\*\n[\s\S]*- CAD: 0\.7\.4\n- Platform: win32$/);
-  const footer = menu.querySelector('[data-menu-footer]')!;
-  expect([...footer.querySelectorAll('a')].map(link => [link.textContent, link.getAttribute('href')]))
-    .toEqual([['v0.7.4', 'r'], ['Made by @earthtojake', 'https://x.com/earthtojake']]);
-  await user.click(within(menu).getByRole('menuitemcheckbox', { name: 'Share anonymous usage data' }));
-  expect(changes).toEqual([true]);
-  cleanup();
-  // A host with no tracker has no Send feedback.
-  render(<ModelLibrary library={library([])} links={{ ...links, issues: '' }} />);
-  await user.click(within(await screen.findByRole('navigation', { name: 'CAD links' })).getByRole('button', { name: 'Settings' }));
-  expect(within(await screen.findByRole('menu')).queryByRole('menuitem', { name: 'Send feedback' })).toBeNull();
   cleanup();
   // The host's update button, first in the row, while its install is behind; its Full size, last, where it shows the view small.
   render(<ModelLibrary library={library([])} links={links} update={<button type="button" aria-label="Update to 0.7.5" />}
     fullSize={<button type="button" aria-label="Full size" />} />);
   const row = await screen.findByRole('navigation', { name: 'CAD links' });
-  expect([...row.querySelectorAll('a, button')].map(node => node.getAttribute('aria-label'))).toEqual(['Update to 0.7.5', 'GitHub', 'Settings', 'Full size']);
+  expect([...row.querySelectorAll('a, button')].map(node => node.getAttribute('aria-label'))).toEqual(['Update to 0.7.5', 'GitHub', 'Discord', 'X', 'Full size']);
 });
 
 it('offers Open only where the host has a chooser, and opens and pins through the host', async () => {

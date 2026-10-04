@@ -97,6 +97,21 @@ class PluginManifestPolicyTest(unittest.TestCase):
             with self.subTest(command=command.splitlines()[0]):
                 self.assertIn(command, readme)
 
+    def test_the_setup_skill_updates_and_switches_as_the_install_pages_say(self) -> None:
+        # cad-setup tells an agent how to update each app's copy, and how to swap a store's copy for
+        # the GitHub one: the same commands, line for line, as the docs site's (and so the README's).
+        skill = (REPO_ROOT / "skills" / "cad-setup" / "SKILL.md").read_text(encoding="utf-8")
+        page = (REPO_ROOT / "apps" / "docs" / "src" / "lib" / "content.ts").read_text(encoding="utf-8")
+        entries = {match.group(1): match.group(2) for match in re.finditer(r'id: "([a-z-]+)",(.*?)\n  \}', page, re.S)}
+        lines = [line for body in entries.values() for update in re.findall(r'\bupdate:\s*"([^"]+)"', body)
+                 for line in update.replace("\\n", "\n").splitlines()]
+        lines += [line for app in ("claude-code", "codex", "cursor")
+                  for line in re.search(r'\bcommand:\s*"([^"]+)"', entries[app]).group(1).replace("\\n", "\n").splitlines()]
+        self.assertGreaterEqual(len(lines), 11)
+        for line in lines:
+            with self.subTest(line=line):
+                self.assertIn(f"`{line}`", skill)
+
     def test_the_update_cards_instructions_link_reaches_the_docs_install_section(self) -> None:
         # cadgen's update card links to texttocad.dev/install; the docs site redirects that to its
         # Install section, so renaming the section or dropping the redirect breaks every card.

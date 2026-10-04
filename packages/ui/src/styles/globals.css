@@ -68,7 +68,7 @@
 .dark .cad-library-byline > span { color: #94d9fa; }
 .cad-library-links { display: flex; align-items: center; justify-content: center; gap: 2px; margin: 12px 0 40px; }
 .cad-library-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
-.cad-library-heading { margin: 0; font-size: 1.25rem; line-height: 28px; font-weight: 600; color: var(--foreground); }
+.cad-library-heading { margin: 0; font-size: calc(min(360px, 100cqw) / 20.8); line-height: 28px; font-weight: 600; color: var(--foreground); }
 .cad-library-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .cad-library-search { position: relative; width: 200px; }
 .cad-library-search > svg { position: absolute; left: 10px; top: 50%; width: 14px; height: 14px; transform: translateY(-50%); color: var(--muted-foreground); pointer-events: none; }

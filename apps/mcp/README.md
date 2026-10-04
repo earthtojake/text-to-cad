@@ -46,8 +46,8 @@ reference host `basic-host` does.
   opens, goes to it: the library (the models opened before, in any view or the web
   viewer) and Open with the desktop's chooser, where this computer has one
   (`pick`). The sidebar (`cad_home`) and a tab with nothing to show open on it; a
-  model opened from it is shown in place. The cog under the home's wordmark opens
-  the same menu.
+  model opened from it is shown in place. Under the home's wordmark are GitHub,
+  Discord and X.
 - **A view browses from its file's folder.** The file name in the navbar opens
   the explorer: one folder at a time, its subfolders and then its CAD files,
   starting at the file's; the last three folders as a breadcrumb, those above

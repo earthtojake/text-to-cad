@@ -49,7 +49,7 @@ are for reading and maintaining the contracts.
 | `RobotRendererOptions` (URDF, SRDF, SDF), `RobotLiveController`, `RobotLiveState` (`selectedLinks`, `selectedPartIds`) | [Robot registration](../src/renderers/robot/index.ts) | `@text-to-cad/ui/renderers/robot` |
 | `ViewerCommands`, `ViewerCommandSource` (the host requests every viewer renderer takes) | [Viewer commands](../src/renderers/workspace/commands.ts) | `@text-to-cad/ui/renderers/workspace` |
 | `createLiveRegistry`, `LiveRegistry` (the host's handle on the mounted view: its renderers' `live`) | [Live registry](../src/host/liveRegistry.ts) | `@text-to-cad/ui/host` |
-| `ModelLibrary`, `ModelLibrarySource`, `ModelPictureSource`, `useModelThumbnail` (a host's home: the CAD title over the host's links and the cog that opens its app menu, then the models opened before, pinned first, as cards or rows, and with none, where the host has a chooser, an "Open File" card that opens it; placeholder cards or rows while the list is read (again every two seconds while the home is up, so a model rebuilt meanwhile is pictured again), and a spinner over the model being opened, which takes no second press until `open` settles; `pick` only where the host has a file chooser; `pictureFrom` where it can reach a model to picture it) | [Model library](../src/library/ModelLibrary.tsx), [thumbnails](../src/library/thumbnails.ts) | `@text-to-cad/ui/library` |
+| `ModelLibrary`, `ModelLibrarySource`, `ModelPictureSource`, `useModelThumbnail` (a host's home: the CAD title over the host's links (GitHub, Discord, X), then the models opened before, pinned first, as cards or rows, and with none, where the host has a chooser, an "Open File" card that opens it; placeholder cards or rows while the list is read (again every two seconds while the home is up, so a model rebuilt meanwhile is pictured again), and a spinner over the model being opened, which takes no second press until `open` settles; `pick` only where the host has a file chooser; `pictureFrom` where it can reach a model to picture it) | [Model library](../src/library/ModelLibrary.tsx), [thumbnails](../src/library/thumbnails.ts) | `@text-to-cad/ui/library` |
 | `CadViewer` (FileViewer over a CAD client, one file by absolute path or the home: the five CAD renderers, catalog following, the home, the "File does not exist" and "Could not open that file" pages, the library's pictures) | [CAD viewer](../src/cad-viewer/CadViewer.tsx) | `@text-to-cad/ui/cad-viewer` |
 | `createCadFileSource` (a CAD client as a read-only `FileSource`: `stat` through the client's `resolveEntry`, `list` through `folder`, `search` through `search`), `createCadFileActions` (the file menu's Copy path, the absolute path, and Reveal), `normalizePath`, `baseName`, `joinPath`, `contentRevision` | [Catalog](../src/cad-viewer/catalog.ts) | `@text-to-cad/ui/catalog` |
 | `ViewerLinks`, `viewerLinks` (the version, GitHub, Discord, where a new issue opens, the newest release and how to update, and how a link is followed), `issueUrl` (a new issue filled in — its title, labels and body — its address kept under `ISSUE_URL_MAX`) | [Host types](../src/host/types.ts), [links](../src/file-viewer/navigation/links.js) | `@text-to-cad/ui/links` |
@@ -384,8 +384,8 @@ no settings and no view controls.
 
 The app menu is FileViewer's, built from the host's `navigation.home`, `links` and
 `environment.platform` and the person's `FileViewerProps.appSettings` (which `CadViewer`
-passes on); the home's cog opens the same one. It is a dropdown on the floating surface.
-First **Back to files**, where the host has a home (the home's own menu has none); then
+passes on); the home has none. It is a dropdown on the floating surface.
+First **Back to files**, where the host has a home; then
 the host's on/off settings (`appSettings`, below) as checkbox items, checked at the right,
 which a press turns without closing the menu; then, where the host has a tracker
 (`links.issues`), **Send feedback**, a link to a new issue titled "Feedback: "
@@ -393,9 +393,9 @@ which a press turns without closing the menu; then, where the host has a tracker
 `environment.platform` — it has no label: the project has none for feedback, and what is
 said may be a bug, a request or a question — then **GitHub** and **Discord**; and last, in
 gray, "v<version> · Made by @<handle>": the version links its release notes
-(`links.release`) and `MadeBy` the host's X account. The home has GitHub (`GitHubLink`),
-which says the project is open source, and the cog that opens this menu under its
-wordmark, in that order.
+(`links.release`) and `MadeBy` the host's X account. The home has GitHub, which says the
+project is open source, Discord and X as icon links under its wordmark (`HomeLinks`), in
+that order.
 
 An alert card's Report Issue opens a new issue too,
 titled "Issue: " and labelled `bug`, filled in from the card (`kit/status/reportIssue.js`): its

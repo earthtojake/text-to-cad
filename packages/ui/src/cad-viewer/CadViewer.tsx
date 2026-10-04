@@ -47,7 +47,7 @@ export interface CadViewerProps<Model extends LibraryModel = LibraryModel> {
   onThumbnail?(png: Blob, file: string): Promise<unknown>;
   /** The host's controls in the Display panel (the web's appearance). */
   displayActions?: ReactNode;
-  /** The host's on/off settings, in the app menu, the same from the navbar's logo and the home's cog (analytics, Quick edit). */
+  /** The host's on/off settings, in the app menu the navbar's logo opens over every file (analytics, Quick edit). */
   appSettings?: readonly AppSetting[];
   /** The features the person has left on (in the app menu): Quick edit is offered only while it is on. */
   features?: ViewerFeatures;
@@ -154,19 +154,18 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
   // A file opened meanwhile has the screen, and the GPU, to itself.
   useEffect(() => { if (path) drawn(false); }, [path, drawn]);
 
-  const { platform } = host.environment;
   const layout = settings.library.layout;
   const changeLayout = useCallback((next: LibraryLayout) => preferences.update({ library: { layout: next } }), [preferences]);
   // A file that will not open says why, with the way home where the host has one.
   const goHome = useMemo(() => homed ? <Button size="sm" variant="outline" onClick={home}>Go home</Button> : null, [homed, home]);
   const presentation = useMemo(() => ({
     home: library ? <ModelLibrary library={library} layout={layout} onLayoutChange={changeLayout} picture={picture}
-      links={host.links} platform={platform} appSettings={appSettings} update={update} fullSize={fullSize} onError={onError} /> : undefined,
+      links={host.links} update={update} fullSize={fullSize} onError={onError} /> : undefined,
     loading: <div className="relative h-full"><ViewerLoadingOverlay viewerLoading /></div>,
     error: ({ message, missing }: { message: string; missing: boolean }) => missing
       ? <EmptyState icon={FileX} title="File does not exist" description={path} tone="warn" action={goHome} />
       : <EmptyState icon={FileWarning} title="Could not open that file" description={message} tone="warn" action={goHome} />,
-  }), [library, layout, changeLayout, path, picture, host.links, platform, appSettings, update, fullSize, onError, goHome]);
+  }), [library, layout, changeLayout, path, picture, host.links, update, fullSize, onError, goHome]);
   return <>
     <FileViewer file={path || null} host={viewerHost} renderers={renderers} state={state} onStateChange={onStateChange}
       displayActions={displayActions} appSettings={appSettings} update={update} fullSize={fullSize} features={features} notice={notice} onError={onError} presentation={presentation} />

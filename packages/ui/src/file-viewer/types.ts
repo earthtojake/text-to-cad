@@ -156,8 +156,8 @@ export interface FileViewerProps {
   /** Host controls inside the CAD Display panel. */
   displayActions?: ReactNode;
   /**
-   * The person's on/off settings, in the app menu the navbar's logo opens over every file (the
-   * home's cog opens the same menu), with the host's links (`host.links`).
+   * The person's on/off settings, in the app menu the navbar's logo opens over every file, with
+   * the host's links (`host.links`).
    */
   appSettings?: readonly AppSetting[];
   /**

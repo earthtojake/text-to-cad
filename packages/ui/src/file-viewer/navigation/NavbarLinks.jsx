@@ -1,14 +1,14 @@
 import { Button } from "@text-to-cad/ui/primitives/button";
 import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 
-import { GitHubMark } from "./brandMarks.jsx";
+import { DiscordMark, GitHubMark, XMark } from "./brandMarks.jsx";
 import { issueUrl } from "./links.js";
 
 /**
  * The host's links (`ViewerHost.links`, built by `viewerLinks` in `links.js`), as the viewer shows
  * them. The app menu (`AppMenu.jsx`) holds Send feedback (`feedbackUrl`), GitHub and Discord, and
  * in its footer the version (its release notes) and "Made by @…" (`MadeBy`, the host's X account).
- * GitHub alone (`GitHubLink`) is under the home's wordmark, before its cog. Every link opens the
+ * The home's row under its wordmark has GitHub, Discord and X as icon links (`HomeLinks`). Every link opens the
  * host's way: a page that can open one itself follows an ordinary link to a new tab; a page in a
  * frame that cannot hands it to `links.open` (the host's own browser).
  */
@@ -28,13 +28,17 @@ export function useFollow(links, onError) {
 }
 
 /**
- * GitHub alone, as an icon link: under the home's wordmark, before Settings. It says, in one
- * glance, that the project is open source.
+ * GitHub, Discord and X, as icon links, in that order: the home's row under its wordmark. GitHub
+ * first says, in one glance, that the project is open source.
  * @param {{ links: import("../../host/types.js").ViewerLinks, onError?: (error: Error) => void }} props
  */
-export function GitHubLink({ links, onError }) {
+export function HomeLinks({ links, onError }) {
   const follow = useFollow(links, onError);
-  return <IconLink href={links.github} label="GitHub" icon={GitHubMark} onFollow={follow} />;
+  return <>
+    <IconLink href={links.github} label="GitHub" icon={GitHubMark} onFollow={follow} />
+    <IconLink href={links.discord} label="Discord" icon={DiscordMark} onFollow={follow} />
+    <IconLink href={links.x} label="X" icon={XMark} onFollow={follow} />
+  </>;
 }
 
 /**

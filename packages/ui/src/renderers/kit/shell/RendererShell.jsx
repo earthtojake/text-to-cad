@@ -1,6 +1,6 @@
 import { VIEWPORT_ACTION_HEIGHT_PX, VIEWPORT_CORNER_INSET_PX, VIEWPORT_CUBE_BOTTOM_PX, VIEWPORT_CUBE_SIZE, VIEWPORT_INSET_PX, VIEWPORT_STACK_BOTTOM, VIEWPORT_TOP_BAR_PX } from "./viewportLayout.js";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Maximize2, X } from "lucide-react";
+import { Play, X } from "lucide-react";
 import { Button } from "@text-to-cad/ui/primitives/button";
 import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 import PreviewChrome from "../tools/PreviewChrome.jsx";
@@ -302,7 +302,7 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
               {shell.previewable && !toolsHidden && !previewing ? <div className="pointer-events-auto absolute z-20 flex items-center justify-center gap-0.5"
                 style={VIEW_CONTROLS_POSITION} data-viewport-actions="">
                 <DisplayPopover open={displayOpen} onOpenChange={setDisplayOpen} disabled={shell.idle} boundary={frame.hostElement}>{frame.display}</DisplayPopover>
-                <NavbarControl label="Preview" tooltipSide="top" disabled={shell.idle} onClick={enterPreview}><Maximize2 className="size-3.5" aria-hidden="true" /></NavbarControl>
+                <NavbarControl label="Preview" tooltipSide="top" disabled={shell.idle} onClick={enterPreview}><Play className="size-3.5" aria-hidden="true" /></NavbarControl>
               </div> : null}
               {/* Preview: fullscreen, the navbar and the tools put away and the model orbiting, its
                   routines playing. Where Display and Preview sat, Playback settings (the routine's and

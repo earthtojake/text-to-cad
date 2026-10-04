@@ -59,8 +59,7 @@ none.
   settings are the app menu's, and Display and Preview sit on top of the view cube. A
   host's home has no navbar:
   its update (when there is one), GitHub (its mark, a link to the project: it is open source),
-  the cog — which opens the same app menu, centred under it, without Back to files — and,
-  where the host shows the view small, **Full size** stand under its
+  Discord and X, as icon links, and, where the host shows the view small, **Full size** stand under its
   TEXTTOCAD wordmark, in that order, above its Recent Files: the models opened before,
   pinned first, as cards or rows, with Open where the host has a file chooser.
   The update shows only for a release
@@ -482,13 +481,13 @@ icon is unambiguous, and always keep the accessible name.
 ## Settings
 
 Settings are the person's, never a file's, and live in the app menu: one dropdown
-(`file-viewer/navigation/AppMenu.jsx`) on the floating surface, 15rem wide, the same
-wherever it is reached — the navbar's logo, over every file (FileViewer builds it from the
-host's `links`, the `appSettings` `CadViewer` hands it and `environment.platform`, while a
-model loads and after it failed to as well), and the cog under the home's wordmark. Its
-rows, a rule between each group, are only what the host supplies:
+(`file-viewer/navigation/AppMenu.jsx`) on the floating surface, 15rem wide, from the
+navbar's logo over every file (FileViewer builds it from the host's `links`, the
+`appSettings` `CadViewer` hands it and `environment.platform`, while a model loads and after
+it failed to as well); the home has no menu. Its rows, a rule between each group, are only
+what the host supplies:
 
-- **Back to files**, where the menu is opened from a file and the host has a home
+- **Back to files**, where the host has a home
   (`navigation.home`): it shows the home in this view. The home's own menu has none.
 - The host's own on/off settings (`appSettings`), a checkbox item each, in the order they
   come, checked at the right; a press turns one without closing the menu. **Share

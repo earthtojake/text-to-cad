@@ -116,7 +116,7 @@ export const ViewerNavbar: ComponentType<{
 }>;
 
 /**
- * The app's menu, from the navbar's logo and the home's cog alike: Back to files (`onHome`), the
+ * The app's menu, from the navbar's logo: Back to files (`onHome`), the
  * person's settings (`appSettings`), Send feedback, GitHub and Discord, then the version and who
  * made it. `trigger` is the button that opens it.
  */
@@ -126,7 +126,6 @@ export const AppMenu: ComponentType<{
   links?: import("../../host/types.js").ViewerLinks;
   appSettings?: readonly import("../types.js").AppSetting[];
   platform?: string;
-  align?: "start" | "center" | "end";
 }>;
 
 /** One declared panel's toggle in the navbar; `active` is its panel being open. */

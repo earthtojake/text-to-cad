@@ -288,8 +288,8 @@ saved through the host's `attachments` (`createHttpAttachmentStore`, over
 The bare URL is the home: the library of models every CAD view shares
 (`@text-to-cad/ui/library`), and Open, the desktop's file chooser (`POST /__cad/pick`),
 where the server's computer has one (`serverInfo.pick`). From a file, Back to files in
-the menu the navbar's C logo opens leads back to it; the cog under the home's wordmark
-opens the same menu. A `?file=` that names nothing there shows "File does not exist",
+the menu the navbar's C logo opens leads back to it. Under the home's wordmark are GitHub,
+Discord and X. A `?file=` that names nothing there shows "File does not exist",
 with Go home.
 
 The home reads the library over `GET /__cad/recents`, pins, unpins and removes over
@@ -352,8 +352,8 @@ explorer, with its ⋯; at the right only the blue update button, while a newer 
 is out. The app menu holds Back to files (the home), the person's settings (Share
 anonymous usage data, Quick edit), Send feedback (a new issue titled "Feedback: "),
 GitHub, Discord and, in gray, the version (a link to its release notes) and "Made by @…"
-(X); the cog under the home's wordmark opens the same menu, without Back to files, as in
-the CAD app. Display and Preview are the view's, on top of its cube. This host
+(X), as in the CAD app; the home shows GitHub, Discord and X under its wordmark instead.
+Display and Preview are the view's, on top of its cube. This host
 supplies the links (`src/host/viewerLinks.js`): its version, the GitHub (where new
 issues open) and Discord its build names (`VIEWER_GITHUB_URL`, `VIEWER_DISCORD_URL`);
 links open in a new tab. A newer text-to-cad is the blue update button's, at the navbar's right as in the CAD app: cadgen's

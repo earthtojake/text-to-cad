@@ -12,9 +12,8 @@ import { feedbackUrl, MadeBy, useFollow } from "./NavbarLinks.jsx";
 const NONE = Object.freeze([]);
 
 /**
- * The app's menu: what is the person's rather than a file's, one menu wherever it is reached — the
- * navbar's logo, over every file, and the home's cog. First, where it is opened from a file and the
- * host has a home, Back to files (`onHome`). Then the host's on/off settings (`appSettings`: Quick
+ * The app's menu, from the navbar's logo over every file: what is the person's rather than a
+ * file's. First, where the host has a home, Back to files (`onHome`). Then the host's on/off settings (`appSettings`: Quick
  * edit, sharing anonymous usage data), checked at the right, which a press turns without closing
  * the menu; then Send feedback (a new issue on the host's tracker, naming the version and the
  * `platform`), GitHub and Discord; and last, in gray, the version this host runs (a link to its
@@ -22,9 +21,9 @@ const NONE = Object.freeze([]);
  *
  * @param {{ trigger: import("react").ReactElement, onHome?: () => void,
  *   links?: import("../../host/types.js").ViewerLinks, appSettings?: readonly import("../types.js").AppSetting[],
- *   platform?: string, align?: "start" | "center" | "end" }} props
+ *   platform?: string }} props
  */
-export function AppMenu({ trigger, onHome, links, appSettings = NONE, platform, align = "start" }) {
+export function AppMenu({ trigger, onHome, links, appSettings = NONE, platform }) {
   const follow = useFollow(links);
   const feedback = links ? feedbackUrl(links, platform) : "";
   const outward = [
@@ -47,7 +46,7 @@ export function AppMenu({ trigger, onHome, links, appSettings = NONE, platform, 
   const madeBy = links?.x ? <MadeBy links={links} /> : null;
   return <DropdownMenu modal={false}>
     <DropdownMenuTrigger asChild>{trigger}</DropdownMenuTrigger>
-    <DropdownMenuContent align={align} sideOffset={6} collisionPadding={8} aria-label="Menu" data-app-menu=""
+    <DropdownMenuContent align="start" sideOffset={6} collisionPadding={8} aria-label="Menu" data-app-menu=""
       className={cn(FLOATING_SURFACE_CLASS, "w-60 data-[state=closed]:animate-none!")}>
       {groups.map((group, index) => <Fragment key={index}>{index ? <DropdownMenuSeparator /> : null}{group}</Fragment>)}
       {version || madeBy ? <>

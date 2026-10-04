@@ -1,5 +1,4 @@
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
 import type { ReactElement } from 'react';
 import { afterEach, expect, test, vi } from 'vitest';
 import { unavailablePromptContext } from '@text-to-cad/core/prompt';
@@ -134,30 +133,16 @@ test('the home pictures a card out of sight, in a viewer of its own, from what i
   expect(viewer.hidden).toBeNull();
 });
 
-test("the person's settings are the app menu's, over every file and on the home: the host's settings and its links, and nothing of a file", async () => {
+test("the person's settings go to the app menu over every file; the home shows the host's links", async () => {
   const client = cadClient();
-  const changes: string[] = [];
-  const appSettings = [
-    { id: 'analytics', label: 'Share anonymous usage data', checked: false, onCheckedChange: (value: boolean) => { changes.push(`analytics:${value}`); } },
-    { id: 'other', label: 'Another setting', checked: true, onCheckedChange: (value: boolean) => { changes.push(`other:${value}`); } },
-  ];
+  const appSettings = [{ id: 'analytics', label: 'Share anonymous usage data', checked: false, onCheckedChange: () => {} }];
   render(<CadViewer client={client as never} host={ports(client, { links: viewerLinks({ version: '0.7.4' }) })} tabStore={createTabStore(memoryTabRecord())}
     live={createLiveRegistry()} file="/models/parts/a.step" library={library} appSettings={appSettings} onShow={() => {}} />);
-  // Over every file, FileViewer's navbar logo opens them (its own suite); on the home, its cog.
+  // FileViewer's navbar logo opens them (its own suite).
   expect(props().appSettings).toBe(appSettings);
-  vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
-  const user = userEvent.setup();
   const home = render(props().presentation!.home as ReactElement);
-  await user.click(home.getByRole('button', { name: 'Settings' }));
-  // A menu is named by the button that opens it: here, the home's cog.
-  const menu = await screen.findByRole('menu', { name: 'Settings' });
-  expect([...menu.querySelectorAll('[role^="menuitem"]')].map(item => item.matches('a')
-    ? `${item.textContent} → ${item.getAttribute('href')}` : item.textContent)).toEqual(['Share anonymous usage data', 'Another setting',
-    expect.stringMatching(/^Send feedback → https:\/\/github\.com\/earthtojake\/text-to-cad\/issues\/new\?title=Feedback/),
-    expect.stringMatching(/^GitHub → /), expect.stringMatching(/^Discord → /)]);
-  // The home is not a file: no Back to files. Each row is the host's own setting, changed through the host.
-  await user.click(screen.getByRole('menuitemcheckbox', { name: 'Share anonymous usage data' }));
-  expect(changes).toEqual(['analytics:true']);
+  const row = await home.findByRole('navigation', { name: 'CAD links' });
+  expect([...row.querySelectorAll('a, button')].map(node => node.getAttribute('aria-label'))).toEqual(['GitHub', 'Discord', 'X']);
 });
 
 test('the features the person left on reach every file the viewer shows', () => {

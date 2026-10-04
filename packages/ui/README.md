@@ -305,8 +305,8 @@ pointer is on them or their menu is open, with no tooltip. At the right is only 
 or a file adds: the host's update button, a dismissed alert's icon, a declared panel's
 toggle and the host's Full size.
 With no file a view shows the host's home, the model library: the models opened before,
-pinned first, with their pictures, and Open where the host has a file chooser; the cog
-under its wordmark opens the same menu, without Back to files. A file that
+pinned first, with their pictures, and Open where the host has a file chooser, under its
+wordmark and GitHub, Discord and X. A file that
 does not exist shows "File does not exist" and its path, and any other failure to open
 "Could not open that file" and why, each with Go home where the host has a home. A
 renderer's loading and update status is its own, in its viewport. An error appears as a
