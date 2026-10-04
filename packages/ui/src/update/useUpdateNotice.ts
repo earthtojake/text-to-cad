@@ -18,13 +18,15 @@ export interface UpdateNotice {
 export type UpdateCall = () => Promise<{ notice: UpdateNotice | null }>;
 
 /**
- * The update button's state, from the host's server: read once, and again whenever the person comes
- * back to the page (the day's check may have found a release meanwhile). There is no answer to keep:
- * the button stays while this install is behind and goes once the update lands. A view that cannot
- * ask its server shows nothing.
+ * The update button's state, from the host's server: what the host already knew as the page started
+ * (`initial`: a CAD app's launch carries it, the web page reads it with its server's description), so
+ * the button draws with the page rather than after it; then read again, and again whenever the person
+ * comes back to the page (the day's check may have found a release meanwhile). There is no answer to
+ * keep: the button stays while this install is behind and goes once the update lands. A view that
+ * cannot ask its server shows nothing.
  */
-export function useUpdateNotice(call: UpdateCall): UpdateNotice | null {
-  const [notice, setNotice] = useState<UpdateNotice | null>(null);
+export function useUpdateNotice(call: UpdateCall, initial: UpdateNotice | null = null): UpdateNotice | null {
+  const [notice, setNotice] = useState<UpdateNotice | null>(initial);
   const read = useCallback(() => {
     void call().then(reply => setNotice(reply.notice ?? null), () => {});
   }, [call]);

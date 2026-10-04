@@ -146,13 +146,15 @@ _ANALYTICS_TOOL = {
 
 def _stamped(launch: dict[str, Any]) -> dict[str, Any]:
     """A launch with what the page needs to start on it alone: this server's version and platform,
-    and whether this computer has a file chooser for the home's Open."""
-    from cadgen import __version__
+    whether this computer has a file chooser for the home's Open, and the update notice as the
+    server last read it (``cadgen/updates.py``; a launch never waits on the feed)."""
+    from cadgen import __version__, updates
     from cadgen._internal.picker import available
 
     launch["version"] = __version__
     launch["platform"] = sys.platform if sys.platform in ("darwin", "win32") else "linux"
     launch["pick"] = available()
+    launch["notice"] = updates.notice(fetch=False)
     return launch
 
 

@@ -32,11 +32,15 @@ it('heads the home with the TEXTTOCAD wordmark over GitHub, Discord and X, the h
     .toEqual([['GitHub', links.github], ['Discord', links.discord], ['X', links.x]]);
   expect(screen.queryByText('Build things')).toBeNull();
   cleanup();
-  // The host's update button, first in the row, while its install is behind; its Full size, last, where it shows the view small.
-  render(<ModelLibrary library={library([])} links={links} update={<button type="button" aria-label="Update to 0.7.5" />}
-    fullSize={<button type="button" aria-label="Full size" />} />);
+  // The host's update button, while its install is behind: a row of its own above the links, labeled
+  // Update, its card centred; its Full size, last in the links, where it shows the view small.
+  const Update = ({ labeled = false, align = 'end' }: { labeled?: boolean; align?: string }) =>
+    <button type="button" aria-label="Update to 0.7.5" data-align={align}>{labeled ? 'Update' : null}</button>;
+  render(<ModelLibrary library={library([])} links={links} update={<Update />} fullSize={<button type="button" aria-label="Full size" />} />);
   const row = await screen.findByRole('navigation', { name: 'CAD links' });
-  expect([...row.querySelectorAll('a, button')].map(node => node.getAttribute('aria-label'))).toEqual(['Update to 0.7.5', 'GitHub', 'Discord', 'X', 'Full size']);
+  expect([...row.querySelectorAll('a, button')].map(node => node.getAttribute('aria-label'))).toEqual(['GitHub', 'Discord', 'X', 'Full size']);
+  const update = document.querySelector('[data-library-update] button')!;
+  expect([update.textContent, update.getAttribute('data-align'), update.closest('[data-library-update]')!.nextElementSibling]).toEqual(['Update', 'center', row]);
 });
 
 it('offers Open only where the host has a chooser, and opens and pins through the host', async () => {

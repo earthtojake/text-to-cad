@@ -26,6 +26,8 @@ export interface Launch {
   recents?: Recent[];
   /** Whether this computer has a file chooser for the home's Open. */
   pick?: boolean;
+  /** Whether a newer text-to-cad is out, as the server last read it: the update button draws with the page. */
+  notice?: UpdateNotice | null;
   /** A view mounted inline: its token (the agent names it by that) and its place among the chat's views. */
   view?: string;
   order?: { createdAt: number; seq: number };

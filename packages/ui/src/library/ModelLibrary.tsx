@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent, type ReactNode } from "react";
+import { cloneElement, isValidElement, useCallback, useEffect, useRef, useState, type ChangeEvent, type ReactElement, type ReactNode } from "react";
 import { Box, FolderOpen, LayoutGrid, List, Pin, Search, X } from "lucide-react";
 import type { CadWorkspaceService } from "@text-to-cad/core/client";
 import { Button } from "../primitives/button.jsx";
@@ -136,8 +136,8 @@ function Placeholders({ layout }: { layout: LibraryLayout }) {
 
 /**
  * The host's home: the models opened before, from every view, to open again. It has no navbar
- * over it: the TEXTTOCAD wordmark is centred at its top over its byline and the host's links — its update, only when
- * there is one, then GitHub, Discord and X, then the
+ * over it: the TEXTTOCAD wordmark is centred at its top over its byline, then the host's update, only when there
+ * is one, as a row of its own (the button, labeled Update), then the host's links — GitHub, Discord and X, then the
  * host's Full size where it shows the view small — then "Recent Files" with its search, its grid/list switch and, where
  * the host has a chooser, Open, all three there with no models yet too; then the models, pinned first, as solid cards (a picture over the
  * name and when the file was edited) or as rows. A card can be pinned (its pin filled); a row can
@@ -161,7 +161,7 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   picture?(model: Model): Promise<boolean>;
   /** The host's links, under the wordmark: GitHub, Discord and X. */
   links?: ViewerLinks;
-  /** The host's update button, first in the row under the wordmark, while its install is behind. */
+  /** The host's update button, while its install is behind: a row of its own under the byline, labeled Update. */
   update?: ReactNode;
   /** The host's Full size button, last in that row, where it shows the view small. */
   fullSize?: ReactNode;
@@ -264,8 +264,11 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
     <main className="cad-library-content" aria-label="CAD models">
       <img className="cad-library-wordmark" src={wordmark} alt="text-to-cad" />
       <p className="cad-library-byline">Build anything. <span>100% open source and free.</span></p>
+      {/* The update, when there is one, as a call to action of its own: the button, labeled, its card centred. */}
+      {isValidElement(update) ? <div className="cad-library-update" data-library-update="">
+        {cloneElement(update as ReactElement<{ labeled?: boolean; align?: string }>, { labeled: true, align: "center" })}
+      </div> : null}
       {links ? <nav className="cad-library-links" aria-label="CAD links">
-        {update}
         <HomeLinks links={links} onError={onError} />
         {fullSize}
       </nav> : null}

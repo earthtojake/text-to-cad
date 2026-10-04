@@ -57,10 +57,10 @@ none.
   A CAD file declares no panel and publishes no navbar action but that icon, so its navbar
   has no panel toggle. The navbar holds no settings and no view controls: the person's
   settings are the app menu's, and Display and Preview sit on top of the view cube. A
-  host's home has no navbar:
-  its update (when there is one), GitHub (its mark, a link to the project: it is open source),
-  Discord and X, as icon links, and, where the host shows the view small, **Full size** stand under its
-  TEXTTOCAD wordmark, in that order, above its Recent Files: the models opened before,
+  host's home has no navbar: under its TEXTTOCAD wordmark and byline, its update, when there is
+  one, is a row of its own (the blue button, labeled **Update**, its card centred under it), then
+  GitHub (its mark, a link to the project: it is open source), Discord and X, as icon links, and,
+  where the host shows the view small, **Full size**, above its Recent Files: the models opened before,
   pinned first, as cards or rows, with Open where the host has a file chooser.
   The update shows only for a release
   later than the version the page names, whatever the host says. A file that will not open

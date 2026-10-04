@@ -175,10 +175,10 @@ export default function App({ bridge, server, launch: initial, presentation = 't
   // the analytics answer, one choice for the sidebar, every thread's tab and the browser viewer.
   const { features, appSettings: featureSettings } = useFeatures(server.features);
   const appSettings = useMemo(() => [...analyticsSettings ?? [], ...featureSettings ?? []], [analyticsSettings, featureSettings]);
-  // A newer text-to-cad (`cadgen/updates.py`): the blue update button, first in the navbar and on the
-  // home while this install is behind. Its prompt goes to the chat where the host takes messages, so
-  // the agent updates CAD; elsewhere it is copied.
-  const updateNotice = useUpdateNotice(server.version);
+  // A newer text-to-cad (`cadgen/updates.py`): the blue update button, first in the navbar and a row of
+  // its own on the home while this install is behind, from the launch's notice at once. Its prompt goes
+  // to the chat where the host takes messages, so the agent updates CAD; elsewhere it is copied.
+  const updateNotice = useUpdateNotice(server.version, initial.notice ?? null);
   const sendPrompt = chat.send
     ? (prompt: string) => bridge.request('ui/message', { role: 'user', content: [{ type: 'text', text: prompt }] }, { timeoutMs: 30_000 }).then(() => {})
     : undefined;

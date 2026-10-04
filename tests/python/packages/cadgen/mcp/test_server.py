@@ -134,12 +134,14 @@ class TabServerTest(_Session):
         for _ in range(2):  # the update button stays while this install is behind
             notice = self.call("cad_version")["structuredContent"]["notice"]
             self.assertEqual(notice["prompt"], "Update text-to-cad to 99.0.0 from https://github.com/earthtojake/text-to-cad")
+        # A launch carries it, as the server last read it, so the button draws with the page.
+        self.assertEqual(self.launch("cad_home")["notice"], notice)
 
     def test_an_agent_names_a_model_by_its_absolute_path_and_a_tab_reopens_on_it(self) -> None:
         opened = self.launch("cad_open", {"path": self.bracket})
         self.assertEqual({key: opened[key] for key in ("protocol", "page", "model", "surface")},
                          {"protocol": 5, "page": "viewer", "model": self.bracket, "surface": "agent"})
-        self.assertEqual(sorted(opened), ["model", "page", "pick", "platform", "protocol", "surface", "version"])
+        self.assertEqual(sorted(opened), ["model", "notice", "page", "pick", "platform", "protocol", "surface", "version"])
         # The thread's tab reopens on what the thread last opened.
         self.assertEqual(self.launch("cad_tab")["model"], self.bracket)
         refused = self.call("cad_open", {"path": "parts/bracket.stl"})

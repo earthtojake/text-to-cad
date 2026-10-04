@@ -429,9 +429,11 @@ answer and its `appSettings` row (Share anonymous usage data); the host supplies
 where the answer is kept.
 `@text-to-cad/ui/update` is the update button both apps share, from cadgen's version check:
 `UpdateButton`, the blue button a host hands the viewer as its `update` (`CadViewerProps.update`,
-first among the navbar's right-hand controls over every file and first in the home's row), which opens
-`UpdateCard` in a popover, and `useUpdateNotice(call)`, which reads the host's call, again when the
-page regains focus. Nothing it does is an answer the server keeps: the button stays while the
+first among the navbar's right-hand controls over every file, an icon, and on the home a row of its own,
+labeled Update), which opens `UpdateCard` in a popover, and `useUpdateNotice(call, initial)`, which
+starts on the notice the host already has (a CAD app's launch carries it; the web page reads it with
+its server's description), so the button draws with the page, and reads the host's call again, and
+again when the page regains focus. Nothing it does is an answer the server keeps: the button stays while the
 install is behind and goes once the update lands. The card sends its prompt
 to the agent's chat through the host's `send`, where the host can, and otherwise copies it through
 `copy`, its button then Copy prompt; the prompt has a copy icon in its top-right corner either way; the host decides which it supplies. Its

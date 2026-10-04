@@ -6,6 +6,7 @@ import { ViewerLoadingOverlay } from '@text-to-cad/ui/file-viewer/presentation';
 import { createTabStore } from '@text-to-cad/ui/tab-store';
 import { createWebCadClient } from './host/cadClient.js';
 import App from './App';
+import { version } from './adapters/version';
 import { sessionTabRecord } from './persistence/tabRecord';
 import faviconUrl from './client/assets/favicon.png';
 import './client/styles/globals.css';
@@ -37,9 +38,10 @@ function onPageHide(event: PageTransitionEvent) { if (!event.persisted) dispose(
 window.addEventListener('pagehide', onPageHide);
 if (import.meta.hot) import.meta.hot.dispose(dispose);
 root.render(<StartingView />);
-void client.serverInfo({ signal: controller.signal }).then(server => {
+// The update notice comes with the server's description, so the update button draws with the page.
+void Promise.all([client.serverInfo({ signal: controller.signal }), version().then(reply => reply.notice ?? null, () => null)]).then(([server, notice]) => {
   if (controller.signal.aborted) return;
-  root.render(<StrictMode><App client={client} server={server} tabStore={tabStore} /></StrictMode>);
+  root.render(<StrictMode><App client={client} server={server} tabStore={tabStore} notice={notice} /></StrictMode>);
 }).catch(error => {
   if (!controller.signal.aborted) root.render(<StartingView error={error} />);
 });

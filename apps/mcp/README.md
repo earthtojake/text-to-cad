@@ -70,8 +70,10 @@ reference host `basic-host` does.
   reads the version feed (`cadgen/updates.py`): one anonymous GET, with no id and
   nothing about the person (`CADGEN_UPDATE_CHECK=0` turns it off; never in CI or from
   a source tree). While this install is behind, the navbar and the home show the
-  shared blue `UpdateButton` (`@text-to-cad/ui/update`, read through `cad_version`),
-  first among their controls. It opens the update card: "A new version of text-to-cad
+  shared blue `UpdateButton` (`@text-to-cad/ui/update`): first among the navbar's
+  controls, and on the home a row of its own, labeled Update. A launch carries the
+  notice the server last read, so the button draws with the page; `cad_version` reads
+  it again. It opens the update card: "A new version of text-to-cad
   is available. Send a message to your agent asking it to update to the latest
   version:", and a prompt worded like the install message, "Update text-to-cad to
   0.9.0 from https://github.com/earthtojake/text-to-cad".

@@ -13,7 +13,7 @@ import { features as viewerFeatures } from './adapters/features';
 import { version } from './adapters/version';
 import { ConsentCard, useAnalyticsConsent } from '@text-to-cad/ui/consent';
 import { useFeatures } from '@text-to-cad/ui/features';
-import { UpdateButton, useUpdateNotice } from '@text-to-cad/ui/update';
+import { UpdateButton, useUpdateNotice, type UpdateNotice } from '@text-to-cad/ui/update';
 import { browserClipboard, browserClipboardSupportsImages } from './host/clipboard';
 import { createWebPromptContext } from './host/promptContext';
 import { useViewerLinks } from './host/viewerLinks.js';
@@ -47,7 +47,7 @@ export function useTabAppearance(tabStore: TabStore): { preference: Appearance; 
  * home — the models opened before, and Open — where it names none. The browser's own history is
  * the way back: showing a file or the home is a new entry.
  */
-export default function App({ client, server, tabStore }: { client: CadClient; server: CadServerInfo; tabStore: TabStore }) {
+export default function App({ client, server, tabStore, notice = null }: { client: CadClient; server: CadServerInfo; tabStore: TabStore; notice?: UpdateNotice | null }) {
   useViewerAutoReload(server, { fetchServerInfo: () => client.serverInfo({ fresh: true }).then(info => ({ ok: true, identityToken: String(info.identityToken || '') }), () => ({ ok: false })) });
   const source = useMemo(() => createCadFileSource(client), [client]);
   const promptContext = useMemo(() => createWebPromptContext(browserClipboard, browserClipboardSupportsImages()), []);
@@ -105,9 +105,10 @@ export default function App({ client, server, tabStore }: { client: CadClient; s
   const { features, appSettings: featureSettings } = useFeatures(viewerFeatures);
   const appSettings = useMemo(() => [...analyticsSettings ?? [], ...featureSettings ?? []], [analyticsSettings, featureSettings]);
   // A newer text-to-cad, as the CAD app says it (`cadgen/updates.py`): the blue update button, first
-  // in the navbar while this install is behind. A page in a browser cannot reach the agent's chat,
-  // so its prompt is copied.
-  const updateNotice = useUpdateNotice(version);
+  // in the navbar and a row of its own on the home while this install is behind, from the notice read
+  // with the server's description (`main.tsx`). A page in a browser cannot reach the agent's chat, so
+  // its prompt is copied.
+  const updateNotice = useUpdateNotice(version, notice);
   // A person touching the page is use (time spent looking at a model makes no other request): said
   // at most every couple of seconds.
   useEffect(() => {

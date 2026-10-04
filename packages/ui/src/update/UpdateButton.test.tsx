@@ -6,10 +6,10 @@ const NOTICE = { latest: '0.9.0', version: '0.8.1', text: 'A new version v0.9.0 
   prompt: 'Update text-to-cad to 0.9.0 from https://github.com/earthtojake/text-to-cad',
   instructions: 'https://www.texttocad.dev/install' };
 
-function Host({ call, send, copy = vi.fn(async () => {}), onLink = vi.fn() }: {
-  call: UpdateCall; send?: (prompt: string) => Promise<void>; copy?: (prompt: string) => Promise<void>; onLink?: (url: string) => void;
+function Host({ call, initial = null, send, copy = vi.fn(async () => {}), onLink = vi.fn() }: {
+  call: UpdateCall; initial?: typeof NOTICE | null; send?: (prompt: string) => Promise<void>; copy?: (prompt: string) => Promise<void>; onLink?: (url: string) => void;
 }) {
-  const notice = useUpdateNotice(call);
+  const notice = useUpdateNotice(call, initial);
   return notice ? <UpdateButton notice={notice} send={send} copy={copy} onLink={onLink} /> : <p>No notice</p>;
 }
 
@@ -90,4 +90,12 @@ it('reads the server again when the person comes back, and shows nothing once th
   await act(async () => { fireEvent.focus(window); });
   expect(call).toHaveBeenCalledTimes(2);
   expect(screen.getByText('No notice')).toBeTruthy();
+});
+
+it('draws with the page when the host already knows the notice, and asks again', async () => {
+  const call = vi.fn<UpdateCall>(() => new Promise(() => {}));
+  render(<Host call={call} initial={NOTICE} />);
+  // The first render, before any answer: the button is there.
+  expect(screen.getByRole('button', { name: 'Update to 0.9.0' })).toBeTruthy();
+  expect(call).toHaveBeenCalledOnce();
 });
