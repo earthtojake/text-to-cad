@@ -1,6 +1,5 @@
-import type { CadEditingPreview } from '@text-to-cad/core/client';
+import { encodeBase64, type CadEditingPreview } from '@text-to-cad/core/client';
 import type { Launch, Server, ViewEvent } from './server';
-import { encodeBase64 } from './tunnel';
 
 /** How often a view syncs with nothing happening (the server's `views.POLL_SECONDS`). */
 export const SYNC_MS = 1_000;

@@ -56,7 +56,7 @@ function workspace(id: string, store: TabStore) {
   const request = (next: CadCommands) => { snapshot = next; for (const listener of listeners) listener(); };
   const capture = () => request({ captureRequest: { key: Date.now() } });
   const selectReference = (selector: string) => request({ selectReference: { selector, key: Date.now() } });
-  const client = createCadClient({ origin: `${location.origin}/${id}`, workspaceId: id, pollIntervalMs: 0 });
+  const client = createCadClient({ origin: `${location.origin}/${id}`, pollIntervalMs: 0 });
   // The pane's files: the one it shows, which is also all its explorer lists and finds.
   const name = file.split('/').pop() || file;
   const source: FileSource = {

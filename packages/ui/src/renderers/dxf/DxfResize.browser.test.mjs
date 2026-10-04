@@ -8,8 +8,8 @@ import { createServer } from 'node:http';
 import { build } from 'esbuild';
 import { chromium } from 'playwright';
 
-// A drawing pane that changes size in ONE layout step (a panel column opening, a window
-// snap) must paint the drawing at its new size in the very frame that layout lands in.
+// A drawing pane that changes size in ONE layout step (a window snap) must paint the
+// drawing at its new size in the very frame that layout lands in.
 // Setting a canvas's width or height wipes it, so a pane that resizes its canvas as it
 // is observed and paints on the NEXT animation frame shows an empty pane for a frame.
 //

@@ -490,7 +490,6 @@ class DevelopmentAutoReload(StagedApp):
 
         self.assertEqual(after["port"], port, "the URL the browser has open stays valid")
         self.assertEqual(after["start"], before["start"], "and its relative links resolve where they did")
-        self.assertGreater(after["startedAt"], before["startedAt"], "it is a new server")
         # errors="replace": the child writes the PLATFORM's encoding, not ours.
         narration = Path(log_path).read_text(encoding="utf-8", errors="replace")
         self.assertIn(f"code changed; restarting on port {port}", narration)
@@ -511,7 +510,7 @@ class DevelopmentAutoReload(StagedApp):
         before = server_info(port)
         self.change_runtime_code(staged)
         after = self.wait_for_identity_change(port, before["identityToken"])
-        self.assertEqual((after["port"], after["serverFeatures"]), (port, before["serverFeatures"]))
+        self.assertEqual(after["port"], port)
 
 
 class DistFreshnessWarning(unittest.TestCase):
@@ -778,9 +777,6 @@ class ArgumentGrammar(unittest.TestCase):
         message = self.refuses(["--dir", "/tmp", "--json"])
         self.assertIn("unknown argument: --dir", message)
         self.assertNotIn("/tmp", message.splitlines()[0])
-        # Retired: a viewer has no registry and no rolled port.
-        for retired in ("--ephemeral", "--no-registry"):
-            self.assertIn(f"unknown argument: {retired}", self.refuses([retired]))
 
     def test_port_zero_garbage_and_out_of_range_are_refused_not_defaulted(self) -> None:
         # --new is the spelling for "any free port".
@@ -822,7 +818,6 @@ class ArgumentSurface(unittest.TestCase):
         self.assertIn("usage: python -m cadgen.viewer", result.stdout)
         self.assertIn("--new", result.stdout)
         self.assertIn("python -m cadgen.viewer stop [--port N]", result.stdout)
-        self.assertNotIn("--root", result.stdout, "the launcher has no directory flag")
         self.assertEqual(result.stderr, "")
 
     def test_the_front_door_names_itself_in_help(self) -> None:
@@ -832,12 +827,10 @@ class ArgumentSurface(unittest.TestCase):
         self.assertIn("usage: cadgen viewer", result.stdout)
         self.assertIn("cadgen viewer stop", result.stdout)
 
-    def test_unknown_and_retired_arguments_are_refused_not_ignored(self) -> None:
-        # The FIRST unknown token, not the value that trailed it; `--root <dir>` and `list` are
-        # retired (a viewer has no directory, and there is one per port), and `--json stop` is a
-        # serve invocation: only argv[0] selects `stop`.
-        for argv, unknown in ((("--dir", "/tmp"), "--dir"), (("--root", "/tmp"), "--root"), (("list",), "list"),
-                              (("--json", "stop"), "stop")):
+    def test_unknown_arguments_are_refused_not_ignored(self) -> None:
+        # The FIRST unknown token, not the value that trailed it; and `--json stop` is a serve
+        # invocation: only argv[0] selects `stop`.
+        for argv, unknown in ((("--dir", "/tmp"), "--dir"), (("--json", "stop"), "stop")):
             with self.subTest(argv=argv):
                 result = self._run(*argv)
                 self.assertEqual(result.returncode, 2)

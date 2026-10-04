@@ -15,19 +15,17 @@ belong to apps through the [host contract](viewer-host.md).
 ## Ownership and layout
 
 FileViewer owns the navbar — the logo's app menu ([Settings](#settings)) included, built from
-the host's `links` and the `appSettings` `CadViewer` hands it — the file explorer (a popover
-under the file's name), the column a file's declared panels open in, and which panel is
-open. RendererShell owns the scene's chrome: the toolbar, the tool stack under it, Quick Edit,
-the view cube with the view's controls (Display, Preview) on top of it, the playbar and
-preview mode. Renderers supply their tools, their document state and their tool
-panels; the shell never inspects a format's parts, joints or topology. A CAD
-file's controls are never a panel of the host's: no pick or tool opens or closes
-the column or the explorer.
+the host's `links` and the `appSettings` `CadViewer` hands it — and the file explorer (a
+popover under the file's name). RendererShell owns the scene's chrome: the toolbar, the tool
+stack under it, Quick Edit, the view cube with the view's controls (Display, Preview) on top
+of it, the playbar and preview mode. Renderers supply their tools, their document state and
+their tool panels; the shell never inspects a format's parts, joints or topology. No pick or
+tool opens or closes the explorer.
 
 | The host (web, desktop) supplies | The shared UI decides |
 | --- | --- |
-| Where the tab record lives (`TabRecordStorage`: the web's sessionStorage, the CAD app's memory) | The record: its settings (the panel column's width, the tool stack's layout, the appearance, the home's layout) and the view of the file on screen (its camera, Display settings, Playback settings and renderer slices), what is written when, and what is never stored (`@text-to-cad/ui/tab-store`, `kit/shell/fileView.js`) |
-| `navigation.home`, `links` (its version, GitHub, Discord, where a new issue opens, how a link opens), `appSettings` (the person's own settings) and `displayActions` (an appearance control) | The navbar's order and look, the app menu (one menu in the viewer and on the home), the panel toggles and what a new issue says |
+| Where the tab record lives (`TabRecordStorage`: the web's sessionStorage, the CAD app's memory) | The record: its settings (the tool stack's layout, the appearance, the home's layout) and the view of the file on screen (its camera, Display settings, Playback settings and renderer slices), what is written when, and what is never stored (`@text-to-cad/ui/tab-store`, `kit/shell/fileView.js`) |
+| `navigation.home`, `links` (its version, GitHub, Discord, where a new issue opens, how a link opens), `appSettings` (the person's own settings) and `displayActions` (an appearance control) | The navbar's order and look, the app menu (one menu in the viewer and on the home) and what a new issue says |
 | `host.files`, `fileActions`, `navigation`, `clipboard`, `promptContext`, `attachments` | When a copy, capture or open happens and what it carries |
 | `host.environment`: color scheme, keyboard `platform`, `reducedMotion` | How the chrome honours them |
 | `onError`, for errors the viewer hands up | Preview, tooltips, keyboard scope, the tool stack, the camera |
@@ -52,10 +50,9 @@ none.
   is new. Then, while a person has put an alert card away: the card's own icon (a circle
   with an exclamation mark, red for an error and amber for a warning, named and hinted by
   the alert's title), which brings the card back and goes with it — the renderer's one
-  navbar action. Then a declared panel's toggle, and last, where the host shows the view
-  small (inline in a conversation, where the view is the whole viewer), its **Full size**.
-  A CAD file declares no panel and publishes no navbar action but that icon, so its navbar
-  has no panel toggle. The navbar holds no settings and no view controls: the person's
+  navbar action. And last, where the host shows the view small (inline in a conversation,
+  where the view is the whole viewer), its **Full size**. A CAD file publishes no navbar
+  action but that icon. The navbar holds no settings and no view controls: the person's
   settings are the app menu's, and Display and Preview sit on top of the view cube. A
   host's home has no navbar: under its TEXTTOCAD wordmark and byline, its update, when there is
   one, is a row of its own (the blue button, labeled **Update**, its card centred under it), then
@@ -379,7 +376,7 @@ stack.
   with the platform's scrollbar, and only when there is more of it than fits.
 - **Nothing opens elsewhere.** A pick shows its Reference in the stack; the
   Position tool shows its panel by being chosen. No pick or tool opens or closes
-  the explorer or the host's panel column, on desktop or mobile.
+  the explorer, on desktop or mobile.
 
 Tree rows inset their backgrounds 4px from the panel edges, and the filter row
 shares that inset. A tree in the stack (Features, Links) is dense (`TreeRowSurface`'s
@@ -397,19 +394,12 @@ dense: 28px, in 12px text.
 **Mobile** is below 720px of FileViewer width — the one viewer breakpoint
 (`useViewerMobile`); chrome never uses window breakpoints. The tool stack is
 the same stack, but Select's tree (Features, Links) starts closed in every
-file, Select marked, so the model has the screen until the person presses Select. A
-declared panel (at the right) becomes a non-modal floating sheet over the viewer
-(280px, inset 8px) that never resizes or moves the scene or shifts the page; it has a
-compact X, outside dismissal and Escape. The explorer is the same popover, never wider
-than the window less 1rem. The navbar is the same row; the shortcut hint is hidden.
+file, Select marked, so the model has the screen until the person presses Select. The
+explorer is the same popover, never wider than the window less 1rem. The navbar is the
+same row; the shortcut hint is hidden.
 Touch works for every tool: one finger orbits, two pan and
 zoom, a tap picks; a pinch, a cancelled pointer or a camera drag is never a
 pick.
-
-**The panel column** (a declared panel's, at the viewer's right) is 220px by default,
-140px at least and 480px at most, sized by its left edge. A drag past the minimum
-stops at it; only a drag below half the minimum closes the panel, and the keyboard
-never does. The next open starts at 220px.
 
 ## Display settings and section primitives
 

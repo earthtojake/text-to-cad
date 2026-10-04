@@ -3,7 +3,7 @@ import { attachLiveBinding, HOST_LIVE_COMMANDS } from './liveBinding';
 import type { LiveViewController, LiveViewState } from './liveBinding';
 
 const state = (): Omit<LiveViewState, 'active'> => ({
-  resource: { kind: 'workspace-file', workspaceId: 'local', path: '/models/scene.glb', revision: 'r1' },
+  resource: { kind: 'workspace-file', path: '/models/scene.glb', revision: 'r1' },
   revision: 'r1', loading: false, selection: [], camera: null, display: { mode: 'solid' }, renderMode: 'inspect',
 });
 function harness(options: Parameters<typeof attachLiveBinding>[2], extra: Record<string, unknown> = {}) {

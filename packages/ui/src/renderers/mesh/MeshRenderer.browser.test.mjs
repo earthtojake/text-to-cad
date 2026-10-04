@@ -154,9 +154,6 @@ const differingPixels = (left, right) => {
   return count;
 };
 const settle = page => page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
-// The nav row's panel toggles, in order, each with whether its panel is the open one.
-const panels = pane => pane.locator('[data-file-panel]')
-  .evaluateAll(buttons => buttons.map(button => `${button.getAttribute('aria-label')}:${button.getAttribute('aria-pressed')}`));
 const display = (page, patch) => page.evaluate(next => window.cadHarness.a.controller.setDisplaySettings(next), patch);
 // Grid lines, axes and the stage floor are a share of the picture too; with them off,
 // only the model's own colours are counted.
@@ -178,12 +175,10 @@ test('an STL opens as one mesh with no tools: display settings, orbit, host comm
     'an STL is 3D: Preview sits on top of its cube');
 
   // A mesh has no panel of its own: its only settings are Display's, and Display is never
-  // where a file opens. So the navbar has no panel toggle, and the model has the room.
-  assert.deepEqual(await panels(pane), []);
+  // where a file opens, so the model has the room.
   assert.equal(await pane.locator('[data-tool-panel]').count(), 0, 'nothing in the tool stack');
   await displayButton(pane).click();
   await displayPanel(pane).waitFor();
-  assert.deepEqual(await panels(pane), []);
   assert.equal(await displayPanel(pane).getByRole('tab').count(), 0, 'Display has no tabs inside it');
   assert.equal(await pane.locator('[data-tool-panel]').count(), 0, 'and nothing joins the tool stack');
   const displayMenu = displayPanel(pane);
@@ -325,7 +320,6 @@ test('a 3MF is one mesh per object with its source colour; an uncoloured one tak
   await page.waitForFunction(() => window.cadHarness.a.controller?.readState().loading === false);
   await noTools(pane);
   // A 3MF's controls are a mesh's: no strip, and Display shut as it opens, the same dropdown an STL has.
-  assert.deepEqual(await panels(pane), []);
   await displayButton(pane).click();
   await displayPanel(pane).waitFor();
   await displayButton(pane).click();

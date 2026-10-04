@@ -1,5 +1,5 @@
 import { createPromptDeliveryLedger, formatPromptContextText, validatePromptContext } from '@text-to-cad/core/prompt';
-import type { PromptContextPort, PromptDeliveryResult, PromptDestinationState, ResourceRef } from '@text-to-cad/core/prompt';
+import type { PromptContextPort, PromptDeliveryResult, PromptDestinationState } from '@text-to-cad/core/prompt';
 import type { WebClipboard } from './clipboard';
 
 /** Prepare portable clipboard content without claiming an external composer pasted it. */
@@ -10,8 +10,6 @@ export function createWebPromptContext(clipboard: WebClipboard, supportsImages =
   };
   const state: PromptDestinationState = Object.freeze({ kind: 'clipboard', available: true, capabilities });
   const ledger = createPromptDeliveryLedger({ busyMessage: 'Wait for pending clipboard operations before copying more.' });
-  // A reference names the file by its absolute path, as every app's does.
-  const resolvePath = (resource: ResourceRef) => resource.kind === 'url' ? resource.url : resource.path;
   return {
     getSnapshot: () => state,
     subscribe: () => () => {},
@@ -25,7 +23,7 @@ export function createWebPromptContext(clipboard: WebClipboard, supportsImages =
         if (attachments.length && !supportsImages) throw new Error('Clipboard image copy is not supported in this browser.');
         if (attachments.length > 1 || attachments.some(part => part.mimeType !== 'image/png')) throw new Error('The browser can copy one PNG image per action. Copy other attachments separately.');
         const textIds = context.parts.filter(part => part.kind !== 'attachment').map(part => part.id);
-        const text = textIds.length ? formatPromptContextText(context, { resolvePath }) : undefined;
+        const text = textIds.length ? formatPromptContextText(context) : undefined;
         const image = attachments[0] ? Promise.resolve(attachments[0].content).then(blob => {
           if (blob.type !== 'image/png' || blob.size > 20 * 1024 * 1024) throw new Error('Prompt image must be a PNG of at most 20 MiB.');
           return blob;

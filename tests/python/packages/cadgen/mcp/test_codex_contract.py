@@ -29,13 +29,6 @@ CODEX_INITIALIZE = {"protocolVersion": "2025-06-18",
 STL = b"solid t\nfacet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex 1 0 0\nvertex 0 1 0\nendloop\nendfacet\nendsolid t\n"
 
 
-class _Connection:
-    closed = False
-
-    def is_cancelled(self, request_id) -> bool:
-        return False
-
-
 def converse(tmp: Path) -> dict:
     """Codex's side of a session: what it is told, listed, served and launched."""
     bracket = tmp / "project" / "parts" / "bracket.stl"
@@ -45,10 +38,9 @@ def converse(tmp: Path) -> dict:
     page.mkdir()
     (page / "index.html").write_text("<!doctype html><head><title>CAD</title></head>", encoding="utf-8")
     server = Server(page=AppPage(page), recents=RecentStore(tmp / "state"))
-    connection = _Connection()
 
     def call(name: str, arguments: dict | None = None, meta: dict | None = None) -> dict:
-        context = RequestContext(1, {"threadId": "t", **(meta or {})}, connection)
+        context = RequestContext(1, {"threadId": "t", **(meta or {})})
         return server.handle("tools/call", {"name": name, "arguments": arguments or {}}, context)
 
     initialized = server.handle("initialize", CODEX_INITIALIZE, None)
@@ -64,7 +56,6 @@ def converse(tmp: Path) -> dict:
             "cad_open": call("cad_open", {"path": str(bracket)}),
             "cad_tab": call("cad_tab"),
             "cad_file": call("cad_file", {"file": {"name": "bracket.stl", "resourceUri": "x"}}, {"openai/resource": {"path": str(bracket)}}),
-            "cad_launch": call("cad_launch", {"model": str(bracket)}),
             "cad_show": call("cad_show", {"path": str(bracket)}),
             "cad_view": call("cad_view"),
             "cad_screenshot": call("cad_screenshot"),

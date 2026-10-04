@@ -6,8 +6,8 @@ const NOTICE = { latest: '0.9.0', version: '0.8.1', text: 'A new version v0.9.0 
   prompt: 'Update text-to-cad to 0.9.0 from https://github.com/earthtojake/text-to-cad',
   instructions: 'https://www.texttocad.dev/install' };
 
-function Host({ call, initial = null, send, copy = vi.fn(async () => {}), onLink = vi.fn() }: {
-  call: UpdateCall; initial?: typeof NOTICE | null; send?: (prompt: string) => Promise<void>; copy?: (prompt: string) => Promise<void>; onLink?: (url: string) => void;
+function Host({ call = async () => ({ notice: NOTICE }), initial = NOTICE, send, copy = vi.fn(async () => {}), onLink = vi.fn() }: {
+  call?: UpdateCall; initial?: typeof NOTICE | null; send?: (prompt: string) => Promise<void>; copy?: (prompt: string) => Promise<void>; onLink?: (url: string) => void;
 }) {
   const notice = useUpdateNotice(call, initial);
   return notice ? <UpdateButton notice={notice} send={send} copy={copy} onLink={onLink} /> : <p>No notice</p>;
@@ -33,7 +33,7 @@ it('is a blue button that opens the card; Send to agent posts the prompt and clo
   expect(send).toHaveBeenCalledWith(NOTICE.prompt);
   expect(screen.queryByRole('dialog')).toBeNull();
   expect(screen.getByRole('button', { name: 'Update to 0.9.0' })).toBeTruthy();
-  expect(call).toHaveBeenCalledTimes(1); // a read, and no answer to keep
+  expect(call).not.toHaveBeenCalled(); // the host knew the notice, and there is no answer to keep
 });
 
 it('the prompt has a copy icon in its corner: it copies, and the card stays with a tick beside Send to agent', async () => {
@@ -82,20 +82,20 @@ it('links to manual installation through the host, and the card stays', async ()
   expect(screen.getByRole('dialog', { name: 'Update available' })).toBeTruthy();
 });
 
-it('reads the server again when the person comes back, and shows nothing once the install is current', async () => {
-  const call = vi.fn<UpdateCall>(async () => ({ notice: NOTICE }));
+it('draws with the page from what the host knew, and reads the server again only when the person comes back', async () => {
+  const call = vi.fn<UpdateCall>(async () => ({ notice: null }));
   render(<Host call={call} />);
-  await screen.findByRole('button', { name: 'Update to 0.9.0' });
-  call.mockImplementation(async () => ({ notice: null }));
+  // The first render: the button is there, and nothing was asked.
+  expect(screen.getByRole('button', { name: 'Update to 0.9.0' })).toBeTruthy();
+  expect(call).not.toHaveBeenCalled();
   await act(async () => { fireEvent.focus(window); });
-  expect(call).toHaveBeenCalledTimes(2);
-  expect(screen.getByText('No notice')).toBeTruthy();
+  expect(call).toHaveBeenCalledOnce();
+  expect(screen.getByText('No notice')).toBeTruthy(); // the install is current now
 });
 
-it('draws with the page when the host already knows the notice, and asks again', async () => {
-  const call = vi.fn<UpdateCall>(() => new Promise(() => {}));
-  render(<Host call={call} initial={NOTICE} />);
-  // The first render, before any answer: the button is there.
-  expect(screen.getByRole('button', { name: 'Update to 0.9.0' })).toBeTruthy();
-  expect(call).toHaveBeenCalledOnce();
+it('a release found after the page started shows once the person comes back', async () => {
+  render(<Host initial={null} />);
+  expect(screen.getByText('No notice')).toBeTruthy();
+  await act(async () => { fireEvent.focus(window); });
+  expect(await screen.findByRole('button', { name: 'Update to 0.9.0' })).toBeTruthy();
 });

@@ -5,8 +5,6 @@ import { TEXT_TO_CAD_LINKS } from "@text-to-cad/ui/links";
 import {
   DEFAULT_VIEWER_DISCORD_URL,
   DEFAULT_VIEWER_GITHUB_URL,
-  normalizeViewerReleaseVersion,
-  viewerReleaseTagName,
   normalizeViewerDiscordUrl,
   normalizeViewerGithubUrl,
   viewerGithubIssueUrl,
@@ -75,16 +73,4 @@ test("viewerGithubReleaseUrl links to the v-prefixed release tag", () => {
 test("viewerGithubIssueUrl opens a new issue on the build's repository, the shared default unless it names another", () => {
   assert.equal(viewerGithubIssueUrl(""), TEXT_TO_CAD_LINKS.issues);
   assert.equal(viewerGithubIssueUrl("github.com/example/repo/tree/main"), "https://github.com/example/repo/issues/new");
-});
-
-test("normalizeViewerReleaseVersion strips the tag dressing once, for display and comparison", () => {
-  assert.equal(normalizeViewerReleaseVersion("v0.5.0"), "0.5.0");
-  assert.equal(normalizeViewerReleaseVersion("0.4.28"), "0.4.28");
-  assert.equal(normalizeViewerReleaseVersion("refs/tags/v0.5.0"), "0.5.0");
-  assert.equal(normalizeViewerReleaseVersion(" V0.5.0 "), "0.5.0");
-  // Only a `v` in front of a digit is tag dressing.
-  assert.equal(normalizeViewerReleaseVersion("vnext"), "vnext");
-  assert.equal(viewerReleaseTagName("0.5.0"), "v0.5.0");
-  assert.equal(viewerReleaseTagName("v0.5.0"), "v0.5.0");
-  assert.equal(viewerReleaseTagName(""), "");
 });

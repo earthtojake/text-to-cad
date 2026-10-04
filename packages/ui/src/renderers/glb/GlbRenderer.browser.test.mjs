@@ -163,9 +163,6 @@ async function captureMatching(page, expected, message) {
   }
   assert.equal(differing, 0, message);
 }
-// The nav row's panel toggles, in order, each with whether its panel is the open one.
-const panels = pane => pane.locator('[data-file-panel]')
-  .evaluateAll(buttons => buttons.map(button => `${button.getAttribute('aria-label')}:${button.getAttribute('aria-pressed')}`));
 const display = (page, patch) => page.evaluate(next => window.cadHarness.a.controller.setDisplaySettings(next), patch);
 
 test('a static GLB opens on its native scene with no tools: display settings, orbit, host commands and state all work', async (t) => {
@@ -181,12 +178,10 @@ test('a static GLB opens on its native scene with no tools: display settings, or
     'a GLB is 3D: Preview sits on top of its cube');
 
   // A GLB has no panel of its own: its only settings are Display's, and Display is never
-  // where a file opens. So the navbar has no panel toggle, and the model has the room.
-  assert.deepEqual(await panels(pane), []);
+  // where a file opens, so the model has the room.
   assert.equal(await pane.locator('[data-tool-panel]').count(), 0, 'nothing in the tool stack');
   await displayButton(pane).click();
   await displayPanel(pane).waitFor();
-  assert.deepEqual(await panels(pane), []);
   const displayMenu = displayPanel(pane);
   assert.equal(await displayMenu.getByRole('tab').count(), 0, 'Display has no tabs inside it');
   assert.deepEqual(await displayMenu.getByRole('combobox', { name: 'Mode', exact: true }).innerText(), 'Solid');

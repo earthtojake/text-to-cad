@@ -6,7 +6,9 @@ folder -- a home, a whole disk -- can hold a request up or wear the server down:
 number of matches, a depth and a deadline, says when it stopped early, skips hidden and build
 folders, and never walks a folder twice (a link back into one is how a walk would never end).
 
-Paths are absolute in and out, with ``/`` separators on every platform.
+Paths are absolute in and out, with ``/`` separators on every platform. A path comes in by the one
+rule every route applies to a path it is named (``backend.absolute_path``), so a relative path, a
+``~`` and a UNC path are refused: a GET must never send this machine out to the network.
 """
 
 from __future__ import annotations
@@ -16,6 +18,7 @@ import time
 from collections import deque
 from typing import Callable
 
+from .backend import absolute_path
 from .content_types import extension_of
 from .natural_sort import collation_key
 from .scanner import SOURCE_EXTENSIONS, VIEWER_SKIPPED_DIRECTORIES, is_hidden_name
@@ -32,10 +35,9 @@ def _slashed(path: str) -> str:
 
 
 def absolute_folder(path: object) -> str:
-    """``path`` as an absolute folder, or ``ValueError`` (``FileNotFoundError`` when it is not one)."""
-    if not isinstance(path, str) or not path or not os.path.isabs(os.path.expanduser(path)):
-        raise ValueError("a folder is named by its absolute path")
-    folder = os.path.normpath(os.path.expanduser(path))
+    """``path`` as an absolute folder: ``ValueError`` when ``backend.absolute_path`` refuses it,
+    ``FileNotFoundError`` when it is not a folder."""
+    folder = absolute_path(path)
     if not os.path.isdir(folder):
         raise FileNotFoundError(path)
     return folder

@@ -34,7 +34,6 @@ __all__ = [
 ]
 
 STEP_PACKAGE_KIND = "assembly-package"
-STEP_DESCRIPTOR_NAME = "assembly.json"
 
 # Artifacts only: model scripts are not status subjects.
 #

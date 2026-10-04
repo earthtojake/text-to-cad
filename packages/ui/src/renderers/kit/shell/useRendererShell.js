@@ -133,8 +133,7 @@ const NO_PREVIEW = () => {};
  *   builder that speaks it, and then `promptReferences` may return that vocabulary instead — and such a
  *   renderer reports its live `selection` itself, in the prompt grammar, through `live.state`.
  * @param {{ active?: boolean, handle?: () => boolean }} [options.escape]  Escape, innermost first: `handle` returns
- *   true when it spent the key. After it there is nothing of the viewer's own left to close: the
- *   host's panel column (the file tree) closes only from its own toggle.
+ *   true when it spent the key. After it there is nothing of the viewer's own left to close.
  * @param {{ signatures?: Record<string, string>, read: () => Record<string, unknown> } | null} [options.rendererState]
  *   The renderer's own slices of the file's view (`fileView.js`): `read()` is called when the view is written,
  *   never at render — state a renderer keeps outside React (a pose written per frame) is saved as it is at that

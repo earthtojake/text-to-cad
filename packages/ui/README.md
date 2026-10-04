@@ -4,11 +4,10 @@ The shared React interface for text-to-cad. `FileViewer` is the complete file vi
 one file by its absolute path (`/a/b.step`, `C:/a/b.step`, `/`-separated in every
 app), or the host's home with none, under a navbar — the logo that opens the app's
 menu, the file's name and the explorer it opens, the file menu — with the file's
-content, the column a file's own panels open in, and the loading and error states
-([FileViewer](docs/file-viewer.md)). `CadViewer` (`@text-to-cad/ui/cad-viewer`) is
-the CAD viewer every app shows: FileViewer over a CAD client, with the five CAD
-renderers, the home (the model library) and the standard loading and missing-file
-pages. `apps/web` and `apps/mcp` consume both through the package's compiled
+content and the loading and error states ([FileViewer](docs/file-viewer.md)).
+`CadViewer` (`@text-to-cad/ui/cad-viewer`) is the CAD viewer every app shows:
+FileViewer over a CAD client, with the five CAD renderers, the home (the model
+library) and the standard loading and missing-file pages. `apps/web` and `apps/mcp` consume both through the package's compiled
 exports; a host's own project, session and window layout remains application code.
 
 The viewer's tools, tool stack, settings, tooltips and keyboard follow one
@@ -62,15 +61,10 @@ row backgrounds 4px from their horizontal edges, including selected, hovered and
 filtered rows; nesting adds indentation inside that gutter.
 The file explorer is a popover under the navbar's file name (`FolderExplorer.jsx`):
 18rem wide, no taller than 28rem or the room below it, with no resize handle. It
-floats over the view and never resizes it or moves its tools. A file's declared
-panels open in a column at the view's right, 220px by default, 140px at least and
-480px at most; a drag of its left edge past the minimum stops at it, and only a
-drag below half of it closes it. Below 720px of total FileViewer width the column
-is a dismissible floating sheet. The sheets have no extra visible title row and
-never scroll or translate the host page. A CAD file declares no panel: its controls
-are panels of the viewer's own tool stack under the toolbar, one width for every
-panel until a person sizes one, bounded by the viewer's height.
-Progress indicators use this same breakpoint. Panels never
+floats over the view and never resizes it or moves its tools. A file's controls are
+panels of the viewer's own tool stack under the toolbar, one width for every panel
+until a person sizes one, bounded by the viewer's height. FileViewer is mobile below
+720px of its own width; progress indicators use this same breakpoint. Panels never
 scroll sideways: a Position panel's labels truncate to preserve its sliders and
 inputs.
 
@@ -86,7 +80,7 @@ src/
   drawing/           reusable Excalidraw editor; desktop scratch drawing host
   cad-viewer/        CadViewer (FileViewer + the five CAD renderers + the home), and a CAD client as a FileSource
   file-viewer/       FileViewer, typed source/renderer contracts, the document lifecycle hook
-    navigation/     the navbar, the app menu and its links, the folder explorer, the file menu, the panel column
+    navigation/     the navbar, the app menu and its links, the folder explorer, the file menu
   library/           a host's home: the models opened before, to open again, and their pictures
   renderers/
     kit/            the frame every viewer file shares: viewport, tools, panels, Display settings, status
@@ -105,7 +99,7 @@ dist/               generated ESM, declarations, CSS, assets and worker modules
 ```
 
 `FileViewer` has no concrete renderer imports. A registration describes matching,
-priority, panels, asynchronous preparation, lazy component loading and disposal.
+priority, asynchronous preparation, lazy component loading and disposal.
 Each app registers only the file types its source supports. A renderer's code
 loads when a file selects it; adding a renderer does not add a branch to FileViewer.
 The registry rejects duplicate IDs and ambiguous matches.
@@ -176,15 +170,14 @@ raw transport, clipboard discovery, host storage or page-navigation effects.
 
 `FileSource` describes what a view reads, by absolute path: `stat` (one file's
 metadata) and, where the host's files can be browsed, `list` (a folder's entries)
-and `search` (the files under a folder, saying when it stopped early), with an
-optional `subscribe` for changes to a file. It reads and never writes. The file
-menu's Copy path and Reveal come from the separate `FileActions` port; a missing
-method remains unavailable, and listing never filters entries by renderer support.
+and `search` (the files under a folder, saying when it stopped early). It reads and
+never writes. The file menu's Copy path and Reveal come from the separate
+`FileActions` port; a missing method remains unavailable, and listing never filters
+entries by renderer support.
 
-Source subscriptions distinguish content from metadata changes. A content change of
-the file on screen opens its document again unless the document is `live`, which its
-renderer updates in place; a metadata change (compiler progress) never does. A late
-answer to an aborted read is discarded.
+FileViewer opens a file's document when the file is shown, and again only on `reload`:
+its renderer follows the file's changes in place. A late answer to an aborted read is
+discarded.
 
 A source has a stable `id` independent of a server's ephemeral port. A saved view is
 scoped by file path and renderer, and a document by source, path and reload
@@ -262,9 +255,8 @@ and versioned, bounded memory cache; it adds no persistent store. Read
 [feature detection](docs/feature-detection.md) before changing inference rules,
 cache identity, cancellation or recognition limits.
 
-A CAD file declares no panel of the navbar: its controls are `ToolPanel`s in the
-tool stack, shown by the tool they belong to. Select shows Features (a robot's Links)
-and, with a selection, the Reference; Position shows Position; Display and Draw show
+A CAD file's controls are `ToolPanel`s in the tool stack, shown by the tool they
+belong to. Select shows Features (a robot's Links) and, with a selection, the Reference; Position shows Position; Display and Draw show
 their own panels; kept effects (Explode, Clip, Measure's results) follow. A panel
 whose tool is not up stays mounted, hidden, so a tree keeps its scroll and expansion;
 only what is on screen does background work. The tree's X closes it alone (Select stays
@@ -273,8 +265,7 @@ part and on a phone, open for an assembly, until a person chooses.
 The tree, the Reference and Position are each sized by their own bottom-right grip, Quick
 Edit's. SDF metadata is a Select panel
 too. Links is the description's link tree, with the Model tree's rows, filter
-and Reference panel; see [robot links](docs/cad-renderer.md#robot-links). The open
-panel is never stored: a page load opens a file on its own default.
+and Reference panel; see [robot links](docs/cad-renderer.md#robot-links).
 The binding [viewer design system](docs/settings-ui.md) defines tool lifecycle,
 the tool stack, mobile layout, section density, keyboard scope, tooltips
 and preview. RendererShell owns the top-left toolbar, Quick Edit at the top-right and the
@@ -302,8 +293,8 @@ has a home, the person's settings (Share anonymous usage data, Quick edit), Send
 gray, the version and who made it. It names the file — the name opens the explorer — and
 offers its ⋯ menu (Copy path, Reveal). The three share one look: transparent until the
 pointer is on them or their menu is open, with no tooltip. At the right is only what a host
-or a file adds: the host's update button, a dismissed alert's icon, a declared panel's
-toggle and the host's Full size.
+or a file adds: the host's update button, a dismissed alert's icon and the host's Full
+size.
 With no file a view shows the host's home, the model library: the models opened before,
 pinned first, with their pictures, and Open where the host has a file chooser, under its
 wordmark and GitHub, Discord and X. A file that

@@ -103,12 +103,10 @@ test('a file that does not exist says so by its path, and any other failure says
 });
 
 test('the home pictures a card out of sight, in a viewer of its own, from what is already built, and never builds one', async () => {
-  const client = cadClient();
-  const pictureClient = { ...cadClient(), requestArtifactStatus: vi.fn(async (file: string) => ({ state: file === '/models/a.stl' ? 'compiled' : 'not-compiled' })) };
-  const pictured = { ...library, pictureFrom: (model: { path: string }) => ({ client: pictureClient as never, file: model.path, keep: async () => {} }) };
+  const client = { ...cadClient(), requestArtifactStatus: vi.fn(async (file: string) => ({ state: file === '/models/a.stl' ? 'compiled' : 'not-compiled' })) };
   const host = ports(client);
   const view = (file: string) => <CadViewer client={client as never} host={host} tabStore={createTabStore(memoryTabRecord())} live={createLiveRegistry()} file={file}
-    library={pictured} onShow={() => {}} />;
+    library={library} onThumbnail={async () => {}} onShow={() => {}} />;
   const { rerender } = render(view(''));
   const picture = (props().presentation!.home as { props: { picture(model: { path: string }): Promise<boolean> } }).props.picture;
   // A model whose display is not built keeps its placeholder: its status is read, and that is all.

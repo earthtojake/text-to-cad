@@ -1,6 +1,6 @@
 import type { CadEntry, CadWorkspaceService } from '@text-to-cad/core/client';
 import type { ClipboardPort } from '../host/types.js';
-import type { FileActions, FileChange, FileMetadata, FileSource } from '../file-viewer/types.js';
+import type { FileActions, FileMetadata, FileSource } from '../file-viewer/types.js';
 
 /**
  * `@text-to-cad/ui/catalog`: CAD files as the viewer reads them, by absolute path. Pure — no React
@@ -38,12 +38,11 @@ export function contentRevision(entry: CadEntry): string {
 
 /**
  * The files a view reads, through a CAD client: a file's metadata from its catalog entry, one
- * folder's subfolders and CAD files, and a bounded search under a folder. The client's catalog
- * holds the files on screen, so an entry coming or going is another file shown, not the disk
- * changing: only a change to a file that stayed is one. A content change (a new revision) is not a
- * metadata change (compiler progress), so progress never restarts a prepared document.
+ * folder's subfolders and CAD files, and a bounded search under a folder. A file's revision is its
+ * content's (`contentRevision`), never compiler progress. (A renderer follows its file's updates
+ * through the client itself.)
  */
-export function createCadFileSource(client: Pick<CadWorkspaceService, 'getSnapshot' | 'subscribe' | 'resolveEntry' | 'folder' | 'search'>,
+export function createCadFileSource(client: Pick<CadWorkspaceService, 'resolveEntry' | 'folder' | 'search'>,
   { id = 'local' }: { id?: string } = {}): FileSource {
   return {
     id,
@@ -61,24 +60,6 @@ export function createCadFileSource(client: Pick<CadWorkspaceService, 'getSnapsh
     async search(directory, query, { signal }) {
       const found = await client.search(directory, query, { signal });
       return { paths: found.results.map(normalizePath), truncated: found.truncated };
-    },
-    subscribe(listener) {
-      let previous = client.getSnapshot().entries;
-      return client.subscribe(() => {
-        const current = client.getSnapshot().entries;
-        if (current === previous) return;
-        const before = new Map(previous.map(entry => [normalizePath(entry.file), entry]));
-        const changes: FileChange[] = [];
-        for (const entry of current) {
-          const path = normalizePath(entry.file);
-          const oldEntry = before.get(path);
-          if (!oldEntry || oldEntry === entry) continue;
-          if (contentRevision(oldEntry) !== contentRevision(entry)) changes.push({ kind: 'content', path, revision: contentRevision(entry) });
-          else if (JSON.stringify(oldEntry) !== JSON.stringify(entry)) changes.push({ kind: 'metadata', path });
-        }
-        previous = current;
-        if (changes.length) listener({ sourceId: id, changes });
-      });
     },
   };
 }

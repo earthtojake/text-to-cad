@@ -61,7 +61,7 @@ async function openDrawing(destinationKind = 'composer', notice: ReactNode = nul
     if (url.pathname.endsWith('/__cad/drawing')) return readDrawing();
     return new Response('', { status: 404 });
   });
-  const client = createCadClient({ origin: 'http://viewer.test/one', workspaceId: 'one', pollIntervalMs: 0, fetch: fetch as typeof globalThis.fetch });
+  const client = createCadClient({ origin: 'http://viewer.test/one', pollIntervalMs: 0, fetch: fetch as typeof globalThis.fetch });
   await client.refresh();
 
   let commandSnapshot: Record<string, any> = {};
@@ -102,7 +102,7 @@ async function openDrawing(destinationKind = 'composer', notice: ReactNode = nul
     }
   };
   function Pane() {
-    const [state, setState] = useState<any>({ panel: null, renderers: {} });
+    const [state, setState] = useState<any>({ renderers: {} });
     // The host's Settings, as `CadViewer` hands it over: drawn by FileViewer over every file.
     return <section data-testid="one"><FileViewer file={FILE} host={host as any} renderers={renderers} state={state} onStateChange={setState} notice={notice}
       settings={<button type="button" aria-label="Settings" />} /></section>;
@@ -144,8 +144,6 @@ it("the host's notice shows at the top-right once the drawing is on screen", asy
 
 it('a DXF has no panels of its own, no tools, no Display and no preview', async () => {
   const { pane, delivered, dispose } = await openDrawing();
-  // The nav row has no panel toggle: a drawing declares none.
-  expect(pane.querySelectorAll('[data-file-panel]')).toHaveLength(0);
   expect(pane.querySelectorAll('[data-tool-panel]')).toHaveLength(0);
   const inPane = within(pane);
   expect(inPane.queryByRole('group', { name: 'Interaction tools' })).toBeNull();

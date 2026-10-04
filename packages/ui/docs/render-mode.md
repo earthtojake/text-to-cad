@@ -211,7 +211,7 @@ unchanged after a runtime replacement does not.
 
 Display settings are a dropdown from the Display button on top of the view cube
 (the perspective box, before Preview: `kit/shell/DisplayPopover.jsx`), which opens up from
-it, present for every 3D file, never a panel of the tool stack or of the host's panel column. A
+it, present for every 3D file, never a panel of the tool stack. A
 file's model tree, its Reference and Position are panels of the tool stack (see
 [settings-ui.md](./settings-ui.md#the-tool-stack)); nothing in them is a display
 setting.

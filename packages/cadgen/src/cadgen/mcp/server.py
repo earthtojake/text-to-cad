@@ -10,8 +10,10 @@ a view browses from its model's folder, so nothing says where it may browse. Onc
 open, a view makes ONE call each second, ``cad_sync``: it says what it shows (its
 model, its selection, whether a person just touched it) and what it watches (its
 model's catalog entry, a STEP's build feed), and gets back the agent's requests
-and what changed. It reaches the viewer's own HTTP routes through ``cad_http``.
-No call is held open (``views.py``). Agents name models by absolute path only.
+and what changed. Everything else -- its model, the library and the home's Open,
+Reveal, the person's analytics answer and features, the update check -- it reaches
+through ``cad_http``, the viewer's own HTTP routes. No call is held open
+(``views.py``). Agents name models by absolute path only.
 
 Hosts present views in one of three ways, told apart at initialize:
 
@@ -204,7 +206,6 @@ class Server:
         self._recents = recents
         self._tunnel = tunnel
         self._sidebar_views = sidebar_views
-        self._picker = None
         self._model: str | None = None  # what this thread last opened or showed
         self._tools: list[dict[str, Any]] | None = None
         self.tabs = False  # decided at initialize: see the module docstring
@@ -247,19 +248,13 @@ class Server:
         return self._analytics
 
     @property
-    def picker(self):
-        if self._picker is None:
-            from cadgen._internal.picker import FilePicker
-
-            self._picker = FilePicker()
-        return self._picker
-
-    @property
     def tunnel(self):
+        """The viewer's routes, served in-process for the views (``tunnel.py``), over this server's
+        library and analytics."""
         if self._tunnel is None:
             from .tunnel import ViewerTunnel
 
-            self._tunnel = ViewerTunnel()
+            self._tunnel = ViewerTunnel(recents=self.recents, analytics=self.analytics)
         return self._tunnel
 
     # -- the protocol ----------------------------------------------------------
@@ -388,27 +383,13 @@ class Server:
         ]
 
     def _page_tools(self) -> list[dict[str, Any]]:
-        """The tools only the page calls."""
-        from cadgen.features import DEFAULTS as FEATURES
+        """The tools only the page calls: its sync, its answer to a capture, and the viewer's routes."""
 
         def app(name: str, title: str, description: str, schema: dict[str, Any]) -> dict[str, Any]:
             return {"name": name, "title": title, "description": description, "inputSchema": schema,
                     "annotations": _READ_ONLY, "_meta": {"ui": {"visibility": ["app"]}}}
 
         return [
-            app("cad_consent", "CAD analytics consent",
-                "Whether to ask the person about anonymous usage analytics, and their answer. Only for the person's own click.",
-                _object({"share": {"type": "boolean"}})),
-            app("cad_features", "CAD features",
-                "The CAD views' features a person can turn off in Settings, and their choice. Only for the person's own click.",
-                _object({name: {"type": "boolean"} for name in sorted(FEATURES)})),
-            app("cad_version", "CAD updates",
-                "Whether a newer text-to-cad is out: the update button's notice, or null.",
-                _object({})),
-            app("cad_launch", "Open model", "The launch for opening a model in this view.",
-                _object({"model": {"type": "string"}}, ["model"])),
-            app("cad_pick_model", "Open Model", "Choose a model with the desktop's file chooser. Only for an explicit Open Model action.",
-                _object()),
             app("cad_sync", "CAD sync", "This view's one call each second: what it shows and watches, and what is waiting for it.",
                 _object({"view": {"type": "string"}, "surface": {"type": "string"}, "model": {"type": ["string", "null"]},
                          "focused": {"type": "boolean"}, "closed": {"type": "boolean"}, "state": {"type": "object"},
@@ -419,13 +400,6 @@ class Server:
                 _object({"method": {"type": "string"}, "url": {"type": "string"},
                          "headers": {"type": "object", "additionalProperties": {"type": "string"}},
                          "body": {"type": "string"}}, ["method", "url"])),
-            app("cad_recents", "CAD recents", "Read or change recently opened models.",
-                _object({"action": {"type": "string", "enum": ["list", "pin", "unpin", "remove", "thumbnail", "thumbnails"]},
-                         "path": {"type": "string"}, "png": {"type": "string"},
-                         "names": {"type": "array", "items": {"type": "string"}}})),
-            app("cad_reveal", "Reveal in file manager",
-                "Show a file, by its absolute path, in the desktop's file manager. Only for an explicit Reveal action.",
-                _object({"path": {"type": "string"}}, ["path"])),
         ]
 
     # -- calls -----------------------------------------------------------------
@@ -435,7 +409,10 @@ class Server:
         arguments = params.get("arguments") or {}
         if not isinstance(arguments, dict):
             raise RpcError(INVALID_PARAMS, "arguments must be an object")
-        handler = getattr(self, f"_tool_{name}", None) if isinstance(name, str) and name.startswith("cad_") else None
+        # Only a tool this client was listed: a text client has no page, so no one there answers a
+        # card or reaches the viewer's routes for the person.
+        listed = any(tool["name"] == name for tool in self.tools())
+        handler = getattr(self, f"_tool_{name}", None) if listed else None
         if handler is None:
             raise RpcError(INVALID_PARAMS, f"unknown tool {name!r}")
         started = time.monotonic()
@@ -454,12 +431,12 @@ class Server:
     # launches -----------------------------------------------------------------
 
     def _launch(self, model: str, *, surface: str | None = None) -> dict[str, Any]:
-        """The launch that shows ``model`` (absolute): the view browses from its folder."""
+        """The launch that shows ``model`` (absolute): the view browses from its folder, and adds the
+        model to the library once it is on screen, as every CAD view does."""
         launch: dict[str, Any] = {"protocol": PROTOCOL, "page": "viewer", "model": model}
         if surface:
             launch["surface"] = surface
         self._model = model
-        self._remember(model)
         return _stamped(launch)
 
     def _home(self, *, surface: str | None = None) -> dict[str, Any]:
@@ -482,14 +459,6 @@ class Server:
         # Wall-clock time orders views across restarts of this process; seq breaks a tie.
         launch["order"] = {"createdAt": int(time.time() * 1000), "seq": seq}
         return launch
-
-    def _remember(self, model: str) -> None:
-        """A model opened on screen: the library's recents, and analytics' count of distinct files."""
-        self.analytics.opened(model)
-        try:
-            self.recents.opened(model)
-        except Exception:  # opening never depends on the store
-            LOG.exception("could not record %s in recents", model)
 
     def _model_path(self, value: Any) -> str:
         """An existing CAD file, from the absolute path a caller named."""
@@ -530,56 +499,6 @@ class Server:
         launch = self._launch(model, surface="agent")
         return _text(f"{model} is open in a new CAD tab. From now on, use cad_show to show models in it.", {"launch": launch})
 
-    def _tool_cad_launch(self, arguments, context):
-        return _data({"launch": self._launch(self._model_path(arguments.get("model")))})
-
-    def _tool_cad_pick_model(self, arguments, context):
-        from cadgen._internal.picker import PickerFailed
-
-        try:
-            chosen = self.picker.choose()
-        except PickerFailed as failure:
-            raise ToolFailed(str(failure)) from failure
-        if chosen is None:
-            return _data({"cancelled": True})
-        return _data({"launch": self._launch(self._model_path(chosen))})
-
-    def _tool_cad_consent(self, arguments, context):
-        # The page's analytics prompt and its Settings toggle: whether to ask (nothing chosen yet),
-        # whether sharing is on, and, from the person's click, their answer.
-        from cadgen.analytics import PRIVACY_URL
-
-        # Only a page answers: a text client has none, so the agent can never answer for the person.
-        # A card answers only an open question: one still up in another view must not undo an answer
-        # the person just gave (`card`); Settings' toggle changes it whenever.
-        share = arguments.get("share")
-        if isinstance(share, bool) and not self.text:
-            if arguments.get("card") is not True or self.analytics.status()["reason"] == "unasked":
-                self.analytics.choose(share, by="app")
-        found = self.analytics.status()
-        # `reason`: Settings shows a choice the environment made (DO_NOT_TRACK, CADGEN_ANALYTICS) as fixed.
-        return _data({"ask": found["reason"] == "unasked", "sharing": found["sharing"], "reason": found["reason"],
-                      "policy": PRIVACY_URL})
-
-    def _tool_cad_features(self, arguments, context):
-        # Settings' Features: every feature as the person left it (``cadgen/features.py``), and,
-        # from their click, their choice. Only a page sets one: a text client has none.
-        from cadgen import features
-
-        if not self.text and arguments:
-            try:
-                return _data(features.change(arguments))
-            except (OSError, ValueError) as error:
-                raise ToolFailed(f"CAD could not keep that setting: {error}") from error
-        return _data(features.read())
-
-    def _tool_cad_version(self, arguments, context):
-        # The page's update button (`cadgen/updates.py`): whether a newer text-to-cad is out. Nothing the
-        # person does with it is kept: it stays while this install is behind.
-        from cadgen import updates
-
-        return _data({"notice": updates.notice()})
-
     def _tool_cad_analytics(self, arguments, context):
         # The agent may report the setting or turn sharing off for the person; only the person turns it on.
         from cadgen.analytics import PRIVACY_URL
@@ -597,7 +516,7 @@ class Server:
                    found["reason"], "off: the setting could not be read")
         state = "on" if found["sharing"] else "off"
         return _text(f"CAD's anonymous usage analytics are {state} ({why}). They count tool calls, view activity and "
-                     f"distinct files (as one-way codes), never file names, contents or prompts. The user turns them on in the CAD app's Settings or with `cadgen analytics on`. Policy: {PRIVACY_URL}",
+                     f"distinct files (as one-way codes), never file names, contents or prompts. The user turns them on in the CAD app's menu (the logo at the top left of a view) or with `cadgen analytics on`. Policy: {PRIVACY_URL}",
                      {"sharing": found["sharing"], "reason": found["reason"]})
 
     # the agent's tools ----------------------------------------------------------
@@ -648,7 +567,6 @@ class Server:
         from .browser import ViewerUnavailable, model_link, viewer_url
 
         self._model = model
-        self._remember(model)
         try:
             url = (self._viewer_url or viewer_url)()
         except ViewerUnavailable as failure:
@@ -753,12 +671,10 @@ class Server:
             return _data({"events": []})
         state = arguments.get("state") if isinstance(arguments.get("state"), dict) else None
         focused = arguments.get("focused") is True
-        # Use the agent's tools never see: a person touching the view, or it switching models, and
-        # the file on screen (one a person browsed to through the explorer included).
-        # Noted only when a person touched it: a view left open on a model sends nothing.
+        # Use the agent's tools never see: a person touching the view. (The file on screen is counted
+        # as the view adds it to the library, through ``cad_http``.)
         if focused:
             self.analytics.viewed()
-            self.analytics.opened(arguments.get("model"))
         if state is not None or focused:
             self.views.report(view_id, model=arguments.get("model"), state=state, focused=focused)
         if focused and isinstance(arguments.get("model"), str):
@@ -801,46 +717,6 @@ class Server:
         headers = arguments.get("headers") if isinstance(arguments.get("headers"), dict) else {}
         return _data(self.tunnel.serve(method=str(arguments.get("method") or "GET"), url=str(arguments.get("url") or ""),
                                        headers=headers, body=body))
-
-    def _tool_cad_reveal(self, arguments, context):
-        """Reveal a file, exactly as the CAD Viewer reveals one (``cadgen.viewer.reveal``)."""
-        import subprocess
-
-        from cadgen.viewer.reveal import reveal_path
-
-        try:
-            reveal_path(arguments.get("path"))
-        except FileNotFoundError as error:
-            raise ToolFailed("That file is no longer there.") from error
-        except (ValueError, OSError, subprocess.SubprocessError) as error:
-            raise ToolFailed(f"The file manager could not show that file: {error}") from error
-        return _data({})
-
-    def _tool_cad_recents(self, arguments, context):
-        action = arguments.get("action") or "list"
-        path = arguments.get("path")
-        store = self.recents
-        if action == "thumbnails":
-            names = [name for name in arguments.get("names") or [] if isinstance(name, str)][:64]
-            found = {name: store.read_thumbnail(name) for name in names}
-            return _data({"thumbnails": {name: base64.b64encode(png).decode("ascii") for name, png in found.items() if png}})
-        if action != "list":
-            if not isinstance(path, str) or not os.path.isabs(path):
-                raise ToolFailed("name the recent model by its absolute path")
-            if action in ("pin", "unpin"):
-                store.pin(path, action == "pin")
-            elif action == "remove":
-                store.remove(path)
-            elif action == "thumbnail":
-                from cadgen.viewer.recents import thumbnail_png
-
-                try:
-                    store.thumbnail(path, thumbnail_png(arguments.get("png")))
-                except ValueError as error:
-                    raise ToolFailed(str(error)) from error
-            else:
-                raise ToolFailed(f"unknown action {action!r}")
-        return _data({"recents": [entry.public() for entry in store.list()]})
 
 
 def serve(argv: list[str] | None = None) -> int:

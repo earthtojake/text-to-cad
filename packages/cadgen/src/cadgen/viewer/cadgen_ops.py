@@ -31,9 +31,6 @@ class CadgenOps:
     def __init__(self, *, client=None) -> None:
         self.client = client if client is not None else DocumentCompiler()
 
-    def shutdown(self) -> None:
-        self.client.shutdown()
-
     # --- status -----------------------------------------------------------
 
     def artifact_status(self, file_ref) -> dict:

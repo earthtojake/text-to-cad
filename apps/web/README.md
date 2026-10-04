@@ -34,9 +34,8 @@ this app. The Python wheel consumes only the production build.
 
 ```text
 src/
-  App.tsx               the CadViewer's browser host: URL, history, title and appearance
+  App.tsx               the CadViewer's browser host: URL, history, title, appearance, the file menu and the library
   main.tsx              host/client bootstrap and cleanup
-  adapters/             the file menu's actions (copies, reveal) and what it records in the model library
   host/                 browser clipboard, prompt delivery, the app menu's links and release check, development auto-reload
   persistence/          the tab record in sessionStorage
   client/               appearance control and styling
@@ -78,9 +77,8 @@ VIEWER_PYTHON=<checkout>/.venv/bin/python \
 # open http://127.0.0.1:5173/?file=<an absolute path, or one relative to that folder>
 ```
 
-For the spawned backend, `scripts/directoryRoot.mjs` uses an explicit
-`directoryRoot` supplied by its caller first, then `INIT_CWD`, then the process
-working directory, accepting the latter two only outside `apps/web`. If neither
+For the spawned backend, `scripts/directoryRoot.mjs` uses `INIT_CWD`, then the
+process working directory, accepting either only outside `apps/web`. If neither
 qualifies, Vite defaults to the app's parent, `<checkout>/apps`. npm sets
 `INIT_CWD` to the directory where you invoked it, so `--prefix` selects the app
 without changing that folder. It is only where relative links resolve
@@ -226,7 +224,7 @@ The web host owns URL/history, the tab's persistence, appearance, version links
 and native service adapters. Shared renderers own all model interaction. STEP and
 robots open in Select, whose Features (Links for a robot) panel hangs under the
 toolbar with the rest of the tool stack; Position's panel replaces it while Position
-is the tool. The navbar has no panel toggle: the file's name opens the explorer.
+is the tool. The file's name in the navbar opens the explorer.
 STEP and robot files have a top-left toolbar; GLB, STL and 3MF have none. Every 3D
 file has Display (its settings, a dropdown that opens up) and Preview on top of the
 view cube at the bottom-left, and Quick Edit at the top-right. DXF is a 2D canvas with
@@ -307,14 +305,14 @@ them, and the Viewer asks as the CAD app does: once a model is on screen, with t
 Quick Edit stacked under it, then **Share anonymous usage data** in the app menu. The
 answer is kept in the user's state directory, so
 one answer counts for both apps. A "No thanks" or a closed card is never asked again, and
-where no answer could be kept the card never shows. `src/adapters/analytics.ts` reads and
-answers it through `/__cad/analytics`, and reports each file shown and a person touching
-the page (at most every 2 s) to `/__cad/analytics/activity`. The server holds those as
-counts and a code per file, in memory, and sends nothing without consent. Only the
-Viewer's own server serves the two routes.
+where no answer could be kept the card never shows. The page reads and answers it through
+the CAD client (`consent`, `/__cad/analytics`), and reports a person touching the page (at
+most every 2 s) to `/__cad/analytics/activity`; a file shown is counted as it joins the
+library (`/__cad/recents`). The server holds those as counts and a code per file, in
+memory, and sends nothing without consent.
 
 The app menu's **Quick edit** (on until the person turns it off) is read and changed
-the same way: `src/adapters/features.ts`, through `/__cad/features` (`cadgen/features.py`).
+the same way: the client's `features`, through `/__cad/features` (`cadgen/features.py`).
 The server keeps the choice in the person's settings, beside the analytics answer, so it is
 one choice with the CAD app's and holds whatever port this Viewer is served on, which the
 page's own storage would not.
@@ -326,13 +324,13 @@ the CAD client, the one the CAD app uses: a file's catalog row, one folder's ent
 (`GET /__cad/folder`) and the CAD files under a folder (`GET /__cad/search`), with no
 writes or native filesystem mutations. Catalog content/revision changes are
 distinct from transient metadata progress, so progress updates do not restart a
-prepared document. Native path copying and file reveal live in the separate host
-actions adapter (`src/adapters/fileActions.ts`, over the shared
-`createCadFileActions`), which the navbar's ⋯ shows. Path copying uses the clipboard port. Reveal uses guarded `POST /__cad/reveal` with the file's
-absolute path; the backend opens the native file manager without a shell. The menu uses the
-server platform to label Finder, Explorer, or the Linux file manager, and only
-offers reveal when the server advertises `reveal-path`. Path copies form the first menu section. Reference copying belongs
-to the renderer's selection action, rather than the file menu.
+prepared document. Native path copying and file reveal are the host's file actions
+(the shared `createCadFileActions`, in `App.tsx`), which the navbar's ⋯ shows. Path
+copying uses the clipboard port. Reveal is the client's guarded `POST /__cad/reveal` with
+the file's absolute path; the backend opens the native file manager without a shell. The
+menu uses the server's platform (`/__cad/server`) to label Finder, Explorer, or the Linux
+file manager. Path copies form the first menu section. Reference copying belongs to the
+renderer's selection action, rather than the file menu.
 
 ### Shared interface defaults
 
@@ -357,8 +355,9 @@ Display and Preview are the view's, on top of its cube. This host
 supplies the links (`src/host/viewerLinks.js`): its version, the GitHub (where new
 issues open) and Discord its build names (`VIEWER_GITHUB_URL`, `VIEWER_DISCORD_URL`);
 links open in a new tab. A newer text-to-cad is the blue update button's, at the navbar's right as in the CAD app: cadgen's
-daily version check, read from `/__cad/version`, and its prompt copied for the person to paste
-into their agent's chat (`src/adapters/version.ts`); its full install instructions open in a new tab.
+daily version check, read from `/__cad/version` with the server's description as the page
+starts (`main.tsx`) and again whenever the person comes back to it, and its prompt copied for
+the person to paste into their agent's chat; its full install instructions open in a new tab.
 A Viewer the CAD server opens says what the server's channel allows (a store's copy hears nothing);
 one a skill opens names no channel, a skills-only install, which is told. Browser titles use "CAD | <filename>", or "CAD" when no file is selected.
 Appearance is injected as an icon-bearing dropdown beside Projection in Display's

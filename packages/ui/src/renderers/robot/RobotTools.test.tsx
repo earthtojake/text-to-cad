@@ -86,7 +86,7 @@ async function openRobot() {
     if (url.pathname.endsWith('/arm.urdf')) return new Response(served.urdf);
     return new Response('', { status: 404 });
   });
-  const client = createCadClient({ origin: 'http://viewer.test/one', workspaceId: 'one', pollIntervalMs: 0, fetch: fetch as typeof globalThis.fetch });
+  const client = createCadClient({ origin: 'http://viewer.test/one', pollIntervalMs: 0, fetch: fetch as typeof globalThis.fetch });
   await client.refresh();
   const renderers = [createRobotRenderer({ client })];
   const destination = { kind: 'composer', available: true };
@@ -100,9 +100,9 @@ async function openRobot() {
     clipboard: { writeText: async () => {}, readText: async () => '', writeImage: async () => {} },
     promptContext: { getSnapshot: () => destination, subscribe: () => noop, deliver: async () => ({ status: 'added', partIds: [] }) },
   };
-  // The tab's state, held as a host holds it: the panel the person opened is the host's.
+  // The tab's state, held as a host holds it.
   function Pane() {
-    const [state, setState] = useState<any>({ panel: null, renderers: {} });
+    const [state, setState] = useState<any>({ renderers: {} });
     return <section data-testid="one"><FileViewer file={FILE} host={host as any} renderers={renderers} state={state} onStateChange={setState} /></section>;
   }
   render(<Pane />);
@@ -123,8 +123,6 @@ async function openRobot() {
     // The tool stack's panels on screen, top to bottom.
     stack: () => [...pane.querySelectorAll('[data-cad-tool-stack] [data-tool-panel]')]
       .filter(panel => !panel.closest('[hidden]')).map(panel => panel.getAttribute('aria-label')),
-    // The nav row's panel toggles, each with whether its panel is the open one.
-    panels: () => [...pane.querySelectorAll('[data-file-panel]')].map(button => `${button.getAttribute('aria-label')}:${button.getAttribute('aria-pressed')}`),
     knobs: () => pane.querySelectorAll('[data-cad-joint-handles]').length,
     posedMark: () => robot.tool('Position').querySelectorAll('[data-position-custom]').length,
     jointField: (name: string) => within(pane).getByLabelText(`${name} value in deg`) as HTMLInputElement,
@@ -215,15 +213,13 @@ it('robot Links and Position are each their tool\'s panel, and no pick or tool o
   expect(robot.jointField('shoulder').closest('[hidden]')).toBeNull();
   expect(robot.jointField('shoulder').value).toBe('30°');
 
-  // A link picked in the viewport and the Position tool open nothing in the host's column: their
-  // panels are the stack's. A robot declares no panel, so the navbar has no toggle for one.
+  // A link picked in the viewport and the Position tool show their panels in the stack.
   robot.open('Select');
   robot.tapUpperArm();
   await waitFor(() => expect(robot.pressedRows()).toHaveLength(1));
   expect(robot.stack()).toEqual(['Links', 'Reference details']);
   robot.open('Position');
   expect(robot.stack()).toEqual(['Position controls']);
-  expect([robot.panels(), robot.pane.querySelector('[data-file-panel-container]')]).toEqual([[], null]);
   robot.client.dispose();
 });
 

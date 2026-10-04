@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { createCadPromptContext } from './promptContext.js';
 import { promptDeliveryError } from '../../kit/shell/promptContext.js';
 test('capture context freezes revision and selected topology before encoding', async () => {
-  const resource = { kind: 'workspace-file', workspaceId: 'one', path: '/models/parts/widget.step', revision: 'v1' };
+  const resource = { kind: 'workspace-file', path: '/models/parts/widget.step', revision: 'v1' };
   let resolve;
   const capture = new Promise(done => { resolve = done; });
   const context = createCadPromptContext({ resource, references: [{ selector: 'o1.f2,o1.e3', label: 'Selected edges' }], text: 'Round these', capture });
@@ -17,7 +17,7 @@ test('capture context freezes revision and selected topology before encoding', a
   assert.equal(await context.parts[2].content, blob);
 });
 test('whole-view captures retain provenance and delivery feedback reflects actual receipt', () => {
-  const context = createCadPromptContext({ resource: { kind: 'workspace-file', workspaceId: 'one', path: '/models/part.stl' }, capture: new Blob(['pixels'], { type: 'image/png' }) });
+  const context = createCadPromptContext({ resource: { kind: 'workspace-file', path: '/models/part.stl' }, capture: new Blob(['pixels'], { type: 'image/png' }) });
   assert.deepEqual(context.parts[0].reference.target, { kind: 'whole-resource' });
   assert.deepEqual(context.parts[1].about, ['source']);
   assert.equal(promptDeliveryError({ status: 'added', partIds: ['source', 'capture'] }), null);

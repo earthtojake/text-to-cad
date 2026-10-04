@@ -17,8 +17,8 @@ shared package's. The root workspace builds UI's ESM, declarations, CSS and
 worker assets before building the app; no source alias or JSX loader is needed.
 
 Native file operations are desktop capabilities. Web offers copy-path actions
-and, when the server advertises `reveal-path`, reveal in the file manager; it has
-no filesystem-writing or editing endpoints.
+and reveal in the file manager of the machine the server runs on; it has no
+filesystem-writing or editing endpoints.
 
 See the app README for commands and `@text-to-cad/ui`'s README and type declarations
 for the source, renderer and lifetime contracts.

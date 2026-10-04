@@ -82,7 +82,7 @@ import {
 import { createAnimationClock, AnimationClockProvider } from "./workbench/animationClockStore.js";
 import { measureFilterSnaps } from "./workbench/measureRulerState.js";
 import { useStepMeasure } from "./workbench/useStepMeasure.js";
-import { cadFileParamForEntry, fileKey } from "./workbench/entryPaths.js";
+import { fileKey } from "./workbench/entryPaths.js";
 import {
   stepModuleTopologyOccurrenceIds
 } from "./workbench/topologyCapabilities.js";
@@ -235,7 +235,6 @@ function StepSurfaceBody({ view, data }) {
   const storeSnapshot = useSyncExternalStore(client.subscribe, client.getSnapshot, client.getSnapshot);
   const selectedKey = fileKey(entry);
   const liveEntry = workspace.entry;
-  const explicitFileParam = cadFileParamForEntry(entry);
   const catalogHydrated = storeSnapshot.hydrated;
   const catalogError = storeSnapshot.error || "";
   const [selectedReferenceIds, setSelectedReferenceIds, selectedReferenceIdsRef] = useSyncedState([]);
@@ -328,9 +327,7 @@ function StepSurfaceBody({ view, data }) {
     buildNormalizedReferenceState,
   });
 
-  // File state uses the host's absolute identity; server requests use the
-  // catalog's path relative to this client's served root.
-  const editingFile = liveEntry ? cadFileParamForEntry(liveEntry) : explicitFileParam;
+  const editingFile = liveEntry ? fileKey(liveEntry) : selectedKey;
   const editingAvailable = /\.st(?:ep|p)$/i.test(editingFile || "");
   // The build feed: status only ("Updating model…", a failed build). The view shows the saved file.
   const editingPreview = useEditingPreview(editingFile, { client,
@@ -343,7 +340,7 @@ function StepSurfaceBody({ view, data }) {
   // asked again when this file's entry changes, never for the rest of the catalog
   // (`artifactFreshnessKey`), and a build of a model already on screen is left to the build feed.
   const selectedArtifact = useArtifact(
-    liveEntry ? cadFileParamForEntry(liveEntry) : "",
+    liveEntry ? fileKey(liveEntry) : "",
     {
       freshnessKey: artifactFreshnessKey(liveEntry, storeSnapshot),
       shown: editingHasView,
@@ -1756,7 +1753,7 @@ function StepSurfaceBody({ view, data }) {
   // Copy is clipboard-only; what goes to the agent goes through Quick Edit.
   const deliverReferenceText = useCallback((text) => host.clipboard.writeText(text), [host.clipboard]);
   const referencesForHost = useCallback((text) =>
-    referencesFromCopyText(text, cadFileParamForEntry(selectedEntry)).map((reference) => {
+    referencesFromCopyText(text, fileKey(selectedEntry)).map((reference) => {
       const label = referenceLabel(reference.selector, displayStepTreeRoot || stepTreeRoot);
       return { ...reference, ...(label ? { label } : {}) };
     }), [selectedEntry, displayStepTreeRoot, stepTreeRoot]);

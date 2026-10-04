@@ -1,15 +1,15 @@
 import { describe, expect, it, vi } from 'vitest';
+import { encodeBase64 } from '@text-to-cad/core/client';
 import { createPromptContext, referencePart } from '@text-to-cad/core/prompt';
 import { createBridge, HostError, type ToolResult } from './bridge';
 import { frameClipboard } from './clipboard';
 import { chatReach, createChatPromptContext } from './prompt';
-import { relaunch } from './relaunch';
 import { createServer, type SyncReply, type SyncRequest, type ViewEvent } from './server';
 import { createViewSync, LOST_AFTER, NEWS_MS, SYNC_MS } from './sync';
 import {
   createHttpTessellationCacheProvider, encodeComponentTessellation, tessellationPayloadFacts,
 } from '@text-to-cad/core/lib/surf/tessellationCache.js';
-import { createTunnelClient, createTunnelFetch, decodeBase64, encodeBase64, TUNNEL_ORIGIN, TUNNEL_REPLY_MAX_BYTES } from './tunnel';
+import { createTunnelClient, createTunnelFetch, decodeBase64, TUNNEL_ORIGIN, TUNNEL_REPLY_MAX_BYTES } from './tunnel';
 
 /** A host frame: records what the page posts and answers with `respond`. */
 function fakeHost(respond: (message: any) => unknown) {
@@ -362,35 +362,9 @@ function servingInParts(bytes: Uint8Array, {
   return { server, ranges, sizes };
 }
 
-describe('a tab restored from an older build', () => {
-  it('is launched again as it was: the home, a thread\'s tab, a file\'s tab or an agent\'s model', async () => {
-    const calls: [string, Record<string, unknown>][] = [];
-    const bridge = { callTool: vi.fn(async (name: string, args: Record<string, unknown>) => {
-      calls.push([name, args]);
-      return { structuredContent: { launch: { protocol: 5, page: name === 'cad_home' ? 'home' : 'viewer', model: (args.model as string) || null } } } as ToolResult;
-    }) };
-    const stale = (patch: object) => ({ protocol: 4, page: 'viewer' as const, model: null, ...patch });
-    expect((await relaunch(bridge, stale({ page: 'home', surface: 'sidebar' }))).page).toBe('home');
-    await relaunch(bridge, stale({ surface: 'tab' }));
-    await relaunch(bridge, stale({ surface: 'file', model: '/work/parts/a b.step' }));
-    await relaunch(bridge, stale({ surface: 'file', model: '/work/parts/link #2?.step' }));
-    await relaunch(bridge, stale({ surface: 'file', model: 'C:\\work\\b.step' }));
-    const agent = await relaunch(bridge, stale({ surface: 'agent', model: '/work/parts/a.step' }));
-    expect(calls).toEqual([
-      ['cad_home', {}], ['cad_tab', {}],
-      ['cad_file', { file: { name: 'a b.step', resourceUri: 'file:///work/parts/a%20b.step' } }],
-      ['cad_file', { file: { name: 'link #2?.step', resourceUri: 'file:///work/parts/link%20%232%3F.step' } }],
-      ['cad_file', { file: { name: 'b.step', resourceUri: 'file:///C:/work/b.step' } }],
-      ['cad_launch', { model: '/work/parts/a.step' }],
-    ]);
-    expect([agent.protocol, agent.surface]).toEqual([5, 'agent']);
-  });
-});
-
 describe('a Quick Edit in the chat', () => {
-  const resolvePath = (resource: any) => resource.kind === 'url' ? resource.url : resource.path;
-  const file = referencePart({ resource: { kind: 'workspace-file', workspaceId: 'w', path: '/project/parts/a.step' }, target: { kind: 'whole-resource' } }, 'file');
-  const face = referencePart({ resource: { kind: 'workspace-file', workspaceId: 'w', path: '/project/parts/a.step' }, target: { kind: 'cad-selector', selectors: ['o1.f2'] } }, 'face');
+  const file = referencePart({ resource: { kind: 'workspace-file', path: '/project/parts/a.step' }, target: { kind: 'whole-resource' } }, 'file');
+  const face = referencePart({ resource: { kind: 'workspace-file', path: '/project/parts/a.step' }, target: { kind: 'cad-selector', selectors: ['o1.f2'] } }, 'face');
   const sketch = () => ({ id: 'sketch', kind: 'attachment' as const, name: 'a-sketch.png', label: 'Sketch', mimeType: 'image/png', about: ['file'],
     content: new Blob([new Uint8Array([0x89, 0x50, 0x4e, 0x47])], { type: 'image/png' }) });
   const edit = (...parts: any[]) => createPromptContext([{ id: 'text', kind: 'text', text: 'Round it.' }, file, ...parts]);
@@ -408,7 +382,7 @@ describe('a Quick Edit in the chat', () => {
       hostContext: {},
       onHostContext: listener => { context = listener; return () => {}; },
       request: async (method: string, params: any) => { updates.push({ method, params }); return {}; },
-    } as any, { resolvePath, reach: { queue: true, send: false, sendImages: false } });
+    } as any, { reach: { queue: true, send: false, sendImages: false } });
     expect([port.getSnapshot().kind, port.send]).toEqual(['composer', undefined]);
     expect((await port.deliver(edit(face, sketch()))).status).toBe('added');
     const [text, image] = updates[0].params.content;
@@ -436,7 +410,7 @@ describe('a Quick Edit in the chat', () => {
     } as any;
     const saved: string[] = [];
     const attachments = { save: async (_png: Blob, name: string) => { saved.push(name); return `/tmp/cadgen-sketches/${name}`; } };
-    const port = createChatPromptContext(bridge, { resolvePath, reach: { queue: false, send: true, sendImages: true }, attachments });
+    const port = createChatPromptContext(bridge, { reach: { queue: false, send: true, sendImages: true }, attachments });
     expect(port.getSnapshot().kind).toBe('unavailable');
     expect((await port.send!(edit(sketch()))).status).toBe('sent');
     expect(sent[0].method).toBe('ui/message');

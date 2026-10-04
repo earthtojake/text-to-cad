@@ -900,9 +900,8 @@ VIEWER_PYTHON=<checkout>/.venv/bin/python \
 ```
 
 The spawned backend opens any file by its absolute path; the folder it starts
-in is only where a relative `?file=` resolves. Its resolver accepts an explicit
-`directoryRoot` from its caller first, then `INIT_CWD`, then the process working
-directory, skipping the latter two when they are inside `apps/web`. Vite's
+in is only where a relative `?file=` resolves. Its resolver takes `INIT_CWD`, then
+the process working directory, skipping either when it is inside `apps/web`. Vite's
 fallback is `<checkout>/apps`. npm sets `INIT_CWD` to the invocation directory,
 so `--prefix` selects the app while keeping your folder. The page is the bare
 origin and `?file=` names a file, for example

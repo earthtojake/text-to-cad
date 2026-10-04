@@ -28,8 +28,5 @@ export function createQuickEditContext({ resource, references = [], text, sketch
  * sketch by the path it was saved at, since text cannot carry a picture.
  */
 export function copiedQuickEdit(context, { sketchPath = null } = {}) {
-  return formatPromptMessage(context, {
-    resolvePath: resource => (resource.kind === "url" ? resource.url : resource.path),
-    attachmentPath: () => sketchPath,
-  });
+  return formatPromptMessage(context, { attachmentPath: () => sketchPath });
 }

@@ -41,7 +41,7 @@ The record is `{ version, settings, files }`:
 
 | Kept | Where | What |
 | --- | --- | --- |
-| Tab settings | `settings` | `panelWidth` (the width of the column a file's declared panels open in), `toolStack` (the resizable panels' sizes, the folded panels and the closed tree, `kit/tools/toolStackLayout.js`), `appearance` (System, Light or Dark; System until the person picks), `library` (the home's models as a grid or a list). |
+| Tab settings | `settings` | `toolStack` (the resizable panels' sizes, the folded panels and the closed tree, `kit/tools/toolStackLayout.js`), `appearance` (System, Light or Dark; System until the person picks), `library` (the home's models as a grid or a list). |
 | File views | `files[[absolute file path, renderer id]]` | The file's view ([fileView.js](../../../packages/ui/src/renderers/kit/shell/fileView.js)): `camera` (the renderer's own — a scene's pose, lens and projection, restored in place of the open-time fit; a drawing's plane transform), `display` (the Display settings, Clip and Explode included), `playback` (preview's Playback settings: orbit on or off and its speed, Autoplay, and — once chosen — the Speed and Loop the routine plays with, unset meaning the routine's own; kept between leaving and re-entering preview; defaults orbit on at 1×, Autoplay off) and `renderer`, the renderer's own slices, each behind the signature it was written against: a STEP's expanded nodes, hidden parts, isolated assemblies, pose and large-file opt-in; a robot's joint values. A slice whose signature no longer matches the file on screen is dropped; the camera, the display and the playback are always kept. Only the file on screen has a view: leaving it — for another file, or for the home — drops its view (`CadViewer`, after the view's last write as it unmounts), so opening it again starts at the defaults, while a reload of the tab, which shows the same file, brings its view back. |
 
 | Not kept | Every open starts it afresh |
@@ -52,8 +52,7 @@ The record is `{ version, settings, files }`:
 | Preview and its camera | Off; its Playback settings are the file's, above |
 | The routine, its time and whether it is playing | At rest |
 | Quick Edit's note | Empty, its box closed |
-| The Select mode filter, hover, menus, the open panel, popovers | The page's own |
-| The open panel of the host's column | `panel: null`: a page load opens a file on its own default |
+| The Select mode filter, hover, menus, popovers | The page's own |
 
 Appearance applies before the first paint: the inline script in
 [index.html](../index.html) reads the same key and applies `settings.appearance`

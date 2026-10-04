@@ -5,7 +5,6 @@ import { FileViewer } from '../file-viewer/FileViewer.js';
 import type { FileViewerState } from '../file-viewer/types.js';
 import { createLiveRegistry, type LiveRegistry } from '../host/liveRegistry.js';
 import type { ViewerHost } from '../host/types.js';
-import type { ModelPictureSource } from '../library/ModelLibrary.js';
 import { THUMBNAIL_SIZE } from '../library/thumbnails.js';
 import { createDxfRenderer } from '../renderers/dxf/index.js';
 import { createGlbRenderer } from '../renderers/glb/index.js';
@@ -26,13 +25,20 @@ export function cadRenderers(client: CadWorkspaceService, preferences: CadPrefer
   ];
 }
 
+/** A model to picture: the client that reads it, its absolute path, and where its picture is kept. */
+export interface ModelPictureSource {
+  client: CadWorkspaceService;
+  file: string;
+  keep(png: Blob): Promise<unknown>;
+}
+
 // Out of sight: behind the page and invisible, at the picture's own size, so the view draws as it
 // would on screen and nothing of it is seen or reached.
 const OUT_OF_SIGHT: CSSProperties = {
   position: 'fixed', left: 0, top: 0, width: THUMBNAIL_SIZE.width, height: THUMBNAIL_SIZE.height,
   opacity: 0, pointerEvents: 'none', zIndex: -1, overflow: 'hidden',
 };
-const NOT_SAVED: FileViewerState = { panel: null, panelWidth: 0 };
+const NOT_SAVED: FileViewerState = {};
 // A model that has not settled by then is not a cheap one to picture: it keeps its placeholder.
 const SETTLE_WITHIN_MS = 30_000;
 

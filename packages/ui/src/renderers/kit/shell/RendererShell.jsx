@@ -245,8 +245,8 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
         <div className="relative min-h-0 flex-1 overflow-hidden">
           <div className="flex h-full min-w-0">
             {/* The render pane's box. The canvas fills exactly this area, so a camera fit
-                centres in what is visible and the host's panel column (the file tree) opening
-                or closing reaches the scene as a plain resize. Its background is the
+                centres in what is visible and a change of the pane's size reaches the scene
+                as a plain resize. Its background is the
                 scene's edge colour: the canvas is resized on the next frame, and one frame of
                 the chrome's background above a dark stage is a visible band. */}
             <div

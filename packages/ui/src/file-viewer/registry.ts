@@ -29,11 +29,8 @@ export function defineFileRenderer<T>(definition: FileRendererDefinition<T>): Re
         ]), aborted]);
         context.signal.throwIfAborted();
         const { default: Component } = module;
-        const { panels } = definition;
         return {
           Component: (props) => createElement(Component, { ...props, data: document.data }),
-          panels: panels ? (panelContext) => panels({ ...panelContext, data: document.data }) : undefined,
-          live: document.live === true,
           dispose,
         };
       } catch (error) {

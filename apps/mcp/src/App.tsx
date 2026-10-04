@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react';
 import { Maximize2 } from 'lucide-react';
-import type { ResourceRef } from '@text-to-cad/core/prompt';
 import { ConsentCard, useAnalyticsConsent } from '@text-to-cad/ui/consent';
 import { useFeatures } from '@text-to-cad/ui/features';
 import { UpdateButton, useUpdateNotice } from '@text-to-cad/ui/update';
@@ -17,6 +16,7 @@ import { watchSupersession, type Presentation } from './host/presentation';
 import { chatReach } from './host/prompt';
 import type { Launch, Server } from './host/server';
 import { createViewSync } from './host/sync';
+import { createTunnelClient, createTunnelFetch } from './host/tunnel';
 import ModelView, { type ViewReporter } from './ModelView';
 import { Banner } from './Notice';
 
@@ -24,7 +24,6 @@ interface Showing { launch: Launch; sequence: number }
 
 // The host's sandbox need not be a secure context, where randomUUID is missing.
 const newViewId = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-const unresolved = () => { throw new Error('No model is showing.'); };
 
 export function useHostContext(bridge: Pick<Bridge, 'hostContext' | 'onHostContext'>): HostContext {
   return useSyncExternalStore(listener => bridge.onHostContext(listener), () => bridge.hostContext, () => bridge.hostContext);
@@ -117,25 +116,31 @@ export default function App({ bridge, server, launch: initial, presentation = 't
   const [showing, setShowing] = useState<Showing>({ launch: initial, sequence: 0 });
   // The server stopped answering (its process has gone): the view keeps its model, and says so.
   const [lost, setLost] = useState(false);
-  const shown = useRef<{ model: string | null; resolvePath: (resource: ResourceRef) => string }>({ model: null, resolvePath: unresolved });
+  const shown = useRef<string | null>(null);
   // This view's one call to the server each second: what it shows, the agent's requests for it,
   // and what changed in what it watches (`host/sync.ts`).
-  const sync = useMemo(() => createViewSync(server, { id: view, surface, model: () => shown.current.model }, {
+  const sync = useMemo(() => createViewSync(server, { id: view, surface, model: () => shown.current }, {
     show: launch => setShowing(previous => ({ launch, sequence: previous.sequence + 1 })),
     capture: async () => {
       const controller = live.current();
       if (!controller) throw new Error('No model is showing in this CAD view.');
       return fitCapture(await controller.capture());
     },
-    state: () => describeView(live.current(), shown.current.model, shown.current.resolvePath),
+    state: () => describeView(live.current(), shown.current),
     connection: connected => setLost(!connected),
   }), [server, view, surface, live]);
   const reporter = useMemo<ViewReporter>(() => ({
-    showing(model, resolvePath) {
-      shown.current = { model, resolvePath };
+    showing(model) {
+      shown.current = model;
       sync.focus();
     },
   }), [sync]);
+  // Everything else the view asks of the server travels as viewer requests over `cad_http`: its
+  // model, the library, Open, Reveal, the person's settings and the update check. The client polls
+  // nothing: the sync says when the file's catalog entry moved, and carries a STEP's build feed.
+  const tunnel = useMemo(() => createTunnelFetch(server), [server]);
+  const client = useMemo(() => createTunnelClient(tunnel, { pollIntervalMs: 0, editingPreviewFeed: sync.observePreview }), [tunnel, sync]);
+  useEffect(() => () => client.dispose(), [client]);
 
   useEffect(() => {
     const order = initial.order;
@@ -170,15 +175,15 @@ export default function App({ bridge, server, launch: initial, presentation = 't
 
   // Asked once, of everyone, unless their environment answered or no answer could be kept
   // (`cadgen/analytics.py`): the card, and the app menu's toggle after it.
-  const { consent, answer, appSettings: analyticsSettings } = useAnalyticsConsent(server.consent);
+  const { consent, answer, appSettings: analyticsSettings } = useAnalyticsConsent(client.consent);
   // The app menu's features (Quick edit), on until the person turns one off: kept by the server beside
   // the analytics answer, one choice for the sidebar, every thread's tab and the browser viewer.
-  const { features, appSettings: featureSettings } = useFeatures(server.features);
+  const { features, appSettings: featureSettings } = useFeatures(client.features);
   const appSettings = useMemo(() => [...analyticsSettings ?? [], ...featureSettings ?? []], [analyticsSettings, featureSettings]);
   // A newer text-to-cad (`cadgen/updates.py`): the blue update button, first in the navbar and a row of
   // its own on the home while this install is behind, from the launch's notice at once. Its prompt goes
   // to the chat where the host takes messages, so the agent updates CAD; elsewhere it is copied.
-  const updateNotice = useUpdateNotice(server.version, initial.notice ?? null);
+  const updateNotice = useUpdateNotice(client.version, initial.notice ?? null);
   const sendPrompt = chat.send
     ? (prompt: string) => bridge.request('ui/message', { role: 'user', content: [{ type: 'text', text: prompt }] }, { timeoutMs: 30_000 }).then(() => {})
     : undefined;
@@ -187,20 +192,18 @@ export default function App({ bridge, server, launch: initial, presentation = 't
   // host (a frame cannot open one itself).
   const links = useMemo(() => viewerLinks({ version, open: url => bridge.request('ui/open-link', { url }).then(() => {}) }),
     [bridge]);
-  const show = (launch: Launch) => setShowing(previous => ({ launch, sequence: previous.sequence + 1 }));
   const { launch } = showing;
   if (superseded) {
     return <Frame bridge={bridge} context={context} insets={insets} inline={inline} bottomCenter={bottomCenter}><Superseded still={still} /></Frame>;
   }
   return <Frame bridge={bridge} context={context} insets={insets} inline={inline} bottomCenter={bottomCenter}
     overlay={lost ? <Banner message={LOST[presentation]} /> : null}>
-    <ModelView launch={launch} sequence={showing.sequence} bridge={bridge} server={server}
+    <ModelView launch={launch} sequence={showing.sequence} bridge={bridge} client={client} tunnel={tunnel}
       tabStore={tabStore} live={live} links={links} appSettings={appSettings} features={features}
       notice={consent?.ask ? <ConsentCard policy={consent.policy} onAnswer={answer} onPolicy={openLink} /> : null}
       update={updateNotice ? <UpdateButton notice={updateNotice} send={sendPrompt} copy={prompt => frameClipboard.writeText(prompt)}
         onLink={openLink} /> : null}
       fullSize={inline && context.availableDisplayModes?.includes('fullscreen') !== false ? <FullSizeButton bridge={bridge} /> : null}
-      colorScheme={colorScheme} platform={initial.platform || 'darwin'} reporter={reporter} sync={sync} chat={chat}
-      onLaunch={show} />
+      colorScheme={colorScheme} platform={initial.platform || 'darwin'} reporter={reporter} sync={sync} chat={chat} />
   </Frame>;
 }

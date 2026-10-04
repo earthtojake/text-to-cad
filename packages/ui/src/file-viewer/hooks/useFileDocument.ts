@@ -8,16 +8,16 @@ export type LoadedDocument = ReadyDocument | { status: "empty" } | { status: "lo
 
 export function errorMessage(error: unknown): string { return error instanceof Error ? error.message : String(error); }
 
-/** The lifetime of one file, by its absolute path. Source identity participates in every asynchronous guard. */
+/**
+ * The lifetime of one file, by its absolute path: opened when it is shown, and again only on
+ * `reload` (its renderer follows the file's changes itself). Source identity participates in every
+ * asynchronous guard.
+ */
 export function useFileDocument(path: string | null, source: FileSource, renderers: readonly RendererRegistration[]) {
   const [generation, setGeneration] = useState(0);
   const key = JSON.stringify([source.id, path, generation]);
   const [result, setResult] = useState<{ key: string; document: LoadedDocument } | null>(null);
   const loaded: LoadedDocument = result?.key === key ? result.document : { status: path === null ? "empty" : "loading" };
-  // A live document follows its file itself (`PreparedDocument.live`): its content changes are not ours.
-  const live = loaded.status === "ready" && loaded.prepared.live === true;
-  const current = useRef({ key, source, live });
-  current.current = { key, source, live };
   const reload = useCallback(() => setGeneration((value) => value + 1), []);
   const previousLoad = useRef<{ key: string; source: FileSource; path: string | null; generation: number; refresh: boolean } | null>(null);
 
@@ -45,17 +45,6 @@ export function useFileDocument(path: string | null, source: FileSource, rendere
     })();
     return () => { controller.abort(); owned?.dispose?.(); };
   }, [key, path, source, renderers]);
-
-  useEffect(() => {
-    if (!path || !source.subscribe) return;
-    return source.subscribe((change) => {
-      if (change.sourceId !== source.id) return;
-      const state = current.current;
-      if (state.key !== key || state.source !== source || state.live) return;
-      // A live document is updated in place by its renderer; any other reopens on a new revision.
-      if (change.changes.some(item => item.kind === "content" && item.path === path)) reload();
-    });
-  }, [key, path, source, reload]);
 
   return { loaded, key, reload, path };
 }

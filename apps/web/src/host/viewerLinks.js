@@ -10,7 +10,6 @@ import { viewerLinks } from "@text-to-cad/ui/links";
 import {
   normalizeViewerDiscordUrl,
   normalizeViewerGithubUrl,
-  normalizeViewerReleaseVersion,
   viewerGithubIssueUrl,
   viewerGithubReleaseUrl
 } from "../shared/viewerConfig.mjs";
@@ -18,7 +17,7 @@ import viewerPackage from "../../package.json";
 
 /** This Viewer's `ViewerHost.links`: the version it runs, X, its build's GitHub (and new issues there) and Discord. */
 export function useViewerLinks() {
-  const version = normalizeViewerReleaseVersion(viewerPackage.version);
+  const version = viewerPackage.version;
   const github = normalizeViewerGithubUrl(import.meta.env?.VIEWER_GITHUB_URL);
   const discord = normalizeViewerDiscordUrl(import.meta.env?.VIEWER_DISCORD_URL);
   return useMemo(() => viewerLinks({

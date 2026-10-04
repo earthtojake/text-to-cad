@@ -157,7 +157,7 @@ if __name__ == "__main__":
 HINGE
 # A SECOND revision of the same model, with an arm long enough that the model
 # no longer fits the frame the first one was fitted to. It is built into a
-# dot-directory, which the catalog scan skips, so the served root still holds
+# dot-directory, which the explorer skips, so the model's folder still holds
 # one hinge; the gate copies it over the first to stand in for a rebuild that a
 # source edit saved while the model was open.
 # The model name decides the output name, so the two revisions build side by

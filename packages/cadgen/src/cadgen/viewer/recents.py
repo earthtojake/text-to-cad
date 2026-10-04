@@ -1,7 +1,8 @@
 """Recently opened models: one library for everywhere a person opens models.
 
 Every CAD view writes here -- the MCP app's views and the CAD Viewer -- and every
-home shows all of it (``GET /__cad/recents``, and the MCP app's ``cad_recents``).
+home shows all of it (``GET /__cad/recents``, which the MCP app's views reach
+through its tunnel).
 
 The store is an append-only log of events -- ``open``, ``pin``, ``unpin``,
 ``remove``, ``picture`` -- folded into a list on read. It is user state, not a

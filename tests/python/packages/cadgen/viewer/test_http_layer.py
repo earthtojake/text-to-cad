@@ -13,6 +13,7 @@ import http.client
 import json
 import os
 import socket
+import subprocess
 import tempfile
 import threading
 import unittest
@@ -206,34 +207,16 @@ class ServerInfo(HttpLayerTestCase):
         self.assertEqual(status, 200)
         info = json.loads(body)
         self.assertEqual(info["app"], "cad-viewer")
-        self.assertEqual(info["backend"], "local-fs")
-        self.assertEqual(info["serverMode"], "serve")
         self.assertIn("identityToken", info)
         self.assertIs(info["autoReload"], reload_module.running_from_source_checkout())
-        self.assertEqual(info["serverFeatures"], ["reveal-path"])
-        self.assertEqual(info["stepArtifactGenerationAvailable"], False)
+        self.assertIn(info["platform"], ("darwin", "win32", "linux"))
         self.assertEqual(info["pid"], os.getpid())
         self.assertEqual(info["port"], self.fixture.port)
         # Where a developer's relative links resolve, spelled with "/". A viewer has no root.
         self.assertEqual(info["start"], self.fixture.root.replace(os.sep, "/"))
         self.assertIsInstance(info["pick"], bool)
-        for retired in ("rootId", "rootPath", "rootName"):
-            self.assertNotIn(retired, info)
-        self.assertFalse(info["url"].endswith("/"), "serverInfo.url carries NO trailing slash")
+        self.assertEqual(list(info), ["app", "identityToken", "autoReload", "platform", "user", "start", "pick", "port", "pid"])
         self.assertEqual(headers["cache-control"], "no-store")
-
-    def test_the_key_order_is_the_shipped_one(self):
-        _, _, body = self.fixture.request("GET", "/__cad/server")
-        text = body.decode("utf-8")
-        order = [
-            '"app"', '"viewerVersion"', '"identityToken"', '"autoReload"',
-            '"serverMode"', '"serverFeatures"', '"backend"', '"platform"',
-            '"start"', '"pick"', '"port"', '"pid"',
-            '"stepArtifactGenerationAvailable"',
-            '"packageDir"', '"startedAt"', '"url"',
-        ]
-        positions = [text.index(key) for key in order]
-        self.assertEqual(positions, sorted(positions))
 
     def test_json_is_compact_and_not_ascii_escaped(self):
         _, _, body = self.fixture.request("GET", "/__cad/server")
@@ -333,14 +316,16 @@ class Pick(HttpLayerTestCase):
         self.assertEqual(self.pick(side_effect=PickerFailed("no chooser here")), (500, {"error": "no chooser here"}))
         self.assertEqual(self.fixture.request("POST", "/__cad/pick")[0], 403, "a page from another site cannot open it")
 
-    def test_a_second_open_while_one_is_up_is_a_conflict(self):
+    def test_a_second_open_while_one_is_up_says_so(self):
         opened, release, answers = threading.Event(), threading.Event(), []
 
-        def choose():
+        def run(argv, **_):
             opened.set()
             release.wait(10)
+            return subprocess.CompletedProcess(argv, 1, b"", b"")  # the person cancelled
 
-        with mock.patch.object(FilePicker, "choose", side_effect=choose):
+        with mock.patch("cadgen._internal.picker._command", return_value=(["chooser"], {}, False)), \
+                mock.patch("cadgen._internal.picker.subprocess.run", side_effect=run):
             first = threading.Thread(target=lambda: answers.append(
                 self.fixture.request("POST", "/__cad/pick", headers={"x-cadgen-viewer": "1"})[0]))
             first.start()
@@ -348,7 +333,7 @@ class Pick(HttpLayerTestCase):
             second = self.fixture.request("POST", "/__cad/pick", headers={"x-cadgen-viewer": "1"})
             release.set()
             first.join(10)
-        self.assertEqual((second[0], json.loads(second[2])), (409, {"error": "A file chooser is already open."}))
+        self.assertEqual((second[0], json.loads(second[2])), (500, {"error": "A file chooser is already open."}))
         self.assertEqual(answers, [200])
 
 

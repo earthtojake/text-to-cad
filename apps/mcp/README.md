@@ -40,8 +40,9 @@ reference host `basic-host` does.
   nothing here branches on a surface's name but one: `surface: file` (below).
 - **A launch is enough to start.** It also carries what the server is — its
   `protocol`, `version` and `platform` — and the home's carries its `recents`,
-  so the page asks nothing before it draws. A tab restored from an older build
-  is launched again by today's server; one that still disagrees says so.
+  so the page asks nothing before it draws. A launch from another build (a tab
+  the host restored after an update, a past chat's card) says so: the page
+  reads only its own protocol's.
 - **Every view has a home.** Back to files, first in the menu the navbar's C logo
   opens, goes to it: the library (the models opened before, in any view or the web
   viewer) and Open with the desktop's chooser, where this computer has one
@@ -72,8 +73,8 @@ reference host `basic-host` does.
   a source tree). While this install is behind, the navbar and the home show the
   shared blue `UpdateButton` (`@text-to-cad/ui/update`): first among the navbar's
   controls, and on the home a row of its own, labeled Update. A launch carries the
-  notice the server last read, so the button draws with the page; `cad_version` reads
-  it again. It opens the update card: "A new version of text-to-cad
+  notice the server last read, so the button draws with the page; the page reads it
+  again (`/__cad/version`) when the person comes back to it. It opens the update card: "A new version of text-to-cad
   is available. Send a message to your agent asking it to update to the latest
   version:", and a prompt worded like the install message, "Update text-to-cad to
   0.9.0 from https://github.com/earthtojake/text-to-cad".
@@ -90,15 +91,16 @@ reference host `basic-host` does.
   copy nothing else updates checks and is told. A store's copy (the Claude or OpenAI directory, the Cursor
   Marketplace) is left to its store, and Gemini's extension to Gemini. The analytics: the server
   notes its use -- tool calls (not the page's plumbing), view activity from each
-  view's sync (`focused`), and the files views show, as salted one-way codes --
+  view's sync (`focused`), and the files views show (counted as a view adds one to
+  the library), as salted one-way codes --
   and, only with consent, sends it once a minute (`cadgen/analytics.py`): never a
   path, an argument or a file. Every install is asked once by the page
-  (`cad_consent`, the shared `ConsentCard` from `@text-to-cad/ui/consent`, the
+  (`/__cad/analytics`, the shared `ConsentCard` from `@text-to-cad/ui/consent`, the
   viewer's `notice`: top-right once a model is on screen, Quick Edit under it,
   never on the home; the browser viewer asks the same way, and one answer counts
   for both), and nothing is sent before a yes; the app menu's **Share anonymous usage
   data** (`appSettings`) changes the answer later. Its **Quick edit** (on until
-  the person turns it off) is read and changed the same way, through `cad_features`, and kept
+  the person turns it off) is read and changed the same way, through `/__cad/features`, and kept
   beside the analytics answer (`cadgen/features.py`): one choice for the sidebar, every
   thread's tab, every inline card and the browser viewer. The channel is reported with the
   counts; it decides nothing there. The agent's `cad_analytics` reports the
@@ -133,7 +135,14 @@ reference host `basic-host` does.
   test enforces it: `tests/python/global/test_host_neutral_packages.py`.
 - **The web client's data path, unchanged.** `createCadClient` gets a `fetch`
   that sends each request as a `cad_http` tool call against the placeholder
-  origin `http://cad.invalid`; the server hands it to the viewer's own router.
+  origin `http://cad.invalid`; the server hands it to the viewer's own router,
+  over its own model library and analytics. Everything the page asks of the
+  server travels this way, as the web page asks its own: the models, the
+  library and its pictures, Open (`/__cad/pick`), Reveal, the person's analytics
+  answer and features, the update check. Only the clipboard stays the host's: a
+  view copies through its frame. So the page has three tools of its own:
+  `cad_sync`, `cad_capture_reply` and `cad_http`, and a client with no page (a
+  text client) is listed none of them, so nothing there answers for the person.
   The fetch is a distinct function, so workers are handed bytes rather than URLs.
 - **No reply a host cannot read.** A reply is one JSON-RPC message, its body
   base64 (4/3 of its size), and a host that caps one message closes the
@@ -179,8 +188,8 @@ reference host `basic-host` does.
 | Module | What it is |
 | --- | --- |
 | `bridge.ts` | JSON-RPC 2.0 over `postMessage`: requests, the opening tool's result, host context, teardown |
-| `server.ts` | typed calls to the server's tools, `cad_reveal` among them: the file menu's Reveal, in the desktop's file manager (the server is on the person's machine) |
-| `tunnel.ts` | the `fetch` over `cad_http`, a long body a range at a time |
+| `server.ts` | typed calls to the page's three tools: its sync, its answer to a capture, and `cad_http` |
+| `tunnel.ts` | the `fetch` over `cad_http`, a long body a range at a time, and the CAD client over it (`App.tsx` makes one per view): the library, Open, Reveal and the person's settings among its requests |
 | `prompt.ts` | Quick Edit's chat: `chatReach`, what the host's chat takes, and the prompt port over it — Queue through `ui/update-model-context` (a text block titled `Quick edit · <file>` and the sketch's image block, kept until the host clears its model context), Send through `ui/message` — with references as absolute paths (Copy Prompt spells them as copied references are) |
 | `live.ts`, `sync.ts` | the mounted view's live controller (`@text-to-cad/ui/host`'s registry), and its sync (`cad_sync`), every second: its state for the agent, the agent's requests (`show`, `capture`), the catalog's revision and its build feeds |
 | `presentation.ts` | how the host presents the page, and the election that retires older inline views |
@@ -189,7 +198,7 @@ reference host `basic-host` does.
 the one the web Viewer shows) showing the launch's model, with this host's ports — its
 tunnel (which also carries a copied prompt's sketch to the server: `attachments`), the
 explorer's folders and search over it (`createCadFileSource`), its chat, its file menu
-(copy path, Reveal through `cad_reveal`), the app menu's links (its Send feedback and
+(copy path, Reveal), the app menu's links (its Send feedback and
 an alert's Report Issue open a new issue), followed through `ui/open-link`,
 and its home: the library, with Open, the desktop's file chooser, where any file can be
 chosen. A view keeps its tab record in memory (`App.tsx`): the model on screen keeps

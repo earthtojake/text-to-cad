@@ -97,27 +97,3 @@ export function fuzzyMatch(needle, haystack) {
 
   return { score, indices };
 }
-
-/** Rank `paths` against `query`, best first, capped at `limit`. */
-/**
- * @param {readonly string[]} paths
- * @param {string} query
- * @param {number} [limit]
- * @returns {{ path: string, indices: number[] }[]}
- */
-export function fuzzyFilter(paths, query, limit = 300) {
-  const trimmed = query.trim();
-  if (trimmed === "") {
-    return paths.slice(0, limit).map((path) => ({ path, indices: [] }));
-  }
-  /** @type {{ path: string, score: number, indices: number[] }[]} */
-  const scored = [];
-  for (const path of paths) {
-    const match = fuzzyMatch(trimmed, path);
-    if (match) {
-      scored.push({ path, score: match.score, indices: match.indices });
-    }
-  }
-  scored.sort((left, right) => right.score - left.score || left.path.localeCompare(right.path));
-  return scored.slice(0, limit).map(({ path, indices }) => ({ path, indices }));
-}

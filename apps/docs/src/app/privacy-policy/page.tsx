@@ -164,8 +164,8 @@ export default function PrivacyPolicyPage() {
             unless you open the CAD viewer.
           </li>
           <li>
-            To change your answer later, use <strong>Share anonymous usage data</strong> in Settings: in
-            the CAD app (on its home page, or with a 3D model open) or in the CAD viewer. To turn
+            To change your answer later, use <strong>Share anonymous usage data</strong> in the menu of
+            the CAD app or the CAD viewer (the logo at the top left, over any open model). To turn
             analytics off, you can also ask your agent to turn off CAD analytics, or run{" "}
             <code>uvx cadgen analytics off</code>. Turning them off deletes the install ID on your
             computer, with the secret key behind the file codes, and asks our server to delete everything

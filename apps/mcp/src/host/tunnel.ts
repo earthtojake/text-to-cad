@@ -1,4 +1,4 @@
-import { createCadClient } from '@text-to-cad/core/client';
+import { createCadClient, encodeBase64 } from '@text-to-cad/core/client';
 import type { CadClientOptions } from '@text-to-cad/core/client';
 import type { HttpReply, Server } from './server';
 
@@ -27,14 +27,6 @@ export const TUNNEL_REPLY_MAX_BYTES = 4 * 1024 * 1024;
  * (`cadgen/mcp/tunnel.py`), and its headers describe the inflated body.
  */
 type TunnelReply = HttpReply & { encoding?: string };
-
-export function encodeBase64(bytes: Uint8Array): string {
-  const native = (bytes as Uint8Array & { toBase64?: () => string }).toBase64;
-  if (typeof native === 'function') return native.call(bytes);
-  let binary = '';
-  for (let index = 0; index < bytes.length; index += 0x8000) binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
-  return btoa(binary);
-}
 
 export function decodeBase64(text: string): Uint8Array<ArrayBuffer> {
   const native = (Uint8Array as unknown as { fromBase64?: (value: string) => Uint8Array<ArrayBuffer> }).fromBase64;

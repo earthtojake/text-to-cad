@@ -25,7 +25,7 @@ function selectorFromStepTreeInternalId(value) {
 
 /**
  * A copied line as the host sees it: the file it belongs to (its absolute
- * path, as `cadFileParamForEntry` gives it), the selector half without its
+ * path, as `fileKey` gives it), the selector half without its
  * `#` (`""` for a whole file), and the text exactly as copied.
  */
 export function referenceFromCopyText(text, file) {

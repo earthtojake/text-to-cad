@@ -41,11 +41,11 @@ the same. Launch is::
 
     cadgen viewer            # or: python -m cadgen.viewer
 
-There is no interpreter discovery, and deliberately so: an earlier backend
-searched ``$CADGEN_PYTHON``, ``PATH``, and ``<servedRoot>/.venv/bin/python``,
-which meant OPENING AN UNTRUSTED FOLDER THAT SHIPS A .venv handed it the
-interpreter to execute. The server IS the interpreter that installed cadgen.
-Do not reintroduce a search in any form.
+There is no interpreter discovery, and deliberately so: a search for one
+(``$CADGEN_PYTHON``, ``PATH``, a ``.venv`` found in a folder) would mean that
+OPENING AN UNTRUSTED FOLDER THAT SHIPS A .venv hands it the interpreter to
+execute. The server IS the interpreter that installed cadgen. Do not
+introduce a search in any form.
 """
 
 from __future__ import annotations
@@ -208,12 +208,11 @@ def _port_number(raw: str) -> int:
 class _Parser(argparse.ArgumentParser):
     """argparse with the launcher's refusal shape.
 
-    An unknown argument is a REFUSAL, not a shrug: a misspelled flag once started
-    a viewer on the wrong directory and served an empty catalog while looking
-    fine. argparse refuses too, but names every stray token in one line —
+    An unknown argument is a REFUSAL, not a shrug: a misspelled flag that is
+    ignored starts a viewer other than the one asked for, and looks fine.
+    argparse refuses too, but names every stray token in one line —
     ``--dir /tmp`` would read as two problems. The FIRST unknown is the useful
-    one, so ``parse`` below reports exactly that. This also catches the retired
-    ``--root <dir>``: a viewer has no directory.
+    one, so ``parse`` below reports exactly that.
     """
 
     def error(self, message: str) -> None:  # noqa: D401 - argparse's contract
@@ -306,17 +305,17 @@ def warn_when_dist_is_stale(dist_dir: str) -> None:
     manufactured a false bug report from a sibling project — a pose-preset
     "bug" that was just an old bundle — and nothing at startup said so.
 
-    Structurally impossible in a published bundle: the check looks for the
-    app's ``src/`` tree BESIDE the served dist, which exists only in checkouts
-    — the skill bundle and the mirrored repo ship ``dist/`` without sources,
-    so there is nothing to compare and the walk never happens. The cost in a
-    checkout is one mtime walk of src/ (~150 files, well under a millisecond).
+    Structurally impossible in the wheel: the check looks for the app's
+    ``src/`` tree BESIDE the served dist, which exists only in checkouts — the
+    packaged client ships without sources, so there is nothing to compare and
+    the walk never happens. The cost in a checkout is one mtime walk of src/
+    and of dist/: a few hundred stats.
     """
     if not dist_dir:
         return
     src_dir = os.path.join(os.path.dirname(dist_dir), "src")
     if not os.path.isdir(src_dir):
-        return  # published bundles ship no client sources: nothing to compare
+        return  # the packaged client ships no sources: nothing to compare
     if newest_mtime_ns(src_dir) > newest_mtime_ns(dist_dir):
         _err("dist/ is older than the client sources — rebuild with `npm run build`\n")
 
@@ -639,8 +638,9 @@ def serve(argv: list[str], *, prog: str = DEFAULT_PROG) -> int:
     # Ask the port who holds it, with the exact runtime requested now. Resolving dist before this
     # is load-bearing: --dist must never hand back a server serving a different client, and a
     # removed default dist is not a usable resident merely because its server is still alive.
+    token = identity_token(dist_dir)
     if not args["new"]:
-        action, held = _take_port(host, port, identity_token(dist_dir))
+        action, held = _take_port(host, port, token)
         if action == "stuck":
             _err(
                 f"The CAD Viewer on port {port} (pid {held.get('pid')}) runs other code and did not exit; "
@@ -680,7 +680,7 @@ def serve(argv: list[str], *, prog: str = DEFAULT_PROG) -> int:
     # Attach the real app in the same breath as the successful bind: the socket
     # is listening but serve_forever has not accepted anything, so no request
     # can be dropped in the gap, and serverInfo names the port actually taken.
-    app = create_cad_app(host=host, port=port, dist_dir=dist_dir)
+    app = create_cad_app(host=host, port=port, dist_dir=dist_dir, identity=token)
     server.app = app
     server.RequestHandlerClass = make_handler_class(app)
 

@@ -21,14 +21,14 @@ function browserTab(): { storage: Storage; record: () => TabRecordStorage } {
 test('a new tab starts at the defaults and two tabs never meet: each reload brings back its own tab\'s settings and file views alone', () => {
   const one = browserTab(), two = browserTab();
   const first = createTabStore(one.record());
-  // Tab one: the tree panel widened, the panel column widened, the appearance chosen, and the file in wireframe.
-  first.settings.update({ appearance: 'dark', toolStack: { panels: { tree: { width: 240 } }, collapsed: {}, closed: {} }, panelWidth: 300 });
+  // Tab one: the tree panel widened, the appearance chosen, and the file in wireframe.
+  first.settings.update({ appearance: 'dark', toolStack: { panels: { tree: { width: 240 } }, collapsed: {}, closed: {} } });
   first.files.write('/models/part.step', 'step', writeFileView({ display: { mode: 'wireframe' }, playback: { orbitSpeed: 3, autoplay: true } }) as never);
 
   // Tab two, in the same browser: none of it.
   const second = createTabStore(two.record());
   expect(second.getSnapshot()).toEqual(defaultTabRecord());
-  expect(second.settings.getSnapshot()).toEqual({ panelWidth: 220, toolStack: { panels: {}, collapsed: {}, closed: {} }, appearance: 'system', library: { layout: 'grid' } });
+  expect(second.settings.getSnapshot()).toEqual({ toolStack: { panels: {}, collapsed: {}, closed: {} }, appearance: 'system', library: { layout: 'grid' } });
   const fresh = readFileView(second.files.read('/models/part.step', 'step'));
   expect([fresh.display.mode, fresh.playback]).toEqual(['solid', DEFAULT_PLAYBACK]);
   second.settings.update({ appearance: 'light' });
@@ -36,7 +36,7 @@ test('a new tab starts at the defaults and two tabs never meet: each reload brin
   // Tab one reloaded: its own settings and view, untouched by tab two.
   const reloaded = createTabStore(one.record());
   const settings = reloaded.settings.getSnapshot();
-  expect([settings.appearance, settings.toolStack.panels, settings.panelWidth]).toEqual(['dark', { tree: { width: 240 } }, 300]);
+  expect([settings.appearance, settings.toolStack.panels]).toEqual(['dark', { tree: { width: 240 } }]);
   const view = readFileView(reloaded.files.read('/models/part.step', 'step'));
   expect([view.display.mode, view.playback.orbitSpeed, view.playback.autoplay]).toEqual(['wireframe', 3, true]);
 

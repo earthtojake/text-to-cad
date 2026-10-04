@@ -188,9 +188,14 @@ Where the mechanism is written:
 ## Public modules and lifetimes
 
 Use `@text-to-cad/core/client`, `/common/*`, `/lib/*` and `/glb/*` exports.
-Construct `createCadClient({ origin, workspaceId })` in a host. Construction is
+Construct `createCadClient({ origin, fetch })` in a host. Construction is
 inert; subscriptions start catalog polling, which the host's `shouldPoll` gates
-(the web's pauses while its page is hidden). `dispose()` stops polling, aborts
+(the web's pauses while its page is hidden). The client also carries what every
+CAD view asks of its server, so each host reaches it the same way: the model
+library (`recents`, `changeRecents`, `thumbnail`, `keepThumbnail`), Open
+(`pick`), Reveal (`reveal`), the person's analytics answer and features
+(`consent`, `features`), the update check (`version`) and a touch
+(`reportActivity`); every change is a POST with the viewer's guard header. `dispose()` stops polling, aborts
 requests and disposes render sessions. The client lazily owns its cache provider
 and bounded write-back queue; each render session borrows a cancellable cache
 view and owns its abort signal and worker leases. A host whose transport

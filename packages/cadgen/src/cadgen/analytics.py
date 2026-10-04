@@ -32,7 +32,7 @@ Nothing is sent without the person's yes, however CAD was installed. Strongest f
    ``CADGEN_ANALYTICS=1`` on.
 2. The person's choice, kept as the ``analytics`` section of their settings (``cadgen/settings.py``:
    ``settings.json`` in the state directory) and shared by both apps:
-   either app's card or its Settings, ``cadgen analytics on|off``, or the agent's
+   either app's card or its menu, ``cadgen analytics on|off``, or the agent's
    ``cad_analytics`` (off only).
 3. Otherwise nothing is sent, and whichever app the person opens first asks once.
 
@@ -103,10 +103,11 @@ FLUSH_SECONDS = 60
 # shorter wait would give up on a batch a cold receiver was still storing, and send it twice.
 TIMEOUT_SECONDS = 10
 CLOSE_SECONDS = 2  # the most an exiting server waits for its last send
-# The page's plumbing: a view's once-a-second sync, its viewer requests, its capture replies and
-# the home's re-reads of its library every couple of seconds say nothing about use and would
-# drown what does. A view's own activity is noted from its sync instead (``viewed``, ``opened``).
-UNCOUNTED = frozenset({"cad_sync", "cad_http", "cad_capture_reply", "cad_consent", "cad_features", "cad_version", "cad_recents"})
+# The page's plumbing: a view's once-a-second sync, its viewer requests (the home's re-reads of its
+# library every couple of seconds among them) and its capture replies say nothing about use and would
+# drown what does. A view's own activity is noted from its sync (``viewed``) and as it adds the model
+# on screen to the library (``opened``).
+UNCOUNTED = frozenset({"cad_sync", "cad_http", "cad_capture_reply"})
 # A file's format, by extension: what the viewer opens (``cadgen.viewer.scanner.SOURCE_EXTENSIONS``).
 FILE_KINDS = {".step": "step", ".stp": "step", ".stl": "stl", ".3mf": "3mf", ".glb": "glb", ".dxf": "dxf",
               ".urdf": "urdf", ".srdf": "srdf", ".sdf": "sdf"}

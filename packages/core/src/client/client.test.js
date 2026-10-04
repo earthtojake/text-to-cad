@@ -279,3 +279,47 @@ test('a drawing refused by the server raises the classified failure an alert is 
   });
   client.dispose();
 });
+
+test('the library, Open, Reveal and the person\'s settings are guarded requests to the viewer\'s routes, as any host reaches them', async (t) => {
+  const calls = [];
+  const thumbnail = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+  const client = createCadClient({ origin: 'http://one.test', pollIntervalMs: 0, fetch: async (url, options = {}) => {
+    const path = new URL(url).pathname;
+    calls.push([path, options.method || 'GET', options.headers?.['x-cadgen-viewer'] ?? null, options.body ? JSON.parse(options.body) : null]);
+    if (path === '/__cad/thumbnail') return new Response(new URL(url).searchParams.get('name') === 'a.png' ? thumbnail : null, { status: new URL(url).searchParams.get('name') === 'a.png' ? 200 : 404 });
+    if (path === '/__cad/reveal') return options.body.includes('gone') ? Response.json({ error: 'That file is no longer there.' }, { status: 404 }) : new Response(null, { status: 204 });
+    if (path === '/__cad/pick') return Response.json({ path: '/models/picked.step' });
+    if (path === '/__cad/recents') return Response.json({ recents: [{ path: '/models/a.step' }] });
+    return Response.json({ path });
+  } });
+  t.after(() => client.dispose());
+  assert.deepEqual(await client.recents(), [{ path: '/models/a.step' }]);
+  assert.deepEqual(await client.changeRecents({ action: 'open', path: '/models/a.step' }), [{ path: '/models/a.step' }]);
+  await client.keepThumbnail(new Blob([thumbnail], { type: 'image/png' }), '/models/a.step');
+  assert.equal(await client.thumbnail('a.png'), 'data:image/png;base64,iVBORw==');
+  assert.equal(await client.thumbnail('none.png'), null);
+  assert.equal(await client.pick(), '/models/picked.step');
+  await client.reveal('/models/a.step');
+  await assert.rejects(client.reveal('/models/gone.step'), /no longer there/);
+  await client.consent();
+  await client.consent(true, 'card');
+  await client.consent(false, 'settings');
+  await client.features({ quickEdit: false });
+  await client.version();
+  client.reportActivity({ touched: true });
+  await new Promise((resolve) => setImmediate(resolve));
+  // Every change carries the header no page from another site can send; a read sends none.
+  assert.deepEqual(calls, [
+    ['/__cad/recents', 'GET', null, null],
+    ['/__cad/recents', 'POST', '1', { action: 'open', path: '/models/a.step' }],
+    ['/__cad/recents', 'POST', '1', { action: 'thumbnail', path: '/models/a.step', png: 'iVBORw==' }],
+    ['/__cad/thumbnail', 'GET', null, null], ['/__cad/thumbnail', 'GET', null, null],
+    ['/__cad/pick', 'POST', '1', null],
+    ['/__cad/reveal', 'POST', '1', { path: '/models/a.step' }], ['/__cad/reveal', 'POST', '1', { path: '/models/gone.step' }],
+    ['/__cad/analytics', 'GET', null, null],
+    ['/__cad/analytics', 'POST', '1', { share: true, card: true }], ['/__cad/analytics', 'POST', '1', { share: false }],
+    ['/__cad/features', 'POST', '1', { quickEdit: false }],
+    ['/__cad/version', 'GET', null, null],
+    ['/__cad/analytics/activity', 'POST', '1', { touched: true }],
+  ]);
+});

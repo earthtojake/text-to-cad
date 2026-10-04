@@ -58,8 +58,7 @@ no quality effect or resize observer may resize the backing buffer directly. A v
 resize DRAWS that frame instead, synchronously inside its ResizeObserver callback (after
 layout, before paint): the canvas is sized 100% by CSS, and a frame requested from there
 with `requestAnimationFrame` would land a frame late, painting the old picture stretched
-over the new box whenever the viewer changes width in one step (a panel column opening, a
-window snap). That synchronous frame replaces any queued one, so a drag still draws once
+over the new box whenever the viewer changes width in one step (a window snap). That synchronous frame replaces any queued one, so a drag still draws once
 per frame, and an idle viewer draws nothing. While the gate holds, the draw is skipped
 like any other, the buffer keeps its size, and the held picture waits for the frame that
 releases it (`kit/viewport/ViewportResize.browser.test.mjs`). Presentation resumes after

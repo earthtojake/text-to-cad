@@ -48,9 +48,6 @@ class _NeverCompiles:
     def failure(self, candidate):
         return None
 
-    def shutdown(self):
-        pass
-
 
 class ProgressFeed(unittest.TestCase):
     def setUp(self) -> None:

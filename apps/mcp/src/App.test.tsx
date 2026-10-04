@@ -1,7 +1,6 @@
 import { act, cleanup, render } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { CadViewerProps } from '@text-to-cad/ui/cad-viewer';
-import type { UpdateNotice } from '@text-to-cad/ui/update';
 import App from './App';
 import type { HostContext } from './host/bridge';
 import type { Launch } from './host/server';
@@ -21,8 +20,16 @@ vi.mock('@text-to-cad/ui/cad-viewer', async original => {
 beforeEach(() => vi.stubGlobal('IntersectionObserver', class { observe() {} unobserve() {} disconnect() {} }));
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); viewer.props = null; viewer.mounts = 0; });
 
-/** A host frame and CAD's server, as the page reaches them. */
-function host(initial: HostContext, hostCapabilities: Record<string, unknown> = {}, ask = false, notice: UpdateNotice | null = null) {
+const POLICY = 'https://www.texttocad.dev/privacy-policy';
+type Answer = (body: any) => unknown;
+
+/**
+ * A host frame and CAD's server, as the page reaches them: its sync, and the viewer's routes over
+ * `cad_http`, answered here as the viewer answers them (`answers`, by path; a route without one, as
+ * what the viewer reads for itself, never answers). `asked(path)` is what the page sent each: its
+ * JSON body, or null for a read.
+ */
+function host(initial: HostContext, hostCapabilities: Record<string, unknown> = {}, ask = false) {
   const listeners = new Set<(context: HostContext) => void>();
   let context = initial;
   const bridge = {
@@ -32,17 +39,30 @@ function host(initial: HostContext, hostCapabilities: Record<string, unknown> = 
     onHostContext(listener: (next: HostContext) => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
     change(next: HostContext) { context = { ...context, ...next }; for (const listener of [...listeners]) listener(context); },
   };
-  const server = {
-    events: () => new Promise(() => {}), report: vi.fn(async () => ({})), reply: vi.fn(async () => ({})),
-    recents: vi.fn(async () => []), thumbnails: vi.fn(async () => ({})), http: () => new Promise(() => {}),
-    launch: vi.fn(async (model: string) => ({ ...home, page: 'viewer', model })), pickModel: vi.fn(async () => ({ cancelled: true })),
-    reveal: vi.fn(async () => {}),
-    consent: vi.fn(async (share?: boolean) => ({ ask: share === undefined && ask, sharing: Boolean(share), policy: 'https://www.texttocad.dev/privacy-policy' })),
-    // The person's features as the server keeps them (`cad_features`).
-    features: vi.fn(async (change?: object) => { kept = { ...kept, ...change }; return kept; }),
-    version: vi.fn(async () => ({ notice })),
-  };
   let kept = { quickEdit: true };
+  const answers: Record<string, Answer> = {
+    '/__cad/analytics': body => ({ ask: body === null && ask, sharing: Boolean(body?.share), policy: POLICY }),
+    // The person's features as the server keeps them.
+    '/__cad/features': body => (kept = { ...kept, ...body }),
+    '/__cad/version': () => ({ notice: null }),
+    '/__cad/recents': () => ({ recents: [] }),
+    '/__cad/reveal': () => null,
+  };
+  const requests: { path: string; body: any }[] = [];
+  const server = {
+    sync: () => new Promise(() => {}), reply: vi.fn(async () => ({})),
+    http: vi.fn(async ({ url, body }: { url: string; body: string }) => {
+      const path = new URL(url).pathname;
+      const sent = body ? JSON.parse(atob(body)) : null;
+      requests.push({ path, body: sent });
+      if (!answers[path]) return new Promise(() => {});
+      const value = await answers[path](sent);
+      return value === null ? { status: 204, headers: {}, body: '' }
+        : { status: 200, headers: { 'content-type': 'application/json' }, body: btoa(JSON.stringify(value)) };
+    }),
+    answers,
+    asked: (path: string) => requests.filter(request => request.path === path).map(request => request.body),
+  };
   return { bridge, server };
 }
 // The home, as the server launches it: the library, with Open on a computer that has a chooser.
@@ -65,12 +85,16 @@ it('a tab host gets the page it always had, down to its bottom: the home, with n
   expect(frame.style.getPropertyValue('--cad-host-bottom-inset')).toBe('72px');
 });
 
-it('a model opened from the home is launched by the server and leads back to it; the navbar\'s links and file menu go through the host', async () => {
+it('a model opened from the home is shown in place, joins the library with its picture, and leads back home; the navbar\'s links and file menu go through the host', async () => {
   const { bridge, server } = host({ displayMode: 'fullscreen' });
   render(<App bridge={bridge as any} server={server as any} launch={home} />);
-  await act(async () => viewer.props!.library!.open({ path: '/work/parts/a.step', name: 'a.step', folder: 'work/parts', pinned: false, thumbnail: null, openedAt: 1 } as any));
-  expect(server.launch).toHaveBeenCalledWith('/work/parts/a.step');
+  await act(async () => viewer.props!.library!.open({ path: '/work/parts/a.step', name: 'a.step', folder: 'work/parts', pinned: false, thumbnail: null, opened: 1 } as any));
   expect(viewer.props!.file).toBe('/work/parts/a.step');
+  // On screen, it joins the library every CAD view shares, and its picture is kept there.
+  await act(async () => viewer.props!.onShown!('/work/parts/a.step'));
+  await act(async () => { await viewer.props!.onThumbnail!(new Blob([new Uint8Array([0x89, 0x50])], { type: 'image/png' }), '/work/parts/a.step'); });
+  expect(server.asked('/__cad/recents')).toEqual([{ action: 'open', path: '/work/parts/a.step' },
+    { action: 'thumbnail', path: '/work/parts/a.step', png: 'iVA=' }]);
   // Home again, from the navbar's logo.
   act(() => viewer.props!.onShow(''));
   expect(viewer.props!.file).toBe('');
@@ -81,7 +105,7 @@ it('a model opened from the home is launched by the server and leads back to it;
   const { perform, platform } = viewer.props!.host.fileActions!;
   expect([platform, Object.keys(perform!).sort()]).toEqual(['darwin', ['copy-path', 'reveal']]);
   await act(async () => perform!.reveal!({ path: '/work/parts/a.step', kind: 'file' }));
-  expect(server.reveal).toHaveBeenCalledWith('/work/parts/a.step');
+  expect(server.asked('/__cad/reveal')).toEqual([{ path: '/work/parts/a.step' }]);
 });
 
 it('every view has the home and browses from its file\'s folder, but the host\'s file handler shows its file alone', () => {
@@ -154,9 +178,9 @@ it('a hand-made install is asked once about analytics: nothing is shared before 
     expect([policy.href, policy.target]).toEqual(['https://www.texttocad.dev/privacy-policy', '_blank']);
     await act(async () => policy.click());
     expect(bridge.request).toHaveBeenCalledWith('ui/open-link', { url: 'https://www.texttocad.dev/privacy-policy' });
-    expect(server.consent).toHaveBeenCalledTimes(1);
+    expect(server.asked('/__cad/analytics')).toEqual([null]);
     await act(async () => (choice === 'Close' ? getByRole('button', { name: "Close and don't share" }) : getByText(choice)).click());
-    expect(server.consent).toHaveBeenLastCalledWith(choice === 'Allow', 'card');
+    expect(server.asked('/__cad/analytics').at(-1)).toEqual({ share: choice === 'Allow', card: true });
     expect(queryByRole('dialog', { name: 'Allow Analytics' })).toBeNull();
     cleanup();
   }
@@ -170,7 +194,7 @@ it('a hand-made install is asked once about analytics: nothing is shared before 
     await act(async () => getByText('Allow').click());
     expect(viewer.props!.appSettings![0].checked).toBe(true);
     await act(async () => viewer.props!.appSettings![0].onCheckedChange(false));
-    expect(server.consent).toHaveBeenLastCalledWith(false, 'settings');
+    expect(server.asked('/__cad/analytics').at(-1)).toEqual({ share: false });
     expect(viewer.props!.appSettings![0].checked).toBe(false);
     cleanup();
   }
@@ -178,27 +202,30 @@ it('a hand-made install is asked once about analytics: nothing is shared before 
   const { bridge, server } = host({ displayMode: 'fullscreen' });
   const { queryByRole } = render(<App bridge={bridge as any} server={server as any} launch={home} />);
   await act(async () => {});
-  expect(server.consent).toHaveBeenCalledTimes(1);
+  expect(server.asked('/__cad/analytics')).toEqual([null]);
   expect(queryByRole('dialog', { name: 'Allow Analytics' })).toBeNull();
 });
 
 it('an answer is never undone by a read sent just before it, and a choice the environment made is shown fixed', async () => {
   const { bridge, server } = host({ displayMode: 'fullscreen' }, {}, true);
-  const policy = 'https://www.texttocad.dev/privacy-policy';
   let releaseStaleRead: (value: unknown) => void = () => {};
   const { findByRole, getByText, queryByRole } = render(<App bridge={bridge as any} server={server as any} launch={home} />);
   await findByRole('dialog', { name: 'Allow Analytics' });
   // The click's own focus sends a read that answers late, with the question still open.
-  server.consent.mockImplementationOnce(() => new Promise(resolve => { releaseStaleRead = resolve; }));
+  const answer = server.answers['/__cad/analytics'];
+  server.answers['/__cad/analytics'] = () => {
+    server.answers['/__cad/analytics'] = answer;
+    return new Promise(resolve => { releaseStaleRead = resolve; });
+  };
   act(() => { window.dispatchEvent(new Event('focus')); });
   await act(async () => getByText('Allow').click());
-  await act(async () => releaseStaleRead({ ask: true, sharing: false, policy }));
+  await act(async () => releaseStaleRead({ ask: true, sharing: false, policy: POLICY }));
   expect(queryByRole('dialog', { name: 'Allow Analytics' })).toBeNull();
   expect(viewer.props!.appSettings![0].checked).toBe(true);
   cleanup();
   // DO_NOT_TRACK: the setting says so, and cannot be changed here.
   const fixed = host({ displayMode: 'fullscreen' });
-  fixed.server.consent.mockImplementation(async () => ({ ask: false, sharing: false, reason: 'environment', policy }));
+  fixed.server.answers['/__cad/analytics'] = () => ({ ask: false, sharing: false, reason: 'environment', policy: POLICY });
   render(<App bridge={fixed.bridge as any} server={fixed.server as any} launch={home} />);
   await act(async () => {});
   expect(viewer.props!.appSettings![0]).toEqual(expect.objectContaining({ disabled: true, label: 'Share anonymous usage data (set by your environment)' }));
@@ -208,18 +235,18 @@ it("the app menu's features: Quick edit is read from the server, turned off ther
   const { bridge, server } = host({ displayMode: 'fullscreen' });
   render(<App bridge={bridge as any} server={server as any} launch={home} />);
   await act(async () => {});
-  expect(server.features.mock.calls).toEqual([[undefined]]);
+  expect(server.asked('/__cad/features')).toEqual([null]);
   expect(viewer.props!.features).toEqual({ quickEdit: true });
   // Settings: Analytics, then Features.
   expect(viewer.props!.appSettings!.map(setting => [setting.label, setting.checked]))
     .toEqual([['Share anonymous usage data', false], ['Quick edit', true]]);
   await act(async () => viewer.props!.appSettings!.find(setting => setting.id === 'quickEdit')!.onCheckedChange(false));
-  expect(server.features).toHaveBeenLastCalledWith({ quickEdit: false });
+  expect(server.asked('/__cad/features').at(-1)).toEqual({ quickEdit: false });
   expect(viewer.props!.features).toEqual({ quickEdit: false });
   cleanup();
   // Another view of the person's opens with it off: the server kept it.
   const again = host({ displayMode: 'fullscreen' });
-  again.server.features.mockImplementation(async () => ({ quickEdit: false }));
+  again.server.answers['/__cad/features'] = () => ({ quickEdit: false });
   render(<App bridge={again.bridge as any} server={again.server as any} launch={home} />);
   await act(async () => {});
   expect(viewer.props!.features).toEqual({ quickEdit: false });
@@ -229,8 +256,9 @@ it('a newer release is the blue update button: its card sends the prompt to the 
   const notice = { latest: '0.9.0', version: '0.8.1', text: 'A new version v0.9.0 of text-to-cad is available (currently on v0.8.1)',
     prompt: 'Update text-to-cad to 0.9.0 from https://github.com/earthtojake/text-to-cad', instructions: 'https://www.texttocad.dev/install' };
   {
-    const { bridge, server } = host({ displayMode: 'fullscreen' }, { message: {} }, true, notice);
-    const { findByRole, getByRole, queryByRole } = render(<App bridge={bridge as any} server={server as any} launch={home} />);
+    // The launch carries the notice as the server last read it: the button draws with the page.
+    const { bridge, server } = host({ displayMode: 'fullscreen' }, { message: {} }, true);
+    const { findByRole, getByRole, queryByRole } = render(<App bridge={bridge as any} server={server as any} launch={{ ...home, notice }} />);
     // The button is the navbar's, not the analytics question's corner: both are up at once.
     await findByRole('dialog', { name: 'Allow Analytics' });
     const update = await findByRole('button', { name: 'Update to 0.9.0' });
@@ -242,13 +270,13 @@ it('a newer release is the blue update button: its card sends the prompt to the 
     expect(bridge.request).toHaveBeenCalledWith('ui/message', { role: 'user', content: [{ type: 'text', text: notice.prompt }] }, { timeoutMs: 30_000 });
     expect(queryByRole('dialog', { name: 'Update available' })).toBeNull();
     expect(getByRole('button', { name: 'Update to 0.9.0' })).toBeTruthy();
-    expect(server.version.mock.calls).toEqual([[]]); // read, and nothing kept
+    expect(server.asked('/__cad/version')).toEqual([]); // nothing to read, and nothing kept
     cleanup();
   }
   const writeText = vi.fn(async () => {});
   Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
-  const { bridge, server } = host({ displayMode: 'fullscreen' }, {}, false, notice);
-  const { findByRole } = render(<App bridge={bridge as any} server={server as any} launch={home} />);
+  const { bridge, server } = host({ displayMode: 'fullscreen' });
+  const { findByRole } = render(<App bridge={bridge as any} server={server as any} launch={{ ...home, notice }} />);
   // Looked up outside act: act holds React's updates until it returns, and the lookup waits on them.
   const update = await findByRole('button', { name: 'Update to 0.9.0' });
   await act(async () => update.click());

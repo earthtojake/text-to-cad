@@ -20,9 +20,23 @@ export interface CadServerInfo {
   start?: string;
   /** Whether this computer has a file chooser for the home's Open. */
   pick?: boolean;
-  backend?: string;
+  /** `darwin`, `win32` or `linux`: which file manager Reveal opens. */
+  platform?: string;
   [key: string]: unknown;
 }
+/** A model in the library every CAD view shares (`GET /__cad/recents`): times in seconds. */
+export interface CadRecent {
+  path: string; name: string; folder: string; opened: number;
+  /** When the file last changed; null once it is gone. */
+  modified: number | null;
+  pinned: boolean; missing: boolean;
+  /** The picture's name, for `thumbnail()`, and when it was taken. */
+  thumbnail: string | null; pictured: number | null;
+}
+/** The person's analytics answer, and whether to ask (`/__cad/analytics`): `reason` says who decided. */
+export interface CadConsent { ask: boolean; sharing: boolean; reason: 'unasked' | 'choice' | 'environment' | 'unavailable'; policy: string }
+/** A newer text-to-cad, as cadgen's version check says it (`/__cad/version`). */
+export interface CadUpdateNotice { latest: string; version: string; text: string; prompt: string; instructions: string }
 export interface CadCatalog { entries: CadEntry[]; [key: string]: unknown }
 /** One folder's subfolders and CAD files (`GET /__cad/folder`). */
 export interface CadFolder { path: string; entries: { name: string; kind: 'directory' | 'file' }[]; truncated: boolean }
@@ -127,7 +141,6 @@ export interface CadRenderSession {
 }
 /** Domain service consumed by renderers; HTTP metadata stays on its adapter. */
 export interface CadWorkspaceService {
-  readonly workspaceId: string;
   getSnapshot(): CadCatalogSnapshot;
   subscribe(listener: () => void): () => void;
   refresh(options?: CadRequestOptions & {file?: string;markRefreshing?: boolean}): Promise<CadCatalog>;
@@ -135,6 +148,26 @@ export interface CadWorkspaceService {
   serverInfo(options?: CadRequestOptions & { fresh?: boolean }): Promise<CadServerInfo>;
   folder(path: string, options?: CadRequestOptions): Promise<CadFolder>;
   search(path: string, query: string, options?: CadRequestOptions): Promise<CadSearch>;
+  /** The home's library, newest first. */
+  recents(options?: CadRequestOptions): Promise<CadRecent[]>;
+  /** A change to the library (`open`, `pin`, `unpin`, `remove`, `thumbnail`): the library as it now is. */
+  changeRecents(change: { action: 'open' | 'pin' | 'unpin' | 'remove' | 'thumbnail'; path: string; png?: string }): Promise<CadRecent[]>;
+  /** Keep a model's picture in the library. */
+  keepThumbnail(png: Blob, path: string): Promise<CadRecent[]>;
+  /** A library picture, by the name the library gives it, as a data URL; null when there is none. */
+  thumbnail(name: string, options?: CadRequestOptions): Promise<string | null>;
+  /** Open: the model the person picks with the desktop's chooser, by its absolute path, or null. */
+  pick(): Promise<string | null>;
+  /** Show a file, by its absolute path, in the desktop's file manager. */
+  reveal(path: string): Promise<void>;
+  /** The person's analytics answer; with `share`, their answer (a card's counts only while the question is open). */
+  consent(share?: boolean, from?: 'card' | 'settings'): Promise<CadConsent>;
+  /** The features the person can turn off, as they left them; with `change`, their change of some. */
+  features(change?: Record<string, boolean>): Promise<Record<string, boolean>>;
+  /** Whether a newer text-to-cad is out: the update button's notice, or null. */
+  version(): Promise<{ notice: CadUpdateNotice | null }>;
+  /** What the page did (a person touched it): noted by the server, sent only with consent. Never fails. */
+  reportActivity(activity: { touched?: boolean }): void;
   requestArtifactStatus(file: string, options?: CadRequestOptions): Promise<CadArtifactResult>;
   requestArtifact(file: string, options?: CadRequestOptions & {force?: boolean}): Promise<CadArtifactResult>;
   /** A `.dxf` flattened to 2D render primitives on the server; the client never parses DXF. */
@@ -157,7 +190,6 @@ export interface CadClient extends CadWorkspaceService {
 export interface CadClientOptions {
   resources?: CadResourceProvider;
   origin?: string;
-  workspaceId?: string;
   fetch?: typeof globalThis.fetch;
   pollIntervalMs?: number;
   /** Host visibility policy, evaluated at each polling interval. */

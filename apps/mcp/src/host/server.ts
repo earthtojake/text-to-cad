@@ -1,14 +1,13 @@
 import type { CadEditingPreview } from '@text-to-cad/core/client';
 import type { LibraryModel } from '@text-to-cad/ui/library';
-import type { AnalyticsConsent, AnswerFrom } from '@text-to-cad/ui/consent';
-import type { ViewerFeatures } from '@text-to-cad/ui/features';
 import type { UpdateNotice } from '@text-to-cad/ui/update';
 import type { Bridge, CallOptions, ToolResult } from './bridge';
 
 /**
  * The launch/view protocol this page speaks with `cadgen mcp` (its `PROTOCOL`): a launch names a
  * model by its absolute path (`page: viewer`) or the home (`page: home`), and carries what the page
- * needs to start on it alone; a view makes one call a second (`cad_sync`).
+ * needs to start on it alone; a view makes one call a second (`cad_sync`) and reaches the viewer's
+ * routes through `cad_http`.
  */
 export const PROTOCOL = 5;
 
@@ -32,7 +31,7 @@ export interface Launch {
   view?: string;
   order?: { createdAt: number; seq: number };
 }
-/** A model in the library every CAD view shares (`cad_recents`), as the home lists it. */
+/** A model in the library every CAD view shares, as the home lists it. */
 export type Recent = LibraryModel;
 export type ViewEvent =
   | { seq: number; type: 'show'; launch: Launch }
@@ -50,9 +49,6 @@ export interface SyncReply {
   catalog?: { revision?: string; error?: string };
   previews?: ({ file: string; error?: string } & CadEditingPreview)[];
 }
-
-/** Anonymous usage analytics (`cad_consent`): the shared card's and Settings toggle's state. */
-export type { AnalyticsConsent as Consent } from '@text-to-cad/ui/consent';
 
 export class ServerError extends Error {
   constructor(message: string) { super(message); this.name = 'ServerError'; }
@@ -75,26 +71,14 @@ export function createServer(bridge: Pick<Bridge, 'callTool'>) {
     return (result.structuredContent || {}) as T;
   }
   return {
-    /** Whether to ask the person about anonymous analytics; with `share`, their answer (`cadgen/analytics.py`). */
-    consent: (share?: boolean, from?: AnswerFrom) => call<AnalyticsConsent>('cad_consent', share === undefined ? {} : { share, ...(from === 'card' ? { card: true } : {}) }),
-    /** The app menu's features as the person left them; with `change`, their change of some (`cadgen/features.py`). */
-    features: (change?: Partial<ViewerFeatures>) => call<ViewerFeatures>('cad_features', change ?? {}),
-    /** Whether a newer text-to-cad is out (`cadgen/updates.py`): the update button's notice, or null. */
-    version: () => call<{ notice: UpdateNotice | null }>('cad_version', {}),
-    launch: (model: string) => call<{ launch: Launch }>('cad_launch', { model }).then(value => value.launch),
-    pickModel: () => call<{ launch?: Launch; cancelled?: boolean }>('cad_pick_model', {}, { timeoutMs: 16 * 60_000 }),
-    recents: (args: { action?: 'list' | 'pin' | 'unpin' | 'remove' | 'thumbnail'; path?: string; png?: string } = {}) =>
-      call<{ recents: Recent[] }>('cad_recents', args).then(value => value.recents),
-    thumbnails: (names: string[]) => call<{ thumbnails: Record<string, string> }>('cad_recents', { action: 'thumbnails', names }).then(value => value.thumbnails),
     /** This view's one call each second (`host/sync.ts`). */
     sync: (request: SyncRequest, options?: CallOptions) =>
       call<SyncReply>('cad_sync', request as unknown as Record<string, unknown>, options).then(value => ({ ...value, events: value.events || [] })),
     reply: (requestId: string, reply: { png?: string; error?: string }) =>
       call('cad_capture_reply', { requestId, ...reply }),
+    /** One request to the viewer's routes (`host/tunnel.ts`): everything else the page asks of the server. */
     http: (args: { method: string; url: string; headers: Record<string, string>; body: string }, options?: CallOptions) =>
       call<HttpReply>('cad_http', args, options),
-    /** Show a file, by its absolute path, in the desktop's file manager (the server runs on the person's machine). */
-    reveal: (path: string) => call('cad_reveal', { path }).then(() => {}),
   };
 }
 export type Server = ReturnType<typeof createServer>;

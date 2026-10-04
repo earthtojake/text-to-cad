@@ -1,3 +1,4 @@
+import { encodeBase64 } from './base64.js';
 import { requestViewerJson, ViewerRequestError } from "./request.js";
 import { retainSurfWorkerPool } from '../lib/surf/surfWorkerClient.js';
 import { retainGlbMeshWorker } from '../lib/render/glbMeshWorkerClient.js';
@@ -37,13 +38,16 @@ export function isMissingFileError(error) {
   return error?.code === 'cad-file-missing';
 }
 
+// A guarded JSON POST: the viewer refuses a POST without its header (no cross-site form can send one).
+const JSON_POST = Object.freeze({ 'content-type': 'application/json', 'x-cadgen-viewer': '1' });
+
 /**
  * An explicit connection to a CAD Viewer, which serves files by absolute path. Its catalog holds
  * the files on screen, each read as it is asked for. Construction never starts requests.
  * @param {import("./types.js").CadClientOptions} options
  * @returns {import("./types.js").CadClient}
  */
-export function createCadClient({ origin = '', workspaceId = 'local', fetch: fetchImpl = globalThis.fetch, pollIntervalMs = 2000, shouldPoll = () => true, resources: resourceProvider, editingPreviewFeed = null, maxBatchBytes } = {}) {
+export function createCadClient({ origin = '', fetch: fetchImpl = globalThis.fetch, pollIntervalMs = 2000, shouldPoll = () => true, resources: resourceProvider, editingPreviewFeed = null, maxBatchBytes } = {}) {
   origin = normalizeViewerOrigin(origin);
   let disposed = false;
   const resourceLifetime = new AbortController();
@@ -163,7 +167,6 @@ export function createCadClient({ origin = '', workspaceId = 'local', fetch: fet
   const client = {
     origin,
     resources,
-    get workspaceId() { return workspaceId; },
     getSnapshot: () => snapshot,
     subscribe(listener) {
       if (disposed) throw new Error('This CAD client has been disposed.');
@@ -205,6 +208,48 @@ export function createCadClient({ origin = '', workspaceId = 'local', fetch: fet
     },
     search(path, query, { signal } = {}) {
       return request('/__cad/search', { params: { path, q: query }, signal, timeoutMs: 10_000, operation: 'search' });
+    },
+    // What every CAD view on this machine shares, and the host's own effects, through this client's
+    // fetch: the web page's own server, or the CAD app's through its tunnel. The home's library of
+    // models and their pictures, Open with the desktop's chooser, Reveal, the person's analytics
+    // answer and features, and whether a newer text-to-cad is out.
+    recents({ signal } = {}) {
+      return request('/__cad/recents', { signal, operation: 'recents' }).then((reply) => reply.recents);
+    },
+    changeRecents(change) {
+      return request('/__cad/recents', { method: 'POST', headers: JSON_POST, body: change, operation: 'recents' }).then((reply) => reply.recents);
+    },
+    async keepThumbnail(png, path) {
+      return client.changeRecents({ action: 'thumbnail', path, png: encodeBase64(new Uint8Array(await png.arrayBuffer())) });
+    },
+    async thumbnail(name, { signal } = {}) {
+      const response = await fetchImpl(cadApiUrl('/__cad/thumbnail', { origin, params: { name } }), { signal, cache: 'no-store' });
+      if (!response.ok) return null;
+      return `data:image/png;base64,${encodeBase64(new Uint8Array(await response.arrayBuffer()))}`;
+    },
+    pick() {
+      return request('/__cad/pick', { method: 'POST', headers: { 'x-cadgen-viewer': '1' }, operation: 'pick' }).then((reply) => reply.path ?? null);
+    },
+    async reveal(path) {
+      const response = await fetchImpl(cadApiUrl('/__cad/reveal', { origin }), { method: 'POST', headers: JSON_POST, body: JSON.stringify({ path }) });
+      if (!response.ok) {
+        const detail = await response.json().catch(() => null);
+        throw new Error(detail?.error || 'Could not reveal this file in the file manager.');
+      }
+    },
+    consent(share, from) {
+      return share === undefined ? request('/__cad/analytics', { operation: 'consent' })
+        : request('/__cad/analytics', { method: 'POST', headers: JSON_POST, body: { share, ...(from === 'card' ? { card: true } : {}) }, operation: 'consent' });
+    },
+    features(change) {
+      return change === undefined ? request('/__cad/features', { operation: 'features' })
+        : request('/__cad/features', { method: 'POST', headers: JSON_POST, body: change, operation: 'features' });
+    },
+    version() {
+      return request('/__cad/version', { operation: 'version' });
+    },
+    reportActivity(activity) {
+      void Promise.resolve(fetchImpl(cadApiUrl('/__cad/analytics/activity', { origin }), { method: 'POST', headers: JSON_POST, body: JSON.stringify(activity) })).catch(() => {});
     },
     requestArtifactStatus(file, { signal } = {}) {
       if (!file) return Promise.reject(new Error('Missing file'));

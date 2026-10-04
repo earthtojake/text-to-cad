@@ -101,9 +101,9 @@ class SidebarViews:
 
     # -- any process --------------------------------------------------------------
 
-    def live(self, *, mine: bool = False) -> list[SidebarView]:
-        """Sidebar views seen lately, the one a person touched last first; another process's only,
-        unless ``mine``."""
+    def live(self) -> list[SidebarView]:
+        """Sidebar views seen lately, the one a person touched last first: another process's only,
+        for this process's own are its registry's."""
         now = self._clock()
         views = []
         try:
@@ -122,7 +122,7 @@ class SidebarViews:
                 continue
             if not isinstance(record, dict) or not isinstance(record.get("view"), str):
                 continue
-            if not mine and record["view"] in self._published:
+            if record["view"] in self._published:
                 continue
             views.append(SidebarView(id=record["view"], model=record.get("model") if isinstance(record.get("model"), str) else None,
                                      state=record.get("state") if isinstance(record.get("state"), dict) else {},

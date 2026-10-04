@@ -75,17 +75,12 @@ test("sources, instances and cancelled opens stay isolated", async () => {
   assert.ok(await page.evaluate(() => window.harness.events.includes("root-b:/work/notes.txt:disposed")));
 });
 
-test("a former renderer cannot change the new source's panels or state", async () => {
+test("a former renderer cannot change the new source's state", async () => {
   await reset();
   await page.evaluate(() => window.harness.setRoot("root-b"));
   await waitPayload("root-b notes");
-  await page.evaluate(() => {
-    const stale = window.harness.rendererCallbacks.get("root-a");
-    stale.onPanelOpen("details"); stale.onStateChange({ from: "old root" });
-  });
+  await page.evaluate(() => window.harness.rendererCallbacks.get("root-a").onStateChange({ from: "old root" }));
   await settle();
-  assert.equal(await pane().getByRole("button", { name: "Details", exact: true }).getAttribute("aria-pressed"), "false");
-  assert.equal(await page.getByText("Injected panel").count(), 0);
   assert.equal(await page.evaluate(() => window.harness.state.renderers), undefined);
 });
 
@@ -136,17 +131,14 @@ test("a departing renderer flushes its own state on file changes and reloads, bu
   assert.deepEqual(await page.evaluate(() => window.harness.state.renderers['["/work/next.txt","in-memory"]']), { drawing: 'pending stroke' });
 });
 
-test("a declared panel opens beside the file, and the renderer is not re-rendered by the frame's own chrome: a panel drag or a resize within a layout", async () => {
+test("the renderer is not re-rendered by the frame's own chrome: a navbar action it published or a resize within a layout", async () => {
   await reset();
-  await pane().getByRole("button", { name: "Details", exact: true }).click();
-  await page.getByText("Injected panel").waitFor();
   await settle();
   const before = await page.evaluate(() => window.harness.renders["root-a"]);
-  for (const width of [320, 340, 360, 400]) await page.evaluate(next => window.harness.width(next), width);
-  await page.waitForFunction(() => Math.round(document.querySelector('[data-testid="primary"] [data-file-panel-container]').getBoundingClientRect().width) === 400);
+  await page.evaluate(() => window.harness.rendererCallbacks.get("root-a").onNavigationActionsChange([{ id: "fixture", label: "Inspect notes", icon: "span", onInvoke() {} }]));
+  await pane().getByRole("button", { name: "Inspect notes", exact: true }).waitFor();
   await page.setViewportSize({ width: 1180, height: 800 });
   await page.setViewportSize({ width: 1240, height: 800 });
   await settle();
-  assert.equal(await page.getByText("Injected panel").count(), 1);
-  assert.equal(await page.evaluate(() => window.harness.renders["root-a"]), before, "no renderer render for a width that does not cross the breakpoint");
+  assert.equal(await page.evaluate(() => window.harness.renders["root-a"]), before, "no renderer render for its own navbar action, or a width that does not cross the breakpoint");
 });

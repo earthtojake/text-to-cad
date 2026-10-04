@@ -112,8 +112,7 @@ function HarnessSurface({ view, data }) {
   const preferences = useSyncExternalStore(services.preferences.subscribe, services.preferences.getSnapshot, services.preferences.getSnapshot);
   const [scene] = useState(createTriangleScene);
   useEffect(() => () => scene.dispose(), [scene]);
-  const resource = useMemo(() => ({ kind: "workspace-file", workspaceId: view.source.id, path: view.file.path, revision: "harness" }),
-    [view.source.id, view.file.path]);
+  const resource = useMemo(() => ({ kind: "workspace-file", path: view.file.path, revision: "harness" }), [view.file.path]);
   // The host's capture request, as every renderer takes it (`useWorkspaceDocument`).
   const commands = useSyncExternalStore(services.commands?.subscribe || NO_SUBSCRIPTION,
     services.commands?.getSnapshot || NO_COMMANDS, NO_COMMANDS);

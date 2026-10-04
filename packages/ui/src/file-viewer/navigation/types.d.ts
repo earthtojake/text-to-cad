@@ -17,42 +17,6 @@ export function entryMenu(platform: Platform, capabilities: ReadonlySet<EntryAct
 export function revealLabel(platform: Platform): string;
 
 /* -------------------------------------------------------------------- */
-/* The panel column and its list                                         */
-/* -------------------------------------------------------------------- */
-
-export type FilePanelContent = "slot" | "body";
-
-export type FilePanel = {
-  id: string;
-  label: string;
-  icon: ElementType;
-  content: FilePanelContent;
-  defaultOpen?: boolean;
-};
-
-export function resolveOpenPanel(panels: FilePanel[], panel: string | null): FilePanel | null;
-export function nextOpenPanel(open: string, id: string): string;
-
-export const PANEL_MIN_WIDTH: number;
-export const PANEL_MAX_WIDTH: number;
-export const PANEL_DEFAULT_WIDTH: number;
-export function clampPanelWidth(width: number): number;
-
-/** The column a file's own declared panels open in, at the view's right: one border, one width, one handle. */
-export const FilePanelColumn: ComponentType<{
-  mobile?: boolean;
-  portalContainer?: HTMLElement | null;
-  onDismiss?: () => void;
-  hidden?: boolean;
-  id: string;
-  label: string;
-  width: number;
-  onWidthChange: (width: number) => void;
-  onCollapse?: () => void;
-  children: ReactNode;
-}>;
-
-/* -------------------------------------------------------------------- */
 /* The explorer                                                          */
 /* -------------------------------------------------------------------- */
 
@@ -87,16 +51,11 @@ export function fuzzyMatch(
   needle: string,
   haystack: string,
 ): { score: number; indices: number[] } | null;
-export function fuzzyFilter(
-  paths: readonly string[],
-  query: string,
-  limit?: number,
-): { path: string; indices: number[] }[];
 
 /**
  * The one navbar, over a file (a host's home has none). Left: the logo, which opens the app's menu
  * (`AppMenu`), the open file's name (the explorer's door, where the host's files can be browsed)
- * and its ⋯. Right: `update`, `trailing` (the file's actions, its panels' toggles), then `fullSize`.
+ * and its ⋯. Right: `update`, `trailing` (the file's actions), then `fullSize`.
  */
 export const ViewerNavbar: ComponentType<{
   /** The host's home, where it has one: the app menu's Back to files. */
@@ -126,15 +85,6 @@ export const AppMenu: ComponentType<{
   links?: import("../../host/types.js").ViewerLinks;
   appSettings?: readonly import("../types.js").AppSetting[];
   platform?: string;
-}>;
-
-/** One declared panel's toggle in the navbar; `active` is its panel being open. */
-export const PanelToggle: ComponentType<{
-  icon: ElementType;
-  label: string;
-  active: boolean;
-  onClick: () => void;
-  id?: string;
 }>;
 
 /**

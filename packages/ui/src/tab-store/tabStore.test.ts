@@ -11,22 +11,21 @@ test('the record normalizes: every setting to its bounds, the files to well-keye
   expect(TAB_RECORD_VERSION).toBe(2);
   expect(readTabRecord(undefined)).toEqual(defaultTabRecord());
   expect(defaultTabRecord()).toEqual({ version: 2, settings: {
-    panelWidth: 220, toolStack: { panels: {}, collapsed: {}, closed: {} }, appearance: 'system', library: { layout: 'grid' },
+    toolStack: { panels: {}, collapsed: {}, closed: {} }, appearance: 'system', library: { layout: 'grid' },
   }, files: {} });
   // A record of the version before (a file tree's width, views under a root) is the defaults.
   for (const raw of [null, 'x', [], { version: 1, settings: { appearance: 'dark', fileTree: { width: 300 } } }, { version: 3, settings: { appearance: 'dark' } }]) {
     expect(readTabRecord(raw), JSON.stringify(raw)).toEqual(defaultTabRecord());
   }
   const record = readTabRecord({ version: 2, settings: {
-    panelWidth: 9999, fileTree: { width: 300 },
+    fileTree: { width: 300 },
     toolStack: { panels: { tree: { width: 12 } }, collapsed: { tree: true, 'Not an id': true }, closed: { tree: true, sdf: 'no' } },
     orbit: { speed: 99 }, playback: { autoplay: true }, appearance: 'cinematic', library: { layout: 'shelf' },
   }, files: { [tabFileKey('/models/a.step', 'step')]: view(1), '["root","b.step","step"]': view(2), 'junk': view(3), [tabFileKey('/models/c.step', 'step')]: 'not a view' } });
   expect(record.settings).toEqual({
-    panelWidth: 480, toolStack: { panels: { tree: { width: 164 } }, collapsed: { tree: true }, closed: { tree: true } }, appearance: 'system', library: { layout: 'grid' },
+    toolStack: { panels: { tree: { width: 164 } }, collapsed: { tree: true }, closed: { tree: true } }, appearance: 'system', library: { layout: 'grid' },
   });
-  const settings = (patch: object) => readTabRecord({ version: 2, settings: patch, files: {} }).settings;
-  expect([settings({ panelWidth: 12 }).panelWidth, settings({ panelWidth: 'wide' }).panelWidth, settings({ library: { layout: 'list' } }).library]).toEqual([140, 220, { layout: 'list' }]);
+  expect(readTabRecord({ version: 2, settings: { library: { layout: 'list' } }, files: {} }).settings.library).toEqual({ layout: 'list' });
   expect(Object.keys(record.files)).toEqual([tabFileKey('/models/a.step', 'step')]);
 });
 
@@ -69,19 +68,19 @@ test('leaving a file drops its view: retain keeps the file on screen\'s, whichev
 
 test('the store reads its storage once, writes every change through whole, and publishes a new snapshot per change', () => {
   const writes: unknown[] = [];
-  const storage = { reads: 0, read() { this.reads += 1; return { version: TAB_RECORD_VERSION, settings: { panelWidth: 300 }, files: {} }; }, write(record: unknown) { writes.push(JSON.parse(JSON.stringify(record))); } };
+  const storage = { reads: 0, read() { this.reads += 1; return { version: TAB_RECORD_VERSION, settings: { appearance: 'dark' }, files: {} }; }, write(record: unknown) { writes.push(JSON.parse(JSON.stringify(record))); } };
   const store = createTabStore(storage);
   expect(storage.reads).toBe(1);
   const first = store.getSnapshot();
-  expect(first.settings.panelWidth).toBe(300);
+  expect(first.settings.appearance).toBe('dark');
   const heard: unknown[] = [];
   store.subscribe(() => heard.push(store.getSnapshot()));
-  store.settings.update({ panelWidth: 300 });
+  store.settings.update({ appearance: 'dark' });
   expect([writes.length, heard.length]).toEqual([0, 0]);
   expect(store.getSnapshot()).toBe(first);
-  store.settings.update({ appearance: 'dark' });
+  store.settings.update({ appearance: 'light' });
   expect(store.getSnapshot()).not.toBe(first);
-  expect(store.getSnapshot().settings).toEqual({ ...first.settings, appearance: 'dark' });
+  expect(store.getSnapshot().settings).toEqual({ ...first.settings, appearance: 'light' });
   expect([writes.length, heard.length, storage.reads]).toEqual([1, 1, 1]);
   store.files.write('/models/a.step', 'step', view('a'));
   expect((writes[1] as { files: object }).files).toEqual({ [tabFileKey('/models/a.step', 'step')]: view('a') });
@@ -123,17 +122,16 @@ test('the file views come as FileViewer\'s records, stable per snapshot, and a v
   expect(store.files.all()).toEqual({});
 });
 
-test('FileViewer\'s state comes from the tab: its column width and file views are kept, and the open panel never is', () => {
+test('FileViewer\'s state comes from the tab: its file views, kept across a reload of the tab', () => {
   const storage = memoryTabRecord();
   const first = renderHook(() => useTabViewerState(createTabStore(storage)));
-  expect(first.result.current.state).toEqual({ panel: null, panelWidth: 220, renderers: {} });
+  expect(first.result.current.state).toEqual({ renderers: {} });
   const a = tabFileKey('/models/a.step', 'step');
-  act(() => first.result.current.onStateChange({ panel: 'details', panelWidth: 300, renderers: { [a]: view('a') } }));
-  expect(first.result.current.state).toEqual({ panel: 'details', panelWidth: 300, renderers: { [a]: view('a') } });
+  act(() => first.result.current.onStateChange({ renderers: { [a]: view('a') } }));
+  expect(first.result.current.state).toEqual({ renderers: { [a]: view('a') } });
   first.unmount();
-  // A reload of the tab: the width and the view come back, and the file opens on its own default panel.
   const reloaded = renderHook(() => useTabViewerState(createTabStore(storage)));
-  expect(reloaded.result.current.state).toEqual({ panel: null, panelWidth: 300, renderers: { [a]: view('a') } });
+  expect(reloaded.result.current.state).toEqual({ renderers: { [a]: view('a') } });
 });
 
 test("a file view's slices drop by signature while its camera and display are kept, whatever store it came through", () => {

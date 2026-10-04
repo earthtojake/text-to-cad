@@ -5,7 +5,10 @@ A view sends exactly the requests the web client sends (``/__cad/*``,
 own router -- one :class:`~cadgen.viewer.http_app.CadApp`, made on the first
 request, for every view of this server -- and returns the status, headers and
 body bytes. There is one backend, not two: the router, its checks and its limits
-are the ones the web app uses.
+are the ones the web app uses, the model library, the home's Open, Reveal, the
+person's analytics answer and features, and the update check included. The app
+keeps the server's own library and analytics, so a model a view opens is
+counted once, by this process.
 
 A body travels base64 inside the host's JSON, and a JSON body of more than
 ``GZIP_JSON_MIN_BYTES`` travels gzipped as well, flagged ``encoding: "gzip"``: the
@@ -39,10 +42,9 @@ from cadgen.viewer.response import Request, Response
 MAX_REQUEST_BODY_BYTES = 256 * 1024 * 1024
 _ALLOWED_METHODS = frozenset({"GET", "HEAD", "POST"})
 _API_PREFIXES = ("/__cad/", "/__tess_cache")
-# Routes whose effects belong to a host: the web app's reveal, clipboard and Open, its model library
-# and its pictures (a view here has its own tools for each), and a viewer's shutdown.
-_HOST_EFFECT_ROUTES = frozenset({"/__cad/reveal", "/__cad/clipboard", "/__cad/pick", "/__cad/recents",
-                                 "/__cad/thumbnail", "/__cad/shutdown"})
+# The one route whose effect belongs to the host: a view copies through its host's frame, never
+# through the server's clipboard. (No app here has a shutdown: it refuses `/__cad/shutdown` itself.)
+_HOST_EFFECT_ROUTES = frozenset({"/__cad/clipboard"})
 # How long one catalog read answers every view of a file that asks for its revision: views sync
 # each second, and N of them on one file then cost one read, not N.
 CATALOG_REVISION_SECONDS = 0.75
@@ -98,8 +100,10 @@ def _result(status: int, headers: dict[str, str], body: bytes) -> dict[str, Any]
 class ViewerTunnel:
     """The viewer backend every view of this server shares, made when the first one asks."""
 
-    def __init__(self, *, clock=time.monotonic) -> None:
+    def __init__(self, *, recents=None, analytics=None, clock=time.monotonic) -> None:
         self._app = None
+        self._recents = recents
+        self._analytics = analytics
         self._lock = threading.Lock()
         self._clock = clock
         self._revisions: dict[str, tuple[float, str]] = {}
@@ -110,7 +114,12 @@ class ViewerTunnel:
             if self._app is None:
                 from cadgen.viewer.http_app import create_cad_app
 
-                self._app = create_cad_app(host="127.0.0.1", port=0)
+                app = create_cad_app(host="127.0.0.1", port=0)
+                if self._recents is not None:
+                    app.recents = self._recents
+                # The server's recorder: a person's answer on a card here is the CAD app's.
+                app.analytics, app.consent_by = self._analytics, "app"
+                self._app = app
             return self._app
 
     # What a view watches, answered on its sync (``cad_sync``) rather than as requests of its own.

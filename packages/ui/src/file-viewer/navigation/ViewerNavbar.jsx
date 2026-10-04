@@ -1,10 +1,8 @@
 import { Ellipsis } from "lucide-react";
 import { useState } from "react";
 
-import { Button } from "@text-to-cad/ui/primitives/button";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@text-to-cad/ui/primitives/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@text-to-cad/ui/primitives/popover";
-import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
 import { cn } from "@text-to-cad/ui/utils";
 
 import logo from "../../assets/logo-c.svg";
@@ -26,29 +24,12 @@ import { FolderExplorer } from "./FolderExplorer.jsx";
  *
  * Right, only what a host or a file adds: the host's update button while its install is behind
  * (`update`, the blue `UpdateButton` from `@text-to-cad/ui/update`); the file's own actions (the
- * CAD viewer's one: a dismissed alert's icon, which brings its card back) and the toggles of any
- * panel the file declares; and last the host's way to show the view full size (`fullSize`), where
- * it shows it small. A 3D view's own controls (Display, Preview) are the view's, over its cube.
- * Preview takes the whole page, this row with it.
+ * CAD viewer's one: a dismissed alert's icon, which brings its card back); and last the host's
+ * way to show the view full size (`fullSize`), where it shows it small. A 3D view's own controls
+ * (Display, Preview) are the view's, over its cube. Preview takes the whole page, this row with it.
  *
  * Nothing here is drawn for its own sake: a control appears only where it does something.
  */
-
-/** One class for every panel toggle in the row, so "highlighted while its panel is open" looks the same everywhere. */
-export const PANEL_TOGGLE_CLASSES =
-  "size-6 text-muted-foreground aria-pressed:bg-accent aria-pressed:text-accent-foreground";
-
-/**
- * One declared panel's toggle. `active` is the panel being open: it is `aria-pressed`, which is what paints it.
- *
- * @param {{ icon: import("react").ElementType, label: string, active: boolean, onClick: () => void, id?: string }} props
- */
-export function PanelToggle({ icon: Icon, label, active, onClick, id }) {
-  return <TooltipHint content={label}><Button aria-label={label} aria-pressed={active} className={PANEL_TOGGLE_CLASSES}
-    {...(id ? { "data-file-panel": id } : {})} onClick={onClick} size="icon-xs" type="button" variant="ghost">
-    <Icon className="size-3.5" />
-  </Button></TooltipHint>;
-}
 
 /**
  * The left of the row: the logo, the file's name and its ⋯, one kind of control — transparent until
@@ -112,7 +93,7 @@ function FileName({ path, explorer }) {
  *   Where the host's files can be browsed: the explorer the name opens.
  * @param {{ platform: import("./entry-menu.js").Platform, capabilities: ReadonlySet<import("./entry-menu.js").EntryAction>,
  *   onAction(action: import("./entry-menu.js").EntryAction, path: string): void } | null} [props.fileMenu]
- * @param {import("react").ReactNode} [props.trailing] The file's actions and its panels' toggles.
+ * @param {import("react").ReactNode} [props.trailing] The file's actions.
  * @param {import("react").ReactNode} [props.update] The host's update button, first among the controls.
  * @param {import("react").ReactNode} [props.fullSize] The host's Full size button, last, where it shows the view small.
  * @param {string} [props.className]

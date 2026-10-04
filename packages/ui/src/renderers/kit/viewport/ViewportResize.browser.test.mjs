@@ -8,9 +8,9 @@ import { createServer } from 'node:http';
 import { build } from 'esbuild';
 import { chromium } from 'playwright';
 
-// A viewer whose box changes size in ONE layout step (a panel column opening, the tool
-// stack widened, a window snap) must paint the model at the new size in the very frame
-// that layout lands in. The canvas is sized 100% by CSS, so a drawing buffer or a render
+// A viewer whose box changes size in ONE layout step (the tool stack widened, a window
+// snap) must paint the model at the new size in the very frame that layout lands in.
+// The canvas is sized 100% by CSS, so a drawing buffer or a render
 // left for a later frame shows the old picture stretched over the new box for a frame.
 //
 // A ResizeObserver callback runs after layout and before paint, and observers are called
@@ -90,7 +90,7 @@ async function serveHarness(t) {
 }
 
 // Opening over: no draw call for longer than the viewport's open-fit window. Opening settles
-// in steps (the open fit, the panel column, the projection), each a draw, and until it has been
+// in steps (the open fit, the projection), each a draw, and until it has been
 // quiet for OPEN_FIT_SETTLE_MS (600 ms, `ShellViewport.jsx`) a resize re-fits instead of
 // rescaling. Awaited as a quiet spell, however long a slow GL takes to reach it.
 const idle = page => page.waitForFunction(() => new Promise(resolve => {
@@ -193,7 +193,7 @@ function assertPaintedAtNewSize(record, ratio, settled, label) {
 test('a viewer resized in one step paints the model at its new size in that same frame', async (t) => {
   const { open } = await serveHarness(t);
   const { page, pane, errors } = await open();
-  // Let opening settle (the open fit, the panel column, the projection) before resizing.
+  // Let opening settle (the open fit, the projection) before resizing.
   await idle(page);
   await installProbe(page);
   const ratio = await restingRatio(page);

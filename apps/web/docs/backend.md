@@ -67,9 +67,8 @@ VIEWER_PYTHON=<checkout>/.venv/bin/python \
   npm --prefix <checkout>/apps/web run dev -- --host 127.0.0.1
 ```
 
-The spawned backend is started in the first of an explicit `directoryRoot` from
-its caller, `INIT_CWD` and the process working directory that is outside
-`apps/web`; otherwise Vite starts it in `<checkout>/apps`. npm preserves its
+The spawned backend is started in the first of `INIT_CWD` and the process working
+directory that is outside `apps/web`; otherwise Vite starts it in `<checkout>/apps`. npm preserves its
 invocation directory in `INIT_CWD`, so the command above chooses that folder
 while `--prefix` locates the app. The folder is `serverInfo.start`: the page
 resolves a relative `?file=` against it, and it bounds nothing.
@@ -153,8 +152,7 @@ answer.
 `cadgen.viewer.artifact_status` reads artifact/store state and advisory build
 progress. Generated artifacts stay detached from their source: the viewer does
 not execute model scripts or rebuild generated outputs. When generation is
-needed, the alert names the CLI command. `/__cad/server` therefore reports
-`stepArtifactGenerationAvailable: false`.
+needed, the alert names the CLI command.
 
 A raw foreign `.step` or `.stp` without a current render artifact can be
 imported. `cadgen.viewer.cadgen_ops` delegates to cadgen's compile entry point in
@@ -189,7 +187,7 @@ cache reads and writes.
 
 | Route | Purpose |
 |---|---|
-| `GET /__cad/server` | Server identity and capabilities: `identityToken`, `user`, `start` (where relative links resolve), `pick` (a file chooser exists), `serverFeatures`. |
+| `GET /__cad/server` | Server identity: `identityToken`, `autoReload`, `platform` (which file manager Reveal opens), `user`, `start` (where relative links resolve), `pick` (a file chooser exists), `port`, `pid`. |
 | `GET /__cad/catalog?file=...` | One file's catalog row and its `revision`. |
 | `GET /__cad/folder?path=...` | One folder's subfolders and CAD files. |
 | `GET /__cad/search?path=...&q=...` | The CAD files under a folder whose path holds `q`, bounded. |
@@ -199,10 +197,15 @@ cache reads and writes.
 | `GET /__cad/artifact?file=...` | Artifact status and advisory progress. |
 | `POST /__cad/artifact?file=...` | Start importing a foreign STEP and answer at once (`compiling`; `compiled` when there is nothing to build); `&force=1` requests a rebuild. The import is followed through `GET /__cad/artifact`, whose `failed` carries the job's reason until the file's bytes change. |
 | `GET /__cad/recents` | The model library every CAD view shares. |
-| `POST /__cad/recents` | `{action, path, png?}`: `open` (an existing CAD file), `pin`, `unpin`, `remove`, `thumbnail`; answers the library as it now is. |
+| `POST /__cad/recents` | `{action, path, png?}`: `open` (an existing CAD file on screen; counted for analytics), `pin`, `unpin`, `remove`, `thumbnail`; answers the library as it now is. |
 | `GET /__cad/thumbnail?name=...` | A library picture, by its content name. |
-| `POST /__cad/pick` | The desktop's own file chooser, held open while the person chooses: `{path}`, `{cancelled: true}`, a 400 naming the kinds CAD opens, 409 while one is open. |
+| `POST /__cad/pick` | The desktop's own file chooser, held open while the person chooses: `{path}`, `{cancelled: true}`, a 400 naming the kinds CAD opens, a 500 with the chooser's own sentence (one already open among them). |
 | `POST /__cad/reveal` | `{path}`: show a file in the desktop's file manager. |
+| `POST /__cad/clipboard` | A PNG onto this machine's clipboard: the web page's picture copy, which asks the browser for no permission. |
+| `GET`/`POST /__cad/analytics` | The person's analytics answer and whether to ask; `{share, card?}` answers it (a card's only while the question is open). |
+| `POST /__cad/analytics/activity` | `{touched: true}`: a person touched the page. |
+| `GET`/`POST /__cad/features` | The features a person can turn off, and their change of some. |
+| `GET /__cad/version` | Whether a newer text-to-cad is out: the update button's `notice`, or null. |
 | `POST /__cad/sketches?name=...` | Save a PNG a copied prompt names by path (a Quick Edit's sketch) as scratch in the system's temporary directory; answers its absolute path. |
 | `POST /__cad/shutdown` | Exit: a newer launch replacing this viewer, or `cadgen viewer stop`. Answers 202, then stops and frees the port. |
 | `GET /__tess_cache/<key>.tess` | Read a tessellation-cache entry. |

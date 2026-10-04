@@ -7,7 +7,7 @@ import { testHost } from '../../../../../dist/host/testing/host.js';
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
-const resource = { kind: 'workspace-file', workspaceId: 'w', path: '/models/parts/bracket.step', revision: 'r1' } as const;
+const resource = { kind: 'workspace-file', path: '/models/parts/bracket.step', revision: 'r1' } as const;
 const face = { resource, target: { kind: 'cad-selector', selectors: ['o1.f2'] } } as const;
 const composer = { kind: 'composer', available: true } as const;
 

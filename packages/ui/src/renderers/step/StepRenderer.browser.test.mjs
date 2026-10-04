@@ -222,11 +222,6 @@ async function open(options = {}) {
       : pane.locator(name === 'Reset' ? '[data-cad-camera-controls]' : '[data-cad-toolbar]').getByRole('button', { name, exact: true }),
     tools: () => pane.locator('[data-cad-toolbar]').getByRole('button')
       .evaluateAll(buttons => buttons.map(button => `${button.getAttribute('aria-label')}:${button.getAttribute('aria-pressed')}`)),
-    // The nav row's panel toggles, in order, each with whether its panel is the open one. A STEP
-    // declares none of its own.
-    panels: () => pane.locator('[data-file-panel]')
-      .evaluateAll(buttons => buttons.map(button => `${button.getAttribute('aria-label')}:${button.getAttribute('aria-pressed')}`)),
-    toggle: id => id === 'cad-display' ? pane.locator('[data-viewport-actions]').getByRole('button', { name: 'Display', exact: true }) : pane.locator(`[data-file-panel="${id}"]`),
     // The tool stack's panels on screen, top to bottom, by their accessible names.
     stack: () => pane.locator('[data-cad-tool-stack] [data-tool-panel]').evaluateAll(panels => panels
       .filter(panel => panel.getClientRects().length > 0).map(panel => panel.getAttribute('aria-label'))),
@@ -261,10 +256,6 @@ test('a STEP opens in Select with the tools its sidecar earns, its Features in t
     'Position because the sidecar bound; no Animate: its routine plays in preview. Display is a dropdown from on top of the cube, not a tool');
   assert.deepEqual(await pane.locator('[data-viewport-actions] button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
     ['Display', 'Preview'], 'the view\'s controls on top of the cube: Display, then Preview');
-  // The nav row has no panel of the file's: its controls are the tool stack's, so it has no panel
-  // toggle, and a file opens with nothing beside it.
-  assert.deepEqual(await view.panels(), []);
-  assert.equal(await pane.locator('[data-file-panel-container]').count(), 0, 'no panel column beside the file');
   assert.equal(await view.displayPanel().count(), 0, 'Display is never where a file opens');
   assert.equal(await pane.locator('[data-viewport-actions]').getByRole('button', { name: 'Preview', exact: true }).count(), 1,
     'a STEP is 3D: Preview sits on top of its cube');
@@ -705,7 +696,7 @@ test('every Display preset reaches the drawn frame, on the live canvas', async (
   const view = await open();
   const { page, errors } = view;
   // Display is a dropdown from its button on top of the cube, over the viewport.
-  await view.toggle('cad-display').click();
+  await view.tool('Display').click();
   const panel = view.displayPanel();
   await panel.waitFor();
   const solid = await restingFrame(view);

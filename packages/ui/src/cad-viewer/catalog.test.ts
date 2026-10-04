@@ -1,24 +1,18 @@
 import { expect, test, vi } from 'vitest';
 import { baseName, createCadFileActions, createCadFileSource, joinPath, normalizePath } from './catalog.js';
 
-// A CAD client as the source reads it: a catalog of the files on screen, a folder at a time, a search.
+// A CAD client as the source reads it: a file's catalog entry, a folder at a time, a search.
 function cadClient(entries: Record<string, unknown>[]) {
-  let snapshot = { entries };
-  const listeners = new Set<() => void>();
   const missing = Object.assign(new Error('File does not exist: /models/gone.step'), { code: 'cad-file-missing' });
   return {
     missing,
-    getSnapshot: () => snapshot as never,
-    subscribe(listener: () => void) { listeners.add(listener); return () => { listeners.delete(listener); }; },
     resolveEntry: vi.fn(async (path: string) => {
-      const entry = snapshot.entries.find(item => item.file === path);
+      const entry = entries.find(item => item.file === path);
       if (!entry) throw missing;
       return entry as never;
     }),
     folder: vi.fn(async (path: string) => ({ path, entries: [{ name: 'parts', kind: 'directory' as const }, { name: 'a.step', kind: 'file' as const }], truncated: false })),
     search: vi.fn(async (path: string) => ({ path, results: ['C:\\models\\parts\\a.step'], truncated: true })),
-    publish(next: Record<string, unknown>[]) { snapshot = { entries: next }; for (const listener of [...listeners]) listener(); },
-    listeners,
   };
 }
 
@@ -40,26 +34,6 @@ test('the source reads a file from its catalog entry, a folder a time and a sear
   expect(await source.list!('C:/models', options)).toEqual([{ path: 'C:/models/parts', name: 'parts', kind: 'directory' }, { path: 'C:/models/a.step', name: 'a.step', kind: 'file' }]);
   expect(await source.search!('C:/models', 'a', options)).toEqual({ paths: ['C:/models/parts/a.step'], truncated: true });
   expect(client.search).toHaveBeenCalledWith('C:/models', 'a', options);
-});
-
-test('the source reports only what changed in a file that stayed: progress is metadata, a new revision is content', () => {
-  const probe = { file: '/models/probe.step', bytes: 128 };
-  const flat = { file: '/models/flat.stl', bytes: 64 };
-  const client = cadClient([probe, flat]);
-  const source = createCadFileSource(client as never, { id: 'a' });
-  const seen: unknown[] = [];
-  const stop = source.subscribe!(change => seen.push(change));
-  // The catalog is the files on screen: one going, or another coming, is a view moving, not the disk changing.
-  client.publish([flat]);
-  client.publish([flat, { file: '/models/other.step', bytes: 1 }]);
-  client.publish([{ ...flat, compileProgress: 0.5 }]);
-  client.publish([{ ...flat, compileProgress: 0.5, hash: 'new' }]);
-  expect(seen).toEqual([
-    { sourceId: 'a', changes: [{ kind: 'metadata', path: '/models/flat.stl' }] },
-    { sourceId: 'a', changes: [{ kind: 'content', path: '/models/flat.stl', revision: expect.any(String) }] },
-  ]);
-  stop();
-  expect(client.listeners.size).toBe(0);
 });
 
 test('the file menu copies a file\'s absolute path, and reveals it only where its host can', async () => {

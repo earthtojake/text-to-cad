@@ -1,5 +1,5 @@
 import type { ComponentType, ElementType, ReactNode } from "react";
-import type { EntryAction, FilePanel, Platform } from "./navigation/index.js";
+import type { EntryAction, Platform } from "./navigation/index.js";
 import type { ViewerHost } from "../host/types.js";
 
 export type JsonValue = null | boolean | number | string | JsonValue[] | { [key: string]: JsonValue };
@@ -12,8 +12,6 @@ export interface FileMetadata extends FileEntry {
   mediaType?: string;
   revision?: string;
 }
-export type FileChange = { kind: "content" | "metadata"; path: string; revision?: string };
-export interface FileChanges { sourceId: string; changes: readonly FileChange[] }
 export interface FileActions {
   platform?: Platform;
   perform?: Partial<Record<EntryAction, (entry: Pick<FileEntry, "path" | "kind">) => void | Promise<void>>>;
@@ -23,16 +21,13 @@ export interface FileActions {
  * subfolders and files, and a search under a folder that says when it stopped early.
  */
 export interface FileSource {
-  /** Stable identity: what a document's key and a reference's workspace are named by. */
+  /** Stable identity: what a document's key is named by. */
   id: string;
   stat: (path: string, options: { signal: AbortSignal }) => Promise<FileMetadata>;
   list?: (directory: string, options: { signal: AbortSignal }) => Promise<readonly FileEntry[]>;
   search?: (directory: string, query: string, options: { signal: AbortSignal }) => Promise<{ paths: readonly string[]; truncated: boolean }>;
-  subscribe?: (listener: (change: FileChanges) => void) => () => void;
 }
 export interface FileViewerState {
-  panel: string | null;
-  panelWidth: number;
   /**
    * Each file's view under `JSON.stringify([file path, renderer id])`: what the host's tab store
    * holds (`@text-to-cad/ui/tab-store`), and where a renderer's `onStateChange` lands.
@@ -43,20 +38,19 @@ export interface PrepareContext {
   file: FileMetadata;
   source: FileSource;
   signal: AbortSignal;
-  /** This same file was explicitly reloaded or invalidated by its source. */
+  /** This same file was opened again by `reload`. */
   refresh?: boolean;
 }
+/**
+ * A file's document, opened when the file is shown and again only on `reload`: a renderer follows
+ * its file's changes itself (the CAD renderers read a live catalog entry), so the model on screen
+ * is never taken down for an edit.
+ */
 export interface PreparedDocument<T> {
   data: T;
   dispose?: () => void;
-  /**
-   * The document follows its file by itself: a rewritten file reaches the open renderer as an update
-   * (the CAD renderers read a live catalog entry), so the viewer keeps it open when the file's
-   * content changes instead of opening it again, and the model on screen is never taken down for it.
-   */
-  live?: boolean;
 }
-/** Renderer-owned actions shown at the navbar's right, before any declared panel's toggle. Never persisted. */
+/** Renderer-owned actions shown at the navbar's right. Never persisted. */
 export interface FileNavigationAction {
   id: string;
   /** The accessible name. */
@@ -96,19 +90,10 @@ export interface RendererViewProps {
   file: FileMetadata;
   source: FileSource;
   /**
-   * The open panel id, for a renderer that declares `panels` of its own. The CAD renderers declare
-   * none and read none of `panelSlot` or `onPanelOpen`: their controls are tool-stack panels, never
-   * the host's column.
-   */
-  openPanel: string;
-  /** The column's box for a declared `"slot"` panel to draw into. */
-  panelSlot: HTMLElement | null;
-  /**
    * The renderer shows its file fullscreen (the CAD viewer's Preview), or no longer does: the
-   * navbar and any declared panel step aside while it lasts.
+   * navbar steps aside while it lasts.
    */
   onFullscreenChange: (fullscreen: boolean) => void;
-  onPanelOpen: (id: string) => void;
   onReady: (ready: boolean) => void;
   /** Show another file, by its absolute path, in this view (a robot's mesh). */
   onOpenFile: (path: string) => void;
@@ -124,20 +109,13 @@ export interface FileRendererDefinition<T> {
   priority: number;
   matches: (file: FileMetadata) => boolean;
   fallback?: boolean;
-  /** The nav row's panels for this file, which can depend on what `prepare` found (`data`). */
-  panels?: (context: PanelContext & { data: T }) => FilePanel[];
   prepare: (context: PrepareContext) => Promise<PreparedDocument<T>>;
   load: () => Promise<{ default: ComponentType<FileRendererProps<T>> }>;
 }
-export interface PanelContext { open: string; ready: boolean; file: FileMetadata }
 /** The typed payload is closed over by defineFileRenderer, never erased to `any`. */
 export interface PreparedRenderer {
   Component: ComponentType<RendererViewProps>;
-  /** The definition's panels over this document's prepared data. */
-  panels?: (context: PanelContext) => FilePanel[];
   dispose?: () => void;
-  /** See `PreparedDocument.live`. */
-  live?: boolean;
 }
 export interface RendererRegistration {
   id: string;

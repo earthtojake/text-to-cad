@@ -85,9 +85,6 @@ class DocumentCompiler:
         # The last failed compile of a document, with the bytes it failed on (mtime, size).
         self._failed: dict[str, tuple[tuple[int, int] | None, dict]] = {}
 
-    def shutdown(self) -> None:
-        """Nothing to own: the jobs belong to the pool, which outlives the viewer."""
-
     def compile(self, candidate: str, *, force: bool = False) -> dict:
         """Compile one document, attaching to an in-flight compile for the same one.
 

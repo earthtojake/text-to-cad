@@ -28,7 +28,6 @@ import re
 import stat
 import sys
 import threading
-import time
 from pathlib import Path
 
 from . import reload as dev_reload
@@ -46,7 +45,6 @@ from .tess_cache import (
 __all__ = [
     "CadApp",
     "POST_GUARD_HEADER",
-    "LOCAL_SERVER_FEATURES",
     "hostname_only",
     "host_is_allowed",
     "read_viewer_version",
@@ -57,7 +55,6 @@ __all__ = [
 ]
 
 POST_GUARD_HEADER = "x-cadgen-viewer"
-LOCAL_SERVER_FEATURES = ["reveal-path"]
 # A thumbnail travels as base64 in the change's JSON: 512 KiB of PNG, and room for the rest.
 _LIBRARY_BODY_LIMIT = 768 * 1024
 # A thumbnail's name is its content's (``recents.RecentStore.thumbnail``): nothing else is read.
@@ -78,8 +75,6 @@ TESS_CACHE_PROBE_PATH = "/__tess_cache/probe"
 # every other route, `POST /__cad/artifact` above all, is counted.
 _UNCOUNTED_ROUTES = frozenset({"/__cad/server", "/__cad/preview", "/__cad/surfaces", "/__cad/surfaces/cancel",
                                "/__cad/analytics", "/__cad/analytics/activity", "/__cad/version"})
-
-_PACKAGE_DIR = str(Path(__file__).resolve().parent)
 
 
 def hostname_only(host_header) -> str:
@@ -265,7 +260,7 @@ class CadApp:
     relative ``?file=`` against it, and it bounds nothing.
     """
 
-    def __init__(self, *, host: str, port: int, dist_dir: str = "", start: str | None = None):
+    def __init__(self, *, host: str, port: int, dist_dir: str = "", start: str | None = None, identity: str | None = None):
         from cadgen._internal.picker import available
 
         from .surfaces import SurfaceSubscribers
@@ -283,28 +278,27 @@ class CadApp:
         # never re-resolve at request time.
         self.dist_dir = os.path.abspath(dist_dir) if dist_dir else ""
         self.viewer_version = read_viewer_version()
-        # Computed ONCE, at start: the identity this instance announces and
-        # registers is the identity of the code it is actually running.
-        self.identity_token = identity_token(self.dist_dir)
+        # Computed ONCE, at start (or handed in by the launcher, which computed it to ask the port):
+        # the identity this instance announces is the identity of the code it is actually running.
+        self.identity_token = identity if identity is not None else identity_token(self.dist_dir)
         # The single development predicate (reload.py). In an installed wheel
         # this is False and the whole mechanism is absent: nothing is watched,
         # no request is counted, and the browser never polls for a restart.
         self.auto_reload = dev_reload.running_from_source_checkout()
         self._request_lock = threading.Lock()
         self._busy_requests = 0
-        self.started_at = time.time()
         self.ops = CadgenOps()
         self._recents = None
         self._picker = None
-        self._picking = threading.Lock()
         # What ``POST /__cad/shutdown`` calls, after it answers: the `cadgen viewer` process's own
         # shutdown (``main.py``). An app with none -- the CAD app's tunnel builds them -- has no
         # such route.
         self.on_shutdown = None
         # Anonymous usage analytics (``cadgen/analytics.py``): the `cadgen viewer` process attaches
-        # its recorder here (``main.py``). An app the CAD app's tunnel builds gets none, and its
-        # page asks the CAD app's own server instead, so nothing is counted twice.
+        # its recorder here (``main.py``), and the CAD app's server its own to the app its tunnel
+        # builds. ``consent_by`` says, with a person's answer, which of them asked.
         self.analytics = None
+        self.consent_by = "viewer"
 
     # --- development auto-reload accounting -------------------------------
 
@@ -323,7 +317,6 @@ class CadApp:
     def server_info(self) -> dict:
         return {
             "app": "cad-viewer",
-            "viewerVersion": self.viewer_version,
             # The start-time token, NOT identity_token() re-evaluated: a
             # resident answering a reuse probe must report the code it runs,
             # not the code now on disk. It is also what the browser's
@@ -333,10 +326,8 @@ class CadApp:
             # Whether this server watches its own code and restarts itself.
             # False in every installed wheel; the client polls only when true.
             "autoReload": self.auto_reload,
-            "serverMode": "serve",
-            "serverFeatures": LOCAL_SERVER_FEATURES,
-            "backend": "local-fs",
-            "platform": sys.platform,
+            # Which file manager Reveal opens: darwin, win32 or linux.
+            "platform": sys.platform if sys.platform in ("darwin", "win32") else "linux",
             # Whose viewer this is: a launch reuses, replaces or stops only its own user's.
             "user": os_user(),
             # Where a developer's relative ?file= resolves, in the page. Not a boundary.
@@ -344,12 +335,6 @@ class CadApp:
             "pick": self.pick,
             "port": self.port,
             "pid": os.getpid(),
-            # The viewer is a static visualization tool: it never runs
-            # generators or exports. The CLIs own those; this stays false.
-            "stepArtifactGenerationAvailable": False,
-            "packageDir": _PACKAGE_DIR,
-            "startedAt": self.started_at,
-            "url": f"http://{self.host}:{self.port}",
         }
 
     def read_catalog(self, file=None) -> dict:
@@ -554,7 +539,7 @@ class CadApp:
                         self._report_activity(payload)
                         response.send_empty(204)
                 elif pathname == "/__cad/features":
-                    # Settings' Features: the person's choices, one for every CAD view (``cadgen/features.py``).
+                    # The app menu's features: the person's choices, one for every CAD view (``cadgen/features.py``).
                     from cadgen import features
 
                     if int(request.headers.get("content-length") or 0) > 4096:
@@ -639,12 +624,17 @@ class CadApp:
 
     @property
     def recents(self):
-        """The one library every CAD view writes (``recents.py``), read lazily."""
+        """The one library every CAD view writes (``recents.py``), read lazily; or the store the
+        process serving this app already keeps (the CAD app's server hands its own in)."""
         if self._recents is None:
             from .recents import RecentStore
 
             self._recents = RecentStore()
         return self._recents
+
+    @recents.setter
+    def recents(self, store) -> None:
+        self._recents = store
 
     @property
     def picker(self):
@@ -660,7 +650,7 @@ class CadApp:
 
     def _change_recents(self, payload) -> dict:
         """A change to the library -- ``{action, path, png?}``, the model by its absolute path --
-        answered with the library as it now is: what the CAD app's ``cad_recents`` does."""
+        answered with the library as it now is. A model opened is also counted for analytics."""
         from .recents import thumbnail_png
 
         if type(payload) is not dict:
@@ -670,6 +660,8 @@ class CadApp:
             if extension_of(path) not in SOURCE_EXTENSIONS or not os.path.isfile(path):
                 raise ValueError(f"no CAD file at {path}")
             self.recents.opened(path)
+            if self.analytics is not None:
+                self.analytics.opened(path)
         elif action in ("pin", "unpin"):
             self.recents.pin(path, action == "pin")
         elif action == "remove":
@@ -707,19 +699,15 @@ class CadApp:
         response.send_json(200, answer)
 
     def _handle_pick(self, response):
-        """The home's Open: the desktop's own chooser, held open for as long as the person takes."""
+        """The home's Open: the desktop's own chooser, held open for as long as the person takes (one
+        at a time: the picker refuses a second while one is open)."""
         from cadgen._internal.picker import PickerFailed
 
-        if not self._picking.acquire(blocking=False):
-            response.send_json(409, {"error": "A file chooser is already open."})
-            return
         try:
             chosen = self.picker.choose()
         except PickerFailed as failure:
             response.send_json(500, {"error": str(failure)})
             return
-        finally:
-            self._picking.release()
         if chosen is None:
             response.send_json(200, {"cancelled": True})
         elif extension_of(chosen) not in SOURCE_EXTENSIONS:
@@ -730,14 +718,14 @@ class CadApp:
     # --- anonymous usage analytics -----------------------------------------
 
     def _consent(self, share=None, *, card: bool = False) -> dict:
-        """The page's analytics card and Settings toggle: whether to ask (nothing chosen, and an answer
+        """The page's analytics card and the app menu's toggle: whether to ask (nothing chosen, and an answer
         could be kept), whether sharing is on and why, and, from the person's click, their answer. A
         card answers only an open question, so one still up in another view never undoes an answer
         just given (``card``); the toggle changes it whenever."""
         from cadgen.analytics import PRIVACY_URL
 
         if isinstance(share, bool) and (not card or self.analytics.status()["reason"] == "unasked"):
-            self.analytics.choose(share, by="viewer")
+            self.analytics.choose(share, by=self.consent_by)
         found = self.analytics.status()
         return {"ask": found["reason"] == "unasked", "sharing": found["sharing"], "reason": found["reason"],
                 "policy": PRIVACY_URL}
@@ -749,16 +737,10 @@ class CadApp:
         return {"notice": updates.notice()}
 
     def _report_activity(self, payload: dict) -> None:
-        """What the page did: a person touched it (``touched``), or it shows a model (``file``, by
-        its absolute path). Noted in memory, and sent only with consent, a file only as its code."""
+        """What the page did: a person touched it (``touched``). Noted in memory, and sent only with
+        consent. (A model it shows is counted when it joins the library: ``_change_recents``.)"""
         if payload.get("touched") is True:
             self.analytics.viewed()
-        ref = payload.get("file")
-        if ref:
-            try:
-                self.analytics.opened(absolute_path(ref))
-            except ValueError:
-                pass  # not a file named by its absolute path: nothing to count
 
     # --- routes ----------------------------------------------------------
 
@@ -894,5 +876,5 @@ class CadApp:
         response.send_bytes(200, container, "application/octet-stream")
 
 
-def create_cad_app(*, host: str, port: int, dist_dir: str = "", start: str | None = None) -> CadApp:
-    return CadApp(host=host, port=port, dist_dir=dist_dir, start=start)
+def create_cad_app(*, host: str, port: int, dist_dir: str = "", start: str | None = None, identity: str | None = None) -> CadApp:
+    return CadApp(host=host, port=port, dist_dir=dist_dir, start=start, identity=identity)

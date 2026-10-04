@@ -14,7 +14,7 @@ await build({
 });
 const { createWebPromptContext, browserClipboard } = await import(pathToFileURL(output).href);
 after(() => rm(temporary, { recursive: true, force: true }));
-const reference = { id: 'ref', kind: 'reference', reference: { resource: { kind: 'workspace-file', workspaceId: 'local', path: '/Car project/folder/part.step', revision: 'r4' }, target: { kind: 'cad-selector', selectors: ['o1.f2'] } } };
+const reference = { id: 'ref', kind: 'reference', reference: { resource: { kind: 'workspace-file', path: '/Car project/folder/part.step', revision: 'r4' }, target: { kind: 'cad-selector', selectors: ['o1.f2'] } } };
 const context = (operationId, parts) => ({ schemaVersion: 1, operationId, parts });
 function replaceGlobal(name, value) {
   const descriptor = Object.getOwnPropertyDescriptor(globalThis, name);

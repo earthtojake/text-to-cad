@@ -46,6 +46,19 @@ class FoldersTest(unittest.TestCase):
         with self.assertRaises(FileNotFoundError):
             search_folder(str(self.root / "base.stl"), "x")
 
+    def test_a_path_the_one_rule_refuses_is_refused_here_too(self) -> None:
+        # ``backend.absolute_path`` decides for every route: a relative path, a ``~``, a NUL and a UNC
+        # path are a ValueError (a 400), never a read -- and a GET must never send this machine out to
+        # the network. Spelled with backslashes a UNC path is relative anywhere; spelled with slashes
+        # (or rooted with no drive) it is refused on Windows, where it is one.
+        refused = [None, "", "arm", "../arm", "~", "~/arm", str(self.root / "arm") + "\0", "\\\\host\\share\\models"]
+        if os.name == "nt":
+            refused += ["//host/share/models", "/models"]
+        for path in refused:
+            for read in (list_folder, lambda path: search_folder(path, "x")):
+                with self.subTest(path=path), self.assertRaises(ValueError):
+                    read(path)
+
     def test_a_search_finds_nested_files_by_their_path_below_the_folder_shallowest_first(self) -> None:
         found = search_folder(str(self.root), "")
         self.assertEqual(found["results"], [slashed(self.root / name) for name in

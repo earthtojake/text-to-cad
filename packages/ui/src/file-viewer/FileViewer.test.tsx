@@ -22,7 +22,7 @@ const host = {
   promptContext: unavailablePromptContext, environment: { colorScheme: 'light' as const }, navigation: { openFile(_path: string) {} },
 };
 const open = (props: { host?: object; file?: string | null; presentation?: object }) =>
-  render(<FileViewer file={FILE} host={host as any} renderers={[renderer]} state={{ panel: null, panelWidth: 220 }} onStateChange={() => {}} {...props as any} />);
+  render(<FileViewer file={FILE} host={host as any} renderers={[renderer]} state={{}} onStateChange={() => {}} {...props as any} />);
 const navbar = () => document.querySelector('[data-viewer-navbar]');
 const fileName = () => document.querySelector<HTMLElement>('[data-file-name]')!;
 const labels = (selector = '[data-viewer-navbar]') => [...document.querySelectorAll(`${selector} a, ${selector} button`)].map(node => node.getAttribute('aria-label'));
@@ -53,7 +53,7 @@ it('keeps the right of the navbar for the host\'s update button and Full size al
       <button type="button" onClick={() => onFullscreenChange(false)}>Back</button>
     </> }),
   });
-  render(<FileViewer file={FILE} host={host as any} renderers={[fullscreen]} state={{ panel: null, panelWidth: 220 }} onStateChange={() => {}}
+  render(<FileViewer file={FILE} host={host as any} renderers={[fullscreen]} state={{}} onStateChange={() => {}}
     update={<button type="button" aria-label="Update to 0.7.5" />} fullSize={<button type="button" aria-label="Full size" />} />);
   await screen.findByRole('button', { name: 'Preview' });
   expect(labels()).toEqual(['Update to 0.7.5', 'Full size']);

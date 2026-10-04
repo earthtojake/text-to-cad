@@ -8,9 +8,9 @@ import { Button } from '../primitives/button.jsx';
 import type { AppSetting, ViewerFeatures } from '../file-viewer/types.js';
 import type { ViewerHost } from '../host/types.js';
 import type { LiveRegistry } from '../host/liveRegistry.js';
-import { ModelLibrary, type LibraryModel, type ModelLibrarySource, type ModelPictureSource } from '../library/ModelLibrary.js';
+import { ModelLibrary, type LibraryModel, type ModelLibrarySource } from '../library/ModelLibrary.js';
 import { useModelThumbnail } from '../library/thumbnails.js';
-import { OffscreenPicture, cadRenderers } from './OffscreenPicture.js';
+import { OffscreenPicture, cadRenderers, type ModelPictureSource } from './OffscreenPicture.js';
 import type { LibraryLayout } from '../tab-store/tabRecord.js';
 import type { TabStore } from '../tab-store/tabStore.js';
 import { useTabViewerState } from '../tab-store/useTabViewerState.js';
@@ -43,7 +43,7 @@ export interface CadViewerProps<Model extends LibraryModel = LibraryModel> {
    * whose own navigation shows one file, as a file handler does) a view has a file and nothing else.
    */
   library?: ModelLibrarySource<Model>;
-  /** Keep the library's picture of the file on screen, once it has settled. */
+  /** Keep the library's picture of a model: the file on screen once it has settled, and on the home a card's. */
   onThumbnail?(png: Blob, file: string): Promise<unknown>;
   /** The host's controls in the Display panel (the web's appearance). */
   displayActions?: ReactNode;
@@ -73,10 +73,10 @@ const reportError = (error: Error) => console.error(error);
  * with its five renderers (STEP, DXF, GLB, STL/3MF, URDF/SRDF/SDF), the host's home (the model
  * library) wherever no file is open, and the standard loading and "File does not exist" pages. It
  * follows the catalog of the file on screen and refreshes it when the page is focused or shown
- * again. It keeps a picture of each model it shows for the library, and on the home draws one for a
- * card that has none or an old one, where the host says how (`library.pictureFrom`): out of sight,
- * one model at a time, and only a model whose display is already built — the home never starts a
- * build. It never navigates: showing a file, or the home, is the host's `onShow`.
+ * again. It keeps a picture of each model it shows for the library (`onThumbnail`), and on the home
+ * draws one for a card that has none or an old one: out of sight, with its own client, one model at a
+ * time, and only a model whose display is already built — the home never starts a build. It never
+ * navigates: showing a file, or the home, is the host's `onShow`.
  */
 export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, host, tabStore, live, file, onShow, onShown,
   library, onThumbnail, displayActions, appSettings, features, notice, update, fullSize, onError = reportError }: CadViewerProps<Model>) {
@@ -88,8 +88,8 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
   const settings = useSyncExternalStore(preferences.subscribe, preferences.getSnapshot, preferences.getSnapshot);
   const { state, onStateChange } = useTabViewerState(tabStore);
   const path = normalizePath(file);
-  const latest = useRef({ onShow, onShown, onThumbnail, path, library });
-  latest.current = { onShow, onShown, onThumbnail, path, library };
+  const latest = useRef({ onShow, onShown, onThumbnail, path });
+  latest.current = { onShow, onShown, onThumbnail, path };
 
   // The file on screen once the catalog has it.
   const entry = path ? catalog.entries.find(item => normalizePath(item.file) === path) ?? null : null;
@@ -131,17 +131,19 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
   const home = useCallback(() => latest.current.onShow(''), []);
   const viewerHost = useMemo<ViewerHost>(() => ({ ...host, navigation: homed ? { openFile, home } : { openFile } }), [host, openFile, home, homed]);
 
-  // The home's pictures for cards without a current one, drawn out of sight one at a time. A model
-  // whose display is not built yet is left to its placeholder: the status is read, never built.
+  // The home's pictures for cards without a current one, drawn out of sight one at a time and kept as
+  // the file on screen's are. A model whose display is not built yet is left to its placeholder: the
+  // status is read, never built.
   const [drawing, setDrawing] = useState<{ source: ModelPictureSource; done(kept: boolean): void } | null>(null);
-  const drawable = Boolean(library?.pictureFrom);
+  const drawable = Boolean(library && onThumbnail);
   const picture = useMemo(() => (drawable ? async (model: Model) => {
-    const source = latest.current.library?.pictureFrom?.(model);
-    if (!source || latest.current.path) return false;
-    const status = await source.client.requestArtifactStatus(source.file).catch(() => null);
+    const file = normalizePath(model.path);
+    if (latest.current.path) return false;
+    const status = await client.requestArtifactStatus(file).catch(() => null);
     if (status?.state !== 'compiled' || latest.current.path) return false;
-    return new Promise<boolean>(done => setDrawing({ source, done }));
-  } : undefined), [drawable]);
+    const keep = (png: Blob) => latest.current.onThumbnail?.(png, model.path) ?? Promise.resolve();
+    return new Promise<boolean>(done => setDrawing({ source: { client, file, keep }, done }));
+  } : undefined), [drawable, client]);
   const inFlight = useRef(drawing);
   inFlight.current = drawing;
   const drawn = useCallback((kept: boolean) => {

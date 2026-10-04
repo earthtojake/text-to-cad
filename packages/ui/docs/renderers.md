@@ -10,8 +10,7 @@ what a host renderer may rely on:
 
 - `defineFileRenderer` and the registration contract from `@text-to-cad/ui/file-viewer`
   ([FileViewer](file-viewer.md)), including `fallback: true` for the one
-  renderer that takes files nothing else matches, and `body` panels for a view
-  that replaces the content rather than sitting in the panel column.
+  renderer that takes files nothing else matches.
 - The file it is handed (`FileMetadata`) and its `FileSource`, which names and
   describes files and reads nothing else: a renderer reads a file's content through
   what its host injects into it (the CAD renderers take a `CadWorkspaceService`).

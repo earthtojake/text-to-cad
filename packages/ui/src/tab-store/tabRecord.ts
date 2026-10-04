@@ -1,5 +1,4 @@
 import type { JsonValue } from '../file-viewer/types.js';
-import { clampPanelWidth, PANEL_DEFAULT_WIDTH } from '../file-viewer/navigation/panelWidth.js';
 import { normalizeToolStack } from '../renderers/kit/tools/toolStackLayout.js';
 
 /**
@@ -7,8 +6,8 @@ import { normalizeToolStack } from '../renderers/kit/tools/toolStackLayout.js';
  *
  *   { version, settings, files }
  *
- * `settings` is tab-wide — a declared panel column's width, the tool stack's layout, the
- * appearance and how the home lays out its library — and replaces every global preference.
+ * `settings` is tab-wide — the tool stack's layout, the appearance and how the home lays out its
+ * library — and replaces every global preference.
  * `files` is the view of the file on screen (`kit/shell/fileView.js`: its camera, its Display
  * settings, its playback, its renderer's own slices) under `[absolute file path, renderer id]`,
  * and nothing else: a write puts a file last and drops any other (`TAB_FILE_LIMIT`), and a host
@@ -30,8 +29,6 @@ export type Appearance = 'system' | 'light' | 'dark';
 export type LibraryLayout = 'grid' | 'list';
 export interface ToolStackLayout { panels: Record<string, { width?: number; height?: number }>; collapsed: Record<string, boolean>; closed: Record<string, boolean> }
 export interface TabSettings {
-  /** The width of the column a file's declared panels open in. */
-  panelWidth: number;
   /** The tool stack's layout (`kit/tools/toolStackLayout.js`): the resizable panels' sizes, the folded panels and the closed ones. */
   toolStack: ToolStackLayout;
   /** System, Light or Dark; a new tab follows the OS until the person picks. */
@@ -62,7 +59,6 @@ function normalizeLibrary(value: unknown): TabSettings['library'] {
 export function normalizeTabSettings(value: unknown): TabSettings {
   const record = plainObject(value) ? value : {};
   return {
-    panelWidth: typeof record.panelWidth === 'number' && Number.isFinite(record.panelWidth) ? clampPanelWidth(record.panelWidth) : PANEL_DEFAULT_WIDTH,
     toolStack: normalizeToolStack(record.toolStack) as ToolStackLayout,
     appearance: normalizeAppearance(record.appearance),
     library: normalizeLibrary(record.library),

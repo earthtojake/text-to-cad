@@ -12,7 +12,7 @@ const require = createRequire(import.meta.url);
 const temporary = await mkdtemp(join(tmpdir(), 'text-to-cad-web-app-'));
 const output = join(temporary, 'app.mjs');
 await build({
-  stdin: { contents: `export {default as App} from './App.tsx'; export {act,createElement} from 'react'; export {createRoot} from 'react-dom/client'; export {snapshot} from '@text-to-cad/ui/cad-viewer'; export {autoReloadOptions} from './host/useViewerAutoReload.js'; export {createTabStore} from '@text-to-cad/ui/tab-store'; export {sessionTabRecord, TAB_RECORD_KEY} from './persistence/tabRecord.ts';`, resolveDir: fileURLToPath(new URL('.', import.meta.url)) },
+  stdin: { contents: `export {default as App} from './App.tsx'; export {createWebCadClient} from './host/cadClient.js'; export {act,createElement} from 'react'; export {createRoot} from 'react-dom/client'; export {snapshot} from '@text-to-cad/ui/cad-viewer'; export {autoReloadOptions} from './host/useViewerAutoReload.js'; export {createTabStore} from '@text-to-cad/ui/tab-store'; export {sessionTabRecord, TAB_RECORD_KEY} from './persistence/tabRecord.ts';`, resolveDir: fileURLToPath(new URL('.', import.meta.url)) },
   bundle: true, platform: 'node', format: 'esm', jsx: 'automatic', outfile: output, loader: { '.css': 'empty', '.svg': 'dataurl' },
   banner: { js: `import {createRequire} from 'node:module'; const require=createRequire(import.meta.url);` },
   plugins: [{ name: 'host-boundaries', setup(plugin) {
@@ -32,7 +32,7 @@ await build({
     });
   } }],
 });
-const { App, act, createElement, createRoot, snapshot, autoReloadOptions, createTabStore, sessionTabRecord, TAB_RECORD_KEY } = await import(pathToFileURL(output).href);
+const { App, createWebCadClient, act, createElement, createRoot, snapshot, autoReloadOptions, createTabStore, sessionTabRecord, TAB_RECORD_KEY } = await import(pathToFileURL(output).href);
 after(() => rm(temporary, { recursive: true, force: true }));
 
 test('the web host keeps the URL, the history, the title and the appearance, and hands the rest to the shared viewer', async () => {
@@ -62,13 +62,15 @@ test('the web host keeps the URL, the history, the title and the appearance, and
       : init.body ? { ask: false, sharing: false, reason: 'choice', policy: 'p' } : { ask: true, sharing: false, reason: 'unasked', policy: 'p' };
     return new Response(JSON.stringify(reply), { headers: { 'content-type': 'application/json' } });
   };
-  const client = { serverInfo: async options => { serverCalls.push(options); return { identityToken: 'restarted' }; } };
+  // The page's own client over this Viewer's routes, its server's description answered here.
+  const client = { ...createWebCadClient({ document: window.document }), serverInfo: async options => { serverCalls.push(options); return { identityToken: 'restarted' }; } };
   const root = createRoot(window.document.getElementById('root'));
   const tabStore = createTabStore(sessionTabRecord(window.sessionStorage));
   const viewer = () => snapshot();
   try {
     const historyAtStart = window.history.length;
-    await act(() => root.render(createElement(App, { client, server: { start: '/m', pick: true, backend: 'local-fs', serverFeatures: ['reveal-path'] }, tabStore })));
+    // The update notice comes with the server's description (`main.tsx`): the button draws with the page.
+    await act(() => root.render(createElement(App, { client, server: { start: '/m', pick: true, platform: 'darwin' }, tabStore, notice })));
     // The file, by its absolute path, in the URL too, in place of the relative one; the host's file
     // menu and links; the tab's store for everything the viewer keeps.
     assert.equal(viewer().file, '/m/one.step');
@@ -77,6 +79,9 @@ test('the web host keeps the URL, the history, the title and the appearance, and
     assert.equal(viewer().host.files.id, 'local');
     assert.equal(viewer().tabStore, tabStore);
     assert.deepEqual(Object.keys(viewer().host.fileActions.perform).sort(), ['copy-path', 'reveal']);
+    assert.equal(viewer().host.fileActions.platform, 'darwin', 'Reveal is labeled for the machine the server runs on');
+    await viewer().host.fileActions.perform.reveal({ path: '/m/one.step', kind: 'file' });
+    assert.deepEqual(libraryCalls.filter(([url]) => url === '/__cad/reveal'), [['/__cad/reveal', { path: '/m/one.step' }]]);
     assert.equal(viewer().host.links.version, '0.7.4');
     assert.equal('navigation' in viewer().host, false, 'navigation is the shared viewer\'s: the host only shows what it is asked to');
     assert.deepEqual(await autoReloadOptions().fetchServerInfo(), { ok: true, identityToken: 'restarted' });
@@ -101,11 +106,10 @@ test('the web host keeps the URL, the history, the title and the appearance, and
     await act(() => viewer().onShown('/m/one.step'));
     assert.equal(window.document.title, 'CAD | one.step');
     assert.deepEqual(libraryCalls.filter(([url]) => url === '/__cad/recents'), [['/__cad/recents', { action: 'open', path: '/m/one.step' }]]);
-    // CAD's analytics, as the CAD app's: the consent read once, its answer in Settings, and the model
-    // shown reported to this Viewer's server (which keeps it as a code, and sends it only with consent).
-    assert.deepEqual(libraryCalls.filter(([url]) => url.startsWith('/__cad/analytics')),
-      [['/__cad/analytics', null], ['/__cad/analytics/activity', { file: '/m/one.step' }]]);
-    // Settings: Analytics, then Features.
+    // CAD's analytics, as the CAD app's: the consent read once, its answer in the app menu. (The
+    // model shown is counted, as a code and only with consent, as it joins the library.)
+    assert.deepEqual(libraryCalls.filter(([url]) => url.startsWith('/__cad/analytics')), [['/__cad/analytics', null]]);
+    // The app menu: Analytics, then Features.
     assert.deepEqual(viewer().appSettings.map(setting => [setting.label, setting.checked]),
       [['Share anonymous usage data', false], ['Quick edit', true]]);
     // The card goes to the viewer (it asks once a model is on screen), and its answer is a card's: the
@@ -125,7 +129,7 @@ test('the web host keeps the URL, the history, the title and the appearance, and
     viewer().update.props.onLink(notice.instructions);
     window.open = openBefore;
     assert.deepEqual(opened, [[notice.instructions, '_blank', 'noopener,noreferrer']]);
-    assert.deepEqual(libraryCalls.filter(([url]) => url === '/__cad/version'), [['/__cad/version', null]]);
+    assert.deepEqual(libraryCalls.filter(([url]) => url === '/__cad/version'), [], 'nothing read: the page started with the notice');
     assert.deepEqual(guards, ['1']);
     // Quick edit, on until the person turns it off: read from this Viewer's server once, and the
     // choice kept there (in their settings, whatever port this is), never in the browser's storage.

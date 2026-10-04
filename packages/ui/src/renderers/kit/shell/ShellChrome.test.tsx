@@ -60,9 +60,9 @@ function tabSettings(initial: object = {}) {
   return store;
 }
 type Settings = ReturnType<typeof tabSettings>;
-function frame({ name = 'panel.harness', preferences = tabSettings(), state = undefined as unknown, mobile = false, onStateChange = (_: unknown) => {}, onPanelOpen = vi.fn(), onFullscreenChange = vi.fn(), openPanel = '', appearance = { colorScheme: 'light' } as object, notice = null as React.ReactNode, features = undefined as object | undefined } = {}) {
-  const props = { source: { id: 'one' }, file: { path: `/models/${name}`, name, kind: 'file' }, document: null, openPanel, panelSlot: null, notice, features,
-    onFullscreenChange, onPanelOpen, onReady() {}, onOpenFile() {}, appearance, state, onStateChange, reload() {}, data: { services: { preferences } } };
+function frame({ name = 'panel.harness', preferences = tabSettings(), state = undefined as unknown, mobile = false, onStateChange = (_: unknown) => {}, onFullscreenChange = vi.fn(), appearance = { colorScheme: 'light' } as object, notice = null as React.ReactNode, features = undefined as object | undefined } = {}) {
+  const props = { source: { id: 'one' }, file: { path: `/models/${name}`, name, kind: 'file' }, document: null, notice, features,
+    onFullscreenChange, onReady() {}, onOpenFile() {}, appearance, state, onStateChange, reload() {}, data: { services: { preferences } } };
   const element = () => <ViewerHostContext.Provider value={testHost()}><ViewerMobileContext.Provider value={mobile}>
     <HarnessRenderer {...(props as any)} /></ViewerMobileContext.Provider></ViewerHostContext.Provider>;
   const view = render(element());
@@ -331,7 +331,7 @@ it("a dismissed alert's own icon, at the navbar's right, brings its card back; i
   const host = testHost({ links: viewerLinks({ version: '0.7.5' }), environment: { colorScheme: 'light', platform: 'darwin' },
     files: { id: 'one', stat: async (path: string) => ({ path, name: path.split('/').pop()!, kind: 'file', extension: 'harness', size: 1 }) } });
   render(<FileViewer file="/models/one.harness" host={host as any} renderers={[createHarnessRenderer({ preferences: tabSettings() })]}
-    state={{ panel: null, panelWidth: 220 }} onStateChange={() => {}} />);
+    state={{}} onStateChange={() => {}} />);
   await screen.findByRole('button', { name: 'Preview' });
   const right = () => [...document.querySelector('[data-viewer-navbar] > div')!.querySelectorAll('a, button')].map(node => node.getAttribute('aria-label'));
   const card = () => screen.queryByRole('alert');
@@ -358,13 +358,6 @@ it("a dismissed alert's own icon, at the navbar's right, brings its card back; i
   stage('failed');
   expect(card()).not.toBeNull();
   expect(right()).toEqual([]);
-});
-
-it('the file explorer, open over the top-left corner, leaves the tools drawn under it', () => {
-  frame({ openPanel: 'tree' });
-  const groups = document.querySelector<HTMLElement>('[data-cad-tool-groups]')!;
-  expect(groups.classList.contains('invisible')).toBe(false);
-  expect(shown()).toEqual(['Harness tree', 'Harness reference']);
 });
 
 it("the host's notice waits for the model, then takes the top-right with Quick Edit stacked under it", () => {
@@ -490,11 +483,10 @@ it("two surfaces: the strip and the stack share the light chrome surface, and Di
   expect(has(screen.getByRole('menu'), FLOATING_SURFACE_CLASS)).toBe(true);
 });
 
-it("Preview is fullscreen: the strip, the stack and the view's controls step aside, never opening the host's column; its corner's way out brings back the tool in hand with its panel", async () => {
+it("Preview is fullscreen: the strip, the stack and the view's controls step aside; its corner's way out brings back the tool in hand with its panel", async () => {
   const user = userEvent.setup();
-  const onPanelOpen = vi.fn();
   const onFullscreenChange = vi.fn();
-  frame({ onPanelOpen, onFullscreenChange });
+  frame({ onFullscreenChange });
   await user.click(tool('Pose'));
   expect(shown()).toContain('Harness position');
   await user.click(screen.getByRole('button', { name: 'Display' }));
@@ -523,11 +515,6 @@ it("Preview is fullscreen: the strip, the stack and the view's controls step asi
   expect([viewportProps.current.previewMode, displayPopover()]).toEqual([true, null]);
   await user.click(within(document.querySelector<HTMLElement>('[data-preview-corner]')!).getByRole('button', { name: 'Exit preview' }));
   expect([displayPopover(), screen.getByRole('button', { name: 'Display' }).getAttribute('aria-pressed')]).toEqual([null, 'false']);
-  // Escape is the viewer's: whatever it closes, it is never the host's column (only its toggle does that).
-  act(() => document.querySelector<HTMLElement>('[data-slot="cad-file-view"]')!.focus());
-  await user.keyboard('{Escape}');
-  await user.keyboard('{Escape}');
-  expect(onPanelOpen).not.toHaveBeenCalled();
 });
 
 it("preview's Playback settings are the file's: kept between previews, written to the file's view, restored when it is reopened, and another file starts at the defaults", async () => {

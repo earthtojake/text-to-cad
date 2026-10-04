@@ -71,7 +71,7 @@ class ViewerAnalyticsTest(unittest.TestCase):
         # The answer is the person's, in the state directory every CAD app reads: the CAD app's
         # server sees the same no.
         self.assertEqual(json.loads(self.state.read_text(encoding="utf-8"))["analytics"]["choice"], "off")
-        # A card still up in another view answers nothing now; the Settings toggle changes it whenever.
+        # A card still up in another view answers nothing now; the app menu's toggle changes it whenever.
         self.assertEqual(self.request("POST", "/__cad/analytics", {"share": True, "card": True})[1]["sharing"], False)
         self.assertEqual(self.request("POST", "/__cad/analytics", {"share": True})[1]["sharing"], True)
 
@@ -82,12 +82,15 @@ class ViewerAnalyticsTest(unittest.TestCase):
         self.assertFalse(self.state.exists())
 
     def test_what_the_page_did_is_sent_only_with_consent_and_a_file_only_as_its_code(self) -> None:
+        # A touch is reported; a model the page shows is counted as it joins the library.
         model = str(self.root / "parts" / "a.stl")
-        self.request("POST", "/__cad/analytics/activity", {"file": model, "touched": True})
+        self.request("POST", "/__cad/analytics/activity", {"touched": True})
+        self.request("POST", "/__cad/recents", {"action": "open", "path": model})
         self.assertFalse(self.app.analytics.flush())  # not asked yet: nothing goes
         self.request("POST", "/__cad/analytics", {"share": True})
-        self.assertEqual(self.request("POST", "/__cad/analytics/activity", {"file": model, "touched": True})[0], 204)
-        self.request("POST", "/__cad/analytics/activity", {"file": "parts/b.stl"})  # not named by its absolute path: not counted
+        self.assertEqual(self.request("POST", "/__cad/analytics/activity", {"touched": True})[0], 204)
+        self.assertEqual(self.request("POST", "/__cad/recents", {"action": "open", "path": model})[0], 200)
+        self.assertEqual(self.request("POST", "/__cad/recents", {"action": "open", "path": "parts/a.stl"})[0], 400)
         self.assertTrue(self.app.analytics.flush())
         [payload] = self.sent
         self.assertEqual((payload["presentation"], payload["client"]["name"]), ("browser", "cadgen-viewer"))
@@ -111,7 +114,7 @@ class ViewerAnalyticsTest(unittest.TestCase):
             self.assertNotEqual(self.request("POST", "/__cad/version", {})[0], 200)
 
     def test_an_app_with_no_recorder_serves_no_analytics(self) -> None:
-        # The CAD app's tunnel builds apps of its own: its page asks the CAD app's server instead.
+        # The viewer process and the CAD app's server each attach theirs; an app given none counts nothing.
         port = self.serve(create_cad_app(host="127.0.0.1", port=0))
         self.assertEqual(self.request("GET", "/__cad/analytics", port=port)[0], 404)
         self.assertEqual(self.request("POST", "/__cad/analytics/activity", {"touched": True}, port=port)[0], 405)

@@ -1,12 +1,11 @@
 """The viewer's document compile: a job in the pool, de-duplicated, errors as values.
 
-The private compile pool is gone; ``DocumentCompiler`` submits ``submit_compile``
-jobs; the build route starts one and answers at once, and the status route
-follows it. Driven by a fake ``submit`` so the outcomes are deterministic
-and fast: what these cover is the waiter's behaviour — one job per document,
-attached requests sharing the answer, a failed job's bare message — and the
-ops wiring around it. The pool's own behaviour (slots, coalescing, spares) has
-its own suites.
+``DocumentCompiler`` submits ``submit_compile`` jobs to cadgen's pool; the build
+route starts one and answers at once, and the status route follows it. Driven by
+a fake ``submit`` so the outcomes are deterministic and fast: what these cover
+is the waiter's behaviour — one job per document, attached requests sharing the
+answer, a failed job's bare message — and the ops wiring around it. The pool's
+own behaviour (slots, coalescing, spares) has its own suites.
 """
 
 from __future__ import annotations
