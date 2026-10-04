@@ -219,8 +219,9 @@ The floor's finish is `backdrop.groundFinish` (`PHOTOGRAPHIC_STUDIO_FLOOR_FINISH
 `matte`, the default, or `glossy`, a glossier surface that also reflects the model
 (`studioFloorReflection.js`). Before each frame of the scene (its `onBeforeRender`)
 the scene is drawn again from the camera mirrored in the floor, at half the
-canvas's resolution; four small passes fade and soften it with each reflected
-point's height (crisp where the model meets the floor), and the floor lays it over
+canvas's resolution; three small passes fade and soften it with each reflected
+point's height (crisp where the model meets the floor), none of them sampling the
+target it draws into, a draw WebGL refuses, and the floor lays it over
 itself with a Fresnel weight, in display colour, so a light floor shows it as a
 dark one does. The mirrored draw runs when the camera moved or the frame re-renders
 shadows (it renders them, and the frame keeps them); a frame for a highlight keeps

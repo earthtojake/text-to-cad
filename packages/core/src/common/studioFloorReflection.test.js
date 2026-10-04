@@ -8,7 +8,7 @@ import { createStudioFloorReflection } from "./studioFloorReflection.js";
 // The mirrored draw is GPU work; what is checked here is WHEN it runs, what it leaves
 // out, and that it leaves the renderer and the scene as it found them.
 function rendererStub(scene) {
-  const calls = { mirrored: 0, passes: 0, visibleDuringMirror: [], targets: [] };
+  const calls = { mirrored: 0, passes: 0, visibleDuringMirror: [], targets: [], passTargets: [] };
   let target = null;
   const clearColor = new THREE.Color("#123456");
   let clearAlpha = 1;
@@ -28,6 +28,13 @@ function rendererStub(scene) {
     render(drawn, camera) {
       if (drawn !== scene) {
         calls.passes += 1;
+        calls.passTargets.push(target);
+        // WebGL refuses a draw that samples a texture of the target it draws into.
+        for (const { value } of Object.values(drawn.children[0].material.uniforms)) {
+          if (!value?.isTexture) continue;
+          assert.ok(value !== target.texture && value !== target.depthTexture,
+            `a pass samples ${target.texture.name}'s own ${value.isDepthTexture ? "depth" : "colour"} while drawing into it`);
+        }
         return;
       }
       calls.mirrored += 1;
@@ -90,8 +97,9 @@ test("the reflection is drawn when the camera moved or the casters changed, and 
   frame();
   assert.equal(renderer.calls.mirrored, 1);
   assert.equal(reflection.uniforms.uReflectionReady.value, 1);
-  // Each mirrored draw is faded, softened (a pass per axis) and combined in small passes.
-  assert.equal(renderer.calls.passes, 4);
+  // Each mirrored draw is faded, then softened a pass per axis, the second mixing the
+  // soft copy with the crisp one by height.
+  assert.equal(renderer.calls.passes, 3);
 
   // A camera move draws it again; a frame that changed neither waits out the interval.
   orbit(camera, 10);
@@ -133,7 +141,7 @@ test("the mirrored draw leaves out what it is given, and restores the renderer a
   assert.equal(renderer.getClearAlpha(), 1);
   assert.equal(renderer.getClearColor(new THREE.Color()).getHexString(), "123456");
   assert.equal(renderer.calls.targets[0].isXRRenderTarget, false, "drawn as the canvas only while the scene is");
-  assert.equal(reflection.uniforms.uReflection.value, renderer.calls.targets[0].texture);
+  assert.equal(reflection.uniforms.uReflection.value, renderer.calls.passTargets.at(-1).texture, "the floor reads the last pass");
   reflection.dispose();
 });
 

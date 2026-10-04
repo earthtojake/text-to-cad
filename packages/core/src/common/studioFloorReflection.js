@@ -62,31 +62,39 @@ void main() {
 `;
 
 // One separable Gaussian pass: 17 taps over two sigmas either side.
-const BLUR_FRAGMENT = /* glsl */ `
+const GAUSSIAN_GLSL = /* glsl */ `
 uniform sampler2D uInput;
 uniform vec2 uStep;
-varying vec2 vUv;
-void main() {
+vec4 gaussian(vec2 uv) {
   vec4 sum = vec4(0.0);
   float total = 0.0;
   for (int i = -8; i <= 8; i++) {
     float t = float(i) / 4.0;
     float w = exp(-0.5 * t * t);
-    sum += w * texture2D(uInput, vUv + uStep * float(i));
+    sum += w * texture2D(uInput, uv + uStep * float(i));
     total += w;
   }
-  gl_FragColor = sum / total;
+  return sum / total;
 }
 `;
 
+const BLUR_FRAGMENT = /* glsl */ `
+varying vec2 vUv;
+${GAUSSIAN_GLSL}
+void main() {
+  gl_FragColor = gaussian(vUv);
+}
+`;
+
+// The soft copy's second pass, mixed with the crisp copy by height as it is drawn.
 const COMBINE_FRAGMENT = /* glsl */ `
 uniform sampler2D uSharp;
-uniform sampler2D uSoft;
 uniform float uBlurHeight;
 varying vec2 vUv;
 ${HEIGHT_GLSL}
+${GAUSSIAN_GLSL}
 void main() {
-  gl_FragColor = mix(texture2D(uSharp, vUv), texture2D(uSoft, vUv),
+  gl_FragColor = mix(texture2D(uSharp, vUv), gaussian(vUv),
     smoothstep(0.0, uBlurHeight, reflectedHeight(vUv)));
 }
 `;
@@ -184,10 +192,12 @@ export function createStudioFloorReflection(THREE, {
   clearTimer
 } = {}) {
   const depthTexture = new THREE.DepthTexture(1, 1, THREE.UnsignedIntType);
-  // The mirrored draw, then the combined result: the passes are done with it by then.
+  // The mirrored draw, then the blurs' halfway passes; the crisp copy; and what the floor
+  // reads. No pass draws into a target whose colour or depth it samples: WebGL refuses
+  // that draw as a feedback loop, so the soft copy's second pass and the mix are one.
   const mirrored = colorTarget(THREE, "studio-floor-reflection", depthTexture);
   const sharp = colorTarget(THREE, "studio-floor-reflection-sharp");
-  const soft = colorTarget(THREE, "studio-floor-reflection-soft");
+  const combined = colorTarget(THREE, "studio-floor-reflection-combined");
   const passCamera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
   const heightUniforms = () => ({
     uDepth: { value: depthTexture },
@@ -207,12 +217,13 @@ export function createStudioFloorReflection(THREE, {
   const combine = fullScreenPass(THREE, COMBINE_FRAGMENT, {
     ...heightUniforms(),
     uSharp: { value: sharp.texture },
-    uSoft: { value: soft.texture },
+    uInput: { value: null },
+    uStep: { value: new THREE.Vector2() },
     uBlurHeight: { value: 1 }
   });
 
   const uniforms = {
-    uReflection: { value: mirrored.texture },
+    uReflection: { value: combined.texture },
     uReflectionMatrix: { value: new THREE.Matrix4() },
     uReflectionShape: { value: new THREE.Vector3(strength, normalWeight, 0) },
     uReflectionReady: { value: 0 }
@@ -264,7 +275,7 @@ export function createStudioFloorReflection(THREE, {
     if (width === state.width && height === state.heightPx) return;
     state.width = width;
     state.heightPx = height;
-    for (const renderTarget of [mirrored, sharp, soft]) renderTarget.setSize(width, height);
+    for (const renderTarget of [mirrored, sharp, combined]) renderTarget.setSize(width, height);
   }
 
   // The camera mirrored in the floor, its near plane turned onto the floor so nothing
@@ -311,13 +322,17 @@ export function createStudioFloorReflection(THREE, {
     renderer.render(fullScreen.scene, passCamera);
   }
 
+  // Aim a Gaussian pass across `from`, or down it: taps a quarter sigma apart, so the 17
+  // taps span two sigmas either side.
+  function aim(fullScreen, from, sigma, down) {
+    fullScreen.uniforms.uInput.value = from.texture;
+    fullScreen.uniforms.uStep.value.set(down ? 0 : sigma / 4 / state.width, down ? sigma / 4 / state.heightPx : 0);
+  }
+
   function blurInto(renderer, from, via, into, sigma) {
-    // Taps a quarter sigma apart: the 17 taps span two sigmas either side.
-    blurPass.uniforms.uInput.value = from.texture;
-    blurPass.uniforms.uStep.value.set(sigma / 4 / state.width, 0);
+    aim(blurPass, from, sigma, false);
     pass(renderer, blurPass, via);
-    blurPass.uniforms.uInput.value = via.texture;
-    blurPass.uniforms.uStep.value.set(0, sigma / 4 / state.heightPx);
+    aim(blurPass, via, sigma, true);
     pass(renderer, blurPass, into);
   }
 
@@ -362,8 +377,10 @@ export function createStudioFloorReflection(THREE, {
       pass(renderer, prep, sharp);
       // The scene's colour is spent once faded: it carries the blurs' halfway passes.
       if (sharpBlur > 0) blurInto(renderer, sharp, mirrored, sharp, sharpBlur);
-      blurInto(renderer, sharp, mirrored, soft, blur);
-      pass(renderer, combine, mirrored);
+      aim(blurPass, sharp, blur, false);
+      pass(renderer, blurPass, mirrored);
+      aim(combine, mirrored, blur, true);
+      pass(renderer, combine, combined);
     } finally {
       mirrored.isXRRenderTarget = false;
       hidden.forEach((object, index) => { object.visible = saved.visible[index]; });
@@ -423,7 +440,7 @@ export function createStudioFloorReflection(THREE, {
     dispose() {
       schedule.dispose();
       depthTexture.dispose();
-      for (const renderTarget of [mirrored, sharp, soft]) renderTarget.dispose();
+      for (const renderTarget of [mirrored, sharp, combined]) renderTarget.dispose();
       for (const fullScreen of [prep, blurPass, combine]) {
         fullScreen.mesh.geometry.dispose();
         fullScreen.mesh.material.dispose();
