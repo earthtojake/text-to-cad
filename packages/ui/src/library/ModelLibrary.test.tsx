@@ -59,10 +59,11 @@ it('heads the home with the TEXTTOCAD wordmark over GitHub and Settings, the hos
   fireEvent.click(within(await screen.findByRole('navigation', { name: 'CAD links' })).getByRole('button', { name: 'Settings' }));
   expect((await screen.findByRole('dialog', { name: 'Settings' })).querySelector('[data-settings-section]')).toBeNull();
   cleanup();
-  // The host's update button, first in the row, while its install is behind.
-  render(<ModelLibrary library={library([])} links={links} update={<button type="button" aria-label="Update to 0.7.5" />} />);
+  // The host's update button, first in the row, while its install is behind; its Full size, last, where it shows the view small.
+  render(<ModelLibrary library={library([])} links={links} update={<button type="button" aria-label="Update to 0.7.5" />}
+    fullSize={<button type="button" aria-label="Full size" />} />);
   const row = await screen.findByRole('navigation', { name: 'CAD links' });
-  expect([...row.querySelectorAll('a, button')].map(node => node.getAttribute('aria-label'))).toEqual(['Update to 0.7.5', 'GitHub', 'Settings']);
+  expect([...row.querySelectorAll('a, button')].map(node => node.getAttribute('aria-label'))).toEqual(['Update to 0.7.5', 'GitHub', 'Settings', 'Full size']);
 });
 
 it('offers Open only where the host has a chooser, and opens and pins through the host', async () => {

@@ -25,7 +25,8 @@ import { InlineName } from "./InlineName.jsx";
  * `UpdateButton` from `@text-to-cad/ui/update`); the file's own actions (the CAD viewer's one: a
  * dismissed alert's icon, which brings its card back), the toggles of any panel the file declares, the host's Settings (`settings`, the
  * same popover as on its home, over every file: Feedback is
- * in it), then the renderer's view controls (`controlsRef`: the CAD viewer's Display and Preview).
+ * in it), then the renderer's view controls (`controlsRef`: the CAD viewer's Display and Preview),
+ * and last the host's way to show the view full size (`fullSize`), where it shows it small.
  * Preview takes the whole page, this row with it.
  *
  * Nothing here is drawn for its own sake: a control appears only where it does something.
@@ -112,10 +113,11 @@ function FileActions({ entry, capabilities, platform, onAction }) {
  * @param {import("react").ReactNode} [props.trailing] The file's actions and its panels' toggles.
  * @param {import("react").ReactNode} [props.settings] The host's Settings, before the renderer's view controls.
  * @param {import("react").ReactNode} [props.update] The host's update button, first among the controls.
+ * @param {import("react").ReactNode} [props.fullSize] The host's Full size button, last, where it shows the view small.
  * @param {(element: HTMLDivElement | null) => void} [props.controlsRef] The box the renderer draws its view controls into.
  * @param {string} [props.className]
  */
-export function ViewerNavbar({ onBack, explorer = null, file = null, selecting = false, status = null, trailing = null, settings = null, update = null, controlsRef, className }) {
+export function ViewerNavbar({ onBack, explorer = null, file = null, selecting = false, status = null, trailing = null, settings = null, update = null, fullSize = null, controlsRef, className }) {
   const name = file ? file.path.split("/").pop() || file.path : "";
   return (
     <header className={cn(NAVBAR_ROW_CLASS, "border-border bg-background text-foreground", className)} data-viewer-navbar="">
@@ -139,6 +141,7 @@ export function ViewerNavbar({ onBack, explorer = null, file = null, selecting =
         {trailing}
         {settings}
         <div ref={controlsRef} className="contents" data-navbar-controls="" />
+        {fullSize}
       </div>
     </header>
   );

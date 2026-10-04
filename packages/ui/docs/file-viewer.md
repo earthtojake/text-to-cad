@@ -111,8 +111,9 @@ The navbar is drawn only when it holds something: the way home
 (`navigation.home`, with a file open), the explorer's toggle (a source with
 `list`), the open file's name (`navigationPath` names it: the file's own path by
 default, `null` while a host resolves it), a renderer's actions, a panel toggle,
-the host's `links`, or the unsaved-changes dot — and never for a `compact` host,
-whose frame already names what it shows. The C mark leads every row that is drawn.
+the host's `links`, update, Settings or Full size (`fullSize`, last, where the host
+shows the view small), or the unsaved-changes dot — and never for a `compact` view,
+a picture (the home's thumbnails). The C mark leads every row that is drawn.
 The name has a ⋯ with the explorer's menu for the file when the host can do
 anything with it; it has no right-click menu and no crumbs: folders are the
 explorer's to show.

@@ -139,7 +139,8 @@ function Placeholders({ layout }: { layout: LibraryLayout }) {
 /**
  * The host's home: the models opened before, from every view, to open again. It has no navbar
  * over it: the TEXTTOCAD wordmark is centred at its top over its byline and the host's links — its update, only when
- * there is one, then GitHub and Settings (the version, X and Discord, the host's own settings and Feedback) — then "Recent Files" with its search, its grid/list switch and, where
+ * there is one, then GitHub and Settings (the version, X and Discord, the host's own settings and Feedback), then the
+ * host's Full size where it shows the view small — then "Recent Files" with its search, its grid/list switch and, where
  * the host has a chooser, Open, all three there with no models yet too; then the models, pinned first, as solid cards (a picture over the
  * name and when the file was edited) or as rows. A card can be pinned (its pin filled); a row can
  * also be removed. With none yet, one empty card opens the host's chooser. It is drawn on the
@@ -151,7 +152,7 @@ function Placeholders({ layout }: { layout: LibraryLayout }) {
  * (`wantsPicture`) is handed to `picture`, where the viewer draws one out of sight — one card at a
  * time, each once while the page is up — and the list is read again once one is kept.
  */
-export function ModelLibrary<Model extends LibraryModel>({ library, layout = "grid", onLayoutChange, failure = "", picture, links, platform, appSettings, update, onError }: {
+export function ModelLibrary<Model extends LibraryModel>({ library, layout = "grid", onLayoutChange, failure = "", picture, links, platform, appSettings, update, fullSize, onError }: {
   library: ModelLibrarySource<Model>;
   /** Grid or list; the host keeps the choice (the tab's settings). */
   layout?: LibraryLayout;
@@ -168,6 +169,8 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
   appSettings?: readonly AppSetting[];
   /** The host's update button, first in the row under the wordmark, while its install is behind. */
   update?: ReactNode;
+  /** The host's Full size button, last in that row, where it shows the view small. */
+  fullSize?: ReactNode;
   onError?(error: Error): void;
 }) {
   const [items, setItems] = useState<readonly Model[] | null>(null);
@@ -271,6 +274,7 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
         {update}
         <GitHubLink links={links} onError={onError} />
         <SettingsPopover links={links} appSettings={appSettings} platform={platform} align="center" />
+        {fullSize}
       </nav> : null}
       <div className="cad-library-toolbar">
         <h1 className="cad-library-heading">Recent Files</h1>

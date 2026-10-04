@@ -6,6 +6,7 @@ import { useFeatures } from '@text-to-cad/ui/features';
 import { UpdateButton, useUpdateNotice } from '@text-to-cad/ui/update';
 import { viewerLinks } from '@text-to-cad/ui/links';
 import { Button } from '@text-to-cad/ui/primitives/button';
+import { TooltipHint } from '@text-to-cad/ui/primitives/tooltip';
 import { createTabStore, memoryTabRecord } from '@text-to-cad/ui/tab-store';
 import { version } from '../package.json';
 import type { Bridge, HostContext } from './host/bridge';
@@ -49,10 +50,9 @@ export function inlineHeight(width: number, maxHeight?: number): number {
 
 /**
  * Room for what the host draws over the page (`insets`). Inline, a card whose height the host is
- * told, with a way to full size. The one element either way, so going full size keeps the view (and
- * its model) as it is.
+ * told. The one element either way, so going full size keeps the view (and its model) as it is.
  */
-function Frame({ bridge, context, insets, inline = false, expandable = true, bottomCenter, overlay = null, children }: { bridge: Bridge; context: HostContext; insets: NonNullable<HostContext['safeAreaInsets']>; inline?: boolean; expandable?: boolean; bottomCenter?: string; overlay?: ReactNode; children: ReactNode }) {
+function Frame({ bridge, context, insets, inline = false, bottomCenter, overlay = null, children }: { bridge: Bridge; context: HostContext; insets: NonNullable<HostContext['safeAreaInsets']>; inline?: boolean; bottomCenter?: string; overlay?: ReactNode; children: ReactNode }) {
   // Where the host's composer floats over the page instead of taking room from it: the line the
   // viewer's playback bars sit on, and the strip lists scroll clear of.
   const floating = bottomCenter ? { '--cad-viewport-bottom-center': bottomCenter, '--cad-host-bottom-inset': `${context.safeAreaInsets?.bottom || 0}px` } as CSSProperties : {};
@@ -70,19 +70,19 @@ function Frame({ bridge, context, insets, inline = false, expandable = true, bot
       <div className="relative min-h-0 flex-1">{children}{overlay}</div>
     </div>;
   }
-  const expand = () => void bridge.request('ui/request-display-mode', { mode: 'fullscreen' }).catch(() => {});
-  const fullSize = expandable && context.availableDisplayModes?.includes('fullscreen') !== false;
-  // Its button holds the view's top-right corner: the viewer's column there (the analytics card) starts below it.
-  return <div className="flex flex-col overflow-hidden" style={{ height, ...(fullSize ? { '--cad-viewport-top-right-inset': '40px' } : {}) } as CSSProperties}>
-    <div className="relative min-h-0 flex-1">
-      {children}
-      {overlay}
-      {fullSize
-        ? <Button variant="secondary" size="icon-sm" className="absolute right-2 top-2 z-40 shadow-sm" aria-label="Full size" title="Full size" onClick={expand}>
-          <Maximize2 aria-hidden="true" />
-        </Button> : null}
-    </div>
+  return <div className="flex flex-col overflow-hidden" style={{ height }}>
+    <div className="relative min-h-0 flex-1">{children}{overlay}</div>
   </div>;
+}
+
+/** Inline, the card's way to full size: the navbar's last control, and the home's. */
+function FullSizeButton({ bridge }: { bridge: Bridge }) {
+  const expand = () => void bridge.request('ui/request-display-mode', { mode: 'fullscreen' }).catch(() => {});
+  return <TooltipHint content="Full size">
+    <Button variant="ghost" size="icon-xs" className="size-6 text-muted-foreground hover:text-foreground" aria-label="Full size" onClick={expand}>
+      <Maximize2 className="size-3.5" aria-hidden="true" />
+    </Button>
+  </TooltipHint>;
 }
 
 /** A view a newer one replaced: its last frame, and where to look now. */
@@ -195,7 +195,7 @@ export default function App({ bridge, server, launch: initial, presentation = 't
   const show = (launch: Launch) => setShowing(previous => ({ launch, sequence: previous.sequence + 1 }));
   const { launch } = showing;
   if (superseded) {
-    return <Frame bridge={bridge} context={context} insets={insets} inline={inline} bottomCenter={bottomCenter} expandable={false}><Superseded still={still} /></Frame>;
+    return <Frame bridge={bridge} context={context} insets={insets} inline={inline} bottomCenter={bottomCenter}><Superseded still={still} /></Frame>;
   }
   return <Frame bridge={bridge} context={context} insets={insets} inline={inline} bottomCenter={bottomCenter}
     overlay={lost ? <Banner message={LOST[presentation]} /> : null}>
@@ -204,7 +204,8 @@ export default function App({ bridge, server, launch: initial, presentation = 't
       notice={consent?.ask ? <ConsentCard policy={consent.policy} onAnswer={answer} onPolicy={openLink} /> : null}
       update={updateNotice ? <UpdateButton notice={updateNotice} send={sendPrompt} copy={prompt => frameClipboard.writeText(prompt)}
         onLink={openLink} /> : null}
-      colorScheme={colorScheme} platform={initial.platform || 'darwin'} reporter={reporter} sync={sync} compact={inline} chat={chat}
+      fullSize={inline && context.availableDisplayModes?.includes('fullscreen') !== false ? <FullSizeButton bridge={bridge} /> : null}
+      colorScheme={colorScheme} platform={initial.platform || 'darwin'} reporter={reporter} sync={sync} chat={chat}
       onLaunch={show} onHome={goHome} />
   </Frame>;
 }

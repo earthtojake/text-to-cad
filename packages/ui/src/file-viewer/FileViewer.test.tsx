@@ -60,18 +60,18 @@ it('puts the host\'s update button first and its Settings just before the view\'
       <button type="button" onClick={() => onFullscreenChange(false)}>Back</button>
     </> }),
   });
-  // The host's update button and Settings (`CadViewer`'s), drawn over every file: no renderer draws them.
+  // The host's update button, Settings and (shown small) Full size, drawn over every file: no renderer draws them.
   render(<FileViewer file="parts/a.step" host={{ ...host, links: viewerLinks({ version: '0.7.4' }) } as any} renderers={[fullscreen]}
     state={{ panel: null, panelWidth: 220 }} onStateChange={() => {}} settings={<button type="button" aria-label="Settings" />}
-    update={<button type="button" aria-label="Update to 0.7.5" />} />);
+    update={<button type="button" aria-label="Update to 0.7.5" />} fullSize={<button type="button" aria-label="Full size" />} />);
   await screen.findByRole('button', { name: 'Preview' });
-  // Feedback is Settings' now: the navbar has no link of its own for it.
-  expect(labels()).toEqual(['Update to 0.7.5', 'Settings', 'Preview']);
+  // Feedback is Settings' now: the navbar has no link of its own for it. Full size is last, after the view controls.
+  expect(labels()).toEqual(['Update to 0.7.5', 'Settings', 'Preview', 'Full size']);
   expect(labels('[data-navbar-controls]')).toEqual(['Preview']);
   act(() => screen.getByRole('button', { name: 'Preview' }).click());
   expect(navbar()).toBeNull();
   act(() => screen.getByRole('button', { name: 'Back' }).click());
-  expect(labels()).toEqual(['Update to 0.7.5', 'Settings', 'Preview']);
+  expect(labels()).toEqual(['Update to 0.7.5', 'Settings', 'Preview', 'Full size']);
 });
 
 it('leads back to the host\'s home from a file, and draws no navbar over the home itself', async () => {

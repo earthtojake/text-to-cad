@@ -224,6 +224,8 @@ export interface FileViewerProps {
    * controls, while the host's install is behind; nothing otherwise.
    */
   update?: ReactNode;
+  /** The host's Full size button, last in the navbar, where the host shows the view small (inline in a conversation). */
+  fullSize?: ReactNode;
   /** The features the person has left on (Settings' Features), for every renderer (`RendererViewProps.features`). */
   features?: ViewerFeatures;
   /** The host's notice, shown at the viewport's top-right once the file is on screen (`RendererViewProps.notice`). */

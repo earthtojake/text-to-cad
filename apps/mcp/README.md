@@ -19,10 +19,11 @@ extension):
   names no view reaches the thread's own tab, and it says which folder the
   thread works in, through MCP roots or Codex's per-call sandbox metadata.
 - **Inline (Claude Desktop, and every other MCP Apps host).** Each `cad_show`
-  mounts a viewer card in the chat, and the host keeps the old cards. A card
-  shows the model alone (a compact viewer: no tools, view actions, cube or Quick
-  Edit), goes full size on request, and a newer card retires the older ones.
-  Full size is the whole viewer, Quick Edit included.
+  mounts a viewer card in the chat, and the host keeps the old cards. A card is
+  the whole viewer at card size: its navbar (the update button first, Settings,
+  the view controls, and Full size last where the host can show a view full
+  size), the tools, the view cube and Quick Edit. A newer card retires the older
+  ones.
 
 A client that renders no MCP Apps never loads this page: its `cad_show` answers
 with the model's link in the CAD Viewer, started or reused for its folder
@@ -193,7 +194,7 @@ its view — camera, Display settings, pose — through updates of it, and leavi
 another model, for the home or for another root drops it, as in the web Viewer. A view the
 host creates again (its frame re-created) starts afresh: nothing names a view across its
 frames, so there is nothing to keep its record under. `App.tsx` frames it (full page, or
-an inline card with its full-size button). In a tab, preview's playbar sits on the line of Codex's
+an inline card whose height the host is told; its Full size is the navbar's last control). In a tab, preview's playbar sits on the line of Codex's
 composer, which floats over the page (`--cad-viewport-bottom-center`), and the
 home's and the explorer's lists scroll clear of it (`--cad-host-bottom-inset`).
 

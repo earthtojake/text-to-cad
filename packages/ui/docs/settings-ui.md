@@ -56,9 +56,10 @@ none.
   same popover, centred under its cog, and holds the same sections. The home has no footer of
   its own.
   The update shows only for a release
-  later than the version the page names, whatever the host says. A view shown small in a
-  conversation (`compact`) has none either, and draws the model alone: no tools,
-  view actions, cube or Quick Edit.
+  later than the version the page names, whatever the host says. A view drawn as a
+  picture (`compact`, the home's thumbnails) has none either, and draws the model alone:
+  no tools, view actions, cube or Quick Edit. A view shown small in a conversation is the
+  whole viewer, with the host's Full size last in its navbar.
 - **File explorer** floats over the view's left, inset 8px like the toolbar, on a
   solid background above the tools, as tall as its rows up to the view's height
   less the inset at either end: past that its list scrolls. While it is open the

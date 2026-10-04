@@ -256,6 +256,8 @@ export const ViewerNavbar: ComponentType<{
   settings?: ReactNode;
   /** The host's update button, first among the controls, while its install is behind. */
   update?: ReactNode;
+  /** The host's Full size button, last in the row, where it shows the view small. */
+  fullSize?: ReactNode;
   /** The box the renderer draws its view controls into, at the row's right end. */
   controlsRef?: (element: HTMLDivElement | null) => void;
   className?: string;

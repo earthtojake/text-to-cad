@@ -12,10 +12,12 @@ The host contains `files`, optional native `fileActions`, `clipboard`,
 live-document bindings `documents` and `pdf`. `environment` carries the resolved `colorScheme`,
 the keyboard `platform` (`darwin` shows ⌘, anything else Ctrl), the app's own
 `reducedMotion`, honoured beside the system's `prefers-reduced-motion`, and
-`compact`: a host showing the view small, inline in a conversation, where a CAD
-renderer draws the model alone — no tools, view actions, view cube or Quick
-Edit — and FileViewer draws no navbar (the host offers its own way
-to full size, where it drops `compact`). CAD is a separate registration supplied with a
+`compact`: a view drawn as a picture (the home draws its thumbnails this way, out
+of sight), where a CAD renderer draws the model alone — no tools, view actions,
+view cube or Quick Edit — and FileViewer draws no navbar. A view shown small in a
+conversation is not compact: it is the whole viewer, and its host hands it a way
+to full size as `fullSize` (`CadViewerProps.fullSize`), the navbar's last control
+and the home's. CAD is a separate registration supplied with a
 `CadWorkspaceService`; the generic FileViewer does not import CAD. The HTTP CAD
 adapter can serve both apps, while desktop owns native runtime startup/recovery.
 See [workspace resources](../../core/docs/workspace-resources.md) for resource
@@ -395,8 +397,10 @@ With no file open the name's place says "Select file" (words, not a control), an
 the page says "Ask the agent to show a model". Right: the host's update button first (`update`,
 while its install is behind), the renderer's navigation actions, any declared panel's toggle, then Settings,
 the person's: FileViewer draws the control its composer hands it (`FileViewerProps.settings`)
-over every file, just before the renderer's view controls and never among them, and `CadViewer`
-hands it the Settings popover (`SettingsPopover`, `kit/shell/SettingsPopover.jsx`) the home has
+over every file, just before the renderer's view controls and never among them; last, after the
+view controls, the host's Full size where it shows the view small (`fullSize`, the inline card's way
+to full size, in the home's row too). `CadViewer`
+hands FileViewer the Settings popover (`SettingsPopover`, `kit/shell/SettingsPopover.jsx`) the home has
 too — one component, the same sections in both. It shows the version beside its title, the
 host's own settings (`appSettings`, below) under it, then Feedback where the host has a
 tracker (`links.issues`): a button, Open Issue, that opens a new issue titled "Feedback: " (`feedbackUrl`,

@@ -634,7 +634,7 @@ The port and app adapters own delivery and return an acknowledged outcome.
 Quick Edit (`kit/tools/quick-edit/QuickEdit.jsx`) is the shared note to the agent:
 a box at the top-right, there only while it has something to carry, which
 `RendererShell` mounts for a renderer that hands it `references` — STEP alone, the one
-format with picks and sketches (a compact host gets none). Its box, header and buttons are the design system's
+format with picks and sketches (a picture, `compact`, gets none). Its box, header and buttons are the design system's
 ([Quick Edit](settings-ui.md#quick-edit)); what it can do follows the host
 ([prompt handoff](viewer-host.md#prompt-handoff)), never an app. The renderer hands
 the shell what is selected as `references`, in the prompt grammar (STEP's, under
@@ -1376,8 +1376,8 @@ labelled `Show files` / `Hide files`), when the host's source lists files. No CA
 CAD file has the tree alone, its controls being panels of its own tool stack. The
 tree is FileViewer's own (`treePanel`), always last. Display is a popover from its
 button in the navbar (the renderer's `navbarSlot`) and never a panel of the host's. The renderer's update status is
-in the viewport, centred at its top, never in the navbar. So a host shown small in a
-conversation (`compact`) has no navbar at all: its card names what it shows.
+in the viewport, centred at its top, never in the navbar. So a view drawn as a picture
+(`compact`, as the home draws its thumbnails) needs no navbar at all.
 
 With nothing chosen (`panel: null`) a CAD file opens with nothing beside it, and a tab
 with no file opens with the tree shut: "Select file" stands in the navbar. On mobile a file opens with no sheet

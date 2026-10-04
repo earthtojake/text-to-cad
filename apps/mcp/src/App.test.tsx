@@ -14,7 +14,7 @@ vi.mock('@text-to-cad/ui/cad-viewer', async original => {
   return {
     ...await original<object>(),
     // The host's notice (the analytics card) drawn as the real viewer would once a model is on screen.
-    CadViewer: (props: CadViewerProps) => { viewer.props = props; useEffect(() => { viewer.mounts += 1; }, []); return <>{props.update ?? null}{props.notice ?? null}</>; },
+    CadViewer: (props: CadViewerProps) => { viewer.props = props; useEffect(() => { viewer.mounts += 1; }, []); return <>{props.update ?? null}{props.fullSize ?? null}{props.notice ?? null}</>; },
   };
 });
 
@@ -95,25 +95,32 @@ it('a thread\'s tab has no home: no library, and nothing to go back to, but its 
   expect(viewer.props!.host.files.list).toBeDefined();
 });
 
-it('an inline host gets a card of a height it is told, which goes full size in place', () => {
+it('an inline host gets the whole viewer in a card of a height it is told, with Full size last in its navbar, which goes full size in place', () => {
   const { bridge, server } = host({ displayMode: 'inline', availableDisplayModes: ['inline', 'fullscreen'] });
   const { container } = render(<App bridge={bridge as any} server={server as any} presentation="inline" session={session}
     launch={{ ...home, surface: 'inline', explore: false, view: 'cad-1-a', order: { createdAt: 1, seq: 1 } }} />);
-  expect(viewer.props!.host.environment.compact).toBe(true);
+  // Not a picture: the card has the navbar (and its update button), the tools, the cube and Quick Edit.
+  expect(viewer.props!.host.environment.compact).toBeUndefined();
   expect(sized(bridge.notify)).toEqual([['ui/notifications/size-changed', { height: expect.any(Number) }]]);
-  // Its Full size button holds the top-right corner: the viewer's column there (the analytics card) starts below it.
-  expect((container.firstElementChild as HTMLElement).style.getPropertyValue('--cad-viewport-top-right-inset')).toBe('40px');
   act(() => (container.querySelector('[aria-label="Full size"]') as HTMLButtonElement).click());
   expect(bridge.request).toHaveBeenCalledWith('ui/request-display-mode', { mode: 'fullscreen' });
   act(() => bridge.change({ displayMode: 'fullscreen', safeAreaInsets: { bottom: 72 } }));
   expect(container.querySelector('[aria-label="Full size"]')).toBeNull();
-  expect(viewer.props!.host.environment.compact).toBeUndefined();
   // Full size, the host's composer lies across the bottom: the view keeps clear of it, and its
   // playbar keeps its own line.
   expect((container.firstElementChild as HTMLElement).style.paddingBottom).toBe('72px');
   expect((container.firstElementChild as HTMLElement).style.getPropertyValue('--cad-viewport-bottom-center')).toBe('');
   // Full size keeps what was on the card: the same view, not a new one.
   expect(viewer.mounts).toBe(1);
+});
+
+it('an inline host that cannot show a view full size gets no Full size, and still the whole viewer', () => {
+  const { bridge, server } = host({ displayMode: 'inline', availableDisplayModes: ['inline'] });
+  const { container } = render(<App bridge={bridge as any} server={server as any} presentation="inline" session={session}
+    launch={{ protocol: 3, page: 'viewer', model: '/work/part.stl', root: { kind: 'global', path: '/', name: '/' }, explore: false, surface: 'inline', view: 'cad-1-b', order: { createdAt: 1, seq: 1 } }} />);
+  expect(container.querySelector('[aria-label="Full size"]')).toBeNull();
+  expect(viewer.props!.fullSize).toBeNull();
+  expect(viewer.props!.host.environment.compact).toBeUndefined();
 });
 
 it('a Quick Edit queues into a tab host\'s composer always, into an inline host\'s when it takes model context, and sends where the host takes messages', () => {

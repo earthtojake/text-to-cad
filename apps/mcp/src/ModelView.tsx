@@ -26,7 +26,7 @@ export interface ViewReporter {
  * data — the root it browses, whether it browses at all, what a Quick Edit can do in the chat —
  * never by where the view is.
  */
-export default function ModelView({ launch, root: launchedRoot, sequence, bridge, server, tabStore, live, links, colorScheme, platform, reporter, sync, onLaunch, onHome, compact = false, chat, appSettings, features, notice, update }: {
+export default function ModelView({ launch, root: launchedRoot, sequence, bridge, server, tabStore, live, links, colorScheme, platform, reporter, sync, onLaunch, onHome, chat, appSettings, features, notice, update, fullSize }: {
   launch: Launch; root: Root; sequence: number; bridge: Bridge; server: Server; tabStore: TabStore; live: LiveRegistry; links: ViewerLinks;
   colorScheme: 'light' | 'dark'; platform: string; reporter: ViewReporter;
   /** The view's one call each second: it carries what this root's client would otherwise poll for. */
@@ -35,8 +35,6 @@ export default function ModelView({ launch, root: launchedRoot, sequence, bridge
   onLaunch(launch: Launch): void;
   /** Show this view's home: a view opened on one (the sidebar's) has it; one opened on a model has none. */
   onHome?(): void;
-  /** Shown small, inline in the chat: the renderer draws the model, not its tools. */
-  compact?: boolean;
   /** What the chat takes from a Quick Edit: context for the next message, a message now, or neither (Copy Prompt alone). */
   chat: ChatReach;
   /** This app's on/off settings: Settings' Analytics and Features sections. */
@@ -47,6 +45,8 @@ export default function ModelView({ launch, root: launchedRoot, sequence, bridge
   notice?: ReactNode;
   /** The update button, first in the navbar and on the home, while this install is behind. */
   update?: ReactNode;
+  /** Inline, the card's way to full size, where the host can show it so: last in the navbar and on the home. */
+  fullSize?: ReactNode;
 }) {
   // Every launch carries its own root object; the same folder must keep its client and catalog.
   const root = useMemo(() => launchedRoot, [launchedRoot.kind, launchedRoot.path]);
@@ -139,12 +139,12 @@ export default function ModelView({ launch, root: launchedRoot, sequence, bridge
   }, [server, root]);
   const host = useMemo<Omit<ViewerHost, 'navigation'>>(() => ({
     files: source, fileActions, clipboard: frameClipboard, promptContext, attachments, links,
-    environment: compact ? { colorScheme, platform, compact } : { colorScheme, platform },
-  }), [source, fileActions, promptContext, attachments, links, colorScheme, platform, compact]);
+    environment: { colorScheme, platform },
+  }), [source, fileActions, promptContext, attachments, links, colorScheme, platform]);
 
   return <CadViewer client={client} host={host} tabStore={tabStore} live={live} file={file} onShow={show}
     // A filesystem's catalog holds only the file on screen: a file a renderer links to is shown as named.
     accept={global ? path => normalizeCatalogPath(path) || null : undefined}
-    rootPath={root.path} library={library} appSettings={appSettings} features={features} notice={notice} update={update}
+    rootPath={root.path} library={library} appSettings={appSettings} features={features} notice={notice} update={update} fullSize={fullSize}
     onThumbnail={async (png, pictured) => server.recents({ action: 'thumbnail', path: rootPath(root.path, pictured), png: encodeBase64(new Uint8Array(await png.arrayBuffer())) })} />;
 }
