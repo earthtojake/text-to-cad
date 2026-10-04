@@ -71,6 +71,12 @@ Handler = Callable[[str, dict[str, Any], RequestContext], Any]
 NotificationHandler = Callable[[str, dict[str, Any]], None]
 
 
+def _valid_id(value: Any) -> bool:
+    # JSON-RPC ids are scalars, never containers or booleans. Preserve this
+    # transport's existing numeric/null compatibility; they are all hashable.
+    return value is None or (isinstance(value, (str, int, float)) and not isinstance(value, bool))
+
+
 def claim_stdout() -> BinaryIO:
     """Return a private binary stream on the original stdout; send fd 1 to stderr."""
     protocol_fd = os.dup(1)
@@ -137,9 +143,12 @@ class Connection:
         if not isinstance(message, dict):
             self._send({"jsonrpc": "2.0", "id": None, "error": {"code": INVALID_REQUEST, "message": "expected one JSON-RPC object"}})
             return
-        method = message.get("method")
-        if method is None:
+        if "method" not in message:
             self._resolve(message)
+            return
+        method = message["method"]
+        if not isinstance(method, str) or not _valid_id(message.get("id")):
+            self._send({"jsonrpc": "2.0", "id": None, "error": {"code": INVALID_REQUEST, "message": "invalid method or request id"}})
             return
         params = message.get("params") or {}
         if not isinstance(params, dict):
@@ -155,7 +164,9 @@ class Connection:
 
     def _notification(self, method: str, params: dict[str, Any]) -> None:
         if method == "notifications/cancelled":
-            self._cancelled.add(params.get("requestId"))
+            request_id = params.get("requestId")
+            if _valid_id(request_id):
+                self._cancelled.add(request_id)
             return
         if self._on_notification is not None:
             try:
@@ -205,6 +216,8 @@ class Connection:
         self._send(message)
 
     def _resolve(self, message: dict[str, Any]) -> None:
+        if not _valid_id(message.get("id")):
+            return  # An invalid peer response cannot identify a pending request.
         with self._pending_lock:
             future = self._pending.get(message.get("id"))
         if future is None or future.done():

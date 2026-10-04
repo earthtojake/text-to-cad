@@ -119,6 +119,38 @@ class ConnectionTest(unittest.TestCase):
         self.assertEqual(self.sink.next(), {"jsonrpc": "2.0", "id": 1, "result": {"answer": {"a": 42}}})
 
 
+class InvalidFramesTest(unittest.TestCase):
+    def test_invalid_shapes_do_not_end_the_stream_before_the_next_ping(self) -> None:
+        invalid = [
+            {"method": [], "id": 3}, {"method": {}, "id": 3}, {"method": None, "id": 3},
+            {"method": "ping", "id": []}, {"method": "ping", "id": {}},
+            {"id": [], "result": {}}, {"id": {}, "result": {}},
+            {"method": "notifications/cancelled", "params": {"requestId": []}},
+            {"method": "notifications/cancelled", "params": {"requestId": {}}},
+        ]
+        for message in invalid:
+            with self.subTest(message=message):
+                sink = _Sink()
+                reader = [json.dumps({"jsonrpc": "2.0", **message}).encode(),
+                          b'{"jsonrpc":"2.0","method":"ping","id":"alive"}']
+                connection = Connection(reader, sink, lambda *_: {"alive": True})
+                connection.serve()
+                frames = list(sink.frames.queue)
+                self.assertEqual(frames[-1], {"jsonrpc": "2.0", "id": "alive", "result": {"alive": True}})
+                if "method" in message and message["method"] != "notifications/cancelled":
+                    self.assertEqual(frames[0]["error"]["code"], -32600)
+                    self.assertIsNone(frames[0]["id"])
+
+    def test_scalar_request_ids_are_preserved(self) -> None:
+        for request_id in ("named", 0, 2.5, None):
+            with self.subTest(request_id=request_id):
+                sink = _Sink()
+                connection = Connection([json.dumps({"jsonrpc": "2.0", "method": "ping", "id": request_id}).encode()],
+                                        sink, lambda *_: {})
+                connection.serve()
+                self.assertEqual(sink.next(), {"jsonrpc": "2.0", "id": request_id, "result": {}})
+
+
 class ClaimStdoutTest(unittest.TestCase):
     def test_stray_output_goes_to_stderr_not_the_protocol(self) -> None:
         import subprocess
