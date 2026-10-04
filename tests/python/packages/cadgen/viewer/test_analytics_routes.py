@@ -101,7 +101,7 @@ class ViewerAnalyticsTest(unittest.TestCase):
                                                           encoding="utf-8")
         with mock.patch.dict(os.environ, {"CADGEN_INSTALL_CHANNEL": "github", "CI": "", "CADGEN_UPDATE_CHECK": ""}):
             status, answer = self.request("GET", "/__cad/version")
-            self.assertEqual((status, answer["notice"]["text"]), (200, f"text-to-cad 99.0.0 is available (you have {cadgen.__version__})"))
+            self.assertEqual((status, answer["notice"]["text"]), (200, f"A new version v99.0.0 of text-to-cad is available (currently on v{cadgen.__version__})"))
             self.assertEqual(self.request("POST", "/__cad/version", {"dismiss": "99.0.0"}), (200, {"notice": None}))
             self.assertEqual(self.request("GET", "/__cad/version")[1], {"notice": None})
 

@@ -460,7 +460,8 @@ class TextServerTest(_Session):
     def test_a_newer_release_comes_with_the_first_cad_show_and_only_the_first(self) -> None:
         offer_an_update(self)
         first = self.call("cad_show", {"path": "parts/bracket.stl"})["content"]
-        self.assertIn('ask your agent: "Update text-to-cad to 99.0.0 from https://github.com/earthtojake/text-to-cad"', first[-1]["text"])
+        self.assertIn('Ask your agent to update to the latest version ("Update text-to-cad to 99.0.0 from '
+                      'https://github.com/earthtojake/text-to-cad"), or install manually', first[-1]["text"])
         self.assertEqual(len(self.call("cad_show", {"path": "parts/bracket.stl"})["content"]), 1)
 
     def test_a_viewer_that_will_not_start_leaves_the_command_to_run(self) -> None:

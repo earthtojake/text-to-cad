@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { test } from 'node:test';
 import { handle, RETENTION_DAYS } from './handler.mjs';
-import { STORES, versions } from './versions.mjs';
+import { versions } from './versions.mjs';
 
 const INSTALL = '8c347ec3-1342-4db5-a19a-491cbc8c59be';
 const SESSION = '0b1e6f1a-6a52-4c39-9d43-2f5e0f0b9d11';
@@ -125,19 +125,13 @@ test('health fails without a setting, or with tables a batch cannot be stored in
 });
 
 test('the version feed is the same for everyone, kept at the edge, and answers without a database', async () => {
-  const feed = { latest: '0.9.0', minimum: { 'claude-directory': '0.8.2' } };
+  const feed = { latest: '0.9.0' };
   const down = { ...memory(), async ready() { throw new Error('unreachable'); } };
   const reply = await handle(new Request('https://api.texttocad.dev/v1/versions'), down, { versions: feed, missing: ['DATABASE_URL'] });
   assert.deepEqual([reply.status, await reply.json()], [200, feed]);
   assert.equal(reply.headers.get('cache-control'), 'public, s-maxage=86400');
 });
 
-test("this release's feed names it, and a store's minimum is a release no later", () => {
-  const release = value => /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.test(value) ? value.split('.').map(Number) : null;
-  const order = (a, b) => a.map((part, index) => part - b[index]).find(difference => difference !== 0) ?? 0;
-  assert.equal(versions.latest, readFileSync(new URL('../../../../../VERSION', import.meta.url), 'utf8').trim());
-  for (const [store, minimum] of Object.entries(versions.minimum)) {
-    assert.ok(STORES.includes(store), `${store} is not a store`);
-    assert.ok(release(minimum) && order(release(minimum), release(versions.latest)) <= 0, `${store}: ${minimum}`);
-  }
+test("this release's feed names it, and nothing else", () => {
+  assert.deepEqual(versions, { latest: readFileSync(new URL('../../../../../VERSION', import.meta.url), 'utf8').trim() });
 });

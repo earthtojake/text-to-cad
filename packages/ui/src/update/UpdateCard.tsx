@@ -51,7 +51,7 @@ export function UpdateCard({ notice, send, copy, onLink, onAnswer, onClose }: {
       <h2 id={`${id}-title`} className="font-medium">Update available</h2>
       <Button variant="ghost" size="icon-xs" className="-mr-1" aria-label="Close" onClick={onClose}><X aria-hidden="true" /></Button>
     </div>
-    <p id={`${id}-text`} className="text-xs text-muted-foreground">{notice.text}. Your agent can update it:</p>
+    <p id={`${id}-text`} className="text-xs text-muted-foreground">{notice.text}. Ask your agent to update to the latest version, or install manually:</p>
     <p className="select-text rounded-sm bg-muted px-2 py-1 font-mono text-xs text-foreground">{notice.prompt}</p>
     {state.message ? <p className="text-xs text-muted-foreground" role="status">{state.message}</p> : null}
     <div className="flex items-center justify-between gap-2">

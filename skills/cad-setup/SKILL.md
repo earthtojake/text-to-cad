@@ -53,9 +53,10 @@ agent app's own update commands, and only when the user asked for the update.
 
 ## Update
 
-CAD says when a newer release is out, once per release: a card in its viewer, a
-line with a tool result, or a line in a command's output. Its prompt is worded like
-the install message: "Update text-to-cad to 0.9.0 from
+CAD says when a newer release is out, once per release, to a copy installed by
+hand (from GitHub, or with the Skills CLI): a card in its viewer, a line with a tool
+result, or a line in a command's output. Its prompt is worded like the install
+message: "Update text-to-cad to 0.9.0 from
 https://github.com/earthtojake/text-to-cad".
 
 1. **Find how text-to-cad was installed**, by asking the agent app with its own
@@ -90,11 +91,10 @@ https://github.com/earthtojake/text-to-cad".
 
 3. **A store's copy** (the Claude directory, the OpenAI directory, the Cursor
    Marketplace) is updated by its store, once the release passes the store's
-   review: there is nothing to run. CAD stays quiet about a store's copy unless
-   the store falls far behind, so when CAD itself offered the update, the user's
-   copy is one the project asks to replace now; when the user asked on their own,
-   say the store will update it and offer the switch. Ask before disabling or
-   uninstalling anything, then install from GitHub instead:
+   review: there is nothing to run, and CAD never offers it an update. Tell the
+   user the store will update it, and offer to switch to a copy installed from
+   GitHub, which hears of each release as soon as it is out. Switch only if they
+   say yes, and ask before disabling or uninstalling anything:
 
    - Claude Code: `claude plugin marketplace add earthtojake/text-to-cad`, then
      `claude plugin install text-to-cad@earthtojake`. Claude Code loads that copy

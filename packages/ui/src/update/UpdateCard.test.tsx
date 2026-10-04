@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest';
 import { UpdateCard, useUpdateNotice, type UpdateCall } from './index.js';
 
-const NOTICE = { latest: '0.9.0', version: '0.8.1', text: 'text-to-cad 0.9.0 is available (you have 0.8.1)',
+const NOTICE = { latest: '0.9.0', version: '0.8.1', text: 'A new version v0.9.0 of text-to-cad is available (currently on v0.8.1)',
   prompt: 'Update text-to-cad to 0.9.0 from https://github.com/earthtojake/text-to-cad',
   instructions: 'https://www.texttocad.dev/install' };
 
@@ -19,7 +19,7 @@ it('sends the prompt to the chat where the host can, and keeps that as the answe
   const call = vi.fn<UpdateCall>(async () => ({ notice: NOTICE }));
   const send = vi.fn(async () => {});
   render(<Host call={call} send={send} />);
-  expect((await screen.findByRole('dialog')).textContent).toContain('text-to-cad 0.9.0 is available (you have 0.8.1). Your agent can update it:');
+  expect((await screen.findByRole('dialog')).textContent).toContain('A new version v0.9.0 of text-to-cad is available (currently on v0.8.1). Ask your agent to update to the latest version, or install manually:');
   expect(screen.getByRole('button', { name: 'Send to agent' }).querySelector('svg')).toBeTruthy(); // its icon first, as Quick Edit's
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Send to agent' })); });
   expect(send).toHaveBeenCalledWith(NOTICE.prompt);

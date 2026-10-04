@@ -2,29 +2,30 @@
 
 At most once a day, cadgen reads the version feed (``GET /versions``, ``cadgen/_internal/api.py``)::
 
-    {"latest": "0.9.0", "minimum": {"claude-directory": "0.8.2"}}
+    {"latest": "0.9.0"}
 
 It is one anonymous request: no id, no path, nothing about the person or their machine beyond what
 any web request carries. ``CADGEN_UPDATE_CHECK=0`` turns it off, and it never runs in CI (``CI``
-set) or for a development install. The feed as last read is kept in the state directory
-(``versions.json``), where every process of the person's reads it.
+set), for a development install or for a store's copy. The feed as last read is kept in the state
+directory (``versions.json``), where every process of the person's reads it.
 
-What it offers depends on where the install came from (its channel, ``cadgen/_internal/channel.py``):
+Only a copy installed by hand is told (its channel, ``cadgen/_internal/channel.py``):
 
-- a development install: nothing, ever;
-- a store's copy (any channel its package named but ``github``): nothing while it is at or above
-  that store's ``minimum`` -- the store updates it once a release passes its review -- and
-  ``latest`` once it falls below; a store the feed names no minimum for is never told;
-- installed from GitHub, or a channel nothing named: ``latest``, whenever it is behind.
+- installed from GitHub, or a channel nothing named (a skill's command, a Skills CLI install):
+  ``latest``, whenever it is behind;
+- a store's copy (any channel its package named but ``github``): nothing, ever -- its store updates
+  it once a release passes the store's review;
+- a development install: nothing, ever.
 
-The notice is the same wherever it shows: ``text-to-cad 0.9.0 is available (you have 0.8.1)``, and
-a prompt for the person's agent worded like the install message, ``Update text-to-cad to 0.9.0 from
-https://github.com/earthtojake/text-to-cad``: the agent takes the steps for its own app from there. The agent does the update; nothing here does.
-The CAD app's card sends that prompt to the chat where the host takes messages, and copies it
-elsewhere; the CAD Viewer's card copies it. Each card also links to the full install instructions
-(``INSTRUCTIONS``, the docs site's ``/install``), should the agent not manage. A text-only app gets
-the line with its first ``cad_show`` result, and a ``cadgen`` command prints it on stderr, at most
-once a day.
+The notice is the same wherever it shows: ``A new version v0.9.0 of text-to-cad is available
+(currently on v0.8.1)``, and a prompt for the person's agent worded like the install message,
+``Update text-to-cad to 0.9.0 from https://github.com/earthtojake/text-to-cad``: the agent takes
+the steps for its own app from there. The agent does the update; nothing here does. The CAD app's
+card sends that prompt to the chat where the host takes messages, and copies it elsewhere; the CAD
+Viewer's card copies it. Each card also links to manual installation (``INSTRUCTIONS``, the docs
+site's ``/install``), should the agent not manage. A text-only app gets the same as one line
+(``line``) with its first ``cad_show`` result, and a ``cadgen`` command prints it on stderr, at
+most once a day.
 
 The person's answer to a card -- they sent, copied or closed it -- is kept as theirs (the
 ``updates`` section of ``settings.json``, ``cadgen/settings.py``): that release is not offered
@@ -49,7 +50,7 @@ from typing import Any, Callable, TextIO
 
 from cadgen._internal.api import api_url
 from cadgen._internal.atomic_replace import write_bytes_atomic
-from cadgen._internal.channel import DEV, channel, is_channel, is_store
+from cadgen._internal.channel import DEV, channel, is_store
 from cadgen.settings import read_section, settings_path, update_section
 
 LOG = logging.getLogger("cadgen.updates")
@@ -72,24 +73,22 @@ def _release(value: Any) -> tuple[int, ...] | None:
 
 
 def parse_feed(data: Any) -> dict[str, Any] | None:
-    """The feed as cadgen reads it: a release as ``latest``, and a release per store channel as its
-    ``minimum`` (``None`` when there is no ``latest``). Anything else in it is left out, so the
-    feed can grow without a release of cadgen."""
+    """The feed as cadgen reads it: a release as ``latest`` (``None`` when there is none). Anything
+    else in it is left out, so the feed can grow without a release of cadgen."""
     if not isinstance(data, dict) or _release(data.get("latest")) is None:
         return None
-    minimum = data.get("minimum") if isinstance(data.get("minimum"), dict) else {}
-    return {"latest": data["latest"],
-            "minimum": {store: value for store, value in minimum.items()
-                        if is_channel(store) and is_store(store) and _release(value)}}
+    return {"latest": data["latest"]}
 
 
 def checking() -> bool:
-    """Whether to check at all: not turned off (``CADGEN_UPDATE_CHECK=0``), not in CI, not a development install."""
+    """Whether to check at all: not turned off (``CADGEN_UPDATE_CHECK=0``), not in CI, and a copy
+    installed by hand -- not a development install, and not a store's copy, which its store updates."""
     if str(os.environ.get("CADGEN_UPDATE_CHECK") or "").strip().lower() in _OFF:
         return False
     if str(os.environ.get("CI") or "").strip().lower() not in ("", *_OFF):
         return False
-    return channel() != DEV
+    where = channel()
+    return where != DEV and not is_store(where)
 
 
 def _cache() -> Path:
@@ -153,15 +152,11 @@ def feed(*, fetch: bool = True, now: float | None = None, path: Path | None = No
 
 def offer(found: dict[str, Any] | None, version: str, where: str) -> str | None:
     """The release to offer an install of ``version`` from channel ``where``, if any (see the module docstring)."""
-    if found is None or where == DEV:
+    if found is None or where == DEV or is_store(where):
         return None
     current, latest = _release(version), _release(found["latest"])
     if current is None or latest is None or current >= latest:
         return None
-    if is_store(where):
-        floor = _release(found["minimum"].get(where))
-        if floor is None or current >= floor:
-            return None
     return found["latest"]
 
 
@@ -179,7 +174,7 @@ def notice(*, fetch: bool = True, now: float | None = None, path: Path | None = 
         if latest is None or _dismissed(settings) == latest:
             return None
         return {"latest": latest, "version": __version__,
-                "text": f"text-to-cad {latest} is available (you have {__version__})",
+                "text": f"A new version v{latest} of text-to-cad is available (currently on v{__version__})",
                 "prompt": f"Update text-to-cad to {latest} from {REPOSITORY}", "instructions": INSTRUCTIONS}
     except Exception:  # noqa: BLE001 - a notice never fails what shows it
         LOG.debug("the version check failed", exc_info=True)
@@ -187,8 +182,10 @@ def notice(*, fetch: bool = True, now: float | None = None, path: Path | None = 
 
 
 def line(found: dict[str, str]) -> str:
-    """The notice as one line of text, for an agent to pass on."""
-    return f'{found["text"]}. To update, ask your agent: "{found["prompt"]}"'
+    """The notice as one line of text, for an agent to pass on: the card's words, its prompt and its
+    link in place of its buttons."""
+    return (f'{found["text"]}. Ask your agent to update to the latest version ("{found["prompt"]}"), '
+            f'or install manually ({found["instructions"]}).')
 
 
 def dismiss(version: Any, *, settings: Path | None = None) -> bool:

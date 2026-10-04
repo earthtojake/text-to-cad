@@ -217,7 +217,7 @@ it("Settings' Features: Quick edit is read from the server, turned off there for
 });
 
 it('a newer release is offered once the analytics question is answered: sent to the chat where the host takes messages, copied elsewhere, the full instructions a link away', async () => {
-  const notice = { latest: '0.9.0', version: '0.8.1', text: 'text-to-cad 0.9.0 is available (you have 0.8.1)',
+  const notice = { latest: '0.9.0', version: '0.8.1', text: 'A new version v0.9.0 of text-to-cad is available (currently on v0.8.1)',
     prompt: 'Update text-to-cad to 0.9.0 from https://github.com/earthtojake/text-to-cad', instructions: 'https://www.texttocad.dev/install' };
   {
     const { bridge, server } = host({ displayMode: 'fullscreen' }, { message: {} }, true, notice);

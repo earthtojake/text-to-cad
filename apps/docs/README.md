@@ -160,7 +160,7 @@ a release of cadgen.
 
 | Route | What it does |
 | --- | --- |
-| `GET /v1/versions` | The version feed, the same for everyone: `{latest, minimum: {<store channel>: <release>}}` → `200`, kept by Vercel's edge until the next deploy (`src/lib/api/versions.mjs`). `latest` is this app's version, which the release stamps from `VERSION`; `minimum` is `src/lib/api/minimum.json`. It reads no database. |
+| `GET /v1/versions` | The version feed, the same for everyone: `{latest}` → `200`, kept by Vercel's edge until the next deploy (`src/lib/api/versions.mjs`). `latest` is this app's version, which the release stamps from `VERSION`. Only a copy installed by hand reads it; a store's copy never checks. It reads no database. |
 | `POST /v1/events` | One batch: `{schema: 2, install, session, version, channel, platform, arch, client: {name, version}, presentation, events: [{name: "tool", tool, calls, errors} \| {name: "view", calls} \| {name: "file", file, kind}]}` → `204`. `channel` is where the install came from, as its package named it: `claude-directory`, `openai-directory`, `cursor-marketplace`, `github`, `dev` or `unknown`. `file` is 16 hex characters, an HMAC of the path under a salt that never leaves the machine: distinct files can be counted, not named. One event per tool and per `file`, and one `view` at most. Anything else is `400` and stores nothing (`src/lib/api/events.mjs`), a schema 1 batch (cadgen 0.7.10 and before) included. The country Vercel places the request in (`x-vercel-ip-country`, from its IP address) adds the install to `countries` once a week and once a month: totals only, never beside the batch. |
 | `POST /v1/forget` | `{install}`: deletes every row sent under an install id → `204`. `cadgen analytics off` calls it; the random id is the only authority needed. The id rides in the body because Vercel's request logs keep each path beside the caller's IP. |
 | `GET /v1/prune` | The daily cron (`vercel.json`): deletes rows older than 13 months. Needs `Authorization: Bearer $CRON_SECRET`. |
@@ -196,14 +196,10 @@ A schema change means running `schema.sql` again (it is idempotent) on the
 database before deploying; a deploy that went out without it fails that check.
 
 The feed changes with each release, which deploys the site after its PyPI
-upload, so `latest` never names a release that cannot be installed yet. A store
-whose copies fall far behind (its review stalls, or a fix matters enough) gets a
-minimum: add `"claude-directory": "0.9.0"` (or `openai-directory`,
-`cursor-marketplace`) to `src/lib/api/minimum.json` and run `Deploy Docs`. cadgen
-then tells that store's copies below it to install from GitHub (the `cad-setup`
-skill's steps); a store with no minimum is never told, since its store updates
-it. The test beside the handler holds each minimum to a release no later than
-`latest`.
+upload, so `latest` never names a release that cannot be installed yet. Only a
+copy installed by hand reads it: a store's copy (`claude-directory`,
+`openai-directory`, `cursor-marketplace`) never checks and is never told, since its
+store updates it.
 A Vercel Firewall rate-limit rule on `/v1/*` (answering `429`) is recommended: a
 real client sends at most once a minute per running app, so a per-IP limit well
 above that turns a flood away at no cost to real clients.

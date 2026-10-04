@@ -183,18 +183,19 @@ No plugin for your agent yet?
 
 ### Updates
 
-When a newer release is out, text-to-cad says so once per release: a card in
-CAD's viewer, where **Send to agent** posts "Update text-to-cad to 0.9.0 from
-https://github.com/earthtojake/text-to-cad" to your chat, worded like the install
-message (the browser viewer's card copies it instead), or a line in your agent's
-command output. Your agent then follows the `cad-setup` skill's steps
-for your app. The card also links to the [full install instructions](https://www.texttocad.dev/install),
-in case your agent can't do it. Copies from a plugin directory or the Cursor Marketplace are
-updated by their store, so they hear nothing unless the store falls far behind.
+When a newer release is out, a copy you installed yourself says so once per
+release: a card in CAD's viewer, where **Send to agent** posts "Update text-to-cad
+to 0.9.0 from https://github.com/earthtojake/text-to-cad" to your chat, worded
+like the install message (the browser viewer's card copies it instead), or a line
+in your agent's command output. Your agent then follows the `cad-setup` skill's
+steps for your app. The card also links to the
+[full install instructions](https://www.texttocad.dev/install), in case your agent
+can't do it. Copies from a plugin directory or the Cursor Marketplace never show
+it: their store updates them.
 
 To find out, cadgen fetches `api.texttocad.dev/v1/versions` at most once a day:
-one anonymous request, with no ID, path or anything about you, and never in CI.
-`CADGEN_UPDATE_CHECK=0` turns it off.
+one anonymous request, with no ID, path or anything about you, never in CI and
+never for a store's copy. `CADGEN_UPDATE_CHECK=0` turns it off.
 
 ### Usage analytics
 

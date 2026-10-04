@@ -19,7 +19,7 @@ import cadgen
 from cadgen import updates
 from cadgen.cli import main as cadgen_main
 
-FEED = {"latest": "0.9.0", "minimum": {"claude-directory": "0.8.2"}}
+FEED = {"latest": "0.9.0"}
 
 
 class UpdatesTest(unittest.TestCase):
@@ -40,17 +40,16 @@ class UpdatesTest(unittest.TestCase):
     def read_today(self, feed: dict) -> None:
         (self.tmp / updates.FILE).write_text(json.dumps({"checked": time.time(), "feed": feed}), encoding="utf-8")
 
-    def test_each_channel_is_offered_what_its_install_needs(self) -> None:
+    def test_only_a_copy_installed_by_hand_is_offered_a_newer_release(self) -> None:
         feed = updates.parse_feed(FEED)
         for where, version, offered in (
             ("github", "0.8.1", "0.9.0"),
             ("unknown", "0.8.1", "0.9.0"),
             ("github", "0.9.0", None),
             ("github", "1.0.0", None),
-            # A store's copy is its store's to update, until it falls below the store's minimum.
-            ("claude-directory", "0.8.2", None),
-            ("claude-directory", "0.8.1", "0.9.0"),
-            ("cursor-marketplace", "0.1.0", None),  # no minimum named: never told
+            # A store's copy is its store's to update: never told, however far behind.
+            ("claude-directory", "0.1.0", None),
+            ("cursor-marketplace", "0.1.0", None),
             ("a-store-of-tomorrow", "0.1.0", None),  # a channel cadgen never heard of is a store's too
             ("dev", "0.1.0", None),
             ("github", "0.9.0.dev1", None),  # not a release: nothing to compare
@@ -61,15 +60,13 @@ class UpdatesTest(unittest.TestCase):
     def test_the_notice_reads_the_same_everywhere_like_the_install_message(self) -> None:
         self.read_today(FEED)
         found = updates.notice()
+        text = "A new version v0.9.0 of text-to-cad is available (currently on v0.8.1)"
         prompt = "Update text-to-cad to 0.9.0 from https://github.com/earthtojake/text-to-cad"
-        self.assertEqual(found, {"latest": "0.9.0", "version": "0.8.1",
-                                 "text": "text-to-cad 0.9.0 is available (you have 0.8.1)", "prompt": prompt,
+        self.assertEqual(found, {"latest": "0.9.0", "version": "0.8.1", "text": text, "prompt": prompt,
                                  "instructions": "https://www.texttocad.dev/install"})
-        self.assertEqual(updates.line(found), f'text-to-cad 0.9.0 is available (you have 0.8.1). To update, ask your agent: "{prompt}"')
-        # The same words from a store's copy below its minimum, and from a skill's command, which names no channel.
-        with mock.patch.dict(os.environ, {"CADGEN_INSTALL_CHANNEL": "claude-directory"}), \
-                mock.patch.object(cadgen, "__version__", "0.8.0"):
-            self.assertEqual(updates.notice()["prompt"], prompt)
+        self.assertEqual(updates.line(found), f'{text}. Ask your agent to update to the latest version ("{prompt}"), '
+                                              'or install manually (https://www.texttocad.dev/install).')
+        # The same words from a skill's command, which names no channel.
         with mock.patch.dict(os.environ, {"CADGEN_INSTALL_CHANNEL": ""}), \
                 mock.patch("cadgen._internal.channel._source_tree", return_value=False):
             self.assertEqual(updates.notice()["prompt"], prompt)
@@ -90,10 +87,8 @@ class UpdatesTest(unittest.TestCase):
         self.assertEqual(updates.feed(get=get, now=start + 2 * updates.CHECK_SECONDS)["latest"], "0.9.1")
 
     def test_a_feed_is_read_for_what_this_cadgen_knows(self) -> None:
-        minimum = {"claude-directory": "1.0.0", "a-new-store": "1.0.0", "openai-directory": "soon", "github": "1.0.0",
-                   "Not a channel": "1.0.0"}
-        self.assertEqual(updates.parse_feed({"latest": "1.2.3", "minimum": minimum, "notices": []}),
-                         {"latest": "1.2.3", "minimum": {"claude-directory": "1.0.0", "a-new-store": "1.0.0"}})
+        self.assertEqual(updates.parse_feed({"latest": "1.2.3", "minimum": {"claude-directory": "1.0.0"}, "notices": []}),
+                         {"latest": "1.2.3"})
         for broken in (None, [], {}, {"latest": "v1.2.3"}, {"latest": 1}):
             with self.subTest(broken=broken):
                 self.assertIsNone(updates.parse_feed(broken))
@@ -105,9 +100,10 @@ class UpdatesTest(unittest.TestCase):
         self.read_today({"latest": "0.9.1"})
         self.assertEqual(updates.notice()["latest"], "0.9.1")
 
-    def test_nothing_is_checked_when_turned_off_in_ci_or_from_a_source_tree(self) -> None:
+    def test_nothing_is_checked_when_turned_off_in_ci_from_a_source_tree_or_for_a_stores_copy(self) -> None:
         self.read_today(FEED)
-        for values in ({"CADGEN_UPDATE_CHECK": "0"}, {"CI": "true"}, {"CADGEN_INSTALL_CHANNEL": "dev"}):
+        for values in ({"CADGEN_UPDATE_CHECK": "0"}, {"CI": "true"}, {"CADGEN_INSTALL_CHANNEL": "dev"},
+                       {"CADGEN_INSTALL_CHANNEL": "claude-directory"}):
             with self.subTest(values=values), mock.patch.dict(os.environ, values):
                 asked: list[str] = []
                 self.assertIsNone(updates.notice(now=time.time() + 2 * updates.CHECK_SECONDS, get=asked.append))
@@ -122,7 +118,8 @@ class UpdatesTest(unittest.TestCase):
                 self.assertEqual(cadgen_main(["analytics"]), 0)
             return err.getvalue()
 
-        self.assertIn('ask your agent: "Update text-to-cad to 0.9.0 from https://github.com/earthtojake/text-to-cad"', run())
+        self.assertIn('Ask your agent to update to the latest version ("Update text-to-cad to 0.9.0 from '
+                      'https://github.com/earthtojake/text-to-cad"), or install manually (https://www.texttocad.dev/install).', run())
         self.assertEqual(run(), "")
 
 

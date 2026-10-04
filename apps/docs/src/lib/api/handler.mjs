@@ -70,7 +70,7 @@ export async function handle(request, store, { cronSecret, missing = [], country
     // drops every batch or never prunes what the privacy policy says it deletes. The database's error by its
     // code alone.
     // One feed for everyone, never a reply to anything a request says: the edge keeps it until the next
-    // deploy, which is the next release or a changed minimum. It reads no database, so it answers even
+    // deploy, which is the next release. It reads no database, so it answers even
     // when the analytics cannot.
     if (path === '/v1/versions' && request.method === 'GET' && versions) {
       return reply(200, versions, 'public, s-maxage=86400');

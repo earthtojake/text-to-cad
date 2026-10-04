@@ -725,11 +725,9 @@ cadgen's daily version check reads `api.texttocad.dev/v1/versions`
 (`apps/docs/src/lib/api/versions.mjs`): `latest` is the docs app's version,
 which the release PR stamps from `VERSION`, and `Publish Release` deploys the
 docs after the PyPI upload, so the feed names a release only once it can be
-installed. `minimum` holds, per store channel, the oldest release that store's
-copies may run before cadgen tells them to install from GitHub
-(`apps/docs/src/lib/api/minimum.json`, empty until a store falls behind). To
-raise one, edit that file on `main` and dispatch `Deploy Docs`; no release is
-needed. A change to the analytics schema (`schema.sql`) is run on the database
+installed. Only a copy installed by hand reads it: a store's copy (the Claude or
+OpenAI directory, the Cursor Marketplace) never checks and is never told, since
+its store updates it. A change to the analytics schema (`schema.sql`) is run on the database
 before the deploy that ships it (`apps/docs/README.md`).
 
 ### Resuming and republishing

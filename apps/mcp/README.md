@@ -67,9 +67,10 @@ reference host `basic-host` does.
   nothing about the person (`CADGEN_UPDATE_CHECK=0` turns it off; never in CI or from
   a source tree). When this install is behind, the page shows the shared
   `UpdateCard` (`@text-to-cad/ui/update`, read through `cad_version`) in the viewer's
-  `notice` once the analytics card is answered: "text-to-cad 0.9.0 is available (you
-  have 0.8.1)", and a prompt worded like the install message, "Update text-to-cad to
-  0.9.0 from https://github.com/earthtojake/text-to-cad".
+  `notice` once the analytics card is answered: "A new version v0.9.0 of text-to-cad
+  is available (currently on v0.8.1). Ask your agent to update to the latest version,
+  or install manually:", and a prompt worded like the install message, "Update
+  text-to-cad to 0.9.0 from https://github.com/earthtojake/text-to-cad".
   **Send to agent** posts it as the person's message (`ui/message`) where the host
   takes messages (`chatReach`), with **Copy prompt** beside it as an icon; elsewhere
   **Copy prompt** is the one button. **Manual installation** opens the docs site's
@@ -80,8 +81,8 @@ reference host `basic-host` does.
   install came from is its channel, `CADGEN_INSTALL_CHANNEL` in the server's
   environment, written by each package's build (`cadgen/_internal/channel.py`): a
   store's copy (the Claude or OpenAI directory, the Cursor Marketplace) is left to
-  its store unless it falls below the store's minimum in the feed, and a release
-  the person answered the card for is not offered again. The analytics: the server
+  its store and never checks, and a release the person answered the card for is
+  not offered again. The analytics: the server
   notes its use -- tool calls (not the page's plumbing), view activity from each
   view's sync (`focused`), and the files views show, as salted one-way codes --
   and, only with consent, sends it once a minute (`cadgen/analytics.py`): never a

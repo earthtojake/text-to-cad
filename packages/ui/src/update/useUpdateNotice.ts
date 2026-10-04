@@ -6,7 +6,7 @@ export interface UpdateNotice {
   latest: string;
   /** The release this install runs. */
   version: string;
-  /** `text-to-cad 0.9.0 is available (you have 0.8.1)` */
+  /** `A new version v0.9.0 of text-to-cad is available (currently on v0.8.1)` */
   text: string;
   /** What to ask the person's agent, worded like the install message: `Update text-to-cad to 0.9.0 from https://github.com/earthtojake/text-to-cad`. */
   prompt: string;
