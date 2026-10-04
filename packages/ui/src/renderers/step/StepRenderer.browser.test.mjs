@@ -99,17 +99,27 @@ function projector(camera, box) {
   };
 }
 const translations = page => page.evaluate(() => Object.fromEntries(window.__cadDisplayRecords().map(record => [record.partId, record.matrix.slice(12, 15)])));
-// The parts at rest from one read to the next, 100 ms apart, and no longer where they were (`from`):
-// an explosion turned on has eased all the way out.
-const restingLayout = async (page, from) => {
-  await page.evaluate(() => { window.__lastLayout = null; });
-  await page.waitForFunction(start => {
-    const layout = JSON.stringify(Object.fromEntries(window.__cadDisplayRecords().map(record => [record.partId, record.matrix.slice(12, 15)])));
-    const still = window.__lastLayout === layout && layout !== start;
-    window.__lastLayout = layout;
-    return still;
-  }, JSON.stringify(from), { polling: 100 });
-};
+// Where the parts come to rest, no longer where they were (`from`): an explosion turned on has eased
+// all the way out. Read on the page's own frames, not on a timer: the ease moves the parts on every
+// frame it runs, so a layout unchanged for `still` frames in a row is one the ease has finished
+// with. (A timer's two reads can both land between two frames of an ease a slow software renderer
+// is still drawing.) It answers that layout.
+const restingLayout = (page, from, still = 5) => page.evaluate(({ from, still }) => new Promise((resolve, reject) => {
+  const layout = () => Object.fromEntries(window.__cadDisplayRecords().map(record => [record.partId, record.matrix.slice(12, 15)]));
+  const same = (a, b) => Object.keys(a).length === Object.keys(b).length
+    && Object.keys(a).every(id => b[id] && a[id].every((value, axis) => value === b[id][axis]));
+  const deadline = performance.now() + 30_000;
+  let last = null, unchanged = 0;
+  const frame = () => {
+    const now = layout();
+    unchanged = last && same(now, last) && !same(now, from) ? unchanged + 1 : 0;
+    last = now;
+    if (unchanged >= still) resolve(now);
+    else if (performance.now() > deadline) reject(new Error(`the parts never came to rest: ${JSON.stringify(now)}`));
+    else requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+}), { from, still });
 /**
  * A label and its control on one line, measured where they are drawn: the label to the left of
  * its control, their centres level, and the control running to the panel's right edge.
@@ -1388,8 +1398,7 @@ test('a reload of the tab brings back the view — camera, Display, Clip, Explod
   await page.waitForFunction(() => Object.values(window.cadHarness.state.renderers || {})[0]?.camera?.zoom === 1.3);
   const left = await view.state();
   // Where the explosion put every part once it has eased out, to be found in the same place after the reload.
-  await restingLayout(page, posed);
-  const explodedLeft = await translations(page);
+  const explodedLeft = await restingLayout(page, posed);
   // The tree as isolation shows it: the base's rows, opened.
   const rowsLeft = await view.rows();
   assert.ok(rowsLeft.length > 1, `the tree has the base's rows before the reload: ${rowsLeft.join(', ')}`);
@@ -1404,13 +1413,13 @@ test('a reload of the tab brings back the view — camera, Display, Clip, Explod
   assert.deepEqual([back.display.mode, back.display.clip.enabled, back.display.clip.axis, back.display.exploded.enabled, back.display.exploded.amount],
     ['wireframe', true, 'x', true, 0.3], 'the Display settings, Clip and Explode come back');
   // An explosion restored on load lays the parts out exactly as the live one did: it is centred on
-  // the rest placement, so the restored camera still frames the same picture.
-  const sameLayout = async () => {
-    const now = await translations(page);
-    return Object.keys(explodedLeft).every(id => now[id] && explodedLeft[id].every((value, axis) => Math.abs(value - now[id][axis]) < 1e-6));
-  };
-  for (let tries = 0; tries < 20 && !(await sameLayout()); tries += 1) await page.waitForTimeout(100);
-  assert.ok(await sameLayout(), `every exploded part comes back where it was: ${JSON.stringify({ before: explodedLeft, after: await translations(page) })}`);
+  // the rest placement, so the restored camera still frames the same picture. It is laid out once
+  // the model is drawn again, so it is awaited, on the page's frames.
+  const laidOut = await page.waitForFunction(left => {
+    const now = Object.fromEntries(window.__cadDisplayRecords().map(record => [record.partId, record.matrix.slice(12, 15)]));
+    return Object.keys(left).every(id => now[id] && left[id].every((value, axis) => Math.abs(value - now[id][axis]) < 1e-6));
+  }, explodedLeft, { polling: 'raf', timeout: 30_000 }).then(() => true, () => false);
+  assert.ok(laidOut, `every exploded part comes back where it was: ${JSON.stringify({ before: explodedLeft, after: await translations(page) })}`);
   assert.deepEqual([back.hiddenPartIds, back.isolatedPartIds.length], [['o1.2'], 1], 'the hidden and the isolated parts come back');
   assert.deepEqual(await view.rows(), rowsLeft, 'the tree comes back as it was, expanded');
   assert.deepEqual([back.selectedPartIds, back.selectedReferenceIds], [[], []], 'the selection does not');
