@@ -709,9 +709,10 @@ class Server:
                              f"`cd \"{folder}\" && cadgen viewer --host 127.0.0.1 --json --detach` and open the url it prints "
                              f"with ?file={relative} added.") from failure
         link = model_link(url, folder, model)
+        # Text alone: an app that shows a result's structured content shows it in place of the text
+        # (Claude Code does), and the agent would get neither this guidance nor the update line.
         return self._told(_text(f"This app cannot show CAD views, so {os.path.basename(model)} is in the CAD Viewer: {link}\n"
-                                "The Viewer refreshes when the file changes: share this link once, not after every rebuild.",
-                                {"url": link, "model": model}))
+                                "The Viewer refreshes when the file changes: share this link once, not after every rebuild."))
 
     def _told(self, result: dict[str, Any]) -> dict[str, Any]:
         """A text-only app has no card for the update notice (``cadgen/updates.py``): this process's

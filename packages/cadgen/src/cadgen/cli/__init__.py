@@ -117,8 +117,10 @@ def read_skill_pin(skill_path) -> str | None:
 # the command's own (`_COMMANDS`). The daemon derives what it may import from here
 # (`daemon_tool_modules`), so a door cannot be warm on one side and unknown on the other.
 _WARM_COMMANDS = ("step build", "step compile", "stl build", "3mf build", "glb build")
-# The servers: a host or a client starts them, and their standard streams are its own.
-_SERVERS = frozenset({"mcp", "daemon"})
+# The servers: a host or a client starts them, and their standard streams are its own. None says
+# a newer release on stderr: the CAD Viewer and the CAD app show their own card, and the CAD app
+# starts the Viewer with its stderr discarded, where the day's line would go unseen.
+_SERVERS = frozenset({"mcp", "daemon", "viewer"})
 _DAEMON_TOOLS = {command: command.replace(" ", "-") for command in _WARM_COMMANDS}
 
 

@@ -451,7 +451,8 @@ class TextServerTest(_Session):
         self.assertEqual([(tool["name"], "_meta" in tool) for tool in tools], [("cad_show", False), ("cad_analytics", False)])
         self.assertIn("cannot show CAD views", self.initialized["instructions"])
         shown = self.call("cad_show", {"path": "parts/bracket.stl"})
-        self.assertEqual(shown["structuredContent"]["url"], "http://127.0.0.1:3999/?file=parts/bracket.stl")
+        # Text alone: Claude Code shows a result's structured content in place of its text.
+        self.assertNotIn("structuredContent", shown)
         self.assertIn("http://127.0.0.1:3999/?file=parts/bracket.stl", shown["content"][0]["text"])
         self.assertNotIn("Showing", shown["content"][0]["text"])
         self.assertEqual(TextServerTest.served[-1], str(self.workspace))

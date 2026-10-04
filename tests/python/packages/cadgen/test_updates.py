@@ -122,6 +122,15 @@ class UpdatesTest(unittest.TestCase):
                       'https://github.com/earthtojake/text-to-cad"), or install manually (https://www.texttocad.dev/install).', run())
         self.assertEqual(run(), "")
 
+    def test_a_server_never_says_it_on_stderr(self) -> None:
+        # The CAD Viewer shows its own card, and the CAD app starts it with its stderr discarded,
+        # where the day's line would go unseen.
+        self.read_today(FEED)
+        with mock.patch.object(updates, "begin") as begin, contextlib.redirect_stdout(io.StringIO()), \
+                contextlib.redirect_stderr(io.StringIO()), contextlib.suppress(SystemExit):
+            cadgen_main(["viewer", "--help"])
+        begin.assert_not_called()
+
 
 if __name__ == "__main__":
     unittest.main()
