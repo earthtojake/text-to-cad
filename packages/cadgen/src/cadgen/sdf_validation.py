@@ -175,7 +175,12 @@ def _validate_world(world_element: ET.Element, result: FindingsReport, base_dir:
 
     frames = children(world_element, "frame")
     frame_names = _names(frames)
+    model_names = _names(children(world_element, "model"))
     targets.update(frame_names)
+    targets.update(model_names)
+    _check_cross_type_scope_names(
+        result, world_path, frame=set(frame_names), model=set(model_names),
+    )
     for frame_element in frames:
         _validate_frame(frame_element, result, targets, world_path)
     _validate_frame_cycles(frames, result, world_path)
