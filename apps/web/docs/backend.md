@@ -126,7 +126,12 @@ arrives while the same version's digest or row is being computed waits for that
 computation rather than repeating it, and a read of a file that has changed since
 asks about the new version. A version is the file's mtime and size and, for a save
 by rename inside one tick of a coarse clock (HFS+, FAT, some shares), its inode and
-ctime. A build the client is watching (its build feed,
+ctime. A STEP whose tree the store cannot read whole (an object of it missing or
+damaged) is the one row computed again on every read: it lists the document as
+unbuilt, with no hash and a URL that names no tree, as the artifact status calls it
+not compiled, and the compile that repairs the store restores the same bytes at the
+same hashes, which moves nothing a version is made of. A build the client is
+watching (its build feed,
 `GET /__cad/preview`) that saves a file starts that file's row on a thread of the
 server's as soon as the daemon's ledger lists the save (`cadgen.viewer.warm`),
 so the catalog read that follows the build finds it computed or joins it. The

@@ -14,10 +14,12 @@ import json
 import os
 import shutil
 import tempfile
+import threading
 import unittest
 from pathlib import Path
 from unittest import mock
 
+from cadgen.viewer.backend import LocalAssetBackend
 from cadgen.viewer.scanner import (
     CAD_CATALOG_SCHEMA_VERSION,
     is_served_cad_asset,
@@ -244,6 +246,51 @@ class StoreResults(ScannerTestCase):
         entry = self.entry("p.step")
         self.assertEqual(entry["hash"], tree)
         self.assertEqual(entry["bytes"], len(json.dumps(result_descriptor(tree)).encode("utf-8")))
+
+
+def _join_catalog_hydration() -> None:
+    """Wait out the background catalog read a ``read_catalog`` starts, so the store is
+    changed between two reads and never under one."""
+    for thread in threading.enumerate():
+        if thread.name == "cadgen-viewer-catalog":
+            thread.join(timeout=60)
+
+
+class UnreadableTree(ScannerTestCase):
+    """A document whose tree the store can no longer read whole lists as unbuilt, until
+    the store is repaired.
+
+    The repair (a compile publishing the document again) restores the lost object at
+    its own hash, so the document's digest, its tree and its sidecar all stay what
+    they were. A row kept from before the repair listed the document as unbuilt for
+    as long as the server ran, and the CAD app said "Reading model" over it forever.
+    """
+
+    def row(self, backend: LocalAssetBackend) -> dict:
+        entries = backend.read_catalog("pair.step")["entries"]
+        _join_catalog_hydration()
+        return next(entry for entry in entries if entry["rootRelativeFile"] == "pair.step")
+
+    def test_a_lost_component_lists_the_document_unbuilt_until_the_store_is_repaired(self):
+        from cadgen.store.objects import object_path, put_object
+
+        self.write("pair.step", "pair\n")
+        tree = self.package("pair.step", {"components": {"left": {}, "right": {}}})
+        brep = next(iter(json.loads(object_path(tree).read_bytes())["components"].values()))["brep"]
+        payload = object_path(brep).read_bytes()
+        object_path(brep).unlink()
+        backend = LocalAssetBackend(self.root)
+        self.addCleanup(_join_catalog_hydration)
+
+        lost = self.row(backend)
+        # Nothing in it says it can be loaded: no tree hash, and no URL naming the tree.
+        self.assertEqual((lost["hash"], lost["bytes"]), ("", 0))
+        self.assertNotIn(tree, lost["url"])
+
+        self.assertEqual(put_object(payload, repair=True), brep)  # the same bytes, at their hash
+        repaired = self.row(backend)
+        self.assertEqual((repaired["kind"], repaired["hash"]), ("assembly", tree))
+        self.assertEqual(repaired["documentHash"], lost["documentHash"])
 
 
 class StepKind(ScannerTestCase):

@@ -237,6 +237,12 @@ _HASH_CACHE_LOCK = threading.Lock()
 # already being built for the same inputs is waited for, not built twice: the
 # catalog row a build's save warms (``warm.py``) and the catalog read that
 # follows the build ask for the same row at once.
+#
+# A row whose tree could not be read is never kept. What failed is the store's
+# state (an object of the tree missing or damaged), not an input of the key: a
+# compile repairs it by restoring the same bytes at the same hashes, so the key
+# would never move, and a kept row would list the document as unbuilt for as
+# long as this process lives, however often the compile succeeded.
 _STEP_ENTRY_CACHE: dict[tuple, dict] = {}
 _STEP_ENTRY_CACHE_LIMIT = 4096
 _STEP_ENTRY_CACHE_LOCK = threading.Lock()
@@ -824,7 +830,8 @@ def _create_step_entry(repo_root, root_path, source_path, extension) -> dict:
             cached = _STEP_ENTRY_CACHE.get(cache_key)
         if cached is not None:
             return copy.deepcopy(cached)
-        # The build before ours failed: build it here, and let the error be this caller's.
+        # The build before ours failed, or could not read the tree and kept nothing: build
+        # it here, and let the error be this caller's.
         return _build_step_entry(
             repo_root, root_path, source_path, extension,
             document_hash=document_hash, tree=tree,
@@ -834,10 +841,13 @@ def _create_step_entry(repo_root, root_path, source_path, extension) -> dict:
             repo_root, root_path, source_path, extension,
             document_hash=document_hash, tree=tree,
         )
-        with _STEP_ENTRY_CACHE_LOCK:
-            if len(_STEP_ENTRY_CACHE) >= _STEP_ENTRY_CACHE_LIMIT:
-                _STEP_ENTRY_CACHE.clear()
-            _STEP_ENTRY_CACHE[cache_key] = copy.deepcopy(entry)
+        if entry["hash"] or not tree:
+            # Kept: the tree was read whole, or the bytes have none (one published
+            # for them changes ``tree``, and so the key). Never a tree it could not read.
+            with _STEP_ENTRY_CACHE_LOCK:
+                if len(_STEP_ENTRY_CACHE) >= _STEP_ENTRY_CACHE_LIMIT:
+                    _STEP_ENTRY_CACHE.clear()
+                _STEP_ENTRY_CACHE[cache_key] = copy.deepcopy(entry)
         return entry
     finally:
         with _STEP_ENTRY_CACHE_LOCK:
@@ -852,6 +862,11 @@ def _build_step_entry(
     metadata = read_step_catalog_metadata(
         descriptor, source_path, document_hash=document_hash
     )
+    if not metadata:
+        # No tree this row can stand on: none for these bytes, or one the capture could not
+        # read whole (an object missing or damaged). Either way the row is an unbuilt
+        # document's, as the artifact status says ("not compiled"): its URL names no tree.
+        tree = None
     topology = metadata.get("topology")
     descriptor_body = json.dumps(descriptor) if metadata else ""
     # An EMPTY `kinematics: {}` block still yields a poseUrl (JS truthiness);
