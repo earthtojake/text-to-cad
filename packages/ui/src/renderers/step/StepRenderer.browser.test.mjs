@@ -99,6 +99,17 @@ function projector(camera, box) {
   };
 }
 const translations = page => page.evaluate(() => Object.fromEntries(window.__cadDisplayRecords().map(record => [record.partId, record.matrix.slice(12, 15)])));
+// The parts at rest from one read to the next, 100 ms apart, and no longer where they were (`from`):
+// an explosion turned on has eased all the way out.
+const restingLayout = async (page, from) => {
+  await page.evaluate(() => { window.__lastLayout = null; });
+  await page.waitForFunction(start => {
+    const layout = JSON.stringify(Object.fromEntries(window.__cadDisplayRecords().map(record => [record.partId, record.matrix.slice(12, 15)])));
+    const still = window.__lastLayout === layout && layout !== start;
+    window.__lastLayout = layout;
+    return still;
+  }, JSON.stringify(from), { polling: 100 });
+};
 /**
  * A label and its control on one line, measured where they are drawn: the label to the left of
  * its control, their centres level, and the control running to the panel's right edge.
@@ -1375,7 +1386,8 @@ test('a reload of the tab brings back the view — camera, Display, Clip, Explod
   await page.evaluate(() => window.cadHarness.a.controller.setCamera({ ...window.cadHarness.a.controller.readState().camera, position: [60, -20, 25], target: [4, 1, 0], zoom: 1.3 }));
   await page.waitForFunction(() => Object.values(window.cadHarness.state.renderers || {})[0]?.camera?.zoom === 1.3);
   const left = await view.state();
-  // Where the explosion put every part, to be found in the same place after the reload.
+  // Where the explosion put every part once it has eased out, to be found in the same place after the reload.
+  await restingLayout(page, posed);
   const explodedLeft = await translations(page);
   // The tree as isolation shows it: the base's rows, opened.
   const rowsLeft = await view.rows();
