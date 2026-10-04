@@ -1843,6 +1843,22 @@ export function polylineEdge(curve, floats, scale, options = {}) {
 // per-vertex face ordinal channel (picking / selection tint) and per-class
 // edge segment lists.
 export function tessellateComponent(index, floats, options = {}) {
+  // Imported STEP assemblies can retain empty product entries. They have no
+  // samples from which to measure a box, but still need a valid cache payload.
+  if (index.faces.length === 0 && index.edges.length === 0) {
+    return {
+      positions: new Float32Array(0),
+      normals: new Float32Array(0),
+      faceOrds: new Float32Array(0),
+      indices: new Uint32Array(0),
+      sideOrds: new Uint32Array(0),
+      faceRanges: [],
+      edges: [],
+      bounds: { min: [0, 0, 0], max: [0, 0, 0] },
+      scale: 1e-6,
+      ...(options.collectBoundaryDebug ? { boundaryDebug: [], sharedEdges: new Map() } : {}),
+    };
+  }
   // Component scale: bbox diagonal from a cheap pass over loop samples.
   let min = [Infinity, Infinity, Infinity];
   let max = [-Infinity, -Infinity, -Infinity];

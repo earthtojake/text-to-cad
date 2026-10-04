@@ -221,3 +221,9 @@ at most 32 MiB: about 64 MiB plus one entry in all (`memoryStats()`).
 Snapshot jobs flush and dispose their own cache after their complete source is
 loaded. Decoded component meshes retain their existing page-wide
 content-addressed LRU; a cache view does not retain an additional geometry copy.
+
+Empty imported STEP product entries keep their occurrence identity. A SURF
+with no faces or edges tessellates to empty arrays, a zero-size box at the
+origin and a positive minimum scale, so the same v4 validation applies. That
+box is only cache metadata: composition gives an empty occurrence no bounds,
+so it cannot change the assembly's framing or hide the real parts.

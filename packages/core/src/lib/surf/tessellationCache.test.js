@@ -22,7 +22,9 @@ import {
   tessellationPayloadFacts,
   validateTessellationProbeRow,
 } from "./tessellationCache.js";
-import { DEFAULT_OPTIONS, TESSELLATION_VERSION } from "./tessellate.js";
+import { DEFAULT_OPTIONS, TESSELLATION_VERSION, tessellateComponent } from "./tessellate.js";
+import { buildMeshDataFromSurf } from "./surfMeshData.js";
+import { buildComposedPackageMeshData } from "../assembly/meshData.js";
 
 let tessellationCache = createTessellationCache();
 function setTessellationCacheProvider(provider) {
@@ -175,6 +177,50 @@ test("v4 round-trips the full typed payload and exposes exact D/O/L/Q/R", () => 
   assert.ok(copied);
   assert.deepEqual([...copied.component.positions], [...source.positions]);
   assert.notEqual(copied.component.positions.buffer, unalignedStorage.buffer, "unaligned input safely copies");
+});
+
+test("empty imported components round-trip through the cache without changing assembly bounds", () => {
+  const index = { shapes: [{ ord: 1, kind: "shape", volume: null }], faces: [], edges: [] };
+  const component = tessellateComponent(index, new Float32Array(0));
+  const decoded = decodeComponentTessellation(encodeComponentTessellation(component, {
+    surfaceInput: D,
+    surfaceObject: O,
+    edgeClasses: [],
+  }));
+  assert.ok(decoded, "an empty product entry is a valid complete cache payload");
+  assert.deepEqual(decoded.component, component);
+  const freshMesh = buildMeshDataFromSurf(index, null, { component });
+  const cachedMesh = buildMeshDataFromSurf(surfIndexFromCacheEntry(decoded), null, {
+    component: decoded.component,
+  });
+  assert.deepEqual(cachedMesh, freshMesh);
+
+  const solidMesh = buildMeshDataFromSurf({ faces: [], edges: [] }, null, {
+    component: componentFixture(),
+  });
+  const descriptor = { assembly: { root: {
+    id: "root", nodeType: "assembly", children: [
+      { id: "empty", nodeType: "part", children: [] },
+      { id: "solid", nodeType: "part", children: [] },
+    ],
+  } }, occurrences: [
+    { id: "empty", component: "empty", transform: [
+      1, 0, 0, -1000, 0, 1, 0, -1000, 0, 0, 1, -1000, 0, 0, 0, 1,
+    ] },
+    { id: "solid", component: "solid" },
+  ] };
+  for (const emptyMesh of [freshMesh, cachedMesh]) {
+    const assembly = buildComposedPackageMeshData(descriptor, new Map([
+      ["empty", emptyMesh], ["solid", solidMesh],
+    ]));
+    assert.deepEqual(assembly.parts.map((part) => part.occurrenceId), ["empty", "solid"]);
+    assert.deepEqual(assembly.missingComponentIds, []);
+    assert.equal(assembly.parts[0].bounds, null);
+    assert.equal(assembly.parts[0].triangleCount, 0);
+    assert.equal(assembly.parts[1].triangleCount, 1);
+    assert.deepEqual(assembly.bounds, solidMesh.bounds, "only real geometry frames the view");
+    assert.deepEqual(assembly.assemblyRoot.bounds, solidMesh.bounds);
+  }
 });
 
 test("decode rejects expected and embedded identity mismatches as cache misses", () => {

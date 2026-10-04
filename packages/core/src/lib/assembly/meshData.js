@@ -575,7 +575,11 @@ export function buildComposedPackageMeshData(descriptor, componentMeshDataByCid,
       triangleCount: meshPartNumericValue(sourcePart, "triangleCount")
     }));
 
-    const bounds = boundsForTransformedBox(componentMeshData?.bounds, matrix);
+    // An empty component's finite cache box is a placeholder, not geometry.
+    // Retain its occurrence without extending the assembly's camera bounds.
+    const bounds = sourceVertices.length || componentMeshData?.cadEdgePositions?.length
+      ? boundsForTransformedBox(componentMeshData?.bounds, matrix)
+      : null;
     // An XCAF label entry (`=>[0:1:1:2]`) is no name: the occurrence then goes by its id.
     const displayName = String(stepProductName(occurrence?.name) || occurrenceId || cid || meshPartId(sourceParts[0])).trim();
     const part = {
