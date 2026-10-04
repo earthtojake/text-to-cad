@@ -51,11 +51,14 @@ reference host `basic-host` does.
   agent to show a model".
 - **Only a project is browsed.** A model in the thread's project (Codex's
   workspace, or the roots a host lists) browses that project's catalog:
-  `workspace`, with `explore`. A model with no project around it — opened from the
-  home, or outside the workspace — is shown on its own: a `global` root at `/` or
-  its drive, whose catalog holds only the file on screen (a hidden folder it is in
-  included) and which nothing lists. *Open with CAD* and an inline card show one
-  file and have no explorer either.
+  `workspace`, with `explore`, in a tab and an inline card alike. One process may
+  hold many chats' folders — Claude Desktop serves every Code session from one and
+  lists all their folders as roots, while its chats list none — so a model's
+  project is the innermost of them around it. A model with no project around it —
+  opened from the home, or outside every folder — is shown on its own: a `global`
+  root at `/` or its drive, whose catalog holds only the file on screen (a hidden
+  folder it is in included) and which nothing lists. *Open with CAD* shows one
+  file and has no explorer either.
 - **An agent reaches the sidebar too.** Codex runs the sidebar page in a thread, and a server
   process, of its own, so no thread's agent syncs with it. Each process publishes its sidebar
   views beside the model library (`cadgen/mcp/sidebar_views.py`), and an agent's `cad_show`,

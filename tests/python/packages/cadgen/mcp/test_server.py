@@ -388,7 +388,9 @@ class InlineServerTest(_Session):
         second = self.launch("cad_show", {"path": str(self.tmp / "elsewhere" / "loose.stl")})
         self.assertNotEqual(first["view"], second["view"])
         self.assertLess((first["order"]["createdAt"], first["order"]["seq"]), (second["order"]["createdAt"], second["order"]["seq"]))
-        self.assertEqual((first["surface"], first["explore"], first["root"]["kind"]), ("inline", False, "workspace"))
+        # A card browses its project, as a tab does; a model with none is shown on its own.
+        self.assertEqual((first["surface"], first["explore"], first["root"]["kind"]), ("inline", True, "workspace"))
+        self.assertFalse(second["explore"])
         self.assertEqual((second["root"]["kind"], second["model"]), ("global", str(self.tmp / "elsewhere" / "loose.stl")))
         shown = self.call("cad_show", {"path": "parts/bracket.stl"})
         self.assertIn(shown["structuredContent"]["launch"]["view"], shown["content"][0]["text"])
@@ -418,7 +420,7 @@ class RootsTest(_Session):
     def test_a_host_that_offers_roots_sets_the_workspace(self) -> None:
         other = self.tmp / "other"
         (other / "parts").mkdir(parents=True)
-        (other / "parts" / "bracket.stl").write_bytes(STL)
+        (other / "parts" / "widget.stl").write_bytes(STL)
 
         class Host:
             def request(self, method, params, timeout=None):
@@ -431,7 +433,24 @@ class RootsTest(_Session):
         while self.server.workspace.primary != str(other):
             self.assertLess(time.monotonic(), deadline)
             time.sleep(0.001)
-        self.assertEqual(self.launch("cad_show", {"path": "parts/bracket.stl"})["model"], str(other / "parts" / "bracket.stl"))
+        self.assertEqual(self.launch("cad_show", {"path": "parts/widget.stl"})["model"], str(other / "parts" / "widget.stl"))
+
+    def test_one_process_for_many_chats_browses_the_innermost_folder_around_a_model(self) -> None:
+        # The host lists every chat's folder at once, a worktree inside its checkout among them.
+        checkout = self.tmp / "checkout"
+        worktree = checkout / "worktrees" / "w"
+        for folder in (checkout, worktree):
+            (folder / "parts").mkdir(parents=True)
+            (folder / "parts" / "bracket.stl").write_bytes(STL)
+        (worktree / "parts" / "only.stl").write_bytes(STL)
+        self.server.workspace.adopt([checkout.as_uri(), worktree.as_uri()])
+        inner = self.launch("cad_show", {"path": str(worktree / "parts" / "bracket.stl")})
+        self.assertEqual((inner["root"]["kind"], inner["root"]["path"], inner["explore"]), ("workspace", str(worktree), True))
+        outer = self.launch("cad_show", {"path": str(checkout / "parts" / "bracket.stl")})
+        self.assertEqual((outer["root"]["path"], outer["explore"]), (str(checkout), True))
+        # No call says whose chat it is, so a relative path is the one folder's that has the file.
+        self.assertEqual(self.launch("cad_show", {"path": "parts/only.stl"})["model"], str(worktree / "parts" / "only.stl"))
+        self.assertIn("give its absolute path", self.call("cad_show", {"path": "parts/bracket.stl"})["content"][0]["text"])
 
 
 class TextServerTest(_Session):

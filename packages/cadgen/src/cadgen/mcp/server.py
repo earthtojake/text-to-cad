@@ -27,6 +27,8 @@ Hosts present views in one of three ways, told apart at initialize:
   is that tool, each launch is stamped with an order for the views to retire
   their elders by, and a view the agent reads is named by the token its
   ``cad_show`` returned: one process may serve many chats, and no host says which.
+  A host that lists roots names its chats' folders together (Claude Desktop lists
+  every open Code session's), and a card browses the innermost around its model.
 - *Text* (a client that renders no MCP Apps, so does not advertise the
   ``io.modelcontextprotocol/ui`` extension: Grok, Zed, Gemini CLI, Claude Code in a
   terminal, ...). ``cad_show`` is the only tool, and it answers with a link to the
@@ -477,13 +479,14 @@ class Server:
     # launches -----------------------------------------------------------------
 
     def _project_of(self, model: str) -> str | None:
-        """The workspace folder whose catalog lists ``model``, if any.
+        """The innermost workspace folder whose catalog lists ``model``, if any.
 
         A model the agent writes under ``build/`` or a hidden folder is still the thread's, but the
-        workspace's catalog never shows it, so it has no project around it to browse.
+        workspace's catalog never shows it, so it has no project around it to browse. A process that
+        serves many chats holds all their folders, one perhaps inside another as a worktree is inside
+        its checkout, and no call says whose it is: the innermost around the model is its project.
         """
-        folder = self.workspace.contains(model)
-        return folder if folder and catalog_lists(folder, model) else None
+        return next((folder for folder in self.workspace.holding(model) if catalog_lists(folder, model)), None)
 
     def _root_for(self, model: str) -> Root:
         project = self._project_of(model)
@@ -496,10 +499,10 @@ class Server:
     def _launch(self, model: str | None, *, surface: str | None = None, explore: bool = True,
                 root: Root | None = None) -> dict[str, Any]:
         root = root or (self._root_for(model) if model is not None else self._home_root())
-        # Only a project is browsed: the thread's workspace. A model with no project around it is
-        # shown on its own, and an inline view is a card in the chat, which browses nothing.
+        # Only a project is browsed, in a tab and an inline card alike: a workspace folder around the
+        # model. A model with no project around it is shown on its own.
         launch: dict[str, Any] = {"protocol": PROTOCOL, "page": "viewer", "model": model, "root": root.public(),
-                                  "explore": explore and self.tabs and root.kind == WORKSPACE}
+                                  "explore": explore and root.kind == WORKSPACE}
         if surface:
             launch["surface"] = surface
         if model is not None:
@@ -529,10 +532,15 @@ class Server:
             raise ToolFailed("Name a CAD file by its path.")
         path = file_uri_path(value) or os.path.expanduser(value.strip())
         if not os.path.isabs(path):
-            base = self.workspace.primary
-            if base is None:
+            folders = self.workspace.paths
+            if not folders:
                 raise ToolFailed(f"{value} is relative, and this thread has no workspace folder; give an absolute path.")
-            path = os.path.join(base, path)
+            # A tab's thread names its folder on every call. An inline view's process may serve many
+            # chats with folders of their own, and no call says whose it is: the one folder with the file.
+            having = folders[:1] if self.tabs else [folder for folder in folders if os.path.isfile(os.path.join(folder, path))]
+            if len(having) > 1:
+                raise ToolFailed(f"{value} is in more than one folder open here ({', '.join(having)}); give its absolute path.")
+            path = os.path.join(having[0] if having else folders[0], path)
         path = os.path.abspath(path)
         if not os.path.isfile(path):
             raise ToolFailed(f"No file at {path}.")
