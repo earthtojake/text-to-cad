@@ -371,14 +371,11 @@ it("a dismissed alert's own icon, leftmost of the navbar's right-hand controls, 
   expect(right()).toEqual(['Settings', 'Display', 'Preview']);
 });
 
-it('the file explorer, open over the top-left corner, puts the tools out of sight, kept as they are', () => {
+it('the file explorer, open over the top-left corner, leaves the tools drawn under it', () => {
   frame({ openPanel: 'tree' });
   const groups = document.querySelector<HTMLElement>('[data-cad-tool-groups]')!;
-  expect(groups.classList.contains('invisible')).toBe(true);
+  expect(groups.classList.contains('invisible')).toBe(false);
   expect(shown()).toEqual(['Harness tree', 'Harness reference']);
-  cleanup();
-  frame();
-  expect(document.querySelector<HTMLElement>('[data-cad-tool-groups]')!.classList.contains('invisible')).toBe(false);
 });
 
 it("the host's notice waits for the model, then takes the top-right with Quick Edit stacked under it", () => {

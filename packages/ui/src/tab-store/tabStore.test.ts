@@ -23,6 +23,11 @@ test('the record normalizes: every setting to its bounds, the files to well-keye
     appearance: 'system', library: { layout: 'grid' },
   });
   expect(readTabRecord({ version: TAB_RECORD_VERSION, settings: { library: { layout: 'list' } }, files: {} }).settings.library).toEqual({ layout: 'list' });
+  // The explorer's height cap is kept once a person drags one: bounded, and absent when it is not a size.
+  const tree = (fileTree: unknown) => readTabRecord({ version: TAB_RECORD_VERSION, settings: { fileTree }, files: {} }).settings.fileTree;
+  expect([tree({ width: 300, height: 40 }), tree({ width: 300, height: 360.4 }), tree({ width: 300, height: 'tall' }), tree({ width: 300, height: -5 })]).toEqual([
+    { width: 300, height: 96, expanded: {} }, { width: 300, height: 360, expanded: {} }, { width: 300, expanded: {} }, { width: 300, expanded: {} },
+  ]);
   expect('orbit' in record.settings || 'playback' in record.settings).toBe(false, 'playback is a file view\'s, never a setting');
   expect(Object.keys(record.files)).toEqual([tabFileKey('root', 'a.step', 'step')]);
 });

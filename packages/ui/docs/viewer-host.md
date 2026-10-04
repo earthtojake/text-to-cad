@@ -125,9 +125,8 @@ the selection through `promptContext.deliver`. Neither route detects the platfor
 the navbar leads with a back arrow to it, and the home itself has no navbar.
 `CadViewer` implements both over the host's `onShow`, and gives a host a home only
 with a `library`. `panel`
-is the panel the file opens with: FileViewer asks for the tree (`"tree"`) for a
-file picked in the tree, so the tree stays up while a person walks it. Without a
-panel, a file shown in place or in a new view starts at `FileViewerState.panel:
+is the panel the file opens with: FileViewer asks for none (`""`) for a file
+picked in the tree, so a pick puts the explorer away. Without a panel, a file shown in place or in a new view starts at `FileViewerState.panel:
 null` (its own default), and a view already showing the file keeps what it has
 open. The host applies it because only the host knows which view shows the file:
 web writes it into its one view's state, and desktop into the tab it selects or

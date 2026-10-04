@@ -4,7 +4,7 @@ import { Component, useCallback, useEffect, useMemo, useRef, useState } from "re
 import type { ErrorInfo, ReactNode } from "react";
 import { Button } from "../primitives/button.jsx";
 import { Spinner } from "../primitives/spinner.js";
-import { clampPanelWidth, EmptyState, FILE_PANEL_TREE, FileExplorer, FilePanelColumn, FileTree, nextOpenPanel, PanelToggle, PANEL_DEFAULT_WIDTH, resolveOpenPanel, treePanel, ViewerNavbar } from "./navigation/index.js";
+import { clampPanelHeight, clampPanelWidth, EmptyState, FILE_PANEL_TREE, FileExplorer, FilePanelColumn, FileTree, nextOpenPanel, PanelToggle, PANEL_DEFAULT_WIDTH, resolveOpenPanel, treePanel, ViewerNavbar } from "./navigation/index.js";
 import { useFileDocument } from "./hooks/useFileDocument.js";
 import { useFileNavigation } from "./hooks/useFileNavigation.js";
 import type { FileNavigationAction, FileViewerProps, JsonValue, FileViewerState } from "./types.js";
@@ -76,6 +76,13 @@ export function FileViewer({ file, host, renderers, state, onStateChange, displa
   // A desktop viewer is at least the breakpoint wide, so the panel's own range is the only bound.
   const panelWidth = clampPanelWidth(state.panelWidth);
   const changeWidth = useCallback((nextWidth: number) => changeState((previous) => ({ ...previous, panelWidth: clampPanelWidth(nextWidth) })), [changeState]);
+  // The explorer's corner sizes it: the one width it shares with the column, and its own height cap.
+  const explorerHeight = clampPanelHeight(state.panelHeight);
+  const resizeExplorer = useCallback(({ width, height }: { width?: number; height?: number }) => changeState((previous) => ({
+    ...previous,
+    ...(width === undefined ? {} : { panelWidth: clampPanelWidth(width) }),
+    ...(height === undefined ? {} : { panelHeight: clampPanelHeight(height) }),
+  })), [changeState]);
   const rendererStateKey = loaded.status === "ready" ? JSON.stringify([loaded.file.path, loaded.renderer.id]) : "";
   // A departing renderer flushes its last per-file state during unmount. That
   // write belongs to its own key even after another file in this root opens;
@@ -143,8 +150,9 @@ export function FileViewer({ file, host, renderers, state, onStateChange, displa
         <div className="h-full min-h-0" ref={setPanelSlot} />
       </FilePanelColumn> : null}
       {/* The explorer floats over the body's left, never beside it: opening it resizes nothing. */}
-      {treeOpen ? <FileExplorer label="Files" mobile={mobile} portalContainer={bodyElement} onDismiss={() => setPanel("")} width={panelWidth} onWidthChange={changeWidth} onCollapse={collapsePanel}>
-        <FileTree key={source.id} source={navigation.tree} activePath={selectedPath} edit={navigation.edit} reveal={reveal} onOpen={(next) => { if (mobile) setMobilePanel(""); onOpenFile(next, { target: "new", panel: FILE_PANEL_TREE }); }} />
+      {/* A pick shows the file and puts the explorer away, on a desktop and a phone alike. */}
+      {treeOpen ? <FileExplorer label="Files" mobile={mobile} portalContainer={bodyElement} onDismiss={() => setPanel("")} width={panelWidth} height={explorerHeight} onResize={resizeExplorer}>
+        <FileTree key={source.id} source={navigation.tree} activePath={selectedPath} edit={navigation.edit} reveal={reveal} onOpen={(next) => { setPanel(""); onOpenFile(next, { target: "new", panel: "" }); }} />
       </FileExplorer> : null}
     </div>
   </div></ViewerElementContext.Provider></ViewerHostContext.Provider></ViewerMobileContext.Provider>;

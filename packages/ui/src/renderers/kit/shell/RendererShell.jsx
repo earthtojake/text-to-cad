@@ -4,10 +4,8 @@ import { createPortal } from "react-dom";
 import { Maximize2, X } from "lucide-react";
 import { Button } from "@text-to-cad/ui/primitives/button";
 import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
-import { cn } from "@text-to-cad/ui/utils";
 import PreviewChrome from "../tools/PreviewChrome.jsx";
 import { useViewerMobile } from "../../../file-viewer/responsive.js";
-import { FILE_PANEL_TREE } from "../../../file-viewer/navigation/panels.js";
 import ViewerAlertCard, { alertDismissible, useAlertDismissal } from "../status/ViewerAlertCard.jsx";
 import { MODEL_UPDATE_STATUS, ViewUpdateStatus } from "../status/ViewUpdateStatus.jsx";
 import ViewerLoadingOverlay from "../status/ViewerLoadingOverlay.js";
@@ -317,9 +315,8 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
                 playbar={hasAnimation ? <ViewportAnimationBar key={frame.modelKey} runtime={animation}
                   className="pointer-events-auto" disabled={viewerLoading || !scene} /> : null}>
 
-              {/* The file explorer floats over this corner, as tall as its rows: the tools step out of
-                  sight under it, kept as they are for when it closes. */}
-              {toolsHidden ? null : <div className={cn("group/tool-stack pointer-events-none absolute z-20 flex flex-col items-start gap-2", view.openPanel === FILE_PANEL_TREE && "invisible")} style={TOOLBAR_POSITION}
+              {/* The file explorer floats over this corner, above the tools, which stay drawn under it. */}
+              {toolsHidden ? null : <div className="group/tool-stack pointer-events-none absolute z-20 flex flex-col items-start gap-2" style={TOOLBAR_POSITION}
                 data-mobile={mobile ? "" : undefined} data-cad-tool-groups="">
                 <FloatingToolBar tools={stripTools} />
                 <ToolStack hidden={previewing} mobile={mobile} startsClosed={startsClosed} layout={frame.toolStack} onLayoutChange={frame.changeToolStack}>{shellPanels}{toolPanels}</ToolStack>

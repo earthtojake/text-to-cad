@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { FILE_PANEL_TREE } from "../navigation/index.js";
 import type { EntryAction, FileTreeSource, MenuEntryTarget, NavbarFile, TreeEdit, TreeEditRequest } from "../navigation/index.js";
 import type { FileActions, FileChange, FileEntry, FileMutationResult, FileSource, FileViewerProps, FileViewerState } from "../types.js";
 import { movedFilePath, parentOf, reconcileFileTree } from "../fileChanges.js";
@@ -115,7 +114,8 @@ export function useFileNavigation({ source, actions, state, onStateChange, onOpe
   const create = useCallback(async (directory: string, kind: "file" | "directory", name: string) => {
     try {
       const created = await mutate(signal => source.create!(directory, { kind, name, signal }));
-      if (created !== null && current.current.source === source) { load(directory); if (kind === "file") onOpenFile(created, { target: "new", panel: FILE_PANEL_TREE }); }
+      // A file made in the tree opens as a pick there does: with the explorer put away.
+      if (created !== null && current.current.source === source) { load(directory); if (kind === "file") onOpenFile(created, { target: "new", panel: "" }); }
       return created;
     } catch (error) { report(error); return null; }
   }, [source, load, onOpenFile, report, mutate]);
@@ -124,7 +124,7 @@ export function useFileNavigation({ source, actions, state, onStateChange, onOpe
     catch (error) { if (current.current.source === source) report(error); return false; }
   }, [source, load, report, mutate]);
   const onAction = useCallback<MenuAction>((action, entry) => {
-    if (action === "open") onOpenFile(entry.path, { target: "new", panel: FILE_PANEL_TREE });
+    if (action === "open") onOpenFile(entry.path, { target: "new", panel: "" });
     else if (action === "rename") {
       // The navbar's ⋯ renames the open file where its name is; a row's menu, in its row.
       if (entry.path === path && entry.surface === "navbar" && path !== null) setRenaming({ sourceId: source.id, path });

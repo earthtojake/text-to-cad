@@ -122,11 +122,11 @@ test("panel exclusivity, capability menus, rename and create use the shared chro
   await page.getByRole("textbox", { name: "New file name", exact: true }).fill("created.txt");
   await page.getByRole("textbox", { name: "New file name", exact: true }).press("Enter");
   await page.locator('[data-file-name]', { hasText: "created.txt" }).waitFor();
-  // Made in the tree, the file is opened the way a pick there opens one: with the tree.
-  assert.deepEqual(await page.evaluate(() => window.harness.opened.at(-1)), { path: "created.txt", options: { target: "new", panel: "tree" } });
-  assert.equal(await page.getByRole("tree").count(), 1);
+  // Made in the tree, the file is opened the way a pick there opens one: with the explorer put away.
+  assert.deepEqual(await page.evaluate(() => window.harness.opened.at(-1)), { path: "created.txt", options: { target: "new", panel: "" } });
+  assert.equal(await page.getByRole("tree").count(), 0);
 });
-test("an empty tab asks for a file with the explorer shut, and a pick in the explorer opens the file with the tree", async () => {
+test("an empty tab asks for a file with the explorer shut, and a pick in the explorer opens the file and puts it away", async () => {
   // With no file to show, the navbar asks for one; the explorer opens when the person asks.
   await reset();
   await page.evaluate(() => window.harness.open(null));
@@ -136,15 +136,19 @@ test("an empty tab asks for a file with the explorer shut, and a pick in the exp
   await page.getByRole("tree").waitFor();
   assert.equal(await page.getByTestId("tree-toggle").getAttribute("aria-pressed"), "true");
 
-  // A pick in the tree asks the host for the file WITH the tree, so a person walks it file by file.
+  // A pick in the tree asks the host for the file with no panel: the explorer goes, as a menu does.
   await page.locator('[role="treeitem"][data-path="next.txt"]').click();
   await waitValue("root-a next");
-  assert.deepEqual(await page.evaluate(() => window.harness.opened.at(-1)), { path: "next.txt", options: { target: "new", panel: "tree" } });
-  assert.equal(await page.getByRole("tree").count(), 1, "the tree is still open on the file");
+  assert.deepEqual(await page.evaluate(() => window.harness.opened.at(-1)), { path: "next.txt", options: { target: "new", panel: "" } });
+  assert.equal(await page.getByRole("tree").count(), 0, "the pick put the explorer away");
+  assert.equal(await page.evaluate(() => window.harness.state.panel), "");
+  await page.getByTestId("tree-toggle").click();
   await page.locator('[role="treeitem"][data-path="notes.txt"]').click();
   await waitValue("root-a original");
-  assert.equal(await page.getByRole("tree").count(), 1, "and on the next one");
-  assert.equal(await page.evaluate(() => window.harness.state.panel), "tree");
+  assert.equal(await page.getByRole("tree").count(), 0, "and the next one too");
+
+  await page.getByTestId("tree-toggle").click();
+  await page.getByRole("tree").waitFor();
 
   // A file in folders nobody has opened is revealed as the tab reaches it: the tree opens them,
   // and they stay open — nothing the move writes lands over them.
@@ -157,16 +161,39 @@ test("an empty tab asks for a file with the explorer shut, and a pick in the exp
   assert.deepEqual(await page.evaluate(() => window.harness.state.expandedDirectories), ["", "nested", "nested/deep"]);
   assert.equal(await revealed.isVisible(), true, "and the folders it was revealed in are still open");
 });
-test("the explorer's width stays bounded", async () => {
+test("the explorer's corner sizes its width and height, within bounds, and the tab keeps both", async () => {
   await reset();
+  const pane = page.getByTestId("primary");
+  const box = () => pane.locator('[data-file-explorer]').evaluate(element => element.getBoundingClientRect().toJSON());
+  await page.evaluate(() => { for (let index = 0; index < 80; index += 1) window.harness.a.add(`many-${String(index).padStart(2, "0")}.txt`); });
+  await page.getByTestId("tree-toggle").click();
+  await page.locator('[role="treeitem"][data-path="many-00.txt"]').waitFor();
+  // A width past the explorer's maximum is drawn at it. (The store write renders on React's schedule.)
+  await page.evaluate(() => window.harness.width(99999));
+  await page.waitForFunction(() => Math.round(document.querySelector('[data-testid="primary"] [data-file-explorer]').getBoundingClientRect().width) === 480);
+  // The bottom-right grip moves both edges, and the gesture is written once, when it lets go.
+  const before = await box();
+  const grip = await pane.locator('[data-file-explorer-resize]').evaluate(element => element.getBoundingClientRect().toJSON());
+  await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(grip.x + grip.width / 2 - 120, grip.y + grip.height / 2 - 100, { steps: 4 });
+  await page.mouse.up();
+  await page.waitForFunction(() => window.harness.state.panelHeight !== undefined);
+  const { panelWidth, panelHeight } = await page.evaluate(() => window.harness.state);
+  assert.deepEqual([panelWidth, panelHeight], [Math.round(before.width - 120), Math.round(before.height - 100)]);
+  const after = await box();
+  assert.deepEqual([Math.round(after.width), Math.round(after.height)], [panelWidth, panelHeight]);
+  // Its next opening is the size it was left at.
+  await page.getByTestId("tree-toggle").click();
+  assert.equal(await page.getByRole("tree").count(), 0);
   await page.getByTestId("tree-toggle").click();
   await page.getByRole("tree").waitFor();
-  await page.evaluate(() => window.harness.width(99999));
-  // The width is bounded at the explorer's maximum. (The store write renders on React's
-  // schedule, so the handle is read once it has.)
-  const handle = page.getByRole("separator", { name: "Resize files panel" });
-  await page.waitForFunction(() => document.querySelector('[role="separator"][aria-label="Resize files panel"]')?.getAttribute("aria-valuenow") !== "300");
-  assert.equal(await handle.getAttribute("aria-valuenow"), await handle.getAttribute("aria-valuemax"));
+  const reopened = await box();
+  assert.deepEqual([Math.round(reopened.width), Math.round(reopened.height)], [panelWidth, panelHeight]);
+  // The keyboard nudges it too: Down by 16px of height.
+  await pane.locator('[data-file-explorer-resize]').focus();
+  await page.keyboard.press("ArrowDown");
+  await page.waitForFunction((height) => window.harness.state.panelHeight === height + 16, panelHeight);
 });
 test("root changes, multiple instances, cancelled loads and readonly documents remain isolated", async () => {
   await reset();
@@ -318,10 +345,10 @@ test("the explorer floats over the view's left, inset like its tool strip, and o
   await page.waitForFunction(() => document.querySelector('[data-testid="primary"] [role="tree"]')?.scrollHeight > document.querySelector('[data-testid="primary"] [role="tree"]')?.clientHeight);
   const tall = await pane.locator('[data-file-explorer]').evaluate(element => element.getBoundingClientRect().toJSON());
   assert.equal(Math.round(body.bottom - tall.bottom), 8, "a long tree fills the view's height, less its inset");
-  // A pick in it keeps it up on a wide view, beside the file it opened.
+  // A pick in it puts it away on a wide view too.
   await page.locator('[role="treeitem"][data-path="next.txt"]').click();
   await waitValue("root-a next");
-  assert.equal(await page.getByRole("tree").count(), 1);
+  assert.equal(await page.getByRole("tree").count(), 0);
 });
 
 test("a narrow empty tab asks for a file too, and a file picked in its sheet opens with nothing over it", async () => {

@@ -1,17 +1,16 @@
 import { X } from "lucide-react";
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { Button } from "../../primitives/button.jsx";
 import { Sheet, SheetClose, SheetContent, SheetTitle } from "../../primitives/sheet.jsx";
 import { CHROME_INSET_PX } from "../../lib/chromeInset.js";
 import { hasOpenPopup } from "../../lib/popups.js";
-import { PANEL_MAX_WIDTH, PANEL_MIN_WIDTH, clampPanelWidth } from "./panelWidth.js";
+import ResizeGrip from "../../renderers/kit/tools/ResizeGrip.jsx";
+import { PANEL_MAX_WIDTH, PANEL_MIN_HEIGHT, PANEL_MIN_WIDTH, clampPanelWidth } from "./panelWidth.js";
 
 // A phone's explorer is a sheet over the view with room for a few levels of nesting.
 const MOBILE_WIDTH = 280;
-// A drag has to go well below the minimum — past half of it — before the explorer closes: one that
-// merely overshoots stops at the minimum.
-const COLLAPSE_WIDTH = PANEL_MIN_WIDTH / 2;
+const KEY_NUDGE_PX = 16;
 // A press here is not one outside the explorer: its toggle in the navbar (which closes it itself)
 // and the popups the explorer opens, which portal outside it. Anywhere else — the rest of the
 // navbar included — puts it away.
@@ -20,30 +19,34 @@ const INSIDE = "[data-file-panel], [data-slot=select-content], [data-slot=dropdo
 /**
  * The file explorer: a panel that floats over the LEFT of the view, never beside it.
  *
- * It overlays what it opens over — a model, its tools, a host's home — and never resizes or
- * moves any of it: the viewport keeps its size and its framing, the tool strip keeps its corner.
- * It is inset from the view's edges exactly as the tool strip is (`CHROME_INSET_PX`), on a solid
- * background, above the tools, and as tall as its rows, up to the view's height: past that its
- * list scrolls (one grid row, capped by the panel's max height). It stays up while a person walks the tree file by file; a press
- * anywhere outside it, or its toggle in the navbar, closes it.
+ * It overlays what it opens over — a model, its tools, a host's home — and never resizes, moves or
+ * hides any of it: the viewport keeps its size and its framing, the tool strip keeps its corner and
+ * stays drawn under it. It is inset from the view's edges exactly as the tool strip is
+ * (`CHROME_INSET_PX`), on a solid background, above the tools, and as tall as its rows, up to its
+ * cap and the view's height: past that its list scrolls (one grid row, capped by the panel's max
+ * height). A pick puts it away (`FileViewer`), as do a press anywhere outside it and its toggle
+ * in the navbar.
  *
- * Its right edge is its one handle: dragged, it sizes the explorer between the tab's bounds
- * (`panelWidth.js`), and only a drag well below the minimum — past half of it — closes it; the
- * keyboard never does. Below the viewer breakpoint it is a sheet over the view instead, dismissed
- * by a press outside, Escape or its X, and by a pick.
+ * Its bottom-right corner sizes it, as every resizable panel of the tool stack is sized
+ * (`ResizeGrip.jsx`): wider or narrower between the tab's bounds (`panelWidth.js`), and its height
+ * cap up or down — by pointer or by keyboard (arrows by 16px; Home and End to the bounds), written
+ * back once when the gesture lets go, and kept by the tab for its next opening. A cap is never a
+ * floor: a short tree is its rows. Below the viewer breakpoint it is a sheet over the view
+ * instead, dismissed by a press outside, Escape or its X, and by a pick.
  *
  * @param {object} props
  * @param {string} props.label Names the panel for the accessibility tree.
  * @param {number} props.width
- * @param {(width: number) => void} props.onWidthChange
- * @param {() => void} [props.onCollapse]
+ * @param {number} [props.height] Its height cap, as the person left it; none, as tall as its rows.
+ * @param {(size: { width?: number, height?: number }) => void} props.onResize One gesture's outcome.
  * @param {boolean} [props.mobile]
  * @param {HTMLElement|null} [props.portalContainer] Where the mobile sheet mounts: the view's body.
  * @param {() => void} [props.onDismiss]
  * @param {import("react").ReactNode} props.children
  */
-export function FileExplorer({ label, width, onWidthChange, onCollapse, mobile = false, portalContainer = null, onDismiss, children }) {
+export function FileExplorer({ label, width, height, onResize, mobile = false, portalContainer = null, onDismiss, children }) {
   const drag = useRef(null);
+  const [draft, setDraft] = useState(null);
   const content = useRef(null);
   const panel = useRef(null);
   const dismiss = useRef(onDismiss);
@@ -84,52 +87,61 @@ export function FileExplorer({ label, width, onWidthChange, onCollapse, mobile =
     </SheetContent>
   </Sheet>;
 
-  const resize = (nextWidth, { dragging = false } = {}) => {
-    if (dragging && nextWidth < COLLAPSE_WIDTH && onCollapse) {
-      drag.current = null;
-      onCollapse();
-    } else {
-      onWidthChange(clampPanelWidth(nextWidth));
-    }
+  // The tallest it is drawn: the view's height less its inset above and below.
+  const room = () => (panel.current?.parentElement?.clientHeight ?? Infinity) - CHROME_INSET_PX * 2;
+  const clampHeight = value => Math.round(Math.max(PANEL_MIN_HEIGHT, Math.min(room(), value)));
+  // What a gesture starts from: the size on screen, which is less than the cap for a short tree.
+  const drawn = () => {
+    const box = panel.current?.getBoundingClientRect();
+    return { width: box?.width ?? width, height: box?.height ?? 0 };
   };
-  // The handle drags the explorer's right edge, so its width is measured from its own LEFT edge:
-  // the explorer is anchored there, at the view's inset.
-  const onPointerDown = (event) => {
+  const startDrag = event => {
     if (event.button !== 0) return;
     event.preventDefault();
-    drag.current = { left: event.currentTarget.parentElement.getBoundingClientRect().left, pointerId: event.pointerId };
+    drag.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY, from: drawn(), next: null };
     event.currentTarget.setPointerCapture(event.pointerId);
   };
-  const stopDrag = (event) => {
+  const moveDrag = event => {
+    const current = drag.current;
+    if (current?.pointerId !== event.pointerId) return;
+    current.next = { width: clampPanelWidth(current.from.width + event.clientX - current.x), height: clampHeight(current.from.height + event.clientY - current.y) };
+    setDraft(current.next);
+  };
+  // Let go, the gesture is written once; cancelled, nothing is.
+  const endDrag = (event, commit) => {
+    const current = drag.current;
+    if (!current || current.pointerId !== event.pointerId) return;
     drag.current = null;
     if (event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    setDraft(null);
+    if (commit && current.next) onResize(current.next);
   };
+  // Arrows nudge by 16px, Left/Right the width and Up/Down the cap; Home and End take both to
+  // their bounds.
+  const keyDrag = event => {
+    const from = drawn(), change = {};
+    const nextWidth = { ArrowLeft: from.width - KEY_NUDGE_PX, ArrowRight: from.width + KEY_NUDGE_PX, Home: PANEL_MIN_WIDTH, End: PANEL_MAX_WIDTH }[event.key];
+    const nextHeight = { ArrowUp: from.height - KEY_NUDGE_PX, ArrowDown: from.height + KEY_NUDGE_PX, Home: PANEL_MIN_HEIGHT, End: Infinity }[event.key];
+    if (nextWidth !== undefined) change.width = clampPanelWidth(nextWidth);
+    if (nextHeight !== undefined) change.height = clampHeight(nextHeight);
+    if (!Object.keys(change).length) return;
+    event.preventDefault();
+    onResize(change);
+  };
+  const shownWidth = draft?.width ?? width;
+  const cap = draft?.height ?? height;
+  const inView = `calc(100% - ${CHROME_INSET_PX * 2}px)`;
   return (
     <aside ref={panel} aria-label={label} data-file-panel-container="tree" data-file-explorer=""
       className="absolute z-40 grid grid-rows-[minmax(0,1fr)] overflow-hidden rounded-lg border bg-background shadow-lg"
-      style={{ top: CHROME_INSET_PX, left: CHROME_INSET_PX, width, maxWidth: `calc(100% - ${CHROME_INSET_PX * 2}px)`, maxHeight: `calc(100% - ${CHROME_INSET_PX * 2}px)` }}>
+      style={{ top: CHROME_INSET_PX, left: CHROME_INSET_PX, width: shownWidth, maxWidth: inView, maxHeight: cap ? `min(${cap}px, ${inView})` : inView }}>
       <div className="min-h-0 min-w-0 overflow-hidden">{children}</div>
-      <div
-        aria-label={`Resize ${label.toLowerCase()} panel`}
-        aria-orientation="vertical"
-        aria-valuemax={PANEL_MAX_WIDTH}
-        aria-valuemin={PANEL_MIN_WIDTH}
-        aria-valuenow={width}
-        className="absolute inset-y-0 right-0 w-1.5 cursor-col-resize touch-none transition-colors hover:bg-ring/40 focus-visible:bg-ring/40 focus-visible:outline-none"
-        onPointerDown={onPointerDown}
-        onPointerMove={(event) => { if (drag.current?.pointerId === event.pointerId) resize(event.clientX - drag.current.left, { dragging: true }); }}
-        onPointerUp={stopDrag}
-        onPointerCancel={stopDrag}
-        onLostPointerCapture={() => { drag.current = null; }}
-        onKeyDown={(event) => {
-          const nextWidth = { ArrowRight: width + 16, ArrowLeft: width - 16, Home: PANEL_MIN_WIDTH, End: PANEL_MAX_WIDTH }[event.key];
-          if (nextWidth === undefined) return;
-          event.preventDefault();
-          resize(nextWidth);
-        }}
-        role="separator"
-        tabIndex={0}
-      />
+      {/* The grip every resizable box over the viewport has, at this one's bottom-right: the
+          explorer hangs from the view's top-left, as the tool stack does. */}
+      <ResizeGrip corner="bottom-right" role="separator" tabIndex={0} aria-label={`Resize ${label.toLowerCase()}`}
+        data-file-explorer-resize="" data-dragging={draft ? "" : undefined}
+        onPointerDown={startDrag} onPointerMove={moveDrag} onPointerUp={event => endDrag(event, true)} onPointerCancel={event => endDrag(event, false)}
+        onLostPointerCapture={() => { drag.current = null; setDraft(null); }} onKeyDown={keyDrag} />
     </aside>
   );
 }

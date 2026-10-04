@@ -1,5 +1,5 @@
 import type { JsonValue } from '../file-viewer/types.js';
-import { clampPanelWidth, PANEL_DEFAULT_WIDTH } from '../file-viewer/navigation/panelWidth.js';
+import { clampPanelHeight, clampPanelWidth, PANEL_DEFAULT_WIDTH } from '../file-viewer/navigation/panelWidth.js';
 import { normalizeToolStack } from '../renderers/kit/tools/toolStackLayout.js';
 
 /**
@@ -30,8 +30,8 @@ export type Appearance = 'system' | 'light' | 'dark';
 export type LibraryLayout = 'grid' | 'list';
 export interface ToolStackLayout { panels: Record<string, { width?: number; height?: number }>; collapsed: Record<string, boolean>; closed: Record<string, boolean> }
 export interface TabSettings {
-  /** The host's file tree: its column's width, and the folders open under each root. */
-  fileTree: { width: number; expanded: Record<string, string[]> };
+  /** The host's file tree: its width, the explorer's height cap once a person drags one, and the folders open under each root. */
+  fileTree: { width: number; height?: number; expanded: Record<string, string[]> };
   /** The tool stack's layout (`kit/tools/toolStackLayout.js`): the resizable panels' sizes, the folded panels and the closed ones. */
   toolStack: ToolStackLayout;
   /** System, Light or Dark; a new tab follows the OS until the person picks. */
@@ -58,7 +58,8 @@ function normalizeFileTree(value: unknown): TabSettings['fileTree'] {
     if (!Array.isArray(folders)) continue;
     expanded[root] = [...new Set(folders.filter((folder): folder is string => typeof folder === 'string'))];
   }
-  return { width: typeof record.width === 'number' && Number.isFinite(record.width) ? clampPanelWidth(record.width) : PANEL_DEFAULT_WIDTH, expanded };
+  const height = typeof record.height === 'number' ? clampPanelHeight(record.height) : undefined;
+  return { width: typeof record.width === 'number' && Number.isFinite(record.width) ? clampPanelWidth(record.width) : PANEL_DEFAULT_WIDTH, ...(height === undefined ? {} : { height }), expanded };
 }
 
 export function normalizeAppearance(value: unknown): Appearance {

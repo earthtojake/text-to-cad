@@ -61,11 +61,13 @@ none.
   no tools, view actions, cube or Quick Edit. A view shown small in a conversation is the
   whole viewer, with the host's Full size last in its navbar.
 - **File explorer** floats over the view's left, inset 8px like the toolbar, on a
-  solid background above the tools, as tall as its rows up to the view's height
-  less the inset at either end: past that its list scrolls. While it is open the
-  tool strip and the stack are out of sight under it, kept as they are. Opening it
-  never resizes the view; it stays up while a person walks the tree, and a press
-  anywhere outside it, the navbar included, closes it (its own toggle closes it too).
+  solid background above the tools, as tall as its rows up to its height cap and
+  the view's height less the inset at either end: past that its list scrolls. The
+  tool strip and the stack stay drawn under it. Its bottom-right corner sizes it
+  as a resizable panel of the stack is sized (the same grip): its width and its
+  height cap, kept by the tab for its next opening. Opening it never resizes the
+  view; a pick closes it, as does a press anywhere outside it, the navbar included
+  (its own toggle closes it too).
 - **Toolbar** at top-left, 8px in — the gap between it and the stack under it.
 - **Tool stack** beneath the toolbar: the panels of the tool in hand and of the
   effects a person keeps (see [The tool stack](#the-tool-stack)). The column is

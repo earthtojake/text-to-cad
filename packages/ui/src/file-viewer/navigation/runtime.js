@@ -26,7 +26,9 @@ export {
   FilePanelColumn,
   PANEL_DEFAULT_WIDTH,
   PANEL_MAX_WIDTH,
+  PANEL_MIN_HEIGHT,
   PANEL_MIN_WIDTH,
+  clampPanelHeight,
   clampPanelWidth
 } from "./FilePanelColumn.jsx";
 export { FileTree } from "./FileTree.jsx";

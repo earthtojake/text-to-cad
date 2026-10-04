@@ -67,6 +67,8 @@ export type DocumentSaveResult = WriteResult | { status: "unavailable" } | { sta
 export interface FileViewerState {
   panel: string | null;
   panelWidth: number;
+  /** The explorer's height cap, as its corner left it; absent, it is as tall as its rows, up to the view. */
+  panelHeight?: number;
   expandedDirectories?: readonly string[];
   /**
    * Each file's view under `JSON.stringify([file path, renderer id])`: what the host's tab store

@@ -102,6 +102,9 @@ export const PANEL_MIN_WIDTH: number;
 export const PANEL_MAX_WIDTH: number;
 export const PANEL_DEFAULT_WIDTH: number;
 export function clampPanelWidth(width: number): number;
+export const PANEL_MIN_HEIGHT: number;
+/** The explorer's height cap, clamped; `undefined` when none is set (as tall as its rows). */
+export function clampPanelHeight(height: number | null | undefined): number | undefined;
 
 /**
  * The column a file's own declared panels open in, at the view's right: one border, one width,
@@ -215,13 +218,15 @@ export function fuzzyFilter(
 
 /**
  * The file explorer: a panel floating over the view's left, inset like the tool strip, above
- * everything under it; it never resizes the view. Below the viewer breakpoint, a sheet.
+ * everything under it; it never resizes the view. Its bottom-right corner sizes it: `width`, and
+ * `height`, a cap (absent, as tall as its rows). Below the viewer breakpoint, a sheet.
  */
 export const FileExplorer: ComponentType<{
   label: string;
   width: number;
-  onWidthChange: (width: number) => void;
-  onCollapse?: () => void;
+  height?: number;
+  /** One gesture's outcome, written once: a width, a height cap, or both. */
+  onResize: (size: { width?: number; height?: number }) => void;
   mobile?: boolean;
   portalContainer?: HTMLElement | null;
   onDismiss?: () => void;

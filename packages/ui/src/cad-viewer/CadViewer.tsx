@@ -141,8 +141,8 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
     (png, pictured) => latest.current.onThumbnail?.(png, pictured) ?? Promise.resolve());
 
   // A file the viewer asks for — a pick in the explorer, a renderer's link — is shown by the host,
-  // and opens with the panel it was asked for (the explorer, for a pick there) or its own default;
-  // the file already on screen keeps what it has open unless a panel is asked for.
+  // and opens with the panel it was asked for (none, for a pick in the explorer, which closes it)
+  // or its own default; the file already on screen keeps what it has open unless a panel is asked for.
   const openFile = useCallback((path: string, options?: { target: 'current' | 'new'; panel?: string }) => {
     const { accept: accepts, onShow: show, file: onScreen } = latest.current;
     const listed = findCatalogEntry(client.getSnapshot().entries, path);

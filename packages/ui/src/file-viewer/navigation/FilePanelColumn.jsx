@@ -24,8 +24,8 @@ import { hasOpenPopup } from "../../lib/popups.js";
  * `aria-valuemin`/`max` on the handle below are the real numbers rather than a
  * second opinion. The mobile sheet has its own width.
  */
-import { PANEL_DEFAULT_WIDTH, PANEL_MAX_WIDTH, PANEL_MIN_WIDTH, clampPanelWidth } from "./panelWidth.js";
-export { PANEL_DEFAULT_WIDTH, PANEL_MAX_WIDTH, PANEL_MIN_WIDTH, clampPanelWidth };
+import { PANEL_DEFAULT_WIDTH, PANEL_MAX_WIDTH, PANEL_MIN_HEIGHT, PANEL_MIN_WIDTH, clampPanelHeight, clampPanelWidth } from "./panelWidth.js";
+export { PANEL_DEFAULT_WIDTH, PANEL_MAX_WIDTH, PANEL_MIN_HEIGHT, PANEL_MIN_WIDTH, clampPanelHeight, clampPanelWidth };
 // The mobile sheet floats over the viewer rather than taking width from it, so it keeps room for
 // a few levels of nesting.
 const PANEL_SHEET_WIDTH = 280;

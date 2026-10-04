@@ -78,10 +78,9 @@ start. `FileViewerState.panel` is `null` until someone chooses, which opens the
 first panel declared `defaultOpen`, or nothing; the
 tree is the default only when no file is open and the host has no home to show. `""` is nothing open. Which panel
 a newly shown file opens with is the host's to apply: `navigation.openFile(path,
-{ target, panel })` names it — the tree, for a file picked in the tree, so the
-tree stays up while a person walks it — and without one a file shown in place or
-in a new view opens at `null`, while a view already showing the file keeps its
-panel.
+{ target, panel })` names it — nothing (`""`) for a file picked in the tree, so a
+pick puts the explorer away — and without one a file shown in place or in a new
+view opens at `null`, while a view already showing the file keeps its panel.
 
 Below 720px of its own width FileViewer is mobile (`useViewerMobile`): the
 explorer and the panel column become floating sheets over the body, opened only
