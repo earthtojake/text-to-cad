@@ -12,6 +12,7 @@ import ViewerAlertCard, { alertDismissible, useAlertDismissal } from "../status/
 import { MODEL_UPDATE_STATUS, ViewUpdateStatus } from "../status/ViewUpdateStatus.jsx";
 import ViewerLoadingOverlay from "../status/ViewerLoadingOverlay.js";
 import { VIEWER_RENDER_PROFILE, renderProfileKeepsPixelRatio, sceneForRenderProfile } from "../viewport/renderProfile.js";
+import { NAVBAR_CONTROL_CLASS } from "../../../lib/navbarRow.js";
 import DisplayPopover from "./DisplayPopover.jsx";
 import { DrawingToolbar } from "../../../drawing/toolbar.jsx";
 import ToolPanel, { ToolPanelFooterButton } from "../tools/ToolPanel.jsx";
@@ -32,8 +33,6 @@ import ViewportContextMenu from "./ViewportContextMenu.jsx";
 const INSET = `${VIEWPORT_INSET_PX}px`;
 // The strip and its stack stop short of Quick Edit's button at the top-right.
 const TOOLBAR_POSITION = Object.freeze({ top: INSET, left: INSET, bottom: VIEWPORT_STACK_BOTTOM, maxWidth: "calc(100% - 3.5rem)" });
-// The view's controls in the navbar look as its own icon buttons do.
-export const NAVBAR_CONTROL_CLASS = "size-6 text-muted-foreground hover:text-foreground aria-pressed:bg-accent aria-pressed:text-accent-foreground";
 
 /** One of the view's controls in the navbar: an icon button with its name on hover. */
 function NavbarControl({ label, disabled = false, onClick, children }) {
@@ -47,7 +46,7 @@ function NavbarControl({ label, disabled = false, onClick, children }) {
 /**
  * The frame every file-family renderer draws itself in: the viewport box with the tool strip at
  * its top-left corner and the tool stack under it, Quick Edit at the top-right, the cube in the
- * bottom-left corner, the view's controls in the navbar's right end (Display settings and
+ * bottom-left corner, a 3D view's controls in the navbar's right end (Display's settings and
  * Preview, in the renderer's `navbarSlot`), the loading, update and alert overlays, and preview
  * mode's controls. The same
  * structure, classes and data attributes for every renderer: hosts, stylesheets and tests key on
@@ -66,8 +65,8 @@ function NavbarControl({ label, disabled = false, onClick, children }) {
  *   onCanvasPointerDown?: ((event: import("react").PointerEvent) => void) | null,
  *   viewportOverlay?: import("react").ReactNode | ((viewport: { runtimeRef: object, hostRef: object,
  *     mountRef: object, viewerReadyTick: number, commitScene: () => boolean }) => import("react").ReactNode) }} props
- *   `tools`: left to right, from `shell.tools`; an EMPTY list draws no strip at all,
- *   which is what a file whose viewport only orbits, pans and zooms hands over. A tool the
+ *   `tools`: left to right, from `shell.tools`; an EMPTY list draws no strip at all, which is what
+ *   a file whose viewport only orbits, pans and zooms hands over. A tool the
  *   file cannot offer is left out, never handed over disabled. A tool that names a `closable`
  *   panel of its own (`panel: { id, label, startsClosed }`: Select's tree, which a single part
  *   opens with closed) is marked while that panel is closed, and a press on it while it is up
@@ -81,7 +80,7 @@ function NavbarControl({ label, disabled = false, onClick, children }) {
  *   `references`: what is selected, in the prompt grammar — the references a Quick Edit attaches
  *   (`kit/tools/quick-edit/QuickEdit.jsx`), counted in its header; the file itself always goes. A
  *   renderer that hands none has no Quick Edit: only a view whose picks and sketches a note can
- *   carry offers one. The box sizes itself, for as long as it is open: a drag of its corner renders nothing
+ *   carry offers one, and only while the person has left it on (the host's `view.features`). The box sizes itself, for as long as it is open: a drag of its corner renders nothing
  *   here. `onClearReferences`: the renderer's clear of that selection, as a press on the
  *   background makes it; Quick Edit's X calls it, and clears Draw's ink too.
  *   `copySelection`: the viewer's copy key (⌘C / Ctrl+C) while the renderer's own tool is up and
@@ -135,10 +134,12 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
   // otherwise: orbit on or off is the file's, kept from one preview to the next.
   const orbitPlaying = shell.playback.orbit;
   const setOrbitPlaying = value => shell.setPlayback({ orbit: typeof value === "function" ? value(shell.playback.orbit) : value });
-  // Display's settings: a popover from its button among the view's actions, not a tool — opening
-  // it leaves the tool in hand as it is. Another file starts with it shut.
+  // Display's settings: a dropdown from its button in the navbar, not a tool — opening it leaves the
+  // tool in hand as it is. Preview, which has the page to itself, puts it away; another file starts
+  // with it shut.
   const [displayOpen, setDisplayOpen] = useState(false);
   useEffect(() => { setPreviewing(false); setDisplayOpen(false); }, [frame.modelKey, setPreviewing]);
+  useEffect(() => { if (previewing) setDisplayOpen(false); }, [previewing]);
   // One viewport, two render profiles over the same Display settings (`renderProfile.js`): the
   // tools view is drawn for working on the model, preview for looking at it.
   const renderProfile = previewing ? VIEWER_RENDER_PROFILE.PREVIEW : VIEWER_RENDER_PROFILE.TOOLS;
@@ -146,10 +147,10 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
   // Preview is the one place routines play: entering it starts one when Autoplay is on, and
   // leaving it puts the model back at rest (its Routine, Speed and Loop stay for the next time).
   const enterPreview = () => {
-    setDisplayOpen(false); setPreviewing(true);
+    setPreviewing(true);
     if (hasAnimation && shell.autoplay && !animation.playing) animation.onPlayToggle();
   };
-  const leavePreview = () => { setDisplayOpen(false); setPreviewing(false); };
+  const leavePreview = () => setPreviewing(false);
   // Preview is fullscreen: the page around the view steps aside while it lasts.
   const onFullscreenChange = view.onFullscreenChange;
   useEffect(() => {
@@ -205,6 +206,9 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
   // A host showing the view small (inline in a conversation: `appearance.compact`) gets the model
   // alone, not the tools, Quick Edit, the view actions or the cube; shown full size, all return.
   const compact = Boolean(view.appearance?.compact);
+  // Quick Edit is the person's to turn off (Settings' Features): off, it is not there at all — no
+  // box, so nothing a pick or a sketch opens and no keyboard it takes.
+  const quickEdit = view.features?.quickEdit !== false;
   const toolsHidden = chromeHidden || compact;
   const copyAction = () => {
     if (previewing) return false;
@@ -290,18 +294,19 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
                 </div>
               </div>
 
-              {/* The view's controls, at the navbar's right end: Display settings, then Preview. Not
-                  while the model loads or after it failed to, not in a host that shows the view
-                  small, and not in Preview, which has the page to itself. */}
-              {view.navbarSlot && !toolsHidden && !previewing ? createPortal(<>
+              {/* The view's controls, at the navbar's right end, after the host's Settings: Display's
+                  settings, then Preview, for a 3D view (`useRendererShell`'s `previewable`); another
+                  has neither. Not while the model loads or after it failed to, not in a host that
+                  shows the view small, and not in Preview, which has the page to itself. */}
+              {view.navbarSlot && shell.previewable && !toolsHidden && !previewing ? createPortal(<>
                 <DisplayPopover open={displayOpen} onOpenChange={setDisplayOpen} disabled={shell.idle}>{frame.display}</DisplayPopover>
                 <NavbarControl label="Preview" disabled={shell.idle} onClick={enterPreview}><Maximize2 className="size-3.5" aria-hidden="true" /></NavbarControl>
               </>, view.navbarSlot) : null}
               {/* Preview: fullscreen, the navbar and the tools put away and the model orbiting, its
-                  routines playing. At the top-right, where Settings sits outside it, Playback
+                  routines playing. At the top-right, where Display and Preview sit outside it, Playback
                   settings (the routine's and the orbit's) then its way out; under the model, a
                   file with routines has its playbar, and a static file nothing at all. */}
-              <PreviewChrome active={previewing} surface={frame.hostElement} hold={displayOpen}
+              <PreviewChrome active={previewing} surface={frame.hostElement}
                 corner={onMenuOpenChange => <>
                   <PlaybackMenu animation={playbackMenuRuntime} onOpenChange={onMenuOpenChange}
                     autoplay={shell.autoplay} onAutoplayChange={shell.setAutoplay}
@@ -323,7 +328,7 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
                   under it -- hidden, not unmounted, while the view loads: a note being written outlives a
                   reload of the model. */}
               <ViewportTopRight notice={chromeHidden ? null : view.notice} belowStrip={!toolsHidden}>
-                {compact || !references ? null : <QuickEdit key={frame.modelKey} className="self-stretch" hidden={chromeHidden}
+                {compact || !references || !quickEdit ? null : <QuickEdit key={frame.modelKey} className="self-stretch" hidden={chromeHidden}
                   resource={frame.resource} references={references} sketch={sketch} referencePath={frame.referencePath}
                   onCopy={copyAction} onEscape={frame.escape} onClear={clearQuickEdit} disabled={viewerLoading || !scene} />}
               </ViewportTopRight>

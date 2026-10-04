@@ -20,7 +20,7 @@ class RenderBoundary extends Component<{ children: ReactNode; onError?: (error: 
 }
 
 /** The complete file tab. Its only knowledge of formats comes from registrations. */
-export function FileViewer({ file, host, renderers, state, onStateChange, displayActions, appSettings, notice, navigationPath, reveal, onError, presentation }: FileViewerProps) {
+export function FileViewer({ file, host, renderers, state, onStateChange, displayActions, settings, features, notice, navigationPath, reveal, onError, presentation }: FileViewerProps) {
   const source = host.files;
   const onOpenFile = host.navigation.openFile;
   // A renderer opens files in a new view unless it says otherwise.
@@ -78,7 +78,9 @@ export function FileViewer({ file, host, renderers, state, onStateChange, displa
   const changeWidth = useCallback((nextWidth: number) => changeState((previous) => ({ ...previous, panelWidth: clampPanelWidth(nextWidth) })), [changeState]);
   const rendererStateKey = loaded.status === "ready" ? JSON.stringify([loaded.file.path, loaded.renderer.id]) : "";
   // A departing renderer flushes its last per-file state during unmount. That
-  // write belongs to its own key even after another file in this root opens.
+  // write belongs to its own key even after another file in this root opens;
+  // whether it is kept is the host's (`CadViewer` keeps the file on screen's alone,
+  // and drops this one once it has landed).
   const setRendererState = useCallback((value: JsonValue) => { if (latest.current.sourceId === source.id && rendererStateKey) changeState((previous) => ({ ...previous, renderers: { ...previous.renderers, [rendererStateKey]: value } })); }, [changeState, rendererStateKey, source.id]);
 
   // The renderer is re-rendered only when what it is handed changes: not by a panel drag, a
@@ -93,12 +95,12 @@ export function FileViewer({ file, host, renderers, state, onStateChange, displa
   const rendererBody = useMemo(() => {
     if (!shown) return null;
     const Renderer = shown.prepared.Component;
-    return <RenderBoundary key={key} onError={onError}><Renderer displayActions={displayActions} appSettings={appSettings} notice={notice} key={key} file={shown.file} source={source} document={document}
+    return <RenderBoundary key={key} onError={onError}><Renderer displayActions={displayActions} notice={notice} features={features} key={key} file={shown.file} source={source} document={document}
       openPanel={openId} panelSlot={panelSlot} navbarSlot={navbarSlot} onFullscreenChange={onFullscreenChange} onPanelOpen={setPanel} onReady={onReady}
       onNavigationActionsChange={onNavigationActionsChange}
       onOpenFile={openFromRenderer} appearance={appearance}
       state={rendererState} onStateChange={setRendererState} reload={reload} /></RenderBoundary>;
-  }, [shown, key, onError, displayActions, appSettings, notice, source, document, openId, panelSlot, navbarSlot, onFullscreenChange, setPanel, onReady,
+  }, [shown, key, onError, displayActions, notice, features, source, document, openId, panelSlot, navbarSlot, onFullscreenChange, setPanel, onReady,
     onNavigationActionsChange, openFromRenderer, appearance, rendererState, setRendererState, reload]);
 
   // A host's home stands where no file is open, as a page of its own.
@@ -124,10 +126,10 @@ export function FileViewer({ file, host, renderers, state, onStateChange, displa
   // or for a view shown small in a conversation (`compact`), whose frame already says what it
   // shows. A host that shows one file without browsing it or naming it, with nothing at either
   // end, gets the file with no row above it.
-  const navbar = !appearance.compact && !home && !fullscreen && (Boolean(host.links) || Boolean(onBack) || Boolean(explorer) || navigation.file !== null || Boolean(trailing) || Boolean(dirty));
+  const navbar = !appearance.compact && !home && !fullscreen && (Boolean(host.links) || Boolean(settings) || Boolean(onBack) || Boolean(explorer) || navigation.file !== null || Boolean(trailing) || Boolean(dirty));
   return <ViewerMobileContext.Provider value={mobile}><ViewerHostContext.Provider value={host}><ViewerElementContext.Provider value={viewerElement}><div className="text-to-cad-file-viewer text-ui font-normal flex h-full min-h-0 min-w-0 flex-col overflow-hidden" ref={bindElement} data-viewer-layout={mobile ? "mobile" : "desktop"} tabIndex={-1}>
-    {navbar ? <ViewerNavbar onBack={onBack} explorer={explorer} file={navigation.file} selecting={loaded.status === "empty"} status={dirty} trailing={trailing} controlsRef={setNavbarSlot}
-      links={host.links} platform={appearance.platform} clipboard={host.clipboard} onError={onError} /> : null}
+    {navbar ? <ViewerNavbar onBack={onBack} explorer={explorer} file={navigation.file} selecting={loaded.status === "empty"} status={dirty} trailing={trailing} settings={settings} controlsRef={setNavbarSlot}
+      links={host.links} clipboard={host.clipboard} onError={onError} /> : null}
     {document?.stale ? <div className="flex shrink-0 items-center gap-2 border-b bg-amber-500/10 px-3 py-1.5 text-xs text-amber-700 dark:text-amber-400" role="status">
       <RotateCw className="size-3.5 shrink-0" /><span className="flex-1">This file changed on disk since you opened it.</span>
       <Button className="h-6 px-2 text-xs font-normal" onClick={document.reload} size="sm" variant="secondary">Reload</Button>

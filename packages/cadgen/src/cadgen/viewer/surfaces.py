@@ -2,13 +2,17 @@
 
 Tokens are disposable subscribers to pooled work, never persistent store
 entries or editing sessions. Every poll repeats and validates its immutable
-inputs. Disconnect/cancellation detaches that subscriber, not another reader.
+inputs. Disconnect/cancellation detaches that subscriber, not another reader,
+and never kills a derivation: the daemon finishes the one in hand into the store
+and starts no other for a job nobody is subscribed to.
 """
 
 from __future__ import annotations
 
+from collections import OrderedDict
 import json
 import logging
+import os
 import threading
 import time
 import uuid
@@ -25,6 +29,80 @@ MAX_COMPONENTS = 64
 MAX_SUBSCRIBERS = 256
 SUBSCRIBER_IDLE_SECONDS = 120
 
+# A tree hash names its bytes, and those bytes name every component the tree pins
+# with its entry, so a tree's component map cannot change. The viewer verifies it
+# once per process (capture_tree, the complete closure) and keeps it, rather than
+# checking the whole closure again on every request: the browser asks about each
+# component separately, so that made a model's first open quadratic in its size.
+# What can change is whether the objects are still there, since eviction and GC
+# delete files. So every request stats the tree's object and the objects of each
+# component it names, and a missing one sends the tree back through the complete
+# verification, which fails as it always did. A component a request does not name
+# is not looked at: a derivation verifies its whole closure before it writes.
+PINNED_TREES = 8
+PINNED_COMPONENTS = 100_000
+_PINS: OrderedDict[tuple[str, str], "_Pin"] = OrderedDict()
+_PINS_LOCK = threading.Lock()
+
+
+def _is_digest(value) -> bool:
+    return type(value) is str and len(value) == 64 and all(c in "0123456789abcdef" for c in value)
+
+
+class _Pin:
+    """One verified tree's component map (read-only) and where each object lies."""
+
+    __slots__ = ("components", "by_content", "paths", "tree_path")
+
+    def __init__(self, tree: str, components: dict):
+        self.components = components
+        self.by_content: dict[str, list[str]] = {}
+        self.paths: dict[str, tuple[str, ...]] = {}
+        for cid, entry in components.items():
+            self.by_content.setdefault(entry["contentHash"], []).append(cid)
+            self.paths[cid] = tuple(str(object_path(entry[field])) for field in ("brep", "eagerSurface")
+                                    if entry.get(field))
+        self.tree_path = str(object_path(tree))
+
+    def present(self, cids) -> bool:
+        """Whether the tree's object and every object of ``cids`` are still on disk."""
+        try:
+            os.stat(self.tree_path)
+            for cid in cids:
+                for path in self.paths[cid]:
+                    os.stat(path)
+        except OSError:
+            return False
+        return True
+
+
+def _pinned(tree: str, cids=()) -> _Pin:
+    """``tree``'s verified component map, with the objects of ``cids`` present.
+
+    A miss, or an object gone since the map was verified, verifies the complete
+    closure again (``capture_tree``), raising for a missing or damaged one."""
+    key = (str(store_root().resolve()), tree)
+    with _PINS_LOCK:
+        pin = _PINS.get(key)
+        if pin is not None:
+            _PINS.move_to_end(key)
+    if pin is not None:
+        if pin.present(cids):
+            return pin
+        with _PINS_LOCK:
+            if _PINS.get(key) is pin:
+                del _PINS[key]
+    descriptor, _ = capture_tree(tree, retain_payloads=False)
+    pin = _Pin(tree, descriptor["components"])
+    with _PINS_LOCK:
+        _PINS[key] = pin
+        _PINS.move_to_end(key)
+        total = sum(len(item.components) for item in _PINS.values())
+        while len(_PINS) > 1 and (len(_PINS) > PINNED_TREES or total > PINNED_COMPONENTS):
+            _old_key, old = _PINS.popitem(last=False)
+            total -= len(old.components)
+    return pin
+
 
 def _request(body: bytes) -> tuple[dict, dict, dict, str | None, dict]:
     if len(body) > 128 * 1024:
@@ -35,7 +113,9 @@ def _request(body: bytes) -> tuple[dict, dict, dict, str | None, dict]:
         raise ValueError("surface request requires tree, viewId, producer and components")
     producer = surfaces.producer_fields(value["producer"])
     tree = value["tree"]
-    canonical, _ = capture_tree(tree, retain_payloads=False)
+    if not _is_digest(tree):
+        raise ValueError("surface request names no tree")
+    pin = _pinned(tree)
     view_id = surfaces._view_id(tree, producer)
     if value["viewId"] != view_id:
         raise ValueError("surface request mixes runtime views")
@@ -48,7 +128,7 @@ def _request(body: bytes) -> tuple[dict, dict, dict, str | None, dict]:
         if type(item) is not dict or not {"cid", "surfaceInput"} <= set(item) or set(item) - {"cid", "surfaceInput", "expectedSurfaceObject"}:
             raise ValueError("invalid surface component request")
         cid = item["cid"]
-        entry = canonical["components"].get(cid)
+        entry = pin.components.get(cid) if type(cid) is str else None
         surface_input = surfaces.surface_input(entry, producer) if entry is not None else None
         if entry is None or cid in selected or item["surfaceInput"] != surface_input:
             raise ValueError("surface request names an unpinned component or input")
@@ -63,6 +143,8 @@ def _request(body: bytes) -> tuple[dict, dict, dict, str | None, dict]:
         raise ValueError("invalid surface subscriber token")
     operation = {"kind": "surfaces", "tree": value["tree"], "cids": sorted(selected),
                  "producer": producer, "expected_objects": expected}
+    # The named components' objects, still on disk; the map itself is read-only.
+    canonical = {"components": _pinned(tree, selected).components}
     return {"viewId": view_id}, selected, operation, job, canonical
 
 
@@ -74,28 +156,28 @@ def pinned_surface_object(tree: str, surface_input: str, digest: str):
     """Serve exact CAS bytes only when a verified derivation binds D to O."""
     from cadgen.store.index import read_entry
 
-    if any(type(value) is not str or len(value) != 64 or any(c not in "0123456789abcdef" for c in value)
-           for value in (tree, surface_input, digest)):
+    if not all(_is_digest(value) for value in (tree, surface_input, digest)):
         return None
     # The geometry pins which component may participate; the derivation index
     # pins its full producer and exact output. No producer initialization here.
-    descriptor, _ = capture_tree(tree, retain_payloads=False)
+    pin = _pinned(tree)
     record = read_entry("surface", surface_input)
     if record is None or record.get("object") != digest:
         return None
-    producer = record.get("producer")
-    for entry in descriptor["components"].values():
-        if entry["contentHash"] != record.get("component"):
-            continue
+    producer, component = record.get("producer"), record.get("component")
+    for cid in pin.by_content.get(component, ()) if type(component) is str else ():
+        entry = pin.components[cid]
         if producer is None:
             if entry.get("kind") != "eager-only" or entry.get("eagerSurface") != digest:
                 continue
             if surfaces.surface_input(entry, {}) != surface_input:
                 continue
+            _pinned(tree, (cid,))
             surfaces.validate_surface_bytes(read_verified_object(digest))
             return object_path(digest)
         if surfaces.surface_input(entry, producer) != surface_input:
             continue
+        _pinned(tree, (cid,))
         found = surfaces.lookup(entry, producer)
         if found is not None and found["object"] == digest:
             return object_path(digest)

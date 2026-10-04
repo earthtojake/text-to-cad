@@ -13,27 +13,25 @@ const previewChromeIdleMs = () => Number(globalThis.window?.__cadPreviewChromeId
  * everything a person edits with — is hidden and inert while `active`. Preview is fullscreen: the
  * navbar steps aside with the view's controls in it, and the view holds its own at its top-right
  * (`corner`: Playback settings and the way out), transparent over the model, on a row of the
- * navbar's own geometry: each lands where its counterpart (Settings, Preview) sat. The corner and the
+ * navbar's own geometry: each lands where its counterpart (Display, Preview) sat. The corner and the
  * `playbar` under the model share one idle deadline and a 150ms fade: movement over `surface`
- * wakes them, and hovering them (`data-preview-hover-hold`), an open menu, or `hold` (a popover
- * the owner keeps) keeps them up.
+ * wakes them, and hovering them (`data-preview-hover-hold`) or an open menu keeps them up.
  *
- * @param {{ active: boolean, surface?: Element | null, hold?: boolean,
+ * @param {{ active: boolean, surface?: Element | null,
  *   corner?: import("react").ReactNode | ((onMenuOpenChange: (open: boolean) => void) => import("react").ReactNode),
  *   playbar?: import("react").ReactNode | ((onMenuOpenChange: (open: boolean) => void) => import("react").ReactNode),
  *   children?: import("react").ReactNode }} props
  *   `corner` and `playbar`, when they are functions, are given the setter a menu in them reports
  *   its open state to (Playback settings, in the corner).
  */
-export default function PreviewChrome({ active, surface, hold = false, corner = null, playbar, children }) {
+export default function PreviewChrome({ active, surface, corner = null, playbar, children }) {
   const [visible, setVisible] = useState(true);
   const [menuOpen, setMenuOpen] = useState(false);
-  const held = menuOpen || hold;
   // A menu the bar loses on the way out of preview never reports closing: the next preview starts idle.
   useEffect(() => { if (!active) setMenuOpen(false); }, [active]);
   useEffect(() => {
     setVisible(true);
-    if (!active || !surface || held) return;
+    if (!active || !surface || menuOpen) return;
     let timer;
     let pressing = false;
     const wake = event => {
@@ -64,8 +62,8 @@ export default function PreviewChrome({ active, surface, hold = false, corner = 
       window.removeEventListener('pointerup', up);
       window.removeEventListener('pointercancel', up);
     };
-  }, [active, surface, held]);
-  const shown = !active || visible || held;
+  }, [active, surface, menuOpen]);
+  const shown = !active || visible || menuOpen;
   return <>
     <div data-preview-chrome="" data-visible={!active} hidden={active} inert={active}
       className="pointer-events-none absolute inset-0 z-20">

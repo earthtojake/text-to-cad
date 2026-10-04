@@ -98,15 +98,19 @@ def ready_surface_records(tree_hash: str, producer: dict, cids: list[str] | None
     return result
 
 
-def materialize_view_surfaces(descriptor: dict) -> dict:
-    """Complete an owned static/export view via artifact-only pooled derivation."""
+def materialize_view_surfaces(descriptor: dict, cids: list[str] | None = None) -> dict:
+    """Complete an owned static/export view via artifact-only pooled derivation.
+
+    ``cids`` limits the work to those components: only they are derived when
+    absent, and only they gain a ``surf``. The rest of the view is unchanged."""
     from cadgen.daemon.artifacts import ArtifactJobError, resolve_artifact
     from cadgen.store import surfaces
 
     tree = descriptor["tree"]
     producer = surfaces.producer_fields(descriptor["surfaceProducer"])
-    records = ready_surface_records(tree, producer)
-    missing = [cid for cid in descriptor["components"] if cid not in records]
+    wanted = list(descriptor["components"]) if cids is None else list(dict.fromkeys(cids))
+    records = ready_surface_records(tree, producer, wanted)
+    missing = [cid for cid in wanted if cid not in records]
     if missing:
         try:
             resolve_artifact({"kind": "surfaces", "tree": tree, "cids": missing, "producer": producer})
@@ -126,9 +130,10 @@ def materialize_view_surfaces(descriptor: dict) -> dict:
                 entry = document_entry_for_hash(descriptor["documentHash"])
                 if entry is not None and entry.get("tree") == tree:
                     note_document_tree(descriptor["documentHash"], tree, surface_producer=current)
-            return materialize_view_surfaces(replacement)
-        records = ready_surface_records(tree, producer)
-    for cid, entry in descriptor["components"].items():
+            return materialize_view_surfaces(replacement, cids)
+        records = ready_surface_records(tree, producer, wanted)
+    for cid in wanted:
+        entry = descriptor["components"][cid]
         record = records.get(cid)
         if record is None or record["surfaceInput"] != entry["surfaceInput"]:
             raise FileNotFoundError("surface derivation disappeared before view publication")
@@ -189,8 +194,12 @@ def component_object_for_tree(tree_hash: str, ref: str) -> tuple[str, str] | Non
 
 def views_root() -> Path:
     """Where this process's views live: under the system temp dir, per pid, so
-    a served view path is always confined to one known root."""
-    root = Path(tempfile.gettempdir()) / "cadgen-views" / str(os.getpid())
+    a served view path is always confined to one known root. A killed
+    process's are swept by the next worker that starts
+    (``cadgen._internal.temp_leftovers``)."""
+    from cadgen._internal.temp_leftovers import VIEWS_DIRNAME
+
+    root = Path(tempfile.gettempdir()) / VIEWS_DIRNAME / str(os.getpid())
     root.mkdir(parents=True, exist_ok=True)
     return root
 
@@ -237,20 +246,32 @@ def view_dir_for(tree_hash: str, *, producer: dict | None = None, document_hash:
 
 def export_view(
     tree_hash: str, dest: Path | None = None, *, producer: dict | None = None, document_hash: str | None = None,
+    cids: list[str] | None = None,
 ) -> Path:
     """Write a view directory (assembly.json + components/) for ``tree_hash``; return its path.
-    With ``dest`` None a fresh temporary directory is created (caller removes)."""
+    With ``dest`` None a fresh temporary directory is created (caller removes). ``cids`` limits
+    ``components/`` to those components, and the surface work to theirs; assembly.json still
+    describes the whole tree."""
     descriptor = descriptor_for_view(tree_hash, producer=producer, document_hash=document_hash)
     if descriptor is None:
         raise FileNotFoundError(f"tree object missing: {tree_hash}")
-    root = Path(dest) if dest is not None else Path(tempfile.mkdtemp(prefix="cadgen-view-"))
-    return _write_view(materialize_view_surfaces(descriptor), root)
+    if cids is not None and any(cid not in descriptor["components"] for cid in cids):
+        raise ValueError("view request names an unpinned component")
+    if dest is None:
+        from cadgen._internal.temp_leftovers import VIEW_PREFIX, owned_prefix
+
+        # Named after this process, so a sweep can tell whether its owner is gone.
+        dest = Path(tempfile.mkdtemp(prefix=owned_prefix(VIEW_PREFIX)))
+    root = Path(dest)
+    return _write_view(materialize_view_surfaces(descriptor, cids), root, cids)
 
 
-def _write_view(descriptor: dict, root: Path) -> Path:
+def _write_view(descriptor: dict, root: Path, cids: list[str] | None = None) -> Path:
     comp_dir = root / COMPONENT_DIRNAME
     comp_dir.mkdir(parents=True, exist_ok=True)
-    for cid, entry in (descriptor.get("components") or {}).items():
+    components = descriptor.get("components") or {}
+    for cid in (components if cids is None else dict.fromkeys(cids)):
+        entry = components[cid]
         for key in ("surf", "brep"):
             digest = str(entry.get("surfaceObject" if key == "surf" else f"{key}Object") or "")
             if digest:

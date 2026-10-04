@@ -37,7 +37,7 @@ const matchesFile = (entry, file) => [entry.rootRelativeFile, entry.file].some((
  * @param {import("./types.js").CadClientOptions} options
  * @returns {import("./types.js").CadClient}
  */
-export function createCadClient({ origin = '', workspaceId = '', fetch: fetchImpl = globalThis.fetch, pollIntervalMs = 2000, shouldPoll = () => true, resources: resourceProvider, editingPreviewFeed = null } = {}) {
+export function createCadClient({ origin = '', workspaceId = '', fetch: fetchImpl = globalThis.fetch, pollIntervalMs = 2000, shouldPoll = () => true, resources: resourceProvider, editingPreviewFeed = null, maxBatchBytes } = {}) {
   origin = normalizeViewerOrigin(origin);
   let disposed = false;
   const resourceLifetime = new AbortController();
@@ -254,7 +254,7 @@ export function createCadClient({ origin = '', workspaceId = '', fetch: fetchImp
       const controller = new AbortController();
       const releases = [retainSurfWorkerPool(), retainGlbMeshWorker(), retainStlMeshWorker()];
       tessellationCache ??= createTessellationCache({
-        provider: createHttpTessellationCacheProvider({ origin, headers: { 'x-cadgen-viewer': '1' }, fetch: fetchImpl }),
+        provider: createHttpTessellationCacheProvider({ origin, headers: { 'x-cadgen-viewer': '1' }, fetch: fetchImpl, maxBatchBytes }),
         writeBack: { deferMs: 1500, concurrency: 2 }
       });
       const cache = tessellationCache.createSession({ signal: controller.signal });

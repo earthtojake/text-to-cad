@@ -119,10 +119,10 @@ export interface FileNavigationAction {
   active?: boolean;
   onInvoke: () => void | Promise<void>;
 }
-/** An on/off setting of the host's own, in a Settings section it names (the CAD app's Analytics). */
+/** An on/off setting of the host's own, in a Settings section it names (the CAD apps' Analytics). */
 export interface AppSetting {
   id: string;
-  /** The Settings section it is listed in, after the file's Display sections. */
+  /** The Settings section it is listed in: Settings shows the same sections in the viewer and on the home. */
   section: string;
   label: string;
   checked: boolean;
@@ -130,12 +130,20 @@ export interface AppSetting {
   disabled?: boolean;
   onCheckedChange: (checked: boolean) => void;
 }
+/**
+ * The viewer's features a person can turn off in Settings' Features section, as the host keeps
+ * them: each is on unless the host says it is off.
+ */
+export interface ViewerFeatures {
+  /** Quick Edit: the note to the agent at the viewport's top-right, and every way it opens. */
+  quickEdit?: boolean;
+}
 export interface RendererViewProps {
-  /** The host's on/off settings: the Settings popover's last sections, by the `section` each names. */
-  appSettings?: readonly AppSetting[];
   /** The host's notice (a question it asks once): the viewport's top-right once the file is on screen, Quick Edit under it. */
   notice?: ReactNode;
-  /** Optional host-owned controls inside the Display popover. */
+  /** The features the person has left on (Settings' Features): what is off is not offered at all. */
+  features?: ViewerFeatures;
+  /** Optional host-owned controls inside the Display panel (the web's appearance). */
   displayActions?: ReactNode;
   onNavigationActionsChange?: (actions: readonly FileNavigationAction[]) => void;
   file: FileMetadata;
@@ -151,8 +159,8 @@ export interface RendererViewProps {
   /** The column's box for a declared `"slot"` panel to draw into. */
   panelSlot: HTMLElement | null;
   /**
-   * The navbar's box for the renderer's own view controls, at its right before the host's version
-   * (the CAD viewer's Display settings and Preview); null where no navbar is drawn.
+   * The navbar's box for the renderer's own view controls, at its right end after the host's
+   * Settings (the CAD viewer's Display and Preview); null where no navbar is drawn.
    */
   navbarSlot: HTMLElement | null;
   /**
@@ -204,10 +212,15 @@ export interface FileViewerProps {
   renderers: readonly RendererRegistration[];
   state: FileViewerState;
   onStateChange: (next: FileViewerState) => void;
-  /** Host controls inside the CAD Display popover. */
+  /** Host controls inside the CAD Display panel. */
   displayActions?: ReactNode;
-  /** The host's on/off settings, the Settings popover's last sections. */
-  appSettings?: readonly AppSetting[];
+  /**
+   * The navbar's Settings, at its right end before the renderer's view controls, over every file:
+   * the host composer's (`CadViewer`'s is the Settings popover the home has too).
+   */
+  settings?: ReactNode;
+  /** The features the person has left on (Settings' Features), for every renderer (`RendererViewProps.features`). */
+  features?: ViewerFeatures;
   /** The host's notice, shown at the viewport's top-right once the file is on screen (`RendererViewProps.notice`). */
   notice?: ReactNode;
   /**

@@ -1,12 +1,10 @@
 import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
-import { ToolPanelCollapse } from "../tools/ToolPanel.jsx";
 import { useMemo, useRef } from "react";
 import { Blend, Expand, Plus, RotateCcw, RotateCw, Sun, SunDim, X } from "lucide-react";
 import { ALL_VIEW_FEATURES, normalizeViewFeatures, normalizeViewSettings, resolveViewSettings, viewSettingsAreCustom } from "@text-to-cad/core/common/viewSettings.js";
 import { MAX_THEME_FILL_COLORS } from "@text-to-cad/core/lib/themeSettings.js";
 import { Button } from "@text-to-cad/ui/primitives/button";
 import { DISPLAY_MODE_OPTIONS } from "./DisplayModeOptions.js";
-import { appSettingsSections } from "./appSettings.jsx";
 import {
   FileSheetColorPicker, FileSheetColorProperty,
   FileSheetControlRow, FileSheetSelectRow, FileSheetSettingsSection,
@@ -26,6 +24,9 @@ const SURFACE_STYLE_OPTIONS = [
   { value: "shaded", label: "Shaded" }, { value: "flat", label: "Flat" },
   { value: "hidden", label: "Hidden" }, { value: "off", label: "Off" }
 ];
+const FLOOR_PLACEMENT_OPTIONS = [{ value: "origin", label: "Model origin" }, { value: "lowest", label: "Lowest point" }];
+// Glossy reflects the model too, at the cost of a second, smaller draw of the scene.
+const FLOOR_FINISH_OPTIONS = [{ value: "matte", label: "Matte" }, { value: "glossy", label: "Glossy" }];
 
 function ColorPalette({ colors, onChange }) {
   const palette = Array.isArray(colors) && colors.length ? colors : ["#ffffff"];
@@ -80,7 +81,7 @@ function NumberProperty({ label, Icon, value, min, max, unit = "", digits = 2, o
 }
 
 /**
- * Display's sections, stacked in its panel's one scroller (the tool stack's panel body). A
+ * Display's sections, stacked in its dropdown's one scroller (`DisplayPopover.jsx`). A
  * section with `onEnabledChange` is a feature gate (expanded IS enabled); the others are always
  * open. A press on an open gate's title scrolls it into view within the scroller's natural range,
  * never adding space to force it to the top, and never disables it.
@@ -88,7 +89,7 @@ function NumberProperty({ label, Icon, value, min, max, unit = "", digits = 2, o
 function DisplaySections({ sections }) {
   const list = useRef(null);
   const reveal = id => {
-    const element = list.current?.closest("[data-tool-panel-body]") || list.current;
+    const element = list.current?.closest('[data-slot="scroll-area-viewport"]') || list.current;
     const target = list.current?.querySelector(`[data-settings-section="${CSS.escape(id)}"] [data-settings-section-body]`);
     if (!target) return;
     const top = element.scrollTop + target.getBoundingClientRect().top - element.getBoundingClientRect().top
@@ -107,7 +108,7 @@ function DisplaySections({ sections }) {
 
 export function DisplaySettingsSection({
   viewSettings = {}, resolvedView, hostAppearance = "light", lightingQuality = "final", onViewSettingsPatch, onGroupEnabledChange, onModeChange, onViewReset,
-  features = ALL_VIEW_FEATURES, appearanceControl = null, appSettings = []
+  features = ALL_VIEW_FEATURES, appearanceControl = null, close = null
 }) {
   const settings = useMemo(() => normalizeViewSettings(viewSettings), [viewSettings]);
   const view = resolvedView || resolveViewSettings(settings, { appearance: hostAppearance, lightingQuality, features });
@@ -180,17 +181,18 @@ export function DisplaySettingsSection({
       section("background", "Background", color("background", "Background color")),
       section("floor", "Floor", <>
         {color("floor", "Floor color")}
-        <FileSheetSelectRow hideLabel label="Floor position" value={view.floor.placement} onValueChange={placement => setGroup("floor", { placement })}
-          options={[{ value: "origin", label: "Model origin" }, { value: "lowest", label: "Lowest point" }]} />
+        <FileSheetFieldGrid>
+          <FileSheetSelectRow hideLabel className="px-0" label="Floor position" value={view.floor.placement} onValueChange={placement => setGroup("floor", { placement })}
+            options={FLOOR_PLACEMENT_OPTIONS} />
+          <FileSheetSelectRow hideLabel className="px-0" label="Floor finish" value={view.floor.finish} onValueChange={finish => setGroup("floor", { finish })}
+            options={FLOOR_FINISH_OPTIONS} />
+        </FileSheetFieldGrid>
       </>),
-      // The host's own on/off settings, last: the app's, not the file's view (`appSettings`).
-      ...appSettingsSections(appSettings),
   ];
-  // Its panel has no heading: the first always-open section's heading row is the panel's first
-  // row, and carries the panel's fold chevron after its own action (`ToolPanelCollapse`, nothing
-  // outside a panel).
+  // Its dropdown has no heading: the first always-open section's heading row is its first row, and
+  // carries the dropdown's X (`close`: `DisplayPopoverClose`) after its own action.
   const lead = sections.findIndex(item => item && typeof item.onEnabledChange !== "function");
-  if (lead >= 0) sections[lead] = { ...sections[lead], headingAction: <>{sections[lead].headingAction}<ToolPanelCollapse /></> };
+  if (lead >= 0 && close) sections[lead] = { ...sections[lead], headingAction: <>{sections[lead].headingAction}{close}</> };
   return <div className="[&_[data-settings-section-heading]_.text-xs]:text-tiny">
     <DisplaySections sections={sections} />
   </div>;

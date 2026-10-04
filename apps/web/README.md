@@ -171,8 +171,9 @@ the build — detection only; it keeps serving.
   retains completed STEP working sets in a bounded CPU cache, so reopening a
   warm assembly does not reload each component. Root, origin and revision
   identities isolate reuse; changed files and evicted entries load normally.
-  Inactive WebGL scenes are released, and a file's camera lives only while its
-  viewer is mounted.
+  Inactive WebGL scenes are released, and a file's view (its camera, Display
+  settings and pose) lasts only while it is the file on screen: a refresh brings it
+  back, and leaving the file drops it.
 - **Vite's transform cache can outlive HMR and hard reloads.** If a source
   edit does not show up, restart the dev server and delete
   `node_modules/.vite`.
@@ -243,20 +244,21 @@ and native service adapters. Shared renderers own all model interaction. STEP an
 robots open in Select, whose Features (Links for a robot) panel hangs under the
 toolbar with the rest of the tool stack; Position's panel replaces it while Position
 is the tool. The navbar has no panel of the file's: the explorer's is its one toggle.
-STEP and robot files have a
-top-left toolbar; GLB, STL and 3MF have none. Every 3D file has Display settings
-and Preview among the view's controls in the navbar's right end, the view cube at
-the bottom-left, and Quick Edit at the top-right. DXF is a 2D canvas with pan, zoom, snapshot and
-Quick Edit, without a 3D toolbar or tool stack.
+STEP and robot files have a top-left toolbar; GLB, STL and 3MF have none. Every 3D
+file has Display (its settings, a dropdown) and Preview among the view's controls at
+the navbar's right end, the view cube at the bottom-left, and Quick Edit at the
+top-right. DXF is a 2D canvas with pan, zoom, snapshot and Quick Edit, without a 3D
+toolbar or tool stack.
 
 The file explorer floats over the view's left and never resizes it. Below 720px of
 FileViewer width it is a floating sheet over the viewer and the tree panel of the
 tool stack starts closed (Select, pressed, opens it). Preview is the shared shell's button among the view
 actions: it keeps the navbar and the explorer, hides the toolbar, tool stack and
 Quick Edit, orbits by default, plays routines (on entry only with Autoplay on)
-and offers Playback and Display settings; the host passes no preview props.
-The camera is never stored, so a refresh frames the file anew; Display settings,
-pose and explode are kept per file through the shared state contract (see
+and offers Playback settings; the host passes no preview props.
+The file on screen keeps its view in the tab — its camera, Display settings
+(explode and clip included) and pose — so a refresh restores it; leaving the file for
+another, or for another root, drops it, and opening it again frames it anew (see
 [storage](docs/storage.md)).
 
 Authored material information lives in the selection's reference details; editing
@@ -327,6 +329,12 @@ the page (at most every 2 s) to `/__cad/analytics/activity`. The server holds th
 counts and a code per file, in memory, and sends nothing without consent. Only the
 Viewer's own server serves the two routes.
 
+Settings' Features (**Quick edit**, on until the person turns it off) is read and changed
+the same way: `src/adapters/features.ts`, through `/__cad/features` (`cadgen/features.py`).
+The server keeps the choice in the person's settings, beside the analytics answer, so it is
+one choice with the CAD app's and holds whatever port this Viewer is served on, which the
+page's own storage would not.
+
 ### File storage and host actions
 
 The web `FileSource` is the served folder's read-only CAD catalog
@@ -359,15 +367,17 @@ The Viewer has the one navbar every app shares (see
 [the host contract](../../packages/ui/docs/viewer-host.md#host-chrome-slots)): at the
 left the explorer's toggle and the open file's name with its ⋯ ("Select file" with
 none open); at the right the update (a blue download button, only when GitHub has a
-newer release), GitHub, Feedback (a new issue titled "Feedback: "), then the view's controls (Settings, Preview);
-the version is beside the Settings popover's title, and its footer has "Made by @…" (X), Discord and GitHub. This host
+newer release), Settings (the person's settings — Analytics, Features, then Feedback, a new
+issue titled "Feedback: " — the same popover as the CAD app's home), then the view's controls
+(Display, Preview); the version is beside the Settings popover's title, and its footer has "Made by @…"
+(X), Discord and GitHub. This host
 supplies the links (`src/host/viewerLinks.js`): its version, the GitHub (where new
 issues open) and Discord its build names (`VIEWER_GITHUB_URL`, `VIEWER_DISCORD_URL`),
 and what GitHub's latest-release API
 says, so the blue download button appears when a newer release is out; links open in a
 new tab. Browser titles use "CAD | <filename>", or "CAD" when no file is selected.
-Appearance is injected as an icon-bearing dropdown beside Projection in the Display
-panel's Display section, below the full-width Mode selector (`ViewerAppearance`,
+Appearance is injected as an icon-bearing dropdown beside Projection in Display's
+Display section, below the full-width Mode selector (`ViewerAppearance`,
 through `displayActions`). The original animated mark remains the shared LoadingIcon
 for loading states. The C and CAD marks are the UI package's; the favicons are this
 app's, exported alongside the docs brand assets. See

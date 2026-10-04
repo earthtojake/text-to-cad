@@ -153,9 +153,12 @@ workers. Idle pressure reclamation preserves active and queued consumers.
   callers. A failed worker request reports an error instead of retrying
   expensive tessellation on the UI thread. Inline execution is reserved for
   environments where workers cannot start.
-- A pool starts with one isolate and grows only for ready concurrent requests.
-  Sequential viewport refinement reuses that isolate until the drain becomes
-  idle; it does not create a maximum-size pool for each component.
+- A pool starts with one isolate and grows only for ready concurrent requests,
+  or when a package load finds its first components cached: it starts the
+  isolates its lanes will decode on (`prewarmSurfWorkerPool`, at most the
+  lanes' count), so their start overlaps the batch read of those bodies instead
+  of following it. Sequential viewport refinement reuses that isolate until the
+  drain becomes idle; it does not create a maximum-size pool for each component.
 - Pressure reclamation may release idle worker slots while active and queued
   consumers keep their work. Each live slot retains its own highest completed
   request estimate, including handled failures; reclamation or replacement
@@ -169,6 +172,24 @@ Browser mesh-cache reads start with a bounded metadata probe. The client
 admits the encoded object and conservative decoded size before fetching a
 body, binds that fetch to the probed object digest and byte limit, then
 verifies the v4 header and content address before adoption.
+
+A package's open reads its cache in groups, as a snapshot does: one probe for a
+chunk of components and one TESB read for a batch of their bodies, each
+growing from the loader's first publish (eight components) to the server's
+bounds (256 keys, 32 MiB), in load order (`packageBatchReads.js`). A client
+whose transport caps one reply declares a lower ceiling for a batch's bytes
+(`createCadClient({ maxBatchBytes })`, which its cache reports as
+`batchMaxBytes`): the CAD app's tunnel declares 4 MiB, the most one of its
+replies carries. A ceiling never raises the server's bound
+(`tessBatchMaxBytes`), and a body larger than the ceiling is read alone, as
+every body once was; that transport carries it a range at a time and hands the
+provider the whole, which verifies its digest as it does any body's. A batch's
+framed bytes are charged to the Viewer envelope before it is read and released
+once its last component has taken its body; each component's decode is still
+admitted on its own before it runs, and an entry the batch could not read or
+verify is that component's strict-read miss alone. The cold components'
+surfaces resolve up to 64 to a `/__cad/surfaces` request, each the moment its
+own row is ready.
 
 A validated warm entry carries the full surface-object provenance, so
 rendering does not need the SURF object or its derivation index to remain
@@ -189,9 +210,16 @@ No module-global provider can be swapped by another root. Closing a view aborts
 its reads and prevents late results from enqueueing writes; writes already
 admitted to the root's byte-bounded queue survive file switches. Closing the
 client disposes the owner, aborts every view and discards remaining queued
-writes. Viewer write-backs drain after a quiet interval with bounded concurrency,
-while snapshot jobs flush and dispose their own cache after their complete
-source is loaded. Decoded component meshes retain their existing page-wide
+writes. Viewer write-backs drain in batches with bounded concurrency: after a
+quiet interval, no later than two seconds after a batch's first entry however
+busy the load, and at once when a batch reaches its byte bound; an entry is
+turned away only while the writer is still busy with the full batch before it.
+So the queue holds at most two batches of encoded bodies: the one being
+written, at most 32 MiB (`TESS_BATCH_MAX_BYTES`, the default `maxPendingBytes`)
+plus the entry that reached the bound, and the one being collected meanwhile,
+at most 32 MiB: about 64 MiB plus one entry in all (`memoryStats()`).
+Snapshot jobs flush and dispose their own cache after their complete source is
+loaded. Decoded component meshes retain their existing page-wide
 content-addressed LRU; a cache view does not retain an additional geometry copy.
 
 Empty imported STEP product entries keep their occurrence identity. A SURF

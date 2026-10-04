@@ -6,7 +6,7 @@ import { resolveCadEdgeSettings } from "./cadInk.js";
 import { applyMaterialSettingsToRecord as applyViewerMaterialSettings } from "../lib/viewer/surfaceMaterials.js";
 import { resolveViewSceneSettings } from "./sceneSettings.js";
 import { renderJobContext, modelOptionsForRenderJob } from "./renderMeshScene.js";
-import { ALL_VIEW_FEATURES, EDGELESS_VIEW_FEATURES, normalizeViewSettings, resolveViewSettings, resetViewSettings, viewSettingsAreCustom, VIEW_PRESET_VALUES } from "./viewSettings.js";
+import { ALL_VIEW_FEATURES, EDGELESS_VIEW_FEATURES, RENDER_FLOOR_PLACEMENT, normalizeViewSettings, resolveViewSettings, resetViewSettings, viewSettingsAreCustom, VIEW_PRESET_VALUES } from "./viewSettings.js";
 
 test("grouped input stays sparse, canonicalizes colors and rejects old fields", () => {
   assert.deepEqual(normalizeViewSettings(), { mode: "solid" });
@@ -217,4 +217,46 @@ test("only the Grid preset draws the grid and axes: Solid's surfaces on a finer,
   // Turned on by hand in another preset, the grid is the quiet one; the Grid preset counts as itself.
   assert.equal(resolveViewSettings({ mode: "solid", grid: { enabled: true } }).grid.density, 1);
   assert.equal(viewSettingsAreCustom({ mode: "grid" }), false);
+});
+
+test("the floor is matte until Glossy is chosen, and a snapshot gives the studio the finish the viewer does", () => {
+  assert.deepEqual(normalizeViewSettings({ floor: { finish: "glossy" } }), { mode: "solid", floor: { finish: "glossy" } });
+  for (const finish of ["shiny", "Glossy", true, null]) assert.throws(() => normalizeViewSettings({ floor: { finish } }));
+  for (const mode of VIEW_PRESET_VALUES) assert.equal(resolveViewSettings({ mode }).floor.finish, "matte");
+  assert.equal(resolveViewSettings({ mode: "render", floor: { finish: "glossy" } }).floor.finish, "glossy");
+  assert.equal(resolveViewSettings({ mode: "render", floor: { enabled: false, finish: "glossy" } }).floor.finish, "matte",
+    "a floor turned off is the neutral one");
+  assert.equal(viewSettingsAreCustom({ mode: "render", floor: { finish: "glossy" } }), true);
+  assert.equal(viewSettingsAreCustom({ mode: "render", floor: { finish: "matte" } }), false);
+  assert.deepEqual(resetViewSettings({ mode: "render", floor: { finish: "glossy" } }), { mode: "render" });
+  // The viewer's store and a snapshot's job resolve one display through the same recipe.
+  for (const display of [{ mode: "render" }, { mode: "render", floor: { finish: "glossy" } }, { mode: "render", floor: { finish: "matte", placement: "lowest" } }]) {
+    const viewer = resolveViewSceneSettings({ display }).render.configuration.backdrop;
+    const snapshot = renderJobContext(mesh(), { kind: "step", display }).sceneSettings.render.configuration.backdrop;
+    assert.equal(snapshot.groundFinish, display.floor?.finish ?? "matte");
+    assert.deepEqual(snapshot, viewer);
+  }
+});
+
+test("Render's floor stands at the model's lowest point until Model origin is chosen, which is Custom, and a snapshot's stands where the viewer's does", () => {
+  assert.equal(RENDER_FLOOR_PLACEMENT, "lowest");
+  for (const appearance of ["light", "dark"]) {
+    assert.equal(resolveViewSettings({ mode: "render" }, { appearance }).floor.placement, "lowest");
+    assert.equal(resolveViewSettings({ mode: "render", floor: { finish: "glossy" } }, { appearance }).floor.placement, "lowest");
+  }
+  // A floor turned on by hand in another preset starts at the document's Z=0 plane.
+  for (const mode of VIEW_PRESET_VALUES.filter(mode => mode !== "render")) {
+    assert.equal(resolveViewSettings({ mode, floor: {} }).floor.placement, "origin", mode);
+  }
+  // Model origin is a choice away, and reads as Custom, as Glossy does; Reset brings the lowest point back.
+  assert.equal(resolveViewSettings({ mode: "render", floor: { placement: "origin" } }).floor.placement, "origin");
+  assert.equal(viewSettingsAreCustom({ mode: "render", floor: { placement: "origin" } }), true);
+  assert.equal(viewSettingsAreCustom({ mode: "render", floor: { placement: "lowest" } }), false);
+  assert.deepEqual(resetViewSettings({ mode: "render", floor: { placement: "origin" } }), { mode: "render" });
+  // The viewer's scene and a snapshot's job hand the studio the same floor.
+  for (const [display, placement] of [[{ mode: "render" }, "lowest"], [{ mode: "render", floor: { placement: "origin" } }, "origin"]]) {
+    const viewer = resolveViewSceneSettings({ display }).render.configuration.backdrop;
+    const snapshot = renderJobContext(mesh(), { kind: "step", display }).sceneSettings.render.configuration.backdrop;
+    assert.deepEqual([viewer.groundPlacement, snapshot.groundPlacement], [placement, placement]);
+  }
 });

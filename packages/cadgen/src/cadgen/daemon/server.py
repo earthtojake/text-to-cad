@@ -155,6 +155,8 @@ def _watch_client(
     tool: str,
     worker,
     preserve_work=None,
+    *,
+    finishes_alone: bool = False,
 ) -> None:
     """Kill the WORKER when the requesting client vanishes mid-job.
 
@@ -165,6 +167,10 @@ def _watch_client(
 
     Killing the one worker leaves the supervisor and every other job alone; the pool
     binds a fresh worker to that model on its next request.
+
+    A job that ``finishes_alone`` (an artifact job, ``_handle_request``) is never killed
+    for its client: the worker stops it before its next derivation unless an identical
+    request has attached, and stays warm.
     """
     while not done.wait(CLIENT_LIVENESS_INTERVAL_SECONDS):
         try:
@@ -172,6 +178,9 @@ def _watch_client(
                 _send(conn, {"stream": "stdout", "data": ""})
         except OSError:
             if done.is_set():
+                return
+            if finishes_alone:
+                _log(f"{tool}: client left; worker {worker.pid} stops before its next derivation")
                 return
             if preserve_work is not None and preserve_work():
                 _log(f"{tool}: producer disconnected; continuing for coalesced consumers")
@@ -412,13 +421,46 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
     def preserve_coalesced_work() -> bool:
         return bool(inflight is not None and _BROKER.abandon(inflight))
 
+    # An artifact job is never killed for its client. It is a pure function of immutable
+    # pins that writes each result into the store as it goes, and the CAD Viewer cancels
+    # surface requests as a matter of course, so killing the worker threw away a warm
+    # kernel (a replacement imports it again, ~2.6 s) to save a derivation that takes a
+    # fraction of that. Nor does it run on for nobody: a request names up to 64
+    # components, and one the browser left kept its worker deriving them for seconds while
+    # the model opened next waited for a fresh worker to import the kernel. So the worker
+    # asks before each derivation (``wanted``): its caller still listening, or an
+    # identical request attached since, keeps it going; otherwise it ends with what it
+    # derived, the derivation in hand finished and the worker warm. A model build or a
+    # door whose caller left is still killed: there a cancel means stop.
+    finishes_alone = is_artifact
     watchdog = threading.Thread(
         target=_watch_client,
         args=(conn, send_lock, watchdog_done, tool, worker, preserve_coalesced_work),
+        kwargs={"finishes_alone": finishes_alone},
         daemon=True,
     )
     watchdog.start()
     relay_connected = True
+    owner_left = False
+
+    def wanted() -> bool:
+        # An artifact job's question before each derivation (worker._wanted). A caller that
+        # left is found by a probe send, as the watchdog finds one. The first no gives the
+        # entry up (Broker.abandon), so a later identical request starts its own job, which
+        # finds in the store what this one derived.
+        nonlocal relay_connected, owner_left
+        if relay_connected:
+            try:
+                with send_lock:
+                    _send(conn, {"stream": "stdout", "data": ""})
+                return True
+            except OSError:
+                relay_connected = False
+        if not owner_left:
+            owner_left = True
+            return _BROKER.abandon(inflight)
+        return not _BROKER.orphaned(inflight)
+
     try:
         worker.send({
             "kind": "artifact" if is_artifact else "run",
@@ -443,6 +485,10 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
             if is_artifact:
                 if "event" in frame:
                     raise OSError("artifact worker emitted a source event")
+                if "artifactNext" in frame:
+                    # Answered at once: the worker waits on it. Never relayed.
+                    worker.send({"kind": "artifactNext", "goOn": wanted()})
+                    continue
                 if "artifactResult" in frame:
                     from cadgen.daemon.artifacts import validate_result
 
@@ -462,7 +508,7 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
                     with send_lock:
                         _send(conn, frame)
                 except OSError:
-                    if preserve_coalesced_work():
+                    if finishes_alone or preserve_coalesced_work():
                         relay_connected = False
                     else:
                         raise

@@ -1,6 +1,7 @@
 import type { CadEditingPreview } from '@text-to-cad/core/client';
 import type { LibraryModel } from '@text-to-cad/ui/library';
 import type { AnalyticsConsent, AnswerFrom } from '@text-to-cad/ui/consent';
+import type { ViewerFeatures } from '@text-to-cad/ui/features';
 import type { Bridge, CallOptions, ToolResult } from './bridge';
 
 /**
@@ -76,6 +77,8 @@ export function createServer(bridge: Pick<Bridge, 'callTool'>) {
   return {
     /** Whether to ask the person about anonymous analytics; with `share`, their answer (`cadgen/analytics.py`). */
     consent: (share?: boolean, from?: AnswerFrom) => call<AnalyticsConsent>('cad_consent', share === undefined ? {} : { share, ...(from === 'card' ? { card: true } : {}) }),
+    /** Settings' Features as the person left them; with `change`, their change of some (`cadgen/features.py`). */
+    features: (change?: Partial<ViewerFeatures>) => call<ViewerFeatures>('cad_features', change ?? {}),
     launch: (model: string) => call<{ launch: Launch }>('cad_launch', { model }).then(value => value.launch),
     pickModel: () => call<{ launch?: Launch; cancelled?: boolean }>('cad_pick_model', {}, { timeoutMs: 16 * 60_000 }),
     recents: (args: { action?: 'list' | 'pin' | 'unpin' | 'remove' | 'thumbnail'; path?: string; png?: string } = {}) =>

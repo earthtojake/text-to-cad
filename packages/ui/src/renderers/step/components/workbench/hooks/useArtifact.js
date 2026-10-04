@@ -44,6 +44,12 @@ import {
 // rebuild. Progress carries the server's `runId`; when it changes the bar resets, because the
 // reported ratio is monotonic only within a single run and carrying it across a handoff is what
 // made the bar jump backwards.
+//
+// A model already on screen (`shown`) is watched, not polled: nothing of the run is drawn over it,
+// its build feed says it is updating, and the feed reads the catalog again when the build settles
+// (`useEditingPreview`), which asks here again through `freshnessKey` (`artifactFreshnessKey`).
+// Polling it was a status read every 400 ms for the whole build, through the host's few shared
+// request slots in the CAD app. A model not yet on screen is still followed until its build ends.
 
 const READY = { status: "compiled", error: "", progress: null, advisory: null };
 
@@ -51,11 +57,15 @@ function isAbortError(error) {
   return error?.name === "AbortError";
 }
 
-export function useArtifact(fileRef, { enabled = true, freshnessKey = "", client } = {}) {
+export function useArtifact(fileRef, { enabled = true, freshnessKey = "", shown = false, client } = {}) {
   const activeRef = String(enabled ? fileRef || "" : "").trim();
   const key = activeRef ? `${activeRef}:${freshnessKey}` : "";
   const [state, setState] = useState({ key: "", status: "compiled", error: "", progress: null });
   const requestSeqRef = useRef(0);
+  // Read when a status asks to attach, not a reason to ask again: the model comes on screen when
+  // its entry gains a tree, which moves `freshnessKey` anyway.
+  const shownRef = useRef(shown);
+  shownRef.current = shown === true;
 
   useEffect(() => {
     if (!activeRef) {
@@ -220,10 +230,12 @@ export function useArtifact(fileRef, { enabled = true, freshnessKey = "", client
         }
         if (action === ARTIFACT_ACTION_ATTACH) {
           // SOMEONE ELSE is already building this model (a `cad gen` in a terminal, or
-          // another viewer tab). Watch their run and re-resolve when it ends.
+          // another viewer tab). Watch their run and re-resolve when it ends: by polling it
+          // while nothing is on screen, and through the build feed's catalog read once the
+          // model is (see the header).
           attached = true;
           showGenerating(status);
-          pollTimer = window.setTimeout(pollProgress, ARTIFACT_PROGRESS_FIRST_POLL_MS);
+          if (!shownRef.current) pollTimer = window.setTimeout(pollProgress, ARTIFACT_PROGRESS_FIRST_POLL_MS);
           return;
         }
         // not-compiled -> we start the compile. The POST answers at once (`compiling`), and the

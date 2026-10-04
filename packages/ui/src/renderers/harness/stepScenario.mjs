@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -30,7 +31,6 @@ export async function loadStepFixture() {
   // `surfaceObject` is the digest of the `.surf` payload itself — the pin a real
   // surface resolution hands back. Deriving it here keeps the fixture to the two
   // files the client actually reads.
-  const { createHash } = await import('node:crypto');
   const surfaces = new Map();
   for (const [cid, component] of Object.entries(view.components)) {
     const bytes = await read(`components/${cid}.surf`);
@@ -112,7 +112,12 @@ export function stageProgressiveFixture(fixture) {
     ...inputs.slice(8, 24).map(input => [input, 'a']),
     ...inputs.slice(24).map(input => [input, 'b'])
   ]);
-  return { ...fixture, view, surfaces, heldInputs, assembly: Buffer.from(JSON.stringify(view)) };
+  // The same package with no `bbox`, as a descriptor that declares none is served: the viewer
+  // frames its first batch and again once it is whole (`declare(false)` serves this one).
+  const undeclared = { ...view };
+  delete undeclared.bbox;
+  return { ...fixture, view, surfaces, heldInputs, assembly: Buffer.from(JSON.stringify(view)),
+    undeclaredAssembly: Buffer.from(JSON.stringify(undeclared)) };
 }
 
 /**
@@ -137,6 +142,62 @@ export function stageSinglePartFixture(fixture) {
   };
   const surfaces = new Map([...fixture.surfaces].filter(([input]) => input === original.components[base.component].surfaceInput));
   return { ...fixture, view, surfaces, sidecar: null, file: 'hinge_base.step', assembly: Buffer.from(JSON.stringify(view)) };
+}
+
+/**
+ * The fixture saved again, as cadgen lists a rebuilt file: new STEP bytes — so a new document hash,
+ * and a new tree and view over them — holding the same components, and the sidecar written again,
+ * bound to the new bytes, its mates, named pose and routine as they were. `revision` names it.
+ */
+export function reviseFixture(fixture, revision) {
+  const digest = text => createHash('sha256').update(`${text}:${revision}`).digest('hex');
+  const view = { ...fixture.view, tree: digest(fixture.view.tree), viewId: digest(fixture.view.viewId), documentHash: digest(fixture.view.documentHash) };
+  const sidecar = fixture.sidecar ? { ...fixture.sidecar, documentHash: view.documentHash } : null;
+  return { ...fixture, view, sidecar, assembly: Buffer.from(JSON.stringify(view)) };
+}
+
+/**
+ * The shared tessellation cache as an earlier open leaves it: every component of `fixture` at the
+ * standard tier, tessellated here as the viewer would and keyed and encoded as the store keeps it.
+ * Answers the routes the client reads it by: a probe, a batch read and a single read.
+ */
+async function warmTessellationCache(fixture) {
+  const [{ parseSurf }, { tessellateComponent }, cache] = await Promise.all([
+    import('@text-to-cad/core/lib/surf/container.js'),
+    import('@text-to-cad/core/lib/surf/tessellate.js'),
+    import('@text-to-cad/core/lib/surf/tessellationCache.js'),
+  ]);
+  const entries = new Map();
+  const tessellated = new Map();
+  for (const component of Object.values(fixture.view.components)) {
+    const surface = fixture.surfaces.get(component.surfaceInput);
+    if (!tessellated.has(surface.object)) {
+      const bytes = surface.bytes;
+      const { index, floats } = parseSurf(bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength));
+      tessellated.set(surface.object, { index, mesh: tessellateComponent(index, floats, {}) });
+    }
+    const { index, mesh } = tessellated.get(surface.object);
+    const bytes = cache.encodeComponentTessellation(mesh, {
+      surfaceInput: component.surfaceInput, surfaceObject: surface.object, tessellation: {},
+      partColor: Array.isArray(index.partColor) ? index.partColor : null, edgeClasses: cache.edgeClassesFromSurfIndex(index),
+    });
+    const row = cache.validateTessellationProbeRow({ schemaVersion: 1,
+      object: createHash('sha256').update(bytes).digest('hex'), ...cache.tessellationPayloadFacts(bytes) });
+    entries.set(cache.tessellationCacheKey(component.surfaceInput, {}), { bytes: Buffer.from(bytes), row });
+  }
+  const binary = (response, bytes) => {
+    response.setHeader('Content-Type', 'application/octet-stream');
+    response.setHeader('Content-Length', String(bytes.byteLength));
+    response.end(bytes);
+  };
+  return {
+    probe: keys => ({ entries: Object.fromEntries(keys.filter(key => entries.has(key)).map(key => [key, entries.get(key).row])) }),
+    batch: (response, requested) => binary(response, Buffer.from(cache.encodeTessellationCacheBatch(requested.map(({ tessellationInput, object }) => {
+      const entry = entries.get(tessellationInput);
+      return entry?.row.object === object ? entry.bytes : null;
+    })))),
+    read: (response, key) => { const entry = entries.get(key); if (entry) { binary(response, entry.bytes); return true; } return false; },
+  };
 }
 
 /** The catalog entry the real scanner writes for this document, with the sidecar inline. */
@@ -200,18 +261,27 @@ function harnessBundle() {
  *   progressive?: boolean }} [options]  `progressive` serves the twenty-five-component
  *   staging (`stageProgressiveFixture`) and HOLDS each batch after the first until
  *   `release(gate)` is called, so the package's three publishes are a test's to place
- *   rather than a race. `singlePart` serves the base alone as a cadgen single-part STEP
- *   (`stageSinglePartFixture`), its part named by an XCAF label entry.
+ *   rather than a race; `declare(false)` then serves its descriptor without the `bbox` it
+ *   declares. `singlePart` serves the base alone as a cadgen single-part STEP
+ *   (`stageSinglePartFixture`), its part named by an XCAF label entry. `warmCache` serves a shared
+ *   tessellation cache that already holds every component (`warmTessellationCache`); without it
+ *   the cache is cold, and every probe and read of it is a 404.
  */
-export async function serveStepHarness(t, { onRequest, progressive = false, singlePart = false } = {}) {
+export async function serveStepHarness(t, { onRequest, progressive = false, singlePart = false, warmCache = false } = {}) {
   const loaded = await loadStepFixture();
   const fixture = progressive ? stageProgressiveFixture(loaded) : singlePart ? stageSinglePartFixture(loaded) : loaded;
+  const tessellationCache = warmCache ? await warmTessellationCache(fixture) : null;
   const entry = stepCatalogEntry(fixture);
+  // The file as the catalog lists it now (`revise`), and every revision a page may still ask
+  // for, by its tree.
+  let current = fixture, listed = entry, revisions = 0;
+  const views = new Map([[fixture.view.tree, fixture]]);
   // Each gate is a latch a test can close again (`hold`), so one server can serve the same
   // package progressively more than once — an open, and then a REOPEN in a fresh page.
   const opened = {}, gates = {};
   const hold = name => { gates[name] = new Promise(resolve => { opened[name] = resolve; }); };
   for (const name of ['a', 'b']) hold(name);
+  let declaring = true;
   let server, browser;
   const pages = new Set();
   t.after(async () => {
@@ -238,18 +308,19 @@ export async function serveStepHarness(t, { onRequest, progressive = false, sing
     if (url.pathname === '/harness.js') { response.setHeader('Content-Type', 'text/javascript'); response.end(bundle); return; }
     if (url.pathname === '/styles.css') { response.setHeader('Content-Type', 'text/css'); response.end(css); return; }
     if (url.pathname === '/harness.css') { response.setHeader('Content-Type', 'text/css'); response.end(bundledCss); return; }
-    if (url.pathname.endsWith('/__cad/catalog')) { json(response, { rootId: root, entries: [entry] }); return; }
+    if (url.pathname.endsWith('/__cad/catalog')) { json(response, { rootId: root, entries: [listed] }); return; }
     if (url.pathname.endsWith('/__cad/server')) { json(response, { rootId: root, rootPath: '/models', backend: 'cadgen' }); return; }
     if (url.pathname.endsWith('/__cad/artifact')) { json(response, { state: 'compiled' }); return; }
     if (url.pathname.endsWith('/__cad/surfaces')) {
       const body = await readBody(request);
+      const shown = views.get(body.tree) || fixture;
       json(response, {
-        viewId: fixture.view.viewId,
+        viewId: shown.view.viewId,
         components: Object.fromEntries((body.components || []).map(({ cid, surfaceInput }) => {
           const surface = fixture.surfaces.get(surfaceInput);
           if (!surface) return [cid, { surfaceInput, state: 'failed', error: `unknown surface input for ${cid}` }];
           return [cid, { surfaceInput, state: 'ready', surfaceObject: surface.object, byteLength: surface.bytes.length,
-            url: `/__cad/store?tree=${fixture.view.tree}&surfaceInput=${surfaceInput}&object=${surface.object}` }];
+            url: `/__cad/store?tree=${shown.view.tree}&surfaceInput=${surfaceInput}&object=${surface.object}` }];
         })),
       });
       return;
@@ -270,15 +341,28 @@ export async function serveStepHarness(t, { onRequest, progressive = false, sing
         return;
       }
       if (url.searchParams.get('file')?.endsWith('/assembly.json')) {
-        response.setHeader('Content-Type', 'application/json'); response.end(fixture.assembly); return;
+        const shown = views.get(url.searchParams.get('file').split('/')[0]) || fixture;
+        response.setHeader('Content-Type', 'application/json');
+        response.end(declaring || !shown.undeclaredAssembly ? shown.assembly : shown.undeclaredAssembly);
+        return;
       }
       notFound(response); return;
     }
+    if (tessellationCache && url.pathname.endsWith('/__tess_cache/probe')) {
+      json(response, tessellationCache.probe((await readBody(request)).tessellationInputs || []));
+      return;
+    }
+    if (tessellationCache && url.pathname.endsWith('/__tess_cache/batch')) {
+      tessellationCache.batch(response, (await readBody(request)).entries || []);
+      return;
+    }
+    if (tessellationCache && request.method === 'GET' && url.pathname.endsWith('.tess')
+      && tessellationCache.read(response, decodeURIComponent(url.pathname.split('/__tess_cache/')[1].slice(0, -'.tess'.length)))) return;
     // A cold cache: the tessellation cache probes and writes back, and a clean
     // 404 is what "nothing warm here" looks like. Falling through to the HTML
     // shell instead makes the probe throw on a page that is not JSON.
     if (url.pathname.includes('/__tess_cache/')) { notFound(response); return; }
-    if (url.pathname.endsWith(`/${fixture.file}.json`)) { if (fixture.sidecar) json(response, fixture.sidecar); else notFound(response); return; }
+    if (url.pathname.endsWith(`/${fixture.file}.json`)) { if (current.sidecar) json(response, current.sidecar); else notFound(response); return; }
     if (/\.(woff2|ttf)$/.test(url.pathname)) { notFound(response); return; }
     response.setHeader('Content-Type', 'text/html');
     response.end('<!doctype html><html><head><title>Host title</title><link rel="stylesheet" href="/styles.css"><link rel="stylesheet" href="/harness.css"><style>body { margin: 0 } #root > div { width: 100vw !important; height: 100vh !important }</style></head><body><div id="root"></div><script type="module" src="/harness.js"></script></body></html>');
@@ -294,7 +378,8 @@ export async function serveStepHarness(t, { onRequest, progressive = false, sing
    * 'session'` keeps the tab record in the page's own sessionStorage instead, so a reload of the
    * page is a reload of the tab and a new page is a new tab; `init` is a function run in the page
    * before the app, as `page.addInitScript` runs it. Every page is its own browser context: a new tab.
-   * The viewer fills the page (`VIEWPORT`), whatever size the harness's own layout gives it.
+   * The viewer fills the page (`VIEWPORT`), whatever size the harness's own layout gives it. Its
+   * `update()` saves the file again and settles once the page shows the new revision.
    */
   const open = async ({ timeout = 30000, record = null, store = null, hasTouch = false, init = null } = {}) => {
     const page = await browser.newPage({ viewport: VIEWPORT, deviceScaleFactor: 1, hasTouch });
@@ -311,10 +396,38 @@ export async function serveStepHarness(t, { onRequest, progressive = false, sing
     // React's devtools hook, say).
     if (init) await page.addInitScript(init);
     await page.goto(`http://127.0.0.1:${server.address().port}/?file=${fixture.file}${store === 'session' ? '&store=session' : ''}`);
-    return { page, errors, pane: page.getByTestId('one') };
+    // An update of the file on screen: saved again (`revise`), the catalog read, and the new
+    // revision on screen and settled. The harness's client does not poll.
+    const update = async () => {
+      const revision = revise();
+      await page.evaluate(() => window.cadHarness.a.client.refresh());
+      await page.waitForFunction(wanted => {
+        const state = window.cadHarness.a.controller?.readState();
+        return state?.revision === wanted && state.loading === false;
+      }, revision);
+    };
+    return { page, errors, pane: page.getByTestId('one'), update };
+  };
+  /**
+   * The file saved again (`reviseFixture`): the catalog lists the new revision from now on, and a
+   * page hears of it the next time it reads the catalog. Answers the new document hash: the revision
+   * a view reports (`readState().revision`) once the new one is on screen.
+   */
+  const revise = () => {
+    revisions += 1;
+    current = reviseFixture(fixture, revisions);
+    views.set(current.view.tree, current);
+    listed = stepCatalogEntry(current);
+    return current.view.documentHash;
   };
   // A test's pages, closed when it ends: one left in preview, orbiting, would keep a software
-  // renderer busy through every test after it.
-  const closePages = async () => { for (const page of pages) await page.close().catch(() => {}); pages.clear(); };
-  return { open, closePages, requests, fixture, entry, port: () => server.address().port, release: gate => opened[gate]?.(), hold };
+  // renderer busy through every test after it. The file goes back to the revision it started at.
+  const closePages = async () => {
+    for (const page of pages) await page.close().catch(() => {});
+    pages.clear();
+    current = fixture;
+    listed = entry;
+  };
+  return { open, closePages, requests, fixture, entry, revise, port: () => server.address().port, release: gate => opened[gate]?.(), hold,
+    declare: on => { declaring = on !== false; } };
 }

@@ -14,10 +14,12 @@ import time
 import unittest
 from pathlib import Path
 from unittest import mock
+from urllib.parse import quote
 
 from cadgen.mcp.protocol import RequestContext
 from cadgen.viewer.recents import RecentStore
 from cadgen.mcp.server import Server
+from cadgen.mcp.tunnel import MAX_REPLY_BYTES
 from cadgen.mcp.ui import AppPage
 
 CODEX = {"name": "codex-mcp-client", "title": "Codex", "version": "0.159.0"}
@@ -26,6 +28,9 @@ RENDERS_APPS = {"extensions": {"io.modelcontextprotocol/ui": {"mimeTypes": ["tex
 OTHER_HOST = {"name": "some-desktop-app", "version": "0.1.0"}
 DECLARES_TABS = {"extensions": {**RENDERS_APPS["extensions"], "dev.texttocad/tabs": {"entrypoints": ["global", "thread", "file"]}}}
 STL = b"solid t\nfacet normal 0 0 1\nouter loop\nvertex 0 0 0\nvertex 1 0 0\nvertex 0 1 0\nendloop\nendfacet\nendsolid t\n"
+# The longest message a reply may make: its body's base64 and an envelope. 5.6 MB, under the
+# 10 MiB the MCP TypeScript SDK's stdio reader stops at.
+MESSAGE_BOUND = MAX_REPLY_BYTES * 4 // 3 + 4096
 
 
 class _Connection:
@@ -66,9 +71,9 @@ class _Session(unittest.TestCase):
     def launch(self, name: str, arguments: dict | None = None, meta: dict | None = None) -> dict:
         return self.call(name, arguments, meta)["structuredContent"]["launch"]
 
-    def poll_as(self, view: str, surface: str, answers: int, model: str | None = None) -> threading.Thread:
+    def poll_as(self, view: str, surface: str, answers: int, model: str | None = None, png: str = "iVBORw0KGgo=") -> threading.Thread:
         """A view syncing as the page does (every few milliseconds here): its first sync registers it
-        and says what it shows; it answers ``answers`` captures."""
+        and says what it shows; it answers ``answers`` captures with ``png``."""
         state = {"model": model, "selection": [f"{model}#o1.f1"]}
         self.call("cad_sync", {"view": view, "surface": surface, "model": model, "state": state})
 
@@ -80,7 +85,7 @@ class _Session(unittest.TestCase):
                     time.sleep(0.002)
                 for event in events:
                     asked += 1
-                    self.call("cad_capture_reply", {"requestId": event["requestId"], "png": "iVBORw0KGgo="})
+                    self.call("cad_capture_reply", {"requestId": event["requestId"], "png": png})
 
         viewer = threading.Thread(target=page, daemon=True)
         viewer.start()
@@ -467,6 +472,111 @@ class ImportBudgetTest(unittest.TestCase):
         done = subprocess.run([sys.executable, "-c", code], capture_output=True, text=True, timeout=120, env={**os.environ})
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertEqual(done.stdout.strip(), "")
+
+
+class TunnelBoundTest(_Session):
+    """However long a body, no ``cad_http`` reply carries more than one message holds: a host's
+    stdio reader stops at its ceiling and closes the connection (``tunnel.MAX_REPLY_BYTES``)."""
+
+    def http(self, method: str, url: str, headers: dict | None = None, body: bytes = b"") -> tuple[dict, int]:
+        """The reply, and the length of the message that carried it."""
+        result = self.call("cad_http", {"root": {"kind": "workspace", "path": str(self.workspace)}, "method": method, "url": url,
+                                        "headers": headers or {}, "body": base64.b64encode(body).decode("ascii")})
+        return result["structuredContent"], len(json.dumps({"jsonrpc": "2.0", "id": 1, "result": result}, separators=(",", ":")))
+
+    def read(self, url: str, part: int = MAX_REPLY_BYTES, after_first=lambda: None) -> tuple[bytes, list[int], set[str]]:
+        """``url`` read as the page reads it, ``part`` bytes a range: the body, each message's length,
+        and the etags of its parts."""
+        whole, sizes, etags = b"", [], set()
+        while True:
+            reply, size = self.http("GET", url, {"range": f"bytes={len(whole)}-{len(whole) + part - 1}"})
+            sizes.append(size)
+            whole += base64.b64decode(reply["body"])
+            if reply["status"] == 200:
+                return whole, sizes, etags
+            self.assertEqual(reply["status"], 206)
+            etags.add(reply["headers"]["etag"])
+            if len(whole) == int(reply["headers"]["content-range"].rsplit("/", 1)[1]):
+                return whole, sizes, etags
+            if len(sizes) == 1:
+                after_first()
+
+    def test_a_body_three_times_the_bound_travels_in_parts_none_longer_than_one_message(self) -> None:
+        model = self.workspace / "parts" / "big.stl"
+        body = os.urandom(3 * MAX_REPLY_BYTES + 7)
+        model.write_bytes(body)
+        url = f"http://cad.invalid/__cad/asset?file={quote(str(model), safe='')}"
+        whole, sizes, etags = self.read(url)
+        self.assertEqual((whole, len(sizes), len(etags)), (body, 4, 1))
+        self.assertLessEqual(max(sizes), MESSAGE_BOUND)
+        # Rewritten between two parts, it is another body: its next part says so, and the page's read fails.
+        _, _, etags = self.read(url, after_first=lambda: model.write_bytes(body[::-1]))
+        self.assertEqual(len(etags), 2)
+        # An answer the page did not ask for in parts is refused rather than sent.
+        reply, size = self.http("GET", url)
+        self.assertEqual((reply["status"], size < 1024), (502, True))
+
+    def test_a_tessellation_body_read_in_parts_is_the_body_its_object_names(self) -> None:
+        from tests.python.support.tessellation import tessellation_fixture
+
+        fixture = tessellation_fixture()
+        body = base64.b64decode(fixture["bytes"])
+        digest = fixture["facts"]["object"]
+        with mock.patch.dict(os.environ, {"CADGEN_CACHE_DIR": str(self.tmp / "store")}):
+            from cadgen.store.tess_cache import write_tessellation_cache
+
+            write_tessellation_cache(fixture["key"], body)
+            whole, sizes, etags = self.read(f"http://cad.invalid/__tess_cache/{fixture['key']}.tess?object={digest}&maxBytes={len(body)}", part=256)
+        self.assertEqual((whole, etags), (body, {f'"{digest}"'}))
+        self.assertGreaterEqual(len(sizes), 3)
+
+    def test_a_screenshot_longer_than_one_message_is_refused_not_sent(self) -> None:
+        model = str(self.workspace / "parts" / "bracket.stl")
+        viewer = self.poll_as("v1", "tab", 1, model, png=base64.b64encode(b"\x89PNG" + bytes(MAX_REPLY_BYTES)).decode("ascii"))
+        shot = self.call("cad_screenshot")
+        viewer.join(10)
+        self.assertTrue(shot["isError"])
+        self.assertIn("more than one message", shot["content"][0]["text"])
+        self.assertLess(len(json.dumps(shot)), 1024)
+
+class TunnelBodyTest(unittest.TestCase):
+    """A large JSON body crosses the host's channel gzipped and says so; nothing else changes."""
+
+    def test_only_a_large_json_body_travels_gzipped(self) -> None:
+        import gzip
+
+        from cadgen.mcp.tunnel import GZIP_JSON_MIN_BYTES, ViewerTunnel
+
+        catalog = {"entries": [{"file": f"parts/part-{index}.step", "hash": f"{index:064x}"} for index in range(200)]}
+        binary = bytes(range(256)) * 256
+
+        class Routes:
+            def handle(self, request, response) -> None:
+                if request.path == "/__cad/catalog":
+                    response.send_json(200, catalog)
+                elif request.path == "/__cad/preview":
+                    response.send_json(200, {"state": "idle"})
+                else:
+                    response.send_bytes(200, binary, "application/octet-stream")
+
+        tunnel = ViewerTunnel()
+
+        def call(path: str, method: str = "GET") -> dict:
+            with mock.patch.object(tunnel, "app_for", return_value=Routes()):
+                return tunnel.serve(None, method=method, url=f"http://cad.invalid{path}", headers={}, body=b"")
+
+        written = json.dumps(catalog, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+        self.assertGreater(len(written), GZIP_JSON_MIN_BYTES)
+        reply = call("/__cad/catalog")
+        self.assertEqual(reply["encoding"], "gzip")
+        self.assertEqual(gzip.decompress(base64.b64decode(reply["body"])), written)
+        self.assertEqual(int(reply["headers"]["content-length"]), len(written))
+        self.assertLess(len(reply["body"]), len(base64.b64encode(written)) // 4)
+        for path, method, body in (("/__cad/preview", "GET", b'{"state":"idle"}'),
+                                   ("/__tess_cache/a.tess", "GET", binary), ("/__cad/catalog", "HEAD", b"")):
+            reply = call(path, method)
+            self.assertNotIn("encoding", reply)
+            self.assertEqual(base64.b64decode(reply["body"]), body)
 
 
 if __name__ == "__main__":

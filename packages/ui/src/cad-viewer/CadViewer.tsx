@@ -5,10 +5,11 @@ import { FileViewer } from '../file-viewer/FileViewer.js';
 import { EmptyCadBackdrop } from '../file-viewer/empty.js';
 import { MissingFileAlert, ViewerLoadingOverlay } from '../file-viewer/presentation.js';
 import { EmptyState } from '../file-viewer/navigation/index.js';
-import type { AppSetting } from '../file-viewer/types.js';
+import type { AppSetting, ViewerFeatures } from '../file-viewer/types.js';
 import type { ViewerHost } from '../host/types.js';
 import type { LiveRegistry } from '../host/liveRegistry.js';
 import { ModelLibrary, type LibraryModel, type ModelLibrarySource, type ModelPictureSource } from '../library/ModelLibrary.js';
+import { SettingsPopover } from '../renderers/kit/shell/SettingsPopover.jsx';
 import { useModelThumbnail } from '../library/thumbnails.js';
 import { OffscreenPicture, cadRenderers } from './OffscreenPicture.js';
 import type { LibraryLayout } from '../tab-store/tabRecord.js';
@@ -25,7 +26,10 @@ export interface CadViewerProps<Model extends LibraryModel = LibraryModel> {
    * shows a file through `onShow`.
    */
   host: Omit<ViewerHost, 'navigation'>;
-  /** The tab's one store: the renderers' preferences, this root's viewer state, the home's layout. */
+  /**
+   * The tab's one store: the renderers' preferences, this root's viewer state, the home's layout,
+   * and the view of the file on screen, the only file view it keeps: leaving a file drops its view.
+   */
   tabStore: TabStore;
   /** The host's handle on the mounted view: its agent reads it, and the library's pictures come through it. */
   live: LiveRegistry;
@@ -51,10 +55,12 @@ export interface CadViewerProps<Model extends LibraryModel = LibraryModel> {
   library?: ModelLibrarySource<Model>;
   /** Keep the library's picture of the file on screen, once it has settled. */
   onThumbnail?(png: Blob, file: string): Promise<unknown>;
-  /** The host's controls in the Display settings (the web's appearance). */
+  /** The host's controls in the Display panel (the web's appearance). */
   displayActions?: ReactNode;
-  /** The host's on/off settings: Settings' last sections, in the viewer and on the home (the CAD app's Analytics). */
+  /** The host's on/off settings: Settings' sections, the same in the viewer's navbar and on the home (Analytics, Features). */
   appSettings?: readonly AppSetting[];
+  /** The features the person has left on (Settings' Features): Quick edit is offered only while it is on. */
+  features?: ViewerFeatures;
   /** The host's notice (the analytics question): a file's viewport, top-right, once the file is on screen; never the home. */
   notice?: ReactNode;
   onError?(error: Error): void;
@@ -78,7 +84,7 @@ const reportError = (error: Error) => console.error(error);
  * its library.
  */
 export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, host, tabStore, live, file, onShow, accept, onShown, rootPath,
-  library, onThumbnail, displayActions, appSettings, notice, onError = reportError }: CadViewerProps<Model>) {
+  library, onThumbnail, displayActions, appSettings, features, notice, onError = reportError }: CadViewerProps<Model>) {
   const preferences = tabStore.settings;
   // One viewer renderer per file family, sharing one client and the tab's preferences; each
   // lazy-loads only its own code.
@@ -95,6 +101,16 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
   const shown = entry ? catalogPath(entry) : null;
   const navigationPath = shown ?? (catalog.hydrated ? normalizeCatalogPath(file) || null : null);
   useEffect(() => { latest.current.onShown?.(shown); }, [shown]);
+
+  // Only the file on screen keeps its view in the tab (`tab-store`): leaving a model — for another
+  // file, for the home, or for another root, which is another viewer — drops its camera, Display
+  // settings, pose and the rest, while a reload of the tab (which shows the same file) brings them
+  // back, and an update of the model keeps them. The departing renderer writes its view once more
+  // as it unmounts; that write is a cleanup of the commit that changed `file` (or replaced this
+  // viewer), and every cleanup of a commit runs before its effects, this one included, so it cannot
+  // bring the view back. The tab's settings are not a file's, and stay.
+  const rootId = host.files.id;
+  useEffect(() => { tabStore.files.retain(rootId, normalizeCatalogPath(file) || null); }, [tabStore, rootId, file]);
 
   // Refresh the catalog when the person comes back to the page: a model may have been rebuilt meanwhile.
   useEffect(() => {
@@ -154,6 +170,10 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
   useEffect(() => { if (file) drawn(false); }, [file, drawn]);
 
   const { colorScheme, platform } = host.environment;
+  // Settings, one popover in the viewer's navbar (over every file) and on the home: the person's
+  // settings, never a file's.
+  const settingsControl = useMemo(() => host.links || appSettings?.length
+    ? <SettingsPopover links={host.links} appSettings={appSettings} platform={platform} /> : null, [host.links, appSettings, platform]);
   const layout = settings.library.layout;
   const changeLayout = useCallback((next: LibraryLayout) => preferences.update({ library: { layout: next } }), [preferences]);
   const presentation = useMemo(() => ({
@@ -167,7 +187,7 @@ export function CadViewer<Model extends LibraryModel = LibraryModel>({ client, h
   }), [library, colorScheme, layout, changeLayout, catalog.error, file, rootPath, picture, host.links, platform, host.clipboard, appSettings, onError]);
   return <>
     <FileViewer file={file || null} host={viewerHost} renderers={renderers} state={state} onStateChange={onStateChange}
-      displayActions={displayActions} appSettings={appSettings} notice={notice} navigationPath={navigationPath} onError={onError} presentation={presentation} />
+      displayActions={displayActions} settings={settingsControl} features={features} notice={notice} navigationPath={navigationPath} onError={onError} presentation={presentation} />
     {drawing && !file ? <OffscreenPicture key={drawing.source.file} source={drawing.source} host={host} preferences={preferences} onDone={drawn} /> : null}
   </>;
 }

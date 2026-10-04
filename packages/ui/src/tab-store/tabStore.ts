@@ -29,9 +29,14 @@ export interface TabStore {
   /** The file views, by `[root id, file path, renderer id]`. */
   files: {
     read(rootId: string, path: string, rendererId: string): JsonValue | undefined;
-    /** Writing puts the file last; the oldest goes once there are more than `TAB_FILE_LIMIT`. */
+    /** Writing puts the file last; the oldest goes once there are more than `TAB_FILE_LIMIT` (one). */
     write(rootId: string, path: string, rendererId: string, view: JsonValue): void;
     remove(rootId: string, path: string, rendererId: string): void;
+    /**
+     * Keep the view of the file on screen — `path` under `rootId`, whichever renderer wrote it — and
+     * drop every other; `null` is no file on screen (a home), and drops them all. The settings stay.
+     */
+    retain(rootId: string, path: string | null): void;
     /** One root's views under `FileViewerState.renderers`' keys, `[file path, renderer id]`; stable per snapshot. */
     forRoot(rootId: string): Record<string, JsonValue>;
     /**
@@ -76,6 +81,14 @@ export function createTabStore(storage: TabRecordStorage): TabStore {
     delete files[key];
     commit({ ...record, files });
   };
+  const retain = (rootId: string, path: string | null) => {
+    const files: TabRecord['files'] = {};
+    for (const [key, view] of Object.entries(record.files)) {
+      const parsed = parseTabFileKey(key);
+      if (path !== null && parsed?.rootId === rootId && parsed.path === path) files[key] = view;
+    }
+    if (Object.keys(files).length !== Object.keys(record.files).length) commit({ ...record, files });
+  };
   return {
     getSnapshot: () => record,
     subscribe,
@@ -86,7 +99,7 @@ export function createTabStore(storage: TabRecordStorage): TabStore {
     },
     files: {
       read: (rootId, path, rendererId) => record.files[tabFileKey(rootId, path, rendererId)],
-      write, remove, forRoot,
+      write, remove, retain, forRoot,
       merge(rootId, baseline, next) {
         for (const key of new Set([...Object.keys(baseline), ...Object.keys(next)])) {
           if (JSON.stringify(baseline[key]) === JSON.stringify(next[key])) continue;

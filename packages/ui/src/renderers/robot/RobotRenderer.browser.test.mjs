@@ -172,7 +172,9 @@ async function open(t, file, { panel = true } = {}) {
     // The nav row's panel toggles, in order, each with whether its panel is the open one.
     panels: () => pane.locator('[data-file-panel]')
       .evaluateAll(buttons => buttons.map(button => `${button.getAttribute('aria-label')}:${button.getAttribute('aria-pressed')}`)),
-    toggle: id => id === 'cad-display' ? pane.getByRole('button', { name: 'Settings', exact: true }) : pane.locator(`[data-file-panel="${id}"]`),
+    toggle: id => id === 'cad-display' ? pane.locator('[data-viewer-navbar]').getByRole('button', { name: 'Display', exact: true }) : pane.locator(`[data-file-panel="${id}"]`),
+    // Display's settings: a dropdown from the navbar, portaled out of the viewer.
+    displayPanel: () => page.locator('[data-display-popover]'),
     // The tool stack's panels on screen, top to bottom, by their accessible names.
     stack: () => pane.locator('[data-cad-tool-stack] [data-tool-panel]').evaluateAll(panels => panels
       .filter(panel => panel.getClientRects().length > 0).map(panel => panel.getAttribute('aria-label'))),
@@ -225,9 +227,9 @@ test('a robot can enter Position with sidebar controls: knobs drag joints, the c
   assert.equal(await robot.tool('Preview').count(), 0, 'Preview is no toolbar tool');
   assert.equal(await pane.getByRole('button', { name: 'Preview', exact: true }).count(), 1, 'it is the viewer’s corner button, for a robot as for any 3D file');
   // The nav row has the file tree's toggle alone: a robot declares no panel of its own. Display
-  // is the settings button beside Preview.
+  // is the navbar's button beside Preview, shut as the file opens.
   assert.deepEqual(await robot.panels(), ['Show files:false']);
-  assert.equal(await pane.page().locator('[data-display-popover]').count(), 0, 'Display is never where a file opens');
+  assert.equal(await robot.displayPanel().count(), 0, 'Display is never where a file opens');
   assert.equal(await pane.getByRole('tab').count(), 0, 'no tabs');
   assert.deepEqual(await robot.stack(), ['Position controls']);
   // Headed "Position", with its Reset and the fold chevron in the heading.
@@ -480,10 +482,14 @@ test('Select picks links at once; a selection lives only under Select; Links sho
   await robot.tool('Position').click();
   await robot.waitPressed(0);
   assert.equal(await robot.linksPanel().isVisible(), false, 'and Position shows its own panel instead');
-  // Display is a popover over the viewer, never a panel in the stack: Position's panel stays.
+  // Display is a dropdown over the viewer, never a panel in the stack: Position's panel stays, and
+  // Position stays the tool; a second press puts it away.
   await robot.toggle('cad-display').click();
-  await page.locator('[data-display-popover]').waitFor();
+  await robot.displayPanel().waitFor();
   assert.deepEqual(await robot.stack(), ['Position controls']);
+  assert.deepEqual(await robot.toolNames(), ['Select:false', 'Position:true']);
+  await robot.toggle('cad-display').click();
+  await robot.displayPanel().waitFor({ state: 'detached' });
 
   // A viewport pick under Select: the link is selected on the very next frame (no wait for
   // a double-click that robots do not have), and its row is pressed in the Links panel.
@@ -555,7 +561,7 @@ test('Select picks links at once; a selection lives only under Select; Links sho
   assert.deepEqual(robot.errors, []);
 });
 
-test('a pose and the open panel survive closing the file, and a pose is dropped when the description changed', async (t) => {
+test('a reload of the tab brings the pose back, and nothing of the tool or the Display dropdown, and a pose is dropped when the description changed', async (t) => {
   const robot = await open(t, 'arm.urdf');
   const { page, pane } = robot;
   await robot.openPosition();
@@ -564,9 +570,12 @@ test('a pose and the open panel survive closing the file, and a pose is dropped 
   await robot.type('lift', 0.2, 'm');
   // The last write lands in the record although it was never rendered: the record reads the pose when it is written.
   await robot.type('nod', 12);
-  // The file closes with its Display settings open: they are not a tool, and the tool is not saved either.
+  // The page goes with its Display settings open: they are not a tool, and the tool is not saved either.
+  // The harness's unmount and remount keep the tab's record, as a reload does (the web's pagehide
+  // unmounts the viewer, and its sessionStorage outlives the page). Leaving the file for another, or
+  // for the home, drops its view instead: `cad-viewer/CadViewerFileViews.test.tsx`.
   await robot.toggle('cad-display').click();
-  await pane.page().locator('[data-display-popover]').waitFor();
+  await robot.displayPanel().waitFor();
   await page.evaluate(() => window.cadHarness.mounted(false));
   await page.waitForFunction(() => Object.values(window.cadHarness.state.renderers || {}).some(record => record?.renderer?.pose?.value?.jointValues?.nod === 12));
   const record = await page.evaluate(() => window.cadHarness.state.renderers[JSON.stringify(['arm.urdf', 'robot'])]);
@@ -575,10 +584,10 @@ test('a pose and the open panel survive closing the file, and a pose is dropped 
   assert.equal('tool' in record, false, 'the view keeps no tool');
   assert.match(record.renderer.pose.signature, /arm\.urdf-1$/);
   await page.evaluate(() => window.cadHarness.mounted(true));
-  // The tool is never saved: the file reopens in Select, Display shut.
+  // The tool is never saved: the reloaded file opens in Select, Display shut.
   await robot.linksPanel().waitFor();
   assert.deepEqual(await robot.toolNames(), ['Select:true', 'Position:false']);
-  assert.equal(await pane.page().locator('[data-display-popover]').count(), 0, 'it reopens with Display shut');
+  assert.equal(await robot.displayPanel().count(), 0, 'it comes back with Display shut');
   assert.deepEqual(await robot.panels(), ['Show files:false']);
   await robot.openPosition();
   await robot.jointField('shoulder').waitFor();
@@ -587,7 +596,8 @@ test('a pose and the open panel survive closing the file, and a pose is dropped 
   const links = await robot.links();
   assert.equal(round6(translation(links.carriage)[2]), 0.35, 'and the robot on screen is in that pose');
 
-  // A new revision behind the mounted robot keeps the pose it is in; a record from another revision is not restored.
+  // A record written against another revision is not restored. (A new revision behind the mounted robot
+  // keeps its pose only while its joints and named poses are unchanged: `RobotTools.test.tsx`.)
   await page.evaluate(() => window.cadHarness.mounted(false));
   revision += 1;
   t.after(() => { revision = 1; });
@@ -620,9 +630,9 @@ test('an SDF is the same robot with a section of its own; a snapshot depicts the
   await robot.type('hinge', 40);
   const links = await robot.links();
   assert.equal(round6(translation(links.arm)[2]), round6(0.2 - 0.05 * Math.sin((40 * Math.PI) / 180)));
-  // The Display menu offers no Edges, Cross-section or Explode.
+  // Display offers no Edges, Cross-section or Explode.
   await robot.toggle('cad-display').click();
-  const displayMenu = pane.page().locator('[data-display-popover]');
+  const displayMenu = robot.displayPanel();
   for (const absent of ['Edges', 'Cross-section', 'Explode']) assert.equal(await displayMenu.getByRole('heading', { name: absent, exact: true }).count(), 0, absent);
   await displayMenu.getByRole('combobox', { name: 'Mode', exact: true }).click();
   assert.deepEqual(await page.getByRole('option').allInnerTexts(), ['Solid', 'Render', 'Grid']);

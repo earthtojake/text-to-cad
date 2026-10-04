@@ -34,6 +34,11 @@ __all__ = ["JobLedger", "RETAIN_SECONDS", "declared_outputs", "failure_message"]
 
 RETAIN_SECONDS = 120.0
 _RUNNING = ("submitted", "queued", "building")
+# What a job keeps of a build's preview and saved results: the source result's
+# tree, and the saved document's tree and digest, which the viewer's status reads
+# to tell whether the file moved on (``viewer.preview``). A status carries no
+# geometry or annotations, so nothing else is kept.
+_KEPT_RESULT_FIELDS = {"preview": ("tree",), "saved": ("tree", "documentHash")}
 
 # The two shapes a failed job's stderr ends in: the CLI's own failure line
 # (``[cadgen step compile] FAILED: RuntimeError: ...``) or, under --verbose, a raw
@@ -249,7 +254,7 @@ class JobLedger:
             result = event.get("sourceResult")
             if isinstance(result, dict) and result.get("model") and result.get("tree"):
                 job.setdefault("sourceResults", {}).setdefault(str(result["model"]), copy.deepcopy(result))
-            for field in ("preview", "saved"):
+            for field, kept in _KEPT_RESULT_FIELDS.items():
                 payload = event.get(field)
                 if not isinstance(payload, dict) or not payload.get("output") or not payload.get("tree"):
                     continue
@@ -258,7 +263,8 @@ class JobLedger:
                 ordinal = int(event.get("sequence") or 0)
                 previous = updates.get(output)
                 if previous is None or ordinal > int(previous.get("sequence") or 0):
-                    updates[output] = {**copy.deepcopy(payload), "output": output, "sequence": ordinal}
+                    updates[output] = {**{key: str(payload[key]) for key in kept if payload.get(key)},
+                                       "output": output, "sequence": ordinal}
                 if output not in job["outputs"]:
                     job["outputs"].append(output)
             job["updatedAt"] = now

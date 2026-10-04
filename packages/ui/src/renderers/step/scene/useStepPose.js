@@ -11,8 +11,10 @@ import {
 import { applyDisplayRecordTransform, syncRuntimeStepClipPlane } from "@text-to-cad/core/lib/viewer/modelRuntime.js";
 import { applyPartVisualState, FOCUSED_DIMMED_SURFACE_OPACITY } from "@text-to-cad/core/lib/viewer/partVisualState.js";
 import { syncDisplayMeshFaceIds, syncSelectorPickGroups } from "@text-to-cad/core/lib/viewer/selectorPickGroups.js";
+import { captureShadowCasters, shadowCastersChanged } from "@text-to-cad/core/lib/viewer/shadowCasters.js";
 import { syncTopologyDisplayEdgeLine } from "@text-to-cad/core/lib/viewer/topologyDisplayEdgeLine.js";
 import { playbackFrameTime, usePlaybackFrames } from "../../kit/tools/playbar/usePlaybackFrames.js";
+import { requestSceneFrame } from "../../kit/viewport/sceneFrames.js";
 import { useAnimationClockStore } from "../workbench/animationClockStore.js";
 import { clearSceneGroup, updateTransformedRuntimeState } from "./useStepSceneSync.js";
 
@@ -30,7 +32,10 @@ const MODEL_OFFSET = new THREE.Vector3(0, 0, 0);
  * THE FRAME. A pose or animation write is drawn because this pass asks for a frame, once, as
  * its last act -- and nothing else on that path does. The topology line it re-syncs is told
  * not to ask (`requestRender: false`), and no other layer re-runs for a pose. One owner, so
- * "the model moved but the picture did not" has exactly one place to be wrong.
+ * "the model moved but the picture did not" has exactly one place to be wrong. The frame
+ * re-renders the shadows only when the pass changed what casts them (`shadowCasters.js`): it
+ * also re-runs for a hover or a selection, and a routine's frame can hold still, and neither
+ * moves a shadow.
  */
 export function useStepPose(layers) {
   const {
@@ -161,6 +166,7 @@ export function useStepPose(layers) {
         runtime.requestRender?.();
         return;
       }
+      const casters = captureShadowCasters(runtime.displayRecords);
       resetStepModuleRecordEffects(runtime.displayRecords, THREE);
       for (const record of runtime.displayRecords) {
         applyDisplayRecordTransform(runtime.THREE, record, runtime.modelRadius || 1);
@@ -187,9 +193,10 @@ export function useStepPose(layers) {
         syncClip: (activeRuntime) => syncRuntimeStepClipPlane(activeRuntime, clipSettingsRef.current),
         requestRender: false
       });
-      runtime.invalidateShadows?.();
+      const castersChanged = shadowCastersChanged(casters, runtime.displayRecords);
+      if (castersChanged) runtime.invalidateShadows?.();
       lodCameraChangeRef.current?.();
-      runtime.requestRender?.();
+      requestSceneFrame(runtime, castersChanged);
       return;
     }
 
@@ -202,6 +209,7 @@ export function useStepPose(layers) {
     // plays, the animation clock runs the same function once per tick
     // (`usePlaybackFrames`), so a playing frame renders no component at all.
     const poseFrame = (elapsedSec) => {
+      const casters = captureShadowCasters(runtime.displayRecords);
       let transformDetected = false;
       let passError = null;
       const sceneState = applySceneState(runtime.THREE, {
@@ -292,6 +300,7 @@ export function useStepPose(layers) {
       runtime.cadScene?.refreshBounds();
       viewport.syncSceneBounds();
       const effectiveRuntime = nextEdgeRuntimes.selectorRuntime;
+      const castersChanged = shadowCastersChanged(casters, runtime.displayRecords);
       // Picking is suspended during STEP animation playback, so skip rebuilding
       // pick-only state per frame; the playing->stopped rerun syncs the final pose.
       if (!stepAnimationPlaying && !animateMode) {
@@ -302,10 +311,10 @@ export function useStepPose(layers) {
         // A kinematic edit (or a stopped scrub) is a one-shot model-bounds
         // change for LOD and shadows. Playback stays on its existing bounded
         // frame loop; an idle posed model schedules no recurring work.
-        runtime.invalidateShadows?.();
+        if (castersChanged) runtime.invalidateShadows?.();
         lodCameraChangeRef.current?.();
       }
-      runtime.requestRender?.();
+      requestSceneFrame(runtime, castersChanged);
     };
     // While the routine plays the clock is its time, not the time it started from: see playbackFrameTime.
     poseFrame(playbackFrameTime(animationClock, stepAnimationRuntime));

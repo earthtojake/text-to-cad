@@ -4,7 +4,9 @@ The web host owns browser persistence; shared UI receives state and callbacks.
 There is one rule: **every tab has its own state, thrown out when the tab is
 closed and kept when it is reloaded.** Nothing outlives the tab, nothing is global
 and nothing crosses tabs: a new tab, a duplicated one included, starts from the
-defaults. The one thing outside the rule is a network cache, listed at the end.
+defaults. Within the tab, a model's state lasts only while it is the model on
+screen: leaving it drops it. The one thing outside the rule is a network cache,
+listed at the end.
 
 This doc covers browser state only. Catalogs, CAD assets, and hidden STEP
 GLB/topology artifacts are backend concerns; use [backend.md](./backend.md) for
@@ -39,10 +41,11 @@ The record is `{ version, settings, files }`:
 | Kept | Where | What |
 | --- | --- | --- |
 | Tab settings | `settings` | `fileTree` (the panel column's width, and the folders open under each root), `toolStack` (the resizable panels' sizes, the folded panels and the closed tree, `kit/tools/toolStackLayout.js`), `appearance` (System, Light or Dark; System until the person picks). |
-| File views | `files[[root id, file path, renderer id]]` | The file's view ([fileView.js](../../../packages/ui/src/renderers/kit/shell/fileView.js)): `camera` (the renderer's own — a scene's pose, lens and projection, restored in place of the open-time fit; a drawing's plane transform), `display` (the Display settings, Clip and Explode included), `playback` (preview's Playback settings: orbit on or off and its speed, Autoplay, and — once chosen — the Speed and Loop the routine plays with, unset meaning the routine's own; kept between leaving and re-entering preview; defaults orbit on at 1×, Autoplay off) and `renderer`, the renderer's own slices, each behind the signature it was written against: a STEP's expanded nodes, hidden parts, isolated assemblies, pose and large-file opt-in; a robot's joint values. A slice whose signature no longer matches the file on screen is dropped; the camera, the display and the playback are always kept. The fifty most recently written files stay; the oldest goes. |
+| File views | `files[[root id, file path, renderer id]]` | The file's view ([fileView.js](../../../packages/ui/src/renderers/kit/shell/fileView.js)): `camera` (the renderer's own — a scene's pose, lens and projection, restored in place of the open-time fit; a drawing's plane transform), `display` (the Display settings, Clip and Explode included), `playback` (preview's Playback settings: orbit on or off and its speed, Autoplay, and — once chosen — the Speed and Loop the routine plays with, unset meaning the routine's own; kept between leaving and re-entering preview; defaults orbit on at 1×, Autoplay off) and `renderer`, the renderer's own slices, each behind the signature it was written against: a STEP's expanded nodes, hidden parts, isolated assemblies, pose and large-file opt-in; a robot's joint values. A slice whose signature no longer matches the file on screen is dropped; the camera, the display and the playback are always kept. Only the file on screen has a view: leaving it — for another file, or for another root — drops its view (`CadViewer`, after the view's last write as it unmounts), so opening it again starts at the defaults, while a reload of the tab, which shows the same file, brings its view back. |
 
 | Not kept | Every open starts it afresh |
 | --- | --- |
+| A file the tab left: its whole view | The defaults, when it is opened again |
 | The tool in hand | The renderer's default tool (Select) |
 | The selection (a STEP's tree and topology, a robot's links), measurements, Draw's ink | Empty |
 | Preview and its camera | Off; its Playback settings are the file's, above |
@@ -59,7 +62,9 @@ has no record and follows the OS.
 Writes are whole and synchronous: the shell writes a file's view a moment after
 each change and once more on unmount (the page's `pagehide` unmounts the app), the
 store writes the record through at once, so what the tab last saw is what a
-reload restores. Storage access is explicit in the host; constructing or
+reload restores. When the viewer leaves a file for another, the file's last write
+lands first and `CadViewer` then drops its view (`files.retain`); a view that has
+gone writes nothing more. Storage access is explicit in the host; constructing or
 importing a renderer never chooses a browser storage backend.
 
 ## localStorage

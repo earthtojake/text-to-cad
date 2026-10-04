@@ -34,6 +34,24 @@ export function artifactActionFor(status) {
 }
 
 /**
+ * What in the catalog makes a file's artifact status worth asking again (`useArtifact`'s
+ * `freshnessKey`): the tree its entry names (`hash`, "" while it is unbuilt), the document saved
+ * under it (`documentHash`), and the catalog becoming readable again after it failed, since the
+ * server may have restarted and a status read that failed meanwhile has given up.
+ *
+ * Nothing else in the catalog. Its revision moves with every file in it, so a sibling written
+ * while this file's build ran used to ask again, find the build running and poll it every
+ * 400 ms until it ended; the build feed already reads the catalog again when the build settles.
+ */
+export function artifactFreshnessKey(entry, catalog = null) {
+  return [
+    String(entry?.hash || ""),
+    String(entry?.documentHash || ""),
+    catalog?.error ? "unreachable" : "",
+  ].join(":");
+}
+
+/**
  * The advisory flag a `compiled` status may carry: `busy`, when another process
  * currently holds the model's generator. It changes nothing about what the
  * client does with the complete geometry — it is an honest badge for the file sheet.

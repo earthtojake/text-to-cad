@@ -50,3 +50,32 @@ for (const orthographic of [true, false]) {
     expect(runtime.interactiveFraming.bounds).toEqual(original);
   });
 }
+
+// A view the person turned by the cube is theirs, as one they dragged is: the completion fit of
+// a model still arriving must not take it back (`reframeReason` stands down for `userMovedCamera`).
+// Zoom to fit hands the camera back to the viewer.
+it('a cube face or a drag across the cube makes the camera the user\'s; Zoom to fit hands it back', () => {
+  const runtimeRef = ref();
+  const { result } = renderHook(() => useViewportCamera({
+    runtimeRef, modelBounds: { min: [-20, -10, -5], max: [20, 10, 5] }, modelKey: 'fixture', modelKeyRef: ref('fixture'),
+    coordinateSystemFor: () => 'cad-z-up-v1', activeViewPlaneFaceRef: ref(''),
+    previewCameraRef: ref(), lastEmittedPerspectiveRef: ref(), cameraMovedRef: ref(),
+    modelTransformRef: ref({ offset: [0, 0, 0] }), perspectiveChangeRef: ref(), perspectivePropRef: ref(),
+    perspectiveRef: ref(), previewMode: false, previewModeRef: ref(false), previewOrbitSpeed: 0,
+    runWithoutPerspectiveEvents: (callback: () => unknown) => callback(), sceneScaleModeRef: ref('cad'),
+    setActiveViewPlaneFace: vi.fn(), setViewPlaneOrientation: vi.fn(),
+    suppressPerspectiveEventsRef: ref(0), viewerReadyTick: 0
+  }));
+  const camera = new THREE.PerspectiveCamera(48, 1.25, 0.01, 10000);
+  camera.up.set(0, 0, 1);
+  camera.position.set(200, -300, 70);
+  const runtime = { THREE, camera, perspectiveCamera: camera, controls: { target: new THREE.Vector3(), update() {} },
+    renderer: { domElement: { clientWidth: 1000, clientHeight: 800 } } } as any;
+  runtimeRef.current = runtime;
+  act(() => { expect(result.current.activateViewPlaneFace('z')).toBe(true); });
+  expect(runtime.userMovedCamera).toBe(true);
+  act(() => { expect(result.current.resetZoomAndPan()).toBe(true); });
+  expect(runtime.userMovedCamera).toBe(false);
+  act(() => { expect(result.current.orbitFromViewCube(24, -8)).toBe(true); });
+  expect(runtime.userMovedCamera).toBe(true);
+});

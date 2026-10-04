@@ -19,7 +19,7 @@ import PositionControls from "./PositionControls.jsx";
 import LinksSection from "./LinksSection.jsx";
 import SdfSection from "./SdfSection.jsx";
 import { prepareRobotJointHandles, robotJointHandles, robotPosableJoints } from "./jointHandles.js";
-import { createPoseStore } from "./poseStore.js";
+import { createPoseStore, poseLogic } from "./poseStore.js";
 import { ROBOT_DECLINED_LIVE_COMMANDS, ROBOT_TOOL, ROBOT_TOOL_MODES } from "./tools.js";
 import { useLinkSelection } from "./useLinkSelection.js";
 import { useRobotDocument } from "./useRobotDocument.js";
@@ -44,9 +44,17 @@ function RobotSurface({ view, data }) {
   const poseRef = useRef(null);
   const pose = useMemo(() => {
     if (!robot) return null;
-    // A new revision of the file keeps the pose it was left in (clamped onto the new description).
-    const carried = poseRef.current?.getSnapshot().values || readFileView(stored, { pose: robot.revision }).renderer.pose?.jointValues || null;
-    return createPoseStore(robot.description, carried);
+    // A new revision of the file keeps the pose it was left in, and the named pose it was chosen
+    // as, while what poses it — its joints and named poses — is unchanged; when that changed it
+    // opens at its own opening pose: the old pose is never fitted onto other joints. The first
+    // load takes the stored pose, written against this very revision.
+    const previous = poseRef.current;
+    if (previous) {
+      const { values, groupStateId } = previous.getSnapshot();
+      return previous.logic === poseLogic(robot.description)
+        ? createPoseStore(robot.description, values, groupStateId) : createPoseStore(robot.description);
+    }
+    return createPoseStore(robot.description, readFileView(stored, { pose: robot.revision }).renderer.pose?.jointValues || null);
   }, [robot, stored]);
   poseRef.current = pose;
   const robotRef = useRef(robot);
@@ -76,8 +84,9 @@ function RobotSurface({ view, data }) {
 
   // ---- selection -------------------------------------------------------------------------
   const shellRef = useRef(null);
-  const requestRender = useCallback(() => shellRef.current?.requestRender(), []);
-  const selection = useLinkSelection({ scene, requestRender });
+  // A highlight recolours links and casts no new shadow: its frame keeps the shadow maps.
+  const requestHighlightFrame = useCallback(() => shellRef.current?.requestFrame?.(), []);
+  const selection = useLinkSelection({ scene, requestRender: requestHighlightFrame });
   const selectionRef = useRef(selection);
   selectionRef.current = selection;
   const live = useMemo(() => ({
@@ -97,7 +106,7 @@ function RobotSurface({ view, data }) {
 
   const shell = useRendererShell({
     view, services: document.services, resource: document.resource, modelKey: document.modelKey, revisionKey: robot?.revision || "",
-    features: EDGELESS_VIEW_FEATURES, toolModes: ROBOT_TOOL_MODES, scene,
+    features: EDGELESS_VIEW_FEATURES, toolModes: ROBOT_TOOL_MODES, previewable: true, scene,
     sceneScaleMode: VIEWER_SCENE_SCALE.URDF,
     load: { busy: (loaded.busy && !scene) || (Boolean(robot) && !scene), updating: loaded.busy && Boolean(scene), progress: loaded.progress, alert: loadAlert },
     live, escape, rendererState

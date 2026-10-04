@@ -16,6 +16,7 @@ import { DisplaySettingsSection } from "../view-settings/DisplaySettingsSection.
 import { useAppliedViewSettings } from "../view-settings/useAppliedViewSettings.js";
 import { useViewSettings } from "../view-settings/useViewSettings.js";
 import { cameraForViewSettings, viewerDisplaySettingsForCamera } from "../view-settings/viewerDisplaySettings.js";
+import { DisplayPopoverClose } from "./DisplayPopover.jsx";
 import { attachLiveBinding } from "./liveBinding.js";
 import { shellLoadReport } from "./loadReport.js";
 import { createViewPromptContext, promptDeliveryError } from "./promptContext.js";
@@ -58,6 +59,8 @@ export const SHELL_TOOL = Object.freeze({ DRAW: "draw" });
 
 const SESSION_SAVE_DELAY_MS = 180;
 const EMPTY = Object.freeze({});
+// What asking for Preview does in a view that does not offer it: nothing.
+const NO_PREVIEW = () => {};
 
 /**
  * Everything a file-family renderer needs from its host that is not about its
@@ -69,7 +72,7 @@ const EMPTY = Object.freeze({});
  *    slices of view state — written soon after a change and once more on unmount, and
  *    read back before the first paint, the camera restored in place of the open-time fit;
  *  - Display settings: store, resolution against the renderer's FEATURES, the
- *    queued application to the viewport, and the Display panel's content;
+ *    queued application to the viewport, and the content of Display's dropdown;
  *  - tools: the mode state machine and Draw's session, or none at all for a
  *    renderer whose viewport is the camera's alone;
  *  - the host contract: prompt snapshots, clipboard screenshots,
@@ -96,6 +99,10 @@ const EMPTY = Object.freeze({});
  *   the renderer made it itself (see `viewSettings.applied`).
  * @param {ReturnType<typeof import("../tools/toolModes.js").createToolModes> | null} [options.toolModes]  Omitted
  *   by a renderer with no tools: the shell then has no active tool and a saved tab records none.
+ * @param {boolean} [options.previewable]  The renderer's view is 3D and offers Preview: the model fullscreen,
+ *   orbiting, its tools put away. Each renderer of a 3D view declares it; without it (a 2D view) there is no
+ *   Preview at all — no control in the navbar, not a disabled one — and anything that asks for Preview leaves
+ *   the normal view on screen (`previewing` stays false, `setPreviewing` does nothing).
  * @param {{ previewing: boolean, set: (previewing: boolean) => void }} [options.preview]  Preview mode
  *   (`usePreviewState`), when the renderer holds that state itself: a renderer whose own gates
  *   (picking, recognition, tool effects) run before this hook cannot wait for it. Every gate reads this one
@@ -156,7 +163,7 @@ const EMPTY = Object.freeze({});
  * @param {string} [options.sceneScaleMode]
  */
 export function useRendererShell({
-  view, services, resource, modelKey, revisionKey = "", features, toolModes = null, tool = null, preview = null, scene, load,
+  view, services, resource, modelKey, revisionKey = "", features, toolModes = null, tool = null, previewable = false, preview = null, scene, load,
   viewSettings = null, viewerRef: providedViewerRef = null,
   animation = null, live = EMPTY, promptReferences = null, promptContext = createViewPromptContext,
   escape = EMPTY, rendererState = null,
@@ -172,7 +179,10 @@ export function useRendererShell({
   const { onStateChange, appearance } = view;
   const colorScheme = appearance?.colorScheme === "dark" ? "dark" : "light";
   const ownPreview = usePreviewState();
-  const { previewing, set: setPreviewing } = preview || ownPreview;
+  const previewState = preview || ownPreview;
+  // Preview is a 3D view's alone: one whose renderer did not declare it never enters it, whatever asks.
+  const previewing = previewable && previewState.previewing;
+  const setPreviewing = previewable ? previewState.set : NO_PREVIEW;
 
   // ---- the file's view --------------------------------------------------------
   const [restored] = useState(() => readFileView(view.state));
@@ -229,22 +239,31 @@ export function useRendererShell({
     });
   };
   const saveTimer = useRef(0);
+  // A view that has gone writes nothing more: its last write is the flush as it unmounts, and a host
+  // that drops the view of a file it left (`CadViewer`) must not see it written again by a camera
+  // report or a slice that lands after that.
+  const closed = useRef(false);
   const flushSession = useCallback(() => {
     window.clearTimeout(saveTimer.current);
     saveTimer.current = 0;
+    if (closed.current) return;
     const next = latestRecord.current();
     if (fileViewsEqual(recordRef.current, next)) return;
     recordRef.current = next;
     onStateChangeRef.current?.(next);
   }, []);
   const scheduleSessionSave = useCallback(() => {
+    if (closed.current) return;
     window.clearTimeout(saveTimer.current);
     saveTimer.current = window.setTimeout(flushSession, SESSION_SAVE_DELAY_MS);
+  }, [flushSession]);
+  useEffect(() => {
+    closed.current = false;
+    return () => { flushSession(); closed.current = true; };
   }, [flushSession]);
   // The display's and playback's every edit is saved soon after; the camera's on every move (below);
   // a renderer's slices when it says so. The tool in hand is not saved at all.
   useEffect(() => { scheduleSessionSave(); }, [displaySettings, playback, scheduleSessionSave]);
-  useEffect(() => () => flushSession(), [flushSession]);
 
   // Stable across renders: the viewport keeps it in a ref for the life of the runtime.
   const cameraSettledRef = useRef(onCameraSettled);
@@ -400,7 +419,7 @@ export function useRendererShell({
     onCopy: () => copyActionRef.current?.() || false,
     escapeActive: Boolean(escape.active || previewing),
     onEscape(event) {
-      // A popup opened in THIS viewer (a menu, a Select, the Display popover) owns Escape before
+      // A popup opened in THIS viewer (a menu, a Select, a colour picker, Display) owns Escape before
       // preview; another viewer's popup is not this one's business.
       if (hasOpenPopup(viewerElement.current)) return;
       if (previewing) { setPreviewing(false); return; }
@@ -482,12 +501,13 @@ export function useRendererShell({
   }, [liveBinding, commandNames, whenSettled]);
 
   // ---- what the frame and the renderer read ---------------------------------
-  // The Display panel's content: every renderer's, built here from its display settings.
-  const display = <DisplaySettingsSection appearanceControl={view.displayActions} appSettings={view.appSettings}
+  // The content of Display's dropdown (`DisplayPopover.jsx`): every renderer's, built here from its
+  // display settings, its first heading ending in the dropdown's X.
+  const display = <DisplaySettingsSection appearanceControl={view.displayActions}
     features={features} viewSettings={displaySettings} hostAppearance={colorScheme} lightingQuality="preview"
     resolvedView={desiredScene.view} onViewSettingsPatch={viewSettingsStore.patch}
     onGroupEnabledChange={viewSettingsStore.setEnabled} onModeChange={viewSettingsStore.selectPreset}
-    onViewReset={viewSettingsStore.reset} />;
+    onViewReset={viewSettingsStore.reset} close={<DisplayPopoverClose />} />;
   const stripTool = ({ id, label, icon, ...rest }) => ({
     id, label, icon, active: !previewing && toolMode === id, disabled: idle, onSelect: () => selectTool(id), ...rest
   });
@@ -504,11 +524,13 @@ export function useRendererShell({
 
   return {
     // Renderer-facing.
-    toolMode, selectTool, selectDefaultTool, tools, idle, previewing, setPreviewing,
+    toolMode, selectTool, selectDefaultTool, tools, idle, previewable, previewing, setPreviewing,
     // Preview's Playback settings, the file's own: orbit and its speed, Autoplay, and the routine's chosen speed and loop.
     autoplay, setAutoplay, playback, setPlayback,
     // Deliver a prompt context through the host, reporting a failure as the viewport's alert.
     reportActionError, deliverPrompt, requestRender: () => viewerRef.current?.requestRender?.(),
+    // A frame that keeps the shadow maps, for what moves and reshapes no shadow caster (a highlight).
+    requestFrame: () => viewerRef.current?.requestFrame?.(),
     // The scene moved its own bounds: lighting, shadows and the floor follow, with no React render.
     syncSceneBounds: () => viewerRef.current?.syncSceneBounds?.(),
     // State the renderer keeps outside React changed: write the record soon (and on unmount).

@@ -169,8 +169,11 @@ def _literal_kinematics(raw: object, descriptor: dict) -> dict | None:
     return block
 
 
-def refresh_annotations(spec) -> str | None:
-    """Return a refreshed authored tree, or None to use the ordinary build."""
+def refresh_annotations(spec, *, verdict=None) -> str | None:
+    """Return a refreshed authored tree, or None to use the ordinary build.
+
+    ``verdict`` is the gate's verdict the job already took for this model;
+    without one the gate is asked here."""
     if spec.source != 'generated' or spec.script_path is None or not spec.step_output:
         return None
     from cadgen.store.index import resolve_model_ref
@@ -193,7 +196,8 @@ def refresh_annotations(spec) -> str | None:
     record = read_record(model)
     if not record or not record.get('geometryClosure') or not record.get('unannotatedTree'):
         return None
-    verdict = stale(model)
+    if verdict is None:
+        verdict = stale(model)
     if not verdict.stale or any(clause.get('stale') and clause['clause'] != 2 for clause in verdict.clauses):
         return None
     if changed_constant(script, record.get('constants') or {}) is not None:

@@ -7,6 +7,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 import unittest.mock
 from pathlib import Path
@@ -37,6 +38,20 @@ class RecentStoreTest(unittest.TestCase):
         with unittest.mock.patch("cadgen.viewer.recents.COMPACT_AFTER", 0):
             store.opened("/d.step")
         self.assertEqual(next(entry for entry in store.list() if entry.path == "/c.step").pictured, pictured)
+
+    def test_a_picture_no_listed_model_shows_goes_once_no_writer_can_still_name_it(self) -> None:
+        # Each rebuilt revision a view pictures adds a PNG; replaced ones must not pile up.
+        store = RecentStore(self.tmp)
+        store.opened("/a.step")
+        first = store.thumbnail("/a.step", b"\x89PNG one")
+        second = store.thumbnail("/a.step", b"\x89PNG two")
+        # Replaced, but too fresh to tell from a picture whose event is still on its way.
+        self.assertTrue((store.thumbnails / first).exists())
+        old = time.time() - 3600
+        for name in (first, second):
+            os.utime(store.thumbnails / name, (old, old))
+        third = store.thumbnail("/a.step", b"\x89PNG three")
+        self.assertEqual([path.name for path in store.thumbnails.iterdir()], [third])
 
     def test_a_model_says_when_its_file_last_changed_and_a_gone_one_says_nothing(self) -> None:
         store = RecentStore(self.tmp / "state")

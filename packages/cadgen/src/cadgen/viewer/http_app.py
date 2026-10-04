@@ -242,11 +242,14 @@ class CadApp:
 
     def __init__(self, *, root: str, host: str, port: int, dist_dir: str = "", lazy: bool = False):
         from .surfaces import SurfaceSubscribers
+        from .warm import CatalogWarmer
 
         self.surface_subscribers = SurfaceSubscribers()
         self.backend = LocalAssetBackend(root, lazy=lazy)
         root_path = self.backend.root_path
         self.root_path = root_path
+        # What a build saves, its catalog rows computed before a read asks (``warm.py``).
+        self.catalog_warm = CatalogWarmer(root_path, lazy=lazy)
         self.root_name = self.backend.root_name
         # A connection port is ephemeral; persisted view state follows the
         # canonical directory this server exposes.  Hash the realpath so
@@ -330,6 +333,15 @@ class CadApp:
         reading the catalog again."""
         catalog = self.backend.read_catalog(preferred_file)
         return {**catalog, "rootId": self.root_id, "revision": catalog_revision(catalog.get("entries", []))}
+
+    def build_status(self, file_ref, *, after=None) -> dict:
+        """What a build of ``file_ref`` is doing (``GET /__cad/preview``, ``preview.py``). The files
+        its builds have saved have their catalog rows started on a thread meanwhile (``warm.py``),
+        so the catalog read that follows the build finds them."""
+        from .preview import preview_update
+
+        return preview_update(self.backend.root_path, file_ref, after=after, lazy=self.backend.lazy,
+                              on_saved=self.catalog_warm.saved)
 
     # --- gates ------------------------------------------------------------
 
@@ -461,11 +473,7 @@ class CadApp:
                 elif pathname == "/__cad/artifact":
                     self._handle_artifact_status(request, response, query)
                 elif pathname == "/__cad/preview":
-                    from .preview import preview_update
-
-                    response.send_json(200, preview_update(
-                        self.backend.root_path, query.get("file") or "", after=query.get("after"), lazy=self.backend.lazy
-                    ))
+                    response.send_json(200, self.build_status(query.get("file") or "", after=query.get("after")))
                 elif pathname == "/__cad/drawing":
                     self._handle_drawing(request, response, query)
                 elif pathname == "/__cad/store":
@@ -474,6 +482,10 @@ class CadApp:
                     self._handle_asset(request, response, query)
                 elif pathname == "/__cad/analytics" and self.analytics is not None:
                     response.send_json(200, self._consent())
+                elif pathname == "/__cad/features":
+                    from cadgen import features
+
+                    response.send_json(200, features.read())
                 else:
                     # An unrecognised /__cad/* path is a bad API call, not a
                     # page. Falling through to the SPA answered typo'd and
@@ -508,6 +520,14 @@ class CadApp:
                     else:
                         self._report_activity(payload)
                         response.send_empty(204)
+                elif pathname == "/__cad/features":
+                    # Settings' Features: the person's choices, one for every CAD view (``cadgen/features.py``).
+                    from cadgen import features
+
+                    if int(request.headers.get("content-length") or 0) > 4096:
+                        response.send_empty(413, [("connection", "close")])
+                        return
+                    response.send_json(200, features.change(json.loads(request.body() or b"{}")))
                 elif pathname == "/__cad/recents":
                     if int(request.headers.get("content-length") or 0) > _LIBRARY_BODY_LIMIT:
                         response.send_empty(413, [("connection", "close")])

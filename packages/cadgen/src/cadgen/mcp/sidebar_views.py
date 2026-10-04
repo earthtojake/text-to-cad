@@ -118,6 +118,7 @@ class SidebarViews:
                 continue
             if age > LIVE_SECONDS:
                 path.unlink(missing_ok=True)
+                shutil.rmtree(path.with_suffix(".inbox"), ignore_errors=True)
                 continue
             if not isinstance(record, dict) or not isinstance(record.get("view"), str):
                 continue
@@ -126,7 +127,28 @@ class SidebarViews:
             views.append(SidebarView(id=record["view"], model=record.get("model") if isinstance(record.get("model"), str) else None,
                                      state=record.get("state") if isinstance(record.get("state"), dict) else {},
                                      touched=float(record.get("touched") or 0.0)))
+        self._sweep(now)
         return sorted(views, key=lambda view: view.touched, reverse=True)
+
+    def _sweep(self, now: float) -> None:
+        """What a view gone some other way, or an ask that timed out, left behind: an inbox with no
+        view beside it, and a reply nobody waits for."""
+        try:
+            leftovers = [*self.root.glob("*.inbox"), *(self.root / "replies").glob("*.json")]
+        except OSError:
+            return
+        for leftover in leftovers:
+            try:
+                if leftover.suffix == ".inbox" and leftover.with_suffix(".json").exists():
+                    continue
+                if now - leftover.stat().st_mtime <= LIVE_SECONDS:
+                    continue
+                if leftover.is_dir():
+                    shutil.rmtree(leftover, ignore_errors=True)
+                else:
+                    leftover.unlink(missing_ok=True)
+            except OSError:
+                continue
 
     def post(self, view_id: str, event: dict[str, Any]) -> None:
         """Leave ``event`` for a sidebar view another process serves: it takes it on its next sync."""

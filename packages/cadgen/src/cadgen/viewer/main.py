@@ -498,6 +498,16 @@ class _LateApp:
         response.send_json(503, {"ok": False, "error": "server starting"})
 
 
+def _prewarm_daemon() -> None:
+    """Start the build daemon. Best-effort: without one, the viewer serves what it did."""
+    from cadgen.daemon.client import prewarm  # noqa: PLC0415 - kernel-free, needed only now
+
+    try:
+        prewarm()
+    except Exception:  # noqa: BLE001 - a daemon that cannot start is the first build's to report
+        pass
+
+
 def _bind(host: str, port: int, args: dict) -> CadHTTPServer:
     """Bind, rolling by BINDING rather than pre-probing.
 
@@ -857,6 +867,10 @@ def serve(argv: list[str], *, prog: str = DEFAULT_PROG) -> int:
     # walk while the browser waits. After the announcement, never before it:
     # the URL line is the readiness signal and waits for nothing.
     threading.Thread(target=app.backend.warm_listings, name="cadgen-viewer-warm", daemon=True).start()
+    # And start the build daemon, whose workers import build123d while nobody waits:
+    # the session's first build, or the viewer's first STEP import, otherwise pays for
+    # it. The viewer never builds anything itself; this only warms what will.
+    threading.Thread(target=_prewarm_daemon, name="cadgen-viewer-prewarm", daemon=True).start()
 
     def shutdown(_signum=None, _frame=None):
         if not args["no_registry"]:

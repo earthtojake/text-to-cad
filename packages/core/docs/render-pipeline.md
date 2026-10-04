@@ -53,7 +53,7 @@ Every preset has the same independent groups:
   edges: { enabled: false, visibility: "visible", color: "#253443" },
   lighting: { quality: "final", exposure: 0, rotation: 0, size: 1, fill: 0.25 },
   background: { color: "#ffffff", opacity: 1 },
-  floor: { placement: "origin", color: "#e7e7e5", opacity: 0.6 },
+  floor: { placement: "lowest", color: "#e7e7e5", opacity: 0.6 },
   grid: { enabled: false, color: "#cbd5e1", opacity: 0.16 },
   axes: { enabled: false, color: "#6b7280", opacity: 0.28 }
 }
@@ -92,7 +92,9 @@ maximum regardless of Flip. The neutral boundary is therefore offset 1 normally,
 or offset 0 when flipped. Interactive viewers and snapshots share this policy;
 orbiting the camera never changes the clipped half. Clip coordinates use original
 model bounds in both snapshot and interactive paths; posing or exploding the
-model cannot silently change the plane represented by a slider/input value.
+model cannot silently change the plane represented by a slider/input value. A
+snapshot cuts and caps with the viewer's own sync (`syncRuntimeStepClipPlane`,
+its plane measured against `restBounds`) on a renderer with local clipping on.
 
 `resolveViewSceneSettings({display, camera, appearance, quality})` is the public
 Viewer/snapshot scene-policy boundary. Its `view` is the full grouped state;
@@ -115,10 +117,12 @@ internal compatibility resolver for older low-level consumers.
 Background opacity follows the ordinary alpha convention: 0 is transparent and
 1 is opaque. Fractional alpha is carried by the renderer clear color with
 `scene.background = null`, so viewer checkerboards and PNG captures agree.
-The floor is independent of background alpha. It defaults to authored Z=0;
-`placement: "lowest"` follows the current model minimum without moving geometry
-or lighting. Its double-sided plane uses one transparency pass, keeping geometry
-below the origin visible. Depth fitting includes the actual floor elevation;
+The floor is independent of background alpha. Render's stands at the model's
+lowest point (`placement: "lowest"`, `RENDER_FLOOR_PLACEMENT`, the Render recipe's
+backdrop default too), following the current model minimum without moving geometry
+or lighting; `placement: "origin"` keeps it at authored Z=0, and a floor turned on
+in another preset starts there. Its double-sided plane uses one transparency pass,
+keeping geometry below the origin visible. Depth fitting includes the actual floor elevation;
 orthographic views can use a signed near plane when the floor crosses the eye.
 
 Lighting quality is `preview` or `final`, mapping to standard/high scene policy.
@@ -130,17 +134,28 @@ shadows, a 512px procedural environment and 2x snapshot capture. Technical
 `quality.tessellation` and `output.renderScale` remain explicit overrides.
 PNG output retains requested dimensions by resampling the full drawing buffer.
 
-The two studios use one physical Render pipeline. A neutral HDR key card and
-opposing fill card generate a procedural PMREM for authored PBR reflections;
-one aligned, model-scaled SpotLight supplies direct illumination and PCF contact
-shadows. Softbox size changes card area and bounded shadow softness while keeping
-total card flux stable. Rotation moves the direct light and
-`scene.environmentRotation` together around CAD Z. An overhead side key reveals
-depth; a rear fill card and dim enclosure keep reflections on dark and polished
-surfaces readable. Environment radiance and direct illumination share a
-calibrated zero-EV lighting budget. Khronos PBR Neutral tone mapping is fixed;
-`toneMappingExposure` is `2 ** exposure`. Light and dark differ only in default
-backdrop color.
+The two studios use one physical Render pipeline. A neutral HDR key card, a rear
+fill card, a side bounce card and the studio's fixed soft sources
+(`PHOTOGRAPHIC_STUDIO_PANELS`: a large overhead softbox and two tall strip boxes
+about 75 degrees either side of the default camera) hang in a studio sweep and
+generate a procedural PMREM for authored PBR reflections; one aligned,
+model-scaled SpotLight supplies direct illumination and PCF shadows. Softbox
+size changes every source's area and bounded shadow softness while keeping each
+source's total flux stable. Fill sets both fill cards' radiance as a fraction of
+the key card's. Rotation moves the direct light and `scene.environmentRotation`
+together around CAD Z. An overhead side key reveals depth; the rear fill keeps
+horizontal reflections readable and the bounce, low on the key's far side,
+lifts the faces the key cannot reach (an iso view's right-hand side). The
+softbox and strips are brightest along their centres and fall off toward their
+edges, and the sweep (`PHOTOGRAPHIC_STUDIO_ROOM_RADIANCE`: 0.14 overhead, 0.07
+at the horizon and a light floor's 0.3 below, easing between them) is dimmer
+than they are, so polished and satin metal show defined gradients and highlight
+lines between darker gaps — what reads as metal rather than grey plastic — and
+dark glossy parts keep their color. Nothing is a void: a face turned away from
+every source keeps a soft fill. Environment radiance and direct illumination
+share a calibrated zero-EV lighting budget. Khronos PBR Neutral tone mapping is
+fixed; `toneMappingExposure` is `2 ** exposure`. Light and dark differ only in
+default backdrop color.
 
 `applyPhotographicStudio(THREE, runtime, configuration, options)` owns the
 synchronous light, ground and renderer state and updates those objects in place.
@@ -160,6 +175,61 @@ The ground uses `PHOTOGRAPHIC_STUDIO_STAGE_RADIUS_MULTIPLIER` for its full
 square width. Camera fitting uses the same constant as far-plane padding, which
 keeps the finite two-triangle ground outside practical product views. Near-plane
 fitting includes the visible floor as well as the model.
+
+The physical floor is mostly self-lit backdrop color and receives no shadow
+map; its shadow is a contact layer drawn over it (`studioContactShadow.js`):
+darkest where the model meets the floor, a broad occlusion fading with height,
+and the key's cast shadow crisp near the model and softening into a wide, light
+penumbra away from it. The layer is one texture over a square fitted to the
+rest placement (`PHOTOGRAPHIC_STUDIO_CONTACT_SHADOW`), as deep as the floor is
+opaque, and hidden while the studio's lighting is off; a floor at zero opacity
+is not drawn, so it bakes nothing. It is baked in two steps: the heights, a
+depth pass of the shadow casters seen up through the floor by a probe light
+that is never added to the scene, and the composite, three small full-screen
+passes over those heights and the key's own shadow map. Both are due only when
+the key's shadows re-render: a sentinel in the studio, a shadow caster of zero
+area that every shadow pass and the main pass draw (it rasterizes nothing in
+either), notices that pass. The composite runs in that frame, so the key's cast
+shadow on the floor follows every frame a model moves in. The heights do too,
+unless the caller passes a `heightInterval` (`applyPhotographicStudio`'s
+`contactShadow` option): then a scene that keeps changing re-measures them at
+most that often, and once more when it stops, in a frame the layer asks for
+(`requestFrame`), so what is shown at rest is exact and only the contact
+darkening lags while a model moves. The interactive viewer re-renders shadows
+only for a change that can alter them, never for a camera move or a highlight,
+so it bakes nothing on those frames; the snapshot renderer, which renders
+shadows every frame and passes no interval, bakes both steps every frame. A
+runtime that renders in software (`softwareRendering`) gets no contact layer:
+its key casts no shadow either. A transparent legacy backdrop's floor stays a
+`ShadowMaterial` catcher of the key's shadow.
+
+The floor and its shadow layer are dithered: each adds up to one 8-bit level of
+noise as it is drawn (the floor's divided by its alpha, so its blend keeps it
+whole; the layer's drawn premultiplied, so the blend adds exactly that noise over
+whatever floor is under it). A dark floor's shading spans only a few levels of
+the canvas, and rounding drew it as wavy contour bands; the noise is too fine to
+see and leaves every average colour where it was. A snapshot drawn at a render
+scale above 1 averages that scale squared of drawn pixels into each one it keeps,
+which quietened the noise to a fraction of a level and let the rounding band
+again: it passes its render scale as `applyPhotographicStudio`'s `ditherScale`,
+which spreads both noises that much wider (`syncDitherScale`). The viewer keeps
+1, and at 1 nothing is defined: its shaders are the ones they always were.
+
+The floor's finish is `backdrop.groundFinish` (`PHOTOGRAPHIC_STUDIO_FLOOR_FINISHES`):
+`matte`, the default, or `glossy`, a glossier surface that also reflects the model
+(`studioFloorReflection.js`). Before each frame of the scene (its `onBeforeRender`)
+the scene is drawn again from the camera mirrored in the floor, at half the
+canvas's resolution; four small passes fade and soften it with each reflected
+point's height (crisp where the model meets the floor), and the floor lays it over
+itself with a Fresnel weight, in display colour, so a light floor shows it as a
+dark one does. The mirrored draw runs when the camera moved or the frame re-renders
+shadows (it renders them, and the frame keeps them); a frame for a highlight keeps
+the last reflection and catches up within 400 ms; a snapshot draws it every frame.
+It runs before the frame, at the frame's own render depth and into a target three
+treats as the canvas (`isXRRenderTarget`): drawn nested in the frame, or as an
+ordinary target, it made every lit material rebuild its program key twice a frame,
+which cost more than the draw. A matte floor allocates none of it; turning the
+floor matte, the studio's lighting off or the floor off releases it.
 
 Environment radiance and direct illumination are calibrated together at zero EV
 across colored assemblies, gray mechanical models, and authored metal/plastic
@@ -195,8 +265,16 @@ The interactive viewer uses this fitted conventional depth for every preset so
 settings can enable shadows without replacing its renderer/canvas. The fit also
 uses visible records for closeups, the floor's actual elevation, and the grid's
 plane and bounds independently of Floor. Otherwise the subject's near plane
-clips foreground guides, or the far plane truncates their finite span. Standalone
-CAD snapshots may still use logarithmic depth: they render one fixed configuration.
+clips foreground guides, or the far plane truncates their finite span. A
+perspective camera passes its `pivot` (the point it looks at): its near plane
+never comes nearer than 1/256 of the pivot's depth, so a closeup the fit cannot
+measure (the camera inside a part's own box, or a routine deforming what it
+measures) keeps its depth resolution instead of making close surfaces fight.
+Snapshots draw every preset the same way: ordinary depth, fitted to each output
+with the same inputs (its placed records, the studio floor's elevation, the
+drawn grid's span and the camera's target as pivot). A logarithmic buffer would
+also lose the instanced CAD edges, which write no logarithmic depth: under a
+perspective camera every edge failed its depth test against the surfaces.
 
 ### `common/source.js`
 
@@ -289,8 +367,12 @@ Three.js object graph and its mutable state.
 `bounds` follows the live pose — what lighting, the floor, shadows and clipping
 need. `restBounds` is the same model at its ZERO pose, before a parameter, mate
 or animation frame moved a record, and it is what a camera fit is grounded on so
-that posing a model never re-frames it. A family scene carries its own
-(`restBounds` in the scene contract): a robot's is every joint at its default.
+that posing a model never re-frames it. A package that declares its whole box
+(assembly.json's `bbox`, `declaredBounds` in its composition) rests in that box,
+as the scene contract has it: the viewer frames and grounds it, and a snapshot
+sizes its ground and radiates an exploded view from it. A family scene carries
+its own (`restBounds` in the scene contract): a robot's is every joint at its
+default.
 
 Common settings:
 
@@ -525,7 +607,10 @@ and deterministic renderer settings. Automatic perspective cameras fit the
 current visible vertices to `output.padding` when `output.tightFrame` is true;
 otherwise they fit the model bounds. An explicit camera position is never
 reframed. Video capture fits its precomputed sequence-union bounds once so the
-camera does not breathe between frames.
+camera does not breathe between frames. As in the viewer, a still's studio floor
+and its contact shadow stay sized and centred on the rest placement however the
+model is posed or exploded (`groundBounds`), and an exploded view radiates from
+that rest box.
 
 `captureModel(viewport, { job })` returns data only:
 

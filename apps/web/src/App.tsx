@@ -8,7 +8,9 @@ import { useViewerAutoReload } from './host/useViewerAutoReload.js';
 import { createWebFileActions } from './adapters/fileActions';
 import { recordOpened, recordThumbnail } from './adapters/library';
 import { consent as analyticsConsent, reportActivity } from './adapters/analytics';
+import { features as viewerFeatures } from './adapters/features';
 import { ConsentCard, useAnalyticsConsent } from '@text-to-cad/ui/consent';
+import { useFeatures } from '@text-to-cad/ui/features';
 import { browserClipboard, browserClipboardSupportsImages } from './host/clipboard';
 import { createWebPromptContext } from './host/promptContext';
 import { useViewerLinks } from './host/viewerLinks.js';
@@ -84,7 +86,11 @@ function RootView({ client, server, tabStore }: { client: CadClient; server: Cad
   // CAD's anonymous usage analytics, the same as the CAD app's: one card, asked once of everyone
   // (unless their environment answered, or no answer could be kept) once a model is on screen, and
   // Settings' Analytics section after it. The answer is the person's, shared with the CAD app.
-  const { consent, answer, appSettings } = useAnalyticsConsent(analyticsConsent);
+  const { consent, answer, appSettings: analyticsSettings } = useAnalyticsConsent(analyticsConsent);
+  // Settings' Features (Quick edit), on until the person turns one off: kept by this Viewer's
+  // server beside the analytics answer, one choice with the CAD app's, whatever port this is.
+  const { features, appSettings: featureSettings } = useFeatures(viewerFeatures);
+  const appSettings = useMemo(() => [...analyticsSettings ?? [], ...featureSettings ?? []], [analyticsSettings, featureSettings]);
   // A person touching the page is use (time spent looking at a model makes no other request): said
   // at most every couple of seconds.
   useEffect(() => {
@@ -104,7 +110,7 @@ function RootView({ client, server, tabStore }: { client: CadClient; server: Cad
   }), [source, fileActions, promptContext, attachments, links, appearance.colorScheme]);
   return <div className="flex h-svh flex-col overflow-hidden"><div className="min-h-0 flex-1">
     <CadViewer client={client} host={host} tabStore={tabStore} live={live} file={file} onShow={show} onShown={shown}
-      rootPath={server.rootPath || ''} onThumbnail={recordThumbnail} appSettings={appSettings}
+      rootPath={server.rootPath || ''} onThumbnail={recordThumbnail} appSettings={appSettings} features={features}
       notice={consent?.ask ? <ConsentCard policy={consent.policy} onAnswer={answer}
         onPolicy={url => window.open(url, '_blank', 'noopener,noreferrer')} /> : null}
       displayActions={<ViewerAppearance colorSchemePreference={appearance.preference} resolvedColorSchemeMode={appearance.colorScheme} onColorSchemePreferenceChange={changeColorScheme} />} />

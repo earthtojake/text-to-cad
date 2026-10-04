@@ -66,7 +66,9 @@ _TIMED_OUT = object()
 # CADGEN_FFMPEG is the same kind of per-client choice: `snapshot --video` encodes
 # with the ffmpeg the CALLER has, and a warm worker's ambient PATH is whatever
 # shell happened to start the daemon. CADGEN_STORE_MAX is the cap the daemon's
-# idle housekeeping holds the client's store to (STORE.md §8).
+# idle housekeeping holds the client's store to (STORE.md §8). CADGEN_VERIFY_READBACK
+# is one build's request (STORE.md §10): a daemon started with it verified every
+# later build, and one started without it skipped the check a maintainer asked for.
 FORWARDED_ENV_VARS = (
     "CADGEN_CACHE_DIR",
     "XDG_CACHE_HOME",
@@ -74,6 +76,7 @@ FORWARDED_ENV_VARS = (
     "PYTHONPATH",
     "CADGEN_FFMPEG",
     "CADGEN_STORE_MAX",
+    "CADGEN_VERIFY_READBACK",
 )
 
 # The client's own ffmpeg, looked up once per process. Resolved HERE rather than
@@ -756,6 +759,31 @@ def watch_jobs(after: str | None = None, *, output: str | None = None, store_roo
             channel.close()
 
 
+def prewarm() -> bool:
+    """Start this installation's daemon, and with it its warm workers, if none answers.
+
+    The first build of a session otherwise pays for both: spawning the daemon and
+    importing build123d in a worker, seconds before any model code runs. Submits
+    nothing. A daemon that answers is only asked its status, which also replaces one
+    left running by older cadgen code. True once a current daemon answers.
+    """
+    if os.environ.get("CADGEN_DAEMON") == "0" or os.environ.get("CADGEN_DAEMON_CHILD"):
+        return False
+    if not daemon_supported():
+        return False
+    for _attempt in range(2):  # a stale daemon answers "restart" and gives up its address
+        try:
+            channel = _connect_or_spawn(daemon_address())
+        except OSError:
+            return False
+        if channel is None:
+            return False
+        answer = _ask_status(channel)
+        if answer is not _RESTART:
+            return answer is not None
+    return False
+
+
 def status() -> dict | None:
     """The running daemon's state, or None if there is none.
 
@@ -768,6 +796,14 @@ def status() -> dict | None:
         channel = _connect(daemon_address())
     except OSError:
         return None
+    answer = _ask_status(channel)
+    # A stale daemon is on its way out: nothing is warm.
+    return None if answer is _RESTART else answer
+
+
+def _ask_status(channel) -> object:
+    """Ask a connected daemon its state, then close the channel: its status, ``_RESTART``
+    from a daemon left by older code, or None when it does not answer."""
     try:
         if not _send_json(channel, {"kind": "status", "token": compute_version_token()}):
             return None
@@ -776,7 +812,7 @@ def status() -> dict | None:
             if message is _TIMED_OUT or message is None:
                 return None
             if message.get("restart"):
-                return None  # a stale daemon is on its way out; report nothing warm
+                return _RESTART
             if "status" in message:
                 return message["status"]
     finally:

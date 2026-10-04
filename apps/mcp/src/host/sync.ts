@@ -148,7 +148,9 @@ export function createViewSync(server: Pick<Server, 'sync' | 'reply'>,
             for (const preview of reply.previews ?? []) {
               const slot = previews.get(preview.file);
               if (!slot) continue;
-              if (preview.error) { for (const listener of slot.listeners) listener.onError(new Error(preview.error)); continue; }
+              // A feed answer always has a state, and a failed build's carries its failure as `error`:
+              // that is news for the view. Only a bare error is the feed itself failing to answer.
+              if (preview.error && !preview.state) { for (const listener of slot.listeners) listener.onError(new Error(preview.error)); continue; }
               const cursor = typeof preview.feedCursor === 'string' ? preview.feedCursor : null;
               if (cursor !== slot.cursor) news = true;
               slot.cursor = cursor;

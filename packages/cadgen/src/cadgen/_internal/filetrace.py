@@ -201,7 +201,10 @@ def capture() -> Iterator[Trace]:
     trace = Trace()
     outermost = not _OPEN
     if outermost:
-        handle, _LOG = tempfile.mkstemp(prefix="cadgen-trace-", suffix=".log")
+        from cadgen._internal.temp_leftovers import TRACE_PREFIX, TRACE_SUFFIX, owned_prefix
+
+        # Named after this process, so a sweep can tell whether its owner is gone.
+        handle, _LOG = tempfile.mkstemp(prefix=owned_prefix(TRACE_PREFIX), suffix=TRACE_SUFFIX)
         os.close(handle)
         if tracer.cadgen_filetrace_begin(os.fsencode(_LOG)) != 0:
             raise OSError(f"cadgen's file tracer could not open its log {_LOG}")

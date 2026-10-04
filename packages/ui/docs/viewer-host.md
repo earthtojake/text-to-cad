@@ -40,7 +40,7 @@ are for reading and maintaining the contracts.
 | `CadWorkspaceService`, `CadResourceProvider`, worker tickets | [CAD service types](../../core/src/client/types.ts) | `@text-to-cad/core/client` |
 | `createHttpAttachmentStore` (the viewer server's `AttachmentStore`: it saves a PNG through `POST /__cad/sketches`) | [Attachment store](../../core/src/client/attachments.js) | `@text-to-cad/core/client` |
 | `StepRendererOptions`, `CadLiveBinding` | [STEP registration](../src/renderers/step/index.ts) | `@text-to-cad/ui/renderers/step` |
-| `TabStore`, `TabRecordStorage`, `createTabStore`, `useTabViewerState` (the tab's one store: its settings, its file views, and `FileViewer`'s state from both) | [Tab store](../src/tab-store/tabStore.ts), [the record](../src/tab-store/tabRecord.ts) | `@text-to-cad/ui/tab-store` |
+| `TabStore`, `TabRecordStorage`, `createTabStore`, `useTabViewerState` (the tab's one store: its settings, the view of the file on screen, and `FileViewer`'s state from both) | [Tab store](../src/tab-store/tabStore.ts), [the record](../src/tab-store/tabRecord.ts) | `@text-to-cad/ui/tab-store` |
 | `CadPreferenceSource`, `createCadPreferences` (the tab's settings as renderers read them) | [Viewer preferences](../src/renderers/workspace/preferences.ts) | `@text-to-cad/ui/renderers/workspace` |
 | `DxfRendererOptions` (2D drawings; declares no panel, and declines every camera, display and selection command) | [DXF registration](../src/renderers/dxf/index.ts) | `@text-to-cad/ui/renderers/dxf` |
 | `GlbRendererOptions`, `LiveViewBinding`, `LiveViewController` | [GLB registration](../src/renderers/glb/index.ts), [live binding](../src/renderers/kit/shell/liveBinding.ts) | `@text-to-cad/ui/renderers/glb` |
@@ -77,7 +77,14 @@ beside the orbit speed and playback.
 ## Preview and renderer navigation actions
 
 Preview is the shared shell's own state (`previewing`); there is no host prop
-for it and a host cannot start or observe it. It is fullscreen
+for it and a host cannot start or observe it. It is a 3D view's alone, and each
+renderer says whether its view is one: it declares `previewable` to the shell
+(`useRendererShell`), as STEP, GLB, STL/3MF and URDF/SRDF/SDF do. A view that does
+not — a DXF's 2D drawing, which draws its own surface without the shell — has no
+Preview at all, no control and not a disabled one, and nothing that asks for
+Preview (a link or a host request, should either come to) takes it there: it keeps
+the normal view. The CAD app's Full size, inline, is the host's display mode, not
+Preview: it shows the normal view, of any file. It is fullscreen
 (`onFullscreenChange`, below): the navbar, with everything in it, the explorer and the
 panel column step aside while it lasts. It never uses the browser Fullscreen API. The shell saves the tools view's camera, fits a preview camera and restores
 the tools view's exact pose on exit; nothing of preview is persisted. Orbit
@@ -102,8 +109,8 @@ render loops. These actions use existing host capabilities for effects. What a
 person tells the agent about a CAD file is [Quick Edit](#prompt-handoff)'s.
 
 A renderer with controls of its own for the view draws them into
-`RendererViewProps.navbarSlot`, at the navbar's right end after the host's links (the CAD
-viewer's Display settings and Preview); it is null where no navbar is drawn. A
+`RendererViewProps.navbarSlot`, at the navbar's right end after the host's Settings (the CAD
+viewer's Display and Preview, for a 3D view); it is null where no navbar is drawn. A
 renderer that shows its file fullscreen (the CAD viewer's Preview) says so through
 `onFullscreenChange(true)`, and `false` when it stops: the navbar, the explorer
 and any declared panel step aside while it lasts. The host's `captureRequest`
@@ -149,6 +156,10 @@ creates.
 Platform-agnostic UI can use DOM, canvas, React and renderer-owned workers.
 Filesystem access, transport selection, credentials, clipboard, persistent
 storage, page navigation and native process lifecycle remain host responsibilities.
+So do a transport's limits: a host whose channel caps one reply declares the
+most one batched read may ask for (`createCadClient({ maxBatchBytes })`), and the
+shared loader never asks for more; the host carries a longer body in parts (the
+CAD app's tunnel reads it a range at a time), and the loader sees it whole.
 
 ## Prompt handoff
 
@@ -203,8 +214,8 @@ Hosts must resolve/validate accepted attachments and consume failed encoders;
 they do not transfer Promise or Blob values across native IPC.
 
 Quick Edit is the shared, host-neutral note to the agent
-([the design system](settings-ui.md#quick-edit)), and its buttons are what the
-host can carry out. **Copy Prompt** is always there: the message goes through
+([the design system](settings-ui.md#quick-edit)), there while the person has it on
+(`features.quickEdit`, above), and its buttons are what the host can carry out. **Copy Prompt** is always there: the message goes through
 `ClipboardPort.writeText`, which takes a `Promise<string>` so the write starts
 inside the gesture while a sketch is still being saved; its references are
 spelled as copied references are (below), and a sketch is saved through
@@ -305,9 +316,15 @@ lives through one adapter, `TabRecordStorage` — a synchronous read and write o
 whole record: the web over `sessionStorage`, the desktop over its per-tab store — and
 the package owns the record's shape, version and normalization. `settings` is
 tab-wide (the file tree's width and expansion, the tool stack's layout, the
-appearance) and is what every renderer reads as its preferences;
-`files` holds each opened file's view under `[root, path, renderer]`, the fifty most
-recently written. A view is `{ camera, display, playback, renderer }` (`kit/shell/fileView.js`):
+appearance, the home's layout) and is what every renderer reads as its preferences;
+`files` holds the view of the file on screen, under `[root, path, renderer]`, and no
+other: a write keeps the newest alone (`TAB_FILE_LIMIT`), and `CadViewer` drops the view
+of a file it leaves — for another file, for the home, or for another root — once the
+departing renderer's last write has landed (`files.retain`). A reload of the tab shows
+the same file, so it brings that view back; a file opened again after leaving it starts
+at the defaults. In the CAD app the record is in memory, one per view: a view the host
+creates again (its frame re-created) starts afresh, since nothing names a view across its
+frames. A view is `{ camera, display, playback, renderer }` (`kit/shell/fileView.js`):
 the camera is restored in place of the open-time fit, the display settings with their
 Clip and Explode, preview's Playback settings (orbit on or off and its speed, Autoplay,
 the routine's chosen speed and loop), and the renderer's own slices each behind the
@@ -320,9 +337,10 @@ another view's entries. Material appearance is source-owned and read-only. Live
 selection and scene ownership belong to the mounted view.
 
 A mounted view writes its view shortly after each change (the camera on every move,
-debounced) and once more when it unmounts; the store writes through synchronously, so
-what the tab last saw is what a reload restores. Nothing saves document content or
-promises an asynchronous operation will finish during page exit. Web owns pagehide
+debounced) and once more when it unmounts, and nothing after that; the store writes
+through synchronously, so what the tab last saw is what a reload restores. Nothing
+saves document content or promises an asynchronous operation will finish during page
+exit. Web owns pagehide
 (which unmounts the app), focus, visibility, history and development reload. Desktop
 owns window/runtime lifecycle and IPC.
 
@@ -377,16 +395,19 @@ With no file open the name's place says "Select file" (words, not a control), an
 the page says "Ask the agent to show a model". Right: the renderer's navigation actions, any
 declared panel's toggle, then the update (`UpdateButton`, `NavbarLinks.jsx`): where the host
 found a newer release (`links.latest`), a blue download button whose menu says the step to it,
-how this host updates (`links.install`) and what is new; without one, nothing. Then GitHub
-(`GitHubLink`), which says the project is open source, then Feedback
-(`FeedbackLink`), where the host has a tracker (`links.issues`): a new issue titled "Feedback: ",
-for the person to finish, naming the version and `environment.platform`, just before the
-renderer's view controls and never among them. It has no label: the project has none for
-feedback, and what is said may be a bug, a request or a question. The Settings popover
-(`SettingsPopover`) shows the version beside its title, and its footer has "Made by @…" (`MadeBy`, the
-host's X account) at its left and Discord and GitHub (`CommunityLinks`) at its right. The home has
-GitHub, Feedback and Settings under its wordmark, in that order, after the update; its Settings
-holds no Display sections, only the host's own settings. An alert card's Report Issue opens a new issue too,
+how this host updates (`links.install`) and what is new; without one, nothing. Then Settings,
+the person's: FileViewer draws the control its composer hands it (`FileViewerProps.settings`)
+over every file, just before the renderer's view controls and never among them, and `CadViewer`
+hands it the Settings popover (`SettingsPopover`, `kit/shell/SettingsPopover.jsx`) the home has
+too — one component, the same sections in both. It shows the version beside its title, the
+host's own settings (`appSettings`, below) under it, then Feedback where the host has a
+tracker (`links.issues`): a button, Open Issue, that opens a new issue titled "Feedback: " (`feedbackUrl`,
+`NavbarLinks.jsx`), for the person to finish, naming the version and `environment.platform`
+(`CadViewer` hands the popover the platform). It has no label: the project has none for
+feedback, and what is said may be a bug, a request or a question. Its footer has "Made by @…"
+(`MadeBy`, the host's X account) at its left and Discord and GitHub (`CommunityLinks`) at its
+right. The home has GitHub (`GitHubLink`), which says the project is open source, and Settings
+under its wordmark, in that order, after the update. An alert card's Report Issue opens a new issue too,
 titled "Issue: " and labelled `bug`, filled in from the card (`kit/status/reportIssue.js`): its
 title, message and failure, the file's name, the version and platform, then its Details, cut from
 their end to keep the address, title and labels included, under `ISSUE_URL_MAX`. No path of the
@@ -396,10 +417,21 @@ for someone with triage access to the repository and drops them for everyone els
 the ordinary way unless the host supplies
 `links.open` (a page in a sandboxed frame hands it to its host). `displayActions`
 passes host-owned appearance controls into the Display section beside Projection
-via `RendererViewProps`. `appSettings` (`{ id, section, label, checked, disabled?, onCheckedChange }[]`) are the
-host's own on/off settings, which the shell draws as checkbox rows in the Settings popover's last
-sections, one per `section` the settings name (Analytics, in both apps), in the viewer's Settings
-and the home's; the host owns what each one does. `@text-to-cad/ui/consent` is the analytics
+via `RendererViewProps`. `appSettings` (`{ id, section, label, checked, disabled?, onCheckedChange }[]`,
+a `CadViewer` prop) are the host's own on/off settings: they are Settings' sections, one per
+`section` the settings name (Analytics, in both apps), drawn as checkbox rows, the same in the
+viewer's navbar and on the home; nothing of them reaches a renderer, and Display holds none. The
+host owns what each one does and where it is kept. `@text-to-cad/ui/features` is Settings'
+Features, which both apps share: `useFeatures(features)` turns the host's call — `features()`
+reads them, `features(change)` changes some and answers them all — into the features the person
+left on (`ViewerFeatures`: `quickEdit`, each on until they turn it off) and their Settings rows.
+The host hands the first to `CadViewer` as `features` (on to FileViewer and
+`RendererViewProps.features`: the shell offers no Quick Edit while it is off) and the second
+with its `appSettings`, and keeps the choice where it keeps the analytics answer: the web
+Viewer through its server's `/__cad/features`, the CAD app through `cad_features`, both in the
+person's settings (`cadgen/features.py`), so it holds in every view, tab and app, across
+reloads — a page's own storage would not, the web Viewer's origin changing with its port.
+`@text-to-cad/ui/consent` is the analytics
 prompt both apps share: `ConsentCard` (the card) and
 `useAnalyticsConsent(consent)`, which turns the host's consent call into the card's state, its
 answer and the Analytics setting; the host supplies the call and where the answer is kept. The shell handles placement and hides the toolbar in
@@ -416,8 +448,9 @@ stack at the top-left, Quick Edit at the top-right, and the view cube at the
 bottom-left. A host's one question goes through the shell too: `notice` (the
 `ConsentCard`) is drawn at the top-right once the file is on screen, never while it
 loads or after it failed to, with Quick Edit stacked under it until it is answered;
-the home never shows it. The view's own controls (Display settings, Preview) are the
-renderer's, drawn into the navbar's right end after the version (`navbarSlot`). What Quick Edit offers follows the subscribed destination capability and
+the home never shows it. The view's own controls (Display and Preview, a 3D view's) are the
+renderer's, drawn into the navbar's right end after Settings (`navbarSlot`).
+What Quick Edit offers follows the subscribed destination capability and
 the ports, never an app name: Copy Prompt always, Queue for a composer
 destination, Send where the prompt port has `send`. Native clipboard effects
 remain in the host implementation.

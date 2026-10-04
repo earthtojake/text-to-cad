@@ -91,14 +91,17 @@ async function open(t, file, { record = null } = {}) {
 
 const ready = pane => pane.locator('[aria-busy="false"] > div > canvas').first().waitFor();
 
-// A GLB has no tools; its Display settings are the button beside Preview.
+// A GLB has no interaction tools, so no strip; its Display settings are the navbar's button beside Preview.
 const noTools = async (pane) => {
   assert.equal(await pane.getByRole('group', { name: 'Interaction tools' }).count(), 0, 'a static GLB has no tools, so no strip');
-  assert.equal(await pane.getByRole('button', { name: 'Settings', exact: true }).count(), 1, 'its Display settings are the button beside Preview');
+  assert.equal(await displayButton(pane).count(), 1, 'its Display settings are the navbar\'s button beside Preview');
   for (const name of ['Orbit', 'Draw', 'Select', 'Measure', 'Position', 'Animate']) {
     assert.equal(await pane.getByRole('button', { name, exact: true }).count(), 0, name);
   }
 };
+const displayButton = pane => pane.locator('[data-viewer-navbar]').getByRole('button', { name: 'Display', exact: true });
+// Display's settings: a dropdown, portaled out of the viewer.
+const displayPanel = pane => pane.page().locator('[data-display-popover]');
 // The viewport's own pixels, without any chrome over them: what a host capture returns.
 async function capture(page) {
   const encoded = await page.evaluate(async () => {
@@ -172,24 +175,26 @@ test('a static GLB opens on its native scene with no tools: display settings, or
   // orbits, pans and zooms, with no strip over it.
   await noTools(pane);
   assert.equal(await pane.locator('[data-quick-edit]').count(), 0, 'Quick Edit is a STEP file\'s: a GLB has nothing to pick');
+  assert.equal(await pane.locator('[data-viewer-navbar]').getByRole('button', { name: 'Preview', exact: true }).count(), 1,
+    'a GLB is 3D: its navbar offers Preview');
 
   // A GLB has no panel of its own: its only settings are Display's, and Display is never
   // where a file opens. So it opens with the column shut and the model given the room.
   assert.deepEqual(await panels(pane), ['Show files:false']);
   assert.equal(await pane.locator('[data-tool-panel]').count(), 0, 'nothing in the tool stack');
-  await pane.getByRole('button', { name: 'Settings', exact: true }).click();
-  await pane.page().locator('[data-display-popover]').waitFor();
+  await displayButton(pane).click();
+  await displayPanel(pane).waitFor();
   assert.deepEqual(await panels(pane), ['Show files:false']);
-  const displayMenu = page.locator('[data-display-popover]');
-  assert.equal(await displayMenu.getByRole('tab').count(), 0, 'the popover has no tabs inside it');
+  const displayMenu = displayPanel(pane);
+  assert.equal(await displayMenu.getByRole('tab').count(), 0, 'Display has no tabs inside it');
   assert.deepEqual(await displayMenu.getByRole('combobox', { name: 'Mode', exact: true }).innerText(), 'Solid');
   await displayMenu.getByRole('combobox', { name: 'Mode', exact: true }).click();
   assert.deepEqual(await page.getByRole('option').allInnerTexts(), ['Solid', 'Render', 'Grid'], 'a GLB has no edges to draw: Solid and Render only');
   await page.keyboard.press('Escape');
   assert.equal(await displayMenu.getByRole('heading', { name: 'Surfaces', exact: true }).count(), 1);
   for (const section of ['Edges', 'Cross-section', 'Explode']) assert.equal(await displayMenu.getByRole('heading', { name: section, exact: true }).count(), 0, section);
-  await pane.getByRole('button', { name: 'Settings', exact: true }).click();
-  await pane.page().locator('[data-display-popover]').waitFor({ state: 'detached' });
+  await displayButton(pane).click();
+  await displayPanel(pane).waitFor({ state: 'detached' });
   // The column closing reaches the scene as a resize; let that frame land before comparing pictures.
   await page.waitForFunction(() => document.querySelector('[data-testid="one"] [aria-busy] > div > canvas').width >= 790);
   await settle(page);
@@ -369,7 +374,7 @@ test('a corrupt GLB raises the viewer\'s load alert, with reload and details', a
   assert.match(await alert.innerText(), /Couldn’t load the model/);
   assert.match(await alert.innerText(), /broken\.glb/);
   // Nothing on screen is the file's to work on: the card alone, with no tools or view actions.
-  for (const name of ['Settings', 'Preview']) {
+  for (const name of ['Display', 'Preview']) {
     assert.equal(await pane.getByRole('button', { name, exact: true }).count(), 0, `no ${name} over a failed load`);
   }
   void page;

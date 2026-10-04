@@ -25,8 +25,11 @@ import { ViewerMemoryLimitError } from "../../../render/viewerMemoryPolicy.js";
 // making the first paint wait: the first batch is SMALLER than the old fixed
 // one, so first geometry arrives sooner than it did.
 //
-// First ceilings. The load order puts the model's six extreme components first,
-// so eight components already span it for the one camera framing.
+// First ceilings. The camera frames the box the descriptor declares (`bbox`)
+// from the first publish, so what that publish holds decides only what is drawn
+// first; the load order puts the model's six extreme components first, so eight
+// components already span the model on screen, and span the frame of a
+// descriptor that declares no box.
 export const PROGRESSIVE_PUBLISH_FIRST_COMPONENTS = 8;
 export const PROGRESSIVE_PUBLISH_FIRST_BYTES = 8 * 1024 * 1024;
 // Last ceilings, once doubling reaches them. A batch this size is roughly the
@@ -279,10 +282,12 @@ function occurrenceTranslation(transform) {
 
 // Load order: the components placed at the model's extreme positions (per-axis
 // min and max occurrence translation, up to six cids) come first, then the rest
-// in descriptor order. The viewer frames the camera ONCE per model, on the
-// first publish (the viewport's framed-model gate), so the first batch must
-// span the model: without this the first 32 components of a hand could all be
-// one fingertip and the rest of the model would arrive outside the frame. The
+// in descriptor order, so the first paint already spans the model rather than
+// showing 32 components of one fingertip of a hand. The viewer frames the
+// camera ONCE per model, on the first publish, on the box the descriptor
+// declares (`bbox`), which this order does not change. A descriptor without
+// one is framed on its first batch and again when the last component lands,
+// and this order keeps that first frame close to the final one. The
 // descriptor carries no component bounds, so the placement is the proxy.
 export function orderComponentsForProgressiveLoad(descriptor) {
   const entries = Object.entries(descriptor?.components || {});

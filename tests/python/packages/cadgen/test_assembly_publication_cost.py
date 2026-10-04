@@ -320,5 +320,85 @@ class ReferenceSceneTests(Fixture):
         self.assertEqual(results[0], results[1])
 
 
+class StoredTopologyTests(Fixture):
+    """The edge policy of an all-link parent reads each pinned component's topology from the
+    store by its BREP, decodes a prototype only for a component whose entry is missing, and
+    gives the classes the decoded prototypes give (``store.bounds.cached_component_topology``)."""
+
+    def project(self):
+        for name, geometry in (("box", "bd.Solid.make_box(2, 3, 4)"), ("curve", "bd.Solid.make_torus(7, 1)")):
+            (self.root / f"{name}.py").write_text(
+                f"from cadgen import step, build123d as bd\n@step\ndef {name}():\n    return {geometry}\n",
+                encoding="utf-8",
+            )
+        parent = self.root / "parent.py"
+        parent.write_text(
+            "from cadgen import step, build123d as bd\nfrom box import box\nfrom curve import curve\n"
+            "@step\ndef parent():\n"
+            "    return bd.Compound(children=[bd.Pos(5, 0, 0) * box(), bd.Pos(-5, 0, 0) * curve()], label='assembly')\n",
+            encoding="utf-8",
+        )
+        return parent
+
+    def test_the_edge_policy_reads_stored_topology_and_gives_the_decoded_classes(self):
+        import contextlib
+        import dataclasses
+        import io
+
+        from cadgen._internal import step_scene_mesh
+        from cadgen.cli._run_model import run_model_argv
+        from cadgen.store import bounds as stored
+        from cadgen.store.index import read_entry, write_entry
+        from cadgen.store.records import read_record, remove_record
+        from cadgen.store.trees import get_tree
+
+        parent = self.project()
+        output = io.StringIO()
+        with contextlib.redirect_stdout(output), contextlib.redirect_stderr(output):
+            for name in ("box", "curve"):
+                self.assertEqual(run_model_argv([str(self.root / f"{name}.py"), "--json"]), 0, output.getvalue())
+        original = step_scene_mesh._scene_mesh_resolution_hints
+        seen = []
+
+        def hints(scene):
+            result = original(scene)
+            decoded = getattr(scene.prototype_shapes, "decoded", None)
+            components = dict(scene.prototype_components)
+            # The same scene, every prototype decoded and measured.
+            measured = original(dataclasses.replace(scene, prototype_components={}))
+            seen.append((decoded, components, result, measured))
+            return result
+
+        trees = []
+
+        def build():
+            remove_record(parent)
+            stored.clear()  # this process's memory; the store's entries stay
+            with mock.patch.object(step_scene_mesh, "_scene_mesh_resolution_hints", side_effect=hints), \
+                    contextlib.redirect_stdout(output), contextlib.redirect_stderr(output):
+                self.assertEqual(run_model_argv([str(parent), "--json"]), 0, output.getvalue())
+            trees.append(read_record(parent)["tree"])
+
+        build()  # nothing stored yet: both components decoded and measured once
+        build()  # stored: nothing decoded
+        (codec, brep) = next(iter(seen[0][1].values()))
+        key = stored.bounds_key(stored.TOPOLOGY_ALGORITHM, (codec, brep))
+        self.assertIsNotNone(read_entry("bounds", key))
+        write_entry("bounds", key, {"value": {"faces": -1}})
+        build()  # a damaged entry is measured again
+        self.assertEqual([decoded for decoded, *_ in seen], [2, 0, 1])
+        for _decoded, _components, result, measured in seen:
+            self.assertEqual(result, measured)
+        self.assertEqual(len({json_key(result) for *_, result, _measured in seen}), 1)
+        self.assertEqual(len(set(trees)), 1)
+        self.assertIn("edgeRendering", get_tree(trees[0]))
+
+
+def json_key(value):
+    import json
+
+    return json.dumps(value, sort_keys=True)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -12,11 +12,12 @@ add_repo_path("packages/cadgen/src")
 from cadgen.snapshot_core import (
     CAMERA_OPTION_KEYS, DISPLAY_GROUP_KEYS, DISPLAY_MODES, DISPLAY_OPTION_KEYS,
     DISPLAY_SURFACE_STYLES, PART_COLOR_MODES, SnapshotError,
-    normalize_common_job, validate_camera_option,
+    load_display_option, normalize_common_job, validate_camera_option,
     validate_display_settings_values,
 )
 
 VIEW = repo_path("packages/core/src/common/viewSettings.js")
+SCENE = repo_path("packages/core/src/common/sceneSettings.js")
 CAMERA = repo_path("packages/core/src/common/camera.js")
 VALIDATOR = repo_path("packages/core/src/common/snapshotJobValidation.js")
 
@@ -25,6 +26,7 @@ def javascript(expression: str, payload=None):
     script = f"""
 import fs from "node:fs";
 import * as view from {json.dumps(VIEW.as_uri())};
+import * as scene from {json.dumps(SCENE.as_uri())};
 import {{ CAMERA_SPEC_KEYS, normalizeCameraSpec }} from {json.dumps(CAMERA.as_uri())};
 import {{ validateSnapshotRenderJob }} from {json.dumps(VALIDATOR.as_uri())};
 const cases = JSON.parse(fs.readFileSync(0, "utf8"));
@@ -77,6 +79,7 @@ class SharedDisplayContractParityTests(unittest.TestCase):
             {"lighting": {"quality": "final", "exposure": 5, "rotation": 180, "size": 3, "fill": 1}},
             {"background": {"opacity": 0.35}}, {"edges": {"visibility": "all", "color": "#fff"}},
             {"floor": {"placement": "lowest", "opacity": 1}},
+            {"floor": {"finish": "glossy"}}, {"floor": {"placement": "origin", "finish": "matte"}},
             {"clip": {"enabled": True, "axis": "y", "offset": 0.5, "offsets": {"x": 0, "y": 1}, "invert": False}},
             {"exploded": {"enabled": True, "amount": 1}},
         ]
@@ -93,6 +96,7 @@ class SharedDisplayContractParityTests(unittest.TestCase):
             {"lighting": {"quality": None}}, {"lighting": {"exposure": -5.01}},
             {"lighting": {"rotation": -180.1}}, {"lighting": {"size": 0.24}},
             {"lighting": {"fill": "0.5"}}, {"floor": {"placement": "auto"}},
+            {"floor": {"finish": "shiny"}}, {"floor": {"finish": True}},
             {"background": {"opacity": -0.1}}, {"background": {"color": "white"}},
             {"clip": {"axis": "w"}}, {"clip": {"offsets": {"w": 0.5}}},
             {"clip": {"offsets": None}}, {"exploded": {"amount": 1.01}},
@@ -111,6 +115,7 @@ class SharedDisplayContractParityTests(unittest.TestCase):
             {"mode": "solid", "lighting": {"exposure": 1}},
             {"mode": "render", "floor": {"enabled": False}, "background": {"opacity": 0.35}},
             {"mode": "render", "camera": {"projection": "orthographic"}, "grid": {"color": "#abc"}},
+            {"mode": "render", "floor": {"finish": "glossy"}},
         ]
         packets = [normalize_common_job({"input": "part.step", "outputs": [{"path": "out.png"}], "display": value},
                                       mode="view", resolved_cwd=Path("."), timestamp="parity")["display"] for value in cases]
@@ -124,6 +129,25 @@ class SharedDisplayContractParityTests(unittest.TestCase):
         self.assertEqual(0.35, actual[6]["background"]["opacity"])
         self.assertTrue(actual[7]["grid"]["enabled"])
         self.assertEqual("#aabbcc", actual[7]["grid"]["color"])
+        self.assertEqual("matte", actual[1]["floor"]["finish"])
+        self.assertEqual("glossy", actual[8]["floor"]["finish"])
+
+    def test_a_render_snapshot_stands_its_floor_where_the_viewer_does(self):
+        # `--display render` as the CLI reads it, with no floor placement given; then Model origin
+        # chosen; then a floor turned on by hand in Solid.
+        cases = [dict(load_display_option("render", cwd=Path("."))),
+                 {"mode": "render", "floor": {"placement": "origin"}},
+                 {"mode": "solid", "floor": {}}]
+        packets = [normalize_common_job({"input": "part.step", "outputs": [{"path": "out.png"}], "display": value},
+                                        mode="view", resolved_cwd=Path("."), timestamp="parity")["display"] for value in cases]
+        # Where the Viewer's Display puts the floor, whether it reads as Custom, and where the scene
+        # the snapshot's page renders (`resolveViewSceneSettings`) hands the studio its floor.
+        read = "cases.map(value => [view.resolveViewSettings(value).floor.placement, view.viewSettingsAreCustom(value), " \
+               "scene.resolveViewSceneSettings({ display: value }).render.configuration.backdrop.groundPlacement])"
+        viewer, snapshot = javascript(read, cases), javascript(read, packets)
+        self.assertEqual(viewer, snapshot)
+        self.assertEqual([["lowest", False, "lowest"], ["origin", True, "origin"]], snapshot[:2])
+        self.assertEqual("origin", snapshot[2][0])
 
     def test_public_camera_keys_match_the_shared_pose_fields(self):
         self.assertEqual(set(javascript('CAMERA_SPEC_KEYS.filter(key => !["projection", "focalLength"].includes(key))')), set(CAMERA_OPTION_KEYS))

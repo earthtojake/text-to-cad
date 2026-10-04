@@ -251,21 +251,11 @@ def reemit_step_document(
         payload["annotationHash"] = digest
         payload.pop("kinematics", None)
         if kinematics_def is not None:
-            import shutil
-
             from cadgen._internal.kinematics_resolve import resolve_kinematics_block
-            from cadgen.store.view import export_view
 
-            view_dir = export_view(tree)
-            try:
-                resolved, _ids = resolve_kinematics_block(
-                    kinematics_def.block,
-                    package_dir=view_dir,
-                    step_path=out,
-                    source_ref=_display(out),
-                )
-            finally:
-                shutil.rmtree(view_dir, ignore_errors=True)
+            resolved, _ids = resolve_kinematics_block(
+                kinematics_def.block, tree_hash=tree, source_ref=_display(out),
+            )
             payload["kinematics"] = resolved
         if read_record(out) != record or not _recorded_outputs_current(record, out):
             raise RuntimeError(f"{_display(out)} changed while its annotations were being resolved")

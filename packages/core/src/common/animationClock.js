@@ -271,3 +271,49 @@ export function shouldPublishAnimationFrame({ timeMs, publishedAtMs, publishCost
   }
   return (timeMs - publishedAtMs) >= animationFrameBudgetMs(publishCostMs);
 }
+
+// How many measured frames the budget reads. Saturation is a run of overrunning
+// frames, never one: a frame that misses a single vsync is a gap of two display
+// frames (33.3 ms at 60 Hz), just past SATURATED_ANIMATION_FRAME_MS, and pacing
+// on it held the routine still for two or three frames and then moved it four or
+// five at once. A model whose frames all overrun overruns in every one of the last few.
+export const ANIMATION_PACING_FRAMES = 3;
+
+/**
+ * The publish cost the budget reads: the least of the last ANIMATION_PACING_FRAMES
+ * measured, so one slow frame (a missed vsync, a collection, a heavier pass) is
+ * not saturation, and 0 (the floor) until that many have been measured.
+ */
+export function sustainedAnimationFrameCostMs(costsMs) {
+  const recent = (Array.isArray(costsMs) ? costsMs : []).slice(-ANIMATION_PACING_FRAMES).map(Number);
+  if (recent.length < ANIMATION_PACING_FRAMES || !recent.every(Number.isFinite)) {
+    return 0;
+  }
+  return Math.min(...recent);
+}
+
+/**
+ * The pacing of one playback: which animation-frame callbacks publish a frame.
+ * Ask `shouldPublish(timeMs)` on every callback (it also measures the frame
+ * published before it: the gap to this callback, which includes that frame's
+ * render) and call `published(timeMs)` when the callback publishes.
+ */
+export function createAnimationFramePacer() {
+  const costsMs = [];
+  let publishedAtMs = NaN;
+  let measuring = false;
+  return {
+    shouldPublish(timeMs) {
+      if (measuring) {
+        costsMs.push(timeMs - publishedAtMs);
+        if (costsMs.length > ANIMATION_PACING_FRAMES) costsMs.shift();
+        measuring = false;
+      }
+      return shouldPublishAnimationFrame({ timeMs, publishedAtMs, publishCostMs: sustainedAnimationFrameCostMs(costsMs) });
+    },
+    published(timeMs) {
+      publishedAtMs = timeMs;
+      measuring = true;
+    }
+  };
+}

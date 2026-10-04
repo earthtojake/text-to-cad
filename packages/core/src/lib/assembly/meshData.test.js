@@ -751,6 +751,45 @@ test("composed package mesh records missing components instead of throwing", () 
   assert.deepEqual(composed.missingComponentIds, ["cMissing"]);
 });
 
+// assembly.json declares the whole model's box before any component has loaded (`bbox`: cadgen
+// measures it on the exact B-rep, every occurrence placed, in world millimetres). A composition of
+// only some of the components carries it, so the viewer can frame the whole model on its first
+// publish; `bounds` stays the box of what has loaded.
+test("a partial composition carries the box the descriptor declares, and bounds stay what has loaded", () => {
+  const placed = [1, 0, 0, 30, 0, 1, 0, 25, 0, 0, 1, 10, 0, 0, 0, 1];
+  const descriptor = {
+    units: "mm",
+    bbox: { min: [-5, -2, 0], max: [40, 30, 12] },
+    occurrences: [
+      { id: "o1.1", name: "present", component: "cA", transform: IDENTITY_4X4 },
+      { id: "o1.2", name: "absent", component: "cMissing", transform: placed }
+    ],
+    assembly: { root: { id: "o1", name: "demo", nodeType: "assembly", children: [
+      { id: "o1.1", name: "present", nodeType: "part", children: [] },
+      { id: "o1.2", name: "absent", nodeType: "part", children: [] }
+    ] } }
+  };
+  const loaded = { min: [0, 0, 0], max: [1, 1, 0] };
+  const partial = buildComposedPackageMeshData(descriptor, { cA: unitTriangleComponentMeshData() });
+  assert.deepEqual(partial.missingComponentIds, ["cMissing"]);
+  assert.deepEqual(partial.declaredBounds, { min: [-5, -2, 0], max: [40, 30, 12] });
+  assert.deepEqual(partial.bounds, loaded, "bounds are what has loaded, as before");
+  const next = buildComposedPackageMeshData(descriptor, { cA: unitTriangleComponentMeshData() }, { previous: partial });
+  assert.equal(next.declaredBounds, partial.declaredBounds, "the next publish keeps the very same box");
+  assert.deepEqual(buildComposedPackageMeshData({ ...descriptor, units: undefined }, { cA: unitTriangleComponentMeshData() }).declaredBounds,
+    descriptor.bbox, "no units is cadgen's millimetres");
+
+  for (const malformed of [
+    { bbox: undefined }, { bbox: null }, { bbox: { min: [0, 0], max: [1, 1, 1] } },
+    { bbox: { min: [0, 0, Number.NaN], max: [1, 1, 1] } }, { bbox: { min: [0, 0, 0], max: [1, Infinity, 1] } },
+    { bbox: { min: [0, 0, "0"], max: [1, 1, 1] } }, { bbox: { min: [2, 0, 0], max: [1, 1, 1] } }, { units: "in" }
+  ]) {
+    const composed = buildComposedPackageMeshData({ ...descriptor, ...malformed }, { cA: unitTriangleComponentMeshData() });
+    assert.equal(composed.declaredBounds, null, `${JSON.stringify(Object.keys(malformed))}: ${String(malformed.bbox && Object.values(malformed.bbox))}`);
+    assert.deepEqual(composed.bounds, loaded);
+  }
+});
+
 test("single-component part carries NO assemblyRoot so the viewer renders a topology tree", () => {
   // entryKind:"part" is a single-component package: the viewer must render it like a monolithic
   // STEP part (topology tree of solids/faces/edges), NOT a one-node assembly wrapper. Returning a

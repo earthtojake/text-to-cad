@@ -61,7 +61,7 @@ Projection remains editable in every preset, including orthographic Render.
 | Edges | Visible/all, color | No CAD edges |
 | Lighting | Quality, exposure, rotation, softbox size, fill | Neutral CAD lighting/reflections |
 | Background | Color and opacity | Natural light/dark workbench background |
-| Floor | Origin/lowest point, color and opacity | No floor |
+| Floor | Lowest point/model origin, Matte/Glossy finish, color and opacity | No floor |
 | Grid | Color and opacity | No grid |
 | Axes | Color and opacity (same default color as Grid) | No origin axes |
 
@@ -77,10 +77,10 @@ pickers include opacity, with an opaque checkerboard behind the color swatch:
 0% is transparent, 100% opaque. The background's fractional alpha reaches the
 actual canvas and PNG, not just the preview.
 
-The Display popover's first section, **Display**, holds Mode, the host's
+Display's first section, **Display**, holds Mode, the host's
 Appearance and Projection; **Surfaces** follows; both are always open. Grid and
 Axes are one gated section, **Grid / Axes**, over two independent groups. The
-popover order is Display, Surfaces, Edges, Grid / Axes, Lighting, Background,
+panel's order is Display, Surfaces, Edges, Grid / Axes, Lighting, Background,
 Floor. Preset changes never reorder controls. Clip and Explode are not Display
 sections: they are STEP toolbar tools with their own panels, and their settings
 live in this same store (`clip`, `exploded`). A tool opens neutral — Explode at
@@ -103,7 +103,7 @@ framing and snapshots, but is not a routine viewer control.
   "camera": { "projection": "orthographic" },
   "lighting": { "enabled": false },
   "background": { "color": "#ffffff", "opacity": 0.4 },
-  "floor": { "placement": "origin", "color": "#dddddd", "opacity": 0.8 }
+  "floor": { "placement": "origin", "color": "#dddddd", "opacity": 0.8, "finish": "glossy" }
 }
 ```
 
@@ -136,9 +136,9 @@ them as public display values.
 
 The photographic rig stays lazy. Enabling Lighting creates the photographic
 softbox environment; Floor or Background alone retain neutral lighting and do
-not create a photographic environment. Material information remains read-only
-and is shown in the Model reference section. Color overrides are presentation
-settings, not edits to the model or its material assignments.
+not create a photographic environment. Authored materials are read-only. Color
+overrides are presentation settings, not edits to the model or its material
+assignments.
 
 | Lighting quality | Screen error | Shadow map | Environment | Capture scale |
 | --- | --- | --- | --- | --- |
@@ -148,7 +148,9 @@ settings, not edits to the model or its material assignments.
 The interactive viewer retains one WebGL renderer, canvas and camera controls
 across every preset and settings edit. It uses shadow-compatible conventional
 depth throughout, fitting near/far planes to the current model, closeup records
-and floor/grid planes on every frame. The grid's bounds also fit the far plane;
+and floor/grid planes on every frame; a perspective near plane stays at or beyond
+1/256 of the orbit pivot's depth, so a closeup never trades depth resolution for
+a near plane at the eye. The grid's bounds also fit the far plane;
 it remains visible when Floor is off. Grid spacing is five cells across the
 default model framing. The grid, the stage and the Render studio's floor are
 SIZED from the model's rest placement for every renderer, STEP included: a pose, a
@@ -163,24 +165,67 @@ enabled cut stays live. Explicit neutral boundaries
 still avoid unnecessary caps. See [responsive View updates](view-updates.md)
 for scheduling, resource caching, loading presentation and capture readiness.
 
-Floor defaults to model origin (Z=0), 60% opacity, with Lowest point available.
-Its double-sided shadow-receiving surface uses its actual elevation during
+Render's floor stands at the model's lowest point, at 60% opacity; Model origin (the
+document's Z=0 plane) is a choice away and reads as Custom, as Glossy does. A floor
+turned on in another preset starts at model origin. A snapshot's Render floor stands
+where the viewer's does: both resolve it from the same preset (`RENDER_FLOOR_PLACEMENT`).
+While Render's lighting is on it carries a studio's soft grounding shadow, as deep
+as the floor is opaque: darkest where the model touches it, the key light's cast
+shadow softening and fading away from the model. The viewer re-renders its
+shadows, and re-bakes this one, only for a change that can alter them: never
+while the camera alone moves, and never for a hover, a selection or any other
+highlight, which leave every part casting as it did (a highlighted part keeps
+its shadow). While a routine plays or a pose is dragged, the key's cast shadow on the
+floor follows every frame and the contact darkening under the model at most every
+100 ms; once the model stops, both are baked for its final pose. A floor at zero
+opacity bakes nothing, and a viewer that renders in software, whose key casts no
+shadow, draws no floor shadow.
+Its finish is Matte, or Glossy: a glossier floor that also reflects the model, crisp
+where the model meets it and softening and fading over the model's height, as a
+polished studio floor shows a product, in either appearance. The reflection is a
+second draw of the scene at half the canvas's resolution, before each frame the camera
+or the model moved in (about 4 ms of render CPU a frame on a large assembly); a hover
+or selection keeps the last one and catches up within 400 ms. A Matte floor allocates
+none of it and draws nothing extra, and switching back to Matte releases it. With
+Render's lighting off, or in software, a glossy floor reflects nothing.
+Its double-sided surface uses its actual elevation during
 camera depth fitting, avoiding the origin-placement near-plane gap. Its color
 and opacity are independent of Background.
 Light Render defaults to a pure white background and retains the slightly gray
 floor (`#e7e7e5`); explicit background colors still override the preset.
 External STEP pose and animation passes publish current placed bounds before
-drawing. Depth and lighting follow moving parts without changing camera framing
-or the floor's footprint.
+drawing, and so does the exploded view wherever it comes to rest (a slider move,
+the end of its ease) and at most every 100 ms while it eases in or out. Depth and
+lighting follow moving parts without changing camera framing or the floor's
+footprint.
 
-All presets share surface-under-cursor zoom, zero-pose framing and the 1.1 fit
-padding multiplier. Preset changes do not refit. Motion changes geometry, not
-what 100% means. A changed camera clears current screen-space drawings; camera
-state republished unchanged after a runtime replacement does not.
+All presets share surface-under-cursor zoom, zero-pose framing and the fit
+padding: 1.1 across, and 1.1 down on a square or narrower viewport, easing to
+1.25 at 16:9 and wider (`interactiveFitPadding`), so a wide view leaves room
+above and below the model. Preset changes do not refit, and neither does a
+rebuild of the open file. Motion changes geometry, not what 100% means. A
+changed camera clears current screen-space drawings; camera state republished
+unchanged after a runtime replacement does not.
 
 ## Where the controls live
 
-Display settings are a popover from its button among the view's controls in the
-navbar's right end, present for every 3D file, never a sidebar panel. A file's own Settings panel holds its model tree and Position
-(see [settings-ui.md](./settings-ui.md#sidebars-and-mobile)); nothing in it is a
-display setting.
+Display settings are a dropdown from the Display button in the navbar's right end
+(the perspective box, between Settings and Preview: `kit/shell/DisplayPopover.jsx`),
+present for every 3D file, never a panel of the tool stack or a sidebar panel. A
+file's model tree, its Reference and Position are panels of the tool stack (see
+[settings-ui.md](./settings-ui.md#the-tool-stack)); nothing in them is a display
+setting.
+
+Display and Preview, the view's controls in the navbar, are offered by a 3D view
+alone, as its renderer declares to the shell (`useRendererShell`'s `previewable`):
+
+| Renderer | Files | Display and Preview |
+| --- | --- | --- |
+| `step` | STEP, STP | Yes |
+| `glb` | GLB | Yes |
+| `mesh` | STL, 3MF | Yes |
+| `robot` | URDF, SRDF, SDF | Yes |
+| `dxf` | DXF | No: a 2D drawing, on a surface of its own, without the shell |
+
+A view without them has no Display or Preview control, not a disabled one, and a
+request for Preview leaves its normal view as it is.

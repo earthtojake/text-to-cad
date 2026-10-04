@@ -9,11 +9,11 @@ import { normalizeToolStack } from '../renderers/kit/tools/toolStackLayout.js';
  *
  * `settings` is tab-wide — the file tree's width and expansion (by root), the tool stack's
  * layout, the appearance and how the home lays out its library — and replaces every global
- * preference. `files` is each opened
- * file's view (`kit/shell/fileView.js`: its camera, its Display settings, its playback, its
- * renderer's own slices) under `[root id, file path, renderer id]`, the
- * fifty most recently written of them: a write puts a file last, and the first goes once there
- * are more than that.
+ * preference. `files` is the view of the file on screen (`kit/shell/fileView.js`: its camera,
+ * its Display settings, its playback, its renderer's own slices) under `[root id, file path,
+ * renderer id]`, and nothing else: a write puts a file last and drops any other
+ * (`TAB_FILE_LIMIT`), and a host leaving a file drops its view (`files.retain`, which
+ * `CadViewer` calls), so a reload brings back the file on screen and a file left starts over.
  *
  * This module is the record's one definition: its shape, its version and its normalization.
  * Reading is forgiving — a record another version wrote is the defaults, a field that is not
@@ -22,7 +22,8 @@ import { normalizeToolStack } from '../renderers/kit/tools/toolStackLayout.js';
  * hands the shell. Nothing here touches storage: a host supplies that (`tabStore.ts`).
  */
 export const TAB_RECORD_VERSION = 1;
-export const TAB_FILE_LIMIT = 50;
+/** One: a tab shows one file, and only the file on screen keeps its view. */
+export const TAB_FILE_LIMIT = 1;
 
 export type Appearance = 'system' | 'light' | 'dark';
 /** How the home lays out its models: a grid of cards, or a list of rows. */

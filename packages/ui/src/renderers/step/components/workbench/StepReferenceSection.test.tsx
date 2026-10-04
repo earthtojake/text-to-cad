@@ -24,13 +24,13 @@ function browse(name:string){
  fireEvent.click(screen.getByRole('option',{name,exact:true}));
 }
 
-it('shows arc dimensions and analytic center coordinates without disclosures or actions',()=>{
+// What the panel's rows say, label then value, in order.
+const rows=()=>[...document.querySelectorAll('[data-info-row]')].map(row=>row.textContent);
+
+it('an edge shows its key measurements alone: an arc\'s diameter, radius, arc length and sweep, without disclosures or actions',()=>{
  const {container}=render(<StepReferenceSection references={[arc]}/>);
- expect(screen.getByText('Diameter Ø')).toBeTruthy();
- expect(screen.getByText('Sweep angle')).toBeTruthy();
- expect(screen.getByText('90 °')).toBeTruthy();
- const center=screen.getByText('Center').parentElement!;
- expect(within(center).getAllByText('0')).toHaveLength(3);
+ expect(rows()).toEqual(['Diameter Ø10 mm','Radius R5 mm','Arc length7.85 mm','Sweep angle90 °']);
+ expect(screen.queryByText('Center')).toBeNull();
  expect(container.querySelector('details')).toBeNull();
  expect(screen.queryByRole('button')).toBeNull();
  expect(screen.queryByRole('combobox')).toBeNull();
@@ -45,18 +45,19 @@ it('browses individual selected edges from the heading, and shows only the brows
  browse('o1 · edge 0');
  expect(screen.getByText('3 mm')).toBeTruthy();expect(screen.queryByText('4 mm')).toBeNull();
  expect(picker()).toEqual(['o1 · edge 0','1/2']);
- expect(screen.getByText('o1.e0')).toBeTruthy();
+ expect(screen.queryByText('o1.e0')).toBeNull();
  expect(screen.queryByRole('button',{name:'Previous element'})).toBeNull();
 });
 
-it('updates always-visible coordinates and normal when the selected reference changes',()=>{
+it('a face shows its area, and a round one its radii: nothing of its kind, id, place or part beyond what its heading names',()=>{
  const {rerender}=render(<StepReferenceSection references={[arc]}/>);
- const face={id:'o1.f2',normalizedSelector:'o1.f2',selectorType:'face',pickData:{surfaceType:'plane',center:[2,4,6],normal:[0,0,1],sourceName:'Camera'}};
+ const face={id:'o1.f2',normalizedSelector:'o1.f2',selectorType:'face',pickData:{surfaceType:'plane',area:662.734,center:[2,4,6],normal:[0,0,1],sourceName:'Camera',bbox:{min:[0,0,0],max:[40,20,0]}}};
  rerender(<StepReferenceSection references={[face]}/>);
- expect(screen.getByText('Center').closest('details')).toBeNull();
- expect(screen.getByText('Normal')).toBeTruthy();
- expect(screen.getByText('Camera')).toBeTruthy();
- expect(screen.getByText('Face · Planar')).toBeTruthy();
+ expect(heading()).toBe('Camera · face 2');
+ expect(rows()).toEqual(['Area662.73 mm²']);
+ for (const gone of ['Type','Face · Planar','ID','o1.f2','Center','Normal','Size','Component']) expect(screen.queryByText(gone),gone).toBeNull();
+ rerender(<StepReferenceSection references={[{...face,pickData:{...face.pickData,surfaceType:'cylinder',area:94.25,params:{radius:3}}}]}/>);
+ expect(rows()).toEqual(['Diameter Ø6 mm','Radius R3 mm','Area94.25 mm²']);
 });
 
 it('heads several references with a picker naming the browsed one, and switches to the newest only when the selection changes',()=>{
@@ -68,13 +69,14 @@ it('heads several references with a picker naming the browsed one, and switches 
  // The picker is the heading: the name and id it shows are not repeated as rows.
  expect(within(screen.getByRole('heading')).getByRole('combobox')).toBeTruthy();
  expect(picker()).toEqual([name,'2/2']);
- // The id is not the name: it is the ID row, what a copy carries.
- expect(screen.getByText(selector)).toBeTruthy();
+ // The id is not the name, and no row: what a copy carries is the panel's Copy.
+ expect(screen.queryByText(selector)).toBeNull();
  expect(screen.queryByText('Name')).toBeNull();
  expect(screen.queryByText(/Selection ·|references/)).toBeNull();
- expect(screen.getByText('Subassembly')).toBeTruthy();
- expect(screen.getByText('Parts')).toBeTruthy();
- expect(screen.getByText('Center')).toBeTruthy();
+ // A subassembly's key measurements: its parts, its size.
+ expect(rows()).toEqual(['Parts2','Size10 × 20 × 30 mm']);
+ expect(screen.queryByText('Subassembly')).toBeNull();
+ expect(screen.queryByText('Center')).toBeNull();
  expect(screen.queryByRole('button',{name:'Copy reference'})).toBeNull();
  browse('Base');
  expect(picker()).toEqual(['Base','1/2']);
@@ -100,42 +102,25 @@ it('shows the browsed part\'s own Volume, never a total over the selection',()=>
  expect(screen.queryByText('2,000 mm³')).toBeNull();
 });
 
-it('heads a single component with its name and canonical path, as a label, and keeps its rows compact',()=>{
- render(<StepReferenceSection references={[{id:'o1.8',nodeType:'part',name:'Camera',leafPartIds:['o1.8'],children:[]}]}/>);
+it('heads a single component with its name, over its size alone: no id, type, centre or material rows',()=>{
+ const meshData={parts:[{occurrenceId:'o1.8',sourceColor:'#778899'}]};
+ render(<StepReferenceSection references={[{id:'o1.8',nodeType:'part',name:'Camera',leafPartIds:['o1.8'],children:[],bbox:{min:[0,0,0],max:[40,29,10]}}]} meshData={meshData}/>);
  expect(heading()).toBe('Camera');
- expect(screen.getByText('o1.8')).toBeTruthy();
- expect(screen.getByText('Component')).toBeTruthy();
+ expect(rows()).toEqual(['Size40 × 29 × 10 mm']);
+ for (const gone of ['o1.8','Component','Center','Material','Color','#778899']) expect(screen.queryByText(gone),gone).toBeNull();
  expect(screen.queryByRole('button')).toBeNull();
  expect(screen.queryByRole('combobox')).toBeNull();
  expect(screen.queryByText('Details')).toBeNull();
 });
 
-it('shows read-only authored material without turning source color into a material name',()=>{
- const face={id:'o1.2.f4',normalizedSelector:'o1.2.f4',selectorType:'face',pickData:{surfaceType:'plane'}};
- const meshData={parts:[{occurrenceId:'o1.2',sourceColor:'#778899'}]};
- const sourceAppearance={materials:{steel:{name:'Brushed steel',roughness:0.25,metalness:1}},assignments:{'o1.2':'steel'}};
- render(<StepReferenceSection references={[face]} meshData={meshData} sourceAppearance={sourceAppearance}/>);
- const material=screen.getByRole('generic',{name:'Source material'});
- expect(within(material).getByText('Brushed steel')).toBeTruthy();
- expect(within(material).getByText('#778899')).toBeTruthy();
- expect(within(material).getByText('Roughness')).toBeTruthy();
- expect(within(material).getByText('25%')).toBeTruthy();
- expect(within(material).getByText('Metalness')).toBeTruthy();
- expect(within(material).getByText('100%')).toBeTruthy();
- expect(within(material).queryByText('Steel')).toBeNull();
- expect(within(material).queryByRole('button')).toBeNull();
-});
-
-it('material details follow the reference being browsed within a multi-selection',()=>{
- const references=['o1','o2'].map(id=>({id:`${id}.f1`,normalizedSelector:`${id}.f1`,selectorType:'face',pickData:{surfaceType:'plane'}}));
- const meshData={parts:[{occurrenceId:'o1',sourceColor:'#778899'},{occurrenceId:'o2',sourceColor:'#222222'}]};
- const sourceAppearance={materials:{steel:{name:'Steel'},rubber:{name:'Rubber'}},assignments:{o1:'steel',o2:'rubber'}};
- render(<StepReferenceSection references={references} meshData={meshData} sourceAppearance={sourceAppearance}/>);
- const material=screen.getByRole('generic',{name:'Source material'});
- expect(within(material).getByText('Rubber')).toBeTruthy();
- browse('o1 · face 1');
- expect(within(material).getByText('Steel')).toBeTruthy();
- expect(within(material).queryByText('Rubber')).toBeNull();
+it('a part browsed among several shows its own size, never the selection\'s',()=>{
+ const part=(id:string)=>({id,nodeType:'part',name:id,leafPartIds:[id],children:[]});
+ const sizes:Record<string,number[]>={a:[10,10,10],b:[40,20,5]};
+ const partsSize=(ids:string[])=>ids.length===1 ? sizes[ids[0]] : null;
+ render(<StepReferenceSection references={[part('a'),part('b')]} measurements={{size:[50,30,10]}} partsSize={partsSize}/>);
+ expect(rows()).toEqual(['Size40 × 20 × 5 mm']);
+ browse('a');
+ expect(rows()).toEqual(['Size10 × 10 × 10 mm']);
 });
 
 it('retains bounding measurements as read-only facts when only part geometry is available',()=>{
@@ -153,7 +138,8 @@ it('names a face or edge by its own label, else by its part and kind, never by i
  expect(heading()).toBe('base · face 3');
  rerender(<StepReferenceSection references={[{id:'topology|o1.1|edge|o1.1.e4',normalizedSelector:'o1.1.e4',selectorType:'edge',occurrenceId:'o1.1',pickData:{curveType:'line',length:2}}]} meshData={meshData}/>);
  expect(heading()).toBe('base · edge 4');
- expect(screen.getByText('o1.1.e4')).toBeTruthy();
+ expect(rows()).toEqual(['Length2 mm']);
+ expect(screen.queryByText('o1.1.e4')).toBeNull();
 });
 
 it('never heads a reference with an XCAF label entry: a single-part file names its part after the file',()=>{

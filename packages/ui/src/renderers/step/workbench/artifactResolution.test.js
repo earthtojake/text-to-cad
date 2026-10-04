@@ -8,6 +8,7 @@ import {
   ARTIFACT_ACTION_READY,
   artifactActionFor,
   artifactAdvisoryFor,
+  artifactFreshnessKey,
   reconcileArtifactRun
 } from "./artifactResolution.js";
 
@@ -85,4 +86,17 @@ test("advisory flag: busy only (the stale advisory died with content keying)", (
   );
   // Truthy non-boolean values do not count: the flag is written as a boolean.
   assert.equal(artifactAdvisoryFor({ state: "compiled", busy: "yes" }), null);
+});
+
+test("the status is asked again for the file's tree, its document and a catalog read again, nothing else", () => {
+  const entry = { file: "car.step", hash: "tree-1", documentHash: "document-1" };
+  const key = artifactFreshnessKey(entry, { revision: 4, entries: [entry] });
+  // Another file written, or the catalog merely read again, moves its revision and nothing here.
+  assert.equal(artifactFreshnessKey({ ...entry }, { revision: 9, entries: [entry, { file: "zz.step" }] }), key);
+  assert.notEqual(artifactFreshnessKey({ ...entry, hash: "" }, { revision: 4 }), key);
+  assert.notEqual(artifactFreshnessKey({ ...entry, documentHash: "document-2" }, { revision: 4 }), key);
+  // A status read that failed while the server was away is retried once the catalog is back.
+  const away = artifactFreshnessKey(entry, { revision: 5, error: "connection refused" });
+  assert.notEqual(away, key);
+  assert.equal(artifactFreshnessKey(entry, { revision: 6, error: "" }), key);
 });

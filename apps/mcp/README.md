@@ -73,7 +73,10 @@ reference host `basic-host` does.
   shared `ConsentCard` from `@text-to-cad/ui/consent`, the viewer's `notice`: top-right
   once a model is on screen, Quick Edit under it, never on the home; the browser
   viewer asks the same way, and one answer counts for both), and nothing is sent before a yes; Settings' Analytics
-  section (`appSettings`) changes the answer later. A plugin directory's install
+  section (`appSettings`) changes the answer later. Settings' Features (Quick edit, on until
+  the person turns it off) is read and changed the same way, through `cad_features`, and kept
+  beside the analytics answer (`cadgen/features.py`): one choice for the sidebar, every
+  thread's tab, every inline card and the browser viewer. A plugin directory's install
   (`cadgen mcp --install store`, stamped by `scripts/release/plugin_zip.py`) is
   only reported as such. The agent's `cad_analytics` reports the setting and
   turns it off, never on.
@@ -109,6 +112,20 @@ reference host `basic-host` does.
   that sends each request as a `cad_http` tool call against the placeholder
   origin `http://cad.invalid`; the server hands it to the viewer's own router.
   The fetch is a distinct function, so workers are handed bytes rather than URLs.
+- **No reply a host cannot read.** A reply is one JSON-RPC message, its body
+  base64 (4/3 of its size), and a host that caps one message closes the
+  connection past the cap, ending the server and every view on it: the MCP
+  TypeScript SDK's stdio reader caps it at 10 MiB unless a host sets more
+  (Claude Code 16 MiB, Claude Desktop 32 MiB). So no `cad_http` reply carries
+  more than 4 MiB of body (`TUNNEL_REPLY_MAX_BYTES`), a message under 5.6 MB,
+  for any model: the client asks for batched reads of at most that (the web
+  client asks for 32 MiB), every GET asks for its first 4 MiB as a byte range,
+  and a longer body comes back a range at a time, which the tunnel puts together
+  for the client. A part of a body that changed meanwhile (its `etag`) fails the
+  read, and the cache verifies a tessellation's digest of the whole as of any
+  body. The server refuses any reply still longer (502), and an agent's
+  screenshot longer than that, rather than send it. 4 MiB loads as fast as 8 MiB
+  did.
 - **One file.** The build inlines scripts, styles, workers (as blobs) and the
   drawing editor's fonts (as data URIs) into `dist/index.html`, and fails if
   anything would be left outside it: the host serves one resource and nothing
@@ -140,7 +157,7 @@ reference host `basic-host` does.
 | --- | --- |
 | `bridge.ts` | JSON-RPC 2.0 over `postMessage`: requests, the opening tool's result, host context, teardown |
 | `server.ts` | typed calls to the server's tools, `cad_reveal` among them: the file menu's Reveal, in the desktop's file manager (the server is on the person's machine) |
-| `tunnel.ts` | the `fetch` over `cad_http` |
+| `tunnel.ts` | the `fetch` over `cad_http`, a long body a range at a time |
 | `files.ts` | a filesystem's read-only `FileSource`: the file on screen, never listed, whose copied references name files by absolute path (a project's is `@text-to-cad/ui/catalog`'s, as the web Viewer's is) |
 | `prompt.ts` | Quick Edit's chat: `chatReach`, what the host's chat takes, and the prompt port over it — Queue through `ui/update-model-context` (a text block titled `Quick edit · <file>` and the sketch's image block, kept until the host clears its model context), Send through `ui/message` — with references as absolute paths (Copy Prompt spells them as copied references are) |
 | `live.ts`, `sync.ts` | the mounted view's live controller (`@text-to-cad/ui/host`'s registry), and its sync (`cad_sync`), every second: its state for the agent, the agent's requests (`show`, `capture`), the catalog's revision and its build feeds |
@@ -150,12 +167,16 @@ reference host `basic-host` does.
 the one the web Viewer shows) over one launch's root, with this host's ports — its
 tunnel (which also carries a copied prompt's sketch to the server: `attachments`), its
 chat, its file menu (copy path, copy relative path under a project,
-Reveal through `cad_reveal`), the navbar's links (Feedback's and an alert's Report Issue's
-new issue among them), followed through `ui/open-link`,
+Reveal through `cad_reveal`), the navbar's and Settings' links (Settings' Feedback and an
+alert's Report Issue open a new issue), followed through `ui/open-link`,
 and, on the sidebar, its library, with Open: the desktop's file chooser, where any file can be chosen.
 With no model there it is the home, and a model opened from it has the navbar's back
-arrow to it. `App.tsx` frames it (full page, or an inline card with its
-full-size button). In a tab, preview's playbar sits on the line of Codex's
+arrow to it. A view keeps its tab record in memory (`App.tsx`): the model on screen keeps
+its view — camera, Display settings, pose — through updates of it, and leaving it for
+another model, for the home or for another root drops it, as in the web Viewer. A view the
+host creates again (its frame re-created) starts afresh: nothing names a view across its
+frames, so there is nothing to keep its record under. `App.tsx` frames it (full page, or
+an inline card with its full-size button). In a tab, preview's playbar sits on the line of Codex's
 composer, which floats over the page (`--cad-viewport-bottom-center`), and the
 home's and the explorer's lists scroll clear of it (`--cad-host-bottom-inset`).
 

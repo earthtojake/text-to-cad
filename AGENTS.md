@@ -210,7 +210,7 @@ when touching shared surfaces or before handoff:
 - Focused runners: `scripts/test/test-js.sh`, `scripts/test/test-docs.sh`,
   `scripts/test/test-python.sh`, `scripts/test/test-global.sh`.
   `test-python.sh` takes `--select cadgen|viewer|skills|all` and
-  `--print-weights`; `test-js.sh` takes `--select core|ui|web|codex|all`. See
+  `--print-weights`; `test-js.sh` takes `--select core|ui|web|mcp|all`. See
   `scripts/README.md`.
 - In GitHub Actions, `test.yml` runs one conditional job per concern. The graph,
   stable required check names and workspace install recipes are in

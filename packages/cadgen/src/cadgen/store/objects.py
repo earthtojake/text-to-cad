@@ -6,10 +6,18 @@ observe a partial object. Explicit recovery can replace bytes that no longer
 match their address; a valid existing object is never rewritten.
 
 A write that finds its bytes already present is a REUSE, and a reuse claims
-the object: its mtime becomes now (:func:`claim_object`). The sweeper keeps
-anything claimed within its grace window and deletes only by rename, then
-recheck (:func:`delete_unclaimed`), so an object a publish has claimed is
-never deleted under it (STORE.md §8).
+the object: its mtime becomes now, less two ticks of its filesystem's clock
+(:func:`claim_object`). The sweeper keeps anything claimed within its grace
+window and deletes only by rename, then recheck (:func:`delete_unclaimed`), so
+an object a publish has claimed is never deleted under it (STORE.md §8).
+
+This process also remembers the file identity -- device, inode, size, mtime,
+ctime -- under which it last hashed each object's bytes to their address
+(:func:`verified_stamp`), once that identity is settled: read far enough past
+the write it observed that a later write must stamp a different mtime
+(:func:`_stamp_is_settled`, STORE.md §10). A claim is the one write this
+process makes to an object it has verified, so a claim carries the identity
+forward instead of invalidating it (STORE.md §8).
 """
 
 from __future__ import annotations
@@ -18,7 +26,9 @@ import contextlib
 import hashlib
 import os
 import shutil
+import threading
 import time
+from collections import OrderedDict
 from pathlib import Path
 from typing import Iterator
 
@@ -90,35 +100,176 @@ def _replace_object(tmp: Path, target: Path, digest: str, *, repair: bool) -> No
             tmp.unlink(missing_ok=True)
 
 
+# --- file identity ------------------------------------------------------------
+
+_STAMP_MTIME_NS = 4
+# A clock that ticks every T ns can only stamp multiples of T, so an observed
+# stamp's trailing zeros bound the resolution that produced it from below.
+# Coarsest first: a stamp is attributed to the coarsest clock that could have
+# produced it, because over-estimating the tick costs one cache miss while
+# under-estimating certifies a read a later write can still reproduce. FAT's
+# 2 s write time divides by 1 s, so it needs an entry of its own -- read as a
+# 1 s clock it would admit a rewrite in the back half of its own tick.
+_TIMESTAMP_TICKS_NS = (2_000_000_000, 1_000_000_000)
+# Nanosecond digits do not prove a nanosecond clock. Linux before 6.13 stamps a
+# write with the time its timer interrupt last recorded (every 10 ms at 100 Hz)
+# and Windows with a ~15.6 ms one, each keeping all the digits of that time, so
+# no stamp settles before the slower of them has ticked twice.
+_TIMESTAMP_FLOOR_NS = 2 * 15_625_000
+
+
+def _stamp(key: str, path: Path) -> tuple:
+    """A file's fingerprint: ``key``, then its device, inode, size, mtime (at
+    ``_STAMP_MTIME_NS``) and ctime. Raises OSError when there is no file."""
+    stat = path.stat()
+    return (key, stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns)
+
+
+def _timestamp_resolution_ns(mtime_ns: int) -> int:
+    """How coarsely the filesystem that produced ``mtime_ns`` may stamp a write."""
+    for tick in _TIMESTAMP_TICKS_NS:
+        if mtime_ns % tick == 0:
+            return tick
+    return _TIMESTAMP_FLOOR_NS
+
+
+def _stamp_is_settled(stamp: tuple) -> bool:
+    """True when a write made from here on cannot reproduce ``stamp``.
+
+    The read happened at least one timestamp tick after the write it observed,
+    so any later write lands in a tick the fingerprint does not already hold.
+    Every clock leaves a short window -- a few interrupt ticks, or a whole
+    coarse tick, or longer when the clock ran backwards -- in which the bytes
+    may still change silently, and nothing read in it is remembered.
+    """
+    mtime_ns = stamp[_STAMP_MTIME_NS]
+    return time.time_ns() - mtime_ns >= _timestamp_resolution_ns(mtime_ns)
+
+
+# The settled identity under which this process last verified each object's
+# bytes against its address, by path. A reader that finds an object still at
+# this identity holds the bytes it hashed (STORE.md §10); the tree captures
+# (``cadgen.store.trees``) read through it and fill it. Bounded, oldest first:
+# a forgotten identity costs one read.
+_VERIFIED_CAPACITY = 1 << 16
+_VERIFIED: OrderedDict[str, tuple] = OrderedDict()
+_VERIFIED_LOCK = threading.Lock()
+
+
+def verified_stamp(path: str) -> tuple | None:
+    """The settled fingerprint (:func:`_stamp`) this process verified ``path``
+    under, or None."""
+    return _VERIFIED.get(path)
+
+
+def remember_verified(stamp: tuple) -> None:
+    """Keep ``stamp`` -- taken on both sides of a read whose bytes hashed to the
+    object's address -- as the identity ``path`` is verified under. A stamp that
+    is not settled yet is not kept: a write landing in its tick would be invisible."""
+    if not _stamp_is_settled(stamp):
+        return
+    with _VERIFIED_LOCK:
+        _VERIFIED[stamp[0]] = stamp
+        _VERIFIED.move_to_end(stamp[0])
+        while len(_VERIFIED) > _VERIFIED_CAPACITY:
+            _VERIFIED.popitem(last=False)
+
+
+def forget_verified(path: str) -> None:
+    with _VERIFIED_LOCK:
+        _VERIFIED.pop(path, None)
+
+
+def _reset_verified() -> None:
+    with _VERIFIED_LOCK:
+        _VERIFIED.clear()
+
+
 def _claim(path: Path) -> bool:
-    """Set ``path``'s mtime to now. False only when the file is gone.
+    """Stamp ``path`` as claimed now. False only when the file is gone.
+
+    The mtime written is two ticks of the file's clock in the past (the clock
+    its previous stamp shows, :func:`_timestamp_resolution_ns`): still within
+    any grace window a sweep may use, and a stamp set in a tick that has
+    already ended is settled as it is set, so the identity this process
+    verified the object under (:func:`verified_stamp`) is carried over the
+    claim instead of lost. It is carried only when the stamp before the claim
+    is the verified one -- nothing wrote the file since the verified read -- and
+    the stamp after it is the claim's own, on the same device, inode and size;
+    otherwise the identity is forgotten and the next reader hashes the bytes.
 
     Windows refuses the timestamp write while another process holds the file
     open (a sharing violation, WinError 32), so that one wait gets the same
-    bounded ladder the renames use. Any other refusal (a read-only store,
-    another owner's file) leaves the object as it is: claiming is never a new
-    way for a write to fail where finding the bytes used to succeed.
+    bounded ladder the renames use. POSIX lets only a file's owner set an
+    explicit time, but anyone who may write the file set it to now: in a store
+    several users share, an object another user owns is claimed with a stamp
+    of now, which is not settled as it is set, so its identity is forgotten.
+    Any other refusal (a read-only store, a file this user may not write)
+    leaves the object as it is: claiming is never a new way for a write to fail
+    where finding the bytes used to succeed.
     """
+    key = str(path)
     for delay in (*RETRY_DELAYS_SECONDS, None):
         try:
-            os.utime(path)
-            return True
+            before = os.stat(path)
+            resolution = _timestamp_resolution_ns(before.st_mtime_ns)
+            now_ns = time.time_ns()
+            # A whole microsecond: every filesystem that keeps fractions of a
+            # second stores one exactly (NTFS counts in 100 ns).
+            mtime_ns = (now_ns - 2 * resolution) // 1000 * 1000
+            os.utime(path, ns=(now_ns, mtime_ns))
+            after = os.stat(path)
         except FileNotFoundError:
+            forget_verified(key)
             return False
         except OSError as error:
             if getattr(error, "winerror", None) == WINDOWS_SHARING_VIOLATION and delay is not None:
                 time.sleep(delay)
                 continue
+            # The stamp is as it was, or unknown: keep nothing the next reader
+            # could not confirm.
+            forget_verified(key)
+            if isinstance(error, PermissionError) and os.name != "nt":
+                # Another user's object: setting it to now needs only write access.
+                try:
+                    os.utime(path)
+                    return True
+                except OSError:
+                    pass
             return path.is_file()
+        _carry_verified(key, before, after, mtime_ns, resolution)
+        return True
+    forget_verified(key)
     return path.is_file()
+
+
+def _carry_verified(key: str, before: os.stat_result, after: os.stat_result, mtime_ns: int, resolution: int) -> None:
+    """Carry ``key``'s verified identity over the claim that just stamped it,
+    or forget it (see :func:`_claim`)."""
+    with _VERIFIED_LOCK:
+        known = _VERIFIED.get(key)
+        if known is None:
+            return
+        same_before = known == (key, before.st_dev, before.st_ino, before.st_size, before.st_mtime_ns, before.st_ctime_ns)
+        # A filesystem that stores a coarser time than it was given truncates the
+        # claim's stamp to its own tick.
+        own_stamp = after.st_mtime_ns in (mtime_ns, mtime_ns - mtime_ns % resolution)
+        same_file = (after.st_dev, after.st_ino, after.st_size) == (before.st_dev, before.st_ino, before.st_size)
+        carried = (key, after.st_dev, after.st_ino, after.st_size, after.st_mtime_ns, after.st_ctime_ns)
+        if same_before and own_stamp and same_file and _stamp_is_settled(carried):
+            _VERIFIED[key] = carried
+            _VERIFIED.move_to_end(key)
+        else:
+            _VERIFIED.pop(key, None)
 
 
 def claim_object(digest: str) -> bool:
     """Claim an existing object for whatever is about to reference it.
 
-    True: the object is there and its mtime is now (or the store refused the
-    timestamp, and it is still there). False: it is gone -- a sweep took it
-    first -- and the caller writes its bytes again, or fails when it holds none.
+    True: the object is there and stamped as claimed now (:func:`_claim`), or
+    the store refused the timestamp and it is still there. False: it is gone --
+    a sweep took it first -- and the caller writes its bytes again, or fails
+    when it holds none.
     """
     try:
         return _claim(object_path(digest))

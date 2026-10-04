@@ -130,15 +130,19 @@ def _can_inline(root):
             and store_path() == root)
 
 
-def execute(request):
-    """Worker-only native entry. Source and model lookup are absent by design."""
+def execute(request, *, keep_going=None):
+    """Worker-only native entry. Source and model lookup are absent by design.
+
+    ``keep_going`` is asked before each derivation (``surfaces.derive``): a daemon
+    worker's asks its supervisor whether anyone still wants the job."""
     request = normalize_request(request)
     from cadgen.store import surfaces
 
     if request["kind"] == "producer":
         return surfaces.producer_identity()
     return surfaces.derive(request["tree"], request["cids"], producer=request["producer"],
-                           expected_objects=request["expected_objects"], force=request["force"])
+                           expected_objects=request["expected_objects"], force=request["force"],
+                           keep_going=keep_going)
 
 
 class ArtifactFuture(Future):

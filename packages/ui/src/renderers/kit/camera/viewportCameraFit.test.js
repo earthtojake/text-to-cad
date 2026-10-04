@@ -1,14 +1,14 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import * as THREE from 'three';
-import { interactiveCameraFrameForBounds, interactiveViewportFitScale, INTERACTIVE_CAMERA_FIT_PADDING } from './viewportCameraFit.js';
+import { interactiveCameraFrameForBounds, interactiveFitPadding, interactiveViewportFitScale } from './viewportCameraFit.js';
 
-function frameBounds(bounds, aspect, orthographic) {
+function frameBounds(bounds, aspect, orthographic, padding = undefined) {
   const camera = orthographic ? new THREE.OrthographicCamera(-1, 1, 1, -1, 0.01, 10000) : new THREE.PerspectiveCamera(48, aspect, 0.01, 10000);
   camera.position.set(2.1, -1.65, 1.08);
   camera.up.set(0, 0, 1);
   const controls = { target: new THREE.Vector3() };
-  const frame = interactiveCameraFrameForBounds(THREE, { camera, controls, bounds, frameAspect: aspect });
+  const frame = interactiveCameraFrameForBounds(THREE, { camera, controls, bounds, frameAspect: aspect, padding });
   camera.position.copy(frame.position); camera.up.copy(frame.up); camera.lookAt(frame.target);
   if (orthographic) {
     camera.top = frame.halfHeight; camera.bottom = -frame.halfHeight;
@@ -22,19 +22,51 @@ function frameBounds(bounds, aspect, orthographic) {
   return { camera, frame, projected };
 }
 
+// The share of the viewport the fitted box fills, across and down (NDC: 1 is the edge).
+function occupancy(projected) {
+  return { across: Math.max(...projected.map(point => Math.abs(point.x))), down: Math.max(...projected.map(point => Math.abs(point.y))) };
+}
+const near = (actual, expected) => Math.abs(actual - expected) < 1e-8;
+
+// The owner's report: "on wide screens the models appear very large and tight to the top/bottom
+// of the screen … on thin screens like side panes and phones the default zoom level is great as-is".
+// So a square or narrower viewport keeps 1.1 on both axes, and 16:9 and wider leaves 1.25 down: a
+// model whose height limits the fit fills 80% of it. Across, it is 1.1 at every aspect.
+const PADDING_DOWN = { 0.4: 1.1, 1: 1.1, [16 / 9]: 1.25, 2.8: 1.25 };
 for (const orthographic of [false, true]) {
-  test(`${orthographic ? 'orthographic' : 'perspective'} fits tall, wide and flat bounds to the limiting viewport dimension`, () => {
+  test(`${orthographic ? 'orthographic' : 'perspective'} fits tall, wide and flat bounds to the limiting viewport dimension, with room above and below on a wide viewport`, () => {
     for (const size of [[200, 10, 4], [10, 12, 180], [120, 90, 0], [20, 20, 20]]) {
-      for (const aspect of [0.4, 1, 2.8]) {
+      for (const aspect of [0.4, 1, 16 / 9, 2.8]) {
         const bounds = { min: [14, -37, 53], max: size.map((n, i) => n + [14, -37, 53][i]) };
         const { projected } = frameBounds(bounds, aspect, orthographic);
-        const occupancy = Math.max(...projected.flatMap(point => [Math.abs(point.x), Math.abs(point.y)]));
-        assert.ok(Math.abs(occupancy - 1 / INTERACTIVE_CAMERA_FIT_PADDING) < 1e-8, `${size} at ${aspect}: ${occupancy}`);
+        const { across, down } = occupancy(projected);
+        // The limiting axis meets its padding exactly; the other stays inside its own.
+        assert.ok(near(Math.max(across * 1.1, down * PADDING_DOWN[aspect]), 1), `${size} at ${aspect}: ${across} across, ${down} down`);
         assert.ok(projected.every(point => point.z >= -1 && point.z <= 1), 'all corners remain in front of the camera');
       }
     }
+    // A tall model is limited by its height: 80% of a wide view's, 91% of a square or a phone's, as before.
+    const tall = { min: [0, 0, 0], max: [10, 12, 180] };
+    for (const aspect of [16 / 9, 2.8]) assert.ok(near(occupancy(frameBounds(tall, aspect, orthographic).projected).down, 0.8), `${aspect}`);
+    for (const aspect of [0.4, 1]) assert.ok(near(occupancy(frameBounds(tall, aspect, orthographic).projected).down, 1 / 1.1), `${aspect}`);
+    // A long rod across the view is limited by its width on a 16:9 view, which keeps 1.1 there too.
+    const rod = { min: [0, 0, 0], max: [10, 300, 10] };
+    assert.ok(near(occupancy(frameBounds(rod, 16 / 9, orthographic).projected).across, 1 / 1.1));
   });
 }
+
+test('the padding eases from square to 16:9; an explicit padding (a library card) is both axes', () => {
+  assert.deepEqual(interactiveFitPadding(0.4), { x: 1.1, y: 1.1 });
+  assert.deepEqual(interactiveFitPadding(1), { x: 1.1, y: 1.1 });
+  assert.deepEqual(interactiveFitPadding(Number.NaN), { x: 1.1, y: 1.1 }, 'an unknown aspect is square');
+  assert.ok(near(interactiveFitPadding(1 + (16 / 9 - 1) / 2).y, 1.175), 'halfway to 16:9, halfway to 1.25');
+  assert.ok(near(interactiveFitPadding(16 / 9).y, 1.25));
+  assert.ok(near(interactiveFitPadding(3.5).y, 1.25), 'and no further');
+  for (const orthographic of [false, true]) {
+    const { across, down } = occupancy(frameBounds({ min: [0, 0, 0], max: [10, 12, 180] }, 2.8, orthographic, 1.08).projected);
+    assert.ok(near(Math.max(across, down) * 1.08, 1), `${across} across, ${down} down`);
+  }
+});
 
 test('fit planning preserves saved camera position, target and manual zoom', () => {
   const camera = new THREE.PerspectiveCamera(38, 2, 0.01, 10000);

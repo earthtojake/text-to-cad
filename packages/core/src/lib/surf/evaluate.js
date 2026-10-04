@@ -49,6 +49,16 @@ export function basisFunctions(flatKnots, degree, span, t, out) {
   // out must hold degree+1 values; left/right are shared scratch.
   const left = scratch(0, degree + 1);
   const right = scratch(1, degree + 1);
+  if (degree > 0 && !(flatKnots[span + 1] > flatKnots[span])) {
+    // findSpan lands on an empty span only when the whole domain is one knot: a
+    // model edge shorter than its Float32 knots can resolve (its range in the
+    // index stays double). Every denominator below is then zero and the point
+    // NaN. A clamped curve is its first pole at its start and its last at its
+    // end, so here it is a pole of this span: the first, unless past the knot.
+    out.fill(0, 0, degree + 1);
+    out[t > flatKnots[span] ? degree : 0] = 1.0;
+    return out;
+  }
   out[0] = 1.0;
   for (let j = 1; j <= degree; j += 1) {
     left[j] = t - flatKnots[span + 1 - j];

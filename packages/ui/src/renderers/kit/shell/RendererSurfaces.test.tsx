@@ -204,5 +204,25 @@ it('the renderer is told the camera settled, through what the viewport reports: 
   expect(overlay('camera-settles')).toBe('4');
 });
 
+it('a view that has gone writes nothing more: its last write is the one it makes as it unmounts, and a camera report after it writes no view again', () => {
+  vi.useFakeTimers();
+  try {
+    const { save, unmount } = mount();
+    const camera = (x: number) => ({ position: [x, 2, 3], target: [0, 0, 0], up: [0, 0, 1], zoom: 1, projection: 'orthographic' });
+    act(() => { viewport.props.onPerspectiveChange(camera(1)); });
+    const report = viewport.props.onPerspectiveChange;
+    unmount();
+    const last = save.mock.calls.at(-1)![0];
+    expect(last.camera.position).toEqual([1, 2, 3]);
+    // A report that lands after the file has gone (its runtime winding down) is not a write: a host
+    // that dropped the view of the file it left must not see it come back.
+    const writes = save.mock.calls.length;
+    act(() => { report(camera(9)); vi.advanceTimersByTime(1000); });
+    expect(save.mock.calls.length).toBe(writes);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 // The full reset crosses the renderer callback and the shell's tool/preview
 // lifecycle; it must reach the camera only after those changes commit.

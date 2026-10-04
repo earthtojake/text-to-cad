@@ -38,7 +38,7 @@ const NO_ACTIONS = Object.freeze([]);
  * forgotten and the card shows. While an alert is put away, the navbar has the way back to it:
  * the card's own icon, in its colour, named after the alert, leftmost of the navbar's right-hand
  * controls — the renderer's navbar action (`onNavigationActionsChange`), before the host's update,
- * Feedback and the view's controls. Pressing it brings the card back and takes the icon away. Where
+ * Settings and the view's controls. Pressing it brings the card back and takes the icon away. Where
  * there is no navbar (preview, a view shown small) there is no icon either.
  *
  * @param {object | null} alert  The alert the card shows.

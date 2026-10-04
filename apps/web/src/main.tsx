@@ -4,11 +4,11 @@ import { StrictMode, useMemo } from 'react';
 import { createRoot } from 'react-dom/client';
 import { FileViewer, type FileSource } from '@text-to-cad/ui/file-viewer';
 import { ViewerLoadingOverlay } from '@text-to-cad/ui/file-viewer/presentation';
-import { createCadClient } from '@text-to-cad/core/client';
 import { unavailablePromptContext } from '@text-to-cad/core/prompt';
 import type { ViewerHost } from '@text-to-cad/ui/host';
 import { createTabStore, useTabViewerState } from '@text-to-cad/ui/tab-store';
 import { browserClipboard } from './host/clipboard';
+import { createWebCadClient } from './host/cadClient.js';
 import { useViewerLinks } from './host/viewerLinks.js';
 import App, { useTabAppearance } from './App';
 import { readCadParam, readDefaultCadParam } from './client/workbench/sidebar.js';
@@ -47,9 +47,9 @@ function StartingView({ error }: { error?: Error }) {
 const element = document.getElementById('root');
 if (!element) throw new Error('Missing #root mount point.');
 const root = createRoot(element);
-// The catalog is read every two seconds whether or not the tab is seen: a tab in the background is
-// current when it is shown, and its build feed never falls back on a catalog it stopped reading.
-const client = createCadClient({ origin: '' });
+// The catalog is read every two seconds while the tab is seen: a hidden tab asks nothing and is read
+// again the moment it is shown (`host/cadClient.js`).
+const client = createWebCadClient();
 let icon = document.querySelector<HTMLLinkElement>('link[rel="icon"]');
 if (!icon) { icon = document.createElement('link'); icon.rel = 'icon'; document.head.append(icon); }
 icon.type = 'image/png'; icon.href = faviconUrl;

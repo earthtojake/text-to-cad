@@ -135,7 +135,7 @@ const renderers = [createStepRenderer({ client, preferences }), createDxfRendere
 
 Public entry points include `/host`, `/file-viewer`, `/tab-store`, `/navigation`, `/renderers/step`,
 `/renderers/dxf`, `/renderers/glb`, `/renderers/mesh`, `/renderers/robot`, `/renderers/workspace`, `/file-viewer/presentation`, `/file-viewer/empty`,
-`/cad-viewer`, `/catalog`, `/links`, `/library`, `/consent` (the analytics card and its state), `/drawing`, `/loading-icon`, `/utils`, `/primitives/*`,
+`/cad-viewer`, `/catalog`, `/links`, `/library`, `/consent` (the analytics card and its state), `/features` (Settings' Features: `useFeatures`), `/drawing`, `/loading-icon`, `/utils`, `/primitives/*`,
 `/tokens.css`, and `/styles.css`. `/catalog` (a CAD catalog as a `FileSource`, the file menu's
 copies and reveal, and the paths a root names a file by) and `/links` (the navbar's link
 defaults) are pure modules, with no React, for a host's adapters and their unit tests.
@@ -206,9 +206,10 @@ requests on a warm reopen without retaining another copy of the geometry.
 
 The host owns where state lives; the package owns what it is. Everything the
 viewer keeps is one tab record (`@text-to-cad/ui/tab-store`: the tab's settings and
-each file's view — its camera, Display settings and the renderer's own slices),
-thrown out with the tab and kept across a reload. The web keeps it in
-`sessionStorage`, the desktop in its per-tab store; both hand `createTabStore` one
+the view of the file on screen — its camera, Display settings and the renderer's own
+slices), thrown out with the tab and kept across a reload. Leaving a file drops its
+view (`CadViewer`), and an update of it keeps what still fits the new revision. The
+web keeps it in `sessionStorage`, the desktop in its per-tab store; both hand `createTabStore` one
 synchronous read/write adapter and take `FileViewer`'s state from it. The tool in
 hand, the selection and measurements are never stored. Capabilities determine menus: a read-only web source cannot
 acquire editing or native operations merely by rendering this component.
@@ -279,9 +280,10 @@ tree asks for the tree, so the tree stays up while a person walks it; any other 
 gets nothing. No panel is saved in a file's record.
 The binding [viewer design system](docs/settings-ui.md) defines tool lifecycle,
 the tool stack, mobile layout, section density, keyboard scope, tooltips
-and preview. RendererShell owns the top-left toolbar, Quick Edit at the top-right,
-the bottom-left cube, and the view's controls it draws into the navbar's right end
-(`navbarSlot`): Display settings, then Preview, after the host's Feedback. Preview is
+and preview. RendererShell owns the top-left toolbar, Quick Edit at the top-right, the
+bottom-left cube, and a 3D view's controls it draws into the navbar's right end
+(`navbarSlot`): Display (its settings, a dropdown), then Preview, after the host's Settings
+(the person's settings, the same popover as on the home, Feedback in it). Preview is
 the shell's own mode, where routines play and the model orbits, and takes the whole
 page, the navbar with it. Keep app-specific effects in the
 [host contract](docs/viewer-host.md), not in renderer components.
@@ -290,15 +292,15 @@ One per-file settings store serves controls, live commands and persistence.
 Presets use the canonical grouped schema; see [View presets](docs/render-mode.md).
 Expensive changes use [staged viewport updates](docs/view-updates.md): controls
 remain authoritative, preparation is replaceable, and captures await presentation.
-Camera transforms remain local to a mounted viewer; refresh/reopen fits the file.
+The camera is part of the file's view: a refresh restores the one the file on screen
+was left at, and opening a file — again after leaving it, too — fits it.
 
-Authored material color, finish and opacity are read-only in every style; the
-Model reference section shows their properties. There is no Materials editor or
-persisted material override. See [View styles](docs/render-mode.md) and
+Authored material color, finish and opacity are read-only in every style. There
+is no Materials editor or persisted material override. See [View styles](docs/render-mode.md) and
 [progressive detail](docs/lod.md).
 
-The navbar names the file and offers its ⋯ menu, and Feedback (a new issue titled
-"Feedback: ") where the host has a tracker; a renderer's loading and update status is its
+The navbar names the file and offers its ⋯ menu, and Settings, whose Feedback opens a
+new issue titled "Feedback: " where the host has a tracker; a renderer's loading and update status is its
 own, in its viewport. An error appears as a card over the viewport; a failed update the
 model survives can be dismissed, leaving the previous version to inspect, and the card's own
 icon, the leftmost of the navbar's right-hand controls while it is put away, brings it back.

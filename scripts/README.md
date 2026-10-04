@@ -50,10 +50,10 @@ where those files ship, so these scripts are what produces them.
 - `test.sh` — `test-js.sh`, then `test-python.sh`, then `test-global.sh`: the
   whole tree on one machine. Called by `release-publish.yml`; `test.yml` calls
   the focused runners per job instead.
-- `test-js.sh [--select core|ui|web|codex|all]` — builds the required shared exports,
+- `test-js.sh [--select core|ui|web|mcp|all]` — builds the required shared exports,
   checks dependency boundaries and runs the selected shared JS/UI/web suites.
-  Core includes the pure `bench/viewer-memory/` helper units; `codex` also builds
-  the CAD app, whose one-file build is half its contract.
+  Core includes the pure `bench/viewer-memory/` helper units; `mcp` runs the CAD
+  app's tests and builds it, since its one-file build is half its contract.
 - `test-python.sh [--keep-going] [--select GROUP] [--print-weights]`
   — the cadgen package suite, then every skill's suite. Each test FILE runs in
   its own interpreter against its own temporary store, `CADGEN_TEST_JOBS` at a
@@ -177,7 +177,7 @@ this edit still BUILD? It no longer has anything to say about the index.
 `utils/list-skills.sh` — prints every `skills/*/SKILL.md` directory. Used by the
 install scripts and `test-python.sh`.
 
-`bench/` — manual warm-build and viewer performance commands. See
+`bench/` — manual edit, warm-build and viewer performance commands. See
 [benchmark usage](bench/cadgen-performance/README.md). Reports and profiler
 captures are local output under `tmp/`, never committed here. The drivers are
 manual; their `*.test.mjs` helper units run in `test-js.sh`.

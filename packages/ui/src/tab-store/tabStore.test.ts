@@ -27,26 +27,38 @@ test('the record normalizes: every setting to its bounds, the files to well-keye
   expect(Object.keys(record.files)).toEqual([tabFileKey('root', 'a.step', 'step')]);
 });
 
-test('the files are the fifty most recently written: a write puts a file last, and the fifty-first evicts the oldest', () => {
-  let files: Record<string, unknown> = {};
-  for (let index = 0; index < TAB_FILE_LIMIT; index += 1) files = writeTabFile(files as never, tabFileKey('root', `${index}.step`, 'step'), view(index) as never);
-  expect(Object.keys(files)).toHaveLength(TAB_FILE_LIMIT);
-  // Writing the first again makes it the newest.
-  files = writeTabFile(files as never, tabFileKey('root', '0.step', 'step'), view('again') as never);
-  expect(Object.keys(files).at(-1)).toBe(tabFileKey('root', '0.step', 'step'));
-  expect(Object.keys(files)).toHaveLength(TAB_FILE_LIMIT);
-  // The fifty-first: the oldest, now `1.step`, goes.
-  files = writeTabFile(files as never, tabFileKey('root', 'new.step', 'step'), view('new') as never);
-  expect(Object.keys(files)).toHaveLength(TAB_FILE_LIMIT);
-  expect(files[tabFileKey('root', '1.step', 'step')]).toBeUndefined();
-  expect(files[tabFileKey('root', '0.step', 'step')]).toEqual(view('again'));
-  // A stored record over the limit is read back as its last fifty.
+test('the files are the file on screen\'s: a write keeps the newest alone, and a record stored with more is read back as its newest', () => {
+  expect(TAB_FILE_LIMIT).toBe(1);
+  const [a, b] = [tabFileKey('root', 'a.step', 'step'), tabFileKey('root', 'b.step', 'step')];
+  let files: Record<string, unknown> = writeTabFile({}, a, view('a') as never);
+  files = writeTabFile(files as never, b, view('b') as never);
+  expect(files).toEqual({ [b]: view('b') });
+  // The file on screen written again stays.
+  files = writeTabFile(files as never, b, view('again') as never);
+  expect(files).toEqual({ [b]: view('again') });
+  // A record an earlier build left with fifty files is read back as its newest.
   const over: Record<string, unknown> = {};
-  for (let index = 0; index < TAB_FILE_LIMIT + 5; index += 1) over[tabFileKey('root', `${index}.step`, 'step')] = view(index);
-  const read = readTabRecord({ version: TAB_RECORD_VERSION, settings: {}, files: over });
-  expect(Object.keys(read.files)).toHaveLength(TAB_FILE_LIMIT);
-  expect(read.files[tabFileKey('root', '4.step', 'step')]).toBeUndefined();
-  expect(read.files[tabFileKey('root', '5.step', 'step')]).toEqual(view(5));
+  for (let index = 0; index < 50; index += 1) over[tabFileKey('root', `${index}.step`, 'step')] = view(index);
+  expect(readTabRecord({ version: TAB_RECORD_VERSION, settings: {}, files: over }).files).toEqual({ [tabFileKey('root', '49.step', 'step')]: view(49) });
+});
+
+test('leaving a file drops its view: retain keeps the file on screen\'s, under its root and whichever renderer wrote it, none for no file, and never a setting', () => {
+  const writes: unknown[] = [];
+  const store = createTabStore({ read: () => undefined, write: record => { writes.push(record); } });
+  store.settings.update({ appearance: 'dark', library: { layout: 'list' } });
+  const settings = store.settings.getSnapshot();
+  store.files.write('one', 'a.step', 'mesh', view('a'));
+  // The file on screen keeps its view, whatever renderer wrote it; nothing changes, so nothing is written.
+  const written = writes.length;
+  store.files.retain('one', 'a.step');
+  expect([store.files.read('one', 'a.step', 'mesh'), writes.length]).toEqual([view('a'), written]);
+  // Another file, the same path under another root, and no file at all each drop it.
+  for (const [root, path] of [['one', 'b.step'], ['two', 'a.step'], ['one', null]] as const) {
+    store.files.write('one', 'a.step', 'step', view('a'));
+    store.files.retain(root, path);
+    expect(store.getSnapshot().files, `${root}:${path}`).toEqual({});
+  }
+  expect(store.settings.getSnapshot()).toBe(settings);
 });
 
 test('the store reads its storage once, writes every change through whole, and publishes a new snapshot per change', () => {
@@ -90,22 +102,23 @@ test('the preferences a renderer reads are the settings: patched by key, normali
   expect(preferences.getSnapshot()).toBe(store.getSnapshot().settings);
 });
 
-test("a root's views come as FileViewer's records, stable per snapshot, and a view's changes merge without reverting another's", () => {
+test("a root's view comes as FileViewer's records, stable per snapshot, and a view's changes merge without reverting a newer write", () => {
   const store = createTabStore(memoryTabRecord());
+  const a = JSON.stringify(['a.step', 'step']);
   store.files.write('one', 'a.step', 'step', view('a'));
-  store.files.write('two', 'a.step', 'step', view('other root'));
   const views = store.files.forRoot('one');
-  expect(views).toEqual({ [JSON.stringify(['a.step', 'step'])]: view('a') });
+  expect(views).toEqual({ [a]: view('a') });
   expect(store.files.forRoot('one')).toBe(views);
-  // A stale view of root one changes `b` while `a` moved on: only `b` lands.
-  const baseline = { ...views, [JSON.stringify(['b.step', 'step'])]: view('b0') };
+  expect(store.files.forRoot('two')).toEqual({});
+  // A stale view of the root that changed nothing does not put back what it last saw.
   store.files.write('one', 'a.step', 'step', view('a2'));
-  store.files.merge('one', baseline, { ...baseline, [JSON.stringify(['b.step', 'step'])]: view('b1') });
-  expect(store.files.forRoot('one')).toEqual({ [JSON.stringify(['a.step', 'step'])]: view('a2'), [JSON.stringify(['b.step', 'step'])]: view('b1') });
-  // A key the view dropped is removed; the other root is untouched.
-  store.files.merge('one', store.files.forRoot('one'), { [JSON.stringify(['a.step', 'step'])]: view('a2') });
-  expect(Object.keys(store.files.forRoot('one'))).toEqual([JSON.stringify(['a.step', 'step'])]);
-  expect(store.files.forRoot('two')).toEqual({ [JSON.stringify(['a.step', 'step'])]: view('other root') });
+  store.files.merge('one', views, views);
+  expect(store.files.forRoot('one')).toEqual({ [a]: view('a2') });
+  // What it changed lands, and what it dropped goes.
+  store.files.merge('one', views, { [a]: view('a3') });
+  expect(store.files.forRoot('one')).toEqual({ [a]: view('a3') });
+  store.files.merge('one', store.files.forRoot('one'), {});
+  expect(store.files.forRoot('one')).toEqual({});
 });
 
 test("a file view's slices drop by signature while its camera and display are kept, whatever store it came through", () => {

@@ -62,3 +62,21 @@ test("Zoom uses the existing target for missing bounds and respects pivot distan
     assert.deepEqual(f.runtime.controls.target.toArray(), [0, 0, 18]);
   } finally { f.dispose(); }
 });
+
+test("A pan over a nearer surface is scaled to its depth; a miss or an orthographic camera keeps the pivot's", () => {
+  const f = fixture();
+  try {
+    const anchor = createZoomPivotReanchor(THREE);
+    // The pivot is the origin, 20 away; the box's face under the centre is 14.5 away.
+    assert.equal(f.runtime.controls.target.z, 0);
+    assert.equal(anchor.panScale(f.runtime), 14.5 / 20);
+    assert.deepEqual(f.runtime.controls.target.toArray(), [0, 0, 0], "a pan never moves the pivot");
+    anchor.apply(f.runtime);
+    assert.equal(anchor.panScale(f.runtime), 1, "a pivot on the surface pans at its own depth");
+    anchor.pointer.set(10, 10);
+    assert.equal(anchor.panScale(f.runtime), 1);
+    anchor.pointer.set(0, 0);
+    f.runtime.camera = new THREE.OrthographicCamera();
+    assert.equal(anchor.panScale(f.runtime), 1);
+  } finally { f.dispose(); }
+});

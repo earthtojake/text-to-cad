@@ -30,8 +30,8 @@ the reverse.
 
 | folder | what it is |
 | --- | --- |
-| `viewport/` | `useViewerRuntime` (three.js renderer lifecycle, on-demand render loop and `requestRender`, resize and device-pixel-ratio caps, context loss, keyboard orbit, teardown), `renderProfile` (`VIEWER_RENDER_PROFILE`: the tools view and preview drawing the same Display settings — `sceneForRenderProfile`, `previewSceneQuality`, `renderProfileKeepsPixelRatio`), `framePresentation`, `viewportBuffer`, `renderDepthPolicy`, `sceneObjects` (`disposeSceneObject`), DOM helpers. The scene in the viewport is its owner's: teardown calls the injected `disposeScene(runtime)` and `disposeStudio(runtime)`. |
-| `camera/` | `runtimeCamera` (zoom percent against the authored framing, projection and lens sync, perspective snapshots, eased transitions, fit-to-bounds, recentre), `useViewportCamera` (that behaviour bound to a mounted viewport: the perspective kept by a mounted view, the preview camera swap and its restore, the reset that Zoom to fit and the live `resetCamera` share, view-cube presets, which turn the camera and keep its zoom and target), `viewportCameraKit` and `viewportCameraFit`, `orbitControls`, `zoomPivotReanchor`, `zoomSpeeds`, `cameraLens`, `ViewPlaneControl` (view cube). |
+| `viewport/` | `useViewerRuntime` (three.js renderer lifecycle, on-demand render loop and `requestRender`, resize and device-pixel-ratio caps, context loss, keyboard orbit, teardown), `renderProfile` (`VIEWER_RENDER_PROFILE`: the tools view and preview drawing the same Display settings — `sceneForRenderProfile`, `previewSceneQuality`, `renderProfileKeepsPixelRatio`), `framePresentation`, `viewportBuffer`, `renderDepthPolicy`, `sceneObjects` (`disposeSceneObject`), DOM helpers. The scene in the viewport is its owner's: teardown calls the injected `disposeScene(runtime)` and `disposeStudio(runtime)`, then loses the WebGL context (`forceContextLoss`), since three's shared textures keep every renderer that drew them reachable and only a lost context gives its GPU memory back; a torn-down runtime draws no further frame. The orbit controls let go of the page in a layout cleanup, before React detaches the canvas: they listen on its root node, which is no longer the document once it is detached. |
+| `camera/` | `runtimeCamera` (zoom percent against the authored framing, projection and lens sync, perspective snapshots, eased transitions, fit-to-bounds, recentre), `useViewportCamera` (that behaviour bound to a mounted viewport: the perspective kept by a mounted view, the preview camera swap and its restore, the reset that Zoom to fit and the live `resetCamera` share, view-cube presets, which turn the camera and keep its zoom and target), `viewportCameraKit` and `viewportCameraFit`, `orbitControls`, `zoomPivotReanchor` (a wheel step first moves the pivot's depth onto the surface under the cursor, and a perspective pan is scaled by that surface's depth, so Render pans and zooms what the cursor is on at Solid's rate), `zoomSpeeds`, `cameraLens`, `ViewPlaneControl` (view cube). |
 | `look/` | `stageEffects` (lighting rig scaled to the model, floor, glow and shadow catcher, grid and origin axes), the Render studio boundary (`renderStudioChunk`, `studioEnvironmentCache` and its worker). `chromeBackdrop` and `useChromeBackdropColor` (the frame colour around a scene). The surface LOOK is data the viewport resolves and a scene applies to its own materials: `@text-to-cad/core/lib/viewer/surfaceLook.js` (`createSurfaceLook(THREE, root).apply(look)`) does it for any authored material tree. The viewport resolves it with core's `resolveSceneSurfaceLook` (`common/sceneSettings.js`), the resolver the snapshot CLI dresses the same scenes with. |
 | `view-settings/` | The settings model and store (`viewSettingsStore`, `useViewSettings`, `viewerDisplaySettings`, `renderState`), applying a change to a viewport (`useAppliedViewSettings`, `viewUpdateCoordinator`, `viewUpdateGate`, `viewUpdatePlan`), and the Display tool's content (`DisplaySettingsSection`, `DisplayModeOptions`; the shell draws it as a stack panel while Display is the tool). |
 | `tools/` | `FloatingToolBar` (the dumb strip), `toolModes` (the tool-mode state machine), `ToolModeMenu` (a tool's exclusive modes: one button in its panel's header row and its dropdown), `ToolPopover` (an ordinary dropdown from its button, on a `side` and `align`ed start or end: preview's Playback settings, upward from the playbar), `ToolStack` (the bounded column under the strip, which scrolls only when what cannot give way still does not fit), `ToolPanel` (one panel of it: `fit` says how it gives way when the viewer is short, `resizable` makes it the person's to size by the grip in its bottom-right corner alone, moving only it, and a panel with a heading can fold to it; `closable` is the tree's, whose X — `ToolPanelClose`, in its filter row — closes it until a press on the tool it belongs to brings it back; `ToolPanelCollapse` is the chevron for a foldable panel whose first row is its content's; its `footer`, a `ToolPanelFooterButton`, is a full-row action under the body that never scrolls: the Reference's Copy, Drawing's Copy), `ResizeGrip` (the one resize grip of a box over the viewport, in a bottom corner: a resizable panel's at its bottom-right, Quick Edit's at its bottom-left), `toolStackLayout` (every panel's width, the resizable panels' sizes, the folded panels and the closed tree: defaults, bounds and their stored record), `floatingSurface` (the two surfaces, defined together: the strip's and every menu's over the viewport, and the stack panels' more transparent one), and the format-blind tools: `draw/` (overlay, view lock, `useDrawingViewLock`), `PreviewChrome` (preview's controls and their visibility), `PlaybackMenu` (preview's Playback settings: Animation — Routine, Speed, Loop, Autoplay — then Orbit and its speed), `preview/` (orbit preferences), `playbar/` (`ViewportAnimationBar`, `animationClock`, `usePlaybackFrames`, `playbackPreferences`: the file's Playback settings — orbit and its speed, Autoplay, the routine's chosen Speed and Loop), `pose/` (the handle overlay, canvas, drag mathematics), `select/` (`usePointerPick`: taps and hover through a scene's own `pick`), `quick-edit/` (`QuickEdit`, the note to the agent, and `quickEditPrompt`, the context it builds and the text it copies). Screenshot capture is `@text-to-cad/core/lib/viewer/screenshotCapture.js`. |
@@ -39,22 +39,23 @@ the reverse.
 | `status/` | `LoadingIndicator` and `ViewerLoadingOverlay`, `ViewerAlertCard` (the card over the viewport for every alert, and `useAlertDismissal`: a card put away, and its icon in the navbar that brings it back) and `reportIssue` (`alertIssueUrl`: its Report Issue's new issue), `MissingFileAlert`, `ViewUpdateStatus`, `loadingState` (`viewerLoadingState`), `loadAlerts` (`failureAlert`, `noGeometryAlert`). |
 | `shell/` | The host glue every renderer needs that is not about its scene: see [Shell](#shell). |
 
-**What a view opts into.** The Display panel and `resolveViewSettings` take explicit
+**What a view opts into.** Display's settings and `resolveViewSettings` take explicit
 lists, `features: { sections, modes, surfaceStyles }` (`ViewFeatures` in
-`@text-to-cad/core/common/viewSettings.js`): the sections the panel mounts
+`@text-to-cad/core/common/viewSettings.js`): the sections Display mounts
 (`VIEW_SECTION_IDS`), the presets and the surface styles it lists. A section left
 out resolves off whatever was saved, and the saved settings are never rewritten.
 Core names two lists, `ALL_VIEW_FEATURES` and `EDGELESS_VIEW_FEATURES` (no Edges,
 Clip or Explode; Solid and Render; Shaded and Flat). Every renderer hands its list to
-the shell, which configures the view-settings store (`configure({ features })`) and the
-Display panel from it: STEP passes the first (and the same list to its Explode and Clip
+the shell, which configures the view-settings store (`configure({ features })`) and
+Display's settings from it: STEP passes the first (and the same list to its Explode and Clip
 tools), the GLB, mesh and robot renderers the second. The headless renderer
 (`renderMeshScene.js`) resolves a job of each family under the same list.
 
 **Tools.** The strip draws the list it is handed: `{ id, label, icon, active,
 disabled, onSelect, description? }` — a press is a tool's only action; no tool has a menu
 on the strip, and what it can be set to is its panel in the stack. Display is not a tool:
-its settings are a popover from a button beside Preview (`kit/shell/DisplayPopover.jsx`). A renderer
+its settings are a dropdown from its button in the navbar, between Settings and Preview
+(`kit/shell/DisplayPopover.jsx`), a 3D view's alone. A renderer
 builds its own list from `shell.tools.own(...)`, adding `shell.tools.draw` where it offers
 Draw; STEP's is in `step/StepSurface.jsx`. There is no Animate tool: routines play in
 preview, whose Playback settings and playbar the shell draws for any file with
@@ -147,10 +148,10 @@ calls one hook; the shell owns the rest.
 
 | module | what it is |
 | --- | --- |
-| `useRendererShell.js` | The hook. Per-file state through the host, the Display settings store and the Display panel's content (`shell.display`), tool modes (Draw is the only strip tool the shell itself owns; Display and preview's buttons and Playback settings are the frame's; `toolModes` is omitted altogether by a renderer with no tools of its own), the tool stack's layout (a viewer preference: `services.preferences.toolStack` — the resizable panels' sizes, the folded panels, the closed tree — changed by one patch per gesture, `frame.changeToolStack`), prompt snapshots (the host's `captureRequest`), the clipboard screenshot (Draw's Copy), what Quick Edit takes from the view (its file, how a copied prompt spells a path, the view as a picture, the viewer's Escape), the one preview state (`shell.previewing` / `setPreviewing`, from `usePreviewState`) and preview's Autoplay (`shell.autoplay`, a viewer preference), alerts, shortcuts, and the live command surface. It owns no zoom control: the shell has none. |
-| `RendererShell.jsx` | The frame: viewport box, tool strip (the renderer's tools) at the top-left, the tool stack under the strip (`ToolStack`: the Drawing panel while Draw is up, with Copy at its foot once there is ink, then the renderer's `toolPanels`; the column stops above the cube, `VIEWPORT_STACK_BOTTOM`), Quick Edit at the top-right, the view cube in the bottom-left corner, the view's controls at the navbar's right end, after the version (portaled into the renderer's `navbarSlot`: Display settings, whose popover is `DisplayPopover` and opens down, then Preview, a fullscreen icon), preview's controls (`PreviewChrome`: at the view's top-right, Playback settings then the way out, on a row of the navbar's own geometry (`lib/navbarRow.js`) so each lands where Settings and Preview sat; under the model, the playbar for a file with routines and nothing for a static one), preview as fullscreen (`onFullscreenChange`: the navbar steps aside), the tools out of sight while the host's explorer is open over them (`openPanel === "tree"`), the render profile (`kit/viewport/renderProfile.js`: preview draws the scene one quality tier up, keeps its pixel ratio while orbiting and suspends the tool effects), stopping the routine (`animation.onRelease`) when preview ends, the loading overlay, the update status centred at the top of the viewport, and the alert card. While the model loads, and once a load has failed in a way the model did not survive (an alert that cannot be put away), it draws none of its controls and no update status: only the load, or the card saying why; in a compact host (`appearance.compact`), none at all: the model alone. Nothing sits at the bottom centre but preview's playbar, on the `--cad-viewport-bottom-center` line. It takes `references` (what is selected, in the prompt grammar: what Quick Edit attaches and counts) and `copySelection` (what ⌘C / Ctrl+C copies while the renderer's own tool is up and something is selected; null when nothing is). It draws nothing into the host's panel column. One DOM structure (`data-slot="cad-file-view"`, `data-cad-surface`, `data-cad-scene-backdrop`, `data-cad-toolbar`, `data-cad-tool-stack`, `data-tool-panel`) for every renderer. `frameProvider` wraps the WHOLE frame in the renderer's own context — the tool stack as well as the viewport, because both read it — and `onCanvasPointerDown` is a press that landed on the model, for a renderer with something to put down when the person reaches for it. The frame focuses itself on such a press either way. |
-| `ShellViewport.jsx` | The three.js viewport around ONE kit scene: `useViewerRuntime`, `useViewportCamera`, the look (rig or studio, environment, background, floor, grid, axes), the Draw overlay and view lock, the view cube (bottom-left; not mounted in preview, `previewMode`, while the model loads, or when the shell says so, `viewCube`), frame presentation and the queued view-settings handshake. Its children may be a function of the viewport (`{ runtimeRef, hostRef, mountRef, viewerReadyTick, commitScene, syncSceneBounds }`), which is how a renderer mounts its own overlay or pointer pick. A scene that changes IN PLACE (it arrives in pieces, swaps its detail, is rebuilt under one identity) calls `commitScene()` from its own effect: the viewport re-reads what it placed, fits the stage and the depth range and applies the framing rules THEN, because a child's effects run before the viewport's own adoption effect. The one thing a commit never does ahead of the viewport is FRAME under a camera that is about to change: when the same render also changed the lens, the projection or the viewing mode, the stage is adopted at once and the framing follows once the camera has been given those props (a stored camera applied under the old projection and then converted comes out about a sixth smaller). A scene that says `complete: false` is framed on what has arrived and once more when it is whole — unless the camera on screen is the person's rather than that first fit, which is true of one they moved during the current mount; reopening always starts with fresh framing. `preserveInteractionPixelRatio` keeps the idle pixel ratio while the camera moves (a scene drawn with hairlines, and preview's orbit: `renderProfileKeepsPixelRatio`), and `runtimeLifecycle` (`onRelease(runtime, { handoff })` while the WebGL renderer is still alive, `onContextLost()`, `onInitializationError(error)`) is for a renderer that hangs its own objects or in-flight work on the runtime. `syncSceneBounds()` re-fits lighting, shadows and the floor's height to a scene that moved its own bounds, with no React render and no reframe. What is SIZED stays sized from the rest placement, in Inspect and in Render alike: the grid and stage (`sceneRadiusForBounds` on `restBounds`) and the Render studio's floor plane (`applyPhotographicStudio`'s `groundBounds`), so a pose or a playing routine never rescales or slides the ground under the model; `zoomToBounds(bounds)` frames part of the scene. Read-only test seams: `window.__cadCamera()` (the live camera, its depth range included) and `window.__cadStage()` (the ground's radius, the bounds the stage is fitted to, the floor's height, the studio floor's size and centre). |
-| `fileView.js` | The file's view `{ version, camera, display, playback, renderer }`, read forgivingly and written exactly: the camera (restored in place of the open-time fit; null fits), the Display settings, preview's Playback settings (`tools/playbar/playbackPreferences.js`), and the renderer's own slices, each `{ signature, value }` and restored only under the signature the renderer declares now (`readFileView(raw, signatures)`); the camera, the display and the playback are always kept. The host keys it `[file path, renderer id]` under its root, in the tab store. Not in it: the tool in hand, a selection, measurements, ink, preview, a routine's time — every open starts those afresh. |
+| `useRendererShell.js` | The hook. Per-file state through the host, the Display settings store and the content of Display's dropdown (`shell.display`), tool modes (Draw is the only strip tool the shell itself owns; Display, Preview and preview's Playback settings are the frame's; `toolModes` is omitted altogether by a renderer with no tools of its own), the tool stack's layout (a viewer preference: `services.preferences.toolStack` — the resizable panels' sizes, the folded panels, the closed tree — changed by one patch per gesture, `frame.changeToolStack`), prompt snapshots (the host's `captureRequest`), the clipboard screenshot (Draw's Copy), what Quick Edit takes from the view (its file, how a copied prompt spells a path, the view as a picture, the viewer's Escape), the one preview state (`shell.previewing` / `setPreviewing`, from `usePreviewState`) and preview's Autoplay (`shell.autoplay`, a viewer preference), alerts, shortcuts, and the live command surface. It owns no zoom control: the shell has none. |
+| `RendererShell.jsx` | The frame: viewport box, tool strip (the renderer's tools) at the top-left, the tool stack under the strip (`ToolStack`: the Drawing panel while Draw is up, with Copy at its foot once there is ink, then the renderer's `toolPanels`; the column stops above the cube, `VIEWPORT_STACK_BOTTOM`), Quick Edit at the top-right, the view cube in the bottom-left corner, a 3D view's controls at the navbar's right end, after the host's Settings (portaled into the renderer's `navbarSlot`: Display, the perspective box, whose dropdown is `DisplayPopover` over `frame.display` and opens down, then Preview, a fullscreen icon), preview's controls (`PreviewChrome`: at the view's top-right, Playback settings then the way out, on a row of the navbar's own geometry (`lib/navbarRow.js`) so each lands where Display and Preview sat; under the model, the playbar for a file with routines and nothing for a static one), preview as fullscreen (`onFullscreenChange`: the navbar steps aside), the tools out of sight while the host's explorer is open over them (`openPanel === "tree"`), the render profile (`kit/viewport/renderProfile.js`: preview draws the scene one quality tier up, keeps its pixel ratio while orbiting and suspends the tool effects), stopping the routine (`animation.onRelease`) when preview ends, the loading overlay, the update status centred at the top of the viewport, and the alert card. While the model loads, and once a load has failed in a way the model did not survive (an alert that cannot be put away), it draws none of its controls and no update status: only the load, or the card saying why; in a compact host (`appearance.compact`), none at all: the model alone. Nothing sits at the bottom centre but preview's playbar, on the `--cad-viewport-bottom-center` line. It takes `references` (what is selected, in the prompt grammar: what Quick Edit attaches and counts) and `copySelection` (what ⌘C / Ctrl+C copies while the renderer's own tool is up and something is selected; null when nothing is). It draws nothing into the host's panel column. One DOM structure (`data-slot="cad-file-view"`, `data-cad-surface`, `data-cad-scene-backdrop`, `data-cad-toolbar`, `data-cad-tool-stack`, `data-tool-panel`) for every renderer. `frameProvider` wraps the WHOLE frame in the renderer's own context — the tool stack as well as the viewport, because both read it — and `onCanvasPointerDown` is a press that landed on the model, for a renderer with something to put down when the person reaches for it. The frame focuses itself on such a press either way. |
+| `ShellViewport.jsx` | The three.js viewport around ONE kit scene: `useViewerRuntime`, `useViewportCamera`, the look (rig or studio, environment, background, floor, grid, axes), the Draw overlay and view lock, the view cube (bottom-left; not mounted in preview, `previewMode`, while the model loads, or when the shell says so, `viewCube`), frame presentation and the queued view-settings handshake. Its children may be a function of the viewport (`{ runtimeRef, hostRef, mountRef, viewerReadyTick, commitScene, syncSceneBounds }`), which is how a renderer mounts its own overlay or pointer pick. A scene that changes IN PLACE (it arrives in pieces, swaps its detail, is rebuilt under one identity) calls `commitScene()` from its own effect: the viewport re-reads what it placed, fits the stage and the depth range and applies the framing rules THEN, because a child's effects run before the viewport's own adoption effect. The one thing a commit never does ahead of the viewport is FRAME under a camera that is about to change: when the same render also changed the lens, the projection or the viewing mode, the stage is adopted at once and the framing follows once the camera has been given those props (a stored camera applied under the old projection and then converted comes out about a sixth smaller). A scene is framed once, on its `restBounds`; a STEP package's is the box its `assembly.json` declares (`bbox`), final from the first publish. A scene that says `complete: false` (a package that declares no box) is framed on what has arrived and once more when it is whole, unless the camera on screen is by then the person's: one they dragged, wheeled, turned by keys or the cube, zoomed to a selection or set through `setCamera` during the current mount, or one a reload restored from the file's view. A rebuild of the open file never re-frames; only Zoom to fit does. A file opened again after the tab left it starts with fresh framing, since leaving it dropped its view. `preserveInteractionPixelRatio` keeps the idle pixel ratio while the camera moves (a scene drawn with hairlines, and preview's orbit: `renderProfileKeepsPixelRatio`), and `runtimeLifecycle` (`onRelease(runtime, { handoff })` while the WebGL renderer is still alive, `onContextLost()`, `onInitializationError(error)`) is for a renderer that hangs its own objects or in-flight work on the runtime. `syncSceneBounds()` re-fits lighting, shadows and the floor's height to a scene that moved its own bounds, with no React render and no reframe; a sync that finds the bounds (and every setting the fit reads) as they were refits nothing and keeps the shadow maps (`look/stageFollow.js`). What is SIZED stays sized from the rest placement, in Inspect and in Render alike: the grid and stage (`sceneRadiusForBounds` on `restBounds`) and the Render studio's floor plane (`applyPhotographicStudio`'s `groundBounds`), so a pose or a playing routine never rescales or slides the ground under the model; `zoomToBounds(bounds)` frames part of the scene. Read-only test seams: `window.__cadCamera()` (the live camera, its depth range included) and `window.__cadStage()` (the ground's radius, the bounds the stage is fitted to, the floor's height, the studio floor's size and centre). |
+| `fileView.js` | The file's view `{ version, camera, display, playback, renderer }`, read forgivingly and written exactly: the camera (restored in place of the open-time fit; null fits), the Display settings, preview's Playback settings (`tools/playbar/playbackPreferences.js`), and the renderer's own slices, each `{ signature, value }` and restored only under the signature the renderer declares now (`readFileView(raw, signatures)`); the camera, the display and the playback are always kept. The host keys it `[file path, renderer id]` under its root, in the tab store, which keeps it for the file on screen alone. Not in it: the tool in hand, a selection, measurements, ink, preview, a routine's time — every open starts those afresh. |
 | `liveBinding.ts` | `attachLiveBinding`: the live command surface. Base commands (`readState`, `setCamera`, `resetCamera`, `setDisplaySettings`, `setRenderMode`, `capture`) mean the same for every renderer; a renderer ADDS commands by name and DECLINES the known host commands (`HOST_LIVE_COMMANDS`) that make no sense for it with the sentence the caller reads. Binding fails when a renderer does neither. |
 | `promptContext.js` | `createViewPromptContext` (a snapshot and what it depicts) and `promptDeliveryError`. A renderer with a reference vocabulary of its own passes `promptContext` instead, and may then return that vocabulary from `promptReferences`. |
 | `loadReport.js` | `shellLoadReport`: what the shell asks the status kit about one document load, as one pure function, and all it returns is the loading presentation over the viewport. A renderer whose document is a plain download passes `load` and nothing more. One whose document can be EDITED or PREVIEWED while it is open knows more than the shell can: `load.editPending` (queued work of the person's own, with nothing of it on screen), `load.currentPreview` (that work IS what is drawn, so the wait is over even though the write is not) and `load.finding` (the file is not even located yet). An alert is `load.alert`, which the frame draws as the alert card (`ViewerAlertCard`: every alert; one the model survives, a warning beside it included, can be dismissed). |
@@ -165,6 +166,7 @@ const shell = useRendererShell({
   resource, modelKey, revisionKey,
   features,             // ViewFeatures: the Display sections this family opts into
   toolModes,            // createToolModes({ defaultMode, modes }), or omitted: no tools of its own
+  previewable,          // true for a 3D view: it offers Preview; omitted (a 2D view): no Preview, and a request keeps the normal view
   scene,                // KitScene | null
   load,                 // { busy, updating?, progress?, alert? }: the renderer's document load
   animation,            // playbar runtime with its own `clock` (and `onRelease`), or null: plays in preview alone
@@ -176,11 +178,13 @@ const shell = useRendererShell({
   //                   each restored (by the renderer, `readFileView(view.state, signatures)`) under the same signature
 });
 // Renderer-facing, beside `tools`, `display`, `toolMode`, `selectTool`, `previewing`, `requestRender`:
+shell.requestFrame();            // a frame that keeps the shadow maps: a highlight moves and reshapes no caster
 shell.syncSceneBounds();         // the scene moved its bounds (a pose): the stage follows, no render
 shell.scheduleStateSave();       // a slice changed: write the view soon, and on unmount
 shell.playback; shell.setPlayback(patch); // the file's Playback settings: orbit and its speed, Autoplay, the routine's chosen Speed and Loop
-// The shell adds Display settings, Preview, and preview's Playback settings and playbar.
-const tools = [shell.tools.own({ id, label, icon }), shell.tools.draw].filter(Boolean); // [] for camera-only formats
+// The shell adds Display and Preview (a `previewable` view's, in the navbar), and preview's
+// Playback settings and playbar.
+const tools = [shell.tools.own({ id, label, icon }), shell.tools.draw].filter(Boolean); // [] for camera-only formats: no strip
 // toolPanels: the renderer's ToolPanels, shown or `hidden` by the tool they belong to
 return <RendererShell shell={shell} tools={tools} toolPanels={<>{selectPanels}{keptPanels}</>}
   viewportOverlay={viewport => <PointerPick viewport={viewport} scene={scene} enabled={selecting} onPick={pick} onHover={hover} />} />;
@@ -195,7 +199,7 @@ state), each its content's height, with `fit` saying how it gives way on a short
 rest still does not fit. Every panel is `TOOL_PANEL_WIDTH` wide (164px, a six-tool strip's);
 `resizable` — the tree, the Reference and Position — makes a panel the person's to size on its
 own, from the grip in its bottom-right corner alone (`kit/tools/ResizeGrip.jsx`, Quick Edit's),
-kept under its `id` (`tree` and `position` open at half the stack, `reference` at 200px); a
+kept under its `id` (`tree` and `position` open at half the stack, `reference` at 144px); a
 panel with a heading may fold to it, kept by `id` too. The tree is `closable`: its X closes it,
 and the tool that names it as its `panel` (Select) carries a corner mark until a press on it,
 while it is up, opens the tree again; the person's closing or opening is kept by `id` as well,
@@ -457,7 +461,8 @@ loader asks which it is. The STEP renderer matches none of them.
   distinct link mesh (`loadRenderMeshByUrl`, at most eight at a time). Progress reads "Loading URDF", "Loading meshes 3/13",
   "Building robot". The robot is published once, whole. A missing link mesh fails
   the load. A warm file is on screen on the first render; a new revision loads
-  behind the robot on screen and keeps the pose it was left in. An SRDF with no
+  behind the robot on screen and keeps the pose it was left in while its driven joints and
+  named poses are unchanged, and opens at its opening pose when they changed. An SRDF with no
   URDF paired (the catalog pairs the ONE `.urdf` in the same folder whose
   `<robot name>` matches) raises an alert that names what was looked for.
 - **Look**: a robot authors no finish, so Solid wears the viewer's surface and
@@ -472,7 +477,7 @@ loader asks which it is. The STEP renderer matches none of them.
 - **Display**: `EDGELESS_VIEW_FEATURES` (Solid and Render; no Edges, Clip or Explode).
 - **Tools**, left to right: **Select** (the default), **Position** (only with
   movable joints; shown idle until the robot has loaded; it shows its Position panel),
-  and nothing else: Display settings and Preview are the view's controls in the navbar.
+  and nothing else: Display and Preview are the view's controls in the navbar.
 - **Pose** (`robot/poseStore.js`): joint values live in a store outside React
   (degrees; metres for a prismatic joint), with one write path. A write is clamped,
   ignored under `URDF_JOINT_VALUE_EPSILON`, releases the tracked named pose and is
@@ -559,7 +564,7 @@ and viewport are imported lazily after renderer selection.
 
 A CAD renderer declares no panel of the host's: the navbar's only toggle is the file
 explorer's, and the renderer's controls are panels of its own tool stack. Display is a
-popover from its button among the view's controls in the navbar, beside Preview. Preview is the shell's own state in
+dropdown from its button among the view's controls in the navbar, before Preview. Preview is the shell's own state in
 every 3D renderer, with no host prop. It is fullscreen: the renderer tells FileViewer
 (`onFullscreenChange`), and the navbar and the host's explorer step aside while it
 lasts; see [preview](settings-ui.md#camera-animation-and-preview)
@@ -574,7 +579,8 @@ assets, which remain inside `@text-to-cad/core`.
 
 Everything the viewer keeps is the tab's: one record, `{ version, settings, files }`,
 thrown out with the tab and kept across a reload (`@text-to-cad/ui/tab-store`; the host
-side is in [viewer-host.md](viewer-host.md#files-state-and-shutdown)). The host hands
+side is in [viewer-host.md](viewer-host.md#files-state-and-shutdown)), and of the files
+only the one on screen has a view. The host hands
 the store one adapter — a synchronous read and write of the whole record — and the
 package owns the record. Nothing under `renderers/` touches storage, on import,
 construction or ever.
@@ -589,8 +595,11 @@ neither a setting nor part of a file's view. App light/dark appearance selects I
 fixed workbench basis, including the empty CAD stage; the settings contain no theme
 choice or custom scene settings.
 
-**A file's view** is `files[[root, path, renderer id]]`, the fifty most recently written
-files, each `{ version, camera, display, playback, renderer }` (`kit/shell/fileView.js`):
+**A file's view** is `files[[root, path, renderer id]]`, kept for the file on screen alone
+(`TAB_FILE_LIMIT` is one, and `CadViewer` drops the view of a file it leaves — for another
+file, the home or another root — once the departing renderer's last write has landed:
+`files.retain`), `{ version, camera, display, playback, renderer }` (`kit/shell/fileView.js`).
+A reload shows the same file, and restores it:
 
 | Kept | What |
 | --- | --- |
@@ -601,6 +610,7 @@ files, each `{ version, camera, display, playback, renderer }` (`kit/shell/fileV
 
 | Not kept | Every open starts it afresh |
 | --- | --- |
+| A file the tab left: its whole view | The defaults, when it is opened again |
 | The tool in hand | The default tool |
 | The selection, measurements, Draw's ink | Empty |
 | Preview and its camera | Off; the tools view's camera is the one kept, and its Playback settings are the file's (`playback`) |
@@ -678,10 +688,10 @@ for STEP's (its selection, hidden and isolated parts, `select` and `clearSelecti
 The injected `CadWorkspaceService` owns its catalog and request controllers. The first
 subscriber starts the catalog and its two-second poll; further subscribers
 share them. The last unsubscribe stops polling. A host may gate the poll with
-`shouldPoll`; the web viewer does not, so a tab in the background is current
-when it is shown (the CAD app polls nothing: its views sync). `CadViewer`
-connects window focus and visible `visibilitychange` events to
-`refresh({ markRefreshing: false })`, preserving browser refresh behavior
+`shouldPoll`; the web viewer's pauses while its page is hidden (the CAD app
+polls nothing: its views sync). `CadViewer` connects window focus and visible
+`visibilitychange` events to `refresh({ markRefreshing: false })`, so a tab in
+the background is current when it is shown, preserving browser refresh behavior
 without a DOM dependency in core. Catalog requests retain the ten-second
 timeout and the same error text.
 
@@ -739,12 +749,15 @@ session cancellation and client-owned writes. The browser integration harness ex
 rendering with two roots, panel switching, PNG captures, host title ownership
 and state round trips through unmount/remount.
 
-The camera is the file's: opening, reopening or reloading restores the one the file was
-left at and fits only when there is none. Presets update projection/lens while retaining viewpoint and
+The camera is the file's view's: reloading the page restores the one the file on screen
+was left at, and opening a file — for the first time, or again after leaving it — fits, since
+leaving a file drops its view. Presets update projection/lens while retaining viewpoint and
 zoom on the same renderer, canvas and controls. Ordinary settings edits never
 restart the viewport. Initial/reset/fit views use the
-projected bounds with 1.1 padding (roughly 91% occupancy in the limiting viewport
-dimension), rather than a bounding sphere. Manual views retain their own
+projected bounds rather than a bounding sphere, padded 1.1 across and, down, 1.1 on
+a square or narrower viewport easing to 1.25 at 16:9 and wider
+(`interactiveFitPadding`): about 91% of the limiting dimension in a side pane or on
+a phone, and 80% of a wide view's height. Manual views retain their own
 zoom and pose. This policy belongs to the interactive UI; snapshot/export
 framing remains independent. The orientation control labels its positive X/Y/Z
 axes and retains its snap and drag interactions.
@@ -800,7 +813,8 @@ The optional `@text-to-cad/ui/file-viewer/empty` entry exports `EmptyCadBackdrop
   a mate or playing a routine never rescales or slides the ground — including a
   Render entered while the model is posed.
 - **Shadows** are per record (core's `syncRecordShadowPolicy`: only an opaque, lit surface
-  takes or casts one), so the scene implements `setShadowReception` and the viewport
+  takes or casts one; a hovered or selected part, drawn in the transparent pass at full
+  opacity, still casts), so the scene implements `setShadowReception` and the viewport
   never sets its meshes itself.
 - **Look.** `setSurfaceLook` is the kit's half; the theme, the app appearance (edge
   ink), authored-material overrides, the whole Surfaces section and shadow
@@ -852,6 +866,14 @@ The optional `@text-to-cad/ui/file-viewer/empty` entry exports `EmptyCadBackdrop
   (`components/workbench/hooks/useCadWorkspaceSelectors.js`). It passes through the viewport by identity
   from there, with no comparison of its own to hide churn upstream. `StepRenderer.browser.test.mjs` fails its
   Position and routine tests when that one request is removed.
+- **Shadows re-render only for what casts them.** A pass over the records (part visual
+  state, the pose pass) compares what they put into a shadow pass before and after it
+  (core's `lib/viewer/shadowCasters.js`: which records cast, and their matrices) and asks
+  for an ordinary frame, which re-renders the shadow maps, only when that changed;
+  otherwise, and for a highlight layer, it asks for one that keeps them
+  (`kit/viewport/sceneFrames.js`, `runtime.requestFrame`). So a hover, a selection, or the
+  pose pass a hover re-runs re-renders no shadow, and neither does the Render floor shadow
+  re-bake for them; hiding, isolating, posing and a routine's moving frames do.
 - **The viewport menu** is the part menu, one list
   (`assemblyPartMenuEntries` in `components/workbench/AssemblyContextMenuItems.js`)
   with two presentations: the Features tree renders it into its own context menu,
@@ -947,9 +969,9 @@ A STEP's panels in the tool stack (`components/workbench/StepPanels.js`), in ord
 - **Reference** (Select, with a selection): headed by the reference being read
   (`StepReferenceSection.js`'s `useStepReference`: its label, else its part as the tree
   names it and its kind — `base · face 3`; with several, a picker with `i/N`) and an X
-  that clears the selection; its rows are the browsed reference's alone, compact and in the
-  UI font. A resizable panel of its own, apart from the tree: it opens at the one width and a
-  200px cap, and its corner grip sizes it.
+  that clears the selection; its rows are the browsed reference's key measurements alone,
+  compact and in the UI font. A resizable panel of its own, apart from the tree: it opens at
+  the one width and a 144px cap, and its corner grip sizes it.
 - **Position** (Position): named poses, joint values and Reset, when the file has
   kinematics.
 
@@ -1105,15 +1127,17 @@ unselectable. Selection reveals expand the required ancestors and scroll once
 per selection or explicit reveal command. Later expansion, recognition updates
 and manual scrolling must not pull the view back to that row.
 
-The Reference pane is read-only, sized on its own (it opens at every panel's width, capped at 200px, and its corner grip sizes it),
+The Reference pane is read-only, sized on its own (it opens at every panel's width, capped at 144px, and its corner grip sizes it),
 independently scrollable, and pinned at the panel's foot, under every section. Its
 static heading has a Copy action (the reference on show, file-prefixed as Copy Reference copies it) and an X to clear the selection; neither the pane nor its
 fields collapse. A compact dropdown browses the selected references directly
 without modifying the selection. New selections show their newest reference.
-Selection totals remain above the current reference's name, type, wrapping
-canonical ID, dimensions, coordinates and source material. Rows share an 8px
-gutter, an 80px label column and 11px text, with thin separators between totals,
-reference facts and material. The pane's rows have no copy or dimension-preview
+Under the browsed reference's name, its rows are its key measurements alone
+(`StepReferenceSection.js`): a face's area and a round face's radii, an edge's
+length, radii and an arc's sweep, a part's size and volume, a subassembly's part
+count, size and volume — no type, canonical ID, centre, normal, component or
+source material row. Rows share a 64px label column, an 8px gutter and 11px
+text. The pane's rows have no copy or dimension-preview
 buttons: copying is the heading's Copy, the full-row **Copy** at the panel's foot
 (**Copy All** with several references, with the ⌘C / Ctrl+C hint; shown only for a
 resolved selection) and the tree and viewport menus, and measurement previews are
@@ -1130,7 +1154,14 @@ to Select first. No other tool ever sees a selection, so none needs a rule for o
 
 ### Position
 
-Position edits persist when switching tools or tabs, or closing the panel. Reset
+Position edits persist when switching tools or tabs, or closing the panel. A STEP
+rebuild keeps Position the tool while its sidecar is read again behind the kinematics in
+hand (`workbench/useStepMotion.js`), and keeps the values, and the named pose they were
+chosen as, when the new sidecar's joint parameters and named poses are the ones in hand
+(`stepPoseLogic`, `workbench/stepModuleLoad.js`); when they changed, the pose starts at the
+new defaults — the old values are never fitted onto other joints. A robot's new revision
+follows the same rule over its driven joints and named poses (`poseLogic`,
+`robot/poseStore.js`). Position goes only when the sidecar has nothing left to move. Reset
 explicitly restores STEP defaults or the robot opening pose (including SRDF `home`).
 The Position tool controls joint handles and shows its panel.
 A routine playing in preview sets the Position values aside when it takes the pose and gives them
@@ -1142,8 +1173,8 @@ by handles in the viewport. It exists where
 something can be driven: a robot (URDF, SRDF, SDF) with a revolute, continuous
 or prismatic joint that is not a mimic follower, and a STEP whose sidecar
 kinematics declare a revolute, slider or cylindrical mate. Robots and STEP files
-open in Select. Robots also discard a previously recorded Position tool on reopen
-to match their initial Links tab; stored joint values restore independently. It is absent in preview. While it is active the model picks nothing, hovers
+open in Select: the tool in hand is never stored, and a reload brings back a
+robot's joint values with the rest of the file's view. It is absent in preview. While it is active the model picks nothing, hovers
 nothing and casts no model ray (`pickMode` NONE, as in preview); the camera
 orbits, pans and zooms exactly as under every other tool, and the knobs are the
 only interactive things. Leaving keeps the pose.
@@ -1244,8 +1275,12 @@ so selection, topology and the Position controls never meet an animated model. O
 playback only the transport preferences survive leaving — the routine, Speed and
 Loop, kept by a Position edit too (`activatePositionControls` in
 `useStepMotionControls.js`) for as long as the file is mounted: the next preview plays that
-routine from the start. The routine and its time are not saved: a reopened file starts
-at rest, with the Speed and Loop its Playback settings chose, if any. A routine that failed to
+routine from the start. An update of the model that leaves its routines as they were (the
+same `animationHash`) neither stops nor rewinds one that is playing: `useStepMotion` compiles
+routines per `animationKey`, never per catalog entry, and only a changed routine is compiled
+again, at rest. The routine and its time are not saved: a reloaded file starts
+at rest, with the Speed and Loop its Playback settings chose, if any, and a file opened
+again after the tab left it starts at the defaults. A routine that failed to
 load has no Playback settings to say so in; the viewport's card says
 `Animation unavailable`, and can be dismissed.
 
@@ -1270,7 +1305,12 @@ the time React holds (where playback started, written back only when it stops),
 so a pass React re-runs mid-play — a detail swap, a progressive publish, a display
 change — draws the frame the next tick would (`playbackFrameTime`). The
 scrubber is the clock's only React subscriber. Because the pass runs inside
-the tick, the clock's adaptive pacing measures a frame's real cost. A frame that
+the tick, the clock's adaptive pacing measures a frame's real cost, and only a
+run of frames that all overran slows it (`createAnimationFramePacer` in core's
+`common/animationClock.js`): a frame that misses one vsync publishes on, where
+pacing on it held the routine still for two or three frames and then moved it
+four or five. The clip resolves each `m.get` target once per occurrence table,
+not every frame (`animationRuntime.js`). A frame that
 only moved parts skips material and instance-membership reconciliation: the
 effects pass reports whether a style, visibility or highlight changed
 (`applyStepModuleEffectsToRecords`), and moved instances sync their own matrix.
@@ -1310,8 +1350,13 @@ plane through the orbit target tracks the ink exactly. The camera keeps its
 panned pose when Draw ends.
 
 A sketch is session-only. It lives in the mounted editor, is never written to
-tab or file state, and is discarded when Draw is deselected, the file changes or
-the renderer unmounts; a restored tab never reopens in Draw. While the sketch has
+tab or file state, and is discarded when Draw is deselected, the file changes, the
+model updates under it, or the renderer unmounts; a restored tab never reopens in Draw.
+An update (a new STEP revision, StepSurface's same-file revision branch) discards it
+with `drawing.discard()`: the session mounts a new editor (`drawing.sketch` keys it), so
+the ink's history goes with it and Undo cannot bring the ink back over the new model,
+while Draw stays the tool, on the tool, colour and weight in hand. The editor's own
+`clear()` is an undoable step, so it is not used for this. While the sketch has
 ink, the Drawing panel ends in a full-row **Copy Drawing**, with the copy shortcut beside it (⌘C or
 Ctrl+C does the same): the viewport capture with the editor's committed ink
 composited over it viewport-aligned (the ink canvas keeps its own pixel ratio and is
@@ -1360,7 +1405,9 @@ Zoom to Fit and live `resetCamera`. Cube shortcuts preserve zoom and pan.
 
 Preview is one `previewing` state the shell owns (`usePreviewState` in
 `useRendererShell.js`); a renderer whose own gates run before the shell's hook holds
-it and passes it in as `preview`, as STEP does. The Preview button among the
+it and passes it in as `preview`, as STEP does. It is a 3D view's: a renderer that
+offers it declares `previewable` (STEP, GLB, the meshes and robots do), and one that
+does not has no Preview button and stays in its normal view whatever sets the state. The Preview button among the
 view's controls in the navbar sets it, and Escape or Exit preview — the minimize icon at the
 view's top-right — clears it; no host prop reaches it.
 While previewing, the frame drops the toolbar, the tool stack and its resize handles,
@@ -1428,7 +1475,7 @@ in which case every link is kept. An SRDF shows its paired URDF's tree.
 The section reuses the Features tree's pieces rather than cloning them: the 28px
 row primitive, `Filter…` (`TreeFilterInput`, `primitives/tree-filter`), the
 ranked flat search of `kit/inspector/modelTreeSearch.js` (`useTreeSearch`), and the
-Reference panel under it (the stack's next panel, sized on its own from the same 200px
+Reference panel under it (the stack's next panel, sized on its own from the same 144px
 cap, the same panel the Features tree has). Its X closes Links, as Features', and Select
 opens it again. The search index also reads a row's `searchAliases`, so a
 link is found by its joint name and the hit shows that joint in place of its
@@ -1506,15 +1553,15 @@ hash must match the saved artifact before those annotations apply. Active build
 previews carry immutable geometry revisions and never initiate a source build.
 A complete previous revision stays visible until its replacement is ready.
 
-The Display panel's mode control selects Solid, Render, X-ray, Hidden line or
+Display's mode control selects Solid, Render, X-ray, Hidden line or
 Wireframe presets over the same grouped settings. Render defaults to perspective; the
 others to orthographic. Changing values shows Custom. Reset restores the base
 preset and disables Clip/Explode, preserving camera viewpoint/zoom, selection
 and the pose.
 The groups and gate behavior are specified in [View presets](render-mode.md).
 Photographic lighting and stage code stay lazy; the lightweight grouped settings
-panel is always available. Authored materials remain read-only in the Model
-reference section, with no material override or undo state.
+panel is always available. Authored materials are read-only, with no material
+override or undo state.
 
 The host-supplied render session owns its tessellation cache and worker leases.
 The file view's display slice is the sole view-settings authority; the camera is the
@@ -1543,7 +1590,8 @@ from the card, with the file's name and no path of the machine.
 ### Camera framing and zoom
 
 Zoom to fit and the live `resetCamera` frame the original authored model bounds at
-the current angle, and that framing is 100%. Explode, clipping, animation, kinematics, visibility, floor and
+the current angle, and that framing is 100%. A saved revision keeps the camera and its
+zoom exactly; Zoom to fit frames the new revision. Explode, clipping, animation, kinematics, visibility, floor and
 other scene effects never redefine 100%. Perspective and orthographic derive
 their own baseline from that same box and the current viewport dimensions.
 Selection fit may move the camera but cannot make that new framing become 100%.
@@ -1552,5 +1600,5 @@ for clipping, lighting and picking. Nothing displays that percentage; it is read
 through the `window.__cadCamera()` test seam (`zoomPercent`). The acts that frame the
 model are STEP's context menu (Zoom to fit, Zoom to selection) and the live
 `resetCamera`; the view cube (bottom-left, absent in preview) turns
-the camera and keeps its zoom and pan, and opening or reloading a file fits the model
-afresh.
+the camera and keeps its zoom and pan, and opening a file fits the model afresh (a
+reload of the page restores the camera the file on screen was left at).

@@ -9,14 +9,18 @@ restart expires this channel; the catalog keeps serving the bytes on disk.
 
 from __future__ import annotations
 
+import logging
 import os
 import time
+from collections.abc import Callable
 from pathlib import Path
 
 from cadgen.store.paths import store_root
 
 from .backend import normalized_file_ref, require_contained
 from .build_progress import _daemon_jobs
+
+LOG = logging.getLogger("cadgen.viewer.preview")
 
 
 def _preview_target(root_path: str, file_ref: str, *, lazy: bool = False) -> str:
@@ -31,22 +35,28 @@ def _preview_target(root_path: str, file_ref: str, *, lazy: bool = False) -> str
     return target
 
 
-def preview_update(root_path: str, file_ref: str, *, after: str | None = None, lazy: bool = False) -> dict:
+def preview_update(root_path: str, file_ref: str, *, after: str | None = None, lazy: bool = False,
+                   on_saved: Callable[[dict[str, str]], None] | None = None) -> dict:
     """Wake for ledger changes, then answer as :func:`preview_status`."""
     target = _preview_target(root_path, file_ref, lazy=lazy)  # refuse invalid paths before waiting
     from cadgen.daemon.client import watch_jobs
 
     update = watch_jobs(after, output=os.path.realpath(target), store_root=os.path.realpath(store_root()))
     if update is None:
-        return preview_status(root_path, file_ref, lazy=lazy)
-    result = preview_status(root_path, file_ref, jobs=update["jobs"], lazy=lazy)
+        return preview_status(root_path, file_ref, lazy=lazy, on_saved=on_saved)
+    result = preview_status(root_path, file_ref, jobs=update["jobs"], lazy=lazy, on_saved=on_saved)
     result["feedCursor"] = update["jobsCursor"]
     if update.get("jobsWatchLimited"):
         result["feedLimited"] = True
     return result
 
 
-def preview_status(root_path: str, file_ref: str, *, jobs: list[dict] | None = None, lazy: bool = False) -> dict:
+def preview_status(root_path: str, file_ref: str, *, jobs: list[dict] | None = None, lazy: bool = False,
+                   on_saved: Callable[[dict[str, str], str], None] | None = None) -> dict:
+    """The newest build of the file. ``on_saved`` hears what the file's builds have saved
+    ({path: saved tree}, newest build last) and the file asked about, before anything here
+    reads the file: the viewer starts on those files' catalog rows (``warm.py``). That is
+    best effort: whatever it raises is logged, and the feed answers all the same."""
     file_path = _preview_target(root_path, file_ref, lazy=lazy)
     # Match the catalog's root-relative file identity. An absolute path in a
     # provisional entry would be written into ?file= by the selection effect,
@@ -62,6 +72,18 @@ def preview_status(root_path: str, file_ref: str, *, jobs: list[dict] | None = N
         and job.get("storeRoot") and os.path.realpath(job["storeRoot"]) == active_store
         and target in {os.path.realpath(p) for p in job.get("outputs", [])}
     ]
+    if on_saved is not None:
+        saved = {
+            path: str(entry.get("tree") or "")
+            for job in sorted(matching, key=lambda job: int(job.get("sequence") or 0))
+            for path, entry in (job.get("savedResults") or {}).items()
+            if isinstance(entry, dict)
+        }
+        if saved:
+            try:
+                on_saved(saved, target)
+            except Exception as error:  # noqa: BLE001 - a warm only saves a read time; the feed must answer
+                LOG.warning("catalog warm hand-off failed: %r", error)
     if not matching:
         return {"output": target, "file": display_file, "state": "disconnected", "revision": None}
     latest = max(matching, key=lambda job: int(job.get("sequence") or 0))

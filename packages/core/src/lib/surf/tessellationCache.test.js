@@ -15,6 +15,8 @@ import {
   resolvedTessellationIdentity,
   createTessellationCache,
   surfIndexFromCacheEntry,
+  TESS_BATCH_MAX_BYTES,
+  tessBatchMaxBytes,
   tessellationCacheKey,
   tessellationQuality,
   tessellationPayloadFacts,
@@ -411,6 +413,42 @@ test("HTTP provider probes metadata before an exact bounded object read", async 
 });
 
 
+test("an HTTP batch read verifies each entry on its own: a damaged one is a miss for its component alone", async () => {
+  const entries = [encodedEntry(), encodedEntry({ surfaceInput: D2 })];
+  const rows = entries.map((entry) => validateTessellationProbeRow({ schemaVersion: 1,
+    object: createHash("sha256").update(entry).digest("hex"), ...tessellationPayloadFacts(entry) }));
+  const damaged = entries[1].slice();
+  damaged[damaged.length - 1] ^= 0xff;
+  const container = encodeTessellationCacheBatch([entries[0], damaged]);
+  const provider = createHttpTessellationCacheProvider({ origin: "http://cache.test", fetch: async () => new Response(container.slice(), {
+    status: 200, headers: { "content-length": String(container.byteLength) },
+  }) });
+  const bodies = await provider.getManyProbed(rows, { maxBytes: container.byteLength });
+  assert.deepEqual(bodies[0], entries[0]);
+  assert.equal(bodies[1], null);
+});
+
+test("a transport's batch ceiling lowers the server's bound and never raises it", async () => {
+  const MIB = 1024 * 1024;
+  assert.equal(TESS_BATCH_MAX_BYTES, 32 * MIB);
+  assert.deepEqual([8 * MIB, 64 * MIB, undefined, 0, -1, Number.NaN, 2.5].map(tessBatchMaxBytes),
+    [8 * MIB, 32 * MIB, 32 * MIB, 32 * MIB, 32 * MIB, 32 * MIB, 32 * MIB]);
+  // A client's provider declares its transport's ceiling; the cache and its sessions report it.
+  let fetched = 0;
+  const provider = createHttpTessellationCacheProvider({ origin: "http://cache.test", maxBatchBytes: 8 * MIB,
+    fetch: async () => { fetched += 1; return new Response(null, { status: 500 }); } });
+  const cache = createTessellationCache({ provider });
+  assert.deepEqual([provider.maxBatchBytes, cache.batchMaxBytes, cache.createSession().batchMaxBytes], [8 * MIB, 8 * MIB, 8 * MIB]);
+  assert.equal(createTessellationCache({ provider: createHttpTessellationCacheProvider() }).batchMaxBytes, 32 * MIB);
+  // And the provider asks for no batch over it, whatever its caller allows.
+  const row = validateTessellationProbeRow({ schemaVersion: 1,
+    object: createHash("sha256").update(encodedEntry()).digest("hex"), ...tessellationPayloadFacts(encodedEntry()) });
+  const over = Array.from({ length: Math.ceil((8 * MIB) / row.byteLength) + 1 }, () => row);
+  assert.equal(await provider.getManyProbed(over, { maxBytes: 32 * MIB }), null);
+  assert.equal(fetched, 0);
+  cache.dispose();
+});
+
 test("bounded probes retain other chunks when one metadata response is unavailable", async (t) => {
   const inputs = Array.from({ length: 513 }, (_, n) => createHash("sha256").update(`input-${n}`).digest("hex"));
   const rows = new Map(inputs.map((surfaceInput) => {
@@ -491,31 +529,94 @@ test("cache disposal rejects a late custom-provider response without affecting a
   }
 });
 
-test("deferred cache warming stays byte-bounded and flushes at configured concurrency", async () => {
-  const first = encodedEntry();
-  const second = encodedEntry({ surfaceInput: D2 });
+// Distinct component inputs, each with its own encoded entry: a load's worth of write-backs.
+const loadInputs = ["31", "32", "33", "34", "35", "36", "37", "38"].map((pair) => pair.repeat(32));
+const loadEntry = (surfaceInput) => encodedEntry({ surfaceInput });
+// Every pending callback and microtask: what a resolved write leads to has happened.
+const settled = () => new Promise((resolve) => setImmediate(resolve));
+
+test("deferred write-backs go out by their ceiling while a long load keeps adding entries, and in batches", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const written = [];
+  const cache = createTessellationCache({ provider: {
+    probeMany: async () => [], getProbed: async () => null,
+    put: async (key) => { written.push(key); },
+  }, writeBack: { deferMs: 1500, maxWaitMs: 2000, concurrency: 2 } });
+  const keys = loadInputs.map((surfaceInput) => tessellationCacheKey(surfaceInput, Q));
+  // A long cold load: an entry every 500 ms, so it is never quiet for the 1500 ms a batch waits for.
+  const loadFor = async (indices) => {
+    for (const index of indices) {
+      await cache.writeBackEntryBytes(loadInputs[index], Q, loadEntry(loadInputs[index]));
+      t.mock.timers.tick(500);
+      await settled();
+      if (index % 4 < 3) assert.deepEqual(written, keys.slice(0, index - (index % 4)), "entries wait to be written together");
+    }
+  };
+  try {
+    await loadFor([0, 1, 2, 3]);
+    assert.deepEqual(written, keys.slice(0, 4), "two seconds after its first entry the batch was written, though the load never went quiet");
+    await loadFor([4, 5, 6, 7]);
+    assert.deepEqual(written, keys, "and so was the next");
+    assert.equal(cache.memoryStats().writeBackBytes, 0);
+
+    // A load that goes quiet still writes after its quiet interval.
+    await cache.writeBackEntryBytes(D, Q, encodedEntry());
+    t.mock.timers.tick(1500);
+    await settled();
+    assert.deepEqual(written, [...keys, tessellationCacheKey(D, Q)]);
+  } finally {
+    cache.dispose();
+  }
+});
+
+test("a batch that reaches its byte bound is written at once, not turned away; only a writer still busy with the last one turns entries away", async (t) => {
+  // No timer fires here: whatever is written, the byte bound wrote.
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const entries = loadInputs.map(loadEntry);
+  const keys = loadInputs.map((surfaceInput) => tessellationCacheKey(surfaceInput, Q));
+  const size = entries[0].byteLength;
   const starts = [];
   const finishes = [];
   const cache = createTessellationCache({ provider: {
     probeMany: async () => [], getProbed: async () => null,
     put: (key) => { starts.push(key); return new Promise((resolve) => finishes.push(resolve)); },
-  }, writeBack: { deferMs: 10_000, concurrency: 1, maxPendingBytes: first.byteLength } });
+  }, writeBack: { deferMs: 10_000, concurrency: 1, maxPendingBytes: 2 * size } });
+  const write = (index) => cache.writeBackEntryBytes(loadInputs[index], Q, entries[index]);
   try {
-    await cache.writeBackEntryBytes(D, Q, first);
-    await cache.writeBackEntryBytes(D2, Q, second);
-    assert.equal(cache.memoryStats().pendingWriteBackBytes, first.byteLength);
-    const flushed = cache.flushTessellationCacheWriteBacks();
-    assert.deepEqual(starts, [tessellationCacheKey(D, Q)]);
-    assert.equal(cache.memoryStats().activeWriteBackBytes, first.byteLength);
+    await write(0);
+    assert.deepEqual(starts, []);
+    assert.equal(cache.memoryStats().pendingWriteBackBytes, size);
+    await write(1);
+    assert.deepEqual(starts, [keys[0]], "the full batch is being written, at the configured concurrency");
+    assert.deepEqual(cache.memoryStats(), { pendingWriteBackBytes: 0, activeWriteBackBytes: 2 * size, writeBackBytes: 2 * size });
+
+    // The next batch fills while the writer is busy; past its bound the writer cannot take it,
+    // so memory wins: one batch writing and one waiting, and the entry beyond them is turned away.
+    await write(2);
+    await write(3);
+    await write(4);
+    assert.deepEqual(cache.memoryStats(), { pendingWriteBackBytes: 2 * size, activeWriteBackBytes: 2 * size, writeBackBytes: 4 * size });
+
+    // Once the writer is free, the waiting batch goes at once.
     finishes.shift()();
-    await flushed;
+    await settled();
+    assert.deepEqual(starts, keys.slice(0, 2));
+    finishes.shift()();
+    await settled();
+    assert.deepEqual(starts, keys.slice(0, 3), "the full batch followed the moment the writer was free");
+    finishes.shift()();
+    await settled();
+    finishes.shift()();
+    await settled();
+    assert.deepEqual(starts, keys.slice(0, 4));
     assert.equal(cache.memoryStats().writeBackBytes, 0);
   } finally {
     cache.dispose();
   }
 });
 
-test("root-owned write-backs survive view disposal within one shared byte budget", async () => {
+test("root-owned write-backs survive view disposal within one shared byte budget", async (t) => {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
   const firstBytes = encodedEntry();
   const secondBytes = encodedEntry({ surfaceInput: D2 });
   const written = [];
@@ -524,7 +625,7 @@ test("root-owned write-backs survive view disposal within one shared byte budget
       probeMany: async () => [], getProbed: async () => null,
       put: async (key) => written.push(key),
     },
-    writeBack: { deferMs: 10_000, concurrency: 1, maxPendingBytes: firstBytes.byteLength },
+    writeBack: { deferMs: 10_000, concurrency: 1, maxPendingBytes: firstBytes.byteLength + secondBytes.byteLength },
   });
   try {
     const previous = owner.createSession();
@@ -537,10 +638,12 @@ test("root-owned write-backs survive view disposal within one shared byte budget
 
     const current = owner.createSession();
     await current.writeBackEntryBytes(D2, Q, secondBytes);
-    assert.equal(owner.memoryStats().pendingWriteBackBytes, firstBytes.byteLength,
-      "new views share the root queue's byte ceiling");
+    await settled();
+    assert.deepEqual(written, [tessellationCacheKey(D, Q), tessellationCacheKey(D2, Q)],
+      "new views share the root queue's batch: the second view's entry filled it, and it was written whole");
     await current.flushTessellationCacheWriteBacks();
-    assert.deepEqual(written, [tessellationCacheKey(D, Q)]);
+    assert.equal(owner.memoryStats().writeBackBytes, 0);
+    written.length = 0;
     await previous.writeBackEntryBytes(D2, Q, secondBytes);
     assert.equal(owner.memoryStats().writeBackBytes, 0, "late results from a disposed view cannot enqueue writes");
 
@@ -550,7 +653,7 @@ test("root-owned write-backs survive view disposal within one shared byte budget
     assert.equal(current.tessellationCacheProviderRegistered(), false);
     assert.equal(owner.memoryStats().writeBackBytes, 0, "closing the root still releases pending cache memory");
     await current.flushTessellationCacheWriteBacks();
-    assert.deepEqual(written, [tessellationCacheKey(D, Q)]);
+    assert.deepEqual(written, [], "nothing the root let go of is written");
     assert.throws(() => owner.createSession(), /disposed/);
   } finally {
     owner.dispose();

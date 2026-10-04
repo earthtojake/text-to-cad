@@ -69,7 +69,9 @@ const LOAD_STAGES = Object.freeze({
   broken: {
     load: { alert: { severity: "error", summary: "Load failed", title: "Couldn’t load the harness model",
       message: "The harness file could not be loaded.", reload: true } }
-  }
+  },
+  // Not loading, and no scene to work on yet: the chrome is up, and idle.
+  unready: { load: {}, scene: false }
 });
 
 /** One triangle, as the kit's scene contract (`kit/scene.js`) sees it. */
@@ -85,6 +87,9 @@ function createTriangleScene() {
   const bounds = { min: [0, 0, 0], max: [20, 20, 0] };
   return {
     object3D: root, bounds, restBounds: bounds,
+    // It opens ARRIVING, with no box declared for the whole of it: the viewport frames what is
+    // there, and frames it once more when `arrive(true)` says the box can grow no more.
+    complete: false,
     // This scene's one surface never takes a shadow, whatever the view says: it is TOLD the
     // setting and keeps its own rule, so the viewport must not set its meshes itself.
     setShadowReception(receives) { this.onShadowReception?.(`${receives}:${root.children[0].receiveShadow}`); },
@@ -143,16 +148,18 @@ function HarnessSurface({ view, data }) {
   const [shownRevision, setShownRevision] = useState("");
   // What the frame put down when the person reached for the model.
   const [putDown, setPutDown] = useState("");
-  const { load: stageLoad } = LOAD_STAGES[stage] || LOAD_STAGES.idle;
+  const { load: stageLoad, scene: stageScene = true } = LOAD_STAGES[stage] || LOAD_STAGES.idle;
   const live = useMemo(() => (shownRevision
     ? { ...LIVE, resource: () => ({ ...resource, revision: shownRevision }) }
     : LIVE), [resource, shownRevision]);
 
   // `panel*.harness` stands in for a file whose tool stack is full (below); it opens in Select.
   const withPanel = view.file.path.startsWith("panel");
+  // `flat*.harness` stands in for a view that is not 3D, a drawing's: its renderer does not declare Preview.
+  const previewable = !view.file.path.startsWith("flat");
   const shell = useRendererShell({
     view, services: shellServices, resource, modelKey: view.file.path, revisionKey: "harness",
-    features: EDGELESS_VIEW_FEATURES, toolModes: withPanel ? PANEL_TOOL_MODES : HARNESS_TOOL_MODES, scene,
+    features: EDGELESS_VIEW_FEATURES, toolModes: withPanel ? PANEL_TOOL_MODES : HARNESS_TOOL_MODES, previewable, scene: stageScene ? scene : null,
     load: { busy: false, ...stageLoad },
     live, onCameraSettled, runtimeLifecycle,
     // A renderer whose references are its own vocabulary assembles its own snapshot.
@@ -225,6 +232,9 @@ function HarnessSurface({ view, data }) {
       ))}
       <button type="button" className="pointer-events-auto" data-harness-shown-revision
         onClick={() => setShownRevision(current => (current ? "" : "shown-revision"))}>shown</button>
+      {/* Preview asked for from outside the navbar, as a link or a host request would. */}
+      <button type="button" className="pointer-events-auto" data-harness-ask-preview
+        onClick={() => shell.setPreviewing(true)}>preview</button>
     </div>}/>;
 }
 

@@ -108,14 +108,29 @@ class Lifecycle(unittest.TestCase):
                                            preview={"output": output, "tree": tree, "kinematics": {"mates": []}}))
         snapshot = self.ledger.snapshot()[0]
         self.assertEqual(snapshot["previews"][output]["tree"], "latest")
-        snapshot["previews"][output]["kinematics"]["mates"].append("mutation")
-        self.assertEqual(self.ledger.snapshot()[0]["previews"][output]["kinematics"]["mates"], [])
+        snapshot["previews"][output]["tree"] = "mutation"
+        self.assertEqual(self.ledger.snapshot()[0]["previews"][output]["tree"], "latest")
         self.ledger.observe(self._event(self.model, "done", job=job["id"]))
         self.assertEqual(job["state"], "building", "one model completing does not finish a multi-model request")
         self.ledger.finish(job, 0)
         self.assertEqual(job["state"], "done")
         self.ledger.observe(self._event(self.model, "building", job=job["id"], sequence=100))
         self.assertEqual(job["state"], "done", "late forwarded events cannot reopen completed requests")
+
+    def test_a_job_keeps_only_what_its_readers_read_of_a_result(self):
+        # The viewer's status reads a saved result's tree and digest; nothing reads
+        # a preview's annotations, so a payload carrying them keeps none.
+        job = self.ledger.start(tool="run", subject=self.model)
+        output = str(Path(self.model).with_suffix(".step"))
+        self.ledger.observe(self._event(self.model, "building", job=job["id"], sequence=1, preview={
+            "output": output, "tree": "source", "kinematics": {"mates": [1] * 1000}, "appearance": {},
+            "animation": "export const clips = {};", "surfaceProducer": {"scheme": 19}}))
+        self.ledger.observe(self._event(self.model, "building", job=job["id"], sequence=2, saved={
+            "output": output, "tree": "document", "documentHash": "abc", "appearance": {"materials": {}}}))
+        snapshot = self.ledger.snapshot()[0]
+        self.assertEqual(snapshot["previews"][output], {"output": output, "tree": "source", "sequence": 1})
+        self.assertEqual(snapshot["savedResults"][output],
+                         {"output": output, "tree": "document", "documentHash": "abc", "sequence": 2})
 
     def test_parent_announcements_cannot_claim_child_preview_and_epochs_are_unique(self):
         parent = self.ledger.start(tool="run", subject=self.model)

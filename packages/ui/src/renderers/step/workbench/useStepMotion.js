@@ -18,7 +18,7 @@ import { useAnimationClockStore } from "./animationClockStore.js";
 import { cadPathForEntry, fileKey as fileKeyOf } from "./entryPaths.js";
 import { restoreMotionAnimation, restoreMotionParameters } from "./motionRestore.js";
 import { buildParameterValuesCopyText, parseParameterValuesPasteText } from "./parameterControls.js";
-import { resolveStepModuleLoad } from "./stepModuleLoad.js";
+import { resolveStepModuleLoad, stepPoseLogic } from "./stepModuleLoad.js";
 import { stepModuleRequiresTopology } from "./topologyCapabilities.js";
 import { useStepMotionControls } from "./useStepMotionControls.js";
 
@@ -69,6 +69,7 @@ export function useStepMotion({ entry, fileKey, resources, meshData, meshPartial
 
   const [stepModuleLoadState, setStepModuleLoadState] = useState({
     url: "",
+    file: "",
     status: "idle",
     error: "",
     definition: null
@@ -89,12 +90,17 @@ export function useStepMotion({ entry, fileKey, resources, meshData, meshPartial
   const animationStateRef = useRef(animationState);
   const motionRevisionRef = useRef(0);
 
-  const definition = stepModuleLoadState.url === moduleUrl ? stepModuleLoadState.definition : null;
+  // A rebuild writes this file's sidecar again (a new version, bound to the new document), and it is
+  // read again: until it lands, what the last one declared stays in hand, so the model stays posed
+  // and Position stays the tool while it loads. Whether the pose outlives it is the load's to say.
+  const kinematicsInHand = stepModuleLoadState.url === moduleUrl ||
+    (Boolean(moduleUrl) && stepModuleLoadState.file === fileKey && stepModuleLoadState.status === "ready");
+  const definition = kinematicsInHand ? stepModuleLoadState.definition : null;
   const clips = animationLoadState.url === animationKey ? animationLoadState.clips : null;
   const animationStatus = animationKey ? (animationLoadState.url === animationKey ? animationLoadState.status : "loading") : "idle";
   const animationLoadError = animationLoadState.url === animationKey ? animationLoadState.error : "";
-  const status = moduleUrl ? (stepModuleLoadState.url === moduleUrl ? stepModuleLoadState.status : "loading") : "idle";
-  const error = stepModuleLoadState.url === moduleUrl ? stepModuleLoadState.error : "";
+  const status = moduleUrl ? (kinematicsInHand ? stepModuleLoadState.status : "loading") : "idle";
+  const error = kinematicsInHand ? stepModuleLoadState.error : "";
   const loading = Boolean(moduleUrl && status === "loading");
 
   // The pose the person PICKED, which the dropdown shows until they move a DOF. Without
@@ -108,6 +114,7 @@ export function useStepMotion({ entry, fileKey, resources, meshData, meshPartial
     if (!moduleUrl) {
       setStepModuleLoadState({
         url: "",
+        file: fileKey,
         status: "idle",
         error: "",
         definition: null
@@ -120,14 +127,21 @@ export function useStepMotion({ entry, fileKey, resources, meshData, meshPartial
       };
     }
 
-    setStepModuleLoadState({
-      url: moduleUrl,
-      status: "loading",
-      error: "",
-      definition: null
-    });
-    stepModuleParameterValuesRef.current = {};
-    setStepModuleParameterValues({});
+    // The same file's sidecar read again keeps the last one's definition and values in hand
+    // (above) while it loads; only a first load starts from nothing.
+    const reloading = stepModuleLoadState.file === fileKey && stepModuleLoadState.status === "ready";
+    const poseLogicInHand = reloading ? stepPoseLogic(stepModuleLoadState.definition) : "";
+    if (!reloading) {
+      setStepModuleLoadState({
+        url: moduleUrl,
+        file: fileKey,
+        status: "loading",
+        error: "",
+        definition: null
+      });
+      stepModuleParameterValuesRef.current = {};
+      setStepModuleParameterValues({});
+    }
 
     const loadMotionRevision = motionRevisionRef.current;
     const modulePromise = entry?.sourceSidecar
@@ -145,8 +159,13 @@ export function useStepMotion({ entry, fileKey, resources, meshData, meshPartial
       if (cancelled) {
         return;
       }
-      // The stored pose, read against the sidecar as it is now.
-      const restoredPose = readStoredRef.current().pose;
+      // A reload whose joints and named poses are unchanged keeps the values in hand, and the
+      // named pose chosen with them; one that changed them starts at the new defaults, with no
+      // attempt to fit the old pose onto the new joints. A first load reads the stored pose,
+      // against the sidecar as it is now.
+      const kept = reloading && stepPoseLogic(definition) === poseLogicInHand;
+      const restoredPose = kept ? { parameterValues: stepModuleParameterValuesRef.current }
+        : reloading ? null : readStoredRef.current().pose;
       // A sidecar with no kinematics section resolves to a NULL definition —
       // an animation-only model has a sidecar and lands here — so the ready
       // state is committed from one place that expects that (see
@@ -156,17 +175,18 @@ export function useStepMotion({ entry, fileKey, resources, meshData, meshPartial
         definition,
         restored: restoredPose
       });
-      setStepModuleLoadState(resolved.loadState);
+      setStepModuleLoadState({ ...resolved.loadState, file: fileKey });
       const parameterValues = restoreMotionParameters(definition, resolved.parameterValues, animationStateRef.current);
       stepModuleParameterValuesRef.current = parameterValues;
       setStepModuleParameterValues(parameterValues);
-      setAppliedStepPoseName("");
+      if (!kept) setAppliedStepPoseName("");
     }).catch((error) => {
       if (cancelled) {
         return;
       }
       setStepModuleLoadState({
         url: moduleUrl,
+        file: fileKey,
         status: "error",
         error: error instanceof Error ? error.message : String(error),
         definition: null
@@ -185,7 +205,15 @@ export function useStepMotion({ entry, fileKey, resources, meshData, meshPartial
   // sidecar. A document with no animation resolves to no clips and no
   // Animation tab, and a broken one reports its own error without disturbing
   // the Pose tab.
+  //
+  // It is keyed on the animation's own identity (`animationKey`: the file and the hash of the
+  // routine source), never on the entry: an update of the model that leaves its routines as
+  // they were neither stops nor rewinds one that is playing, and only a changed routine is
+  // compiled again, from rest. The source and the file's name are read when the key changes.
+  const animationSourceRef = useRef({ sourceAnimation, entry });
+  animationSourceRef.current = { sourceAnimation, entry };
   useEffect(() => {
+    const { sourceAnimation, entry } = animationSourceRef.current;
     let cancelled = false;
     const controller = new AbortController();
     const resetAnimation = () => {
@@ -250,7 +278,7 @@ export function useStepMotion({ entry, fileKey, resources, meshData, meshPartial
       cancelled = true;
       controller.abort();
     };
-  }, [fileKey, animationKey, entry, sourceAnimation]);
+  }, [fileKey, animationKey]);
 
 
   const clipList = useMemo(() => animationClipList(clips), [clips]);

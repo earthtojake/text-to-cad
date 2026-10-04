@@ -82,6 +82,32 @@ if __name__ == "__main__":
 """
 
 
+# Three distinct components; the mate's axis is a face of the placed, rotated
+# arm, so it resolves through that occurrence's own topology alone.
+AXIS_MODEL = """
+import cadgen
+from cadgen import label_shape, step
+from cadgen import build123d as bd
+
+KINEMATICS = {
+    "mates": [
+        cadgen.revolute("swing", parent="#base", child="#arm", axis="#arm.f1", limits=(0, 90)),
+    ],
+}
+
+@step(kinematics=KINEMATICS)
+def pivot():
+    base = label_shape(bd.Box(20, 20, 4), "base")
+    arm = label_shape(bd.Pos(10, 3, 6) * bd.Rot(0, 40, 30) * bd.Cylinder(2, 16), "arm")
+    tip = label_shape(bd.Pos(-8, 0, 6) * bd.Sphere(2), "tip")
+    return bd.Compound(children=[base, arm, tip])
+
+
+if __name__ == "__main__":
+    pivot()
+"""
+
+
 class KinematicsBuildTests(unittest.TestCase):
     def setUp(self) -> None:
         self._roots = IsolatedCadRoots(self, prefix="cadkin-")
@@ -147,49 +173,37 @@ class KinematicsBuildTests(unittest.TestCase):
         # The descriptor stays STEP-pure: kinematics is sidecar-only.
         self.assertNotIn("kinematics", self._descriptor(script))
 
-    def test_preview_and_sidecar_share_one_owned_kinematics_resolution(self) -> None:
+    def test_the_build_status_carries_no_annotations(self) -> None:
+        # "Saving STEP" names the output and the source result, and its readers
+        # read no more: kinematics, appearance and animation live in the
+        # sidecar alone, resolved once, after the preview has gone out.
         from cadgen.daemon import executors
 
         script = self._write("owned.py")
-        previews = []
-
-        def sink(event: dict) -> None:
-            preview = event.get("preview")
-            if not isinstance(preview, dict) or not isinstance(preview.get("kinematics"), dict):
-                return
-            previews.append(json.loads(json.dumps(preview["kinematics"])))
-            # Reporting owns its event payload. A sink may retain or mutate it;
-            # neither action may alter the final sidecar or the cached value.
-            preview["kinematics"]["mates"][0]["name"] = "sink mutation"
+        events: list[dict] = []
 
         def resolve(block, **_kwargs):
+            self.assertTrue(any("preview" in event for event in events), "kinematics held back the preview")
             resolved = json.loads(json.dumps(block))
             resolved["mates"][0].update(parentId="o1.1", childId="o1.2")
             return resolved, {"#base": "o1.1", "#arm": "o1.2"}
 
-        view = self.root / "kinematics-view"
-
-        def export_view(_tree):
-            view.mkdir(exist_ok=True)
-            return view
-
-        executors.set_event_sink(sink)
+        executors.set_event_sink(events.append)
         try:
             with mock.patch(
                 "cadgen._internal.kinematics_resolve.resolve_kinematics_block",
                 side_effect=resolve,
-            ) as resolve_call, mock.patch(
-                "cadgen.store.view.export_view", side_effect=export_view,
-            ) as export_call:
+            ) as resolve_call:
                 self.assertEqual(0, self._build(script))
         finally:
             executors.set_event_sink(None)
 
         self.assertEqual(resolve_call.call_count, 1)
-        self.assertEqual(export_call.call_count, 1)
-        self.assertEqual(len(previews), 1)
-        self.assertEqual(previews[0], self._sidecar(script)["kinematics"])
-        self.assertEqual(self._sidecar(script)["kinematics"]["mates"][0]["name"], "swing")
+        (preview,) = [event["preview"] for event in events if "preview" in event]
+        (saved,) = [event["saved"] for event in events if "saved" in event]
+        self.assertEqual(set(preview), {"output", "tree"})
+        self.assertEqual(set(saved), {"output", "tree", "documentHash"})
+        self.assertEqual(self._sidecar(script)["kinematics"]["mates"][0]["parentId"], "o1.1")
 
     def test_axis_selector_refs_resolve_to_world_numbers(self) -> None:
         script = self.root / "pivot.py"
@@ -230,6 +244,69 @@ class KinematicsBuildTests(unittest.TestCase):
         # Both of the arm group's leaves sit under the mated occurrence.
         leaves = {o["id"] for o in self._descriptor(script)["occurrences"]}
         self.assertEqual({"o1.1.1", "o1.1.2", "o1.2.1", "o1.2.2"}, leaves)
+
+    def test_mates_resolve_without_reading_any_component(self) -> None:
+        # A mate's ends name occurrences, never topology: a group, a leaf, a
+        # label or an id. Resolving them reads no component's SURF and writes no
+        # view of the tree; each of those cost seconds on a large assembly and
+        # derived SURF inside the build when the store had none.
+        script = self.root / "grouped.py"
+        script.write_text(GROUPED_MODEL, encoding="utf-8")
+        refused = AssertionError("mate ends need no component topology")
+        with mock.patch("cadgen.store.view.export_view", side_effect=refused), \
+                mock.patch("cadgen.store.view.materialize_view_surfaces", side_effect=refused), \
+                mock.patch("cadgen.assembly_lookup._read_component_bundle", side_effect=refused):
+            self.assertEqual(0, self._build(script))
+        (mate,) = self._sidecar(script)["kinematics"]["mates"]
+        self.assertEqual((mate["parentId"], mate["childId"]), ("o1.1", "o1.2"))
+
+    def test_an_axis_ref_reads_only_its_own_component_and_matches_the_composed_index(self) -> None:
+        from cadgen._internal.kinematics_resolve import _axis_from_ref
+        from cadgen.assembly_lookup import index_with_assembly_occurrences
+        from cadgen.lookup import build_selector_index
+        from cadgen.selector_types import SelectorBundle
+        from cadgen.step_topology_artifact import StepTopologyArtifact
+        from cadgen.store import view
+        from cadgen.store.index import model_ref
+        from cadgen.store.records import read_record
+        from cadgen.store.trees import flatten
+
+        script = self.root / "pivot.py"
+        script.write_text(AXIS_MODEL, encoding="utf-8")
+        exported = []
+        original = view.export_view
+
+        def export_view(tree_hash, *args, **kwargs):
+            exported.append(kwargs.get("cids"))
+            return original(tree_hash, *args, **kwargs)
+
+        with mock.patch("cadgen.store.view.export_view", side_effect=export_view):
+            self.assertEqual(0, self._build(script))
+        tree = read_record(model_ref(script, "pivot"))["tree"]
+        descriptor = flatten(tree)
+        components = {row["name"]: row["component"] for row in descriptor["occurrences"]}
+        self.assertEqual(len(set(components.values())), 3)
+        # One view, of the arm alone: the base and the tip are never read.
+        self.assertEqual(exported, [[components["arm"]]])
+
+        # The numbers are exactly the ones the composed index of every
+        # occurrence's topology gives, the index the resolver used to build.
+        package = original(tree)
+        try:
+            manifest = json.loads((package / "assembly.json").read_text(encoding="utf-8"))
+            artifact = StepTopologyArtifact(
+                cad_path="pivot", source_path=script, step_path=script.with_suffix(".step"),
+                artifact_path=package, manifest=manifest, selector_bundle=SelectorBundle(manifest=manifest),
+            )
+            composed = index_with_assembly_occurrences(build_selector_index(manifest), artifact)
+            expected = _axis_from_ref(composed, "#arm.f1", mate="swing", source_ref="pivot")
+        finally:
+            import shutil
+
+            shutil.rmtree(package, ignore_errors=True)
+        (mate,) = self._sidecar(script)["kinematics"]["mates"]
+        self.assertEqual(mate["axis"], expected)
+        self.assertNotIn(mate["axis"]["dir"], ([0.0, 0.0, 1.0], [0.0, 0.0, -1.0]))
 
     def test_an_unresolvable_mate_ref_fails_the_build(self) -> None:
         script = self.root / "broken.py"

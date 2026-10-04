@@ -73,6 +73,8 @@ this one:
 | Build status: the viewer's feed says whether a build of a file is running or failed, never what it previews; the viewer shows the saved file | saved-artifact read-back; no reader reaches source, closure or a model record | [`STORE.md`](STORE.md) §9b |
 | Composition: what a decorated call returns, what a parent may consume before a child's save, and when an exact `Compound(children=[...])` keeps its children's pins | the link/component decision, declared-output completion, `isinstance(root, Compound)` | [`STORE.md`](STORE.md) §6, §9a |
 | Display surfaces: canonical trees pin encoded BREP and effective intrinsic face colors; SURF extraction is an artifact-only build-pool job under an attested producer | geometry completeness stays separate from display readiness — `read_step`, STEP re-emits and parent materialization never wait for SURF | [`STORE.md`](STORE.md) §2 |
+| Tree composition: an all-link parent's saved-document tree composed from its children's document trees instead of parsed from the STEP it just wrote | `index/document` holds the cold compile of the written bytes, the same tree either way; every ineligible case parses | [`STORE.md`](STORE.md) §3 |
+| STEP splicing: the same parent's STEP written from its children's saved STEP files instead of exported through OCCT | the cold compile of the spliced file is the exported file's; every ineligible case exports | [`STORE.md`](STORE.md) §3 |
 
 ### 2. The store contains only derived results
 
@@ -143,7 +145,9 @@ format — STEP (canonicalized NAUO ids and presentation-style ordering), meshes
 kernel makes no such promise. Two runs of one model can differ in a last digit
 or in the order of the pieces a boolean returns, and cadgen neither hides that
 nor depends on it. Equal bytes mean reuse; different bytes cost a
-recomputation (a re-mesh, a parent recompose) and never a wrong answer.
+recomputation (a re-mesh, a parent recompose) and never a wrong answer. A
+rebuild whose writer input is unchanged keeps its saved STEP instead of writing
+the same bytes again ([`STORE.md`](STORE.md) §3, `writerInput`).
 Content addresses stay byte hashes; whether a model runs is decided by its
 sources (`STORE.md` §4), never by its outputs being reproducible. Compare two
 builds by geometry within a tolerance, never by file hash.
@@ -206,6 +210,14 @@ skills, never a fact cadgen knows; a project that wants an import root beyond
 the script's folder declares it the standard Python way (`PYTHONPATH=src`).
 *Pressure-test*: move a project's folders around and rebuild; cadgen must not
 care, only the project's imports may.
+
+A script may declare several models, and builds the ones its `__main__` calls.
+Its flags (`--force`, `--json`, `--verbose`, the mesh tolerances) apply to every
+model it builds: no flag names, selects or configures one of them. A command
+that addresses one model, such as `cadgen store why`, names it
+`script.py::function`; a bare `script.py` names its sole model, and a file that
+declares several must be named. *Pressure-test*: put two models in one file and
+call both from `__main__`; every flag must mean the same thing for each.
 
 ### 8. No backwards compatibility
 
@@ -361,6 +373,8 @@ src/cadgen/
                          #   every app and version of cadgen
   analytics.py           # the CAD apps' anonymous usage counts, with consent
                          #   (its answer: settings.json's `analytics` section)
+  features.py            # the CAD views' features a person can turn off
+                         #   (Quick edit: settings.json's `features` section)
   store/                 # the store (STORE.md): objects, index, records, trees,
                          #   closure, gate, materialize, publish, lazy, gc, view
   cli/                   # generated command shells, one per <format> <verb>
@@ -375,7 +389,8 @@ src/cadgen/
                          #   cli_from_function, doors (documents by bytes),
                          #   source_sidecar, step_assemble/step_reemit
   viewer/                # the CAD Viewer's server: launcher (main),
-                         #   routes (http_app), catalog (scanner), the model
+                         #   routes (http_app), catalog (scanner; its rows
+                         #   started when a watched build saves: warm), the model
                          #   library every CAD view shares (recents), status
                          #   (artifact_status: not compiled / compiling /
                          #   compiled / failed), build_progress (the daemon's

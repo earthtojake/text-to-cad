@@ -597,6 +597,32 @@
     "openWorldHint": false,
     "readOnlyHint": true
    },
+   "description": "The CAD views' features a person can turn off in Settings, and their choice. Only for the person's own click.",
+   "inputSchema": {
+    "additionalProperties": false,
+    "properties": {
+     "quickEdit": {
+      "type": "boolean"
+     }
+    },
+    "type": "object"
+   },
+   "name": "cad_features",
+   "title": "CAD features"
+  },
+  {
+   "_meta": {
+    "ui": {
+     "visibility": [
+      "app"
+     ]
+    }
+   },
+   "annotations": {
+    "destructiveHint": false,
+    "openWorldHint": false,
+    "readOnlyHint": true
+   },
    "description": "The launch for opening a model in this view.",
    "inputSchema": {
     "additionalProperties": false,

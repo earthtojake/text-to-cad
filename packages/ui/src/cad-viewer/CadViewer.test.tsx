@@ -1,4 +1,5 @@
-import { act, cleanup, render } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react';
+import type { ReactElement } from 'react';
 import { afterEach, expect, test, vi } from 'vitest';
 import { unavailablePromptContext } from '@text-to-cad/core/prompt';
 import type { FileViewerProps } from '../file-viewer/types.js';
@@ -6,6 +7,7 @@ import type { FileViewerProps } from '../file-viewer/types.js';
 import { CadViewer, createCatalogFileSource } from '../../dist/cad-viewer/index.js';
 import { createLiveRegistry } from '../../dist/host/liveRegistry.js';
 import { createTabStore, memoryTabRecord } from '../../dist/tab-store/tabStore.js';
+import { viewerLinks } from '../../dist/file-viewer/navigation/links.js';
 
 // The shared FileViewer, reduced to what this composition hands it: the view on screen, and the
 // one a card's picture is drawn in out of sight (a compact one), while it is mounted.
@@ -127,4 +129,47 @@ test('the home pictures a card out of sight, in a viewer of its own, from what i
   rerender(view('parts/a.step'));
   await expect(again).resolves.toBe(false);
   expect(viewer.hidden).toBeNull();
+});
+
+test("Settings is the person's, one popover in the viewer's navbar and on the home: the host's settings in both, and nothing of a file", async () => {
+  const client = catalogClient();
+  const changes: string[] = [];
+  const appSettings = [
+    { id: 'analytics', section: 'Analytics', label: 'Share anonymous usage data', checked: false, onCheckedChange: (value: boolean) => { changes.push(`analytics:${value}`); } },
+    { id: 'other', section: 'Other', label: 'Another setting', checked: true, onCheckedChange: (value: boolean) => { changes.push(`other:${value}`); } },
+  ];
+  const host = { files: createCatalogFileSource(client as never, { id: 'a', rootName: 'root' }), clipboard: { writeText: async () => {}, readText: async () => '', writeImage: async () => {} },
+    promptContext: unavailablePromptContext, environment: { colorScheme: 'light' as const }, links: viewerLinks({ version: '0.7.4' }) };
+  render(<CadViewer client={client as never} host={host} tabStore={createTabStore(memoryTabRecord())} live={createLiveRegistry()} file="parts/a.step"
+    rootPath="/models" library={library} appSettings={appSettings} onShow={() => {}} />);
+  // What each Settings shows once opened: its sections, each its title and its rows (a setting, or a
+  // link: its words and where it goes).
+  const opened = async (element: ReactElement) => {
+    const view = render(element);
+    fireEvent.click(view.getAllByRole('button', { name: 'Settings' }).at(-1)!);
+    const dialog = await screen.findByRole('dialog', { name: 'Settings' });
+    const sections = [...dialog.querySelectorAll('[data-settings-section]')].map(section => [section.querySelector('h2')!.textContent,
+      [...section.querySelectorAll('label, a')].map(row => row.matches('a') ? `${row.textContent} → ${row.getAttribute('href')}` : row.textContent)]);
+    fireEvent.click(dialog.querySelector<HTMLElement>('[data-settings-section] input')!);
+    view.unmount();
+    return sections;
+  };
+  // The navbar's, which FileViewer draws over every file: no renderer draws it.
+  const navbar = await opened(viewer.props!.settings as ReactElement);
+  // The home's, under its wordmark.
+  const home = await opened(viewer.props!.presentation!.home as ReactElement);
+  expect(navbar).toEqual([['Analytics', ['Share anonymous usage data']], ['Other', ['Another setting']],
+    ['Feedback', [expect.stringMatching(/^Open Issue → https:\/\/github\.com\/earthtojake\/text-to-cad\/issues\/new\?title=Feedback/)]]]);
+  expect(home).toEqual(navbar);
+  // Each row is the host's own setting, changed through the host.
+  expect(changes).toEqual(['analytics:true', 'analytics:true']);
+});
+
+test('the features the person left on reach every file the viewer shows', () => {
+  const client = catalogClient();
+  const host = { files: createCatalogFileSource(client as never, { id: 'a', rootName: 'root' }), clipboard: { writeText: async () => {}, readText: async () => '', writeImage: async () => {} },
+    promptContext: unavailablePromptContext, environment: { colorScheme: 'light' as const } };
+  render(<CadViewer client={client as never} host={host} tabStore={createTabStore(memoryTabRecord())} live={createLiveRegistry()} file="parts/a.step"
+    rootPath="/models" features={{ quickEdit: false }} onShow={() => {}} />);
+  expect(viewer.props!.features).toEqual({ quickEdit: false });
 });

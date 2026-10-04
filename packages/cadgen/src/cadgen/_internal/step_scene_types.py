@@ -37,6 +37,10 @@ class LoadedStepScene:
     prototype_names: dict[int, str | None] = field(default_factory=dict)
     prototype_colors: dict[int, ColorRGBA] = field(default_factory=dict)
     prototype_face_colors: dict[int, dict[int, ColorRGBA]] = field(default_factory=dict)
+    # Prototype key -> (codec, BREP object hash) of the stored component it was
+    # decoded from, where the scene knows it: the facts a scene's edge policy
+    # reads are then remembered by that BREP (store.bounds.cached_component_topology).
+    prototype_components: dict[int, tuple[str, str]] = field(default_factory=dict)
     load_elapsed: float = 0.0
     step_hash: str | None = None
     source_kind: str = "step"

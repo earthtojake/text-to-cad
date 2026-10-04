@@ -52,11 +52,11 @@ it('the nav row, the strip and the view\'s actions share one hint with no native
   render(<>
     <PanelToggle icon={Files} label="Show files" active={false} onClick={() => {}} id="tree" />
     {strip()}
-    <ToolbarButton label="Display settings">D</ToolbarButton>
+    <ToolbarButton label="Display">D</ToolbarButton>
     <ToolbarButton label="Preview">P</ToolbarButton>
   </>);
   const classes: string[] = [];
-  for (const [name, hint] of [['Show files', 'Files'], ['Draw', 'Draw'], ['Display settings', 'Display settings'], ['Preview', 'Preview']]) {
+  for (const [name, hint] of [['Show files', 'Files'], ['Draw', 'Draw'], ['Display', 'Display'], ['Preview', 'Preview']]) {
     const button = screen.getByRole('button', { name });
     expect(button.hasAttribute('title')).toBe(false);
     enter(button);
@@ -70,7 +70,7 @@ it('the nav row, the strip and the view\'s actions share one hint with no native
   expect(new Set(classes).size).toBe(1);
   expect(document.querySelectorAll('[title]').length).toBe(0);
   // A press focuses the trigger: no hint comes with that focus.
-  const display = screen.getByRole('button', { name: 'Display settings' });
+  const display = screen.getByRole('button', { name: 'Display' });
   fireEvent.pointerDown(display);
   act(() => display.focus());
   wait(500);

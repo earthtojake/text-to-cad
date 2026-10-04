@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import itertools
 import os
 import re
 from contextlib import nullcontext
@@ -137,7 +138,7 @@ def _create_bin_xcaf_doc(to_export: Any) -> Any:
 
     def set_label_name(label: object, name: str | None) -> None:
         if name and not label.IsNull():
-            TDataStd_Name.Set_s(label, TCollection_ExtendedString(str(name)))
+            TDataStd_Name.Set_s(label, TCollection_ExtendedString(ascii_name(str(name))))
 
     def set_label_color(label: object, color: object | None) -> None:
         if color is None or label.IsNull():
@@ -923,43 +924,52 @@ def _canonicalize_style_tail_in_file(path: Path, scan: _StyleTailScan) -> bool:
 #
 # A real is matched only when its mantissa is ALL zeros, so a genuinely
 # negative value keeps its sign: `-0.5`, `-1.`, `-0.000000000001` and
-# `-6.123233995737E-17` are all left exactly as written. The leading lookbehind
-# and trailing lookahead make the match a whole token: a `-0.` glued to another
-# number (`1.-0.`, an exponent's `E-0`) is not a real of its own and is not
-# rewritten. A mantissa with no `.` is a STEP INTEGER, never a coordinate, and
-# is left alone — which is also what keeps a name like `rev-0.1` intact if the
-# string alternative below ever failed to cover it.
-_STEP_NEGATIVE_ZERO = re.compile(
-    # A quoted STEP string, consumed whole and returned unchanged: a part name
-    # is not a number, whatever it spells. `''` is an escaped quote.
-    rb"'(?:[^']|'')*'"
-    rb"|(?<![0-9.eE+-])-(?:0+\.0*|0*\.0+)(?:[eE][-+]?[0-9]+)?(?![0-9.eE])"
-)
+# `-6.123233995737E-17` are all left exactly as written. The trailing lookahead
+# ends the match with the token, and the pass below skips a match glued to the
+# number before it: a `-0.` after `1.` or an exponent's `E` is not a real of
+# its own and is not rewritten. A mantissa with no `.` is a STEP INTEGER, never
+# a coordinate, and is left alone. A real inside a quoted string is a name, not
+# a number, whatever it spells, and is left alone too (the pass decides which
+# matches are quoted).
+#
+# The pattern starts with a literal `-`, so the regex engine skips from one
+# `-` to the next in C and Python only sees negative-zero spellings, a few
+# thousand in a few hundred megabytes. Matching the string literals in the same
+# pattern made Python touch every literal in the file: a few tens of MB/s,
+# seconds per save of a large assembly.
+_STEP_NEGATIVE_ZERO = re.compile(rb"-(?:0+\.0*|0*\.0+)(?:[eE][-+]?[0-9]+)?(?![0-9.eE])")
+# What the `-` of a real of its own never follows.
+_STEP_NUMBER_BYTES = frozenset(b"0123456789.eE+-")
 
 
 def _normalize_negative_zero_reals(text: bytes) -> bytes:
     """Rewrite every negative-zero real in STEP text as its positive spelling.
 
-    Pure text over one line-aligned block: a STEP string literal is a single
-    token that never spans a line, so the string alternative above sees every
-    literal whole and no number inside a name is ever touched.
+    Pure text over one line-aligned block. A match is inside a string literal
+    exactly when an odd number of quotes precede it in the block: a literal
+    opens and closes with a quote, and `''`, an escaped quote, is two. OCCT
+    wraps a literal longer than a line, so a block can end inside one; what
+    follows that block's last quote then counts as outside every literal. The
+    rule defines the canonical bytes, so changing it would re-key every
+    document it reaches.
     """
-
-    # The scan has to consider every string literal to know which `-` it may
-    # not touch, so it runs at a few tens of MB/s. A negative zero starts
-    # `-0` or `-.`, so two memmem passes are a necessary condition for any
-    # match, and text with neither — an already-canonical file among them —
-    # skips the scan.
-    if b"-0" not in text and b"-." not in text:
+    last_quote = text.rfind(b"'")
+    cuts: list[int] = []
+    quotes = counted_to = 0
+    for match in _STEP_NEGATIVE_ZERO.finditer(text):
+        start = match.start()
+        if start and text[start - 1] in _STEP_NUMBER_BYTES:
+            continue
+        if start < last_quote:
+            quotes += text.count(b"'", counted_to, start)
+            counted_to = start
+            if quotes % 2:
+                continue
+        cuts.append(start)
+    if not cuts:
         return text
-
-    def replace(match: "re.Match[bytes]") -> bytes:
-        body = match.group(0)
-        if body.startswith(b"'"):
-            return body
-        return body[1:]
-
-    return _STEP_NEGATIVE_ZERO.sub(replace, text)
+    # Each cut drops the `-` at that offset.
+    return b"".join(text[begin + 1:end] for begin, end in zip([-1, *cuts], [*cuts, len(text)]))
 
 
 # Read/rewrite granularity for the negative-zero pass. Large enough that a
@@ -977,9 +987,9 @@ def _normalize_negative_zero_reals_in_file(path: Path) -> bool:
     through one handle with the write offset trailing the read offset and
     truncates at the end — no second copy of the file on disk or in memory.
 
-    Runs LAST, after the style-tail canonicalization: that pass addresses the
-    file by byte offsets it computed from the bytes OCCT wrote, and this one
-    moves them.
+    Runs after the style-tail canonicalization: that pass addresses the file
+    by byte offsets it computed from the bytes OCCT wrote, and this one moves
+    them.
 
     Returns True when the file changed.
     """
@@ -995,7 +1005,7 @@ def _normalize_negative_zero_reals_in_file(path: Path) -> bool:
             block = carry + chunk
             if chunk:
                 # Hand on a partial trailing line rather than splitting a token
-                # (or a string literal) across two blocks.
+                # (or a literal that fits on one line) across two blocks.
                 split = block.rfind(b"\n") + 1
                 carry, block = block[split:], block[:split]
             else:
@@ -1015,6 +1025,155 @@ def _normalize_negative_zero_reals_in_file(path: Path) -> bool:
             return False
         handle.truncate(write_at)
     return True
+
+
+# OCCT's STEP reader ends a string literal at an escaped quote ('') followed by spaces and ','
+# or ')'. A name such as "post (6')" or "x('',y)" then loses its product or comes back renamed,
+# in every OCCT-based reader, and the build's own read-back fails. Such a literal is written
+# with Part 21's \X\27 for each quote instead, which every reader decodes to the same name.
+#
+# OCCT also writes a name's non-ASCII characters as bytes: its UTF-8 read as Latin-1 and
+# encoded again ("Bügel" as "BÃ¼gel"), with any byte its C library takes for a space trimmed
+# from either end ("à", C3 A0, loses its A0). The reader's repair undoes the first only when
+# the name holds a C1 control, which a lowercase accented letter's encoding does not, so such
+# names failed every build's read-back. A non-ASCII name therefore reaches OCCT in ASCII,
+# every non-ASCII character as a Part 21 directive -- \X2\ for a run in the basic plane,
+# \X4\ beyond it (:func:`ascii_name`) -- which every reader decodes to the same name. OCCT
+# doubles a directive's backslashes as it writes the literal, and the name pass restores them.
+# Every other literal keeps OCCT's spelling.
+_MISREAD_QUOTE = re.compile(rb"''[ ]*[,)]")
+_NON_ASCII_RUN = re.compile(r"([^\x00-\x7f]+)")
+# A directive as OCCT writes it in a literal: every backslash doubled.
+_DOUBLED_DIRECTIVE = re.compile(rb"\\\\X([24])\\\\([0-9A-F]+)\\\\X0\\\\")
+
+
+def respell_misread_quotes(body: bytes) -> bytes:
+    """A string literal's body, its quotes doubled, with every quote written \\X\\27 where
+    OCCT's reader would misread the doubling; any other body unchanged."""
+    return body.replace(b"''", b"\\X\\27") if _MISREAD_QUOTE.search(body) else body
+
+
+def unicode_directives(text: str) -> str:
+    """Non-ASCII ``text`` as Part 21 directives: each run of characters in the basic
+    plane as one \\X2\\ directive of UTF-16 code units, each run beyond it as one
+    \\X4\\ directive of code points, upper-case hex."""
+    out = []
+    for wide, run in itertools.groupby(text, key=lambda char: ord(char) > 0xFFFF):
+        chars = "".join(run)
+        if wide:
+            out.append("\\X4\\" + chars.encode("utf-32-be").hex().upper() + "\\X0\\")
+        else:
+            out.append("\\X2\\" + chars.encode("utf-16-be").hex().upper() + "\\X0\\")
+    return "".join(out)
+
+
+def ascii_name(name: str) -> str:
+    """``name`` as cadgen hands it to OCCT: every run of non-ASCII characters as
+    :func:`unicode_directives`, everything else unchanged. An ASCII name is itself."""
+    if name.isascii():
+        return name
+    pieces = _NON_ASCII_RUN.split(name)
+    return "".join(piece if index % 2 == 0 else unicode_directives(piece) for index, piece in enumerate(pieces))
+
+
+def spell_name(name: str) -> bytes:
+    """The body of the literal cadgen's writer gives a product or occurrence ``name``: its
+    quotes doubled, its non-ASCII characters as Part 21 directives and a quote OCCT's
+    reader would misread as \\X\\27. A backslash or a control character takes OCCT's own
+    escapes, which this does not spell (ValueError)."""
+    if "\\" in name or any(ord(char) < 0x20 or ord(char) == 0x7F for char in name):
+        raise ValueError(f"the name {name!r} needs the writer's escape directives")
+    return respell_misread_quotes(ascii_name(name).encode("ascii").replace(b"'", b"''"))
+
+
+# The records that carry the names cadgen writes: products and their occurrences.
+_NAMED_RECORDS = (b" = PRODUCT(", b" = NEXT_ASSEMBLY_USAGE_OCCURRENCE(")
+
+
+# _MISREAD_QUOTE before the quotes are doubled: a quote, spaces, then ',' or ')'.
+_MISREAD_NAME = re.compile(r"'[ ]*[,)]")
+
+
+def _has_respelled_name(model: Any) -> bool:
+    """Whether any product or occurrence in ``model`` has a name cadgen spells unlike OCCT:
+    one holding a Part 21 directive (a non-ASCII name, :func:`ascii_name`), or one OCCT's
+    reader would misread. Rare, so a file is read again only when one is there. A product's
+    id is its name, an occurrence's is its number, and their descriptions are empty. About
+    4 µs a record."""
+    from OCP.StepBasic import StepBasic_Product
+    from OCP.StepRepr import StepRepr_NextAssemblyUsageOccurrence
+
+    for kind in (StepBasic_Product, StepRepr_NextAssemblyUsageOccurrence):
+        iterator = model.Entities()
+        iterator.SelectType(kind.get_type_descriptor_s(), True)
+        iterator.Start()
+        while iterator.More():
+            name = iterator.Value().Name()
+            if name is not None:
+                text = name.ToCString()
+                if "\\X" in text or ("'" in text and _MISREAD_NAME.search(text)):
+                    return True
+            iterator.Next()
+    return False
+
+
+def _respell_literals(record: bytes) -> bytes:
+    """``record`` with each string literal's Part 21 directives given back the single
+    backslashes OCCT doubled, and each quote OCCT's reader would misread written \\X\\27;
+    any other literal as OCCT wrote it. OCCT wraps a long literal at a space, and a reader
+    drops those line breaks, so they are dropped here too before the literal is judged."""
+    parts, cursor, position = [], 0, record.find(b"'")
+    while position >= 0:
+        end = position + 1
+        while True:
+            end = record.index(b"'", end)
+            if record[end + 1:end + 2] != b"'":
+                break
+            end += 2
+        body = record[position + 1:end].replace(b"\r", b"").replace(b"\n", b"")
+        respelled = respell_misread_quotes(_DOUBLED_DIRECTIVE.sub(rb"\\X\1\\\2\\X0\\", body))
+        if respelled != body:
+            parts += [record[cursor:position], b"'" + respelled + b"'"]
+            cursor = end + 1
+        position = record.find(b"'", end + 1)
+    parts.append(record[cursor:])
+    return b"".join(parts)
+
+
+def _record_end(data: bytes, start: int) -> int:
+    """The offset just past the ';' that ends the record running from ``start``."""
+    quoted = False
+    for offset in range(start, len(data)):
+        byte = data[offset]
+        if byte == 0x27:
+            quoted = not quoted
+        elif byte == 0x3B and not quoted:
+            return offset + 1
+    raise ValueError("a record does not end")
+
+
+def _respell_names_in_file(path: Path) -> None:
+    """Rewrite the header's FILE_NAME, which names the root product, and every product and
+    occurrence record with :func:`_respell_literals`."""
+    data = read_bytes_with_ladder(path)
+    starts = [data.find(b"FILE_NAME(", 0, data.find(b"\nDATA;"))]
+    for keyword in _NAMED_RECORDS:
+        found = data.find(keyword)
+        while found >= 0:
+            line = data.rfind(b"\n", 0, found) + 1
+            if data[line:line + 1] == b"#" and data[line + 1:found].isdigit():
+                starts.append(line)
+            found = data.find(keyword, found + len(keyword))
+    parts, cursor = [], 0
+    for start in sorted(starts):
+        # A header-like line inside an earlier record's literal is not a record.
+        if start < cursor:
+            continue
+        end = _record_end(data, start)
+        parts += [data[cursor:start], _respell_literals(data[start:end])]
+        cursor = end
+    parts.append(data[cursor:])
+    write_bytes_atomic(path, b"".join(parts))
 
 
 def write_xcaf_doc_step_file(
@@ -1068,6 +1227,8 @@ def write_xcaf_doc_step_file(
     # deterministic transfer order) so identical models write identical bytes.
     with (logger.timed("renumber NAUO ids") if logger is not None else nullcontext()):
         _renumber_nauo_ids(writer.Writer().Model())
+    respelled_names = _has_respelled_name(writer.Writer().Model()) or not str(label or "").isascii()
+    # The root's name, which the header's FILE_NAME carries, reaches OCCT in ASCII as well.
     # Same contract, other direction: OCCT appends multi-product style graphs
     # in heap-address order. Reorder them into content order.
     #
@@ -1111,7 +1272,7 @@ def write_xcaf_doc_step_file(
     # model, discarding anything set on the pre-transfer header.
     header = APIHeaderSection_MakeHeader(writer.Writer().Model())
     if label:
-        header.SetName(TCollection_HAsciiString(label))
+        header.SetName(TCollection_HAsciiString(ascii_name(label)))
     header.SetOriginatingSystem(TCollection_HAsciiString(originating_system))
     # Byte-determinism: the only nondeterministic bytes in a written STEP are
     # FILE_NAME's wall-clock time_stamp. Exports are content-addressed
@@ -1161,13 +1322,17 @@ def write_xcaf_doc_step_file(
                         # artifact, and a whole-file `wb` that dies midway leaves a
                         # half-written STEP where the tail rewrite above cannot.
                         write_bytes_atomic(output_path, canonical)
-    # Third and last canonicalization, for the same reason as the other two:
-    # a value OCCT prints as `-0.` is the value it prints as `0.` elsewhere,
-    # and which one a build lands on follows the operation path, not the
-    # geometry. Last because it shifts every byte after it, and the style-tail
+    # Third canonicalization, for the same reason as the other two: a value
+    # OCCT prints as `-0.` is the value it prints as `0.` elsewhere, and which
+    # one a build lands on follows the operation path, not the geometry. After
+    # the style tail because it shifts every byte after it, and the style-tail
     # applier above addresses the file by offsets.
     with (logger.timed("normalize negative zero reals") if logger is not None else nullcontext()):
         _normalize_negative_zero_reals_in_file(output_path)
+    # Names cadgen spells unlike OCCT: non-ASCII, or misread by OCCT's own reader
+    # (``_MISREAD_QUOTE``). Last: it changes the text's length.
+    if respelled_names:
+        _respell_names_in_file(output_path)
     replace_atomic(output_path, final_path)
     return step_file_hash(final_path)
 

@@ -21,9 +21,10 @@ const STRIP_TOOLS = 6, BUTTON_PX = 24, GAP_PX = 2, PADDING_PX = 4, BORDER_PX = 1
 export const TOOL_PANEL_WIDTH = STRIP_TOOLS * BUTTON_PX + (STRIP_TOOLS - 1) * GAP_PX + 2 * PADDING_PX + 2 * BORDER_PX;
 // The shortest a person can drag a panel's cap: its first row and a row of content under it.
 export const TOOL_PANEL_MIN_HEIGHT = 64;
-// The cap the Reference opens with: its heading, its Copy and about seven compact rows between
-// them — a part's or a face's first facts, the rest a scroll or a drag of its corner away.
-export const TOOL_PANEL_REFERENCE_HEIGHT = 200;
+// The cap the Reference opens with: its heading and its Copy (28px each) and four compact rows
+// between them (about 18px each) — a reference's key measurements, an arc's four the most; a
+// longer list scrolls, or a drag of its corner shows it.
+export const TOOL_PANEL_REFERENCE_HEIGHT = 144;
 // A stored size is kept whatever the viewer it was chosen in; what is drawn is bounded by the
 // viewer at hand (`clampToolPanelWidth`, `clampToolPanelHeight`).
 const MAX_STORED_PX = 4000;

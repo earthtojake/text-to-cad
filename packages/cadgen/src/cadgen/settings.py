@@ -4,7 +4,8 @@ the same answers -- nothing an install or an update replaces holds them. Deletin
 directory forgets them.
 
 The file is one JSON object with a section per feature, each owned by the module that uses it
-(``analytics``: the answer to the analytics question, ``cadgen/analytics.py``). A change reads,
+(``analytics``: the answer to the analytics question, ``cadgen/analytics.py``; ``features``: the
+CAD views' features a person turned off, ``cadgen/features.py``). A change reads,
 changes and writes its own section under one lock (``update_section``), so two apps changing
 settings at once never undo each other, whichever sections they touch.
 """

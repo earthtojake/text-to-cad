@@ -1,4 +1,4 @@
-import { Check, Copy, Download, MessageCircle } from "lucide-react";
+import { Check, Copy, Download } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { Button } from "@text-to-cad/ui/primitives/button";
@@ -16,8 +16,8 @@ import wordmark from "../../assets/logo-cad.svg";
  * when there is none — whose menu says what is new and how this host updates (`UpdateButton`).
  * The Settings popover's footer has "Made by @…" (`MadeBy`, the host's X account) at its left and
  * Discord and GitHub (`CommunityLinks`) at its right; the version, beside its title, links its
- * release notes. GitHub alone (`GitHubLink`) is under the home's wordmark, before Feedback
- * (`FeedbackLink`), which opens a new issue and is in the viewer's navbar too. Settings follows them. Every link opens the
+ * release notes; its Feedback opens a new issue (`feedbackUrl`). GitHub alone (`GitHubLink`)
+ * is under the home's wordmark, before Settings. Every link opens the
  * host's way: a page that can open one itself follows an ordinary link to a new tab; a page in a
  * frame that cannot hands it to `links.open` (the host's own browser). Copies go through the
  * host's clipboard.
@@ -50,7 +50,7 @@ export function CommunityLinks({ links, onError }) {
 }
 
 /**
- * GitHub alone, as an icon link: under the home's wordmark, before Feedback. It says, in one
+ * GitHub alone, as an icon link: under the home's wordmark, before Settings. It says, in one
  * glance, that the project is open source.
  * @param {{ links: import("../../host/types.js").ViewerLinks, onError?: (error: Error) => void }} props
  */
@@ -60,17 +60,15 @@ export function GitHubLink({ links, onError }) {
 }
 
 /**
- * Feedback: a new issue on the host's tracker (`links.issues`) titled "Feedback: ", blank for the
- * person to finish but for where it came from — the version and the platform. It carries no label:
- * what a person says here may be a bug, a request or a question, and the project has no label for
- * all of them. Nothing where the host has no tracker.
- * @param {{ links: import("../../host/types.js").ViewerLinks, platform?: string, onError?: (error: Error) => void }} props
- *   `platform`: the host's `environment.platform`.
+ * Feedback's address: a new issue on the host's tracker (`links.issues`) titled "Feedback: ",
+ * blank for the person to finish but for where it came from — the version and the platform. It
+ * carries no label: what a person says there may be a bug, a request or a question, and the project
+ * has no label for all of them. "" where the host has no tracker.
+ * @param {import("../../host/types.js").ViewerLinks} links
+ * @param {string} [platform] The host's `environment.platform`.
  */
-export function FeedbackLink({ links, platform, onError }) {
-  const follow = useFollow(links, onError);
-  const href = issueUrl(links.issues, { title: "Feedback: ", body: "**What happened, or what would you like?**\n\n", about: { CAD: links.version, Platform: platform } });
-  return <IconLink href={href} label="Feedback" icon={MessageCircle} onFollow={follow} />;
+export function feedbackUrl(links, platform) {
+  return issueUrl(links.issues, { title: "Feedback: ", body: "**What happened, or what would you like?**\n\n", about: { CAD: links.version, Platform: platform } });
 }
 
 function IconLink({ href, label, icon: Icon, onFollow }) {

@@ -407,6 +407,12 @@ export function loadSurfComponentInWorker(url, {
   const surfaceInput = String(identity?.surfaceInput || "");
   const surfaceObject = String(identity?.surfaceObject || "");
   const strictProbe = Boolean(identity?.tessellationProbe);
+  // What a caller that reads a whole package's entries in batches hands in: the bytes it already
+  // read and verified for this probe (`tessellationEntry`), or its word that it probed this tier
+  // and found no entry (`tessellationProbed`). Either way this request reads nothing itself; a
+  // miss is still tessellated and written back.
+  const readEntry = identity?.tessellationEntry instanceof Uint8Array ? identity.tessellationEntry : null;
+  const probedMiss = identity?.tessellationProbed === true && !strictProbe;
   const cacheable = Boolean(surfaceInput && surfaceObject)
     && tessellationCache?.tessellationCacheProviderRegistered()
     && tessellationOptionsCacheable(tessellation || {});
@@ -486,9 +492,15 @@ export function loadSurfComponentInWorker(url, {
         surfaceInput, surfaceObject, tessellation: tessellation || {},
       }));
       if (completeDisplay) { post(cachedEntry); return; }
+      // Nothing names this component's SURF yet (a part that opened warm, refined before its surface
+      // was resolved): fail as the inline path does, and the caller resolves one and asks again. A
+      // ticket for "" read the page's own address, which in the CAD app is a tunnelled 404.
+      if (!url) { fail(new Error("Exact SURF bytes are not ready for this component")); return; }
       post(cachedEntry, null, () => resources.workerTicket(url, { signal }));
     };
-    if (cacheable) {
+    if (readEntry) {
+      ready(readEntry);
+    } else if (cacheable && !probedMiss) {
       tessellationCache.getCachedEntryBytes(surfaceInput, tessellation || {}, {
         signal,
         probe: identity?.tessellationProbe || null,
@@ -500,6 +512,25 @@ export function loadSurfComponentInWorker(url, {
       ready(null);
     }
   });
+}
+
+// A package load about to decode `count` cached components at once starts that many isolates (up to
+// the pool's growth limit) while their bodies are still on the wire. Otherwise a batched read, which
+// hands every body over at once, starts them all only then, and the first geometry waits on their
+// start. Idle slots carry no charge and are reclaimed and released exactly as grown ones are.
+export function prewarmSurfWorkerPool(count) {
+  const workers = ensurePool();
+  if (!workers) return 0;
+  const target = Math.min(poolGrowthLimit, Math.max(0, Math.floor(Number(count) || 0)));
+  while (pool === workers && workers.length < target) {
+    try {
+      workers.push(createWorkerSlot(workers.length, poolGeneration));
+    } catch {
+      poolGrowthLimit = workers.length;
+      break;
+    }
+  }
+  return workers.filter(Boolean).length;
 }
 
 // A render session leases the shared scheduler. Dropping one session never

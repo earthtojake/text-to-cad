@@ -29,6 +29,7 @@ import time
 import unittest
 import urllib.error
 import urllib.request
+import uuid
 from pathlib import Path
 from unittest import mock
 
@@ -158,6 +159,9 @@ class LauncherFixture(unittest.TestCase):
                 "TMPDIR": self.registry_home,
                 "TEMP": self.registry_home,
                 "TMP": self.registry_home,
+                # A launch warms the build daemon, which under this TMPDIR would be one
+                # per test, its workers left running after it. PrewarmsTheDaemon opts in.
+                "CADGEN_DAEMON": "0",
             }
         )
         env.update(overrides)
@@ -969,6 +973,40 @@ class Detach(LauncherFixture):
         code, _, stderr = self.run_to_exit(["--detach", "--no-registry"], cwd=self.make_root())
         self.assertEqual(code, 2)
         self.assertIn("--detach cannot be combined with --no-registry", stderr)
+
+
+class PrewarmsTheDaemon(LauncherFixture):
+    """After its announcement a launch starts the build daemon, whose workers import
+    build123d before any build asks: a session's first build finds them warm."""
+
+    def test_a_launch_leaves_a_daemon_answering(self) -> None:
+        from cadgen.daemon import client
+        from tests.python.support.daemon_cleanup import retire_owned_daemon
+
+        state = tempfile.mkdtemp(prefix="cgv-")  # short: a Unix socket path caps near 104 bytes
+        daemon_env = {
+            "CADGEN_DAEMON": "1",
+            "CADGEN_DAEMON_STATE_DIR": state,
+            "CADGEN_DAEMON_SOCKET": (rf"\\.\pipe\cadgen-test-{uuid.uuid4().hex}" if os.name == "nt"
+                                     else os.path.join(state, "d.sock")),
+            "CADGEN_CACHE_DIR": os.path.join(state, "store"),
+        }
+        self.addCleanup(shutil.rmtree, state, True)
+
+        def retire() -> None:
+            with mock.patch.dict(os.environ, daemon_env):
+                if client.status() is not None:
+                    retire_owned_daemon(daemon_env["CADGEN_DAEMON_SOCKET"])
+
+        self.addCleanup(retire)  # before the fixture's directories go: the daemon stands in one
+        child = self.launch(["--dist", self.make_dist(), "--json", "--ephemeral"], cwd=self.make_root(), **daemon_env)
+        self.wait_for_url_line(child)
+        with mock.patch.dict(os.environ, daemon_env):
+            deadline = time.monotonic() + 60
+            while client.status() is None:
+                if time.monotonic() >= deadline:
+                    self.fail("no build daemon answered after the viewer started")
+                time.sleep(0.1)
 
 
 class DetachedLogs(unittest.TestCase):

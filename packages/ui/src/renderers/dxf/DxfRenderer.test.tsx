@@ -104,7 +104,9 @@ async function openDrawing(destinationKind = 'composer', notice: ReactNode = nul
   };
   function Pane() {
     const [state, setState] = useState<any>({ panel: null, renderers: {} });
-    return <section data-testid="one"><FileViewer file={FILE} host={host as any} renderers={renderers} state={state} onStateChange={setState} notice={notice} /></section>;
+    // The host's Settings, as `CadViewer` hands it over: drawn by FileViewer over every file.
+    return <section data-testid="one"><FileViewer file={FILE} host={host as any} renderers={renderers} state={state} onStateChange={setState} notice={notice}
+      settings={<button type="button" aria-label="Settings" />} /></section>;
   }
   render(<Pane />);
   const pane = screen.getByTestId('one');
@@ -141,7 +143,7 @@ it("the host's notice shows at the top-right once the drawing is on screen", asy
   dispose();
 });
 
-it('a DXF has no panels of its own, no tools and no preview', async () => {
+it('a DXF has no panels of its own, no tools, no Display and no preview', async () => {
   const { pane, delivered, dispose } = await openDrawing();
   // The nav row's only panel is the host's file tree, closed: a drawing declares none.
   const panels = [...pane.querySelectorAll('[data-file-panel]')]
@@ -151,10 +153,15 @@ it('a DXF has no panels of its own, no tools and no preview', async () => {
   const inPane = within(pane);
   expect(inPane.queryByRole('group', { name: 'Interaction tools' })).toBeNull();
   for (const name of ['Orbit', 'Draw', 'Select', 'Measure', 'Position', 'Animate', 'Preview',
-    'Switch to 2D view', 'Switch to 3D view', 'Display settings', 'Zoom in', 'Zoom out', 'Reset Zoom', 'Zoom to fit', 'Zoom controls']) {
+    'Switch to 2D view', 'Switch to 3D view', 'Display', 'Display settings', 'Zoom in', 'Zoom out', 'Reset Zoom', 'Zoom to fit', 'Zoom controls']) {
     expect(inPane.queryByRole('button', { name }), name).toBeNull();
   }
   expect(inPane.queryAllByRole('tab')).toHaveLength(0);
+  // A drawing is 2D: its view puts no control of its own in the navbar, where a 3D view's Display
+  // and Preview go, so the navbar's right end is the host's Settings alone.
+  const controls = pane.querySelector('[data-viewer-navbar] [data-navbar-controls]')!;
+  expect(controls.childElementCount).toBe(0);
+  expect([...controls.parentElement!.querySelectorAll('button')].map(button => button.getAttribute('aria-label'))).toEqual(['Settings']);
   // A composer gets no snapshot from a drawing, and a drawing has nothing to pick: no Quick Edit,
   // which is a STEP file's.
   expect(inPane.queryByRole('button', { name: 'Take snapshot' })).toBeNull();

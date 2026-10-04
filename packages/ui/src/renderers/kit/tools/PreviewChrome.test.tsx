@@ -20,7 +20,7 @@ it('keeps editor controls hidden throughout Preview and restores them on exit', 
 
 it('fades preview controls together, keeps their hover area awake, and never reveals editing tools', () => {
   vi.useFakeTimers();
-  const { container, rerender } = render(<PreviewChrome active surface={document.body}
+  const { container } = render(<PreviewChrome active surface={document.body}
     playbar={<div data-preview-hover-hold="" data-testid="playback"><button>Pause</button></div>}>
     <button>Edit</button>
   </PreviewChrome>);
@@ -37,10 +37,6 @@ it('fades preview controls together, keeps their hover area awake, and never rev
   fireEvent.pointerMove(document.body);
   act(() => vi.advanceTimersByTime(PREVIEW_CHROME_IDLE_MS));
   expect(controls.getAttribute('data-visible')).toBe('false');
-  // A popover its owner keeps open (Display settings) holds the controls up.
-  rerender(<PreviewChrome active hold surface={document.body}><button>Edit</button></PreviewChrome>);
-  act(() => vi.advanceTimersByTime(PREVIEW_CHROME_IDLE_MS * 3));
-  expect(controls.getAttribute('data-visible')).toBe('true');
 });
 
 it('shows no playbar outside preview', () => {

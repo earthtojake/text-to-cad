@@ -135,6 +135,14 @@ for (const fixture of ["sun_gear", "mixed"]) {
 // cell as a stack of slivers; their refined chords left vertices microns inside
 // the rim, and the conformity pass folded triangles over them — one triangle
 // emitted twice, edges on four faces. Every tolerance failed somewhere.
+//
+// half_disc is a half-round puck (a 20 mm-radius cylinder halved through its
+// axis, 10 mm thick). Each flat end is bounded by only two model edges, the arc
+// and its diameter, so the diameter's two ends lie on both. The conformity pass
+// split the diameter, which runs along the line, with the ARC's points, and its
+// weld folded that fan into the arc's own vertices: each end came out half
+// folded over itself (edges on three triangles, the volume a third short), what
+// the hypercar's tub showed as hatched streaks on its rear bulkhead in Render.
 function meshDefects(name, options) {
   const { index, floats } = loadFixture(name);
   const component = tessellateComponent(index, floats, { ...options, collectBoundaryDebug: true });
@@ -189,6 +197,7 @@ for (const [fixture, chordTolerance] of [
   ["curved_wall_hole", undefined],
   ["curved_wall_hole", 1e-2],
   ["curved_wall_hole", 2e-2],
+  ["half_disc", undefined],
 ]) {
   const label = chordTolerance === undefined ? "default tolerance" : `chord ${chordTolerance}`;
   test(`${fixture} @ ${label}: no degenerate or duplicated triangles, every edge shared by two`, () => {
@@ -199,3 +208,101 @@ for (const [fixture, chordTolerance] of [
     assert.equal(defects.unshared, 0, "a closed solid's every mesh edge is used by exactly two triangles");
   });
 }
+
+// 5. A PLANAR FACE MESHES ONCE OVER, every triangle wound with the face.
+//
+// plenum_end is the hypercar's intake plenum: a blunt ruled loft whose two end
+// faces are each bounded by ONE spline, and that spline closes to 0.18 um, so
+// sampleSharedEdge's relative test calls it open although both its ends weld
+// into one corner. The seam then carried fraction 1 alone, conformity read the
+// mesh edge from the seam to the loop's first point as the whole loop, split it
+// with every point of the edge, and the weld folded each end face over itself:
+// the streaks and blocks that crawled across the plenum while the showcase played.
+// Only its planar faces are held here: the rings between its curved bands are not
+// pinned to their shared edge yet, so the solid as a whole is not watertight.
+test("plenum_end: a face bounded by one spline that barely closes meshes once over, wound with the face", () => {
+  const { index, floats } = loadFixture("plenum_end");
+  const { positions, normals, indices, faceRanges } = tessellateComponent(index, floats);
+  const planes = index.faces.filter((face) => face.surfaceType === "plane");
+  assert.equal(planes.length, 2, "the plenum's two end faces");
+  const at = (i) => [positions[3 * i], positions[3 * i + 1], positions[3 * i + 2]];
+  for (const face of planes) {
+    const range = faceRanges.find((r) => r.ord === face.ord);
+    let against = 0;
+    let area = 0;
+    for (let i = range.indexStart; i < range.indexStart + range.indexCount; i += 3) {
+      const [a, b, c] = [at(indices[i]), at(indices[i + 1]), at(indices[i + 2])];
+      const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+      const v = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+      const n = [u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]];
+      const k = 3 * indices[i];
+      const signed = 0.5 * (n[0] * normals[k] + n[1] * normals[k + 1] + n[2] * normals[k + 2]);
+      if (signed < 0) against += 1;
+      area += signed;
+    }
+    assert.equal(against, 0, `face ${face.ord}: no triangle wound against the face`);
+    assert.ok(Math.abs(area - face.area) <= face.area * 0.02, `face ${face.ord}: meshed ${area} mm2 of ${face.area}`);
+  }
+});
+
+// 6. AN EDGE SHORTER THAN ITS FLOAT32 KNOTS meshes as the point it is.
+//
+// The w16's intercooler lids are boolean results whose straight seams are split by edges a fifth of
+// a micron long, at parameters around 242 along the line they lie on. The index keeps such an edge's
+// range in doubles, but its pcurve's knots are Float32, and both ends round to 242: a domain of one
+// point, where every basis denominator is zero, so every uv the pcurve gave was NaN. The planar face
+// holding it then lost the labels of the edge before it and conformity threw ("Cannot read
+// properties of undefined (reading 'filter')"), stopping the whole engine at 120 of its 777 parts.
+// Here two planar faces meet along a line split as the lids' seams are. Before, neither meshed at
+// all; with the NaN gone but the edge still sampled, the line cracked.
+test("a line split by an edge shorter than its Float32 knots: both faces mesh whole, watertight along it", () => {
+  const floats = [];
+  const span = (values) => { const at = floats.length; floats.push(...values); return [at, values.length]; };
+  const pcurve = (edgeOrd, from, to, t0, t1, reversed = false) => ({ deg: 1, n: 2, periodic: false,
+    poles: span([...from, ...to]), knots: span([t0, t0, t1, t1]), range: [t0, t1], edgeOrd, reversed });
+  const line = (ord, origin, dir, t0, t1) => ({ ord, curve: { kind: "line", origin, dir, range: [t0, t1] } });
+  const s = 241.99999981545; // Math.fround(s) === Math.fround(242)
+  const plane = (ord, ydir, zdir, loop) => ({ ord, surfaceType: "plane", area: 426 * 20, reversed: false,
+    uv: [0, 426, 0, 20], surface: { kind: "plane", origin: [0, 0, 0], xdir: [1, 0, 0], ydir, zdir }, loops: [loop] });
+  const index = {
+    edges: [
+      line(1, [0, 0, 0], [1, 0, 0], 0, s), line(2, [0, 0, 0], [1, 0, 0], s, 242), line(3, [0, 0, 0], [1, 0, 0], 242, 426),
+      line(4, [426, 0, 0], [0, 1, 0], 0, 20), line(5, [0, 20, 0], [1, 0, 0], 0, 426), line(6, [0, 0, 0], [0, 1, 0], 0, 20),
+      line(7, [426, 0, 0], [0, 0, -1], 0, 20), line(8, [0, 0, -20], [1, 0, 0], 0, 426), line(9, [0, 0, 0], [0, 0, -1], 0, 20),
+    ],
+    faces: [
+      // z = 0, uv = (x, y): the split line is its bottom side.
+      plane(1, [0, 1, 0], [0, 0, 1], [pcurve(1, [0, 0], [s, 0], 0, s), pcurve(2, [s, 0], [242, 0], s, 242),
+        pcurve(3, [242, 0], [426, 0], 242, 426), pcurve(4, [426, 0], [426, 20], 0, 20),
+        pcurve(5, [0, 20], [426, 20], 0, 426, true), pcurve(6, [0, 0], [0, 20], 0, 20, true)]),
+      // y = 0, uv = (x, -z): the split line is its top side, walked the other way.
+      plane(2, [0, 0, -1], [0, 1, 0], [pcurve(9, [0, 0], [0, 20], 0, 20), pcurve(8, [0, 20], [426, 20], 0, 426),
+        pcurve(7, [426, 0], [426, 20], 0, 20, true), pcurve(3, [242, 0], [426, 0], 242, 426, true),
+        pcurve(2, [s, 0], [242, 0], s, 242, true), pcurve(1, [0, 0], [s, 0], 0, s, true)]),
+    ],
+  };
+  const { positions, indices, faceRanges } = tessellateComponent(index, Float32Array.from(floats));
+  const at = (i) => [positions[3 * i], positions[3 * i + 1], positions[3 * i + 2]];
+  const onLine = (p) => p[1] === 0 && p[2] === 0;
+  const uses = new Map();
+  for (const face of index.faces) {
+    const range = faceRanges.find((r) => r.ord === face.ord);
+    assert.ok(range, `face ${face.ord} is meshed`);
+    let area = 0;
+    for (let i = range.indexStart; i < range.indexStart + range.indexCount; i += 3) {
+      const [a, b, c] = [at(indices[i]), at(indices[i + 1]), at(indices[i + 2])];
+      const u = [b[0] - a[0], b[1] - a[1], b[2] - a[2]];
+      const v = [c[0] - a[0], c[1] - a[1], c[2] - a[2]];
+      area += Math.hypot(u[1] * v[2] - u[2] * v[1], u[2] * v[0] - u[0] * v[2], u[0] * v[1] - u[1] * v[0]) / 2;
+      for (const [p, q] of [[a, b], [b, c], [c, a]]) {
+        if (onLine(p) && onLine(q)) {
+          const key = [p[0], q[0]].sort((x, y) => x - y).join("|");
+          uses.set(key, (uses.get(key) || 0) + 1);
+        }
+      }
+    }
+    assert.ok(Math.abs(area - face.area) <= face.area * 1e-6, `face ${face.ord}: meshed ${area} mm2 of ${face.area}`);
+  }
+  assert.ok(uses.size > 0, "the split line carries mesh edges");
+  for (const [edge, count] of uses) assert.equal(count, 2, `mesh edge ${edge} on the split line is used by both faces`);
+});

@@ -5,6 +5,7 @@ import {
   buildEdgeLinePositionsFromProxy, buildFaceBoundaryLinePositions, buildFaceFillGeometryFromDisplayMeshes,
   buildFaceFillGeometryFromProxy, buildVertexMarkerMesh, referenceExplodedViewMatrix, REFERENCE_CORNER_COLOR
 } from "@text-to-cad/core/lib/viewer/referenceGeometry.js";
+import { requestSceneFrame } from "../../kit/viewport/sceneFrames.js";
 import { clearOverlayGroup, getHighlightEdgeColor, getHighlightEdgeOpacity, getHighlightEdgeThickness } from "./useStepDisplay.js";
 
 function referenceSelectorType(reference) {
@@ -295,9 +296,10 @@ export function useStepHighlights(layers) {
     applyHoverOverSelection(shared.selectedObjects, shared.hoveredIds);
     syncHighlightGroupVisibility(runtime);
     // A frame for what THIS layer changed, and only that: with no reference highlighted
-    // before or after, a posed selector runtime is not a reason to draw.
+    // before or after, a posed selector runtime is not a reason to draw. A highlight's lines,
+    // fills and markers cast nothing, so the frame keeps the shadow maps.
     const drawn = groups.lines.children.length > 0 || groups.fills.children.length > 0;
-    if (drawn || runtime.referenceSelectionHighlightDrawn === true) runtime.requestRender();
+    if (drawn || runtime.referenceSelectionHighlightDrawn === true) requestSceneFrame(runtime, false);
     runtime.referenceSelectionHighlightDrawn = drawn;
 
     return () => {
@@ -342,7 +344,7 @@ export function useStepHighlights(layers) {
     applyHoverOverSelection(shared.selectedObjects, hoveredIds);
     syncHighlightGroupVisibility(runtime);
     const drawn = groups.lines.children.length > 0 || groups.fills.children.length > 0;
-    if (drawn || runtime.referenceHoverHighlightDrawn === true) runtime.requestRender();
+    if (drawn || runtime.referenceHoverHighlightDrawn === true) requestSceneFrame(runtime, false);
     runtime.referenceHoverHighlightDrawn = drawn;
 
     return () => {

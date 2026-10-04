@@ -11,10 +11,12 @@ import assert from 'node:assert/strict';
 // and sizes its canvas from an unconstrained container).
 
 /**
- * @param {{ page: import('playwright').Page, pane: import('playwright').Locator, errors: string[] }} view
- *   A page the harness has opened on a file whose renderer offers Draw.
+ * @param {{ page: import('playwright').Page, pane: import('playwright').Locator, errors: string[],
+ *   update?: () => Promise<void> }} view
+ *   A page the harness has opened on a file whose renderer offers Draw; `update`, where the frame's
+ *   harness has one, saves the file again and settles once the new revision is on screen.
  */
-export async function runDrawScenario({ page, pane, errors }) {
+export async function runDrawScenario({ page, pane, errors, update }) {
   // Draw's tools, color and history: a panel in the tool stack for as long as Draw is the tool.
   const menu = pane.locator('[data-tool-panel][aria-label="Drawing controls"]');
   const tool = name => menu.getByRole('button', { name, exact: true });
@@ -232,5 +234,23 @@ export async function runDrawScenario({ page, pane, errors }) {
   await choose('Fill area');
   await fillsInside();
   assert.ok(await translucentInk() > 5000);
+
+  // An update of the model ends a sketch drawn over the revision before it: the ink goes, and its
+  // history with it, so Undo has nothing to bring back. Draw stays the tool, on the tool in hand,
+  // and Quick Edit, with no note and nothing left to carry, goes with the ink.
+  if (update) {
+    await update();
+    await page.waitForFunction(() => {
+      const canvas = document.querySelector('[data-testid="one"] [data-cad-drawing-overlay] [data-drawing-ready] canvas.excalidraw__canvas.static');
+      if (!canvas) return false;
+      const { data } = canvas.getContext('2d').getImageData(0, 0, canvas.width, canvas.height);
+      for (let index = 3; index < data.length; index += 4) if (data[index] > 30) return false;
+      return true;
+    });
+    for (const name of ['Undo', 'Redo', 'Clear drawing']) await settles(name, false);
+    assert.equal(await draw.getAttribute('aria-pressed'), 'true', 'Draw is still the tool');
+    assert.equal(await tool('Fill area').getAttribute('aria-pressed'), 'true', 'on the tool it was on');
+    await quickEdit.waitFor({ state: 'detached' });
+  }
   assert.deepEqual(errors, []);
 }

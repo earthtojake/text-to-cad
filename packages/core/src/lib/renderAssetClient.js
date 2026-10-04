@@ -12,6 +12,7 @@ import { buildMeshDataFrom3MfBuffer } from "./render/threeMfMeshData.js";
 import { loadGlbMeshDataInWorker } from "./render/glbMeshWorkerClient.js";
 import { loadStlMeshDataInWorker } from "./render/stlMeshWorkerClient.js";
 import {
+  prewarmSurfWorkerPool,
   reclaimIdleSurfWorkers as reclaimIdleSurfWorkerPool,
   releaseSurfWorkerPoolWhenIdle,
   surfWorkerMemoryStats as surfWorkerMemoryStatsFromPool,
@@ -329,6 +330,11 @@ export async function loadRenderSurf(url, {
 // leaving its conservative retained-memory estimate charged after it drains.
 export async function releaseSurfWorkers() {
   return releaseSurfWorkerPoolWhenIdle();
+}
+
+/** Start the isolates a package load will decode on (`prewarmSurfWorkerPool`). */
+export function prewarmSurfWorkers(count) {
+  return prewarmSurfWorkerPool(count);
 }
 
 export function reclaimIdleSurfWorkers() {
@@ -760,6 +766,11 @@ export function renderAssetCacheStats({ excludeBuffers = [] } = {}) {
   return stats;
 }
 
+/** The display payload `loadRenderSurf` already holds for this tier of this component, or null. */
+export function peekRenderSurf(url, { tessellation, identity } = {}) {
+  return peekCached(glbCache, surfTessellationCacheKey(url, tessellation, identity));
+}
+
 export function surfTessellationCacheKey(_url, tessellation, identity) {
   return resolvedTessellationIdentity(
     String(identity?.surfaceInput || ""),
@@ -809,7 +820,9 @@ async function loadSurfPayloadInline(url, { signal, resources, tessellation, ide
   const [
     { parseSurf },
     {
+      decodeComponentTessellation,
       surfIndexFromCacheEntry,
+      tessellationCacheKey,
     },
     { tessellateComponent },
     { buildMeshDataFromSurf },
@@ -823,12 +836,25 @@ async function loadSurfPayloadInline(url, { signal, resources, tessellation, ide
   ]);
   const surfaceInput = String(identity?.surfaceInput || "");
   const surfaceObject = String(identity?.surfaceObject || "");
-  if (!tessellationCache && identity?.tessellationProbe) throw new TessellationCacheProbeMissError(identity.tessellationProbe);
-  const cached = await tessellationCache?.getCachedComponentEntry(surfaceInput, tessellation || {}, {
-    signal,
-    probe: identity?.tessellationProbe || null,
-    strictProbe: Boolean(identity?.tessellationProbe),
-  });
+  // As the worker path takes them (`loadSurfComponentInWorker`): bytes a batched read already
+  // verified for this probe, or the caller's word that the tier was probed and holds nothing.
+  const readEntry = identity?.tessellationEntry instanceof Uint8Array ? identity.tessellationEntry : null;
+  const strictProbe = Boolean(identity?.tessellationProbe);
+  if (!tessellationCache && strictProbe && !readEntry) throw new TessellationCacheProbeMissError(identity.tessellationProbe);
+  let cached = null;
+  if (readEntry) {
+    cached = decodeComponentTessellation(readEntry, {
+      surfaceInput, ...(surfaceObject ? { surfaceObject } : {}),
+      tessellationInput: tessellationCacheKey(surfaceInput, tessellation || {}), tessellation: tessellation || {},
+    });
+    if (!cached && strictProbe) throw new TessellationCacheProbeMissError(identity.tessellationProbe);
+  } else if (strictProbe || identity?.tessellationProbed !== true) {
+    cached = await tessellationCache?.getCachedComponentEntry(surfaceInput, tessellation || {}, {
+      signal,
+      probe: identity?.tessellationProbe || null,
+      strictProbe,
+    });
+  }
   const cachedIndex = surfIndexFromCacheEntry(cached);
   // Render-only cache hits are complete without the exact-surface container.
   // Selectors need its topology tables; incomplete older entries do too.

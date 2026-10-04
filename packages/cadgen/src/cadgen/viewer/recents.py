@@ -17,7 +17,10 @@ under the same lock. Nothing is ever migrated in place.
 
 A model's picture is a ``picture`` event: the model framed whole from the default
 direction at a card's size, on transparency, taken once its view has settled; its
-time is when it was taken (``pictured``), so a file changed since has an old one. The
+time is when it was taken (``pictured``), so a file changed since has an old one.
+Every rebuilt revision a view pictures adds a PNG, so a picture no listed model
+shows is deleted once it is old enough that no writer can still be about to name
+it (a writer saves the PNG, then appends its event). The
 screenshots of whatever the view showed that came before it were ``thumb`` events,
 which this reader does not know, so a model shows no picture until a view shows it
 again -- then its canonical one.
@@ -42,6 +45,7 @@ SCHEMA = 1
 LIMIT = 200
 COMPACT_AFTER = 2000
 MAX_THUMBNAIL_BYTES = 512 * 1024
+THUMBNAIL_GRACE_SECONDS = 600
 
 
 def thumbnail_png(encoded) -> bytes:
@@ -122,7 +126,7 @@ class RecentStore:
         target = self.thumbnails / name
         if not target.exists():
             write_bytes_atomic(target, png)
-        self._append({"op": "picture", "path": path, "thumbnail": name})
+        self._append({"op": "picture", "path": path, "thumbnail": name}, sweep=True)
         return name
 
     def read_thumbnail(self, name: str) -> bytes | None:
@@ -173,13 +177,29 @@ class RecentStore:
 
     # -- the log ---------------------------------------------------------------
 
-    def _append(self, event: dict[str, Any]) -> None:
+    def _append(self, event: dict[str, Any], *, sweep: bool = False) -> None:
         self.root.mkdir(parents=True, exist_ok=True)
         line = json.dumps({"v": SCHEMA, "t": time.time(), **event}, separators=(",", ":")) + "\n"
         with self._locked():
             with open(self.log, "a", encoding="utf-8") as handle:
                 handle.write(line)
             self._compact_if_long()
+            if sweep:
+                self._sweep_thumbnails()
+
+    def _sweep_thumbnails(self) -> None:
+        shown = {entry.thumbnail for entry in self.list() if entry.thumbnail}
+        cutoff = time.time() - THUMBNAIL_GRACE_SECONDS
+        try:
+            pictures = list(self.thumbnails.glob("*.png"))
+        except OSError:
+            return
+        for picture in pictures:
+            try:
+                if picture.name not in shown and picture.stat().st_mtime < cutoff:
+                    picture.unlink()
+            except OSError:
+                continue
 
     def _compact_if_long(self) -> None:
         try:

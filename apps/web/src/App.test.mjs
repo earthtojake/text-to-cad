@@ -46,12 +46,15 @@ test('the web host keeps the URL, the history, the title and the appearance, and
   const serverCalls = [];
   // The library every CAD view shares, written over this Viewer's routes.
   const libraryCalls = [];
-  const guards = [];  // the header no page from another site can send, on each analytics answer
+  const guards = [];  // the header no page from another site can send, on each analytics answer and features change
+  // The person's features as this Viewer's server keeps them (in their settings: `/__cad/features`).
+  let kept = { quickEdit: true };
   const fetchBefore = globalThis.fetch;
   globalThis.fetch = async (url, init = {}) => {
     libraryCalls.push([url, init.body ? JSON.parse(init.body) : null]);
-    if (url === '/__cad/analytics' && init.body) guards.push(init.headers?.['x-cadgen-viewer']);
-    const reply = url !== '/__cad/analytics' ? { ok: true }
+    if ((url === '/__cad/analytics' || url === '/__cad/features') && init.body) guards.push(init.headers?.['x-cadgen-viewer']);
+    if (url === '/__cad/features' && init.body) kept = { ...kept, ...JSON.parse(init.body) };
+    const reply = url === '/__cad/features' ? kept : url !== '/__cad/analytics' ? { ok: true }
       : init.body ? { ask: false, sharing: false, reason: 'choice', policy: 'p' } : { ask: true, sharing: false, reason: 'unasked', policy: 'p' };
     return new Response(JSON.stringify(reply), { headers: { 'content-type': 'application/json' } });
   };
@@ -95,13 +98,29 @@ test('the web host keeps the URL, the history, the title and the appearance, and
     // shown reported to this Viewer's server (which keeps it as a code, and sends it only with consent).
     assert.deepEqual(libraryCalls.filter(([url]) => url.startsWith('/__cad/analytics')),
       [['/__cad/analytics', null], ['/__cad/analytics/activity', { file: 'one.step' }]]);
-    assert.equal(viewer().appSettings[0].section, 'Analytics');
+    // Settings: Analytics, then Features.
+    assert.deepEqual(viewer().appSettings.map(setting => [setting.section, setting.label, setting.checked]),
+      [['Analytics', 'Share anonymous usage data', false], ['Features', 'Quick edit', true]]);
     // The card goes to the viewer (it asks once a model is on screen), and its answer is a card's: the
     // server applies it only to an open question. Answered, it is gone.
     await act(() => viewer().notice.props.onAnswer(false));
     assert.deepEqual(libraryCalls.filter(([url]) => url === '/__cad/analytics').at(-1), ['/__cad/analytics', { share: false, card: true }]);
     assert.deepEqual(guards, ['1']);
     assert.equal(viewer().notice, null);
+    // Quick edit, on until the person turns it off: read from this Viewer's server once, and the
+    // choice kept there (in their settings, whatever port this is), never in the browser's storage.
+    assert.deepEqual(libraryCalls.filter(([url]) => url === '/__cad/features'), [['/__cad/features', null]]);
+    assert.deepEqual(viewer().features, { quickEdit: true });
+    await act(() => viewer().appSettings.find(setting => setting.id === 'quickEdit').onCheckedChange(false));
+    assert.deepEqual(libraryCalls.filter(([url]) => url === '/__cad/features').at(-1), ['/__cad/features', { quickEdit: false }]);
+    assert.deepEqual(guards, ['1', '1']);
+    assert.deepEqual(viewer().features, { quickEdit: false });
+    assert.equal(viewer().appSettings.find(setting => setting.id === 'quickEdit').checked, false);
+    assert.equal(window.localStorage.length, 0);
+    // Coming back to the page reads it again: another view may have changed it meanwhile.
+    kept = { quickEdit: true };
+    await act(() => { window.dispatchEvent(new window.Event('focus')); });
+    assert.deepEqual(viewer().features, { quickEdit: true });
 
     // Showing another file is a navigation: pushed, and undone by Back.
     const historyLength = window.history.length;

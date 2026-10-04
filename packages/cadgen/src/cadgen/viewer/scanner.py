@@ -53,6 +53,7 @@ from .encoding import encode_uri_component, encode_url_path, file_version
 from .natural_sort import sort_catalog_entries
 from .store_paths import (
     SOURCE_SIDECAR_NAMES,
+    artifact_file_hash,
     artifact_path_key,
     cadgen_cache_root_dir,
     result_descriptor,
@@ -83,6 +84,7 @@ __all__ = [
     "source_format_for_path",
     "step_kind_from_topology",
     "to_posix_path",
+    "warm_catalog_entry",
 ]
 
 CAD_CATALOG_SCHEMA_VERSION = 4
@@ -231,10 +233,14 @@ _HASH_CACHE_LOCK = threading.Lock()
 # scan; only the expensive flattened-tree validation and annotation shaping is
 # reused when all of those inputs are unchanged. Misses build outside the lock;
 # metadata capture has its own per-tree single-flight, and unrelated documents
-# must remain independently readable while one large tree is verified.
+# must remain independently readable while one large tree is verified. A miss
+# already being built for the same inputs is waited for, not built twice: the
+# catalog row a build's save warms (``warm.py``) and the catalog read that
+# follows the build ask for the same row at once.
 _STEP_ENTRY_CACHE: dict[tuple, dict] = {}
 _STEP_ENTRY_CACHE_LIMIT = 4096
 _STEP_ENTRY_CACHE_LOCK = threading.Lock()
+_STEP_ENTRY_FLIGHTS: dict[tuple, threading.Event] = {}
 
 
 def _sha256_file(file_path, stat_result=None) -> str:
@@ -783,8 +789,9 @@ def _create_step_entry(repo_root, root_path, source_path, extension) -> dict:
         document_hash, tree = snapshot
     else:
         # An unbuilt document still needs a digest for status/sidecar binding,
-        # but there is no geometry selection it could be mixed with.
-        document_hash, tree = _sha256_file(source_path), None
+        # but there is no geometry selection it could be mixed with. The lookup
+        # above has just read it into the digest memo, so this reads nothing.
+        document_hash, tree = artifact_file_hash(source_path) or "", None
     sidecar_path = source_sidecar_path(source_path)
     sidecar_stat = _file_stats(sidecar_path)
     sidecar_identity = (
@@ -805,20 +812,37 @@ def _create_step_entry(repo_root, root_path, source_path, extension) -> dict:
     )
     with _STEP_ENTRY_CACHE_LOCK:
         cached = _STEP_ENTRY_CACHE.get(cache_key)
+        flight = None if cached is not None else _STEP_ENTRY_FLIGHTS.get(cache_key)
+        leading = cached is None and flight is None
+        if leading:
+            flight = _STEP_ENTRY_FLIGHTS[cache_key] = threading.Event()
     if cached is not None:
         return copy.deepcopy(cached)
-    entry = _build_step_entry(
-        repo_root, root_path, source_path, extension,
-        document_hash=document_hash, tree=tree,
-    )
-    with _STEP_ENTRY_CACHE_LOCK:
-        cached = _STEP_ENTRY_CACHE.get(cache_key)
+    if not leading:
+        flight.wait()
+        with _STEP_ENTRY_CACHE_LOCK:
+            cached = _STEP_ENTRY_CACHE.get(cache_key)
         if cached is not None:
             return copy.deepcopy(cached)
-        if len(_STEP_ENTRY_CACHE) >= _STEP_ENTRY_CACHE_LIMIT:
-            _STEP_ENTRY_CACHE.clear()
-        _STEP_ENTRY_CACHE[cache_key] = copy.deepcopy(entry)
-    return entry
+        # The build before ours failed: build it here, and let the error be this caller's.
+        return _build_step_entry(
+            repo_root, root_path, source_path, extension,
+            document_hash=document_hash, tree=tree,
+        )
+    try:
+        entry = _build_step_entry(
+            repo_root, root_path, source_path, extension,
+            document_hash=document_hash, tree=tree,
+        )
+        with _STEP_ENTRY_CACHE_LOCK:
+            if len(_STEP_ENTRY_CACHE) >= _STEP_ENTRY_CACHE_LIMIT:
+                _STEP_ENTRY_CACHE.clear()
+            _STEP_ENTRY_CACHE[cache_key] = copy.deepcopy(entry)
+        return entry
+    finally:
+        with _STEP_ENTRY_CACHE_LOCK:
+            _STEP_ENTRY_FLIGHTS.pop(cache_key, None)
+        flight.set()
 
 
 def _build_step_entry(
@@ -934,6 +958,14 @@ def scan_cad_directory(repo_root, *, preferred_file=None, defer_unpreferred=Fals
         "schemaVersion": CAD_CATALOG_SCHEMA_VERSION,
         "entries": sort_catalog_entries(entries),
     }
+
+
+def warm_catalog_entry(repo_root, file_path) -> None:
+    """Compute ``file_path``'s catalog row, as a scan of ``repo_root`` would, and keep it
+    where that scan looks first (the row's own memo, and the digest's): ``warm.py``.
+
+    ``file_path`` must be spelled as the scan spells it, under ``repo_root``."""
+    _catalog_entry(repo_root, os.path.abspath(repo_root), os.path.abspath(file_path))
 
 
 def catalog_lists(root_path, file_path) -> bool:

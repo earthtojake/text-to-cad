@@ -107,7 +107,7 @@ INSTALLS = ("store",)  # what `cadgen mcp --install` may name, reported as `sour
 # The page's plumbing: a view's once-a-second sync, its viewer requests, its capture replies and
 # the home's re-reads of its library every couple of seconds say nothing about use and would
 # drown what does. A view's own activity is noted from its sync instead (``viewed``, ``opened``).
-UNCOUNTED = frozenset({"cad_sync", "cad_http", "cad_capture_reply", "cad_consent", "cad_recents"})
+UNCOUNTED = frozenset({"cad_sync", "cad_http", "cad_capture_reply", "cad_consent", "cad_features", "cad_recents"})
 # A file's format, by extension: what the viewer opens (``cadgen.viewer.scanner.SOURCE_EXTENSIONS``).
 FILE_KINDS = {".step": "step", ".stp": "step", ".stl": "stl", ".3mf": "3mf", ".glb": "glb", ".dxf": "dxf",
               ".urdf": "urdf", ".srdf": "srdf", ".sdf": "sdf"}

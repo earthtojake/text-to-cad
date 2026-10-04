@@ -305,6 +305,20 @@ Review media such as snapshot PNGs are not model artifacts:
 render them under `/tmp` and attach them to the pull request instead. `.gitignore`
 keeps them out of `models/`.
 
+### Performance changes
+
+A change to cadgen's caching, the store, the rebuild gate, or kernel or publish
+performance opens its PR description with a before/after timing table for `main`
+and the branch. The table comes from the edit benchmarks in
+`scripts/bench/cadgen-performance/` (`agent_edits.py` times these edits end to
+end) on representative models, and covers at least a leaf edit, a parent-only
+edit, a revert and a no-op. The table names any slowdown as a regression, and a regression merges
+only with the repository owner's explicit approval. A change that removes a cache
+or a performance mechanism first lists what it made faster. #478 removed the
+kernel-op memo for correctness and slowed re-runs (f1's `power_unit` forced
+rebuild went from 24 s to 102 s); that cost sat deep in a long PR body instead of
+being approved as a trade-off.
+
 ## Source Boundaries
 
 A skill must not import another skill or a repository-root module at runtime, and

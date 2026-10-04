@@ -23,8 +23,9 @@
  * @property {import("three").Object3D} object3D  What the host adopts under its model group.
  * @property {SceneBounds} bounds  The scene as posed now: lighting, floor and depth fit follow it.
  * @property {SceneBounds} [restBounds]  The authored placement, unmoved by any pose: what the
- *   camera frames, what 100% zoom means and what the ground is sized from. Absent means `bounds`
- *   never moves.
+ *   camera frames, what 100% zoom means and what the ground is sized from. A scene that knows
+ *   its whole box before all of it has arrived (a STEP package's declared `bbox`) reports that
+ *   box from the start. Absent means `bounds` never moves.
  * @property {() => void} dispose  Release everything the scene created.
  * @property {(look: SurfaceLook) => void} [setSurfaceLook]  Wear the look the host resolved.
  *   Called on adoption and whenever it changes; a scene applies it to its own materials.
@@ -35,9 +36,12 @@
  *   so Inspect gives it a small neutral environment to reflect.
  * @property {(ray: import("three").Ray) => ({ id: string, point: import("three").Vector3 } | null)} [pick]
  *   Only scenes that select.
- * @property {boolean} [complete]  `false` while the scene is still ARRIVING (a large model published
- *   in pieces into one scene identity). The viewport frames what has arrived, so something is on
- *   screen at once, and frames once more when the scene is whole. Absent means whole.
+ * @property {boolean} [complete]  `false` while `restBounds` may still GROW: a large model published
+ *   in pieces into one scene identity, with no box declared for the whole of it. The viewport
+ *   frames `restBounds` as it stands, so something is on screen at once, and frames once more
+ *   when it can no longer grow, unless the camera on screen is by then the person's. A scene that
+ *   is still arriving but whose `restBounds` is already final is complete: it is framed once.
+ *   Absent means complete.
  * @property {() => object[]} [placedObjects]  The things the scene has placed, each with its own
  *   `partBounds` and transforms, for the near/far fit alone (`fitCameraDepthToBounds`): a camera
  *   inside a mostly empty aggregate box can still be well outside everything visible in it. A

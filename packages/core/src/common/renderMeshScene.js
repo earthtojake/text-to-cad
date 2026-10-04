@@ -30,6 +30,8 @@ import {
 import {
   syncTopologyDisplayEdgeLine
 } from "../lib/viewer/topologyDisplayEdgeLine.js";
+import { syncRuntimeStepClipPlane } from "../lib/viewer/modelRuntime.js";
+import { disposeSectionCaps } from "../lib/viewer/sectionCaps.js";
 import {
   applyExplodedViewProgress,
   clearExplodedViewRecords,
@@ -958,7 +960,9 @@ export function renderModel(_THREE, model, viewportOptions = {}) {
       // still must too, or the CLI and the viewer disagree about how big the ground is.
       groundBounds: viewportOptions.floorBounds ? null : restGroundBounds,
       sceneScale: context.sceneScale,
-      shadowMapSize: context.quality.shadowMapSize
+      shadowMapSize: context.quality.shadowMapSize,
+      // Each kept pixel averages renderScale² drawn ones: the floor's dither is drawn that much wider.
+      ditherScale: renderer.getPixelRatio()
     });
   } else if (normalizeBoolean(job.output?.transparent, false) || context.theme.background?.type === "transparent") {
     scene.background = null;
@@ -1006,7 +1010,7 @@ export function renderModel(_THREE, model, viewportOptions = {}) {
   // to be in right now — right for a still, which is posed before it gets here,
   // and wrong for a video, whose camera frames the union across its frames and
   // would otherwise show the grid's edge with the moving part walking off it.
-  addFloor(
+  const floor = addFloor(
     scene,
     viewportOptions.floorBounds || model.bounds || context.bounds,
     { ...context.theme, floor: { enabled: false }, colorMode: context.sceneSettings.appearance },
@@ -1026,12 +1030,15 @@ export function renderModel(_THREE, model, viewportOptions = {}) {
     perspectiveCamera,
     studioRuntime,
     studioConfiguration,
+    // The grid as drawn, for the depth fit: the viewer fits its near and far planes to it too.
+    gridBounds: floor?.gridBounds ?? null,
     context,
     sceneBuildStarted,
     ready,
     dispose() {
       if (disposed) return;
       disposed = true;
+      if (viewport.clipRuntime) disposeSectionCaps(viewport.clipRuntime);
       model.dispose?.();
       scene.remove?.(model.root);
       if (studioRuntime) disposePhotographicStudio(studioRuntime);
@@ -1055,6 +1062,26 @@ export function renderModel(_THREE, model, viewportOptions = {}) {
   return viewport;
 }
 
+// What the viewer's Clip sync (`syncRuntimeStepClipPlane`) reads of its runtime, over this
+// snapshot's model: the plane is measured against the model at rest, as the viewer measures it,
+// and the cut is capped as it is there. One per viewport, so its caps are kept and released.
+function viewportClipRuntime(viewport) {
+  const { model } = viewport;
+  viewport.clipRuntime ??= {
+    THREE,
+    renderer: viewport.renderer,
+    scene: viewport.scene,
+    cadScene: model,
+    modelGroup: model.runtime.modelGroup,
+    get displayRecords() { return model.displayRecords; },
+    get topologyDisplayEdgeLine() { return model.runtime.topologyDisplayEdgeLine; },
+    get zeroPoseBounds() { return model.restBounds; },
+    get modelRadius() { return model.runtime.modelRadius; },
+    modelBounds: null
+  };
+  return viewport.clipRuntime;
+}
+
 function displayRecordPartIds(displayRecords = []) {
   return Array.from(new Set(
     toArray(displayRecords)
@@ -1063,7 +1090,9 @@ function displayRecordPartIds(displayRecords = []) {
   ));
 }
 
-function applyViewportExplodedView(viewport, bounds) {
+// `layoutBounds` is what the layout radiates from: the model's REST placement, as the viewer's
+// (`useStepExplode`) is, never the bounds as posed. `bounds` is what the returned box falls back to.
+function applyViewportExplodedView(viewport, bounds, layoutBounds = bounds) {
   const { context, model, THREE: RuntimeTHREE } = viewport;
   const settings = context.displaySettings?.exploded;
   const THREEImpl = RuntimeTHREE || THREE;
@@ -1078,7 +1107,7 @@ function applyViewportExplodedView(viewport, bounds) {
     resetExplodedView();
     return bounds;
   }
-  const layout = computeExplodedViewLayout(model.displayRecords, bounds);
+  const layout = computeExplodedViewLayout(model.displayRecords, layoutBounds);
   if (!layout.entries.length) {
     resetExplodedView();
     return bounds;
@@ -1234,13 +1263,21 @@ export async function captureModel(viewport, captureOptions = {}) {
     // would breathe as the model moves. A video passes the union across its
     // frames, computed once (headlessRenderEntry sequenceFrameBounds).
     const baseOutputBounds = captureOptions.frameBounds || posedBounds;
+    // The model at rest (a package's declared box when it has one): what the viewer sizes the
+    // ground from and radiates an exploded view from, whatever the pose.
+    const restBounds = viewport.model.restBounds || null;
     let outputBounds = baseOutputBounds;
     // The exploded view, topology edges and their screen-space line widths are a CAD
     // model's (`buildModel`'s runtime). A family's scene has none of them: the viewer's
     // rule for it (`EDGELESS_VIEW_FEATURES`), which the job was resolved under too.
     if (viewport.model.runtime) {
-      outputBounds = applyViewportExplodedView(viewport, baseOutputBounds);
+      outputBounds = applyViewportExplodedView(viewport, baseOutputBounds, restBounds || baseOutputBounds);
       syncViewportTopologyDisplayEdges(viewport);
+      // The Clip tool cuts and caps the model as the viewer's does, on every material, edge set and
+      // the topology edges drawn just above.
+      const clipRuntime = viewportClipRuntime(viewport);
+      clipRuntime.modelBounds = outputBounds;
+      syncRuntimeStepClipPlane(clipRuntime, context.displaySettings.clip);
       // Device pixels: renderScale is the renderer's pixel ratio, so a
       // supersampled drawing buffer keeps `thickness` in drawing-buffer units
       // before the final PNG is resampled to this output's requested dimensions.
@@ -1277,19 +1314,30 @@ export async function captureModel(viewport, captureOptions = {}) {
       viewport.scene.updateMatrixWorld(true);
       applyTightOrthographicFrame(renderCamera, viewport.model.displayRecords, width, height, padding, cameraView?.zoom);
     }
+    // Every preset draws with ordinary depth, fitted to what this output frames, as the viewer
+    // fits its own every frame (`fitCameraDepthToBounds` in useViewerRuntime.js).
+    const fitDepth = () => fitCameraDepthToBounds(renderCamera, outputBounds, {
+      placedObjects: viewport.model.runtime ? viewport.model.displayRecords : viewport.model.placedObjects(),
+      modelGroup: viewport.model.runtime?.modelGroup ?? null,
+      groundZ: viewport.studioRuntime?.photographicStudio?.ground?.position.z ?? null,
+      gridBounds: viewport.gridBounds ?? null,
+      pivot: resolvedCamera?.target ?? null
+    });
+    if (!viewport.studioRuntime) fitDepth();
     if (outputTimings) outputTimings.frameCameraMs = Math.round(performance.now() - stageStarted);
     if (viewport.studioRuntime) {
       stageStarted = performance.now();
       applyPhotographicStudio(THREE, viewport.studioRuntime, viewport.studioConfiguration, {
         bounds: outputBounds,
+        // The floor and its contact shadow are sized and centred from the REST placement, as the
+        // viewer's are (and as `renderModel` placed them), so an exploded view or a pose never
+        // rescales or slides them; a video's locked frame keeps its union box for both.
+        groundBounds: captureOptions.frameBounds ? null : restBounds,
         sceneScale,
-        shadowMapSize: context.quality.shadowMapSize
+        shadowMapSize: context.quality.shadowMapSize,
+        ditherScale: viewport.renderer.getPixelRatio?.() ?? 1
       });
-      fitCameraDepthToBounds(renderCamera, outputBounds, {
-        placedObjects: viewport.model.runtime ? viewport.model.displayRecords : viewport.model.placedObjects(),
-        modelGroup: viewport.model.runtime?.modelGroup ?? null,
-        groundZ: viewport.studioRuntime.photographicStudio?.ground?.position.z ?? null
-      });
+      fitDepth();
       if (outputTimings) outputTimings.prepareStudioMs = Math.round(performance.now() - stageStarted);
     }
     stageStarted = performance.now();

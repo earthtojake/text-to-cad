@@ -184,7 +184,9 @@ DISPLAY_SURFACE_KEYS = frozenset({"enabled", "style", "colorMode", "color", "col
 DISPLAY_EDGE_KEYS = frozenset({"enabled", "visibility", "color"})
 DISPLAY_LIGHTING_KEYS = frozenset({"enabled", "quality", "exposure", "rotation", "size", "fill"})
 DISPLAY_BACKGROUND_KEYS = frozenset({"enabled", "color", "opacity"})
-DISPLAY_FLOOR_KEYS = frozenset({"enabled", "placement", "color", "opacity"})
+DISPLAY_FLOOR_KEYS = frozenset({"enabled", "placement", "color", "opacity", "finish"})
+# The Viewer's Floor finish: a glossy floor also reflects the model.
+DISPLAY_FLOOR_FINISHES = frozenset({"matte", "glossy"})
 DISPLAY_GRID_KEYS = frozenset({"enabled", "color", "opacity", "density"})
 DISPLAY_AXES_KEYS = frozenset({"enabled", "color", "opacity"})
 DISPLAY_CLIP_KEYS = frozenset({"enabled", "axis", "offset", "offsets", "invert"})
@@ -397,7 +399,7 @@ def validate_display_settings_values(
             "surfaces": {"style": DISPLAY_SURFACE_STYLES, "colorMode": PART_COLOR_MODES},
             "edges": {"visibility": frozenset({"visible", "all"})},
             "lighting": {"quality": RENDER_QUALITY_IDS},
-            "floor": {"placement": frozenset({"origin", "lowest"})},
+            "floor": {"placement": frozenset({"origin", "lowest"}), "finish": DISPLAY_FLOOR_FINISHES},
             "clip": {"axis": frozenset({"x", "y", "z"})},
         }.get(name, {}).items():
             if key in value:
