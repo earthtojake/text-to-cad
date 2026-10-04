@@ -202,6 +202,26 @@ class JobLedger:
                 job["updatedAt"] = self._clock()
                 self._notify(job)
 
+    def waiting(self, job: dict[str, Any], detail: str | None) -> None:
+        """What a job waits on before it has a worker (``detail``), or None once it has one.
+
+        The daemon's own wait, which nothing the job runs can report: a worker being
+        started for it (``server._handle_request``). The job reads as queued, with the
+        wait as its detail -- the line the CAD Viewer's loading screen shows under its
+        label -- rather than as a bare submission.
+        """
+        with self._guard:
+            if job["state"] not in ("submitted", "queued"):
+                return
+            if detail:
+                job.update(state="queued", phase="queued", detail=str(detail))
+            elif job["phase"] == "queued":
+                job.update(phase=None, detail="")
+            else:
+                return
+            job["updatedAt"] = self._clock()
+            self._notify(job)
+
     def accept_editing_producer(self, job: dict[str, Any]) -> None:
         """Only a coalescing request that owns the work advances edit ordering."""
         with self._guard:

@@ -115,8 +115,8 @@ sys.addaudithook(audit)
         original_popen = subprocess.Popen
 
         def start(argv, **kwargs):
-            if argv == [sys.executable, "-m", "cadgen.daemon.worker"]:
-                process = original_popen([sys.executable, "-c", child_prelude + "\nfrom cadgen.daemon import worker\nraise SystemExit(worker.serve())\n"], **kwargs)
+            if argv[-2:] == ["-m", "cadgen.daemon.worker"]:
+                process = original_popen([*argv[:-2], "-c", child_prelude + "\nfrom cadgen.daemon import worker\nraise SystemExit(worker.serve())\n"], **kwargs)
                 processes.append(process)
                 return process
             return original_popen(argv, **kwargs)

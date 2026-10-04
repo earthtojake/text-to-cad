@@ -192,7 +192,7 @@ class CoalescedPreviewRequests(unittest.TestCase):
                 worker.allow_save.set()
                 worker.allow_exit.set()
 
-        worker_pool.acquire.assert_called_once_with(str(self.model), dependency=True)
+        worker_pool.acquire.assert_called_once_with(str(self.model), dependency=True, on_start=mock.ANY)
         self.assertEqual(follower_conn.frames[-1], {"exit": exit_code})
         self.assertEqual(len(follower_conn.frames), 2)
         producer, follower = self.ledger.snapshot()
