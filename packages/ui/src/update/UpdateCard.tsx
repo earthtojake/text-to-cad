@@ -6,12 +6,13 @@ import type { UpdateNotice } from "./useUpdateNotice.js";
 
 /**
  * A newer text-to-cad, with the prompt that has the person's agent update it: what the update button
- * (`UpdateButton`) opens. Its buttons are Quick Edit's, each with its icon: where the host takes
- * messages, Send to agent (the send arrow) posts the prompt to the chat, with Copy prompt beside it as
- * a secondary icon; elsewhere, or when sending fails, Copy prompt is the one button, in words with its
- * icon first. Manual installation is the way round an agent that cannot do it: a real link to a new
- * tab, which `onLink` is how this host follows. Nothing here is an answer to keep: the X closes the
- * card, as a prompt sent does, and the button stays until the update lands.
+ * (`UpdateButton`) opens. The prompt has a copy icon in its top-right corner, as a code block on
+ * GitHub does. Its button is Quick Edit's, with its icon: where the host takes messages, Send to
+ * agent (the send arrow) posts the prompt to the chat; elsewhere, or when sending fails, Copy prompt,
+ * in words with its icon first. Manual installation is the way round
+ * an agent that cannot do it: a real link to a new tab, which `onLink` is how this host follows.
+ * Nothing here is an answer to keep: the X closes the card, as a prompt sent does, and the button
+ * stays until the update lands.
  */
 export function UpdateCard({ id, notice, send, copy, onLink, onClose }: {
   /** The ids of its title and text (`${id}-title`, `${id}-text`), which label what holds it. */
@@ -49,26 +50,26 @@ export function UpdateCard({ id, notice, send, copy, onLink, onClose }: {
       <h2 id={`${id}-title`} className="font-medium">Update available</h2>
       <Button variant="ghost" size="icon-xs" className="-mr-1" aria-label="Close" onClick={onClose}><X aria-hidden="true" /></Button>
     </div>
-    <p id={`${id}-text`} className="text-xs text-muted-foreground">{notice.text}. Ask your agent to update to the latest version, or install manually:</p>
-    <p className="select-text rounded-sm bg-muted px-2 py-1 font-mono text-xs text-foreground">{notice.prompt}</p>
+    <p id={`${id}-text`} className="text-xs text-muted-foreground">A new version of text-to-cad is available. Send a message to your agent asking it to update to the latest version:</p>
+    <div className="relative rounded-sm bg-muted" data-update-prompt="">
+      <p className="select-text py-1 pl-2 pr-8 font-mono text-xs text-foreground">{notice.prompt}</p>
+      <TooltipHint content={state.copied ? "Copied" : "Copy"} side="bottom">
+        <Button variant="ghost" size="icon-xs" className="absolute right-1 top-1 size-6 text-muted-foreground hover:bg-background hover:text-foreground"
+          aria-label={state.copied ? "Copied" : "Copy"} disabled={state.busy || state.copied} onClick={() => void copyPrompt()}>
+          {state.copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+        </Button>
+      </TooltipHint>
+    </div>
     {state.message ? <p className="text-xs text-muted-foreground" role="status">{state.message}</p> : null}
     <div className="flex items-center justify-between gap-2">
       <a href={notice.instructions} target="_blank" rel="noreferrer"
         className="text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
         onClick={event => { event.preventDefault(); onLink(notice.instructions); }}>Manual installation</a>
-      <div className="flex items-center gap-1.5">
-        {sends ? <TooltipHint content="Copy prompt" side="bottom">
-          <Button variant="secondary" size="icon-xs" aria-label={state.copied ? "Prompt copied" : "Copy prompt"}
-            disabled={state.busy || state.copied} onClick={() => void copyPrompt()}>
-            {state.copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
-          </Button>
-        </TooltipHint> : null}
-        <Button size="xs" className="font-medium" disabled={state.busy || (!sends && state.copied)}
-          onClick={() => void (sends ? sendPrompt() : copyPrompt())}>
-          {sends ? <ArrowUp aria-hidden="true" /> : state.copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
-          {sends ? "Send to agent" : state.copied ? "Copied" : "Copy prompt"}
-        </Button>
-      </div>
+      <Button size="xs" className="font-medium" disabled={state.busy || (!sends && state.copied)}
+        onClick={() => void (sends ? sendPrompt() : copyPrompt())}>
+        {sends ? <ArrowUp aria-hidden="true" /> : state.copied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+        {sends ? "Send to agent" : state.copied ? "Copied" : "Copy prompt"}
+      </Button>
     </div>
   </div>;
 }

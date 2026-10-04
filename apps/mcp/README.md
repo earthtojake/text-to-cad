@@ -68,13 +68,13 @@ reference host `basic-host` does.
   nothing about the person (`CADGEN_UPDATE_CHECK=0` turns it off; never in CI or from
   a source tree). While this install is behind, the navbar and the home show the
   shared blue `UpdateButton` (`@text-to-cad/ui/update`, read through `cad_version`),
-  first among their controls. It opens the update card: "A new version v0.9.0 of text-to-cad
-  is available (currently on v0.8.1). Ask your agent to update to the latest version,
-  or install manually:", and a prompt worded like the install message, "Update
-  text-to-cad to 0.9.0 from https://github.com/earthtojake/text-to-cad".
+  first among their controls. It opens the update card: "A new version of text-to-cad
+  is available. Send a message to your agent asking it to update to the latest
+  version:", and a prompt worded like the install message, "Update text-to-cad to
+  0.9.0 from https://github.com/earthtojake/text-to-cad".
   **Send to agent** posts it as the person's message (`ui/message`) where the host
-  takes messages (`chatReach`), with **Copy prompt** beside it as an icon; elsewhere
-  **Copy prompt** is the one button. **Manual installation** opens the docs site's
+  takes messages (`chatReach`); elsewhere the card's button is **Copy prompt**.
+  The prompt has a copy icon in its top-right corner either way. **Manual installation** opens the docs site's
   Install section (`https://www.texttocad.dev/install`) through `ui/open-link`, for a
   person whose agent cannot do it. The agent does
   the update, with the `cad-setup` skill's steps; nothing here updates anything.

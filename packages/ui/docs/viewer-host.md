@@ -443,8 +443,8 @@ first among the navbar's controls over every file and first in the home's row), 
 `UpdateCard` in a popover, and `useUpdateNotice(call)`, which reads the host's call, again when the
 page regains focus. Nothing it does is an answer the server keeps: the button stays while the
 install is behind and goes once the update lands. The card sends its prompt
-to the agent's chat through the host's `send`, where the host can, with a Copy prompt icon beside it
-(`copy`), and otherwise copies it through `copy` alone; the host decides which it supplies. Its
+to the agent's chat through the host's `send`, where the host can, and otherwise copies it through
+`copy`, its button then Copy prompt; the prompt has a copy icon in its top-right corner either way; the host decides which it supplies. Its
 Manual installation link, the notice's `instructions`, opens through the host's `onLink`, as the
 `ConsentCard`'s privacy policy does through `onPolicy`. The shell
 handles placement and hides the toolbar in

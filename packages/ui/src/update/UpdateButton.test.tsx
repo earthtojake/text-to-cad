@@ -26,7 +26,7 @@ it('is a blue button that opens the card; Send to agent posts the prompt and clo
   render(<Host call={call} send={send} />);
   expect((await screen.findByRole('button', { name: 'Update to 0.9.0' })).className).toContain('bg-blue-500');
   const card = await openCard();
-  expect(card.textContent).toContain('A new version v0.9.0 of text-to-cad is available (currently on v0.8.1). Ask your agent to update to the latest version, or install manually:');
+  expect(card.textContent).toContain('A new version of text-to-cad is available. Send a message to your agent asking it to update to the latest version:');
   const sendButton = screen.getByRole('button', { name: 'Send to agent' });
   expect(sendButton.querySelector('svg')).toBeTruthy(); // its icon first, as Quick Edit's
   await act(async () => { fireEvent.click(sendButton); });
@@ -36,17 +36,19 @@ it('is a blue button that opens the card; Send to agent posts the prompt and clo
   expect(call).toHaveBeenCalledTimes(1); // a read, and no answer to keep
 });
 
-it('beside Send to agent, Copy prompt is an icon: it copies, and the card stays with a tick', async () => {
+it('the prompt has a copy icon in its corner: it copies, and the card stays with a tick beside Send to agent', async () => {
   const send = vi.fn(async () => {});
   const copy = vi.fn(async () => {});
   render(<Host call={async () => ({ notice: NOTICE })} send={send} copy={copy} />);
   await openCard();
-  const icon = screen.getByRole('button', { name: 'Copy prompt' });
+  const icon = screen.getByRole('button', { name: 'Copy' });
   expect(icon.textContent).toBe('');
+  expect(icon.closest('[data-update-prompt]')?.textContent).toBe(NOTICE.prompt);
+  expect(screen.queryByRole('button', { name: 'Copy prompt' })).toBeNull();
   await act(async () => { fireEvent.click(icon); });
   expect(copy).toHaveBeenCalledWith(NOTICE.prompt);
   expect(screen.getByRole('status').textContent).toBe("Copied. Paste it into your agent's chat.");
-  expect((screen.getByRole('button', { name: 'Prompt copied' }) as HTMLButtonElement).disabled).toBe(true);
+  expect((screen.getByRole('button', { name: 'Copied' }) as HTMLButtonElement).disabled).toBe(true);
   expect((screen.getByRole('button', { name: 'Send to agent' }) as HTMLButtonElement).disabled).toBe(false);
   expect(send).not.toHaveBeenCalled();
 });
@@ -57,8 +59,11 @@ it('copies the prompt where nothing can send it, or once sending fails', async (
   await openCard();
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Send to agent' })); });
   expect(screen.getByRole('status').textContent).toBe('It could not be sent to the chat. Copy the prompt instead.');
+  // The card's button copies now, in words, and the prompt keeps its corner icon.
   const copyButton = screen.getByRole('button', { name: 'Copy prompt' });
-  expect(copyButton.querySelector('svg')).toBeTruthy();
+  expect([copyButton.querySelector('svg') !== null, copyButton.textContent, copyButton.closest('[data-update-prompt]')])
+    .toEqual([true, 'Copy prompt', null]);
+  expect(screen.getByRole('button', { name: 'Copy' }).closest('[data-update-prompt]')).not.toBeNull();
   await act(async () => { fireEvent.click(copyButton); });
   expect(copy).toHaveBeenCalledWith(NOTICE.prompt);
   expect(screen.getByRole('status').textContent).toBe("Copied. Paste it into your agent's chat.");
