@@ -188,7 +188,8 @@ CAD's viewer, where **Send to agent** posts "Update text-to-cad to 0.9.0 from
 https://github.com/earthtojake/text-to-cad" to your chat, worded like the install
 message (the browser viewer's card copies it instead), or a line in your agent's
 command output. Your agent then follows the `cad-setup` skill's steps
-for your app. Copies from a plugin directory or the Cursor Marketplace are
+for your app. The card also links to the [full install instructions](https://www.texttocad.dev/install),
+in case your agent can't do it. Copies from a plugin directory or the Cursor Marketplace are
 updated by their store, so they hear nothing unless the store falls far behind.
 
 To find out, cadgen fetches `api.texttocad.dev/v1/versions` at most once a day:

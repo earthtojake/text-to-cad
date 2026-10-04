@@ -49,7 +49,7 @@ test('the web host keeps the URL, the history, the title and the appearance, and
   const guards = [];  // the header no page from another site can send, on each answer to a card and features change
   // The person's features as this Viewer's server keeps them (in their settings: `/__cad/features`).
   let kept = { quickEdit: true };
-  const notice = { latest: '0.9.0', version: '0.8.1', text: 'text-to-cad 0.9.0 is available (you have 0.8.1)', prompt: 'Update text-to-cad to 0.9.0 from https://github.com/earthtojake/text-to-cad' };
+  const notice = { latest: '0.9.0', version: '0.8.1', text: 'text-to-cad 0.9.0 is available (you have 0.8.1)', prompt: 'Update text-to-cad to 0.9.0 from https://github.com/earthtojake/text-to-cad', instructions: 'https://www.texttocad.dev/install' };
   const fetchBefore = globalThis.fetch;
   globalThis.fetch = async (url, init = {}) => {
     libraryCalls.push([url, init.body ? JSON.parse(init.body) : null]);
@@ -111,6 +111,13 @@ test('the web host keeps the URL, the history, the title and the appearance, and
     // only copies the prompt. Closing it keeps the answer, and that release is not offered again.
     assert.equal(viewer().notice.props.notice.latest, '0.9.0');
     assert.equal(viewer().notice.props.send, undefined);
+    // Its link to the full install instructions opens a new tab.
+    const opened = [];
+    const openBefore = window.open;
+    window.open = (...args) => { opened.push(args); return null; };
+    viewer().notice.props.onLink(notice.instructions);
+    window.open = openBefore;
+    assert.deepEqual(opened, [[notice.instructions, '_blank', 'noopener,noreferrer']]);
     await act(() => viewer().notice.props.onClose());
     assert.deepEqual(libraryCalls.filter(([url]) => url === '/__cad/version'), [['/__cad/version', null], ['/__cad/version', { dismiss: '0.9.0' }]]);
     assert.deepEqual(guards, ['1', '1']);

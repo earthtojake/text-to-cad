@@ -24,6 +24,8 @@ export type CadClient = ReturnType<typeof createCadClient>;
 
 /** The keyboard the page is typed on — ⌘ on Apple devices, Ctrl elsewhere: the host's one platform answer. */
 const keyboardPlatform = () => /Mac|iPhone|iPad/.test(navigator.platform) ? "darwin" : /Win/.test(navigator.platform) ? "win32" : "linux";
+// A card's link (the privacy policy, the full install instructions): a new tab, as the navbar's open.
+const openTab = (url: string) => { window.open(url, '_blank', 'noopener,noreferrer'); };
 const DARK_QUERY = '(prefers-color-scheme: dark)';
 const subscribeToSystemDark = (onChange: () => void) => {
   const query = matchMedia(DARK_QUERY);
@@ -116,10 +118,9 @@ function RootView({ client, server, tabStore }: { client: CadClient; server: Cad
   return <div className="flex h-svh flex-col overflow-hidden"><div className="min-h-0 flex-1">
     <CadViewer client={client} host={host} tabStore={tabStore} live={live} file={file} onShow={show} onShown={shown}
       rootPath={server.rootPath || ''} onThumbnail={recordThumbnail} appSettings={appSettings} features={features}
-      notice={consent?.ask ? <ConsentCard policy={consent.policy} onAnswer={answer}
-        onPolicy={url => window.open(url, '_blank', 'noopener,noreferrer')} />
+      notice={consent?.ask ? <ConsentCard policy={consent.policy} onAnswer={answer} onPolicy={openTab} />
         : update.notice ? <UpdateCard notice={update.notice} copy={prompt => browserClipboard.writeText(prompt)}
-          onAnswer={update.answer} onClose={update.close} /> : null}
+          onLink={openTab} onAnswer={update.answer} onClose={update.close} /> : null}
       displayActions={<ViewerAppearance colorSchemePreference={appearance.preference} resolvedColorSchemeMode={appearance.colorScheme} onColorSchemePreferenceChange={changeColorScheme} />} />
   </div></div>;
 }

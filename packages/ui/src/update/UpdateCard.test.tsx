@@ -3,11 +3,14 @@ import { afterEach, expect, it, vi } from 'vitest';
 import { UpdateCard, useUpdateNotice, type UpdateCall } from './index.js';
 
 const NOTICE = { latest: '0.9.0', version: '0.8.1', text: 'text-to-cad 0.9.0 is available (you have 0.8.1)',
-  prompt: 'Update text-to-cad to 0.9.0 from https://github.com/earthtojake/text-to-cad' };
+  prompt: 'Update text-to-cad to 0.9.0 from https://github.com/earthtojake/text-to-cad',
+  instructions: 'https://www.texttocad.dev/install' };
 
-function Host({ call, send, copy = vi.fn(async () => {}) }: { call: UpdateCall; send?: (prompt: string) => Promise<void>; copy?: (prompt: string) => Promise<void> }) {
+function Host({ call, send, copy = vi.fn(async () => {}), onLink = vi.fn() }: {
+  call: UpdateCall; send?: (prompt: string) => Promise<void>; copy?: (prompt: string) => Promise<void>; onLink?: (url: string) => void;
+}) {
   const { notice, answer, close } = useUpdateNotice(call);
-  return notice ? <UpdateCard notice={notice} send={send} copy={copy} onAnswer={answer} onClose={close} /> : <p>No notice</p>;
+  return notice ? <UpdateCard notice={notice} send={send} copy={copy} onLink={onLink} onAnswer={answer} onClose={close} /> : <p>No notice</p>;
 }
 
 afterEach(cleanup);
@@ -17,10 +20,27 @@ it('sends the prompt to the chat where the host can, and keeps that as the answe
   const send = vi.fn(async () => {});
   render(<Host call={call} send={send} />);
   expect((await screen.findByRole('dialog')).textContent).toContain('text-to-cad 0.9.0 is available (you have 0.8.1). Your agent can update it:');
+  expect(screen.getByRole('button', { name: 'Send to agent' }).querySelector('svg')).toBeTruthy(); // its icon first, as Quick Edit's
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Send to agent' })); });
   expect(send).toHaveBeenCalledWith(NOTICE.prompt);
   expect(call).toHaveBeenLastCalledWith('0.9.0');
   expect(screen.getByText('No notice')).toBeTruthy();
+});
+
+it('beside Send to agent, Copy prompt is an icon: copying is the answer, and Send stays', async () => {
+  const call = vi.fn<UpdateCall>(async () => ({ notice: NOTICE }));
+  const send = vi.fn(async () => {});
+  const copy = vi.fn(async () => {});
+  render(<Host call={call} send={send} copy={copy} />);
+  const icon = await screen.findByRole('button', { name: 'Copy prompt' });
+  expect(icon.textContent).toBe('');
+  await act(async () => { fireEvent.click(icon); });
+  expect(copy).toHaveBeenCalledWith(NOTICE.prompt);
+  expect(call).toHaveBeenLastCalledWith('0.9.0');
+  expect(screen.getByRole('status').textContent).toBe("Copied. Paste it into your agent's chat.");
+  expect((screen.getByRole('button', { name: 'Prompt copied' }) as HTMLButtonElement).disabled).toBe(true);
+  expect((screen.getByRole('button', { name: 'Send to agent' }) as HTMLButtonElement).disabled).toBe(false);
+  expect(send).not.toHaveBeenCalled();
 });
 
 it('copies the prompt where nothing can send it, or once sending fails', async () => {
@@ -31,6 +51,7 @@ it('copies the prompt where nothing can send it, or once sending fails', async (
   await act(async () => { fireEvent.click(sendButton); });
   expect(screen.getByRole('status').textContent).toBe('It could not be sent to the chat. Copy the prompt instead.');
   expect(call).toHaveBeenCalledTimes(1); // not sent: no answer yet
+  expect(screen.getByRole('button', { name: 'Copy prompt' }).querySelector('svg')).toBeTruthy();
   await act(async () => { fireEvent.click(screen.getByRole('button', { name: 'Copy prompt' })); });
   expect(copy).toHaveBeenCalledWith(NOTICE.prompt);
   expect(call).toHaveBeenLastCalledWith('0.9.0');
@@ -38,6 +59,18 @@ it('copies the prompt where nothing can send it, or once sending fails', async (
   fireEvent.click(screen.getByRole('button', { name: 'Close' }));
   expect(screen.getByText('No notice')).toBeTruthy();
   expect(call).toHaveBeenCalledTimes(2); // answered once
+});
+
+it('links to the full install instructions through the host, and following the link is no answer', async () => {
+  const call = vi.fn<UpdateCall>(async () => ({ notice: NOTICE }));
+  const onLink = vi.fn();
+  render(<Host call={call} onLink={onLink} />);
+  const link = await screen.findByRole('link', { name: 'Manual installation' }) as HTMLAnchorElement;
+  expect([link.href, link.target]).toEqual(['https://www.texttocad.dev/install', '_blank']);
+  fireEvent.click(link);
+  expect(onLink).toHaveBeenCalledWith('https://www.texttocad.dev/install');
+  expect(call).toHaveBeenCalledTimes(1); // the read alone: the card stays
+  expect(screen.getByRole('dialog')).toBeTruthy();
 });
 
 it('closing is an answer, and a read still on its way never brings the card back', async () => {

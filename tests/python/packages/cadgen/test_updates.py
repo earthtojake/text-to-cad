@@ -63,7 +63,8 @@ class UpdatesTest(unittest.TestCase):
         found = updates.notice()
         prompt = "Update text-to-cad to 0.9.0 from https://github.com/earthtojake/text-to-cad"
         self.assertEqual(found, {"latest": "0.9.0", "version": "0.8.1",
-                                 "text": "text-to-cad 0.9.0 is available (you have 0.8.1)", "prompt": prompt})
+                                 "text": "text-to-cad 0.9.0 is available (you have 0.8.1)", "prompt": prompt,
+                                 "instructions": "https://www.texttocad.dev/install"})
         self.assertEqual(updates.line(found), f'text-to-cad 0.9.0 is available (you have 0.8.1). To update, ask your agent: "{prompt}"')
         # The same words from a store's copy below its minimum, and from a skill's command, which names no channel.
         with mock.patch.dict(os.environ, {"CADGEN_INSTALL_CHANNEL": "claude-directory"}), \

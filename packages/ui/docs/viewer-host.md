@@ -436,8 +436,11 @@ answer and the Analytics setting; the host supplies the call and where the answe
 `@text-to-cad/ui/update` is the update notice both apps share, from cadgen's version check:
 `UpdateCard` and `useUpdateNotice(call)`, which reads the host's call and keeps the person's
 answer (they sent or copied the prompt, or closed the card) through it. The card sends its prompt
-to the agent's chat through the host's `send`, where the host can, and otherwise copies it through
-`copy`; the host decides which it supplies. The shell handles placement and hides the toolbar in
+to the agent's chat through the host's `send`, where the host can, with a Copy prompt icon beside it
+(`copy`), and otherwise copies it through `copy` alone; the host decides which it supplies. Its
+Manual installation link, the notice's `instructions`, opens through the host's `onLink`, as the
+`ConsentCard`'s privacy policy does through `onPolicy`; following it is no answer. The shell
+handles placement and hides the toolbar in
 preview; the host owns callbacks and preferences. None of these imply platform
 detection or move application-specific release/network behavior into shared UI.
 

@@ -216,15 +216,17 @@ it("Settings' Features: Quick edit is read from the server, turned off there for
   expect(viewer.props!.features).toEqual({ quickEdit: false });
 });
 
-it('a newer release is offered once the analytics question is answered: sent to the chat where the host takes messages, copied elsewhere', async () => {
+it('a newer release is offered once the analytics question is answered: sent to the chat where the host takes messages, copied elsewhere, the full instructions a link away', async () => {
   const notice = { latest: '0.9.0', version: '0.8.1', text: 'text-to-cad 0.9.0 is available (you have 0.8.1)',
-    prompt: 'Update text-to-cad to 0.9.0 from https://github.com/earthtojake/text-to-cad' };
+    prompt: 'Update text-to-cad to 0.9.0 from https://github.com/earthtojake/text-to-cad', instructions: 'https://www.texttocad.dev/install' };
   {
     const { bridge, server } = host({ displayMode: 'fullscreen' }, { message: {} }, true, notice);
     const { findByRole, getByText, getByRole, queryByRole } = render(<App bridge={bridge as any} server={server as any} launch={home} session={session} />);
     await findByRole('dialog', { name: 'Allow Analytics' });
     expect(queryByRole('dialog', { name: 'Update available' })).toBeNull();
     await act(async () => getByText('No thanks').click());
+    await act(async () => getByRole('link', { name: 'Manual installation' }).click());
+    expect(bridge.request).toHaveBeenCalledWith('ui/open-link', { url: notice.instructions });
     await act(async () => getByRole('button', { name: 'Send to agent' }).click());
     expect(bridge.request).toHaveBeenCalledWith('ui/message', { role: 'user', content: [{ type: 'text', text: notice.prompt }] }, { timeoutMs: 30_000 });
     expect(server.version).toHaveBeenLastCalledWith('0.9.0');

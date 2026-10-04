@@ -21,8 +21,10 @@ The notice is the same wherever it shows: ``text-to-cad 0.9.0 is available (you 
 a prompt for the person's agent worded like the install message, ``Update text-to-cad to 0.9.0 from
 https://github.com/earthtojake/text-to-cad``: the agent takes the steps for its own app from there. The agent does the update; nothing here does.
 The CAD app's card sends that prompt to the chat where the host takes messages, and copies it
-elsewhere; the CAD Viewer's card copies it. A text-only app gets the line with its first
-``cad_show`` result, and a ``cadgen`` command prints it on stderr, at most once a day.
+elsewhere; the CAD Viewer's card copies it. Each card also links to the full install instructions
+(``INSTRUCTIONS``, the docs site's ``/install``), should the agent not manage. A text-only app gets
+the line with its first ``cad_show`` result, and a ``cadgen`` command prints it on stderr, at most
+once a day.
 
 The person's answer to a card -- they sent, copied or closed it -- is kept as theirs (the
 ``updates`` section of ``settings.json``, ``cadgen/settings.py``): that release is not offered
@@ -53,6 +55,7 @@ from cadgen.settings import read_section, settings_path, update_section
 LOG = logging.getLogger("cadgen.updates")
 
 REPOSITORY = "https://github.com/earthtojake/text-to-cad"  # where the install message sends the agent too
+INSTRUCTIONS = "https://www.texttocad.dev/install"  # the full install instructions: the docs site's Install section
 FILE = "versions.json"  # the feed as last read, in the state directory
 SECTION = "updates"  # the person's answers to the card, in settings.json
 CHECK_SECONDS = 24 * 60 * 60  # how old the feed may get before it is read again; the CLI's line, how often
@@ -164,8 +167,8 @@ def offer(found: dict[str, Any] | None, version: str, where: str) -> str | None:
 
 def notice(*, fetch: bool = True, now: float | None = None, path: Path | None = None,
            settings: Path | None = None, get: Callable[[str], Any] | None = None) -> dict[str, str] | None:
-    """``{latest, version, text, prompt}``: what to tell the person, or ``None`` when there is
-    nothing to say -- or no checking, or the person set that release aside."""
+    """``{latest, version, text, prompt, instructions}``: what to tell the person, or ``None`` when
+    there is nothing to say -- or no checking, or the person set that release aside."""
     try:
         if not checking():
             return None
@@ -177,7 +180,7 @@ def notice(*, fetch: bool = True, now: float | None = None, path: Path | None = 
             return None
         return {"latest": latest, "version": __version__,
                 "text": f"text-to-cad {latest} is available (you have {__version__})",
-                "prompt": f"Update text-to-cad to {latest} from {REPOSITORY}"}
+                "prompt": f"Update text-to-cad to {latest} from {REPOSITORY}", "instructions": INSTRUCTIONS}
     except Exception:  # noqa: BLE001 - a notice never fails what shows it
         LOG.debug("the version check failed", exc_info=True)
         return None

@@ -71,7 +71,10 @@ reference host `basic-host` does.
   have 0.8.1)", and a prompt worded like the install message, "Update text-to-cad to
   0.9.0 from https://github.com/earthtojake/text-to-cad".
   **Send to agent** posts it as the person's message (`ui/message`) where the host
-  takes messages (`chatReach`); elsewhere **Copy prompt** copies it. The agent does
+  takes messages (`chatReach`), with **Copy prompt** beside it as an icon; elsewhere
+  **Copy prompt** is the one button. **Manual installation** opens the docs site's
+  Install section (`https://www.texttocad.dev/install`) through `ui/open-link`, for a
+  person whose agent cannot do it. The agent does
   the update, with the `cad-setup` skill's steps; nothing here updates anything.
   A text client gets the same line with its first `cad_show` result. Where the
   install came from is its channel, `CADGEN_INSTALL_CHANNEL` in the server's

@@ -96,6 +96,16 @@ class PluginManifestPolicyTest(unittest.TestCase):
             with self.subTest(command=command.splitlines()[0]):
                 self.assertIn(command, readme)
 
+    def test_the_update_cards_instructions_link_reaches_the_docs_install_section(self) -> None:
+        # cadgen's update card links to texttocad.dev/install; the docs site redirects that to its
+        # Install section, so renaming the section or dropping the redirect breaks every card.
+        updates = (REPO_ROOT / "packages" / "cadgen" / "src" / "cadgen" / "updates.py").read_text(encoding="utf-8")
+        self.assertIn('INSTRUCTIONS = "https://www.texttocad.dev/install"', updates)
+        config = (REPO_ROOT / "apps" / "docs" / "next.config.ts").read_text(encoding="utf-8")
+        self.assertIn('{ source: "/install", destination: "/#install"', config)
+        page = (REPO_ROOT / "apps" / "docs" / "src" / "app" / "page.tsx").read_text(encoding="utf-8")
+        self.assertIn('<section id="install"', page)
+
     def test_plugin_manifests_link_the_same_pages(self) -> None:
         # The listing links every directory shows: homepage, docs, support, privacy policy and terms.
         # Claude and Cursor spell them as top-level fields, Codex under `interface`.

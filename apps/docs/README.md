@@ -136,6 +136,8 @@ for agents installing text-to-cad, so it says more: a line for those agents (whi
 `/llms.txt` carries too) and fuller notes under each install. The site has the
 hero and the agents carousel. The page's copy lives in `src/lib/content.ts`, which `/llms.txt`
 (`src/app/llms.txt/route.ts`, the homepage as markdown for agents) renders too.
+`/install` redirects to the Install section (`/#install`, `next.config.ts`): the stable address
+of the full install instructions, which the CAD app's update card links to.
 `tests/python/global/test_plugin_manifests.py` holds the description, the install
 message and every install command to one text. The unboxed wordmark and one prominent tagline
 sit above the independently framed CAD demo. “100% open source and free.” follows

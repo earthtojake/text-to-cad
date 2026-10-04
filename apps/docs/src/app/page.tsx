@@ -183,8 +183,8 @@ export default function Home() {
             </p>
           </section>
 
-          <section id="installation" aria-labelledby="installation-title" className="scroll-mt-20 space-y-3 py-6">
-            <SectionIntro id="installation-title" title="Install" />
+          <section id="install" aria-labelledby="install-title" className="scroll-mt-20 space-y-3 py-6">
+            <SectionIntro id="install-title" title="Install" />
             <div className="space-y-3">
               <div>
                 <h3 className="text-base font-semibold text-foreground">Ask your agent (recommended)</h3>

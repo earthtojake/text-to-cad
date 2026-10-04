@@ -202,7 +202,7 @@ export default function App({ bridge, server, launch: initial, presentation = 't
       tabStore={tabStore} live={live} links={links} appSettings={appSettings} features={features}
       notice={consent?.ask ? <ConsentCard policy={consent.policy} onAnswer={answer} onPolicy={openLink} />
         : update.notice ? <UpdateCard notice={update.notice} send={sendPrompt} copy={prompt => frameClipboard.writeText(prompt)}
-          onAnswer={update.answer} onClose={update.close} /> : null}
+          onLink={openLink} onAnswer={update.answer} onClose={update.close} /> : null}
       colorScheme={colorScheme} platform={initial.platform || 'darwin'} reporter={reporter} sync={sync} compact={inline} chat={chat}
       onLaunch={show} onHome={goHome} />
   </Frame>;
