@@ -471,6 +471,8 @@ floor so orbiting and panning do not expose an abrupt grid edge.
 Grid and Axes share the appearance's default guide color.
 Appearance updates preserve model lighting, materials, geometry,
 segment textures and occurrence slots; only the canvas and guides adapt.
+An edge color edit keeps them too: `model.update` recolors the live edge draws
+in place.
 
 A thickness is a FULL width in DEVICE pixels — every line shader normalises its
 extrusion by the drawing buffer, never the CSS size, and the fragment stage

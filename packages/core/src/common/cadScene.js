@@ -2189,6 +2189,8 @@ function staticMutableStateKey(settings) {
       materialSettings: settings.materialSettings,
       materialOverrides: settings.materialOverrides,
       surfaceSettings: settings.surfaceSettings,
+      // Edge colour is mutable state (see settingsSignature): a change must reach every record.
+      edgeSettings: settings.edgeSettings,
       baseTheme: settings.baseTheme,
       scale: settings.scale,
       selection: settings.selection,
@@ -2202,9 +2204,12 @@ function staticMutableStateKey(settings) {
 
 // The settings that decide how records are BUILT (materials, edge style, mode);
 // a change rebuilds every record. Which parts are rendered is tracked apart
-// (renderPartsKey) and reconciled incrementally.
+// (renderPartsKey) and reconciled incrementally. The edge colour is not one of
+// them: it is ink, which setRuntimeTheme (the instanced class colours) and the
+// visual-state pass (every other edge material) put on the live draws in place.
 function settingsSignature(meshData, theme, settings) {
-  const edgeSettings = normalizeDisplayEdgeSettings(settings.edgeSettings);
+  const { color: ink, ...edgeSettings } = normalizeDisplayEdgeSettings(settings.edgeSettings);
+  void ink;
   return JSON.stringify({
     meshData: meshData ? "mesh" : "",
     displayMode: normalizeDisplayMode(settings.displayMode),
