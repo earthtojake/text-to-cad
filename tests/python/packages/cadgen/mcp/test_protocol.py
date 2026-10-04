@@ -111,6 +111,16 @@ class ConnectionTest(unittest.TestCase):
         self.assertEqual(self.sink.next()["id"], 8)
         self.assertTrue(self.sink.frames.empty())
 
+    def test_a_broken_output_pipe_fails_a_peer_request(self) -> None:
+        read_fd, write_fd = os.pipe()
+        os.close(read_fd)
+        with os.fdopen(write_fd, "wb", buffering=0) as writer:
+            connection = Connection([], writer, lambda *args: {})
+            self.addCleanup(connection.serve)
+            with self.assertRaisesRegex(ConnectionError, "closed the connection"):
+                connection.request("roots/list", {}, timeout=0)
+            self.assertTrue(connection.closed)
+
     def test_a_request_to_the_peer_waits_for_its_reply(self) -> None:
         self.pipe.send({"jsonrpc": "2.0", "id": 1, "method": "ask"})
         outgoing = self.sink.next()

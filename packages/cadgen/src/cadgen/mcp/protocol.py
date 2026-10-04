@@ -113,13 +113,16 @@ class Connection:
                 if line:
                     self._receive(line)
         finally:
-            self._closed.set()
-            with self._pending_lock:
-                pending, self._pending = self._pending, {}
+            self._close()
+            self._pool.shutdown(wait=False, cancel_futures=True)
+
+    def _close(self) -> None:
+        self._closed.set()
+        with self._pending_lock:
+            pending, self._pending = self._pending, {}
             for future in pending.values():
                 if not future.done():
                     future.set_exception(ConnectionError("the host closed the connection"))
-            self._pool.shutdown(wait=False, cancel_futures=True)
 
     @property
     def closed(self) -> bool:
@@ -207,13 +210,13 @@ class Connection:
     def _resolve(self, message: dict[str, Any]) -> None:
         with self._pending_lock:
             future = self._pending.get(message.get("id"))
-        if future is None or future.done():
-            return
-        if "error" in message:
-            error = message["error"] if isinstance(message["error"], dict) else {}
-            future.set_exception(RpcError(int(error.get("code", INTERNAL_ERROR)), str(error.get("message", "request failed")), error.get("data")))
-        else:
-            future.set_result(message.get("result"))
+            if future is None or future.done():
+                return
+            if "error" in message:
+                error = message["error"] if isinstance(message["error"], dict) else {}
+                future.set_exception(RpcError(int(error.get("code", INTERNAL_ERROR)), str(error.get("message", "request failed")), error.get("data")))
+            else:
+                future.set_result(message.get("result"))
 
     def _send(self, message: dict[str, Any]) -> None:
         frame = json.dumps(message, ensure_ascii=False, separators=(",", ":")).encode("utf-8") + b"\n"
@@ -222,4 +225,4 @@ class Connection:
                 self._writer.write(frame)
                 self._writer.flush()
             except (BrokenPipeError, ValueError, OSError):
-                self._closed.set()
+                self._close()
