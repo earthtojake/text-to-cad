@@ -33,7 +33,6 @@ import hashlib
 import json
 import os
 import re
-import shutil
 from typing import Any, Iterable
 
 __all__ = ["Request", "Response", "STREAM_CHUNK_BYTES"]
@@ -216,9 +215,6 @@ class Response:
             return
         try:
             with open(file_path, "rb") as handle:
-                if not span:
-                    shutil.copyfileobj(handle, self._handler.wfile, STREAM_CHUNK_BYTES)
-                    return
                 handle.seek(first)
                 remaining = last - first + 1
                 while remaining:

@@ -542,6 +542,56 @@ class TunnelBoundTest(_Session):
 class TunnelBodyTest(unittest.TestCase):
     """A large JSON body crosses the host's channel gzipped and says so; nothing else changes."""
 
+    def test_a_file_changed_between_stat_and_stream_is_not_a_successful_short_reply(self) -> None:
+        from cadgen.mcp.roots import Root, WORKSPACE
+        from cadgen.mcp.tunnel import ViewerTunnel
+        from cadgen.viewer.response import Response
+
+        with tempfile.TemporaryDirectory() as directory:
+            model = Path(directory) / "part.stl"
+            original = b"solid t\nendsolid t\n"
+            tunnel = ViewerTunnel()
+            stream_file = Response.stream_file
+            url = f"/__cad/asset?file={quote(str(model), safe='')}"
+
+            def changed(response, path, stat_result, *args):
+                Path(path).write_bytes(b"solid")
+                return stream_file(response, path, stat_result, *args)
+
+            for headers in ({}, {"range": "bytes=0-9"}):
+                with self.subTest(headers=headers):
+                    model.write_bytes(original)
+                    with mock.patch.object(Response, "stream_file", changed):
+                        reply = tunnel.serve(Root(WORKSPACE, directory), method="GET", url=url, headers=headers, body=b"")
+                    self.assertEqual(reply["status"], 502)
+                    self.assertNotIn(b"solid", base64.b64decode(reply["body"]))
+
+            model.write_bytes(original)
+            reply = tunnel.serve(Root(WORKSPACE, directory), method="GET", url=url, headers={}, body=b"")
+            self.assertEqual((reply["status"], base64.b64decode(reply["body"])), (200, original))
+
+    def test_a_file_growing_after_stat_sends_only_the_announced_bytes(self) -> None:
+        from cadgen.mcp.roots import Root, WORKSPACE
+        from cadgen.mcp.tunnel import ViewerTunnel
+        from cadgen.viewer.response import Response
+
+        with tempfile.TemporaryDirectory() as directory:
+            model = Path(directory) / "part.stl"
+            original = b"solid t\nendsolid t\n"
+            model.write_bytes(original)
+            stream_file = Response.stream_file
+
+            def grown(response, path, stat_result, *args):
+                with open(path, "ab") as handle:
+                    handle.write(b"extra bytes")
+                return stream_file(response, path, stat_result, *args)
+
+            with mock.patch.object(Response, "stream_file", grown):
+                reply = ViewerTunnel().serve(Root(WORKSPACE, directory), method="GET",
+                                              url=f"/__cad/asset?file={quote(str(model), safe='')}", headers={}, body=b"")
+            body = base64.b64decode(reply["body"])
+            self.assertEqual((reply["status"], int(reply["headers"]["content-length"]), body), (200, len(original), original))
+
     def test_only_a_large_json_body_travels_gzipped(self) -> None:
         import gzip
 
