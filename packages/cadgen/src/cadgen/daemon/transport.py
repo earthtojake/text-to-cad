@@ -36,7 +36,7 @@ import stat
 import tempfile
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from pathlib import Path
 
 # Bump when the wire format changes. It is part of the address, so mismatched peers never
@@ -305,9 +305,38 @@ class Channel:
         self._conn = conn
         self._close_guard = threading.Lock()
         self._closed = False
+        self._active_io = 0
+        self._close_pending = False
+        self._socket_io = False
+        if os.name != "nt" and isinstance(conn, mpc.Connection):
+            try:
+                probe = socket.socket(fileno=conn.fileno())
+            except OSError:
+                pass  # A non-socket Connection keeps its native close behavior.
+            else:
+                probe.detach()
+                self._socket_io = True
+
+    @contextlib.contextmanager
+    def _io(self) -> Iterator[None]:
+        with self._close_guard:
+            if self._closed:
+                raise OSError("channel closed")
+            self._active_io += 1
+        try:
+            yield
+        finally:
+            with self._close_guard:
+                self._active_io -= 1
+                close = self._close_pending and self._active_io == 0
+                if close:
+                    self._close_pending = False
+            if close:
+                self._close_connection()
 
     def send(self, payload: bytes) -> None:
-        self._conn.send_bytes(payload)
+        with self._io():
+            self._conn.send_bytes(payload)
 
     def recv(self, timeout: float | None = None) -> bytes | None:
         """One message, or None if nothing arrived within ``timeout``.
@@ -322,29 +351,37 @@ class Channel:
         drained). One shape for callers on both.
         """
         try:
-            if timeout is not None and not self._conn.poll(timeout):
-                return None
-            return self._conn.recv_bytes()
-        except EOFError:
-            return b""
-        except OSError:
+            with self._io():
+                if timeout is not None and not self._conn.poll(timeout):
+                    return None
+                return self._conn.recv_bytes()
+        except (EOFError, OSError):
             return b""
 
+    def _close_connection(self) -> None:
+        with contextlib.suppress(OSError):
+            self._conn.close()
+
     def close(self) -> None:
-        # Connection.close() is idempotent only when calls are serialized: it
-        # clears its integer handle AFTER closing it. Two concurrent callers can
-        # therefore both close the same number, and the second can close an
-        # unrelated descriptor if the OS reused that number in between. Claim
-        # close ownership here, then release the guard before the underlying
-        # close so a cancellation never waits behind a blocked receive.
         with self._close_guard:
             if self._closed:
                 return
             self._closed = True
-        try:
-            self._conn.close()
-        except OSError:
-            pass
+            if self._socket_io and self._active_io:
+                # Wake the current I/O without releasing its descriptor. Connection
+                # keeps the number across partial reads/writes; closing it here can
+                # let that operation consume another connection that reuses it.
+                self._close_pending = True
+                wakeup = socket.socket(fileno=self._conn.fileno())
+                try:
+                    with contextlib.suppress(OSError):
+                        wakeup.shutdown(socket.SHUT_RDWR)
+                finally:
+                    wakeup.detach()
+                return
+        # The native owner closes once, outside the guard: duplicate cancellation
+        # never waits behind a blocking close, and Windows retains pipe behavior.
+        self._close_connection()
 
     def __enter__(self) -> Channel:
         return self
