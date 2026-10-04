@@ -71,16 +71,19 @@ scripts/         # asset checks
 ## Brand and loading icon
 
 The header uses the blue CAD wordmark and favicons use C, both with soft relief shading. The homepage
-and repository README use the TEXTTOCAD PNG. A phone's header always shows the CAD wordmark at its
-left; a desktop's slides it in before the section links once the homepage's TEXTTOCAD has scrolled
-out of sight (a page without one shows it throughout). `/icon` provides downloadable
-C, CAD and TEXTTOCAD SVGs and PNGs, followed by the original animated loading-icon
-playground. The original mesh, animation and the shared UI loading assets stay
-unchanged.
+hero builds the TEXTTOCAD wordmark in with its animated SVG (sketch, extrude, cut, chamfer,
+render), and the repository README shows the same animated SVG. A phone's header always shows the
+CAD wordmark at its left; a desktop's slides it in before the section links once the homepage's
+TEXTTOCAD has scrolled out of sight (a page without one shows it throughout). `/icon` plays each
+mark's build, with Replay, and provides downloadable C, CAD, TEXTTOCAD and stacked TEXT TO CAD
+SVGs, PNGs and animated SVGs, followed by the original animated loading-icon playground.
+`LogoBuild` (`src/components/logo-build.tsx`) shows a build: a plain `<img>`, since the animation
+is the SVG's own SMIL, inside a `<picture>` whose reduced-motion source is the static mark. The
+original mesh, animation and the shared UI loading assets stay unchanged.
 
-The vectors in `public/brand/` come from `node scripts/brand/generate-logos.mjs`;
-`node scripts/brand/export-logos.mjs` then refreshes the PNGs, favicons and every
-app's copy (run both from the repository root). See [the brand recipe](../../scripts/brand/README.md)
+The vectors in `public/brand/` come from `node scripts/brand/generate-logos.mjs` and
+`node scripts/brand/animate-logos.mjs`; `node scripts/brand/export-logos.mjs` then
+refreshes the PNGs, favicons and every app's copy (run all three from the repository root). See [the brand recipe](../../scripts/brand/README.md)
 for the letters, projection and palette. These are checked-in assets; ordinary
 builds do not regenerate them.
 

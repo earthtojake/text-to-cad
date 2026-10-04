@@ -9,7 +9,7 @@ const require = createRequire(path.join(root, 'apps/docs/package.json'));
 const sharp = require('sharp');
 const publicDir = path.join(root, 'apps/docs/public');
 const brand = path.join(publicDir, 'brand');
-for (const name of ['logo-c', 'logo-cad', 'logo-texttocad']) {
+for (const name of ['logo-c', 'logo-cad', 'logo-texttocad', 'logo-texttocad-stacked']) {
   const source = await readFile(path.join(brand, `${name}.svg`));
   await sharp(source, { density: 600 }).resize(name === 'logo-c' ? { width: 512, height: 512, fit: 'contain', background: '#00000000' } : { height: 512 }).png().toFile(path.join(brand, `${name}.png`));
 }
@@ -39,4 +39,4 @@ await copyFile(path.join(brand, 'logo-cad.svg'), path.join(root, 'packages/ui/sr
 await copyFile(path.join(brand, 'logo-texttocad.svg'), path.join(root, 'packages/ui/src/assets/logo-texttocad.svg'));
 await copyFile(path.join(brand, 'logo-c.png'), path.join(root, '.codex-plugin/logo.png'));
 await copyFile(path.join(brand, 'logo-c.png'), path.join(root, '.claude-plugin/icon.png'));
-console.log('Exported C, CAD and TEXTTOCAD PNGs, the favicons, the viewer wordmarks and the plugin icons.');
+console.log('Exported C, CAD, TEXTTOCAD and stacked TEXT TO CAD PNGs, the favicons, the viewer wordmarks and the plugin icons.');

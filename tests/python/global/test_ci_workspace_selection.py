@@ -48,6 +48,7 @@ class WorkspaceWorkflowSelection(unittest.TestCase):
             r"^apps/web/(src|scripts)/.*\.test\.[cm]?js$",              # apps/web/scripts/run-tests.mjs
             r"^apps/mcp/src/.*\.test\.tsx?$",                          # apps/mcp vitest.config.mjs
             r"^apps/docs/src/lib/api/[^/]*\.test\.mjs$",          # apps/docs `check` (node --test)
+            r"^scripts/brand/[^/]*\.test\.mjs$",                          # test-docs.sh
             r"^scripts/bench/viewer-memory/[^/]*\.test\.mjs$",          # test-js.sh --select core
             r"^scripts/test/check-(dependencies|kit-boundaries)\.test\.mjs$",  # test-js.sh
             r"^tests/python/packages/cadgen/(.*/)?test_[^/]*\.py$",      # test-python.sh cadgen
