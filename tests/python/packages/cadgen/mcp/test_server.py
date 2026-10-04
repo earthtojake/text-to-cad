@@ -201,12 +201,13 @@ class TabServerTest(_Session):
         self.assertEqual((self.http("POST", "/__cad/clipboard", {})[0], self.http("POST", "/__cad/shutdown", {})[0]), (404, 405))
 
     def test_a_view_keeps_the_library_and_the_persons_settings_in_this_servers_own(self) -> None:
-        # The model on screen joins the library this server lists on the home, and is counted once, here.
+        # The model on screen joins the library this server lists on the home (each path in this
+        # platform's spelling), and is counted once, here.
         with mock.patch.object(self.server.analytics, "opened") as counted:
-            status, recents = self.http("POST", "/__cad/recents", {"action": "open", "path": self.bracket})
-        self.assertEqual((status, [entry["path"] for entry in recents["recents"]]), (200, [self.bracket.replace(os.sep, "/")]))
+            status, recents = self.http("POST", "/__cad/recents", {"action": "open", "path": self.bracket.replace(os.sep, "/")})
+        self.assertEqual((status, [entry["path"] for entry in recents["recents"]]), (200, [self.bracket]))
         counted.assert_called_once()
-        self.assertEqual([entry["path"] for entry in self.launch("cad_home")["recents"]], [self.bracket.replace(os.sep, "/")])
+        self.assertEqual([entry["path"] for entry in self.launch("cad_home")["recents"]], [self.bracket])
         # Its picture, kept and read back by name.
         png = base64.b64encode(b"\x89PNG\r\n\x1a\n" + bytes(64)).decode("ascii")
         [entry] = self.http("POST", "/__cad/recents", {"action": "thumbnail", "path": self.bracket, "png": png})[1]["recents"]
@@ -248,7 +249,7 @@ class TabServerTest(_Session):
         self.http("POST", "/__cad/recents", {"action": "open", "path": self.bracket})
         home = self.launch("cad_home")
         self.assertEqual((home["page"], home["model"], home["surface"], [entry["path"] for entry in home["recents"]]),
-                         ("home", None, "sidebar", [self.bracket.replace(os.sep, "/")]))
+                         ("home", None, "sidebar", [self.bracket]))
         fresh = Server(page=AppPage(self.tmp / "app"), recents=RecentStore(self.tmp / "other"))
         fresh.handle("initialize", {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": CODEX}, None)
         context = RequestContext(1, {"threadId": "t"})
