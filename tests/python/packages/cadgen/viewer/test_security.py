@@ -210,7 +210,8 @@ class FilesByAbsolutePath(SecurityTestCase):
         self.assertDenied(status, body, {400})
 
     def test_an_enormous_path_does_not_500(self):
-        status, _, _ = self.fixture.asset("/" + "a" * 5000 + ".step")
+        # Absolute in this platform's spelling (a drive on Windows), so it reaches the file check.
+        status, _, _ = self.fixture.asset(os.path.join(os.path.abspath(os.sep), "a" * 5000 + ".step"))
         self.assertEqual(status, 404)
 
     def test_crlf_in_a_filename_cannot_inject_a_header(self):
@@ -230,7 +231,9 @@ class OnlyCadBytesLeave(SecurityTestCase):
             with self.subTest(name=name):
                 status, _, body = self.fixture.asset(self.fixture.path(name))
                 self.assertDenied(status, body, {404})
-        status, _, _ = self.fixture.asset("/etc/passwd")
+        # A system file, by its absolute path on this platform: not a CAD file, so never sent.
+        system_file = os.path.join(os.environ.get("SystemRoot", r"C:\Windows"), "win.ini") if os.name == "nt" else "/etc/passwd"
+        status, _, _ = self.fixture.asset(system_file)
         self.assertEqual(status, 404)
 
     def test_a_directory_with_a_served_extension_is_404(self):
