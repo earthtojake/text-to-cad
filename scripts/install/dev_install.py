@@ -79,14 +79,14 @@ def dev_root(host: str, root: Path = REPO_ROOT) -> Path:
     return root / "tmp" / f"{host}-dev"
 
 
-# A development install's channel (cadgen's CADGEN_INSTALL_CHANNEL): its analytics are told apart, and
-# it is never offered an update.
-CHANNEL = {"CADGEN_INSTALL_CHANNEL": "dev"}
+# A development install's channel, as its server's `--channel` (cadgen's _internal/channel.py): its
+# analytics are told apart, and it is never offered an update.
+CHANNEL = ["--channel", "dev"]
 
 
 def server_entry(host: str, python: str, page_dir: Path) -> dict:
     """CAD's server for a development install: this checkout's interpreter, this install's page."""
-    entry = {"command": python, "args": ["-m", "cadgen.cli", "mcp"], "env": {**CHANNEL, "CADGEN_MCP_APP_DIR": str(page_dir)}}
+    entry = {"command": python, "args": ["-m", "cadgen.cli", "mcp", *CHANNEL], "env": {"CADGEN_MCP_APP_DIR": str(page_dir)}}
     if host == "codex":
         entry["startup_timeout_sec"] = CODEX_STARTUP_SECONDS
     return entry
@@ -278,7 +278,7 @@ def runtime(host: str, args: argparse.Namespace, version: str) -> tuple[dict, di
     """``(server, skill commands, page copy)`` for this install: the .venv, or with --wheel the wheel."""
     if args.wheel:
         wheel = build_wheel(host, args.build)
-        server = {"command": LAUNCHER[0], "args": [*LAUNCHER[1:], str(wheel), "cadgen", "mcp"], "env": dict(CHANNEL)}
+        server = {"command": LAUNCHER[0], "args": [*LAUNCHER[1:], str(wheel), "cadgen", "mcp", *CHANNEL]}
         if host == "codex":
             server["startup_timeout_sec"] = CODEX_STARTUP_SECONDS
         prefix = " ".join((*LAUNCHER, str(wheel)))

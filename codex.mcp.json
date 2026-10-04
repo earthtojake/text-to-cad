@@ -10,12 +10,11 @@
         "--from",
         "cadgen==0.7.11",
         "cadgen",
-        "mcp"
+        "mcp",
+        "--channel",
+        "codex-github"
       ],
-      "startup_timeout_sec": 300,
-      "env": {
-        "CADGEN_INSTALL_CHANNEL": "github"
-      }
+      "startup_timeout_sec": 300
     }
   }
 }

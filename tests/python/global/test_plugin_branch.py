@@ -40,14 +40,18 @@ class PluginTreeTests(unittest.TestCase):
         self.assertEqual({path for path in tree if path.startswith(".cursor-plugin/")}, {".cursor-plugin/plugin.json"})
 
     def test_each_config_on_the_branch_names_the_channel_its_installs_come_from(self) -> None:
-        # claude.ai's directory follows this branch, and a Cursor install by hand clones it; on main
-        # the same configs say `github` and `cursor-marketplace` (cadgen's CADGEN_INSTALL_CHANNEL).
+        # claude.ai's directory follows this branch and updates its copies; a Cursor install by hand
+        # clones it, and nothing updates that. On main the same configs name `claude-github` and the
+        # Cursor Marketplace. What follows `cadgen mcp` is the plugin's say (cadgen's _internal/channel.py).
         tree, errors, _manifest = branch.build(REPO_ROOT)
         self.assertEqual(errors, [])
-        channels = {path: json.loads(tree[path][1])["mcpServers"]["cad"]["env"]["CADGEN_INSTALL_CHANNEL"]
-                    for path in ("claude.mcp.json", "cursor.mcp.json", "gemini-extension.json")}
-        self.assertEqual(channels, {"claude.mcp.json": "claude-directory", "cursor.mcp.json": "github",
-                                    "gemini-extension.json": "github"})
+        said = {}
+        for path in ("claude.mcp.json", "cursor.mcp.json", "gemini-extension.json"):
+            args = json.loads(tree[path][1])["mcpServers"]["cad"]["args"]
+            said[path] = args[args.index("mcp") + 1:]
+        self.assertEqual(said, {"claude.mcp.json": ["--channel", "claude-directory", "--auto-updated"],
+                                "cursor.mcp.json": ["--channel", "cursor-github"],
+                                "gemini-extension.json": ["--channel", "gemini-github", "--auto-updated"]})
 
     def test_readme_links_outside_the_tree_point_at_the_commit(self) -> None:
         text = ('[cad](skills/cad/SKILL.md) [dir](skills/cad/) [license](LICENSE) [web](https://x.dev) [top](#install)\n'

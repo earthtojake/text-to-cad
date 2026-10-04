@@ -26,8 +26,8 @@ class UpdatesTest(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
-        self.environment({"CADGEN_STATE_DIR": str(self.tmp), "CADGEN_INSTALL_CHANNEL": "github", "CI": "",
-                          "CADGEN_UPDATE_CHECK": ""})
+        self.environment({"CADGEN_STATE_DIR": str(self.tmp), "CADGEN_INSTALL_CHANNEL": "claude-github",
+                          "CADGEN_AUTO_UPDATED": "", "CI": "", "CADGEN_UPDATE_CHECK": ""})
         version = mock.patch.object(cadgen, "__version__", "0.8.1")
         version.start()
         self.addCleanup(version.stop)
@@ -40,22 +40,32 @@ class UpdatesTest(unittest.TestCase):
     def read_today(self, feed: dict) -> None:
         (self.tmp / updates.FILE).write_text(json.dumps({"checked": time.time(), "feed": feed}), encoding="utf-8")
 
-    def test_only_a_copy_installed_by_hand_is_offered_a_newer_release(self) -> None:
+    def test_a_copy_that_is_told_is_offered_the_newest_release_while_behind(self) -> None:
         feed = updates.parse_feed(FEED)
-        for where, version, offered in (
-            ("github", "0.8.1", "0.9.0"),
-            ("unknown", "0.8.1", "0.9.0"),
-            ("github", "0.9.0", None),
-            ("github", "1.0.0", None),
-            # A store's copy is its store's to update: never told, however far behind.
-            ("claude-directory", "0.1.0", None),
-            ("cursor-marketplace", "0.1.0", None),
-            ("a-store-of-tomorrow", "0.1.0", None),  # a channel cadgen never heard of is a store's too
-            ("dev", "0.1.0", None),
-            ("github", "0.9.0.dev1", None),  # not a release: nothing to compare
+        self.assertEqual(updates.offer(feed, "0.8.1", True), "0.9.0")
+        for version in ("0.9.0", "1.0.0", "0.9.0.dev1"):  # current, ahead, or not a release to compare
+            with self.subTest(version=version):
+                self.assertIsNone(updates.offer(feed, version, True))
+        self.assertIsNone(updates.offer(feed, "0.1.0", False))  # never, however far behind
+
+    def test_who_is_told_is_what_the_plugins_startup_command_says(self) -> None:
+        # A plugin names its channel, and `--auto-updated` where its store or the app that installed
+        # it keeps the copy up to date: cadgen decides by that, never by the channel's name. A Viewer
+        # a skill opens names nothing, a skills-only install; a development install is never told.
+        from cadgen._internal.channel import told
+
+        for values, expected in (
+            ({"CADGEN_INSTALL_CHANNEL": "claude-github"}, True),
+            ({"CADGEN_INSTALL_CHANNEL": "claude-directory", "CADGEN_AUTO_UPDATED": "1"}, False),
+            ({"CADGEN_INSTALL_CHANNEL": "gemini-github", "CADGEN_AUTO_UPDATED": "1"}, False),
+            ({"CADGEN_INSTALL_CHANNEL": "a-store-of-tomorrow", "CADGEN_AUTO_UPDATED": "1"}, False),
+            ({"CADGEN_INSTALL_CHANNEL": "a-store-of-tomorrow"}, True),
+            ({"CADGEN_INSTALL_CHANNEL": ""}, True),
+            ({"CADGEN_INSTALL_CHANNEL": "dev"}, False),
         ):
-            with self.subTest(where=where, version=version):
-                self.assertEqual(updates.offer(feed, version, where), offered)
+            with self.subTest(values=values), mock.patch.dict(os.environ, values), \
+                    mock.patch("cadgen._internal.channel._source_tree", return_value=False):
+                self.assertEqual(told(), expected)
 
     def test_the_notice_reads_the_same_everywhere_like_the_install_message(self) -> None:
         self.read_today(FEED)
@@ -66,7 +76,7 @@ class UpdatesTest(unittest.TestCase):
                                  "instructions": "https://www.texttocad.dev/install"})
         self.assertEqual(updates.line(found), f'{text}. Ask your agent to update to the latest version ("{prompt}"), '
                                               'or install manually (https://www.texttocad.dev/install).')
-        # The same words from a skill's command, which names no channel.
+        # The same words in the CAD Viewer a skill opens, which no plugin names a channel for.
         with mock.patch.dict(os.environ, {"CADGEN_INSTALL_CHANNEL": ""}), \
                 mock.patch("cadgen._internal.channel._source_tree", return_value=False):
             self.assertEqual(updates.notice()["prompt"], prompt)
@@ -102,37 +112,43 @@ class UpdatesTest(unittest.TestCase):
         with mock.patch.object(cadgen, "__version__", "0.9.1"):
             self.assertIsNone(updates.notice())
 
-    def test_nothing_is_checked_when_turned_off_in_ci_from_a_source_tree_or_for_a_stores_copy(self) -> None:
+    def test_nothing_is_checked_when_turned_off_in_ci_or_for_a_copy_that_is_not_told(self) -> None:
         self.read_today(FEED)
         for values in ({"CADGEN_UPDATE_CHECK": "0"}, {"CI": "true"}, {"CADGEN_INSTALL_CHANNEL": "dev"},
-                       {"CADGEN_INSTALL_CHANNEL": "claude-directory"}):
+                       {"CADGEN_INSTALL_CHANNEL": "claude-directory", "CADGEN_AUTO_UPDATED": "1"}):
             with self.subTest(values=values), mock.patch.dict(os.environ, values):
                 asked: list[str] = []
                 self.assertIsNone(updates.notice(now=time.time() + 2 * updates.CHECK_SECONDS, get=asked.append))
                 self.assertEqual(asked, [])
 
-    def test_a_command_says_it_on_stderr_once_a_day(self) -> None:
+    def test_the_plugins_channel_reaches_every_process_its_server_starts(self) -> None:
+        # Each plugin's startup command names its channel, and whether something keeps it up to date
+        # (`cadgen mcp --channel ID [--auto-updated]`); the server hands both on in its environment,
+        # which the CAD Viewer and the daemon it starts inherit.
+        from cadgen._internal.channel import channel
+        from cadgen.cli import mcp
+
         self.read_today(FEED)
+        with mock.patch.dict(os.environ, {}), mock.patch("cadgen.mcp.server.serve", return_value=0) as serve:
+            self.assertEqual(mcp.main(["--channel", "claude-directory", "--auto-updated"]), 0)
+            self.assertEqual((channel(), os.environ["CADGEN_AUTO_UPDATED"]), ("claude-directory", "1"))
+            self.assertIsNone(updates.notice())
+            self.assertEqual(mcp.main(["--channel", "claude-github"]), 0)  # what it says, nothing inherited
+            self.assertEqual((channel(), os.environ["CADGEN_AUTO_UPDATED"]), ("claude-github", ""))
+            self.assertEqual(updates.notice()["latest"], "0.9.0")
+            self.assertEqual(serve.call_count, 2)
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as refused:
+            mcp.main(["--channel", "Not A Channel"])
+        self.assertEqual(refused.exception.code, 2)
 
-        def run() -> str:
-            out, err = io.StringIO(), io.StringIO()
-            with contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
-                self.assertEqual(cadgen_main(["analytics"]), 0)
-            return err.getvalue()
-
-        self.assertIn('Ask your agent to update to the latest version ("Update text-to-cad to 0.9.0 from '
-                      'https://github.com/earthtojake/text-to-cad"), or install manually (https://www.texttocad.dev/install).', run())
-        self.assertEqual(run(), "")
-
-    def test_a_server_never_says_it_on_stderr(self) -> None:
-        # The CAD Viewer shows its own card, and the CAD app starts it with its stderr discarded,
-        # where the day's line would go unseen.
-        self.read_today(FEED)
-        with mock.patch.object(updates, "begin") as begin, contextlib.redirect_stdout(io.StringIO()), \
-                contextlib.redirect_stderr(io.StringIO()), contextlib.suppress(SystemExit):
-            cadgen_main(["viewer", "--help"])
-        begin.assert_not_called()
-
+    def test_no_command_says_it_or_reads_the_feed(self) -> None:
+        # A skill's command cannot tell which plugin, if any, it came with: the CAD app and the CAD
+        # Viewer say it, by their channel.
+        out, err = io.StringIO(), io.StringIO()
+        with mock.patch.object(updates, "_get") as get, contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
+            self.assertEqual(cadgen_main(["analytics"]), 0)
+        get.assert_not_called()
+        self.assertEqual(err.getvalue(), "")
 
 if __name__ == "__main__":
     unittest.main()

@@ -6,16 +6,14 @@ At most once a day, cadgen reads the version feed (``GET /versions``, ``cadgen/_
 
 It is one anonymous request: no id, no path, nothing about the person or their machine beyond what
 any web request carries. ``CADGEN_UPDATE_CHECK=0`` turns it off, and it never runs in CI (``CI``
-set), for a development install or for a store's copy. The feed as last read is kept in the state
-directory (``versions.json``), where every process of the person's reads it.
+set) or for a copy that is not told. The feed as last read is kept in the state directory
+(``versions.json``), where every process of the person's reads it.
 
-Only a copy installed by hand is told (its channel, ``cadgen/_internal/channel.py``):
-
-- installed from GitHub, or a channel nothing named (a skill's command, a Skills CLI install):
-  ``latest``, whenever it is behind;
-- a store's copy (any channel its package named but ``github``): nothing, ever -- its store updates
-  it once a release passes the store's review;
-- a development install: nothing, ever.
+Only a copy nothing else updates is told (``told``: ``cadgen/_internal/channel.py``): a plugin the
+person installed and updates by hand, and a process no plugin started, such as the CAD Viewer of a
+skills-only install. A plugin that something else keeps up to date -- a store, once a release
+passes its review, or the app that installed it -- says so in its startup command
+(``--auto-updated``) and is never told; nor is a development install.
 
 The notice is the same wherever it shows: ``A new version v0.9.0 of text-to-cad is available
 (currently on v0.8.1)``, and a prompt for the person's agent worded like the install message,
@@ -24,13 +22,13 @@ the steps for its own app from there. The agent does the update; nothing here do
 blue update button, first in its navbar and on its home, opens a card that sends that prompt to the
 chat where the host takes messages, and copies it elsewhere; the CAD Viewer's copies it. The card also
 links to manual installation (``INSTRUCTIONS``, the docs site's ``/install``), should the agent not
-manage. The button stays while the install is behind: nothing the person does with it is kept. A text-only app gets the same as one line
-(``line``) with its first ``cad_show`` result, and a ``cadgen`` command prints it on stderr, at
-most once a day.
+manage. The button stays while the install is behind: nothing the person does with it is kept. A
+text-only app gets the same as one line (``line``) with its first ``cad_show`` result. A skill's
+``cadgen`` command says nothing: it cannot tell which plugin, if any, it came with.
 
 None of it ever gets in the way: nothing here raises, a request waits at most
 ``TIMEOUT_SECONDS``, and each day's attempt is spent before it is made, so a feed that cannot be
-reached costs one wait a day, never one per command.
+reached costs one wait a day.
 """
 
 from __future__ import annotations
@@ -39,24 +37,22 @@ import json
 import logging
 import os
 import re
-import sys
 import threading
 import time
 from pathlib import Path
-from typing import Any, Callable, TextIO
+from typing import Any, Callable
 
 from cadgen._internal.api import api_url
 from cadgen._internal.atomic_replace import write_bytes_atomic
-from cadgen._internal.channel import DEV, channel, is_store
+from cadgen._internal.channel import told
 
 LOG = logging.getLogger("cadgen.updates")
 
 REPOSITORY = "https://github.com/earthtojake/text-to-cad"  # where the install message sends the agent too
 INSTRUCTIONS = "https://www.texttocad.dev/install"  # the full install instructions: the docs site's Install section
 FILE = "versions.json"  # the feed as last read, in the state directory
-CHECK_SECONDS = 24 * 60 * 60  # how old the feed may get before it is read again; the CLI's line, how often
+CHECK_SECONDS = 24 * 60 * 60  # how old the feed may get before it is read again
 TIMEOUT_SECONDS = 5
-WAIT_SECONDS = 2  # the most a command's end waits for a check it started
 MAX_BYTES = 64 * 1024  # a feed is a few dozen bytes
 _RELEASE = re.compile(r"(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)")
 _OFF = ("0", "off", "false", "no")
@@ -77,13 +73,12 @@ def parse_feed(data: Any) -> dict[str, Any] | None:
 
 def checking() -> bool:
     """Whether to check at all: not turned off (``CADGEN_UPDATE_CHECK=0``), not in CI, and a copy
-    installed by hand -- not a development install, and not a store's copy, which its store updates."""
+    that is told -- not one something else keeps up to date, nor a development install."""
     if str(os.environ.get("CADGEN_UPDATE_CHECK") or "").strip().lower() in _OFF:
         return False
     if str(os.environ.get("CI") or "").strip().lower() not in ("", *_OFF):
         return False
-    where = channel()
-    return where != DEV and not is_store(where)
+    return told()
 
 
 def _cache() -> Path:
@@ -145,9 +140,9 @@ def feed(*, fetch: bool = True, now: float | None = None, path: Path | None = No
     return known
 
 
-def offer(found: dict[str, Any] | None, version: str, where: str) -> str | None:
-    """The release to offer an install of ``version`` from channel ``where``, if any (see the module docstring)."""
-    if found is None or where == DEV or is_store(where):
+def offer(found: dict[str, Any] | None, version: str, told: bool) -> str | None:
+    """The release to offer an install of ``version`` that is ``told`` or not, if any (see the module docstring)."""
+    if found is None or not told:
         return None
     current, latest = _release(version), _release(found["latest"])
     if current is None or latest is None or current >= latest:
@@ -164,8 +159,7 @@ def notice(*, fetch: bool = True, now: float | None = None, path: Path | None = 
             return None
         from cadgen import __version__
 
-        where = channel()
-        latest = offer(feed(fetch=fetch, now=now, path=path, get=get), __version__, where)
+        latest = offer(feed(fetch=fetch, now=now, path=path, get=get), __version__, told())
         if latest is None:
             return None
         return {"latest": latest, "version": __version__,
@@ -195,34 +189,3 @@ def refresh() -> None:
     if checking():
         threading.Thread(target=_quietly, name="cadgen-update-check", daemon=True).start()
 
-
-def begin() -> threading.Thread | None:
-    """A ``cadgen`` command's start: when the feed is due, read it beside the command, not before it."""
-    try:
-        if not checking() or not _due(_load(_cache()), "checked", time.time()):
-            return None
-    except Exception:  # noqa: BLE001
-        LOG.debug("the version check failed", exc_info=True)
-        return None
-    check = threading.Thread(target=_quietly, name="cadgen-update-check", daemon=True)
-    check.start()
-    return check
-
-
-def end(check: threading.Thread | None, *, stream: TextIO | None = None, now: float | None = None) -> None:
-    """A ``cadgen`` command's end: the notice on stderr, at most once a day. A check the command
-    started gets ``WAIT_SECONDS`` more, and is left behind after that."""
-    try:
-        if check is not None:
-            check.join(WAIT_SECONDS)
-        found = notice(fetch=False)
-        if found is None:
-            return
-        path, now = _cache(), time.time() if now is None else now
-        kept = _load(path)
-        if not _due(kept, "told", now):
-            return
-        _save(path, {**kept, "told": now})
-        (stream or sys.stderr).write(line(found) + "\n")
-    except Exception:  # noqa: BLE001 - the command's own outcome stands
-        LOG.debug("could not tell the version check's notice", exc_info=True)

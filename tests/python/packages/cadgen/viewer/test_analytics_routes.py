@@ -96,11 +96,14 @@ class ViewerAnalyticsTest(unittest.TestCase):
 
     def test_the_update_button_reads_whether_a_newer_release_is_out(self) -> None:
         # The CAD app's notice (`cadgen/updates.py`), from the same feed; this page copies its prompt,
-        # and nothing it does is kept: there is no answer to post.
+        # and nothing it does is kept: there is no answer to post. A Viewer no plugin's server started
+        # names no channel: a skills-only install, which nothing else updates.
         (self.tmp / "state").mkdir(exist_ok=True)
         (self.tmp / "state" / "versions.json").write_text(json.dumps({"checked": time.time(), "feed": {"latest": "99.0.0"}}),
                                                           encoding="utf-8")
-        with mock.patch.dict(os.environ, {"CADGEN_INSTALL_CHANNEL": "github", "CI": "", "CADGEN_UPDATE_CHECK": ""}):
+        with mock.patch.dict(os.environ, {"CADGEN_INSTALL_CHANNEL": "", "CADGEN_AUTO_UPDATED": "", "CI": "",
+                                          "CADGEN_UPDATE_CHECK": ""}), \
+                mock.patch("cadgen._internal.channel._source_tree", return_value=False):
             status, answer = self.request("GET", "/__cad/version")
             self.assertEqual((status, answer["notice"]["text"]), (200, f"A new version v99.0.0 of text-to-cad is available (currently on v{cadgen.__version__})"))
             self.assertEqual(self.request("GET", "/__cad/version")[1], answer)

@@ -376,8 +376,8 @@ src/cadgen/
   features.py            # the CAD views' features a person can turn off
                          #   (Quick edit: settings.json's `features` section)
   updates.py             # the daily version check: whether a newer release is
-                         #   out for this install's channel, said once per
-                         #   release (an answer: settings.json's `updates`)
+                         #   out, for a copy nothing else keeps up to date
+                         #   (_internal/channel.py)
   store/                 # the store (STORE.md): objects, index, records, trees,
                          #   closure, gate, materialize, publish, lazy, gc, view
   cli/                   # generated command shells, one per <format> <verb>

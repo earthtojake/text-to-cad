@@ -210,7 +210,7 @@ class PluginManifestPolicyTest(unittest.TestCase):
         self.assertNotIn("--offline", args)
         self.assertGreaterEqual(server.get("startup_timeout_sec", 0), 300)
         self.assertIn("--no-config", args)
-        self.assertEqual(args[-2:], ["cadgen", "mcp"])
+        self.assertEqual(args[-4:-1], ["cadgen", "mcp", "--channel"])
         version = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
         self.assertEqual(args[args.index("--from") + 1], f"cadgen=={version}")
 
@@ -226,7 +226,7 @@ class PluginManifestPolicyTest(unittest.TestCase):
         self.assertEqual(servers["cad"]["command"], "uvx")
         args = servers["cad"]["args"]
         self.assertIn("--no-config", args)
-        self.assertEqual(args[-2:], ["cadgen", "mcp"])
+        self.assertEqual(args[-4:-1], ["cadgen", "mcp", "--channel"])
         version = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
         self.assertEqual(args[args.index("--from") + 1], f"cadgen=={version}")
 
@@ -238,17 +238,22 @@ class PluginManifestPolicyTest(unittest.TestCase):
         manifest = load_json(CURSOR_PLUGIN_PATH)
         self.assertEqual(manifest.get("mcpServers"), "./cursor.mcp.json")
         cursor, claude = load_json(CURSOR_MCP_PATH)["mcpServers"]["cad"], load_json(CLAUDE_MCP_PATH)["mcpServers"]["cad"]
-        self.assertEqual({**cursor, "env": None}, {**claude, "env": None})
+        launch = lambda server: server["args"][:server["args"].index("--channel")]  # noqa: E731
+        self.assertEqual({**cursor, "args": launch(cursor)}, {**claude, "args": launch(claude)})
         logo = manifest.get("logo", "")
         self.assertFalse(logo.startswith(("/", "..")) or "://" in logo, logo)
         self.assertEqual(logo, ".claude-plugin/icon.png")
 
     def test_gemini_extension_names_the_plugin_and_starts_claudes_server(self) -> None:
         # Gemini CLI reads gemini-extension.json at the root (and its skills/), and runs servers
-        # from the manifest itself: Claude's server, pinned to this release, under the same name.
+        # from the manifest itself: Claude's server, pinned to this release, under the same name,
+        # naming its own channel.
         manifest = load_json(GEMINI_EXTENSION_PATH)
         self.assertEqual(manifest.get("name"), PLUGIN_NAME)
-        self.assertEqual(manifest.get("mcpServers"), load_json(CLAUDE_MCP_PATH)["mcpServers"])
+        gemini, claude = manifest["mcpServers"]["cad"], load_json(CLAUDE_MCP_PATH)["mcpServers"]["cad"]
+        self.assertEqual(list(manifest["mcpServers"]), ["cad"])
+        launch = lambda server: server["args"][:server["args"].index("--channel")]  # noqa: E731
+        self.assertEqual({**gemini, "args": launch(gemini)}, {**claude, "args": launch(claude)})
         # Gemini loads the extension's GEMINI.md (or contextFileName) as the user's context; the
         # repository's own guidance (AGENTS.md) must not become it.
         self.assertNotIn("contextFileName", manifest)
@@ -267,21 +272,40 @@ class PluginManifestPolicyTest(unittest.TestCase):
         for path in (CLAUDE_MCP_PATH, CODEX_MCP_PATH, CURSOR_MCP_PATH, GEMINI_EXTENSION_PATH):
             with self.subTest(path=path.name):
                 server = load_json(path)["mcpServers"]["cad"]
-                self.assertEqual((server["command"], server["args"]), (LAUNCHER[0], expected))
+                args = server["args"]
+                self.assertEqual((server["command"], args[:args.index("--channel")]), (LAUNCHER[0], expected))
         readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
-        self.assertIn('"args": [' + ", ".join(json.dumps(arg) for arg in expected) + "]", readme)
+        self.assertIn('"args": [' + ", ".join(json.dumps(arg) for arg in expected) + ', "--channel"', readme)
 
-    def test_every_package_on_main_names_its_install_channel(self) -> None:
-        # Where an install came from is written into the package itself, in its server's environment
-        # (cadgen's CADGEN_INSTALL_CHANNEL), never worked out at runtime. Everything installed from
-        # main by hand is `github`; the Cursor Marketplace reads main, so its own config says so. The
-        # plugin branch's Claude config (claude.ai's directory) and the OpenAI ZIP stamp their own.
-        channels = {path.name: load_json(path)["mcpServers"]["cad"]["env"]["CADGEN_INSTALL_CHANNEL"]
-                    for path in (CLAUDE_MCP_PATH, CODEX_MCP_PATH, CURSOR_MCP_PATH, GEMINI_EXTENSION_PATH)}
-        self.assertEqual(channels, {"claude.mcp.json": "github", "codex.mcp.json": "github",
-                                    "cursor.mcp.json": "cursor-marketplace", "gemini-extension.json": "github"})
+    def test_every_plugin_on_main_names_its_own_channel(self) -> None:
+        # Each plugin's startup command names where its installs come from (`--channel`), and
+        # `--auto-updated` where something keeps the copy up to date: the Cursor Marketplace, which
+        # reads main, and Gemini, which updates its extension. Nothing is worked out at runtime
+        # (cadgen's _internal/channel.py). The plugin branch and the OpenAI ZIP stamp their own.
+        import sys
+
+        sys.path.insert(0, str(REPO_ROOT / "packages" / "cadgen" / "src"))
+        from cadgen._internal.channel import is_channel
+
+        said = {}
+        for path in (CLAUDE_MCP_PATH, CODEX_MCP_PATH, CURSOR_MCP_PATH, GEMINI_EXTENSION_PATH):
+            server = load_json(path)["mcpServers"]["cad"]
+            self.assertNotIn("env", server)
+            said[path.name] = server["args"][server["args"].index("mcp") + 1:]
         readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
-        self.assertIn('"env": {"CADGEN_INSTALL_CHANNEL": "github"}', readme)
+        said["README.md"] = json.loads(re.search(r'"args": (\[.*"--channel".*\])', readme).group(1))[-2:]
+        self.assertEqual(said, {"claude.mcp.json": ["--channel", "claude-github"],
+                                "codex.mcp.json": ["--channel", "codex-github"],
+                                "cursor.mcp.json": ["--channel", "cursor-marketplace", "--auto-updated"],
+                                "gemini-extension.json": ["--channel", "gemini-github", "--auto-updated"],
+                                "README.md": ["--channel", "claude-desktop"]})
+        # Every channel any package names is one the analytics receiver takes.
+        receiver = (REPO_ROOT / "apps" / "docs" / "src" / "lib" / "api" / "events.mjs").read_text(encoding="utf-8")
+        named = {args[1] for args in said.values()} | {"claude-directory", "cursor-github", "openai-directory", "dev"}
+        for channel in sorted(named):
+            with self.subTest(channel=channel):
+                self.assertTrue(is_channel(channel))
+                self.assertIn(f"'{channel}'", receiver)
 
     def test_no_stale_plugin_subdirectory_package_remains(self) -> None:
         # The generated `plugins/cad/skills` copy is what the repo-root move

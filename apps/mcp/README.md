@@ -78,10 +78,11 @@ reference host `basic-host` does.
   person whose agent cannot do it. The agent does
   the update, with the `cad-setup` skill's steps; nothing here updates anything.
   A text client gets the same line with its first `cad_show` result. Where the
-  install came from is its channel, `CADGEN_INSTALL_CHANNEL` in the server's
-  environment, written by each package's build (`cadgen/_internal/channel.py`): a
-  store's copy (the Claude or OpenAI directory, the Cursor Marketplace) is left to
-  its store and never checks. The analytics: the server
+  install came from is its channel, which each plugin's startup command names
+  (`cadgen mcp --channel`, `cadgen/_internal/channel.py`), with `--auto-updated`
+  where something else keeps the copy up to date: only a copy nothing else updates
+  checks and is told. A store's copy (the Claude or OpenAI directory, the Cursor
+  Marketplace) is left to its store, and Gemini's extension to Gemini. The analytics: the server
   notes its use -- tool calls (not the page's plumbing), view activity from each
   view's sync (`focused`), and the files views show, as salted one-way codes --
   and, only with consent, sends it once a minute (`cadgen/analytics.py`): never a

@@ -117,10 +117,6 @@ def read_skill_pin(skill_path) -> str | None:
 # the command's own (`_COMMANDS`). The daemon derives what it may import from here
 # (`daemon_tool_modules`), so a door cannot be warm on one side and unknown on the other.
 _WARM_COMMANDS = ("step build", "step compile", "stl build", "3mf build", "glb build")
-# The servers: a host or a client starts them, and their standard streams are its own. None says
-# a newer release on stderr: the CAD Viewer and the CAD app show their own card, and the CAD app
-# starts the Viewer with its stderr discarded, where the day's line would go unseen.
-_SERVERS = frozenset({"mcp", "daemon", "viewer"})
 _DAEMON_TOOLS = {command: command.replace(" ", "-") for command in _WARM_COMMANDS}
 
 
@@ -280,17 +276,9 @@ def main(argv: list[str] | None = None) -> int:
         sys.stderr.write(f"cadgen: unknown command {noun!r}\n\n" + _usage())
         return 2
 
-    if command in _SERVERS:
-        return _run(command, entry[0], rest)
-    # A newer text-to-cad is said on stderr, at most once a day (`cadgen/updates.py`); the feed,
-    # when it is due, is read beside the command rather than before it.
-    from cadgen import updates
-
-    check = updates.begin()
-    try:
-        return _run(command, entry[0], rest)
-    finally:
-        updates.end(check)
+    # No command says a newer text-to-cad is out: it cannot tell which plugin, if any, it came
+    # with, so the CAD app and the CAD Viewer say it (`cadgen/updates.py`).
+    return _run(command, entry[0], rest)
 
 
 def _run(command: str, module_name: str, rest: list[str]) -> int:

@@ -10,7 +10,7 @@ export const metadata: Metadata = {
 
 export default function PrivacyPolicyPage() {
   return (
-    <LegalPage title="Privacy Policy" updated="October 3, 2026">
+    <LegalPage title="Privacy Policy" updated="October 4, 2026">
       <LegalSection>
         <p>
           This policy describes how Thompson Labs LLC (“we”, “us”) handles personal data for
@@ -54,12 +54,12 @@ export default function PrivacyPolicyPage() {
             viewer, send no analytics.
           </li>
           <li>
-            <strong>The version check:</strong> at most once a day, cadgen (the CAD app, the CAD viewer
-            or a <code>cadgen</code> command) asks api.texttocad.dev which text-to-cad release is the
+            <strong>The version check:</strong> at most once a day, cadgen (the CAD app or the CAD viewer)
+            asks api.texttocad.dev which text-to-cad release is the
             newest, so it can tell you when there is an update. The request carries no ID and nothing
             about you or your work; like any request, it reaches our host with your IP address, the
-            time and a user agent (“cadgen”). It is never made in CI, and section 5 says how to turn it
-            off.
+            time and a user agent (“cadgen”). It is never made in CI or for a copy that a plugin directory,
+            the Cursor Marketplace or Gemini updates, and section 5 says how to turn it off.
           </li>
           <li>
             <strong>step.parts searches:</strong> when you ask your agent to find a part, the

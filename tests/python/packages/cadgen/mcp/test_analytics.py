@@ -38,7 +38,7 @@ class _Tmp(unittest.TestCase):
 
     def serve(self, channel: str, client: str = "codex-mcp-client") -> tuple[Server, list[dict]]:
         sent: list[dict] = []
-        # The channel the install's package named in its server's environment (`cadgen/_internal/channel.py`).
+        # The channel the plugin's startup command named, as the server hands it on (`cadgen/_internal/channel.py`).
         with mock.patch.dict("os.environ", {"CADGEN_INSTALL_CHANNEL": channel}):
             recorder = Recorder(path=self.path, send=lambda payload: sent.append(payload) or True)
         (self.tmp / "app").mkdir(exist_ok=True)
@@ -190,10 +190,10 @@ class OneAnswerTest(_Tmp):
         self.assertEqual(len(sent), 1)
 
     def test_only_a_page_answers_and_a_card_only_an_open_question(self) -> None:
-        server, sent = self.serve("github", client="some-terminal-agent")
+        server, sent = self.serve("claude-github", client="some-terminal-agent")
         self.call(server, "cad_consent", {"share": True})  # a text client has no page: the agent cannot opt in
         self.assertEqual(status(path=self.path)["reason"], "unasked")
-        server, sent = self.serve("github")
+        server, sent = self.serve("claude-github")
         self.call(server, "cad_consent", {"share": True, "card": True})
         self.call(server, "cad_consent", {"share": False, "card": True})  # a stale card still up in another view
         self.assertTrue(status(path=self.path)["sharing"])
@@ -311,7 +311,7 @@ class ServerCountsTest(_Tmp):
         self.assertEqual(len(sent[-1]["events"]), 1)
 
     def test_an_install_from_github_asks_once_and_sends_only_after_yes(self) -> None:
-        server, sent = self.serve("github")
+        server, sent = self.serve("claude-github")
         self.call(server, "cad_show", {"path": "a.step"})
         self.assertEqual(self.call(server, "cad_consent")["structuredContent"]["ask"], True)
         server.analytics.flush()

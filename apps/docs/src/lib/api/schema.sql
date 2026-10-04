@@ -13,7 +13,7 @@ create table if not exists events (
   calls          integer     not null,  -- tool: calls; view: touches; file: 1
   errors         integer     not null,  -- tool: failed calls
   version        text        not null,  -- cadgen's
-  channel        text        not null,  -- where the install came from: claude-directory | openai-directory | cursor-marketplace | github | dev | unknown
+  channel        text        not null,  -- where the install came from (cadgen/_internal/channel.py): claude-github | codex-github | cursor-github | gemini-github | claude-desktop | claude-directory | openai-directory | cursor-marketplace | dev | unknown
   platform       text        not null,  -- darwin | linux | win32 | other
   arch           text,
   client         text,                  -- the agent app: codex-mcp-client, claude-ai, ...

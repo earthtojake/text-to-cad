@@ -1,21 +1,22 @@
-"""Where this install of text-to-cad came from: its channel.
+"""Where this install of text-to-cad came from: its channel, and whether something keeps it up to date.
 
-Each package of the CAD plugin names its own channel in its MCP server's environment,
-``CADGEN_INSTALL_CHANNEL``, written by the build that makes that package -- never worked out from
-folders, ids or a host's internals. The server's children (the CAD Viewer, the build daemon and
-its workers) inherit it, so every process of an install knows it.
+Each plugin says both where it starts the CAD server: ``cadgen mcp --channel <id>``, plus
+``--auto-updated`` when something other than the person keeps that copy up to date (the store
+that reviewed it, or the app that installed it). The build that makes the plugin writes them into
+its startup command; nothing works them out from folders, ids or a host's internals. The server
+hands both to the processes it starts (the CAD Viewer, the build daemon and its workers) as
+``CADGEN_INSTALL_CHANNEL`` and ``CADGEN_AUTO_UPDATED``, so they know them too.
 
-cadgen knows two channels by name: ``github``, installed from the repository by hand (a
-marketplace added from it, a clone, an extension, a Claude Desktop config), and ``dev``, a
-development install. Every other channel a package names is a store's copy, named by that store's
-package (a plugin directory, a marketplace): cadgen reads it as a token and nothing more, so a new
-store needs no release of cadgen. A process nothing named a channel for -- a skill's ``cadgen``
-command, a Skills CLI install -- is ``unknown``, and an editable install of a source tree is
-``dev``. Which app runs it is not a channel: the MCP handshake says that (``clientInfo``), so one
-package read by several apps names one channel.
+cadgen reads a channel as a token and nothing more: analytics report it, and nothing decides by
+its name but ``dev``, a development install (and an editable install of a source tree). A process
+no plugin's server started -- a skill's ``cadgen`` command, the CAD Viewer a skill opens -- is
+``unknown``: a skills-only install, or cadgen run by hand. Which app runs a server is not a
+channel either: the MCP handshake says that (``clientInfo``), so a plugin several apps read names
+one channel.
 
-Analytics report it (``channel``), and the version check decides by it (``cadgen/updates.py``):
-a store's copy is left to its store, which updates it.
+Whether a copy hears of a new release (``cadgen/updates.py``) is ``told``: not when something
+keeps it up to date, nor for a development install. So a plugin that ships somewhere new needs no
+release of cadgen: its startup command says it all.
 """
 
 from __future__ import annotations
@@ -25,14 +26,14 @@ import os
 import re
 
 ENV = "CADGEN_INSTALL_CHANNEL"
-GITHUB = "github"
+AUTO_UPDATED_ENV = "CADGEN_AUTO_UPDATED"
 DEV = "dev"
 UNKNOWN = "unknown"
 _TOKEN = re.compile(r"[a-z0-9][a-z0-9-]{0,39}")
 
 
 def is_channel(value: object) -> bool:
-    """Whether ``value`` is a channel a package can name: a short lowercase token."""
+    """Whether ``value`` is a channel a plugin can name: a short lowercase token."""
     return isinstance(value, str) and bool(_TOKEN.fullmatch(value)) and value != UNKNOWN
 
 
@@ -44,14 +45,18 @@ def _source_tree() -> bool:
 
 
 def channel() -> str:
-    """This install's channel: what its package named, else ``dev`` for a source tree, else ``unknown``."""
+    """This install's channel: what its plugin named, else ``dev`` for a source tree, else ``unknown``."""
     named = str(os.environ.get(ENV) or "").strip()
     if is_channel(named):
         return named
     return DEV if _source_tree() else UNKNOWN
 
 
-def is_store(where: str) -> bool:
-    """Whether ``where`` is a store's copy: any channel a package named but ``github`` and ``dev``."""
-    return where not in (GITHUB, DEV, UNKNOWN)
+def auto_updated() -> bool:
+    """Whether this install's plugin said something other than the person keeps it up to date."""
+    return str(os.environ.get(AUTO_UPDATED_ENV) or "").strip() == "1"
 
+
+def told() -> bool:
+    """Whether this install hears of a new release: a copy nothing else updates, and not a development install."""
+    return not auto_updated() and channel() != DEV

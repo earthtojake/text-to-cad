@@ -34,10 +34,10 @@ MESSAGE_BOUND = MAX_REPLY_BYTES * 4 // 3 + 4096
 
 
 def offer_an_update(test: unittest.TestCase) -> None:
-    """A feed read today that offers 99.0.0 to an install from GitHub (`cadgen/updates.py`)."""
+    """A feed read today that offers 99.0.0 to the Claude plugin installed from GitHub (`cadgen/updates.py`)."""
     state = Path(tempfile.mkdtemp())
     test.addCleanup(shutil.rmtree, state, ignore_errors=True)
-    patched = mock.patch.dict(os.environ, {"CADGEN_STATE_DIR": str(state), "CADGEN_INSTALL_CHANNEL": "github", "CI": "",
+    patched = mock.patch.dict(os.environ, {"CADGEN_STATE_DIR": str(state), "CADGEN_INSTALL_CHANNEL": "claude-github", "CADGEN_AUTO_UPDATED": "", "CI": "",
                                            "CADGEN_UPDATE_CHECK": ""})
     patched.start()
     test.addCleanup(patched.stop)

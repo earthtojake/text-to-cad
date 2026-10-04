@@ -85,6 +85,7 @@ test('anything outside the contract is refused and stores nothing', async () => 
     { ...BATCH, events: [...BATCH.events, BATCH.events[2]] }, // the same file twice
     { ...BATCH, events: [{ name: 'tool', tool: 'cad_show', calls: 1, errors: null }] },
     { ...BATCH, channel: 'store' },
+    { ...BATCH, channel: 'github' }, // a channel no plugin names any more
     { ...BATCH, schema: 1 },
   ]) assert.equal((await send(store, 'POST', '/v1/events', bad)).status, 400, JSON.stringify(bad));
   assert.equal((await send(store, 'POST', '/v1/events', '{')).status, 400);

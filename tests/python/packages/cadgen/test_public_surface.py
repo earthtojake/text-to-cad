@@ -91,9 +91,10 @@ ADAPTERS: dict[str, frozenset[str]] = {
     # The one validator that cannot be a mirror: `--packages NAME=PATH` is
     # repeatable, and a repeatable key/value map is outside the derivable set.
     "urdf validate": frozenset({"path", "strict", "packages", "verbose"}),
-    # A host starts it and speaks MCP on its standard streams; it takes no options (where an
-    # install came from is its package's CADGEN_INSTALL_CHANNEL, in the server's environment).
-    "mcp": frozenset(),
+    # A host starts it and speaks MCP on its standard streams. Its options are what the plugin's
+    # startup command says: where the install came from, and whether something keeps it up to
+    # date (`cadgen/_internal/channel.py`).
+    "mcp": frozenset({"channel", "auto_updated"}),
     # The person's analytics choice: status, on or off.
     "analytics": frozenset({"action"}),
 }

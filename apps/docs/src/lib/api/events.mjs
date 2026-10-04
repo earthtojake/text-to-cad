@@ -18,8 +18,9 @@ const MAX_EVENTS = 64;
 export const MAX_BYTES = 16 * 1024;
 
 const FIELDS = new Set(['schema', 'install', 'session', 'version', 'channel', 'platform', 'arch', 'client', 'presentation', 'events']);
-// Where the install came from, as its package named it (`cadgen/_internal/channel.py`).
-const CHANNELS = new Set(['claude-directory', 'openai-directory', 'cursor-marketplace', 'github', 'dev', 'unknown']);
+// Where the install came from, as its plugin's startup command named it (`cadgen/_internal/channel.py`).
+const CHANNELS = new Set(['claude-github', 'codex-github', 'cursor-github', 'gemini-github', 'claude-desktop',
+  'claude-directory', 'openai-directory', 'cursor-marketplace', 'dev', 'unknown']);
 const PLATFORMS = new Set(['darwin', 'linux', 'win32', 'other']);
 const PRESENTATIONS = new Set(['tabs', 'inline', 'text', 'browser']);
 const KINDS = new Set(['step', 'stl', '3mf', 'glb', 'dxf', 'urdf', 'srdf', 'sdf']);

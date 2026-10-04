@@ -99,8 +99,7 @@ app. If Claude Desktop cannot find `uvx`, give its full path (`which uvx`).
   "mcpServers": {
     "cad": {
       "command": "uvx",
-      "args": ["--no-config", "--managed-python", "--python", "3.13", "--from", "cadgen==0.7.11", "cadgen", "mcp"],
-      "env": {"CADGEN_INSTALL_CHANNEL": "github"}
+      "args": ["--no-config", "--managed-python", "--python", "3.13", "--from", "cadgen==0.7.11", "cadgen", "mcp", "--channel", "claude-desktop"]
     }
   }
 }
@@ -256,15 +255,16 @@ When a newer release is out, a copy you installed yourself says so: a blue updat
 button, first in CAD's navbar and on its home, whose **Send to agent** posts
 "Update text-to-cad to 0.9.0 from https://github.com/earthtojake/text-to-cad" to
 your chat, worded like the install message (the browser viewer's copies it
-instead), or a line in your agent's command output. Your agent then follows the
-`cad-setup` skill's steps for your app. The button also links to the
-[install instructions](https://www.texttocad.dev/install), to update by hand.
-Copies from a plugin directory or the Cursor Marketplace never show it: their
-store updates them.
+instead), or, in an app that shows CAD's replies as text, a line with its reply.
+Your agent then follows the `cad-setup` skill's steps for your app. The button
+also links to the [install instructions](https://www.texttocad.dev/install), to
+update by hand. Copies from a plugin directory or the Cursor Marketplace never
+show it, since their store updates them, and neither does Gemini's extension,
+which Gemini updates.
 
 To find out, cadgen fetches `api.texttocad.dev/v1/versions` at most once a day:
 one anonymous request, with no ID, path or anything about you, never in CI and
-never for a store's copy. `CADGEN_UPDATE_CHECK=0` turns it off.
+never for a copy that something else updates. `CADGEN_UPDATE_CHECK=0` turns it off.
 
 ### Usage analytics
 
