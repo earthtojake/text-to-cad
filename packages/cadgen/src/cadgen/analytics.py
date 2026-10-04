@@ -395,6 +395,7 @@ class Recorder:
         self._files: dict[str, str] = {}  # absolute path -> kind; paths never leave this process
         self._sent: set[str] = set()  # "day:code" of files sent today: each goes once a day
         self._basis: Any = _UNREAD  # the answer in force when what is noted now began to be noted
+        self._choice_generation = 0  # a failed in-flight batch cannot undo a local choice's clear
         self._off = False  # a no this process could not keep: nothing more is sent from it
         self._timer: threading.Event | None = None
         self._describe()
@@ -437,6 +438,7 @@ class Recorder:
             self._views = 0
             self._files.clear()
             self._basis = decision
+            self._choice_generation += 1
         if not share:
             self._off = self._off or not chosen["saved"]
             self._background(lambda: forget_pending(path=self.path))
@@ -502,6 +504,7 @@ class Recorder:
         day = _day()
         with self._lock:
             counts, views, files, basis = self._counts, self._views, self._files, self._basis
+            choice_generation = self._choice_generation
             self._counts, self._views, self._files, self._basis = {}, 0, {}, decided
             context = dict(self._context)
             if not found["sharing"] or salt is None:
@@ -530,7 +533,9 @@ class Recorder:
         with self._lock:
             if outcome == "ok":
                 self._sent.update(f"{day}:{code}" for _, _, code in sending)
-            elif outcome == "failed":  # kept for the next batch, added to whatever came since
+            elif outcome == "failed" and self._choice_generation == choice_generation:
+                # Retry only within the same choice. A choice made while sending clears
+                # prior use, even when both answers share one coarse clock tick.
                 for tool, (calls, errors) in counts.items():
                     noted = self._counts.setdefault(tool, [0, 0])
                     noted[0] += calls

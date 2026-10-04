@@ -270,6 +270,43 @@ class ServerCountsTest(_Tmp):
         self.assertTrue(recorder.flush())
         self.assertEqual([event["tool"] for event in sent[3]["events"]], ["cad_show"])
 
+    def test_failed_send_does_not_restore_use_cleared_by_a_new_choice(self) -> None:
+        sent: list[dict] = []
+        # Different choices can share a clock tick on Windows. The retry boundary must
+        # follow the recorder's clear, rather than assume their timestamps differ.
+        with mock.patch("cadgen.analytics.time.time", return_value=1_790_000_000.0):
+            choose(True, by="app", path=self.path)
+            original_id = status(path=self.path)["id"]
+
+            def answer(payload: dict) -> bool:
+                sent.append(payload)
+                if len(sent) == 1:
+                    # The person changes their answer while this batch is in flight.
+                    recorder.choose(False, by="app")
+                    recorder.choose(True, by="app")
+                    recorder.called("cad_view", True)
+                    recorder.viewed()
+                    recorder.opened(str(self.tmp / "new.step"))
+                    return False
+                return True
+
+            recorder = Recorder(path=self.path, send=answer)
+            recorder.called("cad_show", False)
+            recorder.viewed()
+            recorder.opened(str(self.tmp / "old.step"))
+            self.assertFalse(recorder.flush())
+            self.assertTrue(recorder.flush())
+
+        self.assertEqual(len(sent), 2)
+        self.assertEqual(sent[0]["install"], original_id)
+        self.assertNotEqual(sent[1]["install"], original_id)
+        self.assertEqual(sent[1]["events"], [
+            {"name": "tool", "tool": "cad_view", "calls": 1, "errors": 0},
+            {"name": "view", "calls": 1},
+            {"name": "file", "file": file_code(file_salt(self.path), str(self.tmp / "new.step")), "kind": "step"},
+        ])
+        self.assertFalse(recorder.flush())
+
     def test_only_a_receiver_that_read_the_batch_refuses_it(self) -> None:
         # A 404 (no receiver deployed there yet), a firewall's 403, a 429 or a 5xx is no refusal: the batch,
         # or the deletion an opt-out owes, is kept and tried again. A 400 means it was read: dropped.
