@@ -75,6 +75,44 @@ class DeclaredOutputs(unittest.TestCase):
             script.write_text("def (\n", encoding="utf-8")
             self.assertEqual([], declared_outputs(str(script), "run"))
 
+    def test_a_project_read_again_after_another_reads_its_own_lib(self):
+        # The daemon reads every project's declarations in one process, and each
+        # project keeps its helpers in a package named `lib`: a, then b, then a again
+        # once its helper changed must evaluate a's `out=` from a's lib, not b's.
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            self.addCleanup(_forget_project_modules, root)
+            for name in ("a", "b"):
+                src = root / name / "src"
+                (src / "lib").mkdir(parents=True)
+                (src / "lib" / "__init__.py").write_text("", encoding="utf-8")
+                (src / "lib" / "dims.py").write_text(f"SIZE = '{name}1'\n", encoding="utf-8")
+                (src / f"{name}.py").write_text(
+                    "from cadgen import step\nfrom cadgen import build123d as bd\nfrom lib.dims import SIZE\n\n"
+                    f"@step(out='{name}_' + SIZE + '.step')\ndef {name}():\n    return bd.Box(1, 1, 1)\n",
+                    encoding="utf-8",
+                )
+
+            def declared(name):
+                return [Path(path).name for path in declared_outputs(str(root / name / "src" / f"{name}.py"), "run")]
+
+            self.assertEqual(["a_a1.step"], declared("a"))
+            self.assertEqual(["b_b1.step"], declared("b"))
+            (root / "a" / "src" / "lib" / "dims.py").write_text("SIZE = 'a2'\n", encoding="utf-8")
+            self.assertEqual(["a_a2.step"], declared("a"))
+
+
+def _forget_project_modules(root: Path) -> None:
+    """Drop what a test's projects left in this process: their modules, sys.path roots."""
+    import sys
+
+    prefix = str(root)
+    for name, module in list(sys.modules.items()):
+        paths = [getattr(module, "__file__", None), *[str(entry) for entry in getattr(module, "__path__", None) or ()]]
+        if any(path and str(path).startswith(prefix) for path in paths):
+            sys.modules.pop(name, None)
+    sys.path[:] = [entry for entry in sys.path if not entry.startswith(prefix)]
+
 
 class Lifecycle(unittest.TestCase):
     def setUp(self) -> None:

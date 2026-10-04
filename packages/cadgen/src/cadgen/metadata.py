@@ -396,22 +396,24 @@ def imported_model(script_path: Path, function: str):
     does not run -- and read again. The module top must stay kernel-free, as the
     cad skill requires: this import is what every door pays to learn a model's
     declarations."""
+    from cadgen._internal.generation_runner import _MODULE_LOAD_LOCK
     from cadgen.authoring import import_closure_current, registered_model
 
     resolved = Path(script_path).resolve()
-    stamp = _script_stamp(resolved)
-    defn = registered_model(resolved, function)
-    if defn is None or getattr(defn, "stamp", None) != stamp or not import_closure_current(resolved):
-        from cadgen._internal.generation_runner import _load_generator_module, _first_party_from_source
-        from cadgen._internal.source_hash import evict_first_party_modules
-
-        # Like the build's own load: from a clean first-party module space (a helper a
-        # warm worker still holds would feed the reload its OLD values) and with no
-        # .pyc for the model or its helpers.
-        evict_first_party_modules()
-        with _first_party_from_source():
-            _load_generator_module(resolved)
+    with _MODULE_LOAD_LOCK:
+        stamp = _script_stamp(resolved)
         defn = registered_model(resolved, function)
+        if defn is None or getattr(defn, "stamp", None) != stamp or not import_closure_current(resolved):
+            from cadgen._internal.generation_runner import _load_generator_module, _first_party_from_source
+            from cadgen._internal.source_hash import evict_first_party_modules
+
+            # Like the build's own load: from a clean first-party module space (a helper a
+            # warm worker still holds would feed the reload its OLD values) and with no
+            # .pyc for the model or its helpers.
+            evict_first_party_modules()
+            with _first_party_from_source():
+                _load_generator_module(resolved)
+            defn = registered_model(resolved, function)
     if defn is None:
         raise InvalidModelScriptError(
             f"{_display_path(resolved)} declares {function}() but importing it registered no such model"
