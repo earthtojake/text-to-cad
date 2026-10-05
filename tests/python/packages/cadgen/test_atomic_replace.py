@@ -435,13 +435,28 @@ class OpenWithLadderTest(unittest.TestCase):
         """The rule the atomic_replace docstring states: harden one and the
         failure moves to the next. Pins that no reopen of the written STEP was
         left on a bare open()."""
-        import re as _re
-
         for relative in ("cadgen/step_export.py", "cadgen/_internal/step_hash.py"):
-            source = (REPO_ROOT / "packages" / "cadgen" / "src" / relative).read_text(encoding="utf-8")
-            body = source.split('"""', 2)[-1] if source.count('"""') >= 2 else source
-            bare = _re.findall(r"^(?!.*ladder).*\b(?:read_bytes\(\)|write_bytes\(|\.open\(\s*[\"']r)", body, _re.M)
+            bare = _bare_reads(relative)
             self.assertEqual([], bare, f"{relative} reopens its output without the ladder: {bare}")
+
+    def test_every_read_of_an_imported_document_goes_through_the_ladder(self) -> None:
+        """#529: importing a STEP on Windows failed with "[Errno 13] Permission
+        denied" while another program held or replaced it -- the refusal the
+        ladder waits out for cadgen's own STEPs. Pins that the import's reads of
+        the document (the closure hash before the job, the scene loads in it)
+        are not left on a bare read."""
+        for relative in ("cadgen/_internal/step_scene_package.py", "cadgen/daemon/executors.py"):
+            bare = _bare_reads(relative)
+            self.assertEqual([], bare, f"{relative} reads a document without the ladder: {bare}")
+
+
+def _bare_reads(relative: str) -> list[str]:
+    """Reads and reopens in a cadgen module that are not on a ladder line."""
+    import re as _re
+
+    source = (REPO_ROOT / "packages" / "cadgen" / "src" / relative).read_text(encoding="utf-8")
+    body = source.split('"""', 2)[-1] if source.count('"""') >= 2 else source
+    return _re.findall(r"^(?!.*ladder).*\b(?:read_bytes\(\)|write_bytes\(|\.open\(\s*[\"']r)", body, _re.M)
 
 
 if __name__ == "__main__":

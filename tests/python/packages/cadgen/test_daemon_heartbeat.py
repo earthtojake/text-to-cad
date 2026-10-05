@@ -90,8 +90,9 @@ class _WorkerCase(unittest.TestCase):
         original_popen = subprocess.Popen
 
         def start(argv, **kwargs):
-            if argv == [sys.executable, "-m", "cadgen.daemon.worker"]:
-                return original_popen([sys.executable, "-c", prelude], **kwargs)
+            if argv[-2:] == ["-m", "cadgen.daemon.worker"]:
+                # The worker's own interpreter and flags, running the fixture instead.
+                return original_popen([*argv[:-2], "-c", prelude], **kwargs)
             return original_popen(argv, **kwargs)
 
         with mock.patch.object(pool_mod.subprocess, "Popen", start):

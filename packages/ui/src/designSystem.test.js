@@ -34,7 +34,7 @@ test("viewer chrome uses the type scale and the viewer breakpoint, never window 
 // library) is a page, not chrome: it scrolls as a page does, with the platform's own scrollbar.
 const NATIVE_SCROLLER = /\boverflow(?:-[xy])?-(?:auto|scroll)\b/;
 const PAGES = ["library/ModelLibrary.tsx"];
-const SCROLL_REGIONS = ["renderers/kit/tools/ToolPanel.jsx", "file-viewer/navigation/FileTree.jsx", "primitives/dropdown-menu.jsx",
+const SCROLL_REGIONS = ["renderers/kit/tools/ToolPanel.jsx", "file-viewer/navigation/FolderExplorer.jsx", "primitives/dropdown-menu.jsx",
   "renderers/kit/status/ViewerAlertCard.jsx"];
 
 test("every scroll region in the viewer's chrome is the ScrollArea primitive, never a native scroller", () => {

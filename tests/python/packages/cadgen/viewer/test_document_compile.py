@@ -1,12 +1,11 @@
 """The viewer's document compile: a job in the pool, de-duplicated, errors as values.
 
-The private compile pool is gone; ``DocumentCompiler`` submits ``submit_compile``
-jobs; the build route starts one and answers at once, and the status route
-follows it. Driven by a fake ``submit`` so the outcomes are deterministic
-and fast: what these cover is the waiter's behaviour — one job per document,
-attached requests sharing the answer, a failed job's bare message — and the
-ops wiring around it. The pool's own behaviour (slots, coalescing, spares) has
-its own suites.
+``DocumentCompiler`` submits ``submit_compile`` jobs to cadgen's pool; the build
+route starts one and answers at once, and the status route follows it. Driven by
+a fake ``submit`` so the outcomes are deterministic and fast: what these cover
+is the waiter's behaviour — one job per document, attached requests sharing the
+answer, a failed job's bare message — and the ops wiring around it. The pool's
+own behaviour (slots, coalescing, spares) has its own suites.
 """
 
 from __future__ import annotations
@@ -19,9 +18,8 @@ import time
 import unittest
 from pathlib import Path
 
-from cadgen.viewer.backend import ForbiddenAssetError
 from cadgen.viewer.cadgen_ops import CadgenOps
-from cadgen.viewer.compiles import DocumentCompiler
+from cadgen.viewer.compiles import READ_REFUSAL_REPORT_SECONDS, DocumentCompiler
 
 
 class _FakeJob:
@@ -57,6 +55,16 @@ class _FakeSubmit:
             )
         if name.startswith("mumble"):
             return _FakeJob(2, "the worker said something\nand then died\n")
+        if name.startswith("locked"):
+            # The job's own read refused (what Windows' open() raises for a held file).
+            return _FakeJob(
+                1,
+                "Traceback (most recent call last):\n  ...\n"
+                f"PermissionError: [Errno 13] Permission denied: '{document}'\n",
+            )
+        if name.startswith("denied"):
+            # The read before the job, in the viewer's own process (submit_compile's hash).
+            raise PermissionError(13, "Permission denied", str(document))
         if name.startswith("silent"):
             return _FakeJob(3, "")
         if name.startswith("slow"):
@@ -86,7 +94,10 @@ class CompileTestCase(unittest.TestCase):
         return DocumentCompiler(submit=self.submit)
 
     def ops(self) -> CadgenOps:
-        return CadgenOps(str(self.root), client=self.compiler())
+        return CadgenOps(client=self.compiler())
+
+    def path(self, name: str) -> str:
+        return str(self.root / name)
 
     def step(self, name: str) -> str:
         path = self.root / name
@@ -174,17 +185,16 @@ def _scope(candidate: str) -> str:
 class OpsWiring(CompileTestCase):
     def test_an_unowned_entry_is_ready_without_a_job(self):
         ops = self.ops()
-        self.assertEqual(ops.artifact_status("model.stl"), {"state": "compiled"})
-        self.assertEqual(ops.build_artifact("model.stl"), {"ok": True, "state": "compiled"})
+        self.assertEqual(ops.artifact_status(self.path("model.stl")), {"state": "compiled"})
+        self.assertEqual(ops.build_artifact(self.path("model.stl")), {"ok": True, "state": "compiled"})
         self.assertEqual(self.submit.calls, [])
 
     def test_a_document_with_no_tree_is_offered_a_compile_with_exactly_three_keys(self):
         # No `blocked`: it is set from a `busy` snapshot no producer can emit, and an
         # unreachable flag that flips the client from BUILD to ATTACH is a trap.
         ops = self.ops()
-        self.step("ok.step")
         self.assertEqual(
-            ops.artifact_status("ok.step"),
+            ops.artifact_status(self.step("ok.step")),
             {"state": "not-compiled", "reason": "missing_glb", "compile": True},
         )
 
@@ -192,11 +202,11 @@ class OpsWiring(CompileTestCase):
         # The request is never held for the job: a host relaying requests through a few
         # shared slots would lose one for the compile's length.
         ops = self.ops()
-        self.step("slow.step")
+        slow = self.step("slow.step")
         self.submit.gate = threading.Event()
-        self.assertEqual(ops.build_artifact("slow.step"), {"ok": True, "state": "compiling"})
-        self.assertEqual(ops.artifact_status("slow.step")["state"], "compiling")
-        self.assertEqual(ops.build_artifact("slow.step"), {"ok": True, "state": "compiling"})
+        self.assertEqual(ops.build_artifact(slow), {"ok": True, "state": "compiling"})
+        self.assertEqual(ops.artifact_status(slow)["state"], "compiling")
+        self.assertEqual(ops.build_artifact(slow), {"ok": True, "state": "compiling"})
         self.submit.gate.set()
         self.settle(ops, "slow.step")
         self.assertEqual(len(self.submit.calls), 1)
@@ -204,27 +214,27 @@ class OpsWiring(CompileTestCase):
     def test_a_failed_compile_is_the_status_routes_answer_with_the_bare_message_until_the_bytes_change(self):
         ops = self.ops()
         candidate = self.step("crash.step")
-        self.assertEqual(ops.build_artifact("crash.step"), {"ok": True, "state": "compiling"})
+        self.assertEqual(ops.build_artifact(candidate), {"ok": True, "state": "compiling"})
         self.settle(ops, "crash.step")
         self.assertEqual(
-            ops.artifact_status("crash.step"),
+            ops.artifact_status(candidate),
             {"state": "failed", "error": "failed to read STEP file: not a STEP", "errorType": "RuntimeError"},
         )
         # New bytes are a new document: the compile is offered again.
         Path(candidate).write_bytes(b"ISO-10303-21;crash, rewritten and longer")
-        self.assertEqual(ops.artifact_status("crash.step")["state"], "not-compiled")
+        self.assertEqual(ops.artifact_status(candidate)["state"], "not-compiled")
 
     def test_an_in_flight_compile_with_no_progress_record_yet_is_indeterminate_generating(self):
         ops = self.ops()
-        self.step("slow.step")
+        slow = self.step("slow.step")
         self.submit.gate = threading.Event()
-        thread = threading.Thread(target=lambda: ops.build_artifact("slow.step"))
+        thread = threading.Thread(target=lambda: ops.build_artifact(slow))
         thread.start()
         try:
             deadline = time.monotonic() + 5
             status = None
             while time.monotonic() < deadline:
-                status = ops.artifact_status("slow.step")
+                status = ops.artifact_status(slow)
                 if status.get("state") == "compiling":
                     break
                 time.sleep(0.02)
@@ -234,27 +244,42 @@ class OpsWiring(CompileTestCase):
             thread.join(timeout=5)
 
 
-class ContainmentHappensBeforeTheJob(CompileTestCase):
-    def test_an_absolute_outside_ref_never_reaches_the_pool(self):
-        outside = Path(self.tmp.name, "outside.step")
-        outside.write_bytes(b"ISO-10303-21;outside")
-        ops = self.ops()
-        with self.assertRaises(ForbiddenAssetError):
-            ops.build_artifact(str(outside))
-        self.assertEqual(self.submit.calls, [])
+class ReadRefusals(CompileTestCase):
+    """A document that refused to be read says nothing about its bytes (#529: Windows
+    refuses an open while another program holds or replaces the file)."""
 
-    def test_a_relative_ref_that_walks_out_never_reaches_the_pool(self):
-        ops = self.ops()
-        with self.assertRaises(ForbiddenAssetError):
-            ops.build_artifact("../outside.step")
-        self.assertEqual(self.submit.calls, [])
+    def test_a_refused_read_is_reported_then_offered_again_while_bad_bytes_stay_failed(self):
+        now = [1000.0]
+        ops = CadgenOps(client=DocumentCompiler(submit=self.submit, clock=lambda: now[0]))
+        documents = {name: self.step(name) for name in ("locked.step", "denied.step", "crash.step")}
+        for name, document in documents.items():
+            self.assertEqual(ops.build_artifact(document), {"ok": True, "state": "compiling"})
+            self.settle(ops, name)
+        for name in ("locked.step", "denied.step"):
+            with self.subTest(name=name):
+                status = ops.artifact_status(documents[name])
+                self.assertEqual((status["state"], status.get("errorType")), ("failed", "PermissionError"))
+                self.assertIn("[Errno 13] Permission denied", status["error"])
+        # Past the report, with the same bytes: the next open compiles a refused read again,
+        # and still reports a document whose bytes failed.
+        now[0] += READ_REFUSAL_REPORT_SECONDS + 1
+        for name in ("locked.step", "denied.step"):
+            with self.subTest(name=name):
+                self.assertEqual(
+                    ops.artifact_status(documents[name]),
+                    {"state": "not-compiled", "reason": "missing_glb", "compile": True},
+                )
+        self.assertEqual(ops.artifact_status(documents["crash.step"])["state"], "failed")
 
-    def test_an_absolute_in_root_ref_is_still_compiled(self):
+
+class OnlyAnAbsolutePathReachesTheJob(CompileTestCase):
+    def test_a_relative_ref_never_reaches_the_pool(self):
+        self.step("inside.step")
         ops = self.ops()
-        candidate = self.step("inside.step")
-        self.assertTrue(ops.build_artifact(candidate)["ok"])
-        self.settle(ops, "inside.step")
-        self.assertEqual(len(self.submit.calls), 1)
+        for ref in ("inside.step", "../folder/inside.step"):
+            with self.subTest(ref=ref), self.assertRaises(ValueError):
+                ops.build_artifact(ref)
+        self.assertEqual(self.submit.calls, [])
 
 
 if __name__ == "__main__":

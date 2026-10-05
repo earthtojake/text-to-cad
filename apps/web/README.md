@@ -2,9 +2,10 @@
 
 A local-filesystem CAD review app. This directory is the React CLIENT; the
 backend is `cadgen viewer` — the `cadgen.viewer` package in the cadgen Python
-distribution — and the built client ships inside that same wheel. One instance
-serves ONE directory, fixed at start; the page is always the bare origin and
-`?file=` selects an artifact inside that root. There is no hosted deployment.
+distribution — and the built client ships inside that same wheel. A viewer
+serves every CAD file on the machine by its absolute path, on port 3245 or the
+port `--port N` names: the page is the bare origin and `?file=` names the file (a relative one resolves
+against the folder the viewer was started in). There is no hosted deployment.
 
 This app is the browser host of `@text-to-cad/ui/file-viewer`, not the owner of
 the shared CAD interface.
@@ -33,10 +34,9 @@ this app. The Python wheel consumes only the production build.
 
 ```text
 src/
-  App.tsx               the CadViewer's browser host: URL, history, title and appearance
+  App.tsx               the CadViewer's browser host: URL, history, title, appearance, the file menu and the library
   main.tsx              host/client bootstrap and cleanup
-  adapters/             the file menu's actions (copies, reveal) and what it records in the model library
-  host/                 browser clipboard, prompt delivery, the navbar's links and release check, development auto-reload
+  host/                 browser clipboard, prompt delivery, the app menu's links and release check, development auto-reload
   persistence/          the tab record in sessionStorage
   client/               appearance control and styling
   shared/               app build/runtime configuration helpers
@@ -67,110 +67,91 @@ and assets, so the app does not scan another package's source.
 ## Launching
 
 Dev serves the client from source with HMR. Build the shared packages from the
-repository root first, then invoke npm from the directory you want to serve
-(outside `apps/web`):
+repository root first, then invoke npm from the folder a relative `?file=`
+should resolve against (outside `apps/web`):
 
 ```bash
-cd <the directory to serve>
+cd <a folder of models>
 VIEWER_PYTHON=<checkout>/.venv/bin/python \
   npm --prefix <checkout>/apps/web run dev -- --host 127.0.0.1
-# open http://127.0.0.1:5173/?file=<path relative to the served root>
+# open http://127.0.0.1:5173/?file=<an absolute path, or one relative to that folder>
 ```
 
-For the spawned backend, `scripts/directoryRoot.mjs` uses an explicit
-`directoryRoot` supplied by its caller first, then `INIT_CWD`, then the process
-working directory, accepting the latter two only outside `apps/web`. If neither
+For the spawned backend, `scripts/directoryRoot.mjs` uses `INIT_CWD`, then the
+process working directory, accepting either only outside `apps/web`. If neither
 qualifies, Vite defaults to the app's parent, `<checkout>/apps`. npm sets
 `INIT_CWD` to the directory where you invoked it, so `--prefix` selects the app
-without changing the served root. The page URL stays at the bare origin;
-`?file=` selects an artifact within that root.
+without changing that folder. It is only where relative links resolve
+(`serverInfo.start`): the backend opens any file by its absolute path.
 
-Dev spawns the real backend — `python -m cadgen.viewer --api-only` on an
-ephemeral port — and proxies `/__cad` and `/__tess_cache` to it, so there is one
-implementation, not two, and Vite owns the client. `VIEWER_PYTHON` names the
+Dev spawns the real backend — `python -m cadgen.viewer --new --api-only` on a
+port of its own — and proxies `/__cad` and `/__tess_cache` to it, so there is
+one implementation, not two, and Vite owns the client. `VIEWER_PYTHON` names the
 interpreter that has cadgen installed (it defaults to `python3` and must be
 Python 3.11 or newer); `VIEWER_BACKEND_URL` attaches to a backend you started
-yourself, which retains its own served root.
-The shared packages must be built first; the web app itself needs no production
-build for Vite development.
+yourself. The shared packages must be built first; the web app itself needs no
+production build for Vite development.
 
-Prod is `cadgen viewer`, run FROM the directory to serve (there is no directory
-flag, the cwd IS the served directory). It serves the client bundled by
+Prod is `cadgen viewer`, run from anywhere. It serves the client bundled by
 `scripts/bundle/bundle.sh` or installed in the wheel. To explicitly select this
 checkout's web build, start from the repository root:
 
 ```bash
 npm run build:web
 export CADGEN_VIEWER_DIST="$PWD/apps/web/dist"
-cd <the directory to serve> && cadgen viewer --host 127.0.0.1 --json
+cadgen viewer --host 127.0.0.1 --json
 ```
 
-The launcher is unconditional and prints the URL it serves: a live instance
-already serving that realpath with the same code on disk is REUSED
-(`action:"reused"`); otherwise it binds the first free port from 3245 upward.
-`--new` forces a fresh instance of the same code; an explicit `--port` is
-strict; `--dist DIR` (or `CADGEN_VIEWER_DIST`) names another built client. The
-URL line (and the `--json` line) is written only after the socket is bound and
-listening with the app attached and the instance registered, so the first
-request after reading it answers and `list`/`stop`/reuse already see it — no
-poll, no retry, no grace period. Nothing about the served tree stands in front
-of that line: the catalog walk happens after it, in the background.
+The launcher is unconditional and prints the URL it serves: on port 3245, or the
+port `--port N` names, as any web server. Before binding it asks that port who holds it
+(`GET /__cad/server`): nothing, and it starts there (`action:"started"`); this
+user's viewer at the same identity, and it is REUSED (`action:"reused"`); this
+user's viewer running other code, and that one is asked to exit
+(`POST /__cad/shutdown`) and the launch starts on the freed port — the newest
+code wins, on the same URL; anything else (another program, another user's
+viewer), and it refuses, naming `--port`. `--new` binds an OS-assigned free
+port, asks nothing and is never reused (dev and tests); `--dist DIR` (or
+`CADGEN_VIEWER_DIST`) names another built client. The URL line (and the
+`--json` line) is written only after the socket is bound and listening with the
+app attached, so the first request after reading it answers — no poll, no
+retry, no grace period.
 
 A launch that STARTS a server is that server: it stays in the foreground until
 it is stopped (Ctrl-C, `stop`), which is what a terminal and `npm run dev`
 want. A launch that REUSES one prints and exits. `--detach` makes both return:
 the server runs as a background process in its own session, its output goes
-to a log beside its registry entry
-(`<tmp>/cadgen-viewer-info/viewer-<launch-time>-<random>.log`, named by the
-launcher's message and by `list`), and the launcher exits 0 once the server
-has announced itself — or relays the server's refusal and exits non-zero. The
-log outlives the server so a crash can be read afterwards: a clean `stop`
-removes it; an instance that crashed or was killed keeps it for a day, the
-newest ten at most. Agents and scripts use `--detach`; never pipe a foreground
-launch into `tail` or `head`, which wait for an EOF a running server never
-sends.
-`--detach` refuses `--no-registry`, since `list`/`stop` are the only way to
-find a detached server again. `cadgen viewer list` shows every running
-instance; `cadgen viewer stop --port <n>` ends one. Do not stop instances you
-did not start. Dev lives on Vite's port (5173, strict) and never enters the
-instance registry.
+to one log in the state directory (`viewer.log`, named by the launcher's
+message), and the launcher exits 0 once the server has announced itself — or
+relays the server's refusal and exits non-zero. The log outlives the server so
+a crash can be read afterwards, until the next detached start. Agents and
+scripts use `--detach`; never pipe a foreground launch into `tail` or `head`,
+which wait for an EOF a running server never sends.
+`cadgen viewer stop [--port N]` asks this user's viewer on a port to exit and
+waits for the port to be free. Dev lives on Vite's port (5173, strict).
 
-Reuse keys on realpath(served directory) × an identity token — the cadgen
-version plus content digests of the server runtime and the selected built
-client — so an instance serving a different directory, the same directory
-from another install, or code that has since been edited, pulled, or rebuilt is
-never handed back by mistake. In a checkout, a server that finds `src/` beside
-the `dist/` it serves also warns once on stderr when any source is newer than
-the build — detection only; it keeps serving.
+The identity is the cadgen version plus content digests of the server runtime
+and the selected built client, so a viewer running code that has since been
+edited, pulled, or rebuilt — or another client — is replaced rather than handed
+back by mistake. In a checkout, a server that finds `src/` beside the `dist/` it
+serves also warns once on stderr when any source is newer than the build —
+detection only; it keeps serving.
 
 ## Behaviours worth knowing before concluding something is broken
 
-- **The catalog scan skips dot-directories.** A buildable entry under
-  `.review/` (or any dotted path) never appears, even when the server is
-  launched from inside it. It also skips `__cadgen__`, `__pycache__`, `build`,
-  `coverage`, `dist`, `node_modules` and `viewer` (exact case). Everything
-  else is walked — a project's `tmp/` included.
-- **Every catalog request is fresh, and a warm one is cheap.** A new model
-  appears on the next request and a deleted one is gone from it. The server
-  remembers each directory's listing against that directory's own stamps, for
-  at most 10 s, so a root with a few hundred thousand scratch files costs one
-  stat per directory on most requests, not one entry per file; the first walk
-  after launch (done in the background) and one poll in five pay for every
-  file. Where a directory's stamps can be put back (an extract that restores
-  times onto FAT, exFAT or a Windows disk) a change can take those 10 s to show.
-  [docs/backend.md](docs/backend.md) has the rule.
+- **A file is named by its absolute path, and nothing walks a tree.** The
+  catalog is the named file's row, computed when it is asked for; a file under
+  a hidden folder opens like any other. The explorer reads one folder at a
+  time, and its search skips hidden folders and `__cadgen__`, `__pycache__`,
+  `build`, `coverage`, `dist`, `node_modules` and `viewer` (exact case).
+  [docs/backend.md](docs/backend.md) has the rules.
 - **Verify a link by loading the page**, never by curling `/__cad/asset` —
   that route serves raw files; generated entries render through a
   different route, so probing it 404s whether or not anything is wrong.
-- **Large catalogs are partial.** Path-only `catalogPending` entries support
-  navigation but are not renderable metadata. The shared client resolves the
-  selected file explicitly and polls active files. Other files' placeholders
-  must not erase resolved metadata; a newer complete entry still invalidates
-  that file's view. The app retains one root client across navigation, so its
+- **Warm work survives navigation.** The app retains one client across navigation, so its
   bounded mesh-cache write queue survives file switches. The shared renderer
   retains completed STEP working sets in a bounded CPU cache, so reopening a
-  warm assembly does not reload each component. Root, origin and revision
-  identities isolate reuse; changed files and evicted entries load normally.
+  warm assembly does not reload each component. Origin and revision identities
+  isolate reuse; changed files and evicted entries load normally.
   Inactive WebGL scenes are released, and a file's view (its camera, Display
   settings and pose) lasts only while it is the file on screen: a refresh brings it
   back, and leaving the file drops it.
@@ -239,26 +220,27 @@ settings controls, selection and
 Keep those rules there rather than maintaining a separate web layout
 specification.
 
-The web host owns URL/history, root-scoped persistence, appearance, version links
+The web host owns URL/history, the tab's persistence, appearance, version links
 and native service adapters. Shared renderers own all model interaction. STEP and
 robots open in Select, whose Features (Links for a robot) panel hangs under the
 toolbar with the rest of the tool stack; Position's panel replaces it while Position
-is the tool. The navbar has no panel of the file's: the explorer's is its one toggle.
+is the tool. The file's name in the navbar opens the explorer.
 STEP and robot files have a top-left toolbar; GLB, STL and 3MF have none. Every 3D
-file has Display (its settings, a dropdown) and Preview among the view's controls at
-the navbar's right end, the view cube at the bottom-left, and Quick Edit at the
-top-right. DXF is a 2D canvas with pan, zoom, snapshot and Quick Edit, without a 3D
-toolbar or tool stack.
+file has Display (its settings, a dropdown that opens up) and Preview on top of the
+view cube at the bottom-left, and Quick Edit at the top-right. DXF is a 2D canvas with
+pan, zoom, snapshot and Quick Edit, without a 3D toolbar or tool stack.
 
-The file explorer floats over the view's left and never resizes it. Below 720px of
-FileViewer width it is a floating sheet over the viewer and the tree panel of the
-tool stack starts closed (Select, pressed, opens it). Preview is the shared shell's button among the view
-actions: it keeps the navbar and the explorer, hides the toolbar, tool stack and
+The explorer is a popover under the file's name: the file's folder, one folder at a
+time, with "Filter files..." to find a file anywhere under it. Below 720px of
+FileViewer width the tree panel of the tool stack starts closed (Select, pressed,
+opens it). Preview is the shared shell's button beside Display: it takes the whole page,
+hiding the navbar, toolbar, tool stack and
 Quick Edit, orbits by default, plays routines (on entry only with Autoplay on)
-and offers Playback settings; the host passes no preview props.
+and offers Playback settings, in the box where Display and Preview sat; the host passes
+no preview props.
 The file on screen keeps its view in the tab — its camera, Display settings
 (explode and clip included) and pose — so a refresh restores it; leaving the file for
-another, or for another root, drops it, and opening it again frames it anew (see
+another or for the home drops it, and opening it again frames it anew (see
 [storage](docs/storage.md)).
 
 Authored material information lives in the selection's reference details; editing
@@ -281,7 +263,7 @@ uses compiled workspace exports and honors an explicit `PORT` while retaining
 strict port binding. React 19 is deduplicated with the shared packages.
 
 Prompt actions prepare clipboard content for an external composer. References
-use the complete served-root path and canonical selector grammar. Image writes
+name the file by its absolute path, in the canonical selector grammar. Image writes
 begin during the user gesture with a pending PNG Blob. A mixed text/image copy is written as separate clipboard
 representations, and its result says some receivers paste only one; unsupported combinations fail without
 silently copying a subset. No receipt claims that another app pasted or sent the
@@ -299,58 +281,56 @@ text itself once it arrives where the browser takes no pending item. A sketch is
 saved through the host's `attachments` (`createHttpAttachmentStore`, over
 `POST /__cad/sketches`) and named in the text by its absolute path.
 
-### No file open
+### The home
 
-With no file open, the navbar keeps its place: the explorer's toggle, then the words
-"Select file" where a file's name goes, and the page says "Ask the agent to show a
-model". The explorer does not open by itself.
+The bare URL is the home: the library of models every CAD view shares
+(`@text-to-cad/ui/library`), and Open, the desktop's file chooser (`POST /__cad/pick`),
+where the server's computer has one (`serverInfo.pick`). From a file, Back to files in
+the menu the navbar's C logo opens leads back to it. Under the home's wordmark are GitHub,
+Discord and X. A `?file=` that names nothing there shows "File does not exist",
+with Go home.
 
-### The model library
-
-The Viewer has no home: the library of models every CAD view shares is the Codex
-sidebar's to show (`@text-to-cad/ui/library`). The Viewer only writes to it, through
-`POST /__cad/recents`: the file on screen joins it once the catalog has it
-(`{action: "open"}`), and its picture once it has settled — the model framed whole
-from the default direction, whatever the camera (`{action: "thumbnail"}`).
-`cadgen.viewer.recents` keeps the library in the user's state directory, shared with
-every other Viewer and the MCP app.
+The home reads the library over `GET /__cad/recents`, pins, unpins and removes over
+`POST /__cad/recents`, and draws each card's picture from `GET /__cad/thumbnail`. The
+file on screen joins it once the catalog has it (`{action: "open"}`), and its picture
+once it has settled — the model framed whole from the default direction, whatever the
+camera (`{action: "thumbnail"}`). `cadgen.viewer.recents` keeps the library in the
+user's state directory, shared with the CAD app.
 
 ### Anonymous usage analytics
 
 CAD's anonymous usage analytics (`cadgen/analytics.py`) are off until the person allows
 them, and the Viewer asks as the CAD app does: once a model is on screen, with the shared card
 (`@text-to-cad/ui/consent`, handed to `CadViewer` as `notice`) at the viewport's top-right and
-Quick Edit stacked under it, then **Share anonymous usage data** in Settings' Analytics
-section. The answer is kept in the user's state directory, so
+Quick Edit stacked under it, then **Share anonymous usage data** in the app menu. The
+answer is kept in the user's state directory, so
 one answer counts for both apps. A "No thanks" or a closed card is never asked again, and
-where no answer could be kept the card never shows. `src/adapters/analytics.ts` reads and
-answers it through `/__cad/analytics`, and reports each file shown and a person touching
-the page (at most every 2 s) to `/__cad/analytics/activity`. The server holds those as
-counts and a code per file, in memory, and sends nothing without consent. Only the
-Viewer's own server serves the two routes.
+where no answer could be kept the card never shows. The page reads and answers it through
+the CAD client (`consent`, `/__cad/analytics`), and reports a person touching the page (at
+most every 2 s) to `/__cad/analytics/activity`; a file shown is counted as it joins the
+library (`/__cad/recents`). The server holds those as counts and a code per file, in
+memory, and sends nothing without consent.
 
-Settings' Features (**Quick edit**, on until the person turns it off) is read and changed
-the same way: `src/adapters/features.ts`, through `/__cad/features` (`cadgen/features.py`).
+The app menu's **Quick edit** (on until the person turns it off) is read and changed
+the same way: the client's `features`, through `/__cad/features` (`cadgen/features.py`).
 The server keeps the choice in the person's settings, beside the analytics answer, so it is
 one choice with the CAD app's and holds whatever port this Viewer is served on, which the
 page's own storage would not.
 
 ### File storage and host actions
 
-The web `FileSource` is the served folder's read-only CAD catalog
-(`createCatalogFileSource` from `@text-to-cad/ui/catalog`, the one the MCP app uses
-for a project). It exposes stat, directory listing and path search without text
+The web `FileSource` is `createCadFileSource` from `@text-to-cad/ui/catalog` over
+the CAD client, the one the CAD app uses: a file's catalog row, one folder's entries
+(`GET /__cad/folder`) and the CAD files under a folder (`GET /__cad/search`), with no
 writes or native filesystem mutations. Catalog content/revision changes are
 distinct from transient metadata progress, so progress updates do not restart a
-prepared document. Native path copying and file reveal live in the separate host
-actions adapter (`src/adapters/fileActions.ts`, over the shared
-`createCadFileActions`), which the navbar's ⋯ and the explorer's right-click menu
-share. Path copying uses the clipboard port. Reveal uses guarded `POST /__cad/reveal` with a root-relative
-path; the backend rejects paths outside the served directory, including symlink
-escapes, and opens the native file manager without a shell. The menu uses the
-server platform to label Finder, Explorer, or the Linux file manager, and only
-offers reveal when the server advertises `reveal-path`. Path copies form the first menu section. Reference copying belongs
-to the renderer's selection action, rather than the file menu.
+prepared document. Native path copying and file reveal are the host's file actions
+(the shared `createCadFileActions`, in `App.tsx`), which the navbar's ⋯ shows. Path
+copying uses the clipboard port. Reveal is the client's guarded `POST /__cad/reveal` with
+the file's absolute path; the backend opens the native file manager without a shell. The
+menu uses the server's platform (`/__cad/server`) to label Finder, Explorer, or the Linux
+file manager. Path copies form the first menu section. Reference copying belongs to the
+renderer's selection action, rather than the file menu.
 
 ### Shared interface defaults
 
@@ -365,17 +345,21 @@ and web stay consistent without host-specific copies of those controls.
 
 The Viewer has the one navbar every app shares (see
 [the host contract](../../packages/ui/docs/viewer-host.md#host-chrome-slots)): at the
-left the explorer's toggle and the open file's name with its ⋯ ("Select file" with
-none open); at the right the update (a blue download button, only when GitHub has a
-newer release), Settings (the person's settings — Analytics, Features, then Feedback, a new
-issue titled "Feedback: " — the same popover as the CAD app's home), then the view's controls
-(Display, Preview); the version is beside the Settings popover's title, and its footer has "Made by @…"
-(X), Discord and GitHub. This host
+left the C logo, which opens the app menu, then the open file's name, which opens the
+explorer, with its ⋯; at the right only the blue update button, while a newer text-to-cad
+is out. The app menu holds Back to files (the home), the person's settings (Share
+anonymous usage data, Quick edit), Send feedback (a new issue titled "Feedback: "),
+GitHub, Discord and, in gray, the version (a link to its release notes) and "Made by @…"
+(X), as in the CAD app; the home shows GitHub, Discord and X under its wordmark instead.
+Display and Preview are the view's, on top of its cube. This host
 supplies the links (`src/host/viewerLinks.js`): its version, the GitHub (where new
-issues open) and Discord its build names (`VIEWER_GITHUB_URL`, `VIEWER_DISCORD_URL`),
-and what GitHub's latest-release API
-says, so the blue download button appears when a newer release is out; links open in a
-new tab. Browser titles use "CAD | <filename>", or "CAD" when no file is selected.
+issues open) and Discord its build names (`VIEWER_GITHUB_URL`, `VIEWER_DISCORD_URL`);
+links open in a new tab. A newer text-to-cad is the blue update button's, at the navbar's right as in the CAD app: cadgen's
+daily version check, read from `/__cad/version` with the server's description as the page
+starts (`main.tsx`) and again whenever the person comes back to it, and its prompt copied for
+the person to paste into their agent's chat; its full install instructions open in a new tab.
+A Viewer the CAD server opens says what the server's channel allows (a store's copy hears nothing);
+one a skill opens names no channel, a skills-only install, which is told. Browser titles use "CAD | <filename>", or "CAD" when no file is selected.
 Appearance is injected as an icon-bearing dropdown beside Projection in Display's
 Display section, below the full-width Mode selector (`ViewerAppearance`,
 through `displayActions`). The original animated mark remains the shared LoadingIcon

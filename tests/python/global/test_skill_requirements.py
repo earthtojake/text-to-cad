@@ -1,23 +1,17 @@
-"""A skill that runs cadgen must say so, with the extras it actually reaches.
+"""A skill that runs cadgen must teach the launch command, pinned to this release.
 
-`requirements.txt` is not documentation: `scripts/release/pin-cadgen-requirements.sh`
-rewrites it to `cadgen==<release>` at publish, and it is what an installed skill's
-`pip install -r requirements.txt` resolves. A skill that imports cadgen without declaring
-it installs nothing and fails at first use; one that renders without the `snapshot` extra
-installs fine and then dies inside the headless browser with a playwright ImportError,
-which reads as a rendering bug rather than a missing dependency.
+The CAD plugin's server and every skill run cadgen as one command,
+`uvx --no-config --managed-python --python 3.13 --from cadgen==<release> <tool>`
+(cadgen._internal.launch): uv keeps one installation per requirement, so the same command is
+the same installation and the same warm daemon. A skill that runs cadgen any other way -- a
+`pip install -r requirements.txt` into the project's interpreter -- makes a second installation
+with a daemon of its own, and its docs may describe a cadgen that is not the one running.
 
-Both stated as criteria rather than lists. A skill shipped for months with no manifest
-at all, and dxf gained a snapshot command without gaining the extra -- neither was caught,
-because nothing derived the expectation from what the skill actually does.
-
-The skills are instruction-only now (the per-verb shims are gone), so "what the skill
-does" is what its documentation TEACHES: a skill whose docs invoke `cadgen ...` (or
-whose remaining Python imports cadgen) must declare it, and one that teaches a snapshot
-verb needs the `snapshot` extra. Skills that never touch cadgen (bambu-labs, dfam-check,
-gcode, sendcutsend, step-parts) correctly have no cadgen line — a mention on a line that
-hands off to another skill (`$cad: cadgen stl build ...`) is that skill's command, not a
-dependency here.
+Stated as a criterion rather than a list, as before: "uses cadgen" is what the skill's docs
+TEACH (`cadgen ...`) or what its own Python imports. Skills that never touch cadgen
+(bambu-labs, dfam-check, gcode, sendcutsend, step-parts) carry no launch command, and a
+mention on a line that hands off to another skill (`$cad: cadgen stl build ...`) is that
+skill's command, not this one's.
 """
 
 from __future__ import annotations
@@ -29,20 +23,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[3]
 SKILLS = sorted(p for p in (REPO_ROOT / "skills").iterdir() if p.is_dir())
 
-# `cadgen`, `cadgen[snapshot]`, or either pinned -- main carries the pinned form.
-_CADGEN_LINE = re.compile(r"^cadgen(?:\[(?P<extras>[a-z0-9_,.-]+)\])?\s*(?:==\s*\S+)?\s*$")
-
-
-def _declared(skill: Path) -> tuple[bool, set[str]]:
-    """(declares cadgen, extras it asks for) from the skill's requirements.txt."""
-    manifest = skill / "requirements.txt"
-    if not manifest.is_file():
-        return False, set()
-    for line in manifest.read_text(encoding="utf-8").splitlines():
-        match = _CADGEN_LINE.match(line.strip())
-        if match:
-            return True, set((match.group("extras") or "").split(",")) - {""}
-    return False, set()
+VERSION = (REPO_ROOT / "VERSION").read_text(encoding="utf-8").strip()
+LAUNCH = "uvx --no-config --managed-python --python 3.13 --from cadgen=={version} {tool}"
 
 
 _HANDOFF_MARKER = re.compile(r"\$(?P<name>[a-z0-9-]+)")
@@ -74,7 +56,6 @@ def _imports_cadgen(skill: Path) -> bool:
 
 
 _CADGEN_INVOCATION = re.compile(r"(?:^|[`\s])cadgen\s+[a-z]", re.M)
-_SNAPSHOT_INVOCATION = re.compile(r"cadgen\s+(?:(?:step|dxf)\s+)?snapshot\b")
 
 
 def _docs_text(skill: Path) -> str:
@@ -90,55 +71,36 @@ def _teaches_cadgen(skill: Path) -> bool:
     return _imports_cadgen(skill) or bool(_CADGEN_INVOCATION.search(_docs_text(skill)))
 
 
-def _teaches_snapshot(skill: Path) -> bool:
-    return bool(_SNAPSHOT_INVOCATION.search(_docs_text(skill)))
-
-
-class SkillRequirements(unittest.TestCase):
+class SkillLaunchCommand(unittest.TestCase):
     def test_skills_were_found(self) -> None:
         self.assertGreaterEqual(len(SKILLS), 8, "the skills/ glob found almost nothing")
 
-    def test_every_skill_that_uses_cadgen_declares_it(self) -> None:
-        missing = [s.name for s in SKILLS if _teaches_cadgen(s) and not _declared(s)[0]]
-        self.assertEqual(
-            missing,
-            [],
-            "these skills teach or import cadgen but do not name it in requirements.txt, "
-            "so `pip install -r requirements.txt` installs nothing they need",
-        )
-
-    def test_every_rendering_skill_asks_for_the_snapshot_extra(self) -> None:
-        """A skill that teaches a snapshot verb reaches the headless browser renderer.
-
-        Playwright is an extra rather than a base dependency because it is a large install
-        plus a browser download, so a skill that renders has to opt in explicitly.
-        """
+    def test_every_skill_that_uses_cadgen_defines_the_launch_command(self) -> None:
         for skill in SKILLS:
-            if not _teaches_snapshot(skill):
-                continue
+            text = (skill / "SKILL.md").read_text(encoding="utf-8")
             with self.subTest(skill=skill.name):
-                declares, extras = _declared(skill)
-                self.assertTrue(declares, f"{skill.name} renders but declares no cadgen")
-                self.assertIn(
-                    "snapshot",
-                    extras,
-                    f"{skill.name} teaches a cadgen snapshot verb; it needs "
-                    "cadgen[snapshot] or its renders die on a playwright ImportError",
-                )
+                if not _teaches_cadgen(skill):
+                    self.assertNotIn("--from cadgen==", text, "a skill that never runs cadgen downloads nothing")
+                    continue
+                for tool in ("cadgen", "python"):
+                    self.assertIn(f"`{tool}` below means `{LAUNCH.format(version=VERSION, tool=tool)}`", text)
 
-    def test_a_declared_extra_is_one_cadgen_actually_offers(self) -> None:
-        """Guards the reverse typo: cadgen[snapshots] installs no extra and never warns."""
-        pyproject = (REPO_ROOT / "packages" / "cadgen" / "pyproject.toml").read_text(encoding="utf-8")
-        block = pyproject.split("[project.optional-dependencies]", 1)[1].split("\n[", 1)[0]
-        available = set(re.findall(r"^([a-z0-9_-]+)\s*=", block, re.M))
-        self.assertIn("snapshot", available, "cadgen no longer defines a snapshot extra")
+    def test_no_skill_installs_cadgen_any_other_way(self) -> None:
+        # A requirements.txt naming cadgen is a second installation, with a daemon of its own.
         for skill in SKILLS:
-            extras = _declared(skill)[1]
+            manifest = skill / "requirements.txt"
             with self.subTest(skill=skill.name):
-                self.assertTrue(
-                    extras <= available,
-                    f"{skill.name} asks for {sorted(extras - available)}, which cadgen does not define",
-                )
+                if manifest.is_file():
+                    lines = [line.split("#")[0].strip() for line in manifest.read_text(encoding="utf-8").splitlines()]
+                    self.assertFalse([line for line in lines if line.startswith("cadgen")], manifest)
+
+    def test_the_launch_command_is_cadgens_own(self) -> None:
+        import sys
+
+        sys.path.insert(0, str(REPO_ROOT / "packages" / "cadgen" / "src"))
+        from cadgen._internal.launch import launch_command
+
+        self.assertEqual(launch_command("python", VERSION), LAUNCH.format(version=VERSION, tool="python"))
 
 
 if __name__ == "__main__":

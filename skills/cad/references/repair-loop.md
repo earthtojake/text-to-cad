@@ -37,9 +37,8 @@ Version-specific pitfalls and construction alternatives are in
 ## Viewer and snapshots
 
 Show the result as in [Show the model](../SKILL.md#show-the-model). With the CLI viewer,
-`cadgen viewer list` shows what each instance serves and `cadgen viewer --help` its
-options. If showing fails, report the failure and use Python geometry checks plus
-snapshots.
+`cadgen viewer --help` lists its options. If showing fails, report the failure and use
+Python geometry checks plus snapshots.
 
 Snapshot commands take saved documents, not model scripts. Run the model first
 when its output is missing; otherwise verify the input format/path, Chromium

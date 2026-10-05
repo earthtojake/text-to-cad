@@ -34,10 +34,9 @@ export const DXF_FILE = /\.dxf$/i;
  * A `.dxf` is a straight 2D render: the backend flattens it with ezdxf and the
  * client paints the primitives on a canvas.
  *
- * It declares NO panel. A drawing has nothing to configure — no Display
- * settings, no Material, no Bends, no Layers — so the navbar shows no toggle for
- * one, and the file tree stays the only panel a DXF tab can open. Registering
- * loads no three.js, no viewport and no backend connection.
+ * A drawing has nothing to configure — no Display settings, no Material, no
+ * Bends, no Layers. Registering loads no three.js, no viewport and no backend
+ * connection.
  *
  * It still opens a render session it never draws from. That session is also
  * what registers the file as OPEN with the client, which is how a rewritten

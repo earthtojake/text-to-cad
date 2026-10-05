@@ -1,8 +1,8 @@
 """Document compiles for the CAD Viewer: jobs in cadgen's pool.
 
 The viewer renders what exists. Its one build-shaped action is compiling a
-document whose BYTES have no tree yet — a vendor ``.step`` dropped into the
-directory, or a generated one built into another store — and that is a compile
+document whose BYTES have no tree yet — a vendor's ``.step``, or a generated
+one built into another store — and that is a compile
 JOB submitted to the pool (``cadgen.daemon.executors.submit_compile``): the same
 job a door submits when handed such a document. It runs on a daemon spare (or a
 transient subprocess under ``CADGEN_DAEMON=0``), takes a job slot, coalesces
@@ -19,18 +19,29 @@ answers at once; it never holds its request for the job's length (a host that
 relays requests through a few shared slots would lose one for that long). The
 client follows the job through the status route, as it follows a peer's, and a
 compile that failed is remembered against the document's bytes so the status
-route can say so rather than offer the same compile again.
+route can say so rather than offer the same compile again. A document that
+refused to be READ (an ``OSError``: on Windows, another program holding or
+replacing it) is remembered only long enough for that report
+(:data:`READ_REFUSAL_REPORT_SECONDS`): nothing about its bytes is known, and the
+next open or reload compiles it again.
 """
 
 from __future__ import annotations
 
+import builtins
 import os
 import threading
+import time
 from pathlib import Path
 
 from .store_paths import build_scope
 
-__all__ = ["DocumentCompiler"]
+__all__ = ["DocumentCompiler", "READ_REFUSAL_REPORT_SECONDS"]
+
+# How long the status route reports a compile that failed because the document could not be
+# read: past any status read the requests following the compile make (the client gives one
+# 10 s), short of a person's next reload.
+READ_REFUSAL_REPORT_SECONDS = 10.0
 
 class _Compile:
     """One in-flight compile that other requests may attach to."""
@@ -59,6 +70,14 @@ def _failure(output: str, document: str) -> dict:
     return answer
 
 
+def _read_refusal(result: dict) -> bool:
+    """Whether a failed compile is the document refusing to be read -- an ``OSError``
+    (``PermissionError`` on Windows for a held or replaced file) -- rather than its
+    bytes failing to compile."""
+    error_class = getattr(builtins, str(result.get("errorType") or ""), None)
+    return isinstance(error_class, type) and issubclass(error_class, OSError)
+
+
 def _signature(candidate: str) -> tuple[int, int] | None:
     try:
         stat = os.stat(candidate)
@@ -76,17 +95,16 @@ def _submit(document: Path, *, force: bool):
 class DocumentCompiler:
     """Compile documents through the pool; one job per document at a time."""
 
-    def __init__(self, *, submit=None) -> None:
+    def __init__(self, *, submit=None, clock=time.monotonic) -> None:
         # `submit(document, force=) -> Job` (wait() -> exit code, output() -> text).
-        # Injected by tests; the real one is the pool's submit_compile.
+        # Injected by tests; the real one is the pool's submit_compile. So is the clock.
         self._submit = submit or _submit
+        self._clock = clock
         self._lock = threading.Lock()
         self._in_flight: dict[str, _Compile] = {}
-        # The last failed compile of a document, with the bytes it failed on (mtime, size).
-        self._failed: dict[str, tuple[tuple[int, int] | None, dict]] = {}
-
-    def shutdown(self) -> None:
-        """Nothing to own: the jobs belong to the pool, which outlives the viewer."""
+        # The last failed compile of a document: the bytes it failed on (mtime, size), the
+        # answer, and when it failed.
+        self._failed: dict[str, tuple[tuple[int, int] | None, dict, float]] = {}
 
     def compile(self, candidate: str, *, force: bool = False) -> dict:
         """Compile one document, attaching to an in-flight compile for the same one.
@@ -156,17 +174,25 @@ class DocumentCompiler:
                 if result is not None and result.get("ok"):
                     self._failed.pop(build_key, None)
                 elif result is not None:
-                    self._failed[build_key] = (signature, result)
+                    self._failed[build_key] = (signature, result, self._clock())
             entry.result = result
             entry.done.set()
 
     def failure(self, candidate: str) -> dict | None:
-        """The last compile's failure, while the document still has the bytes it failed on."""
+        """The last compile's failure, while the document still has the bytes it failed on;
+        a refusal to read it, only for :data:`READ_REFUSAL_REPORT_SECONDS`."""
+        build_key = build_scope(candidate)
         with self._lock:
-            recorded = self._failed.get(build_scope(candidate))
+            recorded = self._failed.get(build_key)
         if recorded is None or recorded[0] != _signature(candidate):
             return None
-        return recorded[1]
+        _, result, failed_at = recorded
+        if _read_refusal(result) and self._clock() - failed_at > READ_REFUSAL_REPORT_SECONDS:
+            with self._lock:
+                if self._failed.get(build_key) is recorded:
+                    del self._failed[build_key]
+            return None
+        return result
 
     def in_flight(self, build_key: str) -> bool:
         with self._lock:

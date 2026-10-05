@@ -34,7 +34,7 @@ const root = path.resolve(args.dir || ".");
 // a robot description.
 const fixtures = [
   // `tools` is the file's own tool strip (a mesh and a drawing have none: a tool that does not
-  // apply is hidden, not disabled); `threeD` has Display and Preview in the navbar.
+  // apply is hidden, not disabled); `threeD` has Display and Preview on top of its cube.
   { format: "stl", file: "smoke.stl", parts: false, tools: [], threeD: true },
   { format: "step", file: "assembly.step", parts: true, tools: ["Select", "Draw", "Measure"], threeD: true },
   // A drawing is line work, not shaded surfaces: its outline covers a fraction of what a solid does.
@@ -91,12 +91,12 @@ async function newPage() {
       return;
     }
     const parsed = new URL(url);
-    // Catalog identities are absolute so two hosted projects can keep separate
-    // file state. Artifact/editing endpoints accept the served-root reference.
-    if (["/__cad/artifact", "/__cad/preview"].includes(parsed.pathname)) {
+    // A file is named by its absolute path in every request: the page resolves a relative
+    // `?file=` (as this suite opens them) against where the viewer started before it asks.
+    if (["/__cad/catalog", "/__cad/artifact", "/__cad/preview"].includes(parsed.pathname)) {
       const file = parsed.searchParams.get("file") || "";
-      if (/^(?:[/\\]|[a-z]:[/\\])/i.test(file)) {
-        errors.push(`absolute file identity leaked to ${parsed.pathname}: ${file}`);
+      if (file && !/^(?:\/|[a-z]:\/)/i.test(file)) {
+        errors.push(`a relative file reached ${parsed.pathname}: ${file}`);
       }
     }
     if (["http:", "https:"].includes(parsed.protocol) && parsed.origin !== viewerOrigin) {
@@ -284,22 +284,19 @@ async function formatGate() {
         buttons.map((button) => button.getAttribute("aria-label")));
       for (const label of fixture.tools) if (!strip.includes(label)) failures.push(`${fixture.format}: missing ${label} (strip: ${strip.join(", ")})`);
       if (!fixture.tools.length && strip.length) failures.push(`${fixture.format}: a tool strip on a file with no tools (${strip.join(", ")})`);
-      if (strip.includes("Display")) failures.push(`${fixture.format}: Display is on the strip (strip: ${strip.join(", ")}); it is the navbar's`);
+      if (strip.includes("Display")) failures.push(`${fixture.format}: Display is on the strip (strip: ${strip.join(", ")}); it sits on top of the cube`);
       if (!fixture.tools.includes("Measure") && strip.includes("Measure")) {
         failures.push(`${fixture.format}: Measure is offered on a view that cannot measure (must be hidden, not disabled)`);
       }
-      // The view's own controls, at the navbar's right end: Display then Preview on a 3D view, none
-      // on a drawing. Settings is the person's, not the view's: one on every file, drawing
-      // included, just before them.
-      const controls = await page.locator("[data-navbar-controls] button").evaluateAll((buttons) =>
+      // The view's own controls, on top of the cube: Display then Preview on a 3D view, none on a
+      // drawing. The navbar's left is the logo (the app menu, the person's settings in it), the
+      // file's name and its ⋯, on every file, drawing included.
+      const controls = await page.locator("[data-viewport-actions] button").evaluateAll((buttons) =>
         buttons.map((button) => button.getAttribute("aria-label")));
       const expected = fixture.threeD ? ["Display", "Preview"] : [];
-      if (JSON.stringify(controls) !== JSON.stringify(expected)) failures.push(`${fixture.format}: navbar controls are ${JSON.stringify(controls)}`);
-      const right = await page.locator("[data-navbar-controls]").evaluate((node) =>
-        [...node.parentElement.querySelectorAll("button")].map((button) => button.getAttribute("aria-label")));
-      if (JSON.stringify(right) !== JSON.stringify(["Settings", ...expected])) failures.push(`${fixture.format}: the navbar's right end is ${JSON.stringify(right)}`);
-      const settings = await page.getByRole("button", { name: "Settings", exact: true }).count();
-      if (settings !== 1) failures.push(`${fixture.format}: ${settings} Settings buttons (one on every file)`);
+      if (JSON.stringify(controls) !== JSON.stringify(expected)) failures.push(`${fixture.format}: the view's controls are ${JSON.stringify(controls)}`);
+      const menus = await page.getByRole("button", { name: "Menu", exact: true }).count();
+      if (menus !== 1) failures.push(`${fixture.format}: ${menus} app menus (one on every file)`);
       const menu = await canvasMenuItems(page, canvas);
       if (fixture.parts) {
         for (const item of framing) if (!menu.includes(item)) failures.push(`${fixture.format}: menu missing ${item}`);
@@ -320,10 +317,10 @@ async function formatGate() {
 }
 
 // Inspect and Render are the Display settings' Solid and Render presets, chosen from the Mode
-// dropdown of the popover the navbar's Display button opens (a second press closes it).
+// dropdown of the popover the Display button on top of the cube opens (a second press closes it).
 const VIEWING_PRESET = { Inspect: "Solid", Render: "Render" };
 async function selectViewingMode(page, current, next) {
-  const display = page.locator("[data-navbar-controls]").getByRole("button", { name: "Display", exact: true });
+  const display = page.locator("[data-viewport-actions]").getByRole("button", { name: "Display", exact: true });
   const popover = page.locator("[data-display-popover]");
   if (!(await popover.count())) await display.click();
   const mode = popover.getByRole("combobox", { name: "Mode", exact: true });

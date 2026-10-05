@@ -399,11 +399,18 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
             return
         if not is_artifact:
             _JOBS.accept_editing_producer(job)
+
+    def starting_worker() -> None:
+        # No warm worker could take the job and one is starting for it: a wait that
+        # nothing the job runs can report, since its worker does not exist yet.
+        _JOBS.waiting(job, "Starting a geometry kernel")
+
     try:
-        worker = _POOL.acquire(model, dependency=bool(request.get("dependency")))
+        worker = _POOL.acquire(model, dependency=bool(request.get("dependency")), on_start=starting_worker)
     except (pool_mod.WorkerGone, pool_mod.MemoryAdmissionError) as exc:
         # Failed spawn or memory admission. Return an explicit failure; a cold
         # retry here would bypass the daemon's aggregate admission policy.
+        _JOBS.waiting(job, None)
         _log(f"{tool}: could not start a worker: {exc}")
         _JOBS.finish(job, 1, error=str(exc))
         if inflight is not None:
@@ -412,6 +419,7 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
             _send(conn, {"stream": "stderr", "data": f"cadgen-daemon: could not start a worker: {exc}\n"})
             _send(conn, {"exit": 1})
         return
+    _JOBS.waiting(job, None)  # it has a worker now; the job reports its own progress
 
     exit_code, healthy = 1, True
     # The tail of the job's stderr: on failure its last FAILED/exception line is the

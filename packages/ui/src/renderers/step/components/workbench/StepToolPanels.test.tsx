@@ -12,7 +12,6 @@ import ToolPanel from '../../../../../dist/renderers/kit/tools/ToolPanel.js';
 import ToolStack from '../../../../../dist/renderers/kit/tools/ToolStack.js';
 import { TOOL_PANEL_WIDTH } from '../../../../../dist/renderers/kit/tools/toolStackLayout.js';
 import { ViewerMobileContext } from '../../../../../dist/file-viewer/responsive.js';
-import { createStepRenderer } from '../../index.js';
 
 // The STEP renderer's panels in the tool stack — Select's Features and its mode, the kept effects
 // (Explode, Clip), Position — each where it is decided, under the stack that holds them. The
@@ -335,7 +334,3 @@ it("Position is headed with its Reset and its X, offers Default beside a named p
   expect(onClose).toHaveBeenCalledOnce();
 });
 
-it("a STEP declares no panel of its own, so no pick or tool of it can open or turn the host's column: its panels are the tool stack's", () => {
-  const step = createStepRenderer({ client: {} as never });
-  expect('panels' in step).toBe(false);
-});

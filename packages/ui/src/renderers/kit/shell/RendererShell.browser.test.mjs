@@ -55,8 +55,8 @@ async function serve(t, route = () => false) {
     if (url.pathname === '/harness.js') { response.setHeader('Content-Type', 'text/javascript'); response.end(bundle); }
     else if (url.pathname === '/styles.css') { response.setHeader('Content-Type', 'text/css'); response.end(compiledCss); }
     else if (route(url, root, response)) return;
-    else if (url.pathname.endsWith('/__cad/catalog')) { response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify({ rootId: root, entries: [] })); }
-    else if (url.pathname.endsWith('/__cad/server')) { response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify({ rootId: root, rootPath: '/models', backend: 'cadgen' })); }
+    else if (url.pathname.endsWith('/__cad/catalog')) { response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify({ entries: [] })); }
+    else if (url.pathname.endsWith('/__cad/server')) { response.setHeader('Content-Type', 'application/json'); response.end(JSON.stringify({ backend: 'cadgen' })); }
     else if (/\.(woff2|ttf)$/.test(url.pathname)) { response.statusCode = 404; response.end(); }
     else { response.setHeader('Content-Type', 'text/html'); response.end(`<!doctype html><html><head><title>Host title</title><link rel="stylesheet" href="/styles.css">${HARNESS_SIZE}</head><body><div id="root"></div><script type="module" src="/harness.js"></script></body></html>`); }
   });
@@ -88,13 +88,12 @@ test('a shell renderer restores isolated view state on a remount', async (t) => 
   const origin = await serve(t, (url, root, response) => {
     requests.push(url.pathname);
     if (url.pathname.endsWith('/__cad/catalog')) {
-      // The workspace listing defers the file; asked for it by name, the catalog resolves it.
+      // The catalog holds the files on screen: asked for one by its absolute path, it lists it.
       response.setHeader('Content-Type', 'application/json');
       catalogFiles.push({ root, file: url.searchParams.get('file') });
-      const entry = url.searchParams.get('file') === 'part.stl'
-        ? { kind: 'stl', file: 'part.stl', rootRelativeFile: 'part.stl', url: '/mesh.stl', hash: root, bytes: mesh.length }
-        : { file: 'part.stl', rootRelativeFile: 'part.stl', catalogPending: true };
-      response.end(JSON.stringify({ rootId: root, entries: [entry] }));
+      const entries = url.searchParams.get('file') === '/models/part.stl'
+        ? [{ kind: 'stl', file: '/models/part.stl', url: '/mesh.stl', hash: root, bytes: mesh.length }] : [];
+      response.end(JSON.stringify({ entries }));
       return true;
     }
     if (url.pathname.endsWith('/mesh.stl')) { response.end(mesh); return true; }
@@ -132,14 +131,14 @@ test('a shell renderer restores isolated view state on a remount', async (t) => 
   });
   await page.goto(`${origin}/`);
   const first = page.getByTestId('one');
-  // Display's settings are a dropdown from its button in the navbar (`DisplayPopover.jsx`),
+  // Display's settings are a dropdown from its button on top of the cube (`DisplayPopover.jsx`),
   // portaled out of the pane: a file never opens with it, and it is not a tool.
-  const displayButton = pane => pane.locator('[data-viewer-navbar]').getByRole('button', { name: 'Display', exact: true });
+  const displayButton = pane => pane.locator('[data-viewport-actions]').getByRole('button', { name: 'Display', exact: true });
   const display = page.locator('[data-display-popover]');
   const cameraZoom = id => page.evaluate(pane => window.cadHarness[pane].controller?.readState().camera?.zoom ?? null, id);
   await displayButton(first).waitFor().catch(async (error) => { throw new Error(`${error.message}; page errors: ${errors.join('; ')}; body: ${await page.locator("body").innerText()}; requests: ${requests.join(", ")}`); });
   await page.waitForFunction(() => Object.keys(window.cadHarness.state.renderers || {}).length > 0);
-  assert.ok(catalogFiles.some(({ root, file }) => root === 'one' && file === 'part.stl'), 'the deferred file was resolved by name');
+  assert.ok(catalogFiles.some(({ root, file }) => root === 'one' && file === '/models/part.stl'), 'the file was read by its absolute path');
 
   // The camera is moved through the live controller: there is no zoom control in the viewer to press.
   // A view refuses commands until it has drawn its file (`liveBinding.ts`), which a software GL
@@ -171,7 +170,7 @@ test('a shell renderer restores isolated view state on a remount', async (t) => 
   await first.locator('[data-slot="cad-file-view"]').waitFor({ state: 'detached' });
   // Unmount persists the display settings and the camera, under the file and the renderer.
   const before = await page.evaluate(() => window.cadHarness.state);
-  assert.deepEqual(Object.keys(before.renderers), [JSON.stringify(['part.stl', 'mesh'])], 'one record per file, keyed [path, renderer id]');
+  assert.deepEqual(Object.keys(before.renderers), [JSON.stringify(['/models/part.stl', 'mesh'])], 'one record per file, keyed [absolute path, renderer id]');
   for (const saved of Object.values(before.renderers)) assert.ok(Math.abs(saved.camera.zoom - 1.1) < 1e-6, `the camera is persisted: ${JSON.stringify(saved.camera)}`);
   await page.evaluate(() => window.cadHarness.mounted(true));
   // Whether Display is open is transient, not file state.
@@ -215,7 +214,7 @@ test('a viewport that goes loses its WebGL context and leaves no listener on the
   const origin = await serve(t, (url, root, response) => {
     if (url.pathname.endsWith('/__cad/catalog')) {
       response.setHeader('Content-Type', 'application/json');
-      response.end(JSON.stringify({ rootId: root, entries: [{ kind: 'stl', file: 'part.stl', rootRelativeFile: 'part.stl', url: '/mesh.stl', hash: root, bytes: mesh.length }] }));
+      response.end(JSON.stringify({ entries: [{ kind: 'stl', file: '/models/part.stl', url: '/mesh.stl', hash: root, bytes: mesh.length }] }));
       return true;
     }
     if (url.pathname.endsWith('/mesh.stl')) { response.end(mesh); return true; }
@@ -321,8 +320,8 @@ test('a file opens framed at 100% of its own ruler: the open fit is the fit, wha
   const origin = await serve(t, (url, root, response) => {
     if (url.pathname.endsWith('/__cad/catalog')) {
       response.setHeader('Content-Type', 'application/json');
-      response.end(JSON.stringify({ rootId: root, entries: [
-        { kind: 'stl', file: 'plate.stl', rootRelativeFile: 'plate.stl', url: '/plate.stl', hash: root, bytes: widePlate.length }] }));
+      response.end(JSON.stringify({ entries: [
+        { kind: 'stl', file: '/models/plate.stl', url: '/plate.stl', hash: root, bytes: widePlate.length }] }));
       return true;
     }
     if (url.pathname.endsWith('/plate.stl')) { response.end(widePlate); return true; }
@@ -577,8 +576,8 @@ test('a renderer says more about its load than a download: finding the file, edi
   assert.equal(await card.count(), 0, 'and raises nothing');
 
   // THE CUBE IS THE BOTTOM-LEFT CORNER'S, far enough off the bottom that its axes stay inside the
-  // view, and the tool stack stops above it. The view's controls, Display then Preview, are the
-  // navbar's. The right of the view is Quick Edit's, and the bottom middle the host's (a
+  // view, with the view's controls, Display then Preview, on top of it, and the tool stack stops
+  // above them. The right of the view is Quick Edit's, and the bottom middle the host's (a
   // composer, on some) and preview's playbar.
   const frameBox = await canvasElement.boundingBox();
   const cubeBox = await pane.getByLabel('View cube', { exact: true }).boundingBox();
@@ -587,8 +586,8 @@ test('a renderer says more about its load than a download: finding the file, edi
   assert.ok(offBottom >= 6 && offBottom < 16, `the view cube sits just off the bottom-left corner: ${offBottom}px`);
   assert.ok(cubeBox.x < frameBox.x + 20, 'the view cube stays against the left edge');
   assert.ok(stackBox.y + stackBox.height <= cubeBox.y, 'the tool stack stops above the cube');
-  assert.deepEqual(await pane.locator('[data-viewer-navbar] [data-navbar-controls] button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
-    ['Display', 'Preview'], 'Display then Preview, in the navbar');
+  assert.deepEqual(await pane.locator('[data-viewport-actions] button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
+    ['Display', 'Preview'], 'Display then Preview, on top of the cube');
   assert.equal(await pane.locator('[data-cad-toolbar]').getByRole('button', { name: 'Display', exact: true }).count(), 0, 'nothing of Display on the strip');
 
   // FINDING: the wait before the file is even located covers the viewport, and says

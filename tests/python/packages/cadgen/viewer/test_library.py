@@ -1,4 +1,5 @@
-"""The Viewer's part in the model library every CAD view shares: it records what it opens."""
+"""The Viewer's part in the model library every CAD view shares: the home reads it, and a view
+records what it opens, its picture, and what the person pins or removes -- by absolute path."""
 
 from __future__ import annotations
 
@@ -25,15 +26,13 @@ class LibraryTest(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
-        self.root = self.tmp / "models"
-        (self.root / "parts").mkdir(parents=True)
-        (self.root / "parts" / "a.stl").write_bytes(STL)
-        (self.tmp / "elsewhere.stl").write_bytes(STL)
+        self.model = self.tmp / "anywhere" / "a.stl"
+        self.model.parent.mkdir()
+        self.model.write_bytes(STL)
         state = mock.patch.dict(os.environ, {"CADGEN_STATE_DIR": str(self.tmp / "state")})
         state.start()
         self.addCleanup(state.stop)
-        app = create_cad_app(root=str(self.root), host="127.0.0.1", port=0)
-        server = handler_module.serve(app, "127.0.0.1", 0)
+        server = handler_module.serve(create_cad_app(host="127.0.0.1", port=0), "127.0.0.1", 0)
         self.port = server.server_address[1]
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
@@ -51,25 +50,37 @@ class LibraryTest(unittest.TestCase):
         finally:
             connection.close()
 
-    def change(self, action: str, file: str, **extra) -> tuple[int, dict]:
-        status, body = self.request("POST", "/__cad/recents", {"action": action, "file": file, **extra})
+    def change(self, action: str, path: str, **extra) -> tuple[int, dict]:
+        status, body = self.request("POST", "/__cad/recents", {"action": action, "path": path, **extra})
         return status, json.loads(body)
 
-    def test_a_viewer_records_what_it_opens_and_its_picture_for_the_sidebars_home(self) -> None:
-        self.assertEqual(self.change("open", "parts/a.stl"), (200, {"ok": True}))
-        self.assertEqual(self.change("thumbnail", "parts/a.stl", png=base64.b64encode(PNG).decode("ascii")), (200, {"ok": True}))
-        [entry] = RecentStore().list()
-        self.assertEqual(entry.path, str(self.root / "parts" / "a.stl"))
-        self.assertEqual(RecentStore().read_thumbnail(entry.public()["thumbnail"]), PNG)
-        # The library is the home's to show, and a Viewer has no home: it only writes.
-        self.assertEqual(self.request("GET", "/__cad/recents")[0], 404)
-        self.assertEqual(self.change("pin", "parts/a.stl")[0], 400)
+    def test_the_library_is_read_and_changed_by_absolute_path(self) -> None:
+        self.assertEqual(self.request("GET", "/__cad/recents"), (200, b'{"recents":[]}'))
+        status, answer = self.change("open", str(self.model))
+        self.assertEqual((status, [entry["path"] for entry in answer["recents"]]), (200, [str(self.model)]))
+        status, answer = self.change("thumbnail", str(self.model), png=base64.b64encode(PNG).decode("ascii"))
+        [entry] = answer["recents"]
+        self.assertEqual(entry, RecentStore().list()[0].public())
+        self.assertTrue(self.change("pin", str(self.model))[1]["recents"][0]["pinned"])
+        self.assertFalse(self.change("unpin", str(self.model))[1]["recents"][0]["pinned"])
+        # The picture, by the content name the library gives it.
+        status, png = self.request("GET", f"/__cad/thumbnail?name={entry['thumbnail']}")
+        self.assertEqual((status, png), (200, PNG))
+        self.assertEqual(self.change("remove", str(self.model)), (200, {"recents": []}))
 
-    def test_a_viewer_records_only_models_in_its_folder(self) -> None:
-        self.assertEqual(self.change("open", str(self.tmp / "elsewhere.stl"))[0], 403)
-        (self.root / "notes.txt").write_text("x", encoding="utf-8")
-        self.assertEqual(self.change("open", "notes.txt")[0], 400)
-        self.assertEqual(self.change("thumbnail", "parts/a.stl", png=base64.b64encode(b"GIF89a").decode("ascii"))[0], 400)
+    def test_a_change_names_a_cad_file_by_its_absolute_path(self) -> None:
+        (self.tmp / "notes.txt").write_text("x", encoding="utf-8")
+        for action, path, extra in (("open", "anywhere/a.stl", {}), ("open", str(self.tmp / "notes.txt"), {}),
+                                    ("open", str(self.tmp / "gone.stl"), {}), ("sort", str(self.model), {}),
+                                    ("thumbnail", str(self.model), {"png": base64.b64encode(b"GIF89a").decode("ascii")})):
+            with self.subTest(action=action, path=path):
+                self.assertEqual(self.change(action, path, **extra)[0], 400)
+        self.assertEqual(RecentStore().list(), [])
+
+    def test_only_a_thumbnail_name_reads_a_thumbnail(self) -> None:
+        for name in ("", "x.png", "../recents.jsonl", "0" * 32 + ".png"):
+            with self.subTest(name=name):
+                self.assertEqual(self.request("GET", f"/__cad/thumbnail?name={name}")[0], 404)
 
 
 if __name__ == "__main__":

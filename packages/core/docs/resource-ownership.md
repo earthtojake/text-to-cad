@@ -206,9 +206,9 @@ cheap decoded-mesh request into unbudgeted surface tessellation.**
 
 A client lazily owns one `createTessellationCache({provider})`, whose
 `createSession({signal})` method lends cancellable views to render sessions.
-No module-global provider can be swapped by another root. Closing a view aborts
+No module-global provider can be swapped by another client. Closing a view aborts
 its reads and prevents late results from enqueueing writes; writes already
-admitted to the root's byte-bounded queue survive file switches. Closing the
+admitted to the client's byte-bounded queue survive file switches. Closing the
 client disposes the owner, aborts every view and discards remaining queued
 writes. Viewer write-backs drain in batches with bounded concurrency: after a
 quiet interval, no later than two seconds after a batch's first entry however

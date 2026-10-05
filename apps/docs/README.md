@@ -71,14 +71,19 @@ scripts/         # asset checks
 ## Brand and loading icon
 
 The header uses the blue CAD wordmark and favicons use C, both with soft relief shading. The homepage
-and repository README use the TEXTTOCAD PNG. `/icon` provides downloadable
-C, CAD and TEXTTOCAD SVGs and PNGs, followed by the original animated loading-icon
-playground. The original mesh, animation and the shared UI loading assets stay
-unchanged.
+hero builds the TEXTTOCAD wordmark in with its animated SVG (sketch, extrude, cut, chamfer,
+render), and the repository README shows the same animated SVG. A phone's header always shows the
+CAD wordmark at its left; a desktop's slides it in before the section links once the homepage's
+TEXTTOCAD has scrolled out of sight (a page without one shows it throughout). `/icon` plays each
+mark's build, with Replay, and provides downloadable C, CAD, TEXTTOCAD and stacked TEXT TO CAD
+SVGs, PNGs and animated SVGs, followed by the original animated loading-icon playground.
+`LogoBuild` (`src/components/logo-build.tsx`) shows a build: a plain `<img>`, since the animation
+is the SVG's own SMIL, inside a `<picture>` whose reduced-motion source is the static mark. The
+original mesh, animation and the shared UI loading assets stay unchanged.
 
-The vectors in `public/brand/` come from `node scripts/brand/generate-logos.mjs`;
-`node scripts/brand/export-logos.mjs` then refreshes the PNGs, favicons and every
-app's copy (run both from the repository root). See [the brand recipe](../../scripts/brand/README.md)
+The vectors in `public/brand/` come from `node scripts/brand/generate-logos.mjs` and
+`node scripts/brand/animate-logos.mjs`; `node scripts/brand/export-logos.mjs` then
+refreshes the PNGs, favicons and every app's copy (run all three from the repository root). See [the brand recipe](../../scripts/brand/README.md)
 for the letters, projection and palette. These are checked-in assets; ordinary
 builds do not regenerate them.
 
@@ -112,12 +117,34 @@ actions use muted shades of the logo's pastel blue through shadcn semantic
 tokens: #2c7197 in light mode and #30779d in dark mode, with #f5fbff labels.
 Text contrast is 5.14:1 and 4.73:1 respectively; the solid darker hover shades
 also exceed 4.5:1. Focus rings use a deeper brand blue on white and the logo's
-pale highlight on charcoal. All installation Copy buttons use the same blue
-primary action style. Install uses the same heading scale as Skills. The header lists Install, Skills
-and Plugins, with Install active by default and the active link following the
-visible section. Install has one Skills CLI command; Plugins contains only
-provider-native installation commands and guidance. Install boxes and explanatory text fill the content width.
-Command text remains monospace. The unboxed wordmark and one prominent tagline
+pale highlight on charcoal. Every Copy button is one size; the install message's
+uses the blue primary action style, the others are plain. Every section title
+shares one heading scale, and the header lists Overview, Install and Skills, the
+active link following the visible section. Overview opens with Available for
+these agents, first so a phone shows it on load: the agents' logos scrolling as
+skills.sh's do, skills.sh's logo set in `public/agents/` with Grok's glyph from
+Lobe Icons (MIT) in the same tile, each tile blended into the page's background.
+A logo leads to its install. Then the plugin's description, which every manifest
+and the README's Overview say word for word (`test_plugin_manifests.py` holds
+them to one text). Install
+leads with the message to send to an agent and a line on installing it yourself
+(uv, the app's commands, a restart), then a sub-section per agent app, its update
+and remove commands folded under Update or reinstall, Other Agents (the Skills
+CLI) for the rest, and Request Plugin, a new GitHub issue. Contributing closes the page. Install boxes and explanatory text fill the
+content width. Command text remains monospace.
+
+The homepage and the repository README share their structure and are changed
+together: the plugin's description, the install message, installing it yourself,
+each install's commands (to install, update and remove it), the skills and
+Contributing. Both speak to whoever installs text-to-cad, a person or their agent,
+and the README says more: numbered steps to install it yourself and fuller notes
+under each install. The site has the
+hero and the agents carousel. The page's copy lives in `src/lib/content.ts`, which `/llms.txt`
+(`src/app/llms.txt/route.ts`, the homepage as markdown for agents) renders too.
+`/install` redirects to the Install section (`/#install`, `next.config.ts`): the stable address
+of the full install instructions, which the CAD app's update button links to.
+`tests/python/global/test_plugin_manifests.py` holds the description, the install
+message and every install, update and remove command to one text. The unboxed wordmark and one prominent tagline
 sit above the independently framed CAD demo. “100% open source and free.” follows
 “Give your agent CAD superpowers.” in blue, using a lighter brand shade on dark
 surfaces. The app owns
@@ -126,22 +153,30 @@ without importing another app or the CAD UI package. Keep the palette aligned
 with `packages/ui/src/styles/tokens.css` when the viewer's base theme changes.
 
 
-## api.texttocad.dev: CAD's analytics
+## api.texttocad.dev: the version feed and CAD's analytics
 
 The same project answers `api.texttocad.dev` (a second domain on it). Its `/v1`
-routes receive CAD's anonymous usage analytics (`cadgen/analytics.py` in
-`packages/cadgen`), from the CAD app (`cadgen mcp`) and the browser viewer
+routes serve the version feed cadgen's daily check reads (`cadgen/updates.py` in
+`packages/cadgen`), and receive CAD's anonymous usage analytics
+(`cadgen/analytics.py`), from the CAD app (`cadgen mcp`) and the browser viewer
 (`cadgen viewer`, presentation `browser`); `www.texttocad.dev/v1/...` reaches the same routes. Clients
-know only `api.texttocad.dev`, so the receiver can move to another host without
+know only `api.texttocad.dev`, so the service can move to another host without
 a release of cadgen.
 
 | Route | What it does |
 | --- | --- |
-| `POST /v1/events` | One batch: `{schema: 1, install, session, version, source, platform, arch, client: {name, version}, presentation, events: [{name: "tool", tool, calls, errors} \| {name: "view", calls} \| {name: "file", file, kind}]}` → `204`. `file` is 16 hex characters, an HMAC of the path under a salt that never leaves the machine: distinct files can be counted, not named. One event per tool and per `file`, and one `view` at most. Anything else is `400` and stores nothing (`src/lib/analytics/events.mjs`). The country Vercel places the request in (`x-vercel-ip-country`, from its IP address) adds the install to `countries` once a week and once a month: totals only, never beside the batch. |
+| `GET /v1/versions` | The version feed, the same for everyone: `{latest}` → `200`, kept by Vercel's edge until the next deploy (`src/lib/api/versions.mjs`). `latest` is this app's version, which the release stamps from `VERSION`. Only a copy installed by hand reads it; a store's copy never checks. It reads no database. |
+| `POST /v1/events` | One batch: `{schema: 2, install, session, version, channel, platform, arch, client: {name, version}, presentation, events: [{name: "tool", tool, calls, errors} \| {name: "view", calls} \| {name: "file", file, kind}]}` → `204`. `channel` is where the install came from, as its package named it: `claude-github`, `codex-github`, `cursor-github`, `gemini-github`, `claude-desktop`, `claude-directory`, `openai-directory`, `cursor-marketplace`, `dev` or `unknown`. A schema 1 batch (cadgen 0.7.7 to 0.7.11) says how the install was made, `source` (`store` or `manual`), in place of `channel`: its rows keep that as `source`, with the channel `unknown`. `file` is 16 hex characters, an HMAC of the path under a salt that never leaves the machine: distinct files can be counted, not named. One event per tool and per `file`, and one `view` at most. Anything else is `400` and stores nothing (`src/lib/api/events.mjs`). The country Vercel places the request in (`x-vercel-ip-country`, from its IP address) adds the install to `countries` once a week and once a month: totals only, never beside the batch. |
 | `POST /v1/forget` | `{install}`: deletes every row sent under an install id → `204`. `cadgen analytics off` calls it; the random id is the only authority needed. The id rides in the body because Vercel's request logs keep each path beside the caller's IP. |
 | `GET /v1/prune` | The daily cron (`vercel.json`): deletes rows older than 13 months. Needs `Authorization: Bearer $CRON_SECRET`. |
 | `GET /v1/health` | → `200`, or `503` naming a missing setting (`DATABASE_URL`, `CRON_SECRET`), or the database's error code when it cannot take a batch (unreachable, or tables missing a column after a schema change that `schema.sql` was not re-run for). `Deploy Docs` checks it. |
 
+- **Every release keeps counting.** The receiver reads every schema a released
+  cadgen sends, for as long as that release can still be running: a copy nobody
+  updates is counted like a current one. A new schema adds a reader beside the old
+  ones in `events.mjs`, and `schema.sql` only ever adds (a column, a default),
+  never renames or drops one, so it can run before the deploy while the live
+  receiver still writes the columns it knows.
 - **Nothing outside the contract is stored**: unknown fields, tool names that are
   not `cad_*`, free-text strings are refused. No IP address is stored, and the one
   header read, the country, is kept only in `countries`' weekly and monthly totals
@@ -153,7 +188,7 @@ a release of cadgen.
   included. There are no CORS headers.
 - **The privacy policy describes this table.** A new field is a change to
   `src/app/privacy-policy/page.tsx` in the same PR.
-- **Portable.** `src/lib/analytics/handler.mjs` is a plain `fetch(Request) →
+- **Portable.** `src/lib/api/handler.mjs` is a plain `fetch(Request) →
   Response` handler over a store (`insert`, `seen`, `tally`, `forget`, `prune`, `ready`);
   `app/v1/[...route]/route.ts` is all that ties it to Next.js, and to Vercel (the
   country header). `postgres.mjs` is the store for any Postgres (`DATABASE_URL`,
@@ -168,8 +203,15 @@ connection string) and `CRON_SECRET` (any long random string; Vercel sends it to
 the prune cron as `Authorization: Bearer …`). Nothing in GitHub holds them. A
 changed value takes effect with the next deploy, and `Deploy Docs` checks
 `api.texttocad.dev/v1/health`, which answers `503` while either is missing.
-A schema change means running `schema.sql` again (it is idempotent) on the
-database before deploying; a deploy that went out without it fails that check.
+A schema change means running `schema.sql` again (it is idempotent, and only
+adds) on the database before deploying; a deploy that went out without it fails
+that check.
+
+The feed changes with each release, which deploys the site after its PyPI
+upload, so `latest` never names a release that cannot be installed yet. Only a
+copy installed by hand reads it: a store's copy (`claude-directory`,
+`openai-directory`, `cursor-marketplace`) never checks and is never told, since its
+store updates it.
 A Vercel Firewall rate-limit rule on `/v1/*` (answering `429`) is recommended: a
 real client sends at most once a minute per running app, so a per-IP limit well
 above that turns a flood away at no cost to real clients.

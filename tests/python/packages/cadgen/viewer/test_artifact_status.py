@@ -22,8 +22,6 @@ from cadgen.viewer.artifact_status import (
     owns_step_path,
     resolve_artifact_verdict,
 )
-from cadgen.viewer.backend import ForbiddenAssetError
-
 from tests.python.support.store_fixtures import seed_result
 
 STEP_BYTES = b"ISO-10303-21;\nHEADER;\nENDSEC;\nDATA;\nENDSEC;\nEND-ISO-10303-21;\n"
@@ -111,57 +109,28 @@ class Ownership(ArtifactStatusTestCase):
         self.assertTrue(owns_step_path("a\nb.step"))
 
 
-class Containment(ArtifactStatusTestCase):
-    """An out-of-root ref is refused here, before any package is looked at.
+class AbsolutePaths(ArtifactStatusTestCase):
+    """A document is named by its absolute path, wherever it is; anything else is refused here,
+    before any store read -- the HTTP routes answer it with a 400."""
 
-    The whole HTTP chain lives in ``test_security.py`` class L; these pin the
-    resolver itself, which is where the refusal has to land — every compile
-    door is downstream of it.
-    """
+    def test_a_ref_that_is_not_an_absolute_path_raises(self):
+        self.tree.step()
+        for ref in ("model.step", "../folder/model.step", ""):
+            with self.subTest(ref=ref), self.assertRaises(ValueError):
+                resolve_artifact_verdict(ref)
 
-    def test_an_absolute_ref_outside_the_root_raises(self):
-        outside = Path(self.tree.tmp.name, "outside")
-        outside.mkdir()
-        victim = outside / "secret.step"
-        victim.write_bytes(STEP_BYTES)
-        with self.assertRaises(ForbiddenAssetError):
-            resolve_artifact_verdict(str(victim), str(self.tree.root))
-        with self.assertRaises(ForbiddenAssetError):
-            artifact_status(str(victim), str(self.tree.root))
-
-    def test_a_relative_ref_that_walks_out_raises(self):
-        for ref in ("../outside/secret.step", "sub/../../outside/secret.step"):
-            with self.subTest(ref=ref), self.assertRaises(ForbiddenAssetError):
-                resolve_artifact_verdict(ref, str(self.tree.root))
-
-    def test_a_name_prefix_sibling_of_the_root_is_outside(self):
-        sibling = Path(str(self.tree.root) + "-evil")
-        sibling.mkdir()
-        stolen = sibling / "stolen.step"
-        stolen.write_bytes(STEP_BYTES)
-        with self.assertRaises(ForbiddenAssetError):
-            resolve_artifact_verdict(str(stolen), str(self.tree.root))
-
-    def test_an_absolute_in_root_ref_still_resolves(self):
-        # The judgement call: absolute IS the normal spelling here, because the
-        # catalog absolutizes every entry's file and the client echoes it back.
+    def test_an_absolute_ref_resolves_and_a_missing_one_is_a_soft_no(self):
         step = self.tree.step()
-        verdict = resolve_artifact_verdict(step, str(self.tree.root))
-        self.assertEqual(verdict["candidate"], os.path.abspath(step))
-
-    def test_a_missing_in_root_ref_is_still_a_soft_no(self):
-        # Containment raises; a file that simply is not there must not.
-        self.assertEqual(
-            artifact_status("absent.step", str(self.tree.root)),
-            {"state": "failed", "error": "Artifact source not found: absent.step"},
-        )
+        self.assertEqual(resolve_artifact_verdict(step)["candidate"], os.path.abspath(step))
+        absent = str(self.tree.root / "absent.step")
+        self.assertEqual(artifact_status(absent), {"state": "failed", "error": f"Artifact source not found: {absent}"})
 
 
 class Verdicts(ArtifactStatusTestCase):
     def test_a_fresh_package_is_ready(self):
         step = self.tree.step()
         self.tree.package(step)
-        self.assertEqual(artifact_status(step, str(self.tree.root)), {"state": "compiled"})
+        self.assertEqual(artifact_status(step), {"state": "compiled"})
 
     def test_editing_the_file_unresolves_the_package(self):
         step = self.tree.step()
@@ -170,7 +139,7 @@ class Verdicts(ArtifactStatusTestCase):
         # The record lists the document's sha (gate clause 5): different bytes,
         # no result for them.
         self.assertEqual(
-            artifact_status(step, str(self.tree.root)),
+            artifact_status(step),
             {"state": "not-compiled", "reason": "missing_glb"},
         )
 
@@ -179,36 +148,34 @@ class Verdicts(ArtifactStatusTestCase):
         self.tree.package(step)
         Path(step).write_bytes(STEP_BYTES + b"\n")
         Path(step).write_bytes(STEP_BYTES)
-        self.assertEqual(artifact_status(step, str(self.tree.root)), {"state": "compiled"})
+        self.assertEqual(artifact_status(step), {"state": "compiled"})
 
     def test_a_missing_candidate_is_an_error_naming_the_raw_ref(self):
-        self.assertEqual(
-            artifact_status("nope.step", str(self.tree.root)),
-            {"state": "failed", "error": "Artifact source not found: nope.step"},
-        )
+        nope = str(self.tree.root / "nope.step")
+        self.assertEqual(artifact_status(nope), {"state": "failed", "error": f"Artifact source not found: {nope}"})
 
     def test_an_unowned_format_is_an_error(self):
         path = self.tree.root / "notes.py"
         path.write_text("x = 1", encoding="utf-8")
         self.assertEqual(
-            artifact_status(str(path), str(self.tree.root)),
+            artifact_status(str(path)),
             {"state": "failed", "error": f"No render-artifact format owns this entry: {path}"},
         )
 
     def test_the_gate_order_missing_then_components_then_ready(self):
         step = self.tree.step()
-        self.assertEqual(artifact_status(step, str(self.tree.root))["reason"], "missing_glb")
+        self.assertEqual(artifact_status(step)["reason"], "missing_glb")
 
         self.tree.package(step, components=())
-        self.assertEqual(artifact_status(step, str(self.tree.root))["reason"], "missing_step_topology")
+        self.assertEqual(artifact_status(step)["reason"], "missing_step_topology")
 
         self.tree.package(step)
-        self.assertEqual(artifact_status(step, str(self.tree.root)), {"state": "compiled"})
+        self.assertEqual(artifact_status(step), {"state": "compiled"})
 
     def test_a_component_whose_native_payload_is_absent_is_missing_glb(self):
         step = self.tree.step()
         self.tree.package(step, write_payloads=False)
-        self.assertEqual(artifact_status(step, str(self.tree.root))["reason"], "missing_step_topology")
+        self.assertEqual(artifact_status(step)["reason"], "missing_step_topology")
 
 
 class SnapshotShapes(ArtifactStatusTestCase):
@@ -217,7 +184,6 @@ class SnapshotShapes(ArtifactStatusTestCase):
         self.tree.package(step)
         status = artifact_status(
             step,
-            str(self.tree.root),
             snapshot={"writing": True, "busy": False, "runId": "r1", "progress": {"phase": "x"}},
         )
         self.assertEqual(
@@ -228,7 +194,6 @@ class SnapshotShapes(ArtifactStatusTestCase):
         step = self.tree.step()
         status = artifact_status(
             step,
-            str(self.tree.root),
             snapshot={"writing": True, "busy": False, "runId": None, "progress": None},
         )
         self.assertEqual(status, {"state": "compiling"})
@@ -238,7 +203,6 @@ class SnapshotShapes(ArtifactStatusTestCase):
         self.tree.package(step)
         status = artifact_status(
             step,
-            str(self.tree.root),
             snapshot={"writing": False, "busy": True, "runId": "r2", "progress": None},
         )
         self.assertEqual(status, {"state": "compiled", "busy": True, "runId": "r2"})
@@ -247,7 +211,6 @@ class SnapshotShapes(ArtifactStatusTestCase):
         step = self.tree.step()
         status = artifact_status(
             step,
-            str(self.tree.root),
             snapshot={"writing": False, "busy": True, "runId": None, "progress": None},
         )
         self.assertEqual(
@@ -345,7 +308,7 @@ class RetiredRenderModule(ArtifactStatusTestCase):
             Path(step_path + ".js").write_text("export const clips = {};", encoding="utf-8")
         if package:
             self.tree.package(step_path)
-        return artifact_status(name, str(self.tree.root))
+        return artifact_status(step_path)
 
     def test_a_document_with_one_beside_it_is_simply_rendered(self):
         self.assertEqual(self._status(), {"state": "compiled"})

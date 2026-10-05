@@ -7,13 +7,13 @@ import { testHost } from '../../../../../dist/host/testing/host.js';
 
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
-const resource = { kind: 'workspace-file', workspaceId: 'w', path: 'parts/bracket.step', revision: 'r1' } as const;
+const resource = { kind: 'workspace-file', path: '/models/parts/bracket.step', revision: 'r1' } as const;
 const face = { resource, target: { kind: 'cad-selector', selectors: ['o1.f2'] } } as const;
 const composer = { kind: 'composer', available: true } as const;
 
 function mount(host = testHost(), props: Record<string, unknown> = {}) {
   const view = (next: Record<string, unknown>) => <ViewerHostContext.Provider value={host}><div data-slot="cad-file-view">
-    <QuickEdit resource={resource} referencePath={(path: string) => `models/${path}`} {...props} {...next} />
+    <QuickEdit resource={resource} {...props} {...next} />
   </div></ViewerHostContext.Provider>;
   const rendered = render(view({}));
   return { ...rendered, update: (next: Record<string, unknown>) => rendered.rerender(view(next)) };
@@ -119,7 +119,7 @@ it('offers the buttons the host can carry out, the rightmost primary and pressed
   expect(deliver).not.toHaveBeenCalled();
 });
 
-it('copies the note with its references as copied, and its sketch saved as a file it names, keeping it all in the box', async () => {
+it('copies the note with its references by their files\' absolute paths, and its sketch saved as a file it names, keeping it all in the box', async () => {
   let copied: Promise<string> | string = '';
   const saved: string[] = [];
   const host = testHost({
@@ -135,7 +135,7 @@ it('copies the note with its references as copied, and its sketch saved as a fil
   // Copied, nothing has gone yet: the note and what it carries stay, and the button says so.
   await waitFor(() => expect(within(box()!).getByRole('button', { name: 'Prompt copied' })).toBeTruthy());
   expect([field().value, clear.mock.calls.length]).toEqual(['Round this edge.', 0]);
-  expect(await copied).toBe('Round this edge.\n\nFile: models/parts/bracket.step\nReferences:\nmodels/parts/bracket.step#o1.f2\nSketch: /tmp/cadgen-sketches/bracket-sketch.png');
+  expect(await copied).toBe('Round this edge.\n\nFile: /models/parts/bracket.step\nReferences:\n/models/parts/bracket.step#o1.f2\nSketch: /tmp/cadgen-sketches/bracket-sketch.png');
   expect(saved).toEqual(['bracket-sketch.png']);
 });
 
