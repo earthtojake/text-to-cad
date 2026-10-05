@@ -60,12 +60,14 @@ reference host `basic-host` does.
   file the host handed over, with no home and no explorer: the host's own file
   tree is its navigation. Its navbar still has the C logo and its menu, without
   Back to files.
-- **An agent reaches the sidebar too.** Codex runs the sidebar page in a thread, and a server
-  process, of its own, so no thread's agent syncs with it. Each process publishes its sidebar
-  views beside the model library (`cadgen/mcp/sidebar_views.py`), and an agent's `cad_show`,
-  `cad_view` and `cad_screenshot` mean the view a person touched last of its thread's tabs and
-  the sidebar's: a model already in the sidebar is shown there, not in a new tab. Only sidebar
-  views are shared; a thread's tabs are that conversation's.
+- **An agent reads the sidebar too, and shows beside its thread.** Codex runs the sidebar page
+  in a thread, and a server process, of its own, so no thread's agent syncs with it. Each process
+  publishes its sidebar views beside the model library (`cadgen/mcp/sidebar_views.py`), and an
+  agent's `cad_view` and `cad_screenshot` mean the view a person touched last of its thread's
+  tabs and the sidebar's. A model it shows goes to its thread's tab (`cad_open` when there is
+  none): Codex keeps the sidebar page running while the person is in a thread, so a model sent
+  there lands where nobody is looking. Only a `cad_show` that names the sidebar's view reaches
+  it. Only sidebar views are shared; a thread's tabs are that conversation's.
 - **Two requests to the network: the version check, and analytics with consent.**
   Both go to `api.texttocad.dev` (the docs site's `/v1`). Once a day at most, cadgen
   reads the version feed (`cadgen/updates.py`): one anonymous GET, with no id and

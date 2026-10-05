@@ -522,17 +522,18 @@ class Server:
 
     # the agent's tools ----------------------------------------------------------
 
-    def _target(self, context: RequestContext, view_id: Any, *, needs_model: bool) -> Any:
+    def _target(self, context: RequestContext, view_id: Any, *, needs_model: bool, sidebar: bool = True) -> Any:
         """The view the agent means: one it names, else the one a person touched last of its thread's
-        views and the CAD sidebar's -- which another process serves (``sidebar_views.py``), so a
-        model the person is looking at in the sidebar is shown, read and captured there."""
-        return next(iter(self._candidates(context, view_id, needs_model=needs_model)), None)
+        views and, with ``sidebar``, the CAD sidebar's -- which another process serves
+        (``sidebar_views.py``), so what a person selected there is read and captured there."""
+        return next(iter(self._candidates(context, view_id, needs_model=needs_model, sidebar=sidebar)), None)
 
-    def _candidates(self, context: RequestContext, view_id: Any, *, needs_model: bool, files: bool = False) -> list[Any]:
+    def _candidates(self, context: RequestContext, view_id: Any, *, needs_model: bool, files: bool = False,
+                    sidebar: bool = True) -> list[Any]:
         own = [view for view in self.views.live(context.meta.get("threadId"))
                if files or view.surface != "file" or view.id == view_id]
         touched = [(self.views.wall(view.focused), view) for view in own]
-        if self.tabs:
+        if self.tabs and sidebar:
             touched += [(view.touched, view) for view in self.sidebar_views.live()]
         views = [view for _, view in sorted(touched, key=lambda pair: pair[0], reverse=True)]
         if view_id:
@@ -548,7 +549,10 @@ class Server:
             launch = self._mounted(self._launch(self._model_path(arguments.get("path")), surface="inline"))
             return _text(f"Showing {launch['model']} in CAD (view {launch['view']}).", {"launch": launch})
         model = self._model_path(arguments.get("path"))
-        view = self._target(context, arguments.get("view"), needs_model=False)
+        # A model shown goes beside this thread: Codex keeps the sidebar page running while the
+        # person is in a thread, so a model sent there lands where nobody is looking. The sidebar
+        # takes one only when the agent names its view.
+        view = self._target(context, arguments.get("view"), needs_model=False, sidebar=bool(arguments.get("view")))
         if view is None:
             self._model = model
             LOG.info("cad_show: no viewer for thread %s in process %d; live here: %s", context.meta.get("threadId") or "none",

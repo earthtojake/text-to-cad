@@ -270,8 +270,10 @@ class TabServerTest(_Session):
 
 class SidebarAcrossThreadsTest(_Session):
     """Codex runs the sidebar page in a thread, and a server process, of its own. An agent in any
-    thread reaches the sidebar view a person touched last -- shown a model, read, captured -- as it
-    reaches its own tabs, rather than opening a tab beside a model already on screen."""
+    thread reads and captures the sidebar view a person touched last, as it does its own tabs. A
+    model it shows goes beside its thread, though: Codex keeps the sidebar page running while the
+    person is in a thread, so a model sent there lands where nobody is looking (the bug in 0.7.12:
+    "open the tom2.step model" reported it shown, and no tab opened). Only a named view reaches it."""
 
     def setUp(self) -> None:
         super().setUp()
@@ -287,17 +289,19 @@ class SidebarAcrossThreadsTest(_Session):
     def sync_sidebar(self, **extra) -> dict:
         return self.on_sidebar("cad_sync", {"view": "s1", "surface": "sidebar", "model": self.model, **extra})
 
-    def test_an_agent_with_no_tab_shows_reads_and_captures_the_model_in_the_sidebar(self) -> None:
+    def test_an_agent_with_no_tab_opens_one_and_reads_and_captures_the_sidebar(self) -> None:
         self.sync_sidebar(state={"model": self.model, "selection": [f"{self.model}#o1.f1"]}, focused=True)
-        # The model the sidebar shows already: no tab, and nothing to send it.
-        self.assertEqual(self.call("cad_show", {"path": self.bracket})["structuredContent"],
-                         {"delivered": 1, "view": "s1", "sidebar": True})
+        # No tab in this thread: the agent is told to open one, and the sidebar is sent nothing.
+        shown = self.call("cad_show", {"path": self.loose})
+        self.assertEqual(shown["structuredContent"], {"delivered": 0})
+        self.assertIn("call cad_open", shown["content"][0]["text"].lower())
         self.assertEqual(self.sync_sidebar()["events"], [])
         # What the sidebar reported, read at once.
         (view,) = self.call("cad_view")["structuredContent"]["views"]
         self.assertEqual((view["view"], view["surface"], view["selection"]), ("s1", "sidebar", [f"{self.model}#o1.f1"]))
-        # Another model: the sidebar takes it on its next sync.
-        self.assertEqual(self.call("cad_show", {"path": self.loose})["structuredContent"]["view"], "s1")
+        # Named, the sidebar takes another model on its next sync.
+        self.assertEqual(self.call("cad_show", {"path": self.loose, "view": "s1"})["structuredContent"],
+                         {"delivered": 1, "view": "s1", "sidebar": True})
         (event,) = self.sync_sidebar()["events"]
         self.assertEqual((event["type"], event["launch"]["model"]), ("show", self.loose))
         # A capture: the sidebar's process takes the request on a sync, and its answer comes back.
@@ -316,14 +320,14 @@ class SidebarAcrossThreadsTest(_Session):
         viewer.join(10)
         self.assertEqual(shot["content"][0], {"type": "image", "data": "iVBORw0KGgo=", "mimeType": "image/png"})
 
-    def test_the_view_a_person_touched_last_is_meant_and_a_threads_tabs_stay_its_own(self) -> None:
+    def test_a_show_goes_to_the_threads_tab_whatever_was_touched_last(self) -> None:
         self.call("cad_sync", {"view": "t1", "surface": "agent", "model": self.model})
         time.sleep(0.02)
         self.sync_sidebar(focused=True)
-        self.assertEqual(self.call("cad_show", {"path": self.bracket})["structuredContent"]["view"], "s1")
-        time.sleep(0.02)
-        self.call("cad_sync", {"view": "t1", "surface": "agent", "model": self.model, "focused": True})
-        self.assertEqual(self.call("cad_show", {"path": self.bracket})["structuredContent"]["view"], "t1")
+        # The sidebar was touched last, so it is what the agent reads; a model it shows goes to its tab.
+        self.assertEqual(self.call("cad_view")["structuredContent"]["views"][0]["view"], "s1")
+        self.assertEqual(self.call("cad_show", {"path": self.loose})["structuredContent"]["view"], "t1")
+        self.assertEqual(self.sync_sidebar()["events"], [])
         # The sidebar's process sees no thread's tab: only sidebar views are shared.
         self.assertEqual([view["view"] for view in self.on_sidebar("cad_view", {})["views"]], ["s1"])
 
@@ -332,7 +336,8 @@ class SidebarAcrossThreadsTest(_Session):
         stale = time.time() - 120
         for published in (self.tmp / "state" / "sidebar-views").glob("*.json"):
             os.utime(published, (stale, stale))
-        self.assertEqual(self.call("cad_show", {"path": self.bracket})["structuredContent"], {"delivered": 0})
+        self.assertEqual(self.call("cad_view")["structuredContent"]["views"], [])
+        self.assertEqual(self.call("cad_show", {"path": self.bracket, "view": "s1"})["structuredContent"], {"delivered": 0})
 
 
 class DeclaredTabServerTest(_Session):
