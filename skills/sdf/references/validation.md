@@ -35,7 +35,7 @@ The validator should check that:
 - a model with no links, includes, or nested models is an error;
 - unknown elements under model/link/joint/visual/collision/inertial warn (misspelled elements are otherwise silently ignored);
 - the version must be a known SDFormat release (1.4–1.12) or it warns;
-- world- and link-level lights need a valid type (`point`/`directional`/`spot`) and validated poses;
+- root-, world-, and link-level lights need a valid type (`point`/`directional`/`spot`) and validated poses;
 - duplicate names are reported with a path and scope.
 
 ### Poses
