@@ -55,6 +55,10 @@ The plugin for your agent app brings the skills and CAD's viewer, a local server
 (`cadgen mcp`). For an agent without a plugin, install the skills alone. Install
 one or the other in an app, not both: two copies means every skill twice.
 
+Every install below comes from the `install` branch: the plugin alone, one commit
+per release, written once that release is on PyPI. Claude Code and Codex reach it
+through the marketplace; the other commands name it.
+
 Each app's heading also says how to update text-to-cad, and how to reinstall it:
 remove it, then install it again. Updating the plugin updates CAD: the new
 release's cadgen is downloaded the first time it runs, and the skills and the
@@ -148,12 +152,12 @@ Cursor also loads the plugin installed with Claude Code. If the Claude Code plug
 is installed, Cursor already has text-to-cad: skip this.
 
 ```bash
-git clone --depth 1 --branch plugin https://github.com/earthtojake/text-to-cad ~/.cursor/plugins/local/text-to-cad
+git clone --depth 1 --branch install https://github.com/earthtojake/text-to-cad ~/.cursor/plugins/local/text-to-cad
 ```
 
-Cursor reads `.cursor-plugin/plugin.json`: restart Cursor after cloning. The
-`plugin` branch holds only the plugin, one commit per release. Teams can import
-the repository instead, under **Dashboard → Plugins & MCPs → Team Marketplaces**.
+Cursor reads `.cursor-plugin/plugin.json`: restart Cursor after cloning. Teams
+can import the repository instead, under **Dashboard → Plugins & MCPs → Team
+Marketplaces**.
 
 To update, pull the latest release, then restart Cursor:
 
@@ -173,7 +177,7 @@ Grok Build also loads the plugin installed with Claude Code. If the Claude Code
 plugin is installed, Grok Build already has text-to-cad: skip this.
 
 ```bash
-grok plugin install earthtojake/text-to-cad --trust
+grok plugin install earthtojake/text-to-cad@install --trust
 grok plugin enable text-to-cad
 ```
 
@@ -195,12 +199,11 @@ grok plugin uninstall text-to-cad
 ### Gemini
 
 ```bash
-gemini extensions install https://github.com/earthtojake/text-to-cad --consent --auto-update
+gemini extensions install https://github.com/earthtojake/text-to-cad --ref install --consent --auto-update
 ```
 
-Gemini installs the latest release as an extension, with the skills and CAD's
-server, and keeps it up to date (`--auto-update`; `--consent` answers its security
-prompt). Like Grok, it shows tool results as text, so asking it to show a model
+Gemini installs the plugin as an extension, with the skills and CAD's server, and
+keeps it up to date (`--auto-update`; `--consent` answers its security prompt). Like Grok, it shows tool results as text, so asking it to show a model
 gives you a CAD Viewer link.
 
 To update now, run this, then restart Gemini:
@@ -222,17 +225,16 @@ core CAD workflows and let you view CAD files in a localhost web app. Install th
 with the Skills CLI:
 
 ```bash
-npx skills add earthtojake/text-to-cad
+npx skills add earthtojake/text-to-cad#install
 ```
 
 The command asks which agents to install for, and where. To skip the questions,
 name the agent and install for your user:
-`npx skills add earthtojake/text-to-cad -g -a <agent> -y`.
+`npx skills add earthtojake/text-to-cad#install -g -a <agent> -y`.
 
-The skills install from `main`, and each one runs cadgen through uv with the same
-pinned command the plugin's server uses, so uv must be installed. Without the
-plugin there is no CAD server, so the skills open models in the CAD Viewer in
-your browser.
+Each skill runs cadgen through uv with the same pinned command the plugin's server
+uses, so uv must be installed. Without the plugin there is no CAD server, so the
+skills open models in the CAD Viewer in your browser.
 
 **To update or reinstall, run the same command again**, then restart the app.
 `add` re-fetches the package and overwrites what is already installed, so it both

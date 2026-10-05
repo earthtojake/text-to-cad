@@ -102,28 +102,17 @@ where those files ship, so these scripts are what produces them.
   `VERSION` against a ref, for `check-version.sh`. Run by hand and by
   `release-prepare.yml`; see `CONTRIBUTING.md`, "Shipping a release".
 - `check-pr-version.sh HEAD_REPO` — on a pull request's merge commit, says what
-  merging it releases and the command that releases it: nothing when `VERSION`
-  is unchanged against the target branch; otherwise the bump must come from a
-  branch of this repository (never a fork) and pass both the target's version
-  and the latest tag, and the version goes to `GITHUB_OUTPUT`. Called by
-  `version.yml` (Version Check).
-- `release_pr.py published VERSION | await --pr N | resolve --pr N --base BRANCH
-  | land --pr N --sha HEAD [--version X] | settle VERSION` — releases a pull
-  request with PyPI first and `main` after: whether PyPI serves a version
-  (Version Check holds a release's merge on it), waiting for `Test` to pass on a
-  release pull request while keeping it up to date with its base, whether a pull
-  request may be released, waiting for PyPI, re-running the held Version Check
-  and merging, and waiting until the upload is older than PyPI's index cache
-  (`max-age=600`) before anything announces it. Called by `release-prepare.yml`,
-  `release-publish.yml` and `version.yml`; tested by
-  `tests/python/global/test_release_gate.py`.
+  merging it releases: nothing when `VERSION` is unchanged against the target
+  branch; otherwise the bump must come from a branch of this repository (never a
+  fork) and pass both the target's version and the latest tag. Called by
+  `test.yml` (Version Check).
 - `check-version.sh [--incremented-from REF]` — `VERSION` is valid semver, every
   skill pins `cadgen==VERSION`, and (with the flag) `VERSION` is greater than the
-  one at `REF`. Called by `version.yml`, `release-publish.yml`,
+  one at `REF`. Called by `test.yml` (Version Check), `release-publish.yml`,
   `publish-github-release.sh`.
 - `sync-version.mjs [--check]` — stamps the derived versions (package, plugin,
   lockfile and `pyproject.toml` metadata, the cadgen pins) from `VERSION`. Called
-  by `bump-version.sh`, `bundle.sh`, `version.yml`, `release-publish.yml`.
+  by `bump-version.sh`, `bundle.sh`, `test.yml` (Version Check), `release-publish.yml`.
 - `check-wheel-contents.sh` — builds the wheel and asserts the Python modules and
   `_runtime/{node,browser,viewer}` are inside it, with bytes identical to the
   bundled source. The only gate on package data, which fails quietly. Called by
@@ -134,14 +123,16 @@ where those files ship, so these scripts are what produces them.
   `.mcp.json`) and checks it against the portal's documented package rules.
   Called by `release-publish.yml`; tested by
   `tests/python/global/test_plugin_zip.py`.
-- `plugin_branch.py --check | --commit [--parent REF]` — builds the plugin
-  claude.ai's directory follows (`.claude-plugin/` manifest and icon, the Cursor
-  and Gemini manifests, `claude.mcp.json`, `skills/`, `LICENSE`, and the README with outside
-  links pinned to the release commit), checks it against claude.ai's file
-  rules, and with `--commit` commits it on `REF` and prints the commit. Called
-  by `release-publish.yml`, whose `plugin-branch` job pushes it to the `plugin`
-  branch (and to `claude-plugin` until claude.ai's listing moves); tested by
-  `tests/python/global/test_plugin_branch.py`.
+- `plugin_branch.py --check | --commit --copy install|directory [--parent REF]` —
+  builds the plugin alone, as the branches installers follow take it (the
+  manifests and icon, the MCP configs they name, `skills/`, `LICENSE`, and the
+  README with outside links pinned to the release commit), checks it against
+  claude.ai's file rules, and with `--commit` commits it on `REF` and prints the
+  commit. The `install` copy adds the marketplace catalog, naming itself, and
+  Codex's manifest and config; the `directory` copy names claude.ai's directory
+  as its channel. Called by `release-publish.yml`, whose `branches` job pushes
+  the `install` copy to `install` and `plugin` and the `directory` copy to
+  `claude-plugin`; tested by `tests/python/global/test_plugin_branch.py`.
 - `publish-github-release.sh [--target REF] [--dry-run] [--publish]` — creates and
   pushes the `v<VERSION>` tag and the GitHub Release (a draft unless
   `--publish`). Called by `release-publish.yml`; a local run on the merged release
@@ -172,8 +163,8 @@ where those files ship, so these scripts are what produces them.
   reaching into a repo root; then `bundle.sh --check` unless the workflow
   already bundled; then every path `cadgen-runtime.sh --print-outputs` names
   exists and holds no symlink. `--tree-only` stops after the tree rules, which
-  need no runtime, so Version Check (`version.yml`) runs them for every change.
-  Called by `version.yml`, `test.yml`, `release-publish.yml`, the pre-commit hook path. The
+  need no runtime, so Version Check runs them for every change.
+  Called by `test.yml`, `release-publish.yml`, the pre-commit hook path. The
   no-symlink rule is load-bearing: Codex `plugin add` drops symlinks silently.
 - `deploy-vercel-app.sh` — deploys one Vercel project to production and verifies
   its public URLs. Called by `deploy-docs.yml` only.
@@ -214,14 +205,14 @@ manual; their `*.test.mjs` helper units run in `test-js.sh`.
 
 | Workflow | Branches/events | Purpose |
 | -------- | --------------- | ------- |
-| `test.yml` | pushes to and PRs against `main` and `build-test`; manual dispatch; called by `release-publish.yml` | One job per thing that has to work, each run only when the change selects it (`select_checks.py`; `CONTRIBUTING.md#ci` documents the table): the cadgen package suite on Linux and Windows; `core-js` (`@text-to-cad/core`), `web` (shared UI and the web app), `mcp`, skills and docs on Linux; `packaging` bundles from clean (nothing under `_runtime/` is committed, so this is where it comes from), checks the layout, inspects the wheel and runs the installed-mode tests. Each run records the tree it tested; a push whose tree its pull request already tested runs nothing again. Superseded PR runs are cancelled. |
-| `version.yml` (`Version`) | pushes to and PRs against `main` and `build-test`; manual dispatch | Version Check, a required check: canonical version, derived metadata, cadgen pins, the tracked tree's rules; on a pull request, what merging it releases — and for a release into `main`, red until PyPI serves the version, so nobody merges it before its wheel is out. |
-| `release-prepare.yml` (`Prepare Release`) | manual dispatch (`bump` or `set_version`; `target`, `release`, `dry_run`) | Opens a release pull request of what the target already has: `bump-version.sh` on `release/X.Y.Z`, pushed and opened with `PREPARE_RELEASE_TOKEN` so its checks run. With `release` (the default) it waits for `Test` to pass on it, keeping it up to date with the target, and dispatches `Publish Release` with its number. It never merges. `target=build-test` rehearses. |
-| `release-publish.yml` (`Publish Release`) | manual dispatch with `pr` (release that pull request) or without (resume the commit that last moved `VERSION`); pushes to `main` and `build-test` that change `VERSION` (a bump that skipped the pull-request route) | Gate (the pull request open, this repository's, up to date and a real bump; VERSION past the latest tag); the record of a run that tested that tree in full, or else every `test.yml` job on it; the checked OpenAI plugin ZIP (built first, from the untouched release commit) and plugin tree; bundle, wheel build, an `unzip -l` assertion that the shipping wheel carries `_runtime`, install test, distribution artifact; then — on `main` only — PyPI upload, and only after it the merge of the pull request; ten minutes later, docs deploy, `v<VERSION>` tag and GitHub Release carrying the wheel, sdist and plugin ZIP, and the plugin committed onto the `plugin` branch (and `claude-plugin`, until claude.ai's listing moves). On `build-test` it merges, prints what it would have uploaded and tagged, and stops. |
+| `test.yml` | pushes to and PRs against `main` and `build-test`; manual dispatch; called by `release-publish.yml` | One job per thing that has to work, each run only when the change selects it (`select_checks.py`; `CONTRIBUTING.md#ci` documents the table): `Version Check` always (canonical version, derived metadata, cadgen pins, the tracked tree's rules; on a pull request, what merging it releases); the cadgen package suite on Linux and Windows; `core-js` (`@text-to-cad/core`), `web` (shared UI and the web app), `mcp`, skills and docs on Linux; `packaging` bundles from clean (nothing under `_runtime/` is committed, so this is where it comes from), checks the layout, inspects the wheel and runs the installed-mode tests. Each run records the tree it tested; a push whose tree its pull request already tested runs nothing again. Superseded PR runs are cancelled. |
+| `release-prepare.yml` (`Prepare Release`) | manual dispatch (`bump` or `set_version`; `target`, `dry_run`) | Opens a release pull request of what the target already has: `bump-version.sh` on `release/X.Y.Z`, pushed and opened with `PREPARE_RELEASE_TOKEN` so its checks run. It never merges: merging the pull request releases it. `target=build-test` rehearses. |
+| `release-publish.yml` (`Publish Release`) | pushes to `main` and `build-test` that change `VERSION` (a release pull request's merge); manual dispatch (resume the commit that last moved `VERSION`) | Gate (`VERSION` past the latest tag); the record of a run that tested that tree in full, or else every `test.yml` job on it; the checked OpenAI plugin ZIP (built first, from the untouched release commit) and plugin trees; bundle, wheel build, an `unzip -l` assertion that the shipping wheel carries `_runtime`, install test, distribution artifact; then — on `main` only — PyPI upload, a wait until PyPI's index lists the version, the plugin committed onto `install` (and `plugin`) and `claude-plugin`, and after them the docs deploy and the `v<VERSION>` tag and GitHub Release carrying the wheel, sdist and plugin ZIP. On `build-test` it prints what it would have uploaded, pushed and tagged, and stops. |
 | `deploy-docs.yml` (`Deploy Docs`) | manual dispatch; called by `release-publish.yml` | Deploys the docs app to Vercel production from a ref (default `main`): configures Vercel Authentication for preview deployments only, runs `vercel pull/build/deploy --prod`, and verifies the public production URLs. |
 
 `Prepare Release` opens a release pull request, or a pull request carries its own
-bump (`release/bump-version.sh`); `Publish Release` ships either (PyPI, then the
-merge); `Deploy Docs` redeploys. `main` is the one branch: the source, what installers clone, and what
-releases tag; `build-test` is the rehearsal. The CAD Viewer is a local-filesystem
+bump (`release/bump-version.sh`); merging either starts `Publish Release` (PyPI,
+then the install branches); `Deploy Docs` redeploys. `main` is the one branch you
+develop on, and what releases tag; installers follow `install`, written only by
+`Publish Release`; `build-test` is the rehearsal. The CAD Viewer is a local-filesystem
 app with no hosted deployment.

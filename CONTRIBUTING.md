@@ -255,7 +255,7 @@ diff content: a comment in a module selects what the module's code would.
 
 | Check | Runs when a change reaches | What it runs |
 | --- | --- | --- |
-| Version Check (`version.yml`) | every change | canonical version, derived metadata, cadgen pins, the shipping contract's tree rules; on a pull request, what merging it releases, and for a release into `main` a hold until PyPI has the version (see [Shipping a release](#shipping-a-release)) |
+| Version Check | every change | canonical version, derived metadata, cadgen pins, the shipping contract's tree rules; on a pull request, what merging it releases (see [Shipping a release](#shipping-a-release)) |
 | cadgen (Linux/Windows) | `packages/cadgen`, `scripts/bundle`, a cadgen test, prose a cadgen test reads | the cadgen package suite, CAD Viewer backend included; for a change confined to the Viewer's backend or the CAD app's server (`cadgen/viewer`, `cadgen/mcp` and the commands that start them), only the tests that name them or read all of cadgen; for a test file, that file |
 | core-js | `packages/core` (and with it everything), `test-js.sh` and the dependency checks, `apps/docs/src` (the dependency check walks it), the viewer-memory helpers | `@text-to-cad/core`'s units, the dependency and kit-boundary checks, the benchmark helper units |
 | web | `packages/ui`, `apps/web` and the files its Markdown links to, `packages/cadgen` and `scripts/bundle`, `tests/browser`, the viewer scripts | the UI's units and browser specs (ui changes only), the client's units, then the bundle, the launch smoke test and the format/camera gates through the real backend (anything the served client or the backend reads) |
@@ -566,12 +566,14 @@ metadata derived from `VERSION`, asserted by the separate `Version Check` job
 
 ## Releases
 
-A pull request that changes `VERSION` is a release, and `Publish Release`
-ships it — the PyPI wheel first, then the merge — so the canonical repo version,
-the skill pins, the Git tag, the PyPI wheel and the GitHub Release all describe
-one commit. Normal development PRs leave `VERSION` alone. A PR that touches release state must keep `VERSION`, the
-derived metadata and the pins valid; Version Check (`version.yml`) checks all
-three, apart from `Test`, so code tests still run when they are wrong.
+A pull request that changes `VERSION` is a release: merging it starts `Publish
+Release`, which uploads the wheel to PyPI and only then moves the branches
+installers follow, so the canonical repo version, the skill pins, the Git tag,
+the PyPI wheel and the GitHub Release all describe one commit. Normal
+development PRs leave `VERSION` alone. A PR that touches release state must keep
+`VERSION`, the derived metadata and the pins valid; `Test`'s Version Check job
+checks all three, apart from the code tests, so those still run when they are
+wrong.
 
 ### Build artifacts live in the wheel, never in git
 
@@ -599,21 +601,23 @@ Where the built things live instead:
   layout OpenAI's plugin submission portal takes. It is built from the release
   commit and attached to the GitHub Release beside the wheel. See [Submitting
   the plugin to OpenAI](#submitting-the-plugin-to-openai).
-- **The `plugin` branch** is the plugin alone, the folder claude.ai's plugin
-  directory follows. See [The plugin branch](#the-plugin-branch).
+- **The install branches** (`install`, and `claude-plugin` for claude.ai's
+  directory) are the plugin alone, the trees installers take. See
+  [The install branches](#the-install-branches).
 - **A checkout** builds its own: run `scripts/bundle/bundle.sh` once after
   cloning (and after pulling changes to `packages/core`); a missing runtime
   fails with a message that says so.
 
 ### Shipping a release
 
-The bump rides on a pull request, and `Publish Release` (`release-publish.yml`)
-releases it: it uploads the wheel to PyPI first and merges the pull request
-after. A cadgen pin must never reach anything an installer tracks before PyPI
-has that wheel, and Codex's and Claude Code's marketplaces, Grok Build, the
-Skills CLI and the Cursor Marketplace all install from `main`. When `main` got
-the pin first, anyone who updated in the gap got a CAD server that would not
-start (`uvx … --from cadgen==0.7.14` → "there is no version"), for the 25
+Merging a pull request that changes `VERSION` releases it: `Publish Release`
+(`release-publish.yml`) runs on that merge. Installers never take `main` as the
+plugin: they follow the `install` branch (see
+[The install branches](#the-install-branches)), which `Publish Release` moves
+only once PyPI serves the wheel. A cadgen pin must never reach anything an
+installer tracks before PyPI has that wheel. When installers took `main`, anyone
+who updated between a release's merge and its upload got a CAD server that would
+not start (`uvx … --from cadgen==0.7.14` → "there is no version"), for the 25
 minutes the release took to reach PyPI.
 
 A release pull request comes one of two ways. Choose the bump deliberately for
@@ -630,12 +634,9 @@ gh workflow run release-prepare.yml --ref main -f bump=patch     # or minor, maj
 It runs `bump-version.sh` on a fresh `release/X.Y.Z` branch from `main` and
 opens that pull request with `PREPARE_RELEASE_TOKEN`: a pull request the
 workflow's own token opens starts no workflows, so no check would ever run on
-it. Then it waits for `Test` to pass on the pull request, bringing the branch up
-to date whenever `main` moves on (only an up-to-date pull request is released),
-and dispatches `Publish Release` for it (`release_pr.py await`). It never merges
-anything itself. With `-f release=false` it only opens the pull request, which
-is then released like any other; `-f dry_run=true` shows the version changes and
-opens nothing.
+it. It never merges anything: merge the pull request once its checks pass, and
+that merge releases it. `-f dry_run=true` shows the version changes and opens
+nothing.
 
 **On the pull request that should carry it**, a feature branch whose merge
 should be the release:
@@ -653,8 +654,7 @@ branch's, so running it twice changes nothing and running it again after `main`
 moves moves the bump with it; it refuses a branch that does not contain `main`
 yet, whose stamps would conflict.
 
-The pull request's Version Check (`version.yml`, a workflow of its own) says
-what merging it releases and the command that releases it, and refuses:
+The pull request's Version Check says what merging it releases, and refuses:
 
 - a bump from a fork — releases come from branches of this repository only, so
   a contributor's pull request can never start one;
@@ -662,38 +662,28 @@ what merging it releases and the command that releases it, and refuses:
 - stamps out of step with `VERSION` (`check-version.sh`,
   `sync-version.mjs --check`).
 
-Into `main`, it also stays red until PyPI serves the version, so nobody merges
-a release by hand before its wheel is out. A `VERSION` change runs every `Test`
-job (see [CI](#ci)), so the release is tested whole, Windows included, before
-it can ship. When it is green but for that hold, release it (Prepare Release
-does this itself for the pull request it opened):
+A `VERSION` change runs every `Test` job (see [CI](#ci)), so the release is
+tested whole, Windows included, before it can merge. Merge it once everything is
+green: that is the release. `Publish Release`, on the merge commit:
 
-```bash
-gh workflow run release-publish.yml --ref main -f pr=<number>
-```
-
-`Publish Release`, for that pull request:
-
-1. **Gate.** The pull request must be open, ready, this repository's, into the
-   dispatched branch, a real bump, and up to date with the branch, so that the
-   tree it tested is the tree that lands. Then `check-version.sh` and
-   `sync-version.mjs --check`, and `VERSION` must be past the latest release
-   tag (either spelling — `scripts/release/release-tags.sh` is the one place
-   that knows `v0.5.0` and the bare `0.4.28` before it, and it compares
-   versions, not tag strings).
+1. **Gate.** `check-version.sh` and `sync-version.mjs --check`, and `VERSION`
+   must be past the latest release tag (either spelling —
+   `scripts/release/release-tags.sh` is the one place that knows `v0.5.0` and
+   the bare `0.4.28` before it, and it compares versions, not tag strings).
 2. **Tested?** Every `Test` run records the tree it tested
    (`tested-<tree>-<scope>`), and `scripts/github-workflows/tested_tree.py`
    finds the record of a completed, successful `Test` run of this repository
    (never a fork's) that ran every job on exactly this tree: the pull request's
-   own. Then nothing is tested again. Without one, the workflow calls
-   `test.yml` with `full` on the release commit and publishes only if every
-   job passes. No untested tree is published either way.
+   own, since `main` merges only an up-to-date pull request. Then nothing is
+   tested again. Without one, the workflow calls `test.yml` with `full` on the
+   release commit and publishes only if every job passes. No untested tree is
+   published either way.
 3. **Build.** `scripts/release/plugin_zip.py` builds the plugin ZIP from the
    untouched release commit and checks it against the portal's package rules,
    so a package the portal would refuse stops the release before anything
    irreversible; the ZIP is kept as a workflow artifact
    (`cad-openai-plugin-<version>`). `scripts/release/plugin_branch.py --check`
-   does the same for the tree claude.ai's directory gets. Then
+   does the same for both copies of the plugin the install branches get. Then
    `bundle.sh --clean` — which is where cadgen's whole runtime comes into
    existence, Node builders, snapshot bundle and Viewer client alike, because
    the release commit carries none of it — `check-builds.sh`, the
@@ -704,52 +694,55 @@ gh workflow run release-publish.yml --ref main -f pr=<number>
    `cadgen viewer --help`, `cadgen doctor skills/cad` — then
    `scripts/test/test-installed.sh --wheel <built-wheel>`; the distribution is
    uploaded as a workflow artifact (`cadgen-<version>`).
-5. **PyPI** (on `main` only), with `skip-existing`, so a rerun is a no-op.
-6. **Merge.** `scripts/release/release_pr.py land` waits until PyPI serves the
-   version, re-runs the pull request's Version Check, which held the merge until
-   then, and squash-merges it with the workflow's own token, checking that the
-   merge commit holds exactly the tree that was built. Only now does `main` get
-   the pin.
-7. **Settle.** PyPI's index is cached for ten minutes (`max-age=600`), by uv
-   too: a uv that fetched it minutes before the upload would still not see the
-   version. So nothing announces the release until the upload is that old
-   (`release_pr.py settle`).
-8. **Announce** (on `main` only): `Deploy Docs`, which moves the version feed
-   that tells installs a release is out; the `v<VERSION>` tag and the GitHub
-   Release (Gemini's extension installs from it), with the wheel and sdist from
-   that same artifact and the plugin ZIP attached as release assets (PyPI stays
-   the install channel; the release page is the provenance copy); and the
-   plugin tree committed onto `plugin`, which claude.ai's directory and a Cursor
-   install by hand follow. Each names the merge commit.
+5. **PyPI** (on `main` only), with `skip-existing`, so a rerun is a no-op. Then
+   the job waits until PyPI's simple index, which uv resolves a pin through,
+   lists the version: usually seconds.
+6. **Install branches** (on `main` only). `plugin_branch.py` commits the plugin
+   alone onto `install` (and `plugin`, its old name) and `claude-plugin`. Only
+   now does an installer see the version.
+7. **Announce** (on `main` only), after the branches: `Deploy Docs`, which moves
+   the version feed that tells installs a release is out; and the `v<VERSION>`
+   tag and the GitHub Release, with the wheel and sdist from that same artifact
+   and the plugin ZIP attached as release assets (PyPI stays the install
+   channel; the release page is the provenance copy).
 
-When two pull requests bump at once, the first released wins. The other is then
-behind `main` and the gate refuses it until it is updated, which conflicts on
-the stamps if it bumped differently (take `main`'s side and run
+`main` has the new pins from the merge on, a few minutes before PyPI has the
+wheel. Only an install of `main` itself sees that: the Skills CLI or Grok
+without the branch, and the Cursor Marketplace, which takes the repository.
+
+When two pull requests bump at once, the first merged wins. The other then
+conflicts on the stamps if it bumped differently (take `main`'s side and run
 `bump-version.sh` again) or quietly stops changing `VERSION` if it bumped the
 same way — its Version Check then says it releases nothing; bump again to
-release it. A `Prepare Release` run waiting on its pull request updates it the
-same way; on a conflict the run stops, and so does `Publish Release` on a pull
-request that releases nothing: close it and dispatch `Prepare Release` again. A bump that reaches `main` some other way — an admin merge past the
-hold — starts `Publish Release` by its push (only a push that changes `VERSION`
-does) and is published at once: its pin is already out, so the sooner its wheel
-is, the better.
+release it.
 
-### The plugin branch
+### The install branches
 
-`main` is an installable plugin for every host: its root holds every manifest
-(`.claude-plugin/`, `.codex-plugin/`, `.cursor-plugin/`, `gemini-extension.json`)
-and MCP config (`claude.mcp.json`, `codex.mcp.json`, `cursor.mcp.json`), and the
-README's install commands use it. claude.ai's plugin directory treats the folder it follows as
-the whole plugin, though, so it follows the `plugin` branch instead: on `main`
-the monorepo's files, workflows, lockfile and binaries would all be held for a
-reviewer, and every install would copy them. `Publish Release` writes `plugin` on
-each release: one commit whose tree is `.claude-plugin/plugin.json` and
-`icon.png`, `.cursor-plugin/plugin.json`, `gemini-extension.json`,
-`claude.mcp.json` and `cursor.mcp.json` (the CAD server the manifests name),
-`skills/`, `LICENSE` and `README.md`, with each README link to a file outside
-that tree pointed at the release commit on GitHub. A Cursor install by hand
-clones this branch too (the README's `git clone --branch plugin`). A release whose plugin did not change adds no commit.
-The tree is checked against claude.ai's file rules
+Installers clone a branch and take its tree as the plugin. On `main` that tree
+is the monorepo: a Claude Code install copied all of it into its plugin cache
+and ran an npm install of the workspace, 1 GB per install, and claude.ai's
+directory would hold its workflows, lockfile and binaries for a reviewer. `main`
+also has a release's pins from the merge on, before PyPI has the wheel. So
+installers follow branches only `Publish Release` writes, once the release is on
+PyPI: one commit per release whose tree is only the plugin
+(`scripts/release/plugin_branch.py`) — `.claude-plugin/plugin.json` and
+`icon.png`, `.cursor-plugin/plugin.json`, `gemini-extension.json`, the MCP
+configs the manifests name, `skills/`, `LICENSE` and `README.md`, with each
+README link to a file outside that tree pointed at the release commit on GitHub.
+A release whose plugin did not change adds no commit. There are two copies:
+
+- `install`, for every installer that clones a branch. It also carries the
+  marketplace catalog, whose entry names the branch itself, and Codex's manifest
+  and config. `plugin`, its old name, gets the same commit, for the Cursor
+  installs that cloned `plugin` before `install` existed. `install` grew out of
+  `plugin`, so their pulls fast-forward.
+- `claude-plugin`, which claude.ai's directory listing tracks. Its
+  `claude.mcp.json` names the directory as its channel and marks its copies
+  auto-updated (below).
+
+`main` stays an installable plugin, every manifest and MCP config at its root,
+for development installs (`scripts/install/dev_install.py`) and for a command
+that names no branch. Both trees are checked against claude.ai's file rules
 (<https://claude.com/docs/plugins/pre-submission-checklist>) by
 `tests/python/global/test_plugin_branch.py` on every pull request and again
 before each release.
@@ -758,12 +751,14 @@ What each store and installer reads:
 
 | Where | Reads |
 | ----- | ----- |
-| claude.ai's directory | the branch the listing tracks: still `claude-plugin`, the old name, so `Publish Release` pushes the same commit there too |
+| Claude Code, Codex | the catalog on `main` (`earthtojake/text-to-cad`), whose plugin entry names the `install` branch (`"source": {"source": "url", …, "ref": "install"}`), so the plugin comes from `install`. Claude Code's update fetches the branch. Codex's `marketplace upgrade` reinstalls from it whenever `main` has moved, and its background refresh reinstalls when the catalog's version differs from the installed one, so the catalog keeps its stamped version |
+| Grok Build | `install` (`earthtojake/text-to-cad@install`; its registry keeps the ref); `main` without it |
+| Gemini CLI | `install` (`--ref install`, kept for its updates). Without the ref, the latest GitHub Release: with no Gemini archive among its assets, it takes the release's source tarball, the whole repository. A release with a single asset would be taken as the extension, so keep shipping the wheel and sdist beside the ZIP |
+| Skills CLI and skills.sh | `install` (`earthtojake/text-to-cad#install`; the lock file keeps the ref for updates); `main` without it |
+| Cursor, by hand | `install` (`git clone --branch install`) |
+| claude.ai's directory | `claude-plugin` |
 | Cursor Marketplace | the repository's default branch, `main`: its submission takes a repository, not a branch |
 | OpenAI's plugin portal | the plugin ZIP a person uploads from the GitHub Release |
-| Claude Code, Codex, Grok Build | `main`, unless the command names a ref (`owner/repo@ref` for Codex and Grok) |
-| Gemini CLI | the latest GitHub Release: with no Gemini archive among its assets, it takes the release's source tarball, so a new manifest reaches Gemini with the next release. A release with a single asset would be taken as the extension, so keep shipping the wheel and sdist beside the ZIP |
-| Skills CLI and skills.sh | `main` |
 
 Each plugin's CAD server startup config says where its installs come from, its
 install channel, in the server's environment (`CADGEN_INSTALL_CHANNEL`), and adds
@@ -773,23 +768,23 @@ server starts (the Viewer, the daemon) inherit both. cadgen reports the channel
 with analytics and says a new release is out only to a copy that is not
 auto-updated (`cadgen/_internal/channel.py`, `cadgen/updates.py`); it never
 decides by a channel's name, since its core may not know a host. They are
-environment, never flags: `main`'s configs pin the last release, and a cadgen
+environment, never flags: an install of `main` pins the last release, and a cadgen
 ignores a variable it does not know but refuses a flag, so a new setting would
-stop every server installed from `main` until the next release. Nothing works
-them out at runtime, so a plugin that ships somewhere new writes its own, and the
-analytics receiver (`apps/docs/src/lib/api/events.mjs`) learns its channel;
+stop every such server until the next release. Nothing works them out at
+runtime, so a plugin that ships somewhere new writes its own, and the analytics
+receiver (`apps/docs/src/lib/api/events.mjs`) learns its channel;
 `test_plugin_manifests.py`, `test_plugin_branch.py` and `test_plugin_zip.py`
 hold each one:
 
 | Package | Server environment | Told of a release | Written by |
 | ------- | ------------------ | ----------------- | ---------- |
-| `main`'s `claude.mcp.json` (Claude Code, Grok Build, and Cursor through Claude Code's plugins) | `claude-github` | yes | the checked-in file |
-| `main`'s `codex.mcp.json` | `codex-github` | yes | the checked-in file |
-| `main`'s `gemini-extension.json` | `gemini-github`, auto-updated | no: Gemini updates it | the checked-in file |
+| `claude.mcp.json` on `main` and `install` (Claude Code, Grok Build, and Cursor through Claude Code's plugins) | `claude-github` | yes | the checked-in file |
+| `codex.mcp.json` on `main` and `install` | `codex-github` | yes | the checked-in file |
+| `gemini-extension.json` | `gemini-github`, auto-updated | no: Gemini updates it | the checked-in file |
 | the README's Claude Desktop config | `claude-desktop` | yes | the README |
 | `main`'s `cursor.mcp.json`, which the Cursor Marketplace reads | `cursor-marketplace`, auto-updated | no: its store updates it | the checked-in file |
-| the `plugin` branch's `claude.mcp.json`, which claude.ai's directory follows | `claude-directory`, auto-updated | no: its store updates it | `plugin_branch.py` |
-| the `plugin` branch's `cursor.mcp.json`, which a Cursor install by hand clones | `cursor-github` | yes | `plugin_branch.py` |
+| `install`'s `cursor.mcp.json`, which a Cursor install by hand clones | `cursor-github` | yes | `plugin_branch.py` |
+| `claude-plugin`'s `claude.mcp.json`, which claude.ai's directory follows | `claude-directory`, auto-updated | no: its store updates it | `plugin_branch.py` |
 | the OpenAI ZIP's `.mcp.json` | `openai-directory`, auto-updated | no: its store updates it | `plugin_zip.py` |
 | a development install | `dev` | no | `dev_install.py` |
 | a process no plugin's server started: a skill's command, the Viewer a skill opens | none (`unknown`) | the Viewer: a skills-only install | nothing |
@@ -798,11 +793,11 @@ A skill's own `cadgen` command never says a release is out: the same skill files
 ship in every plugin, so it cannot tell which one it came with. The CAD app and
 the Viewer say it.
 
-**Dev note — retire `claude-plugin`.** The portal refuses a tracked-branch change
-while a reviewer has the plugin. Once the claude.ai listing is out of review,
-set its **Branch or tag** to `plugin` on the Settings tab, then remove the
-`claude-plugin` push from `release-publish.yml`'s `plugin-branch` job and delete
-the `claude-plugin` branch.
+**Dev note — `plugin`.** It serves only the Cursor installs that cloned it before
+`install` existed. Once those have moved, drop it from the `branches` job's push
+in `release-publish.yml` and delete the branch. claude.ai's listing stays on
+`claude-plugin`: the portal refuses a tracked-branch change while a reviewer has
+the plugin, and that copy is the directory's anyway.
 
 ### Submitting the plugin to OpenAI
 
@@ -861,14 +856,8 @@ before the deploy that ships it (`apps/docs/README.md`).
 
 ### Resuming and republishing
 
-A run that stopped before the merge — say the pull request fell behind `main`
-while it built — is finished by dispatching it again with the same `pr` once the
-pull request is up to date again. The PyPI upload is idempotent, but an update
-that changes the tree changes what would ship, so the gate's record lookup
-then has to find a run of the new tree; if the version on PyPI was built from
-the old one, bump again rather than ship a different tree under it.
-
-A run that stopped after the merge is finished by dispatching it without one:
+A run that stopped — say the upload went through and the branches push failed —
+is finished by dispatching it:
 
 ```bash
 gh workflow run release-publish.yml --ref main            # or -f publish=false for a draft
@@ -876,40 +865,36 @@ gh workflow run release-publish.yml --ref main            # or -f publish=false 
 
 That publishes the commit on `main` that last moved `VERSION` — the release
 commit, not whatever merged after it — if that version has no tag yet. The
-merge commit holds the pull request's tested tree, so its record is found and
+release commit holds the pull request's tested tree, so its record is found and
 nothing is tested again (a run that tested a commit itself records it inside
 its own run, which does not count, so a resume of one tests again). A dispatch
 uses the workflow file on `main`, so a fix to `release-publish.yml` itself
 applies to the resume; a fix anywhere else in the tree ships with a new bump,
-since the resume builds the release commit as it was. A version whose tag
-exists skips at the gate. A failed docs deploy is redeployed on its own (see
+since the resume builds the release commit as it was. The PyPI upload is
+idempotent. A version whose tag exists skips at the gate. A failed docs deploy
+is redeployed on its own (see
 [Redeploying the docs site](#redeploying-the-docs-site)).
 
 ### Rehearsing on `build-test`
 
 `build-test` is a long-lived branch whose only job is to run `Publish Release`
-without side effects: there it builds, installs and merges, uploads nothing,
+without side effects: there it builds and installs, uploads and pushes nothing,
 and prints what it WOULD have uploaded, deployed and tagged
 (`publish-github-release.sh --dry-run`). To rehearse a release, reset the
-branch and dispatch `Prepare Release` into it:
+branch, open a bump against it, and merge that:
 
 ```bash
 git push --force origin main:build-test     # build-test is throwaway; a past rehearsal leaves it ahead
 gh workflow run release-prepare.yml --ref main -f bump=patch -f target=build-test
 ```
 
-To rehearse a bump carried by a pull request instead, bump a branch of
-`build-test` (`bump-version.sh patch --base origin/build-test`), open its pull
-request against `build-test`, and once `Test` passes release it with
-`gh workflow run release-publish.yml --ref build-test -f pr=<number>`.
-
-Version Check's hold on PyPI is `main`'s alone, since a rehearsal never
-uploads. Pushing a bump to `build-test` directly instead rehearses a bump that
-skipped the pull request, which `Publish Release` tests itself. The gate
-compares the rehearsal's `VERSION` against the repository's REAL tags, exactly
-as `main` would: a rehearsal bump passes the gate and exercises everything. A
-rehearsal consumes that version number on `build-test` only; `main` and the tags
-are untouched, so the real release re-uses it.
+Or bump a branch of `build-test` by hand
+(`bump-version.sh patch --base origin/build-test`) and open its pull request
+against `build-test`. The gate compares the rehearsal's `VERSION` against the
+repository's REAL tags, exactly as `main` would: a rehearsal bump passes the
+gate and exercises everything. A rehearsal consumes that version number on
+`build-test` only; `main` and the tags are untouched, so the real release
+re-uses it.
 
 ### Redeploying the docs site
 
@@ -949,18 +934,16 @@ Check`, `cadgen (Linux)`, `cadgen (Windows)`, `core-js`, `web`, `skills`,
 linear history, no force pushes and no deletions. A job its selection skips
 satisfies its check, so a prose pull request merges on Version Check and the
 light contracts. Changing required check names also requires updating GitHub
-branch protection. Version Check runs in `version.yml`, apart from `Test`, under
-the same check name. `Publish Release` merges a released pull request with the
-workflow's own token, so no admin token is involved. Strict up-to-date is what
-makes a merged tree the tree its pull request's run tested, so the push run
-finds that run's record and tests nothing again; a merge that is not up to date
-is still tested, by its push run (`Publish Release` releases only an up-to-date
-pull request).
+branch protection. Strict up-to-date is what makes a merged tree the tree its
+pull request's run tested, so the push run and `Publish Release` find that run's
+record and test nothing again; a merge that is not up to date is still tested,
+by both.
 `PREPARE_RELEASE_TOKEN` is a personal access token, so that the release pull
-requests `Prepare Release` opens and updates start their checks. It needs
-Contents and Pull requests write on this repository; nothing merges with it, so
-it need not be an admin's.
-`build-test` needs no protection: the irreversible steps never run there. Keep
+requests `Prepare Release` opens start their checks. It needs Contents and Pull
+requests write on this repository; nothing merges with it, so it need not be an
+admin's.
+`build-test` needs no protection: the irreversible steps never run there, and
+neither do the install branches need it: `Publish Release` is their only writer. Keep
 the repository tag ruleset (extend its pattern to cover `v[0-9]*.[0-9]*.[0-9]*`
 beside the bare form) and immutable releases.
 

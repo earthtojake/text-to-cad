@@ -1,22 +1,20 @@
 name: Prepare Release
 
 # The explicit release: a pull request that only bumps VERSION, for releasing what the target
-# branch already has. (A feature pull request can carry its own bump instead; both are released
-# the same way, by Publish Release, which uploads the wheel to PyPI and only then merges.)
+# branch already has. (A feature pull request can carry its own bump instead.) Either way,
+# merging the bump is the release: Publish Release runs on that merge, uploads the wheel to
+# PyPI, and only then moves the install branch installers follow.
 #
 #   gh workflow run release-prepare.yml --ref main -f bump=patch
 #
 # runs scripts/release/bump-version.sh on a fresh `release/X.Y.Z` branch from the target -- the
-# bump, the derived metadata and every cadgen pin -- and opens that pull request. It opens it with
-# PREPARE_RELEASE_TOKEN: a pull request the workflow's own token opens starts no workflows, so no
-# check would ever run on it. With `release` (the default), it then waits for Test to pass on the
-# pull request, bringing the branch up to date whenever the target moves on, and dispatches
-# Publish Release for it. Without, the pull request waits for someone to release it:
+# bump, the derived metadata and every cadgen pin -- and opens that pull request with
+# PREPARE_RELEASE_TOKEN: a pull request the workflow's own token opens starts no workflows, so
+# no check would ever run on it. It never merges anything: a person merges the pull request
+# once its checks pass, and that merge releases it.
 #
-#   gh workflow run release-publish.yml --ref main -f pr=<number>
-#
-# It never merges anything itself. `target=build-test` rehearses: the same pull request against
-# build-test, which Publish Release builds, installs and merges without uploading anything.
+# `target=build-test` rehearses: the same pull request against build-test, whose Publish
+# Release builds and installs without uploading anything.
 
 on:
   workflow_dispatch:
@@ -40,11 +38,6 @@ on:
         required: true
         default: main
         type: string
-      release:
-        description: Release the pull request once Test passes on it. Off, it only opens the pull request.
-        required: true
-        default: true
-        type: boolean
       dry_run:
         description: Show the version changes without opening a pull request.
         required: true
@@ -53,8 +46,6 @@ on:
 
 permissions:
   contents: read
-  # Dispatching Publish Release.
-  actions: write
 
 concurrency:
   group: release-prepare-${{ inputs.target }}
@@ -64,8 +55,7 @@ jobs:
   release-pr:
     name: Release pull request
     runs-on: ubuntu-latest
-    # Test on the pull request takes about 18 minutes, and the branch may need an update or two.
-    timeout-minutes: 120
+    timeout-minutes: 15
 
     steps:
       - name: Check out target branch
@@ -115,7 +105,7 @@ jobs:
           git checkout -B "$branch"
           git commit -qam "Release $VERSION"
           git push --force-with-lease origin "$branch"
-          body="Releases $VERSION: VERSION, the derived metadata and every cadgen pin. Opened by Prepare Release. Publish Release uploads the wheel to PyPI and then merges it (\`gh workflow run release-publish.yml --ref $TARGET -f pr=<this number>\`)."
+          body="Releases $VERSION: VERSION, the derived metadata and every cadgen pin. Opened by Prepare Release. Merging it releases it: Publish Release uploads the wheel to PyPI, then moves the install branch."
           # Only an OPEN pull request from this branch is ours to update: a closed or merged one
           # with the same head name (a previous attempt) cannot be reopened onto a new commit.
           number="$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$branch" --base "$TARGET" --state open --json number --jq '.[0].number // empty')"
@@ -124,24 +114,7 @@ jobs:
             number="$(gh pr view "$url" --repo "$GITHUB_REPOSITORY" --json number --jq .number)"
           fi
           echo "number=$number" >> "$GITHUB_OUTPUT"
-          echo "Release pull request: https://github.com/$GITHUB_REPOSITORY/pull/$number" | tee -a "$GITHUB_STEP_SUMMARY"
-
-      # Test runs every job on a VERSION change. The branch is brought up to date (with the same
-      # token, so its Test runs again) whenever the target moves on: Publish Release releases
-      # only a pull request that is up to date, so the tree it tested is the tree that lands.
-      - name: Wait for Test to pass on it
-        if: ${{ !inputs.dry_run && inputs.release }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.PREPARE_RELEASE_TOKEN }}
-          PR: ${{ steps.pr.outputs.number }}
-        run: python3 scripts/release/release_pr.py await --pr "$PR"
-
-      - name: Release it
-        if: ${{ !inputs.dry_run && inputs.release }}
-        env:
-          GH_TOKEN: ${{ github.token }}
-          PR: ${{ steps.pr.outputs.number }}
-          TARGET: ${{ inputs.target }}
-        run: |
-          gh workflow run release-publish.yml --repo "$GITHUB_REPOSITORY" --ref "$TARGET" -f pr="$PR"
-          echo "Dispatched Publish Release for pull request #$PR." | tee -a "$GITHUB_STEP_SUMMARY"
+          {
+            echo "Release pull request: https://github.com/$GITHUB_REPOSITORY/pull/$number"
+            echo "Merge it once its checks pass: merging it releases $VERSION."
+          } | tee -a "$GITHUB_STEP_SUMMARY"

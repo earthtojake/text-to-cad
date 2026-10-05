@@ -13,8 +13,8 @@
 #
 # Check names are the jobs' concerns: `core-js` tests packages/core, `web` tests
 # packages/ui and apps/web and drives the bundled viewer, `mcp` tests apps/mcp. main
-# requires the seven jobs before `mcp`, and Version Check (version.yml), which holds a
-# release's merge until its wheel is on PyPI.
+# requires Version Check, cadgen (Linux), cadgen (Windows), core-js, web, skills, docs and
+# packaging; not `mcp`.
 name: Test
 
 on:
@@ -103,6 +103,46 @@ jobs:
           path: ${{ runner.temp }}/selection.json
           retention-days: 90
           overwrite: true
+
+  # Every change, selected or not: the canonical version, the derived metadata and the
+  # cadgen pins, and the tracked tree's rules -- and on a pull request, what merging it
+  # releases. A pull request that changes VERSION is a release: merging it starts Publish
+  # Release. Only a branch of this repository may carry one, and only to a version past the
+  # target branch's and the latest tag (scripts/release/check-pr-version.sh).
+  version:
+    name: Version Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.ref }}
+          # The release guard reads the target branch's history and the release tags.
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Check release version
+        run: |
+          scripts/release/check-version.sh
+          node scripts/release/sync-version.mjs --check
+
+      - name: Check what merging releases
+        if: github.event_name == 'pull_request'
+        env:
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+        run: scripts/release/check-pr-version.sh "$HEAD_REPO" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # The shipping contract's tree rules hold for every change, docs and models
+      # included, and need no runtime: no symlink, no LFS or other rewriting
+      # .gitattributes rule, every file under 5 MiB, no skill reaching into a repo root.
+      - name: Check the tracked tree
+        run: scripts/github-workflows/check-builds.sh --tree-only
 
   # The cadgen package suite, CAD Viewer backend included, on both platforms -- or the
   # files of it a change selected (a test edited, a document a test reads).

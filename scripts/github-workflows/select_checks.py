@@ -295,7 +295,6 @@ RULES: tuple[Rule, ...] = (
         "scripts/release/**", "scripts/install/**", "scripts/github-workflows/deploy-vercel-app.sh",
         "scripts/git-hooks/**", "scripts/bench/cadgen-performance/**", "scripts/README.md",
         ".github/workflows/release-publish.yml", ".github/workflows/release-prepare.yml",
-        ".github/workflows/version.yml",
         ".github/workflows/deploy-docs.yml",
         ".github/dependabot.yml", ".github/release.yml", ".githooks/**",
         ".claude-plugin/**", ".codex-plugin/**", ".cursor-plugin/**", "gemini-extension.json",
