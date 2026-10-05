@@ -3,6 +3,9 @@
 from __future__ import annotations
 
 import os
+import multiprocessing.connection as mpc
+import socket
+import struct
 from pathlib import Path
 import tempfile
 import threading
@@ -83,6 +86,101 @@ class _BlockingReceiveConnection:
 
 
 class ChannelCloseOwnershipTest(unittest.TestCase):
+    @unittest.skipIf(os.name == "nt", "POSIX socket descriptor reuse")
+    def test_cancelled_partial_frame_does_not_consume_a_replacement_connection(self):
+        receiver, sender = socket.socketpair()
+        connection = mpc.Connection(receiver.detach())
+        channel = Channel(connection)
+        entered, release = threading.Event(), threading.Event()
+        received, failures = [], []
+        descriptor = connection.fileno()
+        native_read = mpc.Connection._read
+        reads = 0
+
+        def read(fd, size):
+            nonlocal reads
+            if fd == descriptor:
+                reads += 1
+                if reads == 2:
+                    entered.set()
+                    if not release.wait(2):
+                        raise RuntimeError("test did not release the frame reader")
+            return native_read(fd, size)
+
+        def receive():
+            try:
+                received.append(channel.recv())
+            except BaseException as error:
+                failures.append(error)
+
+        replacement_receiver = replacement_sender = None
+        # CPython captures its native read function in _recv defaults. This
+        # private hook synchronizes a partial frame; revisit it on Python upgrades.
+        with mock.patch.object(mpc.Connection._recv, "__defaults__", (read,)):
+            thread = threading.Thread(target=receive, daemon=True)
+            thread.start()
+            try:
+                sender.sendall(struct.pack("!i", 4))
+                self.assertTrue(entered.wait(2), "reader did not consume the partial frame header")
+                channel.close()
+                replacement_receiver, replacement_sender = socket.socketpair()
+                replacement_sender.sendall(b"next")
+                release.set()
+                thread.join(2)
+                self.assertFalse(thread.is_alive(), "cancelled receive did not finish")
+                self.assertEqual(failures, [])
+                self.assertEqual(received, [b""], "cancelled channel stole the replacement connection's bytes")
+                self.assertEqual(replacement_receiver.recv(4), b"next")
+            finally:
+                release.set()
+                channel.close()
+                sender.close()
+                if replacement_sender is not None:
+                    replacement_sender.close()
+                thread.join(2)
+                if replacement_receiver is not None:
+                    replacement_receiver.close()
+
+    @unittest.skipIf(os.name == "nt", "POSIX socket cancellation")
+    def test_cancel_wakes_a_reader_waiting_for_its_first_frame(self):
+        receiver, sender = socket.socketpair()
+        connection = mpc.Connection(receiver.detach())
+        channel = Channel(connection)
+        entered = threading.Event()
+        received, failures = [], []
+        native_poll = connection.poll
+
+        def poll(timeout):
+            entered.set()
+            return native_poll(timeout)
+
+        def receive():
+            try:
+                received.append(channel.recv(60))
+            except BaseException as error:
+                failures.append(error)
+
+        with mock.patch.object(connection, "poll", side_effect=poll):
+            thread = threading.Thread(target=receive, daemon=True)
+            thread.start()
+            try:
+                self.assertTrue(entered.wait(2), "receive did not start polling")
+                channel.close()
+                channel.close()
+                thread.join(2)
+                self.assertFalse(thread.is_alive(), "cancel did not wake the native reader")
+                self.assertEqual(failures, [])
+                self.assertEqual(received, [b""])
+                self.assertTrue(connection.closed)
+                self.assertEqual(channel.recv(0), b"")
+                with self.assertRaises(OSError):
+                    channel.send(b"after-close")
+            finally:
+                channel.close()
+                sender.close()
+                thread.join(2)
+
+
     def test_concurrent_close_has_one_underlying_owner_without_serializing_callers(self) -> None:
         connection = _BlockingCloseConnection()
         channel = Channel(connection)

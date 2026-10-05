@@ -277,7 +277,10 @@ def clear_address(address: str) -> None:
 
 
 class Channel:
-    """A duplex message channel. Wraps a Connection so callers never see the family."""
+    """A duplex message channel. Wraps a Connection so callers never see the family.
+
+    close() cancels active POSIX socket I/O without releasing the descriptor
+    until that operation exits; subsequent receives return end-of-stream."""
 
     def __init__(self, conn) -> None:
         self._conn = conn
@@ -322,6 +325,7 @@ class Channel:
         ``poll`` replaces the socket timeout the old code set per read: a daemon that is
         streaming output keeps resetting the clock, so only genuine silence trips it.
 
+        A cancelled receive is end-of-stream, like a dead peer.
         A dead peer is END-OF-STREAM (``b""``), never an exception, and the two platforms
         report it differently: POSIX as EOFError from ``recv_bytes``, Windows as
         BrokenPipeError — an OSError, not an EOFError — raised by ``recv_bytes`` OR by
@@ -344,6 +348,7 @@ class Channel:
         with self._close_guard:
             if self._closed:
                 return
+            # Claim close ownership while holding the guard, before any native close.
             self._closed = True
             if self._socket_io and self._active_io:
                 # Wake the current I/O without releasing its descriptor. Connection
