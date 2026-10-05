@@ -27,7 +27,7 @@ it('Quick edit is on until the person turns it off: Settings shows it once the s
   expect(result.current.features).toEqual({ quickEdit: true });
   expect(result.current.appSettings).toBeUndefined();
   await act(async () => {});
-  expect(result.current.appSettings).toEqual([expect.objectContaining({ id: 'quickEdit', section: 'Features', label: 'Quick edit', checked: true })]);
+  expect(result.current.appSettings).toEqual([expect.objectContaining({ id: 'quickEdit', label: 'Quick edit', checked: true })]);
   await act(async () => result.current.appSettings![0].onCheckedChange(false));
   expect(host.calls).toEqual([undefined, { quickEdit: false }]);
   expect(result.current.features).toEqual({ quickEdit: false });

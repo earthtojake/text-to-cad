@@ -8,9 +8,13 @@ admission, reservations and reclamation separately.
 from __future__ import annotations
 
 import concurrent.futures
+import io
+import itertools
+import json
 import os
 import pathlib
 import queue
+import subprocess
 import sys
 import time
 import unittest
@@ -19,6 +23,7 @@ from unittest import mock
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 
 from cadgen.daemon import pool as pool_mod  # noqa: E402
+from tests.python.support.tmp_root import generated_cad_directory  # noqa: E402
 
 _RealWorker = pool_mod.Worker
 
@@ -422,6 +427,133 @@ class IdleUnbind(unittest.TestCase):
             self.assertEqual(busy.model, "/m/a.py", "a busy worker was unbound")
             self.assertTrue(idle.model == "" or idle.killed, "the idle worker stayed bound")
         self.pool.release(busy)
+
+
+class _StartingProcess:
+    """Stands in for a starting worker's process: what it writes, and how it ends."""
+
+    pid = 4242
+
+    def __init__(self, argv) -> None:
+        self.argv = argv
+        self.returncode = None
+        self.killed = False
+        self.stdin = io.StringIO()
+        self.stdout = self  # read by Worker._pump, line by line
+        self._lines: queue.Queue = queue.Queue()
+
+    def __iter__(self):
+        return iter(self._lines.get, None)
+
+    def close(self) -> None:
+        pass
+
+    def announce(self) -> None:
+        self._lines.put(json.dumps({"ready": self.pid}) + "\n")
+
+    def exit(self, code: int) -> None:
+        self.returncode = code
+        self._lines.put(None)
+
+    def poll(self):
+        return self.returncode
+
+    def wait(self, timeout=None):
+        if self.returncode is None:
+            raise subprocess.TimeoutExpired(self.argv, timeout)
+        return self.returncode
+
+    def terminate(self) -> None:
+        self.killed = True
+        self.exit(-15)
+
+    kill = terminate
+
+
+class WorkerStart(unittest.TestCase):
+    """A starting worker is judged like a running one: slow while its CPU clock moves, hung when it stops.
+
+    The silence window is zero here, so every read of the frame channel that finds it
+    empty is a window that elapsed: the CPU readings the test hands out decide the start,
+    not the clock.
+    """
+
+    def start(self, cpu):
+        processes: list[_StartingProcess] = []
+
+        def popen(argv, **_kwargs):
+            processes.append(_StartingProcess(argv))
+            return processes[-1]
+
+        self.processes = processes
+        with mock.patch.object(pool_mod.subprocess, "Popen", popen), \
+                mock.patch.object(pool_mod, "SPAWN_TIMEOUT_SECONDS", 0.0), \
+                mock.patch.object(pool_mod, "process_cpu_seconds", cpu):
+            return pool_mod.Worker()
+
+    def test_a_start_whose_cpu_clock_moves_is_waited_for_until_it_announces(self):
+        # A loaded machine (or many workers starting at once) spreads the kernel import's
+        # few CPU seconds over minutes. A fixed wait killed such starts mid-import.
+        readings = itertools.count(1)
+
+        def cpu(pid):
+            reading = next(readings)
+            if reading == 3:
+                self.processes[0].announce()  # the import ends after three silent windows
+            return reading * 0.5
+
+        worker = self.start(cpu)
+        self.addCleanup(worker.kill)
+        self.assertEqual(worker.pid, _StartingProcess.pid)
+        self.assertFalse(self.processes[0].killed)
+
+    def test_a_start_whose_cpu_clock_stands_still_is_killed_and_says_so(self):
+        with self.assertRaises(pool_mod.WorkerGone) as caught:
+            self.start(lambda pid: pool_mod.BUSY_CPU_SECONDS / 2)
+        self.assertTrue(self.processes[0].killed)
+        self.assertIn("did not announce itself", str(caught.exception))
+        self.assertIn("no CPU progress", str(caught.exception))
+
+    def test_a_start_that_exits_says_how(self):
+        def cpu(pid):
+            raise AssertionError("an ended start was judged by its CPU clock")
+
+        def popen(argv, **_kwargs):
+            process = _StartingProcess(argv)
+            process.exit(3)
+            return process
+
+        with mock.patch.object(pool_mod.subprocess, "Popen", popen), \
+                mock.patch.object(pool_mod, "process_cpu_seconds", cpu), \
+                self.assertRaises(pool_mod.WorkerGone) as caught:
+            pool_mod.Worker()
+        self.assertEqual(caught.exception.exit_status, 3)
+        self.assertIn("exited with code 3 before announcing itself", str(caught.exception))
+
+    def test_a_worker_imports_nothing_from_the_folder_it_starts_in(self):
+        # Workers start in the system temp folder, which other programs fill. `python -m`
+        # puts its working directory first on the import path, so whatever is there
+        # shadowed the worker's own modules, and each import that missed it listed the
+        # whole folder again. Here that folder holds a `cadgen` of its own.
+        temporary = generated_cad_directory(prefix="daemon-worker-start-")
+        self.addCleanup(temporary.cleanup)
+        folder = pathlib.Path(temporary.name).resolve()
+        (folder / "cadgen").mkdir()
+        (folder / "cadgen" / "__init__.py").write_text(
+            "raise ImportError('imported from the folder the worker started in')\n", encoding="utf-8")
+        # The worker's own interpreter and flags in that folder, without the kernel import.
+        prelude = "from cadgen.daemon import worker\nworker._warm_imports = lambda: None\nraise SystemExit(worker.serve())\n"
+        real_popen = subprocess.Popen
+
+        def popen(argv, **kwargs):
+            self.assertEqual(argv[-2:], ["-m", "cadgen.daemon.worker"])
+            return real_popen([*argv[:-2], "-c", prelude], **{**kwargs, "cwd": str(folder)})
+
+        with mock.patch.object(pool_mod.subprocess, "Popen", popen):
+            worker = pool_mod.Worker()
+        self.addCleanup(worker.kill)
+        worker.send({"kind": "ping"})
+        self.assertEqual(list(worker.frames(silence_timeout=60)), [{"pong": worker.pid}])
 
 
 class Status(_PoolFixture):

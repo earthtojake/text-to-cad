@@ -86,6 +86,10 @@ jobs:
           if [ -d apps/docs/src/app/v1 ]; then
             urls="$urls https://api.texttocad.dev/v1/health"
           fi
+          # cadgen's version feed, on refs that serve it.
+          if [ -f apps/docs/src/lib/api/versions.mjs ]; then
+            urls="$urls https://api.texttocad.dev/v1/versions"
+          fi
           scripts/github-workflows/deploy-vercel-app.sh \
             --label "Docs app" \
             --project-id "$VERCEL_DOCS_PROJECT_ID" \

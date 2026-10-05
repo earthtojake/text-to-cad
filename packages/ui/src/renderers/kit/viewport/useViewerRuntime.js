@@ -607,7 +607,7 @@ export function useViewerRuntime({
 
       // The canvas is sized 100% by CSS, so the moment its box changes the browser
       // stretches the last picture over the new box. Whatever resizes the box in one
-      // layout step (the file tree opening, the tool stack widened, a window snap) must
+      // layout step (the tool stack widened, a window snap) must
       // therefore be answered with a picture at the new size IN THE FRAME that layout
       // lands in, or the model is painted squashed or stretched until the next frame.
       //

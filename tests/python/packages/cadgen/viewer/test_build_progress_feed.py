@@ -48,9 +48,6 @@ class _NeverCompiles:
     def failure(self, candidate):
         return None
 
-    def shutdown(self):
-        pass
-
 
 class ProgressFeed(unittest.TestCase):
     def setUp(self) -> None:
@@ -69,10 +66,10 @@ class ProgressFeed(unittest.TestCase):
         self.feed = mock.patch.object(build_progress, "_daemon_jobs", side_effect=lambda now: list(self.jobs))
         self.feed.start()
         self.addCleanup(self.feed.stop)
-        self.ops = CadgenOps(str(self.root), client=_NeverCompiles())
+        self.ops = CadgenOps(client=_NeverCompiles())
 
     def status(self) -> dict:
-        return self.ops.artifact_status("STEP/widget.step")
+        return self.ops.artifact_status(str(self.document))
 
     def test_a_cli_build_started_outside_the_viewer_shows_as_compiling_with_its_phase(self):
         self.jobs = [job(self.script, [str(self.document)], "building", phase="Meshing components", detail="finger linkage", done=3, total=9)]
@@ -187,7 +184,7 @@ class ProgressFeed(unittest.TestCase):
             self.document, jobs=[job(self.script, [str(self.document)], "building", phase="p", done=1, total=2)]
         )
         self.assertEqual({"writing": True, "busy": False, "runId": "job-1"}, {k: running[k] for k in ("writing", "busy", "runId")})
-        self.assertEqual("compiling", artifact_status(str(self.document), str(self.root), snapshot=running)["state"])
+        self.assertEqual("compiling", artifact_status(str(self.document), snapshot=running)["state"])
 
 
 if __name__ == "__main__":

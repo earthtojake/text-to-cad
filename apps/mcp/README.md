@@ -16,16 +16,17 @@ extension):
   each thread, and *Open with CAD* for a model file. The agent opens a tab once
   (`cad_open`) and drives it (`cad_show`). A host that declares tabs does what
   Codex does: it starts one `cadgen mcp` process per thread, since a call that
-  names no view reaches the thread's own tab, and it says which folder the
-  thread works in, through MCP roots or Codex's per-call sandbox metadata.
+  names no view reaches the thread's own tab.
 - **Inline (Claude Desktop, and every other MCP Apps host).** Each `cad_show`
-  mounts a viewer card in the chat, and the host keeps the old cards. A card
-  shows the model alone (a compact viewer: no tools, view actions, cube or Quick
-  Edit), goes full size on request, and a newer card retires the older ones.
-  Full size is the whole viewer, Quick Edit included.
+  mounts a viewer card in the chat, and the host keeps the old cards. A card is
+  the whole viewer at card size: its navbar (the logo, which opens the app menu,
+  first; the file name that opens the explorer; the ⋯; then, at the right, the
+  update button, and Full size last where the host can show a view full size), the
+  tools, the view cube with Display and Preview on top of it, and Quick Edit. A
+  newer card retires the older ones.
 
 A client that renders no MCP Apps never loads this page: its `cad_show` answers
-with the model's link in the CAD Viewer, started or reused for its folder
+with the model's link in this machine's CAD Viewer, started if none runs
 (`cadgen/mcp/browser.py`), and opens no browser. `CADGEN_MCP_PRESENTATION=inline`
 tells the server that a client renders apps without advertising them, as the
 reference host `basic-host` does.
@@ -33,53 +34,80 @@ reference host `basic-host` does.
 ## The rules
 
 - **One page, told what to show.** Every surface loads this one page. The tool
-  that opened it returns a *launch* — `page` (`home` or `viewer`), `model`,
-  `root`, `explore` — and the page renders it: the shared CAD viewer over the
-  launch's root, showing its model, or the home. Every launch names a root, the
-  home's included. The server computes the root from the workspace; the page never
-  guesses where it is, and nothing here branches on a surface's name (`surface` is
-  only reported back to the server).
+  that opened it returns a *launch* — `page` (`home` or `viewer`) and `model`, a
+  file's absolute path or none — and the page renders it: the shared CAD viewer
+  showing that file, or the home. Agents name models by absolute path only, and
+  nothing here branches on a surface's name but one: `surface: file` (below).
 - **A launch is enough to start.** It also carries what the server is — its
   `protocol`, `version` and `platform` — and the home's carries its `recents`,
-  so the page asks nothing before it draws. A tab restored from an older build
-  is launched again by today's server; one that still disagrees says so.
-- **Only the sidebar has a home.** `cad_home` is its one launch with `page: home`:
-  the library, and Open with the desktop's chooser. A model opened from it gets a
-  back arrow to it in place of an explorer. Every other surface is about files a
-  thread or chat shows, and has no home: with nothing shown yet it says "Ask the
-  agent to show a model".
-- **Only a project is browsed.** A model in the thread's project (Codex's
-  workspace, or the roots a host lists) browses that project's catalog:
-  `workspace`, with `explore`. A model with no project around it — opened from the
-  home, or outside the workspace — is shown on its own: a `global` root at `/` or
-  its drive, whose catalog holds only the file on screen (a hidden folder it is in
-  included) and which nothing lists. *Open with CAD* and an inline card show one
-  file and have no explorer either.
-- **An agent reaches the sidebar too.** Codex runs the sidebar page in a thread, and a server
-  process, of its own, so no thread's agent syncs with it. Each process publishes its sidebar
-  views beside the model library (`cadgen/mcp/sidebar_views.py`), and an agent's `cad_show`,
-  `cad_view` and `cad_screenshot` mean the view a person touched last of its thread's tabs and
-  the sidebar's: a model already in the sidebar is shown there, not in a new tab. Only sidebar
-  views are shared; a thread's tabs are that conversation's.
-- **One request to the network: analytics, with consent.** There is no update
-  button: the host updates CAD (a plugin directory by itself, an unpinned `uvx` on
-  restart), and GitHub's newest release often runs ahead of what a directory
-  serves. The server notes its use -- tool calls (not the page's plumbing),
-  view activity from each view's sync (`focused`), and the files views show,
-  as salted one-way codes -- and, only with consent, sends it to
-  `api.texttocad.dev` once a minute
-  (`cadgen/analytics.py`; the receiver is the docs site's `/v1`): never a path, an argument
-  or a file. Every install is asked once by the page (`cad_consent`, the
-  shared `ConsentCard` from `@text-to-cad/ui/consent`, the viewer's `notice`: top-right
-  once a model is on screen, Quick Edit under it, never on the home; the browser
-  viewer asks the same way, and one answer counts for both), and nothing is sent before a yes; Settings' Analytics
-  section (`appSettings`) changes the answer later. Settings' Features (Quick edit, on until
-  the person turns it off) is read and changed the same way, through `cad_features`, and kept
+  so the page asks nothing before it draws. A launch from another build (a tab
+  the host restored after an update, a past chat's card) says so: the page
+  reads only its own protocol's.
+- **Every view has a home.** Back to files, first in the menu the navbar's C logo
+  opens, goes to it: the library (the models opened before, in any view or the web
+  viewer) and Open with the desktop's chooser, where this computer has one
+  (`pick`). The sidebar (`cad_home`) and a tab with nothing to show open on it; a
+  model opened from it is shown in place. Under the home's wordmark are GitHub,
+  Discord and X.
+- **A view browses from its file's folder.** The file name in the navbar opens
+  the explorer: one folder at a time, its subfolders and then its CAD files,
+  starting at the file's; the last three folders as a breadcrumb, those above
+  them under "…"; and "Filter files..." finds the files anywhere under the folder
+  (the server's bounded `/__cad/search`). A pick shows the file and closes it.
+  Nothing says where a view may browse: a tab, a card and the web viewer browse
+  the same way.
+- ***Open with CAD* is the file alone.** `cad_file` (`surface: file`) shows the
+  file the host handed over, with no home and no explorer: the host's own file
+  tree is its navigation. Its navbar still has the C logo and its menu, without
+  Back to files.
+- **An agent reads the sidebar too, and shows beside its thread.** Codex runs the sidebar page
+  in a thread, and a server process, of its own, so no thread's agent syncs with it. Each process
+  publishes its sidebar views beside the model library (`cadgen/mcp/sidebar_views.py`), and an
+  agent's `cad_view` and `cad_screenshot` mean the view a person touched last of its thread's
+  tabs and the sidebar's. A model it shows goes to its thread's tab (`cad_open` when there is
+  none): Codex keeps the sidebar page running while the person is in a thread, so a model sent
+  there lands where nobody is looking. Only a `cad_show` that names the sidebar's view reaches
+  it. Only sidebar views are shared; a thread's tabs are that conversation's.
+- **Two requests to the network: the version check, and analytics with consent.**
+  Both go to `api.texttocad.dev` (the docs site's `/v1`). Once a day at most, cadgen
+  reads the version feed (`cadgen/updates.py`): one anonymous GET, with no id and
+  nothing about the person (`CADGEN_UPDATE_CHECK=0` turns it off; never in CI or from
+  a source tree). While this install is behind, the navbar and the home show the
+  shared blue `UpdateButton` (`@text-to-cad/ui/update`): first among the navbar's
+  controls, and on the home a row of its own, labeled Update. A launch carries the
+  notice the server last read, so the button draws with the page; the page reads it
+  again (`/__cad/version`) when the person comes back to it. It opens the update card: "A new version of text-to-cad
+  is available. Send a message to your agent asking it to update to the latest
+  version:", and a prompt worded like the install message, "Update text-to-cad to
+  0.9.0 from https://github.com/earthtojake/text-to-cad".
+  **Send to agent** posts it as the person's message (`ui/message`) where the host
+  takes messages (`chatReach`); elsewhere the card's button is **Copy prompt**.
+  The prompt has a copy icon in its top-right corner either way. **Manual installation** opens the docs site's
+  Install section (`https://www.texttocad.dev/install`) through `ui/open-link`, for a
+  person whose agent cannot do it. The agent does
+  the update, with the commands under its app's heading in the text-to-cad README;
+  nothing here updates anything.
+  A text client gets the same line with its first `cad_show` result. Where the
+  install came from is its channel, which each plugin's startup config names in
+  the server's environment (`CADGEN_INSTALL_CHANNEL`, `cadgen/_internal/channel.py`),
+  with `CADGEN_AUTO_UPDATED=1` where something else keeps the copy up to date: only a
+  copy nothing else updates checks and is told. A store's copy (the Claude or OpenAI directory, the Cursor
+  Marketplace) is left to its store, and Gemini's extension to Gemini. The analytics: the server
+  notes its use -- tool calls (not the page's plumbing), view activity from each
+  view's sync (`focused`), and the files views show (counted as a view adds one to
+  the library), as salted one-way codes --
+  and, only with consent, sends it once a minute (`cadgen/analytics.py`): never a
+  path, an argument or a file. Every install is asked once by the page
+  (`/__cad/analytics`, the shared `ConsentCard` from `@text-to-cad/ui/consent`, the
+  viewer's `notice`: top-right once a model is on screen, Quick Edit under it,
+  never on the home; the browser viewer asks the same way, and one answer counts
+  for both), and nothing is sent before a yes; the app menu's **Share anonymous usage
+  data** (`appSettings`) changes the answer later. Its **Quick edit** (on until
+  the person turns it off) is read and changed the same way, through `/__cad/features`, and kept
   beside the analytics answer (`cadgen/features.py`): one choice for the sidebar, every
-  thread's tab, every inline card and the browser viewer. A plugin directory's install
-  (`cadgen mcp --install store`, stamped by `scripts/release/plugin_zip.py`) is
-  only reported as such. The agent's `cad_analytics` reports the setting and
-  turns it off, never on.
+  thread's tab, every inline card and the browser viewer. The channel is reported with the
+  counts; it decides nothing there. The agent's `cad_analytics` reports the
+  setting and turns it off, never on.
 - **Told how it is presented, before it greets the host.** A host that mounts
   views inline is served the page with `<meta name="cad-presentation"
   content="inline">` in its head: the page offers that host `inline` and
@@ -110,7 +138,14 @@ reference host `basic-host` does.
   test enforces it: `tests/python/global/test_host_neutral_packages.py`.
 - **The web client's data path, unchanged.** `createCadClient` gets a `fetch`
   that sends each request as a `cad_http` tool call against the placeholder
-  origin `http://cad.invalid`; the server hands it to the viewer's own router.
+  origin `http://cad.invalid`; the server hands it to the viewer's own router,
+  over its own model library and analytics. Everything the page asks of the
+  server travels this way, as the web page asks its own: the models, the
+  library and its pictures, Open (`/__cad/pick`), Reveal, the person's analytics
+  answer and features, the update check. Only the clipboard stays the host's: a
+  view copies through its frame. So the page has three tools of its own:
+  `cad_sync`, `cad_capture_reply` and `cad_http`, and a client with no page (a
+  text client) is listed none of them, so nothing there answers for the person.
   The fetch is a distinct function, so workers are handed bytes rather than URLs.
 - **No reply a host cannot read.** A reply is one JSON-RPC message, its body
   base64 (4/3 of its size), and a host that caps one message closes the
@@ -143,8 +178,8 @@ reference host `basic-host` does.
   and pick of the others behind it. So a view syncs (`cad_sync`, `host/sync.ts`),
   answered at once, about once a second (`views.POLL_SECONDS`). Up go what it
   shows — its model, its state whenever that changed (what `cad_view` reads),
-  that a person just touched it — and what it watches: its root's catalog and
-  the build feed of a model being edited. Back come the agent's requests for it
+  that a person just touched it — and what it watches: its file's catalog entry
+  and the build feed of a model being edited. Back come the agent's requests for it
   (`show`, `capture`), the catalog's revision, which the view reads again only
   when it moved, and each feed's status (whether a build is running or failed:
   the view shows the saved file), handed to the client as its
@@ -156,40 +191,39 @@ reference host `basic-host` does.
 | Module | What it is |
 | --- | --- |
 | `bridge.ts` | JSON-RPC 2.0 over `postMessage`: requests, the opening tool's result, host context, teardown |
-| `server.ts` | typed calls to the server's tools, `cad_reveal` among them: the file menu's Reveal, in the desktop's file manager (the server is on the person's machine) |
-| `tunnel.ts` | the `fetch` over `cad_http`, a long body a range at a time |
-| `files.ts` | a filesystem's read-only `FileSource`: the file on screen, never listed, whose copied references name files by absolute path (a project's is `@text-to-cad/ui/catalog`'s, as the web Viewer's is) |
+| `server.ts` | typed calls to the page's three tools: its sync, its answer to a capture, and `cad_http` |
+| `tunnel.ts` | the `fetch` over `cad_http`, a long body a range at a time, and the CAD client over it (`App.tsx` makes one per view): the library, Open, Reveal and the person's settings among its requests |
 | `prompt.ts` | Quick Edit's chat: `chatReach`, what the host's chat takes, and the prompt port over it — Queue through `ui/update-model-context` (a text block titled `Quick edit · <file>` and the sketch's image block, kept until the host clears its model context), Send through `ui/message` — with references as absolute paths (Copy Prompt spells them as copied references are) |
 | `live.ts`, `sync.ts` | the mounted view's live controller (`@text-to-cad/ui/host`'s registry), and its sync (`cad_sync`), every second: its state for the agent, the agent's requests (`show`, `capture`), the catalog's revision and its build feeds |
 | `presentation.ts` | how the host presents the page, and the election that retires older inline views |
 
 `ModelView.tsx` is the page: the shared `CadViewer` (`@text-to-cad/ui/cad-viewer`,
-the one the web Viewer shows) over one launch's root, with this host's ports — its
-tunnel (which also carries a copied prompt's sketch to the server: `attachments`), its
-chat, its file menu (copy path, copy relative path under a project,
-Reveal through `cad_reveal`), the navbar's and Settings' links (Settings' Feedback and an
-alert's Report Issue open a new issue), followed through `ui/open-link`,
-and, on the sidebar, its library, with Open: the desktop's file chooser, where any file can be chosen.
-With no model there it is the home, and a model opened from it has the navbar's back
-arrow to it. A view keeps its tab record in memory (`App.tsx`): the model on screen keeps
+the one the web Viewer shows) showing the launch's model, with this host's ports — its
+tunnel (which also carries a copied prompt's sketch to the server: `attachments`), the
+explorer's folders and search over it (`createCadFileSource`), its chat, its file menu
+(copy path, Reveal), the app menu's links (its Send feedback and
+an alert's Report Issue open a new issue), followed through `ui/open-link`,
+and its home: the library, with Open, the desktop's file chooser, where any file can be
+chosen. A view keeps its tab record in memory (`App.tsx`): the model on screen keeps
 its view — camera, Display settings, pose — through updates of it, and leaving it for
-another model, for the home or for another root drops it, as in the web Viewer. A view the
+another model or the home drops it, as in the web Viewer. A view the
 host creates again (its frame re-created) starts afresh: nothing names a view across its
 frames, so there is nothing to keep its record under. `App.tsx` frames it (full page, or
-an inline card with its full-size button). In a tab, preview's playbar sits on the line of Codex's
+an inline card whose height the host is told; its Full size is the navbar's last control). In a tab, preview's playbar sits on the line of Codex's
 composer, which floats over the page (`--cad-viewport-bottom-center`), and the
-home's and the explorer's lists scroll clear of it (`--cad-host-bottom-inset`).
+home's list scrolls clear of it (`--cad-host-bottom-inset`).
 
 ## Develop
 
 ```bash
 npm run build:mcp                             # packages, then this app
 npm --prefix apps/mcp run test               # jsdom units
-scripts/install/codex-dev-plugin.sh --restart   # run it in the Codex app
-scripts/install/claude-dev-server.sh            # run it in Claude Desktop (then restart it)
+scripts/install/dev_install.py codex --restart  # run it in the Codex app
+scripts/install/dev_install.py claude-desktop   # run it in Claude Desktop (then restart it)
 ```
 
 `scripts/test/test-js.sh --select mcp` is what CI runs: the tests, then the
-build. A checkout's `cadgen mcp` serves `apps/mcp/dist` when it exists
+build. Every host `dev_install.py` takes is in CONTRIBUTING.md ("Test In Agent
+Apps"). A checkout's `cadgen mcp` serves `apps/mcp/dist` when it exists
 (`CADGEN_MCP_APP_DIR` overrides it); a wheel serves `cadgen/_runtime/mcp`,
 built by `scripts/bundle/bundle.sh`.

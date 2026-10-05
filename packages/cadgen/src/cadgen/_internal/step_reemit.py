@@ -97,9 +97,12 @@ def load_materials_config(raw: object, *, where: str) -> dict | None:
     return normalize_materials(raw, where=f"{where} --materials")
 
 
-def load_animation_source(raw: object, *, where: str) -> dict | None:
-    """Embed a JS input file or inline module source, never its source path."""
+def load_animation_source(raw: object, *, where: str, document: Path) -> dict | None:
+    """Embed a JS input file or inline module source, never its source path,
+    refusing what the renderer would refuse for ``document``'s animation."""
+    from cadgen._internal.animation_source import check_animation_exports
     from cadgen._internal.source_sidecar import normalize_animation
+    from cadgen.render import relative_to_cwd
 
     if raw is None:
         return None
@@ -108,7 +111,9 @@ def load_animation_source(raw: object, *, where: str) -> dict | None:
     text = raw.strip()
     if "\n" not in text and not text.startswith(("export ", "//", "/*", "const ", "let ", "var ", "class ", "async ", "function ")):
         text = Path(text).expanduser().read_text(encoding="utf-8")
-    return normalize_animation(text, where=f"{where} --animation")
+    animation = normalize_animation(text, where=f"{where} --animation")
+    check_animation_exports(animation["source"], name=f"{relative_to_cwd(Path(document))} animation")
+    return animation
 
 
 def annotation_digest(kinematics_def: Any | None, appearance: object = None, materials: object = None, animation: object = None) -> str:

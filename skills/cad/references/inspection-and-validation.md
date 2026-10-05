@@ -90,13 +90,10 @@ numeric IDs. Duplicate labels receive numbered aliases in occurrence order;
 resolving the ambiguous bare label raises and lists candidates. No fuzzy
 matching or choosing the first match.
 
-A copied reference's file prefix is the file's path relative to the root of the
-viewer it came from (the folder it serves; for `cad_show`, the thread's project
-folder), or its full path when the model has no project around it, always with
-the file's real name and extension. A relative path resolves from the working
-directory, so from the viewer's root pass the prefix to `read_scene` as is.
-`resolve()` reads the prefix as a path, with `~` expanded, links followed and a
-relative one read from the working directory, and it must name the opened document.
+A copied reference's file prefix is the file's absolute path, with the file's real
+name and extension (in quotes when it holds a space or `#`). `resolve()` reads the
+prefix as a path, with `~` expanded, links followed and a relative one read from the
+working directory, and it must name the opened document.
 A relative prefix that names no file from where you run still matches the end of
 the document's path. A prefix naming a different document is rejected. Do not
 guess between ambiguous files.

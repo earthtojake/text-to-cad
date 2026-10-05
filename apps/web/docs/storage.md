@@ -16,8 +16,9 @@ that interface.
 
 Use query params only for shareable state that should survive copying a URL:
 
-- `file`: active catalog entry, relative to the root served by this instance.
-  The page is the bare origin with `?file=`; there is no `dir` page parameter.
+- `file`: the file on screen, by its absolute path; the bare origin is the home. A
+  relative one (a developer's) resolves against the folder the viewer started in, and
+  the page then names it in full. There is no `dir` page parameter.
 
 Do not put dense viewer state, panel state, drawing state, or per-file controls
 in the URL.
@@ -40,8 +41,8 @@ The record is `{ version, settings, files }`:
 
 | Kept | Where | What |
 | --- | --- | --- |
-| Tab settings | `settings` | `fileTree` (the panel column's width, and the folders open under each root), `toolStack` (the resizable panels' sizes, the folded panels and the closed tree, `kit/tools/toolStackLayout.js`), `appearance` (System, Light or Dark; System until the person picks). |
-| File views | `files[[root id, file path, renderer id]]` | The file's view ([fileView.js](../../../packages/ui/src/renderers/kit/shell/fileView.js)): `camera` (the renderer's own — a scene's pose, lens and projection, restored in place of the open-time fit; a drawing's plane transform), `display` (the Display settings, Clip and Explode included), `playback` (preview's Playback settings: orbit on or off and its speed, Autoplay, and — once chosen — the Speed and Loop the routine plays with, unset meaning the routine's own; kept between leaving and re-entering preview; defaults orbit on at 1×, Autoplay off) and `renderer`, the renderer's own slices, each behind the signature it was written against: a STEP's expanded nodes, hidden parts, isolated assemblies, pose and large-file opt-in; a robot's joint values. A slice whose signature no longer matches the file on screen is dropped; the camera, the display and the playback are always kept. Only the file on screen has a view: leaving it — for another file, or for another root — drops its view (`CadViewer`, after the view's last write as it unmounts), so opening it again starts at the defaults, while a reload of the tab, which shows the same file, brings its view back. |
+| Tab settings | `settings` | `toolStack` (the resizable panels' sizes, the folded panels and the closed tree, `kit/tools/toolStackLayout.js`), `appearance` (System, Light or Dark; System until the person picks), `library` (the home's models as a grid or a list). |
+| File views | `files[[absolute file path, renderer id]]` | The file's view ([fileView.js](../../../packages/ui/src/renderers/kit/shell/fileView.js)): `camera` (the renderer's own — a scene's pose, lens and projection, restored in place of the open-time fit; a drawing's plane transform), `display` (the Display settings, Clip and Explode included), `playback` (preview's Playback settings: orbit on or off and its speed, Autoplay, and — once chosen — the Speed and Loop the routine plays with, unset meaning the routine's own; kept between leaving and re-entering preview; defaults orbit on at 1×, Autoplay off) and `renderer`, the renderer's own slices, each behind the signature it was written against: a STEP's expanded nodes, hidden parts, isolated assemblies, pose and large-file opt-in; a robot's joint values. A slice whose signature no longer matches the file on screen is dropped; the camera, the display and the playback are always kept. Only the file on screen has a view: leaving it — for another file, or for the home — drops its view (`CadViewer`, after the view's last write as it unmounts), so opening it again starts at the defaults, while a reload of the tab, which shows the same file, brings its view back. |
 
 | Not kept | Every open starts it afresh |
 | --- | --- |
@@ -51,8 +52,7 @@ The record is `{ version, settings, files }`:
 | Preview and its camera | Off; its Playback settings are the file's, above |
 | The routine, its time and whether it is playing | At rest |
 | Quick Edit's note | Empty, its box closed |
-| The Select mode filter, hover, menus, the open panel, popovers | The page's own |
-| The open panel of the host's column | `panel: null`: a page load opens a file on its own default |
+| The Select mode filter, hover, menus, popovers | The page's own |
 
 Appearance applies before the first paint: the inline script in
 [index.html](../index.html) reads the same key and applies `settings.appearance`
@@ -69,9 +69,5 @@ importing a renderer never chooses a browser storage backend.
 
 ## localStorage
 
-One key, and it is not viewer state: `cad-viewer:latest-release:v1:<api url>`
-caches the latest-release check ([viewerLinks.js](../src/host/viewerLinks.js))
-so every tab does not ask GitHub again. It is a network cache with a time to
-live, shared by every tab, and it says nothing about what any tab shows. Nothing
-else goes in localStorage: a value that depends on a file, a root, a tab or a
-person's choice belongs in the tab record.
+Nothing goes in localStorage: a value that depends on a file, a tab or a person's
+choice belongs in the tab record.

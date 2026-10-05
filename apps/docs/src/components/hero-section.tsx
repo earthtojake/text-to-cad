@@ -1,19 +1,19 @@
-import Image from "next/image";
-import wordmark from "../../public/brand/logo-texttocad.png";
 import { HeroStepRender } from "@/components/hero-step-render";
+import { LogoBuild } from "@/components/logo-build";
 
 export function HeroSection() {
   return (
     <section className="space-y-8">
       <div className="space-y-6 pt-4 sm:pt-6">
         <h1 className="sr-only">text-to-cad: Give your agent CAD superpowers</h1>
-        <Image
+        <LogoBuild
           id="hero-wordmark"
-          src={wordmark}
+          name="logo-texttocad"
           alt=""
+          width={800}
+          height={137}
           priority
           className="h-auto w-full max-w-[800px]"
-          sizes="(min-width: 848px) 800px, 100vw"
         />
         <p className="text-2xl font-semibold tracking-tight text-foreground sm:text-3xl lg:text-4xl">
           Give your agent CAD superpowers.{" "}
