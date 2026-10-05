@@ -241,26 +241,54 @@ the first thing to read when a run is slow.
 
 ### CI
 
-`test.yml` selects work from the dependency graph. Each job installs only its
-root npm workspaces; Python and the two Playwright browser installations are
-requested separately. A manual dispatch runs every job.
+`test.yml` runs one job per concern, and a change runs only what can break.
+Its first job, `Changed paths`, puts every path the change touches — added,
+modified or deleted, against the target branch as it is now — through
+`scripts/github-workflows/select_checks.py`: a table of the tests that READ each
+path (open it, scan it, import it, build it or run it). A path selects the union
+of every rule it matches; the jobs run on the result, and the Python jobs run
+only the test files it names. A path the table does not know runs everything,
+as do `VERSION` (a release is tested whole), the test machinery (`test.yml`,
+`setup-deps`, `select_checks.py`, the runners' shared parts) and the dependency
+manifests. A manual dispatch runs every job. Selection is by path, never by
+diff content: a comment in a module selects what the module's code would.
 
-| Check | Runs for | Coverage |
+| Check | Runs when a change reaches | What it runs |
 | --- | --- | --- |
-| Version Check | every change | canonical version, derived metadata, skill pins, the shipping contract's tree rules |
-| cadgen (Linux/Windows) | cadgen, core, infrastructure | Python engine, daemon, CLI and viewer backend |
-| core-js | core, infrastructure | `@text-to-cad/core` and benchmark helper units |
-| web | web, UI, core, cadgen, infrastructure | UI and web units, the UI browser specs, bundled launch, format/camera browser checks through the backend |
-| skills | skills or runtime/host contracts | repo policy; skill CLI suites only for skills, cadgen, core or infrastructure |
-| codex | codex, UI, core, cadgen, infrastructure | the CAD app's host-adapter units (jsdom) and its one-file build |
-| docs | docs, skills, cadgen, core, infrastructure | `npm --prefix apps/docs run check`: static asset contract, the analytics receiver's tests (`npm test`), lint, Next build, icon verification |
-| packaging | cadgen, core, UI, web, codex, infrastructure | clean bundle, wheel contents, installed CLI behavior |
+| Version Check | every change | canonical version, derived metadata, cadgen pins, the shipping contract's tree rules; on a pull request, what merging it releases (see [Shipping a release](#shipping-a-release)) |
+| cadgen (Linux/Windows) | `packages/cadgen`, `scripts/bundle`, a cadgen test, prose a cadgen test reads | the cadgen package suite, CAD Viewer backend included; for a change confined to the Viewer's backend or the CAD app's server (`cadgen/viewer`, `cadgen/mcp` and the commands that start them), only the tests that name them or read all of cadgen; for a test file, that file |
+| core-js | `packages/core` (and with it everything), `test-js.sh` and the dependency checks, `apps/docs/src` (the dependency check walks it), the viewer-memory helpers | `@text-to-cad/core`'s units, the dependency and kit-boundary checks, the benchmark helper units |
+| web | `packages/ui`, `apps/web` and the files its Markdown links to, `packages/cadgen` and `scripts/bundle`, `tests/browser`, the viewer scripts | the UI's units and browser specs (ui changes only), the client's units, then the bundle, the launch smoke test and the format/camera gates through the real backend (anything the served client or the backend reads) |
+| mcp | `apps/mcp`, `packages/ui`, `test-js.sh` | the CAD app's host-adapter units (jsdom) and its one-file build |
+| skills | every change | first, with only Python and Node: the light contracts (every policy test that reads the repository's text, and the gcode, sendcutsend and step-parts suites); then, after the full install, the policy tests that load cadgen or its runtime (`packages/cadgen`, `scripts/bundle`), the cad and dxf suites (the same, and each skill's documented examples), dfm and dfam-check (their skills) |
+| docs | `apps/docs`, `scripts/brand`, `test-docs.sh` | `npm --prefix apps/docs run check` (static asset contract, the analytics receiver's tests, lint, Next build, icon verification) and the animated brand marks |
+| packaging | `packages/cadgen`, `packages/ui`, `apps/web`, `apps/mcp`, `scripts/bundle`, the wheel and install scripts | clean bundle, layout, wheel contents, installed CLI behavior |
 
-Here `cadgen`, `core` and `UI` mean their package directories and tests;
-`web`, `codex` and `docs` mean their app directories. Infrastructure includes
-`scripts/`, `.github/`, the root lockfile/manifests and version/plugin metadata.
-Root prose, manual model changes and `LICENSE` run only Version Check. Skill
-and package Markdown is test input and follows its owning component.
+Everything runs for `VERSION`, `package.json`, `package-lock.json`,
+`requirements-dev.txt`, `packages/core`, `scripts/build`, `tests/python/support`,
+the workflow, `setup-deps`, the selector and the runners' shared parts, and any
+path the table does not name. Prose inside a code tree (`packages/**/*.md`,
+`apps/**/*.md`) is read by the light contracts alone — except cadgen's README,
+the wheel's description, and `apps/web`'s Markdown, whose links its tests
+resolve. Root prose, the plugin manifests and configs, the release scripts and
+`models/` run the light contracts and nothing else.
+
+Adding a test that reads a new path means adding the path to the test's rule in
+`select_checks.py`; `tests/python/global/test_ci_workspace_selection.py` holds
+the table to the tree: every policy test is selected by some rule, every test
+path a rule names exists, every rule matches a tracked file, and the routing of
+each kind of change is pinned. Each job installs only what its selected tests
+need: npm workspaces by job, Python and the two Playwright browsers on request,
+and nothing beyond Python and Node for the light contracts (every policy test
+but the selector's `HEAVY_POLICY`, and its `LIGHT_SKILL_TESTS`).
+
+Every run records the tree it tested as an artifact, `tested-<tree>-<scope>`
+(`scope` is `full` or a digest of the selection). A push to `main` whose tree
+its pull request's run already tested with the same selection runs nothing
+again — `main` merges only up-to-date branches, so that is every ordinary merge
+— and `Publish Release` ships a release commit without re-testing it when a run
+here tested its tree in full (`scripts/github-workflows/tested_tree.py`: a
+successful run of this repository, never a fork's).
 
 A skipped job satisfies its required check. Renaming a job renames its required
 check, so it lands together with a matching branch-protection update.
@@ -269,11 +297,12 @@ Every job has a timeout of about twice its slowest recent run, so a hang fails
 in minutes. Within a Python suite, a test file still running after 15 minutes
 prints every thread's stack and fails by name.
 
-A web-only edit does not run the Python engine. A UI edit exercises the web
-host. Core changes reach every consumer. Policy checks for a host edit do not
-also run every skill CLI suite. Windows runs the Python package suite because
-paths, locks, subprocesses, file URLs and daemon behavior are
-platform-sensitive.
+The CAD Viewer's backend and the CAD app's server are leaves of cadgen:
+outside them and the commands that start them, nothing in cadgen imports either
+but `cadgen.viewer.recents`. `test_viewer_and_mcp_boundary.py` holds that, so a
+change confined to one of them can run the cadgen tests that reach it instead of
+the whole suite. Windows runs the Python package suite because paths, locks,
+subprocesses, file URLs and daemon behavior are platform-sensitive.
 
 Viewer browser failures upload bounded renderer-state JSON for three days.
 CI sets `VIEWER_TEST_DIAGNOSTICS_DIR` for this evidence; it does not enable the
@@ -520,14 +549,15 @@ on every push:
   `test_package_boundaries.py` hold the same law.
 
 Every cadgen pin in the tree — the plugin server configs and each skill's launch
-command — names `VERSION`. The release PR stamps them with the bump
-(`sync-version.mjs`), and `scripts/release/check-version.sh` asserts every skill
-pin equals `VERSION` — so a stale pin fails the `Version Check` job.
+command — names `VERSION`. `scripts/release/bump-version.sh` stamps them with the
+bump (`sync-version.mjs`), and `scripts/release/check-version.sh` asserts every
+skill pin equals `VERSION` — so a stale pin fails the `Version Check` job.
 
-The `Test` workflow runs on pushes to `main` and PRs against it: it runs
-`scripts/bundle/bundle.sh --clean` to produce the runtime, checks the layout
-without rebuilding it, runs documentation checks, and runs the code tests
-against that generated output. `main` commits no generated runtime at all —
+The `Test` workflow runs on PRs against `main` and pushes to it, selecting
+the jobs each change can break ([CI](#ci)); a push whose tree its pull request
+already tested runs nothing again, and the `packaging` job builds the runtime
+from clean with `scripts/bundle/bundle.sh --clean` and checks the layout and the
+wheel. `main` commits no generated runtime at all —
 cadgen's Node builders, its snapshot bundle and the Viewer client are built from
 `packages/core`, `packages/ui` and `apps/web` on demand, and ship only inside the
 wheel. What IS committed and therefore checked for freshness is the version
@@ -536,12 +566,12 @@ metadata derived from `VERSION`, asserted by the separate `Version Check` job
 
 ## Releases
 
-Normal development PRs should not bump `VERSION`; release versions are reserved
-for release PRs so the canonical repo version, the skill pins, the Git tag, the
-PyPI wheel and the GitHub Release all describe one commit. PRs that do touch
-release state must keep `VERSION`, the derived metadata and the pins valid; the
-`Test` workflow checks all three in a separate job so code tests still run when
-they are wrong.
+A pull request that changes `VERSION` is a release: merging it publishes that
+version, so the canonical repo version, the skill pins, the Git tag, the PyPI
+wheel and the GitHub Release all describe one commit. Normal development PRs
+leave `VERSION` alone. A PR that touches release state must keep `VERSION`, the
+derived metadata and the pins valid; the `Test` workflow checks all three in a
+separate job (Version Check), so code tests still run when they are wrong.
 
 ### Build artifacts live in the wheel, never in git
 
@@ -577,54 +607,79 @@ Where the built things live instead:
 
 ### Shipping a release
 
-Two GitHub Actions workflows, one release. `Prepare Release`
-(`release-prepare.yml`, manual) is the version bump as a PR; `Publish Release`
-(`release-publish.yml`) fires on the push its merge makes and does everything
-else to that one commit.
+The bump rides on a pull request; `Publish Release` (`release-publish.yml`)
+fires on the push its merge makes and does everything else to that one commit.
+On the branch that should carry the release — a feature branch, or a fresh
+branch from `main` to release what `main` already has:
 
 ```bash
-gh workflow run release-prepare.yml --ref main -f bump=patch
+git fetch origin && git merge origin/main      # the bump is relative to main's VERSION
+scripts/release/bump-version.sh patch           # or minor, major, or an exact X.Y.Z
 ```
 
-`Prepare Release` takes `bump` (`patch|minor|major`), `set_version` (an exact
-X.Y.Z instead of a bump), `target` (the branch the PR is opened against —
-`main`, or `build-test` to rehearse) and `dry_run`. Choose the bump
-deliberately for every release; if a release request does not specify one,
-confirm it rather than assuming. It bumps `VERSION`, stamps the derived
-metadata and every `cadgen==` pin (`sync-version.mjs`: the plugin server configs
-and each skill's launch command), commits on `release/<version>`, opens the PR,
-merges it through the API (the PAT, as before — no "allow auto-merge" setting
-is involved) and deletes the branch. The merged commit is THE release commit.
+Choose the bump deliberately for every release; if a release request does not
+specify one, confirm it rather than assuming. `bump-version.sh` sets `VERSION`
+past `main`'s and stamps the derived metadata and every `cadgen==` pin
+(`sync-version.mjs`: package, plugin and lockfile versions, the plugin server
+configs, each skill's launch command). It works from `main`'s version, not the
+branch's, so running it twice changes nothing and running it again after `main`
+moves moves the bump with it; it refuses a branch that does not contain `main`
+yet, whose stamps would conflict.
 
-`Publish Release`, on that push:
+The pull request's Version Check says what merging it releases, and refuses:
 
-1. `check-version.sh`, then the gate: `VERSION` must be past the latest release
+- a bump from a fork — releases come from branches of this repository only, so
+  a contributor's pull request can never start one;
+- a version that is not past the target branch's and the latest release tag's;
+- stamps out of step with `VERSION` (`check-version.sh`,
+  `sync-version.mjs --check`).
+
+A `VERSION` change runs every `Test` job (see [CI](#ci)), so the release is
+tested whole, Windows included, before it merges. When two pull requests bump
+at once, the first to merge releases. Updating the other then conflicts on the
+stamps if it bumped differently (take `main`'s side and run `bump-version.sh`
+again), or quietly stops changing `VERSION` if it bumped the same way — its
+Version Check then says it releases nothing; bump again to release it.
+
+`Publish Release`, on that push (only a push that changes `VERSION` starts it,
+so an ordinary merge never replaces a release that is waiting its turn):
+
+1. **Gate.** `check-version.sh`, then `VERSION` must be past the latest release
    tag (either spelling — `scripts/release/release-tags.sh` is the one place
    that knows `v0.5.0` and the bare `0.4.28` before it, and it compares
-   versions, not tag strings), or equal to it with the tag missing. Then
-   `scripts/release/plugin_zip.py` builds the plugin ZIP from the untouched
-   release commit and checks it against the portal's package rules, so a
-   package the portal would refuse stops the release before anything
-   irreversible. The ZIP is kept as a workflow artifact
-   (`cad-openai-plugin-<version>`). `scripts/release/plugin_branch.py
-   --check` does the same for the tree claude.ai's directory gets.
-2. `bundle.sh --clean` — which is where cadgen's whole runtime comes into
+   versions, not tag strings).
+2. **Tested?** Every `Test` run records the tree it tested
+   (`tested-<tree>-<scope>`). `main` merges only branches that are up to date,
+   so the release commit's tree is the one its pull request's run tested in
+   full, and `scripts/github-workflows/tested_tree.py` finds that record: a
+   completed, successful `Test` run of this repository (never a fork's) that
+   ran every job on exactly this tree. Then nothing is tested again. Without
+   one — an admin merge, a direct push, a branch merged behind `main` — the
+   workflow calls `test.yml` with `full` on the release commit and publishes
+   only if every job passes. No untested tree is published either way.
+3. **Build.** `scripts/release/plugin_zip.py` builds the plugin ZIP from the
+   untouched release commit and checks it against the portal's package rules,
+   so a package the portal would refuse stops the release before anything
+   irreversible; the ZIP is kept as a workflow artifact
+   (`cad-openai-plugin-<version>`). `scripts/release/plugin_branch.py --check`
+   does the same for the tree claude.ai's directory gets. Then
+   `bundle.sh --clean` — which is where cadgen's whole runtime comes into
    existence, Node builders, snapshot bundle and Viewer client alike, because
-   the release commit carries none of it — then `check-builds.sh`, the docs and
-   code tests, the wheel-contents check, `python -m build`, and an `unzip -l`
-   assertion that the wheel about to ship really holds `_runtime/node`,
-   `_runtime/browser`, `_runtime/viewer` and every `_runtime/native` tracer.
-3. Install test: the built wheel into a fresh venv — `cadgen --help`, `cadgen
-   viewer --help`, `cadgen doctor skills/cad` — then
-   `scripts/test/test-installed.sh --wheel <built-wheel>`; the distribution is uploaded as a workflow
-   artifact (`cadgen-<version>`).
-4. **On `main` only:** PyPI upload (`skip-existing`, so a rerun is a no-op),
+   the release commit carries none of it — `check-builds.sh`, the
+   wheel-contents check, `python -m build`, and an `unzip -l` assertion that
+   the wheel about to ship really holds `_runtime/node`, `_runtime/browser`,
+   `_runtime/viewer` and every `_runtime/native` tracer.
+4. **Install test.** The built wheel into a fresh venv — `cadgen --help`,
+   `cadgen viewer --help`, `cadgen doctor skills/cad` — then
+   `scripts/test/test-installed.sh --wheel <built-wheel>`; the distribution is
+   uploaded as a workflow artifact (`cadgen-<version>`).
+5. **On `main` only:** PyPI upload (`skip-existing`, so a rerun is a no-op),
    `Deploy Docs`, then the `v<VERSION>` tag and the GitHub Release, with the
    wheel and sdist from that same artifact and the plugin ZIP attached as
    release assets (PyPI stays the install channel; the release page is the
    provenance copy), and the plugin tree committed onto `plugin`.
-   Nothing is committed or pushed to `main` after the release PR merge: the tag
-   points at the source commit, and `git describe` on `main` is meaningful.
+   Nothing is committed or pushed to `main` after the merge: the tag points at
+   the source commit, and `git describe` on `main` is meaningful.
 
 ### The plugin branch
 
@@ -759,33 +814,42 @@ Dispatch `Publish Release` on `main`:
 gh workflow run release-publish.yml --ref main            # or -f publish=false for a draft
 ```
 
-It runs against the current head. A run that uploaded the wheel and failed
-before the tag or the docs deploy is finished this way — the PyPI upload is
-idempotent and the tag is still missing, so the gate lets it through. A head
-whose version is already tagged skips at the gate. There is no `bump=none`: a
-version that needs re-preparing goes through `Prepare Release` again.
+It publishes the commit on `main` that last moved `VERSION` — the release
+commit, not whatever merged after it — if that version has no tag yet. A run
+that uploaded the wheel and failed before the tag is finished this way: the
+PyPI upload is idempotent, and the tested-tree record that let the first run
+skip the tests lets this one skip them too. A dispatch uses the workflow file on
+`main`, so a fix to `release-publish.yml` itself applies to the resume; a fix
+anywhere else in the tree ships with a new bump, since the resume builds the
+release commit as it was. A version whose tag exists skips at the gate. A failed
+docs deploy is redeployed on its own (see
+[Redeploying the docs site](#redeploying-the-docs-site)).
 
 ### Rehearsing on `build-test`
 
 `build-test` is a long-lived branch whose only job is to run `Publish Release`
-without side effects. Every push to it (including a rehearsal release PR merge)
-runs the full pipeline through the install test and the artifact upload, then
-prints what it WOULD have uploaded, deployed and tagged
-(`publish-github-release.sh --dry-run`) and stops. To rehearse a release:
+without side effects. A push to it that changes `VERSION` runs the full
+pipeline through the install test and the artifact upload, then prints what it
+WOULD have uploaded, deployed and tagged (`publish-github-release.sh --dry-run`)
+and stops. To rehearse a release, reset the branch and merge a bump into it the
+way `main` gets one:
 
 ```bash
-git push origin main:build-test                                    # or any branch under test
-gh workflow run release-prepare.yml --ref main -f bump=patch -f target=build-test
+git push --force origin main:build-test     # build-test is throwaway; a past rehearsal leaves it ahead
+git switch -c rehearse origin/build-test
+scripts/release/bump-version.sh patch --base origin/build-test
+git commit -am "Rehearse the next patch" && git push -u origin rehearse
+gh pr create --base build-test --title "Rehearse the next patch" --body "Rehearsal."
 ```
 
-The gate compares the rehearsal's `VERSION` against the repository's REAL tags,
-exactly as `main` would — that is the intended behaviour: a rehearsal bump
-passes the gate and exercises everything, while an unbumped push to
-`build-test` (say, a pipeline fix) skips at the gate with the same message
-`main` would give. A rehearsal consumes that version number on `build-test`
-only; `main` and the tags are untouched, so the real release re-uses it. `Test`
-also runs on `build-test` pushes and PRs. `dry_run=true` on `Prepare Release`
-stops after printing the version diff, for changes to the preparation itself.
+`Test` runs on pull requests to `build-test` as it does for `main`; merging the
+pull request after it passes rehearses the path where the record says the tree
+was tested. Pushing the bump to `build-test` directly instead rehearses the
+other path, where `Publish Release` tests the commit itself. The gate compares
+the rehearsal's `VERSION` against the repository's REAL tags, exactly as
+`main` would: a rehearsal bump passes the gate and exercises everything. A
+rehearsal consumes that version number on `build-test` only; `main` and the tags
+are untouched, so the real release re-uses it.
 
 ### Redeploying the docs site
 
@@ -805,12 +869,10 @@ with identical bytes, with no obsolete assets left in the wheel. It leaves the
 checkout's build scratch untouched. Set `CADGEN_WHEEL_OUT_DIR` and
 `CADGEN_KEEP_WHEEL=1` to retain that checked wheel for an installed smoke test.
 
-For local release preparation, use the same scripts the workflow calls:
+To check a bump locally the way the gate and Version Check will:
 
 ```bash
 git fetch --tags origin
-scripts/release/bump-version.sh patch
-node scripts/release/sync-version.mjs
 scripts/release/check-version.sh --incremented-from "refs/tags/$(source scripts/release/release-tags.sh && latest_release_tag)"
 node scripts/release/sync-version.mjs --check
 ```
@@ -824,15 +886,16 @@ draft release unless `--publish` is passed.
 `main` requires a PR with eight stable status checks — `Version
 Check`, `cadgen (Linux)`, `cadgen (Windows)`, `core-js`, `web`, `skills`,
 `docs`, `packaging` — strict (up to date with `main`), squash merges only, a
-linear history, no force pushes and no deletions. A job skipped by its path
-condition satisfies its check, so a prose pull request merges on Version Check
-alone. Changing required check names also requires updating GitHub branch
-protection.
-`Prepare Release`'s PR merges through the same checks via the API (no "allow auto-merge"
-repository setting is needed). `build-test` needs no protection: the
-irreversible steps never run there. Keep the repository tag
-ruleset (extend its pattern to cover `v[0-9]*.[0-9]*.[0-9]*` beside the bare
-form) and immutable releases.
+linear history, no force pushes and no deletions. A job its selection skips
+satisfies its check, so a prose pull request merges on Version Check and the
+light contracts. Changing required check names also requires updating GitHub
+branch protection. Strict up-to-date is what makes a merged tree the tree its
+pull request's run tested, so the push run and `Publish Release` find that
+run's record and test nothing again; a merge that is not up to date is still
+tested, by its push run (and by `Publish Release` before a release).
+`build-test` needs no protection: the irreversible steps never run there. Keep
+the repository tag ruleset (extend its pattern to cover `v[0-9]*.[0-9]*.[0-9]*`
+beside the bare form) and immutable releases.
 
 Dependency updates arrive as Dependabot PRs (`.github/dependabot.yml`: weekly,
 one grouped PR per ecosystem for minor + patch bumps, labelled `dependencies`

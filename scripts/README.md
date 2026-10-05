@@ -44,17 +44,19 @@ where those files ship, so these scripts are what produces them.
 `test/` — test runners.
 
 - `test.sh` — `test-js.sh`, then `test-python.sh`, then `test-global.sh`: the
-  whole tree on one machine. Called by `release-publish.yml`; `test.yml` calls
-  the focused runners per job instead.
+  whole tree on one machine, for a local run; `test.yml` calls the focused
+  runners per job instead.
 - `test-js.sh [--select core|ui|web|mcp|all]` — builds the required shared exports,
   checks dependency boundaries and runs the selected shared JS/UI/web suites.
   Core includes the pure `bench/viewer-memory/` helper units; `mcp` runs the CAD
   app's tests and builds it, since its one-file build is half its contract.
-- `test-python.sh [--keep-going] [--select GROUP] [--print-weights]`
+- `test-python.sh [--keep-going] [--select GROUP] [--print-weights] [PATH...]`
   — the cadgen package suite, then every skill's suite. Each test FILE runs in
   its own interpreter against its own temporary store, `CADGEN_TEST_JOBS` at a
   time (default: the core count; CI sets 4). `--keep-going` runs all suites and
-  reports every failure.
+  reports every failure. PATHs (repo-relative files or directories) narrow the
+  run to the test files at or under them — CI passes what the change selected
+  — and a PATH that holds no test fails the run.
   - `--select` picks one group: `cadgen` (the package suite, CAD Viewer backend
     included), `viewer` (that backend alone, ~11 s), `skills` (every skill's
     suite), `all` (the default).
@@ -65,12 +67,15 @@ where those files ship, so these scripts are what produces them.
   test file under its full dotted path so an import failure names the file, and
   runs the files `--jobs` at a time in their own interpreters. A file still
   running after 15 minutes is hung: it prints every thread's stack and fails.
-- `test-global.sh` — `tests/python/global`, the repo-wide policy suite. Like
-  `test-python.sh`, it builds the `--node` and `--browser` runtime stages and this
-  machine's file tracer first when they are absent: the suites read them and a
-  fresh clone has none.
-- `test-docs.sh` — `npm --prefix apps/docs run check`, pulling the hero assets
-  first. Called by `test.yml` and `release-publish.yml`.
+- `test-global.sh [PATH...]` — `tests/python/global`, the repo-wide policy
+  suite, narrowed to PATHs as `test-python.sh` is. Like `test-python.sh`, it
+  builds the `--node` and `--browser` runtime stages and this machine's file
+  tracer first when they are absent: the suites read them and a fresh clone has
+  none. `PYTHON_TEST_RUNTIME=0` skips that build for a selection that reads none
+  of it (the skills job's light phase); a test that does read it then fails on the
+  missing file.
+- `test-docs.sh` — `npm --prefix apps/docs run check`, then the animated brand
+  marks' tests. Called by `test.yml`.
 - `test-installed.sh` — builds the wheel (or accepts `--wheel PATH` to test
   the exact artifact already built), installs it into a scratch venv and
   exercises cadgen from outside the repo, including `cadgen mcp` serving the
@@ -84,25 +89,30 @@ where those files ship, so these scripts are what produces them.
   gates, exactly what `test.yml` runs.
   `--only NAME` selects a gate; `--out DIR` retains screenshots.
 - `common.sh`, `unittest_files.py` — shared runner pieces (interpreter
-  resolution, fail-closed unittest loading, the per-file parallel run). Sourced
-  by the runners.
+  resolution, path narrowing, fail-closed unittest loading, the per-file
+  parallel run). Sourced by the runners.
 
 `release/` — the version and the release identity.
 
-- `check-pr-version.sh BASE_REF HEAD_REF HEAD_SHA` — rejects VERSION edits
-  outside `release/*`, comparing with the current target branch's merge base
-  so inherited releases are not mistaken for PR edits. Requires fetched remote
-  history; called by `test.yml`.
+- `bump-version.sh major|minor|patch|X.Y.Z [--base REF] [--dry-run]` — makes a
+  branch a release: sets `VERSION` past the one on `REF` (default `origin/main`,
+  fetched first; it must already be merged into the branch) and stamps the
+  derived metadata and every cadgen pin (`sync-version.mjs`). Relative to `REF`,
+  so a second run changes nothing. `--check-incremented-from REF` compares
+  `VERSION` against a ref, for `check-version.sh`. Run by hand; see
+  `CONTRIBUTING.md`, "Shipping a release".
+- `check-pr-version.sh HEAD_REPO` — on a pull request's merge commit, says what
+  merging it releases: nothing when `VERSION` is unchanged against the target
+  branch; otherwise the bump must come from a branch of this repository (never
+  a fork) and pass both the target's version and the latest tag. Called by
+  `test.yml`'s Version Check.
 - `check-version.sh [--incremented-from REF]` — `VERSION` is valid semver, every
   skill pins `cadgen==VERSION`, and (with the flag) `VERSION` is greater than the
-  one at `REF`. Called by `test.yml`, `release-prepare.yml`, `release-publish.yml`,
+  one at `REF`. Called by `test.yml`, `release-publish.yml`,
   `publish-github-release.sh`.
-- `bump-version.sh major|minor|patch | --set-version X.Y.Z [--dry-run]` — writes
-  `VERSION`; `--check-incremented-from REF` compares against a ref. Called by
-  `release-prepare.yml` and `check-version.sh`.
 - `sync-version.mjs [--check]` — stamps the derived versions (package, plugin,
-  lockfile and `pyproject.toml` metadata) from `VERSION`. Called by `bundle.sh`,
-  `test.yml`, `release-prepare.yml`.
+  lockfile and `pyproject.toml` metadata, the cadgen pins) from `VERSION`. Called
+  by `bump-version.sh`, `bundle.sh`, `test.yml`.
 - `check-wheel-contents.sh` — builds the wheel and asserts the Python modules and
   `_runtime/{node,browser,viewer}` are inside it, with bytes identical to the
   bundled source. The only gate on package data, which fails quietly. Called by
@@ -126,10 +136,24 @@ where those files ship, so these scripts are what produces them.
   `--publish`). Called by `release-publish.yml`; a local run on the merged release
   commit is the manual fallback.
 - `release-tags.sh` — sourced helpers for tag spelling (`v0.5.0`, and the bare
-  `0.4.x` releases before 0.5.0). Sourced by `bump-version.sh`,
-  `publish-github-release.sh`, `release-prepare.yml`, `release-publish.yml`.
+  `0.4.x` releases before 0.5.0) and for comparing versions. Sourced by
+  `bump-version.sh`, `check-pr-version.sh`, `publish-github-release.sh`,
+  `release-publish.yml`.
 
 `github-workflows/` — scripts a workflow runs whole.
+
+- `select_checks.py [--paths PATH...]` — what a change can break: maps every
+  changed path through a table of the tests that read it (`RULES`) to the
+  `test.yml` jobs that run and the test files the narrowed jobs take, and names
+  the run's record, `tested-<tree>-<scope>`. A path no rule or `INERT` entry
+  names runs everything. `--paths` prints the selection for a list of paths.
+  Called by `test.yml`'s first job; held to the tree by
+  `tests/python/global/test_ci_workspace_selection.py`. See `CONTRIBUTING.md#ci`.
+- `tested_tree.py NAME...` — finds the successful `test.yml` run of this
+  repository (never a fork's) that recorded one of the NAMEs: the run that
+  already tested a tree. Called by `select_checks.py` on a push, and by
+  `release-publish.yml`'s gate, which tests the release commit itself when it
+  finds none; tested by `tests/python/global/test_release_gate.py`.
 
 - `check-builds.sh [--skip-bundle-check | --tree-only]` — the shipping contract: no tracked
   symlink anywhere, no `.gitattributes` rule that rewrites files at checkout or
@@ -179,12 +203,11 @@ manual; their `*.test.mjs` helper units run in `test-js.sh`.
 
 | Workflow | Branches/events | Purpose |
 | -------- | --------------- | ------- |
-| `test.yml` | pushes to `main`; PRs to `main`; manual dispatch | One job per thing that has to work, each conditional on the paths that can break it (`CONTRIBUTING.md` documents the graph): `Version Check` always; the cadgen package suite on Linux and Windows; `core-js` (`@text-to-cad/core`), `web` (shared UI and the web app), skills and docs on Linux; `packaging` bundles from clean (nothing under `_runtime/` is committed, so this is where it comes from), checks the layout, inspects the wheel and runs the installed-mode tests. Superseded PR runs are cancelled. |
-| `release-prepare.yml` (`Prepare Release`) | manual dispatch | The version bump as a PR: bumps `VERSION`, stamps metadata and skill pins, opens `release/X.Y.Z` against `target` (default `main`; `build-test` rehearses) and merges it. The merge is what runs `Publish Release`. |
-| `release-publish.yml` (`Publish Release`) | pushes to `main` and `build-test`; manual dispatch (resume/republish the head) | Gate (VERSION past the latest tag, or untagged), bundle, tests, wheel build, an `unzip -l` assertion that the shipping wheel carries `_runtime`, install test, distribution artifact, and the checked OpenAI plugin ZIP (built first, from the untouched release commit) and plugin tree; then — on `main` only — PyPI upload, docs deploy, `v<VERSION>` tag and GitHub Release carrying the wheel, sdist and plugin ZIP, and the plugin committed onto the `plugin` branch (and `claude-plugin`, until claude.ai's listing moves). On `build-test` it prints what it would have tagged and stops. |
+| `test.yml` | pushes to and PRs against `main` and `build-test`; manual dispatch; called by `release-publish.yml` | One job per thing that has to work, each run only when the change selects it (`select_checks.py`; `CONTRIBUTING.md#ci` documents the table): `Version Check` always; the cadgen package suite on Linux and Windows; `core-js` (`@text-to-cad/core`), `web` (shared UI and the web app), `mcp`, skills and docs on Linux; `packaging` bundles from clean (nothing under `_runtime/` is committed, so this is where it comes from), checks the layout, inspects the wheel and runs the installed-mode tests. Each run records the tree it tested; a push whose tree its pull request already tested runs nothing again. Superseded PR runs are cancelled. |
+| `release-publish.yml` (`Publish Release`) | pushes to `main` and `build-test` that change `VERSION`; manual dispatch (resume the commit that last moved `VERSION`) | Gate (VERSION past the latest tag); the record of a run that tested the release commit's tree in full, or else every `test.yml` job on that commit; the checked OpenAI plugin ZIP (built first, from the untouched release commit) and plugin tree; bundle, wheel build, an `unzip -l` assertion that the shipping wheel carries `_runtime`, install test, distribution artifact; then — on `main` only — PyPI upload, docs deploy, `v<VERSION>` tag and GitHub Release carrying the wheel, sdist and plugin ZIP, and the plugin committed onto the `plugin` branch (and `claude-plugin`, until claude.ai's listing moves). On `build-test` it prints what it would have tagged and stops. |
 | `deploy-docs.yml` (`Deploy Docs`) | manual dispatch; called by `release-publish.yml` | Deploys the docs app to Vercel production from a ref (default `main`): configures Vercel Authentication for preview deployments only, runs `vercel pull/build/deploy --prod`, and verifies the public production URLs. |
 
-`Prepare Release` bumps, `Publish Release` ships, `Deploy Docs`
-redeploys. `main` is the one branch: the source, what installers clone, and what
+A pull request bumps (`release/bump-version.sh`), `Publish Release` ships,
+`Deploy Docs` redeploys. `main` is the one branch: the source, what installers clone, and what
 releases tag; `build-test` is the rehearsal. The CAD Viewer is a local-filesystem
 app with no hosted deployment.

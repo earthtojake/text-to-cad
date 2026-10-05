@@ -18,33 +18,41 @@ an installable plugin too: every manifest and MCP config lives at its root.
 
 ## Release Workflow
 
-Do not bump the canonical release version in `VERSION` during normal
-development work; the `Test` workflow refuses a PR that changes `VERSION` from
-any branch but `release/*`. Releases are two GitHub Actions workflows:
+A pull request that changes `VERSION` is a release: merging it publishes that
+version. Never bump during normal development work. When asked to make or ship a
+release, bump on the pull request that should carry it — or on a fresh branch
+from `main`, for a release of what `main` already has — with
+`scripts/release/bump-version.sh <patch|minor|major|X.Y.Z>`, which sets `VERSION`
+past `main`'s and stamps the derived metadata and every `cadgen==` pin with it.
+Never pick the bump yourself: if the request does not name patch, minor, major,
+or an exact version, ask which one. Merging is releasing, so never merge one
+without the user's explicit word.
 
-- `Prepare Release` (`release-prepare.yml`, manual): opens and merges a release
-  PR against `main` that bumps `VERSION`, the derived metadata and every
-  skill's `cadgen==` pin together.
-- `Publish Release` (`release-publish.yml`): fires on the push that merge makes.
-  Bundles, tests, builds the `cadgen` wheel, installs and exercises it, keeps
-  the distribution as a workflow artifact, then — on `main` only — uploads to
-  PyPI, deploys the docs site, and tags (`v<VERSION>`; releases before 0.5.0
-  are bare `0.4.x` tags) + GitHub-Releases that same merged commit with the
-  wheel and sdist that went to PyPI attached as release assets, plus the
-  plugin ZIP that a person uploads to OpenAI's plugin portal, which has no API.
-  It also commits the plugin alone (Claude, Cursor and Gemini manifests, icon,
-  `claude.mcp.json`, `skills/`, `LICENSE`, README) onto the `plugin` branch,
-  which claude.ai's plugin directory follows (`scripts/release/plugin_branch.py`).
+- `Test`'s Version Check vets the bump: a branch of this repository only (a fork
+  cannot release), a version past `main`'s and the latest tag, every stamp in
+  step. A `VERSION` change runs every `Test` job, so a release is tested whole.
+- `Publish Release` (`release-publish.yml`) fires on the push that merge makes
+  (only a push that changes `VERSION` starts it). When a `Test` run recorded the
+  release commit's exact tree as tested in full — its pull request's run, since
+  `main` merges only branches that are up to date — it does not test again;
+  otherwise it runs every `Test` job on the release commit first. Then it builds
+  the plugin ZIP, the bundle and the `cadgen` wheel and sdist, installs and
+  exercises the wheel, keeps the distribution as a workflow artifact, and — on
+  `main` only — uploads to PyPI, deploys the docs site, and tags (`v<VERSION>`;
+  releases before 0.5.0 are bare `0.4.x` tags) + GitHub-Releases that same
+  commit with the wheel and sdist that went to PyPI attached as release assets,
+  plus the plugin ZIP that a person uploads to OpenAI's plugin portal, which has
+  no API. It also commits the plugin alone (Claude, Cursor and Gemini manifests,
+  icon, `claude.mcp.json`, `skills/`, `LICENSE`, README) onto the `plugin`
+  branch, which claude.ai's plugin directory follows
+  (`scripts/release/plugin_branch.py`).
 
-When asked to publish, make, or ship a release, dispatch `Prepare Release` on
-`main`. Never pick the semver bump yourself: if the request does not name patch,
-minor, major, or an exact version, ask which one before dispatching. To resume a
-run that uploaded the wheel but failed before the tag or the docs deploy, or to
-republish the current head, dispatch `Publish Release` on `main` (`publish=false`
-leaves the GitHub Release as a draft). `target=build-test` on `Prepare Release`
-is the rehearsal — the same PR against `build-test`, whose pushes run `Publish
-Release` without PyPI, docs or tag — and is never a release; use it only when the
-user explicitly asks to test the pipeline.
+To resume a run that uploaded the wheel but failed before the tag or the docs
+deploy, dispatch `Publish Release` on `main` (`publish=false` leaves the GitHub
+Release as a draft): it publishes the commit that last moved `VERSION`, if that
+version has no tag yet. `build-test` is the rehearsal branch — a bump merged into
+it runs `Publish Release` without PyPI, docs or tag — and is never a release; use
+it only when the user explicitly asks to test the pipeline.
 
 The standalone `Deploy Docs` workflow redeploys the docs site from a ref
 (default `main`, or a release tag) without running a release.
@@ -196,9 +204,9 @@ path, the rehearsal, and local/manual fallbacks.
 - Use path-targeted search, validation, and `git status`; avoid broad scans over
   generated CAD artifacts unless the task requires them.
 - Treat `VERSION` as the canonical release version. Do not hand-edit duplicate
-  package, plugin, lockfile, or Python `pyproject.toml` versions; release
-  preparation and `scripts/bundle/bundle.sh` stamp them from the canonical
-  version.
+  package, plugin, lockfile, or Python `pyproject.toml` versions;
+  `scripts/release/bump-version.sh` and `scripts/bundle/bundle.sh` stamp them
+  from the canonical version.
 
 ## Environments
 
@@ -228,10 +236,13 @@ when touching shared surfaces or before handoff:
   `test-python.sh` takes `--select cadgen|viewer|skills|all` and
   `--print-weights`; `test-js.sh` takes `--select core|ui|web|mcp|all`. See
   `scripts/README.md`.
-- In GitHub Actions, `test.yml` runs one conditional job per concern. The graph,
-  stable required check names and workspace install recipes are in
-  `CONTRIBUTING.md#ci`. Core changes reach all consumers; UI reaches web; app
-  changes do not run unrelated apps. Manual dispatch runs all jobs.
+- In GitHub Actions, `test.yml` runs one job per concern, each only when the
+  change reaches it: `scripts/github-workflows/select_checks.py` maps every
+  changed path to the tests that read it, and the Python jobs run just those
+  files. A test that reads a new kind of path gets a rule there
+  (`CONTRIBUTING.md#ci`); an unknown path, `VERSION`, `packages/core`, the
+  lockfiles and the test machinery run everything, as does a manual dispatch.
+  Required check names stay stable.
 - Canonical release version: `scripts/release/check-version.sh`
 - Packaged runtime builds and is complete: `scripts/bundle/bundle.sh --check`
 - CAD Viewer or shared packages: build exports with `npm run build:packages`,
