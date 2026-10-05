@@ -329,6 +329,23 @@ class PluginManifestPolicyTest(unittest.TestCase):
         shipped = sorted(path.parent.name for path in SKILLS_ROOT.glob("*/SKILL.md"))
         self.assertEqual(sorted(listed), shipped)
 
+    def test_the_docs_site_lists_only_skills_that_ship(self) -> None:
+        # The site's catalog is its own copy, not read from skills/, and its build does not check
+        # the links: a renamed or retired skill would leave it pointing at nothing.
+        content = (REPO_ROOT / "apps" / "docs" / "src" / "lib" / "content.ts").read_text(encoding="utf-8")
+        listed = re.findall(r'path: "skills/([a-z0-9-]+)"', content)
+        self.assertTrue(listed, "no skill paths found in the docs site's catalog")
+        self.assertEqual([name for name in listed if not (SKILLS_ROOT / name / "SKILL.md").is_file()], [])
+
+    def test_skill_handoffs_name_skills_that_ship(self) -> None:
+        # `$cad`, `$dxf`: one skill hands the agent to another by name (shell variables are upper case).
+        dangling = []
+        for document in sorted(SKILLS_ROOT.rglob("*.md")):
+            for name in sorted(set(re.findall(r"\$([a-z][a-z0-9-]*)\b", document.read_text(encoding="utf-8")))):
+                if not (SKILLS_ROOT / name / "SKILL.md").is_file():
+                    dangling.append(f"{document.relative_to(REPO_ROOT)} -> ${name}")
+        self.assertEqual(dangling, [])
+
 
 if __name__ == "__main__":
     unittest.main()
