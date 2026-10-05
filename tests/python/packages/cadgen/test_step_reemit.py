@@ -336,6 +336,17 @@ class StepReemitTests(unittest.TestCase):
         module.unlink()
         self.assertEqual(ANIM_JS, self._sidecar()["animation"]["source"])
 
+    def test_an_animation_the_renderer_would_refuse_is_refused_before_out_is_written(self) -> None:
+        from cadgen.render import relative_to_cwd
+
+        with self.assertRaises(ValueError) as refused:
+            self._build(animation=ANIM_JS + "export const SPEED = 3;\n")
+        self.assertEqual(
+            f"{relative_to_cwd(self.out)} animation: unknown export SPEED — the renderer understands: clips",
+            str(refused.exception),
+        )
+        self.assertFalse(self.out.exists())
+
 
 if __name__ == "__main__":
     unittest.main()

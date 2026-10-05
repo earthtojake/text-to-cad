@@ -40,7 +40,10 @@ class ViewRegistryTest(unittest.TestCase):
         self.assertEqual(registry.post(["v1"], {"type": "show", "model": "/a.step"}), 1)
         self.assertEqual([(event["type"], event["model"]) for event in registry.poll("v1")], [("show", "/a.step")])
         self.assertEqual(registry.poll("v1"), [])
-        self.assertEqual(registry.poll("gone"), [{"type": "unknown-view"}])
+        # A view forgotten while its sync was in flight (it closed) has nothing waiting, and no event
+        # says so: the page takes every event that is not a show for a capture.
+        registry.forget("v1")
+        self.assertEqual(registry.poll("v1"), [])
 
     def test_live_views_are_most_recently_focused_first_and_stale_ones_expire(self) -> None:
         clock = _Clock()
@@ -92,10 +95,6 @@ class ViewRegistryTest(unittest.TestCase):
             registry.ask("v1", "capture", timeout=60)
 
 
-if __name__ == "__main__":
-    unittest.main()
-
-
 class SidebarViewsTest(unittest.TestCase):
     def test_a_gone_views_inbox_an_orphan_inbox_and_a_late_reply_are_swept(self) -> None:
         import os
@@ -120,3 +119,7 @@ class SidebarViewsTest(unittest.TestCase):
         self.assertEqual([view.id for view in asking.live()], ["here"])
         self.assertEqual(sorted(path.name for path in root.iterdir()), ["here.inbox", "here.json", "replies"])
         self.assertEqual(list((root / "replies").iterdir()), [])
+
+
+if __name__ == "__main__":
+    unittest.main()

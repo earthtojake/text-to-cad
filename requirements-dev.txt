@@ -16,10 +16,8 @@
 # tracer for every platform the one cadgen wheel ships to.
 ziglang==0.16.0
 
-# cadgen's own runtime dependencies (build123d, cadquery-ocp-novtk, ezdxf, shapely) come with
-# the editable install above. playwright is cadgen's `snapshot` extra, which the skills
-# that render ask for; it is listed here so a checkout gets it without the extra syntax.
-playwright
+# cadgen's own runtime dependencies (build123d, cadquery-ocp-novtk, ezdxf, playwright,
+# shapely) come with the editable install above.
 # - skills/dfam-check/requirements.txt
 rtree
 scipy

@@ -1,7 +1,8 @@
-// api.texttocad.dev/v1/*: CAD's anonymous analytics (src/lib/analytics). The domain is this
-// project's too, and every /v1 path is the handler's, which routes it.
-import { handle } from "@/lib/analytics/handler.mjs";
-import { postgresStore } from "@/lib/analytics/postgres.mjs";
+// api.texttocad.dev/v1/*: cadgen's version feed and CAD's anonymous analytics (src/lib/api). The
+// domain is this project's too, and every /v1 path is the handler's, which routes it.
+import { handle } from "@/lib/api/handler.mjs";
+import { postgresStore } from "@/lib/api/postgres.mjs";
+import { versions } from "@/lib/api/versions.mjs";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,6 +16,7 @@ const serve = (request: Request) =>
     // Where Vercel's edge places the request, from its IP address: counted into the countries'
     // totals, never kept with a batch.
     country: request.headers.get("x-vercel-ip-country"),
+    versions,
   });
 
 export const GET = serve;

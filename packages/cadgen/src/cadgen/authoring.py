@@ -528,6 +528,15 @@ def _decorator(
             func = prior.func
         _validate_signature(func, fmt=fmt)
         script_path = _script_path_of(func)
+        if animation_def is not None:
+            # The renderer refuses a module exporting anything but `clips`, and
+            # every clip with it: say so here, in its words, not when it opens.
+            from cadgen._internal.animation_source import check_animation_exports
+            from cadgen.render import relative_to_cwd
+
+            check_animation_exports(
+                animation_def["source"], name=f"{relative_to_cwd(script_path)}::{func.__name__} animation"
+            )
         defn = ModelDef(
             func=func,
             fmt=fmt,

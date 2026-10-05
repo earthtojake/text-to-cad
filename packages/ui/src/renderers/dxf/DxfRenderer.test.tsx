@@ -14,7 +14,7 @@ import SAMPLE from './__fixtures__/sample.drawing.json';
 // encoder are stand-ins — what is PAINTED is the browser suite's; what the tab offers, what the
 // cursor says and what a host is told are decided here, above the pixels.
 
-const FILE = 'sample.dxf';
+const FILE = '/models/sample.dxf';
 
 // Every transform the drawing is painted at: the picture itself is not jsdom's to draw.
 const painted = vi.hoisted(() => [] as Array<{ scale: number; offsetX: number; offsetY: number }>);
@@ -55,13 +55,13 @@ async function openDrawing(destinationKind = 'composer', notice: ReactNode = nul
   const fetch = vi.fn(async (input: RequestInfo | URL) => {
     const url = new URL(String(input));
     if (url.pathname.endsWith('/__cad/catalog')) {
-      return json({ rootId: 'one', entries: [{ kind: 'dxf', file: FILE, rootRelativeFile: FILE, url: `/${FILE}`, hash: revision, bytes: 4096 }] });
+      return json({ entries: [{ kind: 'dxf', file: FILE, url: '/sample.dxf', hash: revision, bytes: 4096 }] });
     }
-    if (url.pathname.endsWith('/__cad/server')) return json({ rootId: 'one', rootPath: '/models', backend: 'cadgen' });
+    if (url.pathname.endsWith('/__cad/server')) return json({ backend: 'cadgen' });
     if (url.pathname.endsWith('/__cad/drawing')) return readDrawing();
     return new Response('', { status: 404 });
   });
-  const client = createCadClient({ origin: 'http://viewer.test/one', workspaceId: 'one', pollIntervalMs: 0, fetch: fetch as typeof globalThis.fetch });
+  const client = createCadClient({ origin: 'http://viewer.test/one', pollIntervalMs: 0, fetch: fetch as typeof globalThis.fetch });
   await client.refresh();
 
   let commandSnapshot: Record<string, any> = {};
@@ -85,9 +85,8 @@ async function openDrawing(destinationKind = 'composer', notice: ReactNode = nul
   const delivered: Array<{ type: string; parts: string[] }> = [];
   const host = {
     files: {
-      id: 'one', rootName: 'one',
-      stat: async (path: string) => ({ path, name: path, kind: 'file', size: 400, extension: 'dxf' }),
-      list: async () => [{ path: FILE, name: FILE, kind: 'file' }]
+      id: 'one',
+      stat: async (path: string) => ({ path, name: path.split('/').pop(), kind: 'file', size: 400, extension: 'dxf' })
     },
     navigation: { openFile: noop },
     environment: { colorScheme: 'light' },
@@ -103,7 +102,7 @@ async function openDrawing(destinationKind = 'composer', notice: ReactNode = nul
     }
   };
   function Pane() {
-    const [state, setState] = useState<any>({ panel: null, renderers: {} });
+    const [state, setState] = useState<any>({ renderers: {} });
     // The host's Settings, as `CadViewer` hands it over: drawn by FileViewer over every file.
     return <section data-testid="one"><FileViewer file={FILE} host={host as any} renderers={renderers} state={state} onStateChange={setState} notice={notice}
       settings={<button type="button" aria-label="Settings" />} /></section>;
@@ -145,10 +144,6 @@ it("the host's notice shows at the top-right once the drawing is on screen", asy
 
 it('a DXF has no panels of its own, no tools, no Display and no preview', async () => {
   const { pane, delivered, dispose } = await openDrawing();
-  // The nav row's only panel is the host's file tree, closed: a drawing declares none.
-  const panels = [...pane.querySelectorAll('[data-file-panel]')]
-    .map(button => `${button.getAttribute('aria-label')}:${button.getAttribute('aria-pressed')}`);
-  expect(panels).toEqual(['Show files:false']);
   expect(pane.querySelectorAll('[data-tool-panel]')).toHaveLength(0);
   const inPane = within(pane);
   expect(inPane.queryByRole('group', { name: 'Interaction tools' })).toBeNull();
@@ -157,11 +152,8 @@ it('a DXF has no panels of its own, no tools, no Display and no preview', async 
     expect(inPane.queryByRole('button', { name }), name).toBeNull();
   }
   expect(inPane.queryAllByRole('tab')).toHaveLength(0);
-  // A drawing is 2D: its view puts no control of its own in the navbar, where a 3D view's Display
-  // and Preview go, so the navbar's right end is the host's Settings alone.
-  const controls = pane.querySelector('[data-viewer-navbar] [data-navbar-controls]')!;
-  expect(controls.childElementCount).toBe(0);
-  expect([...controls.parentElement!.querySelectorAll('button')].map(button => button.getAttribute('aria-label'))).toEqual(['Settings']);
+  // A drawing is 2D: it has none of a 3D view's controls on top of the cube (Display, Preview).
+  expect(pane.querySelector('[data-viewport-actions]')).toBeNull();
   // A composer gets no snapshot from a drawing, and a drawing has nothing to pick: no Quick Edit,
   // which is a STEP file's.
   expect(inPane.queryByRole('button', { name: 'Take snapshot' })).toBeNull();

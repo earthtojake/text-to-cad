@@ -237,6 +237,12 @@ def refresh_annotations(spec, *, verdict=None) -> str | None:
     raw_animation = parts[1]['animation']
     animation = (copy.deepcopy(record.get('animation')) if raw_animation is _COMPUTED
                  else normalize_animation(raw_animation, where='animation='))
+    if animation is not None:
+        # The decorator checked the module it imported; this is the text read now.
+        from cadgen._internal.animation_source import check_animation_exports
+        from cadgen.render import relative_to_cwd
+
+        check_animation_exports(animation['source'], name=f'{relative_to_cwd(script)}::{entry_name} animation')
     raw_kinematics = parts[1]['kinematics']
     kinematics_is_document = raw_kinematics is _COMPUTED
     try:

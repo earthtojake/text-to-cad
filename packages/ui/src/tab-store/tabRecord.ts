@@ -1,5 +1,4 @@
 import type { JsonValue } from '../file-viewer/types.js';
-import { clampPanelWidth, PANEL_DEFAULT_WIDTH } from '../file-viewer/navigation/panelWidth.js';
 import { normalizeToolStack } from '../renderers/kit/tools/toolStackLayout.js';
 
 /**
@@ -7,13 +6,13 @@ import { normalizeToolStack } from '../renderers/kit/tools/toolStackLayout.js';
  *
  *   { version, settings, files }
  *
- * `settings` is tab-wide — the file tree's width and expansion (by root), the tool stack's
- * layout, the appearance and how the home lays out its library — and replaces every global
- * preference. `files` is the view of the file on screen (`kit/shell/fileView.js`: its camera,
- * its Display settings, its playback, its renderer's own slices) under `[root id, file path,
- * renderer id]`, and nothing else: a write puts a file last and drops any other
- * (`TAB_FILE_LIMIT`), and a host leaving a file drops its view (`files.retain`, which
- * `CadViewer` calls), so a reload brings back the file on screen and a file left starts over.
+ * `settings` is tab-wide — the tool stack's layout, the appearance and how the home lays out its
+ * library — and replaces every global preference.
+ * `files` is the view of the file on screen (`kit/shell/fileView.js`: its camera, its Display
+ * settings, its playback, its renderer's own slices) under `[absolute file path, renderer id]`,
+ * and nothing else: a write puts a file last and drops any other (`TAB_FILE_LIMIT`), and a host
+ * leaving a file drops its view (`files.retain`, which `CadViewer` calls), so a reload brings back
+ * the file on screen and a file left starts over.
  *
  * This module is the record's one definition: its shape, its version and its normalization.
  * Reading is forgiving — a record another version wrote is the defaults, a field that is not
@@ -21,7 +20,7 @@ import { normalizeToolStack } from '../renderers/kit/tools/toolStackLayout.js';
  * more field of `settings` here; a new kind of per-file state is one more slice a renderer
  * hands the shell. Nothing here touches storage: a host supplies that (`tabStore.ts`).
  */
-export const TAB_RECORD_VERSION = 1;
+export const TAB_RECORD_VERSION = 2;
 /** One: a tab shows one file, and only the file on screen keeps its view. */
 export const TAB_FILE_LIMIT = 1;
 
@@ -30,8 +29,6 @@ export type Appearance = 'system' | 'light' | 'dark';
 export type LibraryLayout = 'grid' | 'list';
 export interface ToolStackLayout { panels: Record<string, { width?: number; height?: number }>; collapsed: Record<string, boolean>; closed: Record<string, boolean> }
 export interface TabSettings {
-  /** The host's file tree: its column's width, and the folders open under each root. */
-  fileTree: { width: number; expanded: Record<string, string[]> };
   /** The tool stack's layout (`kit/tools/toolStackLayout.js`): the resizable panels' sizes, the folded panels and the closed ones. */
   toolStack: ToolStackLayout;
   /** System, Light or Dark; a new tab follows the OS until the person picks. */
@@ -42,25 +39,13 @@ export interface TabSettings {
 export interface TabRecord {
   version: typeof TAB_RECORD_VERSION;
   settings: TabSettings;
-  /** File views under `tabFileKey(rootId, path, rendererId)`, oldest first. */
+  /** File views under `tabFileKey(path, rendererId)`, oldest first. */
   files: Record<string, JsonValue>;
 }
 
 const plainObject = (value: unknown): value is Record<string, unknown> => Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 const APPEARANCES: readonly Appearance[] = ['system', 'light', 'dark'];
 const LIBRARY_LAYOUTS: readonly LibraryLayout[] = ['grid', 'list'];
-const MAX_EXPANDED_ROOTS = 64;
-
-function normalizeFileTree(value: unknown): TabSettings['fileTree'] {
-  const record = plainObject(value) ? value : {};
-  const expanded: Record<string, string[]> = {};
-  for (const [root, folders] of Object.entries(plainObject(record.expanded) ? record.expanded : {}).slice(0, MAX_EXPANDED_ROOTS)) {
-    if (!Array.isArray(folders)) continue;
-    expanded[root] = [...new Set(folders.filter((folder): folder is string => typeof folder === 'string'))];
-  }
-  return { width: typeof record.width === 'number' && Number.isFinite(record.width) ? clampPanelWidth(record.width) : PANEL_DEFAULT_WIDTH, expanded };
-}
-
 export function normalizeAppearance(value: unknown): Appearance {
   return APPEARANCES.includes(value as Appearance) ? (value as Appearance) : 'system';
 }
@@ -74,19 +59,19 @@ function normalizeLibrary(value: unknown): TabSettings['library'] {
 export function normalizeTabSettings(value: unknown): TabSettings {
   const record = plainObject(value) ? value : {};
   return {
-    fileTree: normalizeFileTree(record.fileTree),
     toolStack: normalizeToolStack(record.toolStack) as ToolStackLayout,
     appearance: normalizeAppearance(record.appearance),
     library: normalizeLibrary(record.library),
   };
 }
 
-export const tabFileKey = (rootId: string, path: string, rendererId: string): string => JSON.stringify([rootId, path, rendererId]);
-export function parseTabFileKey(key: string): { rootId: string; path: string; rendererId: string } | null {
+/** A file view's key: the same as `FileViewerState.renderers`' — `[absolute file path, renderer id]`. */
+export const tabFileKey = (path: string, rendererId: string): string => JSON.stringify([path, rendererId]);
+export function parseTabFileKey(key: string): { path: string; rendererId: string } | null {
   try {
     const parsed: unknown = JSON.parse(key);
-    return Array.isArray(parsed) && parsed.length === 3 && parsed.every(part => typeof part === 'string')
-      ? { rootId: parsed[0], path: parsed[1], rendererId: parsed[2] } : null;
+    return Array.isArray(parsed) && parsed.length === 2 && parsed.every(part => typeof part === 'string')
+      ? { path: parsed[0], rendererId: parsed[1] } : null;
   } catch { return null; }
 }
 

@@ -119,9 +119,9 @@ A document with no model script gets its kinematics from
 same `{mates, couplings, poses}` vocabulary, as inline JSON or a `.json`
 path. `--materials` accepts the named material declaration as inline JSON or
 a `.json` path, and `--animation` accepts a self-contained JavaScript module
-file or source string. The input is read with OCCT and
-re-emitted by the canonical writer, so OUT's bytes are deterministic whichever
-kernel wrote IN:
+file or source string that exports only `clips` (see below). The input is read
+with OCCT and re-emitted by the canonical writer, so OUT's bytes are
+deterministic whichever kernel wrote IN:
 
 ```bash
 cadgen step build vendor/hinge.step STEP/hinge.step \
@@ -143,9 +143,12 @@ re-emitting a byte, and vendor metadata (PMI, GD&T) does not survive the trip.
 
 A STEP document may carry one self-contained JavaScript animation module in
 its unified sidecar. Author the module as a Python string and pass it to
-`@step(animation=...)`. It exports `clips`; an export the renderer does not
-know is a load error, never ignored. The module has no imports. For the arm
-above, add this constant and update its decorator, keeping the same model body:
+`@step(animation=...)`. It exports `clips` and nothing else; leave helpers and
+constants unexported. The renderer refuses a module with any other export, and
+every clip with it, so the build refuses it first, in the renderer's words:
+`arm.py::arm animation: unknown export ease — the renderer understands: clips`.
+The module has no imports. For the arm above, add this constant and update its
+decorator, keeping the same model body:
 
 ```python
 ANIMATION = r"""
@@ -182,8 +185,8 @@ def arm(): ...
   editing its animation to refresh the sidecar. Literal annotation edits may
   reuse cached geometry; computed or imported annotations can require a rebuild.
   See [annotation caching](step-generation.md#annotation-caching).
-- The model build validates and embeds the declaration. A model without
-  `animation=` is simply a model without animation.
+- The model build validates the declaration, exports included, and embeds it.
+  A model without `animation=` is simply a model without animation.
 - Targets are checked at LOAD, against the compiled tree: every clip's
   `update(0, m)` runs once when the module loads, and a label or occurrence
   id no part carries is reported in the viewer's Issues (`Animation

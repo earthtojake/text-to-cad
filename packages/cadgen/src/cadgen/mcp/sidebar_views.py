@@ -1,12 +1,13 @@
 """The CAD sidebar's views, which every server process of the person's app can reach.
 
 The host runs one server process per thread, and the sidebar page in a thread of its own, so an
-agent's thread never syncs with the sidebar view the person may be looking at: its ``cad_show``
-found no viewer and opened a tab beside a model already on screen. Each process publishes its
-live sidebar views here -- ``<view>.json``: the model, the state ``cad_view`` reads, when a person
-last touched it -- and hands each the requests left in its inbox (``<view>.inbox/``) on its next
-sync. An agent reaches the sidebar view a person touched last, as it reaches its own thread's
-tabs: shown a model, read, captured; a capture's answer comes back as ``replies/<request>.json``.
+agent's thread never syncs with the sidebar view the person may have used. Each process publishes
+its live sidebar views here -- ``<view>.json``: the model, the state ``cad_view`` reads, when a
+person last touched it -- and hands each the requests left in its inbox (``<view>.inbox/``) on its
+next sync. An agent reads and captures the sidebar view a person touched last, as it does its own
+thread's tabs; a capture's answer comes back as ``replies/<request>.json``. A model it shows goes
+to its thread's tab instead, unless it names the sidebar's view: the host keeps the sidebar page
+running while the person is in a thread, so a model sent there lands where nobody is looking.
 
 Only sidebar views are shared. A thread's tabs are that conversation's, and no other drives them.
 """
@@ -101,9 +102,9 @@ class SidebarViews:
 
     # -- any process --------------------------------------------------------------
 
-    def live(self, *, mine: bool = False) -> list[SidebarView]:
-        """Sidebar views seen lately, the one a person touched last first; another process's only,
-        unless ``mine``."""
+    def live(self) -> list[SidebarView]:
+        """Sidebar views seen lately, the one a person touched last first: another process's only,
+        for this process's own are its registry's."""
         now = self._clock()
         views = []
         try:
@@ -122,7 +123,7 @@ class SidebarViews:
                 continue
             if not isinstance(record, dict) or not isinstance(record.get("view"), str):
                 continue
-            if not mine and record["view"] in self._published:
+            if record["view"] in self._published:
                 continue
             views.append(SidebarView(id=record["view"], model=record.get("model") if isinstance(record.get("model"), str) else None,
                                      state=record.get("state") if isinstance(record.get("state"), dict) else {},

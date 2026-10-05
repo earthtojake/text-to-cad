@@ -41,7 +41,7 @@ owner rules in [resource ownership](resource-ownership.md).
 Each service wraps its provider in an opaque cache generation. URL-addressed
 JSON, text, mesh and descriptor caches include this scope; completed package and
 recognition caches do too. A fresh server-metadata read that observes a changed
-root or identity token retires the generation and aborts its pending reads.
+identity token retires the generation and aborts its pending reads.
 The provider exposes that generation signal on the main thread. Worker clients
 and recognition subscribe before acquiring tickets, so already-issued URL
 tickets cannot publish a late result after retirement. The signal itself never

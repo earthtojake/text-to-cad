@@ -1,6 +1,6 @@
 {
   "name": "@text-to-cad/ui",
-  "version": "0.7.11",
+  "version": "0.7.14",
   "private": true,
   "type": "module",
   "files": [
@@ -61,6 +61,10 @@
     "./features": {
       "types": "./dist/features/index.d.ts",
       "import": "./dist/features/index.js"
+    },
+    "./update": {
+      "types": "./dist/update/index.d.ts",
+      "import": "./dist/update/index.js"
     },
     "./tab-store": {
       "types": "./dist/tab-store/index.d.ts",

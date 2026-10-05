@@ -292,8 +292,10 @@ export function useCadAssets({
   const [meshLoadInProgress, setMeshLoadInProgress] = useState(false);
   const [meshLoadTargetFile, setMeshLoadTargetFile] = useState("");
   const [meshLoadTargetHash, setMeshLoadTargetHash] = useState("");
-  // The file and revision whose load failed outright; see shouldStartMeshLoad.
+  // The file and revision whose load failed outright; see shouldStartMeshLoad. Forgotten by the
+  // caller when something outside the load changed what it would find (a build of the revision).
   const [fatalLoadFailure, setFatalLoadFailure] = useState(null);
+  const clearFatalLoadFailure = useCallback(() => setFatalLoadFailure(null), []);
   const [meshLoadProgress, setMeshLoadProgress] = useState(null);
   const [status, setStatus] = useState(ASSET_STATUS.READY);
   const [error, setError] = useState("");
@@ -1730,6 +1732,7 @@ export function useCadAssets({
     cancelReferenceLoad,
     loadMeshForEntry,
     fatalLoadFailure,
+    clearFatalLoadFailure,
     loadReferencesForEntry
   };
 }

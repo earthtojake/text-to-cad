@@ -3,7 +3,7 @@ import test from 'node:test';
 import { setImmediate } from 'node:timers';
 import { resolveViewSceneSettings } from '@text-to-cad/core/common/sceneSettings.js';
 import { createViewUpdateCoordinator } from './viewUpdateCoordinator.js';
-import { viewPreparationKey } from './viewUpdatePlan.js';
+import { afterViewPaint, viewPreparationKey } from './viewUpdatePlan.js';
 
 const scene = value => resolveViewSceneSettings({ display: value, lightingQuality: "preview" });
 const tick = () => new Promise(resolve => setImmediate(resolve));
@@ -85,5 +85,16 @@ test('only resource boundaries prepare; clip motion, exposure, rotation and colo
   ]) assert.equal(viewPreparationKey(scene({ mode: 'render', clip: { enabled: true }, ...patch })), viewPreparationKey(render));
   for (const patch of [ { clip: { enabled: false } }, { lighting: { quality: 'final' } }, { surfaces: { opacity: 0.5 } }, { lighting: { size: 2 } } ]) {
     assert.notEqual(viewPreparationKey(scene({ mode: 'render', clip: { enabled: true }, ...patch })), viewPreparationKey(render));
+  }
+});
+
+test('a paint wait no frame comes to settles on its timer and reaches for no frame API', { timeout: 10_000 }, async () => {
+  // A hidden tab draws no frame, and a page can be gone, its frame API with it, when the timer
+  // fires (the CI flake: a test file torn down first). Node has no cancelAnimationFrame at all.
+  globalThis.requestAnimationFrame = () => 1;
+  try {
+    await afterViewPaint();
+  } finally {
+    delete globalThis.requestAnimationFrame;
   }
 });

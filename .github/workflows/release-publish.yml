@@ -270,9 +270,9 @@ jobs:
       ref: ${{ needs.publish.outputs.release_sha }}
     secrets: inherit
 
-  # The plugin directories follow the `plugin` branch: one commit per release whose tree
-  # is only the plugin, so they never scan or install the rest of the monorepo. Cursor
-  # and Grok Build install it; Publish Release is the branch's only writer.
+  # claude.ai's plugin directory follows the `plugin` branch: one commit per release whose
+  # tree is only the plugin, so it never scans or installs the rest of the monorepo. Every
+  # other store reads `main` or the release; Publish Release is the branch's only writer.
   #
   # TODO: claude.ai's listing still tracks `claude-plugin`, the branch's old name, and
   # the portal refuses a tracked-branch change while a reviewer has the plugin. Until the

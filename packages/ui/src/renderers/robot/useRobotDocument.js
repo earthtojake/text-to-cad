@@ -81,10 +81,9 @@ export function useRobotDocument({ entry, resources }) {
   const kind = kindOf(entry);
   const revision = entryUrdfAssetHash(entry);
   const { url: primary, urdfUrl: urdf } = descriptionSource(entry, null);
-  const pending = entry?.catalogPending === true;
   const label = `Loading ${kind.toUpperCase()}`;
   const [state, setState] = useState(() => {
-    const robot = pending ? null : peekRobot(entry, resources);
+    const robot = peekRobot(entry, resources);
     return { robot, busy: !robot, progress: robot ? null : { phase: "read", label, determinate: false }, error: null };
   });
   const resourcesRef = useRef(resources);
@@ -94,7 +93,7 @@ export function useRobotDocument({ entry, resources }) {
   const loadedRef = useRef(state.robot?.revision ?? null);
 
   useEffect(() => {
-    if (pending || loadedRef.current === revision) return undefined;
+    if (loadedRef.current === revision) return undefined;
     const current = entryRef.current;
     const controller = new AbortController();
     const { signal } = controller;
@@ -126,6 +125,6 @@ export function useRobotDocument({ entry, resources }) {
       setState({ robot, busy: false, progress: null, error: null });
     }, fail);
     return () => controller.abort();
-  }, [kind, primary, urdf, revision, pending, label]);
+  }, [kind, primary, urdf, revision, label]);
   return state;
 }

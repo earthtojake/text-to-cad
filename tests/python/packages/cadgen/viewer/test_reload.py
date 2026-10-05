@@ -207,36 +207,27 @@ class WhatItReRuns(unittest.TestCase):
 
     def test_the_binding_is_rewritten_and_nothing_else_is(self) -> None:
         self.assertEqual(
-            reload_module.restart_argv(
-                ["--host", "127.0.0.1", "--dist", "/d", "--api-only", "--no-registry", "--json"],
-                port=4321,
-            ),
-            ["--host", "127.0.0.1", "--dist", "/d", "--api-only", "--no-registry", "--json",
-             "--port", "4321"],
+            reload_module.restart_argv(["--host", "127.0.0.1", "--dist", "/d", "--api-only", "--json"], port=4321),
+            ["--host", "127.0.0.1", "--dist", "/d", "--api-only", "--json", "--port", "4321"],
         )
 
-    def test_an_ephemeral_launch_comes_back_on_the_port_it_took(self) -> None:
+    def test_a_new_launch_comes_back_on_the_port_it_took(self) -> None:
         # This is the `npm run dev` shape: Vite proxies to the port the backend
         # announced once, so the restart must take that same port back.
         self.assertEqual(
-            reload_module.restart_argv(["--ephemeral", "--no-registry", "--api-only"], port=51234),
-            ["--no-registry", "--api-only", "--port", "51234"],
+            reload_module.restart_argv(["--new", "--api-only"], port=51234),
+            ["--api-only", "--port", "51234"],
         )
 
     def test_an_earlier_explicit_port_is_replaced_not_duplicated(self) -> None:
-        self.assertEqual(
-            reload_module.restart_argv(["--port", "3245", "--new"], port=3245),
-            ["--new", "--port", "3245"],
-        )
-        self.assertEqual(
-            reload_module.restart_argv(["--port=3245"], port=3245), ["--port", "3245"]
-        )
+        self.assertEqual(reload_module.restart_argv(["--port", "3245", "--json"], port=3245), ["--json", "--port", "3245"])
+        self.assertEqual(reload_module.restart_argv(["--port=3245"], port=3245), ["--port", "3245"])
 
     def test_posix_execs_in_place_and_windows_spawns_then_exits(self) -> None:
-        argv = ["--no-registry", "--port", "8123"]
+        argv = ["--api-only", "--port", "8123"]
         with mock.patch.object(reload_module.os, "execv") as execv:
             reload_module.execute_restart(argv, executable="/py", platform="linux")
-        execv.assert_called_once_with("/py", ["/py", "-m", "cadgen.viewer", *argv])
+        execv.assert_called_once_with("/py", ["/py", "-P", "-m", "cadgen.viewer", *argv])
 
         with mock.patch.object(reload_module.subprocess, "Popen") as popen, \
                 mock.patch.object(reload_module.os, "_exit", side_effect=SystemExit) as hard_exit:
@@ -247,7 +238,7 @@ class WhatItReRuns(unittest.TestCase):
         # and a restarted server whose narration went to a redirected stderr
         # must keep writing there rather than to a console that may not exist.
         popen.assert_called_once_with(
-            ["py.exe", "-m", "cadgen.viewer", *argv], stdout=1, stderr=2
+            ["py.exe", "-P", "-m", "cadgen.viewer", *argv], stdout=1, stderr=2
         )
         hard_exit.assert_called_once_with(0)
 
@@ -263,7 +254,7 @@ class TheProductionPath(unittest.TestCase):
         with mock.patch.object(
             reload_module, "running_from_source_checkout", return_value=checkout
         ):
-            return create_cad_app(root=self._tmp.name, host="127.0.0.1", port=0, dist_dir="")
+            return create_cad_app(host="127.0.0.1", port=0, dist_dir="", start=self._tmp.name)
 
     def test_a_wheel_reports_no_auto_reload_and_counts_no_requests(self) -> None:
         app = self.app(checkout=False)

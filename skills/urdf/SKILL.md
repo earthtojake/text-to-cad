@@ -14,18 +14,14 @@ Use this skill for URDF robot-description outputs. Treat URDF work as constraine
 
 ## Setup
 
-This skill's commands are thin entrypoints over the `cadgen` distribution, which
-carries the Python build runtime and the JavaScript it executes. Install it once:
+Run cadgen through [uv](https://docs.astral.sh/uv/), so this skill's commands share
+one installation, and its warm build daemon, with the CAD app's server:
 
-```bash
-python -m pip install -r requirements.txt
-```
+- `cadgen` below means `uvx --no-config --managed-python --python 3.13 --from cadgen==0.7.14 cadgen`
+- `python` below means `uvx --no-config --managed-python --python 3.13 --from cadgen==0.7.14 python`
 
-Snapshots additionally need a browser, which pip cannot supply:
-
-```bash
-python -m playwright install chromium
-```
+The first run downloads that installation and the first snapshot its headless
+browser; later runs reuse both.
 
 ## Core Rules
 
@@ -43,22 +39,21 @@ python -m playwright install chromium
 Show the user each file you create or change, and any they ask to see. Snapshots and
 validation don't replace this.
 
-- If your tools include `cad_show` (your host may prefix it), use it, and follow its
-  description for when to call it again. `cad_view` reads what the user selected;
-  `cad_screenshot` shows you what they see. Neither is a review of your own work.
-- Otherwise run the CAD Viewer from the models directory (usually `models/`, not an
-  artifact's output folder):
+- If your tools include `cad_show` (your host may prefix it), use it with the file's
+  absolute path, and follow its description for when to call it again. `cad_view` reads
+  what the user selected; `cad_screenshot` shows you what they see. Neither is a review
+  of your own work.
+- Otherwise run the CAD Viewer, from any folder:
 
   ```bash
-  cd /absolute/path/to/model-workspace && cadgen viewer --host 127.0.0.1 --json --detach
+  cadgen viewer --host 127.0.0.1 --json --detach
   ```
 
   `--detach` returns once the viewer answers requests and leaves it running in the
   background: always pass it, since a foreground viewer never exits (and piping its
-  output through `tail` can hide the URL for good). It starts or reuses the viewer.
-  Read `url` from its one JSON line (never guess the port); for each file under that
-  directory return `url?file=<URL-encoded relative path>`, or `url` alone to review the
-  directory. If it fails to launch, say so.
+  output through `tail` can hide the URL for good). It starts this machine's one viewer,
+  or reuses it. Read `url` from its one JSON line (never guess the port), and for each
+  file return `url?file=<its URL-encoded absolute path>`. If it fails to launch, say so.
 
 Review mesh scale and placement, then sweep every movable joint against the
 design ledger. A link alone does not complete the [viewer sweep](references/validation.md);
@@ -77,7 +72,7 @@ report any checks you could not perform.
 
 ## Commands
 
-Run `cadgen` from the Python environment this skill's `requirements.txt` was installed into (`python -m cadgen.cli <verb>` with that interpreter is the PATH-independent equivalent). `cadgen doctor <skill-dir>` verifies the installed cadgen matches this skill's pin — docs drift silently on a mismatched install. Validation itself needs nothing beyond the Python standard library; only snapshots need the browser. Use `cadgen <verb> --help` for the complete current interface.
+Run `cadgen` as Setup defines it. `cadgen doctor <skill-dir>` reports the installation in use and checks that it is the one this skill pins — docs drift silently on another. Validation itself needs nothing beyond the Python standard library; only snapshots need the browser. Use `cadgen <verb> --help` for the complete current interface.
 
 The validator shape is:
 
