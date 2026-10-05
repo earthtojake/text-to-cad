@@ -51,7 +51,7 @@ const SelectTrigger = React.forwardRef(function SelectTrigger({
 })
 
 // A listbox leaves at once when it closes: one still fading out would keep the focus, and
-// take the next Escape meant for the sheet it was opened from.
+// take the next Escape meant for the popover it was opened from.
 function SelectContent({
   className,
   children,

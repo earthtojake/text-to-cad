@@ -99,11 +99,10 @@ dist-info by design — it is release-grained, so dev code is always newer than
 its number — and nothing behavioral consults it, but stale metadata makes the
 reported number drift further from the code than it has to.
 
-Install `requirements-dev.txt`, not a skill's `requirements.txt`: the skill
-files pin `cadgen==<VERSION>` (the release PR stamps them, and they are what an
-installer resolves from PyPI). The editable install reports that same version,
-so the pin is satisfied in a checkout — but `pip install -r skills/<s>/requirements.txt`
-on its own would fetch the previous RELEASE from PyPI over your working copy.
+Skills run cadgen through their launch command, `uvx ... --from cadgen==<VERSION>`,
+which installs the RELEASE from PyPI. To run your working copy, use the checkout's
+`.venv` (`requirements-dev.txt`), or `scripts/install/dev_install.py`, which points a
+dev install's server and skills at it (see [Test In Agent Apps](#test-in-agent-apps)).
 
 `packages/cadgen/src/cadgen/_runtime/` is BUILT, not committed — the whole
 directory is gitignored, and the wheel is the only place those files ship. A
@@ -129,56 +128,72 @@ The robot validators used to be the exception, running on bare `python3` while
 their logic lived under `skills/`; that logic is `cadgen.{urdf,sdf,srdf}_*` now,
 so they need cadgen like everything else.
 
-## Link Skills Into Your Agent
+## Test In Agent Apps
 
-For local development, symlink this checkout's supported skill directories into
-your agent. Do not copy skill directories into your agent: symlinks keep edits
-in this checkout visible immediately.
-
-Use the installer from the repository root:
+Test the skills the way users get them: as the plugin, with CAD's server. One
+script installs this checkout into an agent app, and running it again replaces
+that install with the current checkout:
 
 ```bash
-scripts/install/install-skills.sh --agent codex
+scripts/install/dev_install.py claude
 ```
 
-To see supported agents and resolved destination directories:
+| Host | What it installs |
+| ---- | ---------------- |
+| `claude` | Claude Code's plugin, which Cursor and Grok Build also load |
+| `codex` | the Codex plugin, shared by the app, the CLI and the IDE extension; `--restart` quits and reopens the app |
+| `cursor` | a local Cursor plugin, for Cursor without Claude Code |
+| `grok` | Grok Build's plugin, for Grok without Claude Code |
+| `gemini` | a linked Gemini CLI extension |
+| `claude-desktop` | a `cad-dev` server in Claude Desktop's chat, which takes servers, not plugins |
+
+For an agent without plugins, install the skills alone from the checkout with the
+Skills CLI, the way users get them, and run it again after a change:
 
 ```bash
-scripts/install/install-skills.sh --list-agents
+npx skills add . -g -a <agent>
 ```
 
-The installer discovers each directory under `skills/` that contains
-`SKILL.md`, creates one symlink per skill, and leaves existing non-symlink paths
-untouched.
+A plugin host gets `text-to-cad@earthtojake-dev`: this checkout's skills, and
+`cadgen mcp` run by this checkout's `.venv` (`CADGEN_PYTHON` overrides it), serving
+a copy of the `apps/mcp` page built for that install (`--no-build` reuses the last
+build). The copied skills' launch command is rewritten to that same `.venv`, so the
+server and the agent's scripts share this checkout's installation and warm daemon;
+each worktree is an installation of its own (the daemon is named after it), so
+several can be installed side by side, one per app. With `--wheel`, the checkout's
+wheel is built as the release builds it (`bundle.sh`, then `uv build`) and the
+server and skills run it through `uvx --from <wheel>`: exactly what users get,
+each build its own installation. Install again to see a skill or page edit. A page that changed under a
+running app would change its URI, and hosts drop the frames already showing it,
+which is why each install serves its own copy. A running server keeps the
+Python it started with, so restart the app after a Python-only change.
+`--uninstall` removes a host's install. Its server names its install channel
+`dev` (`CADGEN_INSTALL_CHANNEL`), and a checkout's editable cadgen counts as one
+too: neither is ever offered an update. To see the update button, run a server or
+a Viewer with `CADGEN_INSTALL_CHANNEL=claude-github` and a `versions.json` in its
+state directory (`CADGEN_STATE_DIR`) naming a newer `latest`.
 
-Supported local-development agent destinations:
+Keep one copy of the plugin per app. The script refuses to install where another
+copy would load beside it: the published plugin, this one installed through
+another host, or this repository's skills installed loose where the app reads
+skills. Two copies means every skill twice. Uninstall the published plugin
+before testing, and reinstall it afterwards.
 
-| Agent flag  | Destination                                       |
-| ----------- | ------------------------------------------------- |
-| `codex`     | `${CODEX_HOME:-$HOME/.codex}/skills`              |
-| `claude`    | `${CLAUDE_CONFIG_DIR:-$HOME/.claude}/skills`      |
-| `gemini`    | `$HOME/.gemini/skills`                            |
-| `universal` | `${XDG_CONFIG_HOME:-$HOME/.config}/agents/skills` |
-| `project`   | `.agents/skills` in this repository               |
+Where the server's output goes:
 
-`claude-code`, `gemini-cli`, `agents`, and `repo` are accepted aliases. Use
-`--all` to install into every destination above, or repeat `--agent` for a
-smaller set:
+- Codex: its log database, `~/.codex/logs_2.sqlite` (lines starting `MCP server stderr`)
+- Claude Code: `claude mcp list` shows whether the server connected
+- Claude Desktop: `~/Library/Logs/Claude/mcp-server-cad-dev.log`; the app's
+  developer tools (Developer Mode, then Cmd+Option+I) inspect a card's frame
+- Cursor: `mcp-server-plugin-*` logs under `~/Library/Application Support/Cursor/logs/`
+- Gemini CLI: `gemini mcp list` shows whether the server connected
 
-```bash
-scripts/install/install-skills.sh --agent codex --agent claude
-```
-
-Restart or reload the agent after linking so it rescans available skills.
-
-To remove this checkout's skill links while testing provider behavior:
-
-```bash
-scripts/install/uninstall-skills.sh --agent codex
-```
-
-The uninstaller removes only symlinks that point back at this checkout and
-prunes empty destination directories unless `--keep-empty-dirs` is passed.
+What the CAD app is and how hosts present it is in
+[apps/mcp/README.md](apps/mcp/README.md). No agent app can be driven by a test,
+so the standard path is also checked in the MCP Apps reference host
+(`basic-host` from `modelcontextprotocol/ext-apps`): it speaks Streamable HTTP,
+so a local bridge to the stdio server is needed, and it does not advertise the UI
+extension, so start the server with `CADGEN_MCP_PRESENTATION=inline`.
 
 ## Test From This Repository
 
@@ -326,10 +341,10 @@ must not put `skills/`, the repository root, or a sibling skill directory on
 `sys.path`, `PYTHONPATH`, `NODE_PATH`, or any similar lookup path. Skills are
 independent of *each other*.
 
-They are not independent of `cadgen`. Each skill's `requirements.txt` names that
-distribution, and a skill's `scripts/<tool>` is a thin entrypoint whose parser and
-behaviour live in `cadgen.cli` — so what a published skill needs is an install, not
-a copy. Skills used to vendor cadgen and its Node builders into
+They are not independent of `cadgen`. Each cadgen skill's SKILL.md runs that
+distribution through the launch command, and a skill's `scripts/<tool>` is a thin
+entrypoint whose parser and behaviour live in `cadgen.cli` — so what a published skill
+needs is an install, not a copy. Skills used to vendor cadgen and its Node builders into
 `skills/*/scripts/packages/`; six copies of one runtime is what that cost, and it
 is gone. cadgen now carries the JavaScript it executes as well as the Python.
 
@@ -408,35 +423,38 @@ Vite and Next consume their `dist` exports. `npm ci` without a
 workspace filter installs the whole workspace.
 
 Create this worktree's `.venv` with `requirements-dev.txt` when Python is
-needed. For web development, invoke Vite from the directory you want served:
+needed. For web development, invoke Vite from a folder of models (a relative
+`?file=` resolves against it):
 
 ```bash
-cd <the directory to serve>
+cd <a folder of models>
 VIEWER_PYTHON=<checkout>/.venv/bin/python \
   npm --prefix <checkout>/apps/web run dev -- --host 127.0.0.1
 ```
 
-Vite owns its API-only Python backend. `VIEWER_PYTHON` must name an interpreter
-that satisfies cadgen's Python floor and imports this checkout. The backend's
-stable `rootId` identifies a normalized real filesystem root across port
-changes. The web app owns URL/history and browser preferences. FileViewer
-state is scoped by root, file and renderer; each CAD render session owns its
+Vite owns its API-only Python backend (`--new`: a port of its own). `VIEWER_PYTHON`
+must name an interpreter that satisfies cadgen's Python floor and imports this
+checkout. The backend opens any file by its absolute path. The web app owns
+URL/history and browser preferences. FileViewer
+state is scoped by file and renderer; each CAD render session owns its
 cache provider and worker lease.
 
-The standalone launcher is `cadgen viewer`. A source checkout can serve the
-local web build; `CADGEN_VIEWER_DIST`, `CADGEN_NODE_BUILDERS_DIR` and
+The standalone launcher is `cadgen viewer`: on port 3245, or the port `--port N`
+names, as any web server; on that port a viewer of the same code is reused and one
+of other code replaced. A source
+checkout can serve the local web build; `CADGEN_VIEWER_DIST`, `CADGEN_NODE_BUILDERS_DIR` and
 `CADGEN_BROWSER_RUNTIME_DIR` are explicit asset overrides. A wheel resolves its
 own bundled assets without the repository. Run `scripts/bundle/bundle.sh` after
 editing build inputs to refresh all packaged outputs.
 
 The self-contained browser suite creates tiny inputs and owns its project,
 viewer and cache. It never reads the sample-model corpus. Install the npm
-Playwright Chromium for UI/web tests and Python Playwright Chromium for
-snapshot tests; their revisions can differ:
+Playwright Chromium for UI/web tests and Python Playwright's headless shell for
+snapshot tests (a snapshot also fetches it on first use); their revisions can differ:
 
 ```bash
 npx --no-install playwright install chromium
-.venv/bin/python -m playwright install chromium
+.venv/bin/python -m playwright install --only-shell chromium
 scripts/bundle/bundle.sh
 scripts/test/test-viewer-browser.sh
 scripts/test/test-viewer-browser.sh --only camera
@@ -468,49 +486,6 @@ scripts/bundle/bundle.sh --check
 asserts required Node/browser outputs; wheel validation checks the complete
 packaged viewer too. Per-stage `cadgen-runtime.sh` flags are for debugging;
 normal iteration goes through `bundle.sh`.
-
-## CAD In Agent Hosts (Codex, Claude Desktop)
-
-The viewer agent hosts render is `apps/mcp` served by `cadgen mcp`; what it
-does, the two ways hosts present it, and the rules it keeps are in
-[apps/mcp/README.md](apps/mcp/README.md). To run this checkout's build in the
-Codex app:
-
-```bash
-scripts/install/codex-dev-plugin.sh --restart
-```
-
-It builds `apps/mcp`, assembles a plugin under `tmp/codex-dev` (this
-checkout's skills, and a server run by this checkout's `.venv`), installs it as
-`text-to-cad@earthtojake-dev` and restarts the app. It refuses while another CAD plugin
-is installed; `--uninstall` removes it. The plugin serves a copy of the page
-taken at install, never `apps/mcp/dist` itself: a rebuild would change the
-page's URI under the running app, and Codex drops the frames showing the old
-one. So reinstall to see a page edit. A running server keeps the Python it
-started with, so restart the app after a Python-only change. The server's
-stderr lands in Codex's log database (`~/.codex/logs_2.sqlite`, lines starting
-`MCP server stderr`).
-
-To run it in Claude Desktop:
-
-```bash
-scripts/install/claude-dev-server.sh
-```
-
-It builds `apps/mcp` and adds a `cad-dev` server to Claude Desktop's
-`claude_desktop_config.json` (every other entry is kept): this checkout's
-`.venv` running `cadgen mcp` over a copy of the page, for the same reason as
-above. Claude Desktop reads the file when it starts, so quit and reopen it (or
-use Developer > Reload MCP Configuration), then ask Claude to show a model with
-CAD. `--uninstall` removes the entry. The server's stderr lands in
-`~/Library/Logs/Claude/mcp-server-cad-dev.log`; the app's developer tools
-(Developer Mode, then Cmd+Option+I) inspect the card's frame.
-
-Neither app can be driven by a test, so the standard path is also checked in
-the MCP Apps reference host (`basic-host` from `modelcontextprotocol/ext-apps`):
-it speaks Streamable HTTP, so a local bridge to the stdio server is needed, and it
-does not advertise the UI extension, so start the server with
-`CADGEN_MCP_PRESENTATION=inline`.
 
 ## Branch Layout
 
@@ -544,10 +519,10 @@ on every push:
   `npx skills add`. `tests/python/global/test_skill_self_containment.py` and
   `test_package_boundaries.py` hold the same law.
 
-Skill `requirements.txt` files pin `cadgen==<VERSION>` in the tree. The release
-PR stamps them with the bump, and `scripts/release/check-version.sh` asserts
-every pin equals `VERSION` — so a bare `cadgen` line or a stale pin fails the
-`Version Check` job.
+Every cadgen pin in the tree — the plugin server configs and each skill's launch
+command — names `VERSION`. The release PR stamps them with the bump
+(`sync-version.mjs`), and `scripts/release/check-version.sh` asserts every skill
+pin equals `VERSION` — so a stale pin fails the `Version Check` job.
 
 The `Test` workflow runs on pushes to `main` and PRs against it: it runs
 `scripts/bundle/bundle.sh --clean` to produce the runtime, checks the layout
@@ -594,9 +569,8 @@ Where the built things live instead:
   layout OpenAI's plugin submission portal takes. It is built from the release
   commit and attached to the GitHub Release beside the wheel. See [Submitting
   the plugin to OpenAI](#submitting-the-plugin-to-openai).
-- **The `plugin` branch** is the plugin alone, the folder the plugin
-  directories follow and Cursor and Grok Build can install. See [The plugin
-  branch](#the-plugin-branch).
+- **The `plugin` branch** is the plugin alone, the folder claude.ai's plugin
+  directory follows. See [The plugin branch](#the-plugin-branch).
 - **A checkout** builds its own: run `scripts/bundle/bundle.sh` once after
   cloning (and after pulling changes to `packages/core`); a missing runtime
   fails with a message that says so.
@@ -617,8 +591,8 @@ X.Y.Z instead of a bump), `target` (the branch the PR is opened against —
 `main`, or `build-test` to rehearse) and `dry_run`. Choose the bump
 deliberately for every release; if a release request does not specify one,
 confirm it rather than assuming. It bumps `VERSION`, stamps the derived
-metadata (`sync-version.mjs`) and every skill's `cadgen==` pin
-(`pin-cadgen-requirements.sh`), commits on `release/<version>`, opens the PR,
+metadata and every `cadgen==` pin (`sync-version.mjs`: the plugin server configs
+and each skill's launch command), commits on `release/<version>`, opens the PR,
 merges it through the API (the PAT, as before — no "allow auto-merge" setting
 is involved) and deletes the branch. The merged commit is THE release commit.
 
@@ -633,7 +607,7 @@ is involved) and deletes the branch. The merged commit is THE release commit.
    package the portal would refuse stops the release before anything
    irreversible. The ZIP is kept as a workflow artifact
    (`cad-openai-plugin-<version>`). `scripts/release/plugin_branch.py
-   --check` does the same for the tree the plugin directories get.
+   --check` does the same for the tree claude.ai's directory gets.
 2. `bundle.sh --clean` — which is where cadgen's whole runtime comes into
    existence, Node builders, snapshot bundle and Viewer client alike, because
    the release commit carries none of it — then `check-builds.sh`, the docs and
@@ -655,30 +629,66 @@ is involved) and deletes the branch. The merged commit is THE release commit.
 ### The plugin branch
 
 `main` is an installable plugin for every host: its root holds every manifest
-(`.claude-plugin/`, `.codex-plugin/`, `.cursor-plugin/`) and MCP config
-(`claude.mcp.json`, `codex.mcp.json`), and the README's install commands clone
-it. Plugin directories treat the folder they follow as the whole plugin, though,
-so they follow the `plugin` branch instead: on `main` the monorepo's files,
-workflows, lockfile and binaries would all be held for a reviewer, and every
-install would copy them. `Publish Release` writes `plugin` on each release: one
-commit whose tree is `.claude-plugin/plugin.json` and `icon.png`,
-`.cursor-plugin/plugin.json`, `claude.mcp.json` (the CAD server both manifests
-name), `skills/`, `LICENSE` and `README.md`, with each README link to a file
-outside that tree pointed at the release commit on GitHub. A release whose
-plugin did not change adds no commit. The tree is checked against claude.ai's
-file rules (<https://claude.com/docs/plugins/pre-submission-checklist>), the
-strictest of the directories, by `tests/python/global/test_plugin_branch.py` on
-every pull request and again before each release.
+(`.claude-plugin/`, `.codex-plugin/`, `.cursor-plugin/`, `gemini-extension.json`)
+and MCP config (`claude.mcp.json`, `codex.mcp.json`, `cursor.mcp.json`), and the
+README's install commands use it. claude.ai's plugin directory treats the folder it follows as
+the whole plugin, though, so it follows the `plugin` branch instead: on `main`
+the monorepo's files, workflows, lockfile and binaries would all be held for a
+reviewer, and every install would copy them. `Publish Release` writes `plugin` on
+each release: one commit whose tree is `.claude-plugin/plugin.json` and
+`icon.png`, `.cursor-plugin/plugin.json`, `gemini-extension.json`,
+`claude.mcp.json` and `cursor.mcp.json` (the CAD server the manifests name),
+`skills/`, `LICENSE` and `README.md`, with each README link to a file outside
+that tree pointed at the release commit on GitHub. A Cursor install by hand
+clones this branch too (the README's `git clone --branch plugin`). A release whose plugin did not change adds no commit.
+The tree is checked against claude.ai's file rules
+(<https://claude.com/docs/plugins/pre-submission-checklist>) by
+`tests/python/global/test_plugin_branch.py` on every pull request and again
+before each release.
 
-- **claude.ai:** in the developer portal at <https://claude.ai/directory/manage>,
-  the listing's **Branch or tag** is still `claude-plugin`, the branch's old
-  name, so `Publish Release` pushes the same commit there too. The directory
-  scans each new commit and publishes it by the listing's publish setting.
-- **Cursor:** reads `.cursor-plugin/plugin.json`. Submit the repository at
-  <https://cursor.com/marketplace/publish>; teams can import it from
-  **Dashboard → Plugins & MCPs → Team Marketplaces**.
-- **Grok Build:** reads the Claude manifest
-  (`grok plugin install earthtojake/text-to-cad@plugin`).
+What each store and installer reads:
+
+| Where | Reads |
+| ----- | ----- |
+| claude.ai's directory | the branch the listing tracks: still `claude-plugin`, the old name, so `Publish Release` pushes the same commit there too |
+| Cursor Marketplace | the repository's default branch, `main`: its submission takes a repository, not a branch |
+| OpenAI's plugin portal | the plugin ZIP a person uploads from the GitHub Release |
+| Claude Code, Codex, Grok Build | `main`, unless the command names a ref (`owner/repo@ref` for Codex and Grok) |
+| Gemini CLI | the latest GitHub Release: with no Gemini archive among its assets, it takes the release's source tarball, so a new manifest reaches Gemini with the next release. A release with a single asset would be taken as the extension, so keep shipping the wheel and sdist beside the ZIP |
+| Skills CLI and skills.sh | `main` |
+
+Each plugin's CAD server startup config says where its installs come from, its
+install channel, in the server's environment (`CADGEN_INSTALL_CHANNEL`), and adds
+`CADGEN_AUTO_UPDATED=1` where something other than the person keeps the copy up to
+date: the store that reviewed it, or the app that installed it. The processes the
+server starts (the Viewer, the daemon) inherit both. cadgen reports the channel
+with analytics and says a new release is out only to a copy that is not
+auto-updated (`cadgen/_internal/channel.py`, `cadgen/updates.py`); it never
+decides by a channel's name, since its core may not know a host. They are
+environment, never flags: `main`'s configs pin the last release, and a cadgen
+ignores a variable it does not know but refuses a flag, so a new setting would
+stop every server installed from `main` until the next release. Nothing works
+them out at runtime, so a plugin that ships somewhere new writes its own, and the
+analytics receiver (`apps/docs/src/lib/api/events.mjs`) learns its channel;
+`test_plugin_manifests.py`, `test_plugin_branch.py` and `test_plugin_zip.py`
+hold each one:
+
+| Package | Server environment | Told of a release | Written by |
+| ------- | ------------------ | ----------------- | ---------- |
+| `main`'s `claude.mcp.json` (Claude Code, Grok Build, and Cursor through Claude Code's plugins) | `claude-github` | yes | the checked-in file |
+| `main`'s `codex.mcp.json` | `codex-github` | yes | the checked-in file |
+| `main`'s `gemini-extension.json` | `gemini-github`, auto-updated | no: Gemini updates it | the checked-in file |
+| the README's Claude Desktop config | `claude-desktop` | yes | the README |
+| `main`'s `cursor.mcp.json`, which the Cursor Marketplace reads | `cursor-marketplace`, auto-updated | no: its store updates it | the checked-in file |
+| the `plugin` branch's `claude.mcp.json`, which claude.ai's directory follows | `claude-directory`, auto-updated | no: its store updates it | `plugin_branch.py` |
+| the `plugin` branch's `cursor.mcp.json`, which a Cursor install by hand clones | `cursor-github` | yes | `plugin_branch.py` |
+| the OpenAI ZIP's `.mcp.json` | `openai-directory`, auto-updated | no: its store updates it | `plugin_zip.py` |
+| a development install | `dev` | no | `dev_install.py` |
+| a process no plugin's server started: a skill's command, the Viewer a skill opens | none (`unknown`) | the Viewer: a skills-only install | nothing |
+
+A skill's own `cadgen` command never says a release is out: the same skill files
+ship in every plugin, so it cannot tell which one it came with. The CAD app and
+the Viewer say it.
 
 **Dev note — retire `claude-plugin`.** The portal refuses a tracked-branch change
 while a reviewer has the plugin. Once the claude.ai listing is out of review,
@@ -698,7 +708,10 @@ each folder with its own entry: `.codex-plugin/` (manifest and icons), `skills/`
 first ZIP, one top-level `cad/` folder with no directory entry of its own, as
 holding no plugin.) The portal requires `mcpServers` to resolve to a root
 `.mcp.json`, so a server config the checkout keeps under another name is
-archived as `.mcp.json`, and the archived manifest points there.
+archived as `.mcp.json`, and the archived manifest points there. That config
+names `openai-directory` as its install channel, auto-updated, in the server's
+`env`; the portal's acceptance of `env` is confirmed at the first upload that
+carries it.
 
 For each release, a person with the access below:
 
@@ -725,6 +738,18 @@ with the final-submission listing limits, such as 30 characters for the name and
 subtitle. A missing `interface.logo` or `interface.composerIcon` is a warning,
 not an error, but the portal refuses the upload without them. The portal's own
 skill and policy scans still run after upload.
+
+### The version feed
+
+cadgen's daily version check reads `api.texttocad.dev/v1/versions`
+(`apps/docs/src/lib/api/versions.mjs`): `latest` is the docs app's version,
+which the release PR stamps from `VERSION`, and `Publish Release` deploys the
+docs after the PyPI upload, so the feed names a release only once it can be
+installed. Only a copy nothing else updates reads it (its channel, "The plugin
+branch" above): a store's copy (the Claude or OpenAI directory, the Cursor
+Marketplace) and Gemini's extension never check and are never told, since their
+store or Gemini updates them. A change to the analytics schema (`schema.sql`) is run on the database
+before the deploy that ships it (`apps/docs/README.md`).
 
 ### Resuming and republishing
 
@@ -786,7 +811,6 @@ For local release preparation, use the same scripts the workflow calls:
 git fetch --tags origin
 scripts/release/bump-version.sh patch
 node scripts/release/sync-version.mjs
-scripts/release/pin-cadgen-requirements.sh
 scripts/release/check-version.sh --incremented-from "refs/tags/$(source scripts/release/release-tags.sh && latest_release_tag)"
 node scripts/release/sync-version.mjs --check
 ```
@@ -866,24 +890,23 @@ Repo-owned Python tests live under `tests/python/`, grouped by tested surface:
 suite is `tests/python/packages/cadgen/viewer/`, part of the cadgen package suite.
 
 For fast CAD Viewer source iteration, build the shared packages, then invoke
-the web app in dev mode from the directory you want to serve (outside
-`apps/web`). The app consumes source with HMR while shared packages resolve to
-their compiled exports:
+the web app in dev mode from a folder of models (outside `apps/web`). The app
+consumes source with HMR while shared packages resolve to their compiled exports:
 
 ```bash
-cd <the directory to serve>
+cd <a folder of models>
 VIEWER_PYTHON=<checkout>/.venv/bin/python \
   npm --prefix <checkout>/apps/web run dev -- --host 127.0.0.1
 ```
 
-The spawned backend serves one root, fixed at startup. Its resolver accepts an
-explicit `directoryRoot` from its caller first, then `INIT_CWD`, then the
-process working directory, skipping the latter two when they are inside
-`apps/web`. Vite's fallback is `<checkout>/apps`. npm sets `INIT_CWD` to the
-invocation directory, so `--prefix` selects the app while retaining your chosen
-root. The page is the bare origin and `?file=` names an artifact relative to
-that root, for example `http://127.0.0.1:5173/?file=STEP/part.step` when the
-served directory contains `STEP/part.step`.
+The spawned backend opens any file by its absolute path; the folder it starts
+in is only where a relative `?file=` resolves. Its resolver takes `INIT_CWD`, then
+the process working directory, skipping either when it is inside `apps/web`. Vite's
+fallback is `<checkout>/apps`. npm sets `INIT_CWD` to the invocation directory,
+so `--prefix` selects the app while keeping your folder. The page is the bare
+origin and `?file=` names a file, for example
+`http://127.0.0.1:5173/?file=/abs/models/STEP/part.step`, or
+`?file=STEP/part.step` from `/abs/models`.
 
 Vite defaults to port 5173 and fails if it is taken; select another with
 `--port`. See [the app's launcher contract](apps/web/README.md#launching) for

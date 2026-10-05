@@ -1,0 +1,57 @@
+{
+  "why": "An animation module's closed export vocabulary and its refusals, as the renderer (compileAnimationModule here) and cadgen's build check (cadgen/_internal/animation_source.py) both say them. renderModule.test.js imports and compiles each source; tests/python/packages/cadgen/test_animation_source.py reads the same cases without running them. A refusal is the error's whole message; null is no refusal.",
+  "exports": ["clips"],
+  "name": "arm.py::arm animation",
+  "cases": [
+    {
+      "why": "a module that exports its clips and nothing else",
+      "source": "export const clips = { demo: { duration: 2, update(t, m) {} } };",
+      "error": null
+    },
+    {
+      "why": "a helper exported beside the clips",
+      "source": "export function helper() { return 1; }\nexport const clips = { demo: { duration: 2, update(t, m) { helper(); } } };",
+      "error": "arm.py::arm animation: unknown export helper — the renderer understands: clips"
+    },
+    {
+      "why": "every unknown export, in the order a module namespace lists them (by UTF-16 code unit)",
+      "source": "export const clips = {};\nexport const clamp = (v) => v;\nexport function solveDrs() {}\nexport class Helper {}\nexport const HP = {};\nexport const _clamp = 1;",
+      "error": "arm.py::arm animation: unknown exports HP, Helper, _clamp, clamp, solveDrs — the renderer understands: clips"
+    },
+    {
+      "why": "a default export",
+      "source": "export default { demo: { duration: 1, update() {} } };",
+      "error": "arm.py::arm animation: a default export is not an animation-module export — use named exports (clips)"
+    },
+    {
+      "why": "an unknown export is reported before a default one",
+      "source": "const clips = {};\nconst helper = 1;\nexport { clips, helper as default, helper as extra };",
+      "error": "arm.py::arm animation: unknown export extra — the renderer understands: clips"
+    },
+    {
+      "why": "a second binding of the exported declaration",
+      "source": "export const clips = {}, helper = 1;",
+      "error": "arm.py::arm animation: unknown export helper — the renderer understands: clips"
+    },
+    {
+      "why": "a line break ends the exported declaration before a statement it cannot continue into",
+      "source": "export const clips = {}\nlet a, b\na = b",
+      "error": null
+    },
+    {
+      "why": "a comma on the next line continues it",
+      "source": "export const clips = {}\n, helper = 1",
+      "error": "arm.py::arm animation: unknown export helper — the renderer understands: clips"
+    },
+    {
+      "why": "the word export in comments, strings, templates, regular expressions and property names exports nothing",
+      "source": "// export const commented = 1;\n/* export const blocked = 2; */\nconst text = \"export const quoted = 3\";\nconst template = `export const ${\"templated\"} = 4`;\nconst pattern = /export const matched = 5/;\nconst object = { export: 6 };\nobject.export = 7;\nexport const clips = { demo: { duration: 1, update(t, m) { return t / 2 / 1; } } };",
+      "error": null
+    },
+    {
+      "why": "a quote inside a regular expression does not open a string",
+      "source": "function quoted(s) { if (s) /'/.test(s); return 4 / 2 / 1; }\nexport const clips = {};\nexport const helper = quoted;",
+      "error": "arm.py::arm animation: unknown export helper — the renderer understands: clips"
+    }
+  ]
+}

@@ -895,9 +895,8 @@ def resolve_robot_render_job(
     The browser assembles the robot: the parser resolves each link mesh against the
     description's own URL, so this hands over one asset URL and the pose, and the shared
     mesh backend renders the result."""
-    # Link meshes are referenced relative to the description, so the served root has to
-    # contain both. The description's own directory is the natural root and matches how the
-    # viewer serves a robot from its model folder.
+    # Link meshes are referenced relative to the description, so the folder this serves has
+    # to contain both: the description's own directory.
     asset_url = asset_url_for_path(input_path, root_path)
     resolved: dict[str, object] = {
         "rootPath": str(root_path),

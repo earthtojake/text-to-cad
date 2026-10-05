@@ -1,5 +1,6 @@
-export { createCadClient, cadApiUrl } from "./client.js";
+export { createCadClient, cadApiUrl, isMissingFileError } from "./client.js";
 export { createHttpAttachmentStore } from "./attachments.js";
+export { encodeBase64 } from "./base64.js";
 export * from "./origin.js";
 export type * from "./types.js";
 export { resolvePackageAssetUrl } from "./assetUrl.js";

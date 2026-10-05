@@ -218,6 +218,68 @@ RETIRED_DISPLAY_KEYS = {
 }
 class SnapshotError(RuntimeError):
     pass
+# What a Playwright launch failure says when the browser itself is the problem, not the job:
+# its build was never downloaded (the first snapshot after an install or a Playwright bump), or
+# a Linux host lacks the system libraries it links against (a slim container).
+_BROWSER_MISSING = "Executable doesn't exist"
+_HOST_LIBRARIES_MISSING = "Host system is missing dependencies"
+
+
+def browser_problem(message: str) -> str | None:
+    """``"browser"`` (not downloaded), ``"libraries"`` (host lacks them) or ``None`` (anything else)."""
+    if _BROWSER_MISSING in message:
+        return "browser"
+    if _HOST_LIBRARIES_MISSING in message:
+        return "libraries"
+    return None
+
+
+def install_browser(problem: str) -> None:
+    """Fix ``problem`` the way Playwright documents, so the first snapshot needs no setup step.
+
+    The browser is the headless shell alone (``--only-shell``): the full Chromium beside it is
+    ~350 MB a snapshot never launches. It goes where Playwright keeps its browsers, which shares
+    it with any other Playwright install and keeps Playwright's own cleanup of old builds. The
+    host's libraries need root and apt; without them the fix is the user's to run, and this says
+    exactly which command. Progress goes to stderr: stdout is the snapshot's result.
+    """
+    import shutil
+    import subprocess
+
+    if problem == "browser":
+        sys.stderr.write("cadgen: downloading the snapshot browser (once, about 100 MB)...\n")
+        command = [sys.executable, "-m", "playwright", "install", "--only-shell", "chromium"]
+    else:
+        command = [sys.executable, "-m", "playwright", "install-deps", "chromium"]
+        root = hasattr(os, "geteuid") and os.geteuid() == 0
+        if not (sys.platform.startswith("linux") and root and shutil.which("apt-get")):
+            raise SnapshotError(
+                "The snapshot browser needs system libraries this machine does not have. "
+                f"Install them with: sudo {' '.join(command)}"
+            )
+        sys.stderr.write("cadgen: installing the snapshot browser's system libraries...\n")
+    result = subprocess.run(command, stdout=sys.stderr, stderr=sys.stderr)
+    if result.returncode != 0:
+        raise SnapshotError(f"{' '.join(command)} exited {result.returncode}; run it to see why, then retry.")
+
+
+async def launch_with_browser(launch: Any, fix: Any = install_browser) -> Any:
+    """``await launch()``, fixing a missing browser (then its libraries) and retrying.
+
+    At most one fix per problem: a launch that still fails after both is the job's real error.
+    """
+    fixed: set[str] = set()
+    while True:
+        try:
+            return await launch()
+        except Exception as error:  # noqa: BLE001 - Playwright raises its own Error for both cases
+            problem = browser_problem(str(error))
+            if problem is None or problem in fixed:
+                raise
+            fixed.add(problem)
+            fix(problem)
+
+
 class RouteFileError(SnapshotError):
     def __init__(self, message: str, *, status: int = 404) -> None:
         super().__init__(message)
@@ -1656,13 +1718,15 @@ class BatchSnapshotRenderer:
             try:
                 from playwright.async_api import async_playwright
             except ImportError as exc:
+                from cadgen._internal.launch import launch_command
+
+                # A dependency of every cadgen install, so this is an incomplete environment.
                 raise SnapshotError(
-                    "CAD snapshot requires the Python playwright package. "
-                    "Install the invoking skill's own requirements.txt (it ships playwright), "
-                    "then run `python -m playwright install chromium` if needed."
+                    "CAD snapshot requires the Python playwright package, which every cadgen "
+                    f"install includes. Run cadgen as the skills do: {launch_command()} ..."
                 ) from exc
             self.playwright = await async_playwright().start()
-            self.browser = await self.playwright.chromium.launch(
+            self.browser = await launch_with_browser(lambda: self.playwright.chromium.launch(
                 headless=True,
                 timeout=RENDER_BROWSER_STARTUP_TIMEOUT_MS,
                 # The intercepted localhost page and its 127.0.0.1 bulk server
@@ -1690,7 +1754,7 @@ class BatchSnapshotRenderer:
                     # platform default stands.
                     *(["--use-angle=metal"] if sys.platform == "darwin" else []),
                 ],
-            )
+            ))
             self.context = await self.browser.new_context(
                 viewport={"width": SIMPLE_RENDER_WIDTH, "height": SIMPLE_RENDER_HEIGHT},
                 device_scale_factor=1,

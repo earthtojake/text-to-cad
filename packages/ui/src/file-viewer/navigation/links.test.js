@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { TEXT_TO_CAD_LINKS, issueUrl } from "./links.js";
+import { TEXT_TO_CAD_LINKS, issueUrl, releaseNotesUrl, releaseVersion } from "./links.js";
 
 const ISSUES = TEXT_TO_CAD_LINKS.issues;
 const read = (url) => new URL(url).searchParams;
@@ -29,4 +29,10 @@ test("the title and the labels count against the cap and are never cut: Details 
   assert.ok(read(squeezed).get("body").endsWith("b\n… (truncated)") && !squeezed.includes("Details"));
   // The title and the labels alone past the cap: the bare address, never a cut title.
   assert.equal(issueUrl(ISSUES, { ...issue, title: "t".repeat(500) }, 100), ISSUES);
+});
+
+test("a version is shown bare, its tag dressing stripped once, and its notes are under its v-tag", () => {
+  assert.deepEqual(["v0.5.0", "0.4.28", "refs/tags/v0.5.0", " V0.5.0 ", "vnext"].map(releaseVersion), ["0.5.0", "0.4.28", "0.5.0", "0.5.0", "vnext"]);
+  assert.equal(releaseNotesUrl("https://github.com/example/repo/", "v0.5.0"), "https://github.com/example/repo/releases/tag/v0.5.0");
+  assert.equal(releaseNotesUrl("https://github.com/example/repo", ""), "");
 });

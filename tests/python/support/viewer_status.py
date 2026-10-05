@@ -13,7 +13,8 @@ import json
 from pathlib import Path
 
 
-def viewer_artifact_status(file_ref: str | Path, root: str | Path) -> dict:
+def viewer_artifact_status(file: str | Path) -> dict:
+    """The status of ``file``, by its absolute path."""
     from cadgen.viewer.artifact_status import artifact_status
 
-    return json.loads(json.dumps(artifact_status(str(file_ref), str(root))))
+    return json.loads(json.dumps(artifact_status(str(file))))

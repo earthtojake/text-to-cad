@@ -182,7 +182,7 @@ async function measurePoints(page, at, ...points) {
 // preview camera, so what moves in a frame is the model — as a previous session would have left it.
 async function open(options = {}) {
   const seeded = options.record === undefined && options.store !== 'session'
-    ? { record: { version: 1, settings: {}, files: { [JSON.stringify(['one', harness.fixture.file, 'step'])]: { version: 2, playback: { orbit: false } } } } } : {};
+    ? { record: { version: 2, settings: {}, files: { [JSON.stringify([`/models/${harness.fixture.file}`, 'step'])]: { version: 2, playback: { orbit: false } } } } } : {};
   const view = await harness.open({ ...options, ...seeded });
   const { page, pane } = view;
   const ready = async () => {
@@ -217,16 +217,11 @@ async function open(options = {}) {
       await pane.getByRole('button', { name: 'Exit preview', exact: true }).click();
       await pane.getByRole('button', { name: 'Preview', exact: true }).waitFor();
     },
-    // Display is not a tool: its button sits between Settings and Preview at the navbar's right end.
-    tool: name => name === 'Display' ? pane.locator('[data-viewer-navbar]').getByRole('button', { name, exact: true })
+    // Display is not a tool: its button sits before Preview on top of the cube.
+    tool: name => name === 'Display' ? pane.locator('[data-viewport-actions]').getByRole('button', { name, exact: true })
       : pane.locator(name === 'Reset' ? '[data-cad-camera-controls]' : '[data-cad-toolbar]').getByRole('button', { name, exact: true }),
     tools: () => pane.locator('[data-cad-toolbar]').getByRole('button')
       .evaluateAll(buttons => buttons.map(button => `${button.getAttribute('aria-label')}:${button.getAttribute('aria-pressed')}`)),
-    // The nav row's panel toggles, in order, each with whether its panel is the open one. A STEP
-    // declares none of its own: the file tree's is the only one.
-    panels: () => pane.locator('[data-file-panel]')
-      .evaluateAll(buttons => buttons.map(button => `${button.getAttribute('aria-label')}:${button.getAttribute('aria-pressed')}`)),
-    toggle: id => id === 'cad-display' ? pane.locator('[data-viewer-navbar]').getByRole('button', { name: 'Display', exact: true }) : pane.locator(`[data-file-panel="${id}"]`),
     // The tool stack's panels on screen, top to bottom, by their accessible names.
     stack: () => pane.locator('[data-cad-tool-stack] [data-tool-panel]').evaluateAll(panels => panels
       .filter(panel => panel.getClientRects().length > 0).map(panel => panel.getAttribute('aria-label'))),
@@ -254,20 +249,16 @@ async function open(options = {}) {
 }
 
 
-test('a STEP opens in Select with the tools its sidecar earns, its Features in the tool stack and Display and Preview in the navbar, and paints both authored colours', async () => {
+test('a STEP opens in Select with the tools its sidecar earns, its Features in the tool stack and Display and Preview on top of the cube, and paints both authored colours', async () => {
   const view = await open();
   const { page, pane, errors } = view;
   assert.deepEqual(await view.tools(), ['Select:true', 'Position:false', 'Draw:false', 'Measure:false', 'Explode:false', 'Clip:false'],
-    'Position because the sidecar bound; no Animate: its routine plays in preview. Display is a dropdown from the navbar, not a tool');
-  assert.deepEqual(await pane.locator('[data-viewer-navbar] [data-navbar-controls] button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
-    ['Display', 'Preview'], 'the view\'s controls at the navbar\'s right end: Display, then Preview');
-  // The nav row has no panel of the file's: its controls are the tool stack's. The file tree's
-  // toggle is the only one, and a file opened directly opens with nothing beside it.
-  assert.deepEqual(await view.panels(), ['Show files:false']);
-  assert.equal(await pane.locator('[data-file-panel-container]').count(), 0, 'no panel column beside the file');
+    'Position because the sidecar bound; no Animate: its routine plays in preview. Display is a dropdown from on top of the cube, not a tool');
+  assert.deepEqual(await pane.locator('[data-viewport-actions] button').evaluateAll(buttons => buttons.map(button => button.getAttribute('aria-label'))),
+    ['Display', 'Preview'], 'the view\'s controls on top of the cube: Display, then Preview');
   assert.equal(await view.displayPanel().count(), 0, 'Display is never where a file opens');
-  assert.equal(await pane.locator('[data-viewer-navbar]').getByRole('button', { name: 'Preview', exact: true }).count(), 1,
-    'a STEP is 3D: its navbar offers Preview');
+  assert.equal(await pane.locator('[data-viewport-actions]').getByRole('button', { name: 'Preview', exact: true }).count(), 1,
+    'a STEP is 3D: Preview sits on top of its cube');
   // Select is the tool, so the stack shows its Features — an assembly's tree starts open — with no
   // tabs, and nothing of Position's.
   assert.deepEqual(await view.stack(), ['Features']);
@@ -704,8 +695,8 @@ const MIN_REDRAWN = { render: 30_000, xray: 30_000, 'hidden-line': 30_000, wiref
 test('every Display preset reaches the drawn frame, on the live canvas', async () => {
   const view = await open();
   const { page, errors } = view;
-  // Display is a dropdown from its button in the navbar, over the viewport.
-  await view.toggle('cad-display').click();
+  // Display is a dropdown from its button on top of the cube, over the viewport.
+  await view.tool('Display').click();
   const panel = view.displayPanel();
   await panel.waitFor();
   const solid = await restingFrame(view);
@@ -871,12 +862,12 @@ test('preview opens paused, its playbar plays and pauses the routine without mov
   assert.equal(await view.tool('Animate').count(), 0);
   assert.equal(await pane.locator('[data-animation-transport]').count(), 0);
   const boxes = names => Promise.all(names.map(name => pane.getByRole('button', { name, exact: true }).boundingBox()));
-  const navbarControls = await boxes(['Display', 'Preview']);
+  const viewControls = await boxes(['Display', 'Preview']);
   await view.enterPreview();
   // Preview has the page to itself: the navbar goes, and its corner holds Playback settings and the
-  // way out exactly where Display and Preview sat in it.
+  // way out exactly where Display and Preview sat, on top of the cube.
   await pane.locator('[data-viewer-navbar]').waitFor({ state: 'hidden' });
-  assert.deepEqual(await boxes(['Playback settings', 'Exit preview']), navbarControls);
+  assert.deepEqual(await boxes(['Playback settings', 'Exit preview']), viewControls);
   // The tools are put away, and the playbar is under the model.
   assert.equal(await pane.getByRole('group', { name: 'Interaction tools' }).isVisible(), false);
   const bar = pane.getByRole('toolbar', { name: 'Animation playback' });
@@ -1187,8 +1178,8 @@ test('mobile touch: a tap selects, and a two-finger pinch zooms without selectin
 });
 
 test('a click selects at once, and a double-click ends where it did when a click waited: the part isolated, isolation left, or the face copied and kept, on the selection its first click found', async () => {
-  // The host names its files absolutely, and every copy says so.
-  const view = await open({ init: () => { window.__cadPromptDestination = 'clipboard'; window.__cadReferenceRoot = '/work/models'; } });
+  // Files are named by their absolute paths, and every copy says so.
+  const view = await open({ init: () => { window.__cadPromptDestination = 'clipboard'; } });
   const { page, box, at, errors } = view;
   const selection = () => page.evaluate(() => { const state = window.cadHarness.a.controller.readState();
     return { parts: state.selectedPartIds, refs: state.selectedReferenceIds, isolated: state.isolatedPartIds }; });
@@ -1217,7 +1208,7 @@ test('a click selects at once, and a double-click ends where it did when a click
   // The Reference panel's Copy, at its foot: the selection's reference.
   await view.pane.getByRole('region', { name: 'Reference details', exact: true }).getByRole('button', { name: 'Copy', exact: true }).click();
   await page.waitForFunction(() => window.__clipboardWrites.length === 1);
-  assert.equal(await page.evaluate(() => window.__clipboardWrites[0]), '/work/models/hinge_block.step#o1.2');
+  assert.equal(await page.evaluate(() => window.__clipboardWrites[0]), '/models/hinge_block.step#o1.2');
   await page.evaluate(() => { window.__clipboardWrites = []; });
 
   // A double-click on the base isolates it. Its first click picked the base; the double-click
@@ -1266,7 +1257,7 @@ test('a click selects at once, and a double-click ends where it did when a click
   const armFace = (await selection()).refs;
   assert.equal(armFace.length, 1, `the double-clicked face is the selection: ${JSON.stringify(armFace)}`);
   assert.match(armFace[0], /\|o1\.2\.f\d+$/);
-  assert.match(await page.evaluate(() => window.__clipboardWrites[0]), /^\/work\/models\/hinge_block\.step#o1\.2\.f\d+$/);
+  assert.match(await page.evaluate(() => window.__clipboardWrites[0]), /^\/models\/hinge_block\.step#o1\.2\.f\d+$/);
   // ...also when it was selected already: the two clicks it is made of do not toggle it off.
   await page.mouse.dblclick(...at([15, 0, 4]));
   await page.waitForFunction(() => window.__clipboardWrites.length === 2);
@@ -1300,7 +1291,7 @@ test('a click selects at once, and a double-click ends where it did when a click
   await view.pane.getByRole('region', { name: 'Reference details', exact: true }).getByRole('button', { name: 'Copy All', exact: true }).click();
   await page.waitForFunction(() => window.__clipboardWrites.length === 5);
   const copiedSelection = parseCadRefToken(await page.evaluate(() => window.__clipboardWrites[4]));
-  assert.equal(copiedSelection.cadPath, '/work/models/hinge_block.step');
+  assert.equal(copiedSelection.cadPath, '/models/hinge_block.step');
   assert.deepEqual([...copiedSelection.selectors].sort(), both.map(reference => reference.split('|').at(-1)).sort());
 
   // Hover is untouched: under Faces the face under the pointer lights, under Edges the edge does.

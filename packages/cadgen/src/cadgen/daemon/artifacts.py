@@ -294,7 +294,7 @@ def _run_transient(request, root, env, endpoint, *, subscriber=None):
                           "CADGEN_DAEMON": "0", "CADGEN_CACHE_DIR": root})
         if orphaned.is_set():
             raise ArtifactDetached("artifact producer lost its last subscriber")
-        process = subprocess.Popen([sys.executable, "-m", "cadgen.daemon.artifacts"],
+        process = subprocess.Popen([sys.executable, "-P", "-m", "cadgen.daemon.artifacts"],
                                    env=child_env, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                    stderr=subprocess.STDOUT, text=True, encoding="utf-8", errors="backslashreplace")
         if orphaned.is_set():

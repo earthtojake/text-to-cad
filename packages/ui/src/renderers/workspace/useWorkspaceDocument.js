@@ -26,9 +26,9 @@ export function useWorkspaceDocument({ view, data }) {
   const modelKey = fileKey(entry);
   const liveEntry = catalog.entries.find(item => fileKey(item) === modelKey) || entry;
   const resource = useMemo(() => ({
-    kind: "workspace-file", workspaceId: view.source.id, path: view.file.path,
+    kind: "workspace-file", path: view.file.path,
     revision: String(liveEntry?.documentHash || liveEntry?.hash || view.file.revision || "")
-  }), [view.source.id, view.file.path, view.file.revision, liveEntry?.documentHash, liveEntry?.hash]);
+  }), [view.file.path, view.file.revision, liveEntry?.documentHash, liveEntry?.hash]);
   const shellServices = useMemo(() => ({
     preferences, onPreferenceChange: services.preferences.update, live: services.live,
     captureRequest: commands.captureRequest, acknowledgeCommand: services.commands?.acknowledge

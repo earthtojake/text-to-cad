@@ -17,6 +17,7 @@ then regenerate the vectors and profiles before rebuilding these entrypoints:
 
 ```sh
 node scripts/brand/generate-logos.mjs
+node scripts/brand/animate-logos.mjs
 node scripts/brand/export-logos.mjs
 .venv/bin/python models/branding/src/logo_c.py
 .venv/bin/python models/branding/src/logo_cad.py

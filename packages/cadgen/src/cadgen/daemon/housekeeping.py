@@ -166,7 +166,8 @@ class Housekeeper:
         output: list[str] = []
         released = None
         with subprocess.Popen(
-            [sys.executable, "-m", "cadgen.store.gc", *args],
+            # -P: cadgen's own modules, never the working folder's (STORE.md §9).
+            [sys.executable, "-P", "-m", "cadgen.store.gc", *args],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
             cwd=tempfile.gettempdir(), env=env, text=True, encoding="utf-8", errors="replace",
         ) as proc:

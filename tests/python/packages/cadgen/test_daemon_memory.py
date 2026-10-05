@@ -407,7 +407,7 @@ class DependencyRequest(unittest.TestCase):
              mock.patch.object(server, "_BROKER", broker), \
              mock.patch.object(server, "_log"):
             server._handle_request(conn, request)
-        worker_pool.acquire.assert_called_once_with(os.path.realpath("/work/child.py"), dependency=True)
+        worker_pool.acquire.assert_called_once_with(os.path.realpath("/work/child.py"), dependency=True, on_start=mock.ANY)
         worker_pool.release.assert_not_called()
         ledger.finish.assert_called_once_with(job, 1, error=reason)
         broker.finish_entry.assert_called_once_with(entry, 1)

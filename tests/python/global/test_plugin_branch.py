@@ -21,6 +21,7 @@ branch = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(branch)
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"\0" * 64
+SERVERS = json.dumps({"mcpServers": {"cad": {"command": "uvx", "args": ["--from", "cadgen==1.0.0", "cadgen", "mcp"]}}})
 
 
 def git(root: Path, *args: str) -> str:
@@ -32,10 +33,25 @@ class PluginTreeTests(unittest.TestCase):
         tree, errors, _manifest = branch.build(REPO_ROOT)
         self.assertEqual(errors, [])
         self.assertEqual({path.split("/")[0] for path in tree},
-                         {".claude-plugin", ".cursor-plugin", "claude.mcp.json", "skills", "LICENSE", "README.md"})
+                         {".claude-plugin", ".cursor-plugin", "gemini-extension.json", "claude.mcp.json", "cursor.mcp.json",
+                          "skills", "LICENSE", "README.md"})
         self.assertEqual({path for path in tree if path.startswith(".claude-plugin/")},
                          {".claude-plugin/plugin.json", ".claude-plugin/icon.png"})
         self.assertEqual({path for path in tree if path.startswith(".cursor-plugin/")}, {".cursor-plugin/plugin.json"})
+
+    def test_each_config_on_the_branch_names_the_channel_its_installs_come_from(self) -> None:
+        # claude.ai's directory follows this branch and updates its copies; a Cursor install by hand
+        # clones it, and nothing updates that. On main the same configs name `claude-github` and the
+        # Cursor Marketplace. The server's environment is the plugin's say (cadgen's _internal/channel.py).
+        tree, errors, _manifest = branch.build(REPO_ROOT)
+        self.assertEqual(errors, [])
+        said = {path: json.loads(tree[path][1])["mcpServers"]["cad"]["env"]
+                for path in ("claude.mcp.json", "cursor.mcp.json", "gemini-extension.json")}
+        self.assertEqual(said, {
+            "claude.mcp.json": {"CADGEN_INSTALL_CHANNEL": "claude-directory", "CADGEN_AUTO_UPDATED": "1"},
+            "cursor.mcp.json": {"CADGEN_INSTALL_CHANNEL": "cursor-github"},
+            "gemini-extension.json": {"CADGEN_INSTALL_CHANNEL": "gemini-github", "CADGEN_AUTO_UPDATED": "1"},
+        })
 
     def test_readme_links_outside_the_tree_point_at_the_commit(self) -> None:
         text = ('[cad](skills/cad/SKILL.md) [dir](skills/cad/) [license](LICENSE) [web](https://x.dev) [top](#install)\n'
@@ -69,7 +85,7 @@ class PluginTreeTests(unittest.TestCase):
             manifest = {"name": "demo", "version": "1.0.0", "repository": "https://github.com/o/demo"}
             files = {".claude-plugin/plugin.json": json.dumps(manifest), ".claude-plugin/icon.png": PNG,
                      ".claude-plugin/marketplace.json": "{}", ".cursor-plugin/plugin.json": "{}",
-                     "claude.mcp.json": "{}", "LICENSE": "MIT\n",
+                     "gemini-extension.json": "{}", "claude.mcp.json": SERVERS, "cursor.mcp.json": SERVERS, "LICENSE": "MIT\n",
                      "skills/s/SKILL.md": "one\n",
                      "README.md": "[s](skills/s/SKILL.md) [c](CONTRIBUTING.md)\n", "CONTRIBUTING.md": "x\n",
                      "apps/web.js": "x\n"}
@@ -84,7 +100,8 @@ class PluginTreeTests(unittest.TestCase):
             first = branch.commit(root, tree, None, "demo 1.0.0")
             self.assertEqual(git(root, "ls-tree", "-r", "--name-only", first).split(),
                              [".claude-plugin/icon.png", ".claude-plugin/plugin.json", ".cursor-plugin/plugin.json",
-                              "LICENSE", "README.md", "claude.mcp.json", "skills/s/SKILL.md"])
+                              "LICENSE", "README.md", "claude.mcp.json", "cursor.mcp.json", "gemini-extension.json",
+                              "skills/s/SKILL.md"])
             self.assertIn(f"[c](https://github.com/o/demo/blob/{git(root, 'rev-parse', 'HEAD')}/CONTRIBUTING.md)",
                           git(root, "show", f"{first}:README.md"))
             self.assertEqual(branch.commit(root, tree, first, "demo 1.0.0"), first)

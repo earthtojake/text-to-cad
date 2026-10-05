@@ -135,7 +135,7 @@ def build(
         destination,
         kinematics_def=kinematics_def,
         materials=load_materials_config(materials, where=where),
-        animation=load_animation_source(animation, where=where),
+        animation=load_animation_source(animation, where=where, document=destination),
         force=force,
         logger=CliLogger(where, verbose=verbose),
     )

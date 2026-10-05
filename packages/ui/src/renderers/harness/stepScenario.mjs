@@ -200,15 +200,17 @@ async function warmTessellationCache(fixture) {
   };
 }
 
-/** The catalog entry the real scanner writes for this document, with the sidecar inline. */
+/**
+ * The catalog entry the real scanner writes for this document, with the sidecar inline: the file
+ * by its absolute path, under the `/models` the harness opens a bare `?file=` name in.
+ */
 export function stepCatalogEntry({ view, sidecar, assembly, file }) {
   if (!sidecar) {
-    return { file, rootRelativeFile: file, kind: 'part', url: `/__cad/store?file=${view.tree}&documentHash=${view.documentHash}`,
+    return { file: `/models/${file}`, kind: 'part', url: `/__cad/store?file=${view.tree}&documentHash=${view.documentHash}`,
       hash: view.tree, documentHash: view.documentHash, bytes: assembly.length };
   }
   return {
-    file,
-    rootRelativeFile: file,
+    file: `/models/${file}`,
     kind: 'assembly',
     url: `/__cad/store?file=${view.tree}&documentHash=${view.documentHash}`,
     hash: view.tree,
@@ -304,12 +306,11 @@ export async function serveStepHarness(t, { onRequest, progressive = false, sing
     const url = new URL(request.url, 'http://test');
     requests.push(`${request.method} ${url.pathname}${url.search}`);
     onRequest?.(url, request);
-    const root = url.pathname.split('/')[1];
     if (url.pathname === '/harness.js') { response.setHeader('Content-Type', 'text/javascript'); response.end(bundle); return; }
     if (url.pathname === '/styles.css') { response.setHeader('Content-Type', 'text/css'); response.end(css); return; }
     if (url.pathname === '/harness.css') { response.setHeader('Content-Type', 'text/css'); response.end(bundledCss); return; }
-    if (url.pathname.endsWith('/__cad/catalog')) { json(response, { rootId: root, entries: [listed] }); return; }
-    if (url.pathname.endsWith('/__cad/server')) { json(response, { rootId: root, rootPath: '/models', backend: 'cadgen' }); return; }
+    if (url.pathname.endsWith('/__cad/catalog')) { json(response, { entries: [listed] }); return; }
+    if (url.pathname.endsWith('/__cad/server')) { json(response, { backend: 'cadgen' }); return; }
     if (url.pathname.endsWith('/__cad/artifact')) { json(response, { state: 'compiled' }); return; }
     if (url.pathname.endsWith('/__cad/surfaces')) {
       const body = await readBody(request);

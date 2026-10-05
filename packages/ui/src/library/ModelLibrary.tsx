@@ -1,15 +1,12 @@
-import { useCallback, useEffect, useRef, useState, type ChangeEvent } from "react";
+import { cloneElement, isValidElement, useCallback, useEffect, useRef, useState, type ChangeEvent, type ReactElement, type ReactNode } from "react";
 import { Box, FolderOpen, LayoutGrid, List, Pin, Search, X } from "lucide-react";
-import type { CadWorkspaceService } from "@text-to-cad/core/client";
 import { Button } from "../primitives/button.jsx";
 import { Input } from "../primitives/input.jsx";
 import { Spinner } from "../primitives/spinner.jsx";
 import type { LibraryLayout } from "../tab-store/tabRecord.js";
 import wordmark from "../assets/logo-texttocad.svg";
-import { GitHubLink, UpdateButton } from "../file-viewer/navigation/NavbarLinks.jsx";
-import { SettingsPopover } from "../renderers/kit/shell/SettingsPopover.jsx";
-import type { AppSetting } from "../file-viewer/types.js";
-import type { ClipboardPort, ViewerLinks } from "../host/types.js";
+import { HomeLinks } from "../file-viewer/navigation/NavbarLinks.jsx";
+import type { ViewerLinks } from "../host/types.js";
 
 /** A model someone opened: kept by the host, which also says where it is shown from. */
 export interface LibraryModel {
@@ -31,16 +28,6 @@ export interface LibraryModel {
   pictured: number | null;
 }
 
-/**
- * Where a model is drawn off screen for its card's picture: the CAD client that reads it, its path
- * under that client's root, and where the picture is kept once it is drawn.
- */
-export interface ModelPictureSource {
-  client: CadWorkspaceService;
-  file: string;
-  keep(png: Blob): Promise<unknown>;
-}
-
 /** A host's library of models: read, changed and opened through the host. */
 export interface ModelLibrarySource<Model extends LibraryModel = LibraryModel> {
   /** Pinned first, then most recently opened. */
@@ -50,16 +37,10 @@ export interface ModelLibrarySource<Model extends LibraryModel = LibraryModel> {
   thumbnail(name: string): Promise<string | null>;
   open(model: Model): Promise<void>;
   /**
-   * Choose a model with the desktop's own file chooser. A host whose files are browsed in place,
-   * beside this page, has none: its files are already there to open.
+   * Choose a model with the desktop's own file chooser: Open. A host on a computer with no chooser
+   * has none.
    */
   pick?(): Promise<void>;
-  /**
-   * Where a model can be drawn for a picture, for a card with none or an old one (`CadViewer` draws
-   * it); null for a model the host cannot reach. Absent, a card keeps what it has until a view of
-   * the model pictures it.
-   */
-  pictureFrom?(model: Model): ModelPictureSource | null;
 }
 
 /** A card wants a picture: it has none, or its file changed since it was taken. */
@@ -138,8 +119,9 @@ function Placeholders({ layout }: { layout: LibraryLayout }) {
 
 /**
  * The host's home: the models opened before, from every view, to open again. It has no navbar
- * over it: the TEXTTOCAD wordmark is centred at its top over its byline and the host's links — its update, only when
- * there is one, then GitHub and Settings (the version, X and Discord, the host's own settings and Feedback) — then "Recent Files" with its search, its grid/list switch and, where
+ * over it: the TEXTTOCAD wordmark is centred at its top over its byline, then the host's update, only when there
+ * is one, as a row of its own (the button, labeled Update), then the host's links — GitHub, Discord and X, then the
+ * host's Full size where it shows the view small — then "Recent Files" with its search, its grid/list switch and, where
  * the host has a chooser, Open, all three there with no models yet too; then the models, pinned first, as solid cards (a picture over the
  * name and when the file was edited) or as rows. A card can be pinned (its pin filled); a row can
  * also be removed. With none yet, one empty card opens the host's chooser. It is drawn on the
@@ -151,22 +133,19 @@ function Placeholders({ layout }: { layout: LibraryLayout }) {
  * (`wantsPicture`) is handed to `picture`, where the viewer draws one out of sight — one card at a
  * time, each once while the page is up — and the list is read again once one is kept.
  */
-export function ModelLibrary<Model extends LibraryModel>({ library, layout = "grid", onLayoutChange, failure = "", picture, links, platform, clipboard, appSettings, onError }: {
+export function ModelLibrary<Model extends LibraryModel>({ library, layout = "grid", onLayoutChange, picture, links, update, fullSize, onError }: {
   library: ModelLibrarySource<Model>;
   /** Grid or list; the host keeps the choice (the tab's settings). */
   layout?: LibraryLayout;
   onLayoutChange?(layout: LibraryLayout): void;
-  /** What the host's own controls failed at, shown where the library's failures are. */
-  failure?: string;
   /** Draw and keep a model's picture; true once it is kept. */
   picture?(model: Model): Promise<boolean>;
-  /** The host's links, under the wordmark, and the clipboard their copies go through. */
+  /** The host's links, under the wordmark: GitHub, Discord and X. */
   links?: ViewerLinks;
-  /** The host's `environment.platform`, which Feedback's issue names. */
-  platform?: string;
-  clipboard?: ClipboardPort;
-  /** The host's own on/off settings, in the home's Settings. */
-  appSettings?: readonly AppSetting[];
+  /** The host's update button, while its install is behind: a row of its own under the byline, labeled Update. */
+  update?: ReactNode;
+  /** The host's Full size button, last in that row, where it shows the view small. */
+  fullSize?: ReactNode;
   onError?(error: Error): void;
 }) {
   const [items, setItems] = useState<readonly Model[] | null>(null);
@@ -266,10 +245,13 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
     <main className="cad-library-content" aria-label="CAD models">
       <img className="cad-library-wordmark" src={wordmark} alt="text-to-cad" />
       <p className="cad-library-byline">Build anything. <span>100% open source and free.</span></p>
+      {/* The update, when there is one, as a call to action of its own: the button, labeled, its card centred. */}
+      {isValidElement(update) ? <div className="cad-library-update" data-library-update="">
+        {cloneElement(update as ReactElement<{ labeled?: boolean; align?: string }>, { labeled: true, align: "center" })}
+      </div> : null}
       {links ? <nav className="cad-library-links" aria-label="CAD links">
-        {clipboard ? <UpdateButton links={links} clipboard={clipboard} onError={onError} align="center" /> : null}
-        <GitHubLink links={links} onError={onError} />
-        <SettingsPopover links={links} appSettings={appSettings} platform={platform} align="center" />
+        <HomeLinks links={links} onError={onError} />
+        {fullSize}
       </nav> : null}
       <div className="cad-library-toolbar">
         <h1 className="cad-library-heading">Recent Files</h1>
@@ -286,7 +268,7 @@ export function ModelLibrary<Model extends LibraryModel>({ library, layout = "gr
           {pick ? <Button size="sm" onClick={pick}><FolderOpen aria-hidden="true" />Open</Button> : null}
         </div>
       </div>
-      {(error || failure) ? <div className="cad-library-error" role="alert"><p>{error || failure}</p></div> : null}
+      {error ? <div className="cad-library-error" role="alert"><p>{error}</p></div> : null}
       {items === null ? <Placeholders layout={layout} />
         : searchQuery && !shown.length ? <p className="cad-library-empty" role="status">No matching models.</p>
           : !all.length ? (pick
