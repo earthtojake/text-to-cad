@@ -35,7 +35,7 @@ def route(*paths: str) -> dict[str, str]:
 
 
 def condition(job: str) -> str:
-    return re.search(r"^    if: needs\.changes\.outputs\.(\w+) == 'true'$", JOBS[job], re.M)[1]
+    return re.search(r"^    if: .*?needs\.changes\.outputs\.(\w+) == 'true'", JOBS[job], re.M)[1]
 
 
 def jobs_for(*paths: str) -> set[str]:
@@ -181,6 +181,17 @@ class TheWorkflowFollowsTheSelector(unittest.TestCase):
             values = dict(line.split("=", 1) for line in output.read_text(encoding="utf-8").splitlines())
         self.assertTrue(values["record"].startswith("tested-") and values["record"].endswith("-full"))
         self.assertEqual({job for job in GATED if values[condition(job)] == "true"}, GATED)
+
+    def test_a_selection_that_failed_fails_a_required_check(self):
+        # Every job waits on Changed paths, and GitHub counts a job skipped for a failed dependency
+        # as a passing required check. skills is required and runs for every change, so it also runs
+        # when Changed paths failed -- and fails.
+        skills = JOBS["skills"]
+        self.assertRegex(skills, r"(?m)^    if: \$\{\{ !cancelled\(\) && \(needs\.changes\.result != 'success' \|\| ")
+        guard = skills.split("steps:", 1)[1].split("- name:", 2)[1]
+        self.assertIn("if: needs.changes.result != 'success'", guard)
+        self.assertIn("exit 1", guard)
+        self.assertTrue(all(route(path)["skills"] == "true" for path in ("README.md", "skills/cad/SKILL.md", "VERSION")))
 
     def test_required_check_names_are_the_jobs(self):
         # main's branch protection requires exactly these names (CONTRIBUTING.md, Repository settings).

@@ -326,16 +326,25 @@ jobs:
   # here, whatever else the change selected. Then, only when the change reaches them, the
   # policy tests and skill suites that load the CAD kernel or the built runtime, after the
   # full install. Repository properties, so Linux only.
+  # Required, and selected for every change -- so it also stands guard over the selection. If
+  # Changed paths fails, every job it gates is skipped, and GitHub counts a skipped required
+  # check as passing: this one runs then, and fails, so nothing merges untested.
   skills:
     name: skills
     needs: changes
-    if: needs.changes.outputs.skills == 'true'
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.skills == 'true') }}
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
       CADGEN_TEST_JOBS: "4"
 
     steps:
+      - name: Stop when the selection did not run
+        if: needs.changes.result != 'success'
+        run: |
+          echo "Changed paths did not finish, so nothing was selected and no test ran. Re-run the workflow." >&2
+          exit 1
+
       - name: Check out repository
         uses: actions/checkout@v7
         with:
