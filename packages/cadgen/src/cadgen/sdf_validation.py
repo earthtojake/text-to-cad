@@ -175,7 +175,9 @@ def _validate_world(world_element: ET.Element, result: FindingsReport, base_dir:
 
     frames = children(world_element, "frame")
     frame_names = _names(frames)
-    model_names = _names(children(world_element, "model"))
+    models = children(world_element, "model")
+    includes = children(world_element, "include")
+    model_names = _names(models) + [name for include in includes if (name := _child_text(include, "name"))]
     targets.update(frame_names)
     targets.update(model_names)
     _check_cross_type_scope_names(
@@ -183,7 +185,7 @@ def _validate_world(world_element: ET.Element, result: FindingsReport, base_dir:
     )
     for frame_element in frames:
         _validate_frame(frame_element, result, targets, world_path)
-    _validate_frame_cycles(frames, result, world_path)
+    _validate_frame_cycles(frames, result, world_path, posed_models=[*models, *includes])
 
     for pose_element in children(world_element, "pose"):
         _validate_pose(pose_element, result, f"{world_path}/pose", targets)
@@ -249,7 +251,6 @@ def _validate_model(
         "world",
         "__model__",
         model_name,
-        *parent_targets,
         *link_names,
         *joint_names,
         *frame_names,
@@ -257,7 +258,7 @@ def _validate_model(
     }
 
     for pose_element in children(model_element, "pose"):
-        _validate_pose(pose_element, result, f"{model_path}/pose", local_targets)
+        _validate_pose(pose_element, result, f"{model_path}/pose", parent_targets)
 
     for static_element in children(model_element, "static"):
         _validate_boolean_text(static_element, result, f"{model_path}/static", "static")
@@ -647,8 +648,16 @@ def _validate_pose(
         _check_reference(relative_to, result, pose_path, "relative_to", targets)
 
 
-def _validate_frame_cycles(frames: list[ET.Element], result: FindingsReport, owner_path: str) -> None:
-    frame_names = set(_names(frames))
+def _validate_frame_cycles(
+    frames: list[ET.Element], result: FindingsReport, owner_path: str,
+    *, posed_models: list[ET.Element] | None = None,
+) -> None:
+    models = posed_models or []
+    model_names = {
+        _child_text(model, "name") if model.tag == "include" else _name(model)
+        for model in models
+    } - {""}
+    frame_names = set(_names(frames)) | model_names
     edges: dict[str, str] = {}
     for frame in frames:
         name = _name(frame)
@@ -656,6 +665,15 @@ def _validate_frame_cycles(frames: list[ET.Element], result: FindingsReport, own
         if not target:
             pose_element = _first_child(frame, "pose")
             target = str(pose_element.attrib.get("relative_to") or "").strip() if pose_element is not None else ""
+        if name and target in frame_names:
+            edges[name] = target
+
+    # World models are pose nodes too: a frame attached to a model that is
+    # positioned relative to that frame is a cycle through the model node.
+    for model in models:
+        name = _child_text(model, "name") if model.tag == "include" else _name(model)
+        pose = _first_child(model, "pose")
+        target = str(pose.attrib.get("relative_to") or "").strip() if pose is not None else ""
         if name and target in frame_names:
             edges[name] = target
 
