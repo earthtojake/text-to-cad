@@ -319,11 +319,14 @@ def submit_compile(
     transient subprocess, never in the caller."""
     import hashlib
 
+    from cadgen._internal.atomic_replace import read_bytes_with_ladder
     from cadgen.store.paths import store_root as default_store_root
 
     document = Path(document).resolve()
     root = Path(store_root) if store_root is not None else default_store_root()
-    closure = hashlib.sha256(document.read_bytes()).hexdigest()
+    # Through the ladder: on Windows, a program saving, replacing or scanning the document
+    # refuses the read for a moment, and that is not a failure of its bytes.
+    closure = hashlib.sha256(read_bytes_with_ladder(document)).hexdigest()
     job = Job(document)
     emit_event(model_event(document, "submitted", parent=str(parent) if parent else None))
     tool_argv = [str(document)] + (["--force"] if force else [])
@@ -335,7 +338,7 @@ def submit_compile(
     else:
         _submit_transient(
             job, root, force=force, root_id=root_id, closure=closure,
-            command=[sys.executable, "-m", "cadgen.cli.step_compile", *tool_argv],
+            command=[sys.executable, "-P", "-m", "cadgen.cli.step_compile", *tool_argv],
         )
     emit_event(model_event(document, "building", phase="compile"))
 
@@ -374,7 +377,7 @@ def _submit_transient(
     env["CADGEN_EVENTS"] = "1"  # the child writes events as JSON lines on stderr
     if root_id:
         env["CADGEN_ROOT_ID"] = root_id
-    argv = list(command) if command else [sys.executable, "-m", "cadgen.cli._run_model", *job.target_argv()]
+    argv = list(command) if command else [sys.executable, "-P", "-m", "cadgen.cli._run_model", *job.target_argv()]
     if force and not command:
         argv.append("--force")
     try:
@@ -470,7 +473,7 @@ def _submit_daemon(
             argv.append("--force")
     fallback = None
     if tool != "run":
-        fallback = [sys.executable, "-m", f"cadgen.cli.{tool.replace('-', '_')}", *argv]
+        fallback = [sys.executable, "-P", "-m", f"cadgen.cli.{tool.replace('-', '_')}", *argv]
 
     def run() -> None:
         def observe(event: dict) -> None:

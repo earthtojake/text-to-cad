@@ -1,5 +1,5 @@
-"""A build's saved files have their catalog rows computed as the save is announced, off the
-request threads, so the catalog read that follows the build finds them (``cadgen.viewer.warm``)."""
+"""The file a view's build feed is about has its catalog row computed as its save is announced,
+off the request threads, so the catalog read that follows the build finds it (``cadgen.viewer.warm``)."""
 from __future__ import annotations
 
 import hashlib
@@ -68,11 +68,7 @@ class CatalogWarmTests(unittest.TestCase):
         self.addCleanup(env.stop)
         self.part = self.root / "part.step"
         self.part.write_bytes(b"first version\n")
-        self.app = create_cad_app(root=str(self.root), host="127.0.0.1", port=0)
-        # A read answers with the row it names; the rest of the catalog is not this test's.
-        hydration = mock.patch.object(self.app.backend, "_start_catalog_hydration")
-        hydration.start()
-        self.addCleanup(hydration.stop)
+        self.app = create_cad_app(host="127.0.0.1", port=0)
 
     def replace(self, data: bytes) -> None:
         staged = self.root / ".part.step.staged"
@@ -90,12 +86,13 @@ class CatalogWarmTests(unittest.TestCase):
             yield
 
     def entry(self) -> dict:
-        return self.app.backend.catalog_entry_for_file_ref(self.app.read_catalog("part.step"), "part.step")
+        [row] = self.app.read_catalog(str(self.part))["entries"]
+        return row
 
     def test_a_save_the_feed_lists_is_warmed_on_a_thread_of_its_own_and_the_read_finds_it(self):
         tree = seed_result(self.part, {"label": "saved"})
         with self.ledger(tree):
-            self.assertEqual(self.app.build_status("part.step", after="epoch:1")["phase"], "STEP saved")
+            self.assertEqual(self.app.build_status(str(self.part), after="epoch:1")["phase"], "STEP saved")
         self.assertTrue(self.app.catalog_warm.wait_settled(HANG))
         with mock.patch.object(catalog, "open_shared_for_read", side_effect=AssertionError("read the file again")), \
                 mock.patch.object(scanner, "_build_step_entry", side_effect=AssertionError("built the row again")):
@@ -108,24 +105,24 @@ class CatalogWarmTests(unittest.TestCase):
         entered, release, finished = threading.Event(), threading.Event(), threading.Event()
         warmed = []
 
-        def warm_row(root, path):
+        def warm_row(path):
             warmed.append((threading.current_thread().name, os.path.basename(path)))
             entered.set()
             release.wait(HANG)
             finished.set()
 
-        with mock.patch.object(warm, "warm_catalog_entry", warm_row), self.ledger(tree):
-            self.app.build_status("part.step", after="epoch:1")
+        with mock.patch.object(warm, "catalog_entry", warm_row), self.ledger(tree):
+            self.app.build_status(str(self.part), after="epoch:1")
             self.assertFalse(finished.is_set())  # answered while its save waits to be warmed
             self.assertTrue(entered.wait(HANG))
-            self.app.build_status("part.step", after="epoch:1")  # the feed lists the save again
+            self.app.build_status(str(self.part), after="epoch:1")  # the feed lists the save again
             release.set()
             self.assertTrue(self.app.catalog_warm.wait_settled(HANG))
-            self.app.build_status("part.step", after="epoch:1")
+            self.app.build_status(str(self.part), after="epoch:1")
             self.assertTrue(self.app.catalog_warm.wait_settled(HANG))
             self.assertEqual(warmed, [("cadgen-viewer-catalog-warm", "part.step")])
             self.replace(b"second version\n")
-            self.app.build_status("part.step", after="epoch:1")
+            self.app.build_status(str(self.part), after="epoch:1")
             self.assertTrue(self.app.catalog_warm.wait_settled(HANG))
         self.assertEqual(len(warmed), 2)
 
@@ -142,10 +139,10 @@ class CatalogWarmTests(unittest.TestCase):
             return build(*args, **kwargs)
 
         with mock.patch.object(scanner, "_build_step_entry", held_build):
-            self.app.catalog_warm.saved({str(self.part): tree})
+            self.app.catalog_warm.saved({str(self.part): tree}, str(self.part))
             self.assertTrue(building.wait(HANG))
             _watch_flight(scanner._STEP_ENTRY_FLIGHTS, scanner._STEP_ENTRY_CACHE_LOCK,
-                          lambda key: key[3] == str(self.part), waiting)
+                          lambda key: key[1] == str(self.part), waiting)
             reader = threading.Thread(target=lambda: read.append(self.entry()))
             reader.start()
             self.assertTrue(waiting.wait(HANG))
@@ -210,7 +207,7 @@ class CatalogWarmTests(unittest.TestCase):
             return HeldOnceRead(handle) if len(opens) == 1 else handle
 
         with mock.patch.object(catalog, "open_shared_for_read", holding_open):
-            self.app.catalog_warm.saved({str(self.part): first})
+            self.app.catalog_warm.saved({str(self.part): first}, str(self.part))
             self.assertTrue(held.wait(HANG))
             self.replace(b"second version\n")
             second = seed_result(self.part, {"label": "second"})
@@ -227,58 +224,58 @@ class CatalogWarmTests(unittest.TestCase):
         held, release = threading.Event(), threading.Event()
         warmed = []
 
-        def warm_row(root, path):
+        def warm_row(path):
             warmed.append(os.path.basename(path))
             held.set()
             release.wait(HANG)
 
-        names = [f"part{index:02d}.step" for index in range(warm.WARM_PENDING_LIMIT + 4)]
-        for name in names:
-            (self.root / name).write_bytes(name.encode("ascii"))
-        with mock.patch.object(warm, "warm_catalog_entry", warm_row):
-            self.app.catalog_warm.saved({str(self.root / names[0]): ""})
+        paths = [str(self.root / f"part{index:02d}.step") for index in range(warm.WARM_PENDING_LIMIT + 4)]
+        for path in paths:
+            Path(path).write_bytes(os.path.basename(path).encode("ascii"))
+        with mock.patch.object(warm, "catalog_entry", warm_row):
+            self.app.catalog_warm.saved({paths[0]: ""}, paths[0])
             self.assertTrue(held.wait(HANG))
-            self.app.catalog_warm.saved({str(self.root / name): "" for name in names[1:]})
+            for path in paths[1:]:  # each view's feed, about its own file
+                self.app.catalog_warm.saved({path: ""}, path)
             release.set()
             self.assertTrue(self.app.catalog_warm.wait_settled(HANG))
         # The one being warmed, then as many as wait at once; the rest are left to the reads.
-        self.assertEqual(warmed, names[: 1 + warm.WARM_PENDING_LIMIT])
+        self.assertEqual(warmed, [os.path.basename(path) for path in paths[: 1 + warm.WARM_PENDING_LIMIT]])
 
-    def test_the_watched_file_is_warmed_first_and_a_lazy_root_warms_only_it(self):
+    def test_only_the_file_the_feed_is_about_is_warmed(self):
+        # A parent's build saves its children too: each view's own feed warms its own file.
         others = [self.root / "a.step", self.root / "b.step"]
         for other in others:
             other.write_bytes(other.name.encode("ascii"))
-        saves = {str(path): "" for path in [*others, self.part]}  # a parent saves after its children
+        saves = {str(path): "" for path in [*others, self.part]}
         warmed = []
-        with mock.patch.object(warm, "warm_catalog_entry", lambda root, path: warmed.append(os.path.basename(path))):
+        with mock.patch.object(warm, "catalog_entry", lambda path: warmed.append(os.path.basename(path))):
             self.app.catalog_warm.saved(saves, str(self.part))
             self.assertTrue(self.app.catalog_warm.wait_settled(HANG))
-            self.assertEqual(warmed, ["part.step", "a.step", "b.step"])
-            warmed.clear()
-            lazy = warm.CatalogWarmer(str(self.root), lazy=True)  # the CAD app's whole filesystem
-            lazy.saved(saves, str(self.part))
-            self.assertTrue(lazy.wait_settled(HANG))
+            # A file the feed is about that no listed build saved is not warmed.
+            self.app.catalog_warm.saved({str(others[0]): ""}, str(others[1]))
+            self.assertTrue(self.app.catalog_warm.wait_settled(HANG))
         self.assertEqual(warmed, ["part.step"])
 
     def test_a_warm_that_fails_never_reaches_the_feed_nor_stops_the_next(self):
         tree = seed_result(self.part, {"label": "saved"})
-        with mock.patch.object(warm, "warm_catalog_entry", side_effect=OSError("disk gone")), self.ledger(tree), \
+        with mock.patch.object(warm, "catalog_entry", side_effect=OSError("disk gone")), self.ledger(tree), \
                 self.assertLogs("cadgen.viewer.warm", "WARNING"):
-            self.assertEqual(self.app.build_status("part.step", after="epoch:1")["phase"], "STEP saved")
+            self.assertEqual(self.app.build_status(str(self.part), after="epoch:1")["phase"], "STEP saved")
             self.assertTrue(self.app.catalog_warm.wait_settled(HANG))
         with mock.patch.object(warm.CatalogWarmer, "saved", side_effect=RuntimeError("warm is broken")), \
                 self.ledger(tree), self.assertLogs("cadgen.viewer.preview", "WARNING"):
-            self.assertEqual(self.app.build_status("part.step", after="epoch:1")["phase"], "STEP saved")
+            self.assertEqual(self.app.build_status(str(self.part), after="epoch:1")["phase"], "STEP saved")
         self.replace(b"second version\n")
         with mock.patch.object(warm.threading, "Thread", side_effect=RuntimeError("can't start new thread")), \
                 self.assertLogs("cadgen.viewer.warm", "WARNING"):
-            self.app.catalog_warm.saved({str(self.part): ""})
+            self.app.catalog_warm.saved({str(self.part): ""}, str(self.part))
         self.assertTrue(self.app.catalog_warm.wait_settled(HANG))
         # None of it wedged the warmer: the save left waiting goes with the next one.
         warmed = []
-        with mock.patch.object(warm, "warm_catalog_entry", lambda root, path: warmed.append(os.path.basename(path))):
+        with mock.patch.object(warm, "catalog_entry", lambda path: warmed.append(os.path.basename(path))):
             self.replace(b"third version\n")
-            self.app.catalog_warm.saved({str(self.part): ""})
+            self.app.catalog_warm.saved({str(self.part): ""}, str(self.part))
             self.assertTrue(self.app.catalog_warm.wait_settled(HANG))
         self.assertEqual(warmed, ["part.step"])
 
@@ -313,16 +310,22 @@ class CatalogWarmTests(unittest.TestCase):
             entry = self.entry()  # nothing built it: no tree names its digest
         self.assertEqual((entry["documentHash"], len(reads)), (_sha(self.part), 1))
 
-    def test_only_files_the_catalog_lists_are_warmed(self):
-        hidden = self.root / ".hidden" / "part.step"
-        hidden.parent.mkdir()
+    def test_only_a_file_with_a_row_is_warmed(self):
+        # A file under a hidden folder has a row (named, never found); a hidden file, a file
+        # gone again and one CAD does not open do not.
+        inside = self.root / ".worktree" / "part.step"
+        inside.parent.mkdir()
+        inside.write_bytes(b"inside\n")
+        hidden = self.root / ".hidden.step"
         hidden.write_bytes(b"hidden\n")
-        outside = self.root.parent / "outside.step"
-        outside.write_bytes(b"outside\n")
-        with mock.patch.object(warm, "warm_catalog_entry", side_effect=AssertionError("warmed an unlisted file")):
-            self.app.catalog_warm.saved({str(hidden): "", str(outside): "", str(self.root / "gone.step"): ""})
+        notes = self.root / "notes.txt"
+        notes.write_bytes(b"notes\n")
+        warmed = []
+        with mock.patch.object(warm, "catalog_entry", lambda path: warmed.append(path)):
+            for path in (inside, hidden, notes, self.root / "gone.step"):
+                self.app.catalog_warm.saved({str(path): ""}, str(path))
             self.assertTrue(self.app.catalog_warm.wait_settled(HANG))
-
+        self.assertEqual(warmed, [str(inside)])
 
 if __name__ == "__main__":
     unittest.main()

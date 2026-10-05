@@ -1,4 +1,4 @@
-"""The stdio JSON-RPC transport: framing, concurrency, cancellation, requests out."""
+"""The stdio JSON-RPC transport: framing, concurrency, cancellation."""
 
 from __future__ import annotations
 
@@ -60,8 +60,6 @@ class ConnectionTest(unittest.TestCase):
                 return {"slow": True}
             if method == "fast":
                 return {"fast": True, "meta": context.meta}
-            if method == "ask":
-                return {"answer": context.connection.request("peer/question", {"q": 1}, timeout=5)}
             if method == "bad":
                 raise RpcError(-32602, "bad params", {"field": "x"})
             if method == "boom":
@@ -111,12 +109,12 @@ class ConnectionTest(unittest.TestCase):
         self.assertEqual(self.sink.next()["id"], 8)
         self.assertTrue(self.sink.frames.empty())
 
-    def test_a_request_to_the_peer_waits_for_its_reply(self) -> None:
-        self.pipe.send({"jsonrpc": "2.0", "id": 1, "method": "ask"})
-        outgoing = self.sink.next()
-        self.assertEqual(outgoing["method"], "peer/question")
-        self.pipe.send({"jsonrpc": "2.0", "id": outgoing["id"], "result": {"a": 42}})
-        self.assertEqual(self.sink.next(), {"jsonrpc": "2.0", "id": 1, "result": {"answer": {"a": 42}}})
+    def test_a_response_from_the_host_is_ignored(self) -> None:
+        # This side sends no requests: a response that arrives answers nothing, and the stream goes on.
+        self.pipe.send({"jsonrpc": "2.0", "id": "cadgen-1", "result": {"a": 42}})
+        self.pipe.send({"jsonrpc": "2.0", "id": 9, "method": "fast"})
+        self.assertEqual(self.sink.next()["id"], 9)
+        self.assertTrue(self.sink.frames.empty())
 
 
 class ClaimStdoutTest(unittest.TestCase):

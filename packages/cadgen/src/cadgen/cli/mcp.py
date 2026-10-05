@@ -2,7 +2,8 @@
 
 An agent host that renders MCP Apps starts this process itself, one per thread;
 it is not a command to run by hand. Standard output carries the protocol alone,
-so diagnostics go to standard error.
+so diagnostics go to standard error. The plugin that starts it says where it
+came from in the server's environment (``cadgen/_internal/channel.py``).
 """
 
 from __future__ import annotations
@@ -18,20 +19,17 @@ def build_parser(prog: str = DEFAULT_PROG) -> argparse.ArgumentParser:
         prog=prog,
         description=(
             "Serve CAD's viewer to an agent host over MCP (stdio). The host starts one "
-            "process per thread; there is nothing to configure."
+            "process per thread, from its plugin's startup config; there is nothing to configure."
         ),
     )
-    # Stamped into the server config of a plugin directory's package (scripts/release/plugin_zip.py):
-    # analytics report it as their `source`. It decides nothing; every install is asked.
-    parser.add_argument("--install", choices=("store",), help=argparse.SUPPRESS)
     return parser
 
 
 def main(argv: Sequence[str] | None = None, *, prog: str = DEFAULT_PROG) -> int:
-    args = build_parser(prog).parse_args(argv)
+    build_parser(prog).parse_args(argv)
     from cadgen.mcp.server import serve
 
-    return serve(install=args.install)
+    return serve()
 
 
 if __name__ == "__main__":

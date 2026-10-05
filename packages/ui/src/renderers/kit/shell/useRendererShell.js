@@ -101,7 +101,7 @@ const NO_PREVIEW = () => {};
  *   by a renderer with no tools: the shell then has no active tool and a saved tab records none.
  * @param {boolean} [options.previewable]  The renderer's view is 3D and offers Preview: the model fullscreen,
  *   orbiting, its tools put away. Each renderer of a 3D view declares it; without it (a 2D view) there is no
- *   Preview at all — no control in the navbar, not a disabled one — and anything that asks for Preview leaves
+ *   Preview at all — no control on top of the cube, not a disabled one — and anything that asks for Preview leaves
  *   the normal view on screen (`previewing` stays false, `setPreviewing` does nothing).
  * @param {{ previewing: boolean, set: (previewing: boolean) => void }} [options.preview]  Preview mode
  *   (`usePreviewState`), when the renderer holds that state itself: a renderer whose own gates
@@ -133,8 +133,7 @@ const NO_PREVIEW = () => {};
  *   builder that speaks it, and then `promptReferences` may return that vocabulary instead — and such a
  *   renderer reports its live `selection` itself, in the prompt grammar, through `live.state`.
  * @param {{ active?: boolean, handle?: () => boolean }} [options.escape]  Escape, innermost first: `handle` returns
- *   true when it spent the key. After it there is nothing of the viewer's own left to close: the
- *   host's panel column (the file tree) closes only from its own toggle.
+ *   true when it spent the key. After it there is nothing of the viewer's own left to close.
  * @param {{ signatures?: Record<string, string>, read: () => Record<string, unknown> } | null} [options.rendererState]
  *   The renderer's own slices of the file's view (`fileView.js`): `read()` is called when the view is written,
  *   never at render — state a renderer keeps outside React (a pose written per frame) is saved as it is at that
@@ -398,9 +397,6 @@ export function useRendererShell({
     if (!viewerRef.current?.captureScreenshotBlob) return Promise.reject(new Error("The viewer is not ready"));
     return viewerRef.current.captureScreenshotBlob();
   }, []);
-  // How a copied reference names a file of this view's source (`FileSource.referencePath`).
-  const source = view.source;
-  const referencePath = useCallback(path => (source?.referencePath ? source.referencePath(path) : path), [source]);
   const captureKey = services.captureRequest?.key ?? null;
   const appliedCaptureKey = useRef(null);
   useEffect(() => {
@@ -547,7 +543,7 @@ export function useRendererShell({
       copyActionRef, copyDrawing, copyShortcut: host.environment.platform === "darwin" ? "⌘C" : "Ctrl+C",
       // Quick Edit's: the file it is about, how a copied prompt spells its paths, its sketch, and
       // the renderer's own Escape, which an empty Quick Edit passes on.
-      resource, referencePath, captureView, escape: escapeView,
+      resource, captureView, escape: escapeView,
       drawToolActive, drawing, animation, display
     }
   };

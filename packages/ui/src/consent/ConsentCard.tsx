@@ -5,7 +5,7 @@ import { Button } from "../primitives/button.jsx";
 /**
  * The one question a CAD app asks, once, of everyone who runs it: whether to share anonymous usage
  * statistics. Nothing is sent before a yes, and any answer ends the question (closing it is No
- * thanks); Settings' Analytics section changes it later. It is asked in context: a host hands it to
+ * thanks); the app menu's Share anonymous usage data changes it later. It is asked in context: a host hands it to
  * the viewer as its `notice`, which the viewer shows at its top-right once a model is on screen,
  * Quick Edit stacked under it. The privacy policy is a real link to a new tab; `onPolicy` is how
  * this host follows one.

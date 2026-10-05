@@ -58,10 +58,11 @@ runs:
       if: inputs.python == 'true' && inputs.playwright == 'true'
       shell: bash
       run: |
+        # The headless shell is all a snapshot launches; the full Chromium would be ~350 MB more.
         if [ "$RUNNER_OS" = "Linux" ]; then
-          python -m playwright install --with-deps chromium
+          python -m playwright install --with-deps --only-shell chromium
         else
-          python -m playwright install chromium
+          python -m playwright install --only-shell chromium
         fi
 
     - name: Install selected root workspaces

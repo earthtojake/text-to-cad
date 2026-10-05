@@ -27,8 +27,7 @@ class SketchesTest(unittest.TestCase):
         where = mock.patch.object(sketches, "sketches_dir", return_value=self.saved)
         where.start()
         self.addCleanup(where.stop)
-        (self.tmp / "models").mkdir()
-        app = create_cad_app(root=str(self.tmp / "models"), host="127.0.0.1", port=0)
+        app = create_cad_app(host="127.0.0.1", port=0)
         server = handler_module.serve(app, "127.0.0.1", 0)
         self.port = server.server_address[1]
         thread = threading.Thread(target=server.serve_forever, daemon=True)

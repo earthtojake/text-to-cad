@@ -240,13 +240,13 @@ class TwoSidesLaw(unittest.TestCase):
                 self.assertEqual(tree, store_paths.result_tree(document))
                 self.assertTrue((catalog.result_view_dir(document) / "assembly.json").is_file())
                 self.assertIsInstance(store_paths.result_descriptor(tree), dict)
-            listed = scanner.scan_cad_directory(str(self.root))
-            self.assertIn("robot.step", json.dumps(listed))
+            listed = scanner.catalog_entry(str(self.robot_step))
+            self.assertEqual(expected["robot"], listed["hash"])
             # The viewer's status — the badge included — is artifact-side only.
-            verdict = artifact_status.resolve_artifact_verdict(str(self.robot_step), str(self.root))
+            verdict = artifact_status.resolve_artifact_verdict(str(self.robot_step))
             self.assertTrue(verdict.get("ok"), verdict)
             self.assertNotIn("generated", verdict)
-            self.assertEqual("compiled", artifact_status.artifact_status(str(self.robot_step), str(self.root))["state"])
+            self.assertEqual("compiled", artifact_status.artifact_status(str(self.robot_step))["state"])
             payload = export_cad_target(self.robot_step, [("stl", out)], repo_root=self.root)
             self.assertTrue(out.is_file(), payload)
             # A second export at the same variant is satisfied by the ARTIFACT-side ledger.
@@ -274,7 +274,7 @@ class TwoSidesLaw(unittest.TestCase):
                     document = self.root / f"{name}.step"
                     self.assertEqual(tree, doors.document_tree(document))
                     self.assertEqual(tree, store_paths.result_tree(document))
-                self.assertIn("robot.step", json.dumps(scanner.scan_cad_directory(str(self.root))))
+                self.assertEqual(expected["robot"], scanner.catalog_entry(str(self.root / "robot.step"))["hash"])
             stl = _cli("stl", "build", "robot.step", "exports/robot_no_records.stl", cwd=self.root)
             self.assertEqual(0, stl.returncode, stl.stderr)
             self.assertTrue((self.root / "exports" / "robot_no_records.stl").is_file())

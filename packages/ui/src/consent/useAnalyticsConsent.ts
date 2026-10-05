@@ -14,19 +14,19 @@ export interface AnalyticsConsent {
 
 /**
  * Where an answer came from: the card, which answers only an open question (one still up in
- * another view must not undo an answer just given there), or Settings' toggle, which changes it
+ * another view must not undo an answer just given there), or the app menu's toggle, which changes it
  * whenever. The host passes it on to its server.
  */
 export type AnswerFrom = "card" | "settings";
 
 /**
- * The analytics card's and the Settings toggle's state, from the host's server (`consent()` reads,
+ * The analytics card's and the app menu toggle's state, from the host's server (`consent()` reads,
  * `consent(share, from)` answers): read once, read again whenever the person comes back to the
  * page (another view, the agent or the CLI may have changed it meanwhile), and answered by a click.
  * Each read and answer takes a number and only the latest one's reply is kept, so a read sent just
  * before a click (the click's own focus) can never bring the card back. An answer that did not
  * arrive is read back rather than shown as kept, and a page that answered never asks again. A view
- * that cannot ask its server asks nothing. A choice the environment made shows in Settings as fixed.
+ * that cannot ask its server asks nothing. A choice the environment made shows in the app menu as fixed.
  */
 export function useAnalyticsConsent(consent: (share?: boolean, from?: AnswerFrom) => Promise<AnalyticsConsent>) {
   const [state, setState] = useState<AnalyticsConsent | null>(null);
@@ -49,9 +49,9 @@ export function useAnalyticsConsent(consent: (share?: boolean, from?: AnswerFrom
     setState(previous => previous && { ...previous, ask: false, sharing: share });
     read(share, from);
   }, [read]);
-  // The same choice, changed later: Settings' Analytics section.
+  // The same choice, changed later: the app menu's toggle.
   const appSettings = useMemo<AppSetting[] | undefined>(() => state ? [{
-    id: "analytics", section: "Analytics", checked: state.sharing, onCheckedChange: (checked: boolean) => answer(checked, "settings"),
+    id: "analytics", checked: state.sharing, onCheckedChange: (checked: boolean) => answer(checked, "settings"),
     ...(state.reason === "environment"
       ? { label: "Share anonymous usage data (set by your environment)", disabled: true }
       : { label: "Share anonymous usage data" }),

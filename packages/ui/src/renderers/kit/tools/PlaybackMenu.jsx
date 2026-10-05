@@ -5,7 +5,7 @@ import {
 } from "@text-to-cad/ui/primitives/dropdown-menu";
 import { ToolbarButton } from "@text-to-cad/ui/primitives/toolbar-button";
 import { cn } from "@text-to-cad/ui/utils";
-import { FLOATING_SURFACE_CLASS } from "./floatingSurface.js";
+import { FLOATING_SURFACE_CLASS } from "../../../lib/floatingSurface.js";
 import { PLAYBACK_SPEEDS } from "./playbar/ViewportAnimationBar.js";
 import ToolPopover from "./ToolPopover.jsx";
 
@@ -28,8 +28,8 @@ function SpeedSubmenu({ label, name = label, value, values, onChange }) {
 }
 
 /**
- * Preview mode's Playback settings: the cog in the view's top-right corner, beside the way out of
- * preview, and its dropdown, which opens down from it. For a file with routines, **Animation** — the Routine (with
+ * Preview mode's Playback settings: the cog where Display sits outside preview, on top of the cube's
+ * corner, beside the way out of preview, and its dropdown, which opens up from it. For a file with routines, **Animation** — the Routine (with
  * more than one), its Speed, Loop and Autoplay (whether entering preview starts it, the person's
  * across files) — then, for every file, **Orbit**: on or off, and its Speed. Ticking a checkbox
  * leaves the menu open. Play, pause and the scrubber are the playbar under the model, for a file
@@ -43,7 +43,7 @@ export default function PlaybackMenu({ animation = null, autoplay, onAutoplayCha
   onOrbitSpeedChange, onOpenChange }) {
   const clips = animation?.clips || [];
   const keepOpen = event => event.preventDefault();
-  return <ToolPopover allowInactive side="bottom" align="end" onOpenChange={onOpenChange} label="Playback settings" className="w-44"
+  return <ToolPopover allowInactive side="top" align="start" onOpenChange={onOpenChange} label="Playback settings" className="w-44"
     trigger={<ToolbarButton tooltip={false} label="Playback settings" className="size-6"><Settings className="size-3.5" aria-hidden="true" /></ToolbarButton>}>
     {clips.length ? <>
       <DropdownMenuLabel className="text-muted-foreground">Animation</DropdownMenuLabel>

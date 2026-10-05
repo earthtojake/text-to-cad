@@ -1,6 +1,6 @@
-/** Portable identity: delivery addresses (HTTP/blob URLs) do not identify workspace files. */
+/** Portable identity: a file by its absolute path; delivery addresses (HTTP/blob URLs) do not identify files. */
 export type ResourceRef =
-  | { kind: 'workspace-file'; workspaceId: string; path: string; revision?: string }
+  | { kind: 'workspace-file'; path: string; revision?: string }
   | { kind: 'url'; url: string; revision?: string };
 /** Zero-based UTF-16 coordinates; text ranges have an exclusive end. */
 export interface TextPosition { line: number; character: number }
@@ -43,8 +43,7 @@ export interface PromptContextPort {
   deliver(context: PromptContext): Promise<PromptDeliveryResult>;
   send?(context: PromptContext): Promise<PromptDeliveryResult>;
 }
-export interface PromptTextOptions { resolvePath?: (resource: ResourceRef) => string }
-export interface PromptMessageOptions extends PromptTextOptions {
+export interface PromptMessageOptions {
   /** Where an attachment was saved, for one that travels as a file; nothing for one sent beside the text. */
   attachmentPath?: (part: Extract<PromptPart, { kind: 'attachment' }>) => string | null | undefined;
 }

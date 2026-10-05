@@ -17,8 +17,6 @@ set -euo pipefail
 # shellcheck source=scripts/test/common.sh
 source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/common.sh"
 
-LIST_SKILLS_SCRIPT="$REPO_ROOT/scripts/utils/list-skills.sh"
-
 # --keep-going: run every suite and report all of them, instead of stopping at the first
 # failure. Opt-in, because stopping early is the right default for a developer waiting on a
 # run. It is for CI on a platform being brought up, where the failures are independent and
@@ -80,7 +78,8 @@ if [ "$SELECT" = "viewer" ]; then
 fi
 
 if [ "$SELECT" = "all" ] || [ "$SELECT" = "skills" ]; then
-  while IFS= read -r skill; do
+  for skill_md in skills/*/SKILL.md; do
+    skill="$(basename "$(dirname "$skill_md")")"
     test_dir="tests/python/skills/$skill"
     if [ -d "$test_dir" ]; then
       # Skills no longer vendor cadgen; they import the distribution. In a checkout that is
@@ -89,7 +88,7 @@ if [ "$SELECT" = "all" ] || [ "$SELECT" = "skills" ]; then
       run_suite "$skill skill Python tests" "$test_dir" \
         "skills/$skill/scripts" "packages/cadgen/src"
     fi
-  done < <("$LIST_SKILLS_SCRIPT")
+  done
 fi
 
 if [ "${#failed_suites[@]}" -gt 0 ]; then

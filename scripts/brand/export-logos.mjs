@@ -9,7 +9,7 @@ const require = createRequire(path.join(root, 'apps/docs/package.json'));
 const sharp = require('sharp');
 const publicDir = path.join(root, 'apps/docs/public');
 const brand = path.join(publicDir, 'brand');
-for (const name of ['logo-c', 'logo-cad', 'logo-texttocad']) {
+for (const name of ['logo-c', 'logo-cad', 'logo-texttocad', 'logo-texttocad-stacked']) {
   const source = await readFile(path.join(brand, `${name}.svg`));
   await sharp(source, { density: 600 }).resize(name === 'logo-c' ? { width: 512, height: 512, fit: 'contain', background: '#00000000' } : { height: 512 }).png().toFile(path.join(brand, `${name}.png`));
 }
@@ -33,10 +33,12 @@ await writeFile(path.join(publicDir, 'favicon.ico'), Buffer.concat([header, ...p
 for (const file of ['favicon.png', 'favicon.ico']) {
   await copyFile(path.join(publicDir, file), path.join(root, 'apps/web/src/client/assets', file));
 }
-// The viewer's home page draws the TEXTTOCAD wordmark and its version menu the CAD one, both from
-// the shared UI package; both plugin listings (Codex, and claude.ai's directory) use the C icon.
+// The viewer's home page draws the TEXTTOCAD wordmark, its version menu the CAD one and its navbar's
+// home button the C, all from the shared UI package; both plugin listings (Codex, and claude.ai's
+// directory) use the C icon.
+await copyFile(path.join(brand, 'logo-c.svg'), path.join(root, 'packages/ui/src/assets/logo-c.svg'));
 await copyFile(path.join(brand, 'logo-cad.svg'), path.join(root, 'packages/ui/src/assets/logo-cad.svg'));
 await copyFile(path.join(brand, 'logo-texttocad.svg'), path.join(root, 'packages/ui/src/assets/logo-texttocad.svg'));
 await copyFile(path.join(brand, 'logo-c.png'), path.join(root, '.codex-plugin/logo.png'));
 await copyFile(path.join(brand, 'logo-c.png'), path.join(root, '.claude-plugin/icon.png'));
-console.log('Exported C, CAD and TEXTTOCAD PNGs, the favicons, the viewer wordmarks and the plugin icons.');
+console.log('Exported C, CAD, TEXTTOCAD and stacked TEXT TO CAD PNGs, the favicons, the viewer wordmarks and the plugin icons.');
