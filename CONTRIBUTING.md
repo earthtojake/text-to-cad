@@ -275,9 +275,9 @@ resolve. Root prose, the plugin manifests and configs, the release scripts and
 
 Adding a test that reads a new path means adding the path to the test's rule in
 `select_checks.py`; `tests/python/global/test_ci_workspace_selection.py` holds
-the table to the tree: every policy test is selected by some rule, every test
-path a rule names exists, every rule matches a tracked file, and the routing of
-each kind of change is pinned. Each job installs only what its selected tests
+the table to the tree: every policy test that is not a light contract is
+selected by some rule, every test path a rule names exists, every rule matches a
+tracked file, and the routing of each kind of change is pinned. Each job installs only what its selected tests
 need: npm workspaces by job, Python and the two Playwright browsers on request,
 and nothing beyond Python and Node for the light contracts (every policy test
 but the selector's `HEAVY_POLICY`, and its `LIGHT_SKILL_TESTS`).

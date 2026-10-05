@@ -115,6 +115,15 @@ class TheTableHoldsToTheTree(unittest.TestCase):
         for path in selector.LIGHT_SKILL_TESTS:
             self.assertTrue((REPO_ROOT / path).is_dir(), path)
 
+    def test_every_heavy_policy_test_has_a_rule_that_runs_it(self):
+        # The light contracts run on every change; a heavy one runs only when a rule names it,
+        # so one no rule names would run only when everything does.
+        named = set()
+        for rule in selector.RULES:
+            if isinstance(rule.selects, selector.Select) and not rule.selects.full:
+                named |= rule.selects.policy
+        self.assertEqual(sorted(f"{POLICY}/{name}" for name in selector.HEAVY_POLICY if f"{POLICY}/{name}" not in named), [])
+
     def test_every_rule_matches_a_tracked_path(self):
         present = TRACKED + [path.relative_to(REPO_ROOT).as_posix() for path in (REPO_ROOT / "scripts").rglob("*")]
         for rule in selector.RULES:
