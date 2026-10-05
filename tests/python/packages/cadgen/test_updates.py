@@ -10,6 +10,7 @@ import json
 import os
 import shutil
 import tempfile
+import threading
 import time
 import unittest
 from pathlib import Path
@@ -119,8 +120,29 @@ class UpdatesTest(unittest.TestCase):
                        {"CADGEN_INSTALL_CHANNEL": "claude-directory", "CADGEN_AUTO_UPDATED": "1"}):
             with self.subTest(values=values), mock.patch.dict(os.environ, values):
                 asked: list[str] = []
-                self.assertIsNone(updates.notice(now=time.time() + 2 * updates.CHECK_SECONDS, get=asked.append))
-                self.assertEqual(asked, [])
+                self.assertIsNone(updates.notice())
+                updates.feed(now=time.time() + 2 * updates.CHECK_SECONDS, get=asked.append)
+                self.assertEqual((asked, updates.refresh()), ([], None))
+
+    def test_nothing_waits_on_the_feed(self) -> None:
+        # A feed that is due is read in the background, and whatever asks meanwhile -- a page, a launch,
+        # a tool's result -- is told from the feed as last read: offline or slow, nothing waits.
+        (self.tmp / updates.FILE).write_text(json.dumps({"checked": 0, "feed": FEED}), encoding="utf-8")
+        reading, answer = threading.Event(), threading.Event()
+
+        def get(url: str) -> dict:
+            reading.set()
+            answer.wait(30)
+            return {"latest": "0.9.1"}
+
+        with mock.patch.object(updates, "_get", get):
+            thread = updates.refresh()
+            self.assertTrue(reading.wait(30))
+            self.assertEqual(updates.notice()["latest"], "0.9.0")
+            self.assertIsNone(updates.refresh(), "a day's read is not asked for twice")
+            answer.set()
+            thread.join(30)
+        self.assertEqual(updates.notice()["latest"], "0.9.1")
 
     def test_no_command_says_it_or_reads_the_feed(self) -> None:
         # A skill's command cannot tell which plugin, if any, it came with: the CAD app and the CAD

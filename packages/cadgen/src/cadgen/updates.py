@@ -26,9 +26,10 @@ manage. The button stays while the install is behind: nothing the person does wi
 text-only app gets the same as one line (``line``) with its first ``cad_show`` result. A skill's
 ``cadgen`` command says nothing: it cannot tell which plugin, if any, it came with.
 
-None of it ever gets in the way: nothing here raises, a request waits at most
-``TIMEOUT_SECONDS``, and each day's attempt is spent before it is made, so a feed that cannot be
-reached costs one wait a day.
+None of it ever gets in the way, online or off: nothing here raises, and the feed is read only in
+the background (``refresh``), so no start, request or tool call waits on it -- what is told comes
+from the feed as last read. Each day's attempt is spent before it is made, so a feed that cannot be
+reached is tried once a day.
 """
 
 from __future__ import annotations
@@ -150,16 +151,15 @@ def offer(found: dict[str, Any] | None, version: str, told: bool) -> str | None:
     return found["latest"]
 
 
-def notice(*, fetch: bool = True, now: float | None = None, path: Path | None = None,
-           get: Callable[[str], Any] | None = None) -> dict[str, str] | None:
-    """``{latest, version, text, prompt, instructions}``: what to tell the person, or ``None`` when
-    there is nothing to say, or no checking."""
+def notice(*, path: Path | None = None) -> dict[str, str] | None:
+    """``{latest, version, text, prompt, instructions}``: what to tell the person, from the feed as
+    last read (never read here: ``refresh``), or ``None`` when there is nothing to say, or no checking."""
     try:
         if not checking():
             return None
         from cadgen import __version__
 
-        latest = offer(feed(fetch=fetch, now=now, path=path, get=get), __version__, told())
+        latest = offer(feed(fetch=False, path=path), __version__, told())
         if latest is None:
             return None
         return {"latest": latest, "version": __version__,
@@ -184,8 +184,16 @@ def _quietly() -> None:
         LOG.debug("the version check failed", exc_info=True)
 
 
-def refresh() -> None:
-    """A server's start: read the feed in the background when it is due, so what it tells is current."""
-    if checking():
-        threading.Thread(target=_quietly, name="cadgen-update-check", daemon=True).start()
+def refresh() -> threading.Thread | None:
+    """Read the feed in the background when it is due, so what is told stays current: as a server
+    starts, and as a page asks (a server can run for days). The thread reading it, if one started."""
+    try:
+        if not (checking() and _due(_load(_cache()), "checked", time.time())):
+            return None
+        thread = threading.Thread(target=_quietly, name="cadgen-update-check", daemon=True)
+        thread.start()
+        return thread
+    except Exception:  # noqa: BLE001 - a check that cannot start is tried at the next one
+        LOG.debug("the version check could not start", exc_info=True)
+        return None
 

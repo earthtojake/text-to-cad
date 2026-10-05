@@ -731,9 +731,11 @@ class CadApp:
                 "policy": PRIVACY_URL}
 
     def _version(self) -> dict:
-        """The page's update button (``cadgen/updates.py``): whether a newer text-to-cad is out."""
+        """The page's update button (``cadgen/updates.py``): whether a newer text-to-cad is out, from
+        the feed as last read. A feed that is due is read in the background: the page never waits."""
         from cadgen import updates
 
+        updates.refresh()
         return {"notice": updates.notice()}
 
     def _report_activity(self, payload: dict) -> None:

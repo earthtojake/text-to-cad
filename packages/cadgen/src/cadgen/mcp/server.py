@@ -156,7 +156,8 @@ def _stamped(launch: dict[str, Any]) -> dict[str, Any]:
     launch["version"] = __version__
     launch["platform"] = sys.platform if sys.platform in ("darwin", "win32") else "linux"
     launch["pick"] = available()
-    launch["notice"] = updates.notice(fetch=False)
+    launch["notice"] = updates.notice()
+    updates.refresh()  # a server can run for days: a feed that is due is read in the background, for the next launch
     return launch
 
 
@@ -585,7 +586,7 @@ class Server:
             return result
         from cadgen import updates
 
-        found = updates.notice(fetch=False)  # an agent's call never waits on the feed: the server read it at start
+        found = updates.notice()
         if found is not None:
             self._update_told = True
             result["content"].append({"type": "text", "text": updates.line(found)})

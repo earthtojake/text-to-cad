@@ -352,6 +352,25 @@ and is retired with every object only it named (`STORE.md` §8).
 cadgen build; the geometry it returns, and the answer to every `==` and
 `is_same` along the way, are the same.
 
+### 19. Nothing waits on the network
+
+Once installed, cadgen works offline: every command, build, snapshot, server
+and page. Its own requests are two, both anonymous: analytics
+(`analytics.py`, sent only with the person's yes) and the daily version check
+(`updates.py`). Both run in the background and fail silently: no start,
+command, request or tool call waits on them, and one that fails changes
+nothing but what is counted or offered. Two waits remain, bounded, each for
+something only the network can do: a server's last analytics send as it exits
+(`analytics.CLOSE_SECONDS`), and `cadgen analytics off`, which waits for the
+deletion it asks for (still owed, and asked again, when nobody answers). The
+pages load nothing from the internet: everything they show ships in the wheel.
+Installing needs the network (cadgen itself, and the headless browser the first
+snapshot fetches), and nothing after it does.
+*Pressure-test*: with every request refused (a proxy on a closed port), and
+again with every request hanging, start a server, open a view, call each tool,
+and run a build and a snapshot: each works, and nothing waits on a request
+beyond the two waits above.
+
 ## The shape of the package
 
 ```
