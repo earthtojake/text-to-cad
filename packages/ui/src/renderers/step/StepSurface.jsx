@@ -88,7 +88,7 @@ import {
 } from "./workbench/topologyCapabilities.js";
 import { stepJointHandles, stepPosableDofs } from "./workbench/jointHandles.js";
 import { useArtifact } from "./components/workbench/hooks/useArtifact.js";
-import { artifactFreshnessKey } from "./workbench/artifactResolution.js";
+import { artifactEndsLoad, artifactFreshnessKey } from "./workbench/artifactResolution.js";
 import {
   rootAssemblyInspectionNodeId,
   buildAssemblyLeafToNodePickMap,
@@ -317,7 +317,8 @@ function StepSurfaceBody({ view, data }) {
     cancelReferenceLoad,
     loadMeshForEntry,
     loadReferencesForEntry,
-    fatalLoadFailure
+    fatalLoadFailure,
+    clearFatalLoadFailure
   } = useCadAssets({
     initialEntry: liveEntry,
     client,
@@ -664,8 +665,10 @@ function StepSurfaceBody({ view, data }) {
     hiddenPartIds,
     renderPartIdsForAssemblySelection
   ]);
-  // A fatal render-artifact error (not building) stops the loading spinner so the error surfaces.
-  const artifactBlocksRender = selectedArtifact.status === "failed" && !editingHasView;
+  // A render-artifact status nothing will load from — a fatal error (not building), or one settled
+  // as compiled over an entry that still names no tree — stops the loading spinner so the alert
+  // surfaces (`artifactEndsLoad`).
+  const artifactBlocksRender = artifactEndsLoad(selectedArtifact, editingHasView);
   const viewerLoading =
     (selectedArtifactGenerating || !artifactBlocksRender) &&
     status !== ASSET_STATUS.ERROR &&
@@ -944,6 +947,14 @@ function StepSurfaceBody({ view, data }) {
     selectedEntry,
     selectedMeshMatches
   ]);
+
+  // A load that failed outright is not retried by itself (`shouldStartMeshLoad`), except once a
+  // build of this same revision ends (`built`): a store that lost an object of the tree answers
+  // 404 for the descriptor until the compile the status started restores it, at the same hashes,
+  // so the entry does not move and the load above would otherwise wait for Reload.
+  useEffect(() => {
+    if (selectedArtifact.built) clearFatalLoadFailure();
+  }, [selectedArtifact.built, clearFatalLoadFailure]);
 
   // Stable key over the expanded tree nodes whose topology should be loaded. An assembly's
   // reference state is COMPLETE when it was composed for exactly this expanded set; until it is,

@@ -1572,6 +1572,16 @@ which rechecks the artifact and does not restart the desktop window, and Report 
 where the host has a tracker, opens a new issue titled "Issue: ", labelled `bug`, filled in
 from the card, with the file's name and no path of the machine.
 
+Loading always ends. An artifact status that has settled as compiled — the server's answer
+for the entry, read after the catalog was read again (`useArtifact`) — over a catalog row
+that still names no tree is the no-geometry alert (`artifactEndsLoad`,
+`workbench/artifactResolution.js`), or, over a previous version kept on screen through a
+rewrite, a dismissible "Couldn’t update the model"; never "Reading model" for good. A load
+that failed outright (a row naming a tree whose object the store lost answers 404 for its
+descriptor) is not retried by itself, except once when the compile the status started ends
+(`built`): the repaired tree keeps its hash, so the row never moves and nothing else would
+try again before Reload.
+
 ### Camera framing and zoom
 
 Zoom to fit and the live `resetCamera` frame the original authored model bounds at

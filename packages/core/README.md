@@ -175,7 +175,9 @@ docs/              # subsystem docs (the map below)
 Contract mirrors that must stay in lockstep (each has a sync test):
 `lib/cadRefs.js` ↔ `cadgen/cad_ref_syntax.py`;
 `common/kinematicsRuntime.js` ↔ `cadgen/_internal/kinematics_fk.py`;
-tessellation v4 keys, headers and mesh-index records ↔ `cadgen/store/meshes.py`.
+tessellation v4 keys, headers and mesh-index records ↔ `cadgen/store/meshes.py`;
+`common/renderModule.js`'s animation exports and their refusals ↔ the build's
+check in `cadgen/_internal/animation_source.py` (both read `common/renderModule.parity.json`).
 
 Where the mechanism is written:
 

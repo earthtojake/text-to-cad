@@ -335,7 +335,7 @@ def submit_compile(
     else:
         _submit_transient(
             job, root, force=force, root_id=root_id, closure=closure,
-            command=[sys.executable, "-m", "cadgen.cli.step_compile", *tool_argv],
+            command=[sys.executable, "-P", "-m", "cadgen.cli.step_compile", *tool_argv],
         )
     emit_event(model_event(document, "building", phase="compile"))
 
@@ -374,7 +374,7 @@ def _submit_transient(
     env["CADGEN_EVENTS"] = "1"  # the child writes events as JSON lines on stderr
     if root_id:
         env["CADGEN_ROOT_ID"] = root_id
-    argv = list(command) if command else [sys.executable, "-m", "cadgen.cli._run_model", *job.target_argv()]
+    argv = list(command) if command else [sys.executable, "-P", "-m", "cadgen.cli._run_model", *job.target_argv()]
     if force and not command:
         argv.append("--force")
     try:
@@ -470,7 +470,7 @@ def _submit_daemon(
             argv.append("--force")
     fallback = None
     if tool != "run":
-        fallback = [sys.executable, "-m", f"cadgen.cli.{tool.replace('-', '_')}", *argv]
+        fallback = [sys.executable, "-P", "-m", f"cadgen.cli.{tool.replace('-', '_')}", *argv]
 
     def run() -> None:
         def observe(event: dict) -> None:

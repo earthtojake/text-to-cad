@@ -50,8 +50,21 @@ import {
 // (`useEditingPreview`), which asks here again through `freshnessKey` (`artifactFreshnessKey`).
 // Polling it was a status read every 400 ms for the whole build, through the host's few shared
 // request slots in the CAD app. A model not yet on screen is still followed until its build ends.
+//
+// `settled` says the status is the server's answer for this exact key, not the optimism. A model
+// not on screen whose server says `compiled` has the catalog read again BEFORE that is reported:
+// a build just ended (ours or a peer's) and the catalog has the entry it wrote, which moves the key;
+// or the row is the server's last word, and a `compiled` that has settled over an entry still
+// naming no tree is the renderer's cue to stop waiting (`artifactEndsLoad`). Reported first, as it
+// was, that state showed after every compile for the length of a catalog read.
+//
+// `built` says the compiled status is the end of a build this hook followed — ours or a peer's —
+// rather than the state the file was found in. An entry whose key did not move through it (the
+// compile that repairs a store which lost an object of the tree restores the same bytes at the
+// same hashes) is the renderer's cue to try again a load that failed outright (`StepSurface`).
 
 const READY = { status: "compiled", error: "", progress: null, advisory: null };
+const OPTIMISTIC = { ...READY, failure: null, settled: false, built: false };
 
 function isAbortError(error) {
   return error?.name === "AbortError";
@@ -197,6 +210,24 @@ export function useArtifact(fileRef, { enabled = true, freshnessKey = "", shown 
       });
     };
 
+    // The server says compiled. For a model not on screen the catalog is read again first (see the
+    // header): the entry it lists then either names the tree, which moves the key and ends this
+    // run, or still names none, and `compiled` settles over it. A model on screen has its entry;
+    // one whose build just ended there is the build feed's to update, and the read is not waited for.
+    // `built`: this compiled is the end of a build, not the state the file was found in.
+    const settleReady = async (payload, built) => {
+      finished = true;
+      stopPolling();
+      if (typeof client.refresh === "function") {
+        if (!shownRef.current) {
+          await client.refresh({ file: activeRef, markRefreshing: false }).catch(() => {});
+        } else if (built) {
+          void client.refresh({ file: activeRef, markRefreshing: false }).catch(() => {});
+        }
+      }
+      settle({ ...READY, advisory: artifactAdvisoryFor(payload), built });
+    };
+
     async function resolve() {
       let readingStatus = true;
       try {
@@ -213,13 +244,7 @@ export function useArtifact(fileRef, { enabled = true, freshnessKey = "", shown 
         if (action === ARTIFACT_ACTION_READY) {
           // Ready may carry advisory flags (stale package compiled as-is, generator
           // busy elsewhere); keep them for the file sheet's status section.
-          finished = true;
-          stopPolling();
-          // A build just ended (ours or a peer's): the catalog has the entry it wrote.
-          if (attached && typeof client.refresh === "function") {
-            void client.refresh({ file: activeRef, markRefreshing: false }).catch(() => {});
-          }
-          settle({ ...READY, advisory: artifactAdvisoryFor(status) });
+          await settleReady(status, attached);
           return;
         }
         if (action === ARTIFACT_ACTION_ERROR) {
@@ -256,9 +281,12 @@ export function useArtifact(fileRef, { enabled = true, freshnessKey = "", shown 
           pollTimer = window.setTimeout(pollProgress, ARTIFACT_PROGRESS_FIRST_POLL_MS);
           return;
         }
-        settle(result?.ok && result.state === "compiled"
-          ? { ...READY, advisory: artifactAdvisoryFor(result) }
-          : { status: "failed", error: serverErrorMessage(result) });
+        if (result?.ok && result.state === "compiled") {
+          // Nothing left to build: a peer's build ended between the status read and the POST.
+          await settleReady(result, true);
+          return;
+        }
+        settle({ status: "failed", error: serverErrorMessage(result) });
       } catch (error) {
         if (readingStatus && noteStatusFailure(error)) {
           pollTimer = window.setTimeout(resolve, ARTIFACT_PROGRESS_POLL_MS);
@@ -287,13 +315,15 @@ export function useArtifact(fileRef, { enabled = true, freshnessKey = "", shown 
   }, [activeRef, key, client]);
 
   // Optimistic-ready until this exact key has settled, so a fresh selection renders without a flash.
-  return state.key === key
+  return activeRef && state.key === key
     ? {
       status: state.status,
       error: state.error,
       failure: state.failure || null,
       progress: state.progress,
-      advisory: state.advisory || null
+      advisory: state.advisory || null,
+      settled: true,
+      built: state.built === true
     }
-    : READY;
+    : OPTIMISTIC;
 }

@@ -125,6 +125,23 @@ test("missing geometry gives file context and a next step", () => {
   assert.equal(buildViewerMeshAlert(null, false, "failure"), null);
 });
 
+test("a compiled status settled over an entry naming no tree is no geometry, or a failed update of the model on screen", () => {
+  // The row the server keeps for a store it cannot read whole: no hash, a URL naming no tree, and an
+  // artifact status that has settled as compiled over it (`useArtifact`).
+  const unbuilt = { file: "STEP/pair.step", kind: "part", url: "/__cad/store?file=unbuilt-pair", hash: "", documentHash: "d1" };
+  const settled = { status: "compiled", settled: true, error: "", failure: null };
+  assert.equal(buildViewerMeshAlert(unbuilt, false, "", settled).summary, "Mesh unavailable");
+  // The previous version kept on screen through the rewrite: the update failed, the model survives.
+  const kept = buildViewerMeshAlert(unbuilt, true, "", settled);
+  assert.equal(kept.blocking, false);
+  assert.equal(kept.title, "Couldn’t update the model");
+  assert.match(kept.message, /pair\.step.*previous version/);
+  assert.equal(kept.reload, true);
+  // Not before the status settles, and not over a model still arriving.
+  assert.equal(buildViewerMeshAlert(unbuilt, true, "", { ...settled, settled: false }), null);
+  assert.equal(buildViewerMeshAlert(unbuilt, true, "", settled, { partial: true }), null);
+});
+
 test("only a failed build the file has not moved past raises an alert", () => {
   assert.equal(buildViewerEditAlert({ state: "disconnected", error: "Connection closed" }, false), null);
   assert.equal(buildViewerEditAlert({ state: "building" }, true), null);

@@ -227,7 +227,7 @@ class WhatItReRuns(unittest.TestCase):
         argv = ["--api-only", "--port", "8123"]
         with mock.patch.object(reload_module.os, "execv") as execv:
             reload_module.execute_restart(argv, executable="/py", platform="linux")
-        execv.assert_called_once_with("/py", ["/py", "-m", "cadgen.viewer", *argv])
+        execv.assert_called_once_with("/py", ["/py", "-P", "-m", "cadgen.viewer", *argv])
 
         with mock.patch.object(reload_module.subprocess, "Popen") as popen, \
                 mock.patch.object(reload_module.os, "_exit", side_effect=SystemExit) as hard_exit:
@@ -238,7 +238,7 @@ class WhatItReRuns(unittest.TestCase):
         # and a restarted server whose narration went to a redirected stderr
         # must keep writing there rather than to a console that may not exist.
         popen.assert_called_once_with(
-            ["py.exe", "-m", "cadgen.viewer", *argv], stdout=1, stderr=2
+            ["py.exe", "-P", "-m", "cadgen.viewer", *argv], stdout=1, stderr=2
         )
         hard_exit.assert_called_once_with(0)
 

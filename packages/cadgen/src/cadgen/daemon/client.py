@@ -484,7 +484,8 @@ def _spawn_daemon(address: str) -> subprocess.Popen | None:
         log_file_path.parent.mkdir(parents=True, exist_ok=True)
         with open(log_file_path, "ab") as log_file:
             return subprocess.Popen(
-                [sys.executable, "-m", "cadgen.daemon"],
+                # -P: cadgen's own modules, never the working folder's (STORE.md §9).
+                [sys.executable, "-P", "-m", "cadgen.daemon"],
                 stdin=subprocess.DEVNULL,
                 stdout=log_file,
                 stderr=subprocess.STDOUT,
