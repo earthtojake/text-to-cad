@@ -134,15 +134,6 @@ def collect(root: Path) -> Package:
             if name.split(".")[1] in ICONS and path not in package.icons:
                 package.icons.append(path)
 
-    extensions = manifest.get("extensions") if isinstance(manifest.get("extensions"), dict) else {}
-    openai = extensions.get("com.openai") if isinstance(extensions.get("com.openai"), dict) else {}
-    if "onboardingSkill" in openai:
-        value = openai["onboardingSkill"]
-        if not (isinstance(value, str) and re.fullmatch(r"\./skills/[^/]+/SKILL\.md", value)
-                and value[2:] in modes):
-            package.errors.append("extensions.com.openai.onboardingSkill must be the ./skills/<name>/SKILL.md "
-                                  f"path of a packaged skill (got {value!r})")
-
     for archived in sorted(wanted | sources.keys()):
         source = sources.get(archived, archived)
         mode = modes[source]

@@ -43,10 +43,5 @@
       "Check my bracket for CNC machining and tell me what to change."
     ],
     "brandColor": "#249DDD"
-  },
-  "extensions": {
-    "com.openai": {
-      "onboardingSkill": "./skills/cad-setup/SKILL.md"
-    }
   }
 }

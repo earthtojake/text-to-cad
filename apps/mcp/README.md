@@ -83,7 +83,8 @@ reference host `basic-host` does.
   The prompt has a copy icon in its top-right corner either way. **Manual installation** opens the docs site's
   Install section (`https://www.texttocad.dev/install`) through `ui/open-link`, for a
   person whose agent cannot do it. The agent does
-  the update, with the `cad-setup` skill's steps; nothing here updates anything.
+  the update, with the commands under its app's heading in the text-to-cad README;
+  nothing here updates anything.
   A text client gets the same line with its first `cad_show` result. Where the
   install came from is its channel, which each plugin's startup config names in
   the server's environment (`CADGEN_INSTALL_CHANNEL`, `cadgen/_internal/channel.py`),

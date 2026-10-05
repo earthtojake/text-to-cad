@@ -58,14 +58,12 @@ class PluginZipTests(unittest.TestCase):
             "skills": "./skills/", "mcpServers": "./codex.mcp.json",
             "interface": {"displayName": "Demo", "shortDescription": "Demo things", "longDescription": "Demo.",
                           "developerName": "Demo", "category": "Productivity", "capabilities": []},
-            "extensions": {"com.openai": {"onboardingSkill": "./skills/cad-setup/SKILL.md"}},
         }
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
             (root / ".codex-plugin").mkdir()
-            (root / "skills/cad-setup").mkdir(parents=True)
-            (root / "skills/cad-setup/SKILL.md").write_text("---\nname: cad-setup\ndescription: Set up.\n---\nSteps.\n",
-                                                        encoding="utf-8")
+            (root / "skills/demo").mkdir(parents=True)
+            (root / "skills/demo/SKILL.md").write_text("---\nname: demo\ndescription: Demo.\n---\nSteps.\n", encoding="utf-8")
             server = {"command": "uvx", "args": ["--from", "cadgen==1.0.0", "cadgen", "mcp"]}
             (root / "codex.mcp.json").write_text(json.dumps({"mcpServers": {"cad": server}}), encoding="utf-8")
             git(root, "init", "-q")
@@ -85,15 +83,9 @@ class PluginZipTests(unittest.TestCase):
                                  {**server, "env": {"CADGEN_INSTALL_CHANNEL": "openai-directory", "CADGEN_AUTO_UPDATED": "1"}})
                 self.assertNotIn("codex.mcp.json", archive.namelist())
 
-            # The portal refuses both: a subtitle over 30 characters (main's, until this
-            # check) and an onboarding skill named instead of given as its SKILL.md path.
-            for change, code in (
-                ({"interface": {**manifest["interface"], "shortDescription": "Give your agent CAD superpowers."}},
-                 "plugin_short_description_too_long"),
-                ({"extensions": {"com.openai": {"onboardingSkill": "setup"}}}, "onboardingSkill"),
-            ):
-                with self.subTest(code=code):
-                    self.assertTrue(any(code in error for error in build({**manifest, **change})))
+            # The portal refuses a subtitle over 30 characters (main's, until this check).
+            change = {"interface": {**manifest["interface"], "shortDescription": "Give your agent CAD superpowers."}}
+            self.assertTrue(any("plugin_short_description_too_long" in error for error in build({**manifest, **change})))
 
 
 if __name__ == "__main__":

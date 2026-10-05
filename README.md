@@ -123,8 +123,7 @@ silently, and it never appears in `codex plugin list`. Upgrade with
 
 In the Codex app the plugin also brings the CAD viewer: **CAD** in the sidebar
 (recent models, and Open), a **CAD** tab beside each thread that the agent
-drives, and *Open with CAD* for model files. The plugin's `$cad-setup` skill
-checks for uv and points to its installer.
+drives, and *Open with CAD* for model files.
 
 To update, upgrade the `earthtojake` marketplace (or use Plugins › Manage ›
 Marketplace), then restart Codex:
@@ -240,9 +239,9 @@ misses new ones — which matters here, because releases do add skills.
 
 Neither command removes a skill that was retired upstream; drop one with
 `npx skills remove <skill>` if you need to. The retired `cad-viewer` skill is
-now covered by the CAD, DXF and robot-description skills, and `cad-mcp-setup`
-became `cad-setup`; remove old standalone installs with
-`npx skills remove cad-viewer cad-mcp-setup`.
+now covered by the CAD, DXF and robot-description skills, and the retired
+`cad-mcp-setup` by this README's install and update steps. Remove old standalone
+installs with `npx skills remove cad-viewer cad-mcp-setup`.
 
 No plugin for your agent yet?
 [Request one](https://github.com/earthtojake/text-to-cad/issues/new?title=Plugin%20request%3A%20).
@@ -257,11 +256,11 @@ button, first in CAD's navbar and on its home, whose **Send to agent** posts
 "Update text-to-cad to 0.9.0 from https://github.com/earthtojake/text-to-cad" to
 your chat, worded like the install message (the browser viewer's copies it
 instead), or, in an app that shows CAD's replies as text, a line with its reply.
-Your agent then follows the `cad-setup` skill's steps for your app. The button
+Your agent then runs the update commands under your app's heading here. The button
 also links to the [install instructions](https://www.texttocad.dev/install), to
 update by hand. Copies from a plugin directory or the Cursor Marketplace never
 show it, since their store updates them, and neither does Gemini's extension,
-which Gemini updates.
+which Gemini updates: for those there is nothing to run.
 
 To find out, cadgen fetches `api.texttocad.dev/v1/versions` at most once a day:
 one anonymous request, with no ID, path or anything about you, never in CI and

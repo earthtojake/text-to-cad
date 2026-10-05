@@ -1,4 +1,0 @@
-interface:
-  display_name: "CAD setup"
-  short_description: "Check that CAD can start, and update text-to-cad."
-  default_prompt: "Use $cad-setup to check that the CAD plugin can start (uv installed, when to restart Codex), or to update text-to-cad when CAD says a newer release is out."

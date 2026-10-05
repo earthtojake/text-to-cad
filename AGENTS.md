@@ -129,8 +129,8 @@ path, the rehearsal, and local/manual fallbacks.
   the first snapshot fetches its headless browser, so no skill has a browser step. cadgen carries
   the JavaScript it executes too (Node builders, the snapshot browser bundle,
   the CAD Viewer client), so a skill ships no runtime of its own. Not every
-  skill needs cadgen (bambu-labs, cad-setup, dfam-check, dfm, gcode,
-  sendcutsend, step-parts are cadgen-free); do not add the dependency to a skill that never invokes it.
+  skill needs cadgen (bambu-labs, dfam-check, dfm, gcode, sendcutsend,
+  step-parts are cadgen-free); do not add the dependency to a skill that never invokes it.
 - Keep samples and manual CAD/robot-description validation artifacts under
   `models/`. Automated tests must not read, build or import that sample corpus:
   generate small fixtures in fresh temporary directories or use tiny test-owned
