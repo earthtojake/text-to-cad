@@ -166,11 +166,17 @@ a release of cadgen.
 | Route | What it does |
 | --- | --- |
 | `GET /v1/versions` | The version feed, the same for everyone: `{latest}` → `200`, kept by Vercel's edge until the next deploy (`src/lib/api/versions.mjs`). `latest` is this app's version, which the release stamps from `VERSION`. Only a copy installed by hand reads it; a store's copy never checks. It reads no database. |
-| `POST /v1/events` | One batch: `{schema: 2, install, session, version, channel, platform, arch, client: {name, version}, presentation, events: [{name: "tool", tool, calls, errors} \| {name: "view", calls} \| {name: "file", file, kind}]}` → `204`. `channel` is where the install came from, as its package named it: `claude-directory`, `openai-directory`, `cursor-marketplace`, `github`, `dev` or `unknown`. `file` is 16 hex characters, an HMAC of the path under a salt that never leaves the machine: distinct files can be counted, not named. One event per tool and per `file`, and one `view` at most. Anything else is `400` and stores nothing (`src/lib/api/events.mjs`), a schema 1 batch (cadgen 0.7.10 and before) included. The country Vercel places the request in (`x-vercel-ip-country`, from its IP address) adds the install to `countries` once a week and once a month: totals only, never beside the batch. |
+| `POST /v1/events` | One batch: `{schema: 2, install, session, version, channel, platform, arch, client: {name, version}, presentation, events: [{name: "tool", tool, calls, errors} \| {name: "view", calls} \| {name: "file", file, kind}]}` → `204`. `channel` is where the install came from, as its package named it: `claude-github`, `codex-github`, `cursor-github`, `gemini-github`, `claude-desktop`, `claude-directory`, `openai-directory`, `cursor-marketplace`, `dev` or `unknown`. A schema 1 batch (cadgen 0.7.7 to 0.7.11) says how the install was made, `source` (`store` or `manual`), in place of `channel`: its rows keep that as `source`, with the channel `unknown`. `file` is 16 hex characters, an HMAC of the path under a salt that never leaves the machine: distinct files can be counted, not named. One event per tool and per `file`, and one `view` at most. Anything else is `400` and stores nothing (`src/lib/api/events.mjs`). The country Vercel places the request in (`x-vercel-ip-country`, from its IP address) adds the install to `countries` once a week and once a month: totals only, never beside the batch. |
 | `POST /v1/forget` | `{install}`: deletes every row sent under an install id → `204`. `cadgen analytics off` calls it; the random id is the only authority needed. The id rides in the body because Vercel's request logs keep each path beside the caller's IP. |
 | `GET /v1/prune` | The daily cron (`vercel.json`): deletes rows older than 13 months. Needs `Authorization: Bearer $CRON_SECRET`. |
 | `GET /v1/health` | → `200`, or `503` naming a missing setting (`DATABASE_URL`, `CRON_SECRET`), or the database's error code when it cannot take a batch (unreachable, or tables missing a column after a schema change that `schema.sql` was not re-run for). `Deploy Docs` checks it. |
 
+- **Every release keeps counting.** The receiver reads every schema a released
+  cadgen sends, for as long as that release can still be running: a copy nobody
+  updates is counted like a current one. A new schema adds a reader beside the old
+  ones in `events.mjs`, and `schema.sql` only ever adds (a column, a default),
+  never renames or drops one, so it can run before the deploy while the live
+  receiver still writes the columns it knows.
 - **Nothing outside the contract is stored**: unknown fields, tool names that are
   not `cad_*`, free-text strings are refused. No IP address is stored, and the one
   header read, the country, is kept only in `countries`' weekly and monthly totals
@@ -197,8 +203,9 @@ connection string) and `CRON_SECRET` (any long random string; Vercel sends it to
 the prune cron as `Authorization: Bearer …`). Nothing in GitHub holds them. A
 changed value takes effect with the next deploy, and `Deploy Docs` checks
 `api.texttocad.dev/v1/health`, which answers `503` while either is missing.
-A schema change means running `schema.sql` again (it is idempotent) on the
-database before deploying; a deploy that went out without it fails that check.
+A schema change means running `schema.sql` again (it is idempotent, and only
+adds) on the database before deploying; a deploy that went out without it fails
+that check.
 
 The feed changes with each release, which deploys the site after its PyPI
 upload, so `latest` never names a release that cannot be installed yet. Only a

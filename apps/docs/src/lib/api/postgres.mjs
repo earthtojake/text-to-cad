@@ -4,7 +4,7 @@
  * first use, so the site's build and the handler's tests need no database. Weeks are ISO weeks
  * and months calendar months, both in UTC.
  */
-const COLUMNS = ['install_id', 'session_id', 'event', 'tool', 'file', 'kind', 'calls', 'errors', 'version', 'channel', 'platform', 'arch', 'client', 'client_version', 'presentation'];
+const COLUMNS = ['install_id', 'session_id', 'event', 'tool', 'file', 'kind', 'calls', 'errors', 'version', 'channel', 'source', 'platform', 'arch', 'client', 'client_version', 'presentation'];
 
 export function postgresStore(url) {
   let sql;

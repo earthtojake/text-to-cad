@@ -16,6 +16,9 @@ const BATCH = {
     { name: 'file', file: '3f9a1c0be47d2a55', kind: 'step' },
   ],
 };
+// What cadgen 0.7.7 to 0.7.11 send: how the install was made in place of its channel (undefined is left
+// out of the JSON a batch is sent as).
+const SCHEMA_1 = { ...BATCH, schema: 1, version: '0.7.11', source: 'store', channel: undefined };
 
 // A store in memory, all in one week: an install has been seen this week and month once it has rows.
 function memory() {
@@ -47,7 +50,18 @@ test('a batch becomes one row per event, carrying its context and nothing else',
     ['view', null, null, null, 7, 0],
     ['file', null, '3f9a1c0be47d2a55', 'step', 1, 0],
   ]);
-  assert.deepEqual(Object.keys(store.rows[0]).sort(), ['arch', 'calls', 'channel', 'client', 'client_version', 'errors', 'event', 'file', 'install_id', 'kind', 'platform', 'presentation', 'session_id', 'tool', 'version']);
+  assert.deepEqual(Object.keys(store.rows[0]).sort(), ['arch', 'calls', 'channel', 'client', 'client_version', 'errors', 'event', 'file', 'install_id', 'kind', 'platform', 'presentation', 'session_id', 'source', 'tool', 'version']);
+});
+
+test('every schema a released cadgen sends is stored: a copy nobody updated keeps counting', async () => {
+  const store = memory();
+  assert.equal((await send(store, 'POST', '/v1/events', SCHEMA_1)).status, 204);
+  assert.equal((await send(store, 'POST', '/v1/events', BATCH)).status, 204);
+  // Schema 1 names no channel: its rows keep how the install was made.
+  assert.deepEqual(store.rows.map(row => [row.version, row.channel, row.source]), [
+    ...SCHEMA_1.events.map(() => ['0.7.11', 'unknown', 'store']),
+    ...BATCH.events.map(() => ['0.7.6', 'claude-directory', null]),
+  ]);
 });
 
 test('where installs are is kept as totals: each counts once a week and a month, never beside its rows', async () => {
@@ -86,7 +100,10 @@ test('anything outside the contract is refused and stores nothing', async () => 
     { ...BATCH, events: [{ name: 'tool', tool: 'cad_show', calls: 1, errors: null }] },
     { ...BATCH, channel: 'store' },
     { ...BATCH, channel: 'github' }, // a channel no plugin names any more
-    { ...BATCH, schema: 1 },
+    { ...BATCH, schema: 3 }, // a schema no release sends
+    { ...BATCH, schema: '2' },
+    { ...SCHEMA_1, channel: 'claude-github' }, // each schema's own fields, and only those
+    { ...SCHEMA_1, source: 'github' },
   ]) assert.equal((await send(store, 'POST', '/v1/events', bad)).status, 400, JSON.stringify(bad));
   assert.equal((await send(store, 'POST', '/v1/events', '{')).status, 400);
   assert.equal((await send(store, 'POST', '/v1/events', 'x'.repeat(20_000))).status, 400);

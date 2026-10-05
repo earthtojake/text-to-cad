@@ -1,6 +1,8 @@
 -- CAD's anonymous analytics: one row per event of a batch (src/lib/api/events.mjs), and where
 -- installs are, as totals. No IP address, nothing that names a person, a file or a model. Safe to
--- run again: it creates what is missing and adds the columns a later schema introduced.
+-- run again: it creates what is missing and adds the columns a later schema introduced. It only ever
+-- adds, never renames or drops, so it runs safely before a deploy while the receiver that is live
+-- still writes the columns it knows.
 create table if not exists events (
   id             bigint generated always as identity primary key,
   received_at    timestamptz not null default now(),  -- the row's one time: when its batch arrived
@@ -13,26 +15,20 @@ create table if not exists events (
   calls          integer     not null,  -- tool: calls; view: touches; file: 1
   errors         integer     not null,  -- tool: failed calls
   version        text        not null,  -- cadgen's
-  channel        text        not null,  -- where the install came from (cadgen/_internal/channel.py): claude-github | codex-github | cursor-github | gemini-github | claude-desktop | claude-directory | openai-directory | cursor-marketplace | dev | unknown
+  channel        text        not null default 'unknown',  -- where the install came from (cadgen/_internal/channel.py): claude-github | codex-github | cursor-github | gemini-github | claude-desktop | claude-directory | openai-directory | cursor-marketplace | dev | unknown
+  source         text,                  -- schema 1 (cadgen 0.7.7 to 0.7.11), which names no channel: store | manual
   platform       text        not null,  -- darwin | linux | win32 | other
   arch           text,
   client         text,                  -- the agent app: codex-mcp-client, claude-ai, ...
   client_version text,
   presentation   text                   -- tabs | inline | text (the CAD app), browser (`cadgen viewer`)
 );
--- Schema 2 names where an install came from (`channel`), where schema 1 said how it was installed
--- (`source`: store | manual). The column is renamed, and what schema 1 sent, which names no channel,
--- is unknown.
-do $$
-begin
-  if exists (select 1 from information_schema.columns
-             where table_schema = current_schema() and table_name = 'events' and column_name = 'source') then
-    alter table events rename column source to channel;
-    update events set channel = 'unknown';
-  end if;
-end $$;
 alter table events add column if not exists file text;
 alter table events add column if not exists kind text;
+-- Schema 2 (cadgen 0.8.0) names where an install came from. Schema 1's rows name none, and keep how
+-- the install was made in `source`, which schema 2 leaves empty.
+alter table events add column if not exists channel text not null default 'unknown';
+alter table events alter column source drop not null;
 create index if not exists events_received_at on events (received_at);
 -- An install's rows, in time: what it forgets, and whether it has sent anything this week or month.
 create index if not exists events_install on events (install_id, received_at);

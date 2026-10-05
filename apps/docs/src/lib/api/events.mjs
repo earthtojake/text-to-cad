@@ -1,9 +1,11 @@
 /**
- * What `cadgen mcp` sends (`cadgen/analytics.py`, schema 2), checked field by field and turned
- * into rows. Anything outside the contract is refused, not stored: an unknown field, a tool name
- * that is not a tool's, a file code that is not 16 hex characters, a string longer than a version
- * or a client name needs, a tool or a file counted twice in one batch, or a second view. A row
- * carries the batch's context and one event; nothing in it names a person, a file or what they made.
+ * What CAD's two apps send (`cadgen/analytics.py`), checked field by field and turned into rows.
+ * Every schema a released cadgen sends is read, for as long as that release can still be running
+ * (README.md): a copy nobody updates keeps counting. Anything outside the contract is refused, not
+ * stored: an unknown field, a tool name that is not a tool's, a file code that is not 16 hex
+ * characters, a string longer than a version or a client name needs, a tool or a file counted twice
+ * in one batch, or a second view. A row carries the batch's context and one event; nothing in it
+ * names a person, a file or what they made.
  *
  * Events: `tool` (a CAD tool's calls and failures since the last batch), `view` (times a person
  * touched a CAD view, or it switched models) and `file` (a distinct file on screen, once a day per
@@ -17,10 +19,19 @@ const FILE_CODE = /^[0-9a-f]{16}$/;
 const MAX_EVENTS = 64;
 export const MAX_BYTES = 16 * 1024;
 
-const FIELDS = new Set(['schema', 'install', 'session', 'version', 'channel', 'platform', 'arch', 'client', 'presentation', 'events']);
+const SHARED = new Set(['schema', 'install', 'session', 'version', 'platform', 'arch', 'client', 'presentation', 'events']);
 // Where the install came from, as its plugin's startup command named it (`cadgen/_internal/channel.py`).
 const CHANNELS = new Set(['claude-github', 'codex-github', 'cursor-github', 'gemini-github', 'claude-desktop',
   'claude-directory', 'openai-directory', 'cursor-marketplace', 'dev', 'unknown']);
+const SOURCES = new Set(['store', 'manual']);
+// What each schema says beside the shared fields: where the install came from. A new schema adds a reader
+// here and keeps the old ones.
+const SCHEMAS = new Map([
+  // cadgen 0.7.7 to 0.7.11: how it was installed, which names no channel. Kept as `source`.
+  [1, { field: 'source', origin: batch => ({ channel: 'unknown', source: oneOf(batch.source, SOURCES, 'source') }) }],
+  // cadgen 0.8.0 on: the channel its plugin's startup command named.
+  [2, { field: 'channel', origin: batch => ({ channel: oneOf(batch.channel, CHANNELS, 'channel'), source: null }) }],
+]);
 const PLATFORMS = new Set(['darwin', 'linux', 'win32', 'other']);
 const PRESENTATIONS = new Set(['tabs', 'inline', 'text', 'browser']);
 const KINDS = new Set(['step', 'stl', '3mf', 'glb', 'dxf', 'urdf', 'srdf', 'sdf']);
@@ -43,8 +54,8 @@ export function isUuid(value) {
 /** The rows a batch stores, or `Invalid`. */
 export function rowsOf(batch) {
   if (!batch || typeof batch !== 'object' || Array.isArray(batch)) fail('a batch is an object');
-  for (const key of Object.keys(batch)) if (!FIELDS.has(key)) fail(`unknown field ${key}`);
-  if (batch.schema !== 2) fail('schema must be 2');
+  const schema = SCHEMAS.get(batch.schema) ?? fail(`schema is not one of ${[...SCHEMAS.keys()].join(', ')}`);
+  for (const key of Object.keys(batch)) if (key !== schema.field && !SHARED.has(key)) fail(`unknown field ${key}`);
   if (!isUuid(batch.install)) fail('install is not a uuid');
   if (!isUuid(batch.session)) fail('session is not a uuid');
   const client = batch.client ?? {};
@@ -54,7 +65,7 @@ export function rowsOf(batch) {
     install_id: batch.install,
     session_id: batch.session,
     version: token(batch.version, 'version', 32),
-    channel: oneOf(batch.channel, CHANNELS, 'channel'),
+    ...schema.origin(batch),
     platform: oneOf(batch.platform, PLATFORMS, 'platform'),
     arch: batch.arch === undefined ? null : token(batch.arch, 'arch', 16),
     client: client.name === undefined ? null : token(client.name, 'client.name'),
