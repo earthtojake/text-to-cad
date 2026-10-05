@@ -2,7 +2,7 @@
   "name": "@text-to-cad/mcp",
   "private": true,
   "type": "module",
-  "version": "0.7.13",
+  "version": "0.7.14",
   "scripts": {
     "build": "vite build",
     "test": "node scripts/run-tests.mjs",
