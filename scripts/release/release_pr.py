@@ -14,9 +14,14 @@ Gemini installs from, the plugin branch -- wait until the upload is ten minutes 
 (`settle`).
 
     release_pr.py published VERSION                        # exit 0 once PyPI serves it
+    release_pr.py await --pr N                              # wait for Test to pass on it; print its head
     release_pr.py resolve --pr N --base BRANCH              # check the pull request; print its head
     release_pr.py land --pr N --sha HEAD [--version X]      # (wait for PyPI,) unblock and merge
     release_pr.py settle VERSION                            # wait until the upload is 10 min old
+
+`await` is Prepare Release's: the explicit release pull request it opens is released once Test
+passes on it, and kept up to date with its base meanwhile. Run it with a token whose pushes
+start workflows (not the workflow's own), or the branch update would start no Test run.
 
 GITHUB_TOKEN, GITHUB_REPOSITORY and GITHUB_REPOSITORY_ID come from Actions.
 """
@@ -35,7 +40,10 @@ PYPI = "https://pypi.org/pypi/cadgen/{version}/json"
 INDEX_MAX_AGE = 600       # PyPI's simple index: cache-control max-age=600
 SETTLE_MARGIN = 60        # and the CDN's purge after an upload
 VERSION_CHECK = "version.yml"
+TEST = "test.yml"
 WAIT_SECONDS = 600        # for PyPI to serve an upload, or a Version Check to finish
+AWAIT_SECONDS = 90 * 60   # for Test on a release pull request, through a few branch updates
+AWAIT_UPDATES = 3         # times the base may move on before the release gives up
 POLL_SECONDS = 10
 
 
@@ -152,6 +160,41 @@ def land(number: int, sha: str, repository: str, version: str | None = None,
     return merged["sha"]
 
 
+def await_tested(number: int, repository: str, github=_github, clock=time.time, sleep=time.sleep) -> str:
+    """Wait until Test passes on the pull request's head; the head it passed on.
+
+    A release must be up to date with its base (Publish Release's gate refuses one that is
+    behind), so whenever the base moves on, the branch is brought up to date and the wait
+    starts over on the new head. GitHub makes that update after it answers, so until the
+    head moves, the old one is not looked at again.
+    """
+    deadline = clock() + AWAIT_SECONDS
+    updates, updated = 0, None
+    while True:
+        pull = github("GET", f"repos/{repository}/pulls/{number}")
+        if pull.get("state") != "open":
+            raise ReleaseError(f"pull request #{number} is {pull.get('state')}")
+        head, base = pull["head"]["sha"], pull["base"]["ref"]
+        if head == updated:
+            pass
+        elif github("GET", f"repos/{repository}/compare/{base}...{head}").get("behind_by", 0):
+            if updates >= AWAIT_UPDATES:
+                raise ReleaseError(f"{base} kept moving on; release pull request #{number} by hand once it is up to date")
+            github("PUT", f"repos/{repository}/pulls/{number}/update-branch", {"expected_head_sha": head})
+            updates, updated = updates + 1, head
+        else:
+            runs = github("GET", f"repos/{repository}/actions/workflows/{TEST}/runs"
+                                 f"?event=pull_request&head_sha={head}&per_page=5").get("workflow_runs", [])
+            if runs and runs[0].get("status") == "completed":
+                if runs[0].get("conclusion") == "success":
+                    return head
+                raise ReleaseError(f"Test concluded {runs[0].get('conclusion')} on pull request #{number}: "
+                                   f"{runs[0].get('html_url')}")
+        if clock() >= deadline:
+            raise ReleaseError(f"gave up waiting for Test on pull request #{number}")
+        sleep(POLL_SECONDS * 3)
+
+
 def settle(version: str, pypi=_pypi, clock=time.time, sleep=time.sleep) -> float:
     """Wait until every index page cached before the upload has expired; the seconds waited."""
     remaining = uploaded_at(version, pypi) + INDEX_MAX_AGE + SETTLE_MARGIN - clock()
@@ -165,6 +208,8 @@ def main(argv: list[str]) -> int:
     commands = parser.add_subparsers(dest="command", required=True)
     command = commands.add_parser("published")
     command.add_argument("version")
+    command = commands.add_parser("await")
+    command.add_argument("--pr", type=int, required=True)
     command = commands.add_parser("resolve")
     command.add_argument("--pr", type=int, required=True)
     command.add_argument("--base", required=True)
@@ -184,7 +229,9 @@ def main(argv: list[str]) -> int:
             print(f"PyPI does not serve cadgen {arguments.version} yet.")
             return 1
         repository = os.environ.get("GITHUB_REPOSITORY", "")
-        if arguments.command == "resolve":
+        if arguments.command == "await":
+            print(await_tested(arguments.pr, repository))
+        elif arguments.command == "resolve":
             pull = resolve(arguments.pr, arguments.base, repository, int(os.environ["GITHUB_REPOSITORY_ID"]))
             print(json.dumps(pull))
         elif arguments.command == "land":

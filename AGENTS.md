@@ -19,18 +19,26 @@ an installable plugin too: every manifest and MCP config lives at its root.
 ## Release Workflow
 
 A pull request that changes `VERSION` is a release. Never bump during normal
-development work. When asked to make or ship a release, bump on the pull request
-that should carry it — or on a fresh branch from `main`, for a release of what
-`main` already has — with
-`scripts/release/bump-version.sh <patch|minor|major|X.Y.Z>`, which sets `VERSION`
-past `main`'s and stamps the derived metadata and every `cadgen==` pin with it.
-Never pick the bump yourself: if the request does not name patch, minor, major,
-or an exact version, ask which one.
+development work, and never pick the bump yourself: if a request to make or ship
+a release does not name patch, minor, major, or an exact version, ask which one.
+A release pull request comes one of two ways, and both are released the same way:
+
+- **Its own pull request**, for a release of what `main` already has — what
+  "make a release" means unless the user names a pull request to carry it:
+  dispatch `Prepare Release`
+  (`gh workflow run release-prepare.yml --ref main -f bump=<patch|minor|major>`,
+  or `-f set_version=X.Y.Z`). It opens `release/X.Y.Z` with the bump, waits for
+  `Test` to pass on it (bringing it up to date whenever `main` moves on), and
+  releases it; `-f release=false` only opens it.
+- **On the pull request that should carry it**: on its branch,
+  `scripts/release/bump-version.sh <patch|minor|major|X.Y.Z>` sets `VERSION` past
+  `main`'s and stamps the derived metadata and every `cadgen==` pin with it.
 
 A cadgen pin must never reach `main`, which installers track, before PyPI has
 that wheel, so a release is never merged by hand. Its Version Check
 (`version.yml`) stays red until the version is on PyPI. Once the rest of its
-checks pass, and only on the user's explicit word, release it:
+checks pass, and only on the user's explicit word, release it (Prepare Release
+does this itself unless `release=false`):
 `gh workflow run release-publish.yml --ref main -f pr=<number>`.
 
 - `Test` runs every job for a `VERSION` change, so a release is tested whole.
@@ -55,9 +63,10 @@ To finish a run that stopped before the merge, dispatch it again with the same
 `pr`; after the merge, dispatch `Publish Release` on `main` without one
 (`publish=false` leaves the GitHub Release as a draft): it publishes the commit
 that last moved `VERSION`, if that version has no tag yet. `build-test` is the
-rehearsal branch — a bump released into it is built, installed and merged, with
-no PyPI, docs or tag — and is never a release; use it only when the user
-explicitly asks to test the pipeline.
+rehearsal branch — `Prepare Release` with `-f target=build-test` opens and
+releases a bump into it, which is built, installed and merged, with no PyPI,
+docs or tag — and is never a release; use it only when the user explicitly asks
+to test the pipeline.
 
 The standalone `Deploy Docs` workflow redeploys the docs site from a ref
 (default `main`, or a release tag) without running a release.

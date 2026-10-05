@@ -1,0 +1,147 @@
+name: Prepare Release
+
+# The explicit release: a pull request that only bumps VERSION, for releasing what the target
+# branch already has. (A feature pull request can carry its own bump instead; both are released
+# the same way, by Publish Release, which uploads the wheel to PyPI and only then merges.)
+#
+#   gh workflow run release-prepare.yml --ref main -f bump=patch
+#
+# runs scripts/release/bump-version.sh on a fresh `release/X.Y.Z` branch from the target -- the
+# bump, the derived metadata and every cadgen pin -- and opens that pull request. It opens it with
+# PREPARE_RELEASE_TOKEN: a pull request the workflow's own token opens starts no workflows, so no
+# check would ever run on it. With `release` (the default), it then waits for Test to pass on the
+# pull request, bringing the branch up to date whenever the target moves on, and dispatches
+# Publish Release for it. Without, the pull request waits for someone to release it:
+#
+#   gh workflow run release-publish.yml --ref main -f pr=<number>
+#
+# It never merges anything itself. `target=build-test` rehearses: the same pull request against
+# build-test, which Publish Release builds, installs and merges without uploading anything.
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Semver part to bump when set_version is empty.
+        required: true
+        default: patch
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+      set_version:
+        description: An exact X.Y.Z to release instead of bumping. Leave empty unless you are naming a specific new version.
+        required: false
+        default: ""
+        type: string
+      target:
+        description: Branch the release pull request goes into. main for releases; build-test to rehearse.
+        required: true
+        default: main
+        type: string
+      release:
+        description: Release the pull request once Test passes on it. Off, it only opens the pull request.
+        required: true
+        default: true
+        type: boolean
+      dry_run:
+        description: Show the version changes without opening a pull request.
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+  # Dispatching Publish Release.
+  actions: write
+
+concurrency:
+  group: release-prepare-${{ inputs.target }}
+  cancel-in-progress: false
+
+jobs:
+  release-pr:
+    name: Release pull request
+    runs-on: ubuntu-latest
+    # Test on the pull request takes about 18 minutes, and the branch may need an update or two.
+    timeout-minutes: 120
+
+    steps:
+      - name: Check out target branch
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.target }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Bump the version
+        id: version
+        env:
+          BUMP: ${{ inputs.bump }}
+          SET_VERSION: ${{ inputs.set_version }}
+          TARGET: ${{ inputs.target }}
+        run: |
+          scripts/release/bump-version.sh "${SET_VERSION:-$BUMP}" --base "origin/$TARGET"
+          echo "version=$(tr -d '[:space:]' < VERSION)" >> "$GITHUB_OUTPUT"
+
+      - name: Show the version changes
+        if: inputs.dry_run
+        run: |
+          git diff --stat
+          git diff -- VERSION
+
+      - name: Open the release pull request
+        if: ${{ !inputs.dry_run }}
+        id: pr
+        env:
+          GH_TOKEN: ${{ secrets.PREPARE_RELEASE_TOKEN }}
+          TARGET: ${{ inputs.target }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "PREPARE_RELEASE_TOKEN is not set. It opens the pull request so that its checks run." >&2
+            exit 1
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          branch="release/$VERSION"
+          git checkout -B "$branch"
+          git commit -qam "Release $VERSION"
+          git push --force-with-lease origin "$branch"
+          body="Releases $VERSION: VERSION, the derived metadata and every cadgen pin. Opened by Prepare Release. Publish Release uploads the wheel to PyPI and then merges it (\`gh workflow run release-publish.yml --ref $TARGET -f pr=<this number>\`)."
+          # Only an OPEN pull request from this branch is ours to update: a closed or merged one
+          # with the same head name (a previous attempt) cannot be reopened onto a new commit.
+          number="$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$branch" --base "$TARGET" --state open --json number --jq '.[0].number // empty')"
+          if [ -z "$number" ]; then
+            url="$(gh pr create --repo "$GITHUB_REPOSITORY" --base "$TARGET" --head "$branch" --title "Release $VERSION" --body "$body")"
+            number="$(gh pr view "$url" --repo "$GITHUB_REPOSITORY" --json number --jq .number)"
+          fi
+          echo "number=$number" >> "$GITHUB_OUTPUT"
+          echo "Release pull request: https://github.com/$GITHUB_REPOSITORY/pull/$number" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # Test runs every job on a VERSION change. The branch is brought up to date (with the same
+      # token, so its Test runs again) whenever the target moves on: Publish Release releases
+      # only a pull request that is up to date, so the tree it tested is the tree that lands.
+      - name: Wait for Test to pass on it
+        if: ${{ !inputs.dry_run && inputs.release }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.PREPARE_RELEASE_TOKEN }}
+          PR: ${{ steps.pr.outputs.number }}
+        run: python3 scripts/release/release_pr.py await --pr "$PR"
+
+      - name: Release it
+        if: ${{ !inputs.dry_run && inputs.release }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ steps.pr.outputs.number }}
+          TARGET: ${{ inputs.target }}
+        run: |
+          gh workflow run release-publish.yml --repo "$GITHUB_REPOSITORY" --ref "$TARGET" -f pr="$PR"
+          echo "Dispatched Publish Release for pull request #$PR." | tee -a "$GITHUB_STEP_SUMMARY"

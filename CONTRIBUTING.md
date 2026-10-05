@@ -570,8 +570,8 @@ A pull request that changes `VERSION` is a release, and `Publish Release`
 ships it — the PyPI wheel first, then the merge — so the canonical repo version,
 the skill pins, the Git tag, the PyPI wheel and the GitHub Release all describe
 one commit. Normal development PRs leave `VERSION` alone. A PR that touches release state must keep `VERSION`, the
-derived metadata and the pins valid; the `Test` workflow checks all three in a
-separate job (Version Check), so code tests still run when they are wrong.
+derived metadata and the pins valid; Version Check (`version.yml`) checks all
+three, apart from `Test`, so code tests still run when they are wrong.
 
 ### Build artifacts live in the wheel, never in git
 
@@ -616,16 +616,36 @@ the pin first, anyone who updated in the gap got a CAD server that would not
 start (`uvx … --from cadgen==0.7.14` → "there is no version"), for the 25
 minutes the release took to reach PyPI.
 
-On the branch that should carry the release — a feature branch, or a fresh
-branch from `main` to release what `main` already has:
+A release pull request comes one of two ways. Choose the bump deliberately for
+every release; if a release request does not specify one, confirm it rather
+than assuming.
+
+**Its own pull request**, to release what `main` already has: dispatch
+`Prepare Release` (`release-prepare.yml`).
+
+```bash
+gh workflow run release-prepare.yml --ref main -f bump=patch     # or minor, major; -f set_version=X.Y.Z
+```
+
+It runs `bump-version.sh` on a fresh `release/X.Y.Z` branch from `main` and
+opens that pull request with `PREPARE_RELEASE_TOKEN`: a pull request the
+workflow's own token opens starts no workflows, so no check would ever run on
+it. Then it waits for `Test` to pass on the pull request, bringing the branch up
+to date whenever `main` moves on (only an up-to-date pull request is released),
+and dispatches `Publish Release` for it (`release_pr.py await`). It never merges
+anything itself. With `-f release=false` it only opens the pull request, which
+is then released like any other; `-f dry_run=true` shows the version changes and
+opens nothing.
+
+**On the pull request that should carry it**, a feature branch whose merge
+should be the release:
 
 ```bash
 git fetch origin && git merge origin/main      # the bump is relative to main's VERSION
 scripts/release/bump-version.sh patch           # or minor, major, or an exact X.Y.Z
 ```
 
-Choose the bump deliberately for every release; if a release request does not
-specify one, confirm it rather than assuming. `bump-version.sh` sets `VERSION`
+`bump-version.sh` sets `VERSION`
 past `main`'s and stamps the derived metadata and every `cadgen==` pin
 (`sync-version.mjs`: package, plugin and lockfile versions, the plugin server
 configs, each skill's launch command). It works from `main`'s version, not the
@@ -645,7 +665,8 @@ what merging it releases and the command that releases it, and refuses:
 Into `main`, it also stays red until PyPI serves the version, so nobody merges
 a release by hand before its wheel is out. A `VERSION` change runs every `Test`
 job (see [CI](#ci)), so the release is tested whole, Windows included, before
-it can ship. When it is green but for that hold, release it:
+it can ship. When it is green but for that hold, release it (Prepare Release
+does this itself for the pull request it opened):
 
 ```bash
 gh workflow run release-publish.yml --ref main -f pr=<number>
@@ -706,7 +727,9 @@ behind `main` and the gate refuses it until it is updated, which conflicts on
 the stamps if it bumped differently (take `main`'s side and run
 `bump-version.sh` again) or quietly stops changing `VERSION` if it bumped the
 same way — its Version Check then says it releases nothing; bump again to
-release it. A bump that reaches `main` some other way — an admin merge past the
+release it. A `Prepare Release` run waiting on its pull request updates it the
+same way; on a conflict the run stops, and so does `Publish Release` on a pull
+request that releases nothing: close it and dispatch `Prepare Release` again. A bump that reaches `main` some other way — an admin merge past the
 hold — starts `Publish Release` by its push (only a push that changes `VERSION`
 does) and is published at once: its pin is already out, so the sooner its wheel
 is, the better.
@@ -868,16 +891,17 @@ exists skips at the gate. A failed docs deploy is redeployed on its own (see
 without side effects: there it builds, installs and merges, uploads nothing,
 and prints what it WOULD have uploaded, deployed and tagged
 (`publish-github-release.sh --dry-run`). To rehearse a release, reset the
-branch and release a bump into it the way `main` gets one:
+branch and dispatch `Prepare Release` into it:
 
 ```bash
 git push --force origin main:build-test     # build-test is throwaway; a past rehearsal leaves it ahead
-git switch -c rehearse origin/build-test
-scripts/release/bump-version.sh patch --base origin/build-test
-git commit -am "Rehearse the next patch" && git push -u origin rehearse
-gh pr create --base build-test --title "Rehearse the next patch" --body "Rehearsal."
-gh workflow run release-publish.yml --ref build-test -f pr=<number>    # once Test passes
+gh workflow run release-prepare.yml --ref main -f bump=patch -f target=build-test
 ```
+
+To rehearse a bump carried by a pull request instead, bump a branch of
+`build-test` (`bump-version.sh patch --base origin/build-test`), open its pull
+request against `build-test`, and once `Test` passes release it with
+`gh workflow run release-publish.yml --ref build-test -f pr=<number>`.
 
 Version Check's hold on PyPI is `main`'s alone, since a rehearsal never
 uploads. Pushing a bump to `build-test` directly instead rehearses a bump that
@@ -932,6 +956,10 @@ makes a merged tree the tree its pull request's run tested, so the push run
 finds that run's record and tests nothing again; a merge that is not up to date
 is still tested, by its push run (`Publish Release` releases only an up-to-date
 pull request).
+`PREPARE_RELEASE_TOKEN` is a personal access token, so that the release pull
+requests `Prepare Release` opens and updates start their checks. It needs
+Contents and Pull requests write on this repository; nothing merges with it, so
+it need not be an admin's.
 `build-test` needs no protection: the irreversible steps never run there. Keep
 the repository tag ruleset (extend its pattern to cover `v[0-9]*.[0-9]*.[0-9]*`
 beside the bare form) and immutable releases.

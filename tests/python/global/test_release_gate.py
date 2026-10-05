@@ -22,6 +22,7 @@ from tests.python.support.paths import REPO_ROOT
 
 WORKFLOW = (REPO_ROOT / ".github/workflows/release-publish.yml").read_text(encoding="utf-8")
 VERSION_WORKFLOW = (REPO_ROOT / ".github/workflows/version.yml").read_text(encoding="utf-8")
+PREPARE_WORKFLOW = (REPO_ROOT / ".github/workflows/release-prepare.yml").read_text(encoding="utf-8")
 JOBS = dict(re.findall(r"^  ([a-z][\w-]*):\n(.*?)(?=^  [a-z][\w-]*:\n|\Z)", WORKFLOW.split("\njobs:\n", 1)[1], re.M | re.S))
 
 def load(name: str, path: str):
@@ -288,6 +289,72 @@ class ReleasePullRequests(unittest.TestCase):
         clock = Clock(now=uploaded + 3600)
         self.assertEqual(release_pr.settle("0.7.15", pypi=pypi, clock=clock.time, sleep=clock.sleep), 0.0)
         self.assertEqual(clock.slept, [])
+
+
+class AwaitGitHub:
+    """A release pull request whose base moves on `behind` times, then whose Test run ends `conclusion`."""
+
+    def __init__(self, behind: int = 0, conclusion: str = "success", state: str = "open"):
+        self.calls, self.head, self.behind, self.conclusion, self.state = [], "h0", behind, conclusion, state
+        self.polls, self.updating = 0, 0
+
+    def __call__(self, method: str, path: str, body: dict | None = None) -> dict:
+        self.calls.append((method, path.split("?", 1)[0], body))
+        if path.endswith("/pulls/9"):
+            # GitHub updates a branch after it answers: the head moves a poll later.
+            if self.updating:
+                self.updating -= 1
+                if not self.updating:
+                    self.behind -= 1
+                    self.head = f"h{int(self.head[1:]) + 1}"
+            return {"state": self.state, "head": {"sha": self.head}, "base": {"ref": "main"}}
+        if "/compare/main..." in path:
+            return {"behind_by": 1 if self.behind else 0}
+        if path.endswith("/update-branch"):
+            assert body == {"expected_head_sha": self.head} and not self.updating, body
+            self.updating = 2
+            return {}
+        if "/workflows/test.yml/runs" in path:
+            self.polls += 1
+            if self.polls == 1:
+                return {"workflow_runs": [{"status": "in_progress", "conclusion": None}]}
+            return {"workflow_runs": [{"status": "completed", "conclusion": self.conclusion, "html_url": "u"}]}
+        raise AssertionError(f"unexpected {method} {path}")
+
+
+class ExplicitReleasePullRequests(unittest.TestCase):
+    def test_it_releases_the_head_test_passed_on(self):
+        github, clock = AwaitGitHub(), Clock()
+        self.assertEqual(release_pr.await_tested(9, "o/r", github, clock.time, clock.sleep), "h0")
+
+    def test_it_keeps_the_branch_up_to_date_and_waits_for_the_new_head(self):
+        github, clock = AwaitGitHub(behind=2), Clock()
+        self.assertEqual(release_pr.await_tested(9, "o/r", github, clock.time, clock.sleep), "h2")
+        self.assertEqual([call[2] for call in github.calls if call[0] == "PUT"],
+                         [{"expected_head_sha": "h0"}, {"expected_head_sha": "h1"}])
+
+    def test_a_failing_test_run_or_a_base_that_will_not_settle_stops_it(self):
+        clock = Clock()
+        with self.assertRaisesRegex(release_pr.ReleaseError, "Test concluded failure"):
+            release_pr.await_tested(9, "o/r", AwaitGitHub(conclusion="failure"), clock.time, clock.sleep)
+        with self.assertRaisesRegex(release_pr.ReleaseError, "kept moving on"):
+            release_pr.await_tested(9, "o/r", AwaitGitHub(behind=release_pr.AWAIT_UPDATES + 1), clock.time, clock.sleep)
+        with self.assertRaisesRegex(release_pr.ReleaseError, "is closed"):
+            release_pr.await_tested(9, "o/r", AwaitGitHub(state="closed"), clock.time, clock.sleep)
+
+    def test_prepare_release_opens_the_pull_request_and_never_merges_it(self):
+        # Its own token's pull request would start no checks, so a token that starts workflows opens it.
+        opened = PREPARE_WORKFLOW.split("- name: Open the release pull request", 1)[1].split("- name:", 1)[0]
+        self.assertIn("GH_TOKEN: ${{ secrets.PREPARE_RELEASE_TOKEN }}", opened)
+        self.assertIn("scripts/release/bump-version.sh", PREPARE_WORKFLOW)
+        self.assertNotRegex(PREPARE_WORKFLOW, r"gh pr merge|/merge\b")
+        # It releases only through Publish Release, after Test passed on the pull request.
+        wait, release = (PREPARE_WORKFLOW.index("- name: Wait for Test to pass on it"),
+                         PREPARE_WORKFLOW.index("- name: Release it"))
+        self.assertLess(wait, release)
+        self.assertIn("release_pr.py await", PREPARE_WORKFLOW[wait:release])
+        self.assertIn('gh workflow run release-publish.yml --repo "$GITHUB_REPOSITORY" --ref "$TARGET" -f pr="$PR"',
+                      PREPARE_WORKFLOW[release:])
 
 
 if __name__ == "__main__":
