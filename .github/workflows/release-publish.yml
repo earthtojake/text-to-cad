@@ -1,18 +1,27 @@
 name: Publish Release
 
-# Half two of a release: everything that happens to the merged release commit. Runs on
-# every push to main (the merge Prepare Release makes, or any other push -- the gate
-# below decides whether there is anything to publish) and on every push to build-test,
-# the rehearsal branch. Manual dispatch republishes or resumes the current head of a
-# branch: a run that uploaded the wheel and died before the tag is finished by
-# dispatching this on main again (PyPI's skip-existing makes the re-upload a no-op).
+# A release is the commit that moves VERSION. The pull request that carries it bumps
+# VERSION, the derived metadata and every cadgen pin in one step
+# (scripts/release/bump-version.sh); Test's Version Check vets the bump, and a VERSION change
+# selects every Test job. Merging that pull request is the push that starts this workflow:
+# only a push that changes VERSION does.
 #
-# Two kinds of step. Everything up to and including the artifact upload runs on both
-# branches. The IRREVERSIBLE steps -- PyPI upload, docs deploy, tag + GitHub Release --
-# run only on refs/heads/main; on build-test the run prints what it would have tagged
-# and released and stops. That is the whole point of build-test: a bumped VERSION
-# lands there through a rehearsal Prepare Release, the gate compares it against the
-# repository's REAL tags exactly as main would, and nothing outside this run changes.
+# Nothing ships untested, and nothing is tested twice. Every Test run records the tree it
+# tested (scripts/github-workflows/select_checks.py, tested_tree.py). main merges a pull
+# request only once it is up to date, so the release commit's tree is normally the tree its
+# pull request's run tested in full; the gate looks that record up, and the tests do not run
+# again. Without one -- an admin merge, a direct push, a branch merged behind main -- this
+# workflow runs every Test job on the release commit before anything is built.
+#
+# Then the publish job builds what ships from that commit -- the plugin ZIP, the runtime
+# bundle, the wheel and sdist -- and installs and exercises the wheel it is about to upload.
+# The IRREVERSIBLE steps -- PyPI upload, docs deploy, tag + GitHub Release, plugin branch --
+# run only on refs/heads/main. build-test is the rehearsal branch: there the run prints what
+# it would have uploaded, deployed and tagged, and stops.
+#
+# Manual dispatch resumes: it publishes the commit on the dispatched branch that last moved
+# VERSION, if that version has no tag yet. A run that uploaded the wheel and died before the
+# tag is finished this way (PyPI's skip-existing makes the re-upload a no-op).
 #
 # Release tags are `v<VERSION>` from 0.5.0 on; earlier releases were tagged bare
 # (`0.4.28`). scripts/release/release-tags.sh is the one place that knows both.
@@ -22,6 +31,8 @@ on:
     branches:
       - main
       - build-test
+    paths:
+      - VERSION
   workflow_dispatch:
     inputs:
       publish:
@@ -31,45 +42,60 @@ on:
         type: boolean
 
 permissions:
-  contents: write
+  contents: read
 
+# One release at a time per branch. A run waiting here is replaced by a newer one, which is
+# why only a push that moves VERSION starts this workflow at all: an ordinary merge can never
+# cancel a release that is waiting its turn.
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  publish:
-    name: Publish
+  gate:
+    name: Gate
     runs-on: ubuntu-latest
-    env:
-      # Four test files at a time: each is a kernel-loading interpreter (~450 MB).
-      CADGEN_TEST_JOBS: "4"
+    timeout-minutes: 10
     permissions:
       contents: read
-      # Trusted publishing (OIDC) for the PyPI upload.
-      id-token: write
+      # tested_tree.py reads other runs' records.
+      actions: read
     outputs:
       should_publish: ${{ steps.gate.outputs.should_publish }}
       version: ${{ steps.gate.outputs.version }}
-      release_sha: ${{ github.sha }}
+      release_sha: ${{ steps.release.outputs.sha }}
       is_main: ${{ steps.gate.outputs.is_main }}
+      tested: ${{ steps.tested.outputs.tested }}
 
     steps:
-      - name: Check out release commit
+      - name: Check out the branch
         uses: actions/checkout@v7
         with:
           ref: ${{ github.sha }}
           fetch-depth: 0
           persist-credentials: false
 
+      # A push is the release commit itself. A dispatch publishes the commit that last moved
+      # VERSION on the dispatched branch: later merges ride in the next release, not this one.
+      - name: Find the release commit
+        id: release
+        run: |
+          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+            sha="$GITHUB_SHA"
+          else
+            sha="$(git log -1 --first-parent --format=%H -- VERSION)"
+          fi
+          git checkout --quiet --detach "$sha"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+          echo "Release commit: $sha"
+
       - name: Check canonical release version
         run: scripts/release/check-version.sh
 
-      # Publish only when the version is new: past the latest release tag (either
-      # spelling), or equal to it with the tag missing (a run that uploaded the wheel
-      # and died before tagging; a rerun resumes it). On build-test the same
-      # comparison runs against the same real tags -- a rehearsal bump passes the
-      # gate exactly as it would on main, and an unbumped build-test push skips.
+      # Publish only a version that is past the latest release tag (either spelling). That
+      # covers a resume too: a run that uploaded the wheel and died before tagging left the
+      # tag missing, so its version is still past the latest one. On build-test the same
+      # comparison runs against the same real tags.
       - name: Evaluate release gate
         id: gate
         run: |
@@ -82,24 +108,67 @@ jobs:
             echo "Rehearsal on $GITHUB_REF_NAME: the irreversible steps (PyPI, docs, tag) are skipped."
           fi
           latest_tag="$(source scripts/release/release-tags.sh && latest_release_tag)"
-          current_tag="$(source scripts/release/release-tags.sh && release_tag_name "$current_version")"
           if [ -z "$latest_tag" ]; then
             echo "should_publish=true" >> "$GITHUB_OUTPUT"
             echo "No release tag yet; publishing $current_version."
-            exit 0
-          fi
-          if scripts/release/check-version.sh --incremented-from "refs/tags/$latest_tag" >/tmp/publish-tag-version-check.log 2>&1; then
+          elif scripts/release/check-version.sh --incremented-from "refs/tags/$latest_tag"; then
             echo "should_publish=true" >> "$GITHUB_OUTPUT"
-            echo "Release version $current_version advanced past $latest_tag; publishing."
-            exit 0
+            echo "Release version $current_version is past $latest_tag; publishing."
+          else
+            echo "should_publish=false" >> "$GITHUB_OUTPUT"
+            echo "Nothing to publish: version $current_version is not past $latest_tag."
           fi
-          if ! git rev-parse --verify --quiet "refs/tags/$current_tag" >/dev/null; then
-            echo "should_publish=true" >> "$GITHUB_OUTPUT"
-            echo "Version $current_version has no tag ($current_tag) yet; resuming publish."
-            exit 0
+
+      # The record a Test run made of exactly this tree with every job selected. Not finding
+      # one -- or failing to look -- means the tests run below.
+      - name: Find the run that tested this tree
+        id: tested
+        if: steps.gate.outputs.should_publish == 'true'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          record="tested-$(git rev-parse 'HEAD^{tree}')-full"
+          if python3 scripts/github-workflows/tested_tree.py "$record"; then
+            echo "tested=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "tested=false" >> "$GITHUB_OUTPUT"
+            echo "Every Test job runs on the release commit before it is built."
           fi
-          echo "should_publish=false" >> "$GITHUB_OUTPUT"
-          echo "Nothing to publish: version $current_version is already tagged ($current_tag)."
+
+  # Every Test job, on the release commit, when no run tested its tree in full.
+  test:
+    name: Test
+    needs: gate
+    if: needs.gate.outputs.should_publish == 'true' && needs.gate.outputs.tested != 'true'
+    permissions:
+      contents: read
+      actions: read
+    uses: ./.github/workflows/test.yml
+    with:
+      full: true
+      ref: ${{ needs.gate.outputs.release_sha }}
+
+  publish:
+    name: Publish
+    needs:
+      - gate
+      - test
+    # `test` is skipped when the gate found the tree tested; anything else but success stops here.
+    if: ${{ !cancelled() && needs.gate.outputs.should_publish == 'true' && (needs.test.result == 'success' || (needs.test.result == 'skipped' && needs.gate.outputs.tested == 'true')) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      # Trusted publishing (OIDC) for the PyPI upload.
+      id-token: write
+
+    steps:
+      - name: Check out release commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.gate.outputs.release_sha }}
+          fetch-depth: 0
+          persist-credentials: false
 
       # The plugin as OpenAI's plugin submission portal takes it, built from the release
       # commit before anything else in this run touches the tree. It is checked against
@@ -108,16 +177,14 @@ jobs:
       # no API, so a person uploads this file (CONTRIBUTING.md, Releases); tag-release
       # attaches these same bytes to the GitHub Release.
       - name: Build the OpenAI plugin ZIP
-        if: steps.gate.outputs.should_publish == 'true'
         env:
-          VERSION: ${{ steps.gate.outputs.version }}
+          VERSION: ${{ needs.gate.outputs.version }}
         run: python3 scripts/release/plugin_zip.py --out "$RUNNER_TEMP/plugin/cad-openai-plugin-$VERSION.zip"
 
       - name: Upload the OpenAI plugin ZIP as a workflow artifact
-        if: steps.gate.outputs.should_publish == 'true'
         uses: actions/upload-artifact@v7
         with:
-          name: cad-openai-plugin-${{ steps.gate.outputs.version }}
+          name: cad-openai-plugin-${{ needs.gate.outputs.version }}
           path: ${{ runner.temp }}/plugin/
           if-no-files-found: error
 
@@ -125,38 +192,28 @@ jobs:
       # checked against claude.ai's file rules ahead of every irreversible step; on main,
       # plugin-branch below commits this same tree to the branch.
       - name: Check the plugin tree
-        if: steps.gate.outputs.should_publish == 'true'
         run: python3 scripts/release/plugin_branch.py --check
 
+      # What the build needs and nothing the tests need: the CAD dependencies the wheel's
+      # install test reuses, and the workspaces the bundle builds (core, ui, the web client,
+      # the CAD app). No browsers -- nothing here renders.
       - name: Set up dependencies
-        if: steps.gate.outputs.should_publish == 'true'
         uses: ./.github/actions/setup-deps
+        with:
+          playwright: "false"
+          npm: packages/core packages/ui apps/web apps/mcp
 
       # The bundle feeds the WHEEL, and it is the only thing that does: cadgen's Node
-      # builders, the snapshot browser bundle, the CAD Viewer client and the file
-      # tracers are all gitignored, so the release commit carries none of them. Nothing here writes to
-      # git -- the wheel is the release asset.
+      # builders, the snapshot browser bundle, the CAD Viewer client, the CAD app and the
+      # file tracers are all gitignored, so the release commit carries none of them. Nothing
+      # here writes to git -- the wheel is the release asset.
       - name: Bundle production outputs
-        if: steps.gate.outputs.should_publish == 'true'
         run: scripts/bundle/bundle.sh --clean
 
       - name: Validate production bundle layout
-        if: steps.gate.outputs.should_publish == 'true'
         run: scripts/github-workflows/check-builds.sh --skip-bundle-check
 
-      - name: Run documentation checks
-        if: steps.gate.outputs.should_publish == 'true'
-        run: scripts/test/test-docs.sh
-
-      - name: Run code tests
-        if: steps.gate.outputs.should_publish == 'true'
-        # As test.yml's web job: one browser spec at a time on the runner's software WebGL.
-        env:
-          UI_BROWSER_TEST_CONCURRENCY: "1"
-        run: scripts/test/test.sh
-
       - name: Check cadgen package version matches the canonical release version
-        if: steps.gate.outputs.should_publish == 'true'
         run: |
           version="$(tr -d '[:space:]' < VERSION)"
           if ! grep -Eq "^version = \"$version\"$" packages/cadgen/pyproject.toml; then
@@ -167,13 +224,11 @@ jobs:
       # Package data fails quietly: a glob that stops matching produces a wheel that
       # imports fine and cannot build a DXF preview or serve the Viewer.
       - name: Check cadgen wheel contents
-        if: steps.gate.outputs.should_publish == 'true'
         run: |
           python -m pip install build
           scripts/release/check-wheel-contents.sh
 
       - name: Build cadgen sdist and wheel
-        if: steps.gate.outputs.should_publish == 'true'
         run: |
           python3 -m pip install --upgrade build
           python3 -m build packages/cadgen
@@ -182,7 +237,6 @@ jobs:
       # the path: the front door, the viewer verb and the skill pin check all answer.
       # test-installed.sh then drives the same wheel through a real build.
       - name: Install the built wheel and exercise it
-        if: steps.gate.outputs.should_publish == 'true'
         run: |
           wheel="$(find packages/cadgen/dist -name '*.whl' -type f | head -n 1)"
           [ -n "$wheel" ] || { echo "no wheel under packages/cadgen/dist" >&2; exit 1; }
@@ -193,15 +247,11 @@ jobs:
           "$RUNNER_TEMP/install-test/bin/cadgen" doctor skills/cad
           scripts/test/test-installed.sh --wheel "$wheel"
 
-      # The distribution is kept whether or not it ships: a rehearsal's artifact is
-      # what you inspect instead of a PyPI upload, and a main run's is the record of
-      # exactly what was uploaded.
       # The paranoid half of the same question check-wheel-contents.sh answers, asked of
       # the wheel that actually ships rather than one rebuilt in scratch: the runtime is
       # built minutes earlier by a step that could fail soft, and a wheel without it
       # installs cleanly and then cannot render a snapshot or export a mesh.
       - name: Assert the shipping wheel carries its built runtime
-        if: steps.gate.outputs.should_publish == 'true'
         run: |
           wheel="$(find packages/cadgen/dist -name '*.whl' -type f | head -n 1)"
           [ -n "$wheel" ] || { echo "no wheel under packages/cadgen/dist" >&2; exit 1; }
@@ -226,11 +276,13 @@ jobs:
           done
           echo "$(basename "$wheel") carries its built runtime."
 
+      # The distribution is kept whether or not it ships: a rehearsal's artifact is
+      # what you inspect instead of a PyPI upload, and a main run's is the record of
+      # exactly what was uploaded.
       - name: Upload the distribution as a workflow artifact
-        if: steps.gate.outputs.should_publish == 'true'
         uses: actions/upload-artifact@v7
         with:
-          name: cadgen-${{ steps.gate.outputs.version }}
+          name: cadgen-${{ needs.gate.outputs.version }}
           path: packages/cadgen/dist/*
           if-no-files-found: error
 
@@ -240,18 +292,18 @@ jobs:
       # release without its wheel would break every skill install. If the upload
       # succeeds and a later step fails, dispatch this workflow on main again.
       - name: Publish cadgen to PyPI
-        if: ${{ steps.gate.outputs.should_publish == 'true' && steps.gate.outputs.is_main == 'true' }}
+        if: needs.gate.outputs.is_main == 'true'
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: packages/cadgen/dist
           skip-existing: true
 
       - name: Rehearsal summary (build-test)
-        if: ${{ steps.gate.outputs.should_publish == 'true' && steps.gate.outputs.is_main != 'true' }}
+        if: needs.gate.outputs.is_main != 'true'
         run: |
-          echo "Rehearsal complete on $GITHUB_REF_NAME at $GITHUB_SHA."
+          echo "Rehearsal complete on $GITHUB_REF_NAME at ${{ needs.gate.outputs.release_sha }}."
           echo "Would have uploaded: $(ls packages/cadgen/dist)"
-          echo "Would have deployed the docs site from $GITHUB_SHA."
+          echo "Would have deployed the docs site from ${{ needs.gate.outputs.release_sha }}."
           echo "Would have committed the plugin tree to the plugin branch."
           # --dry-run computes the tag and the release it would create without
           # pushing anything; the version check inside it runs for real.
@@ -263,11 +315,14 @@ jobs:
   # and apps/docs/package.json carries the stamped version the header reads.
   deploy-docs:
     name: Deploy Docs
-    needs: publish
-    if: ${{ needs.publish.outputs.should_publish == 'true' && needs.publish.outputs.is_main == 'true' }}
+    needs:
+      - gate
+      - publish
+    # Spelled out: the implicit success() would also read `test`, skipped when the tree was tested.
+    if: ${{ !cancelled() && needs.publish.result == 'success' && needs.gate.outputs.is_main == 'true' }}
     uses: ./.github/workflows/deploy-docs.yml
     with:
-      ref: ${{ needs.publish.outputs.release_sha }}
+      ref: ${{ needs.gate.outputs.release_sha }}
     secrets: inherit
 
   # claude.ai's plugin directory follows the `plugin` branch: one commit per release whose
@@ -280,15 +335,20 @@ jobs:
   # drop the `claude-plugin` push and delete that branch (CONTRIBUTING.md, Releases).
   plugin-branch:
     name: Plugin branch
-    needs: publish
-    if: ${{ needs.publish.outputs.should_publish == 'true' && needs.publish.outputs.is_main == 'true' }}
+    needs:
+      - gate
+      - publish
+    if: ${{ !cancelled() && needs.publish.result == 'success' && needs.gate.outputs.is_main == 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
 
     steps:
       - name: Check out release commit
         uses: actions/checkout@v7
         with:
-          ref: ${{ needs.publish.outputs.release_sha }}
+          ref: ${{ needs.gate.outputs.release_sha }}
           persist-credentials: false
 
       - name: Commit the plugin onto plugin (and claude-plugin) and push it
@@ -319,15 +379,19 @@ jobs:
     # The tag records what was published; a docs deploy failing must not leave a
     # PyPI release untagged (Deploy Docs can be re-run on its own).
     needs:
+      - gate
       - publish
-    if: ${{ needs.publish.outputs.should_publish == 'true' && needs.publish.outputs.is_main == 'true' }}
+    if: ${{ !cancelled() && needs.publish.result == 'success' && needs.gate.outputs.is_main == 'true' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
 
     steps:
       - name: Check out release commit
         uses: actions/checkout@v7
         with:
-          ref: ${{ needs.publish.outputs.release_sha }}
+          ref: ${{ needs.gate.outputs.release_sha }}
           fetch-depth: 0
           persist-credentials: false
 
@@ -350,14 +414,14 @@ jobs:
       - name: Download the published distribution
         uses: actions/download-artifact@v8
         with:
-          name: cadgen-${{ needs.publish.outputs.version }}
+          name: cadgen-${{ needs.gate.outputs.version }}
           path: packages/cadgen/dist
 
       # The plugin ZIP the publish job built and checked from this same commit.
       - name: Download the OpenAI plugin ZIP
         uses: actions/download-artifact@v8
         with:
-          name: cad-openai-plugin-${{ needs.publish.outputs.version }}
+          name: cad-openai-plugin-${{ needs.gate.outputs.version }}
           path: ${{ runner.temp }}/plugin
 
       # A push-triggered run has no `publish` input: it publishes. Only a manual
