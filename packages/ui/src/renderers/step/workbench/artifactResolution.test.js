@@ -8,9 +8,22 @@ import {
   ARTIFACT_ACTION_READY,
   artifactActionFor,
   artifactAdvisoryFor,
+  artifactEndsLoad,
   artifactFreshnessKey,
   reconcileArtifactRun
 } from "./artifactResolution.js";
+
+test("a status ends the wait for geometry only when nothing it promises will bring any", () => {
+  // The optimistic compiled a fresh selection starts with still has the catalog to hear from; one
+  // the server settled, after the catalog was read again, does not — nor does a fatal error.
+  assert.equal(artifactEndsLoad({ status: "compiled", settled: false }, false), false);
+  assert.equal(artifactEndsLoad({ status: "compiled", settled: true }, false), true);
+  assert.equal(artifactEndsLoad({ status: "failed", settled: true }, false), true);
+  assert.equal(artifactEndsLoad({ status: "compiling", settled: true }, false), false);
+  // A model on screen has its geometry, whatever the status says about it.
+  assert.equal(artifactEndsLoad({ status: "compiled", settled: true }, true), false);
+  assert.equal(artifactEndsLoad({ status: "failed", settled: true }, true), false);
+});
 
 test("a ready artifact needs no work", () => {
   assert.equal(artifactActionFor({ state: "compiled" }), ARTIFACT_ACTION_READY);

@@ -10,18 +10,15 @@ what a host renderer may rely on:
 
 - `defineFileRenderer` and the registration contract from `@text-to-cad/ui/file-viewer`
   ([FileViewer](file-viewer.md)), including `fallback: true` for the one
-  renderer that takes files nothing else matches, and `body` panels for a view
-  that replaces the content rather than sitting in the panel column (the
-  Markdown source view's).
-- Text preparation through `FileSource.readText`, which opts into FileViewer's
-  document session: revision-checked saves, drafts, conflicts and reloads.
-- Assets through `FileSource.readAsset`. Every acquired asset URL carries a
-  release lease; the renderer returns it as the prepared document's `dispose`,
-  and FileViewer releases it when the request is cancelled, the file changes,
-  or the view unmounts.
-- The host ports in `@text-to-cad/ui/host`: `useViewerHost`, `PromptContextAction`
-  for prompt delivery, and the live `documents` and `pdf` capabilities
-  ([viewer host](viewer-host.md#live-text-and-pdf-capabilities)).
+  renderer that takes files nothing else matches.
+- The file it is handed (`FileMetadata`) and its `FileSource`, which names and
+  describes files and reads nothing else: a renderer reads a file's content through
+  what its host injects into it (the CAD renderers take a `CadWorkspaceService`).
+  Every resource a renderer acquires carries a release; it returns that as the
+  prepared document's `dispose`, and FileViewer releases it when the request is
+  cancelled, the file changes, or the view unmounts.
+- The host ports in `@text-to-cad/ui/host`: `useViewerHost`, and `PromptContextAction`
+  for prompt delivery.
 - Shared chrome from `@text-to-cad/ui/navigation` (`EmptyState`),
   `@text-to-cad/ui/primitives/*` and `@text-to-cad/ui/utils`, styled by this
   package's `styles.css` and the host's own Tailwind build.

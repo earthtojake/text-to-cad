@@ -1,16 +1,16 @@
 """Recently opened models: one library for everywhere a person opens models.
 
-Every CAD view writes here -- the MCP app's views and every CAD Viewer -- and
-each shows what it can open: the MCP app all of it, a Viewer the models under
-the folder it serves.
+Every CAD view writes here -- the MCP app's views and the CAD Viewer -- and every
+home shows all of it (``GET /__cad/recents``, which the MCP app's views reach
+through its tunnel).
 
 The store is an append-only log of events -- ``open``, ``pin``, ``unpin``,
 ``remove``, ``picture`` -- folded into a list on read. It is user state, not a
 derived artifact, so it lives in the state directory and never in the cadgen
 cache (the cache holds only what file bytes imply).
 
-Several processes append at once: an MCP server per thread, a Viewer per folder,
-and after an update, old and new versions side by side. So each write appends
+Several processes append at once: an MCP server per thread, the Viewer, and
+after an update, old and new versions side by side. So each write appends
 one line under an exclusive lock, readers skip lines they cannot parse and events
 they do not know, and compaction writes a new file and renames it into place
 under the same lock. Nothing is ever migrated in place.

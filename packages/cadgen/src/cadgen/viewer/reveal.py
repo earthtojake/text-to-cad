@@ -1,19 +1,19 @@
-"""Reveal a served file in the local operating system's file manager."""
+"""Reveal a file, named by its absolute path, in the local operating system's file manager."""
 import shutil
 import subprocess
 import sys
 from pathlib import Path
 
-from .backend import ForbiddenAssetError
+from .backend import absolute_path
 
 
-def reveal_path(root, relative):
-    if not isinstance(relative, str) or Path(relative).is_absolute():
-        raise ValueError("Reveal requires a root-relative path")
-    base = Path(root).resolve()
-    target = (base / relative).resolve(strict=True)
-    if not target.is_relative_to(base):
-        raise ForbiddenAssetError()
+def reveal_path(path) -> None:
+    """Show ``path`` selected in Finder, Explorer or the desktop's file manager.
+
+    ``ValueError`` for a ref that is not an absolute path, ``FileNotFoundError`` when nothing is
+    there. Never a shell: each platform's command takes the path as one argument.
+    """
+    target = Path(absolute_path(path)).resolve(strict=True)
     if not (target.is_file() or target.is_dir()):
         raise ValueError("Only files and directories can be revealed")
     if sys.platform == "darwin":

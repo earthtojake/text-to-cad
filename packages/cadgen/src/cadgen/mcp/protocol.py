@@ -3,8 +3,8 @@
 One reader thread parses messages. Requests the host sends run on a small pool,
 so a slow request (a model's bytes, a picture) never blocks the others; ``initialize`` and ``ping``
 run on the reader so a handshake is never queued behind work. Every outgoing
-message is one line written under one lock. Requests this side sends (a form
-elicitation, for instance) wait on a future keyed by their id.
+message is one line written under one lock. This side only answers: it sends no
+requests of its own, so a response that arrives is ignored.
 
 The standard output of the process belongs to the protocol alone:
 :func:`claim_stdout` moves the original descriptor aside and points descriptor 1
@@ -14,14 +14,13 @@ descriptor -- can never corrupt a frame.
 
 from __future__ import annotations
 
-import itertools
 import json
 import logging
 import os
 import sys
 import threading
 from collections.abc import Callable, Iterable
-from concurrent.futures import Future, ThreadPoolExecutor
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, BinaryIO
 
 LOG = logging.getLogger("cadgen.mcp")
@@ -55,20 +54,14 @@ class RpcError(Exception):
 class RequestContext:
     """What a handler knows about the request it is serving."""
 
-    __slots__ = ("request_id", "meta", "connection")
+    __slots__ = ("request_id", "meta")
 
-    def __init__(self, request_id: Any, meta: dict[str, Any], connection: "Connection") -> None:
+    def __init__(self, request_id: Any, meta: dict[str, Any]) -> None:
         self.request_id = request_id
         self.meta = meta
-        self.connection = connection
-
-    @property
-    def cancelled(self) -> bool:
-        return self.connection.is_cancelled(self.request_id)
 
 
 Handler = Callable[[str, dict[str, Any], RequestContext], Any]
-NotificationHandler = Callable[[str, dict[str, Any]], None]
 
 
 def claim_stdout() -> BinaryIO:
@@ -88,42 +81,26 @@ class Connection:
         writer: BinaryIO,
         handler: Handler,
         *,
-        on_notification: NotificationHandler | None = None,
         workers: int = 16,
     ) -> None:
         self._reader = reader
         self._writer = writer
         self._handler = handler
-        self._on_notification = on_notification
         self._write_lock = threading.Lock()
-        self._pending: dict[Any, Future] = {}
-        self._pending_lock = threading.Lock()
         self._cancelled: set[Any] = set()
-        self._ids = itertools.count(1)
         self._pool = ThreadPoolExecutor(max_workers=workers, thread_name_prefix="cadgen-mcp")
-        self._closed = threading.Event()
 
     # -- serving -------------------------------------------------------------
 
     def serve(self) -> None:
-        """Serve until the reader ends; then fail every pending outgoing request."""
+        """Serve until the reader ends."""
         try:
             for raw in self._reader:
                 line = raw.strip()
                 if line:
                     self._receive(line)
         finally:
-            self._closed.set()
-            with self._pending_lock:
-                pending, self._pending = self._pending, {}
-            for future in pending.values():
-                if not future.done():
-                    future.set_exception(ConnectionError("the host closed the connection"))
             self._pool.shutdown(wait=False, cancel_futures=True)
-
-    @property
-    def closed(self) -> bool:
-        return self._closed.is_set()
 
     def is_cancelled(self, request_id: Any) -> bool:
         return request_id in self._cancelled
@@ -139,8 +116,7 @@ class Connection:
             return
         method = message.get("method")
         if method is None:
-            self._resolve(message)
-            return
+            return  # a response: this side sends no requests
         params = message.get("params") or {}
         if not isinstance(params, dict):
             params = {}
@@ -154,18 +130,13 @@ class Connection:
             self._pool.submit(self._run, request_id, method, params)
 
     def _notification(self, method: str, params: dict[str, Any]) -> None:
+        # The one notification read: a request the host gave up on gets no response.
         if method == "notifications/cancelled":
             self._cancelled.add(params.get("requestId"))
-            return
-        if self._on_notification is not None:
-            try:
-                self._on_notification(method, params)
-            except Exception:  # a notification has no one to report to
-                LOG.exception("notification %s failed", method)
 
     def _run(self, request_id: Any, method: str, params: dict[str, Any]) -> None:
         meta = params.get("_meta") if isinstance(params.get("_meta"), dict) else {}
-        context = RequestContext(request_id, meta, self)
+        context = RequestContext(request_id, meta)
         try:
             result = self._handler(method, params, context)
         except RpcError as error:
@@ -181,40 +152,6 @@ class Connection:
         if not cancelled:
             self._send(response)
 
-    # -- requests and notifications from this side ---------------------------
-
-    def request(self, method: str, params: dict[str, Any], *, timeout: float | None = None) -> Any:
-        """Send a request to the host and wait for its result."""
-        request_id = f"cadgen-{next(self._ids)}"
-        future: Future = Future()
-        with self._pending_lock:
-            if self.closed:
-                raise ConnectionError("the host closed the connection")
-            self._pending[request_id] = future
-        self._send({"jsonrpc": "2.0", "id": request_id, "method": method, "params": params})
-        try:
-            return future.result(timeout=timeout)
-        finally:
-            with self._pending_lock:
-                self._pending.pop(request_id, None)
-
-    def notify(self, method: str, params: dict[str, Any] | None = None) -> None:
-        message: dict[str, Any] = {"jsonrpc": "2.0", "method": method}
-        if params:
-            message["params"] = params
-        self._send(message)
-
-    def _resolve(self, message: dict[str, Any]) -> None:
-        with self._pending_lock:
-            future = self._pending.get(message.get("id"))
-        if future is None or future.done():
-            return
-        if "error" in message:
-            error = message["error"] if isinstance(message["error"], dict) else {}
-            future.set_exception(RpcError(int(error.get("code", INTERNAL_ERROR)), str(error.get("message", "request failed")), error.get("data")))
-        else:
-            future.set_result(message.get("result"))
-
     def _send(self, message: dict[str, Any]) -> None:
         frame = json.dumps(message, ensure_ascii=False, separators=(",", ":")).encode("utf-8") + b"\n"
         with self._write_lock:
@@ -222,4 +159,4 @@ class Connection:
                 self._writer.write(frame)
                 self._writer.flush()
             except (BrokenPipeError, ValueError, OSError):
-                self._closed.set()
+                pass  # the host has gone: the reader ends next, and with it the server

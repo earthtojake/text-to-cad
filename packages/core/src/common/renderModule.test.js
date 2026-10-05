@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 import * as THREE from "three";
 
 import {
@@ -53,6 +55,26 @@ test("the embedded module vocabulary is closed", async () => {
     () => compileAnimationModule(withDefault, { name: "arm animation" }),
     /default export is not an animation-module export/
   );
+});
+
+test("cadgen's build check refuses exactly these exports, in these words", async () => {
+  // The build reads each source without running it (cadgen/_internal/animation_source.py,
+  // tested against the same fixture); here the renderer compiles them for real.
+  const parity = JSON.parse(
+    readFileSync(fileURLToPath(new URL("./renderModule.parity.json", import.meta.url)), "utf8")
+  );
+  assert.deepEqual([...ANIMATION_MODULE_EXPORTS], parity.exports);
+  for (const { why, source, error } of parity.cases) {
+    const compile = async () => compileAnimationModule(
+      await importAnimationModule(source, { name: parity.name }),
+      { name: parity.name }
+    );
+    if (error === null) {
+      await assert.doesNotReject(compile, why);
+    } else {
+      await assert.rejects(compile, { message: error }, why);
+    }
+  }
 });
 
 test("syntax errors carry the embedded animation name", async () => {

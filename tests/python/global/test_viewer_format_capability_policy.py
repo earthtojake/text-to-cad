@@ -149,13 +149,10 @@ class ViewerFormatCapabilityPolicyTest(unittest.TestCase):
             # advice, the wrong icon or no spinner at all.
             CLIENT_ROOT / "workbench/viewerAlerts.js",
             UI_ROOT / "file-viewer/navigation/entryIconKind.js",
-            # The file list, which is now the SHARED file tree and the catalog source that
-            # feeds it — drawn by every app alike, so a format check in either is a format
-            # one app lists and another does not. (It replaced
-            # `components/workbench/CadWorkspaceHome.js` and
-            # `components/workbench/FileViewerSidebar.js`, which were the standalone's
-            # own home screen and left sidebar, and the web's own catalog adapter.)
-            UI_ROOT / "file-viewer/navigation/FileTree.jsx",
+            # The file list, the SHARED explorer, and the file source that feeds it — drawn
+            # by every app alike, so a format check in either is a format one app lists and
+            # another does not.
+            UI_ROOT / "file-viewer/navigation/FolderExplorer.jsx",
             UI_ROOT / "cad-viewer/catalog.ts",
         ):
             source = path.read_text(encoding="utf-8")

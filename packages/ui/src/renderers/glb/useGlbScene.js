@@ -20,7 +20,6 @@ const LOADING = Object.freeze({ phase: "geometry", label: "Loading geometry", do
 export function useGlbScene({ entry, resources }) {
   const url = entryMeshAssetUrl(entry);
   const revision = entryMeshAssetHash(entry);
-  const pending = entry?.catalogPending === true;
   const [state, setState] = useState({ scene: null, revision: "", busy: true, progress: READING, error: null });
   const resourcesRef = useRef(resources);
   resourcesRef.current = resources;
@@ -32,7 +31,6 @@ export function useGlbScene({ entry, resources }) {
   };
   useEffect(() => () => adopt(null), []);
   useEffect(() => {
-    if (pending) return undefined;
     if (!url) {
       adopt(null);
       setState({ scene: null, revision, busy: false, progress: null,
@@ -52,6 +50,6 @@ export function useGlbScene({ entry, resources }) {
       setState({ scene: null, revision, busy: false, progress: null, error });
     });
     return () => controller.abort();
-  }, [url, revision, pending]);
+  }, [url, revision]);
   return state;
 }

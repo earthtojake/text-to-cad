@@ -1,6 +1,6 @@
 import { Fragment } from "react";
 import { ToolbarButton } from "@text-to-cad/ui/primitives/toolbar-button";
-import { FLOATING_CHROME_SURFACE_CLASS } from "./floatingSurface.js";
+import { FLOATING_CHROME_SURFACE_CLASS } from "../../../lib/floatingSurface.js";
 
 /**
  * One tool of the strip. The strip draws it; whoever hands it over decides what

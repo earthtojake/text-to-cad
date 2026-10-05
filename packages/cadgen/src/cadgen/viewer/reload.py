@@ -173,13 +173,11 @@ def restart_argv(argv, *, port: int) -> list[str]:
     """The same launch, pinned to the port this process already holds.
 
     Everything the operator asked for survives — ``--host``, ``--dist``,
-    ``--api-only``, ``--no-registry``, ``--new``, ``--json``. Only the BINDING
-    is rewritten: ``--ephemeral`` and any ``--port`` are dropped and
-    ``--port <bound>`` appended, so the restarted process takes the very port
-    the browser is already open on (and, under ``npm run dev``, the ephemeral
-    port Vite's proxy was handed at startup). An explicit ``--port`` also makes
-    the launcher skip its reuse lookup, so a restart can never hand itself back
-    to some other instance instead of coming back.
+    ``--api-only``, ``--json``. Only the BINDING is rewritten: ``--new`` and any
+    ``--port`` are dropped and ``--port <bound>`` appended, so the restarted
+    process takes the very port the browser is already open on (and, under
+    ``npm run dev``, the port Vite's proxy was handed at startup), which this
+    process has just given up.
     """
     rebuilt: list[str] = []
     drop_value = False
@@ -187,7 +185,7 @@ def restart_argv(argv, *, port: int) -> list[str]:
         if drop_value:
             drop_value = False
             continue
-        if item == "--ephemeral":
+        if item == "--new":
             continue
         if item == "--port":
             drop_value = True
@@ -202,20 +200,18 @@ def restart_argv(argv, *, port: int) -> list[str]:
 def execute_restart(argv, *, executable: str = "", platform: str = "") -> None:
     """Become the new code. The caller has already closed the listening socket.
 
-    POSIX: ``os.execv`` replaces the image and KEEPS THE PID, so the registry
-    entry — which is named by pid — stays the operator's handle across the
-    restart and the new image simply writes over it.
+    POSIX: ``os.execv`` replaces the image and KEEPS THE PID.
 
     Windows: ``os.execv`` there is the C runtime's, which spawns a NEW process
-    with a new pid and terminates this one, so the pid handoff cannot be
-    implicit — the caller drops the registry entry and the child registers
-    itself. The standard handles are passed EXPLICITLY (``stdout=1, stderr=2``)
+    with a new pid and terminates this one, so this spawns the replacement and
+    exits itself. The standard handles are passed EXPLICITLY (``stdout=1, stderr=2``)
     rather than left to inheritance: an exec keeps whatever stdout and stderr
     were, and a Windows spawn only does so if it is told to — without this, a
     server whose stderr had been redirected to a file or a pipe came back
     writing to a console that, in CI, is not there at all, and its narration
     simply vanished at the restart. Nothing else is inherited, and the cwd is
-    left alone: it IS the served directory, and the replacement needs it.
+    left alone: it is the folder a developer's relative links resolve from
+    (``serverInfo.start``), and the replacement needs it.
 
     Always ``-m cadgen.viewer``: it is the documented equivalent of the
     ``cadgen viewer`` console script, and it works whichever of the two
@@ -225,7 +221,7 @@ def execute_restart(argv, *, executable: str = "", platform: str = "") -> None:
     interpreter = executable or sys.executable
     if not interpreter:
         raise OSError("no interpreter to re-execute (sys.executable is empty)")
-    command = [interpreter, "-m", "cadgen.viewer", *list(argv)]
+    command = [interpreter, "-P", "-m", "cadgen.viewer", *list(argv)]
     if (platform or sys.platform).startswith("win"):
         # Flush BEFORE spawning: parent and child write the same descriptors,
         # and anything still sitting in this process's buffers would otherwise

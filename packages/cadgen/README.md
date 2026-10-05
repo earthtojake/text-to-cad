@@ -11,8 +11,8 @@ platform.
 **PURPOSE** — the engine and its command surface: model execution, the
 store, document assembly, kinematics, exports, validation, inspection,
 snapshots, the warm daemon and its build pool, the CAD Viewer
-(`cadgen viewer`: a local HTTP server over the built client, one directory per
-instance), and CAD beside an agent's chat (`cadgen mcp`: an MCP App server that
+(`cadgen viewer`: a local HTTP server over the built client, on port 3245 or the
+port `--port` names, serving every CAD file by its absolute path), and CAD beside an agent's chat (`cadgen mcp`: an MCP App server that
 an agent host starts, over the viewer's own routes: tabs in Codex, viewer cards
 in the chat for every other MCP Apps host).
 
@@ -352,6 +352,27 @@ and is retired with every object only it named (`STORE.md` §8).
 cadgen build; the geometry it returns, and the answer to every `==` and
 `is_same` along the way, are the same.
 
+### 19. Nothing waits on the network
+
+Once installed, cadgen works offline: every command, build, snapshot, server
+and page. Its own requests are two, both anonymous: analytics
+(`analytics.py`, sent only with the person's yes) and the daily version check
+(`updates.py`). Both run in the background and fail silently: no start,
+command, request or tool call waits on them, and one that fails changes
+nothing but what is counted or offered. Two waits remain, bounded, each for
+something only the network can do: a server's last analytics send as it exits
+(`analytics.CLOSE_SECONDS`), and `cadgen analytics off`, which waits for the
+deletion it asks for (still owed, and asked again, when nobody answers). The
+pages load nothing from the internet: everything they show ships in the wheel.
+Installing needs the network (cadgen itself, and the headless browser the first
+snapshot fetches), and nothing after it does. The law is the package's, not the
+launcher's: a launcher that checks a package index before it starts anything
+(`uvx`, once its cache is stale) has its own needs.
+*Pressure-test*: with an installed cadgen and every request refused (a proxy on
+a closed port), and again with every request hanging, start a server, open a
+view, call each tool, and run a build and a snapshot: each works, and nothing
+waits on a request beyond the two waits above.
+
 ## The shape of the package
 
 ```
@@ -375,6 +396,9 @@ src/cadgen/
                          #   (its answer: settings.json's `analytics` section)
   features.py            # the CAD views' features a person can turn off
                          #   (Quick edit: settings.json's `features` section)
+  updates.py             # the daily version check: whether a newer release is
+                         #   out, for a copy nothing else keeps up to date
+                         #   (_internal/channel.py)
   store/                 # the store (STORE.md): objects, index, records, trees,
                          #   closure, gate, materialize, publish, lazy, gc, view
   cli/                   # generated command shells, one per <format> <verb>
@@ -389,9 +413,11 @@ src/cadgen/
                          #   cli_from_function, doors (documents by bytes),
                          #   source_sidecar, step_assemble/step_reemit
   viewer/                # the CAD Viewer's server: launcher (main),
-                         #   routes (http_app), catalog (scanner; its rows
-                         #   started when a watched build saves: warm), the model
-                         #   library every CAD view shares (recents), status
+                         #   routes (http_app), files by absolute path
+                         #   (backend), a file's catalog row (scanner; started
+                         #   when a watched build saves: warm), the explorer's
+                         #   reads (folders), the model library every CAD view
+                         #   shares (recents), status
                          #   (artifact_status: not compiled / compiling /
                          #   compiled / failed), build_progress (the daemon's
                          #   job ledger, read over its socket)
@@ -411,7 +437,7 @@ Verbs by format: `step` compile · build · snapshot;
 `stl`/`3mf`/`glb` build · snapshot; `dxf` snapshot; `urdf`/`sdf`
 validate · snapshot; `srdf` validate. `cadgen snapshot` routes any suffix.
 `cadgen store|daemon|doctor` are status commands, `cadgen viewer
-[list|stop]` the CAD Viewer's launcher and instance manager, and `cadgen mcp`
+[stop]` the CAD Viewer's launcher, and `cadgen mcp`
 the server an agent host starts — all deliberately outside the mirror pattern. `cadgen step compile` is internal tooling: skills never
 teach it — doors compile a document's missing tree on demand.
 
