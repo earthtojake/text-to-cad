@@ -144,15 +144,16 @@ before, remove the old one first (`codex plugin marketplace remove text-to-cad`)
 
 ### Cursor
 
+Cursor also loads the plugin installed with Claude Code. If the Claude Code plugin
+is installed, Cursor already has text-to-cad: skip this.
+
 ```bash
 git clone --depth 1 --branch plugin https://github.com/earthtojake/text-to-cad ~/.cursor/plugins/local/text-to-cad
 ```
 
 Cursor reads `.cursor-plugin/plugin.json`: restart Cursor after cloning. The
-`plugin` branch holds only the plugin, one commit per release. Cursor also loads
-plugins installed with Claude Code, so skip this if you installed the Claude Code
-plugin. Teams can import the repository instead, under **Dashboard → Plugins &
-MCPs → Team Marketplaces**.
+`plugin` branch holds only the plugin, one commit per release. Teams can import
+the repository instead, under **Dashboard → Plugins & MCPs → Team Marketplaces**.
 
 To update, pull the latest release, then restart Cursor:
 
@@ -168,13 +169,15 @@ rm -rf ~/.cursor/plugins/local/text-to-cad
 
 ### Grok Build
 
+Grok Build also loads the plugin installed with Claude Code. If the Claude Code
+plugin is installed, Grok Build already has text-to-cad: skip this.
+
 ```bash
 grok plugin install earthtojake/text-to-cad --trust
 grok plugin enable text-to-cad
 ```
 
-Grok Build reads the Claude plugin manifest, and also loads plugins installed
-with Claude Code: install one or the other. Grok shows tool results as text, so
+Grok Build reads the Claude plugin manifest. Grok shows tool results as text, so
 asking it to show a model gives you a CAD Viewer link.
 
 To update, run this, then restart Grok Build:

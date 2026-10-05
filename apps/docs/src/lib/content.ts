@@ -53,7 +53,7 @@ export const installs = [
   {
     id: "cursor",
     agent: "Cursor",
-    note: "Cursor also loads the Claude Code plugin: install one or the other.",
+    note: "Cursor also loads the Claude Code plugin: if it is installed, skip this.",
     command:
       "git clone --depth 1 --branch plugin https://github.com/earthtojake/text-to-cad ~/.cursor/plugins/local/text-to-cad",
     update: "git -C ~/.cursor/plugins/local/text-to-cad pull",
@@ -64,7 +64,7 @@ export const installs = [
   {
     id: "grok-build",
     agent: "Grok Build",
-    note: "Grok Build also loads the Claude Code plugin: install one or the other.",
+    note: "Grok Build also loads the Claude Code plugin: if it is installed, skip this.",
     command: "grok plugin install earthtojake/text-to-cad --trust\ngrok plugin enable text-to-cad",
     update: "grok plugin update text-to-cad",
     remove: "grok plugin uninstall text-to-cad",
