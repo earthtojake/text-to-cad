@@ -10,7 +10,7 @@ name: Publish Release
 # The publish job builds what ships from that commit -- the plugin ZIP, the runtime bundle,
 # the wheel and sdist -- installs and exercises the wheel, uploads it to PyPI, and waits until
 # PyPI's index lists the version. Only then does anything that installers follow name it: the
-# `install` branch (and `plugin`, its old name) and claude.ai's `claude-plugin` get the plugin
+# `latest` branch (and `plugin`, its old name) and claude.ai's `claude-plugin` get the plugin
 # alone (scripts/release/plugin_branch.py); after them, the docs deploy moves the version feed
 # and the update notice, and the tag and the GitHub Release go out. main has the new pins from
 # the merge on, so only an install of main itself -- a command that names no branch -- can see
@@ -189,7 +189,7 @@ jobs:
           path: ${{ runner.temp }}/plugin/
           if-no-files-found: error
 
-      # The plugin alone, as the install branch and claude.ai's directory take it, checked
+      # The plugin alone, as `latest` and claude.ai's directory take it, checked
       # against the directory's file rules ahead of every irreversible step; on main, the
       # branches job below commits these same trees.
       - name: Check the plugin trees
@@ -322,7 +322,7 @@ jobs:
           echo "Rehearsal complete on $GITHUB_REF_NAME at ${{ needs.gate.outputs.release_sha }}."
           echo "Would have uploaded: $(ls packages/cadgen/dist)"
           echo "Would have deployed the docs site from ${{ needs.gate.outputs.release_sha }}."
-          echo "Would have committed the plugin to install (and plugin) and claude-plugin."
+          echo "Would have committed the plugin to latest (and plugin) and claude-plugin."
           # --dry-run computes the tag and the release it would create without
           # pushing anything; the version check inside it runs for real.
           args=(--target HEAD --dry-run --publish)
@@ -330,7 +330,7 @@ jobs:
           scripts/release/publish-github-release.sh "${args[@]}"
 
   # The plugin alone, one commit per release, onto the branches installers follow
-  # (scripts/release/plugin_branch.py): `install`, which every install command names, and
+  # (scripts/release/plugin_branch.py): `latest`, which every install command names, and
   # `plugin`, its old name, for the Cursor installs made before it. claude.ai's directory
   # follows `claude-plugin`, whose copy names that directory as its channel. Publish Release is
   # these branches' only writer.
@@ -354,7 +354,7 @@ jobs:
           ref: ${{ needs.gate.outputs.release_sha }}
           persist-credentials: false
 
-      - name: Commit the plugin onto install, plugin and claude-plugin and push them
+      - name: Commit the plugin onto latest, plugin and claude-plugin and push them
         env:
           PUBLISH_PUSH_TOKEN: ${{ secrets.PUBLISH_PUSH_TOKEN }}
           GH_TOKEN: ${{ github.token }}
@@ -368,13 +368,13 @@ jobs:
             git fetch --quiet "$remote" "+refs/heads/$1:refs/remotes/origin/$1" 2>/dev/null &&
               git rev-parse "refs/remotes/origin/$1"
           }
-          # install grew out of plugin, so plugin's clones fast-forward onto it.
-          install_parent="$(tip install || tip plugin || true)"
+          # latest grew out of plugin, so plugin's clones fast-forward onto it.
+          latest_parent="$(tip latest || tip plugin || true)"
           directory_parent="$(tip claude-plugin || true)"
-          install="$(python3 scripts/release/plugin_branch.py --commit --copy install --parent "$install_parent")"
+          latest="$(python3 scripts/release/plugin_branch.py --commit --copy latest --parent "$latest_parent")"
           directory="$(python3 scripts/release/plugin_branch.py --commit --copy directory --parent "$directory_parent")"
           # A push that changes nothing is a no-op, so an unchanged plugin leaves every branch where it is.
-          git push "$remote" "$install:refs/heads/install" "$install:refs/heads/plugin" \
+          git push "$remote" "$latest:refs/heads/latest" "$latest:refs/heads/plugin" \
             "$directory:refs/heads/claude-plugin"
 
   # The docs site is built from the release commit itself: main is the source tree, and

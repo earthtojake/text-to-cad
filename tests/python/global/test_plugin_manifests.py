@@ -3,7 +3,7 @@
 The repository root *is* the plugin: `.claude-plugin/plugin.json` and
 `.codex-plugin/plugin.json` sit beside `.claude-plugin/marketplace.json`, and
 the plugin's skills are the canonical `skills/` directory rather than a
-generated copy. Publish Release builds the install branch, the plugin alone, from
+generated copy. Publish Release builds the `latest` branch, the plugin alone, from
 this tree (scripts/release/plugin_branch.py). These checks replace the manifest validation that used to live
 in `scripts/bundle/bundle-plugin.sh` back when the plugin was a subdirectory
 package with its own duplicated `skills/` tree.
@@ -189,6 +189,43 @@ class PluginManifestPolicyTest(unittest.TestCase):
             VALID_ROOT_SOURCES,
             "marketplace entry must source the plugin from the repository root",
         )
+
+    def test_main_installs_as_itself(self) -> None:
+        # Installs always work from main (AGENTS.md): a command that names no branch installs main as
+        # it is. So no manifest or config here points an installer at another branch or repository.
+        def keys(value):
+            if isinstance(value, dict):
+                for key, item in value.items():
+                    yield key
+                    yield from keys(item)
+            elif isinstance(value, list):
+                for item in value:
+                    yield from keys(item)
+
+        for path in (MARKETPLACE_PATH, CLAUDE_PLUGIN_PATH, CODEX_PLUGIN_PATH, CURSOR_PLUGIN_PATH, GEMINI_EXTENSION_PATH,
+                     CLAUDE_MCP_PATH, CODEX_MCP_PATH, CURSOR_MCP_PATH):
+            with self.subTest(path=path.name):
+                self.assertFalse({"ref", "sha"} & set(keys(load_json(path))), f"{path.name} names a git ref")
+        for entry in load_json(MARKETPLACE_PATH)["plugins"]:
+            self.assertIn(entry.get("source"), VALID_ROOT_SOURCES)
+
+    def test_the_documented_commands_install_latest(self) -> None:
+        # The preferred install is `latest`, the plugin alone, written once a release is on PyPI: every
+        # command in the README and on the docs site names it, each in its app's own syntax.
+        commands = (
+            "claude plugin marketplace add earthtojake/text-to-cad#latest",
+            "codex plugin marketplace add earthtojake/text-to-cad --ref latest",
+            "git clone --depth 1 --branch latest https://github.com/earthtojake/text-to-cad",
+            "grok plugin install earthtojake/text-to-cad@latest",
+            "gemini extensions install https://github.com/earthtojake/text-to-cad --ref latest",
+            "npx skills add earthtojake/text-to-cad#latest",
+        )
+        readme = (REPO_ROOT / "README.md").read_text(encoding="utf-8")
+        site = (REPO_ROOT / "apps" / "docs" / "src" / "lib" / "content.ts").read_text(encoding="utf-8")
+        for command in commands:
+            with self.subTest(command=command):
+                self.assertIn(command, readme)
+                self.assertIn(command, site)
 
     def test_codex_starts_the_cad_server_pinned_in_the_threads_workspace(self) -> None:
         # One uniquely named server (a host allowlists servers by name), run by uvx from the

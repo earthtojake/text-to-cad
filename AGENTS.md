@@ -11,7 +11,7 @@ product and `models/` as the shared fixture/artifact area.
 `main` is the only branch you develop on: the source tree, and what releases
 are cut from. Branch from `main` and open PRs against `main`; never push it
 directly. There is no development symlink layout — every path in the tree is the
-real file. Installers follow `install` (and `plugin`, its old name), and
+real file. Installers follow `latest` (and `plugin`, its old name), and
 claude.ai's directory `claude-plugin`: the plugin alone, one commit per release,
 written only by `Publish Release` once the release is on PyPI (see below); never
 commit to them. `main` stays an installable plugin too: every manifest and MCP
@@ -47,7 +47,7 @@ pass: the merge is the release.
   wheel and sdist, installs and exercises the wheel, uploads it to PyPI, and
   waits until PyPI's index lists it. Only then does it commit the plugin alone
   onto the branches installers follow (`scripts/release/plugin_branch.py`):
-  `install` (and `plugin`, its old name), which every install command names;
+  `latest` (and `plugin`, its old name), which every install command names;
   and `claude-plugin`, which claude.ai's directory tracks. After them it deploys the docs site, which moves
   the version feed, and tags (`v<VERSION>`; releases before 0.5.0 are bare
   `0.4.x` tags) and GitHub-Releases the release commit, with the wheel and sdist
@@ -87,7 +87,7 @@ path, the rehearsal, and local/manual fallbacks.
 - `skills/`: agent skills and their references/scripts.
 - `.claude-plugin/`, `.codex-plugin/`, `.cursor-plugin/`, `gemini-extension.json`:
   agent plugin manifests. The repository root is the plugin package; its skills are
-  `skills/` directly. Installers take it from the `install` branch, which
+  `skills/` directly. Installers take it from the `latest` branch, which
   `scripts/release/plugin_branch.py` builds from this tree at each release.
 - `models/`: sample and durable CAD/robot-description fixtures.
 - `apps/web/`: the CAD Viewer's React client (its backend is `cadgen.viewer`).
@@ -181,6 +181,15 @@ path, the rehearsal, and local/manual fallbacks.
   entry point, `scripts/bundle/bundle.sh`; `bundle.sh --check` builds it and
   asserts every required output. Call `scripts/bundle/cadgen-runtime.sh`
   directly only when debugging one stage.
+- Installs always work from `main`. A command that names no branch installs `main`
+  as it is, so every manifest, MCP config and the marketplace catalog stay at its
+  root, the catalog lists the plugin at `./`, and nothing on `main` points an
+  installer at another branch. The documented commands name `latest` instead: the
+  plugin alone, one commit per release, which `Publish Release` writes once the
+  release is on PyPI, so it installs lean (no monorepo, no npm install of the
+  workspace) and is never ahead of PyPI. `latest` is a channel, so a slower
+  `stable` can join it later. `tests/python/global/test_plugin_manifests.py`
+  holds both halves.
 - Never let a symlink reach the published tree. Agent installers disagree about
   symlinks and one loses data silently: the Skills CLI dereferences them, Claude
   Code preserves them, and Codex `plugin add` drops them with no error, shipping

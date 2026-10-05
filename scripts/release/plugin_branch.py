@@ -10,8 +10,8 @@ MCP configs they name, `skills/`, `LICENSE`, and the README, with each link to a
 that tree pointed at the release commit on GitHub (CONTRIBUTING.md, "The install branches").
 Two copies, differing in what they carry and the channel each config names:
 
-- `install` (pushed to `install`, and to `plugin`, its old name): every installer, each
-  command naming the branch. The copy also carries the marketplace catalog, which lists the
+- `latest` (pushed to `latest`, and to `plugin`, its old name): the newest release, which
+  every documented install command names. The copy also carries the marketplace catalog, which lists the
   plugin at the root of the branch it is read from, and Codex's manifest and config.
 - `directory` (pushed to `claude-plugin`): claude.ai's plugin directory, which updates its
   copies.
@@ -29,7 +29,7 @@ before anything irreversible and, on main, commits each copy and pushes it. Neve
 commit to those branches by hand.
 
     scripts/release/plugin_branch.py --check
-    scripts/release/plugin_branch.py --commit --copy install|directory [--parent REF]   # prints the commit
+    scripts/release/plugin_branch.py --commit --copy latest|directory [--parent REF]   # prints the commit
 """
 
 from __future__ import annotations
@@ -60,7 +60,7 @@ class Copy(NamedTuple):
 
 
 COPIES = {
-    "install": Copy(FILES + MARKETPLACE_FILES, {"cursor.mcp.json": ("cursor-github", False)}),
+    "latest": Copy(FILES + MARKETPLACE_FILES, {"cursor.mcp.json": ("cursor-github", False)}),
     "directory": Copy(FILES, {"claude.mcp.json": ("claude-directory", True), "cursor.mcp.json": ("cursor-github", False)}),
 }
 DIRECTORIES = ("skills/",)

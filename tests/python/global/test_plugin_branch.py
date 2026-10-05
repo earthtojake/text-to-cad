@@ -1,6 +1,6 @@
 """The plugin the install branches carry: scripts/release/plugin_branch.py.
 
-Publish Release commits these trees onto `install` (and `plugin`) and `claude-plugin`, so a
+Publish Release commits these trees onto `latest` (and `plugin`) and `claude-plugin`, so a
 tree claude.ai's directory would hold or refuse has to fail here, on the pull request that
 causes it, rather than at release time.
 """
@@ -38,33 +38,33 @@ class PluginTreeTests(unittest.TestCase):
         self.assertEqual({path for path in directory if path.startswith(".claude-plugin/")},
                          {".claude-plugin/plugin.json", ".claude-plugin/icon.png"})
         self.assertEqual({path for path in directory if path.startswith(".cursor-plugin/")}, {".cursor-plugin/plugin.json"})
-        # The install copy adds what Claude Code's and Codex's marketplaces read.
-        install, errors, _manifest = branch.build(REPO_ROOT, "install")
+        # The latest copy adds what Claude Code's and Codex's marketplaces read.
+        install, errors, _manifest = branch.build(REPO_ROOT, "latest")
         self.assertEqual(errors, [])
         self.assertEqual(set(install) - set(directory), {".claude-plugin/marketplace.json", ".codex-plugin/plugin.json",
                                                          ".codex-plugin/logo.png", "codex.mcp.json"})
 
     def test_the_install_copy_lists_itself_as_the_plugin(self) -> None:
         # The catalog lists the plugin at the root of the branch it is read from, so a marketplace
-        # added from the install branch installs what that branch holds -- no link back to the repo.
-        install, _errors, manifest = branch.build(REPO_ROOT, "install")
+        # added from `latest` installs what that branch holds -- no link back to the repo.
+        install, _errors, manifest = branch.build(REPO_ROOT, "latest")
         catalog = json.loads(install[".claude-plugin/marketplace.json"][1])
         self.assertEqual([entry["source"] for entry in catalog["plugins"] if entry["name"] == manifest["name"]], ["./"])
 
     def test_each_config_names_the_channel_its_installs_come_from(self) -> None:
         # claude.ai's directory follows claude-plugin and updates its copies. Every other installer
-        # follows install, where the configs keep main's channels but Cursor's: main's names the
+        # follows latest, where the configs keep main's channels but Cursor's: main's names the
         # Cursor Marketplace, which reads main, and a Cursor install by hand clones the branch.
         # The server's environment is the plugin's say (cadgen's _internal/channel.py).
         said = {}
-        for copy in ("install", "directory"):
+        for copy in ("latest", "directory"):
             tree, errors, _manifest = branch.build(REPO_ROOT, copy)
             self.assertEqual(errors, [])
             said[copy] = {path: json.loads(tree[path][1])["mcpServers"]["cad"]["env"]
                           for path in ("claude.mcp.json", "codex.mcp.json", "cursor.mcp.json", "gemini-extension.json")
                           if path in tree}
         gemini = {"CADGEN_INSTALL_CHANNEL": "gemini-github", "CADGEN_AUTO_UPDATED": "1"}
-        self.assertEqual(said["install"], {
+        self.assertEqual(said["latest"], {
             "claude.mcp.json": {"CADGEN_INSTALL_CHANNEL": "claude-github"},
             "codex.mcp.json": {"CADGEN_INSTALL_CHANNEL": "codex-github"},
             "cursor.mcp.json": {"CADGEN_INSTALL_CHANNEL": "cursor-github"},

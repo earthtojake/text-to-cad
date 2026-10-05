@@ -37,7 +37,7 @@ export const installs = [
     id: "claude-code",
     agent: "Claude Code",
     command:
-      "claude plugin marketplace add earthtojake/text-to-cad#install\nclaude plugin install text-to-cad@earthtojake",
+      "claude plugin marketplace add earthtojake/text-to-cad#latest\nclaude plugin install text-to-cad@earthtojake",
     update: "claude plugin marketplace update earthtojake\nclaude plugin update text-to-cad@earthtojake",
     remove: "claude plugin uninstall text-to-cad@earthtojake\nclaude plugin marketplace remove earthtojake",
   },
@@ -46,7 +46,7 @@ export const installs = [
     agent: "Codex",
     note: "Requires Codex 0.142.0 or newer.",
     command:
-      "codex plugin marketplace add earthtojake/text-to-cad --ref install\ncodex plugin add text-to-cad@earthtojake",
+      "codex plugin marketplace add earthtojake/text-to-cad --ref latest\ncodex plugin add text-to-cad@earthtojake",
     update: "codex plugin marketplace upgrade earthtojake",
     remove: "codex plugin remove text-to-cad@earthtojake\ncodex plugin marketplace remove earthtojake",
   },
@@ -55,7 +55,7 @@ export const installs = [
     agent: "Cursor",
     note: "Cursor also loads the Claude Code plugin: if it is installed, skip this.",
     command:
-      "git clone --depth 1 --branch install https://github.com/earthtojake/text-to-cad ~/.cursor/plugins/local/text-to-cad",
+      "git clone --depth 1 --branch latest https://github.com/earthtojake/text-to-cad ~/.cursor/plugins/local/text-to-cad",
     update: "git -C ~/.cursor/plugins/local/text-to-cad pull",
     remove: "rm -rf ~/.cursor/plugins/local/text-to-cad",
   },
@@ -65,14 +65,14 @@ export const installs = [
     id: "grok-build",
     agent: "Grok Build",
     note: "Grok Build also loads the Claude Code plugin: if it is installed, skip this.",
-    command: "grok plugin install earthtojake/text-to-cad@install --trust\ngrok plugin enable text-to-cad",
+    command: "grok plugin install earthtojake/text-to-cad@latest --trust\ngrok plugin enable text-to-cad",
     update: "grok plugin update text-to-cad",
     remove: "grok plugin uninstall text-to-cad",
   },
   {
     id: "gemini",
     agent: "Gemini",
-    command: "gemini extensions install https://github.com/earthtojake/text-to-cad --ref install --consent --auto-update",
+    command: "gemini extensions install https://github.com/earthtojake/text-to-cad --ref latest --consent --auto-update",
     update: "gemini extensions update text-to-cad",
     remove: "gemini extensions uninstall text-to-cad",
   },
@@ -80,7 +80,7 @@ export const installs = [
     id: "other-agents",
     agent: "Other Agents",
     note: "For an agent without plugin support: the skills give you everything you need for core CAD workflows and let you view CAD files in a localhost web app.",
-    command: "npx skills add earthtojake/text-to-cad#install",
+    command: "npx skills add earthtojake/text-to-cad#latest",
   },
 ];
 

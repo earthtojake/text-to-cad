@@ -601,7 +601,7 @@ Where the built things live instead:
   layout OpenAI's plugin submission portal takes. It is built from the release
   commit and attached to the GitHub Release beside the wheel. See [Submitting
   the plugin to OpenAI](#submitting-the-plugin-to-openai).
-- **The install branches** (`install`, and `claude-plugin` for claude.ai's
+- **The install branches** (`latest`, and `claude-plugin` for claude.ai's
   directory) are the plugin alone, the trees installers take. See
   [The install branches](#the-install-branches).
 - **A checkout** builds its own: run `scripts/bundle/bundle.sh` once after
@@ -612,7 +612,7 @@ Where the built things live instead:
 
 Merging a pull request that changes `VERSION` releases it: `Publish Release`
 (`release-publish.yml`) runs on that merge. Installers never take `main` as the
-plugin: they follow the `install` branch (see
+plugin: they follow the `latest` branch (see
 [The install branches](#the-install-branches)), which `Publish Release` moves
 only once PyPI serves the wheel. A cadgen pin must never reach anything an
 installer tracks before PyPI has that wheel. When installers took `main`, anyone
@@ -698,7 +698,7 @@ green: that is the release. `Publish Release`, on the merge commit:
    the job waits until PyPI's simple index, which uv resolves a pin through,
    lists the version: usually seconds.
 6. **Install branches** (on `main` only). `plugin_branch.py` commits the plugin
-   alone onto `install` (and `plugin`, its old name) and `claude-plugin`. Only
+   alone onto `latest` (and `plugin`, its old name) and `claude-plugin`. Only
    now does an installer see the version.
 7. **Announce** (on `main` only), after the branches: `Deploy Docs`, which moves
    the version feed that tells installs a release is out; and the `v<VERSION>`
@@ -731,18 +731,24 @@ configs the manifests name, `skills/`, `LICENSE` and `README.md`, with each
 README link to a file outside that tree pointed at the release commit on GitHub.
 A release whose plugin did not change adds no commit. There are two copies:
 
-- `install`, which every install command names. It also carries the
-  marketplace catalog, listing the plugin at the branch's root, and Codex's
-  manifest and config. `plugin`, its old name, gets the same commit, for the Cursor
-  installs that cloned `plugin` before `install` existed. `install` grew out of
-  `plugin`, so their pulls fast-forward.
+- `latest`, the newest release, which every install command names. It also
+  carries the marketplace catalog, listing the plugin at the branch's root, and
+  Codex's manifest and config. `plugin`, its old name, gets the same commit, for
+  the Cursor installs that cloned `plugin` before `latest` existed. `latest` grew
+  out of `plugin`, so their pulls fast-forward.
 - `claude-plugin`, which claude.ai's directory listing tracks. Its
   `claude.mcp.json` names the directory as its channel and marks its copies
   auto-updated (below).
 
-`main` stays an installable plugin, every manifest and MCP config at its root,
-for development installs (`scripts/install/dev_install.py`) and for a command
-that names no branch. Both trees are checked against claude.ai's file rules
+**Installs always work from `main`; `latest` is the preferred install.** A
+command that names no branch installs `main` as it is, so `main` keeps every
+manifest, MCP config and the marketplace catalog at its root, its catalog lists
+the plugin at `./`, and nothing on `main` points an installer at another branch.
+Development installs (`scripts/install/dev_install.py`) rely on that too. The
+documented commands name `latest` because it is the plugin alone and never ahead
+of PyPI. Branch names are channels: a slower `stable`, moved to a `latest` commit
+that has proven itself, can join `latest` later without renaming anything.
+`test_plugin_manifests.py` holds both halves of the rule. Both trees are checked against claude.ai's file rules
 (<https://claude.com/docs/plugins/pre-submission-checklist>) by
 `tests/python/global/test_plugin_branch.py` on every pull request and again
 before each release.
@@ -751,12 +757,12 @@ What each store and installer reads:
 
 | Where | Reads |
 | ----- | ----- |
-| Claude Code | `install` (`earthtojake/text-to-cad#install`; the marketplace keeps the ref, so its updates follow the branch); `main` without it |
-| Codex | `install` (`earthtojake/text-to-cad --ref install`); `main` without it. Codex clones the whole repository with its history, about 300 MB, whichever branch it installs |
-| Grok Build | `install` (`earthtojake/text-to-cad@install`; its registry keeps the ref); `main` without it |
-| Gemini CLI | `install` (`--ref install`, kept for its updates). Without the ref, the latest GitHub Release: with no Gemini archive among its assets, it takes the release's source tarball, the whole repository. A release with a single asset would be taken as the extension, so keep shipping the wheel and sdist beside the ZIP |
-| Skills CLI and skills.sh | `install` (`earthtojake/text-to-cad#install`; the lock file keeps the ref for updates); `main` without it |
-| Cursor, by hand | `install` (`git clone --branch install`) |
+| Claude Code | `latest` (`earthtojake/text-to-cad#latest`; the marketplace keeps the ref, so its updates follow the branch); `main` without it |
+| Codex | `latest` (`earthtojake/text-to-cad --ref latest`); `main` without it. Codex clones the whole repository with its history, about 300 MB, whichever branch it installs |
+| Grok Build | `latest` (`earthtojake/text-to-cad@latest`; its registry keeps the ref); `main` without it |
+| Gemini CLI | `latest` (`--ref latest`, kept for its updates). Without the ref, the latest GitHub Release: with no Gemini archive among its assets, it takes the release's source tarball, the whole repository. A release with a single asset would be taken as the extension, so keep shipping the wheel and sdist beside the ZIP |
+| Skills CLI and skills.sh | `latest` (`earthtojake/text-to-cad#latest`; the lock file keeps the ref for updates); `main` without it |
+| Cursor, by hand | `latest` (`git clone --branch latest`) |
 | claude.ai's directory | `claude-plugin` |
 | Cursor Marketplace | the repository's default branch, `main`: its submission takes a repository, not a branch |
 | OpenAI's plugin portal | the plugin ZIP a person uploads from the GitHub Release |
@@ -779,12 +785,12 @@ hold each one:
 
 | Package | Server environment | Told of a release | Written by |
 | ------- | ------------------ | ----------------- | ---------- |
-| `claude.mcp.json` on `main` and `install` (Claude Code, Grok Build, and Cursor through Claude Code's plugins) | `claude-github` | yes | the checked-in file |
-| `codex.mcp.json` on `main` and `install` | `codex-github` | yes | the checked-in file |
+| `claude.mcp.json` on `main` and `latest` (Claude Code, Grok Build, and Cursor through Claude Code's plugins) | `claude-github` | yes | the checked-in file |
+| `codex.mcp.json` on `main` and `latest` | `codex-github` | yes | the checked-in file |
 | `gemini-extension.json` | `gemini-github`, auto-updated | no: Gemini updates it | the checked-in file |
 | the README's Claude Desktop config | `claude-desktop` | yes | the README |
 | `main`'s `cursor.mcp.json`, which the Cursor Marketplace reads | `cursor-marketplace`, auto-updated | no: its store updates it | the checked-in file |
-| `install`'s `cursor.mcp.json`, which a Cursor install by hand clones | `cursor-github` | yes | `plugin_branch.py` |
+| `latest`'s `cursor.mcp.json`, which a Cursor install by hand clones | `cursor-github` | yes | `plugin_branch.py` |
 | `claude-plugin`'s `claude.mcp.json`, which claude.ai's directory follows | `claude-directory`, auto-updated | no: its store updates it | `plugin_branch.py` |
 | the OpenAI ZIP's `.mcp.json` | `openai-directory`, auto-updated | no: its store updates it | `plugin_zip.py` |
 | a development install | `dev` | no | `dev_install.py` |
@@ -795,7 +801,7 @@ ship in every plugin, so it cannot tell which one it came with. The CAD app and
 the Viewer say it.
 
 **Dev note — `plugin`.** It serves only the Cursor installs that cloned it before
-`install` existed. Once those have moved, drop it from the `branches` job's push
+`latest` existed. Once those have moved, drop it from the `branches` job's push
 in `release-publish.yml` and delete the branch. claude.ai's listing stays on
 `claude-plugin`: the portal refuses a tracked-branch change while a reviewer has
 the plugin, and that copy is the directory's anyway.

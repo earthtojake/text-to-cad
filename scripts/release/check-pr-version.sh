@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # A pull request is a release when it changes VERSION: merging it starts Publish Release,
-# which uploads the wheel to PyPI and only then moves the install branch installers follow.
+# which uploads the wheel to PyPI and only then moves the `latest` branch installers follow.
 # This decides whether one is, and whether it may be. Pins and derived metadata are
 # check-version.sh's and sync-version.mjs --check's job; this is about the bump itself.
 #
@@ -65,4 +65,4 @@ if [ -n "$latest_tag" ] && ! version_greater "$version" "$(version_from_release_
 fi
 
 echo "This pull request releases $version (the target branch is at $base_version)."
-echo "Merging it releases it: Publish Release uploads cadgen $version to PyPI, then moves the install branch."
+echo "Merging it releases it: Publish Release uploads cadgen $version to PyPI, then moves the latest branch."
