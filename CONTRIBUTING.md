@@ -817,12 +817,13 @@ gh workflow run release-publish.yml --ref main            # or -f publish=false 
 It publishes the commit on `main` that last moved `VERSION` — the release
 commit, not whatever merged after it — if that version has no tag yet. A run
 that uploaded the wheel and failed before the tag is finished this way: the
-PyPI upload is idempotent, and the tested-tree record that let the first run
-skip the tests lets this one skip them too. A dispatch uses the workflow file on
-`main`, so a fix to `release-publish.yml` itself applies to the resume; a fix
-anywhere else in the tree ships with a new bump, since the resume builds the
-release commit as it was. A version whose tag exists skips at the gate. A failed
-docs deploy is redeployed on its own (see
+PyPI upload is idempotent, and if the first run found its pull request's record,
+the resume finds it too (a first run that tested the commit itself recorded that
+inside its own run, which does not count, so the resume tests again). A
+dispatch uses the workflow file on `main`, so a fix to `release-publish.yml`
+itself applies to the resume; a fix anywhere else in the tree ships with a new
+bump, since the resume builds the release commit as it was. A version whose tag
+exists skips at the gate. A failed docs deploy is redeployed on its own (see
 [Redeploying the docs site](#redeploying-the-docs-site)).
 
 ### Rehearsing on `build-test`
