@@ -17,8 +17,8 @@ Use this skill for URDF robot-description outputs. Treat URDF work as constraine
 Run cadgen through [uv](https://docs.astral.sh/uv/), so this skill's commands share
 one installation, and its warm build daemon, with the CAD app's server:
 
-- `cadgen` below means `uvx --no-config --managed-python --python 3.13 --from cadgen==0.7.12 cadgen`
-- `python` below means `uvx --no-config --managed-python --python 3.13 --from cadgen==0.7.12 python`
+- `cadgen` below means `uvx --no-config --managed-python --python 3.13 --from cadgen==0.7.13 cadgen`
+- `python` below means `uvx --no-config --managed-python --python 3.13 --from cadgen==0.7.13 python`
 
 The first run downloads that installation and the first snapshot its headless
 browser; later runs reuse both.
