@@ -13,8 +13,8 @@ name: Publish Release
 # `install` branch (and `plugin`, its old name) and claude.ai's `claude-plugin` get the plugin
 # alone (scripts/release/plugin_branch.py); after them, the docs deploy moves the version feed
 # and the update notice, and the tag and the GitHub Release go out. main has the new pins from
-# the merge on, so only an install of main itself -- the Skills CLI or Grok without the
-# branch -- can see a version minutes before PyPI has it.
+# the merge on, so only an install of main itself -- a command that names no branch -- can see
+# a version minutes before PyPI has it.
 #
 # A dispatch resumes: it publishes the commit on the branch that last moved VERSION, if that
 # version has no tag yet (PyPI's skip-existing makes a re-upload a no-op).
@@ -330,8 +330,7 @@ jobs:
           scripts/release/publish-github-release.sh "${args[@]}"
 
   # The plugin alone, one commit per release, onto the branches installers follow
-  # (scripts/release/plugin_branch.py): `install` -- Claude Code's and Codex's marketplaces
-  # through main's catalog, the Skills CLI, Grok, Gemini, a Cursor install by hand -- and
+  # (scripts/release/plugin_branch.py): `install`, which every install command names, and
   # `plugin`, its old name, for the Cursor installs made before it. claude.ai's directory
   # follows `claude-plugin`, whose copy names that directory as its channel. Publish Release is
   # these branches' only writer.

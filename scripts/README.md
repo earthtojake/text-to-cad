@@ -128,8 +128,8 @@ where those files ship, so these scripts are what produces them.
   manifests and icon, the MCP configs they name, `skills/`, `LICENSE`, and the
   README with outside links pinned to the release commit), checks it against
   claude.ai's file rules, and with `--commit` commits it on `REF` and prints the
-  commit. The `install` copy adds the marketplace catalog, naming itself, and
-  Codex's manifest and config; the `directory` copy names claude.ai's directory
+  commit. The `install` copy adds the marketplace catalog and Codex's manifest
+  and config; the `directory` copy names claude.ai's directory
   as its channel. Called by `release-publish.yml`, whose `branches` job pushes
   the `install` copy to `install` and `plugin` and the `directory` copy to
   `claude-plugin`; tested by `tests/python/global/test_plugin_branch.py`.

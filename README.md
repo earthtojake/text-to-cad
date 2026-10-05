@@ -55,9 +55,9 @@ The plugin for your agent app brings the skills and CAD's viewer, a local server
 (`cadgen mcp`). For an agent without a plugin, install the skills alone. Install
 one or the other in an app, not both: two copies means every skill twice.
 
-Every install below comes from the `install` branch: the plugin alone, one commit
-per release, written once that release is on PyPI. Claude Code and Codex reach it
-through the marketplace; the other commands name it.
+Every command below installs from the `install` branch: the plugin alone, one
+commit per release, written once that release is on PyPI. A command without the
+branch installs `main` as it is.
 
 Each app's heading also says how to update text-to-cad, and how to reinstall it:
 remove it, then install it again. Updating the plugin updates CAD: the new
@@ -67,7 +67,7 @@ server share it. Earlier releases stay in uv's cache until you run `uv cache pru
 ### Claude Code
 
 ```bash
-claude plugin marketplace add earthtojake/text-to-cad
+claude plugin marketplace add earthtojake/text-to-cad#install
 claude plugin install text-to-cad@earthtojake
 ```
 
@@ -117,7 +117,7 @@ downloads. To update, change that version to the
 ### Codex
 
 ```bash
-codex plugin marketplace add earthtojake/text-to-cad
+codex plugin marketplace add earthtojake/text-to-cad --ref install
 codex plugin add text-to-cad@earthtojake
 ```
 

@@ -10,11 +10,9 @@ MCP configs they name, `skills/`, `LICENSE`, and the README, with each link to a
 that tree pointed at the release commit on GitHub (CONTRIBUTING.md, "The install branches").
 Two copies, differing in what they carry and the channel each config names:
 
-- `install` (pushed to `install`, and to `plugin`, its old name): every installer that clones
-  a branch. Claude Code's and Codex's marketplaces reach it through main's catalog, whose entry
-  names this branch; the copy carries that catalog, with the entry naming the branch itself,
-  and Codex's manifest and config. The Skills CLI, Grok, Gemini and a Cursor install by hand
-  name the branch.
+- `install` (pushed to `install`, and to `plugin`, its old name): every installer, each
+  command naming the branch. The copy also carries the marketplace catalog, which lists the
+  plugin at the root of the branch it is read from, and Codex's manifest and config.
 - `directory` (pushed to `claude-plugin`): claude.ai's plugin directory, which updates its
   copies.
 
@@ -146,22 +144,6 @@ def with_channel(path: str, data: bytes, channel: str, auto_updated: bool, error
     return json.dumps(config, indent=2, ensure_ascii=False).encode("utf-8") + b"\n"
 
 
-def catalog_for_tree(data: bytes, plugin: str, errors: list[str]) -> bytes:
-    """main's catalog with the plugin's entry naming this tree itself as its source, where main's
-    names the branch: a marketplace added from the branch installs what it holds."""
-    try:
-        catalog = json.loads(data)
-        entries = [entry for entry in catalog["plugins"] if entry.get("name") == plugin]
-    except (ValueError, KeyError, TypeError, AttributeError):
-        errors.append(f"{CATALOG} is not a marketplace catalog this script can read")
-        return data
-    if len(entries) != 1:
-        errors.append(f"{CATALOG} must list {plugin} exactly once (found {len(entries)})")
-        return data
-    entries[0]["source"] = "./"
-    return json.dumps(catalog, indent=2, ensure_ascii=False).encode("utf-8") + b"\n"
-
-
 def rule_errors(tree: dict[str, tuple[str, bytes]]) -> list[str]:
     """What in the tree claude.ai's directory would hold for a reviewer or refuse."""
     errors = []
@@ -199,8 +181,6 @@ def build(root: Path, copy: str) -> tuple[dict[str, tuple[str, bytes]], list[str
         manifest = json.loads(tree[MANIFEST][1]) if MANIFEST in tree else {}
     except ValueError as error:
         return tree, errors + [f"{MANIFEST}: {error}"], {}
-    if CATALOG in tree:
-        tree[CATALOG] = (tree[CATALOG][0], catalog_for_tree(tree[CATALOG][1], manifest.get("name"), errors))
     repository = manifest.get("repository")
     if not isinstance(repository, str) or not repository.startswith("https://github.com/"):
         return tree, errors + [f"{MANIFEST}: `repository` must be the plugin's https://github.com/ URL"], manifest

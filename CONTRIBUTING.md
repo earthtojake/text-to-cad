@@ -707,8 +707,8 @@ green: that is the release. `Publish Release`, on the merge commit:
    channel; the release page is the provenance copy).
 
 `main` has the new pins from the merge on, a few minutes before PyPI has the
-wheel. Only an install of `main` itself sees that: the Skills CLI or Grok
-without the branch, and the Cursor Marketplace, which takes the repository.
+wheel. Only an install of `main` itself sees that: a command that names no
+branch, and the Cursor Marketplace, which takes the repository.
 
 When two pull requests bump at once, the first merged wins. The other then
 conflicts on the stamps if it bumped differently (take `main`'s side and run
@@ -731,9 +731,9 @@ configs the manifests name, `skills/`, `LICENSE` and `README.md`, with each
 README link to a file outside that tree pointed at the release commit on GitHub.
 A release whose plugin did not change adds no commit. There are two copies:
 
-- `install`, for every installer that clones a branch. It also carries the
-  marketplace catalog, whose entry names the branch itself, and Codex's manifest
-  and config. `plugin`, its old name, gets the same commit, for the Cursor
+- `install`, which every install command names. It also carries the
+  marketplace catalog, listing the plugin at the branch's root, and Codex's
+  manifest and config. `plugin`, its old name, gets the same commit, for the Cursor
   installs that cloned `plugin` before `install` existed. `install` grew out of
   `plugin`, so their pulls fast-forward.
 - `claude-plugin`, which claude.ai's directory listing tracks. Its
@@ -751,7 +751,8 @@ What each store and installer reads:
 
 | Where | Reads |
 | ----- | ----- |
-| Claude Code, Codex | the catalog on `main` (`earthtojake/text-to-cad`), whose plugin entry names the `install` branch (`"source": {"source": "url", …, "ref": "install"}`), so the plugin comes from `install`. Claude Code's update fetches the branch. Codex's `marketplace upgrade` reinstalls from it whenever `main` has moved, and its background refresh reinstalls when the catalog's version differs from the installed one, so the catalog keeps its stamped version |
+| Claude Code | `install` (`earthtojake/text-to-cad#install`; the marketplace keeps the ref, so its updates follow the branch); `main` without it |
+| Codex | `install` (`earthtojake/text-to-cad --ref install`); `main` without it. Codex clones the whole repository with its history, about 300 MB, whichever branch it installs |
 | Grok Build | `install` (`earthtojake/text-to-cad@install`; its registry keeps the ref); `main` without it |
 | Gemini CLI | `install` (`--ref install`, kept for its updates). Without the ref, the latest GitHub Release: with no Gemini archive among its assets, it takes the release's source tarball, the whole repository. A release with a single asset would be taken as the extension, so keep shipping the wheel and sdist beside the ZIP |
 | Skills CLI and skills.sh | `install` (`earthtojake/text-to-cad#install`; the lock file keeps the ref for updates); `main` without it |

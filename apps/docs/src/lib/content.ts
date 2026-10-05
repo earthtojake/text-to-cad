@@ -37,7 +37,7 @@ export const installs = [
     id: "claude-code",
     agent: "Claude Code",
     command:
-      "claude plugin marketplace add earthtojake/text-to-cad\nclaude plugin install text-to-cad@earthtojake",
+      "claude plugin marketplace add earthtojake/text-to-cad#install\nclaude plugin install text-to-cad@earthtojake",
     update: "claude plugin marketplace update earthtojake\nclaude plugin update text-to-cad@earthtojake",
     remove: "claude plugin uninstall text-to-cad@earthtojake\nclaude plugin marketplace remove earthtojake",
   },
@@ -46,7 +46,7 @@ export const installs = [
     agent: "Codex",
     note: "Requires Codex 0.142.0 or newer.",
     command:
-      "codex plugin marketplace add earthtojake/text-to-cad\ncodex plugin add text-to-cad@earthtojake",
+      "codex plugin marketplace add earthtojake/text-to-cad --ref install\ncodex plugin add text-to-cad@earthtojake",
     update: "codex plugin marketplace upgrade earthtojake",
     remove: "codex plugin remove text-to-cad@earthtojake\ncodex plugin marketplace remove earthtojake",
   },

@@ -47,9 +47,8 @@ pass: the merge is the release.
   wheel and sdist, installs and exercises the wheel, uploads it to PyPI, and
   waits until PyPI's index lists it. Only then does it commit the plugin alone
   onto the branches installers follow (`scripts/release/plugin_branch.py`):
-  `install` (and `plugin`, its old name), which `main`'s marketplace catalog
-  names, so Claude Code and Codex install from it; and `claude-plugin`, which
-  claude.ai's directory tracks. After them it deploys the docs site, which moves
+  `install` (and `plugin`, its old name), which every install command names;
+  and `claude-plugin`, which claude.ai's directory tracks. After them it deploys the docs site, which moves
   the version feed, and tags (`v<VERSION>`; releases before 0.5.0 are bare
   `0.4.x` tags) and GitHub-Releases the release commit, with the wheel and sdist
   that went to PyPI attached as release assets, plus the plugin ZIP that a

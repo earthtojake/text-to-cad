@@ -45,8 +45,8 @@ class PluginTreeTests(unittest.TestCase):
                                                          ".codex-plugin/logo.png", "codex.mcp.json"})
 
     def test_the_install_copy_lists_itself_as_the_plugin(self) -> None:
-        # main's catalog names the install branch; the branch's names its own tree, so a marketplace
-        # added from the branch installs what it holds.
+        # The catalog lists the plugin at the root of the branch it is read from, so a marketplace
+        # added from the install branch installs what that branch holds -- no link back to the repo.
         install, _errors, manifest = branch.build(REPO_ROOT, "install")
         catalog = json.loads(install[".claude-plugin/marketplace.json"][1])
         self.assertEqual([entry["source"] for entry in catalog["plugins"] if entry["name"] == manifest["name"]], ["./"])

@@ -3,8 +3,8 @@
 The repository root *is* the plugin: `.claude-plugin/plugin.json` and
 `.codex-plugin/plugin.json` sit beside `.claude-plugin/marketplace.json`, and
 the plugin's skills are the canonical `skills/` directory rather than a
-generated copy. Installers get it from the install branch, which Publish Release
-builds from this tree (scripts/release/plugin_branch.py). These checks replace the manifest validation that used to live
+generated copy. Publish Release builds the install branch, the plugin alone, from
+this tree (scripts/release/plugin_branch.py). These checks replace the manifest validation that used to live
 in `scripts/bundle/bundle-plugin.sh` back when the plugin was a subdirectory
 package with its own duplicated `skills/` tree.
 
@@ -41,9 +41,7 @@ VALID_SKILLS_POINTERS = {"./skills/", "./skills", "skills"}
 # Codex resolves a repo-root plugin source from exactly these two spellings
 # (codex-rs/core-plugins/src/marketplace.rs). Anything else is treated as a
 # subdirectory path and would not resolve to the repository root.
-# Claude Code and Codex install from the install branch, which Publish Release writes once the
-# release is on PyPI (scripts/release/plugin_branch.py); main itself is never the plugin they get.
-INSTALL_SOURCE = {"source": "url", "url": "https://github.com/earthtojake/text-to-cad.git", "ref": "install"}
+VALID_ROOT_SOURCES = {"./", "."}
 
 
 def load_json(path: Path) -> dict:
@@ -169,7 +167,7 @@ class PluginManifestPolicyTest(unittest.TestCase):
         self.assertTrue(width == height and 512 <= width <= 2048, f"the Claude icon is {width}x{height}")
         self.assertLess(len(data), 2 * 1024 * 1024, "the Claude icon is 2 MB or more")
 
-    def test_marketplace_lists_the_plugin_on_the_install_branch(self) -> None:
+    def test_marketplace_lists_the_plugin_at_the_repository_root(self) -> None:
         marketplace = load_json(MARKETPLACE_PATH)
         self.assertEqual(marketplace.get("name"), MARKETPLACE_NAME)
 
@@ -186,7 +184,11 @@ class PluginManifestPolicyTest(unittest.TestCase):
             1,
             f"marketplace must contain exactly one {PLUGIN_NAME!r} entry",
         )
-        self.assertEqual(entries[0].get("source"), INSTALL_SOURCE)
+        self.assertIn(
+            entries[0].get("source"),
+            VALID_ROOT_SOURCES,
+            "marketplace entry must source the plugin from the repository root",
+        )
 
     def test_codex_starts_the_cad_server_pinned_in_the_threads_workspace(self) -> None:
         # One uniquely named server (a host allowlists servers by name), run by uvx from the
