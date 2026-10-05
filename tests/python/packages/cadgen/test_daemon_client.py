@@ -28,6 +28,7 @@ sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 from cadgen.daemon import client, transport  # noqa: E402
 from cadgen.daemon import pool as pool_mod  # noqa: E402
 from cadgen.daemon import server  # noqa: E402
+from cadgen.daemon.jobs import JobLedger
 
 
 class _ScriptedChannel:
@@ -254,13 +255,16 @@ class ServerRelaysTheDeath(unittest.TestCase):
         conn = self._Conn()
         request = {"tool": "step-compile", "argv": ["x.step"], "cwd": "/w", "prog": "cadgen step compile"}
         logged: list[str] = []
-        with mock.patch.object(server, "_POOL", pool), \
+        jobs = JobLedger()
+        with mock.patch.object(server, "_JOBS", jobs), \
+                mock.patch.object(server, "_POOL", pool), \
                 mock.patch.object(server, "_log", logged.append), \
                 mock.patch.object(server, "CLIENT_LIVENESS_INTERVAL_SECONDS", 60.0):
             server._handle_request(conn, request)
         kinds = [next(iter(frame)) for frame in conn.frames if frame != {"stream": "stdout", "data": ""}]
         self.assertEqual(kinds, ["stream", "workerDied", "exit"])
         died = next(frame["workerDied"] for frame in conn.frames if "workerDied" in frame)
+        self.assertEqual(jobs.snapshot()[0]["error"], died["detail"])
         self.assertEqual(died["pid"], 777)
         self.assertEqual(died["exitStatus"], -9)
         self.assertIn("SIGKILL", died["detail"])

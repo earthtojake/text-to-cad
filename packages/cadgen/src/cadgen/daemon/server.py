@@ -526,6 +526,7 @@ def _handle_request(conn: transport.Channel, request: dict) -> None:
         # evidence. Note the log line too -- `cadgen daemon status` cannot show a
         # worker that is gone.
         healthy = False
+        # Record the same death evidence in the ledger without relaying a stderr chunk.
         stderr_tail.append(f"\n{exc}\n")
         _log(f"{tool}: worker {worker.pid} died mid-job: {exc}")
         with contextlib.suppress(OSError), send_lock:
