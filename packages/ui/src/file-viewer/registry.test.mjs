@@ -11,8 +11,8 @@ const output = join(temporary, "registry.mjs");
 await build({ entryPoints: [fileURLToPath(new URL("./registry.ts", import.meta.url))], bundle: true, platform: "node", format: "esm", outfile: output });
 const { defineFileRenderer, selectRenderer, validateRenderers } = await import(pathToFileURL(output).href);
 after(() => rm(temporary, { recursive: true, force: true }));
-const file = { path: "notes.md", name: "notes.md", kind: "file", extension: "md", size: 4, mediaType: "text" };
-const source = { id: "root-a", rootName: "A", stat: async () => file };
+const file = { path: "/docs/notes.md", name: "notes.md", kind: "file", extension: "md", size: 4, mediaType: "text" };
+const source = { id: "root-a", stat: async () => file };
 const registration = (id, priority, matches = () => true, fallback = false) => defineFileRenderer({
   id, priority, matches, fallback, prepare: async () => ({ data: "typed payload" }), load: async () => ({ default: () => null }),
 });

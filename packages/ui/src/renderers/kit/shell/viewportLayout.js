@@ -15,5 +15,7 @@ export const VIEWPORT_TOP_BAR_PX = 34;
 export const VIEWPORT_CUBE_SIZE = "6rem";
 export const VIEWPORT_CORNER_INSET_PX = 2;
 export const VIEWPORT_CUBE_BOTTOM_PX = 8;
-// Where the tool stack stops: an inset above the cube.
-export const VIEWPORT_STACK_BOTTOM = `calc(${VIEWPORT_CUBE_SIZE} + ${VIEWPORT_CUBE_BOTTOM_PX + CHROME_INSET_PX}px)`;
+// The view's controls on top of the cube (Display, Preview): a row as wide as it, so their centres line up.
+export const VIEWPORT_ACTION_HEIGHT_PX = 24;
+// Where the tool stack stops: an inset above the cube and its controls.
+export const VIEWPORT_STACK_BOTTOM = `calc(${VIEWPORT_CUBE_SIZE} + ${VIEWPORT_CUBE_BOTTOM_PX + VIEWPORT_ACTION_HEIGHT_PX + CHROME_INSET_PX}px)`;

@@ -50,6 +50,19 @@ test("compile failure preserves the full diagnostic, context and useful recovery
   assert.match(alert.recovery, /rebuild/);
 });
 
+test("a file another program holds is said to be unreadable, not broken (#529)", () => {
+  const reason = "[Errno 13] Permission denied: 'C:\\Users\\ada\\STEP\\moonwatch.step'";
+  const alert = buildViewerMeshAlert(step, false, "", {
+    status: "failed", error: reason, failure: { kind: "compile", errorType: "PermissionError" }
+  });
+  assert.equal(alert.title, "Couldn’t read the model");
+  assert.match(alert.message, /moonwatch\.step.*could not be read/);
+  assert.equal(alert.reason, reason);
+  assert.match(alert.recovery, /Another program may have it open/);
+  assert.doesNotMatch(alert.recovery, /rebuild/);
+  assert.equal(alert.reload, true);
+});
+
 test("missing compiler diagnostic is stated honestly", () => {
   const alert = buildViewerMeshAlert(step, false, "", { status: "failed", error: "" });
   assert.match(alert.reason, /No diagnostic was returned/);
@@ -123,6 +136,23 @@ test("missing geometry gives file context and a next step", () => {
   // Nothing loaded and nothing raised is "no geometry", for every file this renderer opens.
   assert.equal(buildViewerMeshAlert({ file: "plans/panel.step", kind: "step" }, false, "").summary, "Mesh unavailable");
   assert.equal(buildViewerMeshAlert(null, false, "failure"), null);
+});
+
+test("a compiled status settled over an entry naming no tree is no geometry, or a failed update of the model on screen", () => {
+  // The row the server keeps for a store it cannot read whole: no hash, a URL naming no tree, and an
+  // artifact status that has settled as compiled over it (`useArtifact`).
+  const unbuilt = { file: "STEP/pair.step", kind: "part", url: "/__cad/store?file=unbuilt-pair", hash: "", documentHash: "d1" };
+  const settled = { status: "compiled", settled: true, error: "", failure: null };
+  assert.equal(buildViewerMeshAlert(unbuilt, false, "", settled).summary, "Mesh unavailable");
+  // The previous version kept on screen through the rewrite: the update failed, the model survives.
+  const kept = buildViewerMeshAlert(unbuilt, true, "", settled);
+  assert.equal(kept.blocking, false);
+  assert.equal(kept.title, "Couldn’t update the model");
+  assert.match(kept.message, /pair\.step.*previous version/);
+  assert.equal(kept.reload, true);
+  // Not before the status settles, and not over a model still arriving.
+  assert.equal(buildViewerMeshAlert(unbuilt, true, "", { ...settled, settled: false }), null);
+  assert.equal(buildViewerMeshAlert(unbuilt, true, "", settled, { partial: true }), null);
 });
 
 test("only a failed build the file has not moved past raises an alert", () => {

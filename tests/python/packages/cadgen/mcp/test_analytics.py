@@ -3,6 +3,7 @@ metadata -- how many people, how often, on how many files -- and nothing else.""
 
 from __future__ import annotations
 
+import base64
 import http.server
 import json
 import shutil
@@ -14,7 +15,7 @@ from pathlib import Path
 from unittest import mock
 
 from cadgen.analytics import CLOSE_SECONDS, FILES_PER_BATCH, Recorder, _post, choose, file_code, file_salt, forget_pending, status
-from cadgen.mcp.protocol import RequestContext
+from cadgen.mcp.protocol import RequestContext, RpcError
 from cadgen.mcp.server import Server
 from cadgen.mcp.ui import AppPage
 from cadgen.viewer.recents import RecentStore
@@ -36,19 +37,35 @@ class _Tmp(unittest.TestCase):
         deletion.start()
         self.addCleanup(deletion.stop)
 
-    def serve(self, install: str | None, client: str = "codex-mcp-client") -> tuple[Server, list[dict]]:
+    def serve(self, channel: str, client: str = "codex-mcp-client") -> tuple[Server, list[dict]]:
         sent: list[dict] = []
-        recorder = Recorder(install=install, path=self.path, send=lambda payload: sent.append(payload) or True)
+        # The channel the plugin's startup command named, as the server hands it on (`cadgen/_internal/channel.py`).
+        with mock.patch.dict("os.environ", {"CADGEN_INSTALL_CHANNEL": channel}):
+            recorder = Recorder(path=self.path, send=lambda payload: sent.append(payload) or True)
         (self.tmp / "app").mkdir(exist_ok=True)
-        server = Server(launch_cwd=str(self.tmp), page=AppPage(self.tmp / "app"), recents=RecentStore(self.tmp / "state"),
+        server = Server(page=AppPage(self.tmp / "app"), recents=RecentStore(self.tmp / "state"),
                         analytics=recorder)
         server.handle("initialize", {"protocolVersion": "2025-06-18", "capabilities": {},
                                      "clientInfo": {"name": client, "version": "0.159.0"}}, None)
         return server, sent
 
     def call(self, server: Server, name: str, arguments: dict | None = None) -> dict:
-        context = RequestContext(1, {"threadId": "t"}, None)
+        context = RequestContext(1, {"threadId": "t"})
         return server.handle("tools/call", {"name": name, "arguments": arguments or {}}, context)
+
+    def http(self, server: Server, method: str, url: str, body: dict | None = None) -> tuple[int, dict | None]:
+        """A request the page sends through ``cad_http`` (a POST with the header its client sends)."""
+        headers = {"x-cadgen-viewer": "1", "content-type": "application/json"} if body is not None else {}
+        reply = self.call(server, "cad_http", {"method": method, "url": url, "headers": headers,
+                                               "body": base64.b64encode(json.dumps(body).encode() if body is not None else b"").decode("ascii")})
+        data = base64.b64decode(reply["structuredContent"].get("body") or "")
+        return reply["structuredContent"]["status"], json.loads(data) if data else None
+
+    def consent(self, server: Server, share: bool | None = None, *, card: bool = False) -> dict:
+        """The page's analytics card and the app menu's toggle: read, or the person's answer."""
+        if share is None:
+            return self.http(server, "GET", "/__cad/analytics")[1]
+        return self.http(server, "POST", "/__cad/analytics", {"share": share, **({"card": True} if card else {})})[1]
 
 
 class ConsentTest(_Tmp):
@@ -188,14 +205,15 @@ class OneAnswerTest(_Tmp):
         self.assertEqual(len(sent), 1)
 
     def test_only_a_page_answers_and_a_card_only_an_open_question(self) -> None:
-        server, sent = self.serve(None, client="some-terminal-agent")
-        self.call(server, "cad_consent", {"share": True})  # a text client has no page: the agent cannot opt in
+        server, sent = self.serve("claude-github", client="some-terminal-agent")
+        with self.assertRaises(RpcError):  # a text client has no page: the agent cannot opt in
+            self.consent(server, True)
         self.assertEqual(status(path=self.path)["reason"], "unasked")
-        server, sent = self.serve(None)
-        self.call(server, "cad_consent", {"share": True, "card": True})
-        self.call(server, "cad_consent", {"share": False, "card": True})  # a stale card still up in another view
+        server, sent = self.serve("claude-github")
+        self.consent(server, True, card=True)
+        self.consent(server, False, card=True)  # a stale card still up in another view
         self.assertTrue(status(path=self.path)["sharing"])
-        self.call(server, "cad_consent", {"share": False})  # Settings' toggle changes it whenever
+        self.consent(server, False)  # the app menu's toggle changes it whenever
         self.assertFalse(status(path=self.path)["sharing"])
 
     def test_the_environment_turns_it_on_too(self) -> None:
@@ -207,18 +225,23 @@ class OneAnswerTest(_Tmp):
 
 class ServerCountsTest(_Tmp):
     def test_a_yes_sends_use_files_and_metadata_and_nothing_the_person_made(self) -> None:
-        server, sent = self.serve("store")
-        self.assertEqual(self.call(server, "cad_consent")["structuredContent"]["ask"], True)  # a directory install is asked too
-        self.call(server, "cad_consent", {"share": True})
-        secret = self.tmp / "secret-bracket.step"
+        server, sent = self.serve("claude-directory")
+        self.assertEqual(self.consent(server)["ask"], True)  # a directory install is asked too
+        self.consent(server, True)
+        secret, plate = self.tmp / "secret-bracket.step", self.tmp / "secret-plate.STL"
         secret.write_text("ISO-10303-21;", encoding="utf-8")
+        plate.write_bytes(b"solid t\nendsolid t\n")
         self.call(server, "cad_open", {"path": str(secret)})  # the agent opens one
-        self.call(server, "cad_recents", {})  # the home's polling: never counted
-        # A view's syncs: plumbing, never a tool count. One nobody touched notes nothing (a view left open
-        # sends nothing); a touch is view activity, and the file it shows (one a person browsed to) a file worked on.
+        # The view adds the models it shows to the library (one a person browsed to as well): files
+        # worked on. The home's re-reads of the library are plumbing, never counted.
+        for model in (secret, plate):
+            self.http(server, "POST", "/__cad/recents", {"action": "open", "path": str(model)})
+        self.http(server, "GET", "/__cad/recents")
+        # A view's syncs: plumbing, never a tool count. One nobody touched notes nothing (a view left
+        # open sends nothing); a touch is view activity.
         for _ in range(3):
             self.call(server, "cad_sync", {"view": "v", "surface": "thread", "model": str(self.tmp / "secret-idle.step")})
-        self.call(server, "cad_sync", {"view": "v", "surface": "thread", "model": str(self.tmp / "secret-plate.STL"), "focused": True})
+        self.call(server, "cad_sync", {"view": "v", "surface": "thread", "model": str(plate), "focused": True})
         self.assertTrue(server.analytics.flush())
         [payload] = sent
         events = payload["events"]
@@ -226,13 +249,13 @@ class ServerCountsTest(_Tmp):
                          [("tool", "cad_open", 1), ("view", None, 1)])
         files = sorted((event["kind"], event["file"]) for event in events if event["name"] == "file")
         salt = file_salt(self.path)
-        self.assertEqual(files, sorted([("step", file_code(salt, str(secret))), ("stl", file_code(salt, str(self.tmp / "secret-plate.STL")))]))
+        self.assertEqual(files, sorted([("step", file_code(salt, str(secret))), ("stl", file_code(salt, str(plate)))]))
         self.assertTrue(all(len(code) == 16 for _, code in files))
-        self.assertEqual((payload["source"], payload["presentation"], payload["client"]["name"]),
-                         ("store", "tabs", "codex-mcp-client"))
+        self.assertEqual((payload["channel"], payload["presentation"], payload["client"]["name"]),
+                         ("claude-directory", "tabs", "codex-mcp-client"))
         self.assertNotIn("secret", json.dumps(payload))
         self.assertNotIn(str(self.tmp), json.dumps(payload))
-        # The same files on screen the same day are not sent again, and a batch with no use is not sent.
+        # A batch with no use is not sent.
         self.call(server, "cad_sync", {"view": "v", "surface": "thread", "model": str(secret)})
         self.assertFalse(server.analytics.flush())
         self.assertEqual(len(sent), 1)
@@ -243,8 +266,8 @@ class ServerCountsTest(_Tmp):
 
     def test_a_server_nobody_used_sends_nothing(self) -> None:
         # Codex starts a server per thread, and some only to list tools: none of them is a user.
-        server, sent = self.serve("store")
-        self.call(server, "cad_consent", {"share": True})
+        server, sent = self.serve("claude-directory")
+        self.consent(server, True)
         self.call(server, "cad_sync", {"view": "v", "surface": "sidebar"})
         self.assertFalse(server.analytics.flush())
         server.analytics.close()
@@ -308,21 +331,21 @@ class ServerCountsTest(_Tmp):
         self.assertTrue(recorder.flush())
         self.assertEqual(len(sent[-1]["events"]), 1)
 
-    def test_a_manual_install_asks_once_and_sends_only_after_yes(self) -> None:
-        server, sent = self.serve(None)
+    def test_an_install_from_github_asks_once_and_sends_only_after_yes(self) -> None:
+        server, sent = self.serve("claude-github")
         self.call(server, "cad_show", {"path": "a.step"})
-        self.assertEqual(self.call(server, "cad_consent")["structuredContent"]["ask"], True)
+        self.assertEqual(self.consent(server)["ask"], True)
         server.analytics.flush()
         self.assertEqual(sent, [])
-        answer = self.call(server, "cad_consent", {"share": True})["structuredContent"]
+        answer = self.consent(server, True)
         self.assertEqual((answer["ask"], answer["sharing"]), (False, True))
         self.call(server, "cad_view")
         server.analytics.flush()
         self.assertEqual([event.get("tool") for event in sent[0]["events"]], ["cad_view"])
 
     def test_the_agent_can_turn_analytics_off_but_not_on(self) -> None:
-        server, sent = self.serve("store")
-        self.call(server, "cad_consent", {"share": True})
+        server, sent = self.serve("claude-directory")
+        self.consent(server, True)
         off = self.call(server, "cad_analytics", {"action": "off"})
         self.assertEqual(off["structuredContent"], {"sharing": False})
         self.assertFalse(status(path=self.path)["sharing"])
@@ -341,13 +364,13 @@ class NeverInTheWayTest(_Tmp):
     call = ServerCountsTest.call
 
     def test_a_broken_analytics_layer_fails_nothing_and_logs_nothing_a_host_shows(self) -> None:
-        server, sent = self.serve("store")
+        server, sent = self.serve("claude-directory")
         with mock.patch("cadgen.analytics.status", side_effect=RuntimeError("broken")), \
                 mock.patch("cadgen.analytics.choose", side_effect=RuntimeError("broken")), \
                 self.assertNoLogs("cadgen.analytics", level="INFO"):
             # The tools answer as if nothing were wrong: off, and nothing to ask.
-            self.assertEqual(self.call(server, "cad_consent")["structuredContent"]["ask"], False)
-            self.assertEqual(self.call(server, "cad_consent", {"share": True})["structuredContent"]["sharing"], False)
+            self.assertEqual(self.consent(server)["ask"], False)
+            self.assertEqual(self.consent(server, True)["sharing"], False)
             self.assertFalse(self.call(server, "cad_analytics").get("isError"))
             self.assertFalse(self.call(server, "cad_analytics", {"action": "off"}).get("isError"))
             # CAD's own tools are untouched, and the recorder's own methods return quietly.
@@ -357,12 +380,12 @@ class NeverInTheWayTest(_Tmp):
             server.analytics.close()
 
     def test_no_tool_call_waits_on_the_network(self) -> None:
-        server, sent = self.serve("store")
-        self.call(server, "cad_consent", {"share": True})
+        server, sent = self.serve("claude-directory")
+        self.consent(server, True)
         release = threading.Event()
         with mock.patch("cadgen.analytics.request_deletion", side_effect=lambda id: release.wait(10)):
             began = time.monotonic()
-            self.call(server, "cad_consent", {"share": False})  # its deletion hangs in the background
+            self.consent(server, False)  # its deletion hangs in the background
             self.assertLess(time.monotonic() - began, 1)
             release.set()
 

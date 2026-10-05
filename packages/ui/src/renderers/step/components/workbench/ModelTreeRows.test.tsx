@@ -2,17 +2,17 @@ import React, { useState } from 'react';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import ModelingTree from '../../../../../dist/renderers/step/components/workbench/ModelingTree.js';
-import { FileTree } from '../../../../../dist/file-viewer/navigation/FileTree.js';
+import { FolderExplorer } from '../../../../../dist/file-viewer/navigation/FolderExplorer.js';
 
-// The host's file tree and the viewer's model tree drawn side by side, as the file viewer shows
-// them. jsdom has no layout, so what is asserted is what PRODUCES the geometry: both trees build
-// their rows from the one shared row primitive (`primitives/tree-row.jsx`) — the model tree in its
-// dense form — inside a list whose only horizontal inset is the same `px-1`, with rows spanning
-// it. The rest of the model tree's behaviour (disclosure vs selection, isolation, the one-shot
-// reveal, search hits in a collapsed subassembly) is ModelingTree.test.tsx.
+// The file explorer the navbar's file name opens and the viewer's model tree drawn side by side.
+// jsdom has no layout, so what is asserted is what PRODUCES the geometry: both build their rows
+// from the one shared row primitive (`primitives/tree-row.jsx`) — the model tree in its dense form —
+// inside a list whose only horizontal inset is 4px, with rows spanning it. The rest of the model
+// tree's behaviour (disclosure vs selection, isolation, the one-shot reveal, search hits in a
+// collapsed subassembly) is ModelingTree.test.tsx; the explorer's is FolderExplorer.test.tsx.
 const scrollIntoView = Element.prototype.scrollIntoView;
 beforeEach(() => {
-  Element.prototype.scrollIntoView = () => {}; // jsdom has none; both trees reveal their active row
+  Element.prototype.scrollIntoView = () => {}; // jsdom has none; the model tree reveals its active row
   vi.stubGlobal('ResizeObserver', class { observe() {} unobserve() {} disconnect() {} });
   vi.stubGlobal('matchMedia', (query: string) => ({ matches: false, media: query, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {} }));
 });
@@ -23,14 +23,13 @@ const group = { id: 'group', nodeType: 'assembly', displayName: 'Subassembly', l
 const root = { id: '__step_model__', nodeType: 'assembly', displayName: 'Document', leafPartIds: leaves.map(n => n.id), children: [group, ...leaves.slice(2)] };
 // Different parts, each its own component: one component placed many times would fold into one row.
 const descriptor = { components: Object.fromEntries(leaves.map(n => [`c${n.id}`, {}])), occurrences: leaves.map(n => ({ id: n.id, component: `c${n.id}`, name: n.displayName })) };
-const source = { rootName: 'Files', listings: { '': [{ path: 'part.step', name: 'part.step', kind: 'file' }] }, load() {}, revision: 0,
-  paths: async () => ['part.step'], platform: 'linux', capabilities: new Set(), onAction() {} };
+const source = { list: async () => [{ path: '/models/part.step', name: 'part.step', kind: 'file' }],
+  search: async () => ({ paths: ['/models/part.step'], truncated: false }) };
 
 function Trees() {
-  const [files, setFiles] = useState(new Set());
   const [selected, setSelected] = useState<string[]>([]);
   return <>
-    <section data-testid="files"><FileTree source={{ ...source, expanded: files, setExpanded: setFiles } as any} activePath="part.step" onOpen={() => {}} /></section>
+    <section data-testid="files"><FolderExplorer source={source} file="/models/part.step" onOpen={() => {}} /></section>
     <section data-testid="model"><ModelingTree active disabled={false} modeling={{ descriptor, results: {}, error: '', retryFailed() {} }} stepRoot={root}
       selectedPartIds={selected} partControls={{ isAssemblyView: true, expandedTreeNodeIds: [], onToggleTreeNode() {}, hiddenPartIds: [],
         onSelectTreeNode: (id: string) => setSelected([id]), onTogglePartVisibility() {}, onFocusTreeNode() {} }} /></section>
@@ -52,12 +51,12 @@ function insetOf(row: HTMLElement, list: HTMLElement) {
   return { list: horizontalSpacing(list), between, box };
 }
 
-it('file and model trees share one row primitive and one horizontal inset, the model tree in denser rows', () => {
+it('the file explorer and the model tree share one row primitive and one horizontal inset, the model tree in denser rows', async () => {
   render(<Trees />);
   const files = screen.getByTestId('files'), model = screen.getByTestId('model');
-  const fileRow = files.querySelector('[data-path="part.step"]') as HTMLElement;
+  const fileRow = (await within(files).findByText('part.step')).closest('[data-explorer-row]') as HTMLElement;
   const modelRow = within(model).getByRole('button', { name: 'Select Part 2' }).parentElement as HTMLElement;
-  // The host's tree keeps the regular 28px row in `text-xs`; the model tree the dense 24px row in the
+  // The explorer keeps the regular 28px row in `text-xs`; the model tree the dense 24px row in the
   // panels' 11px `text-tiny`; both the primitive's type weight.
   expect([fileRow.style.height, modelRow.style.height]).toEqual(['28px', '24px']);
   expect(fileRow.className).toMatch(/(^|\s)text-xs(\s|$)/);
@@ -65,23 +64,19 @@ it('file and model trees share one row primitive and one horizontal inset, the m
   for (const row of [fileRow, modelRow]) expect(row.className).toMatch(/(^|\s)font-normal(\s|$)/);
   // The disclosure column: 16px wide, a row tall.
   expect(within(model).getByRole('button', { name: 'Expand Subassembly' }).className.split(/\s+/)).toEqual(expect.arrayContaining(['w-4', 'h-6']));
-  // One inset: 4px (`px-1`) on the list, nothing between the list and a row, and the row spans the list.
-  const shared = { list: ['px-1'], between: [], box: ['w-full'] };
-  expect(insetOf(fileRow, fileRow.closest('[role="tree"]') as HTMLElement)).toEqual(shared);
-  expect(insetOf(modelRow, within(model).getByRole('list', { name: 'Model' }).parentElement as HTMLElement)).toEqual(shared);
+  // One inset: 4px on the list (the explorer's `p-1`, the tree's `px-1`), nothing between the list
+  // and a row, and the row spans the list.
+  expect(insetOf(fileRow, fileRow.closest('[data-slot="scroll-area-viewport"]') as HTMLElement)).toEqual({ list: ['p-1'], between: [], box: ['w-full'] });
+  expect(insetOf(modelRow, within(model).getByRole('list', { name: 'Model' }).parentElement as HTMLElement)).toEqual({ list: ['px-1'], between: [], box: ['w-full'] });
   // Both scroll in the chrome's one scroll region, never a native scroller.
   expect(fileRow.closest('[data-slot="scroll-area"]')).not.toBeNull();
   expect(modelRow.closest('[data-slot="scroll-area"]')).not.toBeNull();
 });
 
-it('filtered file rows and model search hits keep the same row and the same inset', async () => {
+it('model search hits keep the tree\'s row and its inset', async () => {
   render(<Trees />);
-  const files = screen.getByTestId('files'), model = screen.getByTestId('model');
+  const model = screen.getByTestId('model');
   const shared = { list: ['px-1'], between: [], box: ['w-full'] };
-  fireEvent.change(within(files).getByRole('textbox', { name: 'Filter files' }), { target: { value: 'part' } });
-  const option = await within(files).findByRole('option') as HTMLElement;
-  expect(option.style.height).toBe('28px');
-  expect(insetOf(option, option.closest('[role="tree"]') as HTMLElement)).toEqual(shared);
   // "part 1" ranks the nested Part 1 — inside the still-collapsed Subassembly — above Part 10 and 11.
   fireEvent.change(within(model).getByRole('textbox', { name: 'Filter model' }), { target: { value: 'part 1' } });
   const results = await within(model).findByRole('list', { name: 'Model search results' });

@@ -68,7 +68,6 @@ function stepArtifactGenerationFailureCount(state) {
 function stepArtifactGenerationFileRefs(entry = null, artifact = entry?.artifact) {
   const refs = new Set();
   addStepFileRef(refs, entry?.file);
-  addStepFileRef(refs, entry?.rootRelativeFile);
   addStepFileRef(refs, artifact?.stepPath);
   if (STEP_FILE_EXTENSION_RE.test(normalizeStepArtifactFileRef(artifact?.sourcePath))) {
     addStepFileRef(refs, artifact?.sourcePath);

@@ -1,15 +1,15 @@
-"""The launcher contract: launch is unconditional (roll + keyed reuse, ``--new``
-escape), explicit ``--port`` stays strict, and the stdout lines agents parse.
+"""The launcher contract: one port, asked before it is bound — nothing there starts, this
+user's viewer at this identity is reused, one running other code is replaced, anything else
+is refused — ``--new`` past all of it, and the stdout lines agents parse.
 
-Ported from ``main.test.mjs``, and deliberately still SUBPROCESS tests rather
-than in-process ones. The subject here IS the process: stdout flushing on a
-server that never exits, the exit codes, signal shutdown, and the registry file
-another process reads. Calling ``main()`` in-process would test none of that and
-would silently pass the buffering bug that hangs the real launch.
+Deliberately SUBPROCESS tests rather than in-process ones. The subject here IS the process:
+stdout flushing on a server that never exits, the exit codes, signal shutdown, a server
+another launch asks to exit. Calling ``main()`` in-process would test none of that and would
+silently pass the buffering bug that hangs the real launch.
 
-Every launch redirects TMPDIR so the registry is private — the real one is
-shared with the viewer the developer is using, and reuse and reaping are both
-destructive.
+Never the default port: 3245 is the developer's own viewer, and every launch here names a
+port of its own (``free_port``) or takes ``--new``. Each launch gets a private state
+directory (the detached log, the analytics answer) and temporary directory.
 """
 
 from __future__ import annotations
@@ -21,6 +21,7 @@ import json
 import os
 import shutil
 import signal
+import socket
 import subprocess
 import sys
 import tempfile
@@ -30,99 +31,113 @@ import unittest
 import urllib.error
 import urllib.request
 import uuid
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from unittest import mock
 
 from cadgen.viewer import main as main_module
-from cadgen.viewer import registry
+from cadgen.viewer.http_app import os_user
 
 PACKAGE_DIR = Path(main_module.__file__).resolve().parent
 # The documented module spelling, so the child resolves the SAME cadgen this
 # suite imports (PYTHONPATH is inherited through ``env``).
 LAUNCH = [sys.executable, "-m", "cadgen.viewer"]
+TAKEN = "is in use by another program (or another user's CAD Viewer); start the viewer with --port N."
+
+
+def free_port() -> int:
+    """A port nothing holds right now (the OS's pick), for one launch to name."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as probe:
+        probe.bind(("127.0.0.1", 0))
+        return probe.getsockname()[1]
+
+
+def server_info(port: int) -> dict:
+    with urllib.request.urlopen(f"http://127.0.0.1:{port}/__cad/server", timeout=5) as response:
+        return json.loads(response.read())
+
+
+def port_answers(port: int, timeout: float = 0.5) -> bool:
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{port}/__cad/server", timeout=timeout) as response:
+            return 200 <= response.status < 300
+    except (urllib.error.URLError, OSError, ValueError, TimeoutError):
+        return False
+
+
+class FakeViewer:
+    """A server on a port of its own that says it is a CAD Viewer of ``user``, and counts the
+    requests to exit it gets (never honoured)."""
+
+    def __init__(self, *, user, token: str = "") -> None:
+        self.shutdowns: list[str] = []
+        fake = self
+
+        class Handler(BaseHTTPRequestHandler):
+            def log_message(self, *args):  # noqa: D102 - silent
+                return
+
+            def do_GET(self):  # noqa: N802
+                body = json.dumps({"app": "cad-viewer", "user": user, "identityToken": token, "pid": 1,
+                                   "port": fake.port}).encode()
+                self.send_response(200)
+                self.send_header("content-length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def do_POST(self):  # noqa: N802
+                fake.shutdowns.append(self.path)
+                self.send_response(202)
+                self.send_header("content-length", "0")
+                self.end_headers()
+
+        self.server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.port = self.server.server_address[1]
+        self.thread = threading.Thread(target=self.server.serve_forever, daemon=True)
+        self.thread.start()
+
+    def close(self) -> None:
+        self.server.shutdown()
+        self.server.server_close()
+        self.thread.join(5)
 
 
 class LauncherFixture(unittest.TestCase):
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
-        self.registry_home = os.path.join(self._tmp.name, "reg")
-        os.makedirs(self.registry_home)
+        self.home = os.path.join(self._tmp.name, "tmp")
+        self.state = os.path.join(self._tmp.name, "state")
+        os.makedirs(self.home)
         self._children: list[subprocess.Popen] = []
-        self._adopted: list[tuple[int, int]] = []
+        self._servers: list[tuple[int, int]] = []
         self.addCleanup(self._teardown)
 
-    def adopt_server(self, port: int, pid: int) -> None:
-        """Own a live server this fixture did not spawn.
+    def adopt_server(self, port: int) -> dict:
+        """Own the server answering ``port``: a detached one, or the replacement a development
+        restart left there (on Windows a process this fixture never spawned), is stopped at the
+        end like a child. Returns what it says of itself."""
+        info = server_info(port)
+        entry = (int(port), int(info["pid"]))
+        if entry not in self._servers:
+            self._servers.append(entry)
+        return info
 
-        A development restart REPLACES the server. On POSIX it re-execs and
-        keeps the pid, so the Popen child covers it; on Windows ``os.execv`` is
-        the C runtime's and hands out a NEW pid, so the process holding the port
-        is a grandchild this fixture never gets a handle to. Either way that
-        process stands in the served directory — it IS its cwd — and Windows
-        refuses to remove a directory any process is standing in (WinError 32),
-        so a teardown that killed only its own children left the replacement
-        running and failed the cleanup rather than the test.
-        """
-        entry = (int(port), int(pid))
-        if entry not in self._adopted:
-            self._adopted.append(entry)
-
-    @staticmethod
-    def port_answers(port: int, timeout: float = 0.5) -> bool:
-        try:
-            with urllib.request.urlopen(
-                f"http://127.0.0.1:{port}/__cad/server", timeout=timeout
-            ) as response:
-                return 200 <= response.status < 300
-        except (urllib.error.URLError, OSError, ValueError, TimeoutError):
-            return False
-
-    def _stop_adopted(self, port: int, pid: int, timeout: float = 15.0) -> None:
+    def _stop_server(self, port: int, pid: int, timeout: float = 15.0) -> None:
+        if not port_answers(port) or server_info(port).get("pid") != pid:
+            return  # gone already, and the port is someone else's business now
         try:
             os.kill(pid, signal.SIGTERM)
         except OSError:
-            return  # already gone, or never ours to signal
-        # The observable end is the port going quiet, which is the same signal
-        # `cadgen viewer stop` waits on: POSIX runs the handler (unregister,
-        # stop accepting, hard-exit 0.5s later) and Windows maps SIGTERM to
-        # TerminateProcess, where the exit is immediate.
+            return
         deadline = time.monotonic() + timeout
-        while time.monotonic() < deadline:
-            if not self.port_answers(port):
-                return
+        while time.monotonic() < deadline and port_answers(port):
             time.sleep(0.1)
 
-    def _stop_orphans(self) -> None:
-        """Stop every server still registered here that is nobody's child.
-
-        A detached server runs in its own session, so when an assertion fails
-        before a test adopts it, its registry entry is the only thing still
-        leading to it. The registry is private to this fixture: everything in
-        it was started here, and the identity probe makes sure the pid named is
-        the one answering.
-        """
-        children = {child.pid for child in self._children}
-        directory = os.path.join(self.registry_home, registry.REGISTRY_DIR_NAME)
-        try:
-            names = sorted(os.listdir(directory))
-        except OSError:
-            return
-        for name in names:
-            if not (name.startswith("viewer-") and name.endswith(".json")):
-                continue
-            try:
-                entry = json.loads(Path(directory, name).read_text(encoding="utf-8"))
-            except (OSError, ValueError):
-                continue
-            if entry.get("pid") not in children and registry.probe(entry):
-                self._stop_adopted(int(entry["port"]), int(entry["pid"]))
-
     def _teardown(self) -> None:
-        # Adopted servers first, and gracefully: they are the ones that may be
-        # holding a directory this cleanup is about to remove.
-        for port, pid in self._adopted:
-            self._stop_adopted(port, pid)
-        self._stop_orphans()
+        # Adopted servers first, and gracefully: they may be standing in a directory this
+        # cleanup is about to remove, which Windows refuses (WinError 32).
+        for port, pid in self._servers:
+            self._stop_server(port, pid)
         for child in self._children:
             if child.poll() is None:
                 child.kill()
@@ -133,15 +148,8 @@ class LauncherFixture(unittest.TestCase):
         self._cleanup_tmp()
 
     def _cleanup_tmp(self, timeout: float = 15.0) -> None:
-        """Remove the fixture's directory, allowing for a late handle release.
-
-        Every server above was told to stop and waited for, so this is not a
-        substitute for stopping them. It covers only the last gap: Windows
-        drops a terminated process's handles ASYNCHRONOUSLY, so the port can go
-        quiet a moment before the kernel lets go of that process's cwd. Bounded
-        and still raising at the end — a cleanup error that is ignored is a
-        leaked process nobody ever hears about.
-        """
+        """Remove the fixture's directory, allowing for a late handle release: Windows drops a
+        terminated process's handles ASYNCHRONOUSLY. Bounded, and still raising at the end."""
         deadline = time.monotonic() + timeout
         while True:
             try:
@@ -156,11 +164,12 @@ class LauncherFixture(unittest.TestCase):
         env = dict(os.environ)
         env.update(
             {
-                "TMPDIR": self.registry_home,
-                "TEMP": self.registry_home,
-                "TMP": self.registry_home,
-                # A launch warms the build daemon, which under this TMPDIR would be one
-                # per test, its workers left running after it. PrewarmsTheDaemon opts in.
+                "TMPDIR": self.home,
+                "TEMP": self.home,
+                "TMP": self.home,
+                "CADGEN_STATE_DIR": self.state,
+                # A launch warms the build daemon, which would be one per test, its workers left
+                # running after it. PrewarmsTheDaemon opts in.
                 "CADGEN_DAEMON": "0",
             }
         )
@@ -176,14 +185,12 @@ class LauncherFixture(unittest.TestCase):
         return tempfile.mkdtemp(dir=self._tmp.name, prefix="cad-root-")
 
     def launch(self, args: list[str], cwd: str | None = None, **env_overrides) -> subprocess.Popen:
-        # The launcher has no directory flag: the cwd IS the served directory,
-        # so fixtures choose what a launch serves by choosing its cwd.
         child = subprocess.Popen(
             [*LAUNCH, *args],
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
-            cwd=cwd,
+            cwd=cwd or self.make_root(),
             env=self.env(**env_overrides),
         )
         self._children.append(child)
@@ -234,201 +241,128 @@ class LauncherFixture(unittest.TestCase):
                 return json.loads(line)
         raise AssertionError(f"no JSON line in: {stdout!r}")
 
+    def hold_port(self) -> int:
+        """A port held by a program that is no viewer: a plain listening socket."""
+        holder = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.addCleanup(holder.close)
+        holder.bind(("127.0.0.1", 0))
+        holder.listen(1)
+        return holder.getsockname()[1]
 
-class ExplicitPort(LauncherFixture):
-    def test_prints_the_url_contract_and_a_second_explicit_start_refuses(self) -> None:
-        dist = self.make_dist()
-        root = self.make_root()
-        # Below the roll base, so it can never collide with a rolled instance.
-        port = 3201
-        child = self.launch(["--dist", dist, "--port", str(port), "--json"], cwd=root)
+
+class Launch(LauncherFixture):
+    def test_a_launch_starts_on_its_port_and_prints_the_url_contract(self) -> None:
+        port, root = free_port(), self.make_root()
+        child = self.launch(["--dist", self.make_dist(), "--port", str(port), "--json"], cwd=root)
         stdout = self.wait_for_url_line(child)
-
         # --json: stdout is the one JSON line, like every other --json verb; the
-        # narration (Starting… / CAD Viewer URL:) goes to stderr.
+        # narration (Starting… / CAD Viewer URL:) goes to stderr. The line is compact:
+        # the launch smoke test greps for '"action":"started"'.
         self.assertEqual(
             [line for line in stdout.splitlines() if line.strip()],
             [f'{{"url":"http://127.0.0.1:{port}/","port":{port},"action":"started"}}'],
         )
+        info = server_info(port)
+        self.assertEqual((info["app"], info["port"], info["pid"], info["user"]), ("cad-viewer", port, child.pid, os_user()))
+        # Where a developer's relative links resolve: the folder it started in (macOS spells the
+        # temporary directory through /private, so both sides are resolved).
+        self.assertEqual(os.path.realpath(info["start"]), os.path.realpath(root))
+
+    def test_this_users_viewer_at_this_identity_is_reused_from_any_folder(self) -> None:
+        port, dist = free_port(), self.make_dist()
+        first = self.launch(["--dist", dist, "--port", str(port), "--json"])
+        started = self.json_line(self.wait_for_url_line(first))
+        # Another folder: one viewer serves every file, so where a launch runs does not matter.
+        code, stdout, stderr = self.run_to_exit(["--dist", dist, "--port", str(port), "--json"])
+        self.assertEqual(code, 0, stderr)
         self.assertEqual(
-            self.json_line(stdout),
-            {"url": f"http://127.0.0.1:{port}/", "port": port, "action": "started"},
+            [line for line in stdout.splitlines() if line.strip()],
+            [json.dumps({"url": started["url"], "port": port, "action": "reused"}, separators=(",", ":"))],
         )
+        self.assertRegex(stderr, r"Reusing CAD Viewer at ")
+        code, stdout, _ = self.run_to_exit(["--dist", dist, "--port", str(port)])
+        self.assertEqual((code, stdout.splitlines()[-1]), (0, f"CAD Viewer URL: http://127.0.0.1:{port}/"))
+        self.assertEqual(server_info(port)["pid"], first.pid, "nothing was spawned")
 
-        with urllib.request.urlopen(f"http://127.0.0.1:{port}/__cad/server", timeout=5) as response:
-            info = json.loads(response.read())
-        self.assertEqual(info["app"], "cad-viewer")
-        self.assertEqual(info["port"], port, "serverInfo must name the port actually bound")
-        self.assertEqual(info["pid"], child.pid, "the registry probe compares this pid")
-
-        # An explicit port is a demand: refuse when taken, never roll, never reuse.
-        code, _, stderr = self.run_to_exit(["--dist", dist, "--port", str(port)], cwd=root)
-        self.assertEqual(code, 1)
-        self.assertRegex(stderr, r"already")
-
-    def test_the_json_line_is_compact(self) -> None:
-        # The launch smoke test greps for the literal '"action":"started"'.
-        # Python's default json.dumps separators would break it.
+    def test_new_binds_a_port_of_its_own_and_never_reuses(self) -> None:
         dist = self.make_dist()
-        child = self.launch(["--dist", dist, "--port", "3202", "--json"], cwd=self.make_root())
-        stdout = self.wait_for_url_line(child)
-        line = next(line for line in stdout.split("\n") if line.startswith("{"))
-        self.assertIn('"action":"started"', line)
-        self.assertIn('"port":3202', line)
-        self.assertNotIn(", ", line)
+        first = self.json_line(self.wait_for_url_line(self.launch(["--dist", dist, "--json", "--new"])))
+        second = self.json_line(self.wait_for_url_line(self.launch(["--dist", dist, "--json", "--new"])))
+        self.assertEqual((first["action"], second["action"]), ("started", "started"))
+        self.assertNotEqual(first["port"], second["port"])
+        self.assertIn(f":{first['port']}/", first["url"])
+        # A server --new started is an ordinary viewer to every other launch.
+        code, stdout, _ = self.run_to_exit(["--dist", dist, "--port", str(first["port"]), "--json"])
+        self.assertEqual((code, self.json_line(stdout)["action"]), (0, "reused"))
+
+    def test_a_port_another_program_holds_is_refused(self) -> None:
+        port = self.hold_port()
+        code, stdout, stderr = self.run_to_exit(["--dist", self.make_dist(), "--port", str(port), "--json"])
+        self.assertEqual((code, stdout), (1, ""))
+        self.assertIn(f"Port {port} {TAKEN}", stderr)
+
+    def test_another_users_viewer_is_refused_and_never_asked_to_exit(self) -> None:
+        stranger = FakeViewer(user="someone-else" if os.name == "nt" else -1)
+        self.addCleanup(stranger.close)
+        code, _, stderr = self.run_to_exit(["--dist", self.make_dist(), "--port", str(stranger.port)])
+        self.assertEqual(code, 1)
+        self.assertIn(f"Port {stranger.port} {TAKEN}", stderr)
+        self.assertEqual(stranger.shutdowns, [])
 
 
 class AnnounceIsConnectable(LauncherFixture):
     """The printed URL is connectable the instant it appears.
 
-    The CAD skills tell an agent to read the URL the command prints and
-    fetch it; the launch smoke test does the same. Both are only sound if the
-    announce follows the bind: the socket must be bound and LISTENING (and the
-    real app attached) before either the human ``CAD Viewer URL:`` line or the
-    ``--json`` line is written, so the first request after reading the line
-    answers 200 with no retry, no sleep, and no grace period. The 1s socket
-    timeout is the pin: an announce printed before the bind refuses the
-    connection outright, and one printed before the app is attached (or before
-    ``serve_forever`` is reachable) leaves the request hanging past it.
+    The CAD skills tell an agent to read the URL the command prints and fetch it;
+    the launch smoke test does the same. Both are only sound if the announce
+    follows the bind: the socket must be bound and LISTENING (and the real app
+    attached) before either line is written, so the first request after reading
+    the line answers 200 with no retry, no sleep, and no grace period. The 1s
+    socket timeout is the pin.
     """
 
     ANNOUNCE_TO_200_BUDGET_SECONDS = 1.0
 
-    def _first_request_after(self, child: subprocess.Popen, marker: str, port: int) -> float:
+    def _first_request_after(self, child: subprocess.Popen, marker: str, port: int) -> None:
         stdout = self.wait_for_url_line(child, marker=marker)
         announced = next(line for line in stdout.split("\n") if line.startswith(marker))
-        if marker == "{":
-            url = json.loads(announced)["url"]
-        else:
-            url = announced[len(marker):].strip()
+        url = json.loads(announced)["url"] if marker == "{" else announced[len(marker):].strip()
         self.assertEqual(url, f"http://127.0.0.1:{port}/")
-
         started = time.monotonic()
         # One attempt. The timeout bounds connect AND the response read.
         with urllib.request.urlopen(f"{url}__cad/server", timeout=self.ANNOUNCE_TO_200_BUDGET_SECONDS) as response:
             self.assertEqual(response.status, 200)
-            info = json.loads(response.read())
-        elapsed = time.monotonic() - started
-        self.assertEqual(info["port"], port)
-        self.assertLess(
-            elapsed,
-            self.ANNOUNCE_TO_200_BUDGET_SECONDS,
-            f"the announced URL took {elapsed:.3f}s to answer its first request",
-        )
-        return elapsed
+            self.assertEqual(json.loads(response.read())["port"], port)
+        self.assertLess(time.monotonic() - started, self.ANNOUNCE_TO_200_BUDGET_SECONDS)
 
     def test_the_human_url_line_answers_the_first_request(self) -> None:
-        port = 3203
-        child = self.launch(["--dist", self.make_dist(), "--port", str(port)], cwd=self.make_root())
+        port = free_port()
+        child = self.launch(["--dist", self.make_dist(), "--port", str(port)])
         self._first_request_after(child, "CAD Viewer URL: ", port)
 
     def test_the_json_line_answers_the_first_request(self) -> None:
-        port = 3204
-        child = self.launch(["--dist", self.make_dist(), "--port", str(port), "--json"], cwd=self.make_root())
+        port = free_port()
+        child = self.launch(["--dist", self.make_dist(), "--port", str(port), "--json"])
         self._first_request_after(child, "{", port)
-
-
-class RollAndReuse(LauncherFixture):
-    def test_default_launch_rolls_and_a_second_root_rolls_past_the_first(self) -> None:
-        dist = self.make_dist()
-        first = self.launch(["--dist", dist, "--json"], cwd=self.make_root())
-        a = self.json_line(self.wait_for_url_line(first))
-        self.assertEqual(a["action"], "started")
-        self.assertGreaterEqual(a["port"], 3245, "rolled port must be >= the base")
-
-        # Different directory, no reuse match -> its own instance on another port.
-        second = self.launch(["--dist", dist, "--json"], cwd=self.make_root())
-        b = self.json_line(self.wait_for_url_line(second))
-        self.assertEqual(b["action"], "started")
-        self.assertNotEqual(b["port"], a["port"], "an occupied candidate is rolled past, not refused")
-
-    def test_same_root_reuses_and_new_forces_a_fresh_instance(self) -> None:
-        dist = self.make_dist()
-        root = self.make_root()
-        first = self.launch(["--dist", dist, "--json"], cwd=root)
-        a = self.json_line(self.wait_for_url_line(first))
-
-        # Reuse: same realpath(served dir) x exact runtime identity -> the
-        # existing URL, exit 0, no spawn.
-        code, stdout, stderr = self.run_to_exit(["--dist", dist, "--json"], cwd=root)
-        self.assertEqual(code, 0)
-        # --json: stdout is the one JSON line in a reuse exactly as in a start,
-        # so nothing reading it needs "the last line" (the habit that ended in
-        # `| tail -1` on a server that never exits). The narration is stderr's.
-        self.assertEqual(
-            [line for line in stdout.splitlines() if line.strip()],
-            [json.dumps({"url": a["url"], "port": a["port"], "action": "reused"}, separators=(",", ":"))],
-        )
-        self.assertRegex(stderr, r"Reusing CAD Viewer at ")
-
-        # Reuse must also work when launched from a symlinked spelling of the
-        # same directory (the reuse key is the realpath).
-        alias_parent = tempfile.mkdtemp(dir=self._tmp.name, prefix="cad-alias-")
-        alias = os.path.join(alias_parent, "link")
-        os.symlink(root, alias)
-        code, stdout, _ = self.run_to_exit(["--dist", dist, "--json"], cwd=alias)
-        self.assertEqual(code, 0)
-        self.assertEqual(self.json_line(stdout)["action"], "reused")
-
-        # --new bypasses the lookup and starts a second instance.
-        fresh = self.launch(["--dist", dist, "--json", "--new"], cwd=root)
-        c = self.json_line(self.wait_for_url_line(fresh))
-        self.assertEqual(c["action"], "started")
-        self.assertNotEqual(c["port"], a["port"])
-
-    def test_a_no_registry_instance_is_never_reused(self) -> None:
-        # The dev backend runs --no-registry precisely so a later real launch
-        # from the same directory starts fresh instead of handing back a Vite
-        # proxy target.
-        dist = self.make_dist()
-        root = self.make_root()
-        dev = self.launch(["--dist", dist, "--json", "--ephemeral", "--no-registry"], cwd=root)
-        a = self.json_line(self.wait_for_url_line(dev))
-        self.assertEqual(a["action"], "started")
-
-        code, stdout, _ = self.run_to_exit(["list", "--json"])
-        self.assertEqual(code, 0)
-        self.assertEqual(json.loads(stdout.strip()), [], "a --no-registry instance must not be listed")
-
-        real = self.launch(["--dist", dist, "--json"], cwd=root)
-        b = self.json_line(self.wait_for_url_line(real))
-        self.assertEqual(b["action"], "started", "must start fresh, not reuse the dev backend")
-        self.assertNotEqual(b["port"], a["port"])
-
-    def test_ephemeral_binds_a_free_port_and_reports_it(self) -> None:
-        # --ephemeral exists because `--port 0` means STRICT 3245 (Number(0) is
-        # falsy but still sets portExplicit), so it could not be overloaded.
-        dist = self.make_dist()
-        child = self.launch(["--dist", dist, "--json", "--ephemeral"], cwd=self.make_root())
-        payload = self.json_line(self.wait_for_url_line(child))
-        self.assertGreater(payload["port"], 0)
-        self.assertIn(f":{payload['port']}/", payload["url"])
-        with urllib.request.urlopen(f"http://127.0.0.1:{payload['port']}/__cad/server", timeout=5) as r:
-            self.assertEqual(json.loads(r.read())["port"], payload["port"])
 
 
 class StagedApp(LauncherFixture):
     """A staged copy of the cadgen package, launched as its own installation.
 
     Everything below runs against a STAGED copy of the cadgen package + its own dist,
-    so touching mtimes never dirties the real checkout — whose developer may
-    have a live viewer keyed on those very files. The staging is INSTALLED-WHEEL
-    shaped by default (the package's parent is ``site-packages``, with no
-    project file above it) so these launches are production launches: they do
-    not watch their own code. ``stage_app(checkout=True)`` stages the other
-    shape, for the tests that want the development auto-reload.
+    so touching mtimes never dirties the real checkout. The staging is INSTALLED-WHEEL
+    shaped by default (the package's parent is ``site-packages``, with no project file
+    above it) so these launches are production launches: they do not watch their own
+    code. ``stage_app(checkout=True)`` stages the other shape, for the development
+    auto-reload.
     """
 
     def stage_app(self, *, checkout: bool = False) -> str:
         """Stage the package and a dist as one installation, and return its root.
 
-        The sources go UNDER an ``install/`` level rather than beside the dist.
-        They used to sit at ``<staged>/src``, which is also where
-        ``warn_when_dist_is_stale`` looks for the CLIENT sources belonging to
-        ``<staged>/dist`` — so every staged launch printed a rebuild warning
-        about Python it had just copied. Harmless, but it put that warning's em
-        dash into the narration these tests read back, which is how a Windows
-        run found itself decoding cp1252 as UTF-8.
+        The sources go UNDER an ``install/`` level rather than beside the dist, which is
+        where ``warn_when_dist_is_stale`` looks for the CLIENT sources belonging to
+        ``<staged>/dist``.
         """
         staged = os.path.join(self._tmp.name, f"staged-{'checkout' if checkout else 'wheel'}")
         if os.path.isdir(staged):
@@ -457,27 +391,23 @@ class StagedApp(LauncherFixture):
         install = os.path.join(staged, "install")
         return os.path.join(install, "src" if os.path.isdir(os.path.join(install, "src")) else "site-packages")
 
-    def launch_staged(
-        self, staged: str, root: str, extra: list[str] | None = None, *, stderr_path: str = ""
-    ) -> subprocess.Popen:
-        # A live process's stderr PIPE cannot be read without blocking, and
-        # these launches never exit, so a test that reads the narration sends
-        # it to a file instead. BINARY, deliberately: Popen hands the child the
-        # raw descriptor, so the bytes in it are the child's own encoding — the
-        # platform code page on Windows — and pretending the parent's text
-        # wrapper decides that is how this file came to be read back wrongly.
+    def launch_staged(self, staged: str, extra: list[str], *, stderr_path: str = "") -> subprocess.Popen:
+        # A live process's stderr PIPE cannot be read without blocking, and these launches
+        # never exit, so a test that reads the narration sends it to a file instead. BINARY,
+        # deliberately: Popen hands the child the raw descriptor, so the bytes in it are the
+        # child's own encoding — the platform code page on Windows.
         log = open(stderr_path, "wb") if stderr_path else subprocess.PIPE
         if stderr_path:
             self.addCleanup(log.close)
         child = subprocess.Popen(
-            [*LAUNCH, "--json", *(extra or [])],
+            [*LAUNCH, "--json", *extra],
             stdout=subprocess.PIPE,
             stderr=log,
             text=True,
-            cwd=root,
+            cwd=self.make_root(),
             env=self.env(
                 PYTHONPATH=self.staged_sources(staged),
-                # The default dist location is the salt's other half.
+                # The default dist location is the identity's other half.
                 CADGEN_VIEWER_DIST=os.path.join(staged, "dist"),
             ),
         )
@@ -486,210 +416,105 @@ class StagedApp(LauncherFixture):
 
     @staticmethod
     def change_runtime_code(staged: str) -> None:
-        """Edit runtime code OUTSIDE cadgen.viewer, as a pull would.
-
-        The viewer imports daemon transport through its artifact path, so this
-        must re-key the launcher's reuse token and, in a checkout, trip the
-        auto-reload watcher.
-        """
+        """Edit runtime code OUTSIDE cadgen.viewer, as a pull would: the viewer imports the
+        daemon's transport, so this re-keys the identity and, in a checkout, trips the
+        auto-reload watcher."""
         runtime_file = Path(StagedApp.staged_sources(staged), "cadgen", "daemon", "transport.py")
         runtime_file.write_text(
             runtime_file.read_text(encoding="utf-8") + "\n# changed runtime\n", encoding="utf-8"
         )
 
-    @staticmethod
-    def server_info(port: int) -> dict:
-        with urllib.request.urlopen(f"http://127.0.0.1:{port}/__cad/server", timeout=5) as response:
-            return json.loads(response.read())
-
     def wait_for_identity_change(self, port: int, before: str, timeout: float = 30.0) -> dict:
-        """The restarted server, answering the SAME port with a new identity.
-
-        The replacement is ADOPTED here rather than at the call sites: from this
-        moment a process the fixture never spawned holds the port and the served
-        directory, and on Windows that is the same process the cleanup has to
-        wait for.
-        """
+        """The restarted server, answering the SAME port with a new identity, adopted: from
+        this moment a process the fixture may never have spawned holds the port."""
         deadline = time.monotonic() + timeout
         last = None
         while time.monotonic() < deadline:
             try:
-                info = self.server_info(port)
+                info = server_info(port)
             except (urllib.error.URLError, OSError, ValueError, TimeoutError) as error:
                 last = error  # the port is closed for the moment it takes to re-bind
                 time.sleep(0.1)
                 continue
             if info["identityToken"] != before:
-                self.adopt_server(info["port"], info["pid"])
-                return info
+                return self.adopt_server(port)
             last = info
             time.sleep(0.1)
         self.fail(f"port {port} never came back with a new identity; last={last!r}")
 
 
-class IdentityToken(StagedApp):
-    """Reuse identity covers the complete Python runtime and selected client.
+class NewestWins(StagedApp):
+    """This user's viewer running other code — a pull, a rebuilt client, another --dist — is
+    asked to exit, and the launch takes its port: the newest code wins, on the same URL."""
 
-    The version alone is frozen between releases, so in a checkout a `git pull`
-    followed by a launch reused a resident server running last week's code.
-    With the salt, a resident whose code has since changed on disk fails the
-    match, a fresh instance starts, and the old one is left alone.
-    """
-
-    def test_a_stale_resident_fails_the_match_and_is_left_alone(self) -> None:
-        staged = self.stage_app()
-        root = self.make_root()
-        first = self.launch_staged(staged, root)
-        a = self.json_line(self.wait_for_url_line(first))
-        self.assertEqual(a["action"], "started")
-
-        # Same code on disk -> reused, exactly as before the salt existed.
-        relaunch = self.launch_staged(staged, root)
-        reused_stdout, _ = relaunch.communicate(timeout=30)
-        self.assertEqual(self.json_line(reused_stdout)["action"], "reused")
-
-        token_at_start = self.server_info(a["port"])["identityToken"]
-        self.assertRegex(token_at_start, r"^[^:]*:[0-9a-f]{64}$", "the token is version:digest")
-        self.assertIs(
-            self.server_info(a["port"])["autoReload"],
-            False,
-            "an installed wheel does not watch its own code",
-        )
+    def test_a_viewer_running_other_code_is_replaced_on_its_port(self) -> None:
+        staged, port = self.stage_app(), free_port()
+        first = self.launch_staged(staged, ["--port", str(port)])
+        self.assertEqual(self.json_line(self.wait_for_url_line(first))["action"], "started")
+        token = server_info(port)["identityToken"]
+        self.assertRegex(token, r"^[^:]*:[0-9a-f]{64}$", "the token is version:digest")
+        self.assertIs(server_info(port)["autoReload"], False, "an installed wheel does not watch its own code")
 
         self.change_runtime_code(staged)
+        second = self.launch_staged(staged, ["--port", str(port)])
+        self.assertEqual(self.json_line(self.wait_for_url_line(second)), {
+            "url": f"http://127.0.0.1:{port}/", "port": port, "action": "started"})
+        self.assertEqual(first.wait(timeout=15), 0, "the old viewer exited cleanly")
+        info = server_info(port)
+        self.assertEqual(info["pid"], second.pid)
+        self.assertNotEqual(info["identityToken"], token)
 
-        # An installed wheel keeps serving what it started with: nothing
-        # restarts, nothing is refused, and the resident still answers with the
-        # token computed AT ITS OWN START.
-        time.sleep(2.0)
-        self.assertEqual(self.server_info(a["port"])["identityToken"], token_at_start)
-        self.assertEqual(self.server_info(a["port"])["pid"], first.pid)
-        with urllib.request.urlopen(f"http://127.0.0.1:{a['port']}/__cad/catalog", timeout=5) as ok:
-            self.assertEqual(ok.status, 200)
-
-        # The next launch computes a token the resident's entry no longer
-        # matches: a NEW instance starts, and the old one is left alone.
-        second = self.launch_staged(staged, root)
-        b = self.json_line(self.wait_for_url_line(second))
-        self.assertEqual(b["action"], "started")
-        self.assertNotEqual(b["port"], a["port"])
-        self.assertNotEqual(self.server_info(b["port"])["identityToken"], token_at_start)
-        self.assertEqual(
-            self.server_info(a["port"])["pid"], first.pid, "the stale resident keeps running"
-        )
-
-        # The dist is the other half of the app: a rebuilt client re-keys too.
-        Path(staged, "dist", "index.html").write_text("<html>rebuilt viewer</html>", encoding="utf-8")
-        third = self.launch_staged(staged, root)
-        c = self.json_line(self.wait_for_url_line(third))
-        self.assertEqual(c["action"], "started", "a rebuilt dist must not reuse the old client")
-        self.assertNotIn(c["port"], (a["port"], b["port"]))
-
-    def test_explicit_dist_never_reuses_a_different_client(self) -> None:
-        staged = self.stage_app()
-        root = self.make_root()
-        first = self.launch_staged(staged, root)
-        a = self.json_line(self.wait_for_url_line(first))
-
+        # The client is the identity's other half: another --dist replaces it too.
         alternate = os.path.join(staged, "alternate-dist")
         os.makedirs(alternate)
-        # The realpath is part of the identity even when the files happen to
-        # match now: this process must keep serving the directory requested.
         Path(alternate, "index.html").write_text("<html>viewer</html>", encoding="utf-8")
-        second = subprocess.Popen(
-            [*LAUNCH, "--json", "--dist", alternate],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            cwd=root,
-            env=self.env(PYTHONPATH=self.staged_sources(staged)),
-        )
-        self._children.append(second)
-        b = self.json_line(self.wait_for_url_line(second))
-        self.assertEqual(b["action"], "started")
-        self.assertNotEqual(b["port"], a["port"])
-        self.assertNotEqual(
-            self.server_info(b["port"])["identityToken"],
-            self.server_info(a["port"])["identityToken"],
-        )
+        third = self.launch_staged(staged, ["--port", str(port), "--dist", alternate])
+        self.assertEqual(self.json_line(self.wait_for_url_line(third))["action"], "started")
+        self.assertEqual(second.wait(timeout=15), 0)
+        self.assertEqual(server_info(port)["pid"], third.pid)
 
 
 class DevelopmentAutoReload(StagedApp):
-    """A checkout restarts itself onto its own port; a wheel never does.
-
-    These are subprocess tests because the subject IS the process: the exec,
-    the port it comes back on, and the registry entry another launch reads.
-    """
+    """A checkout restarts itself onto its own port; a wheel never does."""
 
     def test_a_checkout_restarts_itself_on_the_same_port_and_stays_reusable(self) -> None:
-        staged = self.stage_app(checkout=True)
-        root = self.make_root()
+        staged, port = self.stage_app(checkout=True), free_port()
         log_path = os.path.join(self._tmp.name, "restart.log")
-        first = self.launch_staged(staged, root, stderr_path=log_path)
-        a = self.json_line(self.wait_for_url_line(first))
-        self.assertEqual(a["action"], "started")
-        before = self.server_info(a["port"])
+        first = self.launch_staged(staged, ["--port", str(port)], stderr_path=log_path)
+        self.assertEqual(self.json_line(self.wait_for_url_line(first))["action"], "started")
+        before = server_info(port)
         self.assertIs(before["autoReload"], True)
 
         self.change_runtime_code(staged)
-        after = self.wait_for_identity_change(a["port"], before["identityToken"])
+        after = self.wait_for_identity_change(port, before["identityToken"])
 
-        self.assertEqual(after["port"], a["port"], "the URL the browser has open stays valid")
-        self.assertEqual(after["rootPath"], before["rootPath"], "and it serves the same directory")
-        self.assertGreater(after["startedAt"], before["startedAt"], "it is a new server")
-        # The fixture now owns the replacement. On POSIX this is the same pid
-        # the exec kept; on Windows it is a process nothing here spawned, and
-        # forgetting it leaves it standing in a served directory the cleanup is
-        # about to remove.
-        self.assertIn((after["port"], after["pid"]), self._adopted)
-        # errors="replace": the child writes the PLATFORM's encoding, not ours
-        # (see `launch_staged`), and this assertion is about an ASCII sentence —
-        # a byte elsewhere in the narration that utf-8 cannot read is not this
-        # test's business and must not turn into a decode error.
+        self.assertEqual(after["port"], port, "the URL the browser has open stays valid")
+        self.assertEqual(after["start"], before["start"], "and its relative links resolve where they did")
+        # errors="replace": the child writes the PLATFORM's encoding, not ours.
         narration = Path(log_path).read_text(encoding="utf-8", errors="replace")
-        self.assertIn(f"code changed; restarting on port {a['port']}", narration)
-        self.assertNotIn(
-            "older than the client sources",
-            narration,
-            "the staging must not sit where warn_when_dist_is_stale looks for client sources",
-        )
+        self.assertIn(f"code changed; restarting on port {port}", narration)
+        self.assertNotIn("older than the client sources", narration)
 
-        # The registry entry names the restarted process, so the launcher's
-        # reuse contract still holds: `cadgen viewer` here hands back THIS
-        # instance rather than starting a second one on another port.
-        relaunch = self.launch_staged(staged, root)
+        # The launcher's contract still holds: `cadgen viewer` hands back THIS instance.
+        relaunch = self.launch_staged(staged, ["--port", str(port)])
         stdout, _ = relaunch.communicate(timeout=30)
-        reused = self.json_line(stdout)
-        self.assertEqual(reused["action"], "reused")
-        self.assertEqual(reused["port"], a["port"])
+        self.assertEqual(self.json_line(stdout), {"url": f"http://127.0.0.1:{port}/", "port": port, "action": "reused"})
 
-    def test_the_dev_server_backend_comes_back_on_its_ephemeral_port(self) -> None:
-        # Exactly what apps/web/vite.config.mjs spawns. Vite reads the port
-        # off the announce line ONCE and proxies there for the rest of the
-        # session, so a restart that moved would strand the dev server.
+    def test_the_dev_server_backend_comes_back_on_its_port(self) -> None:
+        # Exactly what apps/web/vite.config.mjs spawns. Vite reads the port off the announce
+        # line ONCE and proxies there for the rest of the session, so a restart that moved
+        # would strand the dev server.
         staged = self.stage_app(checkout=True)
-        root = self.make_root()
-        child = self.launch_staged(
-            staged, root, ["--ephemeral", "--no-registry", "--api-only"]
-        )
-        announced = self.json_line(self.wait_for_url_line(child))
-        before = self.server_info(announced["port"])
-
+        child = self.launch_staged(staged, ["--new", "--api-only"])
+        port = self.json_line(self.wait_for_url_line(child))["port"]
+        before = server_info(port)
         self.change_runtime_code(staged)
-        after = self.wait_for_identity_change(announced["port"], before["identityToken"])
-        self.assertEqual(after["port"], announced["port"])
-        self.assertEqual(after["serverFeatures"], before["serverFeatures"])
+        after = self.wait_for_identity_change(port, before["identityToken"])
+        self.assertEqual(after["port"], port)
 
 
 class DistFreshnessWarning(unittest.TestCase):
-    """The dev-only staleness guard: one stderr line, detection only.
-
-    Exists because a stale locally-built client manufactured a false bug
-    report (a pose-preset 'bug' that was just an old bundle). Tested at the
-    function: the launch path calls it once, right before binding.
-    """
-
-    main_module = main_module
+    """The dev-only staleness guard: one stderr line, detection only."""
 
     def setUp(self) -> None:
         self._tmp = tempfile.TemporaryDirectory()
@@ -701,7 +526,7 @@ class DistFreshnessWarning(unittest.TestCase):
     def _warning_output(self) -> str:
         stderr = io.StringIO()
         with contextlib.redirect_stderr(stderr):
-            self.main_module.warn_when_dist_is_stale(self.dist)
+            main_module.warn_when_dist_is_stale(self.dist)
         return stderr.getvalue()
 
     def _make_src(self, mtime: float) -> None:
@@ -723,256 +548,110 @@ class DistFreshnessWarning(unittest.TestCase):
         self.assertEqual(self._warning_output(), "")
 
     def test_structurally_silent_without_client_sources(self) -> None:
-        # A published bundle ships dist/ with no src/ beside it: nothing to
-        # compare, no walk, no warning — by construction, not by tuning.
         self.assertEqual(self._warning_output(), "")
 
 
 class ApiOnly(LauncherFixture):
-    """`npm run dev` must work on a checkout that has never been built.
-
-    dist/ is gitignored, so a fresh clone has none — and the dev server does not
-    need one, because Vite serves the client and proxies only the API here.
-    Requiring a build made `npm run dev` fail on first contact, reported through
-    the proxy as a backend that died at startup.
-    """
+    """`npm run dev` must work on a checkout that has never been built: dist/ is gitignored,
+    and Vite serves the client and proxies only the API here."""
 
     def test_it_serves_the_api_with_no_dist_anywhere(self) -> None:
-        # No --dist, and --api-only never consults the fallback either, so a
-        # built checkout cannot mask the regression this pins.
-        child = self.launch(
-            ["--json", "--ephemeral", "--no-registry", "--api-only"], cwd=self.make_root()
-        )
-        stdout = self.wait_for_url_line(child)
-        port = self.json_line(stdout)["port"]
-        # --json: the narration is on stderr; the JSON line proves the start.
-
-        with urllib.request.urlopen(f"http://127.0.0.1:{port}/__cad/server", timeout=5) as response:
-            self.assertEqual(json.loads(response.read())["port"], port)
+        child = self.launch(["--json", "--new", "--api-only"])
+        port = self.json_line(self.wait_for_url_line(child))["port"]
+        self.assertEqual(server_info(port)["port"], port)
         with urllib.request.urlopen(f"http://127.0.0.1:{port}/__cad/catalog", timeout=5) as response:
-            self.assertIn("entries", json.loads(response.read()))
-
-        # The client is Vite's job in this mode, so the SPA routes are a plain
-        # 404 rather than a boot failure.
+            self.assertEqual(json.loads(response.read())["entries"], [])
+        # The client is Vite's job in this mode, so the SPA routes are a plain 404.
         with self.assertRaises(urllib.error.HTTPError) as caught:
             urllib.request.urlopen(f"http://127.0.0.1:{port}/", timeout=5)
         self.assertEqual(caught.exception.code, 404)
 
-    def test_without_it_a_missing_client_still_refuses_to_start(self) -> None:
-        # The exemption must be exactly as wide as --api-only: a PRODUCTION launch
-        # with no built client stays a hard, named failure.
-        #
-        # CADGEN_VIEWER_DIST wins the default-dist resolution, so pointing it
-        # at an EMPTY directory makes "no client anywhere" true regardless of
-        # whether this checkout has built apps/web. Skipping when the
-        # developer's own checkout happens to be built would mean skipping in
-        # CI too, which builds the client before it runs the tests.
-        nowhere = self.make_root()
-        code, _, stderr = self.run_to_exit([], cwd=self.make_root(), CADGEN_VIEWER_DIST=nowhere)
+    def test_without_it_a_missing_client_refuses_before_asking_the_port(self) -> None:
+        # CADGEN_VIEWER_DIST wins the default-dist resolution, so an EMPTY directory makes "no
+        # client anywhere" true whether or not this checkout has built apps/web. The default
+        # port is the developer's: the refusal comes before anything asks it.
+        code, _, stderr = self.run_to_exit([], CADGEN_VIEWER_DIST=self.make_root())
         self.assertEqual(code, 1)
         self.assertIn("No built CAD Viewer client found", stderr)
         self.assertIn("--api-only", stderr, "the refusal must name the dev-mode escape")
-
-    def test_the_same_launch_starts_once_it_is_given_a_client(self) -> None:
-        # Control for the test above: same command, the env now naming a real
-        # dist. Without this, a refusal caused by something unrelated would
-        # read as the dist check working.
-        child = self.launch(
-            ["--json", "--ephemeral", "--no-registry"],
-            cwd=self.make_root(),
-            CADGEN_VIEWER_DIST=self.make_dist(),
-        )
+        # Control: the same launch, given a client, starts.
+        child = self.launch(["--json", "--new"], CADGEN_VIEWER_DIST=self.make_dist())
         self.assertEqual(self.json_line(self.wait_for_url_line(child))["action"], "started")
 
 
-def _make_busy_root(fixture: LauncherFixture, files: int = 3000) -> str:
-    """A served root like a real project: two models and thousands of scratch files."""
-    root = fixture.make_root()
-    Path(root, "part.stl").write_text("solid p\nendsolid p\n", encoding="utf-8")
-    Path(root, "asm.step").write_text("ISO-10303-21;\n", encoding="utf-8")
-    for index in range(files):
-        directory = Path(root, "tmp", "renders", f"r{index // 100}")
-        directory.mkdir(parents=True, exist_ok=True)
-        (directory / f"frame{index}.png").write_bytes(b"x")
-    return root
-
-
-# Run by the child through ``-c``: any listing of the served tree BLOCKS until
-# the test creates the release file, so a launcher that walked the tree before
-# announcing would never announce at all. Listings elsewhere (the development
-# reloader walks cadgen's own package) are untouched.
-_BLOCKED_WALK_BOOTSTRAP = """
-import os, runpy, sys, time
-_served = os.path.realpath(os.getcwd())
-_release = os.environ["CADGEN_TEST_WALK_RELEASE"]
-_scandir = os.scandir
-def _blocking_scandir(path=".", *args, **kwargs):
-    if os.path.realpath(os.fspath(path)).startswith(_served):
-        while not os.path.exists(_release):
-            time.sleep(0.02)
-    return _scandir(path, *args, **kwargs)
-os.scandir = _blocking_scandir
-sys.argv[0] = "cadgen.viewer"
-runpy.run_module("cadgen.viewer", run_name="__main__", alter_sys=True)
-"""
-
-
-class AnnounceWaitsForNoWalk(LauncherFixture):
-    """The URL line is the readiness signal, and nothing about the served tree
-    may stand in front of it — not its size, not a slow filesystem.
-
-    Pinned with a walk that cannot finish at all until the test says so: the
-    JSON line must arrive while every listing of the served root is blocked,
-    and once the walk is released the first catalog request answers.
-    """
-
-    def test_the_json_line_arrives_while_every_walk_of_the_root_is_blocked(self) -> None:
-        root = _make_busy_root(self, files=200)
-        release = os.path.join(self._tmp.name, "release-walk")
-        child = subprocess.Popen(
-            [sys.executable, "-c", _BLOCKED_WALK_BOOTSTRAP, "--dist", self.make_dist(), "--json", "--ephemeral"],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            cwd=root,
-            env=self.env(CADGEN_TEST_WALK_RELEASE=release),
-        )
-        self._children.append(child)
-        announced = self.json_line(self.wait_for_url_line(child))
-        self.assertEqual(announced["action"], "started")
-        # Still blocked, and still answering: readiness is not the catalog.
-        with urllib.request.urlopen(f"{announced['url']}__cad/server", timeout=5) as response:
-            self.assertEqual(response.status, 200)
-
-        Path(release).write_text("go", encoding="utf-8")
-        with urllib.request.urlopen(f"{announced['url']}__cad/catalog", timeout=30) as response:
-            files = sorted(entry["rootRelativeFile"] for entry in json.loads(response.read())["entries"])
-        self.assertEqual(files, ["asm.step", "part.stl"])
-
-
 class Detach(LauncherFixture):
-    """``--detach``: the launch RETURNS once its server has announced itself.
-
-    Without it the launcher that starts a server IS that server and never
-    exits. An agent that ran the documented command as ``… --json 2>&1 | tail
-    -1`` waited on an EOF that never came, never saw the JSON line, and had to
-    find the URL with ``list`` hours later — while the server itself had been
-    answering since its first second.
-    """
-
-    def launch_detached(self, root: str, *extra: str) -> tuple[int, str, str]:
-        return self.run_to_exit(["--dist", self.dist, "--json", "--detach", *extra], cwd=root, timeout=60)
+    """``--detach``: the launch RETURNS once its server has announced itself, so ``… --json
+    2>&1 | tail -1`` ends; the server runs on in the background, writing to one log in the
+    state directory."""
 
     def setUp(self) -> None:
         super().setUp()
         self.dist = self.make_dist()
+        self.log = os.path.join(self.state, "viewer.log")
 
-    def registry_files(self) -> list[str]:
-        try:
-            return sorted(os.listdir(os.path.join(self.registry_home, registry.REGISTRY_DIR_NAME)))
-        except OSError:
-            return []
-
-    def registered(self) -> list[dict]:
-        code, stdout, stderr = self.run_to_exit(["list", "--json"])
-        self.assertEqual(code, 0, stderr)
-        return json.loads(stdout)
+    def detach(self, port: int, *extra: str) -> tuple[int, str, str]:
+        return self.run_to_exit(["--dist", self.dist, "--port", str(port), "--json", "--detach", *extra], timeout=60)
 
     def test_it_returns_with_one_json_line_and_leaves_a_reusable_server(self) -> None:
-        root = _make_busy_root(self)
-        code, stdout, stderr = self.launch_detached(root)
+        port = free_port()
+        code, stdout, stderr = self.detach(port)
         self.assertEqual(code, 0, stderr)
         lines = [line for line in stdout.splitlines() if line.strip()]
-        self.assertEqual(len(lines), 1, f"stdout must be the one JSON line: {stdout!r}")
-        announced = json.loads(lines[0])
-        self.assertEqual(announced["action"], "started")
-        port = announced["port"]
-
-        # The launcher is gone; the server it started answers as the pid the
-        # registry names, and was registered before the line was printed.
-        entries = self.registered()
-        self.assertEqual([entry["port"] for entry in entries], [port])
-        pid, log = entries[0]["pid"], entries[0]["log"]
-        self.adopt_server(port, pid)
-        with urllib.request.urlopen(f"{announced['url']}__cad/server", timeout=5) as response:
-            self.assertEqual(json.loads(response.read())["pid"], pid)
-        # Its output goes to the log its entry names, beside the entry, and the
-        # launcher said where.
-        self.assertIn(f"Running in the background (pid {pid}); its output goes to {log}.", stderr)
-        self.assertIn(os.path.basename(log), self.registry_files())
-        self.assertIn("Starting CAD Viewer at", Path(log).read_text(encoding="utf-8", errors="replace"))
+        self.assertEqual(lines, [json.dumps({"url": f"http://127.0.0.1:{port}/", "port": port, "action": "started"},
+                                            separators=(",", ":"))])
+        pid = self.adopt_server(port)["pid"]
+        self.assertIn(f"Running in the background (pid {pid}); its output goes to {self.log}.", stderr)
+        self.assertIn("Starting CAD Viewer at", Path(self.log).read_text(encoding="utf-8", errors="replace"))
 
         # A second detached launch reuses it, and returns just the same.
-        code, stdout, stderr = self.launch_detached(root)
-        self.assertEqual(code, 0, stderr)
-        self.assertEqual(
-            self.json_line(stdout), {"url": announced["url"], "port": port, "action": "reused"}
-        )
+        code, stdout, stderr = self.detach(port)
+        self.assertEqual((code, self.json_line(stdout)["action"]), (0, "reused"), stderr)
 
-        code, _, _ = self.run_to_exit(["stop", "--port", str(port)])
-        self.assertEqual(code, 0)
-        self.assertNotIn(f"viewer-{pid}.json", self.registry_files())
-        if os.name != "nt":  # Windows may hold a terminated process's handle a moment longer
-            self.assertNotIn(os.path.basename(log), self.registry_files(), "a clean stop removes its log")
+        code, stdout, _ = self.run_to_exit(["stop", "--port", str(port)])
+        self.assertEqual((code, stdout), (0, f"Stopped CAD Viewer on port {port} (pid {pid}).\n"))
+        self.assertFalse(port_answers(port))
 
     def test_a_server_that_dies_leaves_its_log_to_read(self) -> None:
-        code, stdout, stderr = self.launch_detached(self.make_root())
+        port = free_port()
+        code, _, stderr = self.detach(port)
         self.assertEqual(code, 0, stderr)
-        port = self.json_line(stdout)["port"]
-        (entry,) = self.registered()
-        self.adopt_server(port, entry["pid"])
-
-        # Killed outright, as a crash or an OOM kill ends it: no signal handler,
-        # no atexit. (SIGTERM is TerminateProcess on Windows.)
-        os.kill(entry["pid"], signal.SIGTERM if os.name == "nt" else signal.SIGKILL)
+        pid = self.adopt_server(port)["pid"]
+        # Killed outright, as a crash or an OOM kill ends it. (SIGTERM is TerminateProcess on Windows.)
+        os.kill(pid, signal.SIGTERM if os.name == "nt" else signal.SIGKILL)
         deadline = time.monotonic() + 15
-        while self.port_answers(port):
-            if time.monotonic() >= deadline:
-                self.fail(f"the killed server on port {port} still answers")
+        while port_answers(port):
+            self.assertLess(time.monotonic(), deadline, f"the killed server on port {port} still answers")
             time.sleep(0.05)
-
-        # `list` finds it gone and reaps its entry; the log is what is left to read.
-        self.assertEqual(self.registered(), [])
-        self.assertNotIn(f"viewer-{entry['pid']}.json", self.registry_files())
-        self.assertIn(os.path.basename(entry["log"]), self.registry_files())
-        self.assertIn(
-            f"Starting CAD Viewer at http://127.0.0.1:{port}/",
-            Path(entry["log"]).read_text(encoding="utf-8", errors="replace"),
-        )
+        self.assertIn(f"Starting CAD Viewer at http://127.0.0.1:{port}/",
+                      Path(self.log).read_text(encoding="utf-8", errors="replace"))
 
     @unittest.skipIf(os.name == "nt", "a POSIX shell pipeline")
     def test_piped_into_tail_it_ends_on_the_json_line(self) -> None:
-        # The exact shape that hung for seven hours, plus --detach.
-        command = " ".join(
-            [*(f"'{part}'" for part in LAUNCH), "--dist", f"'{self.dist}'", "--json", "--detach", "2>&1", "|", "tail", "-1"]
-        )
-        result = subprocess.run(
-            ["/bin/sh", "-c", command], cwd=self.make_root(), env=self.env(),
-            capture_output=True, text=True, timeout=60,
-        )
+        port = free_port()
+        command = " ".join([*(f"'{part}'" for part in LAUNCH), "--dist", f"'{self.dist}'", "--port", str(port),
+                            "--json", "--detach", "2>&1", "|", "tail", "-1"])
+        result = subprocess.run(["/bin/sh", "-c", command], cwd=self.make_root(), env=self.env(),
+                                capture_output=True, text=True, timeout=60)
         self.assertEqual(result.returncode, 0, result.stderr)
-        announced = json.loads(result.stdout.strip())
-        self.assertEqual(announced["action"], "started")
-        self.assertEqual([entry["port"] for entry in self.registered()], [announced["port"]])
+        self.assertEqual(json.loads(result.stdout.strip())["action"], "started")
+        self.adopt_server(port)
 
-    def test_a_child_that_cannot_start_relays_its_refusal_and_leaves_nothing(self) -> None:
-        import socket  # noqa: PLC0415
+    def test_a_child_that_cannot_start_relays_its_refusal(self) -> None:
+        port = self.hold_port()
+        code, stdout, stderr = self.detach(port)
+        self.assertEqual((code, stdout), (1, ""))
+        self.assertIn(f"Port {port} {TAKEN}", stderr)
 
-        holder = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.addCleanup(holder.close)
-        holder.bind(("127.0.0.1", 0))
-        holder.listen(1)
-        taken = holder.getsockname()[1]
-        code, stdout, stderr = self.launch_detached(self.make_root(), "--port", str(taken))
+    def test_a_launch_that_never_announces_exits_1(self) -> None:
+        # The launcher kills a child that has not announced by the deadline; its -9 must not
+        # become the launch's exit status (247).
+        stderr = io.StringIO()
+        with mock.patch.dict(os.environ, {"CADGEN_STATE_DIR": self.state}), \
+                mock.patch.object(main_module, "DETACH_READY_TIMEOUT_SECONDS", 0.0), \
+                contextlib.redirect_stderr(stderr):
+            code = main_module.launch_detached(["--port", "1"], as_json=True)
         self.assertEqual(code, 1)
-        self.assertEqual(stdout, "")
-        self.assertIn("already in use", stderr)
-        self.assertEqual(self.registry_files(), [], "a failed detach must not leave a log behind")
-
-    def test_it_refuses_to_detach_an_unregistered_server(self) -> None:
-        code, _, stderr = self.run_to_exit(["--detach", "--no-registry"], cwd=self.make_root())
-        self.assertEqual(code, 2)
-        self.assertIn("--detach cannot be combined with --no-registry", stderr)
+        self.assertIn("no announcement within 0s; stopped it", stderr.getvalue())
 
 
 class PrewarmsTheDaemon(LauncherFixture):
@@ -999,7 +678,7 @@ class PrewarmsTheDaemon(LauncherFixture):
                     retire_owned_daemon(daemon_env["CADGEN_DAEMON_SOCKET"])
 
         self.addCleanup(retire)  # before the fixture's directories go: the daemon stands in one
-        child = self.launch(["--dist", self.make_dist(), "--json", "--ephemeral"], cwd=self.make_root(), **daemon_env)
+        child = self.launch(["--dist", self.make_dist(), "--json", "--new"], **daemon_env)
         self.wait_for_url_line(child)
         with mock.patch.dict(os.environ, daemon_env):
             deadline = time.monotonic() + 60
@@ -1009,106 +688,36 @@ class PrewarmsTheDaemon(LauncherFixture):
                 time.sleep(0.1)
 
 
-class DetachedLogs(unittest.TestCase):
-    """Which detached-viewer logs survive, in process against a private registry.
+class Stop(LauncherFixture):
+    def test_stop_asks_the_viewer_on_its_port_to_exit(self) -> None:
+        port = free_port()
+        child = self.launch(["--dist", self.make_dist(), "--port", str(port), "--json"])
+        self.wait_for_url_line(child)
+        code, stdout, _ = self.run_to_exit(["stop", "--port", str(port)])
+        self.assertEqual((code, stdout), (0, f"Stopped CAD Viewer on port {port} (pid {child.pid}).\n"))
+        self.assertEqual(child.wait(timeout=5), 0, "the server exits cleanly")
+        code, _, stderr = self.run_to_exit(["stop", "--port", str(port)])
+        self.assertEqual((code, stderr), (1, f"No CAD Viewer is running on port {port}.\n"))
 
-    A log outlives its server so that a crash can be read afterwards: ``stop``
-    removes the log of the instance it stopped cleanly, and ``list``, ``stop``
-    and every launch's reuse lookup prune the logs of instances that ended any
-    other way once they are a day old or beyond the newest few.
-    """
-
-    def setUp(self) -> None:
-        tmp = tempfile.TemporaryDirectory()
-        self.addCleanup(tmp.cleanup)
-        self.home = tmp.name
-        saved = {key: os.environ.get(key) for key in ("TMPDIR", "TEMP", "TMP")}
-        for key in saved:
-            os.environ[key] = self.home
-        tempfile.tempdir = None  # registry_dir() re-reads the environment
-
-        def restore() -> None:
-            for key, value in saved.items():
-                if value is None:
-                    os.environ.pop(key, None)
-                else:
-                    os.environ[key] = value
-            tempfile.tempdir = None
-
-        self.addCleanup(restore)
-        self.now = time.time()
-
-    def log(self, age_seconds: float = 0.0) -> str:
-        descriptor, path = registry.create_log()
-        os.close(descriptor)
-        os.utime(path, (self.now - age_seconds, self.now - age_seconds))
-        return path
-
-    def test_an_exit_that_unregisters_keeps_the_log(self) -> None:
-        # What atexit, a signal handler and the reaping of a dead entry all do.
-        path = self.log()
-        self.assertTrue(registry.register(host="127.0.0.1", port=1, log=path))
-        registry.unregister()
-        self.assertFalse(os.path.exists(registry.entry_path(os.getpid())))
-        self.assertTrue(os.path.exists(path))
-
-    def test_gone_instances_keep_their_logs_for_a_day_and_only_the_newest(self) -> None:
-        quiet_but_live = self.log(age_seconds=7 * registry.LOG_KEEP_SECONDS)
-        expired = self.log(age_seconds=registry.LOG_KEEP_SECONDS + 60)
-        recent = [self.log(age_seconds=60 * minutes) for minutes in range(registry.LOG_KEEP_COUNT + 2)]
-        registry.prune_logs([{"pid": 1, "log": quiet_but_live}], now=self.now)
-        self.assertTrue(os.path.exists(quiet_but_live), "a live instance's log is never pruned")
-        self.assertFalse(os.path.exists(expired))
-        self.assertEqual(
-            [os.path.exists(path) for path in recent],
-            [True] * registry.LOG_KEEP_COUNT + [False, False],
-        )
-
-    def test_a_clean_stop_removes_only_a_viewer_log(self) -> None:
-        path = self.log()
-        registry.remove_log({"log": path})
-        self.assertFalse(os.path.exists(path))
-        stranger = Path(self.home, "notes.txt")
-        stranger.write_text("not a log", encoding="utf-8")
-        registry.remove_log({"log": str(stranger)})
-        self.assertTrue(stranger.exists())
-
-    def test_a_launch_that_never_announces_exits_1_and_leaves_no_log(self) -> None:
-        # The launcher kills a child that has not announced by the deadline;
-        # its -9 must not become the launch's exit status (247).
-        served = tempfile.mkdtemp(dir=self.home)
-        held = os.getcwd()
-        os.chdir(served)
-        self.addCleanup(os.chdir, held)
-        stderr = io.StringIO()
-        with mock.patch.object(main_module, "DETACH_READY_TIMEOUT_SECONDS", 0.0), \
-                contextlib.redirect_stderr(stderr):
-            code = main_module.launch_detached(["--port", "1"], as_json=True)
-        self.assertEqual(code, 1)
-        self.assertIn("no announcement within 0s; stopped it", stderr.getvalue())
-        self.assertEqual(
-            [name for name in os.listdir(registry.registry_dir()) if name.endswith(".log")], []
-        )
+    def test_stop_never_asks_another_program_or_another_users_viewer(self) -> None:
+        stranger = FakeViewer(user="someone-else" if os.name == "nt" else -1)
+        self.addCleanup(stranger.close)
+        code, _, stderr = self.run_to_exit(["stop", "--port", str(stranger.port)])
+        self.assertEqual((code, stderr), (1, f"The CAD Viewer on port {stranger.port} is another user's.\n"))
+        self.assertEqual(stranger.shutdowns, [])
+        port = self.hold_port()
+        code, _, stderr = self.run_to_exit(["stop", "--port", str(port)])
+        self.assertEqual((code, stderr), (1, f"No CAD Viewer is running on port {port}.\n"))
 
 
 class InterpreterFloor(unittest.TestCase):
-    """The floor is enforced at startup, not discovered on the first request.
-
-    macOS ships 3.9 as `python3` — the default the dev server spawns — and on
-    3.9 this server used to boot, print the URL contract, and then answer the
-    catalog with a raw ``realpath() got an unexpected keyword argument
-    'strict'``.
-    """
-
-    @classmethod
-    def setUpClass(cls) -> None:
-        cls.main_module = main_module
+    """The floor is enforced at startup, not discovered on the first request."""
 
     def test_the_interpreter_running_this_suite_is_accepted(self) -> None:
-        self.assertEqual(self.main_module.unsupported_python_message(), "")
+        self.assertEqual(main_module.unsupported_python_message(), "")
 
     def test_an_interpreter_below_the_floor_is_named_along_with_the_way_out(self) -> None:
-        message = self.main_module.unsupported_python_message(
+        message = main_module.unsupported_python_message(
             version_info=(3, 9, 6, "final", 0), executable="/usr/bin/python3"
         )
         self.assertIn("3.11", message, "the message must name the version required")
@@ -1117,149 +726,40 @@ class InterpreterFloor(unittest.TestCase):
         self.assertIn("VIEWER_PYTHON", message, "and how to point dev at another one")
 
     def test_the_guard_parses_and_fires_under_an_interpreter_that_predates_the_floor(self) -> None:
-        # The refusal is worthless if the module cannot be PARSED by the
-        # interpreter it is refusing: a SyntaxError anywhere above the guard
-        # replaces the friendly message with a traceback. Parse everything up to
-        # and including the guard against 3.9's grammar.
-        source = Path(self.main_module.__file__).read_text(encoding="utf-8")
+        # The refusal is worthless if the module cannot be PARSED by the interpreter it is
+        # refusing: parse everything up to and including the guard against 3.9's grammar.
+        source = Path(main_module.__file__).read_text(encoding="utf-8")
         guard, marker, _ = source.partition("_UNSUPPORTED_PYTHON = unsupported_python_message()")
         self.assertTrue(marker, "the startup guard moved; update this test")
         ast.parse(guard + marker, filename="main.py", feature_version=(3, 9))
-
-        # ...and check the guard itself trips for every version below the floor.
         for version in ((3, 9, 6), (3, 10, 14), (2, 7, 18)):
-            self.assertNotEqual(
-                self.main_module.unsupported_python_message(version_info=version), "", str(version)
-            )
-        self.assertEqual(
-            self.main_module.unsupported_python_message(version_info=(3, 11, 0)),
-            "",
-            "3.11 is the floor, not the first version above it",
-        )
+            self.assertNotEqual(main_module.unsupported_python_message(version_info=version), "", str(version))
+        self.assertEqual(main_module.unsupported_python_message(version_info=(3, 11, 0)), "")
 
 
-class Refusals(LauncherFixture):
-    @unittest.skipIf(os.name == "nt", "Windows refuses to delete a process's cwd")
-    def test_a_cwd_deleted_underfoot_refuses_before_binding(self) -> None:
-        # The served directory is the cwd, and a cwd always exists — unless it
-        # was deleted underneath the shell, in which case os.getcwd() raises.
-        # That must surface as a clean one-line refusal, not a traceback:
-        # booting anyway would answer every request with a 404 that looks like
-        # a missing model rather than a missing directory. In-process rather
-        # than a subprocess because Popen(cwd=...) refuses a missing directory
-        # in the PARENT, so a child can never be started inside one.
-        dist = self.make_dist()
-        doomed = tempfile.mkdtemp(dir=self._tmp.name, prefix="cad-doomed-")
-        held = os.getcwd()
-        os.chdir(doomed)
-        try:
-            os.rmdir(doomed)
-            stderr = io.StringIO()
-            with contextlib.redirect_stderr(stderr):
-                code = main_module.main(["--dist", dist, "--port", "3999"])
-        finally:
-            os.chdir(held)
-        self.assertEqual(code, 1)
-        self.assertIn("no longer exists", stderr.getvalue())
-
+class DistResolution(unittest.TestCase):
     def test_dist_resolution_falls_back_and_then_gives_up(self) -> None:
-        # Tested at the function, with the default location pinned through
-        # CADGEN_VIEWER_DIST so the checkout's own build cannot mask a case.
-        dist = self.make_dist()
-        fallback = self.make_dist()
-        empty = self.make_root()  # a directory with no index.html
-        previous = os.environ.get("CADGEN_VIEWER_DIST")
-        try:
-            os.environ["CADGEN_VIEWER_DIST"] = fallback
+        # The default location pinned through CADGEN_VIEWER_DIST, so the checkout's own build
+        # cannot mask a case.
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        dist, fallback, empty = (os.path.join(tmp.name, name) for name in ("dist", "fallback", "empty"))
+        for directory in (dist, fallback):
+            os.makedirs(directory)
+            Path(directory, "index.html").write_text("<html>viewer</html>", encoding="utf-8")
+        os.makedirs(empty)
+        with mock.patch.dict(os.environ, {"CADGEN_VIEWER_DIST": fallback}):
             self.assertEqual(main_module.resolve_dist_dir(dist), os.path.abspath(dist))
-            # realpath on both sides: the env resolver canonicalizes, and macOS
-            # spells the temp dir through a /var -> /private/var symlink.
-            self.assertEqual(
-                os.path.realpath(main_module.resolve_dist_dir(empty)),
-                os.path.realpath(fallback),
-                "an explicit --dist without index.html falls through to the default location",
-            )
-            os.environ["CADGEN_VIEWER_DIST"] = empty
+            # realpath on both sides: macOS spells the temp dir through /var -> /private/var.
+            self.assertEqual(os.path.realpath(main_module.resolve_dist_dir(empty)), os.path.realpath(fallback),
+                             "an explicit --dist without index.html falls through to the default location")
+        with mock.patch.dict(os.environ, {"CADGEN_VIEWER_DIST": empty}):
             self.assertEqual(main_module.resolve_dist_dir(""), "", "no index.html anywhere is no client")
-        finally:
-            if previous is None:
-                os.environ.pop("CADGEN_VIEWER_DIST", None)
-            else:
-                os.environ["CADGEN_VIEWER_DIST"] = previous
-
-
-class ListAndStop(LauncherFixture):
-    def test_list_reports_a_running_instance_and_stop_terminates_it(self) -> None:
-        dist = self.make_dist()
-        root = self.make_root()
-        child = self.launch(["--dist", dist, "--json"], cwd=root)
-        started = self.json_line(self.wait_for_url_line(child))
-        port = started["port"]
-
-        code, stdout, _ = self.run_to_exit(["list"])
-        self.assertEqual(code, 0)
-        self.assertIn("1 CAD Viewer running:", stdout)
-        # The launch smoke test greps for this exact two-space-separated token.
-        self.assertIn(f"port {port}", stdout)
-        # The registry records os.getcwd()'s spelling of the root, which is the
-        # PHYSICAL path on macOS (/var is a symlink to /private/var) and the 8.3
-        # short form on Windows when TEMP is spelled that way (RUNNER~1). Resolve
-        # both sides rather than pinning one platform's spelling.
-        serving = [
-            line.split("serving", 1)[1].strip()
-            for line in stdout.splitlines()
-            if line.strip().startswith("serving  ")
-        ]
-        self.assertEqual(len(serving), 1, stdout)
-        self.assertEqual(os.path.realpath(serving[0]), os.path.realpath(root))
-
-        code, stdout, _ = self.run_to_exit(["list", "--json"])
-        entries = json.loads(stdout.strip())
-        self.assertEqual(len(entries), 1)
-        self.assertEqual(entries[0]["port"], port)
-        self.assertEqual(entries[0]["pid"], child.pid)
-
-        code, stdout, _ = self.run_to_exit(["stop", "--port", str(port)])
-        self.assertEqual(code, 0)
-        self.assertIn("Stopped CAD Viewer", stdout)
-        # A BOUNDED wait, not an instantaneous poll. `stop` returns as soon as
-        # the port stops ANSWERING, and main.py deliberately allows itself up to
-        # another 0.5s to leave after that (the os._exit fallback, so an
-        # in-flight stream cannot outlive the stop budget). Reading "the socket
-        # closed" as "the process is reaped" made this assertion a coin flip
-        # that any millisecond-scale change elsewhere in the server could tip.
-        # What the contract promises is that it exits, promptly — so wait for
-        # that, well inside the 3s `stop` itself budgets.
-        try:
-            child.wait(timeout=5)
-        except subprocess.TimeoutExpired:  # pragma: no cover - the failure this guards
-            self.fail("the server process must have exited after stop")
-
-        code, stdout, _ = self.run_to_exit(["list"])
-        self.assertIn("No CAD Viewer is running.", stdout)
-
-    def test_stop_without_a_selector_exits_2(self) -> None:
-        code, _, stderr = self.run_to_exit(["stop"])
-        self.assertEqual(code, 2)
-        self.assertIn("Specify which viewer to stop", stderr)
-
-    def test_stop_for_an_unknown_port_exits_1(self) -> None:
-        code, _, stderr = self.run_to_exit(["stop", "--port", "3987"])
-        self.assertEqual(code, 1)
-        self.assertIn("No running CAD Viewer for port 3987.", stderr)
-
-    def test_list_with_no_instances(self) -> None:
-        code, stdout, _ = self.run_to_exit(["list"])
-        self.assertEqual(code, 0)
-        self.assertEqual(stdout, "No CAD Viewer is running.\n")
 
 
 class ArgumentGrammar(unittest.TestCase):
-    """The parse rules, in-process — no launch needed to pin argument handling.
-
-    argparse now, with the launcher's refusal shape kept: an unknown argument is
-    a refusal naming the FIRST unknown token, and every refusal exits 2.
-    """
+    """The parse rules, in-process: an unknown argument is a refusal naming the FIRST unknown
+    token, and every refusal exits 2."""
 
     @staticmethod
     def parse(argv: list[str]) -> dict:
@@ -1278,131 +778,64 @@ class ArgumentGrammar(unittest.TestCase):
         self.assertIn("unknown argument: --dir", message)
         self.assertNotIn("/tmp", message.splitlines()[0])
 
-    def test_port_zero_and_garbage_are_refused_not_defaulted(self) -> None:
-        # The old hand-rolled parser read `--port 0` and `--port abc` as a
-        # STRICT 3245 — a typo silently changed what the launcher did. Both are
-        # refusals now; --ephemeral is the spelling for "any free port".
+    def test_port_zero_garbage_and_out_of_range_are_refused_not_defaulted(self) -> None:
+        # --new is the spelling for "any free port".
         self.assertIn("port out of range", self.refuses(["--port", "0"]))
         self.assertIn("not a port number", self.refuses(["--port", "abc"]))
-
-    def test_an_out_of_range_port_is_refused(self) -> None:
         for value in ("70000", "-1"):
             self.assertIn("port out of range", self.refuses(["--port", value]), value)
-
-    def test_a_valueless_trailing_port_is_refused(self) -> None:
         self.assertIn("--port", self.refuses(["--port"]))
 
-    def test_port_and_ephemeral_are_mutually_exclusive(self) -> None:
-        # One asks for THIS port, the other for ANY port; both at once is a
-        # contradiction the old parser resolved silently in --ephemeral's favour.
-        self.assertIn("not allowed with", self.refuses(["--port", "3999", "--ephemeral"]))
+    def test_port_and_new_are_mutually_exclusive(self) -> None:
+        self.assertIn("not allowed with", self.refuses(["--port", "3999", "--new"]))
 
-    def test_an_explicit_port_is_strict_and_the_default_is_not(self) -> None:
-        explicit = self.parse(["--port", "3999"])
-        self.assertEqual(explicit["port"], 3999)
-        self.assertTrue(explicit["port_explicit"])
-        default = self.parse([])
-        self.assertEqual(default["port"], 3245)
-        self.assertFalse(default["port_explicit"])
+    def test_the_port_is_3245_unless_named_and_new_binds_any(self) -> None:
+        self.assertEqual((self.parse([])["port"], self.parse([])["new"]), (3245, False))
+        self.assertEqual(self.parse(["--port", "3999"])["port"], 3999)
+        self.assertEqual((self.parse(["--new"])["port"], self.parse(["--new"])["new"]), (0, True))
 
-    def test_the_three_dev_flags_default_off_and_are_independent(self) -> None:
+    def test_the_dev_flags_default_off_and_are_independent(self) -> None:
         defaults = self.parse([])
-        for flag in ("ephemeral", "no_registry", "api_only"):
-            self.assertFalse(defaults[flag], flag)
-        for argument, key in (
-            ("--ephemeral", "ephemeral"),
-            ("--no-registry", "no_registry"),
-            ("--api-only", "api_only"),
-        ):
-            args = self.parse([argument])
-            self.assertTrue(args[key], argument)
-            others = {"ephemeral", "no_registry", "api_only"} - {key}
-            for other in others:
-                self.assertFalse(args[other], f"{argument} must not imply --{other}")
+        self.assertEqual((defaults["new"], defaults["api_only"]), (False, False))
+        self.assertEqual((self.parse(["--new"])["api_only"], self.parse(["--api-only"])["new"]), (False, False))
 
-    def test_repeated_flags_take_the_last_value(self) -> None:
+    def test_repeated_flags_take_the_last_value_and_nothing_abbreviates(self) -> None:
         self.assertEqual(self.parse(["--host", "a", "--host", "b"])["host"], "b")
-
-    def test_no_abbreviations(self) -> None:
-        # `--ap` for --api-only is exactly the kind of accidental match a typo
-        # becomes. argparse abbreviates by default; the launcher must not.
+        # `--ap` for --api-only is exactly the kind of accidental match a typo becomes.
         self.assertIn("unknown argument: --ap", self.refuses(["--ap"]))
-
-    def test_the_served_directory_is_the_cwd_with_no_special_cases(self) -> None:
-        # No flag, no environment variable: the cwd IS the served directory,
-        # even inside the package itself — serving the Viewer's own directory
-        # is legitimate, and refusing it would be a special case to explain.
-        for cwd in (str(PACKAGE_DIR), str(PACKAGE_DIR.parent)):
-            with self.subTest(cwd=cwd):
-                held = os.getcwd()
-                os.chdir(cwd)
-                try:
-                    self.assertEqual(main_module.served_directory(), cwd)
-                finally:
-                    os.chdir(held)
 
 
 class ArgumentSurface(unittest.TestCase):
-    """A launcher that answers --help by starting a server reads as broken, and
-    a tolerated typo silently changes what it serves.
-
-    Both were real: `--help` used to fall through the parser and boot an
-    instance, and a misspelled flag started a viewer on the invocation directory
-    and served an empty catalog while looking fine.
-    """
+    """A launcher that answers --help by starting a server reads as broken, and a tolerated
+    typo silently changes what it does."""
 
     def _run(self, *argv: str) -> subprocess.CompletedProcess:
-        return subprocess.run(
-            [*LAUNCH, *argv],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
+        return subprocess.run([*LAUNCH, *argv], capture_output=True, text=True, timeout=30)
 
     def test_help_answers_on_stdout_and_starts_nothing(self) -> None:
         result = self._run("--help")
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("usage: python -m cadgen.viewer", result.stdout)
-        self.assertIn("--host", result.stdout)
-        self.assertIn("python -m cadgen.viewer list", result.stdout, "the manager verbs are in the usage")
-        self.assertIn("python -m cadgen.viewer stop", result.stdout)
-        self.assertNotIn("--root", result.stdout, "the launcher has no directory flag")
+        self.assertIn("--new", result.stdout)
+        self.assertIn("python -m cadgen.viewer stop [--port N]", result.stdout)
         self.assertEqual(result.stderr, "")
 
     def test_the_front_door_names_itself_in_help(self) -> None:
-        # Through `cadgen viewer` the same parser says "cadgen viewer", so the
-        # usage a user reads matches the command they typed.
-        result = subprocess.run(
-            [sys.executable, "-m", "cadgen.cli", "viewer", "--help"],
-            capture_output=True,
-            text=True,
-            timeout=30,
-        )
+        result = subprocess.run([sys.executable, "-m", "cadgen.cli", "viewer", "--help"],
+                                capture_output=True, text=True, timeout=30)
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("usage: cadgen viewer", result.stdout)
-        self.assertIn("cadgen viewer list", result.stdout)
+        self.assertIn("cadgen viewer stop", result.stdout)
 
-    def test_an_unknown_argument_is_refused_not_ignored(self) -> None:
-        result = self._run("--dir", "/tmp")
-        self.assertEqual(result.returncode, 2)
-        # The FIRST unknown token, not the value that trailed it.
-        self.assertIn("unknown argument: --dir", result.stderr)
-        self.assertNotIn("/tmp", result.stderr.splitlines()[0])
-
-    def test_the_retired_root_flag_is_refused_not_silently_dropped(self) -> None:
-        # The served directory is the cwd now. An old-style `--root <dir>`
-        # invocation must refuse rather than boot a viewer serving the wrong
-        # directory (the cwd) while looking successful.
-        result = self._run("--root", "/tmp")
-        self.assertEqual(result.returncode, 2)
-        self.assertIn("unknown argument: --root", result.stderr)
-
-    def test_a_manager_verb_after_a_flag_is_a_serve_refusal(self) -> None:
-        # Only argv[0] selects list/stop: `--json list` is a serve invocation
-        # with an unknown argument, not a list.
-        result = self._run("--json", "list")
-        self.assertEqual(result.returncode, 2)
-        self.assertIn("unknown argument: list", result.stderr)
+    def test_unknown_arguments_are_refused_not_ignored(self) -> None:
+        # The FIRST unknown token, not the value that trailed it; and `--json stop` is a serve
+        # invocation: only argv[0] selects `stop`.
+        for argv, unknown in ((("--dir", "/tmp"), "--dir"), (("--json", "stop"), "stop")):
+            with self.subTest(argv=argv):
+                result = self._run(*argv)
+                self.assertEqual(result.returncode, 2)
+                self.assertIn(f"unknown argument: {unknown}", result.stderr)
+                self.assertNotIn("/tmp", result.stderr.splitlines()[0])
 
 
 if __name__ == "__main__":

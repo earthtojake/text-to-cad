@@ -58,8 +58,7 @@ no quality effect or resize observer may resize the backing buffer directly. A v
 resize DRAWS that frame instead, synchronously inside its ResizeObserver callback (after
 layout, before paint): the canvas is sized 100% by CSS, and a frame requested from there
 with `requestAnimationFrame` would land a frame late, painting the old picture stretched
-over the new box whenever the viewer changes width in one step (the file tree opening, a
-window snap). That synchronous frame replaces any queued one, so a drag still draws once
+over the new box whenever the viewer changes width in one step (a window snap). That synchronous frame replaces any queued one, so a drag still draws once
 per frame, and an idle viewer draws nothing. While the gate holds, the draw is skipped
 like any other, the buffer keeps its size, and the held picture waits for the frame that
 releases it (`kit/viewport/ViewportResize.browser.test.mjs`). Presentation resumes after
@@ -76,8 +75,8 @@ outside FileViewer retain their own scene setup lifecycle.
 ## Status placement
 
 `kit/status/ViewUpdateStatus.jsx` only takes `status`, `onRetry`, and
-`className`. It has no scene/store knowledge. RendererShell portals it into FileViewer’s navbar status slot, immediately after
-the filename and its menu, without changing scheduling. It appears after 150ms with “Updating view…” (or
+`className`. It has no scene/store knowledge. RendererShell draws it centred at the top of the viewport,
+level with the tool strip, without changing scheduling. It appears after 150ms with “Updating view…” (or
 “Preparing section view…” for Clip), stays nonmodal, and never disables controls.
 Fast changes produce no spinner. Failures show a retry action.
 

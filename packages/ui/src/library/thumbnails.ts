@@ -14,7 +14,7 @@ export const THUMBNAIL_SIZE = Object.freeze({ width: 480, height: 360 });
  * Once per revision of a file per mounted view, so a model rebuilt while it is open is pictured
  * again once its new revision is drawn; a failure is left alone, since a picture is a nicety.
  *
- * `file` is the root-relative path of the file on screen, as the viewer names it, and `revision`
+ * `file` is the absolute path of the file on screen, as the viewer names it, and `revision`
  * the catalog's revision of it: a picture of any other file — the view moved on before it
  * settled — is never saved as this one's.
  */

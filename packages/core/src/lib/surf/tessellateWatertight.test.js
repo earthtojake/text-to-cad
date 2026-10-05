@@ -143,6 +143,19 @@ for (const fixture of ["sun_gear", "mixed"]) {
 // weld folded that fan into the arc's own vertices: each end came out half
 // folded over itself (edges on three triangles, the volume a third short), what
 // the hypercar's tub showed as hatched streaks on its rear bulkhead in Render.
+//
+// teacup is issue #555's part, the build123d Teacup Example (Apache-2.0): a
+// revolved bowl with every edge filleted and a handle swept from a rounded
+// rectangle. Three faults, at the default tolerances and at the reporter's fine
+// ones. The bowl's fillet rings are bounded by full circles lying on the ends of
+// their uv boxes, so earcut built slivers of three consecutive trim points there
+// and vertexId snapped them exactly collinear; with no sign the sliver flip
+// skipped them, refinement split them into stacks along the trim, and pinning
+// the stacks to the model edge folded each ring over itself. The handle's flat
+// sides are 60 um wide between two curved edges sampled to 0.25 mm, so those
+// planar strips' loops crossed themselves and earcut left them open along the
+// handle. And at chord 4e-4 the rim fillet's refinement rows met in Float32
+// beside a grid line: triangles with two corners on one written point.
 function meshDefects(name, options) {
   const { index, floats } = loadFixture(name);
   const component = tessellateComponent(index, floats, { ...options, collectBoundaryDebug: true });
@@ -187,7 +200,7 @@ function meshDefects(name, options) {
   };
 }
 
-for (const [fixture, chordTolerance] of [
+for (const [fixture, chordTolerance, angleTolerance] of [
   ["sun_gear", undefined],
   ["sun_gear", 2e-2],
   ["mixed", undefined],
@@ -198,10 +211,16 @@ for (const [fixture, chordTolerance] of [
   ["curved_wall_hole", 1e-2],
   ["curved_wall_hole", 2e-2],
   ["half_disc", undefined],
+  ["teacup", undefined],
+  ["teacup", 4e-4, 0.15],
 ]) {
-  const label = chordTolerance === undefined ? "default tolerance" : `chord ${chordTolerance}`;
+  const label = chordTolerance === undefined ? "default tolerance"
+    : `chord ${chordTolerance}${angleTolerance === undefined ? "" : ` angle ${angleTolerance}`}`;
   test(`${fixture} @ ${label}: no degenerate or duplicated triangles, every edge shared by two`, () => {
-    const defects = meshDefects(fixture, chordTolerance === undefined ? {} : { chordTolerance });
+    const defects = meshDefects(fixture, {
+      ...(chordTolerance === undefined ? {} : { chordTolerance }),
+      ...(angleTolerance === undefined ? {} : { angleTolerance }),
+    });
     assert.ok(defects.triangles > 0, "the fixture tessellates to something");
     assert.equal(defects.degenerate, 0, "a zero-area triangle carries no surface and must not be emitted");
     assert.equal(defects.duplicated, 0, "no triangle may be emitted more than once");

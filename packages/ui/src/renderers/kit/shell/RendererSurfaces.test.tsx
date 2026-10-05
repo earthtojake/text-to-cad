@@ -33,14 +33,6 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); viewport.props = null; });
 
-// The navbar FileViewer hands a renderer: where the view's controls go.
-function navbarSlot() {
-  const slot = document.createElement('div');
-  slot.setAttribute('data-test-navbar', '');
-  document.body.append(slot);
-  return slot;
-}
-afterEach(() => document.querySelectorAll('[data-test-navbar]').forEach(slot => slot.remove()));
 function mount(host = testHost(), state?: unknown) {
   const save = vi.fn();
   const navigation = vi.fn();
@@ -48,8 +40,8 @@ function mount(host = testHost(), state?: unknown) {
   const listeners = new Set<() => void>();
   const preferences = { getSnapshot: () => settings, subscribe: (listener: () => void) => { listeners.add(listener); return () => listeners.delete(listener); },
     update: (patch: any) => { settings = { ...settings, ...patch }; listeners.forEach(listener => listener()); } };
-  const props = { source: { id: 'one', rootName: 'one' }, file: { path: 'one.harness', name: 'one.harness', kind: 'file' }, document: null,
-    openPanel: '', panelSlot: null, navbarSlot: navbarSlot(), onPanelOpen() {}, onReady() {}, onOpenFile() {}, appearance: { colorScheme: 'light' },
+  const props = { source: { id: 'one' }, file: { path: '/models/one.harness', name: 'one.harness', kind: 'file' }, document: null,
+    onReady() {}, onOpenFile() {}, appearance: { colorScheme: 'light' },
     state, onStateChange: save, onNavigationActionsChange: navigation, reload() {}, data: { services: { preferences } } };
   const view = render(<ViewerHostContext.Provider value={host}><HarnessRenderer {...(props as any)} /></ViewerHostContext.Provider>);
   const canvas = view.container.querySelector('[data-stand-in-viewport] > canvas') as HTMLCanvasElement;

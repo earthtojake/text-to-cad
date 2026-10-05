@@ -22,8 +22,6 @@ class ViewerFeaturesTest(unittest.TestCase):
     def setUp(self) -> None:
         self.tmp = Path(tempfile.mkdtemp())
         self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
-        self.root = self.tmp / "models"
-        self.root.mkdir()
         environment = mock.patch.dict(os.environ, {"CADGEN_STATE_DIR": str(self.tmp / "state")})
         environment.start()
         self.addCleanup(environment.stop)
@@ -31,7 +29,7 @@ class ViewerFeaturesTest(unittest.TestCase):
         self.port = self.serve()
 
     def serve(self) -> int:
-        server = handler_module.serve(create_cad_app(root=str(self.root), host="127.0.0.1", port=0), "127.0.0.1", 0)
+        server = handler_module.serve(create_cad_app(host="127.0.0.1", port=0), "127.0.0.1", 0)
         thread = threading.Thread(target=server.serve_forever, daemon=True)
         thread.start()
         self.addCleanup(thread.join, 5)

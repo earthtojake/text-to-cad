@@ -30,9 +30,12 @@ as a leak hedge; its model binds a fresh worker on the next request.
 
 Workers read frames on a thread so every read honours a timeout: a worker that
 hangs before announcing itself, or mid-job, is reported instead of blocking its
-caller forever. Mid-job, "hangs" means neither heartbeat nor CPU: a running job
-beats (``worker._heartbeat``), and a worker whose heartbeat a GIL-holding native
-call starves is still computing, which its CPU clock shows (``Worker.frames``).
+caller forever. Either way "hangs" means silence with no CPU progress. Mid-job, a
+running job beats (``worker._heartbeat``), and a worker whose heartbeat a
+GIL-holding native call starves is still computing, which its CPU clock shows
+(``Worker.frames``). Starting, a worker imports the kernel, a few CPU seconds that
+a busy machine spreads over minutes; it is waited for while its clock moves
+(``Worker._announced``).
 """
 
 from __future__ import annotations
@@ -55,6 +58,8 @@ DEFAULT_SPARES = 2
 DEFAULT_RECYCLE_AFTER = 1000
 DEFAULT_IDLE_UNBIND_SECONDS = 600.0
 BORROWED_SURPLUS_IDLE_SECONDS = 2.0
+# A starting worker that has not announced itself after this long has its CPU clock
+# read, and another window begins while the clock moves (``Worker._announced``).
 SPAWN_TIMEOUT_SECONDS = 120.0
 # A silent worker whose CPU clock advanced at least this much across the silent window
 # is computing inside a native call that holds the GIL, not hung. A stopped process or
@@ -245,7 +250,13 @@ class Worker:
         # as a fresh request; nested SUBMITS ignore this on purpose (client.run_nested).
         env["CADGEN_DAEMON_CHILD"] = "1"
         self.proc = subprocess.Popen(
-            [sys.executable, "-m", "cadgen.daemon.worker"],
+            # -P: `python -m` would put its working directory, the temp folder below,
+            # first on the import path. Whatever other programs leave there would then
+            # shadow a build's imports (STORE.md §9), and each import that misses it
+            # lists that folder again once anything in it changes: tens of listings of a
+            # folder of tens of thousands of entries per start, every start contending
+            # for the same folder, so a burst of starts never finished importing.
+            [sys.executable, "-P", "-m", "cadgen.daemon.worker"],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=None,
             # Spares can remain idle before their first request.  Start them in the
             # same stable directory worker._park uses between jobs so they never pin
@@ -265,15 +276,43 @@ class Worker:
         self._frames: queue.Queue = queue.Queue()
         self._reader = threading.Thread(target=self._pump, name="cadgen-worker-frames", daemon=True)
         self._reader.start()
-        ready = self._read_frame(timeout=SPAWN_TIMEOUT_SECONDS)
-        if ready is _TIMED_OUT:
-            ready = None
-        if not ready or "ready" not in ready:
+        self.pid = self._announced()
+
+    def _announced(self) -> int:
+        """The pid the worker announces once it has imported what its jobs need.
+
+        Judged as a running job is (``frames``): silence is a hang only when the CPU
+        clock stands still too. Importing the kernel takes a few CPU seconds, and a
+        machine whose cores are busy, or that is starting many workers at once, spreads
+        them over minutes, so a fixed wait failed starts that were still importing. After
+        each silent window the process's clock is read from outside; a start that used
+        less than ``BUSY_CPU_SECONDS`` in it (stopped, deadlocked, or on a platform that
+        will not say) is killed. A process that ends first is reported by how it ended;
+        what it printed is in the daemon's log, where its stderr goes.
+        """
+        cpu_seen = 0.0  # a new process has used no CPU
+        while True:
+            frame = self._read_frame(timeout=SPAWN_TIMEOUT_SECONDS)
+            if frame is not _TIMED_OUT:
+                break
+            cpu_now = process_cpu_seconds(self.proc.pid)
+            if cpu_now is not None and cpu_now - cpu_seen >= BUSY_CPU_SECONDS:
+                cpu_seen = cpu_now
+                continue
             self.kill()
             raise WorkerGone(
-                "worker did not announce itself" + ("" if ready else f" within {SPAWN_TIMEOUT_SECONDS:.0f}s")
+                f"worker {self.proc.pid} did not announce itself: it was silent for "
+                f"{SPAWN_TIMEOUT_SECONDS:.0f}s with no CPU progress while starting, and was killed"
             )
-        self.pid = int(ready["ready"])
+        if isinstance(frame, dict) and "ready" in frame:
+            return int(frame["ready"])
+        status = self._exit_status() if frame is None else None
+        self.kill()
+        if frame is None:
+            raise WorkerGone(f"worker {self.proc.pid} {describe_exit(status)} before announcing itself",
+                             exit_status=status)
+        said = frame.get("data", frame) if isinstance(frame, dict) else frame
+        raise WorkerGone(f"worker {self.proc.pid} wrote {str(said).strip()[:200]!r} before announcing itself")
 
     def _pump(self) -> None:
         stream = self.proc.stdout
@@ -476,11 +515,13 @@ class Pool:
 
     # --- acquire / release -------------------------------------------------------
 
-    def acquire(self, model: str = "", *, dependency: bool = False) -> Worker:
+    def acquire(self, model: str = "", *, dependency: bool = False, on_start=None) -> Worker:
         """A worker for ``model``, or an explicit memory-admission failure.
 
         ``model`` is the script path (the routing key); "" means a request with
-        no model subject, which borrows a spare without binding it.
+        no model subject, which borrows a spare without binding it. ``on_start``
+        is called when no warm worker can take the request and one is started for
+        it, before that wait.
         """
         with self._cv:
             if self._closed:
@@ -518,6 +559,8 @@ class Pool:
                 self._active_pending += 1
         if worker is None:
             try:
+                if on_start is not None:
+                    on_start()
                 worker = self._spawn()
             except BaseException:
                 with self._cv:
