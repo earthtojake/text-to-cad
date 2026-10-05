@@ -29,7 +29,7 @@ const SOURCES = new Set(['store', 'manual']);
 const SCHEMAS = new Map([
   // cadgen 0.7.7 to 0.7.11: how it was installed, which names no channel. Kept as `source`.
   [1, { field: 'source', origin: batch => ({ channel: 'unknown', source: oneOf(batch.source, SOURCES, 'source') }) }],
-  // cadgen 0.8.0 on: the channel its plugin's startup command named.
+  // cadgen 0.7.12 on: the channel its plugin's startup command named.
   [2, { field: 'channel', origin: batch => ({ channel: oneOf(batch.channel, CHANNELS, 'channel'), source: null }) }],
 ]);
 const PLATFORMS = new Set(['darwin', 'linux', 'win32', 'other']);

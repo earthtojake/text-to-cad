@@ -25,7 +25,7 @@ create table if not exists events (
 );
 alter table events add column if not exists file text;
 alter table events add column if not exists kind text;
--- Schema 2 (cadgen 0.8.0) names where an install came from. Schema 1's rows name none, and keep how
+-- Schema 2 (cadgen 0.7.12) names where an install came from. Schema 1's rows name none, and keep how
 -- the install was made in `source`, which schema 2 leaves empty.
 alter table events add column if not exists channel text not null default 'unknown';
 alter table events alter column source drop not null;
