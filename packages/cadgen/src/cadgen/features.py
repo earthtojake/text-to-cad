@@ -1,8 +1,8 @@
-"""The CAD views' features a person can turn off: Settings' Features section, in both CAD apps
-(``cadgen viewer``'s ``/__cad/features`` and ``cadgen mcp``'s ``cad_features``). Each feature is
-on until the person turns it off, and their choice is kept as the ``features`` section of their
-settings (``cadgen/settings.py``: ``settings.json`` in the state directory), so it is one choice
-for every CAD view -- the home and the viewer, every tab, both apps -- across reloads and
+"""The CAD views' features a person can turn off: the feature rows of the app menu (the logo over any
+open model), in both CAD apps (the viewer's ``/__cad/features``, which ``cadgen mcp``'s views reach
+through its tunnel). Each feature is on until the person turns it off, and their choice is kept as
+the ``features`` section of their settings (``cadgen/settings.py``: ``settings.json`` in the state
+directory), so it is one choice for every CAD view -- every tab, both apps -- across reloads and
 restarts. A feature is named as the page names it (``quickEdit``), and a new one is a line of
 ``DEFAULTS``.
 """

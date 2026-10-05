@@ -115,8 +115,8 @@ sys.addaudithook(audit)
         original_popen = subprocess.Popen
 
         def start(argv, **kwargs):
-            if argv == [sys.executable, "-m", "cadgen.daemon.worker"]:
-                process = original_popen([sys.executable, "-c", child_prelude + "\nfrom cadgen.daemon import worker\nraise SystemExit(worker.serve())\n"], **kwargs)
+            if argv[-2:] == ["-m", "cadgen.daemon.worker"]:
+                process = original_popen([*argv[:-2], "-c", child_prelude + "\nfrom cadgen.daemon import worker\nraise SystemExit(worker.serve())\n"], **kwargs)
                 processes.append(process)
                 return process
             return original_popen(argv, **kwargs)
@@ -228,7 +228,7 @@ raise SystemExit(artifacts._main())
         original_popen, processes = subprocess.Popen, []
 
         def start(argv, **kwargs):
-            self.assertEqual(argv, [sys.executable, "-m", "cadgen.daemon.artifacts"])
+            self.assertEqual(argv, [sys.executable, "-P", "-m", "cadgen.daemon.artifacts"])
             process = original_popen([sys.executable, "-c", script], **kwargs)
             processes.append(process)
             self.addCleanup(self.stop_process, process)

@@ -18,22 +18,14 @@ prefers reduced motion, when the document is hidden, or when the icon's
 `environment.reducedMotion` (the desktop's Reduce motion setting). No additional
 WebGL context or animation loop runs in the application.
 
-To regenerate, run `npm ci` at the repository root, then install Chromium for Playwright and
-the repo's Python (`.venv`; its Pillow encodes AVIF and WebP). Then, from the repository root:
-
-```sh
-git fetch upstream pull/374/head
-node scripts/brand/render-loading-icon.mjs
-```
-
-The script reads the pinned Git source, so later changes to the PR do not
-silently change the brand. Normal viewer and desktop builds consume these
-checked-in images and need neither Git access nor the rendering tools.
+Both images were rendered once from that pinned source commit, so later changes
+to the PR do not change the brand. Viewer and desktop builds consume these
+checked-in images and need neither Git access nor rendering tools.
 
 # Wordmarks
 
-`logo-texttocad.svg` (the home page's wordmark) and `logo-cad.svg` (the version
-menu's) are copies of the docs site's `public/brand/logo-texttocad.svg` and
-`public/brand/logo-cad.svg`, which `scripts/brand/generate-logos.mjs` draws, so
+`logo-texttocad.svg` (the home page's wordmark), `logo-cad.svg` (the version
+menu's) and `logo-c.svg` (the navbar's home button) are copies of the docs site's
+`public/brand/` marks of the same names, which `scripts/brand/generate-logos.mjs` draws, so
 every app draws the same marks from this package. Refresh them with
 `node scripts/brand/export-logos.mjs` rather than editing them by hand.

@@ -314,10 +314,10 @@ const ShellViewport = forwardRef(function ShellViewport({
   // A camera TRANSITION in flight is a deliberate move being made right now (a view-cube
   // face, entering a plan view): re-fitting mid-flight would read the half-turned direction
   // as "the direction it looks now" and cancel the move. So the open fit waits.
-  // Opening SETTLES: after the fit, the panel column takes its width and the file's
-  // projection arrives, each a beat later. That stretch is the viewer's to re-fit in; once it
-  // has been quiet for OPEN_FIT_SETTLE_MS, opening is over, and a resize rescales and a
-  // projection change converts, as they always have for a view a person is looking at.
+  // Opening SETTLES: after the fit, the file's projection arrives a beat later. That stretch
+  // is the viewer's to re-fit in; once it has been quiet for OPEN_FIT_SETTLE_MS, opening is
+  // over, and a resize rescales and a projection change converts, as they always have for a
+  // view a person is looking at.
   const armOpenFit = useCallback((runtime) => {
     runtime.openFitPending = true;
     clearTimeout(runtime.openFitTimer);

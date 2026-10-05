@@ -1,3 +1,4 @@
+import { entryHasMesh } from "@text-to-cad/core/lib/entryAssets.js";
 import { failedStepArtifact, stepArtifactHasRenderableGlb, stepArtifactStatusMessage } from "./stepArtifactStatus.js";
 import { fileKey } from "./entryPaths.js";
 import { failureAlert, isViewerServiceFailure, noGeometryAlert } from "../../kit/status/loadAlerts.js";
@@ -49,6 +50,19 @@ export function buildViewerMeshAlert(entry, hasMeshData, loadError, artifact = n
 
   if (!hasMeshData) {
     return noGeometryAlert(fileRef);
+  }
+
+  if (!partial && artifact?.settled === true && artifact.status === "compiled" && !entryHasMesh(entry)) {
+    // The model on screen is the previous version, kept while the rewritten file was built, and the
+    // build ended with the server calling the file compiled over a catalog row that names no
+    // geometry (`artifactEndsLoad`): an update that failed, over a model that survives it.
+    return {
+      ...noGeometryAlert(fileRef),
+      blocking: false,
+      summary: "Update failed",
+      title: "Couldn’t update the model",
+      message: `The latest update of “${fileRef}” produced no visible geometry. You’re still viewing the previous version.`
+    };
   }
 
   return null;

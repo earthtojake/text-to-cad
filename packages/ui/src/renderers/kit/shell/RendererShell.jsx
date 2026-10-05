@@ -1,13 +1,10 @@
-import { VIEWPORT_INSET_PX, VIEWPORT_STACK_BOTTOM, VIEWPORT_TOP_BAR_PX } from "./viewportLayout.js";
+import { VIEWPORT_ACTION_HEIGHT_PX, VIEWPORT_CORNER_INSET_PX, VIEWPORT_CUBE_BOTTOM_PX, VIEWPORT_CUBE_SIZE, VIEWPORT_INSET_PX, VIEWPORT_STACK_BOTTOM, VIEWPORT_TOP_BAR_PX } from "./viewportLayout.js";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { createPortal } from "react-dom";
-import { Maximize2, X } from "lucide-react";
+import { Play, X } from "lucide-react";
 import { Button } from "@text-to-cad/ui/primitives/button";
 import { TooltipHint } from "@text-to-cad/ui/primitives/tooltip";
-import { cn } from "@text-to-cad/ui/utils";
 import PreviewChrome from "../tools/PreviewChrome.jsx";
 import { useViewerMobile } from "../../../file-viewer/responsive.js";
-import { FILE_PANEL_TREE } from "../../../file-viewer/navigation/panels.js";
 import ViewerAlertCard, { alertDismissible, useAlertDismissal } from "../status/ViewerAlertCard.jsx";
 import { MODEL_UPDATE_STATUS, ViewUpdateStatus } from "../status/ViewUpdateStatus.jsx";
 import ViewerLoadingOverlay from "../status/ViewerLoadingOverlay.js";
@@ -33,10 +30,15 @@ import ViewportContextMenu from "./ViewportContextMenu.jsx";
 const INSET = `${VIEWPORT_INSET_PX}px`;
 // The strip and its stack stop short of Quick Edit's button at the top-right.
 const TOOLBAR_POSITION = Object.freeze({ top: INSET, left: INSET, bottom: VIEWPORT_STACK_BOTTOM, maxWidth: "calc(100% - 3.5rem)" });
+// A 3D view's controls, on top of the cube in the bottom-left corner and as wide as it.
+const VIEW_CONTROLS_POSITION = Object.freeze({
+  bottom: `calc(${VIEWPORT_CUBE_SIZE} + ${VIEWPORT_CUBE_BOTTOM_PX}px)`, left: VIEWPORT_CORNER_INSET_PX,
+  width: VIEWPORT_CUBE_SIZE, height: VIEWPORT_ACTION_HEIGHT_PX,
+});
 
-/** One of the view's controls in the navbar: an icon button with its name on hover. */
-function NavbarControl({ label, disabled = false, onClick, children }) {
-  return <TooltipHint content={label}>
+/** One of the view's controls: an icon button with its name on hover (above it, over the cube). */
+function NavbarControl({ label, disabled = false, onClick, tooltipSide, children }) {
+  return <TooltipHint content={label} side={tooltipSide}>
     <Button type="button" variant="ghost" size="icon-xs" aria-label={label} disabled={disabled} onClick={onClick} className={NAVBAR_CONTROL_CLASS}>
       {children}
     </Button>
@@ -46,9 +48,8 @@ function NavbarControl({ label, disabled = false, onClick, children }) {
 /**
  * The frame every file-family renderer draws itself in: the viewport box with the tool strip at
  * its top-left corner and the tool stack under it, Quick Edit at the top-right, the cube in the
- * bottom-left corner, a 3D view's controls in the navbar's right end (Display's settings and
- * Preview, in the renderer's `navbarSlot`), the loading, update and alert overlays, and preview
- * mode's controls. The same
+ * bottom-left corner with a 3D view's controls on top of it (Display's settings and Preview), the
+ * loading, update and alert overlays, and preview mode's controls. The same
  * structure, classes and data attributes for every renderer: hosts, stylesheets and tests key on
  * them. A file's controls are never a sidebar: they are panels in the tool stack, shown by the
  * tool they belong to. Nothing sits at the bottom centre but preview's playbar.
@@ -134,7 +135,7 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
   // otherwise: orbit on or off is the file's, kept from one preview to the next.
   const orbitPlaying = shell.playback.orbit;
   const setOrbitPlaying = value => shell.setPlayback({ orbit: typeof value === "function" ? value(shell.playback.orbit) : value });
-  // Display's settings: a dropdown from its button in the navbar, not a tool — opening it leaves the
+  // Display's settings: a dropdown from its button on top of the cube, not a tool — opening it leaves the
   // tool in hand as it is. Preview, which has the page to itself, puts it away; another file starts
   // with it shut.
   const [displayOpen, setDisplayOpen] = useState(false);
@@ -206,7 +207,7 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
   // A host showing the view small (inline in a conversation: `appearance.compact`) gets the model
   // alone, not the tools, Quick Edit, the view actions or the cube; shown full size, all return.
   const compact = Boolean(view.appearance?.compact);
-  // Quick Edit is the person's to turn off (Settings' Features): off, it is not there at all — no
+  // Quick Edit is the person's to turn off (in the app menu): off, it is not there at all — no
   // box, so nothing a pick or a sketch opens and no keyboard it takes.
   const quickEdit = view.features?.quickEdit !== false;
   const toolsHidden = chromeHidden || compact;
@@ -244,8 +245,8 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
         <div className="relative min-h-0 flex-1 overflow-hidden">
           <div className="flex h-full min-w-0">
             {/* The render pane's box. The canvas fills exactly this area, so a camera fit
-                centres in what is visible and the host's panel column (the file tree) opening
-                or closing reaches the scene as a plain resize. Its background is the
+                centres in what is visible and a change of the pane's size reaches the scene
+                as a plain resize. Its background is the
                 scene's edge colour: the canvas is resized on the next frame, and one frame of
                 the chrome's background above a dark stage is a visible band. */}
             <div
@@ -294,32 +295,32 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
                 </div>
               </div>
 
-              {/* The view's controls, at the navbar's right end, after the host's Settings: Display's
-                  settings, then Preview, for a 3D view (`useRendererShell`'s `previewable`); another
-                  has neither. Not while the model loads or after it failed to, not in a host that
-                  shows the view small, and not in Preview, which has the page to itself. */}
-              {view.navbarSlot && shell.previewable && !toolsHidden && !previewing ? createPortal(<>
-                <DisplayPopover open={displayOpen} onOpenChange={setDisplayOpen} disabled={shell.idle}>{frame.display}</DisplayPopover>
-                <NavbarControl label="Preview" disabled={shell.idle} onClick={enterPreview}><Maximize2 className="size-3.5" aria-hidden="true" /></NavbarControl>
-              </>, view.navbarSlot) : null}
+              {/* The view's controls, on top of the cube: Display's settings, then Preview, for a 3D view
+                  (`useRendererShell`'s `previewable`); another has neither. Not while the model loads or
+                  after it failed to, not in a host that shows the view small, and not in Preview, which
+                  has the page to itself. */}
+              {shell.previewable && !toolsHidden && !previewing ? <div className="pointer-events-auto absolute z-20 flex items-center justify-center gap-0.5"
+                style={VIEW_CONTROLS_POSITION} data-viewport-actions="">
+                <DisplayPopover open={displayOpen} onOpenChange={setDisplayOpen} disabled={shell.idle} boundary={frame.hostElement}>{frame.display}</DisplayPopover>
+                <NavbarControl label="Preview" tooltipSide="top" disabled={shell.idle} onClick={enterPreview}><Play className="size-3.5" aria-hidden="true" /></NavbarControl>
+              </div> : null}
               {/* Preview: fullscreen, the navbar and the tools put away and the model orbiting, its
-                  routines playing. At the top-right, where Display and Preview sit outside it, Playback
-                  settings (the routine's and the orbit's) then its way out; under the model, a
-                  file with routines has its playbar, and a static file nothing at all. */}
-              <PreviewChrome active={previewing} surface={frame.hostElement}
+                  routines playing. Where Display and Preview sat, Playback settings (the routine's and
+                  the orbit's) then its way out; under the model, a file with routines has its playbar,
+                  and a static file nothing at all. */}
+              <PreviewChrome active={previewing} surface={frame.hostElement} cornerStyle={VIEW_CONTROLS_POSITION}
                 corner={onMenuOpenChange => <>
                   <PlaybackMenu animation={playbackMenuRuntime} onOpenChange={onMenuOpenChange}
                     autoplay={shell.autoplay} onAutoplayChange={shell.setAutoplay}
                     orbit={orbitPlaying} onOrbitChange={setOrbitPlaying}
                     orbitSpeed={frame.previewOrbitSpeed || 1} onOrbitSpeedChange={frame.setPreviewOrbitSpeed} />
-                  <NavbarControl label="Exit preview" onClick={leavePreview}><X className="size-3.5" aria-hidden="true" /></NavbarControl>
+                  <NavbarControl label="Exit preview" tooltipSide="top" onClick={leavePreview}><X className="size-3.5" aria-hidden="true" /></NavbarControl>
                 </>}
                 playbar={hasAnimation ? <ViewportAnimationBar key={frame.modelKey} runtime={animation}
                   className="pointer-events-auto" disabled={viewerLoading || !scene} /> : null}>
 
-              {/* The file explorer floats over this corner, as tall as its rows: the tools step out of
-                  sight under it, kept as they are for when it closes. */}
-              {toolsHidden ? null : <div className={cn("group/tool-stack pointer-events-none absolute z-20 flex flex-col items-start gap-2", view.openPanel === FILE_PANEL_TREE && "invisible")} style={TOOLBAR_POSITION}
+              {/* The file explorer floats over this corner, above the tools, which stay drawn under it. */}
+              {toolsHidden ? null : <div className="group/tool-stack pointer-events-none absolute z-20 flex flex-col items-start gap-2" style={TOOLBAR_POSITION}
                 data-mobile={mobile ? "" : undefined} data-cad-tool-groups="">
                 <FloatingToolBar tools={stripTools} />
                 <ToolStack hidden={previewing} mobile={mobile} startsClosed={startsClosed} layout={frame.toolStack} onLayoutChange={frame.changeToolStack}>{shellPanels}{toolPanels}</ToolStack>
@@ -329,7 +330,7 @@ export default function RendererShell({ shell, tools, playback = null, toolPanel
                   reload of the model. */}
               <ViewportTopRight notice={chromeHidden ? null : view.notice} belowStrip={!toolsHidden}>
                 {compact || !references || !quickEdit ? null : <QuickEdit key={frame.modelKey} className="self-stretch" hidden={chromeHidden}
-                  resource={frame.resource} references={references} sketch={sketch} referencePath={frame.referencePath}
+                  resource={frame.resource} references={references} sketch={sketch}
                   onCopy={copyAction} onEscape={frame.escape} onClear={clearQuickEdit} disabled={viewerLoading || !scene} />}
               </ViewportTopRight>
 

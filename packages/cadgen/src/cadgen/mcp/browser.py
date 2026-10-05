@@ -1,10 +1,11 @@
 """A link to a model in the CAD Viewer, for an app that cannot show CAD views itself.
 
-``cadgen viewer --json --detach``, run from a folder, reuses the Viewer serving that folder or starts
-one in the background (its own session, its output to a log beside its registry entry), prints its
-``{url, port, action}`` line and exits. So a started Viewer outlives this server, as one an agent
-starts from a shell does, and nothing it writes later comes back here. It never opens a browser: the
-link is the user's to open.
+``cadgen viewer --json --detach`` reuses this machine's Viewer or starts one in the background (its
+own session, its output to the viewer log in the state directory), prints its ``{url, port, action}``
+line and exits. So a started Viewer outlives this server, as one an agent starts from a shell does, and
+nothing it writes later comes back here. The Viewer opens any model by its absolute path, so the
+launch runs from the user's home folder: where it starts only decides how a developer's relative
+links resolve. It never opens a browser: the link is the user's to open.
 """
 
 from __future__ import annotations
@@ -15,19 +16,20 @@ import subprocess
 import sys
 from urllib.parse import quote
 
-LAUNCH = (sys.executable, "-m", "cadgen.cli", "viewer", "--host", "127.0.0.1", "--json", "--detach")
+LAUNCH = (sys.executable, "-P", "-m", "cadgen.cli", "viewer", "--host", "127.0.0.1", "--json", "--detach")
 LAUNCH_SECONDS = 30.0
 
 
 class ViewerUnavailable(Exception):
-    """The CAD Viewer could not be started for a folder."""
+    """The CAD Viewer could not be started."""
 
 
-def viewer_url(folder: str, *, command=LAUNCH, timeout: float = LAUNCH_SECONDS) -> str:
-    """The URL of the CAD Viewer serving ``folder``: the running one, or one started now."""
+def viewer_url(*, cwd: str | None = None, command=LAUNCH, timeout: float = LAUNCH_SECONDS) -> str:
+    """The URL of this machine's CAD Viewer: the running one, or one started now from ``cwd`` (the
+    user's home folder by default)."""
     try:
-        process = subprocess.Popen(list(command), cwd=folder, stdin=subprocess.DEVNULL, stdout=subprocess.PIPE,
-                                   stderr=subprocess.DEVNULL)
+        process = subprocess.Popen(list(command), cwd=cwd or os.path.expanduser("~"), stdin=subprocess.DEVNULL,
+                                   stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     except OSError as error:
         raise ViewerUnavailable(str(error)) from error
     try:
@@ -46,7 +48,6 @@ def viewer_url(folder: str, *, command=LAUNCH, timeout: float = LAUNCH_SECONDS) 
     raise ViewerUnavailable(f"`cadgen viewer` exited ({process.returncode}) without a URL")
 
 
-def model_link(url: str, folder: str, model: str) -> str:
-    """``url`` opened at ``model``, which lies under the folder that Viewer serves."""
-    relative = os.path.relpath(model, folder).replace(os.sep, "/")
-    return f"{url}?file={quote(relative, safe='/')}"
+def model_link(url: str, model: str) -> str:
+    """``url`` opened at ``model``, named by its absolute path: readable, with ``/`` and ``:`` kept."""
+    return f"{url}?file={quote(model.replace(os.sep, '/'), safe='/:')}"

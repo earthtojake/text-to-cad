@@ -3,7 +3,6 @@ import { test } from "node:test";
 
 import {
   buildAssemblyPartCopyText,
-  fileReferencePath,
   fileRefPrefixForEntry,
   buildNormalizedReferenceState,
   buildReferenceCacheKey,
@@ -231,11 +230,6 @@ test("copy text carries the entry's file prefix", () => {
   assert.equal(fileRefPrefixForEntry(entry), "models/assy.step");
 });
 
-test("a file's refs name it as its host spells it, else by its path under the host's root", () => {
-  assert.equal(fileReferencePath({ id: "root" }, "models/assy.step"), "models/assy.step");
-  assert.equal(fileReferencePath({ id: "root", referencePath: (path) => `/work/${path}` }, "models/assy.step"),
-    "/work/models/assy.step");
-});
 
 test("an entry with no prefix emits the bare refs it always did", () => {
   // The prefix is opt-in per call site: every existing caller that builds a minimal entry keeps

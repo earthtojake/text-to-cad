@@ -1,28 +1,29 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type CSSProperties, type ReactNode } from 'react';
 import { Maximize2 } from 'lucide-react';
-import type { ResourceRef } from '@text-to-cad/core/prompt';
 import { ConsentCard, useAnalyticsConsent } from '@text-to-cad/ui/consent';
 import { useFeatures } from '@text-to-cad/ui/features';
+import { UpdateButton, useUpdateNotice } from '@text-to-cad/ui/update';
 import { viewerLinks } from '@text-to-cad/ui/links';
 import { Button } from '@text-to-cad/ui/primitives/button';
+import { TooltipHint } from '@text-to-cad/ui/primitives/tooltip';
 import { createTabStore, memoryTabRecord } from '@text-to-cad/ui/tab-store';
 import { version } from '../package.json';
 import type { Bridge, HostContext } from './host/bridge';
 import { fitCapture } from './host/capture';
+import { frameClipboard } from './host/clipboard';
 import { createLiveRegistry, describeView } from './host/live';
 import { watchSupersession, type Presentation } from './host/presentation';
 import { chatReach } from './host/prompt';
-import type { Launch, Root, Server } from './host/server';
+import type { Launch, Server } from './host/server';
 import { createViewSync } from './host/sync';
+import { createTunnelClient, createTunnelFetch } from './host/tunnel';
 import ModelView, { type ViewReporter } from './ModelView';
 import { Banner } from './Notice';
 
 interface Showing { launch: Launch; sequence: number }
 
-const rootKey = (root: Root) => `${root.kind}:${root.path}`;
 // The host's sandbox need not be a secure context, where randomUUID is missing.
 const newViewId = () => globalThis.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`;
-const unresolved = () => { throw new Error('No model is showing.'); };
 
 export function useHostContext(bridge: Pick<Bridge, 'hostContext' | 'onHostContext'>): HostContext {
   return useSyncExternalStore(listener => bridge.onHostContext(listener), () => bridge.hostContext, () => bridge.hostContext);
@@ -47,10 +48,9 @@ export function inlineHeight(width: number, maxHeight?: number): number {
 
 /**
  * Room for what the host draws over the page (`insets`). Inline, a card whose height the host is
- * told, with a way to full size. The one element either way, so going full size keeps the view (and
- * its model) as it is.
+ * told. The one element either way, so going full size keeps the view (and its model) as it is.
  */
-function Frame({ bridge, context, insets, inline = false, expandable = true, bottomCenter, overlay = null, children }: { bridge: Bridge; context: HostContext; insets: NonNullable<HostContext['safeAreaInsets']>; inline?: boolean; expandable?: boolean; bottomCenter?: string; overlay?: ReactNode; children: ReactNode }) {
+function Frame({ bridge, context, insets, inline = false, bottomCenter, overlay = null, children }: { bridge: Bridge; context: HostContext; insets: NonNullable<HostContext['safeAreaInsets']>; inline?: boolean; bottomCenter?: string; overlay?: ReactNode; children: ReactNode }) {
   // Where the host's composer floats over the page instead of taking room from it: the line the
   // viewer's playback bars sit on, and the strip lists scroll clear of.
   const floating = bottomCenter ? { '--cad-viewport-bottom-center': bottomCenter, '--cad-host-bottom-inset': `${context.safeAreaInsets?.bottom || 0}px` } as CSSProperties : {};
@@ -68,19 +68,19 @@ function Frame({ bridge, context, insets, inline = false, expandable = true, bot
       <div className="relative min-h-0 flex-1">{children}{overlay}</div>
     </div>;
   }
-  const expand = () => void bridge.request('ui/request-display-mode', { mode: 'fullscreen' }).catch(() => {});
-  const fullSize = expandable && context.availableDisplayModes?.includes('fullscreen') !== false;
-  // Its button holds the view's top-right corner: the viewer's column there (the analytics card) starts below it.
-  return <div className="flex flex-col overflow-hidden" style={{ height, ...(fullSize ? { '--cad-viewport-top-right-inset': '40px' } : {}) } as CSSProperties}>
-    <div className="relative min-h-0 flex-1">
-      {children}
-      {overlay}
-      {fullSize
-        ? <Button variant="secondary" size="icon-sm" className="absolute right-2 top-2 z-40 shadow-sm" aria-label="Full size" title="Full size" onClick={expand}>
-          <Maximize2 aria-hidden="true" />
-        </Button> : null}
-    </div>
+  return <div className="flex flex-col overflow-hidden" style={{ height }}>
+    <div className="relative min-h-0 flex-1">{children}{overlay}</div>
   </div>;
+}
+
+/** Inline, the card's way to full size: the navbar's last control, and the home's. */
+function FullSizeButton({ bridge }: { bridge: Bridge }) {
+  const expand = () => void bridge.request('ui/request-display-mode', { mode: 'fullscreen' }).catch(() => {});
+  return <TooltipHint content="Full size">
+    <Button variant="ghost" size="icon-xs" className="size-6 text-muted-foreground hover:text-foreground" aria-label="Full size" onClick={expand}>
+      <Maximize2 className="size-3.5" aria-hidden="true" />
+    </Button>
+  </TooltipHint>;
 }
 
 /** A view a newer one replaced: its last frame, and where to look now. */
@@ -116,25 +116,31 @@ export default function App({ bridge, server, launch: initial, presentation = 't
   const [showing, setShowing] = useState<Showing>({ launch: initial, sequence: 0 });
   // The server stopped answering (its process has gone): the view keeps its model, and says so.
   const [lost, setLost] = useState(false);
-  const shown = useRef<{ model: string | null; resolvePath: (resource: ResourceRef) => string }>({ model: null, resolvePath: unresolved });
+  const shown = useRef<string | null>(null);
   // This view's one call to the server each second: what it shows, the agent's requests for it,
   // and what changed in what it watches (`host/sync.ts`).
-  const sync = useMemo(() => createViewSync(server, { id: view, surface, model: () => shown.current.model }, {
+  const sync = useMemo(() => createViewSync(server, { id: view, surface, model: () => shown.current }, {
     show: launch => setShowing(previous => ({ launch, sequence: previous.sequence + 1 })),
     capture: async () => {
       const controller = live.current();
       if (!controller) throw new Error('No model is showing in this CAD view.');
       return fitCapture(await controller.capture());
     },
-    state: () => describeView(live.current(), shown.current.model, shown.current.resolvePath),
+    state: () => describeView(live.current(), shown.current),
     connection: connected => setLost(!connected),
   }), [server, view, surface, live]);
   const reporter = useMemo<ViewReporter>(() => ({
-    showing(model, resolvePath) {
-      shown.current = { model, resolvePath };
+    showing(model) {
+      shown.current = model;
       sync.focus();
     },
   }), [sync]);
+  // Everything else the view asks of the server travels as viewer requests over `cad_http`: its
+  // model, the library, Open, Reveal, the person's settings and the update check. The client polls
+  // nothing: the sync says when the file's catalog entry moved, and carries a STEP's build feed.
+  const tunnel = useMemo(() => createTunnelFetch(server), [server]);
+  const client = useMemo(() => createTunnelClient(tunnel, { pollIntervalMs: 0, editingPreviewFeed: sync.observePreview }), [tunnel, sync]);
+  useEffect(() => () => client.dispose(), [client]);
 
   useEffect(() => {
     const order = initial.order;
@@ -168,33 +174,36 @@ export default function App({ bridge, server, launch: initial, presentation = 't
   }, [bridge, sync, superseded]);
 
   // Asked once, of everyone, unless their environment answered or no answer could be kept
-  // (`cadgen/analytics.py`): the card, and Settings' Analytics section after it.
-  const { consent, answer, appSettings: analyticsSettings } = useAnalyticsConsent(server.consent);
-  // Settings' Features (Quick edit), on until the person turns one off: kept by the server beside
+  // (`cadgen/analytics.py`): the card, and the app menu's toggle after it.
+  const { consent, answer, appSettings: analyticsSettings } = useAnalyticsConsent(client.consent);
+  // The app menu's features (Quick edit), on until the person turns one off: kept by the server beside
   // the analytics answer, one choice for the sidebar, every thread's tab and the browser viewer.
-  const { features, appSettings: featureSettings } = useFeatures(server.features);
+  const { features, appSettings: featureSettings } = useFeatures(client.features);
   const appSettings = useMemo(() => [...analyticsSettings ?? [], ...featureSettings ?? []], [analyticsSettings, featureSettings]);
+  // A newer text-to-cad (`cadgen/updates.py`): the blue update button, first in the navbar and a row of
+  // its own on the home while this install is behind, from the launch's notice at once. Its prompt goes
+  // to the chat where the host takes messages, so the agent updates CAD; elsewhere it is copied.
+  const updateNotice = useUpdateNotice(client.version, initial.notice ?? null);
+  const sendPrompt = chat.send
+    ? (prompt: string) => bridge.request('ui/message', { role: 'user', content: [{ type: 'text', text: prompt }] }, { timeoutMs: 30_000 }).then(() => {})
+    : undefined;
   const openLink = (url: string) => void bridge.request('ui/open-link', { url }).catch(() => {});
   // The navbar's links: the same as every app's (X, Discord, GitHub and a new issue), followed through the
-  // host (a frame cannot open one itself). No update button: the host updates CAD (a plugin directory
-  // by itself, an unpinned `uvx` on restart), and GitHub's newest release is often not yet what it serves.
+  // host (a frame cannot open one itself).
   const links = useMemo(() => viewerLinks({ version, open: url => bridge.request('ui/open-link', { url }).then(() => {}) }),
     [bridge]);
-  // A view opened on the home (the sidebar's) goes back to it; one opened on a model has no home.
-  // The home's launch carried its library as it stood when the sidebar opened: going back reads it anew.
-  const home = initial.page === 'home' ? { ...initial, recents: undefined } : null;
-  const goHome = home ? () => setShowing(previous => ({ launch: home, sequence: previous.sequence + 1 })) : undefined;
-  const show = (launch: Launch) => setShowing(previous => ({ launch, sequence: previous.sequence + 1 }));
   const { launch } = showing;
   if (superseded) {
-    return <Frame bridge={bridge} context={context} insets={insets} inline={inline} bottomCenter={bottomCenter} expandable={false}><Superseded still={still} /></Frame>;
+    return <Frame bridge={bridge} context={context} insets={insets} inline={inline} bottomCenter={bottomCenter}><Superseded still={still} /></Frame>;
   }
   return <Frame bridge={bridge} context={context} insets={insets} inline={inline} bottomCenter={bottomCenter}
     overlay={lost ? <Banner message={LOST[presentation]} /> : null}>
-    <ModelView key={rootKey(launch.root)} launch={launch} root={launch.root} sequence={showing.sequence} bridge={bridge} server={server}
+    <ModelView launch={launch} sequence={showing.sequence} bridge={bridge} client={client} tunnel={tunnel}
       tabStore={tabStore} live={live} links={links} appSettings={appSettings} features={features}
       notice={consent?.ask ? <ConsentCard policy={consent.policy} onAnswer={answer} onPolicy={openLink} /> : null}
-      colorScheme={colorScheme} platform={initial.platform || 'darwin'} reporter={reporter} sync={sync} compact={inline} chat={chat}
-      onLaunch={show} onHome={goHome} />
+      update={updateNotice ? <UpdateButton notice={updateNotice} send={sendPrompt} copy={prompt => frameClipboard.writeText(prompt)}
+        onLink={openLink} /> : null}
+      fullSize={inline && context.availableDisplayModes?.includes('fullscreen') !== false ? <FullSizeButton bridge={bridge} /> : null}
+      colorScheme={colorScheme} platform={initial.platform || 'darwin'} reporter={reporter} sync={sync} chat={chat} />
   </Frame>;
 }

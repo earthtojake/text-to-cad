@@ -1,4 +1,5 @@
-"""The browser viewer's part in CAD's analytics: the same card, the same saved answer, and what its page did."""
+"""The browser viewer's cards: CAD's analytics -- the same card, the same saved answer, and what its
+page did -- and the update notice the CAD app shows too."""
 
 from __future__ import annotations
 
@@ -8,10 +9,12 @@ import os
 import shutil
 import tempfile
 import threading
+import time
 import unittest
 from pathlib import Path
 from unittest import mock
 
+import cadgen
 from cadgen.analytics import Recorder, file_code, file_salt
 from cadgen.viewer import handler as handler_module
 from cadgen.viewer.http_app import create_cad_app
@@ -31,7 +34,7 @@ class ViewerAnalyticsTest(unittest.TestCase):
         self.addCleanup(environment.stop)
         self.state = self.tmp / "state" / "settings.json"
         self.sent: list[dict] = []
-        self.app = create_cad_app(root=str(self.root), host="127.0.0.1", port=0)
+        self.app = create_cad_app(host="127.0.0.1", port=0, start=str(self.root))
         self.app.analytics = Recorder(path=self.state, send=lambda payload: self.sent.append(payload) or True)
         self.app.analytics.started(client={"name": "cadgen-viewer", "version": "0"}, presentation="browser")
         self.port = self.serve(self.app)
@@ -68,7 +71,7 @@ class ViewerAnalyticsTest(unittest.TestCase):
         # The answer is the person's, in the state directory every CAD app reads: the CAD app's
         # server sees the same no.
         self.assertEqual(json.loads(self.state.read_text(encoding="utf-8"))["analytics"]["choice"], "off")
-        # A card still up in another view answers nothing now; the Settings toggle changes it whenever.
+        # A card still up in another view answers nothing now; the app menu's toggle changes it whenever.
         self.assertEqual(self.request("POST", "/__cad/analytics", {"share": True, "card": True})[1]["sharing"], False)
         self.assertEqual(self.request("POST", "/__cad/analytics", {"share": True})[1]["sharing"], True)
 
@@ -79,11 +82,15 @@ class ViewerAnalyticsTest(unittest.TestCase):
         self.assertFalse(self.state.exists())
 
     def test_what_the_page_did_is_sent_only_with_consent_and_a_file_only_as_its_code(self) -> None:
-        self.request("POST", "/__cad/analytics/activity", {"file": "parts/a.stl", "touched": True})
+        # A touch is reported; a model the page shows is counted as it joins the library.
+        model = str(self.root / "parts" / "a.stl")
+        self.request("POST", "/__cad/analytics/activity", {"touched": True})
+        self.request("POST", "/__cad/recents", {"action": "open", "path": model})
         self.assertFalse(self.app.analytics.flush())  # not asked yet: nothing goes
         self.request("POST", "/__cad/analytics", {"share": True})
-        self.assertEqual(self.request("POST", "/__cad/analytics/activity", {"file": "parts/a.stl", "touched": True})[0], 204)
-        self.request("POST", "/__cad/analytics/activity", {"file": "../outside.stl"})  # not this viewer's: not counted
+        self.assertEqual(self.request("POST", "/__cad/analytics/activity", {"touched": True})[0], 204)
+        self.assertEqual(self.request("POST", "/__cad/recents", {"action": "open", "path": model})[0], 200)
+        self.assertEqual(self.request("POST", "/__cad/recents", {"action": "open", "path": "parts/a.stl"})[0], 400)
         self.assertTrue(self.app.analytics.flush())
         [payload] = self.sent
         self.assertEqual((payload["presentation"], payload["client"]["name"]), ("browser", "cadgen-viewer"))
@@ -91,9 +98,24 @@ class ViewerAnalyticsTest(unittest.TestCase):
         self.assertEqual(payload["events"], [{"name": "view", "calls": 1}, {"name": "file", "file": code, "kind": "stl"}])
         self.assertNotIn("a.stl", json.dumps(payload))
 
+    def test_the_update_button_reads_whether_a_newer_release_is_out(self) -> None:
+        # The CAD app's notice (`cadgen/updates.py`), from the same feed; this page copies its prompt,
+        # and nothing it does is kept: there is no answer to post. A Viewer no plugin's server started
+        # names no channel: a skills-only install, which nothing else updates.
+        (self.tmp / "state").mkdir(exist_ok=True)
+        (self.tmp / "state" / "versions.json").write_text(json.dumps({"checked": time.time(), "feed": {"latest": "99.0.0"}}),
+                                                          encoding="utf-8")
+        with mock.patch.dict(os.environ, {"CADGEN_INSTALL_CHANNEL": "", "CADGEN_AUTO_UPDATED": "", "CI": "",
+                                          "CADGEN_UPDATE_CHECK": ""}), \
+                mock.patch("cadgen._internal.channel._source_tree", return_value=False):
+            status, answer = self.request("GET", "/__cad/version")
+            self.assertEqual((status, answer["notice"]["text"]), (200, f"A new version v99.0.0 of text-to-cad is available (currently on v{cadgen.__version__})"))
+            self.assertEqual(self.request("GET", "/__cad/version")[1], answer)
+            self.assertNotEqual(self.request("POST", "/__cad/version", {})[0], 200)
+
     def test_an_app_with_no_recorder_serves_no_analytics(self) -> None:
-        # The CAD app's tunnel builds apps of its own: its page asks the CAD app's server instead.
-        port = self.serve(create_cad_app(root=str(self.root), host="127.0.0.1", port=0))
+        # The viewer process and the CAD app's server each attach theirs; an app given none counts nothing.
+        port = self.serve(create_cad_app(host="127.0.0.1", port=0))
         self.assertEqual(self.request("GET", "/__cad/analytics", port=port)[0], 404)
         self.assertEqual(self.request("POST", "/__cad/analytics/activity", {"touched": True}, port=port)[0], 405)
 

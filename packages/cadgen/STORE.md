@@ -1094,10 +1094,11 @@ are not cancelled merely because a newer editing request exists.
   moved into place, the record cross-validates the outputs by sha (gate
   clause 5), and the publish rule decides same-model outcomes. Progress is
   not on disk at all: the daemon keeps a ledger of every job it runs (state,
-  phase n/total, the job's declared output paths) and serves it with `daemon
-  status`; the CAD Viewer matches jobs to the documents it shows by output
-  path — a CLI build, a parent's child build and its own compile read alike —
-  and nothing reads any of it to decide freshness. With `CADGEN_DAEMON=0`
+  phase n/total, the job's declared output paths — for a script that no longer
+  imports, what it declared the last time this daemon could read it) and
+  serves it with `daemon status`; the CAD Viewer matches jobs to the
+  documents it shows by output path — a CLI build, a parent's child build and
+  its own compile read alike — and nothing reads any of it to decide freshness. With `CADGEN_DAEMON=0`
   there is no ledger, and concurrent builds are unbrokered
   — safe by the two invariants above, wasteful, and a debugging mode.
 
@@ -1261,6 +1262,14 @@ Every build goes through one interface, `cadgen.daemon.executors.submit(model)
   binds a spare and a replacement starts in the background; no spare means a
   spawn. Spares load build123d/OCP as well as the lazy tool parsers before
   announcing readiness; importing the supervisor never loads the kernel.
+  A worker starts in the system temp folder but keeps it off its import path
+  (`python -P`, as every process cadgen starts does: the daemon, the store's
+  gc, a transient build, the Viewer), so a build imports exactly what
+  `python script.py` would (law 7), nothing another program or user left in
+  that folder stands in for cadgen, and no import lists it. Other programs fill it and keep
+  changing it; on the path, it was listed again by every import that missed it
+  once it had changed, tens of thousands of entries a time, by every worker of
+  a burst at once.
   Spares: `CADGEN_DAEMON_SPARES` (default 2). Requests that name no
   model (a document compile or artifact derivation) borrow a spare without binding
   it. Borrowed workers count toward spare capacity while busy, so a stream of
@@ -1308,7 +1317,12 @@ process, or a deadlock that holds the GIL, sends nothing and accrues no CPU. A
 hang that releases the GIL (a network read with no timeout, a Python-level
 deadlock) keeps beating and is not killed. A body's length is therefore
 unbounded; the heartbeat stops before the job's exit frame, so none
-reaches the next job.
+reaches the next job. A starting worker is judged the same way: it is silent
+until it has imported the kernel, a few CPU seconds that a busy machine, or a
+burst of starts, spreads over minutes, so it is waited for while its CPU clock
+moves and killed only after 120 s with neither its announcement nor CPU
+progress. Meanwhile the job it is for is listed `queued`, detail `Starting a
+geometry kernel`: nothing the job runs can say so before its worker exists.
 
 **One daemon per address, by lock.** The daemon takes an exclusive lock keyed
 by its socket address (`cadgen.daemon.transport.SingletonLock`: `flock` on

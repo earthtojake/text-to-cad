@@ -2,7 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useLayoutEffect, use
 import { Check, ChevronDown, ChevronUp, X } from "lucide-react";
 import { cn } from "@text-to-cad/ui/utils";
 import { ScrollArea } from "@text-to-cad/ui/primitives/scroll-area";
-import { FLOATING_CHROME_SURFACE_CLASS } from "./floatingSurface.js";
+import { FLOATING_CHROME_SURFACE_CLASS } from "../../../lib/floatingSurface.js";
 import ResizeGrip from "./ResizeGrip.jsx";
 import { ToolStackContext } from "./ToolStack.jsx";
 import { TOOL_PANEL_WIDTH, clampToolPanelHeight, clampToolPanelWidth } from "./toolStackLayout.js";

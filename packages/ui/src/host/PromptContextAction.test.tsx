@@ -10,7 +10,7 @@ it.each(['composer', 'clipboard'] as const)('delivers one mixed context to the %
   let encode!: (blob: Blob) => void;
   const image = new Promise<Blob>(resolve => { encode = resolve; });
   const context = createPromptContext([
-    referencePart({ resource: { kind: 'workspace-file', workspaceId: 'fixture', path: 'part.step', revision: 'v1' }, target: { kind: 'cad-selector', selectors: ['o1.f2'] } }),
+    referencePart({ resource: { kind: 'workspace-file', path: '/models/part.step', revision: 'v1' }, target: { kind: 'cad-selector', selectors: ['o1.f2'] } }),
     textPart('Round this edge'),
     { id: 'image', kind: 'attachment', name: 'view.png', mimeType: 'image/png', content: image, about: ['reference'] },
   ]);

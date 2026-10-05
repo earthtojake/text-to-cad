@@ -64,7 +64,7 @@ test('robot dependencies are resolved by the injected provider', async t => {
 test('observed backend restart retires resource generation and aborts old reads', async () => {
   let epoch = 'one', finish;
   const client = createCadClient({fetch: async url => url.includes('/__cad/server')
-    ? Response.json({rootId:'root',identityToken:epoch})
+    ? Response.json({identityToken:epoch})
     : new Promise(resolve => {finish=resolve;})});
   await client.serverInfo();
   const before = client.resources.cacheKey('');

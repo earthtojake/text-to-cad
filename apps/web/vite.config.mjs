@@ -8,17 +8,15 @@ import { drawingAssetsPlugin } from "@text-to-cad/ui/drawing-assets";
 
 import { resolveDirectoryRoot as resolveViewerDirectoryRoot } from "./scripts/directoryRoot.mjs";
 import { resolveServerFsAllow } from "./scripts/serverFsAllow.mjs";
-import { assertNoDeprecatedLocalRootEnv } from "./scripts/viewerEnv.mjs";
 import {
   normalizeServerLifetimeMs,
   scheduleProcessShutdown,
 } from "./scripts/serverLifetime.mjs";
 
-// Dev deliberately lives on Vite's own canonical port, NOT the bundled
-// launcher's 3245: dev is a hand-managed foreground process that never enters
-// the instance registry and never participates in launch reuse, so it must not
-// look like (or collide with) a launched Viewer. Taken port → pick another
-// with --port; nothing rolls or reuses here.
+// Dev deliberately lives on Vite's own canonical port, NOT the launcher's 3245:
+// dev is a hand-managed foreground process that no launch reuses or replaces,
+// so it must not look like (or collide with) a launched Viewer. Taken port →
+// pick another with --port; nothing reuses here.
 const DEFAULT_DEV_PORT = 5173;
 function devPort() { const port=Number(process.env.PORT); return Number.isInteger(port) && port>0 ? port : DEFAULT_DEV_PORT; }
 
@@ -29,7 +27,6 @@ const defaultDirectoryRoot = path.resolve(viewerAppRoot, "..");
 const directoryRoot = resolveDirectoryRoot();
 const viewerAllowedHosts = normalizeViewerAllowedHosts(process.env.VIEWER_ALLOWED_HOSTS ?? "");
 const viewerServerLifetimeMs = normalizeServerLifetimeMs(process.env.VIEWER_SERVER_LIFETIME_MS);
-assertNoDeprecatedLocalRootEnv(process.env);
 
 function normalizeViewerAllowedHosts(value) {
   return String(value || "")
@@ -54,11 +51,11 @@ function resolveDirectoryRoot() {
 // the port off its {url,port,action} line, and hands it to the proxy in the
 // server block.
 //
-// The backend runs --ephemeral --no-registry --api-only. --no-registry is a
-// CORRECTNESS requirement, not tidiness: a registered dev backend would be
-// found by a later `cadgen viewer` launch from the same directory (reuse keys
-// on the served realpath at the same version), handing an agent a URL served by
-// Vite's proxy target instead of a real Viewer. --api-only is what makes dev
+// The backend runs --new --api-only. --new is a CORRECTNESS requirement, not
+// tidiness: on the launcher's port, a later `cadgen viewer` launch would find
+// this backend and reuse it (or replace it), handing an agent a URL served by
+// Vite's proxy target instead of a real Viewer; --new binds a port of its own
+// that no launch asks about. --api-only is what makes dev
 // work on a checkout that has never been built: Vite serves the client here, so
 // this backend needs no dist/ — and dist/ is gitignored, so without it
 // `npm run dev` failed on every fresh clone with a complaint about a missing
@@ -85,10 +82,10 @@ async function startDevBackend() {
   }
 
   const python = process.env.VIEWER_PYTHON || "python3";
-  // The backend has no directory flag: its cwd IS the directory it serves. Dev
-  // still decides which directory that is (scripts/directoryRoot.mjs reads
-  // INIT_CWD, which npm sets for `npm run dev`); the hand-off is the child's
-  // cwd rather than an argument.
+  // The backend serves every file by absolute path. Where it starts is only where
+  // a developer's relative ?file= resolves (`serverInfo.start`): where
+  // `npm run dev` was run (scripts/directoryRoot.mjs reads INIT_CWD, which npm
+  // sets), handed over as the child's cwd.
   const child = spawn(
     python,
     [
@@ -96,8 +93,7 @@ async function startDevBackend() {
       "cadgen.viewer",
       "--host",
       "127.0.0.1",
-      "--ephemeral",
-      "--no-registry",
+      "--new",
       "--api-only",
       "--json",
     ],
@@ -125,7 +121,7 @@ async function startDevBackend() {
 
   const announced = await readFirstJsonLine(child.stdout);
   const target = String(announced.url || "").replace(/\/+$/u, "");
-  console.info(`CAD Viewer backend: ${target} (${python}, serving ${directoryRoot})`);
+  console.info(`CAD Viewer backend: ${target} (${python}, started in ${directoryRoot})`);
   return target;
 }
 
@@ -215,8 +211,8 @@ export default defineConfig(async ({ command }) => ({
     host: "127.0.0.1",
     port: devPort(),
     // Fail on a taken port instead of silently rolling: dev is hand-managed,
-    // so the agent picks another port explicitly. (The bundled launcher is the
-    // one that rolls/reuses; dev stays out of that machinery entirely.)
+    // so the agent picks another port explicitly. (The launcher is the one that
+    // reuses or replaces; dev stays out of that.)
     strictPort: true,
     allowedHosts: viewerAllowedHosts,
     // The two API prefixes go to the Python backend; everything else is the

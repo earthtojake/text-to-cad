@@ -1,5 +1,5 @@
 import { formatPromptReference } from '@text-to-cad/core/prompt';
-import type { PromptReference, ResourceRef } from '@text-to-cad/core/prompt';
+import type { PromptReference } from '@text-to-cad/core/prompt';
 import { createLiveRegistry as createRegistry, type LiveRegistry as Registry, type LiveView } from '@text-to-cad/ui/host';
 
 /** What every renderer's live controller answers, whichever family it is. */
@@ -14,12 +14,12 @@ export interface LiveController extends LiveView {
 export const createLiveRegistry = () => createRegistry<LiveController>();
 export type LiveRegistry = Registry<LiveController>;
 
-/** The view as the agent reads it: references resolved to absolute paths it can quote back. */
-export function describeView(controller: LiveController | null, model: string | null, resolvePath: (resource: ResourceRef) => string): Record<string, unknown> {
+/** The view as the agent reads it: references by the absolute paths it can quote back. */
+export function describeView(controller: LiveController | null, model: string | null): Record<string, unknown> {
   if (!controller) return { model, loading: Boolean(model) };
   const state = controller.readState();
   const selection = (state.selection || []).flatMap(reference => {
-    try { return [formatPromptReference(reference, { resolvePath })]; } catch { return []; }
+    try { return [formatPromptReference(reference)]; } catch { return []; }
   });
   return {
     model, revision: state.revision, loading: Boolean(state.loading), selection,
