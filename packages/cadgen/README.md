@@ -365,11 +365,13 @@ something only the network can do: a server's last analytics send as it exits
 deletion it asks for (still owed, and asked again, when nobody answers). The
 pages load nothing from the internet: everything they show ships in the wheel.
 Installing needs the network (cadgen itself, and the headless browser the first
-snapshot fetches), and nothing after it does.
-*Pressure-test*: with every request refused (a proxy on a closed port), and
-again with every request hanging, start a server, open a view, call each tool,
-and run a build and a snapshot: each works, and nothing waits on a request
-beyond the two waits above.
+snapshot fetches), and nothing after it does. The law is the package's, not the
+launcher's: a launcher that checks a package index before it starts anything
+(`uvx`, once its cache is stale) has its own needs.
+*Pressure-test*: with an installed cadgen and every request refused (a proxy on
+a closed port), and again with every request hanging, start a server, open a
+view, call each tool, and run a build and a snapshot: each works, and nothing
+waits on a request beyond the two waits above.
 
 ## The shape of the package
 
