@@ -11,6 +11,7 @@ import contextlib
 import io
 from pathlib import Path
 import unittest
+from unittest import mock
 
 from tests.python.support.paths import add_repo_path
 from tests.python.support.tmp_root import RetryingTemporaryDirectory
@@ -249,9 +250,44 @@ class SrdfFindingsTests(unittest.TestCase):
         self.assertIn("invalid_paired_urdf", error_codes)
 
     def test_ambiguous_paired_urdf_fails(self) -> None:
-        (self.temp_root / "robot_b.urdf").write_text(URDF, encoding="utf-8")
+        (self.temp_root / "robot_b.URDF").write_text(URDF, encoding="utf-8")
         error_codes, _ = self._codes(_srdf(""))
         self.assertIn("ambiguous_paired_urdf", error_codes)
+
+    def test_case_variant_suffix_pairs_for_validation_and_snapshot(self) -> None:
+        from cadgen.snapshot_cli import paired_urdf_for_srdf
+
+        original = self.temp_root / "robot.urdf"
+        for suffix in (".URDF", ".UrDf"):
+            with self.subTest(suffix=suffix):
+                candidate = original.with_suffix(suffix)
+                original.rename(candidate)
+                try:
+                    self.assertTrue(self._report(_srdf("")).ok)
+                    self.assertEqual(paired_urdf_for_srdf(self.temp_root / "robot.srdf"), candidate)
+                finally:
+                    candidate.rename(original)
+
+    def test_unlistable_pair_directory_reports_no_pair(self) -> None:
+        from cadgen.srdf_validation import find_paired_urdf
+        from cadgen.snapshot_cli import paired_urdf_for_srdf, SnapshotError
+
+        with mock.patch.object(Path, "iterdir", side_effect=PermissionError("cannot list")):
+            self.assertEqual(find_paired_urdf("edge", self.temp_root), (None, []))
+            error_codes, _ = self._codes(_srdf(""))
+            with self.assertRaises(SnapshotError):
+                paired_urdf_for_srdf(self.temp_root / "robot.srdf")
+        self.assertIn("no_paired_urdf", error_codes)
+
+    def test_snapshot_refusal_lists_case_variant_candidates(self) -> None:
+        from cadgen.snapshot_cli import paired_urdf_for_srdf, SnapshotError
+
+        original = self.temp_root / "robot.urdf"
+        original.unlink()
+        (self.temp_root / "other.URDF").write_text(URDF.replace('name="edge"', 'name="other"'), encoding="utf-8")
+        self._report(_srdf(""))
+        with self.assertRaisesRegex(SnapshotError, "other.URDF"):
+            paired_urdf_for_srdf(self.temp_root / "robot.srdf")
 
     def test_multi_root_paired_urdf_warns_not_a_tree(self) -> None:
         urdf_text = URDF.replace("</robot>", '<link name="orphan"/></robot>')
