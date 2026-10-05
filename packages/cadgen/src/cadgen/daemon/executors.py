@@ -319,11 +319,14 @@ def submit_compile(
     transient subprocess, never in the caller."""
     import hashlib
 
+    from cadgen._internal.atomic_replace import read_bytes_with_ladder
     from cadgen.store.paths import store_root as default_store_root
 
     document = Path(document).resolve()
     root = Path(store_root) if store_root is not None else default_store_root()
-    closure = hashlib.sha256(document.read_bytes()).hexdigest()
+    # Through the ladder: on Windows, a program saving, replacing or scanning the document
+    # refuses the read for a moment, and that is not a failure of its bytes.
+    closure = hashlib.sha256(read_bytes_with_ladder(document)).hexdigest()
     job = Job(document)
     emit_event(model_event(document, "submitted", parent=str(parent) if parent else None))
     tool_argv = [str(document)] + (["--force"] if force else [])

@@ -12,7 +12,7 @@ afterEach(() => { cleanup(); vi.useRealTimers(); });
 // A viewer server for one STEP: its catalog (the file and whatever is beside it) and its
 // artifact status, which a build somebody else started holds at `compiling`.
 function workspace({ tree = 'tree-1' } = {}) {
-  const server = { tree, siblings: [] as string[], state: 'compiling', artifactReads: 0, catalogReads: 0, compiles: 0,
+  const server = { tree, siblings: [] as string[], state: 'compiling', error: '', errorType: '', artifactReads: 0, catalogReads: 0, compiles: 0,
     gate: null as { after: number, held: Promise<void> } | null,
     // Hold every catalog read after the first `after` of them until the answer is released.
     holdCatalog(after: number) {
@@ -38,7 +38,8 @@ function workspace({ tree = 'tree-1' } = {}) {
       body = { ok: true, state: 'compiling', runId: 'own-run' };
     } else if (pathname === '/__cad/artifact') {
       server.artifactReads += 1;
-      body = { ok: true, state: server.state, runId: 'peer-run' };
+      body = { ok: true, state: server.state, runId: 'peer-run',
+        ...(server.error ? { error: server.error, errorType: server.errorType } : {}) };
     } else throw new Error(`unexpected ${pathname}`);
     return { ok: true, status: 200, headers: new Headers(), json: async () => body };
   };
@@ -156,5 +157,18 @@ it('reports a build\'s end as compiled only once the catalog lists the tree it w
   await elapse(10);
   expect(result.current).toMatchObject({ status: 'compiled', settled: true });
   expect(entryHasMesh(result.current.entry)).toBe(true);
+  client.dispose();
+});
+
+it('hands on why a compile failed, so a file that refused to be read is told apart (#529)', async () => {
+  const { server, client } = workspace({ tree: '' });
+  server.state = 'failed';
+  server.error = "[Errno 13] Permission denied: 'car.step'";
+  server.errorType = 'PermissionError';
+  const { result } = renderHook(() => useStepArtifact(client));
+  await elapse(10);
+  expect(result.current.status).toBe('failed');
+  expect(result.current.error).toBe(server.error);
+  expect(result.current.failure).toEqual({ kind: 'compile', errorType: 'PermissionError' });
   client.dispose();
 });

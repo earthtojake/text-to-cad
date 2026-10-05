@@ -47,6 +47,15 @@ export function failureAlert(fileRef, error, failure, compile = false) {
     recovery: "Reload to try again. If this continues, check the viewer’s terminal output for the request shown in Details.",
     reload: true
   };
+  // The file refused to be read, so nothing is known about its contents: on Windows,
+  // another program holding it, or saving or replacing it, arrives as a PermissionError.
+  if (failure?.errorType === "PermissionError") return {
+    ...common, summary: "File unreadable", title: "Couldn’t read the model",
+    message: `“${fileRef}” could not be read.`,
+    reason: detail,
+    recovery: "Another program may have it open, or be saving, syncing or scanning it. Close it there or let that finish, then retry. If this continues, check that the folder can be read.",
+    reload: true
+  };
   return {
     ...common, summary: compile || kind === "compile" ? "Compile failed" : "Mesh load failed",
     title: compile || kind === "compile" ? "Couldn’t prepare the model" : "Couldn’t load the model",

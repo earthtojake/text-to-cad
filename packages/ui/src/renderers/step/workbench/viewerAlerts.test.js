@@ -50,6 +50,19 @@ test("compile failure preserves the full diagnostic, context and useful recovery
   assert.match(alert.recovery, /rebuild/);
 });
 
+test("a file another program holds is said to be unreadable, not broken (#529)", () => {
+  const reason = "[Errno 13] Permission denied: 'C:\\Users\\ada\\STEP\\moonwatch.step'";
+  const alert = buildViewerMeshAlert(step, false, "", {
+    status: "failed", error: reason, failure: { kind: "compile", errorType: "PermissionError" }
+  });
+  assert.equal(alert.title, "Couldn’t read the model");
+  assert.match(alert.message, /moonwatch\.step.*could not be read/);
+  assert.equal(alert.reason, reason);
+  assert.match(alert.recovery, /Another program may have it open/);
+  assert.doesNotMatch(alert.recovery, /rebuild/);
+  assert.equal(alert.reload, true);
+});
+
 test("missing compiler diagnostic is stated honestly", () => {
   const alert = buildViewerMeshAlert(step, false, "", { status: "failed", error: "" });
   assert.match(alert.reason, /No diagnostic was returned/);

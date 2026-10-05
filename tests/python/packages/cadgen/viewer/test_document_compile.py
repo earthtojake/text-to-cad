@@ -19,7 +19,7 @@ import unittest
 from pathlib import Path
 
 from cadgen.viewer.cadgen_ops import CadgenOps
-from cadgen.viewer.compiles import DocumentCompiler
+from cadgen.viewer.compiles import READ_REFUSAL_REPORT_SECONDS, DocumentCompiler
 
 
 class _FakeJob:
@@ -55,6 +55,16 @@ class _FakeSubmit:
             )
         if name.startswith("mumble"):
             return _FakeJob(2, "the worker said something\nand then died\n")
+        if name.startswith("locked"):
+            # The job's own read refused (what Windows' open() raises for a held file).
+            return _FakeJob(
+                1,
+                "Traceback (most recent call last):\n  ...\n"
+                f"PermissionError: [Errno 13] Permission denied: '{document}'\n",
+            )
+        if name.startswith("denied"):
+            # The read before the job, in the viewer's own process (submit_compile's hash).
+            raise PermissionError(13, "Permission denied", str(document))
         if name.startswith("silent"):
             return _FakeJob(3, "")
         if name.startswith("slow"):
@@ -232,6 +242,34 @@ class OpsWiring(CompileTestCase):
         finally:
             self.submit.gate.set()
             thread.join(timeout=5)
+
+
+class ReadRefusals(CompileTestCase):
+    """A document that refused to be read says nothing about its bytes (#529: Windows
+    refuses an open while another program holds or replaces the file)."""
+
+    def test_a_refused_read_is_reported_then_offered_again_while_bad_bytes_stay_failed(self):
+        now = [1000.0]
+        ops = CadgenOps(client=DocumentCompiler(submit=self.submit, clock=lambda: now[0]))
+        documents = {name: self.step(name) for name in ("locked.step", "denied.step", "crash.step")}
+        for name, document in documents.items():
+            self.assertEqual(ops.build_artifact(document), {"ok": True, "state": "compiling"})
+            self.settle(ops, name)
+        for name in ("locked.step", "denied.step"):
+            with self.subTest(name=name):
+                status = ops.artifact_status(documents[name])
+                self.assertEqual((status["state"], status.get("errorType")), ("failed", "PermissionError"))
+                self.assertIn("[Errno 13] Permission denied", status["error"])
+        # Past the report, with the same bytes: the next open compiles a refused read again,
+        # and still reports a document whose bytes failed.
+        now[0] += READ_REFUSAL_REPORT_SECONDS + 1
+        for name in ("locked.step", "denied.step"):
+            with self.subTest(name=name):
+                self.assertEqual(
+                    ops.artifact_status(documents[name]),
+                    {"state": "not-compiled", "reason": "missing_glb", "compile": True},
+                )
+        self.assertEqual(ops.artifact_status(documents["crash.step"])["state"], "failed")
 
 
 class OnlyAnAbsolutePathReachesTheJob(CompileTestCase):

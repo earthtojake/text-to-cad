@@ -24,6 +24,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
+from cadgen._internal.atomic_replace import read_bytes_with_ladder
 from cadgen._internal.step_scene_loader import (
     _location_from_transform_matrix,
     _shape_hash,
@@ -156,7 +157,7 @@ def _lookup_document_readback(step_path: Path, *, step_hash: str, lazy: bool = F
         # A valid eager-only component promises display, not a native codec.
         # Saved-document readers still have its exact bytes and may parse them.
         # This is neither a corrupt closure nor permission to use a source tree.
-        payload = step_path.read_bytes()
+        payload = read_bytes_with_ladder(step_path)
         if hashlib.sha256(payload).hexdigest() != step_hash:
             return None, False
         readback = _DocumentReadback(_scene_from_selected_bytes(step_path, payload))
@@ -328,7 +329,9 @@ def load_step_scene_exact(step_path: Path) -> LoadedStepScene:
     resolved_step_path = step_path.expanduser().resolve()
     if not resolved_step_path.is_file():
         raise FileNotFoundError(f"STEP file does not exist: {resolved_step_path}")
-    payload = resolved_step_path.read_bytes()
+    # On Windows a program saving, replacing or scanning the document refuses this read for a
+    # moment (`[Errno 13]`): the ladder waits that out, as it does for every STEP cadgen reopens.
+    payload = read_bytes_with_ladder(resolved_step_path)
     return _scene_from_selected_bytes(resolved_step_path, payload)
 
 
@@ -374,7 +377,7 @@ def load_step_scene_cached(step_path: Path, *, lazy: bool = False) -> LoadedStep
     # these reads, its tree has a different digest and this loop selects again.
     attempts_by_hash: dict[str, int] = {}
     while True:
-        payload = resolved_step_path.read_bytes()
+        payload = read_bytes_with_ladder(resolved_step_path)
         step_hash = hashlib.sha256(payload).hexdigest()
         from_package, damaged_document = lookup_document_scene(resolved_step_path, step_hash=step_hash, lazy=lazy)
         if from_package is not None:
@@ -408,7 +411,7 @@ def load_step_scene_cached(step_path: Path, *, lazy: bool = False) -> LoadedStep
         # A replacement raced the submit: the worker correctly published the
         # bytes it snapshotted. A concurrent deletion of derived geometry can
         # also race publication; retry boundedly while these bytes stay current.
-        current_hash = hashlib.sha256(resolved_step_path.read_bytes()).hexdigest()
+        current_hash = hashlib.sha256(read_bytes_with_ladder(resolved_step_path)).hexdigest()
         attempts_by_hash[step_hash] = attempts_by_hash.get(step_hash, 0) + 1
         if current_hash == step_hash and attempts_by_hash[step_hash] >= 3:
             raise RuntimeError(
