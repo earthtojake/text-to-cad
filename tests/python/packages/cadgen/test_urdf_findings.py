@@ -34,6 +34,10 @@ def _joint(body: str = "", *, joint_type: str = "revolute", limit: str = '<limit
 
 # (case name, xml text, expected finding code, expected severity)
 ERROR_CASES = [
+    ("duplicate_visual_geometry", _wrap('<link name="base"><visual><geometry><sphere radius="1"/></geometry><geometry><sphere radius="2"/></geometry></visual></link>'), "duplicate_geometry"),
+    ("duplicate_collision_geometry", _wrap('<link name="base"><collision><geometry><sphere radius="1"/></geometry><geometry><sphere radius="2"/></geometry></collision></link>'), "duplicate_geometry"),
+    ("duplicate_geometry_first_invalid", _wrap('<link name="base"><visual><geometry><sphere radius="-1"/></geometry><geometry><sphere radius="2"/></geometry></visual></link>'), "nonpositive_dimension"),
+    ("duplicate_geometry_first_mesh_missing", _wrap('<link name="base"><visual><geometry><mesh filename="missing.stl"/></geometry><geometry><sphere radius="2"/></geometry></visual></link>'), "missing_mesh_file"),
     ("invalid_xml", "<robot name='x'><link></robot>", "invalid_xml"),
     ("invalid_root", "<router name='x'/>", "invalid_root"),
     ("missing_robot_name", '<robot><link name="base"/></robot>', "missing_robot_name"),

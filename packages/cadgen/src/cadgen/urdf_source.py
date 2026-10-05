@@ -695,7 +695,7 @@ def _validate_link_geometry(
                 path=owner_path,
                 hint=f"Put each geometry in a separate <{element_name}> element.",
             )
-            continue
+            # Keep validating the first geometry, as the renderer does.
         geometry_element = geometry_elements[0] if geometry_elements else None
         if geometry_element is None:
             result.add(
