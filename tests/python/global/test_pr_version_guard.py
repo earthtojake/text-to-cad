@@ -59,8 +59,13 @@ class PrVersionGuardTests(unittest.TestCase):
         return subprocess.run(
             ["bash", str(repo_path("scripts/release/check-pr-version.sh")), head_repo],
             cwd=self.root, text=True, capture_output=True, check=False,
-            env={**os.environ, "GITHUB_REPOSITORY": REPOSITORY},
+            env={**os.environ, "GITHUB_REPOSITORY": REPOSITORY, "PR_NUMBER": "7", "BASE_REF": "main",
+                 "GITHUB_OUTPUT": str(self.root / "output")},
         )
+
+    def output(self) -> str:
+        path = self.root / "output"
+        return path.read_text(encoding="utf-8") if path.exists() else ""
 
     def bump_feature(self, version: str) -> None:
         self.git("switch", "feature")
@@ -71,6 +76,7 @@ class PrVersionGuardTests(unittest.TestCase):
         result = self.check()
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("releases nothing", result.stdout)
+        self.assertEqual(self.output(), "")
 
     def test_a_release_the_branch_inherited_is_not_one_it_makes(self) -> None:
         self.release_on_main("0.5.1")
@@ -84,7 +90,10 @@ class PrVersionGuardTests(unittest.TestCase):
         self.bump_feature("0.5.1")
         result = self.check()
         self.assertEqual(result.returncode, 0, result.stderr)
+        # The next step holds the merge until this version is on PyPI.
+        self.assertEqual(self.output(), "version=0.5.1\n")
         self.assertIn("releases 0.5.1", result.stdout)
+        self.assertIn("gh workflow run release-publish.yml --ref main -f pr=7", result.stdout)
 
     def test_a_fork_may_not_release(self) -> None:
         self.bump_feature("0.5.1")

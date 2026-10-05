@@ -255,7 +255,7 @@ diff content: a comment in a module selects what the module's code would.
 
 | Check | Runs when a change reaches | What it runs |
 | --- | --- | --- |
-| Version Check | every change | canonical version, derived metadata, cadgen pins, the shipping contract's tree rules; on a pull request, what merging it releases (see [Shipping a release](#shipping-a-release)) |
+| Version Check (`version.yml`) | every change | canonical version, derived metadata, cadgen pins, the shipping contract's tree rules; on a pull request, what merging it releases, and for a release into `main` a hold until PyPI has the version (see [Shipping a release](#shipping-a-release)) |
 | cadgen (Linux/Windows) | `packages/cadgen`, `scripts/bundle`, a cadgen test, prose a cadgen test reads | the cadgen package suite, CAD Viewer backend included; for a change confined to the Viewer's backend or the CAD app's server (`cadgen/viewer`, `cadgen/mcp` and the commands that start them), only the tests that name them or read all of cadgen; for a test file, that file |
 | core-js | `packages/core` (and with it everything), `test-js.sh` and the dependency checks, `apps/docs/src` (the dependency check walks it), the viewer-memory helpers | `@text-to-cad/core`'s units, the dependency and kit-boundary checks, the benchmark helper units |
 | web | `packages/ui`, `apps/web` and the files its Markdown links to, `packages/cadgen` and `scripts/bundle`, `tests/browser`, the viewer scripts | the UI's units and browser specs (ui changes only), the client's units, then the bundle, the launch smoke test and the format/camera gates through the real backend (anything the served client or the backend reads) |
@@ -566,10 +566,10 @@ metadata derived from `VERSION`, asserted by the separate `Version Check` job
 
 ## Releases
 
-A pull request that changes `VERSION` is a release: merging it publishes that
-version, so the canonical repo version, the skill pins, the Git tag, the PyPI
-wheel and the GitHub Release all describe one commit. Normal development PRs
-leave `VERSION` alone. A PR that touches release state must keep `VERSION`, the
+A pull request that changes `VERSION` is a release, and `Publish Release`
+ships it — the PyPI wheel first, then the merge — so the canonical repo version,
+the skill pins, the Git tag, the PyPI wheel and the GitHub Release all describe
+one commit. Normal development PRs leave `VERSION` alone. A PR that touches release state must keep `VERSION`, the
 derived metadata and the pins valid; the `Test` workflow checks all three in a
 separate job (Version Check), so code tests still run when they are wrong.
 
@@ -607,8 +607,15 @@ Where the built things live instead:
 
 ### Shipping a release
 
-The bump rides on a pull request; `Publish Release` (`release-publish.yml`)
-fires on the push its merge makes and does everything else to that one commit.
+The bump rides on a pull request, and `Publish Release` (`release-publish.yml`)
+releases it: it uploads the wheel to PyPI first and merges the pull request
+after. A cadgen pin must never reach anything an installer tracks before PyPI
+has that wheel, and Codex's and Claude Code's marketplaces, Grok Build, the
+Skills CLI and the Cursor Marketplace all install from `main`. When `main` got
+the pin first, anyone who updated in the gap got a CAD server that would not
+start (`uvx … --from cadgen==0.7.14` → "there is no version"), for the 25
+minutes the release took to reach PyPI.
+
 On the branch that should carry the release — a feature branch, or a fresh
 branch from `main` to release what `main` already has:
 
@@ -626,7 +633,8 @@ branch's, so running it twice changes nothing and running it again after `main`
 moves moves the bump with it; it refuses a branch that does not contain `main`
 yet, whose stamps would conflict.
 
-The pull request's Version Check says what merging it releases, and refuses:
+The pull request's Version Check (`version.yml`, a workflow of its own) says
+what merging it releases and the command that releases it, and refuses:
 
 - a bump from a fork — releases come from branches of this repository only, so
   a contributor's pull request can never start one;
@@ -634,29 +642,31 @@ The pull request's Version Check says what merging it releases, and refuses:
 - stamps out of step with `VERSION` (`check-version.sh`,
   `sync-version.mjs --check`).
 
-A `VERSION` change runs every `Test` job (see [CI](#ci)), so the release is
-tested whole, Windows included, before it merges. When two pull requests bump
-at once, the first to merge releases. Updating the other then conflicts on the
-stamps if it bumped differently (take `main`'s side and run `bump-version.sh`
-again), or quietly stops changing `VERSION` if it bumped the same way — its
-Version Check then says it releases nothing; bump again to release it.
+Into `main`, it also stays red until PyPI serves the version, so nobody merges
+a release by hand before its wheel is out. A `VERSION` change runs every `Test`
+job (see [CI](#ci)), so the release is tested whole, Windows included, before
+it can ship. When it is green but for that hold, release it:
 
-`Publish Release`, on that push (only a push that changes `VERSION` starts it,
-so an ordinary merge never replaces a release that is waiting its turn):
+```bash
+gh workflow run release-publish.yml --ref main -f pr=<number>
+```
 
-1. **Gate.** `check-version.sh`, then `VERSION` must be past the latest release
+`Publish Release`, for that pull request:
+
+1. **Gate.** The pull request must be open, ready, this repository's, into the
+   dispatched branch, a real bump, and up to date with the branch, so that the
+   tree it tested is the tree that lands. Then `check-version.sh` and
+   `sync-version.mjs --check`, and `VERSION` must be past the latest release
    tag (either spelling — `scripts/release/release-tags.sh` is the one place
    that knows `v0.5.0` and the bare `0.4.28` before it, and it compares
    versions, not tag strings).
 2. **Tested?** Every `Test` run records the tree it tested
-   (`tested-<tree>-<scope>`). `main` merges only branches that are up to date,
-   so the release commit's tree is the one its pull request's run tested in
-   full, and `scripts/github-workflows/tested_tree.py` finds that record: a
-   completed, successful `Test` run of this repository (never a fork's) that
-   ran every job on exactly this tree. Then nothing is tested again. Without
-   one — an admin merge, a direct push, a branch merged behind `main` — the
-   workflow calls `test.yml` with `full` on the release commit and publishes
-   only if every job passes. No untested tree is published either way.
+   (`tested-<tree>-<scope>`), and `scripts/github-workflows/tested_tree.py`
+   finds the record of a completed, successful `Test` run of this repository
+   (never a fork's) that ran every job on exactly this tree: the pull request's
+   own. Then nothing is tested again. Without one, the workflow calls
+   `test.yml` with `full` on the release commit and publishes only if every
+   job passes. No untested tree is published either way.
 3. **Build.** `scripts/release/plugin_zip.py` builds the plugin ZIP from the
    untouched release commit and checks it against the portal's package rules,
    so a package the portal would refuse stops the release before anything
@@ -673,13 +683,33 @@ so an ordinary merge never replaces a release that is waiting its turn):
    `cadgen viewer --help`, `cadgen doctor skills/cad` — then
    `scripts/test/test-installed.sh --wheel <built-wheel>`; the distribution is
    uploaded as a workflow artifact (`cadgen-<version>`).
-5. **On `main` only:** PyPI upload (`skip-existing`, so a rerun is a no-op),
-   `Deploy Docs`, then the `v<VERSION>` tag and the GitHub Release, with the
-   wheel and sdist from that same artifact and the plugin ZIP attached as
-   release assets (PyPI stays the install channel; the release page is the
-   provenance copy), and the plugin tree committed onto `plugin`.
-   Nothing is committed or pushed to `main` after the merge: the tag points at
-   the source commit, and `git describe` on `main` is meaningful.
+5. **PyPI** (on `main` only), with `skip-existing`, so a rerun is a no-op.
+6. **Merge.** `scripts/release/release_pr.py land` waits until PyPI serves the
+   version, re-runs the pull request's Version Check, which held the merge until
+   then, and squash-merges it with the workflow's own token, checking that the
+   merge commit holds exactly the tree that was built. Only now does `main` get
+   the pin.
+7. **Settle.** PyPI's index is cached for ten minutes (`max-age=600`), by uv
+   too: a uv that fetched it minutes before the upload would still not see the
+   version. So nothing announces the release until the upload is that old
+   (`release_pr.py settle`).
+8. **Announce** (on `main` only): `Deploy Docs`, which moves the version feed
+   that tells installs a release is out; the `v<VERSION>` tag and the GitHub
+   Release (Gemini's extension installs from it), with the wheel and sdist from
+   that same artifact and the plugin ZIP attached as release assets (PyPI stays
+   the install channel; the release page is the provenance copy); and the
+   plugin tree committed onto `plugin`, which claude.ai's directory and a Cursor
+   install by hand follow. Each names the merge commit.
+
+When two pull requests bump at once, the first released wins. The other is then
+behind `main` and the gate refuses it until it is updated, which conflicts on
+the stamps if it bumped differently (take `main`'s side and run
+`bump-version.sh` again) or quietly stops changing `VERSION` if it bumped the
+same way — its Version Check then says it releases nothing; bump again to
+release it. A bump that reaches `main` some other way — an admin merge past the
+hold — starts `Publish Release` by its push (only a push that changes `VERSION`
+does) and is published at once: its pin is already out, so the sooner its wheel
+is, the better.
 
 ### The plugin branch
 
@@ -808,32 +838,37 @@ before the deploy that ships it (`apps/docs/README.md`).
 
 ### Resuming and republishing
 
-Dispatch `Publish Release` on `main`:
+A run that stopped before the merge — say the pull request fell behind `main`
+while it built — is finished by dispatching it again with the same `pr` once the
+pull request is up to date again. The PyPI upload is idempotent, but an update
+that changes the tree changes what would ship, so the gate's record lookup
+then has to find a run of the new tree; if the version on PyPI was built from
+the old one, bump again rather than ship a different tree under it.
+
+A run that stopped after the merge is finished by dispatching it without one:
 
 ```bash
 gh workflow run release-publish.yml --ref main            # or -f publish=false for a draft
 ```
 
-It publishes the commit on `main` that last moved `VERSION` — the release
-commit, not whatever merged after it — if that version has no tag yet. A run
-that uploaded the wheel and failed before the tag is finished this way: the
-PyPI upload is idempotent, and if the first run found its pull request's record,
-the resume finds it too (a first run that tested the commit itself recorded that
-inside its own run, which does not count, so the resume tests again). A
-dispatch uses the workflow file on `main`, so a fix to `release-publish.yml`
-itself applies to the resume; a fix anywhere else in the tree ships with a new
-bump, since the resume builds the release commit as it was. A version whose tag
+That publishes the commit on `main` that last moved `VERSION` — the release
+commit, not whatever merged after it — if that version has no tag yet. The
+merge commit holds the pull request's tested tree, so its record is found and
+nothing is tested again (a run that tested a commit itself records it inside
+its own run, which does not count, so a resume of one tests again). A dispatch
+uses the workflow file on `main`, so a fix to `release-publish.yml` itself
+applies to the resume; a fix anywhere else in the tree ships with a new bump,
+since the resume builds the release commit as it was. A version whose tag
 exists skips at the gate. A failed docs deploy is redeployed on its own (see
 [Redeploying the docs site](#redeploying-the-docs-site)).
 
 ### Rehearsing on `build-test`
 
 `build-test` is a long-lived branch whose only job is to run `Publish Release`
-without side effects. A push to it that changes `VERSION` runs the full
-pipeline through the install test and the artifact upload, then prints what it
-WOULD have uploaded, deployed and tagged (`publish-github-release.sh --dry-run`)
-and stops. To rehearse a release, reset the branch and merge a bump into it the
-way `main` gets one:
+without side effects: there it builds, installs and merges, uploads nothing,
+and prints what it WOULD have uploaded, deployed and tagged
+(`publish-github-release.sh --dry-run`). To rehearse a release, reset the
+branch and release a bump into it the way `main` gets one:
 
 ```bash
 git push --force origin main:build-test     # build-test is throwaway; a past rehearsal leaves it ahead
@@ -841,14 +876,14 @@ git switch -c rehearse origin/build-test
 scripts/release/bump-version.sh patch --base origin/build-test
 git commit -am "Rehearse the next patch" && git push -u origin rehearse
 gh pr create --base build-test --title "Rehearse the next patch" --body "Rehearsal."
+gh workflow run release-publish.yml --ref build-test -f pr=<number>    # once Test passes
 ```
 
-`Test` runs on pull requests to `build-test` as it does for `main`; merging the
-pull request after it passes rehearses the path where the record says the tree
-was tested. Pushing the bump to `build-test` directly instead rehearses the
-other path, where `Publish Release` tests the commit itself. The gate compares
-the rehearsal's `VERSION` against the repository's REAL tags, exactly as
-`main` would: a rehearsal bump passes the gate and exercises everything. A
+Version Check's hold on PyPI is `main`'s alone, since a rehearsal never
+uploads. Pushing a bump to `build-test` directly instead rehearses a bump that
+skipped the pull request, which `Publish Release` tests itself. The gate
+compares the rehearsal's `VERSION` against the repository's REAL tags, exactly
+as `main` would: a rehearsal bump passes the gate and exercises everything. A
 rehearsal consumes that version number on `build-test` only; `main` and the tags
 are untouched, so the real release re-uses it.
 
@@ -890,10 +925,13 @@ Check`, `cadgen (Linux)`, `cadgen (Windows)`, `core-js`, `web`, `skills`,
 linear history, no force pushes and no deletions. A job its selection skips
 satisfies its check, so a prose pull request merges on Version Check and the
 light contracts. Changing required check names also requires updating GitHub
-branch protection. Strict up-to-date is what makes a merged tree the tree its
-pull request's run tested, so the push run and `Publish Release` find that
-run's record and test nothing again; a merge that is not up to date is still
-tested, by its push run (and by `Publish Release` before a release).
+branch protection. Version Check runs in `version.yml`, apart from `Test`, under
+the same check name. `Publish Release` merges a released pull request with the
+workflow's own token, so no admin token is involved. Strict up-to-date is what
+makes a merged tree the tree its pull request's run tested, so the push run
+finds that run's record and tests nothing again; a merge that is not up to date
+is still tested, by its push run (`Publish Release` releases only an up-to-date
+pull request).
 `build-test` needs no protection: the irreversible steps never run there. Keep
 the repository tag ruleset (extend its pattern to cover `v[0-9]*.[0-9]*.[0-9]*`
 beside the bare form) and immutable releases.

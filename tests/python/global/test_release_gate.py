@@ -1,13 +1,16 @@
-"""Publish Release never builds a tree that no run tested in full.
+"""Publish Release ships only a tree a run tested in full, and puts its pin on main last.
 
 The gate looks up the record a Test run made of the release commit's tree
 (scripts/github-workflows/tested_tree.py). Found, the tests are not run again; not found,
 the workflow runs every Test job on the commit first, and the publish job runs only after
-one of the two.
+one of the two. A released pull request merges only after its wheel is on PyPI
+(scripts/release/release_pr.py), and nothing announces the release until PyPI's index has
+had ten minutes to show it.
 """
 from __future__ import annotations
 
 import contextlib
+import datetime
 import importlib.util
 import io
 import os
@@ -18,11 +21,18 @@ from unittest import mock
 from tests.python.support.paths import REPO_ROOT
 
 WORKFLOW = (REPO_ROOT / ".github/workflows/release-publish.yml").read_text(encoding="utf-8")
+VERSION_WORKFLOW = (REPO_ROOT / ".github/workflows/version.yml").read_text(encoding="utf-8")
 JOBS = dict(re.findall(r"^  ([a-z][\w-]*):\n(.*?)(?=^  [a-z][\w-]*:\n|\Z)", WORKFLOW.split("\njobs:\n", 1)[1], re.M | re.S))
 
-_spec = importlib.util.spec_from_file_location("tested_tree", REPO_ROOT / "scripts/github-workflows/tested_tree.py")
-tested_tree = importlib.util.module_from_spec(_spec)
-_spec.loader.exec_module(tested_tree)
+def load(name: str, path: str):
+    spec = importlib.util.spec_from_file_location(name, REPO_ROOT / path)
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+tested_tree = load("tested_tree", "scripts/github-workflows/tested_tree.py")
+release_pr = load("release_pr", "scripts/release/release_pr.py")
 
 REPO_ID = 42
 
@@ -56,8 +66,9 @@ def condition(job: str) -> str:
 
 def evaluate(expression: str, results: dict[str, str], outputs: dict[str, str]) -> bool:
     """A job condition, given the needed jobs' results and the gate's outputs."""
-    expression = re.sub(r"needs\.(\w+)\.result == '(\w+)'", lambda m: str(results[m[1]] == m[2]), expression)
-    expression = re.sub(r"needs\.gate\.outputs\.(\w+) (==|!=) '(\w+)'",
+    expression = re.sub(r"needs\.(\w+)\.result (==|!=) '(\w*)'",
+                        lambda m: str((results[m[1]] == m[3]) == (m[2] == "==")), expression)
+    expression = re.sub(r"needs\.gate\.outputs\.(\w+) (==|!=) '(\w*)'",
                         lambda m: str((outputs.get(m[1], "") == m[3]) == (m[2] == "==")), expression)
     expression = expression.replace("!cancelled()", "True").replace("&&", " and ").replace("||", " or ")
     if not re.fullmatch(r"(?:True|False|and|or|not|\s|[()])+", expression):
@@ -125,14 +136,158 @@ class PublishGate(unittest.TestCase):
                 self.assertEqual(evaluate(publish, {"test": result}, {"should_publish": "true", "tested": tested}), expected)
         self.assertFalse(evaluate(publish, {"test": "skipped"}, {"should_publish": "false", "tested": "true"}))
 
-    def test_irreversible_jobs_follow_a_successful_publish_on_main(self):
+    def test_a_dispatch_names_the_pull_request_it_releases(self):
+        self.assertRegex(WORKFLOW, r"workflow_dispatch:\n    inputs:\n      pr:")
+        self.assertIn("release_pr.py resolve --pr", JOBS["gate"])
+        # Its head must already hold the branch, so the tree tested is the tree that lands.
+        self.assertIn('git merge-base --is-ancestor "origin/$GITHUB_REF_NAME" "$sha"', JOBS["gate"])
+
+    def test_the_pull_request_merges_only_after_a_successful_publish(self):
+        merge = condition("merge")
+        self.assertTrue(evaluate(merge, {"publish": "success"}, {"pr": "554"}))
+        self.assertFalse(evaluate(merge, {"publish": "success"}, {"pr": ""}))
+        for result in ("failure", "skipped", "cancelled"):
+            self.assertFalse(evaluate(merge, {"publish": result}, {"pr": "554"}))
+        # On main the merge waits for PyPI and the held Version Check; a rehearsal uploads nothing.
+        self.assertIn('[ "$IS_MAIN" = "true" ] && args+=(--version "$VERSION")', JOBS["merge"])
+        self.assertIn('"$(git rev-parse "$merged^{tree}")" != "$(git rev-parse "$SHA^{tree}")"', JOBS["merge"])
+        # The PyPI upload is in the publish job, which the merge job needs: PyPI first, main after.
+        self.assertIn("pypa/gh-action-pypi-publish", JOBS["publish"])
+        self.assertRegex(JOBS["merge"], r"needs:\n      - gate\n      - publish\n")
+
+    def test_nothing_announces_a_release_before_the_index_settles(self):
+        settle = condition("settle")
+        self.assertTrue(evaluate(settle, {"publish": "success", "merge": "success"}, {"is_main": "true"}))
+        self.assertTrue(evaluate(settle, {"publish": "success", "merge": "skipped"}, {"is_main": "true"}))
+        self.assertFalse(evaluate(settle, {"publish": "success", "merge": "failure"}, {"is_main": "true"}))
+        self.assertFalse(evaluate(settle, {"publish": "failure", "merge": "skipped"}, {"is_main": "true"}))
+        self.assertFalse(evaluate(settle, {"publish": "success", "merge": "skipped"}, {"is_main": "false"}))
+        self.assertIn("release_pr.py settle", JOBS["settle"])
         for job in ("deploy-docs", "plugin-branch", "tag-release"):
             with self.subTest(job=job):
                 expression = condition(job)
-                self.assertTrue(evaluate(expression, {"publish": "success"}, {"is_main": "true"}))
-                self.assertFalse(evaluate(expression, {"publish": "skipped"}, {"is_main": "true"}))
-                self.assertFalse(evaluate(expression, {"publish": "failure"}, {"is_main": "true"}))
-                self.assertFalse(evaluate(expression, {"publish": "success"}, {"is_main": "false"}))
+                self.assertTrue(evaluate(expression, {"settle": "success"}, {}))
+                for result in ("skipped", "failure", "cancelled"):
+                    self.assertFalse(evaluate(expression, {"settle": result}, {}))
+                # What a release announces is the commit main got: the merge, or the pushed commit.
+                self.assertIn("${{ needs.merge.outputs.sha || needs.gate.outputs.release_sha }}", JOBS[job])
+
+    def test_version_check_holds_a_release_until_its_wheel_is_on_pypi(self):
+        hold = VERSION_WORKFLOW.split("- name: Hold the merge until PyPI has the release", 1)[1]
+        self.assertIn("if: steps.release.outputs.version != '' && github.base_ref == 'main'", hold)
+        self.assertIn('release_pr.py published "$VERSION"', hold)
+        self.assertIn("name: Version Check", VERSION_WORKFLOW)
+        self.assertNotIn("name: Version Check", (REPO_ROOT / ".github/workflows/test.yml").read_text(encoding="utf-8"))
+
+
+class FakeGitHub:
+    """GitHub's REST API, as release_pr.py uses it, with a call log."""
+
+    def __init__(self, pull: dict | None = None, check: dict | None = None, rerun: dict | None = None):
+        self.calls = []
+        self.pull = pull or {}
+        self.check = check or {"id": 9, "status": "completed", "conclusion": "failure", "run_attempt": 1}
+        self.rerun = rerun or {"id": 9, "status": "completed", "conclusion": "success", "run_attempt": 2}
+        self.reran = False
+
+    def __call__(self, method: str, path: str, body: dict | None = None) -> dict:
+        self.calls.append((method, path.split("?", 1)[0]))
+        if method == "GET" and path.endswith("/pulls/554"):
+            return self.pull
+        if method == "GET" and "/workflows/version.yml/runs" in path:
+            return {"workflow_runs": [self.check]}
+        if method == "GET" and path.endswith("/runs/9"):
+            return self.rerun if self.reran else self.check
+        if method == "POST" and path.endswith("/rerun-failed-jobs"):
+            self.reran = True
+            return {}
+        if method == "PUT" and path.endswith("/pulls/554/merge"):
+            assert body == {"merge_method": "squash", "sha": "abc"}, body
+            return {"merged": True, "sha": "def"}
+        raise AssertionError(f"unexpected {method} {path}")
+
+
+class Clock:
+    def __init__(self, now: float = 1_000_000.0):
+        self.now = now
+        self.slept = []
+
+    def time(self) -> float:
+        return self.now
+
+    def sleep(self, seconds: float) -> None:
+        self.slept.append(seconds)
+        self.now += seconds
+
+
+def on_pypi(after_polls: int = 0, uploaded: str = "2026-10-05T04:52:00Z"):
+    state = {"polls": 0}
+
+    def pypi(version: str) -> dict | None:
+        state["polls"] += 1
+        if state["polls"] <= after_polls:
+            return None
+        return {"urls": [{"upload_time_iso_8601": uploaded}, {"upload_time_iso_8601": "2026-10-05T04:53:00Z"}]}
+
+    return pypi
+
+
+class ReleasePullRequests(unittest.TestCase):
+    PULL = {"state": "open", "draft": False, "title": "Release", "base": {"ref": "main"},
+            "head": {"sha": "abc", "repo": {"id": REPO_ID}}}
+
+    def test_only_an_open_ready_pull_request_of_this_repository_into_the_branch_is_released(self):
+        github = FakeGitHub(pull=self.PULL)
+        self.assertEqual(release_pr.resolve(554, "main", "o/r", REPO_ID, github)["sha"], "abc")
+        for change, reason in ((
+            {"state": "closed"}, "closed"), ({"draft": True}, "draft"),
+            ({"base": {"ref": "build-test"}}, "targets build-test"),
+            ({"head": {"sha": "abc", "repo": {"id": 99}}}, "fork"),
+        ):
+            with self.subTest(reason=reason), self.assertRaisesRegex(release_pr.ReleaseError, reason):
+                release_pr.resolve(554, "main", "o/r", REPO_ID, FakeGitHub(pull={**self.PULL, **change}))
+
+    def test_a_release_merges_only_once_pypi_serves_it_and_its_version_check_passes(self):
+        github, clock = FakeGitHub(), Clock()
+        sha = release_pr.land(554, "abc", "o/r", "0.7.15", github=github, pypi=on_pypi(after_polls=2),
+                              clock=clock.time, sleep=clock.sleep)
+        self.assertEqual(sha, "def")
+        # Polled PyPI until it served the version, then re-ran the held check, then merged.
+        self.assertEqual(clock.slept[:2], [release_pr.POLL_SECONDS] * 2)
+        methods = [method for method, _ in github.calls]
+        self.assertLess(methods.index("POST"), methods.index("PUT"))
+        self.assertEqual(github.calls[-1], ("PUT", "repos/o/r/pulls/554/merge"))
+
+    def test_a_version_check_that_still_fails_stops_the_merge(self):
+        github = FakeGitHub(rerun={"id": 9, "status": "completed", "conclusion": "failure", "run_attempt": 2})
+        clock = Clock()
+        with self.assertRaisesRegex(release_pr.ReleaseError, "concluded failure"):
+            release_pr.land(554, "abc", "o/r", "0.7.15", github=github, pypi=on_pypi(), clock=clock.time, sleep=clock.sleep)
+        self.assertNotIn("PUT", [call[0] for call in github.calls])
+
+    def test_a_version_pypi_never_serves_is_never_merged(self):
+        github, clock = FakeGitHub(), Clock()
+        with self.assertRaisesRegex(release_pr.ReleaseError, "PyPI to serve"):
+            release_pr.land(554, "abc", "o/r", "0.7.15", github=github, pypi=lambda version: None,
+                            clock=clock.time, sleep=clock.sleep)
+        self.assertEqual(github.calls, [])
+
+    def test_a_rehearsal_merges_without_pypi(self):
+        github = FakeGitHub()
+        self.assertEqual(release_pr.land(554, "abc", "o/r", github=github), "def")
+        self.assertEqual(github.calls, [("PUT", "repos/o/r/pulls/554/merge")])
+
+    def test_the_announcements_wait_out_the_index_cache_from_the_first_upload(self):
+        # Two files, uploaded a minute apart: the wait counts from the first.
+        uploaded = datetime.datetime(2026, 10, 5, 4, 52, tzinfo=datetime.timezone.utc).timestamp()
+        pypi = on_pypi(uploaded="2026-10-05T04:52:00Z")
+        clock = Clock(now=uploaded + 120)
+        waited = release_pr.settle("0.7.15", pypi=pypi, clock=clock.time, sleep=clock.sleep)
+        self.assertEqual(waited, release_pr.INDEX_MAX_AGE + release_pr.SETTLE_MARGIN - 120)
+        # A resume long after the upload does not wait at all.
+        clock = Clock(now=uploaded + 3600)
+        self.assertEqual(release_pr.settle("0.7.15", pypi=pypi, clock=clock.time, sleep=clock.sleep), 0.0)
+        self.assertEqual(clock.slept, [])
 
 
 if __name__ == "__main__":

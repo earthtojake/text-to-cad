@@ -13,6 +13,9 @@ set -euo pipefail
 # checks out for a pull request. That commit's first parent is the target branch as it is
 # now, so a release the branch merely inherited from the target is not taken for one it
 # makes. GITHUB_REPOSITORY names this repository; the release tags must be fetched.
+#
+# A release writes `version=<X>` to GITHUB_OUTPUT, so the next step can hold the merge until
+# that version is on PyPI. PR_NUMBER and BASE_REF, when set, name the command that releases it.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck source=release-tags.sh
@@ -63,4 +66,9 @@ if [ -n "$latest_tag" ] && ! version_greater "$version" "$(version_from_release_
   exit 1
 fi
 
-echo "Merging this pull request releases $version (the target branch is at $base_version)."
+echo "This pull request releases $version (the target branch is at $base_version)."
+echo "Release it with: gh workflow run release-publish.yml --ref ${BASE_REF:-main} -f pr=${PR_NUMBER:-<number>}"
+echo "That uploads the wheel to PyPI, then merges this pull request."
+if [ -n "${GITHUB_OUTPUT:-}" ]; then
+  echo "version=$version" >> "$GITHUB_OUTPUT"
+fi

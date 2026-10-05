@@ -18,41 +18,46 @@ an installable plugin too: every manifest and MCP config lives at its root.
 
 ## Release Workflow
 
-A pull request that changes `VERSION` is a release: merging it publishes that
-version. Never bump during normal development work. When asked to make or ship a
-release, bump on the pull request that should carry it — or on a fresh branch
-from `main`, for a release of what `main` already has — with
+A pull request that changes `VERSION` is a release. Never bump during normal
+development work. When asked to make or ship a release, bump on the pull request
+that should carry it — or on a fresh branch from `main`, for a release of what
+`main` already has — with
 `scripts/release/bump-version.sh <patch|minor|major|X.Y.Z>`, which sets `VERSION`
 past `main`'s and stamps the derived metadata and every `cadgen==` pin with it.
 Never pick the bump yourself: if the request does not name patch, minor, major,
-or an exact version, ask which one. Merging is releasing, so never merge one
-without the user's explicit word.
+or an exact version, ask which one.
 
-- `Test`'s Version Check vets the bump: a branch of this repository only (a fork
-  cannot release), a version past `main`'s and the latest tag, every stamp in
-  step. A `VERSION` change runs every `Test` job, so a release is tested whole.
-- `Publish Release` (`release-publish.yml`) fires on the push that merge makes
-  (only a push that changes `VERSION` starts it). When a `Test` run recorded the
-  release commit's exact tree as tested in full — its pull request's run, since
-  `main` merges only branches that are up to date — it does not test again;
-  otherwise it runs every `Test` job on the release commit first. Then it builds
-  the plugin ZIP, the bundle and the `cadgen` wheel and sdist, installs and
-  exercises the wheel, keeps the distribution as a workflow artifact, and — on
-  `main` only — uploads to PyPI, deploys the docs site, and tags (`v<VERSION>`;
-  releases before 0.5.0 are bare `0.4.x` tags) + GitHub-Releases that same
-  commit with the wheel and sdist that went to PyPI attached as release assets,
-  plus the plugin ZIP that a person uploads to OpenAI's plugin portal, which has
-  no API. It also commits the plugin alone (Claude, Cursor and Gemini manifests,
-  icon, `claude.mcp.json`, `skills/`, `LICENSE`, README) onto the `plugin`
-  branch, which claude.ai's plugin directory follows
-  (`scripts/release/plugin_branch.py`).
+A cadgen pin must never reach `main`, which installers track, before PyPI has
+that wheel, so a release is never merged by hand. Its Version Check
+(`version.yml`) stays red until the version is on PyPI. Once the rest of its
+checks pass, and only on the user's explicit word, release it:
+`gh workflow run release-publish.yml --ref main -f pr=<number>`.
 
-To resume a run that uploaded the wheel but failed before the tag or the docs
-deploy, dispatch `Publish Release` on `main` (`publish=false` leaves the GitHub
-Release as a draft): it publishes the commit that last moved `VERSION`, if that
-version has no tag yet. `build-test` is the rehearsal branch — a bump merged into
-it runs `Publish Release` without PyPI, docs or tag — and is never a release; use
-it only when the user explicitly asks to test the pipeline.
+- `Test` runs every job for a `VERSION` change, so a release is tested whole.
+  Version Check vets the bump: a branch of this repository only (a fork cannot
+  release), a version past `main`'s and the latest tag, every stamp in step.
+- `Publish Release` (`release-publish.yml`) checks the pull request is
+  up to date and finds the `Test` run that recorded its exact tree as tested in
+  full (else it runs every `Test` job on it first). Then it builds the plugin
+  ZIP, the bundle and the `cadgen` wheel and sdist, installs and exercises the
+  wheel, and uploads it to PyPI. Only then does it re-run the held Version Check
+  and merge the pull request (`scripts/release/release_pr.py`). Ten minutes
+  after the upload, once PyPI's cached index has caught up, it deploys the docs
+  site, tags (`v<VERSION>`; releases before 0.5.0 are bare `0.4.x` tags) and
+  GitHub-Releases the merge commit with the wheel and sdist that went to PyPI
+  attached as release assets, plus the plugin ZIP that a person uploads to
+  OpenAI's plugin portal, which has no API. It also commits the plugin alone
+  (Claude, Cursor and Gemini manifests, icon, `claude.mcp.json`, `skills/`,
+  `LICENSE`, README) onto the `plugin` branch, which claude.ai's plugin
+  directory follows (`scripts/release/plugin_branch.py`).
+
+To finish a run that stopped before the merge, dispatch it again with the same
+`pr`; after the merge, dispatch `Publish Release` on `main` without one
+(`publish=false` leaves the GitHub Release as a draft): it publishes the commit
+that last moved `VERSION`, if that version has no tag yet. `build-test` is the
+rehearsal branch — a bump released into it is built, installed and merged, with
+no PyPI, docs or tag — and is never a release; use it only when the user
+explicitly asks to test the pipeline.
 
 The standalone `Deploy Docs` workflow redeploys the docs site from a ref
 (default `main`, or a release tag) without running a release.

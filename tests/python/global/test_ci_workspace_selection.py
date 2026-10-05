@@ -183,9 +183,13 @@ class TheWorkflowFollowsTheSelector(unittest.TestCase):
         self.assertEqual({job for job in GATED if values[condition(job)] == "true"}, GATED)
 
     def test_required_check_names_are_the_jobs(self):
-        # main's branch protection requires exactly these names (CONTRIBUTING.md, Repository settings).
+        # main's branch protection requires exactly these names (CONTRIBUTING.md, Repository settings):
+        # seven Test jobs, and Version Check, which version.yml runs apart from Test.
         names = {re.search(r"^    name: (.+)$", body, re.M)[1] for body in JOBS.values()}
-        self.assertTrue({"Version Check", "cadgen (Linux)", "cadgen (Windows)", "core-js", "web", "skills", "docs", "packaging"} <= names)
+        self.assertTrue({"cadgen (Linux)", "cadgen (Windows)", "core-js", "web", "skills", "docs", "packaging"} <= names)
+        version = (REPO_ROOT / ".github/workflows/version.yml").read_text(encoding="utf-8")
+        self.assertRegex(version, r"(?m)^    name: Version Check$")
+        self.assertNotIn("Version Check", names)
 
 
 class ChangesRunWhatCanBreak(unittest.TestCase):
@@ -203,7 +207,8 @@ class ChangesRunWhatCanBreak(unittest.TestCase):
                      "claude.mcp.json", "skills.sh.json", "skills/urdf/SKILL.md", "skills/urdf/references/joints.md",
                      "skills/step-parts/agents/openai.yaml", "packages/core/README.md", "packages/ui/docs/lod.md",
                      "docs/migrations/migrating-0.4-to-0.5.md", "models/examples/src/part.py",
-                     ".github/workflows/release-publish.yml", "scripts/release/bump-version.sh"):
+                     ".github/workflows/release-publish.yml", ".github/workflows/version.yml",
+                     "scripts/release/bump-version.sh", "scripts/release/release_pr.py"):
             with self.subTest(path=path):
                 self.assertEqual(jobs_for(path) - {"skills"}, set())
                 self.assertEqual(route(path)["skills_runtime"], "false")

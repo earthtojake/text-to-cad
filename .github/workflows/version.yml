@@ -1,0 +1,82 @@
+# Version Check, a required check of main. Its own workflow, apart from Test, because on a
+# pull request that releases it stays red until the wheel is on PyPI: a cadgen pin must
+# never reach main, which installers track, before PyPI has that version. Test's record of
+# the tree it tested is untouched by that, so Publish Release can still find it.
+name: Version
+
+on:
+  workflow_dispatch:
+  pull_request:
+    branches:
+      - main
+      - build-test
+  push:
+    branches:
+      - main
+      - build-test
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+jobs:
+  version:
+    name: Version Check
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+        with:
+          # The release guard below reads the target branch's history and the release tags.
+          fetch-depth: 0
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Check release version
+        run: |
+          scripts/release/check-version.sh
+          node scripts/release/sync-version.mjs --check
+
+      # A pull request that changes VERSION is a release. Only a branch of this repository may
+      # carry one, and only to a version past the target branch's and the latest tag. The
+      # summary says what merging releases and the command that releases it.
+      - name: Check what merging releases
+        id: release
+        if: github.event_name == 'pull_request'
+        env:
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_REF: ${{ github.base_ref }}
+        run: scripts/release/check-pr-version.sh "$HEAD_REPO" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # Red until PyPI serves the version, so the pull request cannot merge before its wheel
+      # is out. Publish Release uploads it, re-runs this check and then merges the pull request.
+      # Rehearsals into build-test upload nothing, so the hold is main's alone.
+      - name: Hold the merge until PyPI has the release
+        if: steps.release.outputs.version != '' && github.base_ref == 'main'
+        env:
+          VERSION: ${{ steps.release.outputs.version }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          if python3 scripts/release/release_pr.py published "$VERSION"; then
+            exit 0
+          fi
+          {
+            echo "This pull request merges after cadgen $VERSION is on PyPI. Release it with:"
+            echo "  gh workflow run release-publish.yml --ref main -f pr=$PR_NUMBER"
+          } | tee -a "$GITHUB_STEP_SUMMARY" >&2
+          exit 1
+
+      # The shipping contract's tree rules hold for every change, docs and models
+      # included, and need no runtime: no symlink, no LFS or other rewriting
+      # .gitattributes rule, every file under 5 MiB, no skill reaching into a repo root.
+      - name: Check the tracked tree
+        run: scripts/github-workflows/check-builds.sh --tree-only

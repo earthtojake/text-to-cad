@@ -1,27 +1,35 @@
 name: Publish Release
 
-# A release is the commit that moves VERSION. The pull request that carries it bumps
-# VERSION, the derived metadata and every cadgen pin in one step
-# (scripts/release/bump-version.sh); Test's Version Check vets the bump, and a VERSION change
-# selects every Test job. Merging that pull request is the push that starts this workflow:
-# only a push that changes VERSION does.
+# A release is a pull request that moves VERSION (scripts/release/bump-version.sh stamps the
+# bump, the derived metadata and every cadgen pin). Test's run of it selects every job, and
+# its Version Check stays red until the version is on PyPI, so nobody merges it by hand. A
+# cadgen pin must never reach main before PyPI has the wheel: Codex's and Claude Code's
+# marketplaces, Grok, the Skills CLI and the Cursor Marketplace all install from main.
 #
-# Nothing ships untested, and nothing is tested twice. Every Test run records the tree it
-# tested (scripts/github-workflows/select_checks.py, tested_tree.py). main merges a pull
-# request only once it is up to date, so the release commit's tree is normally the tree its
-# pull request's run tested in full; the gate looks that record up, and the tests do not run
-# again. Without one -- an admin merge, a direct push, a branch merged behind main -- this
-# workflow runs every Test job on the release commit before anything is built.
+#   gh workflow run release-publish.yml --ref main -f pr=<number>
 #
-# Then the publish job builds what ships from that commit -- the plugin ZIP, the runtime
-# bundle, the wheel and sdist -- and installs and exercises the wheel it is about to upload.
-# The IRREVERSIBLE steps -- PyPI upload, docs deploy, tag + GitHub Release, plugin branch --
-# run only on refs/heads/main. build-test is the rehearsal branch: there the run prints what
-# it would have uploaded, deployed and tagged, and stops.
+# releases one. The gate checks the pull request is this repository's, up to date and a real
+# bump, and finds the record of the Test run that tested its tree in full
+# (scripts/github-workflows/tested_tree.py); without one, every Test job runs on it first.
+# Nothing ships untested, and nothing is tested twice. The publish job builds what ships from
+# that tree -- the plugin ZIP, the runtime bundle, the wheel and sdist -- installs and
+# exercises the wheel, and uploads it to PyPI. Only then does the merge job re-run the pull
+# request's Version Check and merge it (scripts/release/release_pr.py), so main gets the pin
+# after PyPI has the wheel.
 #
-# Manual dispatch resumes: it publishes the commit on the dispatched branch that last moved
-# VERSION, if that version has no tag yet. A run that uploaded the wheel and died before the
-# tag is finished this way (PyPI's skip-existing makes the re-upload a no-op).
+# PyPI's index is cached for ten minutes (max-age=600), by uv too. The announcements -- the
+# docs deploy that moves the version feed and the update notice, the tag and the GitHub
+# Release that Gemini installs from, the plugin branch -- wait until the upload is that old.
+#
+# Two other ways in. A push that changes VERSION -- a bump that reached the branch another
+# way, say an admin merge -- is published at once; its pin is already out, so the sooner the
+# better. A dispatch without `pr` resumes: it publishes the commit on the branch that last
+# moved VERSION, if that version has no tag yet (PyPI's skip-existing makes a re-upload a
+# no-op).
+#
+# The IRREVERSIBLE steps -- PyPI, docs, tag, GitHub Release, plugin branch -- run only on
+# refs/heads/main. build-test is the rehearsal branch: a pull request against it is built,
+# installed and merged, and the run prints what it would have uploaded, deployed and tagged.
 #
 # Release tags are `v<VERSION>` from 0.5.0 on; earlier releases were tagged bare
 # (`0.4.28`). scripts/release/release-tags.sh is the one place that knows both.
@@ -35,6 +43,11 @@ on:
       - VERSION
   workflow_dispatch:
     inputs:
+      pr:
+        description: The pull request to release (it must change VERSION). Empty resumes the commit that last moved VERSION.
+        required: false
+        default: ""
+        type: string
       publish:
         description: Publish the GitHub Release (main only). Set to false to leave it as a draft.
         required: true
@@ -45,8 +58,7 @@ permissions:
   contents: read
 
 # One release at a time per branch. A run waiting here is replaced by a newer one, which is
-# why only a push that moves VERSION starts this workflow at all: an ordinary merge can never
-# cancel a release that is waiting its turn.
+# why a push starts this workflow only when it moves VERSION.
 concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
@@ -58,12 +70,14 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: read
-      # tested_tree.py reads other runs' records.
+      # tested_tree.py reads other runs' records; release_pr.py reads the pull request.
       actions: read
+      pull-requests: read
     outputs:
       should_publish: ${{ steps.gate.outputs.should_publish }}
       version: ${{ steps.gate.outputs.version }}
       release_sha: ${{ steps.release.outputs.sha }}
+      pr: ${{ steps.release.outputs.pr }}
       is_main: ${{ steps.gate.outputs.is_main }}
       tested: ${{ steps.tested.outputs.tested }}
 
@@ -75,22 +89,42 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      # A push is the release commit itself. A dispatch publishes the commit that last moved
-      # VERSION on the dispatched branch: later merges ride in the next release, not this one.
+      # With `pr`: the pull request's head, which must be this repository's, up to date with
+      # the branch and a real bump -- so its tree is the tree that lands. A push: the commit
+      # itself. A dispatch without `pr`: the commit that last moved VERSION on the branch;
+      # later merges ride in the next release, not this one.
       - name: Find the release commit
         id: release
+        env:
+          PR: ${{ github.event_name == 'workflow_dispatch' && inputs.pr || '' }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: |
-          if [ "$GITHUB_EVENT_NAME" = "push" ]; then
+          if [ -n "$PR" ]; then
+            pull="$(python3 scripts/release/release_pr.py resolve --pr "$PR" --base "$GITHUB_REF_NAME")"
+            sha="$(printf '%s' "$pull" | python3 -c 'import json, sys; print(json.load(sys.stdin)["sha"])')"
+            git fetch --quiet origin "$sha" "+refs/heads/$GITHUB_REF_NAME:refs/remotes/origin/$GITHUB_REF_NAME"
+            if ! git merge-base --is-ancestor "origin/$GITHUB_REF_NAME" "$sha"; then
+              echo "Pull request #$PR is behind $GITHUB_REF_NAME: bring $GITHUB_REF_NAME into it and let Test pass, then release it." >&2
+              exit 1
+            fi
+            if git diff --quiet "origin/$GITHUB_REF_NAME" "$sha" -- VERSION; then
+              echo "Pull request #$PR does not change VERSION: it releases nothing." >&2
+              exit 1
+            fi
+            echo "pr=$PR" >> "$GITHUB_OUTPUT"
+          elif [ "$GITHUB_EVENT_NAME" = "push" ]; then
             sha="$GITHUB_SHA"
           else
             sha="$(git log -1 --first-parent --format=%H -- VERSION)"
           fi
           git checkout --quiet --detach "$sha"
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
-          echo "Release commit: $sha"
+          echo "Release commit: $sha${PR:+ (pull request #$PR)}"
 
       - name: Check canonical release version
-        run: scripts/release/check-version.sh
+        run: |
+          scripts/release/check-version.sh
+          node scripts/release/sync-version.mjs --check
 
       # Publish only a version that is past the latest release tag (either spelling). That
       # covers a resume too: a run that uploaded the wheel and died before tagging left the
@@ -288,9 +322,10 @@ jobs:
 
       # ---- irreversible from here: main only -------------------------------------
 
-      # Uploaded BEFORE the tag: the skill pins on main name this version, so a tagged
-      # release without its wheel would break every skill install. If the upload
-      # succeeds and a later step fails, dispatch this workflow on main again.
+      # Uploaded BEFORE anything names the version: the pull request merges after this (the
+      # merge job), and the tag, the docs feed and the plugin branch after the index settles.
+      # If the upload succeeds and a later step fails, dispatch this workflow again with the
+      # same `pr` (or, once merged, without one).
       - name: Publish cadgen to PyPI
         if: needs.gate.outputs.is_main == 'true'
         uses: pypa/gh-action-pypi-publish@release/v1
@@ -311,18 +346,90 @@ jobs:
           for file in packages/cadgen/dist/* "$RUNNER_TEMP"/plugin/*.zip; do args+=(--asset "$file"); done
           scripts/release/publish-github-release.sh "${args[@]}"
 
+  # The pull request merges only now, with its wheel on PyPI: release_pr.py waits until PyPI
+  # serves the version, re-runs the pull request's Version Check, which held the merge until
+  # then, and merges it -- and the merge commit must hold exactly the tree that was built.
+  merge:
+    name: Merge the pull request
+    needs:
+      - gate
+      - publish
+    if: ${{ !cancelled() && needs.publish.result == 'success' && needs.gate.outputs.pr != '' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      pull-requests: write
+      # Re-running the pull request's Version Check.
+      actions: write
+    outputs:
+      sha: ${{ steps.merge.outputs.sha }}
+
+    steps:
+      - name: Check out release commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.gate.outputs.release_sha }}
+          persist-credentials: false
+
+      - name: Merge the pull request
+        id: merge
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PR: ${{ needs.gate.outputs.pr }}
+          SHA: ${{ needs.gate.outputs.release_sha }}
+          VERSION: ${{ needs.gate.outputs.version }}
+          IS_MAIN: ${{ needs.gate.outputs.is_main }}
+        run: |
+          args=(land --pr "$PR" --sha "$SHA")
+          # On main, the merge waits for PyPI and the Version Check; a rehearsal uploads nothing.
+          [ "$IS_MAIN" = "true" ] && args+=(--version "$VERSION")
+          merged="$(python3 scripts/release/release_pr.py "${args[@]}")"
+          git fetch --quiet origin "$merged"
+          if [ "$(git rev-parse "$merged^{tree}")" != "$(git rev-parse "$SHA^{tree}")" ]; then
+            echo "The merge commit $merged does not hold the tree that was built ($SHA)." >&2
+            exit 1
+          fi
+          echo "sha=$merged" >> "$GITHUB_OUTPUT"
+          echo "Merged pull request #$PR as $merged."
+
+  # Ten minutes after the upload, PyPI's index pages that any uv fetched before it have
+  # expired (max-age=600); only then does anything announce the release.
+  settle:
+    name: Let PyPI's index catch up
+    needs:
+      - gate
+      - publish
+      - merge
+    if: ${{ !cancelled() && needs.publish.result == 'success' && needs.merge.result != 'failure' && needs.merge.result != 'cancelled' && needs.gate.outputs.is_main == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Check out release commit
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.gate.outputs.release_sha }}
+          persist-credentials: false
+
+      - name: Wait until the upload is older than the index's max-age
+        env:
+          VERSION: ${{ needs.gate.outputs.version }}
+        run: python3 scripts/release/release_pr.py settle "$VERSION"
+
   # The docs site is built from the release commit itself: main is the source tree,
-  # and apps/docs/package.json carries the stamped version the header reads.
+  # and apps/docs/package.json carries the stamped version the header reads. Deploying it
+  # moves the version feed, which is what tells installs a release is out.
   deploy-docs:
     name: Deploy Docs
     needs:
       - gate
-      - publish
-    # Spelled out: the implicit success() would also read `test`, skipped when the tree was tested.
-    if: ${{ !cancelled() && needs.publish.result == 'success' && needs.gate.outputs.is_main == 'true' }}
+      - merge
+      - settle
+    if: ${{ !cancelled() && needs.settle.result == 'success' }}
     uses: ./.github/workflows/deploy-docs.yml
     with:
-      ref: ${{ needs.gate.outputs.release_sha }}
+      ref: ${{ needs.merge.outputs.sha || needs.gate.outputs.release_sha }}
     secrets: inherit
 
   # claude.ai's plugin directory follows the `plugin` branch: one commit per release whose
@@ -337,8 +444,9 @@ jobs:
     name: Plugin branch
     needs:
       - gate
-      - publish
-    if: ${{ !cancelled() && needs.publish.result == 'success' && needs.gate.outputs.is_main == 'true' }}
+      - merge
+      - settle
+    if: ${{ !cancelled() && needs.settle.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -348,7 +456,7 @@ jobs:
       - name: Check out release commit
         uses: actions/checkout@v7
         with:
-          ref: ${{ needs.gate.outputs.release_sha }}
+          ref: ${{ needs.merge.outputs.sha || needs.gate.outputs.release_sha }}
           persist-credentials: false
 
       - name: Commit the plugin onto plugin (and claude-plugin) and push it
@@ -380,8 +488,9 @@ jobs:
     # PyPI release untagged (Deploy Docs can be re-run on its own).
     needs:
       - gate
-      - publish
-    if: ${{ !cancelled() && needs.publish.result == 'success' && needs.gate.outputs.is_main == 'true' }}
+      - merge
+      - settle
+    if: ${{ !cancelled() && needs.settle.result == 'success' }}
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -391,7 +500,7 @@ jobs:
       - name: Check out release commit
         uses: actions/checkout@v7
         with:
-          ref: ${{ needs.gate.outputs.release_sha }}
+          ref: ${{ needs.merge.outputs.sha || needs.gate.outputs.release_sha }}
           fetch-depth: 0
           persist-credentials: false
 
