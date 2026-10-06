@@ -7,6 +7,7 @@ import { HeroSection } from "@/components/hero-section";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { Button } from "@/components/ui/button";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   agentInstallByline,
   agentInstallLinks,
@@ -34,14 +35,19 @@ function AgentMessage() {
           {agentInstallLinks.map(({ id, agent, href }) => {
             const Logo = agentLogos[id];
             return (
-              <Button key={id} asChild variant="secondary" size="icon-lg">
-                <a href={href} aria-label={`Open in ${agent}`} title={`Open in ${agent}`}>
-                  <Logo className="size-4" />
-                </a>
-              </Button>
+              <Tooltip key={id}>
+                <TooltipTrigger asChild>
+                  <Button asChild variant="secondary" size="icon-lg">
+                    <a href={href} aria-label={`Open in ${agent}`}>
+                      <Logo className="size-4" />
+                    </a>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Open in {agent}</TooltipContent>
+              </Tooltip>
             );
           })}
-          <CopyButton text={agentInstallMessage} label="Copy the message for your agent" icon />
+          <CopyButton text={agentInstallMessage} label="Copy the message for your agent" />
         </div>
       </div>
     </div>
@@ -88,7 +94,7 @@ function Command({ text, label }: { text: string; label: string }) {
         <code className="flex min-w-0 flex-1 items-center overflow-x-auto whitespace-pre font-mono px-3 py-2 text-sm leading-6 text-foreground">
           {text}
         </code>
-        <CopyButton text={text} label={label} />
+        <CopyButton text={text} label={label} className="m-2 self-center" />
       </div>
     </div>
   );
