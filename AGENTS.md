@@ -85,7 +85,8 @@ path, the rehearsal, and local/manual fallbacks.
 ## Repo Map
 
 - `skills/`: agent skills and their references/scripts.
-- `.claude-plugin/`, `.codex-plugin/`, `.cursor-plugin/`, `gemini-extension.json`:
+- `.claude-plugin/`, `.codex-plugin/`, `.cursor-plugin/`, `gemini-extension.json`, and the
+  [Agent Plugins](https://agent-plugins.org) standard's `plugin.json` and `mcp.json`:
   agent plugin manifests. The repository root is the plugin package; its skills are
   `skills/` directly. Installers take it from the `latest` branch, which
   `scripts/release/plugin_branch.py` builds from this tree at each release.

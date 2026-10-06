@@ -16,6 +16,7 @@ export const jsonTargets = [
   { path: ".codex-plugin/plugin.json", fields: [["version"]] },
   { path: ".cursor-plugin/plugin.json", fields: [["version"]] },
   { path: "gemini-extension.json", fields: [["version"]] },
+  { path: "plugin.json", fields: [["version"]] },
   { path: ".claude-plugin/marketplace.json", fields: [["version"]], pluginEntries: ["text-to-cad"] },
 ];
 
