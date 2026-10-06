@@ -129,7 +129,8 @@ Lobe Icons (MIT) in the same tile, each tile blended into the page's background.
 A logo leads to its install. Then the plugin's description, which every manifest
 and the README's Overview say word for word (`test_plugin_manifests.py` holds
 them to one text). Install
-leads with the message to send to an agent, then a sub-section per agent app, its update
+leads with the message to send to an agent, monospace like the commands, with buttons that open it
+in Claude Code (Claude Desktop) or Codex, prefilled and unsent, beside Copy; then a sub-section per agent app, its update
 and remove commands folded under Update or reinstall; Codex leads with a button to its listing in
 Codex's plugin directory, its commands, update and remove folded under Manual install. Other Agents
 (the Skills CLI) for the rest, and Request Plugin, a new GitHub issue. Contributing closes the page. Install boxes and explanatory text fill the

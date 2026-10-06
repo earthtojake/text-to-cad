@@ -1,7 +1,7 @@
 import { ChevronRight, ExternalLink } from "lucide-react";
 import Image from "next/image";
-import type { ComponentType, ReactNode } from "react";
-import { CodexLogo } from "@/components/codex-logo";
+import type { ReactNode } from "react";
+import { agentLogos } from "@/components/agent-logos";
 import { CopyButton } from "@/components/copy-button";
 import { HeroSection } from "@/components/hero-section";
 import { SiteFooter } from "@/components/site-footer";
@@ -9,6 +9,7 @@ import { SiteHeader } from "@/components/site-header";
 import { Button } from "@/components/ui/button";
 import {
   agentInstallByline,
+  agentInstallLinks,
   agentInstallMessage,
   agents,
   installs,
@@ -25,11 +26,23 @@ const COMMAND_BOX_CLASS =
 function AgentMessage() {
   return (
     <div className={COMMAND_BOX_CLASS}>
-      <div className="flex min-h-[54px] min-w-0 max-w-full items-stretch">
-        <p className="flex min-w-0 flex-1 items-center px-3 py-2 text-sm leading-6 text-foreground">
+      <div className="flex min-h-[54px] min-w-0 max-w-full flex-col items-stretch sm:flex-row">
+        <p className="flex min-w-0 flex-1 items-center break-words px-3 pt-2 font-mono text-sm leading-6 text-foreground sm:py-2">
           {agentInstallMessage}
         </p>
-        <CopyButton text={agentInstallMessage} label="Copy the message for your agent" prominent />
+        <div className="flex shrink-0 items-center justify-end gap-1 pl-2">
+          {agentInstallLinks.map(({ id, agent, href }) => {
+            const Logo = agentLogos[id];
+            return (
+              <Button key={id} asChild variant="secondary" size="icon">
+                <a href={href} aria-label={`Open in ${agent}`} title={`Open in ${agent}`}>
+                  <Logo className="size-4" />
+                </a>
+              </Button>
+            );
+          })}
+          <CopyButton text={agentInstallMessage} label="Copy the message for your agent" prominent />
+        </div>
       </div>
     </div>
   );
@@ -95,14 +108,11 @@ function Fold({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-// The logo on the button to an app's own plugin directory, by install.
-const LISTING_LOGOS: Record<string, ComponentType<{ className?: string }>> = { codex: CodexLogo };
-
 // An install, and under it, folded away, how to update it and how to reinstall it: where the CAD
 // app's update button sends a person who updates by hand (/install). An app listed in its own plugin
 // directory leads with a button to the listing, its commands folded under Manual install.
 function Install({ item }: { item: (typeof installs)[number] }) {
-  const Logo = LISTING_LOGOS[item.id];
+  const Logo = agentLogos[item.id];
   const updateOrReinstall = (
     <>
       {item.update ? (
@@ -129,9 +139,9 @@ function Install({ item }: { item: (typeof installs)[number] }) {
       </div>
       {item.listing ? (
         <>
-          <Button asChild>
+          <Button asChild className="h-11 gap-2 px-5 text-base">
             <a href={item.listing.href} target="_blank" rel="noreferrer">
-              {Logo ? <Logo className="size-4" /> : null}
+              {Logo ? <Logo className="size-5" /> : null}
               {item.listing.label}
             </a>
           </Button>

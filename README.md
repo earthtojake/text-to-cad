@@ -134,10 +134,6 @@ codex plugin marketplace add earthtojake/text-to-cad --ref latest
 codex plugin add text-to-cad@earthtojake
 ```
 
-Requires Codex 0.142.0 or newer: older versions skip this repository-root plugin
-silently, and it never appears in `codex plugin list`. Upgrade with
-`npm install -g @openai/codex@latest`.
-
 To update, upgrade the `earthtojake` marketplace (or use Plugins › Manage ›
 Marketplace), then restart Codex:
 
