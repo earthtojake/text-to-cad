@@ -159,6 +159,11 @@ class PublishGate(unittest.TestCase):
         self.assertIn('git push --atomic "$remote" "$latest:refs/heads/latest" "$directory:refs/heads/claude-plugin"',
                       body)
         self.assertNotIn("refs/heads/plugin", body)
+        # Only a deploy key may update those branches, so the push goes over SSH with the release's own key,
+        # checked against GitHub's host keys.
+        self.assertIn("INSTALL_BRANCHES_KEY: ${{ secrets.INSTALL_BRANCHES_KEY }}", body)
+        self.assertIn('remote="git@github.com:${GITHUB_REPOSITORY}.git"', body)
+        self.assertIn("StrictHostKeyChecking=yes", body)
 
 
 class PrepareRelease(unittest.TestCase):

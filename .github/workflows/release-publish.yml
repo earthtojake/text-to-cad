@@ -357,6 +357,10 @@ jobs:
 
       - name: Commit the plugin onto latest and claude-plugin and push them
         env:
+          # Only a deploy key may update the install branches (CONTRIBUTING.md, "The install branches"),
+          # so the release pushes them with its own. Without the secret it pushes with a token, which
+          # GitHub turns away once that rule is on.
+          INSTALL_BRANCHES_KEY: ${{ secrets.INSTALL_BRANCHES_KEY }}
           PUBLISH_PUSH_TOKEN: ${{ secrets.PUBLISH_PUSH_TOKEN }}
           GH_TOKEN: ${{ github.token }}
           GIT_AUTHOR_NAME: github-actions[bot]
@@ -364,7 +368,18 @@ jobs:
           GIT_COMMITTER_NAME: github-actions[bot]
           GIT_COMMITTER_EMAIL: 41898282+github-actions[bot]@users.noreply.github.com
         run: |
-          remote="https://x-access-token:${PUBLISH_PUSH_TOKEN:-$GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          if [ -n "$INSTALL_BRANCHES_KEY" ]; then
+            key="$RUNNER_TEMP/install-branches-key"
+            (umask 077 && printf '%s\n' "$INSTALL_BRANCHES_KEY" > "$key")
+            # GitHub's SSH host keys, read over HTTPS, so the connection is checked against them.
+            curl -fsSL -H "Authorization: Bearer $GH_TOKEN" https://api.github.com/meta |
+              python3 -c 'import json, sys; print("\n".join("github.com " + k for k in json.load(sys.stdin)["ssh_keys"]))' \
+              > "$RUNNER_TEMP/known_hosts"
+            export GIT_SSH_COMMAND="ssh -i $key -o IdentitiesOnly=yes -o UserKnownHostsFile=$RUNNER_TEMP/known_hosts -o StrictHostKeyChecking=yes"
+            remote="git@github.com:${GITHUB_REPOSITORY}.git"
+          else
+            remote="https://x-access-token:${PUBLISH_PUSH_TOKEN:-$GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          fi
           tip() {
             git fetch --quiet "$remote" "+refs/heads/$1:refs/remotes/origin/$1" 2>/dev/null &&
               git rev-parse "refs/remotes/origin/$1"
