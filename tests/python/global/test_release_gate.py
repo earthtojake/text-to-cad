@@ -160,10 +160,16 @@ class PublishGate(unittest.TestCase):
                       body)
         self.assertNotIn("refs/heads/plugin", body)
         # Only a deploy key may update those branches, so the push goes over SSH with the release's own key,
-        # checked against GitHub's host keys.
+        # checked against GitHub's host keys, and nothing else; the gate checks for the key on main, before
+        # the PyPI upload.
         self.assertIn("INSTALL_BRANCHES_KEY: ${{ secrets.INSTALL_BRANCHES_KEY }}", body)
         self.assertIn('remote="git@github.com:${GITHUB_REPOSITORY}.git"', body)
         self.assertIn("StrictHostKeyChecking=yes", body)
+        self.assertNotIn("x-access-token", body)
+        check = JOBS["gate"].split("- name: Check the install branches' deploy key", 1)[1]
+        self.assertIn("if: steps.gate.outputs.should_publish == 'true' && steps.gate.outputs.is_main == 'true'", check)
+        self.assertIn("INSTALL_BRANCHES_KEY: ${{ secrets.INSTALL_BRANCHES_KEY }}", check)
+        self.assertNotIn("PUBLISH_PUSH_TOKEN", WORKFLOW)
 
 
 class PrepareRelease(unittest.TestCase):

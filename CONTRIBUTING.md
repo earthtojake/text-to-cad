@@ -960,7 +960,8 @@ branches refuses their deletion and any force push, from anyone. Install
 branches: release only lets only a deploy key update them, so `Publish Release`
 is their only writer: it pushes them with its own write deploy key, whose private
 half is the `INSTALL_BRANCHES_KEY` secret, and anyone else's push is refused, an
-admin's or an agent's with an admin's credentials included. GitHub allows no
+admin's or an agent's with an admin's credentials included. Its gate stops a
+release on `main` that lacks the secret, before the PyPI upload. GitHub allows no
 exception for the workflow's own token on a personal account's repository. To
 replace the key, add a new write deploy key, set the secret to its private half,
 then delete the old key. Keep
