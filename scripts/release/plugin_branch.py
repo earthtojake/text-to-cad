@@ -10,9 +10,9 @@ MCP configs they name, `skills/`, `LICENSE`, and the README, with each link to a
 that tree pointed at the release commit on GitHub (CONTRIBUTING.md, "The install branches").
 Two copies, differing in what they carry and the channel each config names:
 
-- `latest` (pushed to `latest`, and to `plugin`, its old name): the newest release, which
-  every documented install command names. The copy also carries the marketplace catalog, which lists the
-  plugin at the root of the branch it is read from, and Codex's manifest and config.
+- `latest`: the newest release, which every documented install command names. The copy also
+  carries the marketplace catalog, which lists the plugin at the root of the branch it is read
+  from, and Codex's manifest and config.
 - `directory` (pushed to `claude-plugin`): claude.ai's plugin directory, which updates its
   copies.
 

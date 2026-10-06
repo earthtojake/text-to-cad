@@ -1,6 +1,6 @@
 """The plugin the install branches carry: scripts/release/plugin_branch.py.
 
-Publish Release commits these trees onto `latest` (and `plugin`) and `claude-plugin`, so a
+Publish Release commits these trees onto `latest` and `claude-plugin`, so a
 tree claude.ai's directory would hold or refuse has to fail here, on the pull request that
 causes it, rather than at release time.
 """

@@ -659,6 +659,9 @@ The pull request's Version Check says what merging it releases, and refuses:
 - a bump from a fork — releases come from branches of this repository only, so
   a contributor's pull request can never start one;
 - a version that is not past the target branch's and the latest release tag's;
+- a release that changes more than 300 files: GitHub matches a push's paths
+  against its first 300 changed files only, so `Publish Release` might never
+  start. Release such a change after it merges, from its own pull request;
 - stamps out of step with `VERSION` (`check-version.sh`,
   `sync-version.mjs --check`).
 
@@ -698,8 +701,8 @@ green: that is the release. `Publish Release`, on the merge commit:
    the job waits until PyPI's simple index, which uv resolves a pin through,
    lists the version: usually seconds.
 6. **Install branches** (on `main` only). `plugin_branch.py` commits the plugin
-   alone onto `latest` (and `plugin`, its old name) and `claude-plugin`. Only
-   now does an installer see the version.
+   alone onto `latest` and `claude-plugin`, in one atomic push. Only now does
+   an installer see the version.
 7. **Announce** (on `main` only), after the branches: `Deploy Docs`, which moves
    the version feed that tells installs a release is out; and the `v<VERSION>`
    tag and the GitHub Release, with the wheel and sdist from that same artifact
@@ -733,9 +736,7 @@ A release whose plugin did not change adds no commit. There are two copies:
 
 - `latest`, the newest release, which every install command names. It also
   carries the marketplace catalog, listing the plugin at the branch's root, and
-  Codex's manifest and config. `plugin`, its old name, gets the same commit, for
-  the Cursor installs that cloned `plugin` before `latest` existed. `latest` grew
-  out of `plugin`, so their pulls fast-forward.
+  Codex's manifest and config.
 - `claude-plugin`, which claude.ai's directory listing tracks. Its
   `claude.mcp.json` names the directory as its channel and marks its copies
   auto-updated (below).
@@ -800,11 +801,13 @@ A skill's own `cadgen` command never says a release is out: the same skill files
 ship in every plugin, so it cannot tell which one it came with. The CAD app and
 the Viewer say it.
 
-**Dev note — `plugin`.** It serves only the Cursor installs that cloned it before
-`latest` existed. Once those have moved, drop it from the `branches` job's push
-in `release-publish.yml` and delete the branch. claude.ai's listing stays on
-`claude-plugin`: the portal refuses a tracked-branch change while a reviewer has
-the plugin, and that copy is the directory's anyway.
+**Dev note — `plugin` and `claude-plugin`.** `plugin`, which Cursor installs
+cloned before `latest` existed, is no longer written; it stays at 0.7.14 until it
+is deleted. claude.ai's listing stays on `claude-plugin` while a reviewer has the
+plugin, since the portal refuses a tracked-branch change then. Moving it to
+`latest` afterwards gives directory installs `latest`'s `claude.mcp.json`: the
+`claude-github` channel, not marked auto-updated, so they would be told of each
+release and counted as GitHub installs.
 
 ### Submitting the plugin to OpenAI
 

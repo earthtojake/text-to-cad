@@ -95,8 +95,11 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
         run: python3 scripts/github-workflows/select_checks.py
 
+      # A record only saves running the tests again, so failing to upload one fails nothing: the
+      # tests still run here, and the push and Publish Release, finding no record, test again.
       - name: Record the tree this run tests
         if: steps.select.outputs.record != ''
+        continue-on-error: true
         uses: actions/upload-artifact@v7
         with:
           name: ${{ steps.select.outputs.record }}

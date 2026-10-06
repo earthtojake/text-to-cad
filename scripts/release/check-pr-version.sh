@@ -64,5 +64,15 @@ if [ -n "$latest_tag" ] && ! version_greater "$version" "$(version_from_release_
   exit 1
 fi
 
+# Publish Release starts on a push that changes VERSION, and GitHub matches a push's paths
+# against its first 300 changed files only: a release that changes more might never start it.
+changed="$(git diff --name-only "$base" HEAD | wc -l | tr -d '[:space:]')"
+if [ "$changed" -gt 300 ]; then
+  echo "This pull request changes $changed files. GitHub starts Publish Release from the first 300" >&2
+  echo "files a push changes, so merging it might release nothing. Leave VERSION alone here, and" >&2
+  echo "release after the merge: gh workflow run release-prepare.yml --ref main -f bump=<part>." >&2
+  exit 1
+fi
+
 echo "This pull request releases $version (the target branch is at $base_version)."
 echo "Merging it releases it: Publish Release uploads cadgen $version to PyPI, then moves the latest branch."

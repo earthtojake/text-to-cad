@@ -115,6 +115,18 @@ class PrVersionGuardTests(unittest.TestCase):
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("latest release, v0.6.0", result.stderr)
 
+    def test_a_release_too_large_for_the_push_path_filter_is_refused(self) -> None:
+        # GitHub matches a push's paths against its first 300 changed files, so Publish Release
+        # might not start for a release that changes more.
+        self.git("switch", "feature")
+        for index in range(300):
+            (self.root / f"file-{index:03}.txt").write_text(f"{index}\n", encoding="utf-8")
+        self.commit("Many files")
+        self.bump_feature("0.5.1")
+        result = self.check()
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("first 300", result.stderr)
+
     def test_it_refuses_anything_but_a_merge_commit(self) -> None:
         result = subprocess.run(
             ["bash", str(repo_path("scripts/release/check-pr-version.sh")), REPOSITORY],

@@ -152,14 +152,13 @@ class PublishGate(unittest.TestCase):
                     self.assertFalse(evaluate(condition(job), {"branches": result}, {}))
 
     def test_the_branches_get_their_copies_of_the_plugin(self):
-        # latest, and plugin, its old name, get one copy; claude.ai's claude-plugin the other.
+        # latest gets one copy and claude.ai's claude-plugin the other, in one push: both or neither.
         body = JOBS["branches"]
         self.assertIn("plugin_branch.py --commit --copy latest", body)
         self.assertIn("plugin_branch.py --commit --copy directory", body)
-        self.assertIn('"$latest:refs/heads/latest" "$latest:refs/heads/plugin"', body)
-        self.assertIn('"$directory:refs/heads/claude-plugin"', body)
-        # latest grew out of plugin, so a clone of plugin fast-forwards onto it.
-        self.assertIn('latest_parent="$(tip latest || tip plugin || true)"', body)
+        self.assertIn('git push --atomic "$remote" "$latest:refs/heads/latest" "$directory:refs/heads/claude-plugin"',
+                      body)
+        self.assertNotIn("refs/heads/plugin", body)
 
 
 class PrepareRelease(unittest.TestCase):

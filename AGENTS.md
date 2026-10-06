@@ -11,8 +11,8 @@ product and `models/` as the shared fixture/artifact area.
 `main` is the only branch you develop on: the source tree, and what releases
 are cut from. Branch from `main` and open PRs against `main`; never push it
 directly. There is no development symlink layout — every path in the tree is the
-real file. Installers follow `latest` (and `plugin`, its old name), and
-claude.ai's directory `claude-plugin`: the plugin alone, one commit per release,
+real file. Installers follow `latest`, and claude.ai's directory
+`claude-plugin`: the plugin alone, one commit per release,
 written only by `Publish Release` once the release is on PyPI (see below); never
 commit to them. `main` stays an installable plugin too: every manifest and MCP
 config lives at its root.
@@ -47,8 +47,8 @@ pass: the merge is the release.
   wheel and sdist, installs and exercises the wheel, uploads it to PyPI, and
   waits until PyPI's index lists it. Only then does it commit the plugin alone
   onto the branches installers follow (`scripts/release/plugin_branch.py`):
-  `latest` (and `plugin`, its old name), which every install command names;
-  and `claude-plugin`, which claude.ai's directory tracks. After them it deploys the docs site, which moves
+  `latest`, which every install command names, and `claude-plugin`, which
+  claude.ai's directory tracks. After them it deploys the docs site, which moves
   the version feed, and tags (`v<VERSION>`; releases before 0.5.0 are bare
   `0.4.x` tags) and GitHub-Releases the release commit, with the wheel and sdist
   that went to PyPI attached as release assets, plus the plugin ZIP that a

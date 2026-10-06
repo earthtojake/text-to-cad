@@ -168,6 +168,8 @@ class TheWorkflowFollowsTheSelector(unittest.TestCase):
     def test_a_manual_or_called_run_selects_everything_and_records_it(self):
         self.assertIn("FULL: ${{ github.event_name == 'workflow_dispatch' || inputs.full }}", JOBS["changes"])
         self.assertIn("name: ${{ steps.select.outputs.record }}", JOBS["changes"])
+        # A record only saves a re-run: failing to upload one must not fail the run.
+        self.assertIn("continue-on-error: true", JOBS["changes"].split("- name: Record the tree this run tests", 1)[1])
         # A pull request is diffed on its merge commit; only a push reads `before`.
         self.assertIn("BEFORE: ${{ github.event_name == 'push' && github.event.before || '' }}", JOBS["changes"])
         script = REPO_ROOT / "scripts/github-workflows/select_checks.py"
