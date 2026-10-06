@@ -120,7 +120,9 @@ also exceed 4.5:1. Focus rings use a deeper brand blue on white and the logo's
 pale highlight on charcoal. Every Copy is a plain icon button, one size with the buttons beside the install
 message that open it in an app, and each icon button has a tooltip. Install in Codex, the official listing, is
 the one blue button. Every button shows a pointer. Every section title
-shares one heading scale, and the header lists Overview, Install, Skills and
+shares one heading scale. Each title, a section's or an install's, links to its
+own anchor (`#install`, `#cursor`), as GitHub's headings do, so following it puts
+that address in the bar. The header lists Overview, Install, Skills and
 Contributing, the active link following the visible section; a phone's header has
 a burger that drops them down. The header shows the version as its release tag
 names it (`v<VERSION>`), on a phone 360px or wider too. Overview opens with Available for
