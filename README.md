@@ -55,9 +55,11 @@ The plugin for your agent app brings the skills and CAD's viewer, a local server
 (`cadgen mcp`). For an agent without a plugin, install the skills alone. Install
 one or the other in an app, not both: two copies means every skill twice.
 
-Every command below installs from the `latest` branch: the plugin alone, one
-commit per release, written once that release is on PyPI. A command without the
-branch installs `main` as it is.
+The install commands below take the `latest` branch: it holds the plugin alone
+and gets each release once it is on PyPI. `main`, where development happens,
+installs too, but can hold changes that aren't released yet. Each app names the
+branch in its own way (`#latest`, `--ref latest`, `@latest` or
+`--branch latest`); leave it out and the app installs `main`.
 
 Each app's heading also says how to update text-to-cad, and how to reinstall it:
 remove it, then install it again. Updating the plugin updates CAD: the new

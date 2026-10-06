@@ -51,6 +51,30 @@ class PluginTreeTests(unittest.TestCase):
         catalog = json.loads(install[".claude-plugin/marketplace.json"][1])
         self.assertEqual([entry["source"] for entry in catalog["plugins"] if entry["name"] == manifest["name"]], ["./"])
 
+    def test_every_file_a_manifest_names_ships_in_its_copy(self) -> None:
+        # Developers install main and users install a copy, so a manifest or config that names a file the
+        # copy leaves out works for every developer and breaks for every user.
+        on_main = set(branch.tracked(REPO_ROOT))
+
+        def strings(value):
+            if isinstance(value, dict):
+                value = list(value.values())
+            if isinstance(value, list):
+                for item in value:
+                    yield from strings(item)
+            elif isinstance(value, str):
+                yield value
+
+        for copy in branch.COPIES:
+            tree, errors, _manifest = branch.build(REPO_ROOT, copy)
+            self.assertEqual(errors, [], copy)
+            missing = [f"{path} -> {value}" for path, (_mode, data) in sorted(tree.items())
+                       if path.endswith(".json") and not path.startswith("skills/")
+                       for value in strings(json.loads(data))
+                       if branch.holds(on_main, value) and not branch.holds(set(tree), value)]
+            with self.subTest(copy=copy):
+                self.assertEqual(missing, [])
+
     def test_each_config_names_the_channel_its_installs_come_from(self) -> None:
         # claude.ai's directory follows claude-plugin and updates its copies. Every other installer
         # follows latest, where the configs keep main's channels but Cursor's: main's names the
