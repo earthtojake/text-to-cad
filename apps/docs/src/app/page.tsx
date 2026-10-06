@@ -30,18 +30,18 @@ function AgentMessage() {
         <p className="flex min-w-0 flex-1 items-center break-words px-3 pt-2 font-mono text-sm leading-6 text-foreground sm:py-2">
           {agentInstallMessage}
         </p>
-        <div className="flex shrink-0 items-center justify-end gap-1 pl-2">
+        <div className="flex shrink-0 items-center justify-end gap-1.5 p-2">
           {agentInstallLinks.map(({ id, agent, href }) => {
             const Logo = agentLogos[id];
             return (
-              <Button key={id} asChild variant="secondary" size="icon">
+              <Button key={id} asChild variant="secondary" size="icon-lg">
                 <a href={href} aria-label={`Open in ${agent}`} title={`Open in ${agent}`}>
                   <Logo className="size-4" />
                 </a>
               </Button>
             );
           })}
-          <CopyButton text={agentInstallMessage} label="Copy the message for your agent" prominent />
+          <CopyButton text={agentInstallMessage} label="Copy the message for your agent" icon />
         </div>
       </div>
     </div>

@@ -21,11 +21,13 @@ export const support = {
 export const agentInstallByline = "Send this message to your agent and it will install text-to-cad for you.";
 export const agentInstallMessage = "Install text-to-cad from https://github.com/earthtojake/text-to-cad";
 // The same message, opened in an agent app with its composer prefilled, never sent: Claude Code in
-// Claude Desktop (claude://code/new, Claude's help center, "Open Claude Desktop with a link") and the
-// Codex app (codex://threads/new, its commands reference). By install id, for the logo.
+// Claude Desktop (claude://code/new, Claude's help center, "Open Claude Desktop with a link"), the
+// Codex app (codex://threads/new, its commands reference) and Cursor (its prompt deeplink, Cursor's
+// docs, "Deeplinks"). By install id, for the logo.
 export const agentInstallLinks = [
   { id: "claude-code", agent: "Claude Code", href: `claude://code/new?q=${encodeURIComponent(agentInstallMessage)}` },
   { id: "codex", agent: "Codex", href: `codex://threads/new?prompt=${encodeURIComponent(agentInstallMessage)}` },
+  { id: "cursor", agent: "Cursor", href: `cursor://anysphere.cursor-deeplink/prompt?text=${encodeURIComponent(agentInstallMessage)}` },
 ];
 
 // Installing by hand, each its own sub-section of Install: the plugin for each agent app (the skills

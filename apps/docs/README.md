@@ -117,8 +117,9 @@ actions use muted shades of the logo's pastel blue through shadcn semantic
 tokens: #2c7197 in light mode and #30779d in dark mode, with #f5fbff labels.
 Text contrast is 5.14:1 and 4.73:1 respectively; the solid darker hover shades
 also exceed 4.5:1. Focus rings use a deeper brand blue on white and the logo's
-pale highlight on charcoal. Every Copy button is one size; the install message's
-uses the blue primary action style, the others are plain. Every section title
+pale highlight on charcoal. Every button that copies or opens an app is plain and one size; the install
+message's Copy is an icon among them. Install in Codex, the official listing, is the one blue button. Every
+button shows a pointer. Every section title
 shares one heading scale, and the header lists Overview, Install, Skills and
 Contributing, the active link following the visible section; a phone's header has
 a burger that drops them down. The header shows the version as its release tag
@@ -130,7 +131,7 @@ A logo leads to its install. Then the plugin's description, which every manifest
 and the README's Overview say word for word (`test_plugin_manifests.py` holds
 them to one text). Install
 leads with the message to send to an agent, monospace like the commands, with buttons that open it
-in Claude Code (Claude Desktop) or Codex, prefilled and unsent, beside Copy; then a sub-section per agent app, its update
+in Claude Code (Claude Desktop), Codex or Cursor, prefilled and unsent, beside Copy; then a sub-section per agent app, its update
 and remove commands folded under Update or reinstall; Codex leads with a button to its listing in
 Codex's plugin directory, its commands, update and remove folded under Manual install. Other Agents
 (the Skills CLI) for the rest, and Request Plugin, a new GitHub issue. Contributing closes the page. Install boxes and explanatory text fill the
